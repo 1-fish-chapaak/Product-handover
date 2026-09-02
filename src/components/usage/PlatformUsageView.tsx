@@ -230,7 +230,7 @@ export default function PlatformUsageView() {
         onOpenFinding: id => navigate('engagements', id),
       }),
       activity: activityGroups({
-        data, period, scope, canSeeNames,
+        data, period, scope, canSeeNames, showMoney,
         onOpenRuns: id => navigate('workflow-library', id ?? ''),
         onOpenQueueItem: item => navigate(item.target.view, item.target.id ?? ''),
       }),

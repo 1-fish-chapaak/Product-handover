@@ -27,12 +27,18 @@ export interface ActivityContext {
   scope: Scope;
   /** Named people are a permission of their own, so a count stands in without it. */
   canSeeNames: boolean;
+  /**
+   * Somebody reading their own work sees hours and never rupees, on every view.
+   * The cost of a lookup they ran is still a price on their work, so the money
+   * column goes with the rest of it.
+   */
+  showMoney: boolean;
   onOpenRuns: (id?: string) => void;
   onOpenQueueItem: (item: QueueFigures['items'][number]) => void;
 }
 
 export function activityGroups(ctx: ActivityContext): GroupSpec[] {
-  const { data, period, scope, canSeeNames } = ctx;
+  const { data, period, scope, canSeeNames, showMoney } = ctx;
   const { volume, stuck, reliability, created, reports, product, people, queue, insights } = data;
 
   const ranGroup: GroupSpec = {
@@ -113,18 +119,23 @@ export function activityGroups(ctx: ActivityContext): GroupSpec[] {
           </Panel>
         </Block>
 
-        <Block heading="What the AI did, and what can honestly be said about the cost of it">
+        <Block heading={showMoney
+          ? 'What the AI did, and what can honestly be said about the cost of it'
+          : 'What the AI did'}
+        >
           <Grid
-            head={['Surface', 'Count', 'Money']}
-            align={['left', 'right', 'left']}
-            rows={data.aiUsage.map(a => [
-              <>
-                {a.surface}
-                {a.note ? <span className="block mt-1 text-[0.75rem] text-ink-500">{a.note}</span> : null}
-              </>,
-              `${fmtInt(a.count)} ${a.countLabel}`,
-              a.money,
-            ])}
+            head={showMoney ? ['Surface', 'Count', 'Money'] : ['Surface', 'Count']}
+            align={showMoney ? ['left', 'right', 'left'] : ['left', 'right']}
+            rows={data.aiUsage.map(a => {
+              const cells = [
+                <>
+                  {a.surface}
+                  {a.note ? <span className="block mt-1 text-[0.75rem] text-ink-500">{a.note}</span> : null}
+                </>,
+                `${fmtInt(a.count)} ${a.countLabel}`,
+              ];
+              return showMoney ? [...cells, a.money] : cells;
+            })}
           />
         </Block>
 

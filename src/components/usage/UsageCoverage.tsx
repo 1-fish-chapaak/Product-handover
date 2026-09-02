@@ -33,17 +33,42 @@ export interface CoverageContext {
 }
 
 export function coverageGroups(ctx: CoverageContext): GroupSpec[] {
-  const { data, committee, period } = ctx;
-  const { plan, risks, population, detection, findings, actions } = committee;
-  const { coverage } = data;
+  const { data, committee, period, scope } = ctx;
+  const { plan, population, detection, actions } = committee;
+  const { coverage, risks } = data;
+
+  /*
+   * Four of the six lines are whole company facts and the records do not split
+   * them by team: the plan, the sample against the full read, how long a thing
+   * sat there before anybody saw it, and what was promised about it. Narrowing
+   * would mean showing one team another team's work, which is the one thing
+   * this page may never do, so a narrowed reader is told where the figure lives
+   * rather than shown a number that is not theirs. The other two, coverage and
+   * findings, are scoped properly by snapshot() and narrow with the reader.
+   */
+  const wholeCompany = scope.persona === 'cfo';
+  const elsewhere = (what: string) => (
+    <Quiet>
+      {what} is a whole company figure and your records do not split it by team, so it is read on the
+      whole company view rather than narrowed to {scope.subject}.
+    </Quiet>
+  );
+
+  /** Open, past its date, and this reader's to worry about. Soonest first. */
+  const overdueFindings = data.ageing.buckets
+    .flatMap(b => b.rows)
+    .filter(ex => ex.dueAt < data.period.to)
+    .sort((a, b) => a.dueAt - b.dueAt);
 
   const planGroup: GroupSpec = {
     id: 'plan',
     title: 'The plan, and what is slipping',
-    answer: plan.completionPct === null
-      ? `${fmtInt(plan.onTheBooks)} engagements on the books, none of them closed in the product.`
-      : `${fmtPct(plan.completionPct)} of the plan closed, ${fmtInt(plan.slipping.length)} past their date.`,
-    node: (
+    answer: !wholeCompany
+      ? 'A whole company figure, read on the whole company view.'
+      : plan.completionPct === null
+        ? `${fmtInt(plan.onTheBooks)} engagements on the books, none of them closed in the product.`
+        : `${fmtPct(plan.completionPct)} of the plan closed, ${fmtInt(plan.slipping.length)} past their date.`,
+    node: !wholeCompany ? elsewhere('The audit plan') : (
       <>
         {plan.completionPct === null ? (
           <>
@@ -95,7 +120,7 @@ export function coverageGroups(ctx: CoverageContext): GroupSpec[] {
   const coveredGroup: GroupSpec = {
     id: 'covered',
     title: 'What was covered, and what was left out',
-    answer: `${fmtInt(coverage.tested.length)} of ${fmtInt(coverage.controlsInLibrary)} controls exercised, ${fmtInt(risks.uncovered)} risks with no control.`,
+    answer: `${fmtInt(coverage.tested.length)} of ${fmtInt(coverage.controlsInLibrary)} controls exercised, ${fmtInt(risks.unmapped.length)} risks with no control.`,
     node: (
       <>
         <Lede>
@@ -152,19 +177,20 @@ export function coverageGroups(ctx: CoverageContext): GroupSpec[] {
 
         <Block heading="Risks with nothing covering them">
           <Lede>
-            <Num>{fmtInt(risks.uncovered)}</Num> of the <Num>{fmtInt(risks.total)}</Num> risks on your
-            register have no control mapped to them, and{' '}
-            <Num>{fmtInt(risks.criticalUncovered)}</Num> of those{' '}
-            {risks.criticalUncovered === 1 ? 'is' : 'are'} critical.
+            <Num>{fmtInt(risks.unmapped.length)}</Num> of the <Num>{fmtInt(risks.total)}</Num> risks on
+            your register have no control mapped to them, and{' '}
+            <Num>{fmtInt(risks.criticalUnmapped.length)}</Num> of those{' '}
+            {risks.criticalUnmapped.length === 1 ? 'is' : 'are'} critical.
           </Lede>
-          {risks.uncovered > 0 ? (
+          {risks.unmapped.length > 0 ? (
             <Grid
               head={['Risk', 'Priority', 'Owner']}
               align={['left', 'left', 'left']}
-              rows={risks.rows.slice(0, 10).map(r => [r.name, r.priority, r.owner])}
+              rows={[...risks.unmapped].sort((a, b) => a.name.localeCompare(b.name)).slice(0, 10)
+                .map(r => [r.name, r.priority, r.owner])}
               caption={
                 <>
-                  {risks.rows.length > 10 ? `Ten of ${fmtInt(risks.rows.length)} shown, alphabetically. ` : 'Alphabetical. '}
+                  {risks.unmapped.length > 10 ? `Ten of ${fmtInt(risks.unmapped.length)} shown, alphabetically. ` : 'Alphabetical. '}
                   <Drill label="Open the risk register" onClick={ctx.onOpenRisks} />.
                 </>
               }
@@ -175,7 +201,7 @@ export function coverageGroups(ctx: CoverageContext): GroupSpec[] {
         </Block>
 
         <Block heading="Everything, against a sample of it">
-          {population.multiple === null ? (
+          {!wholeCompany ? elsewhere('The full read against a sample of it') : population.multiple === null ? (
             <Unmeasured>
               Nobody validated a sample {period.phrase}, so there is nothing to compare the full populations
               against.
@@ -203,12 +229,12 @@ export function coverageGroups(ctx: CoverageContext): GroupSpec[] {
   const caughtGroup: GroupSpec = {
     id: 'caught',
     title: 'What was found, and how late it is',
-    answer: detection.medianDays === null
-      ? `${fmtInt(findings.raised)} findings raised, ${fmtInt(findings.open)} still open.`
-      : `Caught in ${fmtOneDp(detection.medianDays)} days on average, ${fmtInt(findings.open)} findings still open.`,
+    answer: !wholeCompany || detection.medianDays === null
+      ? `${fmtInt(data.exceptions.total)} findings raised, ${fmtInt(data.ageing.open)} still open.`
+      : `Caught in ${fmtOneDp(detection.medianDays)} days on average, ${fmtInt(data.ageing.open)} findings still open.`,
     node: (
       <>
-        {detection.medianDays === null ? (
+        {!wholeCompany ? elsewhere('Time to detection') : detection.medianDays === null ? (
           <Unmeasured>
             Nothing was caught {period.phrase}, so there is no time to detection to report.
           </Unmeasured>
@@ -254,13 +280,13 @@ export function coverageGroups(ctx: CoverageContext): GroupSpec[] {
 
         <Block heading="What was found">
           <Panel>
-            {findings.bySeverity.map(s => (
+            {data.exceptions.bySeverity.map(s => (
               <Line key={s.label} label={s.label} value={fmtInt(s.value)} />
             ))}
-            <Line strong label={`Raised ${period.phrase}`} value={fmtInt(findings.raised)} />
+            <Line strong label={`Raised ${period.phrase}`} value={fmtInt(data.exceptions.total)} />
             <Line
               label="Still open, on every window"
-              value={fmtInt(findings.open)}
+              value={fmtInt(data.ageing.open)}
               sub="Open means nobody has dealt with it yet, not that the problem is still there. A finding never closes itself."
             />
           </Panel>
@@ -283,18 +309,18 @@ export function coverageGroups(ctx: CoverageContext): GroupSpec[] {
           </Note>
         </Block>
 
-        {findings.overdue.length > 0 ? (
+        {overdueFindings.length > 0 ? (
           <Block heading="Findings past their date">
             <Grid
               head={['Finding', 'Severity', 'Owner', 'Due']}
               align={['left', 'left', 'left', 'right']}
-              rows={findings.overdue.slice(0, 10).map(ex => [
+              rows={overdueFindings.slice(0, 10).map(ex => [
                 <Drill key={ex.id} label={`${ex.ref} · ${ex.title}`} onClick={() => ctx.onOpenFinding(ex.engagementId)} />,
                 ex.severity,
                 ex.assignee.name,
                 formatDate(ex.dueAt),
               ])}
-              caption={findings.overdue.length > 10 ? `Ten of ${fmtInt(findings.overdue.length)} shown, soonest due first.` : 'Soonest due first.'}
+              caption={overdueFindings.length > 10 ? `Ten of ${fmtInt(overdueFindings.length)} shown, soonest due first.` : 'Soonest due first.'}
             />
           </Block>
         ) : null}
@@ -328,6 +354,8 @@ export function coverageGroups(ctx: CoverageContext): GroupSpec[] {
         </Block>
 
         <Block heading="What was promised about it">
+          {!wholeCompany ? elsewhere('What was promised about a finding') : (
+          <>
           <Lede>
             <Num>{fmtInt(actions.open)}</Num> action plans are open and{' '}
             <Num>{fmtInt(actions.overdue.length)}</Num> of them are past their date.{' '}
@@ -356,6 +384,8 @@ export function coverageGroups(ctx: CoverageContext): GroupSpec[] {
             />
           ) : (
             <Quiet>Nothing that was promised is past its date.</Quiet>
+          )}
+          </>
           )}
         </Block>
       </>

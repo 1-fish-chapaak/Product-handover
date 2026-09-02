@@ -1,828 +1,521 @@
 /**
- * Platform Usage. The build spec's acceptance tests, run against the real page.
+ * Platform Usage. The PRD's acceptance criteria, run against the real page.
  *
- * `Platform-Usage-Build-Spec_2.pdf` ends every metric with an acceptance line
- * and asks for one seeded customer carrying the worked example's numbers so
- * every tile can be checked against arithmetic done by hand. That is most of
- * this file. It opens the page as a CFO and checks section 5's six figures,
- * then checks the section 9 rules a later change could quietly break: coverage
- * counted once, failed runs kept out of savings, a table under every chart, a
- * list behind every count, a per-person table nobody can sort, and a page that
- * never writes anything.
+ * `PRD-PLATFORM-USAGE.md` section 10 lists nineteen criteria and this file is
+ * them, in order, one describe block each, so a failure names the criterion it
+ * broke rather than a block that moved. Section 9's QA list is folded in where
+ * it says something the criteria do not.
+ *
+ * The page is one scroll of folded groups rather than three tabs, so a spec
+ * that wants a block opens the group it lives in first. Every figure asserted
+ * here is arithmetic anybody can redo by hand from section 3 of the PRD.
  */
 
+import { readFileSync } from 'node:fs';
+import { readdirSync } from 'node:fs';
+import { join } from 'node:path';
 import { test, expect, enterWorkspace, type Page } from './_helpers';
 
-/** Open the page from the left menu, without reloading the app. */
+/**
+ * Open the page.
+ *
+ * The `?view=` whitelist does not carry this surface, so the page is reached
+ * the way the command palette reaches it rather than by a deep link.
+ */
 async function gotoUsage(page: Page) {
-  await page.getByRole('button', { name: /^Platform Usage$/ }).first().click();
+  await page.evaluate(() => window.dispatchEvent(new CustomEvent('irame:command-palette-navigate', {
+    detail: { kind: 'control', id: '', view: 'platform-usage' },
+  })));
   await expect(page.getByRole('heading', { name: 'Platform Usage', level: 1 })).toBeVisible();
-  await page.waitForTimeout(800);
+  await page.waitForTimeout(700);
 }
 
 async function openUsage(page: Page) {
   await page.goto('/');
   await enterWorkspace(page);
+  await page.waitForTimeout(700);
   await gotoUsage(page);
 }
 
-/**
- * Open one of the three tabs.
- *
- * The page is Value, Coverage and Activity rather than one long scroll, so a
- * spec that used to scroll to a block opens the tab it lives on first. Nothing
- * was removed: every block still exists, on exactly one tab.
- */
-async function usageTab(page: Page, name: 'Value' | 'Coverage' | 'Activity') {
-  await page.getByRole('tab', { name }).click();
-  await page.waitForTimeout(500);
+/** Which of the three views is leading. */
+function viewSwitch(page: Page, name: 'Value' | 'Coverage and findings' | 'Activity') {
+  return page.getByRole('button', { name, exact: true });
 }
 
-/** Strip one permission from System Admin, which is how the view changes. */
+async function chooseView(page: Page, name: 'Value' | 'Coverage and findings' | 'Activity') {
+  await viewSwitch(page, name).click();
+  await page.waitForTimeout(600);
+}
+
+/** Open a folded group by its heading, and leave it open. */
+async function openGroup(page: Page, title: string) {
+  const heading = page.getByRole('button', { name: new RegExp(`^${title}`) }).first();
+  await heading.scrollIntoViewIfNeeded();
+  if ((await heading.getAttribute('aria-expanded')) !== 'true') {
+    await heading.click();
+    await page.waitForTimeout(400);
+  }
+}
+
+/** Strip one permission from System Admin, which is how entitlement changes. */
 async function stripPermission(page: Page, description: string) {
   await page.getByRole('button', { name: /^Admin$/ }).first().click();
   await page.getByRole('button', { name: /Roles & Permissions/ }).first().click();
   await page.getByText('System Admin', { exact: true }).first().click();
-  // The segmented control's label is lowercase, upper-cased by CSS.
   await page.getByRole('button', { name: 'edit', exact: true }).first().click();
   await page.locator('input[placeholder*="earch"]').first().fill('Usage');
   await page.getByText(description, { exact: true }).first().click();
   await page.getByRole('button', { name: /Save Changes/ }).first().click();
-  await page.waitForTimeout(600);
+  await page.waitForTimeout(700);
 }
 
-const OWNER_PERMISSION = 'View workspace-wide platform usage and adoption metrics';
-const TEAM_PERMISSION = 'See named member and team activity in Platform Usage';
+const COMPANY_PERMISSION = 'View workspace-wide platform usage and adoption metrics';
+
+async function csvOf(page: Page): Promise<string> {
+  const [download] = await Promise.all([
+    page.waitForEvent('download'),
+    page.getByRole('button', { name: 'CSV' }).click(),
+  ]);
+  const stream = await download.createReadStream();
+  const chunks: Buffer[] = [];
+  for await (const chunk of stream) chunks.push(Buffer.from(chunk));
+  return Buffer.concat(chunks).toString('utf8');
+}
 
 test.describe('Platform Usage', () => {
-  test('opens on the highest view the role may read, and says so in one line', async ({ page }) => {
+  /* ── AC-01, AC-02 · the switch, and where each reader lands ─────────────── */
+
+  test('AC-01 the switch offers the three views, each with the question it answers', async ({ page }) => {
     await openUsage(page);
 
-    await expect(page.locator('h1 + p')).toHaveText('Is this paying for itself?');
-    await expect(page.getByText(/Viewing as CFO · Whole company/)).toBeVisible();
+    await expect(viewSwitch(page, 'Value')).toBeVisible();
+    await expect(viewSwitch(page, 'Coverage and findings')).toBeVisible();
+    await expect(viewSwitch(page, 'Activity')).toBeVisible();
 
-    // A CFO is here for the money, so Value opens first.
-    await expect(page.getByRole('tab', { name: 'Value' })).toHaveAttribute('aria-selected', 'true');
+    // The question is on the switch in words, so a reader picking for
+    // themselves never needs the page to have guessed right.
+    await expect(page.getByText('Is this paying for itself?')).toBeVisible();
+    await chooseView(page, 'Coverage and findings');
+    await expect(page.getByText('Am I ready for the committee, and what is slipping?')).toBeVisible();
+    await chooseView(page, 'Activity');
+    await expect(page.getByText('Is the team actually using what we bought?')).toBeVisible();
   });
 
-  test('the same three tabs on every view, whoever is reading', async ({ page }) => {
+  test('AC-02 a reader who can see the company figures lands on Value', async ({ page }) => {
     await openUsage(page);
-
-    await expect(page.getByRole('tab')).toHaveText(['Value', 'Coverage', 'Activity']);
-
-    // The switch changes whose data you see and which tab opens first. It never
-    // changes the tabs themselves.
-    await page.getByRole('button', { name: 'Internal Auditor', exact: true }).click();
-    await page.waitForTimeout(600);
-    await expect(page.getByRole('tab')).toHaveText(['Value', 'Coverage', 'Activity']);
-    await expect(page.getByRole('tab', { name: 'Activity' })).toHaveAttribute('aria-selected', 'true');
+    await expect(viewSwitch(page, 'Value')).toHaveAttribute('aria-pressed', 'true');
   });
 
-  test('an attention card opens the tab its block lives on', async ({ page }) => {
+  test('AC-02 the view a reader picks is where the page opens next time', async ({ page }) => {
     await openUsage(page);
-    await expect(page.getByRole('tab', { name: 'Value' })).toHaveAttribute('aria-selected', 'true');
+    await chooseView(page, 'Activity');
 
-    // Both of these cards, the unmapped critical risks and the controls nobody
-    // has ever exercised, are about blocks on Coverage.
-    const card = page
-      .locator('section[aria-label="Needs your attention"] li')
-      .filter({ has: page.getByRole('button', { name: /See them|See which/ }) })
-      .first();
-    await expect(card).toBeVisible();
-    await card.getByRole('button').click();
-    await page.waitForTimeout(1000);
+    await page.reload();
+    await enterWorkspace(page);
+    await page.waitForTimeout(900);
+    await gotoUsage(page);
 
-    await expect(page.getByRole('tab', { name: 'Coverage' })).toHaveAttribute('aria-selected', 'true');
-    await expect(page.locator('#risks, #never').first()).toBeVisible();
+    await expect(viewSwitch(page, 'Activity')).toHaveAttribute('aria-pressed', 'true');
   });
 
-  test('the switch is a lens: it only ever narrows down your own line', async ({ page }) => {
+  test('AC-01 a reader without the company view is never offered it, and only narrows down their own line', async ({ page }) => {
     await openUsage(page);
+    await stripPermission(page, COMPANY_PERMISSION);
+    await gotoUsage(page);
 
-    // A CFO may look at their own team and at their own work. There is no
-    // fourth option, and nothing here reaches sideways into another team.
-    const swtch = page.locator('div', { has: page.getByRole('button', { name: 'CFO', exact: true }) }).last();
-    await expect(swtch.getByRole('button', { name: 'CFO', exact: true })).toHaveAttribute('aria-pressed', 'true');
+    // Lands on what they can actually see rather than on a view they cannot.
+    await expect(viewSwitch(page, 'Coverage and findings')).toHaveAttribute('aria-pressed', 'true');
 
-    await page.getByRole('button', { name: 'Internal Auditor', exact: true }).click();
-    await page.waitForTimeout(600);
-
-    await expect(page.locator('h1 + p')).toHaveText('What is waiting on me?');
-    await expect(page.getByText(/Viewing as Internal Auditor · Your own work only/)).toBeVisible();
-
-    // Narrowing to one person takes the money off the page with it. The cost
-    // block lives on Value, so that is where we look for its absence.
-    await usageTab(page, 'Value');
-    await expect(page.locator('#cost')).toHaveCount(0);
+    // Down your own line only. The whole company is not on the control at all,
+    // so it cannot be asked for.
+    await expect(page.getByRole('button', { name: 'Your team only', exact: true })).toBeVisible();
+    await expect(page.getByRole('button', { name: 'Whole company', exact: true })).toHaveCount(0);
   });
 
-  test('the CFO lands on this quarter, compared with the quarter before', async ({ page }) => {
+  /* ── The header line ────────────────────────────────────────────────────── */
+
+  test('the header line states the reader, the scope, the window and the counted to date', async ({ page }) => {
     await openUsage(page);
-    await expect(page.getByText(/This quarter, 1 Jan 2026 to 31 Mar 2026/)).toBeVisible();
-    await expect(page.getByRole('button', { name: 'This quarter' })).toHaveAttribute('aria-pressed', 'true');
-    // Every tile states the comparison in words. A tile that moved says which
-    // way and by how much; one that did not says it is about the same, and
-    // draws no arrow, because an arrow beside "level" contradicts itself.
-    await expect(page.getByText(/(About the same as|on) the quarter before/).first()).toBeVisible();
+    const line = page.locator('header p').last();
+    await expect(line).toContainText('Viewing as Value');
+    await expect(line).toContainText('Whole company');
+    await expect(line).toContainText('This quarter, 1 Jan 2026 to 31 Mar 2026');
+    await expect(line).toContainText('Counted to 31 Mar 2026');
   });
 
-  test('the quarter is the guide\'s worked example, to the rupee', async ({ page }) => {
+  /* ── AC-03, AC-04 · the rate and its derivation ─────────────────────────── */
+
+  test('AC-03 the rate is 530 and 1,200 appears nowhere', async ({ page }) => {
     await openUsage(page);
-    // The whole sum is on the hero, in order, so a reader can check it on a
-    // calculator without opening anything.
-    const hero = page.locator('#hero');
+    await expect(page.getByText('at ₹530 an auditor hour.')).toBeVisible();
 
-    // 340 successful runs over populations of 1,428,000 rows, in 8.5 hours.
-    await expect(hero).toContainText('1,428,000');
-    await expect(hero).toContainText('340');
-    await expect(hero).toContainText('8.5');
-
-    // 1,428,000 rows at 200 an hour is 7,140 hours by hand.
-    await expect(hero).toContainText('7,140');
-
-    // 7,140 less 8.5 is 7,131.5, rounded down because a saving never rounds up.
-    await expect(hero).toContainText('7,131');
-
-    // The money prices the saving rather than the hours by hand, so it is
-    // 7,131.5 at 530 rupees an hour and not 7,140. Pricing the by-hand figure
-    // would hand back the 8.5 hours the hours line had just given up.
-    await expect(hero).toContainText('₹37.8 lakh');
-
-    // 7,131 hours over the 462 a person works in a quarter is 15.4 people,
-    // on the same saved hours the money uses.
-    await expect(hero).toContainText('15.4');
-    await expect(hero).toContainText('462');
-
-    // The contract charged ₹18,400, leaving ₹37.6 lakh.
-    const cost = page.locator('#cost');
-    await expect(cost).toContainText('₹18,400');
-    await expect(cost).toContainText('₹37.6 lakh');
-  });
-
-  test('the rate carries its whole derivation on the same screen as the money', async ({ page }) => {
-    await openUsage(page);
-    const hero = page.locator('#hero');
-
-    // The rate is the only made-up number left in the chain, so the sum behind
-    // it is on the page beside the figure it produces, not in a fold and not
-    // only in the export.
-    const rate = page.locator('#rate-derivation');
-    await rate.scrollIntoViewIfNeeded();
-    await expect(rate).toBeVisible();
-    await expect(rate).toContainText('₹6,57,000');
-    await expect(rate).toContainText('Glassdoor India');
-    await expect(rate).toContainText('₹7,94,964');
-    await expect(rate).toContainText('PayScale');
-    await expect(rate).toContainText('₹7,25,000');
-    await expect(rate).toContainText('1.35');
-    await expect(rate).toContainText('₹9,78,750');
-    await expect(rate).toContainText('1,848');
-    await expect(rate).toContainText('₹530');
-
-    // The rate is not rounded up to a comfortable figure. The page rounds a
-    // saving down, so it may not round the price of an hour up.
-    await expect(rate).not.toContainText('₹550');
-    await expect(rate).toContainText('not rounded up');
-
-    // And the figure it produces is on the same screen as the derivation.
-    await expect(hero).toContainText('₹530 an hour');
-  });
-
-  test('the old invented rate is nowhere on the page', async ({ page }) => {
-    await openUsage(page);
-    for (const name of ['Value', 'Coverage', 'Activity'] as const) {
-      await usageTab(page, name);
-      const body = await page.locator('main, [role="main"], body').first().innerText();
+    for (const view of ['Value', 'Coverage and findings', 'Activity'] as const) {
+      await chooseView(page, view);
+      const body = await page.locator('body').innerText();
       expect(body).not.toContain('₹1,200');
-      expect(body).not.toContain('₹85.6 lakh');
-      expect(body).not.toContain('₹85.4 lakh');
-      expect(body).not.toContain('₹550');
+      expect(body).not.toContain('1,200 an hour');
     }
   });
 
-  test('the pace label says it means rule checking, not substantive testing', async ({ page }) => {
+  test('AC-04 the whole derivation renders on the same screen as the money it produces', async ({ page }) => {
     await openUsage(page);
-    const assumptions = page.locator('#assumptions');
-    await assumptions.scrollIntoViewIfNeeded();
-    await expect(assumptions).toContainText('Rows checked against a rule by hand per hour');
-    await expect(assumptions).toContainText('not full substantive testing');
-    await expect(assumptions).toContainText('4 to 9');
-    await expect(assumptions).toContainText('a faster pace makes the saving smaller');
+    await openGroup(page, 'Where the rate comes from');
+
+    const group = page.locator('#rate');
+    await expect(group).toContainText('₹6,57,000 a year');
+    await expect(group).toContainText('Glassdoor India, February 2026');
+    await expect(group).toContainText('₹7,94,964 a year');
+    await expect(group).toContainText('PayScale, 2026');
+    await expect(group).toContainText('₹7,25,000 a year');
+    await expect(group).toContainText('× 1.35');
+    await expect(group).toContainText('₹9,78,750');
+    await expect(group).toContainText('1,848 hours');
+    await expect(group).toContainText('₹530 an hour');
+
+    // And the money it produces is on the same page, not one click away.
+    await expect(page.locator('#worth')).toContainText('₹37.8 lakh');
   });
 
-  test('the hero says net value only while the cost is complete', async ({ page }) => {
+  test('AC-05 working hours a month is 154', async ({ page }) => {
     await openUsage(page);
-    const hero = page.locator('#hero');
-
-    // The block leads with hours, which rest on one assumed rate, rather than
-    // with money, which rests on two.
-    expect(await hero.locator('h3').innerText()).toBe('What the platform was worth');
-    await expect(hero).toContainText('hours');
-
-    // The money follows, under its own caveat, and only says what the contract
-    // charged while every lookup in the window is priced. The caveat lives in
-    // the fold with everything else somebody would argue with, so the sum on
-    // screen is a sum rather than a paragraph.
-    await expect(hero).toContainText('₹530 an hour');
-    await hero.getByText('How this is counted').click();
-    await expect(hero).toContainText('an hour is ours, not yours');
-    const costed = await hero.innerText();
-    if (costed.includes('Your contract charged')) {
-      await expect(hero).toContainText('which leaves');
-    }
-
-    // Whichever state it is in, the sum is told in the same five lines: what it
-    // would have taken, what it took, what was saved, what that is worth, and
-    // what running it charged.
-    await expect(hero).toContainText('records by hand');
-    await expect(hero).toContainText('The platform did it in');
-    await expect(hero).toContainText('Time your team did not spend');
-    await expect(hero).toContainText('What that time is worth');
-    await expect(hero).toContainText('What running the platform cost');
-    // People are said in the line about the hours rather than as a tile of
-    // their own, because "15 people" only means anything next to the hours.
-    await expect(hero).toContainText('people working the whole quarter');
+    await openGroup(page, 'Where the rate comes from');
+    const assumptions = page.locator('#rate');
+    const row = assumptions.getByText('Working hours per person per month').locator('../..');
+    await expect(row).toContainText('154');
+    // The old HR round number appears once, as the thing 154 replaced.
+    await expect(row).toContainText('It replaces the 160 that was an HR round number');
   });
 
-  test('coverage counts a population once, and says so next to the repeats', async ({ page }) => {
+  test('AC-06 the pace label says rule checking rather than a substantive procedure', async ({ page }) => {
     await openUsage(page);
-    await usageTab(page, 'Coverage');
-    const coverage = page.locator('#coverage');
-
-    await expect(coverage).toContainText('1,428,000');
-    await expect(coverage).toContainText('checks performed');
-
-    // The repeats are far larger than the coverage. If these two ever match,
-    // the count-once rule has been lost and the page is inflating itself.
-    const text = await coverage.innerText();
-    // The label leads its figure in this product's KPI strips, so the number is
-    // read from either side of the words rather than from one fixed order.
-    const checks = Number(
-      (text.match(/checks performed\s*\n?\s*([\d,]+)/i)?.[1]
-        ?? text.match(/([\d,]+)\s*\n?\s*checks performed/i)?.[1]
-        ?? '0').replace(/,/g, ''),
+    await openGroup(page, 'Where the rate comes from');
+    await expect(page.locator('#rate')).toContainText(
+      'It is not full substantive testing with documentation, which the profession puts at 4 to 9 transactions an hour',
     );
-    expect(checks).toBeGreaterThan(1_428_000 * 10);
-  });
-
-  test('failed runs are reported on their own and kept out of every saving', async ({ page }) => {
-    await openUsage(page);
-    // The owner's headline counts successful checks only.
-    await expect(page.locator('#hero')).toContainText('checks:');
-    await usageTab(page, 'Activity');
-    // The failures are named in the block's own head now rather than in a tile
-    // under it. The saving above counts the successful checks only, which is
-    // the other half of this rule.
-    await expect(page.locator('#volume')).toContainText('failed');
-    await expect(page.locator('#volume')).toContainText('passed');
-  });
-
-  test('every chart has a table one click away', async ({ page }) => {
-    await openUsage(page);
-
-    // Every chart on every tab, not just the one the page opens on.
-    let charts = 0;
-    for (const name of ['Value', 'Coverage', 'Activity'] as const) {
-      await usageTab(page, name);
-      const toggles = page.getByRole('button', { name: /^Table$/ });
-      const count = await toggles.count();
-      charts += count;
-      for (let i = 0; i < count; i += 1) {
-        const toggle = toggles.nth(0); // the list re-renders as each one flips
-        await toggle.scrollIntoViewIfNeeded();
-        await toggle.click();
-        await page.waitForTimeout(120);
-      }
-      if (count > 0) {
-        await expect(page.getByRole('button', { name: /^Chart$/ }).first()).toBeVisible();
-        // The first table in the DOM may be one folded under "Show the numbers",
-        // so this looks for a table that is actually on screen.
-        await expect(page.locator('[data-usage-block] table').locator('visible=true').first()).toBeVisible();
-      }
-    }
-    expect(charts).toBeGreaterThan(2);
-  });
-
-  test('every count opens its list, with a name and a date', async ({ page }) => {
-    await openUsage(page);
-
-    // Counts are spread across the three tabs, so the drills are counted on all
-    // three and opened until one shows its list. The list names the thing, who
-    // made it and when: looking for a date is how we know it is a real list
-    // rather than the same count rendered twice.
-    let found = 0;
-    let dated = false;
-    for (const name of ['Value', 'Coverage', 'Activity'] as const) {
-      await usageTab(page, name);
-      const drills = page.getByRole('button', { name: /^Open the / });
-      const count = await drills.count();
-      found += count;
-
-      for (let i = 0; i < count && !dated; i += 1) {
-        // Each open drill renames its own button, so the first unopened one is
-        // always at the head of the list.
-        const drill = drills.first();
-        if (!(await drill.count())) break;
-        await drill.scrollIntoViewIfNeeded();
-        await drill.click();
-        await page.waitForTimeout(150);
-        dated = (await page.locator('[data-usage-block] ul li').filter({ hasText: /\d{4}/ }).count()) > 0;
-      }
-    }
-
-    expect(found).toBeGreaterThan(3);
-    expect(dated).toBe(true);
-  });
-
-  test('the assumptions are on screen with their source, and two states are visible', async ({ page }) => {
-    await openUsage(page);
-    const assumptions = page.locator('#assumptions');
-    await assumptions.scrollIntoViewIfNeeded();
-
-    // The rate has not met its guard, so it is still labelled a starting value,
-    // and it says what the customer's own reviews work out at against it.
-    await expect(assumptions).toContainText('Rows checked against a rule by hand per hour');
-    await expect(assumptions).toContainText('our number, until yours is on record');
-    await expect(assumptions).toContainText('records an hour over');
-    await expect(assumptions).toContainText('switches to your number');
-
-    // The control-test hours have met both guards, so they measured themselves.
-    await expect(assumptions).toContainText('Hours per manual control test');
-    await expect(assumptions).toContainText('from your records');
-    await expect(assumptions).toContainText('of your own timed manual tests');
-
-    // The two that can never be measured say where they do come from, on the
-    // row rather than in a fold.
-    await expect(assumptions).toContainText('Nothing in the product records what anybody is paid');
-    await expect(assumptions).toContainText('1,848 hours a year one person is available to work');
-  });
-
-  test('the swing is employing auditors against buying them, not our doubt', async ({ page }) => {
-    await openUsage(page);
-    const sensitivity = page.locator('#sensitivity');
-    await sensitivity.scrollIntoViewIfNeeded();
-
-    // Four rows, one for each way a company gets an audit hour. Same 7,131
-    // saved hours in every one; only the price of the hour moves.
-    await expect(sensitivity).toContainText('₹530');
-    await expect(sensitivity).toContainText('₹37.8 lakh');
-    await expect(sensitivity).toContainText('₹662');
-    await expect(sensitivity).toContainText('₹47.2 lakh');
-    await expect(sensitivity).toContainText('₹940');
-    await expect(sensitivity).toContainText('₹67.0 lakh');
-    await expect(sensitivity).toContainText('₹2,500');
-    await expect(sensitivity).toContainText('₹1.78 cr');
-
-    // And the cause is named, in one sentence, as a business fact rather than
-    // as an admission that we do not know.
-    await expect(sensitivity).toContainText('Auditors you employ');
-    await expect(sensitivity).toContainText('Hours bought from a firm');
-    await expect(sensitivity).toContainText(
-      'not doubt about the figure. It is the difference between employing auditors and buying their hours',
+    await expect(page.locator('#worth')).toContainText(
+      'a person reading a row in a spreadsheet, checking it against a rule and moving on',
     );
   });
 
-  test('the attention strip carries at most three cards, each with one action', async ({ page }) => {
+  /* ── AC-07 · the four ways, and why they differ ─────────────────────────── */
+
+  test('AC-07 the four rows are ways of getting an audit hour, and the cause is named', async ({ page }) => {
     await openUsage(page);
-    const strip = page.locator('section[aria-label="Needs your attention"]');
-    const cards = strip.locator('li');
-    const count = await cards.count();
-    expect(count).toBeGreaterThan(0);
-    expect(count).toBeLessThanOrEqual(3);
-    for (let i = 0; i < count; i += 1) {
-      await expect(cards.nth(i).locator('button')).toHaveCount(1);
-    }
+    await openGroup(page, 'Where the rate comes from');
+    const group = page.locator('#rate');
+
+    await expect(group).toContainText('Auditors you employ, costed on the hours they are available');
+    await expect(group).toContainText('Auditors you employ, costed only on the hours they charge to audit work');
+    await expect(group).toContainText('Hours bought from a firm, at the lower end');
+    await expect(group).toContainText('Hours bought from a firm, at the upper end');
+
+    await expect(group).toContainText('₹530');
+    await expect(group).toContainText('₹662');
+    await expect(group).toContainText('₹940');
+    await expect(group).toContainText('₹2,500');
+    await expect(group).toContainText('₹37.8 lakh');
+    await expect(group).toContainText('₹47.2 lakh');
+    await expect(group).toContainText('₹67.0 lakh');
+    await expect(group).toContainText('₹1.78 cr');
+
+    // The spread is a fact about the customer's operating model, not our doubt.
+    await expect(group).toContainText(
+      'It is the difference between employing auditors and buying their hours from a firm',
+    );
+    await expect(group).toContainText('The hours saved are the same in every row');
   });
 
-  test('the period selector moves the whole page', async ({ page }) => {
+  /* ── AC-08 · the worked example, to the rupee ───────────────────────────── */
+
+  test('AC-08 Q4 FY26 reconciles', async ({ page }) => {
     await openUsage(page);
-    await page.getByRole('button', { name: 'This month' }).click();
-    await page.waitForTimeout(600);
-    await expect(page.getByText(/This month, 1 Mar 2026 to 31 Mar 2026/)).toBeVisible();
-    await expect(page.locator('#hero')).toContainText('this month');
+    const worth = page.locator('#worth');
+
+    await expect(worth).toContainText('1,428,000 rows');
+    await expect(worth).toContainText('340 successful runs');
+    await expect(worth).toContainText('8.5 hours');
+    await expect(worth).toContainText('7,140 hours');
+    await expect(worth).toContainText('7,131');
+    await expect(worth).toContainText('15.4');
+    await expect(worth).toContainText('₹37.8 lakh');
+    await expect(worth).toContainText('₹18,400');
+    await expect(worth).toContainText('₹37.6 lakh');
+
+    await openGroup(page, 'What the contract charged');
+    await expect(page.locator('#charged')).toContainText('₹18,400');
   });
 
-  test('the financial year to date is a window of its own, alongside the month', async ({ page }) => {
+  /* ── AC-09 · the financial year ─────────────────────────────────────────── */
+
+  test('AC-09 financial year to date is its own window and differs from the quarter', async ({ page }) => {
     await openUsage(page);
+    const worth = page.locator('#worth');
+    const quarter = await worth.innerText();
 
-    // Every window that was here stays. A head of team and an admin read a
-    // month, so the month cannot be the price of adding a financial year.
-    for (const label of ['This month', 'This quarter', 'This year', 'Since you started', 'Custom']) {
-      await expect(page.getByRole('button', { name: label, exact: true })).toBeVisible();
-    }
-
-    // The Indian financial year the anchor closes: 1 Apr 2025 to 31 Mar 2026.
-    const quarter = await page.locator('#hero').innerText();
     await page.getByRole('button', { name: 'Financial year to date', exact: true }).click();
-    await page.waitForTimeout(700);
-    await expect(page.getByText(/Financial year to date, 1 Apr 2025 to 31 Mar 2026/)).toBeVisible();
+    await page.waitForTimeout(800);
 
-    // And it is a real window rather than a relabelled quarter: twelve months
-    // of runs and of contract charge, not three.
-    const ytd = await page.locator('#hero').innerText();
-    expect(ytd).not.toBe(quarter);
-    expect(ytd).toContain('the financial year to date');
+    await expect(page.locator('header p').last()).toContainText(
+      'Financial year to date, 1 Apr 2025 to 31 Mar 2026',
+    );
+    expect(await worth.innerText()).not.toBe(quarter);
 
-    const cost = await page.locator('#cost').innerText();
-    expect(cost).not.toContain('₹18,400');
+    // Every flow figure moves with the window. Coverage does not: the same
+    // eleven populations are counted once in both, which is the rule the page
+    // is built on rather than a figure that failed to update.
+    expect(await worth.innerText()).not.toContain('340 successful runs');
+    expect(await worth.innerText()).not.toContain('7,131');
+    await expect(worth).toContainText('1,428,000 rows');
   });
 
-  test('the longer history does not leak into the quarter', async ({ page }) => {
-    await openUsage(page);
-    // History now runs back to 1 Apr 2025 rather than 1 Jul 2025. The four
-    // recorded figures the worked example rests on are inside the quarter and
-    // must not have moved a digit.
-    const hero = page.locator('#hero');
-    await expect(hero).toContainText('1,428,000');
-    await expect(hero).toContainText('340');
-    await expect(hero).toContainText('8.5');
-    await expect(page.locator('#cost')).toContainText('₹18,400');
+  /* ── AC-10 · the six committee lines ────────────────────────────────────── */
 
-    // And "since you started" now reaches back a full year.
-    await page.getByRole('button', { name: 'Since you started', exact: true }).click();
-    await page.waitForTimeout(700);
-    await expect(page.getByText(/Since you started, 1 Apr 2025 to 31 Mar 2026/)).toBeVisible();
+  test('AC-10 the coverage view carries the six lines a committee asks for', async ({ page }) => {
+    await openUsage(page);
+    await chooseView(page, 'Coverage and findings');
+
+    // 1 · the plan, 2 · what was covered and what was left out
+    await expect(page.locator('#plan')).toContainText('engagements are on the books');
+    await expect(page.locator('#covered')).toContainText('controls in your library were exercised');
+    await expect(page.locator('#covered')).toContainText('have no control mapped to them');
+    // 3 · everything against a sample of it
+    await expect(page.locator('#covered')).toContainText('the sample would have to grow');
+    // 4 · time to detection, 5 · findings and their age, 6 · what was promised
+    await expect(page.locator('#caught')).toContainText('before the platform caught it');
+    await expect(page.locator('#caught')).toContainText('How long the open ones have been open');
+    await expect(page.locator('#caught')).toContainText('action plans are open');
   });
 
-  test('never exercised ignores the period selector', async ({ page }) => {
+  /* ── AC-11 · one snapshot, page and exports ─────────────────────────────── */
+
+  test('AC-11 the CSV carries the same figures as the screen, with the reader and the window', async ({ page }) => {
     await openUsage(page);
-    await usageTab(page, 'Coverage');
-    const never = page.locator('#never');
-    await never.scrollIntoViewIfNeeded();
+    const csv = await csvOf(page);
 
-    await expect(never).toContainText('This block ignores the window');
-    // The lede is the never-ever figure. Only the footnote about the window may
-    // move, and its wording changes with the window, so the lede is compared on
-    // its own rather than by splitting the block's whole text.
-    const lede = never.locator('p').first();
-    const quarter = await lede.innerText();
-
-    await page.getByRole('button', { name: 'This month' }).click();
-    await page.waitForTimeout(600);
-    await never.scrollIntoViewIfNeeded();
-    expect(await lede.innerText()).toBe(quarter);
-  });
-
-  test('the CSV carries the scope, the window, the assumptions and the coverage note', async ({ page }) => {
-    await openUsage(page);
-    const [download] = await Promise.all([
-      page.waitForEvent('download'),
-      page.getByRole('button', { name: 'CSV' }).click(),
-    ]);
-    const stream = await download.createReadStream();
-    const chunks: Buffer[] = [];
-    for await (const chunk of stream) chunks.push(Buffer.from(chunk));
-    const csv = Buffer.concat(chunks).toString('utf8');
-
-    expect(csv).toContain('CFO: Whole company');
+    expect(csv).toContain('Value, for finance');
+    expect(csv).toContain('Whole company');
     expect(csv).toContain('This quarter');
-    expect(csv).toContain('Rows checked against a rule by hand per hour');
-    expect(csv).toContain('our number, until yours is on record');
+    expect(csv).toContain('Counted to 31 Mar 2026');
     expect(csv).toContain('It does not count edits, reviews, views or time spent');
+
+    // The same figures the page prints, from the same snapshot() call.
     expect(csv).toContain('1428000');
     expect(csv).toContain('18400');
+    expect(csv).toContain('7,131');
 
-    // The rate's derivation travels with the figure it produces, so a CFO who
-    // reads the export rather than the page still gets the whole sum.
+    // Every assumption with its derivation.
+    expect(csv).toContain('Rows checked against a rule by hand per hour');
     expect(csv).toContain('Where the auditor rate comes from');
     expect(csv).toContain('Glassdoor India, February 2026');
     expect(csv).toContain('PayScale, 2026');
     expect(csv).toContain('What those hours are worth, four ways');
-    expect(csv).toContain('Auditors you employ, costed on the hours they are available');
-    expect(csv).toContain('Hours bought from a firm, at the upper end');
   });
 
-  test('the head-of-team view opens on what is stuck, with the real error text', async ({ page }) => {
+  /* ── AC-12 · read and never write ───────────────────────────────────────── */
+
+  test('AC-12 no control on the page changes a record it reports on', async ({ page }) => {
     await openUsage(page);
-    await stripPermission(page, OWNER_PERMISSION);
-    await gotoUsage(page);
 
-    await expect(page.locator('h1 + p')).toHaveText('Is anything stuck?');
-    await expect(page.getByText(/Viewing as Head of Team · Your team only/)).toBeVisible();
-    // A team lead's default window is the month, not the quarter.
-    await expect(page.getByRole('button', { name: 'This month' })).toHaveAttribute('aria-pressed', 'true');
+    for (const view of ['Value', 'Coverage and findings', 'Activity'] as const) {
+      await chooseView(page, view);
+      for (const word of [/^Approve$/, /^Reject$/, /^Resolve$/, /^Save$/, /^Delete$/, /^Assign$/, /^Close$/]) {
+        await expect(page.getByRole('button', { name: word })).toHaveCount(0);
+      }
+    }
 
-    const stuck = page.locator('#stuck');
-    await expect(stuck).toContainText('Vendor Master Change Monitor');
-    await expect(stuck).toContainText('Rows 24,001 onward were never read.');
-
-    // What is stuck is the first thing on the tab this view opens on, and the
-    // savings are a tab away rather than above it.
-    const blocks = await page.locator('[data-usage-block] h3').allTextContents();
-    expect(blocks[0]).toBe('What is stuck right now');
-    expect(blocks).not.toContain('What it was worth');
-
-    await usageTab(page, 'Value');
-    await expect(page.locator('#headline')).toContainText('What it was worth');
+    // The one write in the feature is the audit event an export emits.
+    await expect(page.getByRole('button', { name: 'CSV' })).toBeVisible();
+    await expect(page.getByRole('button', { name: 'PDF' })).toBeVisible();
   });
 
-  test('the one per-person table is alphabetical and cannot be sorted', async ({ page }) => {
+  /* ── AC-13 · no benchmark and no target ─────────────────────────────────── */
+
+  test('AC-13 no benchmark, target or comparison against another company', async ({ page }) => {
     await openUsage(page);
-    await stripPermission(page, OWNER_PERMISSION);
-    await gotoUsage(page);
+    for (const view of ['Value', 'Coverage and findings', 'Activity'] as const) {
+      await chooseView(page, view);
+      const body = await page.locator('body').innerText();
+      expect(body).not.toMatch(/benchmark/i);
+      expect(body).not.toMatch(/percentile/i);
+      expect(body).not.toMatch(/industry average/i);
+      expect(body).not.toMatch(/compared with other/i);
+      expect(body).not.toMatch(/\btarget\b/i);
+    }
+  });
 
-    const people = page.locator('#people');
-    await people.scrollIntoViewIfNeeded();
-    await expect(people).toContainText('rather than comparing them');
+  /* ── AC-14 · nothing ranks anybody ──────────────────────────────────────── */
 
-    // No header is a button, a link, or anything else somebody could click to sort.
-    const headers = people.locator('th');
-    expect(await headers.count()).toBeGreaterThan(0);
-    expect(await headers.locator('button, a, [role=button]').count()).toBe(0);
+  test('AC-14 the per person table is alphabetical and nothing can reorder it', async ({ page }) => {
+    await openUsage(page);
+    await chooseView(page, 'Activity');
+    await openGroup(page, 'Who is using it');
 
-    const names = await people.locator('tbody tr td:first-child').allTextContents();
+    const table = page.locator('#people table');
+    await expect(table).toBeVisible();
+
+    const names = await table.locator('tbody tr td:first-child').allInnerTexts();
+    expect(names.length).toBeGreaterThan(1);
     expect(names).toEqual([...names].sort((a, b) => a.localeCompare(b)));
+
+    // No column head is a control, so there is nothing to sort by.
+    await expect(table.locator('thead button')).toHaveCount(0);
+    await expect(page.locator('#people')).toContainText('nothing on this page can reorder it');
   });
 
-  test('the auditor view is only theirs, in hours and never in rupees', async ({ page }) => {
+  /* ── AC-15 · every chart offers its table ───────────────────────────────── */
+
+  test('AC-15 a chart is one click from its numbers, and no chart uses ResponsiveContainer', async ({ page }) => {
     await openUsage(page);
-    await stripPermission(page, OWNER_PERMISSION);
-    await stripPermission(page, TEAM_PERMISSION);
-    await gotoUsage(page);
+    await openGroup(page, 'The same work, week by week');
 
-    await expect(page.locator('h1 + p')).toHaveText('What is waiting on me?');
-    await expect(page.getByText(/Viewing as Internal Auditor · Your own work only/)).toBeVisible();
+    const group = page.locator('#over-time');
+    await expect(group.locator('.recharts-wrapper')).toBeVisible();
+    await group.getByRole('button', { name: 'Show the numbers' }).click();
+    await page.waitForTimeout(300);
+    await expect(group.locator('table')).toBeVisible();
+    await expect(group).toContainText('Rows newly covered');
 
-    // One view offered, so there is no switch: a control with one option is
-    // furniture.
-    await expect(page.getByRole('button', { name: 'CFO', exact: true })).toHaveCount(0);
+    const dir = join(process.cwd(), 'src/components/usage');
+    for (const file of readdirSync(dir)) {
+      if (!file.endsWith('.tsx') && !file.endsWith('.ts')) continue;
+      expect(readFileSync(join(dir, file), 'utf8')).not.toContain('<ResponsiveContainer');
+    }
+  });
 
-    const blocks = await page.locator('[data-usage-block] h3').allTextContents();
-    expect(blocks[0]).toBe('What is waiting on you');
+  /* ── AC-16 · no input field anywhere ────────────────────────────────────── */
 
-    // No money anywhere on this view, so no cost block and no rupee figure.
-    await expect(page.locator('#cost')).toHaveCount(0);
-    const body = await page.locator('main, body').first().innerText();
-    expect(body).not.toContain('₹');
+  test('AC-16 there is no input field anywhere in the feature', async ({ page }) => {
+    await openUsage(page);
+    for (const view of ['Value', 'Coverage and findings', 'Activity'] as const) {
+      await chooseView(page, view);
+      // Open everything, so a field cannot hide inside a folded group.
+      const folds = page.locator('h2 button[aria-expanded="false"]');
+      for (let i = await folds.count(); i > 0; i--) {
+        await folds.first().click();
+        await page.waitForTimeout(150);
+      }
+      await expect(page.locator('main input, main textarea, main select')).toHaveCount(0);
+    }
+  });
 
-    await usageTab(page, 'Value');
-    await expect(page.locator('#my-work')).toContainText('Time you did not spend');
-    // Still no rupees once their own numbers are on screen.
-    expect(await page.locator('main, body').first().innerText()).not.toContain('₹');
+  /* ── AC-17 · at most three groups open ──────────────────────────────────── */
+
+  test('AC-17 each view opens with three groups expanded and the rest folded', async ({ page }) => {
+    await openUsage(page);
+    for (const view of ['Value', 'Coverage and findings', 'Activity'] as const) {
+      await chooseView(page, view);
+      expect(await page.locator('h2 button[aria-expanded="true"]').count()).toBe(3);
+      expect(await page.locator('h2 button[aria-expanded="false"]').count()).toBeGreaterThan(0);
+    }
+  });
+
+  /* ── AC-18 · the copy ───────────────────────────────────────────────────── */
+
+  test('AC-18 no em dash in visible copy outside a table blank', async ({ page }) => {
+    await openUsage(page);
+    for (const view of ['Value', 'Coverage and findings', 'Activity'] as const) {
+      await chooseView(page, view);
+      const prose = await page.locator('main p, main h1, main h2, main h3, main th').allInnerTexts();
+      for (const text of prose) expect(text).not.toContain('—');
+    }
+  });
+
+  /* ── Section 9 · the rules a later change could quietly break ───────────── */
+
+  test('a population is counted once, and its repeats are named on the same screen', async ({ page }) => {
+    await openUsage(page);
+    const worth = page.locator('#worth');
+    await expect(worth).toContainText('counted once for each population however often it was re-tested');
+    await expect(worth).toContainText('1,428,000 rows');
+    await expect(worth).toContainText('52,759,600 row checks performed');
+  });
+
+  test('failed runs are kept out of every saving and reported on their own', async ({ page }) => {
+    await openUsage(page);
+    await expect(page.locator('#worth')).toContainText('Failed runs are left out of every saving here and reported on their own');
+
+    await chooseView(page, 'Activity');
+    await expect(page.locator('#ran')).toContainText('machine time went on runs that produced nothing');
+  });
+
+  test('what is stuck carries the words the failure itself used', async ({ page }) => {
+    await openUsage(page);
+    await chooseView(page, 'Activity');
+    const stuck = page.locator('#ran');
+    await expect(stuck).toContainText('Connection to the vendor master reset after 30s');
+    await expect(stuck).toContainText('Stuck means it failed and nothing has run successfully since');
   });
 
   test('insights are split by kind and never added together', async ({ page }) => {
     await openUsage(page);
-    await usageTab(page, 'Activity');
-    const insights = page.locator('#insights');
-    await insights.scrollIntoViewIfNeeded();
-
-    await expect(insights).toContainText('inside individual checks');
-    await expect(insights).toContainText('reading whole');
-    await expect(insights).toContainText('would count the same observation twice');
-
-    // Two lists rather than one, because one list would need one total.
-    await expect(insights.getByRole('button', { name: /written inside one check/ })).toHaveCount(1);
-    await expect(insights.getByRole('button', { name: /written across an engagement/ })).toHaveCount(1);
+    await chooseView(page, 'Activity');
+    const block = page.locator('#ran');
+    await expect(block).toContainText('Inside one check');
+    await expect(block).toContainText('Across a whole engagement');
+    await expect(block).toContainText('a total would count the same observation twice');
   });
 
-  test('ageing runs from the day a finding was raised, and says what open means', async ({ page }) => {
+  test('open means nobody has dealt with it, and age runs from the day it was raised', async ({ page }) => {
     await openUsage(page);
-    await usageTab(page, 'Coverage');
-    const ageing = page.locator('#ageing');
-    await ageing.scrollIntoViewIfNeeded();
-
-    await expect(ageing).toContainText('0 to 7 days');
-    await expect(ageing).toContainText('8 to 30 days');
-    await expect(ageing).toContainText('More than 30 days');
-    await expect(ageing).toContainText('not that the problem is still there');
-
-    // The 30-plus bucket opens its list, oldest first, each with its owner.
-    const drill = ageing.getByRole('button', { name: /open more than 30 days/ });
-    if (await drill.count()) {
-      await drill.first().click();
-      await expect(ageing.locator('ul li').first()).toContainText('owned by');
-    }
-  });
-
-  test('the false-alarm rate divides by classified findings only', async ({ page }) => {
-    await openUsage(page);
-    await usageTab(page, 'Coverage');
-    const quality = page.locator('#quality');
-    await quality.scrollIntoViewIfNeeded();
-
-    await expect(quality).toContainText('Called real');
-    await expect(quality).toContainText('Called a false alarm');
-    // The unclassified findings are their own bar and never join the divisor.
-    await expect(quality).toContainText('Nobody has looked yet');
-    await expect(quality).toContainText('It does not mean the team is failing');
-  });
-
-  test('the process strip shows where each open engagement has got to', async ({ page }) => {
-    await openUsage(page);
-    await usageTab(page, 'Coverage');
-    const portfolio = page.locator('#portfolio');
-    await portfolio.scrollIntoViewIfNeeded();
-
-    await expect(portfolio).toContainText('Where each open engagement has got to');
-    await expect(portfolio).toContainText('Controls tested');
-    await expect(portfolio).toContainText('Findings open');
-    await expect(portfolio).toContainText('Plans open');
-
-    // Sorted by a date rather than by a person, which is what stops it being a
-    // ranking through the back door.
-    await expect(portfolio).toContainText('Sorted by a date rather than by a person');
-  });
-
-  test('the page reads and never writes: no approve or reject anywhere on it', async ({ page }) => {
-    await openUsage(page);
-    await usageTab(page, 'Activity');
-    const memory = page.locator('#memory');
-    await memory.scrollIntoViewIfNeeded();
-
-    await expect(memory).toContainText('This page only');
-    await expect(memory.getByRole('button', { name: /^Approve$/ })).toHaveCount(0);
-    await expect(memory.getByRole('button', { name: /^Reject$/ })).toHaveCount(0);
-    await expect(memory.getByRole('button', { name: 'Open Smart Learn' }).first()).toBeVisible();
-  });
-
-  test('what was created counts five things, and controls is one of them', async ({ page }) => {
-    await openUsage(page);
-    await usageTab(page, 'Activity');
-    const created = page.locator('#created');
-    await created.scrollIntoViewIfNeeded();
-
-    await expect(created).toContainText('Created, not activity');
-    // Five tables, named in the lede. An empty one shows a designed zero rather
-    // than the unmeasured empty state, so the noun is on screen either way.
-    const text = await created.innerText();
-    for (const noun of ['engagement', 'control', 'risk', 'dashboard', 'report']) {
-      expect(text.toLowerCase()).toContain(noun);
-    }
-  });
-  /*
-   * Ten things a reader could read as a contradiction, each fixed once and
-   * pinned here. Every one of these was a figure or a sentence that argued with
-   * another figure or sentence somewhere else on the same page.
-   */
-
-  test('the two open counts on the coverage tab say which is which', async ({ page }) => {
-    await openUsage(page);
-    await usageTab(page, 'Coverage');
-
-    // "60 raised, 37 still open" is about the window. The block under it counts
-    // every finding nobody has closed, whenever it was raised, and now says so
-    // in the sentence rather than only in the fold.
+    await chooseView(page, 'Coverage and findings');
     const caught = page.locator('#caught');
-    await caught.scrollIntoViewIfNeeded();
-    await expect(caught).toContainText('of those still open');
-
-    const ageing = page.locator('#ageing');
-    await ageing.scrollIntoViewIfNeeded();
-    // The distinction rides on the figure's own context line now, where the
-    // number is, rather than in a paragraph above it.
-    await expect(ageing).toContainText('will not match the open figure in the block above');
+    await expect(caught).toContainText('Open means nobody has dealt with it yet, not that the problem is still there');
+    await expect(caught).toContainText('Age runs from the day a finding was first raised');
   });
 
-  test('the cost block and the activity tab reconcile their lookup counts', async ({ page }) => {
+  test('the false alarm rate divides by classified findings only', async ({ page }) => {
     await openUsage(page);
-    const cost = page.locator('#cost');
-    await cost.scrollIntoViewIfNeeded();
-    const charged = Number((await cost.innerText()).match(/([\d,]+) calls on a contract price/)?.[1].replace(/,/g, ''));
-    expect(charged).toBeGreaterThan(0);
+    await chooseView(page, 'Coverage and findings');
+    const caught = page.locator('#caught');
+    await expect(caught).toContainText('Nobody has looked yet');
+    await expect(caught).toContainText('Dividing by every finding would let a large untouched backlog report a flattering one');
+  });
 
-    // The activity tab counts every attempt. It used to print a larger number
-    // with nothing on screen to explain the gap, so the cost block now names
-    // both counts and says what sits between them.
-    await usageTab(page, 'Activity');
-    const volume = page.locator('#volume');
-    await volume.scrollIntoViewIfNeeded();
-    await volume.getByText('Show the numbers').click();
-    const attempted = Number((await volume.innerText()).match(/Paid lookup calls\s*([\d,]+)/)?.[1].replace(/,/g, ''));
-    expect(attempted).toBeGreaterThanOrEqual(charged);
+  test('an unmeasured figure is dashed and never renders as a nought', async ({ page }) => {
+    await openUsage(page);
+    await chooseView(page, 'Coverage and findings');
 
-    if (attempted > charged) {
-      await usageTab(page, 'Value');
-      await cost.scrollIntoViewIfNeeded();
-      await cost.getByText('How this is counted').click();
-      await expect(cost).toContainText(`The activity tab counts ${attempted.toLocaleString('en-IN')} lookup calls`);
-      await expect(cost).toContainText('are counted and charged nothing');
+    // Nothing in the records carries a completion date, so plan completion is
+    // absent and says why. It never prints 0%.
+    const plan = page.locator('#plan');
+    await expect(plan).toContainText('No engagement in your records carries a completion date');
+    await expect(plan).not.toContainText('0%');
+    await expect(plan.locator('.border-dashed')).toBeVisible();
+  });
+
+  test('never exercised ignores the window on purpose', async ({ page }) => {
+    await openUsage(page);
+    await chooseView(page, 'Coverage and findings');
+    const covered = page.locator('#covered');
+    const never = await covered.getByText('Never exercised at all').locator('..').locator('..').innerText();
+
+    await page.getByRole('button', { name: 'This month', exact: true }).click();
+    await page.waitForTimeout(700);
+    expect(await covered.getByText('Never exercised at all').locator('..').locator('..')
+      .innerText()).toBe(never);
+  });
+
+  test('a reader on their own work sees hours and never rupees', async ({ page }) => {
+    await openUsage(page);
+    await page.getByRole('button', { name: 'Your own work only', exact: true }).click();
+    await page.waitForTimeout(800);
+
+    for (const view of ['Value', 'Coverage and findings', 'Activity'] as const) {
+      await chooseView(page, view);
+      const folds = page.locator('h2 button[aria-expanded="false"]');
+      for (let i = await folds.count(); i > 0; i--) {
+        await folds.first().click();
+        await page.waitForTimeout(150);
+      }
+      expect(await page.locator('main').innerText()).not.toContain('₹');
     }
   });
 
-  test('the window figure and the never-ever figure are told apart', async ({ page }) => {
+  test('a drill down is named in the sentence and leaves for the screen that owns the work', async ({ page }) => {
     await openUsage(page);
-    await usageTab(page, 'Coverage');
-
-    // Same number, two different facts. The tile now says how many of its own
-    // controls are in the harder list.
-    const coverage = page.locator('#coverage');
-    await coverage.scrollIntoViewIfNeeded();
-    await expect(coverage).toContainText('not exercised in this window');
-    await expect(coverage).toContainText(/has ever been tested|never tested at all|tested at some point before/);
-
-    // And the never-ever block says whether its list is that same list.
-    const never = page.locator('#never');
-    await never.scrollIntoViewIfNeeded();
-    await never.getByText('How this is counted').click();
-    await expect(never).toContainText(/those same ones|that same one|Separately/);
-  });
-
-  test('never exercised never prints a zero half of its own sentence', async ({ page }) => {
-    await openUsage(page);
-    await usageTab(page, 'Coverage');
-    const lede = page.locator('#never p').first();
-    await lede.scrollIntoViewIfNeeded();
-    // "and 0 checks have never run" is a double negative with a zero in it.
-    expect(await lede.innerText()).not.toMatch(/\b0 (checks|controls) have never/);
-  });
-
-  test('alerts that fired do not read as a contradiction of alerts configured', async ({ page }) => {
-    await openUsage(page);
-    await usageTab(page, 'Activity');
-    const dashboards = page.locator('#dashboards');
-    await dashboards.scrollIntoViewIfNeeded();
-    const text = await dashboards.innerText();
-
-    // An alert set up last quarter still fires in this one, so a window with
-    // fires and no new alerts says that rather than the bare "No alert was
-    // configured in this window".
-    if (/Alerts fired [1-9]/.test(text) && /Open the 0 alerts set up in this window/.test(text)) {
-      await expect(dashboards).toContainText('set up before');
-    }
-  });
-
-  test('a window with almost nothing in it does not claim a busiest stretch', async ({ page }) => {
-    await openUsage(page);
-    await page.getByRole('button', { name: 'This month' }).click();
-    await page.waitForTimeout(600);
-    const overTime = page.locator('#over-time');
-    await overTime.scrollIntoViewIfNeeded();
-    const text = await overTime.innerText();
-
-    // "The busiest stretch was 1 Mar, at 1 run" is the lede reading a formula
-    // out loud. Below the floor it says how little there was and stops.
-    if (/at 1 run\b/.test(text)) {
-      expect(text).toContain('too little to have a busy stretch');
-    }
-  });
-
-  test('the sampling sentence counts every validation the link opens', async ({ page }) => {
-    await openUsage(page);
-    await stripPermission(page, OWNER_PERMISSION);
-    await gotoUsage(page);
-    await usageTab(page, 'Coverage');
-
-    const sampling = page.locator('#sampling');
-    await sampling.scrollIntoViewIfNeeded();
-    await sampling.getByText('How this is counted').click();
-    const text = await sampling.innerText();
-    const opened = Number(text.match(/Open the ([\d,]+) validation/)?.[1].replace(/,/g, '') ?? '0');
-    const settled = ['passed', 'failed', 'errored']
-      .map(word => Number(text.match(new RegExp(`([\\d,]+) (?:samples? )?${word}`))?.[1].replace(/,/g, '') ?? '0'))
-      .reduce((a, b) => a + b, 0);
-
-    // Anything the sentence does not account for has to be named in it.
-    if (opened > settled) expect(text).toContain('still running or waiting to start');
-  });
-
-  test('the auditor Value tab shows their hours, and Coverage is not one block', async ({ page }) => {
-    await openUsage(page);
-    await stripPermission(page, OWNER_PERMISSION);
-    await stripPermission(page, TEAM_PERMISSION);
-    await gotoUsage(page);
-
-    await usageTab(page, 'Value');
-    // A tab called Value that shows no value is the complaint this fixes. The
-    // hours are in the block's own sum, once, with nothing restating them.
-    const myWork = page.locator('#my-work');
-    await myWork.scrollIntoViewIfNeeded();
-    await expect(myWork).toContainText('Time you did not spend');
-
-    await usageTab(page, 'Coverage');
-    const blocks = page.locator('[data-usage-block]');
-    expect(await blocks.count()).toBeGreaterThan(1);
-
-    // Still hours and never rupees, whatever was added to the tab.
-    expect(await page.locator('main, body').first().innerText()).not.toContain('₹');
-  });
-
-  test('the two lookup counts say on screen why they differ', async ({ page }) => {
-    await openUsage(page);
-
-    // Activity counts every call attempted.
-    await usageTab(page, 'Activity');
-    const surfaces = page.locator('#ai-usage');
-    await surfaces.scrollIntoViewIfNeeded();
-    const surfaceText = await surfaces.innerText();
-    const attempted = Number(
-      surfaceText.match(/([\d,]+) calls/)?.[1].replace(/,/g, '') ?? '0',
-    );
-
-    // The cost block counts what the contract charges for.
-    await usageTab(page, 'Value');
-    const cost = page.locator('#cost');
-    await cost.scrollIntoViewIfNeeded();
-    const charged = Number(
-      (await cost.innerText()).match(/([\d,]+) calls on a contract price/)?.[1].replace(/,/g, '') ?? '0',
-    );
-
-    // Where they disagree, the gap is named with its number next to the larger
-    // one, not folded away. Two counts of one thing and no reason between them
-    // is how a page loses its reader.
-    if (attempted > charged) {
-      expect(surfaceText).toContain(`${charged.toLocaleString('en-IN')} of them are on a contract price`);
-      expect(surfaceText).toMatch(/nobody has priced yet|never came back/);
-    }
+    await chooseView(page, 'Coverage and findings');
+    await page.locator('#plan').getByRole('button', { name: 'Open the engagements' }).first().click();
+    await page.waitForTimeout(900);
+    await expect(page.getByRole('heading', { name: 'Platform Usage', level: 1 })).toHaveCount(0);
   });
 });
