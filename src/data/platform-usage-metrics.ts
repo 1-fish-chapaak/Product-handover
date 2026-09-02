@@ -217,12 +217,18 @@ export const REFUSAL =
  * The window
  * ────────────────────────────────────────────────────────────────────────── */
 
-export type PeriodId = 'this-month' | 'this-quarter' | 'this-year' | 'since-start' | 'custom';
-
-export interface CustomRange { from: number; to: number }
+/**
+ * Two windows, read side by side.
+ *
+ * A committee reads the quarter against the year to date, so those are the two
+ * the page holds and there is no third. The five named periods that were here
+ * before included one, `this-year`, that resolved to 1 January and therefore
+ * printed the same figures as the quarter on an anchor of 31 March.
+ */
+export type WindowId = 'quarter' | 'fy-ytd';
 
 export interface Period {
-  id: PeriodId;
+  id: WindowId;
   /** How it reads on a control: "This quarter". */
   label: string;
   /** How it reads inside a sentence: "this quarter". */
@@ -237,15 +243,21 @@ export interface Period {
   days: number;
 }
 
-const startOfMonth = (ms: number) => {
-  const d = new Date(ms);
-  return Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), 1);
-};
 const startOfQuarter = (ms: number) => {
   const d = new Date(ms);
   return Date.UTC(d.getUTCFullYear(), Math.floor(d.getUTCMonth() / 3) * 3, 1);
 };
-const startOfYear = (ms: number) => Date.UTC(new Date(ms).getUTCFullYear(), 0, 1);
+/**
+ * 1 April, the start of the Indian financial year the moment falls in.
+ *
+ * The anchor is 31 March 2026, which is the last day of that year, so the year
+ * to date runs the full twelve months from 1 April 2025.
+ */
+const startOfFinancialYear = (ms: number) => {
+  const d = new Date(ms);
+  const year = d.getUTCMonth() >= 3 ? d.getUTCFullYear() : d.getUTCFullYear() - 1;
+  return Date.UTC(year, 3, 1);
+};
 
 /**
  * How many person-months a window is worth.
@@ -277,7 +289,7 @@ function monthsCovered(from: number, to: number): number {
   return months;
 }
 
-function make(id: PeriodId, label: string, phrase: string, from: number, to: number): Period {
+function make(id: WindowId, label: string, phrase: string, from: number, to: number): Period {
   const span = to - from;
   const days = Math.max(1, Math.round(span / DAY_MS));
   return {
@@ -289,44 +301,31 @@ function make(id: PeriodId, label: string, phrase: string, from: number, to: num
   };
 }
 
-export function period(id: PeriodId, custom?: CustomRange | null): Period {
-  switch (id) {
-    case 'this-month':
-      return make('this-month', 'This month', 'this month', startOfMonth(ANCHOR), ANCHOR);
-    case 'this-year':
-      return make('this-year', 'This year', 'this year', startOfYear(ANCHOR), ANCHOR);
-    case 'since-start':
-      return make('since-start', 'Since you started', 'since you started', HISTORY_START, ANCHOR);
-    case 'custom':
-      return custom
-        ? make('custom', 'Custom range', `${formatDate(custom.from)} to ${formatDate(custom.to)}`, custom.from, custom.to)
-        : period('this-quarter');
-    default:
-      return make('this-quarter', 'This quarter', 'this quarter', startOfQuarter(ANCHOR), ANCHOR);
-  }
+/** Both windows, built together, because the page reads them together. */
+export function windows(): { quarter: Period; ytd: Period } {
+  return {
+    quarter: make('quarter', 'This quarter', 'this quarter', startOfQuarter(ANCHOR), ANCHOR),
+    ytd: make('fy-ytd', 'Year to date', 'the year to date', startOfFinancialYear(ANCHOR), ANCHOR),
+  };
 }
 
-export const periodOptions: { id: PeriodId; label: string }[] = [
-  { id: 'this-month', label: 'This month' },
-  { id: 'this-quarter', label: 'This quarter' },
-  { id: 'this-year', label: 'This year' },
-  { id: 'since-start', label: 'Since you started' },
-  { id: 'custom', label: 'Custom' },
+/** One of the two, by name. */
+export function windowOf(id: WindowId): Period {
+  const both = windows();
+  return id === 'fy-ytd' ? both.ytd : both.quarter;
+}
+
+export const windowOptions: { id: WindowId; label: string }[] = [
+  { id: 'quarter', label: 'This quarter' },
+  { id: 'fy-ytd', label: 'Year to date' },
 ];
 
-/** The default window per view: a CFO reads a quarter, everyone else a month. */
-export const DEFAULT_PERIOD: Record<Persona, PeriodId> = {
-  cfo: 'this-quarter',
-  head_of_team: 'this-month',
-  auditor: 'this-month',
-};
+/** The page opens on the quarter, because that is what the committee asks about. */
+export const DEFAULT_WINDOW: WindowId = 'quarter';
 
 /** What the comparison is against, said by its real length rather than "last period". */
 export function priorLabel(p: Period): string {
-  if (p.id === 'this-month') return 'the month before';
-  if (p.id === 'this-quarter') return 'the quarter before';
-  if (p.id === 'this-year') return 'the year before';
-  return `the ${p.days} days before`;
+  return p.id === 'fy-ytd' ? 'the year before' : 'the quarter before';
 }
 
 const change = (now: number, before: number): number | null => {

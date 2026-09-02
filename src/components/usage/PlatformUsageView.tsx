@@ -54,18 +54,18 @@
 
 import { useMemo, useState, type ReactNode } from 'react';
 import { AnimatePresence, motion } from 'motion/react';
-import { Activity, CalendarRange, Download, FileText, Lock, ShieldCheck, TrendingUp } from 'lucide-react';
+import { Activity, Download, FileText, Lock, ShieldCheck, TrendingUp } from 'lucide-react';
 import { useCurrentUser, useCan } from '../../context/CurrentUserContext';
 import { useAdminData } from '../../context/AdminDataContext';
 import { useToast } from '../shared/Toast';
 import { Button } from '../shared/Button';
 import { useMemorySessionVersion } from '../../data/memorySession';
-import { ANCHOR, COVERAGE_NOTE, dataAsOfLabel, formatDate, isoDay } from '../../data/platform-usage';
+import { COVERAGE_NOTE, dataAsOfLabel, formatDate } from '../../data/platform-usage';
 import {
-  DEFAULT_PERIOD, PERSONA_QUESTION, PERSONA_SCOPE_LABEL, PERSONA_TITLE, REFUSAL,
-  calibrate, entitledViews, period as buildPeriod, periodOptions, personaFor, snapshot,
-  type AttentionCard, type AttentionTarget, type CustomRange, type Persona, type PeriodId,
-  type QueueFigures, type Scope,
+  DEFAULT_WINDOW, PERSONA_QUESTION, PERSONA_SCOPE_LABEL, PERSONA_TITLE, REFUSAL,
+  calibrate, entitledViews, personaFor, snapshot, windowOf, windowOptions,
+  type AttentionCard, type AttentionTarget, type Persona, type QueueFigures, type Scope,
+  type WindowId,
 } from '../../data/platform-usage-metrics';
 import { AttentionStrip, BlockGroup, UsageTabs } from './usageKit';
 import {
@@ -209,20 +209,12 @@ export default function PlatformUsageView() {
 
   /* ── The window ─────────────────────────────────────────────────────────── */
 
-  const [periodId, setPeriodId] = useState<PeriodId>(() => DEFAULT_PERIOD[ceiling]);
-  const [custom, setCustom] = useState<CustomRange | null>(null);
-  const [customOpen, setCustomOpen] = useState(false);
+  // Two windows and no third. The page opens on the quarter, because that is
+  // the window the committee asks about, and the year to date is the context it
+  // gets read in.
+  const [windowId, setWindowId] = useState<WindowId>(DEFAULT_WINDOW);
 
-  // Until somebody picks a window for themselves, each view opens on the one it
-  // is meant to be read in: the quarter for a CFO, the month for the two views
-  // that are about what is happening now. Once a reader has chosen, switching
-  // views keeps their choice rather than overruling it.
-  const [periodChosen, setPeriodChosen] = useState(false);
-
-  const choosePeriod = (id: PeriodId) => {
-    setPeriodChosen(true);
-    setPeriodId(id);
-  };
+  const chooseWindow = (id: WindowId) => setWindowId(id);
 
   /* ── The tab ────────────────────────────────────────────────────────────── */
 
@@ -239,10 +231,9 @@ export default function PlatformUsageView() {
 
   const chooseView = (view: Persona) => {
     setRequested(view);
-    if (!periodChosen) setPeriodId(DEFAULT_PERIOD[view]);
     if (!tabChosen) setTab(DEFAULT_TAB[view]);
   };
-  const period = useMemo(() => buildPeriod(periodId, custom), [periodId, custom]);
+  const period = useMemo(() => windowOf(windowId), [windowId]);
 
   /* ── Every number on the view, assembled once ───────────────────────────── */
 
@@ -578,9 +569,7 @@ export default function PlatformUsageView() {
   const scopeLine = [
     `Viewing as ${PERSONA_TITLE[persona]}`,
     PERSONA_SCOPE_LABEL[persona] + (persona === 'head_of_team' && myTeam ? ` · ${myTeam}` : ''),
-    period.id === 'custom' && custom
-      ? `${formatDate(custom.from)} to ${formatDate(custom.to)}`
-      : `${period.label}, ${formatDate(period.from)} to ${formatDate(period.to)}`,
+    `${period.label}, ${formatDate(period.from)} to ${formatDate(period.to)}`,
     dataAsOfLabel(),
   ].join(' · ');
 
@@ -627,24 +616,16 @@ export default function PlatformUsageView() {
 
             <div className="flex flex-wrap items-center gap-2">
               <div className="inline-flex rounded-lg border border-canvas-border bg-canvas-elevated p-0.5">
-                {periodOptions.map(option => (
+                {windowOptions.map(option => (
                   <button
                     key={option.id}
                     type="button"
-                    onClick={() => {
-                      if (option.id === 'custom') {
-                        setCustomOpen(true);
-                        return;
-                      }
-                      setCustomOpen(false);
-                      choosePeriod(option.id);
-                    }}
-                    aria-pressed={periodId === option.id}
+                    onClick={() => chooseWindow(option.id)}
+                    aria-pressed={windowId === option.id}
                     className={`h-8 px-3 rounded-md text-[0.75rem] font-medium transition-colors ${
-                      periodId === option.id ? 'bg-brand-50 text-brand-700' : 'text-ink-600 hover:text-brand-700'
+                      windowId === option.id ? 'bg-brand-50 text-brand-700' : 'text-ink-600 hover:text-brand-700'
                     }`}
                   >
-                    {option.id === 'custom' ? <CalendarRange size={13} className="inline -mt-0.5 mr-1" /> : null}
                     {option.label}
                   </button>
                 ))}
@@ -662,50 +643,6 @@ export default function PlatformUsageView() {
               )}
             </div>
           </div>
-
-          {customOpen && (
-            <div className="mt-3 flex flex-wrap items-end gap-3 rounded-lg border border-canvas-border bg-canvas px-4 py-3">
-              <label className="text-[0.75rem] text-ink-600">
-                From
-                <input
-                  type="date"
-                  defaultValue={isoDay(period.from)}
-                  max={isoDay(ANCHOR)}
-                  onChange={e => {
-                    const from = Date.parse(`${e.target.value}T00:00:00Z`);
-                    if (!Number.isNaN(from)) setCustom(prev => ({ from, to: prev?.to ?? ANCHOR }));
-                  }}
-                  className="mt-1 block h-8 px-2 rounded-md border border-canvas-border bg-canvas-elevated text-[0.875rem] text-ink-900 tabular-nums"
-                />
-              </label>
-              <label className="text-[0.75rem] text-ink-600">
-                To
-                <input
-                  type="date"
-                  defaultValue={isoDay(period.to)}
-                  max={isoDay(ANCHOR)}
-                  onChange={e => {
-                    const to = Date.parse(`${e.target.value}T23:59:59Z`);
-                    if (!Number.isNaN(to)) setCustom(prev => ({ from: prev?.from ?? period.from, to }));
-                  }}
-                  className="mt-1 block h-8 px-2 rounded-md border border-canvas-border bg-canvas-elevated text-[0.875rem] text-ink-900 tabular-nums"
-                />
-              </label>
-              <button
-                type="button"
-                onClick={() => {
-                  if (custom) choosePeriod('custom');
-                  setCustomOpen(false);
-                }}
-                className="h-8 px-3 rounded-md bg-brand-600 text-white text-[0.75rem] font-medium"
-              >
-                Use this range
-              </button>
-              <p className="text-[0.75rem] text-ink-500">
-                The comparison is always the window of the same length immediately before the one you pick.
-              </p>
-            </div>
-          )}
 
           {/* The tabs sit on the strip's own border, which is their underline
               track, so the page grows one control rather than one more box. */}

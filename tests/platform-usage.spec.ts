@@ -709,3 +709,91 @@ test.describe('Platform Usage', () => {
     }
   });
 });
+
+/**
+ * The revamp. Two windows read side by side, and no invented money.
+ *
+ * These are the rules the rebuild is being written against, so they live in
+ * their own describe rather than mixed into the tests above, which still assert
+ * the build that is being replaced.
+ */
+test.describe('Platform Usage · the financial year window model', () => {
+  test('the quarter is Q4 FY26 and the year to date starts on 1 April', async ({ page }) => {
+    await openUsage(page);
+
+    // The quarter the page opens on.
+    await expect(page.getByText(/This quarter, 1 Jan 2026 to 31 Mar 2026/)).toBeVisible();
+
+    // Two windows, and no third. The five named periods are gone.
+    const pills = page.getByRole('button', { name: /^(This quarter|Year to date)$/ });
+    await expect(pills).toHaveCount(2);
+    await expect(page.getByRole('button', { name: 'This month' })).toHaveCount(0);
+    await expect(page.getByRole('button', { name: 'This year' })).toHaveCount(0);
+    await expect(page.getByRole('button', { name: 'Since you started' })).toHaveCount(0);
+    await expect(page.getByRole('button', { name: 'Custom' })).toHaveCount(0);
+
+    // The Indian financial year, so the year to date is a full twelve months
+    // ending on the same day the quarter does.
+    await page.getByRole('button', { name: 'Year to date' }).click();
+    await page.waitForTimeout(600);
+    await expect(page.getByText(/Year to date, 1 Apr 2025 to 31 Mar 2026/)).toBeVisible();
+  });
+
+  test('the two windows differ on a line that has history behind it', async ({ page }) => {
+    await openUsage(page);
+
+    const checksIn = async () => {
+      const hero = page.locator('#hero');
+      await hero.scrollIntoViewIfNeeded();
+      const text = await hero.innerText();
+      return Number((text.match(/across\s+([\d,]+)\s+checks/)?.[1] ?? '0').replace(/,/g, ''));
+    };
+
+    const quarter = await checksIn();
+    expect(quarter).toBe(340);
+
+    await page.getByRole('button', { name: 'Year to date' }).click();
+    await page.waitForTimeout(600);
+    const ytd = await checksIn();
+
+    // Twelve months holds more successful checks than the last three of them.
+    expect(ytd).toBeGreaterThan(quarter);
+  });
+
+  test('Q4 FY26 still reconciles to the worked example', async ({ page }) => {
+    await openUsage(page);
+    const hero = page.locator('#hero');
+
+    // 340 successful runs over populations of 1,428,000 rows, in 8.5 hours of
+    // machine time, against a contract that charged 18,400 rupees. Extending
+    // history back to 1 April 2025 must not move any of the four.
+    await expect(hero).toContainText('1,428,000');
+    await expect(hero).toContainText('340');
+    await expect(hero).toContainText('8.5');
+
+    const cost = page.locator('#cost');
+    await cost.scrollIntoViewIfNeeded();
+    await expect(cost).toContainText('₹18,400');
+  });
+
+  test('the quarter coverage headline reconciles with its own bar list', async ({ page }) => {
+    await openUsage(page);
+    await usageTab(page, 'Coverage');
+    const coverage = page.locator('#coverage');
+    await coverage.scrollIntoViewIfNeeded();
+
+    // Coverage credits a population to the window that first tested it inside
+    // that window, so the bars have to add back up to the headline. Three more
+    // months of history must not move a population's credit out of the quarter.
+    await expect(coverage).toContainText('1,428,000');
+
+    await coverage.getByRole('button', { name: /^Table$/ }).first().click();
+    await page.waitForTimeout(400);
+    const text = await coverage.innerText();
+    const sizes = [...text.matchAll(/\b(\d{1,3}(?:,\d{3})+)\b/g)].map(m => Number(m[1].replace(/,/g, '')));
+    // The eleven populations are all listed, and the largest of them is the
+    // 486,000 journal entries.
+    expect(sizes).toContain(486_000);
+    expect(sizes).toContain(312_000);
+  });
+});
