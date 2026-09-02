@@ -1,7 +1,7 @@
 /**
  * Platform Usage as a CSV.
  *
- * The guide asks the export to carry whose view it is, what window it covers,
+ * The export carries the scope it was read at, the window it covers,
  * which assumptions produced the figures, and the coverage note, so that a
  * number pasted into a board pack can still be defended six weeks later. It
  * reads the same `snapshot()` the page renders, so the file and the screen
@@ -10,7 +10,7 @@
 
 import { COVERAGE_NOTE, dataAsOfLabel, formatDate } from '../../data/platform-usage';
 import {
-  ASSUMPTIONS, PERSONA_SCOPE_LABEL, PERSONA_TITLE, REVIEW_PROXY_NOTE, SETTING_SHORT, SOURCE_LABEL,
+  ASSUMPTIONS, REVIEW_PROXY_NOTE, SCOPE_LABEL, SETTING_SHORT, SOURCE_LABEL,
   fmtDuration, fmtHours, fmtInt, fmtMoneyExact, fmtOneDp, fmtPct, fmtPeople, priorLabel, usageFileName,
   type UsageSnapshot,
 } from '../../data/platform-usage-metrics';
@@ -28,7 +28,7 @@ export function usageCsv(data: UsageSnapshot): string {
   const lines: string[] = [];
 
   lines.push(row('Platform Usage'));
-  lines.push(row('View', `${PERSONA_TITLE[scope.persona]}: ${PERSONA_SCOPE_LABEL[scope.persona]}`));
+  lines.push(row('Scope', SCOPE_LABEL[scope.level]));
   if (scope.team) lines.push(row('Team', scope.team));
   lines.push(row('Window', `${period.label}: ${formatDate(period.from)} to ${formatDate(period.to)}`));
   lines.push(row('Compared with', priorLabel(period)));
@@ -40,7 +40,7 @@ export function usageCsv(data: UsageSnapshot): string {
   ASSUMPTIONS.forEach(key => {
     lines.push(row(
       SETTING_SHORT[key],
-      key === 'hourlyRate' ? settings[key] : key === 'manualControlTestHours' ? fmtOneDp(settings[key]) : settings[key],
+      key === 'manualControlTestHours' ? fmtOneDp(settings[key]) : settings[key],
       SOURCE_LABEL[settings.source[key]],
       settings.note[key],
     ));
@@ -56,21 +56,14 @@ export function usageCsv(data: UsageSnapshot): string {
   lines.push(row('Machine time', fmtDuration(value.machineHours), 'measured'));
   lines.push(row('Hours if done by hand', fmtHours(value.manualHours), 'estimated'));
   lines.push(row('Hours saved', fmtHours(value.hoursSaved), 'estimated'));
-  lines.push(row('What the hours saved are worth (INR)', Math.round(value.rupees), 'estimated'));
   lines.push(row('People freed, full time', fmtPeople(value.people), 'estimated'));
   lines.push(row('Charged by the contract (INR)', Math.round(cost.totalPaise / 100), 'measured'));
-  lines.push(row('Net value (INR)', Math.round(data.netRupees), 'estimated'));
   lines.push(row('Machine time wasted on failed runs', fmtDuration(data.reliability.wastedHours), 'measured'));
   lines.push('');
 
-  lines.push(row('How much the pace matters'));
-  lines.push(row('Rows checked by hand per hour', 'Hours by hand', 'The same work in money (INR)'));
-  data.sensitivity.forEach(s => lines.push(row(s.rate, fmtHours(s.hours), Math.round(s.rupees))));
-  lines.push('');
-
   lines.push(row('Over time. A population is credited once, to the window that first tested it'));
-  lines.push(row('Window', 'Runs', 'Row checks performed', 'Rows newly covered', 'Hours avoided', 'Value (INR)'));
-  data.buckets.forEach(b => lines.push(row(b.label, b.runs, b.checks, b.newRows, fmtHours(b.hours), Math.round(b.rupees))));
+  lines.push(row('Window', 'Runs', 'Row checks performed', 'Rows newly covered', 'Hours avoided'));
+  data.buckets.forEach(b => lines.push(row(b.label, b.runs, b.checks, b.newRows, fmtHours(b.hours))));
   lines.push('');
 
   lines.push(row('Control coverage'));

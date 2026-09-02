@@ -23,7 +23,7 @@ export function SmartLearn({
   scope: Scope;
   onOpenSmartLearn: () => void;
 }) {
-  const mine = scope.persona === 'auditor';
+  const mine = scope.level === 'person';
   const title = mine ? 'What the assistant has learned about you' : 'What the assistant has learned';
 
   // Memory switched off, or nothing learned yet. Four zeros would look measured,

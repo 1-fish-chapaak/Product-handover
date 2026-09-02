@@ -54,7 +54,7 @@
 
 import { useMemo, useState, type ReactNode } from 'react';
 import { AnimatePresence, motion } from 'motion/react';
-import { Activity, Download, FileText, Lock, ShieldCheck, TrendingUp } from 'lucide-react';
+import { Activity, Download, FileText, ShieldCheck, TrendingUp } from 'lucide-react';
 import { useCurrentUser, useCan } from '../../context/CurrentUserContext';
 import { useAdminData } from '../../context/AdminDataContext';
 import { useToast } from '../shared/Toast';
@@ -62,16 +62,13 @@ import { Button } from '../shared/Button';
 import { useMemorySessionVersion } from '../../data/memorySession';
 import { COVERAGE_NOTE, dataAsOfLabel, formatDate } from '../../data/platform-usage';
 import {
-  DEFAULT_WINDOW, PERSONA_QUESTION, PERSONA_SCOPE_LABEL, PERSONA_TITLE, REFUSAL,
-  calibrate, entitledViews, personaFor, snapshot, windowOf, windowOptions,
-  type AttentionCard, type AttentionTarget, type Persona, type QueueFigures, type Scope,
+  DEFAULT_WINDOW, SCOPE_LABEL,
+  calibrate, scopeCeiling, scopeOptions, snapshot, windowOf, windowOptions,
+  type AttentionCard, type AttentionTarget, type QueueFigures, type Scope, type ScopeLevel,
   type WindowId,
 } from '../../data/platform-usage-metrics';
 import { AttentionStrip, BlockGroup, UsageTabs } from './usageKit';
-import {
-  AiUsageByArea, AssumptionsReference, CostAndNetValue, HeadlineValue, NetValueHero,
-  SensitivityBlock, ValueOverTime,
-} from './UsageValueBlocks';
+import { AiUsageByArea, ContractCost, ValueOverTime } from './UsageValueBlocks';
 import { ControlCoverage, ExceptionsCaught, NeverTested, RiskPicture } from './UsageCoverageBlocks';
 import { CcmCoverage, MyQueue, MyWork, Reliability, SamplingOutcomes, StuckNow, TeamWork } from './UsageOperationsBlocks';
 import { CreatedThisPeriod, DashboardsAndAlerts, EngagementPortfolio, ReportsMade, WorkVolume } from './UsageProductBlocks';
@@ -103,8 +100,8 @@ const TABS: { id: TabId; label: string; icon: typeof TrendingUp }[] = [
  * block missing from this map would leave its card scrolling to nothing.
  */
 const TAB_OF_BLOCK: Record<string, TabId> = {
-  hero: 'value', 'over-time': 'value', headline: 'value', 'my-work': 'value',
-  cost: 'value', sensitivity: 'value', assumptions: 'value',
+  'over-time': 'value', 'my-work': 'value',
+  cost: 'value',
   coverage: 'coverage', never: 'coverage', portfolio: 'coverage', risks: 'coverage',
   'past-date': 'coverage', 'plan-completion': 'coverage',
   ccm: 'coverage', sampling: 'coverage', caught: 'coverage', ageing: 'coverage', quality: 'coverage',
@@ -114,14 +111,14 @@ const TAB_OF_BLOCK: Record<string, TabId> = {
 };
 
 /**
- * Where each reader lands. A CFO is here for the money, so Value opens first. A
- * head of team and an auditor are here for what is stuck and what is waiting on
- * them, which are both on Activity.
+ * Where each scope lands. The whole company opens on what the platform did.
+ * Narrowed to a team or to your own work the first question is what is stuck
+ * and what is waiting, which are both on Activity.
  */
-const DEFAULT_TAB: Record<Persona, TabId> = {
-  cfo: 'value',
-  head_of_team: 'activity',
-  auditor: 'activity',
+const DEFAULT_TAB: Record<ScopeLevel, TabId> = {
+  company: 'value',
+  team: 'activity',
+  person: 'activity',
 };
 
 /**
@@ -130,10 +127,10 @@ const DEFAULT_TAB: Record<Persona, TabId> = {
  * block this reader has not got. Keep this beside the tab definitions below: if
  * a block moves off a view, its line here moves with it.
  */
-const CARD_BLOCK_ON_VIEW: Record<Persona, AttentionTarget[]> = {
-  cfo: ['risks', 'controls', 'memory'],
-  head_of_team: ['stuck', 'risks', 'controls', 'sampling', 'memory'],
-  auditor: ['queue', 'memory'],
+const CARD_BLOCK_ON_VIEW: Record<ScopeLevel, AttentionTarget[]> = {
+  company: ['risks', 'controls', 'memory'],
+  team: ['stuck', 'risks', 'controls', 'sampling', 'memory'],
+  person: ['queue', 'memory'],
 };
 
 /** Where a card sends a reader whose view has no block for it. */
@@ -177,35 +174,30 @@ export default function PlatformUsageView() {
   const myTeam = me?.team && me.team !== '—' ? me.team : null;
   const myName = me?.name ?? currentUser?.name ?? '';
 
-  // The highest view this role may read. Everyone gets at least their own work:
-  // this page is self-serve, and no request or approval stands in front of it.
-  const ceiling: Persona = useMemo(
-    () => personaFor({ usage: can('ad_usage'), people: can('ad_usage_people'), self: can('ad_usage_self') }, myTeam),
+  // The widest this role may look. Everyone gets at least their own work: this
+  // page is self-serve, and no request or approval stands in front of it.
+  const ceiling: ScopeLevel = useMemo(
+    () => scopeCeiling({ usage: can('ad_usage'), people: can('ad_usage_people'), self: can('ad_usage_self') }, myTeam),
     [can, myTeam],
   );
 
-  const views = useMemo(() => entitledViews(ceiling, myTeam), [ceiling, myTeam]);
-  const [requested, setRequested] = useState<Persona>(ceiling);
+  const levels = useMemo(() => scopeOptions(ceiling, myTeam), [ceiling, myTeam]);
+  const [requested, setRequested] = useState<ScopeLevel>(ceiling);
 
-  // The server resolves the requested view against the entitlement rather than
-  // trusting the client. An unentitled request is refused, never quietly
-  // downgraded and never rendered as an empty page.
-  const entitled = views.includes(requested);
-  const persona = entitled ? requested : ceiling;
+  // The server resolves the requested scope against the entitlement rather than
+  // trusting the client, so a scope above the reader's rights is clamped back
+  // to their own ceiling and never widens what they can see.
+  const level = levels.includes(requested) ? requested : ceiling;
 
   const canExport = can('ad_usage_export');
 
   const scope = useMemo<Scope>(() => {
-    if (persona === 'cfo') return { persona: 'cfo', subject: 'the company' };
-    if (persona === 'head_of_team') {
-      return { persona: 'head_of_team', subject: myTeam ?? 'your team', team: myTeam ?? undefined, userEmail: currentUser?.email, userName: myName };
+    if (level === 'company') return { level: 'company', subject: 'the company' };
+    if (level === 'team') {
+      return { level: 'team', subject: myTeam ?? 'your team', team: myTeam ?? undefined, userEmail: currentUser?.email, userName: myName };
     }
-    return { persona: 'auditor', subject: 'you', userEmail: currentUser?.email, userName: myName };
-  }, [persona, myTeam, currentUser?.email, myName]);
-
-  // An auditor reads their own work in hours and never in rupees. "You saved 84
-  // hours" is an achievement; "you saved ₹1,00,800" is somebody pricing them.
-  const showMoney = persona !== 'auditor';
+    return { level: 'person', subject: 'you', userEmail: currentUser?.email, userName: myName };
+  }, [level, myTeam, currentUser?.email, myName]);
 
   /* ── The window ─────────────────────────────────────────────────────────── */
 
@@ -229,9 +221,9 @@ export default function PlatformUsageView() {
     setTab(id);
   };
 
-  const chooseView = (view: Persona) => {
-    setRequested(view);
-    if (!tabChosen) setTab(DEFAULT_TAB[view]);
+  const chooseLevel = (next: ScopeLevel) => {
+    setRequested(next);
+    if (!tabChosen) setTab(DEFAULT_TAB[next]);
   };
   const period = useMemo(() => windowOf(windowId), [windowId]);
 
@@ -276,7 +268,7 @@ export default function PlatformUsageView() {
       navigate(CARD_ELSEWHERE[card.target], card.focusId ?? '');
     };
 
-    if (!CARD_BLOCK_ON_VIEW[persona].includes(card.target)) {
+    if (!CARD_BLOCK_ON_VIEW[level].includes(card.target)) {
       leave();
       return;
     }
@@ -315,27 +307,6 @@ export default function PlatformUsageView() {
     addToast({ type: 'success', message: 'Exported as a PDF, with the coverage note on the first page.' });
   };
 
-  /* ── A refusal, never a blank page ──────────────────────────────────────── */
-
-  if (!entitled) {
-    return (
-      <div className="h-full flex items-center justify-center bg-canvas px-6">
-        <div className="max-w-lg text-center">
-          <Lock size={20} className="mx-auto text-ink-400" />
-          <h1 className="mt-3 text-[1.25rem] font-semibold text-ink-900">Platform Usage</h1>
-          <p className="mt-2 text-[0.875rem] text-ink-600 leading-relaxed">{REFUSAL}</p>
-          <button
-            type="button"
-            onClick={() => chooseView(ceiling)}
-            className="mt-4 h-8 px-3 rounded-lg border border-canvas-border text-[0.75rem] font-medium text-ink-700 hover:border-brand-200 hover:text-brand-700"
-          >
-            Go to the {PERSONA_TITLE[ceiling]} view
-          </button>
-        </div>
-      </div>
-    );
-  }
-
   /*
    * There is no page-level figure strip.
    *
@@ -364,27 +335,15 @@ export default function PlatformUsageView() {
    * tested and what that testing caught. Activity carries what the platform and
    * the assistant did. The cost figures and the assumptions live only here.
    */
-  const cfoTabs: Record<TabId, ReactNode> = {
+  const companyTabs: Record<TabId, ReactNode> = {
     value: (
       <>
-        <BlockGroup title="What it was worth">
-          <NetValueHero
-            value={data.value}
-            change={data.change}
-            cost={data.cost}
-            netRupees={data.netRupees}
-            period={period}
-            settings={settings}
-          />
-          {/* No separate headline block here: the hero above is the headline and
-              carries the whole sum, so a second block would say it all again. */}
-          <ValueOverTime buckets={data.buckets} period={period} settings={settings} showMoney />
+        <BlockGroup title="What the platform did">
+          <ValueOverTime buckets={data.buckets} period={period} settings={settings} />
         </BlockGroup>
 
-        <BlockGroup title="What it cost, and what it rests on">
-          <CostAndNetValue cost={data.cost} value={data.value} netRupees={data.netRupees} period={period} />
-          <SensitivityBlock rows={data.sensitivity} settings={settings} />
-          <AssumptionsReference settings={settings} />
+        <BlockGroup title="What it cost under the contract">
+          <ContractCost cost={data.cost} period={period} />
         </BlockGroup>
       </>
     ),
@@ -463,19 +422,10 @@ export default function PlatformUsageView() {
    * "this workflow failed four times this week with the same error", so the
    * savings sit on their own tab and the design trade-offs go this view's way.
    */
-  const headOfTeamTabs: Record<TabId, ReactNode> = {
+  const teamTabs: Record<TabId, ReactNode> = {
     value: (
-      <BlockGroup title="What the team's work was worth">
-        <HeadlineValue
-          value={data.value}
-          prior={data.prior}
-          change={data.change}
-          period={period}
-          scope={scope}
-          settings={settings}
-          showMoney={showMoney}
-        />
-        <ValueOverTime buckets={data.buckets} period={period} settings={settings} showMoney={showMoney} />
+      <BlockGroup title="What the team's work covered">
+        <ValueOverTime buckets={data.buckets} period={period} settings={settings} />
       </BlockGroup>
     ),
 
@@ -522,11 +472,11 @@ export default function PlatformUsageView() {
    * hours and never in rupees, and no other person appears anywhere on this
    * view: no average, no percentile, no comparison of any kind.
    */
-  const auditorTabs: Record<TabId, ReactNode> = {
+  const personTabs: Record<TabId, ReactNode> = {
     value: (
       <BlockGroup title="Your own work">
         <MyWork value={data.value} exceptions={data.exceptions} period={period} settings={settings} />
-        <ValueOverTime buckets={data.buckets} period={period} settings={settings} showMoney={false} />
+        <ValueOverTime buckets={data.buckets} period={period} settings={settings} />
       </BlockGroup>
     ),
 
@@ -553,7 +503,7 @@ export default function PlatformUsageView() {
     ),
   };
 
-  const tabs = persona === 'cfo' ? cfoTabs : persona === 'head_of_team' ? headOfTeamTabs : auditorTabs;
+  const tabs = level === 'company' ? companyTabs : level === 'team' ? teamTabs : personTabs;
 
   /* ── The page ───────────────────────────────────────────────────────────── */
 
@@ -567,8 +517,7 @@ export default function PlatformUsageView() {
    * the same image is a figure nobody can defend six weeks later.
    */
   const scopeLine = [
-    `Viewing as ${PERSONA_TITLE[persona]}`,
-    PERSONA_SCOPE_LABEL[persona] + (persona === 'head_of_team' && myTeam ? ` · ${myTeam}` : ''),
+    SCOPE_LABEL[level] + (level === 'team' && myTeam ? ` · ${myTeam}` : ''),
     `${period.label}, ${formatDate(period.from)} to ${formatDate(period.to)}`,
     dataAsOfLabel(),
   ].join(' · ');
@@ -580,30 +529,32 @@ export default function PlatformUsageView() {
           <div className="flex flex-wrap items-start justify-between gap-4">
             <div className="min-w-0">
               <h1 className="text-[2.5rem] font-semibold tracking-tight text-ink-900 leading-[1.1]">Platform Usage</h1>
-              <p className="mt-1.5 text-[0.875rem] text-ink-500 leading-relaxed max-w-2xl">{PERSONA_QUESTION[persona]}</p>
+              <p className="mt-1.5 text-[0.875rem] text-ink-500 leading-relaxed max-w-2xl">
+                What the committee will ask about, and what is slipping.
+              </p>
             </div>
 
             {/*
-              * The switch. Only the views this reader is entitled to appear, so
-              * it can narrow down their own line and can never reach sideways
-              * into somebody else's team. One reader with one view sees no
-              * switch, because a control with one option is furniture.
+              * The scope filter. It narrows and never widens: only the scopes
+              * this reader is entitled to appear, so it can never reach
+              * sideways into somebody else's team. A reader with one scope sees
+              * no filter, because a control with one option is furniture.
               */}
-            {views.length > 1 && (
+            {levels.length > 1 && (
               <div className="flex items-center gap-2 shrink-0">
-                <span className="text-[0.75rem] text-ink-500">Viewing as</span>
+                <span className="text-[0.75rem] text-ink-500">Showing</span>
                 <div className="inline-flex rounded-lg border border-canvas-border bg-canvas-elevated p-0.5">
-                  {views.map(view => (
+                  {levels.map(option => (
                     <button
-                      key={view}
+                      key={option}
                       type="button"
-                      onClick={() => chooseView(view)}
-                      aria-pressed={persona === view}
+                      onClick={() => chooseLevel(option)}
+                      aria-pressed={level === option}
                       className={`h-8 px-3 rounded-md text-[0.75rem] font-medium transition-colors ${
-                        persona === view ? 'bg-brand-600 text-white' : 'text-ink-600 hover:text-brand-700'
+                        level === option ? 'bg-brand-600 text-white' : 'text-ink-600 hover:text-brand-700'
                       }`}
                     >
-                      {PERSONA_TITLE[view]}
+                      {SCOPE_LABEL[option]}
                     </button>
                   ))}
                 </div>

@@ -26,7 +26,7 @@ import { motion } from 'motion/react';
 import { AlertTriangle, ArrowRight, BarChart3, ChevronDown, ChevronRight, Table2, TrendingDown, TrendingUp } from 'lucide-react';
 import { formatDate } from '../../data/platform-usage';
 import {
-  SETTING_LABEL, SOURCE_LABEL, fmtInt, fmtMoneyExact, fmtOneDp,
+  SETTING_LABEL, SOURCE_LABEL, fmtInt, fmtOneDp,
   type AttentionCard, type NumericSetting, type UsageSettings,
 } from '../../data/platform-usage-metrics';
 
@@ -912,9 +912,7 @@ export function CountWithList({
 /* ── The assumptions, said next to the numbers they produce ──────────────── */
 
 const settingValue = (settings: UsageSettings, key: NumericSetting): string =>
-  key === 'hourlyRate' ? fmtMoneyExact(settings[key])
-    : key === 'manualControlTestHours' ? fmtOneDp(settings[key])
-      : fmtInt(settings[key]);
+  (key === 'manualControlTestHours' ? fmtOneDp(settings[key]) : fmtInt(settings[key]));
 
 /**
  * What a figure rests on, on the same screen as the figure.

@@ -797,3 +797,59 @@ test.describe('Platform Usage · the financial year window model', () => {
     expect(sizes).toContain(312_000);
   });
 });
+
+test.describe('Platform Usage · one reader, and no invented money', () => {
+  test('no persona switch exists in the DOM', async ({ page }) => {
+    await openUsage(page);
+
+    // The page has one reader, the audit lead. Nothing on it offers to be read
+    // as somebody else.
+    await expect(page.getByText(/Viewing as/)).toHaveCount(0);
+    for (const title of ['CFO', 'Head of Team', 'Internal Auditor']) {
+      await expect(page.getByRole('button', { name: title, exact: true })).toHaveCount(0);
+    }
+
+    // The scope filter survives, because narrowing to a team is not the same
+    // thing as pretending to be somebody else.
+    await expect(page.getByRole('button', { name: 'Whole company', exact: true })).toBeVisible();
+  });
+
+  test('no rupee saving appears anywhere on the page, in either window', async ({ page }) => {
+    await openUsage(page);
+
+    for (const window of ['This quarter', 'Year to date'] as const) {
+      await page.getByRole('button', { name: window }).click();
+      await page.waitForTimeout(600);
+
+      for (const name of ['Value', 'Coverage', 'Activity'] as const) {
+        await usageTab(page, name);
+        const body = await page.locator('main, body').first().innerText();
+
+        // The saving, the net, the rate behind them, and the block that existed
+        // only to warn about how far the saving could swing.
+        expect(body).not.toMatch(/lakh|crore|\bcr\b/i);
+        expect(body).not.toMatch(/₹1,200|an auditor hour|hourly rate/i);
+        expect(body).not.toMatch(/So you are ahead by|What that time is worth|net value/i);
+        expect(body).not.toMatch(/at 100 records an hour|at 800 records an hour/i);
+      }
+    }
+  });
+
+  test('the contract charge survives, labelled as a contract term', async ({ page }) => {
+    await openUsage(page);
+    const cost = page.locator('#cost');
+    await cost.scrollIntoViewIfNeeded();
+
+    // The price is a recorded fact and a term of the contract, so it stays.
+    // What left is the saving, not the price.
+    await expect(cost).toContainText('₹18,400');
+    await expect(cost).toContainText(/contract/i);
+    await expect(cost).not.toContainText(/saving|saved|ahead by/i);
+  });
+
+  test('the sensitivity block and the net value hero are gone', async ({ page }) => {
+    await openUsage(page);
+    await expect(page.locator('#sensitivity')).toHaveCount(0);
+    await expect(page.locator('#hero')).toHaveCount(0);
+  });
+});
