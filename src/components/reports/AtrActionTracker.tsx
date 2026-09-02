@@ -84,7 +84,7 @@ export default function AtrActionTracker({ atrs, onOpen, onClose }: {
             <div className="w-9 h-9 rounded-lg bg-brand-50 text-brand-700 flex items-center justify-center"><ListChecks size={17} /></div>
             <div>
               <h2 className="text-[0.9375rem] font-semibold text-ink-900 leading-tight">Action Item Tracker</h2>
-              <p className="text-[0.75rem] text-ink-500">Every management action plan across {atrs.length} ATR{atrs.length === 1 ? '' : 's'}.</p>
+              <p className="text-[0.75rem] text-ink-500">Every action plan across {atrs.length} ATR{atrs.length === 1 ? '' : 's'}.</p>
             </div>
           </div>
           <button onClick={onClose} className="w-8 h-8 rounded-full text-ink-500 hover:text-ink-800 hover:bg-draft-50 flex items-center justify-center cursor-pointer"><X size={16} /></button>

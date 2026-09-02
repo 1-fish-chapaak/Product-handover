@@ -27,7 +27,7 @@ export const REQUIRED_FIELDS: AtrField[] = [
   { key: 'title',          label: 'Observation Title',                       hint: 'Short title of the observation.', example: 'Vendor Master Management', match: ['observation title', 'title'] },
   { key: 'description',     label: 'Observation Description',                 hint: 'What was observed / the issue.', example: '14 vendor codes activated in SAP without standard onboarding documentation.', match: ['description', 'issue', 'observation'] },
   { key: 'riskSummary',    label: 'Risk Summary',                            hint: 'The risk this exposes.', example: 'Unauthorized vendor creation could enable fictitious vendor fraud and duplicate payments.', match: ['risk summary'] },
-  { key: 'recommendation', label: 'Recommendation / Management Action Plan',  hint: 'Management action / recommendation.', example: "Enforce a 'Maker-Checker' protocol for vendor onboarding in SAP.", match: ['recommendation', 'management action plan', 'action plan'] },
+  { key: 'recommendation', label: 'Recommendation / Action Plan',  hint: 'Action plan / recommendation.', example: "Enforce a 'Maker-Checker' protocol for vendor onboarding in SAP.", match: ['recommendation', 'management action plan', 'action plan'] },
   { key: 'actionTaken',    label: 'Action Taken',                            hint: 'What management actually did to remediate.', example: "Redesigned the SAP vendor onboarding workflow to enforce maker-checker; no profile activates without second-level validation.", match: ['action taken', 'remediation', 'action'] },
   { key: 'evidence',       label: 'Evidence',                                hint: 'Evidence / supporting documents.', example: 'UAT report, SAP workflow diagram, sample of 3 newly activated vendors.', match: ['evidence'] },
   { key: 'verification',   label: 'Management Comments / Auditor Verification', hint: 'Checker / auditor verification or management comments.', example: 'Verified flow in SAP Production. Workflow functioning as expected.', match: ['verification', 'management comment', 'checker', 'auditor'] },
@@ -196,7 +196,7 @@ function obsRows(meta: AtrMeta, observations: AtrObservation[]) {
         'Observation Title': o.title,
         'Observation Description': i === 0 ? (o.description ?? '') : '',
         'Risk Summary': i === 0 ? (o.riskSummary ?? '') : '',
-        'Recommendation / Management Action Plan': p.text ?? '',
+        'Recommendation / Action Plan': p.text ?? '',
         'Action Taken': p.actionTaken ?? '',
         'Evidence': p.evidence ?? '',
         'Management Comments / Auditor Verification': p.verification ?? '',
@@ -223,10 +223,9 @@ export function exportAtrWord(meta: AtrMeta, observations: AtrObservation[]) {
   const esc = (s?: string) => (s ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
   const blocks = observations.map((o, i) => {
     const plans = o.actionPlans.map((p, j) => `
-      <p style="margin:6px 0 2px;"><b>Management Action Plan ${j + 1}</b>${o.classification ? ` — ${esc(o.classification)}` : ''}${p.dueDate ? ` · Due ${esc(p.dueDate)}` : ''}${p.status ? ` (${esc(p.status)})` : ''}</p>
+      <p style="margin:6px 0 2px;"><b>Action Plan ${j + 1}</b>${o.classification ? ` — ${esc(o.classification)}` : ''}${p.dueDate ? ` · Due ${esc(p.dueDate)}` : ''}${p.status ? ` (${esc(p.status)})` : ''}</p>
       <p style="margin:0 0 2px;">${esc(p.text)}</p>
       ${p.actionTaken ? `<p style="margin:0 0 2px;"><i>Action Taken:</i> ${esc(p.actionTaken)}</p>` : ''}
-      ${p.evidence ? `<p style="margin:0 0 2px;color:#6B5D82;"><i>Evidence / Comments:</i> ${esc(p.evidence)}</p>` : ''}
       ${p.verification ? `<p style="margin:0 0 8px;"><i>Checker / Auditor Verification:</i> ${esc(p.verification)}</p>` : ''}`).join('');
     return `
       <h3 style="color:#550FA5;margin:16px 0 4px;">${i + 1}. ${esc(o.title)}${o.process ? ` — ${esc(o.process)}` : ''}</h3>
@@ -336,7 +335,7 @@ export function deriveObservationsFromReport(report: DerivableReport): AtrObserv
     const firstKpi = q.kpis?.[0]?.value;
     const exceptions = firstKpi ? Number.parseInt(firstKpi.replace(/[^0-9]/g, ''), 10) || undefined : undefined;
     const recommendation =
-      q.observations?.[0] ?? q.findings?.[0] ?? 'Define a management action plan for this observation.';
+      q.observations?.[0] ?? q.findings?.[0] ?? 'Define an action plan for this observation.';
     const obs: AtrObservation = {
       title: q.title || 'Untitled Observation',
       description: q.summary || q.answer || undefined,
@@ -358,7 +357,10 @@ export const SAMPLE_OBSERVATIONS: AtrObservation[] = [
     exceptions: 14,
     process: 'Procurement (P2P)',
     risk: 'High',
-    status: 'Closed',
+    // In Progress — 2 of 3 action plans are Implemented but the centralised
+    // onboarding portal is only Partially Implemented (MCA integration in UAT),
+    // so the observation is not fully closed.
+    status: 'In Progress',
     classification: 'System Deficiency',
     description: 'During the review period, 14 vendor codes were activated in SAP without the standard onboarding documentation (PAN, GST, MSME declaration, bank letter). Of these, 6 were used for transactions exceeding ₹15 lakhs aggregate.',
     querySummary: 'Review of vendor creation and approval workflows in SAP.',
@@ -432,7 +434,7 @@ export const SAMPLE_OBSERVATIONS: AtrObservation[] = [
 
 // Key insights for the sample (auditor commentary — only shown when provided).
 export const SAMPLE_INSIGHTS = [
-  { title: 'Strong management commitment on system-led controls', body: 'Two of the five observations (Vendor Master and Scrap Sale) are fully closed with both technical and procedural controls in place. Management has demonstrated good responsiveness on SAP-led changes.' },
+  { title: 'Strong management commitment on system-led controls', body: 'Scrap Sale is fully closed with both technical and procedural controls in place, and Vendor Master is largely remediated — 2FA and maker-checker are live, with only the centralised onboarding portal (MCA integration) still in UAT. Management has demonstrated good responsiveness on SAP-led changes.' },
   { title: 'Freight rate approval gap requires Audit Committee attention', body: 'Observation 3 (Freight Rate Approval Gap) is now overdue. The hard block in VL01N has not yet been deployed despite a 30 Apr 2026 deadline. Recommend a fixed go-live of 15 Jun 2026 with weekly status to the Audit Committee.' },
   { title: 'Variance investigation cadence needs strengthening', body: 'Observation 4 (FG stock variance) remains open. The 7-day variance investigation SOP should be operationalised before the next physical verification cycle to prevent recurrence.' },
   { title: 'Tolerance-override concentration reduced', body: 'Restricting MIRO / OMR1 override authority to two Finance Managers materially shrinks the segregation-of-duties exposure behind the three-way-match bypass; the monthly signed exception report will close the loop once it is operationalised from the May cycle.' },

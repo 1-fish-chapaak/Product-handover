@@ -20,7 +20,7 @@ export const OBSERVATION_FIELDS: FieldDef[] = [
   { key: 'title',          label: 'Observation Title',                          kind: 'text',           loc: 'obs' },
   { key: 'description',     label: 'Observation Description',                    kind: 'textarea',       loc: 'obs' },
   { key: 'riskSummary',    label: 'Risk Summary',                               kind: 'textarea',       loc: 'obs' },
-  { key: 'recommendation', label: 'Recommendation / Management Action Plan',     kind: 'textarea',       loc: 'plan' },
+  { key: 'recommendation', label: 'Recommendation / Action Plan',     kind: 'textarea',       loc: 'plan' },
   { key: 'actionTaken',    label: 'Action Taken',                               kind: 'textarea',       loc: 'plan' },
   { key: 'evidence',       label: 'Evidence',                                   kind: 'textarea',       loc: 'plan' },
   { key: 'verification',   label: 'Management Comments / Auditor Verification',  kind: 'textarea',       loc: 'plan' },
