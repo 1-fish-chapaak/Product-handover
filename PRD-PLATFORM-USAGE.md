@@ -40,7 +40,13 @@ Four readers, confirmed. Not one.
 | Audit lead or CAE | Am I ready for the committee, and what is slipping | Coverage and findings |
 | Workspace admin | Is the team actually using what we bought | Activity and what is stuck |
 
-The "Viewing as" switch stays. It changes whose data you see and which block comes first. It never changes the layout, the wording or the names of things, so somebody who changes role never relearns the page.
+There are **two controls and they do different jobs**, which an earlier draft of this PRD ran together into one sentence.
+
+**Viewing as** picks which of the three views leads. It changes the order of the page and never the layout, the wording or the names of things.
+
+**Counting** picks whose records are counted, and it is the one the three rules below govern. It is bounded by entitlement and only ever narrows down the reader's own line.
+
+So somebody who changes role never relearns the page.
 
 Three rules hold it, unchanged from the current build because they are right.
 
@@ -198,7 +204,7 @@ The page reads generic because every block is the same card with the same tile i
 4. The rate block shows the full derivation from section 4: salary median, multiplier, available hours, result.
 5. The sensitivity table shows the four rows from section 4 and names the in-house against bought-in cause.
 6. Q4 FY26 reconciles: 1,428,000 rows, 340 successful runs, 8.5 hours machine time, ₹18,400 charged, 7,131 hours saved, ₹37.8 lakh money and ₹37.6 lakh net.
-7. Financial year to date covers 1 Apr 2025 to 31 Mar 2026 and differs from the quarter on every flow figure.
+7. Financial year to date covers 1 Apr 2025 to 31 Mar 2026 and differs from the quarter on runs, checks performed, machine time and the contract charge. Rows covered is 1,428,000 in both, because a population is counted once and all eleven were tested in both windows. That is the coverage rule working, not a stale figure, and the suite asserts it stays that way.
 8. Both exports carry the reader, the window, every assumption with its derivation, and the coverage note.
 
 **Negative**
@@ -207,7 +213,7 @@ The page reads generic because every block is the same card with the same tile i
 10. No rate other than ₹530 appears as the default, and ₹1,200 appears nowhere.
 11. No benchmark, target or comparison against another company on any figure.
 12. No control on the page changes a record it reports on.
-13. No input field exists anywhere in the feature.
+13. Nothing asks the customer to supply a figure the page then reports as a fact. The custom date range stays, because choosing what to look at is not the same as being asked to fill in your own numbers.
 14. A quiet window shows a designed zero. An unmeasured thing shows the dashed unmeasured state. They never render the same.
 
 **Edge**
@@ -237,7 +243,7 @@ The page reads generic because every block is the same card with the same tile i
 | AC-13 | No benchmark or target appears on any figure. |
 | AC-14 | The per person table is alphabetical and cannot be reordered by prop, state or URL. |
 | AC-15 | Every chart offers its table in one click, and no chart under `src/components/usage/` uses `ResponsiveContainer`. |
-| AC-16 | There is no input field anywhere in the feature. |
+| AC-16 | Nothing on the page asks the customer to supply data the page then treats as a fact. No rate field, no pace field, no price field. A window control, including the custom date range, is a view control and is not covered by this rule. |
 | AC-17 | Each view opens with at most three groups expanded and the rest folded. |
 | AC-18 | Visible copy carries no em dash and no hyphenated compound. Table cells may use a dash as a blank. |
 | AC-19 | `npx tsc -b` reports no errors, `npm run build` is green, and the Playwright suite passes. |
