@@ -10,7 +10,8 @@
 
 import { COVERAGE_NOTE, dataAsOfLabel, formatDate } from '../../data/platform-usage';
 import {
-  ASSUMPTIONS, PERSONA_SCOPE_LABEL, PERSONA_TITLE, REVIEW_PROXY_NOTE, SETTING_SHORT, SOURCE_LABEL,
+  ASSUMPTIONS, PERSONA_SCOPE_LABEL, PERSONA_TITLE, RATE_DERIVATION_STEPS, REVIEW_PROXY_NOTE,
+  SENSITIVITY_CAUSE, SETTING_SHORT, SOURCE_LABEL,
   fmtDuration, fmtHours, fmtInt, fmtMoneyExact, fmtOneDp, fmtPct, fmtPeople, priorLabel, usageFileName,
   type UsageSnapshot,
 } from '../../data/platform-usage-metrics';
@@ -63,9 +64,15 @@ export function usageCsv(data: UsageSnapshot): string {
   lines.push(row('Machine time wasted on failed runs', fmtDuration(data.reliability.wastedHours), 'measured'));
   lines.push('');
 
-  lines.push(row('How much the pace matters'));
-  lines.push(row('Rows checked by hand per hour', 'Hours by hand', 'The same work in money (INR)'));
-  data.sensitivity.forEach(s => lines.push(row(s.rate, fmtHours(s.hours), Math.round(s.rupees))));
+  lines.push(row('Where the auditor rate comes from'));
+  lines.push(row('Step', 'Value', 'Source'));
+  RATE_DERIVATION_STEPS.forEach(s => lines.push(row(s.step, s.value, s.from)));
+  lines.push('');
+
+  lines.push(row('What those hours are worth, four ways'));
+  lines.push(row('How you get an audit hour', 'Cost of an hour (INR)', 'Hours saved', 'This window is worth (INR)'));
+  data.sensitivity.forEach(s => lines.push(row(s.basis, s.rate, fmtHours(s.hours), Math.round(s.rupees))));
+  lines.push(row('Why they differ', '', '', SENSITIVITY_CAUSE));
   lines.push('');
 
   lines.push(row('Over time. A population is credited once, to the window that first tested it'));

@@ -11,9 +11,10 @@ import type { ReactNode } from 'react';
 import { Bar, BarChart, CartesianGrid, Tooltip, XAxis, YAxis } from 'recharts';
 import { formatDate } from '../../data/platform-usage';
 import {
-  ASSUMPTIONS, DEDUPLICATION_LIMITS, RATE_BASIS, RATE_PER_DAY, RATE_PER_HOUR, REVIEW_PROXY_NOTE,
-  SETTING_SHORT, SOURCE_LABEL,
-  fmtDuration, fmtHours, fmtInt, fmtMoney, fmtMoneyExact, fmtOneDp, fmtPeople, fmtPrice, plural, priorLabel,
+  ASSUMPTIONS, AUDITOR_RATE, DEDUPLICATION_LIMITS, RATE_BASIS, RATE_DERIVATION_STEPS, RATE_KIND_LINE,
+  RATE_PER_DAY, RATE_PER_HOUR, REVIEW_PROXY_NOTE, SENSITIVITY_CAUSE, SETTING_SHORT, SOURCE_LABEL,
+  fmtDuration, fmtHours, fmtInt, fmtMoney, fmtMoneyExact, fmtMoneyFine, fmtOneDp, fmtPeople, fmtPrice,
+  plural, priorLabel,
   type AiUsageRow, type Bucket, type CostFigures, type NumericSetting, type Period, type Scope,
   type Sensitivity, type UsageSettings, type ValueChange, type ValueFigures,
 } from '../../data/platform-usage-metrics';
@@ -131,7 +132,7 @@ export function NetValueHero({
                 {RATE_BASIS.checkingHours} hours of real checking once meetings, review calls and
                 lunch come out. At {RATE_BASIS.secondsPerRecord} seconds a record that is{' '}
                 {fmtInt(RATE_PER_HOUR)} an hour, or {fmtInt(RATE_PER_DAY)} in a day. Argue with any of
-                those three and every figure below moves with you.
+                those three and every figure below moves with you. {RATE_KIND_LINE}
               </>
             ),
           },
@@ -143,7 +144,14 @@ export function NetValueHero({
           {
             sum: <>{fmtHours(value.hoursSaved)} hours ÷ {fmtInt(hoursPerWindow)} hours one person works</>,
             answer: `${fmtPeople(value.people)} people for the ${window}`,
-            from: <>{fmtInt(settings.hoursPerPersonPerMonth)} hours a month: 8 hours a day across 20 working days.</>,
+            from: (
+              <>
+                {fmtInt(settings.hoursPerPersonPerMonth)} hours a month is the{' '}
+                {fmtInt(AUDITOR_RATE.availableHours)} hours a year one person is available to work,
+                over twelve months: 52 weeks at 40 hours, less about 29 days of leave and public
+                holidays.
+              </>
+            ),
           },
           {
             sum: <>{fmtHours(value.hoursSaved)} hours saved × {fmtMoneyExact(settings.hourlyRate)} an hour</>,
@@ -152,8 +160,10 @@ export function NetValueHero({
               <>
                 The hours saved are priced, not the {fmtHours(value.manualHours)} by hand, so the
                 money never claims back the {fmtDuration(value.machineHours)} the platform spent.{' '}
-                {fmtMoneyExact(settings.hourlyRate)} an hour is ours, not yours. Nothing in the
-                product records what anybody is paid, so this is the softest number here
+                {fmtMoneyExact(settings.hourlyRate)} an hour is ours, not yours: nothing in the
+                product records what anybody is paid, so it comes from published pay data and the
+                whole sum behind it is set out under &ldquo;Where the auditor rate comes
+                from&rdquo; on this tab
                 {net && <>. Your contract charged {fmtMoneyExact(costRupees)} to run the platform, which leaves {fmtMoney(netRupees)}</>}.
               </>
             ),
@@ -295,7 +305,8 @@ export function HeadlineValue({
               <>
                 our estimate, at {fmtInt(settings.manualReviewRate)} records an hour: a{' '}
                 {RATE_BASIS.shiftHours} hour shift, about {RATE_BASIS.checkingHours} hours of real
-                checking, {RATE_BASIS.secondsPerRecord} seconds a record
+                checking, {RATE_BASIS.secondsPerRecord} seconds a record, on a row read against a
+                rule rather than a substantive test
               </>
             ),
           },
@@ -322,8 +333,10 @@ export function HeadlineValue({
       {showMoney && (
         <p className="mt-4 text-[0.875rem] text-ink-600 leading-relaxed max-w-[80ch]">
           Put a price on those <Fig>{fmtHours(value.hoursSaved)}</Fig> saved hours and it comes to{' '}
-          <Fig>{fmtMoney(value.rupees)}</Fig>, at our {fmtMoneyExact(settings.hourlyRate)} an auditor hour. That rate is ours rather than yours,
-          so treat the money as an estimate and the hours as the firmer number.
+          <Fig>{fmtMoney(value.rupees)}</Fig>, at {fmtMoneyExact(settings.hourlyRate)} an auditor hour.
+          That rate is ours rather than yours, worked out from published pay data and set out in full
+          under &ldquo;Where the auditor rate comes from&rdquo;, so treat the money as an estimate and
+          the hours as the firmer number.
         </p>
       )}
     </Block>
@@ -563,34 +576,100 @@ export function CostAndNetValue({
   );
 }
 
-/* ── One assumption swings everything ────────────────────────────────────── */
+/* ── Where the rate comes from, on the same screen as the money ──────────── */
 
+/**
+ * The one assumed number in the chain, with its whole derivation beside it.
+ *
+ * The rate is the last thing on this page that no record can prove, and for a
+ * year it was a figure with nothing behind it. A number a CFO cannot check is a
+ * number a CFO stops believing, and it carried the entire renewal case. So the
+ * sum is printed as seven steps in the open, on the same tab as every figure it
+ * produces, rather than folded away or left to the export.
+ *
+ * There is no input here and nowhere to type. The page reads.
+ */
+export function RateDerivation({ settings }: { settings: UsageSettings }) {
+  return (
+    <Block
+      id="rate-derivation"
+      title="Where the auditor rate comes from"
+      lede={
+        <>
+          The money on this tab prices saved hours at{' '}
+          <Fig>{fmtMoneyExact(settings.hourlyRate)}</Fig> an hour. That is what it costs to employ an
+          internal auditor in India, worked out from published pay data in the seven steps below.
+          It is not what a firm charges to sell you an audit hour, which is several times more.
+        </>
+      }
+      hint="Nothing in the product records what anybody is paid, so this is an estimate and it is labelled as one. It is the only number left in the chain that does not come from your own records. If your finance team has a better figure, this is the line to replace."
+      footer={REVIEW_PROXY_NOTE}
+    >
+      <ul className="divide-y divide-canvas-border border-t border-canvas-border">
+        {RATE_DERIVATION_STEPS.map(step => (
+          <li key={step.step} className="py-3">
+            <div className="flex items-baseline justify-between gap-4">
+              <span className="text-[0.875rem] text-ink-800">{step.step}</span>
+              <span className="text-[0.875rem] font-semibold text-ink-900 tabular-nums shrink-0">
+                {step.value}
+              </span>
+            </div>
+            <p className="mt-1 text-[0.75rem] text-ink-500 leading-relaxed max-w-[80ch]">{step.from}</p>
+          </li>
+        ))}
+      </ul>
+    </Block>
+  );
+}
+
+/* ── What the hour costs, four ways, and why the four differ ─────────────── */
+
+/**
+ * Not a confession, a business fact.
+ *
+ * The old block moved the by-hand pace across three values, printed an eight
+ * times swing and called it "how much the pace matters", which told a reader
+ * the page did not know its own figure. The swing was real and the reason was
+ * wrong. What actually moves the money by that much is whether the company
+ * employs its auditors or buys their hours, so that is what the rows are.
+ */
 export function SensitivityBlock({ rows, settings }: { rows: Sensitivity[]; settings: UsageSettings }) {
-  if (rows.length === 0 || rows[1].rupees === 0) return null;
+  if (rows.length === 0 || rows[0].rupees === 0) return null;
+  const employed = rows[0];
+  const bought = rows[rows.length - 1];
   return (
     <Block
       id="sensitivity"
-      title="How much the pace matters"
+      title="What those hours are worth, four ways"
       lede={
         <>
-          At <Fig>{fmtInt(rows[0].rate)}</Fig> rows an hour the same work comes to{' '}
-          <Fig>{fmtMoney(rows[0].rupees)}</Fig> of hand checking, and at{' '}
-          <Fig>{fmtInt(rows[2].rate)}</Fig> it comes to <Fig>{fmtMoney(rows[2].rupees)}</Fig>.
+          The same <Fig>{fmtHours(employed.hours)}</Fig> saved hours are worth{' '}
+          <Fig>{fmtMoneyFine(employed.rupees)}</Fig> to a company that employs its auditors and{' '}
+          <Fig>{fmtMoneyFine(bought.rupees)}</Fig> to one that buys every audit hour from a firm.
         </>
       }
-      hint="Everything on this tab rests on how many rows a person checks by hand in an hour. The same quarter is worth eight times as much at one end of that range as the other, which is why every figure resting on it is printed next to it. These are the hours by hand at each pace, before the machine time comes off, so each one sits a little above the saving at the top of the tab."
-
-      table={
-        <DataTable
-          head={['Rows checked by hand per hour', 'Hours by hand', 'The same work in money']}
-          rows={rows.map(r => [
-            r.rate === settings.manualReviewRate ? `${fmtInt(r.rate)} (what this page uses)` : fmtInt(r.rate),
-            fmtHours(r.hours),
-            fmtMoney(r.rupees),
-          ])}
-        />
-      }
-    />
+      hint="The first row is the rate this page carries, so it is the same figure as the one at the top of this tab. Every row prices the same saved hours. None of them is a target and none is a comparison against another company."
+    >
+      <DataTable
+        head={['How you get an audit hour', 'Cost of an hour', 'This window is worth']}
+        numericFrom={1}
+        rows={rows.map(r => [
+          r.ours ? `${r.basis} (what this page uses)` : r.basis,
+          fmtMoneyExact(r.rate),
+          fmtMoneyFine(r.rupees),
+        ])}
+      />
+      <p className="mt-4 text-[0.875rem] text-ink-600 leading-relaxed max-w-[80ch]">
+        {SENSITIVITY_CAUSE}
+      </p>
+      <ul className="mt-3 space-y-1">
+        {rows.map(r => (
+          <li key={r.basis} className="text-[0.75rem] text-ink-500 leading-relaxed">
+            <span className="text-ink-700 tabular-nums">{fmtMoneyExact(r.rate)}</span>: {r.from}.
+          </li>
+        ))}
+      </ul>
+    </Block>
   );
 }
 

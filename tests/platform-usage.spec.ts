@@ -144,19 +144,70 @@ test.describe('Platform Usage', () => {
     await expect(hero).toContainText('7,131');
 
     // The money prices the saving rather than the hours by hand, so it is
-    // 7,131.5 at 1,200 rupees an hour and not 7,140. Pricing the by-hand figure
+    // 7,131.5 at 530 rupees an hour and not 7,140. Pricing the by-hand figure
     // would hand back the 8.5 hours the hours line had just given up.
-    await expect(hero).toContainText('₹85.6 lakh');
+    await expect(hero).toContainText('₹37.8 lakh');
 
-    // 7,131 hours over the 480 a person works in a quarter is about 15 people,
+    // 7,131 hours over the 462 a person works in a quarter is 15.4 people,
     // on the same saved hours the money uses.
-    await expect(hero).toContainText('15');
-    await expect(hero).toContainText('480');
+    await expect(hero).toContainText('15.4');
+    await expect(hero).toContainText('462');
 
-    // The contract charged ₹18,400, leaving ₹85.4 lakh.
+    // The contract charged ₹18,400, leaving ₹37.6 lakh.
     const cost = page.locator('#cost');
     await expect(cost).toContainText('₹18,400');
-    await expect(cost).toContainText('₹85.4 lakh');
+    await expect(cost).toContainText('₹37.6 lakh');
+  });
+
+  test('the rate carries its whole derivation on the same screen as the money', async ({ page }) => {
+    await openUsage(page);
+    const hero = page.locator('#hero');
+
+    // The rate is the only made-up number left in the chain, so the sum behind
+    // it is on the page beside the figure it produces, not in a fold and not
+    // only in the export.
+    const rate = page.locator('#rate-derivation');
+    await rate.scrollIntoViewIfNeeded();
+    await expect(rate).toBeVisible();
+    await expect(rate).toContainText('₹6,57,000');
+    await expect(rate).toContainText('Glassdoor India');
+    await expect(rate).toContainText('₹7,94,964');
+    await expect(rate).toContainText('PayScale');
+    await expect(rate).toContainText('₹7,25,000');
+    await expect(rate).toContainText('1.35');
+    await expect(rate).toContainText('₹9,78,750');
+    await expect(rate).toContainText('1,848');
+    await expect(rate).toContainText('₹530');
+
+    // The rate is not rounded up to a comfortable figure. The page rounds a
+    // saving down, so it may not round the price of an hour up.
+    await expect(rate).not.toContainText('₹550');
+    await expect(rate).toContainText('not rounded up');
+
+    // And the figure it produces is on the same screen as the derivation.
+    await expect(hero).toContainText('₹530 an hour');
+  });
+
+  test('the old invented rate is nowhere on the page', async ({ page }) => {
+    await openUsage(page);
+    for (const name of ['Value', 'Coverage', 'Activity'] as const) {
+      await usageTab(page, name);
+      const body = await page.locator('main, [role="main"], body').first().innerText();
+      expect(body).not.toContain('₹1,200');
+      expect(body).not.toContain('₹85.6 lakh');
+      expect(body).not.toContain('₹85.4 lakh');
+      expect(body).not.toContain('₹550');
+    }
+  });
+
+  test('the pace label says it means rule checking, not substantive testing', async ({ page }) => {
+    await openUsage(page);
+    const assumptions = page.locator('#assumptions');
+    await assumptions.scrollIntoViewIfNeeded();
+    await expect(assumptions).toContainText('Rows checked against a rule by hand per hour');
+    await expect(assumptions).toContainText('not full substantive testing');
+    await expect(assumptions).toContainText('4 to 9');
+    await expect(assumptions).toContainText('a faster pace makes the saving smaller');
   });
 
   test('the hero says net value only while the cost is complete', async ({ page }) => {
@@ -172,7 +223,7 @@ test.describe('Platform Usage', () => {
     // charged while every lookup in the window is priced. The caveat lives in
     // the fold with everything else somebody would argue with, so the sum on
     // screen is a sum rather than a paragraph.
-    await expect(hero).toContainText('₹1,200 an hour');
+    await expect(hero).toContainText('₹530 an hour');
     await hero.getByText('How this is counted').click();
     await expect(hero).toContainText('an hour is ours, not yours');
     const costed = await hero.innerText();
@@ -290,7 +341,7 @@ test.describe('Platform Usage', () => {
 
     // The rate has not met its guard, so it is still labelled a starting value,
     // and it says what the customer's own reviews work out at against it.
-    await expect(assumptions).toContainText('Rows checked by hand per hour');
+    await expect(assumptions).toContainText('Rows checked against a rule by hand per hour');
     await expect(assumptions).toContainText('our number, until yours is on record');
     await expect(assumptions).toContainText('records an hour over');
     await expect(assumptions).toContainText('switches to your number');
@@ -303,17 +354,32 @@ test.describe('Platform Usage', () => {
     // The two that can never be measured say where they do come from, on the
     // row rather than in a fold.
     await expect(assumptions).toContainText('Nothing in the product records what anybody is paid');
-    await expect(assumptions).toContainText('8 hours a day across 20 working days');
+    await expect(assumptions).toContainText('1,848 hours a year one person is available to work');
   });
 
-  test('one assumption swings everything, and the page shows the swing', async ({ page }) => {
+  test('the swing is employing auditors against buying them, not our doubt', async ({ page }) => {
     await openUsage(page);
     const sensitivity = page.locator('#sensitivity');
     await sensitivity.scrollIntoViewIfNeeded();
-    // 1,428,000 rows at 100 an hour and 1,200 an hour comes to 1.71 crore, and
-    // at 800 an hour it comes to 21.4 lakh.
-    await expect(sensitivity).toContainText('₹1.7 cr');
-    await expect(sensitivity).toContainText('₹21.4 lakh');
+
+    // Four rows, one for each way a company gets an audit hour. Same 7,131
+    // saved hours in every one; only the price of the hour moves.
+    await expect(sensitivity).toContainText('₹530');
+    await expect(sensitivity).toContainText('₹37.8 lakh');
+    await expect(sensitivity).toContainText('₹662');
+    await expect(sensitivity).toContainText('₹47.2 lakh');
+    await expect(sensitivity).toContainText('₹940');
+    await expect(sensitivity).toContainText('₹67.0 lakh');
+    await expect(sensitivity).toContainText('₹2,500');
+    await expect(sensitivity).toContainText('₹1.78 cr');
+
+    // And the cause is named, in one sentence, as a business fact rather than
+    // as an admission that we do not know.
+    await expect(sensitivity).toContainText('Auditors you employ');
+    await expect(sensitivity).toContainText('Hours bought from a firm');
+    await expect(sensitivity).toContainText(
+      'not doubt about the figure. It is the difference between employing auditors and buying their hours',
+    );
   });
 
   test('the attention strip carries at most three cards, each with one action', async ({ page }) => {
@@ -368,11 +434,20 @@ test.describe('Platform Usage', () => {
 
     expect(csv).toContain('CFO: Whole company');
     expect(csv).toContain('This quarter');
-    expect(csv).toContain('Rows checked by hand per hour');
+    expect(csv).toContain('Rows checked against a rule by hand per hour');
     expect(csv).toContain('our number, until yours is on record');
     expect(csv).toContain('It does not count edits, reviews, views or time spent');
     expect(csv).toContain('1428000');
     expect(csv).toContain('18400');
+
+    // The rate's derivation travels with the figure it produces, so a CFO who
+    // reads the export rather than the page still gets the whole sum.
+    expect(csv).toContain('Where the auditor rate comes from');
+    expect(csv).toContain('Glassdoor India, February 2026');
+    expect(csv).toContain('PayScale, 2026');
+    expect(csv).toContain('What those hours are worth, four ways');
+    expect(csv).toContain('Auditors you employ, costed on the hours they are available');
+    expect(csv).toContain('Hours bought from a firm, at the upper end');
   });
 
   test('the head-of-team view opens on what is stuck, with the real error text', async ({ page }) => {

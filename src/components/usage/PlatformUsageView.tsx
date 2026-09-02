@@ -70,7 +70,7 @@ import {
 import { AttentionStrip, BlockGroup, UsageTabs } from './usageKit';
 import {
   AiUsageByArea, AssumptionsReference, CostAndNetValue, HeadlineValue, NetValueHero,
-  SensitivityBlock, ValueOverTime,
+  RateDerivation, SensitivityBlock, ValueOverTime,
 } from './UsageValueBlocks';
 import { ControlCoverage, ExceptionsCaught, NeverTested, RiskPicture } from './UsageCoverageBlocks';
 import { CcmCoverage, MyQueue, MyWork, Reliability, SamplingOutcomes, StuckNow, TeamWork } from './UsageOperationsBlocks';
@@ -104,7 +104,7 @@ const TABS: { id: TabId; label: string; icon: typeof TrendingUp }[] = [
  */
 const TAB_OF_BLOCK: Record<string, TabId> = {
   hero: 'value', 'over-time': 'value', headline: 'value', 'my-work': 'value',
-  cost: 'value', sensitivity: 'value', assumptions: 'value',
+  cost: 'value', 'rate-derivation': 'value', sensitivity: 'value', assumptions: 'value',
   coverage: 'coverage', never: 'coverage', portfolio: 'coverage', risks: 'coverage',
   'past-date': 'coverage', 'plan-completion': 'coverage',
   ccm: 'coverage', sampling: 'coverage', caught: 'coverage', ageing: 'coverage', quality: 'coverage',
@@ -392,6 +392,9 @@ export default function PlatformUsageView() {
 
         <BlockGroup title="What it cost, and what it rests on">
           <CostAndNetValue cost={data.cost} value={data.value} netRupees={data.netRupees} period={period} />
+          {/* The rate's derivation sits between the money and the four ways of
+              costing it, so a reader meets the sum before the spread. */}
+          <RateDerivation settings={settings} />
           <SensitivityBlock rows={data.sensitivity} settings={settings} />
           <AssumptionsReference settings={settings} />
         </BlockGroup>
@@ -485,6 +488,9 @@ export default function PlatformUsageView() {
           showMoney={showMoney}
         />
         <ValueOverTime buckets={data.buckets} period={period} settings={settings} showMoney={showMoney} />
+        {/* A rupee figure never appears without its derivation on the same
+            screen, so a team lead who can see money sees the sum behind it. */}
+        {showMoney && <RateDerivation settings={settings} />}
       </BlockGroup>
     ),
 

@@ -53,6 +53,7 @@ import type { PlatformMemory } from './memoryStore';
 
 const INT = new Intl.NumberFormat('en-GB');
 const ONE_DP = new Intl.NumberFormat('en-GB', { minimumFractionDigits: 1, maximumFractionDigits: 1 });
+const TWO_DP = new Intl.NumberFormat('en-GB', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 const INDIAN = new Intl.NumberFormat('en-IN');
 
 export const fmtInt = (n: number): string => INT.format(Math.round(n));
@@ -89,8 +90,15 @@ export const opening = (subject: string): string => subject.charAt(0).toUpperCas
  */
 export const fmtHours = (h: number): string => (h < 10 ? fmtOneDp(h) : fmtInt(Math.floor(h)));
 
-/** People, as a headcount. Under ten a decimal still means something. */
-export const fmtPeople = (n: number): string => (n < 10 ? fmtOneDp(n) : fmtInt(n));
+/**
+ * People, as a headcount, always to one decimal.
+ *
+ * A saving of 15.4 people printed as "15" hides four tenths of a person, which
+ * is a fortnight of somebody's work every quarter. It also made the page unable
+ * to show the one thing that moved when the rate was corrected, because 14.9
+ * and 15.4 both printed as 15.
+ */
+export const fmtPeople = (n: number): string => fmtOneDp(n);
 
 /**
  * A span of machine time, in whatever unit stops it reading as zero.
@@ -111,6 +119,21 @@ export function fmtDuration(hours: number): string {
 export function fmtMoney(rupees: number): string {
   const n = Math.abs(rupees);
   if (n >= 10_000_000) return `₹${fmtOneDp(rupees / 10_000_000)} cr`;
+  if (n >= 100_000) return `₹${fmtOneDp(rupees / 100_000)} lakh`;
+  return `₹${INDIAN.format(Math.round(rupees))}`;
+}
+
+/**
+ * The same money, with enough precision that a crore does not swallow two lakh.
+ *
+ * `fmtMoney` gives one decimal at every scale, which is right for a headline
+ * and wrong for a table of four figures four times apart: ₹1.78 crore printed
+ * as ₹1.8 crore drops ₹2 lakh, and the row below it is only ₹67 lakh. So the
+ * scenario table keeps two decimals once it is into crore, and one below.
+ */
+export function fmtMoneyFine(rupees: number): string {
+  const n = Math.abs(rupees);
+  if (n >= 10_000_000) return `₹${TWO_DP.format(rupees / 10_000_000)} cr`;
   if (n >= 100_000) return `₹${fmtOneDp(rupees / 100_000)} lakh`;
   return `₹${INDIAN.format(Math.round(rupees))}`;
 }
@@ -365,16 +388,16 @@ export const ASSUMPTIONS: NumericSetting[] = [
 ];
 
 export const SETTING_LABEL: Record<NumericSetting, string> = {
-  manualReviewRate: 'rows a person checks by hand in an hour',
+  manualReviewRate: 'rows a person checks against a rule by hand in an hour',
   manualControlTestHours: 'hours one manual control test takes',
-  hourlyRate: 'the blended cost of an auditor hour',
+  hourlyRate: 'the cost of an hour of an auditor you employ',
   hoursPerPersonPerMonth: 'working hours per person per month',
 };
 
 export const SETTING_SHORT: Record<NumericSetting, string> = {
-  manualReviewRate: 'Rows checked by hand per hour',
+  manualReviewRate: 'Rows checked against a rule by hand per hour',
   manualControlTestHours: 'Hours per manual control test',
-  hourlyRate: 'Cost of an auditor hour',
+  hourlyRate: 'Cost of an hour of an auditor you employ',
   hoursPerPersonPerMonth: 'Working hours per person per month',
 };
 
@@ -439,12 +462,136 @@ export const RATE_BASIS_LINE =
   + `checking, at about ${RATE_BASIS.secondsPerRecord} seconds a record: ${RATE_PER_HOUR} an hour, `
   + `or ${RATE_PER_DAY} in a day`;
 
+/**
+ * What an hour of an internal auditor costs, worked out rather than invented.
+ *
+ * ₹1,200 an hour was on this page for a year and nobody could say where it came
+ * from, which is the worst kind of number: it carried the whole renewal case and
+ * it had no derivation. It was also wrong in a specific way. ₹1,200 is roughly
+ * what a firm charges to sell you an audit hour. Section 138 of the Companies
+ * Act makes prescribed companies appoint an internal auditor, so our customers
+ * employ their own, and an employed hour costs a fraction of a bought one.
+ *
+ * So the number is built from published pay data, in five steps anybody can
+ * check, and all five are printed on the page beside the money they produce.
+ */
+export const AUDITOR_RATE = {
+  /** Glassdoor India, February 2026. */
+  medianBase: 657_000,
+  /** PayScale, 2026. */
+  averageBase: 794_964,
+  /** The midpoint of the two, because neither source is the better one. */
+  takenBase: 725_000,
+  /**
+   * Employer cost on top of pay: statutory contributions, insurance, the desk,
+   * the laptop, the software. Published ranges run 1.25 to 1.45.
+   */
+  overhead: 1.35,
+  /**
+   * 52 weeks at 40 hours is 2,080. Take out about 29 days of leave and public
+   * holidays and 1,848 is what one person is available to work in a year.
+   */
+  availableHours: 1_848,
+  /** How much of a year an employed auditor actually charges to audit work. */
+  chargeableHours: 1_478,
+} as const;
+
+/** ₹9,78,750 a year, one auditor, fully loaded. */
+export const AUDITOR_LOADED_COST = Math.round(AUDITOR_RATE.takenBase * AUDITOR_RATE.overhead);
+
+/**
+ * ₹530 an hour. Exactly what the sum above comes to, and what the page carries.
+ *
+ * Not rounded to a comfortable ₹550. This page rounds a saving down and prints
+ * 7,131 hours rather than 7,132, so rounding the rate up by ₹20 would round the
+ * benefit up by about ₹1.4 lakh a quarter while the derivation printed beside
+ * it still said ₹530. There is no hand set figure here: the constant is the
+ * arithmetic, so the number on screen and the sum behind it cannot drift.
+ */
+export const AUDITOR_HOUR = Math.round(AUDITOR_LOADED_COST / AUDITOR_RATE.availableHours);
+
+/** Working hours a month: the 1,848 available hours over twelve. */
+export const HOURS_PER_MONTH = Math.round(AUDITOR_RATE.availableHours / 12);
+
+/**
+ * The whole sum in one paragraph, so it can travel with the figure it produces.
+ *
+ * The page shows it laid out as five steps and the exports carry this line, and
+ * both are built from the same constants, so neither can drift from the other.
+ */
+export const RATE_DERIVATION_LINE =
+  `Median base pay for an internal auditor in India is ${fmtMoneyExact(AUDITOR_RATE.medianBase)} a year `
+  + `on Glassdoor India in February 2026, and ${fmtMoneyExact(AUDITOR_RATE.averageBase)} on PayScale in `
+  + `2026. The midpoint of the two is ${fmtMoneyExact(AUDITOR_RATE.takenBase)}. Multiply that by `
+  + `${AUDITOR_RATE.overhead} for what it costs to employ somebody on top of their pay and one auditor `
+  + `costs ${fmtMoneyExact(AUDITOR_LOADED_COST)} a year. Over the ${fmtInt(AUDITOR_RATE.availableHours)} `
+  + 'hours a year one person is available to work, that is '
+  + `${fmtMoneyExact(AUDITOR_HOUR)} an hour, which is what this page carries. It is the cost of an `
+  + 'auditor your own company employs, not the price a firm charges to sell you an '
+  + 'audit hour, because section 138 of the Companies Act means our customers employ their own. Nothing '
+  + 'in the product records what anybody is paid, so this comes from published pay data rather than from '
+  + 'your records, and it is the one number here your finance team can replace with a better one.';
+
+/** The same sum as steps, for the block that lays it out on screen. */
+export const RATE_DERIVATION_STEPS: { step: string; value: string; from: string }[] = [
+  {
+    step: 'Base pay, median',
+    value: `${fmtMoneyExact(AUDITOR_RATE.medianBase)} a year`,
+    from: 'Glassdoor India, February 2026',
+  },
+  {
+    step: 'Base pay, average',
+    value: `${fmtMoneyExact(AUDITOR_RATE.averageBase)} a year`,
+    from: 'PayScale, 2026',
+  },
+  {
+    step: 'Taken',
+    value: `${fmtMoneyExact(AUDITOR_RATE.takenBase)} a year`,
+    from: 'the midpoint of the two, because neither source is the better one',
+  },
+  {
+    step: 'Cost of employing somebody, on top of pay',
+    value: `× ${AUDITOR_RATE.overhead}`,
+    from: 'statutory contributions, insurance, the desk, the laptop, the software. Published ranges run 1.25 to 1.45',
+  },
+  {
+    step: 'What one auditor costs a year',
+    value: fmtMoneyExact(AUDITOR_LOADED_COST),
+    from: `${fmtMoneyExact(AUDITOR_RATE.takenBase)} × ${AUDITOR_RATE.overhead}`,
+  },
+  {
+    step: 'Hours a year one person is available to work',
+    value: `${fmtInt(AUDITOR_RATE.availableHours)} hours`,
+    from: '52 weeks at 40 hours, less about 29 days of leave and public holidays',
+  },
+  {
+    step: 'Cost of an auditor hour',
+    value: `${fmtMoneyExact(AUDITOR_HOUR)} an hour`,
+    from: `${fmtMoneyExact(AUDITOR_LOADED_COST)} ÷ ${fmtInt(AUDITOR_RATE.availableHours)} hours, not rounded up`,
+  },
+];
+
+/**
+ * The pace, said for what it is.
+ *
+ * The profession documents 4 to 9 transactions an hour for full substantive
+ * testing with documentation, and a reader who knows that figure will think 200
+ * is twenty times wrong until the page says these are two different pieces of
+ * work. They are. This one is a person reading a row, checking it against a
+ * rule and moving on.
+ */
+export const RATE_KIND_LINE =
+  'This is a person reading a row in a spreadsheet, checking it against a rule and moving on. It is '
+  + 'not full substantive testing with documentation, which the profession puts at 4 to 9 transactions '
+  + 'an hour and which is a different piece of work. Note also that a faster pace makes the saving '
+  + 'smaller, so 200 is the careful choice rather than the flattering one.';
+
 /** The shipped starting point. Nothing here was ever typed by a customer. */
 const BASE: Omit<UsageSettings, 'changes'> = {
   manualReviewRate: RATE_PER_HOUR,
   manualControlTestHours: 4,
-  hourlyRate: 1_200,
-  hoursPerPersonPerMonth: 160,
+  hourlyRate: AUDITOR_HOUR,
+  hoursPerPersonPerMonth: HOURS_PER_MONTH,
   source: {
     manualReviewRate: 'starting-value',
     manualControlTestHours: 'starting-value',
@@ -453,15 +600,16 @@ const BASE: Omit<UsageSettings, 'changes'> = {
   },
   note: {
     manualReviewRate:
-      `Worked out rather than picked: ${RATE_BASIS_LINE}. Nobody measured it and it is not an `
-      + "industry benchmark, so argue with any of the three and the page moves with you. Your "
+      `Worked out rather than picked: ${RATE_BASIS_LINE}. ${RATE_KIND_LINE} Nobody measured it and `
+      + "it is not an industry benchmark, so argue with any of it and the page moves with you. Your "
       + "team's own pace replaces it once there is enough recorded history.",
     manualControlTestHours:
       'A starting number we picked. It replaces itself once manual tests carry start and finish times.',
-    hourlyRate:
-      'A stand-in rate. Nothing in the product records what anybody is paid, so this one comes from '
-      + 'us rather than from your records. Your finance team is the only place a real figure can come from.',
-    hoursPerPersonPerMonth: '8 hours a day across 20 working days. An HR convention, not a measurement.',
+    hourlyRate: RATE_DERIVATION_LINE,
+    hoursPerPersonPerMonth:
+      `The ${fmtInt(AUDITOR_RATE.availableHours)} hours a year one person is available to work, over `
+      + 'twelve months. 52 weeks at 40 hours, less about 29 days of leave and public holidays. It '
+      + 'replaces the 160 that was an HR round number.',
   },
   measurable: {
     manualReviewRate: true,
@@ -536,8 +684,8 @@ export function calibrate(): UsageSettings {
       : null;
 
     next.note.manualReviewRate = observed === null
-      ? `${fmtInt(BASE.manualReviewRate)} an hour is ${RATE_BASIS_LINE}. Nothing is on record yet to replace it with.`
-      : `${fmtInt(BASE.manualReviewRate)} an hour is ${RATE_BASIS_LINE}. Your own ${fmtInt(usableReviews.length)} timed `
+      ? `${fmtInt(BASE.manualReviewRate)} an hour is ${RATE_BASIS_LINE}. ${RATE_KIND_LINE} Nothing is on record yet to replace it with.`
+      : `${fmtInt(BASE.manualReviewRate)} an hour is ${RATE_BASIS_LINE}. ${RATE_KIND_LINE} Your own ${fmtInt(usableReviews.length)} timed `
         + `reviews so far work out at about ${fmtInt(observed)} records an hour over ${fmtInt(reviewSpanDays)} days, and `
         + `the page switches to your number once there are ${MIN_REVIEW_SAMPLE} of them over ${MIN_HISTORY_DAYS} days.`;
     next.observed.manualReviewRate = observed;
@@ -572,31 +720,72 @@ export const REVIEW_PROXY_NOTE =
   + 'We use it because it is recorded, and a guess would not be.';
 
 /**
- * What the whole page rests on, given as a number rather than a warning.
+ * What the same saved hours are worth, four ways, and why the four differ.
  *
- * One assumption moves every figure above it, so the page prints the range
- * instead of describing it. Halve the pace and the saving doubles. Quadruple it
- * and the saving falls to a quarter.
+ * This block used to print the figure at three different by-hand paces and say
+ * it swung eight times, which read as us admitting we did not know. The swing
+ * was real and the reason given for it was wrong. It is not our uncertainty. It
+ * is a fact about how a company gets its audit hours: an hour bought from a
+ * firm costs four or five times an hour worked by somebody on the payroll, and
+ * the page never said so.
+ *
+ * So the rows are the four ways an audit hour is costed, the saved hours are
+ * the same 7,131 in every one, and only the price of the hour moves.
  */
 export interface Sensitivity {
+  /** How the company gets the hour, said in words. */
+  basis: string;
   rate: number;
   hours: number;
   rupees: number;
+  /** Where the rate comes from, on the row. */
+  from: string;
+  /** True on the row this page's own figure is nearest to. */
+  ours: boolean;
 }
 
-export function sensitivity(coveredRows: number, settings: UsageSettings): Sensitivity[] {
+/** Said once, under the table, because it is the whole point of the table. */
+export const SENSITIVITY_CAUSE =
+  'The spread is not doubt about the figure. It is the difference between employing auditors and '
+  + 'buying their hours from a firm, which is a fact about your own operating model rather than '
+  + 'anything this page is unsure of. The hours saved are the same in every row. Only the price of '
+  + 'an hour moves.';
+
+export function sensitivity(hoursSaved: number): Sensitivity[] {
   /*
-   * The by-hand hours at three paces, and what each is worth. The machine time
-   * is deliberately not taken off here: this block answers "how much does the
-   * assumed pace move the figure", and the guide's worked example is the
-   * by-hand hours at each pace. Subtracting the 8.5 machine hours changed
-   * 21.4 lakh into 21.3 and put the page out of step with its own spec.
+   * The saved hours are priced, not the by-hand hours, so every row here ties
+   * to the saving printed at the top of the tab rather than sitting a little
+   * above it. ₹530 is the sum in `AUDITOR_RATE` at its exact figure; the page
+   * itself carries the round ₹550 a shade above it.
    */
-  return [100, settings.manualReviewRate, 800].map(rate => ({
-    rate,
-    hours: coveredRows / rate,
-    rupees: (coveredRows / rate) * settings.hourlyRate,
-  }));
+  const rows: { basis: string; rate: number; from: string; ours: boolean }[] = [
+    {
+      basis: 'Auditors you employ, costed on the hours they are available',
+      rate: AUDITOR_HOUR,
+      from: `${fmtMoneyExact(AUDITOR_LOADED_COST)} a year over ${fmtInt(AUDITOR_RATE.availableHours)} available hours`,
+      ours: true,
+    },
+    {
+      basis: 'Auditors you employ, costed only on the hours they charge to audit work',
+      rate: Math.round(AUDITOR_LOADED_COST / AUDITOR_RATE.chargeableHours),
+      from: `the same ${fmtMoneyExact(AUDITOR_LOADED_COST)} over the ${fmtInt(AUDITOR_RATE.chargeableHours)} hours a year that reach audit work`,
+      ours: false,
+    },
+    {
+      basis: 'Hours bought from a firm, at the lower end',
+      rate: 940,
+      from: 'what a smaller firm quotes for an internal audit hour. Our estimate, not a published rate',
+      ours: false,
+    },
+    {
+      basis: 'Hours bought from a firm, at the upper end',
+      rate: 2_500,
+      from: 'what a large firm quotes for an internal audit hour. Our estimate, not a published rate',
+      ours: false,
+    },
+  ];
+
+  return rows.map(row => ({ ...row, hours: hoursSaved, rupees: hoursSaved * row.rate }));
 }
 
 /* ──────────────────────────────────────────────────────────────────────────
@@ -1814,7 +2003,7 @@ export function snapshot(scope: Scope, p: Period, settings: UsageSettings): Usag
     },
     cost,
     netRupees: value.rupees - cost.totalPaise / 100,
-    sensitivity: sensitivity(value.coveredRows, settings),
+    sensitivity: sensitivity(value.hoursSaved),
     coverage,
     risks,
     exceptions,

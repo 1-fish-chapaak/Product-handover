@@ -15,7 +15,8 @@
 
 import { COVERAGE_NOTE, dataAsOfLabel, formatDate } from '../../data/platform-usage';
 import {
-  ASSUMPTIONS, PERSONA_SCOPE_LABEL, PERSONA_TITLE, REVIEW_PROXY_NOTE, SETTING_SHORT, SOURCE_LABEL,
+  ASSUMPTIONS, PERSONA_SCOPE_LABEL, PERSONA_TITLE, RATE_DERIVATION_LINE, RATE_DERIVATION_STEPS,
+  REVIEW_PROXY_NOTE, SENSITIVITY_CAUSE, SETTING_SHORT, SOURCE_LABEL,
   fmtDuration, fmtHours, fmtInt, fmtOneDp, fmtPct, fmtPeople, priorLabel, usageFileName,
   type UsageSnapshot,
 } from '../../data/platform-usage-metrics';
@@ -135,11 +136,19 @@ export function usagePdfDefinition(data: UsageSnapshot) {
     ),
     note('Failed runs are excluded from every saving above and reported on their own line. Rows covered counts each population once however often it was re-tested, and the repeats appear on the checks-performed line.'),
 
-    heading('How much the pace matters'),
+    heading('Where the auditor rate comes from'),
     table(
-      ['Rows checked by hand per hour', 'Hours by hand', 'The same work in money, INR'],
-      data.sensitivity.map(s => [fmtInt(s.rate), fmtHours(s.hours), fmtInt(s.rupees)]),
+      ['Step', 'Value', 'Source'],
+      RATE_DERIVATION_STEPS.map(s => [s.step, s.value, s.from]),
     ),
+    note(RATE_DERIVATION_LINE),
+
+    heading('What those hours are worth, four ways'),
+    table(
+      ['How you get an audit hour', 'Cost of an hour, INR', 'This window is worth, INR'],
+      data.sensitivity.map(s => [s.basis, fmtInt(s.rate), fmtInt(s.rupees)]),
+    ),
+    note(SENSITIVITY_CAUSE),
 
     heading('Control coverage'),
     table(
