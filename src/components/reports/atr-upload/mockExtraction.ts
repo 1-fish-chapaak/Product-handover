@@ -44,7 +44,7 @@ const FIELD_LABEL: Record<MissingField['key'], string> = {
   title: 'Observation Title',
   description: 'Observation Description',
   riskSummary: 'Risk Summary',
-  recommendation: 'Recommendation / Management Action Plan',
+  recommendation: 'Recommendation / Action Plan',
   actionTaken: 'Action Taken',
   evidence: 'Evidence',
   verification: 'Management Comments / Auditor Verification',

@@ -202,7 +202,7 @@ export default function AtrValidationStep({ observations, onChange }: {
                         <ViewField label="Risk summary" value={o.riskSummary} />
                         {o.actionPlans.length > 0 && (
                           <div>
-                            <div className="text-[0.625rem] font-semibold uppercase tracking-[0.08em] text-ink-500 mb-1.5">Management action plans</div>
+                            <div className="text-[0.625rem] font-semibold uppercase tracking-[0.08em] text-ink-500 mb-1.5">Action plans</div>
                             <div className="space-y-2">
                               {o.actionPlans.map((p, pi) => (
                                 <div key={pi} className="rounded-sm border border-canvas-border bg-canvas p-2.5 space-y-1.5">
