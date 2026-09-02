@@ -23,10 +23,11 @@
  * of the quarter and of the Indian financial year, which is when the renewal
  * conversation this page exists for actually happens. The quarter end matters:
  * the CFO opens on "this quarter compared with last", and comparing three weeks
- * against three months tells nobody anything. History runs back to 1 Jul 2025 so
- * "since you started" covers nine months and the longest window still has
- * something behind it. A fixed-seed PRNG, no `Date.now()` and no `Math.random()`,
- * so every reload, screenshot and test sees the same history.
+ * against three months tells nobody anything. History runs back to 1 Apr 2025,
+ * the start of the same Indian financial year the anchor closes, so the
+ * financial year to date is a full twelve months and "since you started" has a
+ * whole year behind it. A fixed-seed PRNG, no `Date.now()` and no
+ * `Math.random()`, so every reload, screenshot and test sees the same history.
  *
  * **The quarter is the guide's worked example, to the rupee.** Section 7 prices
  * one quarter of one mid-size customer, and section 15 asks for a seeded
@@ -70,8 +71,8 @@ export const MINUTE_MS = 60_000;
 /** The newest moment in the record: Tue 31 Mar 2026, 18:00 UTC. */
 export const ANCHOR = Date.UTC(2026, 2, 31, 18, 0, 0);
 
-/** The oldest: Tue 1 Jul 2025, so "since you started" covers nine real months. */
-export const HISTORY_START = Date.UTC(2025, 6, 1, 0, 0, 0);
+/** The oldest: Tue 1 Apr 2025, the start of the financial year the anchor closes. */
+export const HISTORY_START = Date.UTC(2025, 3, 1, 0, 0, 0);
 
 /** The guide's worked example: the quarter the CFO lands on. */
 export const EXAMPLE_QUARTER = {

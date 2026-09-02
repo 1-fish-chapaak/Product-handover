@@ -402,6 +402,48 @@ test.describe('Platform Usage', () => {
     await expect(page.locator('#hero')).toContainText('this month');
   });
 
+  test('the financial year to date is a window of its own, alongside the month', async ({ page }) => {
+    await openUsage(page);
+
+    // Every window that was here stays. A head of team and an admin read a
+    // month, so the month cannot be the price of adding a financial year.
+    for (const label of ['This month', 'This quarter', 'This year', 'Since you started', 'Custom']) {
+      await expect(page.getByRole('button', { name: label, exact: true })).toBeVisible();
+    }
+
+    // The Indian financial year the anchor closes: 1 Apr 2025 to 31 Mar 2026.
+    const quarter = await page.locator('#hero').innerText();
+    await page.getByRole('button', { name: 'Financial year to date', exact: true }).click();
+    await page.waitForTimeout(700);
+    await expect(page.getByText(/Financial year to date, 1 Apr 2025 to 31 Mar 2026/)).toBeVisible();
+
+    // And it is a real window rather than a relabelled quarter: twelve months
+    // of runs and of contract charge, not three.
+    const ytd = await page.locator('#hero').innerText();
+    expect(ytd).not.toBe(quarter);
+    expect(ytd).toContain('the financial year to date');
+
+    const cost = await page.locator('#cost').innerText();
+    expect(cost).not.toContain('₹18,400');
+  });
+
+  test('the longer history does not leak into the quarter', async ({ page }) => {
+    await openUsage(page);
+    // History now runs back to 1 Apr 2025 rather than 1 Jul 2025. The four
+    // recorded figures the worked example rests on are inside the quarter and
+    // must not have moved a digit.
+    const hero = page.locator('#hero');
+    await expect(hero).toContainText('1,428,000');
+    await expect(hero).toContainText('340');
+    await expect(hero).toContainText('8.5');
+    await expect(page.locator('#cost')).toContainText('₹18,400');
+
+    // And "since you started" now reaches back a full year.
+    await page.getByRole('button', { name: 'Since you started', exact: true }).click();
+    await page.waitForTimeout(700);
+    await expect(page.getByText(/Since you started, 1 Apr 2025 to 31 Mar 2026/)).toBeVisible();
+  });
+
   test('never exercised ignores the period selector', async ({ page }) => {
     await openUsage(page);
     await usageTab(page, 'Coverage');
