@@ -76,7 +76,7 @@ This is the heart of the feature, so every step is stated and every step says wh
 
 The rate is the only assumed number left in the chain, so it carries its whole derivation on screen.
 
-**Default: ₹550 an hour**, the fully loaded cost of an in-house internal auditor in India.
+**Default: ₹530 an hour**, the fully loaded cost of an in-house internal auditor in India.
 
 | Step | Value | Source |
 | --- | --- | --- |
@@ -86,7 +86,7 @@ The rate is the only assumed number left in the chain, so it carries its whole d
 | Overhead multiplier | 1.35 | published range is 1.25 to 1.45 |
 | Fully loaded annual cost | ₹9,78,750 | |
 | Available hours a year | 1,848 | 52 weeks at 40 hours, less about 29 days of leave and public holidays |
-| **Cost an hour** | **₹530, taken as ₹550** | |
+| **Cost an hour** | **₹530** | |
 
 **Working hours a month becomes 154**, which is 1,848 over twelve, replacing the 160 that was an HR round number.
 
@@ -151,7 +151,7 @@ These are the good part of the current build and they carry over whole.
 
 | Constant | Now | Becomes | Why |
 | --- | --- | --- | --- |
-| `hourlyRate` | ₹1,200 | **₹550** | Sourced in section 4. The old value prices a bought-in hour for a customer who employs their own auditors. |
+| `hourlyRate` | ₹1,200 | **₹530** | Sourced in section 4, and computed from that derivation rather than hand set. The old value prices a bought-in hour for a customer who employs their own auditors. It is not rounded up to ₹550, because this page rounds a benefit down and the rate is part of the benefit. |
 | `hoursPerPersonPerMonth` | 160 | **154** | 1,848 available hours over twelve months, rather than an HR round number. |
 | `manualReviewRate` | 200, label vague | 200, label corrected | Must say it means rule checking in a spreadsheet, not a substantive audit procedure. |
 | `HISTORY_START` | 1 Jul 2025 | **1 Apr 2025** | The Indian financial year starts on 1 April, so the anchor at 31 Mar 2026 becomes a financial year end. Already done at commit `999ab4b` and worth keeping. |
@@ -163,8 +163,8 @@ The worked example moves, on purpose, and the tests must move with it.
 | --- | --- | --- |
 | Hours saved | 7,131 | 7,131, unchanged |
 | People freed | 14.9 | 15.4 |
-| Money saved | ₹85.6 lakh | **₹39.2 lakh** |
-| Net of contract | ₹85.4 lakh | **₹39.0 lakh** |
+| Money saved | ₹85.6 lakh | **₹37.8 lakh** |
+| Net of contract | ₹85.4 lakh | **₹37.6 lakh** |
 | Rows, runs, machine time, contract charge | 1,428,000 · 340 · 8.5 h · ₹18,400 | unchanged, all four still assert |
 
 ---
@@ -195,14 +195,14 @@ The page reads generic because every block is the same card with the same tile i
 3. The value view shows hours saved, people freed, money, and the contract charge, each with its source or its derivation on the same screen.
 4. The rate block shows the full derivation from section 4: salary median, multiplier, available hours, result.
 5. The sensitivity table shows the four rows from section 4 and names the in-house against bought-in cause.
-6. Q4 FY26 reconciles: 1,428,000 rows, 340 successful runs, 8.5 hours machine time, ₹18,400 charged, 7,131 hours saved, ₹39.2 lakh.
+6. Q4 FY26 reconciles: 1,428,000 rows, 340 successful runs, 8.5 hours machine time, ₹18,400 charged, 7,131 hours saved, ₹37.8 lakh money and ₹37.6 lakh net.
 7. Financial year to date covers 1 Apr 2025 to 31 Mar 2026 and differs from the quarter on every flow figure.
 8. Both exports carry the reader, the window, every assumption with its derivation, and the coverage note.
 
 **Negative**
 
 9. No figure anywhere states an assumed number without its derivation on the same screen.
-10. No rate other than ₹550 appears as the default, and ₹1,200 appears nowhere.
+10. No rate other than ₹530 appears as the default, and ₹1,200 appears nowhere.
 11. No benchmark, target or comparison against another company on any figure.
 12. No control on the page changes a record it reports on.
 13. No input field exists anywhere in the feature.
@@ -222,12 +222,12 @@ The page reads generic because every block is the same card with the same tile i
 | --- | --- |
 | AC-01 | The Viewing as switch exists and offers only entitled views. |
 | AC-02 | Each of the four readers opens on the view named in section 5. |
-| AC-03 | `hourlyRate` is ₹550 and ₹1,200 appears nowhere in the codebase or on screen. |
+| AC-03 | `hourlyRate` is ₹530, computed from the derivation rather than hand set, and ₹1,200 appears nowhere on screen. |
 | AC-04 | The rate's full derivation renders on the same screen as any figure it produces. |
 | AC-05 | `hoursPerPersonPerMonth` is 154. |
 | AC-06 | The manual pace label states it means rule checking, not a substantive audit procedure. |
 | AC-07 | The sensitivity table shows the four rows from section 4 and names in-house against bought-in as the cause. |
-| AC-08 | Q4 FY26 asserts 1,428,000 rows, 340 runs, 8.5 hours, ₹18,400 charged, 7,131 hours saved, 15.4 people, ₹39.2 lakh. |
+| AC-08 | Q4 FY26 asserts 1,428,000 rows, 340 runs, 8.5 hours, ₹18,400 charged, 7,131 hours saved, 15.4 people, ₹37.8 lakh money and ₹37.6 lakh net. |
 | AC-09 | `HISTORY_START` is 1 Apr 2025 and financial year to date is offered as a window covering 1 Apr 2025 to 31 Mar 2026. |
 | AC-10 | The audit lead view carries the six committee lines recovered from `a726aff`. |
 | AC-11 | Every figure on the page and in both exports comes from one `snapshot()` call. |
@@ -258,6 +258,6 @@ At ninety days: the figure survives a renewal conversation without being dispute
 
 ## Open decisions
 
-1. **Does operations start collecting the customer's hourly rate at contract time?** Until it does, ₹550 is a sourced default rather than the customer's own number. This is a process decision, not a build one.
+1. **Does operations start collecting the customer's hourly rate at contract time?** Until it does, ₹530 is a sourced default rather than the customer's own number. This is a process decision, not a build one.
 
 Settled: our CS and account team read the CFO view. Four readers, three views.
