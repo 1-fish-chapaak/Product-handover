@@ -50,7 +50,7 @@ Three rules hold it, unchanged from the current build because they are right.
 
 **The screen always says what you are looking at**, in one line above the blocks.
 
-**Decision taken, flag it if wrong:** our CS and account team read the CFO view rather than getting a view of their own, because their question is identical and because this product has no impersonation and will not get one. If CS actually needs something the CFO view does not carry, that is a separate surface, not a fifth persona.
+**Confirmed:** our CS and account team read the CFO view rather than getting a view of their own, because their question is identical and because this product has no impersonation and will not get one. If CS ever needs something the CFO view does not carry, that is a separate surface, not a fifth persona. So there are four readers and three views.
 
 ---
 
@@ -259,4 +259,5 @@ At ninety days: the figure survives a renewal conversation without being dispute
 ## Open decisions
 
 1. **Does operations start collecting the customer's hourly rate at contract time?** Until it does, ₹550 is a sourced default rather than the customer's own number. This is a process decision, not a build one.
-2. **Do our CS and account team read the CFO view, or do they need something of their own?** Taken as the CFO view for now, because the question is identical and this product has no impersonation.
+
+Settled: our CS and account team read the CFO view. Four readers, three views.
