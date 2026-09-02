@@ -68,9 +68,9 @@ const VIEW_TITLE: Record<ViewId, string> = {
 
 /** Who each view was built for, said on the switch so nobody has to guess. */
 const VIEW_READER: Record<ViewId, string> = {
-  value: 'Finance, and our account team before a renewal call',
-  coverage: 'The audit lead',
-  activity: 'The workspace admin',
+  value: 'finance, and our account team before a renewal call',
+  coverage: 'the audit lead',
+  activity: 'the workspace admin',
 };
 
 /** The question the view exists to answer, in the reader's own words. */
@@ -153,18 +153,48 @@ export default function PlatformUsageView() {
   /* ── Which view leads ────────────────────────────────────────────────────── */
 
   /*
-   * Where each of the four readers lands, decided by what their role actually
-   * holds rather than by anything they type. A workspace admin manages people,
-   * which is what separates them from a CFO who reads the same company figures.
+   * Where a reader lands, and why it is not guessed.
+   *
+   * The four readers are not distinguishable by permission and never will be.
+   * System Admin carries every key, so one person holds it while being, at
+   * different moments, the workspace admin, the audit lead, and the person who
+   * talks to finance before a renewal. Guessing which of the three they are
+   * today costs trust every time it guesses wrong, so the page does not guess.
+   *
+   * Anyone who can read the company figures lands on Value, because that is the
+   * question this page exists to answer and the one every reader shares.
+   * Anyone who cannot lands on what they can actually see. After that the page
+   * opens where they left it, which is what makes a wrong first landing cost
+   * one click once rather than one click every visit.
    */
   const homeView: ViewId = useMemo(() => {
-    if (can('ad_usage') && (can('ad_users_manage') || can('ad_roles_manage'))) return 'activity';
     if (can('ad_usage')) return 'value';
     if (can('ad_usage_people') && myTeam) return 'coverage';
     return 'activity';
   }, [can, myTeam]);
 
-  const [view, setView] = useState<ViewId>(homeView);
+  const rememberKey = `irame:platform-usage:view:${currentUser?.email ?? 'anonymous'}`;
+
+  const [view, setView] = useState<ViewId>(() => {
+    try {
+      const saved = window.localStorage.getItem(rememberKey);
+      if (saved === 'value' || saved === 'coverage' || saved === 'activity') return saved;
+    } catch {
+      // Storage can be off. A reader with no storage lands on their home view,
+      // which is the same place they landed the first time anyway.
+    }
+    return homeView;
+  });
+
+  /** Remembered per person, so the switch is a choice rather than a chore. */
+  const chooseView = (next: ViewId) => {
+    setView(next);
+    try {
+      window.localStorage.setItem(rememberKey, next);
+    } catch {
+      // Not remembering is a worse page, not a broken one.
+    }
+  };
 
   /* ── The window ──────────────────────────────────────────────────────────── */
 
@@ -273,7 +303,7 @@ export default function PlatformUsageView() {
    * the same image is a figure nobody can defend six weeks later.
    */
   const headerLine = [
-    `Viewing as ${VIEW_TITLE[view]}, ${VIEW_READER[view].toLowerCase()}`,
+    `Viewing as ${VIEW_TITLE[view]}, read by ${VIEW_READER[view]}`,
     PERSONA_SCOPE_LABEL[persona] + (persona === 'head_of_team' && myTeam ? `, ${myTeam}` : ''),
     `${period.label}, ${formatDate(period.from)} to ${formatDate(period.to)}`,
     dataAsOfLabel(),
@@ -289,25 +319,32 @@ export default function PlatformUsageView() {
       <div className="px-6 lg:px-12 xl:px-[124px] pt-8 pb-16 max-w-[1180px]">
         <header className="border-b border-canvas-border pb-5">
           <h1 className="text-[1.75rem] font-semibold tracking-tight text-ink-900 leading-tight">Platform Usage</h1>
-          <p className="mt-1 text-[1rem] text-ink-500">{VIEW_QUESTION[view]}</p>
+          <p className="mt-1 text-[1rem] text-ink-500">
+            What this quarter's audit work would have cost in human time, and what it cost with us.
+          </p>
 
-          <div className="mt-5 flex flex-wrap items-center gap-x-6 gap-y-3">
-            <div className="flex items-center gap-2">
-              <span className="text-[0.75rem] text-ink-400">Viewing as</span>
-              <div className="inline-flex rounded-lg border border-canvas-border bg-canvas-elevated p-0.5">
+          <div className="mt-5 flex flex-wrap items-start gap-x-6 gap-y-3">
+            <div>
+              <div className="flex items-center gap-2">
+                <span className="text-[0.75rem] text-ink-400">Viewing as</span>
+                <div className="inline-flex rounded-lg border border-canvas-border bg-canvas-elevated p-0.5">
                 {(['value', 'coverage', 'activity'] as ViewId[]).map(id => (
                   <button
                     key={id}
                     type="button"
-                    onClick={() => setView(id)}
+                    onClick={() => chooseView(id)}
                     aria-pressed={view === id}
-                    title={VIEW_READER[id]}
+                    title={VIEW_QUESTION[id]}
                     className={pill(view === id)}
                   >
                     {VIEW_TITLE[id]}
                   </button>
                 ))}
+                </div>
               </div>
+              {/* The question the chosen view answers, said in words, so a reader
+                  picking for themselves never needs us to have guessed right. */}
+              <p className="mt-1.5 text-[0.75rem] text-ink-500">{VIEW_QUESTION[view]}</p>
             </div>
 
             {/*

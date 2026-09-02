@@ -154,7 +154,8 @@ export function coverageGroups(ctx: CoverageContext): GroupSpec[] {
           <Lede>
             <Num>{fmtInt(risks.uncovered)}</Num> of the <Num>{fmtInt(risks.total)}</Num> risks on your
             register have no control mapped to them, and{' '}
-            <Num>{fmtInt(risks.criticalUncovered)}</Num> of those are critical.
+            <Num>{fmtInt(risks.criticalUncovered)}</Num> of those{' '}
+            {risks.criticalUncovered === 1 ? 'is' : 'are'} critical.
           </Lede>
           {risks.uncovered > 0 ? (
             <Grid

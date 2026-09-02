@@ -63,7 +63,7 @@ export function valueGroups(ctx: ValueContext): GroupSpec[] {
           The work {period.phrase} would have taken <Num>{fmtHours(value.manualHours)}</Num> hours by hand.
           It took <Num>{fmtDuration(value.machineHours)}</Num> of machine time, so{' '}
           <Num>{fmtHours(value.hoursSaved)}</Num> hours were saved, which is{' '}
-          <Num>{fmtPeople(value.people)}</Num> people freed for the {period.days} days
+          <Num>{fmtPeople(value.people)}</Num> people freed for {period.phrase}
           {showMoney ? (
             <>
               {' '}and <Num>{fmtMoney(value.rupees)}</Num> at{' '}
@@ -113,7 +113,7 @@ export function valueGroups(ctx: ValueContext): GroupSpec[] {
             <Line
               label="People that frees"
               value={fmtPeople(value.people)}
-              sub={`${fmtHours(value.hoursSaved)} hours over the ${fmtInt(hoursPerQuarter)} hours one person is available to work in ${period.days} days.`}
+              sub={`${fmtHours(value.hoursSaved)} hours over the ${fmtInt(hoursPerQuarter)} hours one person is available to work in the ${fmtInt(period.days)} days this window covers.`}
             />
             {showMoney ? (
               <Line
@@ -128,8 +128,8 @@ export function valueGroups(ctx: ValueContext): GroupSpec[] {
 
         {netKnown ? (
           <Note>
-            Less the {fmtMoneyExact(cost.totalPaise / 100)} your contract charged for running it, the{' '}
-            {period.days} days come to <Num>{fmtMoney(data.netRupees)}</Num> net.
+            Less the {fmtMoneyExact(cost.totalPaise / 100)} your contract charged for running it,{' '}
+            {period.phrase} comes to <Num>{fmtMoney(data.netRupees)}</Num> net.
           </Note>
         ) : showMoney ? (
           <Note>
