@@ -50,6 +50,8 @@ Three rules hold it, unchanged from the current build because they are right.
 
 **The screen always says what you are looking at**, in one line above the blocks.
 
+**Where a reader lands is not guessed from permissions.** The four readers are not distinguishable by permission and never will be: `System Admin` carries every key, so one person holds it while being, at different moments, the workspace admin, the audit lead, and the person who talks to finance before a renewal. So anyone holding `ad_usage` lands on Value, because it is the question the page exists to answer and the one every reader shares. A reader without `ad_usage` lands on what they can actually see: `ad_usage_people` with a team lands on Coverage and findings, anyone else on Activity. After the first visit the page opens on whichever view that reader last chose, remembered per user. The switch carries each view's question in words, so a reader picking for themselves never needs us to have guessed right.
+
 **Confirmed:** our CS and account team read the CFO view rather than getting a view of their own, because their question is identical and because this product has no impersonation and will not get one. If CS ever needs something the CFO view does not carry, that is a separate surface, not a fifth persona. So there are four readers and three views.
 
 ---
@@ -190,7 +192,7 @@ The page reads generic because every block is the same card with the same tile i
 
 **Positive**
 
-1. Each of the four readers opens on the view named in section 5, and the header line states reader, scope, window and the counted to date.
+1. A reader holding `ad_usage` opens on Value, a Team Lead opens on Coverage and findings, and a chosen view survives a reload. The header line states reader, scope, window and the counted to date.
 2. The switch offers only views the reader is entitled to, and narrowing never reaches another team.
 3. The value view shows hours saved, people freed, money, and the contract charge, each with its source or its derivation on the same screen.
 4. The rate block shows the full derivation from section 4: salary median, multiplier, available hours, result.
@@ -221,7 +223,7 @@ The page reads generic because every block is the same card with the same tile i
 | ID | Criterion |
 | --- | --- |
 | AC-01 | The Viewing as switch exists and offers only entitled views. |
-| AC-02 | Each of the four readers opens on the view named in section 5. |
+| AC-02 | A reader holding `ad_usage` opens on Value. A reader holding `ad_usage_people` with a team opens on Coverage and findings. A view chosen by a reader is remembered and opens again on their next visit. |
 | AC-03 | `hourlyRate` is ₹530, computed from the derivation rather than hand set, and ₹1,200 appears nowhere on screen. |
 | AC-04 | The rate's full derivation renders on the same screen as any figure it produces. |
 | AC-05 | `hoursPerPersonPerMonth` is 154. |
