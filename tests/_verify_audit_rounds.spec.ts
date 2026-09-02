@@ -54,8 +54,10 @@ test('round availability reads the chosen year, and disabled rounds say why', as
   await expect(sheet.getByRole('button', { name: 'Roll-forward', exact: true })).toBeDisabled();
   await expect(sheet.getByText('Sign off the CY 2026 interim first — a roll-forward extends a concluded interim.')).toBeVisible();
 
-  // CY 2025 — a signed year-end covers the whole year: interim and year-end
-  // both lock, each with its own reason.
+  // CY 2025 — a signed year-end covers the whole year, so ALL THREE rounds
+  // lock, each with its own reason. Roll-forward included: the year is closed
+  // on the balance-sheet date, so there is nothing left for one to extend
+  // towards, and its gate reads that before it looks for an interim at all.
   await sheet.getByRole('button', { name: 'Financial year' }).click();
   await page.waitForTimeout(300);
   await page.getByRole('option', { name: /CY 2025/ }).click();
@@ -65,7 +67,7 @@ test('round availability reads the chosen year, and disabled rounds say why', as
   await expect(sheet.getByText('A year-end audit already covers CY 2025.')).toBeVisible();
   await expect(sheet.getByText('A year-end audit already exists for CY 2025.')).toBeVisible();
   await expect(sheet.getByRole('button', { name: 'Roll-forward', exact: true })).toBeDisabled();
-  await expect(sheet.getByText('Create and conclude an interim audit for CY 2025 first.')).toBeVisible();
+  await expect(sheet.getByText('A year-end audit already closes CY 2025 — there is nothing left to extend towards.')).toBeVisible();
 });
 
 test('roll forward on a year-end prefills the next year\'s interim in the same sheet', async ({ page }) => {
