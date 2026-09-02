@@ -175,8 +175,17 @@ function EngagementSignoff({ eng, onAttest }: { eng: IcfrEngagement; onAttest: (
       </div>
       <div className="flex items-center gap-2 text-[12.5px] pt-1.5 border-t border-canvas-border">
         <span className="text-ink-500 w-[140px] shrink-0">ICFR conclusion</span>
-        <span className={cn('font-bold', effective ? 'text-compliant-700' : 'text-risk-700')}>{effective ? 'Effective' : 'Not effective'}</span>
-        <span className="text-[11px] text-ink-400">{stamped ? 'stamped at sign-off' : `live — not yet signed${mwOpen ? ` · ${mwOpen} material weakness${mwOpen === 1 ? '' : 'es'} open` : ''}`}</span>
+        {/* An interim never concludes the year — its window stops short of the
+            year end, so no verdict is stamped or shown here (user ask). Saying
+            "live — not yet signed" on a signed interim would be wrong twice. */}
+        {audit?.round === 'interim' ? (
+          <span className="text-[11px] text-ink-400">Not given at interim — the opinion is as of the year end, stamped by the roll-forward or year-end round.</span>
+        ) : (
+          <>
+            <span className={cn('font-bold', effective ? 'text-compliant-700' : 'text-risk-700')}>{effective ? 'Effective' : 'Not effective'}</span>
+            <span className="text-[11px] text-ink-400">{stamped ? 'stamped at sign-off' : `live — not yet signed${mwOpen ? ` · ${mwOpen} material weakness${mwOpen === 1 ? '' : 'es'} open` : ''}`}</span>
+          </>
+        )}
       </div>
     </div>
   );

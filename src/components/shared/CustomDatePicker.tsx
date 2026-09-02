@@ -16,11 +16,13 @@ export function CustomDatePicker({
   onChange,
   placeholder = 'dd/mm/yyyy',
   minDate,
+  maxDate,
 }: {
   value: string;
   onChange: (value: string) => void;
   placeholder?: string;
   minDate?: string;
+  maxDate?: string;
 }) {
   const [open, setOpen] = useState(false);
   const triggerRef = useRef<HTMLButtonElement>(null);
@@ -44,6 +46,19 @@ export function CustomDatePicker({
     ).getTime();
     return a < b;
   };
+  // Symmetric upper bound — days after maxDate are disabled the same way.
+  const maxDateObj = maxDate ? new Date(maxDate + 'T00:00:00') : null;
+  const isAfterMax = (d: Date) => {
+    if (!maxDateObj) return false;
+    const a = new Date(d.getFullYear(), d.getMonth(), d.getDate()).getTime();
+    const b = new Date(
+      maxDateObj.getFullYear(),
+      maxDateObj.getMonth(),
+      maxDateObj.getDate(),
+    ).getTime();
+    return a > b;
+  };
+  const isOutOfRange = (d: Date) => isBeforeMin(d) || isAfterMax(d);
 
   // Position the portal popup relative to the trigger, flipping up if needed
   // and clamping inside the viewport. Recomputed on open, scroll and resize.
@@ -130,14 +145,14 @@ export function CustomDatePicker({
     } else setViewMonth(m => m + 1);
   };
   const selectDate = (d: Date) => {
-    if (isBeforeMin(d)) return;
+    if (isOutOfRange(d)) return;
     onChange(toISO(d));
     setViewYear(d.getFullYear());
     setViewMonth(d.getMonth());
     setOpen(false);
   };
   const goToday = () => {
-    if (isBeforeMin(today)) return;
+    if (isOutOfRange(today)) return;
     setViewYear(today.getFullYear());
     setViewMonth(today.getMonth());
     selectDate(today);
@@ -220,7 +235,7 @@ export function CustomDatePicker({
               const inMonth = d.getMonth() === viewMonth;
               const isToday = isSameDay(d, today);
               const isSelected = isSameDay(d, parsed);
-              const disabled = isBeforeMin(d);
+              const disabled = isOutOfRange(d);
               return (
                 <button
                   key={i}

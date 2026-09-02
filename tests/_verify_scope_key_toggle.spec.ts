@@ -18,19 +18,14 @@ test('a non-key control can be marked key while scoping, and it sticks', async (
   await page.waitForTimeout(800);
   await expect(page.getByText('Audit period', { exact: true }).first()).toBeVisible();
 
-  // Step 1 gates on a From and a To, both calendar buttons rather than typeable
-  // inputs. From is anchored to Today — its calendar does not necessarily open
-  // on the current month, so picking a day number can silently land after the
-  // To date and trip the "From must be on or before To" rule.
+  // Step 1 under the rounds model: the year is prefilled, dates render only
+  // once a round is chosen, and interim's From arrives prefilled — so the step
+  // is pick Interim, then take Today as the cut-off.
+  await page.getByRole('button', { name: 'Interim', exact: true }).click();
+  await page.waitForTimeout(450);
   await page.getByRole('button', { name: 'dd/mm/yyyy' }).first().click();
   await page.waitForTimeout(450);
-  await page.getByRole('button', { name: 'Today', exact: true }).last().click();
-  await page.waitForTimeout(450);
-  // To is then the only field still on the placeholder, and its month opens on
-  // today's, where the later days are selectable.
-  await page.getByRole('button', { name: 'dd/mm/yyyy' }).first().click();
-  await page.waitForTimeout(450);
-  await page.getByRole('button', { name: '28', exact: true }).last().click();
+  await page.getByRole('button', { name: 'Today', exact: true }).click();
   await page.waitForTimeout(450);
 
   for (let i = 0; i < 2; i++) {

@@ -130,13 +130,23 @@ export default function Overview() {
   // An open MW never blocks signing — it flips what the signature concludes.
   // Once signed, the stamped conclusion wins over the live derivation.
   const signsEffective = so.icfrConclusion ? so.icfrConclusion !== 'Not effective' : sev.mwOpen === 0;
+  // An interim's signature concludes the ROUND, never the year — its window
+  // stops short of the year end, so no ICFR verdict is stamped or claimed
+  // (user ask). The opinion arrives with the roll-forward or year-end.
+  const isInterim = eng.audits.find(a => a.id === openAuditId)?.round === 'interim';
   const signPreparer = () => {
     signOffAudit('preparer');
-    addToast({ type: signsEffective ? 'success' : 'warning', title: 'Signed off', message: signsEffective ? `Prepared by ${eng.preparer} — over to the reviewer.` : `Prepared by ${eng.preparer} as ICFR not effective — over to the reviewer.` });
+    addToast({ type: signsEffective ? 'success' : 'warning', title: 'Signed off', message: signsEffective || isInterim ? `Prepared by ${eng.preparer} — over to the reviewer.` : `Prepared by ${eng.preparer} as ICFR not effective — over to the reviewer.` });
   };
   const signReviewer = () => {
     signOffAudit('reviewer');
-    addToast({ type: signsEffective ? 'success' : 'warning', title: 'Countersigned', message: signsEffective ? 'This audit is concluded — ICFR effective.' : 'This audit is concluded — ICFR not effective (material weakness open).' });
+    addToast({
+      type: signsEffective || isInterim ? 'success' : 'warning',
+      title: 'Countersigned',
+      message: isInterim
+        ? 'Interim concluded — roll-forward can now extend it. The year\'s ICFR opinion comes at year end.'
+        : signsEffective ? 'This audit is concluded — ICFR effective.' : 'This audit is concluded — ICFR not effective (material weakness open).',
+    });
   };
 
   const openTasks = eng.tasks.filter(t => t.status === 'open');
@@ -465,11 +475,19 @@ export default function Overview() {
                   <div className={cn('inline-flex items-center gap-1.5 mt-2.5 px-2.5 py-1.5 rounded-lg border text-[12px] font-semibold',
                     signsEffective ? 'text-compliant-700 bg-compliant-50/50 border-compliant-200' : 'text-risk-700 bg-risk-50/50 border-risk-200')}>
                     {signsEffective ? <ShieldCheck size={13} /> : <ShieldAlert size={13} />}
-                    {isConcluded
-                      ? (signsEffective ? 'Concluded — ICFR effective' : 'Concluded — ICFR not effective (material weakness open at period end)')
-                      : signsEffective
-                        ? 'ICFR effective — ready to sign'
-                        : `Signing concludes ICFR not effective — ${sev.mwOpen} material weakness${sev.mwOpen === 1 ? '' : 'es'} open`}
+                    {/* Interim wording never claims the year's opinion — the
+                        signature concludes the round; the ICFR verdict is
+                        stamped by the roll-forward or year-end (user ask). The
+                        colour still reflects open MWs: they carry forward. */}
+                    {isInterim
+                      ? (isConcluded
+                        ? 'Interim concluded — carried to the year-end opinion'
+                        : `Sign-off concludes the interim round${sev.mwOpen ? ` — ${sev.mwOpen} material weakness${sev.mwOpen === 1 ? '' : 'es'} carr${sev.mwOpen === 1 ? 'ies' : 'y'} forward` : ''} — the year's ICFR opinion comes at year end`)
+                      : isConcluded
+                        ? (signsEffective ? 'Concluded — ICFR effective' : 'Concluded — ICFR not effective (material weakness open at period end)')
+                        : signsEffective
+                          ? 'ICFR effective — ready to sign'
+                          : `Signing concludes ICFR not effective — ${sev.mwOpen} material weakness${sev.mwOpen === 1 ? '' : 'es'} open`}
                   </div>
                 )}
                 <div className="flex items-center gap-4 mt-2.5 flex-wrap text-[12px]">

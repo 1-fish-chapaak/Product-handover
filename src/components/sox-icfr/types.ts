@@ -269,6 +269,11 @@ export interface DesignTrack {
    *  conclusion, because a half-walked transaction proves nothing. */
   walkthrough?: Walkthrough;
   conclusion: TrackConclusion;
+  /** Set when a roll-forward carried this design conclusion from its parent
+   *  interim (user ask): TOD is retested only where TOD failed, so an effective
+   *  design travels — named here so the control page can say where the
+   *  conclusion came from. Cleared by the next cycle's reset. */
+  carriedFrom?: string;
   /** Why the track concluded the way it did — recorded on EVERY conclusion, not
    *  only on an override. A working paper whose conclusion carries no words is a
    *  hole; see `concludeRationale`, which drafts it from the evidence so agreeing

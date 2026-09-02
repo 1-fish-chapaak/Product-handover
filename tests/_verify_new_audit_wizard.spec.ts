@@ -1,16 +1,17 @@
 import { test, expect } from './_helpers';
-import { openFromLibrary } from './_sox_helpers';
+import { fillAuditPeriod, openFromLibrary } from './_sox_helpers';
 
 /**
- * The New audit wizard, end to end, after the rework:
+ * The New audit wizard, end to end, under the rounds model:
  *
- *  Period      — named cycles gone, custom dates only, rounds keep their names
+ *  Period      — financial year first, round second, dates derived from both
  *  Materiality — basis cards, performance / clearly-trivial %, computed card
  *  Scope       — entities derived from the trial balance, overridden by toggle
  *  Review      — the numbers survive to the summary and the audit is created
  *
  * Runs against FY26 ICFR — Altura Infra Group (SOX-104), the one engagement
- * this work is scoped to.
+ * this work is scoped to. The round-availability gates and the roll-forward
+ * inheritance have their own spec (_verify_audit_rounds).
  */
 
 type Page = import('@playwright/test').Page;
@@ -30,45 +31,50 @@ async function openWizard(page: Page) {
   return sheet;
 }
 
-/** Fill the period step. The pickers are the app's own component: the trigger is
- *  a button showing the dd/mm/yyyy placeholder, and the calendar renders in a
- *  PORTAL outside the sheet, so days are looked up on `page`, not on `sheet`. */
-async function fillPeriod(page: Page, sheet: ReturnType<Page['getByRole']>) {
-  const triggers = sheet.getByRole('button', { name: /dd\/mm\/yyyy/ });
-  // From — today.
-  await triggers.first().click();
-  await page.waitForTimeout(300);
-  await page.getByRole('button', { name: 'Today', exact: true }).click();
-  await page.waitForTimeout(300);
-  // To — today as well (minDate makes anything earlier unselectable).
-  await sheet.getByRole('button', { name: /dd\/mm\/yyyy/ }).first().click();
-  await page.waitForTimeout(300);
-  await page.getByRole('button', { name: 'Today', exact: true }).click();
-  await page.waitForTimeout(300);
-}
+const fillPeriod = fillAuditPeriod;
 
-test('period step drops the named cycles and keeps the rounds', async ({ page }) => {
+test('period step asks year, then round, then derives the dates', async ({ page }) => {
   test.setTimeout(120_000);
   const sheet = await openWizard(page);
 
-  // Gone: the four year-type buttons.
-  for (const label of ['Financial year', 'Calendar year', 'Quarter', 'Custom range']) {
-    await expect(sheet.getByRole('button', { name: label })).toHaveCount(0);
-  }
-  await expect(sheet.getByText('Year type')).toHaveCount(0);
+  // Year first: the basis toggle and the year dropdown, prefilled with the
+  // running financial year.
+  await expect(sheet.getByRole('button', { name: 'Apr – Mar', exact: true })).toBeVisible();
+  await expect(sheet.getByRole('button', { name: 'Jan – Dec', exact: true })).toBeVisible();
+  const yearSelect = sheet.getByRole('button', { name: 'Financial year' });
+  await expect(yearSelect).toBeVisible();
+  await expect(yearSelect).toContainText('FY 2026-27');
 
-  // Kept: the three rounds, now names only — no derived date span beneath them.
-  for (const label of ['Interim', 'Roll-forward', 'Year-end']) {
-    await expect(sheet.getByRole('button', { name: new RegExp(`^${label}$`) })).toBeVisible();
-  }
-  await expect(sheet.getByText(/Apr – Sep|Oct – Dec|Jan – Mar/)).toHaveCount(0);
+  // The rounds, gated: no interim exists for FY 2026-27, so Roll-forward is
+  // disabled and says why, while Interim and Year-end stay open.
+  await expect(sheet.getByRole('button', { name: 'Interim', exact: true })).toBeEnabled();
+  await expect(sheet.getByRole('button', { name: 'Year-end', exact: true })).toBeEnabled();
+  await expect(sheet.getByRole('button', { name: 'Roll-forward', exact: true })).toBeDisabled();
+  await expect(sheet.getByText('Create and conclude an interim audit for FY 2026-27 first.')).toBeVisible();
 
-  // From / To are the app's picker (a button), never a native date input.
+  // No dates until the round is chosen — what they can hold depends on it.
+  await expect(sheet.getByRole('button', { name: /dd\/mm\/yyyy/ })).toHaveCount(0);
   await expect(sheet.locator('input[type="date"]')).toHaveCount(0);
-
-  // Continue waits for both dates.
   await expect(sheet.getByRole('button', { name: /Continue/ })).toBeDisabled();
-  await fillPeriod(page, sheet);
+
+  // Interim: From prefills with the year start, the cut-off is the one date
+  // left to pick, and Continue waits on it.
+  await sheet.getByRole('button', { name: 'Interim', exact: true }).click();
+  await expect(sheet.getByRole('button', { name: '01/04/2026' })).toBeVisible();
+  await expect(sheet.getByText('To — interim cut-off')).toBeVisible();
+  await expect(sheet.getByRole('button', { name: /Continue/ })).toBeDisabled();
+  await sheet.getByRole('button', { name: 'dd/mm/yyyy' }).first().click();
+  await page.waitForTimeout(400);
+  await page.getByRole('button', { name: 'Today', exact: true }).click();
+  await page.waitForTimeout(300);
+  await expect(sheet.getByRole('button', { name: /Continue/ })).toBeEnabled();
+
+  // Year-end: From re-prefills with the year start, and the To is the year end
+  // rendered locked — nothing left on a placeholder, nothing to pick.
+  await sheet.getByRole('button', { name: 'Year-end', exact: true }).click();
+  await expect(sheet.getByRole('button', { name: '01/04/2026' })).toBeVisible();
+  await expect(sheet.getByText('31 Mar 2027', { exact: true })).toBeVisible();
+  await expect(sheet.getByRole('button', { name: /dd\/mm\/yyyy/ })).toHaveCount(0);
   await expect(sheet.getByRole('button', { name: /Continue/ })).toBeEnabled();
 });
 

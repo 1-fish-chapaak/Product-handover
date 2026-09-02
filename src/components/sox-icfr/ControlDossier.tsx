@@ -4747,7 +4747,13 @@ export default function ControlDossier() {
             subtitle={isOwner
               ? 'The documents this control needs on file. Attach what you hold — the auditor tests them.'
               : 'Test of design — the documents on file, one transaction traced end-to-end, and a design check for each thing that has to be true. Concludes effective or ineffective.'}
-            status={designResult} hideStatus={isOwner}>
+            status={designResult} hideStatus={isOwner}
+            right={!isOwner && control.design.carriedFrom
+              // A roll-forward carried this conclusion from its parent interim —
+              // TOD is retested only where TOD failed (user ask), so the step
+              // says where the verdict came from instead of asking for it again.
+              ? <span className="text-[0.6875rem] font-semibold text-compliant-700 inline-flex items-center gap-1"><CheckCircle2 size={12} /> Carried from the {control.design.carriedFrom} — retest only if the control changed</span>
+              : undefined}>
             <DesignSection control={control} canEdit={canEdit} />
           </VStep>
           {/* An automated control stops here while its ITGCs hold — see

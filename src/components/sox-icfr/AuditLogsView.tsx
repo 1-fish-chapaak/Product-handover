@@ -1,11 +1,21 @@
 import { useState } from 'react';
 import { AnimatePresence } from 'motion/react';
 import { Building2, Grid3x3, Paperclip, Plus, RefreshCw, ScrollText } from 'lucide-react';
-import type { AuditRecord } from './types';
+import type { AuditRecord, AuditRound } from './types';
 import { useIcfr } from './store';
+import { auditStatus, type AuditStatus } from './auditPortfolio';
 import EmptyState from '../shared/EmptyState';
+import { Pill } from '../shared/StatusBadge';
 import NewAuditWizard from './NewAuditWizard';
-import RollForwardSheet from './RollForwardSheet';
+
+// Same vocabulary the engagement Overview's portfolio uses — a register row
+// has to say WHICH pass this is and where it stands, or a concluded interim
+// (the one worth rolling forward) is indistinguishable from a planned round.
+const ROUND_LABEL: Record<AuditRound, string> = { interim: 'Interim', rollforward: 'Roll-forward', yearend: 'Year-end' };
+const STATUS_TONE: Record<AuditStatus, 'compliant' | 'evidence' | 'draft'> = {
+  concluded: 'compliant', active: 'evidence', planned: 'draft',
+};
+const STATUS_LABEL: Record<AuditStatus, string> = { concluded: 'Concluded', active: 'Active', planned: 'Planned' };
 
 /**
  * SOX audit — the engagement's audit register, and the tab an audit lands on
@@ -41,7 +51,9 @@ export default function AuditLogsView() {
   const sheets = (
     <AnimatePresence>
       {creating && <NewAuditWizard onClose={() => setCreating(false)} />}
-      {rolling && <RollForwardSheet prior={rolling} onClose={() => setRolling(null)} />}
+      {/* Roll forward opens the same wizard prefilled (user ask) — one screen,
+          one rulebook. The old standalone roll-forward sheet is gone. */}
+      {rolling && <NewAuditWizard prefillFrom={rolling} onClose={() => setRolling(null)} />}
     </AnimatePresence>
   );
 
@@ -101,7 +113,9 @@ export default function AuditLogsView() {
       </div>
 
       <div className="space-y-2">
-          {eng.audits.map(a => (
+          {eng.audits.map(a => {
+            const status = auditStatus(a, eng);
+            return (
             <div
               key={a.id}
               onClick={() => openAudit(a.id)}
@@ -113,7 +127,11 @@ export default function AuditLogsView() {
             >
               <div className="flex items-start justify-between gap-3 mb-2">
                 <div className="min-w-0">
-                  <div className="text-[13px] font-semibold text-ink-900">{a.period}</div>
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <span className="text-[13px] font-semibold text-ink-900">{a.period}</span>
+                    <span className="text-[11px] font-semibold text-ink-500">{ROUND_LABEL[a.round]}</span>
+                    <Pill tone={STATUS_TONE[status]}>{STATUS_LABEL[status]}</Pill>
+                  </div>
                   <div className="text-[11px] text-ink-400">{a.periodSpan}</div>
                 </div>
                 <div className="flex items-center gap-2 shrink-0">
@@ -150,7 +168,8 @@ export default function AuditLogsView() {
                 )}
               </div>
             </div>
-          ))}
+            );
+          })}
       </div>
       {sheets}
     </div>
