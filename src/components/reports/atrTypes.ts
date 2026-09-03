@@ -2,7 +2,7 @@
 // Mirrors the comprehensive format in ATR_Comprehensive_Sample.pdf. Every field
 // below the required core is optional so the renderer can omit anything missing.
 
-export type AtrRisk = 'High' | 'Medium' | 'Low';
+export type AtrRisk = 'Critical' | 'High' | 'Medium' | 'Low';
 export type AtrClassification =
   | 'Design Deficiency'
   | 'System Deficiency'
@@ -54,6 +54,10 @@ export interface AtrInsight {
 
 export interface AtrMeta {
   reportId: string;
+  /** Human report name shown in the header (in place of the raw Report ID). */
+  reportName?: string;
+  /** Financial year the report covers, e.g. "FY 2025-26". */
+  financialYear?: string;
   auditTitle?: string;
   auditPeriod?: string;
   preparedBy?: string;

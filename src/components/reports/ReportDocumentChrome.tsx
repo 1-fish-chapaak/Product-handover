@@ -21,7 +21,7 @@ const KPI_COL_CLASS: Record<number, string> = {
   1: 'md:grid-cols-1', 2: 'md:grid-cols-2', 3: 'md:grid-cols-3',
   4: 'md:grid-cols-4', 5: 'md:grid-cols-5', 6: 'md:grid-cols-6',
 };
-export function ReportKpiTiles({ stats }: { stats: ReportStat[]; animate?: boolean }) {
+export function ReportKpiTiles({ stats, showTick = true }: { stats: ReportStat[]; animate?: boolean; showTick?: boolean }) {
   // Unified stat-bar (Stripe / Mercury pattern): one surface, the metrics split
   // by hairline dividers — not a grid of separate boxes. Interior dividers only:
   // each cell draws its top+left hairline, the grid is nudged -1px up/left and
@@ -45,11 +45,11 @@ export function ReportKpiTiles({ stats }: { stats: ReportStat[]; animate?: boole
             <p className={`text-[2.5rem] font-bold leading-none tabular-nums tracking-[-0.035em] ${toneText}`}>
               {stat.value}
             </p>
-            <span className={`mt-3.5 mb-3 block h-[2px] w-8 rounded-full bg-current ${toneText}`} aria-hidden="true" />
+            {showTick && <span className={`mt-3.5 mb-3 block h-[2px] w-8 rounded-full bg-current ${toneText}`} aria-hidden="true" />}
             {/* Labels wrap rather than clip. A six-tile row leaves each cell
                 narrow, and an explicit label ("Observations Closed") has to be
                 readable in full or it stops disambiguating anything. */}
-            <p className="text-[0.625rem] font-semibold uppercase tracking-[0.05em] text-ink-400 leading-snug min-h-[1.8em]">
+            <p className={`text-[0.625rem] font-semibold uppercase tracking-[0.05em] text-ink-400 leading-snug min-h-[1.8em] ${showTick ? '' : 'mt-4'}`}>
               {stat.label}
             </p>
           </div>

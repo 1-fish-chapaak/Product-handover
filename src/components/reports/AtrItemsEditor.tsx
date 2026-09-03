@@ -3,7 +3,7 @@ import type {
   AtrObservation, AtrActionPlan, AtrRisk, AtrClassification, AtrObservationStatus, AtrActionStatus,
 } from './atrTypes';
 
-const RISK_OPTS: AtrRisk[] = ['High', 'Medium', 'Low'];
+const RISK_OPTS: AtrRisk[] = ['Critical', 'High', 'Medium', 'Low'];
 const CLASS_OPTS: AtrClassification[] = ['Design Deficiency', 'System Deficiency', 'Procedural Non-Compliance'];
 const OBS_STATUS_OPTS: AtrObservationStatus[] = ['Open', 'In Progress', 'Closed', 'Overdue'];
 const ACTION_STATUS_OPTS: AtrActionStatus[] = ['Pending', 'Partially Implemented', 'Implemented', 'Overdue', 'Not Due'];
