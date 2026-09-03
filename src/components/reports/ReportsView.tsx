@@ -45,6 +45,7 @@ import { useCan } from '../../context/CurrentUserContext';
 import { BulkAuditVariantView } from './BulkAuditVariants';
 import { defForKey, type GeneratedQueryDef } from './templateQueryPool';
 import ReportView from './ReportView';
+import { DEFAULT_REPORT_AUDIENCE, type Audience } from '../shared/audience';
 
 // Observation attachment type + helpers live in AddObservationModal.
 
@@ -60,7 +61,10 @@ import ReportView from './ReportView';
 
 interface ReportsViewProps {
   onOpenBuilder?: () => void;
-  onShare?: (id: string, name?: string) => void;
+  /** Opens the share dialog. The audience saved on the report travels with it,
+   *  plus the setter, so the dialog and the reader's visibility control are one
+   *  answer rather than two. */
+  onShare?: (id: string, name?: string, audience?: Audience, onAudienceChange?: (a: Audience) => void) => void;
   /** Opens Manage Exceptions. Pass a report id to make its Back return there. */
   onManageExceptions?: (returnReportId?: string) => void;
   onOpenQuery?: (query: { id: string; title: string }) => void;
@@ -852,6 +856,14 @@ export default function ReportsView({
     setViewingReport(prev => (prev && prev.id === reportId ? { ...prev, appliedTemplateId: templateId } : prev));
   };
 
+  // Who can open a report. Saved on the report itself so the reader's
+  // visibility control and the share dialog are the same answer, and so the
+  // choice survives closing the reader.
+  const updateReportAudience = (reportId: string, audience: Audience) => {
+    setGeneratedReports(prev => prev.map(r => (r.id === reportId ? { ...r, shareAudience: audience } : r)));
+    setViewingReport(prev => (prev && prev.id === reportId ? { ...prev, shareAudience: audience } : prev));
+  };
+
   const filteredReports = (() => {
     const q = gridSearch.trim().toLowerCase();
     // Only the SOX / IA sub-tabs render this list; scope to my own reports of the active type.
@@ -951,9 +963,12 @@ export default function ReportsView({
         <AtrReportView
           report={{ ...viewingReport, atrData: viewingReport.atrData, status: 'final' }}
           onBack={() => setViewingReport(null)}
-          onShare={onShare ? () => onShare(viewingReport.id, viewingReport.name) : undefined}
+          onShare={onShare ? () => onShare(viewingReport.id, viewingReport.name, viewingReport.shareAudience ?? DEFAULT_REPORT_AUDIENCE, a => updateReportAudience(viewingReport.id, a)) : undefined}
           onSave={data => saveAtrEdits(viewingReport.id, data)}
           onManageExceptions={onManageExceptions ? () => onManageExceptions(viewingReport.id) : undefined}
+          templates={mergeTemplateOptions(REPORT_TEMPLATES, customTemplates)}
+          onApplyTemplate={updateReportAppliedTemplate}
+          onChangeAudience={updateReportAudience}
         />
       );
     }
@@ -966,8 +981,9 @@ export default function ReportsView({
           report={{ ...viewingReport, aestheticVariant: viewingReport.aestheticVariant ?? 'editorial' }}
           templates={mergeTemplateOptions(REPORT_TEMPLATES, customTemplates)}
           onBack={() => setViewingReport(null)}
-          onShare={onShare ? () => onShare(viewingReport.id, viewingReport.name) : undefined}
+          onShare={onShare ? () => onShare(viewingReport.id, viewingReport.name, viewingReport.shareAudience ?? DEFAULT_REPORT_AUDIENCE, a => updateReportAudience(viewingReport.id, a)) : undefined}
           onApplyTemplate={updateReportAppliedTemplate}
+          onChangeAudience={updateReportAudience}
         />
       );
     }
@@ -975,13 +991,14 @@ export default function ReportsView({
       <ReportView
         report={viewingReport}
         onBack={() => setViewingReport(null)}
-        onShare={onShare ? () => onShare(viewingReport.id, viewingReport.name) : undefined}
+        onShare={onShare ? () => onShare(viewingReport.id, viewingReport.name, viewingReport.shareAudience ?? DEFAULT_REPORT_AUDIENCE, a => updateReportAudience(viewingReport.id, a)) : undefined}
         onManageExceptions={onManageExceptions}
         onOpenQuery={onOpenQuery}
         customTemplates={customTemplates}
         onUpdateDescription={updateReportDescription}
         onUpdateSignoffs={updateReportSignoffs}
         onApplyTemplate={updateReportAppliedTemplate}
+        onChangeAudience={updateReportAudience}
         onSaveAsTemplate={addCustomTemplateUnique}
         onSaveAtrVersion={saveAtrVersion}
       />

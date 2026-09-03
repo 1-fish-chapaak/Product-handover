@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { motion, AnimatePresence, Reorder } from 'motion/react';
 import {
   ArrowLeft, ArrowUpRight, AlertTriangle, Calendar,
@@ -327,6 +327,11 @@ export default function EngagementDetailView({ engagementId, onBack, onOpenExecu
   );
   const tabs = useMemo(() => engagement ? tabsForType(engagement.type) : [], [engagement]);
   const [activeTab, setActiveTab] = useState<TabId>(deepLink.tab ?? 'overview');
+  // A control report opened from the Audit Report tab takes the page: the
+  // engagement chrome (its own back button, the header, the KPIs, the tabs)
+  // steps aside so the report has one back button, not two.
+  const [reportReaderOpen, setReportReaderOpen] = useState(false);
+  const handleReportReaderChange = useCallback((open: boolean) => setReportReaderOpen(open), []);
   const [configWorkflow, setConfigWorkflow] = useState<string | null>(null);
   // Control to auto-open in the Evidence tab's Attribute Testing step (from Controls → "Test evidence").
   const [evidenceTarget, setEvidenceTarget] = useState<string | null>(null);
@@ -499,11 +504,14 @@ export default function EngagementDetailView({ engagementId, onBack, onOpenExecu
     <div className="h-full overflow-y-auto bg-white bg-mesh-gradient relative">
       <Orb hoverIntensity={0.06} rotateOnHover hue={275} opacity={0.05} />
       <div className="p-8 relative">
+        {!reportReaderOpen && (
         <button onClick={onBack} className="flex items-center gap-1.5 text-[0.75rem] text-text-muted hover:text-primary font-medium mb-4 cursor-pointer transition-colors">
           <ArrowLeft size={14} />Back to Engagements
         </button>
+        )}
 
         {/* Header */}
+        {!reportReaderOpen && (
         <div className="flex items-start justify-between mb-6 gap-6">
           <div className="flex-1 min-w-0">
             <div className="flex items-center gap-3 mb-2">
@@ -558,10 +566,11 @@ export default function EngagementDetailView({ engagementId, onBack, onOpenExecu
             </div>
           </div>
         </div>
+        )}
 
         {/* KPI strip — Internal Audit only. Automation owns per-tab KPIs; Compliance's
             numbers live on the Overview tab, so the header stays clutter-free. */}
-        {eng.type === 'Internal Audit' && (
+        {eng.type === 'Internal Audit' && !reportReaderOpen && (
           <div className="grid gap-3 mb-6 grid-cols-6">
             {kpis.map((kpi, i) => (
               <motion.div
@@ -581,6 +590,7 @@ export default function EngagementDetailView({ engagementId, onBack, onOpenExecu
 
         {/* Tabs — colorful icons + drag horizontally to reorder (Configuration → show/hide).
             Share sits on the right of the tab line, sharing the same divider. */}
+        {!reportReaderOpen && (
         <div className="flex items-center gap-3 border-b border-border-light mb-5">
         <Reorder.Group
           as="div"
@@ -625,6 +635,7 @@ export default function EngagementDetailView({ engagementId, onBack, onOpenExecu
             </button>
           </Gated>
         </div>
+        )}
 
         {/* Tab content */}
         <AnimatePresence mode="wait">
@@ -690,7 +701,7 @@ export default function EngagementDetailView({ engagementId, onBack, onOpenExecu
             )}
             {/* ═══ WORKING PAPER (Compliance) / AUDIT REPORT (IA) ═══ */}
             {activeTab === 'working-paper' && (
-              <WorkingPaperTab engagement={eng} />
+              <WorkingPaperTab engagement={eng} onReaderChange={handleReportReaderChange} />
             )}
 
             {/* ═══ ACTION TRAIL (all types) ═══ */}

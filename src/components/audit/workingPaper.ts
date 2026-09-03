@@ -43,6 +43,9 @@ export interface WpMeta {
   preparedBy: string;
   reviewedBy: string;
   preparedOn: string;
+  /** The report format applied on the Audit Report tab. Printed on the cover
+   *  sheet so the exported file says which format it was produced in. */
+  reportFormat?: string;
 }
 
 function autofit(rows: (string | number)[][], max = 60): XLSX.ColInfo[] {
@@ -78,6 +81,7 @@ export function downloadWorkingPaper(engagement: Engagement, controls: WpControl
     ['Prepared by', meta.preparedBy],
     ['Reviewed by', meta.reviewedBy],
     ['Date', meta.preparedOn],
+    ...(meta.reportFormat ? [['Report format', meta.reportFormat]] : []),
     [],
     ['— Scope —', ''],
     ['Controls in scope', controls.length],

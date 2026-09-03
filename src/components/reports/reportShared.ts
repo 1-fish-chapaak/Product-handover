@@ -14,6 +14,7 @@ import { REPORT_TEMPLATES, GENERATED_REPORTS } from '../../data/mockData';
 import type { GeneratedQueryDef } from './templateQueryPool';
 import type { AtrReportData } from './atrTypes';
 import type { ToastType } from '../shared/Toast';
+import type { Audience } from '../shared/audience';
 
 // ─── Icon + category maps ────────────────────────────────────────────────────
 
@@ -950,6 +951,10 @@ export type GeneratedReport = typeof GENERATED_REPORTS[number] & {
    *  user applies one, and preferred over `templateId` when the reader reopens,
    *  so the choice survives navigating away and reloads. */
   appliedTemplateId?: string;
+  /** Who can open this report. Written by the visibility control in the
+   *  reader's command bar and by the share dialog, so both say the same thing.
+   *  Absent means the report has never been opened up (invited only). */
+  shareAudience?: Audience;
 };
 
 /** A sign-off slot on the report: a role (Prepared by / Approved by…) and an

@@ -8,8 +8,13 @@ import { computeExecSummary, exportAtrExcel } from './atrTemplate';
 import ReportDownloadModal, { type DownloadPreviewSection } from './ReportDownloadModal';
 import ReportDiscardDialog from './ReportDiscardDialog';
 import ConfirmationModal from '../shared/ConfirmationModal';
+import { useToast } from '../shared/Toast';
 import AtrReviewDrawer from './AtrReviewDrawer';
 import { loadVersions, appendVersion, currentVersion, nowStamp } from './atrReview';
+import { ApplyTemplateChip, ReportVisibilityChip } from './ReportBarControls';
+import { DEFAULT_REPORT_AUDIENCE, type Audience } from '../shared/audience';
+import { REPORT_TEMPLATES } from '../../data/mockData';
+import { reportGradient, type EditableTemplate } from './reportShared';
 
 // Summarize an edit into a version label by diffing the saved report against the
 // working draft — so the version trail reads from what actually changed rather
@@ -93,15 +98,24 @@ interface AtrReport {
   /** Reports have no draft state — an ATR is issued, or frozen from edits. */
   status?: 'final' | 'frozen';
   atrData: AtrReportData;
+  /** Format last applied from the command bar — restored when it reopens. */
+  appliedTemplateId?: string;
+  shareAudience?: Audience;
 }
 
 /** Saved-ATR report page. Renders the generated Action Taken Report inside the
  *  shared reader workspace: plain page-level actions (no header bar), a persistent
  *  scroll-spy outline rail, and a constrained document column. */
-export default function AtrReportView({ report, onBack, onShare, onSave, onManageExceptions }: {
+export default function AtrReportView({ report, onBack, onShare, onSave, onManageExceptions, templates = REPORT_TEMPLATES, onApplyTemplate, onChangeAudience }: {
   report: AtrReport;
   onBack: () => void;
   onShare?: () => void;
+  /** Formats listed in the command bar's Apply Template control. */
+  templates?: (typeof REPORT_TEMPLATES[number] | EditableTemplate)[];
+  /** Persist the applied format on the ATR so it survives a reopen. */
+  onApplyTemplate?: (reportId: string, templateId: string) => void;
+  /** Persist who can open this ATR. */
+  onChangeAudience?: (reportId: string, audience: Audience) => void;
   /** Persist inline edits to the saved ATR. Absent → the report is read-only. */
   onSave?: (data: AtrReportData) => void;
   /** Opens the case-management (Manage Exceptions) view. Absent → button hidden. */
@@ -111,6 +125,28 @@ export default function AtrReportView({ report, onBack, onShare, onSave, onManag
   // discard guard so leaving (or cancelling) only prompts when edits are unsaved.
   const editable = !!onSave;
   const [editing, setEditing] = useState(false);
+  // The format and the audience are saved properties of the ATR, the same two
+  // the standard reader carries, so an ATR opens on what was last chosen.
+  const [appliedTemplate, setAppliedTemplate] = useState<(typeof REPORT_TEMPLATES[number] | EditableTemplate) | null>(
+    () => (report.appliedTemplateId ? templates.find(t => t.id === report.appliedTemplateId) ?? null : null),
+  );
+  const [applyingTemplate, setApplyingTemplate] = useState(false);
+  const [audience, setAudience] = useState<Audience>(report.shareAudience ?? DEFAULT_REPORT_AUDIENCE);
+  const { addToast } = useToast();
+  const handleApplyTemplate = (t: typeof REPORT_TEMPLATES[number] | EditableTemplate) => {
+    setApplyingTemplate(true);
+    window.setTimeout(() => {
+      setAppliedTemplate(t);
+      setApplyingTemplate(false);
+      onApplyTemplate?.(report.id, t.id);
+      addToast({ type: 'success', message: `Format "${t.name}" applied.` });
+    }, 700);
+  };
+  const handleAudienceChange = (next: Audience) => {
+    setAudience(next);
+    onChangeAudience?.(report.id, next);
+    addToast({ type: 'success', message: `Who can open this: ${next}` });
+  };
   // Save runs only after the user confirms.
   const [confirmingSave, setConfirmingSave] = useState(false);
   // The view remounts per report (navigating away passes through the list), so
@@ -280,6 +316,16 @@ export default function AtrReportView({ report, onBack, onShare, onSave, onManag
             </>
           ) : (
             <>
+              {/* The same format and visibility controls every other open
+                  report carries. */}
+              <ApplyTemplateChip
+                templates={templates as typeof REPORT_TEMPLATES[number][]}
+                activeId={appliedTemplate?.id ?? null}
+                activeName={appliedTemplate?.name ?? null}
+                onSelect={handleApplyTemplate}
+                busy={applyingTemplate}
+              />
+              <ReportVisibilityChip audience={audience} onChange={handleAudienceChange} disabled={!onChangeAudience} />
               <button
                 onClick={() => setReviewTab('comments')}
                 className="inline-flex items-center gap-1.5 h-9 px-3.5 text-[0.75rem] font-semibold text-ink-700 bg-canvas-elevated border border-canvas-border rounded-md hover:bg-canvas hover:border-ink-300/70 transition-colors cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600/30"
@@ -362,6 +408,11 @@ export default function AtrReportView({ report, onBack, onShare, onSave, onManag
             onMetaChange={m => setDraft(d => ({ ...d, meta: m }))}
             onObservationsChange={o => setDraft(d => ({ ...d, observations: o }))}
             onInsightsChange={i => setDraft(d => ({ ...d, insights: i }))}
+            gradient={reportGradient(
+              (appliedTemplate as EditableTemplate | null)?.theme,
+              (appliedTemplate as EditableTemplate | null)?.brandColor,
+            )}
+            logo={(appliedTemplate as EditableTemplate | null)?.logoDataUrl}
           />
         </div>
       </div>

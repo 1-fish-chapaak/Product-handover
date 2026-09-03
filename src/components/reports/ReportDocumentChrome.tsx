@@ -287,10 +287,14 @@ export function CoverBanner({ title, gradient, description, byline, actions, fac
   );
 }
 
-export function ReportBrandBanner({ title, back, actions, children, className = '', gradient, headerText, facts, footer, aside, eyebrow, titleClassName, logo }: {
+export function ReportBrandBanner({ title, back, actions, children, className = '', gradient, headerText, facts, footer, aside, eyebrow, titleClassName, titleWrap = false, logo }: {
   title: string;
   /** Tailwind size class for the title (defaults to the 33px letterhead size). */
   titleClassName?: string;
+  /** Let a long title wrap onto a second line instead of ellipsizing. A report
+   *  whose title is a full sentence (a control description, say) is unreadable
+   *  cut off at the fold. */
+  titleWrap?: boolean;
   /** Optional "Back to Reports" affordance rendered above the title (top-left). */
   back?: React.ReactNode;
   /** CTAs rendered top-right on the banner, like the ATR document. */
@@ -380,7 +384,7 @@ export function ReportBrandBanner({ title, back, actions, children, className = 
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.5, delay: 0.1, ease: [0.22, 1, 0.36, 1] }}
             title={typeof title === 'string' ? title : undefined}
-            className={`${titleClassName ?? 'text-[2rem]'} truncate font-bold tracking-[-0.02em] leading-[1.08] text-white mb-1.5`}
+            className={`${titleClassName ?? 'text-[2rem]'} ${titleWrap ? 'text-balance' : 'truncate'} font-bold tracking-[-0.02em] leading-[1.08] text-white mb-1.5`}
             style={{ textShadow: '0 1px 2px rgba(10,2,30,0.22)' }}
           >
             {title}

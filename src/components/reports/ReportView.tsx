@@ -8,9 +8,9 @@ import { createPortal } from 'react-dom';
 import { motion, AnimatePresence, Reorder, useDragControls } from 'motion/react';
 import {
   FileText, Shield, AlertTriangle, CheckCircle2, BarChart3,
-  TrendingUp, Download, Share2, ArrowLeft, ChevronDown,
+  TrendingUp, Download, Share2, ArrowLeft,
   ChevronLeft, ChevronRight,
-  Layout, X, Edit3, Loader2, Trash2,
+  X, Edit3, Loader2, Trash2,
   List, LayoutGrid, GripVertical, Plus,
   MoreVertical, Eye, EyeOff, SquareArrowOutUpRight,
   MessageSquare, Paperclip, Send, History,
@@ -29,7 +29,8 @@ import { cellRender } from './queryTableCell';
 import { ConfigurableChart } from '../dashboard/add-widget/ConfigurableChart';
 import { reportDisplayName } from './reportName';
 import { atrFromReport } from './atrBuilder';
-import { ApplyTemplateDropdown } from './TemplateEditor';
+import { ApplyTemplateChip, ReportVisibilityChip } from './ReportBarControls';
+import { DEFAULT_REPORT_AUDIENCE, type Audience } from '../shared/audience';
 import {
   SECTION_ICONS, reportGradient, reportAccent, mergeTemplateOptions,
   computeQueryKpis, rollupReportStats, reportKind, collectBlockLibrary, sayRating,
@@ -1985,7 +1986,7 @@ function DraggableQuerySection({
 // ─── Attached Query Card — compact pending card for queries the user just attached ───
 
 // ─── Report View (with multiple queries) ───
-export default function ReportView({ report, onBack, onShare, onOpenQuery, initialTemplate, customTemplates = [], onUpdateDescription, onUpdateSignoffs, onApplyTemplate, onSaveAsTemplate, onSaveAtrVersion }: {
+export default function ReportView({ report, onBack, onShare, onOpenQuery, initialTemplate, customTemplates = [], onUpdateDescription, onUpdateSignoffs, onApplyTemplate, onChangeAudience, onSaveAsTemplate, onSaveAtrVersion }: {
   report: GeneratedReport;
   onBack: () => void;
   onShare?: () => void;
@@ -1999,6 +2000,9 @@ export default function ReportView({ report, onBack, onShare, onOpenQuery, initi
   /** Persist the template picked from Apply Template, so the reader reopens on
    *  it instead of falling back to the report's original template. */
   onApplyTemplate?: (reportId: string, templateId: string) => void;
+  /** Persist who can open this report, so the command bar's visibility control
+   *  and the share dialog never disagree. */
+  onChangeAudience?: (reportId: string, audience: Audience) => void;
   onSaveAsTemplate?: (t: typeof REPORT_TEMPLATES[number]) => void;
   /** Save the Live ATR as a brand-new card in the ATR tab. */
   onSaveAtrVersion?: (label: string, data: AtrReportData) => void;
@@ -2025,7 +2029,6 @@ export default function ReportView({ report, onBack, onShare, onOpenQuery, initi
     recordActivity(`Removed sign-off “${slot.role}”`);
   };
   const { can } = useCan();
-  const [showApplyTemplate, setShowApplyTemplate] = useState(false);
   // One-time skeleton "stream-in" on open: query sections resolve from a
   // shimmer placeholder top-to-bottom. `revealStep` ticks up one section at a
   // time; section i is resolved once revealStep > i. Once it passes the section
@@ -2038,6 +2041,17 @@ export default function ReportView({ report, onBack, onShare, onOpenQuery, initi
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [revealStep]);
   const sectionReady = (i: number) => revealStep > i;
+  // Who can open this report. Saved on the report, so the chip in the command
+  // bar, the share dialog and the next person to open it all read the same
+  // answer. A report nobody has opened up is invited-only, and says so.
+  const [audience, setAudience] = useState<Audience>(report.shareAudience ?? DEFAULT_REPORT_AUDIENCE);
+  useEffect(() => { setAudience(report.shareAudience ?? DEFAULT_REPORT_AUDIENCE); }, [report.shareAudience]);
+  const handleAudienceChange = (next: Audience) => {
+    setAudience(next);
+    onChangeAudience?.(report.id, next);
+    addToast({ type: 'success', message: `Who can open this: ${next}` });
+    logEvent({ action: 'Update', description: `Changed who can open "${report.name}" to ${next}`, module: 'Reports', entity: 'Report' });
+  };
   // The applied template is a saved property of the report, not view state: a
   // template picked here is written back through onApplyTemplate and restored
   // on every reopen, so the reader never silently reverts to report.templateId.
@@ -2080,7 +2094,6 @@ export default function ReportView({ report, onBack, onShare, onOpenQuery, initi
   };
 
   const handleApplyTemplate = (template: typeof REPORT_TEMPLATES[0]) => {
-    setShowApplyTemplate(false);
     // Switching away from a template that's already applied replaces the
     // current layout and its sections, so confirm first. The first-time
     // apply (nothing applied yet, or re-picking the same one) is harmless.
@@ -3213,38 +3226,16 @@ export default function ReportView({ report, onBack, onShare, onOpenQuery, initi
   );
   const coverActions = (
     <>
-      {!isReadOnly && (
-        <div className="relative">
-          <button
-            onClick={() => setShowApplyTemplate(p => !p)}
-            className="flex items-center gap-1.5 h-9 px-3.5 text-[0.75rem] font-semibold text-ink-700 bg-canvas-elevated border border-canvas-border rounded-md hover:bg-canvas hover:border-ink-300/70 transition-colors cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600/30"
-          >
-            <Layout size={14} />
-            <span className="truncate max-w-[160px] hidden md:inline">{appliedTemplate?.name ?? reportTemplate?.name ?? 'Apply Template'}</span>
-            <motion.span
-              animate={{ rotate: showApplyTemplate ? 180 : 0 }}
-              transition={{ duration: 0.2, ease: [0.22, 1, 0.36, 1] }}
-              className="inline-flex"
-            >
-              <ChevronDown size={14} />
-            </motion.span>
-          </button>
-          <AnimatePresence>
-            {showApplyTemplate && (
-              <>
-                <div className="fixed inset-0 z-40" onClick={() => setShowApplyTemplate(false)} />
-                <ApplyTemplateDropdown
-                  templates={mergeTemplateOptions(REPORT_TEMPLATES, customTemplates, [reportTemplate])}
-                  activeId={appliedTemplate?.id ?? reportTemplate?.id ?? null}
-                  onSelect={handleApplyTemplate}
-                  onClose={() => setShowApplyTemplate(false)}
-                  onSaveAsTemplate={onSaveAsTemplate && structureChanged ? handleSaveAsTemplate : undefined}
-                />
-              </>
-            )}
-          </AnimatePresence>
-        </div>
-      )}
+      {/* The format, then who can open it, then what you can do with it. Every
+          reader an open report has carries this same row. */}
+      <ApplyTemplateChip
+        templates={mergeTemplateOptions(REPORT_TEMPLATES, customTemplates, [reportTemplate])}
+        activeId={appliedTemplate?.id ?? reportTemplate?.id ?? null}
+        activeName={appliedTemplate?.name ?? reportTemplate?.name ?? null}
+        onSelect={handleApplyTemplate}
+        onSaveAsTemplate={onSaveAsTemplate && structureChanged ? handleSaveAsTemplate : undefined}
+      />
+      <ReportVisibilityChip audience={audience} onChange={handleAudienceChange} />
       <button
         onClick={() => setActivityLogOpen(true)}
         title="View this report's activity log"
@@ -3256,6 +3247,18 @@ export default function ReportView({ report, onBack, onShare, onOpenQuery, initi
       {onShare && can('rp_share') && (
         <button onClick={onShare} className="flex items-center gap-1.5 h-9 px-3.5 text-[0.75rem] font-semibold text-ink-700 bg-canvas-elevated border border-canvas-border rounded-md hover:bg-canvas hover:border-ink-300/70 transition-colors cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600/30">
           <Share2 size={14} /> <span className="hidden sm:inline">Share</span>
+        </button>
+      )}
+      {/* The report restated as an Action Taken Report. It lives in the command
+          bar with the other things you can do with the document, rather than
+          inside the letterhead, so it does not move when a format is applied. */}
+      {canGenerateAtr && (
+        <button
+          onClick={() => setAtrModalOpen(true)}
+          title="Generate Action Taken Report"
+          className="flex items-center gap-1.5 h-9 px-3.5 text-[0.75rem] font-semibold text-ink-700 bg-canvas-elevated border border-canvas-border rounded-md hover:bg-canvas hover:border-ink-300/70 transition-colors cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600/30"
+        >
+          <FileText size={14} /> <span className="hidden sm:inline">Action Taken Report</span>
         </button>
       )}
       <button
@@ -3366,24 +3369,6 @@ export default function ReportView({ report, onBack, onShare, onOpenQuery, initi
                 title={reportDisplayName(report.name)}
                 logo={report.logoDataUrl}
                 gradient={reportGradient(report.theme, report.brandColor)}
-                actions={
-                  <>
-                    {canGenerateAtr && (
-                    <button
-                      // Same control, same words as the standard banner below.
-                      // It used to read "Live ATR" here and "Generate ATR"
-                      // there, so applying a format appeared to change what the
-                      // button did when nothing about it had changed.
-                      onClick={() => setAtrModalOpen(true)}
-                      title="Generate Action Taken Report"
-                      className="inline-flex items-center gap-1.5 h-9 px-3.5 text-[0.75rem] font-semibold text-white bg-brand-700 border border-white/25 rounded-md shadow-[inset_0_1px_0_rgba(255,255,255,0.15)] hover:bg-brand-600 hover:border-white/40 transition-colors cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/50"
-                    >
-                      <FileText size={14} />
-                      Generate ATR
-                    </button>
-                    )}
-                  </>
-                }
               >
                 <EditableDescription onDark />
                 <div className="flex items-center gap-1.5 text-[0.8125rem] flex-wrap">
@@ -3672,20 +3657,6 @@ export default function ReportView({ report, onBack, onShare, onOpenQuery, initi
                           eyebrow={report.id && (
                             <span className="font-mono text-[0.6875rem] tracking-[0.04em] text-white/65">{report.id.toUpperCase()}</span>
                           )}
-                          actions={
-                            <>
-                              {canGenerateAtr && (
-                              <button
-                                onClick={() => setAtrModalOpen(true)}
-                                title="Generate Action Taken Report"
-                                className="inline-flex items-center gap-1.5 h-9 px-3.5 text-[0.75rem] font-semibold text-white bg-brand-700 border border-white/25 rounded-md shadow-[inset_0_1px_0_rgba(255,255,255,0.15)] hover:bg-brand-600 hover:border-white/40 transition-colors cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/50"
-                              >
-                                <FileText size={14} />
-                                Generate ATR
-                              </button>
-                              )}
-                            </>
-                          }
                           footer={(() => {
                             // Inline byline: who/when/scope plus the Audit Period. The
                             // meta strip below carries the Report ID + Report Type.
