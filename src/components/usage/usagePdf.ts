@@ -132,7 +132,7 @@ export function usagePdfDefinition(data: UsageSnapshot, view?: { title: string; 
         ['What the hours saved are worth, INR', fmtInt(value.rupees), 'estimated'],
         ['People freed, full time', fmtPeople(value.people), 'estimated'],
         ['Charged by the contract, INR', fmtInt(cost.totalPaise / 100), 'measured'],
-        ['Net value, INR', fmtInt(data.netRupees), 'estimated'],
+        ['Charged for lookups, INR', fmtInt(data.cost.totalPaise / 100), 'recorded, a contract term'],
         ['Machine time wasted on failed runs', fmtDuration(data.reliability.wastedHours), 'measured'],
       ],
     ),

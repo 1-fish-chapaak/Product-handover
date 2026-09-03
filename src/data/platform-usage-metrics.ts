@@ -98,7 +98,15 @@ export const fmtHours = (h: number): string => (h < 10 ? fmtOneDp(h) : fmtInt(Ma
  * to show the one thing that moved when the rate was corrected, because 14.9
  * and 15.4 both printed as 15.
  */
-export const fmtPeople = (n: number): string => fmtOneDp(n);
+/**
+ * Auditors, as whole people.
+ *
+ * "14.9 auditors" reads as a measurement, and there is no such thing as nine
+ * tenths of an auditor. The figure is an estimate resting on an estimated rate,
+ * so a decimal place claims a precision the number does not have. It rounds to
+ * the nearest whole person and the sentence says "about".
+ */
+export const fmtPeople = (n: number): string => fmtInt(Math.round(n));
 
 /**
  * A span of machine time, in whatever unit stops it reading as zero.
@@ -480,55 +488,48 @@ export const RATE_BASIS_LINE =
   + `or ${RATE_PER_DAY} in a day`;
 
 /**
- * What an hour of an internal auditor costs, worked out rather than invented.
+ * What an auditor costs. Three round numbers, and they are an estimate.
  *
- * ₹1,200 an hour was on this page for a year and nobody could say where it came
- * from, which is the worst kind of number: it carried the whole renewal case and
- * it had no derivation. It was also wrong in a specific way. ₹1,200 is roughly
- * what a firm charges to sell you an audit hour. Section 138 of the Companies
- * Act makes prescribed companies appoint an internal auditor, so our customers
- * employ their own, and an employed hour costs a fraction of a bought one.
+ * They are round on purpose. A figure like ₹529.60 invites a reader to think
+ * somebody measured it, and nobody did. Nothing in this product records what
+ * anybody is paid, and no software can see salaries, so this is the one number
+ * on the page we assume rather than read. Saying it in round hundreds is the
+ * honest way to say "this is roughly right and it is not meant to be exact".
  *
- * So the number is built from published pay data, in five steps anybody can
- * check, and all five are printed on the page beside the money they produce.
+ * The month leads because that is how an auditor is actually paid. Big 4 firms
+ * in India and in-house audit teams both pay a monthly salary; they may bill a
+ * client by the hour, but nobody employed is paid by the hour. Published pay
+ * data for an internal auditor in India runs about ₹6.5 to ₹8 lakh a year, so
+ * ₹80,000 a month is the round figure we work with.
+ *
+ * The salary is paid for the whole month, weekends and holidays included. What
+ * you get back is about twenty working days. So an hour of actual audit work
+ * costs ₹500, and the weekends are not free: their cost is already carried
+ * inside that ₹500.
  */
-export const AUDITOR_RATE = {
-  /** Glassdoor India, February 2026. */
-  medianBase: 657_000,
-  /** PayScale, 2026. */
-  averageBase: 794_964,
-  /** The midpoint of the two, because neither source is the better one. */
-  takenBase: 725_000,
-  /**
-   * Employer cost on top of pay: statutory contributions, insurance, the desk,
-   * the laptop, the software. Published ranges run 1.25 to 1.45.
-   */
-  overhead: 1.35,
-  /**
-   * 52 weeks at 40 hours is 2,080. Take out about 29 days of leave and public
-   * holidays and 1,848 is what one person is available to work in a year.
-   */
-  availableHours: 1_848,
-  /** How much of a year an employed auditor actually charges to audit work. */
-  chargeableHours: 1_478,
+export const AUDITOR_COST = {
+  /** ₹80,000. The salary, paid for the whole month, weekends included. */
+  month: 80_000,
+  /** Working days in a month. Weekends and holidays are paid but not worked. */
+  workingDays: 20,
+  /** Hours in a working day. */
+  hoursInDay: 8,
+  /** What published pay data says, for context only. Never printed as proof. */
+  publishedFrom: 650_000,
+  publishedTo: 800_000,
 } as const;
 
-/** ₹9,78,750 a year, one auditor, fully loaded. */
-export const AUDITOR_LOADED_COST = Math.round(AUDITOR_RATE.takenBase * AUDITOR_RATE.overhead);
+/** ₹4,000 a day. */
+export const AUDITOR_DAY = AUDITOR_COST.month / AUDITOR_COST.workingDays;
 
-/**
- * ₹530 an hour. Exactly what the sum above comes to, and what the page carries.
- *
- * Not rounded to a comfortable ₹550. This page rounds a saving down and prints
- * 7,131 hours rather than 7,132, so rounding the rate up by ₹20 would round the
- * benefit up by about ₹1.4 lakh a quarter while the derivation printed beside
- * it still said ₹530. There is no hand set figure here: the constant is the
- * arithmetic, so the number on screen and the sum behind it cannot drift.
- */
-export const AUDITOR_HOUR = Math.round(AUDITOR_LOADED_COST / AUDITOR_RATE.availableHours);
+/** ₹500 an hour of actual audit work. */
+export const AUDITOR_HOUR = AUDITOR_DAY / AUDITOR_COST.hoursInDay;
 
-/** Working hours a month: the 1,848 available hours over twelve. */
-export const HOURS_PER_MONTH = Math.round(AUDITOR_RATE.availableHours / 12);
+/** 160 hours. What one person gives you in a month. */
+export const HOURS_PER_MONTH = AUDITOR_COST.workingDays * AUDITOR_COST.hoursInDay;
+
+/** 480 hours. What one person gives you in a quarter, which is how this reads. */
+export const HOURS_PER_QUARTER = HOURS_PER_MONTH * 3;
 
 /**
  * The whole sum in one paragraph, so it can travel with the figure it produces.
@@ -537,54 +538,32 @@ export const HOURS_PER_MONTH = Math.round(AUDITOR_RATE.availableHours / 12);
  * both are built from the same constants, so neither can drift from the other.
  */
 export const RATE_DERIVATION_LINE =
-  `Median base pay for an internal auditor in India is ${fmtMoneyExact(AUDITOR_RATE.medianBase)} a year `
-  + `on Glassdoor India in February 2026, and ${fmtMoneyExact(AUDITOR_RATE.averageBase)} on PayScale in `
-  + `2026. The midpoint of the two is ${fmtMoneyExact(AUDITOR_RATE.takenBase)}. Multiply that by `
-  + `${AUDITOR_RATE.overhead} for what it costs to employ somebody on top of their pay and one auditor `
-  + `costs ${fmtMoneyExact(AUDITOR_LOADED_COST)} a year. Over the ${fmtInt(AUDITOR_RATE.availableHours)} `
-  + 'hours a year one person is available to work, that is '
-  + `${fmtMoneyExact(AUDITOR_HOUR)} an hour, which is what this page carries. It is the cost of an `
-  + 'auditor your own company employs, not the price a firm charges to sell you an '
-  + 'audit hour, because section 138 of the Companies Act means our customers employ their own. Nothing '
-  + 'in the product records what anybody is paid, so this comes from published pay data rather than from '
-  + 'your records, and it is the one number here your finance team can replace with a better one.';
+  `This is an estimate, and the numbers are round because it is not meant to be exact. An auditor's `
+  + `salary is about ${fmtMoneyExact(AUDITOR_COST.month)} a month, paid for the whole month with `
+  + `weekends included. A month holds about ${AUDITOR_COST.workingDays} working days, so a day is `
+  + `${fmtMoneyExact(AUDITOR_DAY)}, and a working day is ${AUDITOR_COST.hoursInDay} hours, so an hour `
+  + `of audit work is ${fmtMoneyExact(AUDITOR_HOUR)}. The weekends are not free, their cost is already `
+  + `inside that ${fmtMoneyExact(AUDITOR_HOUR)}. Published pay data for an internal auditor in India `
+  + `runs about ${fmtMoneyExact(AUDITOR_COST.publishedFrom)} to ${fmtMoneyExact(AUDITOR_COST.publishedTo)} `
+  + 'a year, which is what we looked at, not what we are claiming. Nothing in this product records what '
+  + 'anybody is paid, so this is the one figure here your finance team can replace with a better one.';
 
-/** The same sum as steps, for the block that lays it out on screen. */
+/** The ladder, three rows, said the way an auditor is actually paid. */
 export const RATE_DERIVATION_STEPS: { step: string; value: string; from: string }[] = [
   {
-    step: 'Base pay, median',
-    value: `${fmtMoneyExact(AUDITOR_RATE.medianBase)} a year`,
-    from: 'Glassdoor India, February 2026',
+    step: 'One month',
+    value: fmtMoneyExact(AUDITOR_COST.month),
+    from: 'an auditor\'s salary, paid for the whole month, weekends included',
   },
   {
-    step: 'Base pay, average',
-    value: `${fmtMoneyExact(AUDITOR_RATE.averageBase)} a year`,
-    from: 'PayScale, 2026',
+    step: 'One day',
+    value: fmtMoneyExact(AUDITOR_DAY),
+    from: `a month holds about ${AUDITOR_COST.workingDays} working days`,
   },
   {
-    step: 'Taken',
-    value: `${fmtMoneyExact(AUDITOR_RATE.takenBase)} a year`,
-    from: 'the midpoint of the two, because neither source is the better one',
-  },
-  {
-    step: 'Cost of employing somebody, on top of pay',
-    value: `× ${AUDITOR_RATE.overhead}`,
-    from: 'statutory contributions, insurance, the desk, the laptop, the software. Published ranges run 1.25 to 1.45',
-  },
-  {
-    step: 'What one auditor costs a year',
-    value: fmtMoneyExact(AUDITOR_LOADED_COST),
-    from: `${fmtMoneyExact(AUDITOR_RATE.takenBase)} × ${AUDITOR_RATE.overhead}`,
-  },
-  {
-    step: 'Hours a year one person is available to work',
-    value: `${fmtInt(AUDITOR_RATE.availableHours)} hours`,
-    from: '52 weeks at 40 hours, less about 29 days of leave and public holidays',
-  },
-  {
-    step: 'Cost of an auditor hour',
-    value: `${fmtMoneyExact(AUDITOR_HOUR)} an hour`,
-    from: `${fmtMoneyExact(AUDITOR_LOADED_COST)} ÷ ${fmtInt(AUDITOR_RATE.availableHours)} hours, not rounded up`,
+    step: 'One hour of audit work',
+    value: fmtMoneyExact(AUDITOR_HOUR),
+    from: `a working day is ${AUDITOR_COST.hoursInDay} hours. The weekends are paid but not worked, so their cost is already inside this figure`,
   },
 ];
 
@@ -624,9 +603,9 @@ const BASE: Omit<UsageSettings, 'changes'> = {
       'A starting number we picked. It replaces itself once manual tests carry start and finish times.',
     hourlyRate: RATE_DERIVATION_LINE,
     hoursPerPersonPerMonth:
-      `The ${fmtInt(AUDITOR_RATE.availableHours)} hours a year one person is available to work, over `
-      + 'twelve months. 52 weeks at 40 hours, less about 29 days of leave and public holidays. It '
-      + 'replaces the 160 that was an HR round number.',
+      `${AUDITOR_COST.workingDays} working days at ${AUDITOR_COST.hoursInDay} hours is `
+      + `${fmtInt(HOURS_PER_MONTH)} hours, which is what one person gives you in a month. Over a `
+      + `quarter that is ${fmtInt(HOURS_PER_QUARTER)} hours. Round numbers, and an estimate.`,
   },
   measurable: {
     manualReviewRate: true,
@@ -770,34 +749,38 @@ export const SENSITIVITY_CAUSE =
 
 export function sensitivity(hoursSaved: number): Sensitivity[] {
   /*
-   * The saved hours are priced, not the by-hand hours, so every row here ties
-   * to the saving printed at the top of the view rather than sitting a little
-   * above it. The first row is the sum in `AUDITOR_RATE` at its exact figure,
-   * which is the rate the page itself carries.
+   * The saved hours are priced, not the by-hand hours, so every row ties to the
+   * saving printed at the top of the view. The first row is the rate the page
+   * itself carries, and it is the lowest of the four on purpose: the page leads
+   * with the least flattering way of costing an audit hour.
+   *
+   * Every rate here is round and every one is an estimate. The spread is not
+   * doubt about the figure, it is the difference between employing auditors and
+   * buying their hours.
    */
   const rows: { basis: string; rate: number; from: string; ours: boolean }[] = [
     {
-      basis: 'Auditors you employ, costed on the hours they are available',
+      basis: 'Auditors you employ',
       rate: AUDITOR_HOUR,
-      from: `${fmtMoneyExact(AUDITOR_LOADED_COST)} a year over ${fmtInt(AUDITOR_RATE.availableHours)} available hours`,
+      from: `${fmtMoneyExact(AUDITOR_COST.month)} a month over ${fmtInt(HOURS_PER_MONTH)} working hours`,
       ours: true,
     },
     {
-      basis: 'Auditors you employ, costed only on the hours they charge to audit work',
-      rate: Math.round(AUDITOR_LOADED_COST / AUDITOR_RATE.chargeableHours),
-      from: `the same ${fmtMoneyExact(AUDITOR_LOADED_COST)} over the ${fmtInt(AUDITOR_RATE.chargeableHours)} hours a year that reach audit work`,
+      basis: 'Auditors you employ, if only six hours of the day reach audit work',
+      rate: 650,
+      from: `the same ${fmtMoneyExact(AUDITOR_COST.month)} a month over 120 hours instead of ${fmtInt(HOURS_PER_MONTH)}`,
       ours: false,
     },
     {
       basis: 'Hours bought from a firm, at the lower end',
-      rate: 940,
-      from: 'what a smaller firm quotes for an internal audit hour. Our estimate, not a published rate',
+      rate: 1_000,
+      from: 'roughly what a smaller firm quotes for an internal audit hour. Our estimate, not a published rate',
       ours: false,
     },
     {
       basis: 'Hours bought from a firm, at the upper end',
       rate: 2_500,
-      from: 'what a large firm quotes for an internal audit hour. Our estimate, not a published rate',
+      from: 'roughly what a large firm quotes for an internal audit hour. Our estimate, not a published rate',
       ours: false,
     },
   ];

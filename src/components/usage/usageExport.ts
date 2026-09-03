@@ -73,7 +73,7 @@ export function usageCsv(data: UsageSnapshot, view?: ExportView): string {
   lines.push(row('What the hours saved are worth (INR)', Math.round(value.rupees), 'estimated'));
   lines.push(row('People freed, full time', fmtPeople(value.people), 'estimated'));
   lines.push(row('Charged by the contract (INR)', Math.round(cost.totalPaise / 100), 'measured'));
-  lines.push(row('Net value (INR)', Math.round(data.netRupees), 'estimated'));
+  lines.push(row('Charged for lookups (INR)', Math.round(data.cost.totalPaise / 100), 'recorded, a contract term'));
   lines.push(row('Machine time wasted on failed runs', fmtDuration(data.reliability.wastedHours), 'measured'));
   lines.push('');
 

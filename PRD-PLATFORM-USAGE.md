@@ -38,7 +38,11 @@ Four readers, confirmed. Not one.
 | CFO or finance | Is this paying for itself | Value |
 | Our CS or account team | The same question, before a renewal call | Value, the same view |
 | Audit lead or CAE | Am I ready for the committee, and what is slipping | Coverage and findings |
-| Workspace admin | Is the team actually using what we bought | Activity and what is stuck |
+| Workspace admin | Is anything broken that is costing us the saving | Value, the same view |
+
+**There are two views, not three.** An Activity view was built for the workspace admin and cut. Two of its three blocks could not name a decision that turned on them: "who is using it" was per person adoption, which this product deliberately does not do and had already been removed once, and "what got created" was a number because it was countable. The third, what ran and what is stuck, survives on the Value view, because a stuck check is work that did not happen and the saving printed above it is understated by exactly that much. It is a caveat on the money, not a subject beside it.
+
+The test that would reverse this: the admin log records who opens Platform Usage. If workspace admins open it and go looking for adoption figures, the view comes back.
 
 There are **two controls and they do different jobs**, which an earlier draft of this PRD ran together into one sentence.
 
@@ -129,7 +133,7 @@ Layout, wording and block names are identical across views. Only the order chang
 
 The six lines above are the committee pack. They were built once and are preserved at commit `a726aff`; the work is recovered into this view rather than rewritten.
 
-**Activity view** (workspace admin). What ran and what is stuck, with the real error text · who is using it · what got created · then coverage and value.
+**What ran, and what is stuck** sits inside the Value view rather than being a view of its own, directly under the money it qualifies. It carries the words the failure itself used rather than a code or a status colour, because a person who can read the error is a person who can go and fix it.
 
 Everyone, at every view, can narrow scope to their own team or their own work, bounded by entitlement.
 
@@ -228,7 +232,7 @@ The page reads generic because every block is the same card with the same tile i
 
 | ID | Criterion |
 | --- | --- |
-| AC-01 | The Viewing as switch exists and offers only entitled views. |
+| AC-01 | The Viewing as switch offers exactly two views, Value and Coverage and findings, each labelled with the question it answers. No Activity view exists, and no per person adoption table exists anywhere in the feature. |
 | AC-02 | A reader holding `ad_usage` opens on Value. A reader holding `ad_usage_people` with a team opens on Coverage and findings. A view chosen by a reader is remembered and opens again on their next visit. |
 | AC-03 | `hourlyRate` is ₹530, computed from the derivation rather than hand set, and ₹1,200 appears nowhere on screen. |
 | AC-04 | The rate's full derivation renders on the same screen as any figure it produces. |
@@ -245,6 +249,7 @@ The page reads generic because every block is the same card with the same tile i
 | AC-15 | Every chart offers its table in one click, and no chart under `src/components/usage/` uses `ResponsiveContainer`. |
 | AC-16 | Nothing on the page asks the customer to supply data the page then treats as a fact. No rate field, no pace field, no price field. A window control, including the custom date range, is a view control and is not covered by this rule. |
 | AC-17 | Each view opens with at most three groups expanded and the rest folded. |
+| AC-20 | What ran and what is stuck renders inside the Value view, with the real error text, and no chart or table on the page offers a sort control. |
 | AC-18 | Visible copy carries no em dash and no hyphenated compound. Table cells may use a dash as a blank. |
 | AC-19 | `npx tsc -b` reports no errors, `npm run build` is green, and the Playwright suite passes. |
 

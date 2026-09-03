@@ -18,8 +18,8 @@
  * On grid type only: 12, 14, 16, 18 and 20. Every figure is tabular.
  */
 
-import { useState, type ReactNode } from 'react';
-import { ChevronDown } from 'lucide-react';
+import { useEffect, useRef, useState, type ReactNode } from 'react';
+import { ChevronDown, Info } from 'lucide-react';
 
 /**
  * One foldable group of the page.
@@ -38,9 +38,14 @@ export interface GroupSpec {
 
 /* ── The sentence, and the figures inside it ─────────────────────────────── */
 
-/** The answer, in a sentence. The widest thing in its block. */
+/**
+ * The answer, in a sentence. The widest thing in its block.
+ *
+ * Two of these in a row are two paragraphs and have to read as two, so it
+ * carries its own leading gap and drops it when it opens a block.
+ */
 export function Lede({ children }: { children: ReactNode }) {
-  return <p className="text-[1rem] leading-[1.6] text-ink-900 max-w-[70ch]">{children}</p>;
+  return <p className="mt-4 first:mt-0 text-[1rem] leading-[1.65] text-ink-900 max-w-[70ch]">{children}</p>;
 }
 
 /** A figure, said inside the sentence that explains it. */
@@ -50,7 +55,116 @@ export function Num({ children }: { children: ReactNode }) {
 
 /** Where a figure came from, or what it rests on. Plain text, never a pill. */
 export function Note({ children }: { children: ReactNode }) {
-  return <p className="mt-2 text-[0.75rem] leading-[1.7] text-ink-500 max-w-[76ch]">{children}</p>;
+  return <p className="mt-3 text-[0.75rem] leading-[1.7] text-ink-500 max-w-[76ch]">{children}</p>;
+}
+
+/**
+ * The working, at the figure it produced.
+ *
+ * A derivation printed underneath a block is a derivation nobody reads. The
+ * question a reader has is "where did *that* number come from", and they have
+ * it while looking at that number, so the answer belongs there.
+ *
+ * Three things this has to get right.
+ *
+ * **It opens on hover and on click.** Hover alone gives a touch reader and a
+ * keyboard reader nothing at all, which would defeat the point for anybody
+ * reading this on a tablet in a meeting.
+ *
+ * **An estimate says so before anybody hovers.** A recorded figure and a
+ * guessed one must not look identical at rest, so an estimate carries a dotted
+ * underline and its panel opens by saying it is an estimate.
+ *
+ * **It cannot be clipped.** The panel is positioned against the viewport rather
+ * than its parent, because these figures sit inside folds and scrolling tables
+ * that would otherwise cut the answer in half.
+ */
+export function Working({
+  children, sum, estimated = false,
+}: { children: ReactNode; sum: ReactNode; estimated?: boolean }) {
+  /*
+   * Hovering and clicking are two different intentions and they must not fight.
+   * A hover is a glance, so it opens while the pointer is there and closes when
+   * it leaves. A click is "hold still, I am reading this", so it pins the panel
+   * open until the reader dismisses it. Treating a click as a plain toggle made
+   * the panel close the moment a mouse reader clicked the thing they had just
+   * hovered, because the hover had already opened it.
+   */
+  const [open, setOpen] = useState(false);
+  const [pinned, setPinned] = useState(false);
+  const [at, setAt] = useState<{ top: number; left: number } | null>(null);
+  const anchor = useRef<HTMLSpanElement>(null);
+
+  const place = () => {
+    const r = anchor.current?.getBoundingClientRect();
+    if (!r) return;
+    const width = 320;
+    const left = Math.max(12, Math.min(r.left, window.innerWidth - width - 12));
+    setAt({ top: r.bottom + 6, left });
+  };
+
+  const show = () => { place(); setOpen(true); };
+  const glanceAway = () => { if (!pinned) setOpen(false); };
+  const dismiss = () => { setPinned(false); setOpen(false); };
+
+  useEffect(() => {
+    if (!open) return;
+    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') dismiss(); };
+    const onAway = (e: MouseEvent) => {
+      if (!anchor.current?.contains(e.target as Node)) dismiss();
+    };
+    window.addEventListener('keydown', onKey);
+    window.addEventListener('mousedown', onAway);
+    window.addEventListener('scroll', dismiss, true);
+    window.addEventListener('resize', dismiss);
+    return () => {
+      window.removeEventListener('keydown', onKey);
+      window.removeEventListener('mousedown', onAway);
+      window.removeEventListener('scroll', dismiss, true);
+      window.removeEventListener('resize', dismiss);
+    };
+  }, [open, pinned]);
+
+  return (
+    <span
+      ref={anchor}
+      className="whitespace-nowrap"
+      onMouseEnter={show}
+      onMouseLeave={glanceAway}
+    >
+      <span className={estimated ? 'border-b border-dotted border-ink-300' : undefined}>{children}</span>
+      <button
+        type="button"
+        aria-expanded={open}
+        aria-label={estimated ? 'How this estimate was worked out' : 'How this figure was worked out'}
+        data-working={estimated ? 'estimated' : 'recorded'}
+        onClick={e => {
+          e.stopPropagation();
+          if (pinned) { dismiss(); return; }
+          setPinned(true);
+          show();
+        }}
+        onFocus={show}
+        onBlur={glanceAway}
+        style={{ display: 'inline' }}
+        className="ml-0.5 text-ink-300 transition-colors hover:text-ink-500 focus-visible:text-ink-500"
+      >
+        <Info className="inline h-3.5 w-3.5 align-[-0.1em]" strokeWidth={2} aria-hidden />
+      </button>
+      {open && at ? (
+        <span
+          role="tooltip"
+          style={{ position: 'fixed', top: at.top, left: at.left, width: 320, zIndex: 60 }}
+          className="rounded-lg border border-canvas-border bg-canvas-elevated p-3 text-left"
+        >
+          {estimated ? (
+            <span className="mb-1 block text-[0.75rem] font-semibold text-ink-700">This is an estimate</span>
+          ) : null}
+          <span className="block text-[0.75rem] leading-[1.7] text-ink-600">{sum}</span>
+        </span>
+      ) : null}
+    </span>
+  );
 }
 
 /** A drill down, named in the sentence rather than hidden behind a chevron. */
@@ -197,8 +311,8 @@ export function ChartOrTable({ chart, table, label }: { chart: ReactNode; table:
 
 export function Block({ id, heading, children }: { id?: string; heading?: string; children: ReactNode }) {
   return (
-    <section id={id} className="scroll-mt-6 pt-6 first:pt-0">
-      {heading ? <h3 className="mb-2 text-[0.75rem] font-medium text-ink-400">{heading}</h3> : null}
+    <section id={id} className="scroll-mt-6 pt-8 first:pt-0">
+      {heading ? <h3 className="mb-3 text-[0.875rem] font-semibold text-ink-800">{heading}</h3> : null}
       {children}
     </section>
   );
@@ -209,8 +323,11 @@ export function Block({ id, heading, children }: { id?: string; heading?: string
  *
  * Twenty five blocks is more than the four people who open this page can read,
  * so each view keeps its own first three groups open and folds the rest. The
- * fold is a heading with the group's own answer beside it, so a reader can
- * decide whether to open it without opening it.
+ * fold is a heading with the group's own answer under it, so a reader can
+ * decide whether to open it without opening it. The answer used to sit on the
+ * same line and was cut off by an ellipsis at exactly the width where it
+ * started to be worth reading, which made the fold useless on the screens most
+ * likely to be reading it.
  */
 export function Group({
   id, title, answer, open, onToggle, children,
@@ -223,23 +340,27 @@ export function Group({
   children: ReactNode;
 }) {
   return (
-    <section id={id} className="scroll-mt-4 border-t border-canvas-border first:border-t-0">
+    <section id={id} className="scroll-mt-6 border-t border-canvas-border first:border-t-0">
       <h2>
         <button
           type="button"
           onClick={onToggle}
           aria-expanded={open}
-          className="w-full flex items-baseline gap-3 py-5 text-left group"
+          className="w-full flex items-start gap-3 py-5 text-left group"
         >
           <ChevronDown
-            size={14}
-            className={`shrink-0 mt-1 text-ink-400 transition-transform ${open ? '' : '-rotate-90'}`}
+            size={16}
+            className={`shrink-0 mt-1 text-ink-400 transition-transform duration-200 ease-out group-hover:text-brand-600 ${open ? '' : '-rotate-90'}`}
           />
-          <span className="text-[1.125rem] font-semibold tracking-tight text-ink-900 group-hover:text-brand-700">{title}</span>
-          <span className="text-[0.875rem] text-ink-500 truncate">{answer}</span>
+          <span className="min-w-0">
+            <span className="block text-[1.25rem] font-semibold tracking-tight text-ink-900 transition-colors group-hover:text-brand-700">
+              {title}
+            </span>
+            <span className="mt-1 block text-[0.875rem] leading-[1.6] text-ink-500 max-w-[64ch]">{answer}</span>
+          </span>
         </button>
       </h2>
-      {open ? <div className="pb-8 pl-[26px]">{children}</div> : null}
+      {open ? <div className="pb-10 pl-7">{children}</div> : null}
     </section>
   );
 }

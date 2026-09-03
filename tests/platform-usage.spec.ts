@@ -38,12 +38,20 @@ async function openUsage(page: Page) {
 }
 
 /** Which of the three views is leading. */
-function viewSwitch(page: Page, name: 'Value' | 'Coverage and findings' | 'Activity') {
+function viewSwitch(page: Page, name: 'Value' | 'Coverage and findings') {
   return page.getByRole('button', { name, exact: true });
 }
 
-async function chooseView(page: Page, name: 'Value' | 'Coverage and findings' | 'Activity') {
+async function chooseView(page: Page, name: 'Value' | 'Coverage and findings') {
   await viewSwitch(page, name).click();
+  await page.waitForTimeout(600);
+}
+
+/** Pick a window. The chip carries the one in force and lists the rest. */
+async function chooseWindow(page: Page, label: string) {
+  await page.getByRole('button', { name: /^Window,/ }).click();
+  await page.waitForTimeout(200);
+  await page.getByRole('button', { name: label, exact: true }).click();
   await page.waitForTimeout(600);
 }
 
@@ -85,20 +93,24 @@ async function csvOf(page: Page): Promise<string> {
 test.describe('Platform Usage', () => {
   /* ── AC-01, AC-02 · the switch, and where each reader lands ─────────────── */
 
-  test('AC-01 the switch offers the three views, each with the question it answers', async ({ page }) => {
+  test('AC-01 the switch offers the two views, each with the question it answers', async ({ page }) => {
     await openUsage(page);
 
     await expect(viewSwitch(page, 'Value')).toBeVisible();
     await expect(viewSwitch(page, 'Coverage and findings')).toBeVisible();
-    await expect(viewSwitch(page, 'Activity')).toBeVisible();
+
+    // There is no third view. An Activity view was built and cut, because two
+    // of its three blocks could not name a decision that turned on them.
+    await expect(page.getByRole('button', { name: 'Activity', exact: true })).toHaveCount(0);
+    await expect(page.getByText('Is the team actually using what we bought?')).toHaveCount(0);
+    await expect(page.getByText('Who is using it')).toHaveCount(0);
+    await expect(page.getByText('What got created')).toHaveCount(0);
 
     // The question is on the switch in words, so a reader picking for
     // themselves never needs the page to have guessed right.
     await expect(page.getByText('Is this paying for itself?')).toBeVisible();
     await chooseView(page, 'Coverage and findings');
     await expect(page.getByText('Am I ready for the committee, and what is slipping?')).toBeVisible();
-    await chooseView(page, 'Activity');
-    await expect(page.getByText('Is the team actually using what we bought?')).toBeVisible();
   });
 
   test('AC-02 a reader who can see the company figures lands on Value', async ({ page }) => {
@@ -108,14 +120,14 @@ test.describe('Platform Usage', () => {
 
   test('AC-02 the view a reader picks is where the page opens next time', async ({ page }) => {
     await openUsage(page);
-    await chooseView(page, 'Activity');
+    await chooseView(page, 'Coverage and findings');
 
     await page.reload();
     await enterWorkspace(page);
     await page.waitForTimeout(900);
     await gotoUsage(page);
 
-    await expect(viewSwitch(page, 'Activity')).toHaveAttribute('aria-pressed', 'true');
+    await expect(viewSwitch(page, 'Coverage and findings')).toHaveAttribute('aria-pressed', 'true');
   });
 
   test('AC-01 a reader without the company view is never offered it, and only narrows down their own line', async ({ page }) => {
@@ -145,11 +157,11 @@ test.describe('Platform Usage', () => {
 
   /* ── AC-03, AC-04 · the rate and its derivation ─────────────────────────── */
 
-  test('AC-03 the rate is 530 and 1,200 appears nowhere', async ({ page }) => {
+  test('AC-03 the rate is a round 500 and 1,200 appears nowhere', async ({ page }) => {
     await openUsage(page);
-    await expect(page.getByText('at ₹530 an auditor hour.')).toBeVisible();
+    await expect(page.locator('#worth')).toContainText('at ₹500 an hour');
 
-    for (const view of ['Value', 'Coverage and findings', 'Activity'] as const) {
+    for (const view of ['Value', 'Coverage and findings'] as const) {
       await chooseView(page, view);
       const body = await page.locator('body').innerText();
       expect(body).not.toContain('₹1,200');
@@ -162,28 +174,69 @@ test.describe('Platform Usage', () => {
     await openGroup(page, 'Where the rate comes from');
 
     const group = page.locator('#rate');
-    await expect(group).toContainText('₹6,57,000 a year');
-    await expect(group).toContainText('Glassdoor India, February 2026');
-    await expect(group).toContainText('₹7,94,964 a year');
-    await expect(group).toContainText('PayScale, 2026');
-    await expect(group).toContainText('₹7,25,000 a year');
-    await expect(group).toContainText('× 1.35');
-    await expect(group).toContainText('₹9,78,750');
-    await expect(group).toContainText('1,848 hours');
-    await expect(group).toContainText('₹530 an hour');
+    // The ladder, said the way an auditor is actually paid: month, day, hour.
+    await expect(group).toContainText('One month');
+    await expect(group).toContainText('₹80,000');
+    await expect(group).toContainText('One day');
+    await expect(group).toContainText('₹4,000');
+    await expect(group).toContainText('One hour of audit work');
+    await expect(group).toContainText('₹500');
+    await expect(group).toContainText('about 20 working days');
+    await expect(group).toContainText('a working day is 8 hours');
+
+    // It is called an estimate, in those words, before any figure.
+    await expect(group).toContainText('It is an estimate');
+    await expect(group).toContainText('round on purpose');
+
+    // The published pay data is context, never proof.
+    await expect(group).toContainText('which is what we looked at, not what we are claiming');
 
     // And the money it produces is on the same page, not one click away.
-    await expect(page.locator('#worth')).toContainText('₹37.8 lakh');
+    await expect(page.locator('#worth')).toContainText('₹35.7 lakh');
   });
 
-  test('AC-05 working hours a month is 154', async ({ page }) => {
+  test('the working opens on click, not only on hover', async ({ page }) => {
+    await openUsage(page);
+    const worth = page.locator('#worth');
+
+    // Nothing is open at rest.
+    await expect(worth.getByRole('tooltip')).toHaveCount(0);
+
+    // A touch reader and a keyboard reader get nothing from hover, so the mark
+    // has to be a real button that opens on click.
+    const mark = worth.locator('button[data-working]').first();
+    await mark.click();
+    await expect(worth.getByRole('tooltip').first()).toBeVisible();
+
+    // And Escape closes it again.
+    await page.keyboard.press('Escape');
+    await expect(worth.getByRole('tooltip')).toHaveCount(0);
+  });
+
+  test('an estimated figure says so before anybody hovers', async ({ page }) => {
+    await openUsage(page);
+    const worth = page.locator('#worth');
+
+    // Both kinds are on this screen: rows and machine time are recorded, the
+    // by-hand hours and the money rest on an estimate.
+    await expect(worth.locator('button[data-working="recorded"]').first()).toBeVisible();
+    const estimate = worth.locator('button[data-working="estimated"]').first();
+    await expect(estimate).toBeVisible();
+
+    // Opening one says it is an estimate in those words, before the working.
+    await estimate.click();
+    await expect(page.getByRole('tooltip').first()).toContainText('This is an estimate');
+  });
+
+  test('AC-05 a person gives you 160 hours a month and 480 a quarter', async ({ page }) => {
     await openUsage(page);
     await openGroup(page, 'Where the rate comes from');
     const assumptions = page.locator('#rate');
     const row = assumptions.getByText('Working hours per person per month').locator('../..');
-    await expect(row).toContainText('154');
-    // The old HR round number appears once, as the thing 154 replaced.
-    await expect(row).toContainText('It replaces the 160 that was an HR round number');
+    await expect(row).toContainText('160');
+    await expect(row).toContainText('20 working days at 8 hours');
+    await expect(row).toContainText('Over a quarter that is 480 hours');
+    await expect(row).toContainText('Round numbers, and an estimate');
   });
 
   test('AC-06 the pace label says rule checking rather than a substantive procedure', async ({ page }) => {
@@ -204,18 +257,19 @@ test.describe('Platform Usage', () => {
     await openGroup(page, 'Where the rate comes from');
     const group = page.locator('#rate');
 
-    await expect(group).toContainText('Auditors you employ, costed on the hours they are available');
-    await expect(group).toContainText('Auditors you employ, costed only on the hours they charge to audit work');
+    await expect(group).toContainText('Auditors you employ');
+    await expect(group).toContainText('if only six hours of the day reach audit work');
     await expect(group).toContainText('Hours bought from a firm, at the lower end');
     await expect(group).toContainText('Hours bought from a firm, at the upper end');
 
-    await expect(group).toContainText('₹530');
-    await expect(group).toContainText('₹662');
-    await expect(group).toContainText('₹940');
+    // Every rate here is round, because every one of them is an estimate.
+    await expect(group).toContainText('₹500');
+    await expect(group).toContainText('₹650');
+    await expect(group).toContainText('₹1,000');
     await expect(group).toContainText('₹2,500');
-    await expect(group).toContainText('₹37.8 lakh');
-    await expect(group).toContainText('₹47.2 lakh');
-    await expect(group).toContainText('₹67.0 lakh');
+    await expect(group).toContainText('₹35.7 lakh');
+    await expect(group).toContainText('₹46.4 lakh');
+    await expect(group).toContainText('₹71.3 lakh');
     await expect(group).toContainText('₹1.78 cr');
 
     // The spread is a fact about the customer's operating model, not our doubt.
@@ -231,15 +285,17 @@ test.describe('Platform Usage', () => {
     await openUsage(page);
     const worth = page.locator('#worth');
 
-    await expect(worth).toContainText('1,428,000 rows');
-    await expect(worth).toContainText('340 successful runs');
+    await expect(worth).toContainText('1,428,000');
     await expect(worth).toContainText('8.5 hours');
     await expect(worth).toContainText('7,140 hours');
     await expect(worth).toContainText('7,131');
-    await expect(worth).toContainText('15.4');
-    await expect(worth).toContainText('₹37.8 lakh');
+    // Whole auditors. There is no such thing as nine tenths of one.
+    await expect(worth).toContainText('15 auditors');
+    await expect(worth).toContainText('₹35.7 lakh');
+    // The contract charge sits beside the work avoided, never subtracted from it.
     await expect(worth).toContainText('₹18,400');
-    await expect(worth).toContainText('₹37.6 lakh');
+    await expect(worth).toContainText('shown beside the work avoided rather than taken off it');
+    expect(await worth.innerText()).not.toContain('net');
 
     await openGroup(page, 'What the contract charged');
     await expect(page.locator('#charged')).toContainText('₹18,400');
@@ -252,8 +308,8 @@ test.describe('Platform Usage', () => {
     const worth = page.locator('#worth');
     const quarter = await worth.innerText();
 
-    await page.getByRole('button', { name: 'Financial year to date', exact: true }).click();
-    await page.waitForTimeout(800);
+    await chooseWindow(page, 'Financial year to date');
+    await page.waitForTimeout(400);
 
     await expect(page.locator('header p').last()).toContainText(
       'Financial year to date, 1 Apr 2025 to 31 Mar 2026',
@@ -306,8 +362,9 @@ test.describe('Platform Usage', () => {
     // Every assumption with its derivation.
     expect(csv).toContain('Rows checked against a rule by hand per hour');
     expect(csv).toContain('Where the auditor rate comes from');
-    expect(csv).toContain('Glassdoor India, February 2026');
-    expect(csv).toContain('PayScale, 2026');
+    expect(csv).toContain('₹80,000 a month');
+    expect(csv).toContain('an estimate');
+    expect(csv).toContain('which is what we looked at, not what we are claiming');
     expect(csv).toContain('What those hours are worth, four ways');
   });
 
@@ -316,7 +373,7 @@ test.describe('Platform Usage', () => {
   test('AC-12 no control on the page changes a record it reports on', async ({ page }) => {
     await openUsage(page);
 
-    for (const view of ['Value', 'Coverage and findings', 'Activity'] as const) {
+    for (const view of ['Value', 'Coverage and findings'] as const) {
       await chooseView(page, view);
       for (const word of [/^Approve$/, /^Reject$/, /^Resolve$/, /^Save$/, /^Delete$/, /^Assign$/, /^Close$/]) {
         await expect(page.getByRole('button', { name: word })).toHaveCount(0);
@@ -332,7 +389,7 @@ test.describe('Platform Usage', () => {
 
   test('AC-13 no benchmark, target or comparison against another company', async ({ page }) => {
     await openUsage(page);
-    for (const view of ['Value', 'Coverage and findings', 'Activity'] as const) {
+    for (const view of ['Value', 'Coverage and findings'] as const) {
       await chooseView(page, view);
       const body = await page.locator('body').innerText();
       expect(body).not.toMatch(/benchmark/i);
@@ -345,21 +402,18 @@ test.describe('Platform Usage', () => {
 
   /* ── AC-14 · nothing ranks anybody ──────────────────────────────────────── */
 
-  test('AC-14 the per person table is alphabetical and nothing can reorder it', async ({ page }) => {
+  test('AC-14 nothing on the page ranks anybody', async ({ page }) => {
     await openUsage(page);
-    await chooseView(page, 'Activity');
-    await openGroup(page, 'Who is using it');
 
-    const table = page.locator('#people table');
-    await expect(table).toBeVisible();
+    // The per person table was cut with the Activity view, so the strongest
+    // form of this rule now is that there is no per person table at all.
+    await expect(page.locator('#people')).toHaveCount(0);
 
-    const names = await table.locator('tbody tr td:first-child').allInnerTexts();
-    expect(names.length).toBeGreaterThan(1);
-    expect(names).toEqual([...names].sort((a, b) => a.localeCompare(b)));
-
-    // No column head is a control, so there is nothing to sort by.
-    await expect(table.locator('thead button')).toHaveCount(0);
-    await expect(page.locator('#people')).toContainText('nothing on this page can reorder it');
+    // And no table anywhere on the page offers a sort control.
+    for (const view of ['Value', 'Coverage and findings'] as const) {
+      await chooseView(page, view);
+      await expect(page.locator('table thead button')).toHaveCount(0);
+    }
   });
 
   /* ── AC-15 · every chart offers its table ───────────────────────────────── */
@@ -386,7 +440,7 @@ test.describe('Platform Usage', () => {
 
   test('AC-16 nothing on the page asks the customer for a figure it would then treat as a fact', async ({ page }) => {
     await openUsage(page);
-    for (const view of ['Value', 'Coverage and findings', 'Activity'] as const) {
+    for (const view of ['Value', 'Coverage and findings'] as const) {
       await chooseView(page, view);
       // Open everything, so a field cannot hide inside a folded group.
       const folds = page.locator('h2 button[aria-expanded="false"]');
@@ -402,8 +456,7 @@ test.describe('Platform Usage', () => {
 
   test('AC-16 the window is a view control, so its two dates are the only fields in the feature', async ({ page }) => {
     await openUsage(page);
-    await page.getByRole('button', { name: 'Custom', exact: true }).click();
-    await page.waitForTimeout(500);
+    await chooseWindow(page, 'Custom');
 
     const fields = page.locator('main input');
     await expect(fields).toHaveCount(2);
@@ -417,13 +470,12 @@ test.describe('Platform Usage', () => {
     await openUsage(page);
     const worth = page.locator('#worth');
     const quarter = await worth.innerText();
-    expect(quarter).toContain('340 successful runs');
+    expect(quarter).toContain('340 successful');
     expect(quarter).toContain('8.5 hours');
     expect(quarter).toContain('7,131');
-    expect(quarter).toContain('15.4');
+    expect(quarter).toContain('15 auditors');
 
-    await page.getByRole('button', { name: 'Custom', exact: true }).click();
-    await page.waitForTimeout(400);
+    await chooseWindow(page, 'Custom');
     await page.getByLabel('Window starts').fill('2026-02-01');
     await page.waitForTimeout(600);
     await page.getByLabel('Window ends').fill('2026-02-28');
@@ -433,7 +485,7 @@ test.describe('Platform Usage', () => {
 
     const february = await worth.innerText();
     expect(february).not.toBe(quarter);
-    expect(february).not.toContain('340 successful runs');
+    expect(february).not.toContain('340 successful');
     expect(february).not.toContain('8.5 hours');
     expect(february).not.toContain('7,131');
     expect(february).not.toContain('15.4');
@@ -449,7 +501,7 @@ test.describe('Platform Usage', () => {
     expect(february).toContain('1,428,000 rows');
 
     // The whole page moves with the window, not only the block that was open.
-    await chooseView(page, 'Activity');
+    await chooseView(page, 'Coverage and findings');
     await expect(page.locator('header p').last()).toContainText('Custom range, 1 Feb 2026 to 28 Feb 2026');
     expect(await page.locator('#ran').innerText()).not.toContain('354 checks ran');
   });
@@ -458,7 +510,7 @@ test.describe('Platform Usage', () => {
 
   test('AC-17 each view opens with three groups expanded and the rest folded', async ({ page }) => {
     await openUsage(page);
-    for (const view of ['Value', 'Coverage and findings', 'Activity'] as const) {
+    for (const view of ['Value', 'Coverage and findings'] as const) {
       await chooseView(page, view);
       expect(await page.locator('h2 button[aria-expanded="true"]').count()).toBe(3);
       expect(await page.locator('h2 button[aria-expanded="false"]').count()).toBeGreaterThan(0);
@@ -469,7 +521,7 @@ test.describe('Platform Usage', () => {
 
   test('AC-18 no em dash in visible copy outside a table blank', async ({ page }) => {
     await openUsage(page);
-    for (const view of ['Value', 'Coverage and findings', 'Activity'] as const) {
+    for (const view of ['Value', 'Coverage and findings'] as const) {
       await chooseView(page, view);
       const prose = await page.locator('main p, main h1, main h2, main h3, main th').allInnerTexts();
       for (const text of prose) expect(text).not.toContain('—');
@@ -490,13 +542,13 @@ test.describe('Platform Usage', () => {
     await openUsage(page);
     await expect(page.locator('#worth')).toContainText('Failed runs are left out of every saving here and reported on their own');
 
-    await chooseView(page, 'Activity');
+    await openGroup(page, 'What ran, and what is stuck');
     await expect(page.locator('#ran')).toContainText('machine time went on runs that produced nothing');
   });
 
   test('what is stuck carries the words the failure itself used', async ({ page }) => {
     await openUsage(page);
-    await chooseView(page, 'Activity');
+    await openGroup(page, 'What ran, and what is stuck');
     const stuck = page.locator('#ran');
     await expect(stuck).toContainText('Connection to the vendor master reset after 30s');
     await expect(stuck).toContainText('Stuck means it failed and nothing has run successfully since');
@@ -504,7 +556,7 @@ test.describe('Platform Usage', () => {
 
   test('insights are split by kind and never added together', async ({ page }) => {
     await openUsage(page);
-    await chooseView(page, 'Activity');
+    await openGroup(page, 'What ran, and what is stuck');
     const block = page.locator('#ran');
     await expect(block).toContainText('Inside one check');
     await expect(block).toContainText('Across a whole engagement');
@@ -545,8 +597,7 @@ test.describe('Platform Usage', () => {
     const covered = page.locator('#covered');
     const never = await covered.getByText('Never exercised at all').locator('..').locator('..').innerText();
 
-    await page.getByRole('button', { name: 'This month', exact: true }).click();
-    await page.waitForTimeout(700);
+    await chooseWindow(page, 'This month');
     expect(await covered.getByText('Never exercised at all').locator('..').locator('..')
       .innerText()).toBe(never);
   });
@@ -556,7 +607,7 @@ test.describe('Platform Usage', () => {
     await page.getByRole('button', { name: 'Your own work only', exact: true }).click();
     await page.waitForTimeout(800);
 
-    for (const view of ['Value', 'Coverage and findings', 'Activity'] as const) {
+    for (const view of ['Value', 'Coverage and findings'] as const) {
       await chooseView(page, view);
       const folds = page.locator('h2 button[aria-expanded="false"]');
       for (let i = await folds.count(); i > 0; i--) {

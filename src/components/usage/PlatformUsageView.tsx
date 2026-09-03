@@ -10,8 +10,8 @@
  *
  * ## Two controls, and they do different jobs
  *
- * **Viewing as** picks which of the three views leads: value, coverage and
- * findings, or activity. It changes the order of the page and never the layout,
+ * **Viewing as** picks which of the two views leads: value, or coverage and
+ * findings. It changes the order of the page and never the layout,
  * the wording or the names of things, so a reader who changes role never
  * relearns the page.
  *
@@ -39,8 +39,8 @@
  * in the whole feature is the audit event an export emits.
  */
 
-import { useEffect, useMemo, useState } from 'react';
-import { Download, FileText, Lock } from 'lucide-react';
+import { useEffect, useMemo, useRef, useState } from 'react';
+import { Calendar, ChevronDown, Download, FileText, Lock, Users } from 'lucide-react';
 import { useCurrentUser, useCan } from '../../context/CurrentUserContext';
 import { useAdminData } from '../../context/AdminDataContext';
 import { useToast } from '../shared/Toast';
@@ -55,38 +55,47 @@ import {
 import { Group, type GroupSpec } from './usageChrome';
 import { valueGroups } from './UsageValue';
 import { coverageGroups } from './UsageCoverage';
-import { activityGroups } from './UsageActivity';
+import { runsGroups } from './UsageRuns';
 import { downloadUsageCsv } from './usageExport';
 import { downloadUsagePdf } from './usagePdf';
 
-/* ── The three views ─────────────────────────────────────────────────────── */
+/*
+ * Two views, not three.
+ *
+ * An Activity view was built and cut. Two of its three blocks could not name a
+ * decision that turned on them: "who is using it" was per person adoption, which
+ * this product deliberately does not do, and "what got created" was a number
+ * because it was countable. The third, what ran and what is stuck, survives on
+ * the value view, because a stuck check is work that did not happen and the
+ * saving printed above it is understated by exactly that much. It is a caveat
+ * on the money, not a subject beside it.
+ */
 
-type ViewId = 'value' | 'coverage' | 'activity';
+type ViewId = 'value' | 'coverage';
 
 const VIEW_TITLE: Record<ViewId, string> = {
   value: 'Value',
   coverage: 'Coverage and findings',
-  activity: 'Activity',
 };
 
 /** Who each view was built for, said on the switch so nobody has to guess. */
 const VIEW_READER: Record<ViewId, string> = {
   value: 'finance, and our account team before a renewal call',
   coverage: 'the audit lead',
-  activity: 'the workspace admin',
 };
 
 /** The question the view exists to answer, in the reader's own words. */
 const VIEW_QUESTION: Record<ViewId, string> = {
   value: 'Is this paying for itself?',
   coverage: 'Am I ready for the committee, and what is slipping?',
-  activity: 'Is the team actually using what we bought?',
 };
 
-const VIEW_ORDER: Record<ViewId, ViewId[]> = {
-  value: ['value', 'coverage', 'activity'],
-  coverage: ['coverage', 'value', 'activity'],
-  activity: ['activity', 'coverage', 'value'],
+/** The sections the page is built from. A view is an order over these. */
+type SectionId = 'value' | 'runs' | 'coverage';
+
+const VIEW_ORDER: Record<ViewId, SectionId[]> = {
+  value: ['value', 'runs', 'coverage'],
+  coverage: ['coverage', 'value', 'runs'],
 };
 
 /** Each view opens with its own first three groups. The rest fold. */
@@ -172,16 +181,15 @@ export default function PlatformUsageView() {
    */
   const homeView: ViewId = useMemo(() => {
     if (can('ad_usage')) return 'value';
-    if (can('ad_usage_people') && myTeam) return 'coverage';
-    return 'activity';
-  }, [can, myTeam]);
+    return 'coverage';
+  }, [can]);
 
   const rememberKey = `irame:platform-usage:view:${currentUser?.email ?? 'anonymous'}`;
 
   const [view, setView] = useState<ViewId>(() => {
     try {
       const saved = window.localStorage.getItem(rememberKey);
-      if (saved === 'value' || saved === 'coverage' || saved === 'activity') return saved;
+      if (saved === 'value' || saved === 'coverage') return saved;
     } catch {
       // Storage can be off. A reader with no storage lands on their home view,
       // which is the same place they landed the first time anyway.
@@ -230,6 +238,34 @@ export default function PlatformUsageView() {
     setCustomOpen(true);
   };
 
+  /*
+   * The window is one chip rather than six buttons.
+   *
+   * Six windows laid out side by side is six times the chrome of a control
+   * somebody touches once and then reads for ten minutes, and it pushed the
+   * scope control on to a second line where the two read as one undifferentiated
+   * row of pills. Nothing was taken away: every window is still on the list, one
+   * press further in, and it is built from buttons because there is no form on
+   * this page and there must not be one.
+   */
+  const [windowMenu, setWindowMenu] = useState(false);
+  const windowAnchor = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!windowMenu) return;
+    const close = () => setWindowMenu(false);
+    const onAway = (e: MouseEvent) => {
+      if (!windowAnchor.current?.contains(e.target as Node)) close();
+    };
+    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') close(); };
+    window.addEventListener('mousedown', onAway);
+    window.addEventListener('keydown', onKey);
+    return () => {
+      window.removeEventListener('mousedown', onAway);
+      window.removeEventListener('keydown', onKey);
+    };
+  }, [windowMenu]);
+
   /* ── Every figure on the page, assembled once ────────────────────────────── */
 
   const data = useMemo(() => snapshot(scope, period, settings), [scope, period, settings]);
@@ -245,7 +281,7 @@ export default function PlatformUsageView() {
   /* ── The groups, in the order this view needs them ───────────────────────── */
 
   const groups: GroupSpec[] = useMemo(() => {
-    const byView: Record<ViewId, GroupSpec[]> = {
+    const byView: Record<SectionId, GroupSpec[]> = {
       value: valueGroups({
         data, period, settings, showMoney,
         onOpenRate: () => reveal('rate'),
@@ -258,10 +294,9 @@ export default function PlatformUsageView() {
         onOpenControls: () => navigate('governance-controls'),
         onOpenFinding: id => navigate('engagements', id),
       }),
-      activity: activityGroups({
-        data, period, scope, canSeeNames, showMoney,
-        onOpenRuns: id => navigate('workflow-library', id ?? ''),
-        onOpenQueueItem: item => navigate(item.target.view, item.target.id ?? ''),
+      runs: runsGroups({
+        data, period, showMoney,
+        onOpenRuns: (id?: string) => navigate('workflow-library', id ?? ''),
       }),
     };
     return VIEW_ORDER[view].flatMap(id => byView[id]);
@@ -287,6 +322,36 @@ export default function PlatformUsageView() {
     setOpen(prev => (prev.includes(id) ? prev : [...prev, id]));
     window.setTimeout(() => document.getElementById(id)?.scrollIntoView({ behavior: 'smooth', block: 'start' }), 60);
   };
+
+  /*
+   * Which group the reader is standing in, so the contents beside the page can
+   * say so. It is read off the scroll rather than off the last thing clicked,
+   * because a reader who scrolls past four groups has not clicked anything.
+   */
+  const [activeGroup, setActiveGroup] = useState<string | null>(null);
+
+  useEffect(() => {
+    const seen = new Set<string>();
+    const spy = new IntersectionObserver(
+      entries => {
+        for (const entry of entries) {
+          if (entry.isIntersecting) seen.add(entry.target.id);
+          else seen.delete(entry.target.id);
+        }
+        // Nothing in the band happens at the very top of the page, where the
+        // reader is plainly standing in the first group. Marking nothing there
+        // would make the contents look broken on arrival.
+        const first = groups.find(g => seen.has(g.id));
+        setActiveGroup(first ? first.id : groups[0]?.id ?? null);
+      },
+      { rootMargin: '-72px 0px -60% 0px' },
+    );
+    for (const group of groups) {
+      const el = document.getElementById(group.id);
+      if (el) spy.observe(el);
+    }
+    return () => spy.disconnect();
+  }, [groups]);
 
   /* ── Export. The one write in the whole feature ──────────────────────────── */
 
@@ -338,53 +403,80 @@ export default function PlatformUsageView() {
     dataAsOfLabel(),
   ].join(' · ');
 
+  /*
+   * The two narrowing controls sit together, under the view switch and away
+   * from it. Both answer the same shape of question, "whose records and over
+   * what days". The view switch is the only control that changes what the page
+   * is about, so it is the only one that reads as navigation.
+   */
   const pill = (active: boolean) =>
-    `h-8 px-3 rounded-md text-[0.75rem] font-medium transition-colors ${
+    `h-7 px-2.5 rounded-md text-[0.75rem] font-medium transition-colors ${
       active ? 'bg-brand-50 text-brand-700' : 'text-ink-600 hover:text-brand-700'
     }`;
 
   return (
     <div className="h-full overflow-y-auto bg-canvas">
       <div className="px-6 lg:px-12 xl:px-[124px] pt-8 pb-16 max-w-[1180px]">
-        <header className="border-b border-canvas-border pb-5">
+        <header className="border-b border-canvas-border pb-4">
           <h1 className="text-[1.75rem] font-semibold tracking-tight text-ink-900 leading-tight">Platform Usage</h1>
-          <p className="mt-1 text-[1rem] text-ink-500">
+          <p className="mt-1.5 text-[1rem] leading-relaxed text-ink-600 max-w-[70ch]">
             What this quarter's audit work would have cost in human time, and what it cost with us.
           </p>
 
-          <div className="mt-5 flex flex-wrap items-start gap-x-6 gap-y-3">
-            <div>
-              <div className="flex items-center gap-2">
-                <span className="text-[0.75rem] text-ink-400">Viewing as</span>
-                <div className="inline-flex rounded-lg border border-canvas-border bg-canvas-elevated p-0.5">
-                {(['value', 'coverage', 'activity'] as ViewId[]).map(id => (
-                  <button
-                    key={id}
-                    type="button"
-                    onClick={() => chooseView(id)}
-                    aria-pressed={view === id}
-                    title={VIEW_QUESTION[id]}
-                    className={pill(view === id)}
-                  >
-                    {VIEW_TITLE[id]}
-                  </button>
-                ))}
-                </div>
-              </div>
-              {/* The question the chosen view answers, said in words, so a reader
-                  picking for themselves never needs us to have guessed right. */}
-              <p className="mt-1.5 text-[0.75rem] text-ink-500">{VIEW_QUESTION[view]}</p>
+          {/*
+            * The view switch. It changes which of the two questions the page
+            * leads with, which is the one thing here that behaves like moving
+            * between places, so it is the one thing built like it.
+            */}
+          <div className="mt-6 flex flex-wrap items-end justify-between gap-x-6 gap-y-3 border-b border-canvas-border">
+            <div role="group" aria-label="Viewing as" className="flex gap-7">
+              {(['value', 'coverage'] as ViewId[]).map(id => (
+                <button
+                  key={id}
+                  type="button"
+                  aria-pressed={view === id}
+                  onClick={() => chooseView(id)}
+                  title={VIEW_QUESTION[id]}
+                  className={`relative -mb-px pb-3 text-[0.875rem] font-medium transition-colors ${
+                    view === id ? 'text-brand-700' : 'text-ink-500 hover:text-ink-800'
+                  }`}
+                >
+                  {VIEW_TITLE[id]}
+                  {view === id ? (
+                    <span aria-hidden className="absolute inset-x-0 -bottom-px h-[2px] rounded-full bg-brand-600" />
+                  ) : null}
+                </button>
+              ))}
             </div>
 
-            {/*
-              * The scope control, offering only what this reader is entitled to.
-              * One entitled scope is not a choice, so it renders as furniture
-              * rather than as a control nobody can use.
-              */}
-            {scopes.length > 1 ? (
-              <div className="flex items-center gap-2">
-                <span className="text-[0.75rem] text-ink-400">Counting</span>
-                <div className="inline-flex rounded-lg border border-canvas-border bg-canvas-elevated p-0.5">
+            {canExport ? (
+              <div className="flex items-center gap-2 pb-2">
+                <Button variant="outline" size="sm" leftIcon={<Download size={14} />} onClick={onExportCsv}>
+                  CSV
+                </Button>
+                <Button variant="outline" size="sm" leftIcon={<FileText size={14} />} onClick={onExportPdf}>
+                  PDF
+                </Button>
+              </div>
+            ) : null}
+          </div>
+
+          <div className="mt-4 flex flex-wrap items-center gap-x-4 gap-y-3">
+            {/* The question the chosen view answers, said in words, so a reader
+                picking for themselves never needs us to have guessed right. */}
+            <p className="text-[1rem] text-ink-700">{VIEW_QUESTION[view]}</p>
+
+            <div className="ml-auto flex flex-wrap items-center gap-2">
+              {/*
+                * The scope control, offering only what this reader is entitled
+                * to. One entitled scope is not a choice, so it renders as
+                * furniture rather than as a control nobody can use. It stays
+                * open on the page because it is short and because a reader has
+                * to be able to see, without pressing anything, how far up they
+                * are allowed to look.
+                */}
+              {scopes.length > 1 ? (
+                <div role="group" aria-label="Counting" className="inline-flex rounded-lg border border-canvas-border bg-canvas-elevated p-0.5">
                   {scopes.map(id => (
                     <button
                       key={id}
@@ -398,36 +490,47 @@ export default function PlatformUsageView() {
                     </button>
                   ))}
                 </div>
-              </div>
-            ) : null}
+              ) : null}
 
-            <div className="flex items-center gap-2">
-              <span className="text-[0.75rem] text-ink-400">Window</span>
-              <div className="inline-flex flex-wrap rounded-lg border border-canvas-border bg-canvas-elevated p-0.5">
-                {periodOptions.map(option => (
-                  <button
-                    key={option.id}
-                    type="button"
-                    onClick={() => chooseWindow(option.id)}
-                    aria-pressed={periodId === option.id}
-                    className={pill(periodId === option.id)}
+              <div ref={windowAnchor} className="relative">
+                <button
+                  type="button"
+                  aria-haspopup="true"
+                  aria-expanded={windowMenu}
+                  aria-label={`Window, ${period.label}`}
+                  onClick={() => setWindowMenu(v => !v)}
+                  className="h-8 inline-flex items-center gap-2 rounded-lg border border-canvas-border bg-canvas-elevated pl-2.5 pr-2 text-[0.875rem] font-medium text-ink-700 transition-colors hover:border-brand-200 hover:text-brand-700"
+                >
+                  <Calendar size={14} className="text-ink-400" aria-hidden />
+                  {period.label}
+                  <ChevronDown
+                    size={14}
+                    className={`text-ink-400 transition-transform duration-200 ease-out ${windowMenu ? 'rotate-180' : ''}`}
+                    aria-hidden
+                  />
+                </button>
+                {windowMenu ? (
+                  <div
+                    className="absolute right-0 z-30 mt-1 w-52 rounded-lg border border-canvas-border bg-canvas-elevated py-1 shadow-lg"
                   >
-                    {option.label}
-                  </button>
-                ))}
+                    {periodOptions.map(option => (
+                      <button
+                        key={option.id}
+                        type="button"
+                        onClick={() => { chooseWindow(option.id); setWindowMenu(false); }}
+                        className={`block w-full px-3 py-1.5 text-left text-[0.875rem] transition-colors ${
+                          periodId === option.id
+                            ? 'font-medium text-brand-700'
+                            : 'text-ink-700 hover:bg-brand-50 hover:text-brand-700'
+                        }`}
+                      >
+                        {option.label}
+                      </button>
+                    ))}
+                  </div>
+                ) : null}
               </div>
             </div>
-
-            {canExport ? (
-              <div className="flex items-center gap-2 ml-auto">
-                <Button variant="outline" size="sm" leftIcon={<Download size={14} />} onClick={onExportCsv}>
-                  CSV
-                </Button>
-                <Button variant="outline" size="sm" leftIcon={<FileText size={14} />} onClick={onExportPdf}>
-                  PDF
-                </Button>
-              </div>
-            ) : null}
           </div>
 
           {customOpen ? (
@@ -474,35 +577,71 @@ export default function PlatformUsageView() {
         </header>
 
         {/*
-          * The contents. Twenty five blocks is more than anybody reads, so the
-          * page says what it holds and lets a reader open the one they came for.
+          * The contents, and the page beside them.
+          *
+          * Twenty five blocks is more than anybody reads, so the page says what
+          * it holds and lets a reader open the one they came for. On a wide
+          * screen that list stands still in the margin the reading column was
+          * never using, and marks where the reader is. On a narrow one it goes
+          * back above the page, because a margin that thin is not a margin.
           */}
-        <nav aria-label="What is on this page" className="mt-5 flex flex-wrap gap-x-5 gap-y-2">
-          {groups.map(group => (
-            <button
-              key={group.id}
-              type="button"
-              onClick={() => reveal(group.id)}
-              className="text-[0.75rem] text-ink-500 underline decoration-canvas-border underline-offset-[3px] hover:text-brand-700 hover:decoration-brand-300"
-            >
-              {group.title}
-            </button>
-          ))}
-        </nav>
+        <div className="mt-6 flex items-start gap-10">
+          <div className="min-w-0 flex-1">
+            <nav aria-label="What is on this page" className="lg:hidden mb-2 flex flex-wrap gap-x-5 gap-y-2">
+              {groups.map(group => (
+                <button
+                  key={group.id}
+                  type="button"
+                  onClick={() => reveal(group.id)}
+                  className="text-[0.75rem] text-ink-500 underline decoration-canvas-border underline-offset-[3px] hover:text-brand-700 hover:decoration-brand-300"
+                >
+                  {group.title}
+                </button>
+              ))}
+            </nav>
 
-        <div className="mt-4">
-          {groups.map(group => (
-            <Group
-              key={group.id}
-              id={group.id}
-              title={group.title}
-              answer={group.answer}
-              open={open.includes(group.id)}
-              onToggle={() => toggle(group.id)}
-            >
-              {group.node}
-            </Group>
-          ))}
+            {/* Their own wrapper, so the first group is the first child and
+                keeps its rule off. The contents above it is a sibling that
+                disappears at this width, not a group. */}
+            <div>
+              {groups.map(group => (
+                <Group
+                  key={group.id}
+                  id={group.id}
+                  title={group.title}
+                  answer={group.answer}
+                  open={open.includes(group.id)}
+                  onToggle={() => toggle(group.id)}
+                >
+                  {group.node}
+                </Group>
+              ))}
+            </div>
+          </div>
+
+          <nav aria-label="What is on this page" className="hidden lg:block w-[184px] shrink-0">
+            <div className="sticky top-8">
+              <p className="text-[0.75rem] font-medium text-ink-400">What is on this page</p>
+              <ul className="mt-3 border-l border-canvas-border">
+                {groups.map(group => (
+                  <li key={group.id}>
+                    <button
+                      type="button"
+                      onClick={() => reveal(group.id)}
+                      aria-current={activeGroup === group.id ? 'true' : undefined}
+                      className={`-ml-px block w-full border-l py-1.5 pl-3 text-left text-[0.75rem] leading-[1.5] transition-colors ${
+                        activeGroup === group.id
+                          ? 'border-brand-600 font-medium text-brand-700'
+                          : 'border-transparent text-ink-500 hover:border-ink-300 hover:text-ink-800'
+                      }`}
+                    >
+                      {group.title}
+                    </button>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          </nav>
         </div>
       </div>
     </div>
