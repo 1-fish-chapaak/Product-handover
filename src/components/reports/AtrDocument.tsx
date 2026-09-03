@@ -2,12 +2,12 @@ import { useRef, useState } from 'react';
 import { motion } from 'motion/react';
 import ConfirmationModal from '../shared/ConfirmationModal';
 import {
-  Calendar, Lightbulb, Trash2,
-  ClipboardList, AlertTriangle, ListChecks, CircleDot, CheckCircle2, Clock,
+  Calendar, Trash2,
+  ClipboardList, ListChecks, CircleDot, CheckCircle2, Clock,
 } from 'lucide-react';
 import type {
   AtrMeta, AtrObservation, AtrActionPlan, AtrInsight,
-  AtrClassification, AtrObservationStatus, AtrActionStatus,
+  AtrClassification, AtrObservationStatus, AtrActionStatus, AtrRisk,
 } from './atrTypes';
 import { computeExecSummary } from './atrTemplate';
 import { ReportNumberedHeading, ReportBrandBanner, ReportKpiTiles } from './ReportDocumentChrome';
@@ -32,6 +32,13 @@ const CLASSIFICATION_PILL: Record<AtrClassification, string> = {
   'System Deficiency': 'bg-risk-50 text-risk-700',
   'Procedural Non-Compliance': 'bg-brand-50 text-brand-700',
 };
+// Observation severity (risk significance) pill.
+const SEVERITY_PILL: Record<AtrRisk, string> = {
+  Critical: 'bg-risk-50 text-risk-700',
+  High:     'bg-high-50 text-high-700',
+  Medium:   'bg-mitigated-50 text-mitigated-700',
+  Low:      'bg-compliant-50 text-compliant-700',
+};
 
 type Tone = 'brand' | 'risk' | 'mitigated' | 'compliant' | 'high' | 'ink';
 
@@ -40,7 +47,6 @@ const SECTION_ID: Record<AtrSectionKey, string> = {
   summary: 'section-atr-exec',
   process: 'section-atr-obs-summary',
   details: 'section-atr-obs-details',
-  insights: 'section-atr-insights',
 };
 
 function fmt(iso?: string): string {
@@ -76,17 +82,14 @@ function EditableText({ value, onCommit, editable, className = '', placeholder, 
   );
 }
 
-/** Editable metadata cell (edit mode only) — mirrors ReportMetaPanel's read-only look. */
-/** Read-only key-fact: uppercase label + value with a brand accent bar (matches
- *  the shared ReportMetaCell, but wraps long values instead of truncating). */
+/** Read-only key-fact: uppercase label over a bold value, left-aligned (no accent
+ *  bar), wrapping long values instead of truncating. */
 function MetaFact({ label, value }: { label: string; value?: string }) {
   if (!value) return null;
   return (
     <div className="min-w-0">
       <div className="text-[0.6875rem] font-semibold uppercase tracking-[0.12em] text-ink-500 mb-1.5">{label}</div>
-      <div className="border-l-[3px] border-brand-500 pl-3">
-        <div className="text-[0.8125rem] font-bold text-ink-900 break-words">{value}</div>
-      </div>
+      <div className="text-[0.8125rem] font-bold text-ink-900 break-words">{value}</div>
     </div>
   );
 }
@@ -118,8 +121,8 @@ function FieldRow({ label, value, editable, onCommit, italic, multiline = true }
 }
 
 export default function AtrDocument({
-  meta, observations, insights = [], headerActions, maxWidthClass = 'max-w-[840px]',
-  editable, onMetaChange, onObservationsChange, onInsightsChange,
+  meta, observations, headerActions, maxWidthClass = 'max-w-[840px]',
+  editable, onMetaChange, onObservationsChange,
   sectionOrder = ATR_SECTION_ORDER, hiddenSections = [],
   renderObservationActions, onDeleteSection,
 }: {
@@ -151,32 +154,25 @@ export default function AtrDocument({
 
   const setMeta = (key: keyof AtrMeta, v: string) => onMetaChange?.({ ...meta, [key]: v || undefined });
   const setObs = (i: number, next: AtrObservation) => onObservationsChange?.(observations.map((o, idx) => (idx === i ? next : o)));
-  const setInsight = (i: number, next: AtrInsight) => onInsightsChange?.(insights.map((ins, idx) => (idx === i ? next : ins)));
-  const removeInsight = (i: number) => onInsightsChange?.(insights.filter((_, idx) => idx !== i));
   const removeObs = (i: number) => onObservationsChange?.(observations.filter((_, idx) => idx !== i));
 
   // Every delete goes through a confirm dialog. `pendingDelete.run` fires on confirm.
   const [pendingDelete, setPendingDelete] = useState<{ title: string; description: string; run: () => void } | null>(null);
   const confirmDelete = (title: string, description: string, run: () => void) => setPendingDelete({ title, description, run });
 
-  // Executive Summary — exactly six KPIs. Overdue observations fold into Open.
-  const totalExceptions = meta.totalExceptions ?? ex.totalExceptions;
+  // Executive Summary — five KPIs (observation breakdown + action plans).
+  // Overdue observations fold into Open; "Partially Closed" = In Progress.
   const openCount = ex.obsStatus.Open + ex.obsStatus.Overdue;
-  // Three of these six count observations and two count something else, so each
-  // status tile names its unit and sits next to the total it breaks down.
-  // Unlabelled "Open / Closed / In Progress" beside "Action Plans" read as a
-  // breakdown of the action plans, which they are not.
   const kpis: { label: string; value: number; tone: Tone; icon: React.ElementType }[] = [
     { label: 'Observations', value: ex.totalObservations, tone: 'brand', icon: ClipboardList },
     { label: 'Observations Open', value: openCount, tone: 'high', icon: CircleDot },
-    { label: 'Observations In Progress', value: ex.obsStatus['In Progress'], tone: 'mitigated', icon: Clock },
+    { label: 'Observations Partially Closed', value: ex.obsStatus['In Progress'], tone: 'mitigated', icon: Clock },
     { label: 'Observations Closed', value: ex.obsStatus.Closed, tone: 'compliant', icon: CheckCircle2 },
-    { label: 'Exceptions', value: totalExceptions, tone: 'ink', icon: AlertTriangle },
     { label: 'Action Plans', value: ex.totalActionPlans, tone: 'brand', icon: ListChecks },
   ];
 
-  const displayStatus = (s?: AtrObservationStatus): 'Open' | 'In Progress' | 'Closed' =>
-    s === 'Closed' ? 'Closed' : s === 'In Progress' ? 'In Progress' : 'Open';
+  const displayStatus = (s?: AtrObservationStatus): 'Open' | 'Partially Closed' | 'Closed' =>
+    s === 'Closed' ? 'Closed' : s === 'In Progress' ? 'Partially Closed' : 'Open';
 
   // ── Section bodies (keyed so order/visibility props drive them) ──
   const bodies: Record<AtrSectionKey, (n: number) => React.ReactNode> = {
@@ -186,41 +182,56 @@ export default function AtrDocument({
         {/* KPI tiles — the single shared ReportKpiTiles, so the ATR exec summary
             stays identical to every other report type by construction. */}
         <ReportKpiTiles
+          showTick={false}
           stats={kpis.map(k => ({ label: k.label, value: String(k.value), icon: k.icon, color: `text-${k.tone}-700` }))}
         />
       </>
     ),
     process: n => (
       <>
-        <ReportNumberedHeading n={n} title="Observation Wise Summary" subtitle="Exceptions, action plans and status — per observation" />
+        <ReportNumberedHeading n={n} title="Observation Wise Summary" subtitle="Severity, action plans and status — per observation" />
         <div className="overflow-hidden rounded-lg border border-canvas-border">
           <table className="w-full text-[0.75rem]">
             <thead>
               <tr className="bg-brand-50/60 text-ink-700 text-left">
-                <th className="px-4 py-2.5 font-semibold">Observation</th>
-                <th className="px-3 py-2.5 font-semibold text-center">Exceptions</th>
-                <th className="px-3 py-2.5 font-semibold text-center">Action Plans</th>
-                <th className="px-3 py-2.5 font-semibold text-center">Status</th>
+                <th className="px-4 py-2.5 font-semibold">Observation &amp; Action Plans</th>
+                <th className="px-3 py-2.5 font-semibold text-center w-[110px]">Severity</th>
+                <th className="px-3 py-2.5 font-semibold text-center w-[120px]">Status</th>
               </tr>
             </thead>
             <tbody>
               {observations.map((o, i) => {
                 const st = displayStatus(o.status);
-                const stCls = st === 'Closed' ? 'bg-compliant-50 text-compliant-700' : st === 'In Progress' ? 'bg-mitigated-50 text-mitigated-700' : 'bg-high-50 text-high-700';
+                const stCls = st === 'Closed' ? 'bg-compliant-50 text-compliant-700' : st === 'Partially Closed' ? 'bg-mitigated-50 text-mitigated-700' : 'bg-high-50 text-high-700';
                 return (
                   <motion.tr
                     key={i}
                     initial={{ opacity: 0, y: 4 }}
                     animate={{ opacity: 1, y: 0 }}
                     transition={{ duration: 0.28, delay: Math.min(i, 12) * 0.03, ease: [0.22, 1, 0.36, 1] }}
-                    className="border-t border-canvas-border"
+                    className="border-t border-canvas-border align-top"
                   >
                     <td className="px-4 py-3">
                       <div className="font-semibold text-ink-900 leading-snug">{o.title}</div>
                       {o.process && <div className="text-[0.6875rem] text-ink-500">{o.process}</div>}
+                      {o.actionPlans.length > 0 && (
+                        <ul className="mt-2 space-y-1.5">
+                          {o.actionPlans.map((p, j) => {
+                            const ap = p.status ? ACTION_STATUS[p.status] : null;
+                            return (
+                              <li key={j} className="flex items-center gap-2 flex-wrap">
+                                <span className={`w-1.5 h-1.5 rounded-full shrink-0 ${ap?.dot ?? 'bg-ink-300'}`} aria-hidden="true" />
+                                <span className="text-[0.6875rem] text-ink-700">{p.title || p.text || `Action plan ${j + 1}`}</span>
+                                {p.status && <span className={`inline-flex items-center h-5 px-2 rounded-full text-[0.625rem] font-semibold ${ap?.pill ?? ''}`}>{p.status}</span>}
+                              </li>
+                            );
+                          })}
+                        </ul>
+                      )}
                     </td>
-                    <td className="px-3 py-3 text-center tabular-nums font-semibold text-ink-800">{o.exceptions ?? 1}</td>
-                    <td className="px-3 py-3 text-center tabular-nums text-ink-800">{o.actionPlans.length}</td>
+                    <td className="px-3 py-3 text-center">
+                      {o.risk && <span className={`inline-flex items-center h-6 px-2.5 rounded-full text-[0.6875rem] font-semibold ${SEVERITY_PILL[o.risk]}`}>{o.risk}</span>}
+                    </td>
                     <td className="px-3 py-3 text-center">
                       <span className={`inline-flex items-center h-6 px-2.5 rounded-full text-[0.6875rem] font-semibold ${stCls}`}>{st}</span>
                     </td>
@@ -242,37 +253,9 @@ export default function AtrDocument({
         </div>
       </>
     ),
-    insights: n => (
-      <>
-        <ReportNumberedHeading n={n} title="Key Insights & Recommendations" subtitle="Auditor observations and forward-looking guidance" />
-        <div className="space-y-3">
-          {insights.map((ins, i) => (
-            <div key={i} className="flex gap-3.5 bg-canvas-elevated border border-canvas-border rounded-lg p-4 hover:border-brand-200 transition-colors">
-              <span className="shrink-0 mt-0.5 w-6 h-6 rounded-full bg-brand-50 text-brand-600 flex items-center justify-center"><Lightbulb size={13} /></span>
-              <div className="min-w-0 flex-1">
-                <div className="text-[0.9375rem] font-semibold text-ink-900 mb-1 leading-snug"><EditableText value={ins.title} editable={editable} onCommit={v => setInsight(i, { ...ins, title: v })} /></div>
-                <p className="text-[1rem] text-ink-700 leading-relaxed"><EditableText value={ins.body} editable={editable} multiline onCommit={v => setInsight(i, { ...ins, body: v })} /></p>
-              </div>
-              {editable && (
-                <button
-                  type="button"
-                  onClick={() => confirmDelete('Delete insight?', `This removes “${ins.title || 'this insight'}” from Key Insights & Recommendations. You can undo by cancelling before you save.`, () => removeInsight(i))}
-                  title="Delete insight"
-                  aria-label="Delete insight"
-                  className="shrink-0 self-start w-7 h-7 rounded-[7px] inline-flex items-center justify-center text-ink-400 hover:text-risk-700 hover:bg-risk-50 transition-colors cursor-pointer print:hidden"
-                >
-                  <Trash2 size={14} />
-                </button>
-              )}
-            </div>
-          ))}
-        </div>
-      </>
-    ),
   };
 
-  // Insights auto-skip when empty (preserves the original conditional behaviour).
-  const visible = sectionOrder.filter(k => !hiddenSections.includes(k) && !(k === 'insights' && insights.length === 0));
+  const visible = sectionOrder.filter(k => !hiddenSections.includes(k));
 
   return (
     <>
@@ -295,23 +278,23 @@ export default function AtrDocument({
       {editable ? (
         <div className="px-9 py-6 border-b border-canvas-border">
           <div className="grid grid-cols-2 md:grid-cols-3 gap-x-8 gap-y-5">
-            <MetaCell label="Report ID" value={meta.reportId} onCommit={v => setMeta('reportId', v)} />
+            <MetaCell label="Report Name" value={meta.reportName} onCommit={v => setMeta('reportName', v)} />
+            <MetaCell label="Audit Entity" value={meta.auditEntity} onCommit={v => setMeta('auditEntity', v)} />
             <MetaCell label="Audit Title" value={meta.auditTitle} onCommit={v => setMeta('auditTitle', v)} />
             <MetaCell label="Audit Period" value={meta.auditPeriod} onCommit={v => setMeta('auditPeriod', v)} />
+            <MetaCell label="Financial Year" value={meta.financialYear} onCommit={v => setMeta('financialYear', v)} />
             <MetaCell label="Prepared By" value={meta.preparedBy} onCommit={v => setMeta('preparedBy', v)} />
-            <MetaCell label="Generated On" value={meta.generatedOn} onCommit={v => setMeta('generatedOn', v)} />
-            <MetaCell label="Audit Entity" value={meta.auditEntity} onCommit={v => setMeta('auditEntity', v)} />
           </div>
         </div>
-      ) : (meta.reportId || meta.auditTitle || meta.auditPeriod || meta.preparedBy || meta.generatedOn || meta.auditEntity) && (
+      ) : (meta.reportName || meta.reportId || meta.auditTitle || meta.auditPeriod || meta.preparedBy || meta.generatedOn || meta.auditEntity) && (
         <div className="px-9 py-6 border-b border-canvas-border">
           <div className="grid grid-cols-2 md:grid-cols-3 gap-x-8 gap-y-5">
-            <MetaFact label="Report ID" value={meta.reportId} />
+            <MetaFact label="Report Name" value={meta.reportName ?? meta.reportId} />
+            <MetaFact label="Audit Entity" value={meta.auditEntity} />
             <MetaFact label="Audit Title" value={meta.auditTitle} />
             <MetaFact label="Audit Period" value={meta.auditPeriod} />
+            <MetaFact label="Financial Year" value={meta.financialYear} />
             <MetaFact label="Prepared By" value={meta.preparedBy} />
-            <MetaFact label="Generated On" value={meta.generatedOn} />
-            <MetaFact label="Audit Entity" value={meta.auditEntity} />
           </div>
         </div>
       )}
@@ -369,9 +352,10 @@ function ObservationCard({ index, obs, editable, onChange, onDelete, actions }: 
         <div className="flex items-center gap-2 flex-wrap">
           {obs.status && (() => {
             const s: AtrObservationStatus = obs.status === 'Overdue' ? 'Open' : obs.status;
+            const label = s === 'In Progress' ? 'Partially Closed' : s;
             return (
               <span className={`inline-flex items-center gap-1.5 h-6 px-2.5 text-[0.625rem] font-bold uppercase tracking-wider rounded-full ${OBS_STATUS_PILL[s].cls}`}>
-                <span className={`w-1.5 h-1.5 rounded-full ${OBS_STATUS_PILL[s].dot}`} />{s}
+                <span className={`w-1.5 h-1.5 rounded-full ${OBS_STATUS_PILL[s].dot}`} />{label}
               </span>
             );
           })()}

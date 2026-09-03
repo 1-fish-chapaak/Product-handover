@@ -113,7 +113,7 @@ export interface AtrExecSummary {
 
 export function computeExecSummary(observations: AtrObservation[]): AtrExecSummary {
   const classification: Record<AtrClassification, number> = { 'Design Deficiency': 0, 'System Deficiency': 0, 'Procedural Non-Compliance': 0 };
-  const risk: Record<AtrRisk, number> = { High: 0, Medium: 0, Low: 0 };
+  const risk: Record<AtrRisk, number> = { Critical: 0, High: 0, Medium: 0, Low: 0 };
   const obsStatus: Record<AtrObservationStatus, number> = { Closed: 0, 'In Progress': 0, Open: 0, Overdue: 0 };
   const actionStatus: Record<AtrActionStatus, number> = { Implemented: 0, 'Partially Implemented': 0, Pending: 0, Overdue: 0, 'Not Due': 0 };
   let totalActionPlans = 0;
@@ -390,7 +390,7 @@ export const SAMPLE_OBSERVATIONS: AtrObservation[] = [
     title: 'Freight Rate Approval Gap',
     exceptions: 2,
     process: 'Dispatch & Logistics',
-    risk: 'High',
+    risk: 'Critical',
     status: 'Overdue',
     classification: 'Design Deficiency',
     description: 'In September 2024, 2 dispatch lots (DL-0917 and DL-0928) were released to transporters without prior freight rate approval in SAP. Rates were back-dated and approved post-dispatch, creating a control gap of ₹4.7 lakh.',

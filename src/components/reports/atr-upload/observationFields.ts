@@ -30,7 +30,7 @@ export const OBSERVATION_FIELDS: FieldDef[] = [
 ];
 
 export const CLASSIFICATION_OPTIONS: AtrClassification[] = ['Design Deficiency', 'System Deficiency', 'Procedural Non-Compliance'];
-export const RISK_OPTIONS: AtrRisk[] = ['High', 'Medium', 'Low'];
+export const RISK_OPTIONS: AtrRisk[] = ['Critical', 'High', 'Medium', 'Low'];
 
 const PLAN_PROP: Partial<Record<ExtractedFieldKey, keyof AtrActionPlan>> = {
   recommendation: 'text',

@@ -83,6 +83,8 @@ export interface ExtractedObservation extends AtrObservation {
 
 export interface ReportMeta {
   reportId: string;
+  reportName?: string;
+  financialYear?: string;
   auditTitle: string;
   auditPeriod: string;
   preparedBy: string;
