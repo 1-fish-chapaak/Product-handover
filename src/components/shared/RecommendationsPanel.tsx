@@ -20,7 +20,7 @@ import {
   REC_CATEGORY_META, REC_PRIORITY_META,
   type AuditRecommendation, type RecCategory, type VerdictTone,
 } from '../../data/layeredInsights';
-import { openInChat } from './insightChat';
+import { runActionInChat } from './insightChat';
 
 const REC_ICON: Record<RecCategory, LucideIcon> = {
   coverage: ShieldAlert, sampling: SlidersHorizontal, evidence: FileCheck2,
@@ -107,7 +107,7 @@ export default function RecommendationsPanel({
             {counts['do-now'] > 0 && <span className={`inline-flex items-center gap-1 rounded-full border px-1.5 py-0.5 text-[9px] font-bold ${TONE_PILL.negative}`}><span className={`size-1 rounded-full ${TONE_DOT.negative}`} /> {counts['do-now']} do now</span>}
             {counts['this-period'] > 0 && <span className={`inline-flex items-center gap-1 rounded-full border px-1.5 py-0.5 text-[9px] font-bold ${TONE_PILL.caution}`}><span className={`size-1 rounded-full ${TONE_DOT.caution}`} /> {counts['this-period']} this period</span>}
             {counts.advisory > 0 && <span className={`inline-flex items-center gap-1 rounded-full border px-1.5 py-0.5 text-[9px] font-bold ${TONE_PILL.positive}`}><span className={`size-1 rounded-full ${TONE_DOT.positive}`} /> {counts.advisory} advisory</span>}
-            <span className="text-[10px] text-ink-400 inline-flex items-center gap-1"><MessageSquare size={10} /> click any to work it in chat · no generation</span>
+            <span className="text-[10px] text-ink-400 inline-flex items-center gap-1"><MessageSquare size={10} /> click any to run it in chat · no generation</span>
           </div>
         </div>
         <button type="button" onClick={() => setOpen(o => !o)} aria-expanded={open} aria-label={open ? 'Collapse' : 'Expand'}
@@ -132,8 +132,8 @@ export default function RecommendationsPanel({
                 return (
                   <li key={`${r.priority}-${r.category}-${gi}`}>
                     <button
-                      type="button" onClick={() => openInChat(r.title, chatSubject)}
-                      title="Open this recommendation in Ask IRA (new tab)"
+                      type="button" onClick={() => runActionInChat({ rec: r, subjectLabel: chatSubject, subjectSub: many ? undefined : r.subjectSub })}
+                      title="Runs this recommendation in Ask IRA (new tab)"
                       className="group w-full text-left px-2.5 py-2.5 rounded-lg hover:bg-brand-50/60 transition-colors cursor-pointer"
                     >
                       <div className="flex items-center gap-1.5 flex-wrap mb-1">
@@ -147,7 +147,7 @@ export default function RecommendationsPanel({
                           ? <span className="text-[10px] font-semibold text-brand-700 tabular-nums">{g.subjects.length} items</span>
                           : (<><span className="font-mono text-[10px] text-brand-700 font-semibold">{g.subjects[0].label}</span>{g.subjects[0].sub && <span className="text-[10px] text-ink-400 truncate max-w-[280px] hidden md:inline">{g.subjects[0].sub}</span>}</>)}
                         <span className="ml-auto shrink-0 inline-flex items-center gap-1 text-[10px] font-semibold text-brand-600/70 group-hover:text-brand-700 transition-colors">
-                          <MessageSquare size={11} aria-hidden="true" /><span className="hidden sm:inline">Open in chat</span><ArrowUpRight size={10} aria-hidden="true" />
+                          <MessageSquare size={11} aria-hidden="true" /><span className="hidden sm:inline">Run in chat</span><ArrowUpRight size={10} aria-hidden="true" />
                         </span>
                       </div>
                       <p className="text-[12px] font-semibold text-ink-900 leading-snug">{r.title}</p>

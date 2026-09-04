@@ -105,6 +105,8 @@ function Inner({ onBack, backLabel = 'Back to Engagements' }: { onBack?: () => v
   // the breadcrumb names where ← actually lands — "Engagements" or "SOX Testing"
   const backCrumb = backLabel.replace(/^Back to /, '');
   const { eng, role, tab, view, racmEditor, racmProcess, meOwner, selectedControlId, returnView, openAuditId, closeAudit, setMeOwner, setRole, setTab, setView, back } = useIcfr();
+  // Engagement-level signoff is never written — cycles conclude on each audit's
+  // own record, and the engagement outlives them, so the header pill stays Active.
   const concluded = !!(eng.signoff.preparer && eng.signoff.reviewer);
   const W = defWord(eng.id);
   const audit = eng.audits.find(a => a.id === openAuditId);
@@ -367,7 +369,7 @@ export default function SoxIcfrApp({ engagementId, onBack, backLabel }: { engage
   const { currentUser } = useCurrentUser();
   const initialRole = currentUser?.roleId === 'role-risk' ? 'risk-owner' : currentUser?.roleId === 'role-reviewer' ? 'reviewer' : 'auditor';
   const eng = engagementId ? findEngagement(engagementId) : undefined;
-  const seedMeta = eng ? { id: eng.id, code: eng.code, name: eng.name, process: eng.process, processes: eng.soxProcesses, seedMode: eng.soxSeedMode, periodStart: eng.periodStart, periodEnd: eng.periodEnd, owner: eng.owner, materiality: eng.soxConfig?.overallMateriality, performanceMateriality: eng.soxConfig?.performanceMateriality, clearlyTrivial: eng.soxConfig?.clearlyTrivial, sdBandPct: eng.soxConfig?.sdBandPct } : undefined;
+  const seedMeta = eng ? { id: eng.id, code: eng.code, name: eng.name, entity: eng.entity, process: eng.process, processes: eng.soxProcesses, seedMode: eng.soxSeedMode, periodStart: eng.periodStart, periodEnd: eng.periodEnd, owner: eng.owner, materiality: eng.soxConfig?.overallMateriality, performanceMateriality: eng.soxConfig?.performanceMateriality, clearlyTrivial: eng.soxConfig?.clearlyTrivial, sdBandPct: eng.soxConfig?.sdBandPct } : undefined;
   return (
     <IcfrProvider key={currentUser?.id ?? 'signed-out'} initialRole={initialRole} seedMeta={seedMeta}>
       <Flow onBack={onBack} backLabel={backLabel} />

@@ -294,6 +294,11 @@ export function buildChatOutputInsight(threshold: number): LayeredInsight {
       `${inrFull(bankChange?.amount ?? 0)} went to a bank account changed days earlier — if that change wasn’t genuine, the money comes back by dispute, not by credit note.`,
       `The approval limit was cleared two different ways — self-approval and splitting — so the next bypass won’t look like either of these.`,
     ],
+    kpis: [
+      { value: `${pathPct}%`, label: 'On the payment path', sub: `${inrFull(pathTotal)} across ${pathRows.length} of ${RISK_FACTS.length} findings — approver or payee, not the invoice`, tone: 'bad' },
+      { value: String(openRows.length), unit: `/ ${RISK_FACTS.length}`, label: 'Still open', sub: `${inrFull(openTotal)} unactioned — a hold now is reversible, a release is not`, tone: 'bad' },
+      { value: inrFull(largest.amount), label: largest.vendor, sub: 'the single payment that can’t be unwound cheaply' },
+    ],
     // One run, two datasets, today: frequency stays low on purpose — a single
     // output can price exposure, it cannot establish recurrence.
     factors: { frequency: 0.35, sourceDiversity: 0.6, recency: 1, businessImpact: 0.9 },

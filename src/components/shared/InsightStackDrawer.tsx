@@ -17,7 +17,7 @@ import InsightStack, { type StackRowNav } from './InsightStack';
 import { PipelineChecklist } from './InsightGenerator';
 import type { InsightStackRun } from './useInsightStackRun';
 
-export default function InsightStackDrawer({ open, onClose, subjectLabel, scopeLabel, run, rowNav }: {
+export default function InsightStackDrawer({ open, onClose, subjectLabel, scopeLabel, run, rowNav, preamble }: {
   open: boolean;
   onClose: () => void;
   /** The engagement name — drawer header + clean-scan copy. */
@@ -28,6 +28,9 @@ export default function InsightStackDrawer({ open, onClose, subjectLabel, scopeL
   /** Host row navigation — every card names the exact risk/control it resolves
    *  to and can redirect there (the host closes this drawer + focuses the row). */
   rowNav?: StackRowNav;
+  /** Level explainer rendered above the stack — the qualification bar stated
+   *  where the reader stands (the portfolio drawer passes it). */
+  preamble?: string;
 }) {
   const { phase, step, steps, outcome, failedStep, stack } = run;
 
@@ -86,11 +89,14 @@ export default function InsightStackDrawer({ open, onClose, subjectLabel, scopeL
               {/* ── Generated — the full anchor-grouped directory ── */}
               {phase === 'generated' && stack && (
                 <div className="space-y-2">
+                  {preamble && (
+                    <p className="text-[0.71875rem] text-ink-500 leading-snug px-0.5">{preamble}</p>
+                  )}
                   <InsightStack
                     insights={stack}
                     scopeLabel={scopeLabel ?? ''}
                     foldLedger={false}
-                    groupByAnchor
+                    grid
                     rowNav={rowNav}
                   />
                   <div className="flex items-center gap-2 px-1">

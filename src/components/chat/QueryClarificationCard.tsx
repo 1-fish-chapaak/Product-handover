@@ -1,6 +1,14 @@
 import { useState, useRef, useEffect, useLayoutEffect } from 'react';
 import { X, Plus, FileText, Check, ChevronLeft, ChevronRight } from 'lucide-react';
 import type { AttachmentSelection } from './DataPickerModal';
+import { CaptureCard } from '../shared/memory/MemoryKit';
+import { captureMemory } from '../../data/memorySession';
+
+// Capture-at-the-moment-of-confusion (Memory PRD §6): a clarification that
+// exposed an undefined column/term offers its answer back as a memory in one
+// tap — documentation written at the moment of confusion is the only
+// documentation that gets written. Ids use a module counter (no Date.now()).
+let clarifyCaptureSeq = 0;
 
 // Query-clarification shape — distinct from the workflow ClarificationData
 // because query questions can be multiple-choice. Answers are stored as a
@@ -152,9 +160,41 @@ export default function QueryClarificationCard({
   }, [safeIndex, optionCount, isMulti, attachedSources.length, files.length]);
 
   if (data.status === 'submitted') {
+    const answeredIdx = data.questions
+      .map((_, i) => i)
+      .find(i => (data.answers[i]?.length ?? 0) > 0);
+    const capturedQ = answeredIdx != null ? data.questions[answeredIdx] : null;
+    const capturedA = answeredIdx != null ? (data.answers[answeredIdx] ?? []).join(', ') : '';
+    const sourceLabel = attachedSources[0]?.name ?? files[0]?.name ?? 'this dataset';
     return (
-      <div className="text-[0.8125rem] text-ink-700 leading-relaxed">
-        {data.purpose === 'severity' ? 'Got it — applying that to the findings now.' : 'Got it. Running with these inputs.'}
+      <div className="space-y-2.5">
+        <div className="text-[0.8125rem] text-ink-700 leading-relaxed">
+          {data.purpose === 'severity' ? 'Got it — applying that to the findings now.' : 'Got it. Running with these inputs.'}
+        </div>
+        {capturedQ && data.purpose !== 'severity' && (
+          <CaptureCard
+            shared
+            kindLabel="Decision"
+            scopeLabel="Source"
+            answerSummary={
+              <>You answered <span className="font-semibold text-ink-900">“{capturedA}”</span> to <span className="text-ink-500">“{capturedQ.question}”</span> — saved, this question never fires again for {sourceLabel}.</>
+            }
+            onSave={() => {
+              clarifyCaptureSeq += 1;
+              captureMemory({
+                id: `mem-cap-clar-${clarifyCaptureSeq}`,
+                scope: 'source', kind: 'decision', status: 'proposed',
+                statement: `${capturedQ.question} → ${capturedA} (${sourceLabel}).`,
+                source: 'Captured from a chat clarification',
+                pendingNote: 'Answered at the moment of confusion — waiting on approval in My Queue.',
+                evidence: [{ label: 'Chat · clarification answered while building this query', date: 'today' }],
+                learnedOn: 'today', recallCount: 0, lastRecalled: '—',
+                firesIn: ['chat', 'runs'],
+                entity: { id: `src-cap-${clarifyCaptureSeq}`, label: sourceLabel },
+              });
+            }}
+          />
+        )}
       </div>
     );
   }

@@ -1,0 +1,1160 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>SOX / ICFR Engagement · Product Requirements Document</title>
+<style>
+  @page { size: A4; margin: 16mm 13mm; }
+  * { box-sizing: border-box; }
+  body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif;
+         color: #1c1a24; line-height: 1.58; max-width: 1000px; margin: 0 auto; padding: 28px 24px; font-size: 13px; }
+  h1 { font-size: 31px; margin: 0 0 6px; letter-spacing: -0.5px; }
+  h2 { font-size: 21px; margin: 34px 0 10px; padding-top: 14px; border-top: 2px solid #ded4f5; color: #4c1d95; }
+  h3 { font-size: 16.5px; margin: 24px 0 7px; color: #2a2536; }
+  h4 { font-size: 14px; margin: 16px 0 5px; color: #5b21b6; }
+  h5 { font-size: 12.5px; margin: 13px 0 4px; color: #1c1a24; font-weight: 700; }
+  .sub { color: #6b6580; font-size: 14.5px; margin: 0 0 22px; }
+  table { width: 100%; border-collapse: collapse; margin: 11px 0 16px; font-size: 12px; }
+  th { background: #f5f2fc; text-align: left; padding: 7px 9px; border: 1px solid #e2dcf0; font-weight: 650; color: #37304a; }
+  td { padding: 7px 9px; border: 1px solid #e8e4f2; vertical-align: top; }
+  tr:nth-child(even) td { background: #fcfbfe; }
+  .edge th { background:#fff7ed; border-color:#f0ddc0; color:#9a3412; }
+  .callout { border-left: 4px solid #0891b2; background: #f2fbfd; padding: 10px 15px; margin: 12px 0; border-radius: 0 7px 7px 0; page-break-inside: avoid; }
+  .callout p { margin: 4px 0; }
+  .callout .lbl { font-size: 10.5px; font-weight: 800; letter-spacing: .08em; text-transform: uppercase; color: #0e7490; display:block; margin-bottom: 3px; }
+  code { background: #f4f2f7; color: #9d2235; padding: 2px 6px; border-radius: 4px; font-size: 11.5px;
+         font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; }
+  .eq { font-family: "Latin Modern Math", Cambria, Georgia, serif; font-size: 15px; text-align: center;
+        background: #faf8fe; border: 1px solid #e8e2f5; border-radius: 8px; padding: 14px 12px; margin: 10px 0 8px;
+        page-break-inside: avoid; }
+  .eq i { font-style: italic; }
+  .fx { display: inline-block; vertical-align: -0.85em; text-align: center; margin: 0 4px; }
+  .fx .n { display: block; border-bottom: 1.4px solid #4a4459; padding: 0 10px 3px; }
+  .fx .d { display: block; padding: 3px 10px 0; }
+  .where { font-size: 11.5px; color: #4a4459; margin: 0 0 14px; }
+  .where b { font-family: "Latin Modern Math", Cambria, Georgia, serif; font-style: italic; font-weight: 600; }
+  ul, ol { margin: 7px 0 12px; padding-left: 21px; }
+  li { margin: 4px 0; }
+  .step { background: #fbfaff; border: 1px solid #e9e3f7; border-left: 3px solid #7c3aed; border-radius: 0 8px 8px 0; padding: 11px 15px; margin: 9px 0; }
+  .step .n { font-size: 11px; font-weight: 800; letter-spacing: .07em; color: #6d28d9; text-transform: uppercase; }
+  .step h4 { margin: 2px 0 5px; font-size: 15px; color: #1c1a24; }
+  .toc { background:#fbfaff; border:1px solid #e9e3f7; border-radius:9px; padding:13px 20px; font-size:12.5px; column-count:2; column-gap:26px; }
+  .toc div { margin:3px 0; break-inside:avoid; }
+  .toc .s { padding-left:14px; color:#6b6580; }
+  .v { color:#15803d; font-weight:650; }
+  .flow { margin: 14px 0 18px; page-break-inside: avoid; }
+  .flow svg { width: 100%; height: auto; display: block; }
+  .flowtitle { font-size:11px; font-weight:800; letter-spacing:.07em; text-transform:uppercase; color:#6d28d9; margin: 18px 0 4px; }
+  .personas { width:100%; border-collapse:separate; border-spacing:10px; margin:14px 0 12px; }
+  .personas td { border:1px solid #e8e4f2; border-radius:10px; padding:14px 16px; vertical-align:top; width:50%; background:#fff; font-size:12.5px; line-height:1.55; }
+  .personas td.hi { background:#f5f2fc; border-color:#ded4f5; }
+  .ptag { display:inline-block; font-size:11px; font-weight:750; padding:3px 10px; border-radius:12px; margin-right:6px; }
+  .ptag.aud { background:#ede9fe; color:#5b21b6; }
+  .ptag.rev { background:#e0edfb; color:#1d4ed8; }
+  .ptag.own { background:#fdf1dc; color:#92400e; }
+  footer { margin-top: 38px; padding-top: 13px; border-top: 1px solid #e8e4f2; color: #8b849c; font-size: 11.5px; }
+  .q { font-style: italic; color:#4a4459; }
+</style>
+</head>
+<body>
+
+<h1>SOX / ICFR Engagement</h1>
+<p class="sub">Product Requirements Document</p>
+
+<h2>Contents</h2>
+<div class="toc">
+<div>1 · Introduction</div>
+<div>2 · Key terms</div>
+
+<div>3 · Personas and roles</div>
+<div>4 · User flows</div>
+<div>5 · Engagement creation</div>
+<div>6 · Audit creation</div>
+<div>7 · Configuration</div>
+<div>8 · Testing one control</div>
+<div class="s">8.1 · Test of Design</div>
+<div class="s">8.2 · Population extraction</div>
+<div class="s">8.3 · Sample drawing</div>
+<div class="s">8.4 · Test of Operating Effectiveness</div>
+<div class="s">8.5 · Sign off and the working paper</div>
+<div>9 · Deficiency management</div>
+<div>10 · How severity is decided</div>
+<div>11 · Confidence scores</div>
+<!-- <div>· Finishing the year</div> -->
+<div>12 · Glossary</div>
+</div>
+
+<h2>1 · Introduction</h2>
+<p>In the US, public companies must prove every year that the controls protecting their financial numbers work. This is the Sarbanes Oxley Act, section 404. Management signs a statement saying the controls are effective, and for larger companies an external auditor must independently agree. Most teams run this in spreadsheets and email, which is slow, hard to review and hard to defend.</p>
+<p><b>This product replaces that.</b> It gives the team one place to scope the work, test each control with its evidence attached, size any failure against a consistent threshold, drive the fix, and produce the paperwork. Every decision is recorded and every number is derived, never typed.</p>
+
+<h3>Success criteria</h3>
+<table>
+<tr><th>Goal</th><th>Measure</th></tr>
+<tr><td>A full control test completes without leaving the product</td><td>Evidence, sample, results and sign off on one page</td></tr>
+<tr><td>No conclusion without the evidence behind it</td><td>Steps locked until preconditions are met, with the reason stated</td></tr>
+<tr><td>Two people grading the same failure agree</td><td>Severity computed from stated inputs, with the working shown</td></tr>
+<tr><td>A reviewer can audit the audit</td><td>Every change attributed and timestamped, nothing silently overwritten</td></tr>
+<tr><td>Year end paperwork is a by product</td><td>Working paper and report generate from testing already done</td></tr>
+</table>
+
+<h2>2 · Key terms</h2>
+<table>
+<tr><th>Term</th><th>Meaning</th></tr>
+<tr><td><b>Test of Design (TOD)</b></td><td>Is the control built well enough to work? Read the documents, trace one transaction.</td></tr>
+<tr><td><b>Test of Operating Effectiveness (TOE)</b></td><td>Did it actually work, every time, all year? Sample real transactions and check each one.</td></tr>
+<tr><td><b>Population</b></td><td>The full set of transactions a control applies to, before you pick which ones to test.</td></tr>
+<tr><td><b>IPE</b></td><td>Information Produced by the Entity. A report the company gave you, which must be proven before you build testing on it.</td></tr>
+<tr><td><b>Materiality</b></td><td>The size of error that would matter to someone reading the accounts. The threshold every failure is measured against.</td></tr>
+<tr><td><b>Deficiency</b></td><td>A control that failed. Also called an exception or a finding.</td></tr>
+<tr><td><b>Material weakness</b></td><td>The worst grade. Open at year end means the company must publicly declare its controls ineffective.</td></tr>
+<tr><td><b>Working paper</b></td><td>The audit file for one control. The proof that the testing was done properly.</td></tr>
+</table>
+
+
+<h2>3 · Personas and roles</h2>
+
+<table class="personas">
+<tr>
+<td><span class="ptag aud">Auditor</span> Owns the testing. Scopes controls, sets the materiality ground rules, runs Test of Design and Test of Operating Effectiveness, validates the reports testing relies on, concludes each control, evaluates how bad each exception is, signs the working papers as preparer, and signs the engagement first.</td>
+<td><span class="ptag rev">Reviewer</span> The independent second pair of eyes. Works a queue of papers awaiting countersign, raises <b>review notes</b> (tracked challenges the auditor must resolve before a paper can close), verifies resolutions, closes exceptions after a passed retest, and countersigns the engagement to conclude it.</td>
+</tr>
+<tr>
+<td><span class="ptag own">Risk / Control Owner</span> First line, the person who runs the control day to day. Sees a scoped to do list, never the whole engagement: provide requested documents, <b>attest and evidence</b> due control tests, and execute remediation plans when something breaks.</td>
+<td class="hi"><b>Four eyes is person based, not just role based.</b><br>
+The product tracks <i>who</i> did each act. The same human cannot countersign a paper they prepared or close a retest they recorded, even wearing the reviewer hat. Every hand off is explicit: each control shows whose court the work is in.</td>
+</tr>
+</table>
+
+<!-- ==========================================================================
+     PERMISSIONS. COMMENTED OUT, NOT DELETED.
+     Access control now lives in its own document, SOX-RBAC-Spec.
+     Restore by removing this wrapper.
+     ==========================================================================
+
+<h3>Permissions</h3>
+<p>One table per role: what they can do, what they cannot, and where they land when they open the audit.</p>
+
+<h4>Auditor</h4>
+<p>Lands on the audit <b>Dashboard</b>. Sees all four tabs: Dashboard, Control Library, Deficiency management, Configuration. Sees every control in the audit's scope.</p>
+<table>
+<tr><th>Can</th><th>Cannot</th></tr>
+<tr><td>Create the audit, set the period, scope companies and matrices</td><td>Confirm a deficiency rating. That is the reviewer's check on the auditor's own judgement</td></tr>
+<tr><td>Set and edit materiality and the severity thresholds</td><td>Write the remediation plan. The auditor advises, never authors</td></tr>
+<tr><td>Run Test of Design: evidence documents, waive with a reason, validate design checks, conclude</td><td>Declare the owner's fix done and ready for retest. Only the owner submits it</td></tr>
+<tr><td>Prove the report behind a population and conclude the IPE, lock the population, draw and resize the sample</td><td>Countersign a working paper, including their own</td></tr>
+<tr><td>Record every attribute result, override any result with a written reason</td><td>Close a deficiency</td></tr>
+<tr><td>Conclude Test of Operating Effectiveness, size a deficiency, judge a remediation plan, retest the fix</td><td>Sign the engagement as reviewer</td></tr>
+<tr><td>Sign a working paper as preparer, and sign the engagement first</td><td></td></tr>
+<tr><td>Reopen a closed deficiency with a reason</td><td></td></tr>
+</table>
+
+<h4>Risk and control owner</h4>
+<p>Lands on <b>Your control tasks</b>, a task inbox rather than a dashboard. Sees only <b>three</b> tabs: Overview, Control Library and their own deficiencies. The Control Library is filtered to controls in their name, and the tile says so.</p>
+<table>
+<tr><th>Can</th><th>Cannot</th></tr>
+<tr><td>Answer a document request and attach what they hold</td><td>See any testing past the extract. The screen tells them so rather than hiding it silently</td></tr>
+<tr><td>Self attest an attribute with a written note and evidence</td><td>Conclude anything, draw a sample, or lock a population</td></tr>
+<tr><td>Write the remediation plan: the action, the owner, the date</td><td>Grade or confirm the severity of a deficiency</td></tr>
+<tr><td>Attach remediation evidence and submit the fix for retest</td><td>Retest their own fix, or close a deficiency</td></tr>
+<tr><td>Raise a query back to the audit team</td><td>Reach Configuration or Deficiency management for the whole engagement</td></tr>
+<tr><td>Switch between their own capacities where they are both control owner and process owner</td><td>Reopen a closed deficiency</td></tr>
+<tr><td>See which of their controls are waiting on them</td><td>See the ITGC cascade banner. Sample sizing is the audit team's method</td></tr>
+</table>
+
+<h4>Reviewer</h4>
+<p>Lands on the <b>Dashboard</b> with a <b>Reviewer queue</b>. Sees all four tabs and every control, but has no write access anywhere in testing.</p>
+<table>
+<tr><th>Can</th><th>Cannot</th></tr>
+<tr><td>Read every control, every paper and every deficiency</td><td>Attach evidence, record a result, or conclude either track</td></tr>
+<tr><td>Confirm a deficiency rating, or send it back with a reason</td><td>Draw a sample, lock a population, or conclude an IPE</td></tr>
+<tr><td>Raise a review note the auditor must resolve, then verify or reopen it</td><td>Size a deficiency or judge a remediation plan</td></tr>
+<tr><td>Countersign a working paper</td><td>Countersign a paper they prepared, or one with an open review note</td></tr>
+<tr><td>Return a concluded control to the auditor with a reason, which clears both conclusions</td><td>Close a deficiency whose retest they ran themselves</td></tr>
+<tr><td>Close a deficiency after a passed retest</td><td>Confirm a rating or close a deficiency on a control they own</td></tr>
+<tr><td>Countersign the engagement to conclude it</td><td>Sign the engagement if they are also the preparer</td></tr>
+</table>
+
+<h4>Where the baton sits during a deficiency</h4>
+<p>The lifecycle alternates on purpose, so no two consecutive stages sit with the same person.</p>
+<table>
+<tr><th>Stage</th><th>Whose court</th><th>What they are doing</th></tr>
+<tr><td>Identified</td><td>Auditor</td><td>Writing the root cause and sizing it</td></tr>
+<tr><td>Rating review</td><td>Reviewer</td><td>Confirming the grade before any fix starts</td></tr>
+<tr><td>Planning</td><td>Owner</td><td>Writing the plan</td></tr>
+<tr><td>Plan review</td><td>Auditor</td><td>Checking the plan against the root cause</td></tr>
+<tr><td>Remediation</td><td>Owner</td><td>Doing the work and attaching evidence</td></tr>
+<tr><td>Retest</td><td>Auditor</td><td>Retesting on a post fix sample</td></tr>
+<tr><td>Awaiting reviewer</td><td>Reviewer</td><td>Reading the evidence and closing</td></tr>
+</table>
+<p>Each control names <b>the person</b> the baton sits with, not the role, because a role cannot be chased for an answer.</p>
+
+<div class="callout">
+<p><span class="lbl">R3.1 Separation is enforced by person, not by role</span>
+Holding the right role is not enough. The same human cannot countersign a paper they prepared, close a retest they ran, confirm a rating on a control they own, or sign the engagement at both steps. Every gate checks the logged in person as well as the hat.</p>
+</div>
+
+<div class="callout">
+<p><span class="lbl">R3.2 The owner sees their lane, never the audit's</span>
+The first line stops at the extract. Everything past it is the audit's own work, and showing it to the person who runs the control is the independence problem the whole page is arranged around. The screen states this rather than leaving a blank.</p>
+</div>
+
+<div class="callout">
+<p><span class="lbl">R3.3 Configuration must be gated by permission, not by navigation</span>
+The owner cannot reach Configuration because the tab is absent from their navigation, but <b>the reviewer can, and there is no permission check on the screen itself</b>. A reviewer who can move materiality can change the grade of the work they are meant to be independently checking. <b>Open defect.</b></p>
+</div>
+
+     ========================================================================== -->
+
+<h2>4 · User flows</h2>
+
+<div class="flowtitle">Flow A. The full year, end to end</div>
+<div class="flow">
+<svg viewBox="0 0 960 210" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="End to end flow from engagement setup through to the year end opinion">
+  <defs><marker id="a" markerWidth="9" markerHeight="9" refX="7" refY="4.5" orient="auto"><path d="M1,1 L7,4.5 L1,8" fill="none" stroke="#8b7bb8" stroke-width="1.7"/></marker></defs>
+  <g font-family="Helvetica, Arial, sans-serif">
+    <text x="8" y="20" font-size="11" font-weight="700" fill="#6d28d9">AUDITOR</text>
+    <text x="8" y="104" font-size="11" font-weight="700" fill="#b45309">RISK OWNER</text>
+    <text x="8" y="180" font-size="11" font-weight="700" fill="#0e7490">REVIEWER</text>
+    <line x1="0" y1="60" x2="960" y2="60" stroke="#ece7f7" stroke-width="1"/>
+    <line x1="0" y1="126" x2="960" y2="126" stroke="#ece7f7" stroke-width="1"/>
+    <rect x="96" y="10" width="120" height="42" rx="8" fill="#f5f2fc" stroke="#c4b5e8" stroke-width="1.4"/>
+    <text x="156" y="28" font-size="11.5" font-weight="650" text-anchor="middle">Set up the</text><text x="156" y="43" font-size="11.5" font-weight="650" text-anchor="middle">engagement</text>
+    <rect x="240" y="10" width="120" height="42" rx="8" fill="#f5f2fc" stroke="#c4b5e8" stroke-width="1.4"/>
+    <text x="300" y="28" font-size="11.5" font-weight="650" text-anchor="middle">Start an</text><text x="300" y="43" font-size="11.5" font-weight="650" text-anchor="middle">audit</text>
+    <rect x="384" y="10" width="120" height="42" rx="8" fill="#f5f2fc" stroke="#c4b5e8" stroke-width="1.4"/>
+    <text x="444" y="28" font-size="11.5" font-weight="650" text-anchor="middle">Test each</text><text x="444" y="43" font-size="11.5" font-weight="650" text-anchor="middle">control</text>
+    <rect x="528" y="10" width="120" height="42" rx="8" fill="#f5f2fc" stroke="#c4b5e8" stroke-width="1.4"/>
+    <text x="588" y="28" font-size="11.5" font-weight="650" text-anchor="middle">Grade any</text><text x="588" y="43" font-size="11.5" font-weight="650" text-anchor="middle">failure</text>
+    <rect x="672" y="10" width="120" height="42" rx="8" fill="#f5f2fc" stroke="#c4b5e8" stroke-width="1.4"/>
+    <text x="732" y="28" font-size="11.5" font-weight="650" text-anchor="middle">Retest the</text><text x="732" y="43" font-size="11.5" font-weight="650" text-anchor="middle">fix</text>
+    <rect x="384" y="84" width="120" height="42" rx="8" fill="#fffbf2" stroke="#e8c98a" stroke-width="1.4"/>
+    <text x="444" y="102" font-size="11.5" font-weight="650" text-anchor="middle">Provide</text><text x="444" y="117" font-size="11.5" font-weight="650" text-anchor="middle">documents</text>
+    <rect x="600" y="84" width="120" height="42" rx="8" fill="#fffbf2" stroke="#e8c98a" stroke-width="1.4"/>
+    <text x="660" y="102" font-size="11.5" font-weight="650" text-anchor="middle">Plan and</text><text x="660" y="117" font-size="11.5" font-weight="650" text-anchor="middle">run the fix</text>
+    <rect x="528" y="150" width="120" height="42" rx="8" fill="#f2fbfd" stroke="#8fc8d8" stroke-width="1.4"/>
+    <text x="588" y="168" font-size="11.5" font-weight="650" text-anchor="middle">Confirm the</text><text x="588" y="183" font-size="11.5" font-weight="650" text-anchor="middle">rating</text>
+    <rect x="816" y="150" width="128" height="42" rx="8" fill="#f2fbfd" stroke="#8fc8d8" stroke-width="1.4"/>
+    <text x="880" y="168" font-size="11.5" font-weight="650" text-anchor="middle">Countersign,</text><text x="880" y="183" font-size="11.5" font-weight="650" text-anchor="middle">then conclude</text>
+    <path d="M216,31 L238,31" stroke="#8b7bb8" stroke-width="1.7" fill="none" marker-end="url(#a)"/>
+    <path d="M360,31 L382,31" stroke="#8b7bb8" stroke-width="1.7" fill="none" marker-end="url(#a)"/>
+    <path d="M504,31 L526,31" stroke="#8b7bb8" stroke-width="1.7" fill="none" marker-end="url(#a)"/>
+    <path d="M648,31 L670,31" stroke="#8b7bb8" stroke-width="1.7" fill="none" marker-end="url(#a)"/>
+    <path d="M444,84 L444,54" stroke="#8b7bb8" stroke-width="1.7" fill="none" marker-end="url(#a)"/>
+    <path d="M600,54 L600,84" stroke="#8b7bb8" stroke-width="1.7" fill="none" marker-end="url(#a)"/>
+    <path d="M700,84 L716,54" stroke="#8b7bb8" stroke-width="1.7" fill="none" marker-end="url(#a)"/>
+    <path d="M588,54 L588,150" stroke="#8b7bb8" stroke-width="1.7" fill="none" marker-end="url(#a)"/>
+    <path d="M792,31 L880,31 L880,148" stroke="#8b7bb8" stroke-width="1.7" fill="none" marker-end="url(#a)"/>
+  </g>
+</svg>
+</div>
+<p>The audit team drives the spine. The business is pulled in twice, once for documents and once for the fix. The reviewer appears twice, once to confirm a serious rating before work starts and once to close it out.</p>
+
+<div class="flowtitle">Flow B. Testing one control</div>
+<div class="flow">
+<svg viewBox="0 0 960 96" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Five step control testing flow with gates between steps">
+  <defs><marker id="b" markerWidth="9" markerHeight="9" refX="7" refY="4.5" orient="auto"><path d="M1,1 L7,4.5 L1,8" fill="none" stroke="#8b7bb8" stroke-width="1.7"/></marker></defs>
+  <g font-family="Helvetica, Arial, sans-serif">
+    <rect x="4" y="14" width="150" height="40" rx="8" fill="#f5f2fc" stroke="#c4b5e8" stroke-width="1.4"/><text x="79" y="39" font-size="12" font-weight="650" text-anchor="middle">1. Test of Design</text>
+    <rect x="200" y="14" width="150" height="40" rx="8" fill="#f5f2fc" stroke="#c4b5e8" stroke-width="1.4"/><text x="275" y="39" font-size="12" font-weight="650" text-anchor="middle">2. Population</text>
+    <rect x="396" y="14" width="150" height="40" rx="8" fill="#f5f2fc" stroke="#c4b5e8" stroke-width="1.4"/><text x="471" y="39" font-size="12" font-weight="650" text-anchor="middle">3. Sample</text>
+    <rect x="592" y="14" width="150" height="40" rx="8" fill="#f5f2fc" stroke="#c4b5e8" stroke-width="1.4"/><text x="667" y="39" font-size="12" font-weight="650" text-anchor="middle">4. Test operating</text>
+    <rect x="788" y="14" width="150" height="40" rx="8" fill="#f5f2fc" stroke="#c4b5e8" stroke-width="1.4"/><text x="863" y="39" font-size="12" font-weight="650" text-anchor="middle">5. Sign off</text>
+    <path d="M154,34 L198,34" stroke="#8b7bb8" stroke-width="1.7" fill="none" marker-end="url(#b)"/>
+    <path d="M350,34 L394,34" stroke="#8b7bb8" stroke-width="1.7" fill="none" marker-end="url(#b)"/>
+    <path d="M546,34 L590,34" stroke="#8b7bb8" stroke-width="1.7" fill="none" marker-end="url(#b)"/>
+    <path d="M742,34 L786,34" stroke="#8b7bb8" stroke-width="1.7" fill="none" marker-end="url(#b)"/>
+    <text x="176" y="78" font-size="9.5" text-anchor="middle" fill="#8b849c">design must</text><text x="176" y="89" font-size="9.5" text-anchor="middle" fill="#8b849c">conclude first</text>
+    <text x="372" y="78" font-size="9.5" text-anchor="middle" fill="#8b849c">IPE proven,</text><text x="372" y="89" font-size="9.5" text-anchor="middle" fill="#8b849c">then locked</text>
+    <text x="568" y="78" font-size="9.5" text-anchor="middle" fill="#8b849c">sample</text><text x="568" y="89" font-size="9.5" text-anchor="middle" fill="#8b849c">drawn</text>
+    <text x="764" y="78" font-size="9.5" text-anchor="middle" fill="#8b849c">both tracks</text><text x="764" y="89" font-size="9.5" text-anchor="middle" fill="#8b849c">concluded</text>
+  </g>
+</svg>
+</div>
+<p>Each arrow is a gate, not a suggestion. The wording under it is what the product tells the user when the next step is still locked. Section 8 takes each step apart.</p>
+
+<div class="flowtitle">Flow C. Fixing a failure</div>
+<div class="flow">
+<svg viewBox="0 0 960 118" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Six step deficiency lifecycle with a loop back to planning when a retest fails">
+  <defs><marker id="c" markerWidth="9" markerHeight="9" refX="7" refY="4.5" orient="auto"><path d="M1,1 L7,4.5 L1,8" fill="none" stroke="#8b7bb8" stroke-width="1.7"/></marker>
+  <marker id="cr" markerWidth="9" markerHeight="9" refX="7" refY="4.5" orient="auto"><path d="M1,1 L7,4.5 L1,8" fill="none" stroke="#c26a6a" stroke-width="1.7"/></marker></defs>
+  <g font-family="Helvetica, Arial, sans-serif">
+    <rect x="4" y="10" width="140" height="44" rx="8" fill="#f5f2fc" stroke="#c4b5e8" stroke-width="1.4"/><text x="74" y="30" font-size="11.5" font-weight="650" text-anchor="middle">1. Raised</text><text x="74" y="45" font-size="9.5" text-anchor="middle" fill="#6b6580">automatic</text>
+    <rect x="168" y="10" width="140" height="44" rx="8" fill="#f5f2fc" stroke="#c4b5e8" stroke-width="1.4"/><text x="238" y="30" font-size="11.5" font-weight="650" text-anchor="middle">2. Size it</text><text x="238" y="45" font-size="9.5" text-anchor="middle" fill="#6b6580">auditor, reviewer</text>
+    <rect x="332" y="10" width="140" height="44" rx="8" fill="#fffbf2" stroke="#e8c98a" stroke-width="1.4"/><text x="402" y="30" font-size="11.5" font-weight="650" text-anchor="middle">3. Plan the fix</text><text x="402" y="45" font-size="9.5" text-anchor="middle" fill="#6b6580">owner, auditor</text>
+    <rect x="496" y="10" width="140" height="44" rx="8" fill="#fffbf2" stroke="#e8c98a" stroke-width="1.4"/><text x="566" y="30" font-size="11.5" font-weight="650" text-anchor="middle">4. Fix and submit</text><text x="566" y="45" font-size="9.5" text-anchor="middle" fill="#6b6580">owner</text>
+    <rect x="660" y="10" width="140" height="44" rx="8" fill="#f5f2fc" stroke="#c4b5e8" stroke-width="1.4"/><text x="730" y="30" font-size="11.5" font-weight="650" text-anchor="middle">5. Retest</text><text x="730" y="45" font-size="9.5" text-anchor="middle" fill="#6b6580">auditor</text>
+    <rect x="824" y="10" width="132" height="44" rx="8" fill="#f2fbfd" stroke="#8fc8d8" stroke-width="1.4"/><text x="890" y="30" font-size="11.5" font-weight="650" text-anchor="middle">6. Close</text><text x="890" y="45" font-size="9.5" text-anchor="middle" fill="#6b6580">reviewer</text>
+    <path d="M144,32 L166,32" stroke="#8b7bb8" stroke-width="1.7" fill="none" marker-end="url(#c)"/>
+    <path d="M308,32 L330,32" stroke="#8b7bb8" stroke-width="1.7" fill="none" marker-end="url(#c)"/>
+    <path d="M472,32 L494,32" stroke="#8b7bb8" stroke-width="1.7" fill="none" marker-end="url(#c)"/>
+    <path d="M636,32 L658,32" stroke="#8b7bb8" stroke-width="1.7" fill="none" marker-end="url(#c)"/>
+    <path d="M800,32 L822,32" stroke="#8b7bb8" stroke-width="1.7" fill="none" marker-end="url(#c)"/>
+    <path d="M730,56 L730,88 L402,88 L402,58" stroke="#c26a6a" stroke-width="1.7" fill="none" stroke-dasharray="5 4" marker-end="url(#cr)"/>
+    <text x="566" y="106" font-size="10" text-anchor="middle" fill="#c26a6a">retest fails, so the plan was wrong and gets rewritten</text>
+  </g>
+</svg>
+</div>
+<p>A failed retest returns to planning, not to fixing. Two failures escalate to the reviewer, because at that point the problem is the plan, the owner or the rating, and not the fix. Section 9 takes it apart.</p>
+
+<h2>5 · Engagement creation</h2>
+<p>Reached from <b>Engagements, then New Engagement.</b> For a SOX / ICFR engagement it is <b>three steps</b>: Type, Basics and Review.</p>
+
+<div class="flow">
+<svg viewBox="0 0 960 560" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Engagement creation flowchart, three steps with the conditions attached to each">
+  <defs><marker id="d" markerWidth="9" markerHeight="9" refX="7" refY="4.5" orient="auto"><path d="M1,1 L7,4.5 L1,8" fill="none" stroke="#8b7bb8" stroke-width="1.7"/></marker>
+  <marker id="dc" markerWidth="8" markerHeight="8" refX="6" refY="4" orient="auto"><path d="M1,1 L6,4 L1,7" fill="none" stroke="#8fc8d8" stroke-width="1.4"/></marker></defs>
+  <g font-family="Helvetica, Arial, sans-serif">
+    <rect x="196" y="6" width="200" height="38" rx="19" fill="#ede9fe" stroke="#a78bfa" stroke-width="1.4"/><text x="296" y="30" font-size="12" font-weight="700" text-anchor="middle" fill="#4c1d95">Start</text>
+    <path d="M296,44 L296,66" stroke="#8b7bb8" stroke-width="1.7" fill="none" marker-end="url(#d)"/>
+
+    <rect x="116" y="70" width="360" height="70" rx="8" fill="#f5f2fc" stroke="#c4b5e8" stroke-width="1.4"/>
+    <text x="136" y="92" font-size="12.5" font-weight="700">1. Type</text>
+    <text x="136" y="110" font-size="10.5" fill="#4a4459">Pick what is being created: SOX / ICFR, Compliance,</text>
+    <text x="136" y="124" font-size="10.5" fill="#4a4459">Internal Audit or Automation</text>
+    <path d="M476,105 L512,105" stroke="#8fc8d8" stroke-width="1.4" fill="none" marker-end="url(#dc)"/>
+    <rect x="514" y="72" width="440" height="66" rx="8" fill="#f2fbfd" stroke="#8fc8d8" stroke-width="1.4"/>
+    <text x="532" y="92" font-size="10.5" font-weight="700" fill="#0e7490">Choosing SOX / ICFR</text>
+    <text x="532" y="109" font-size="10" fill="#4a4459">Materiality rules turn on, design must be tested before operating,</text>
+    <text x="532" y="122" font-size="10" fill="#4a4459">reviewer approval joins the workflow, and the wizard drops from</text>
+    <text x="532" y="134" font-size="10" fill="#4a4459">five steps to three</text>
+    <path d="M296,140 L296,162" stroke="#8b7bb8" stroke-width="1.7" fill="none" marker-end="url(#d)"/>
+
+    <rect x="116" y="166" width="360" height="150" rx="8" fill="#f5f2fc" stroke="#c4b5e8" stroke-width="1.4"/>
+    <text x="136" y="188" font-size="12.5" font-weight="700">2. Basics</text>
+    <text x="136" y="208" font-size="10.5" fill="#4a4459">Engagement name, already pre filled</text>
+    <text x="136" y="225" font-size="10.5" fill="#4a4459">Engagement code, auto generated</text>
+    <text x="136" y="242" font-size="10.5" fill="#4a4459">Owner</text>
+    <text x="136" y="259" font-size="10.5" fill="#4a4459">Description, optional</text>
+    <text x="136" y="276" font-size="10.5" fill="#4a4459">The listed or holding company</text>
+    <text x="136" y="296" font-size="10.5" font-weight="700" fill="#4a4459">Entities in scope of the group audit</text>
+    <text x="136" y="309" font-size="10" fill="#8b849c">The table starts empty</text>
+    <path d="M476,240 L512,240" stroke="#8fc8d8" stroke-width="1.4" fill="none" marker-end="url(#dc)"/>
+    <rect x="514" y="186" width="440" height="110" rx="8" fill="#f2fbfd" stroke="#8fc8d8" stroke-width="1.4"/>
+    <text x="532" y="206" font-size="10.5" font-weight="700" fill="#0e7490">How the group structure gets in</text>
+    <text x="532" y="224" font-size="10" fill="#4a4459">Upload an org chart and the structure is extracted automatically,</text>
+    <text x="532" y="237" font-size="10" fill="#4a4459">so every company and its parent arrive without being typed</text>
+    <text x="532" y="257" font-size="10" fill="#4a4459">Or add companies by hand if there is no chart to upload</text>
+    <text x="532" y="277" font-size="10" fill="#4a4459">Or tick "There are no separate entities" and the holding company</text>
+    <text x="532" y="290" font-size="10" fill="#4a4459">fills the table by itself</text>
+    <path d="M296,316 L296,338" stroke="#8b7bb8" stroke-width="1.7" fill="none" marker-end="url(#d)"/>
+
+    <rect x="116" y="342" width="360" height="56" rx="8" fill="#f5f2fc" stroke="#c4b5e8" stroke-width="1.4"/>
+    <text x="136" y="364" font-size="12.5" font-weight="700">3. Review</text>
+    <text x="136" y="382" font-size="10.5" fill="#4a4459">A summary of everything above, then create</text>
+    <path d="M476,370 L512,370" stroke="#8fc8d8" stroke-width="1.4" fill="none" marker-end="url(#dc)"/>
+    <rect x="514" y="346" width="440" height="46" rx="8" fill="#f2fbfd" stroke="#8fc8d8" stroke-width="1.4"/>
+    <text x="532" y="365" font-size="10.5" font-weight="700" fill="#0e7490">Nothing exists until this point</text>
+    <text x="532" y="382" font-size="10" fill="#4a4459">Cancelling earlier leaves no partial engagement behind</text>
+    <path d="M296,398 L296,422" stroke="#8b7bb8" stroke-width="1.7" fill="none" marker-end="url(#d)"/>
+
+    <rect x="176" y="426" width="240" height="40" rx="20" fill="#ede9fe" stroke="#a78bfa" stroke-width="1.4"/><text x="296" y="451" font-size="12" font-weight="700" text-anchor="middle" fill="#4c1d95">Engagement created</text>
+    <path d="M296,466 L296,488" stroke="#8b7bb8" stroke-width="1.7" fill="none" marker-end="url(#d)"/>
+    <rect x="116" y="492" width="600" height="42" rx="8" fill="#fbfaff" stroke="#e9e3f7" stroke-width="1.4"/>
+    <text x="136" y="510" font-size="10.5" font-weight="700" fill="#6d28d9">Next</text>
+    <text x="136" y="525" font-size="10" fill="#4a4459">Add the RACM, then create the first audit, where scope and materiality are set</text>
+  </g>
+</svg>
+</div>
+
+<div class="callout">
+<p><span class="lbl">R5.1 Docs are shared, results are not</span>
+RACM, control library, entities and people are defined <b>once per engagement</b> and consumed by every audit. Results, populations, samples and conclusions belong to <b>one audit only</b>. A new audit never disturbs a previous one's results.</p>
+</div>
+
+<div class="callout">
+<p><span class="lbl">R5.2 The same control at several companies</span>
+One control tested at four companies appears as <b>four rows</b>, each with its own owner, due date, evidence and conclusion, sharing one control number. A failure at one company does not affect the others.</p>
+</div>
+
+<h4>Edge cases</h4>
+<table class="edge">
+<tr><th>Situation</th><th>What should happen</th></tr>
+<tr><td>The company is standalone with no subsidiaries</td><td>The tick box fills the entity table with the holding company itself and unblocks the step. No one has to invent a group structure.</td></tr>
+<tr><td>The org chart upload does not parse</td><td>Fall back to adding companies by hand. The upload is a shortcut, never the only route.</td></tr>
+<tr><td>The user abandons halfway</td><td>Nothing is created. The wizard can be cancelled at any point with no partial engagement left behind.</td></tr>
+<tr><td>A non SOX type is chosen</td><td>The wizard keeps its longer path, because scope and the sign off chain have to be captured on the engagement itself, not on an audit.</td></tr>
+<tr><td>A mandatory field is empty</td><td>Forward movement is blocked on that step, not at the end. The user finds out immediately, not after four more screens.</td></tr>
+<tr><td>The engagement is created but has no RACM yet</td><td>The engagement opens on an empty state that says what is missing and links to it, rather than showing zeros as if testing had begun.</td></tr>
+</table>
+
+<h2>6 · Audit creation</h2>
+<p>Reached from <b>SOX testing, then New audit.</b> Four steps: Audit period, Materiality and files, Scope, Review. The thing created is an <b>audit</b>.</p>
+
+<div class="flow">
+<svg viewBox="0 0 960 740" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Audit creation flowchart, four steps with the thresholds and conditions attached to each">
+  <defs><marker id="e" markerWidth="9" markerHeight="9" refX="7" refY="4.5" orient="auto"><path d="M1,1 L7,4.5 L1,8" fill="none" stroke="#8b7bb8" stroke-width="1.7"/></marker>
+  <marker id="ec" markerWidth="8" markerHeight="8" refX="6" refY="4" orient="auto"><path d="M1,1 L6,4 L1,7" fill="none" stroke="#8fc8d8" stroke-width="1.4"/></marker></defs>
+  <g font-family="Helvetica, Arial, sans-serif">
+    <rect x="196" y="6" width="200" height="38" rx="19" fill="#ede9fe" stroke="#a78bfa" stroke-width="1.4"/><text x="296" y="30" font-size="12" font-weight="700" text-anchor="middle" fill="#4c1d95">Start</text>
+    <path d="M296,44 L296,66" stroke="#8b7bb8" stroke-width="1.7" fill="none" marker-end="url(#e)"/>
+
+    <rect x="116" y="70" width="360" height="76" rx="8" fill="#f5f2fc" stroke="#c4b5e8" stroke-width="1.4"/>
+    <text x="136" y="92" font-size="12.5" font-weight="700">1. Audit period</text>
+    <text x="136" y="110" font-size="10.5" fill="#4a4459">A From and To date, and the round: interim,</text>
+    <text x="136" y="124" font-size="10.5" fill="#4a4459">roll forward or year end</text>
+    <text x="136" y="140" font-size="10" fill="#8b849c">Interim tests early, while there is still time to fix what it finds</text>
+    <path d="M476,108 L512,108" stroke="#8fc8d8" stroke-width="1.4" fill="none" marker-end="url(#ec)"/>
+    <rect x="514" y="84" width="440" height="48" rx="8" fill="#f2fbfd" stroke="#8fc8d8" stroke-width="1.4"/>
+    <text x="532" y="103" font-size="10.5" font-weight="700" fill="#0e7490">Once both dates are set</text>
+    <text x="532" y="120" font-size="10" fill="#4a4459">The window this audit covers is confirmed in words</text>
+    <path d="M296,146 L296,168" stroke="#8b7bb8" stroke-width="1.7" fill="none" marker-end="url(#e)"/>
+
+    <rect x="116" y="172" width="360" height="196" rx="8" fill="#f5f2fc" stroke="#c4b5e8" stroke-width="1.4"/>
+    <text x="136" y="194" font-size="12.5" font-weight="700">2. Materiality and files</text>
+    <text x="136" y="211" font-size="10" fill="#4a4459">Attach the trial balance and general ledger. Both optional,</text>
+    <text x="136" y="223" font-size="10" fill="#4a4459">both addable later</text>
+    <text x="136" y="243" font-size="10.5" font-weight="650" fill="#4a4459">Basis</text>
+    <text x="136" y="256" font-size="10" fill="#4a4459">Which figure the threshold comes from, often profit before tax</text>
+    <text x="136" y="276" font-size="10.5" font-weight="650" fill="#4a4459">Basis percentage</text>
+    <text x="136" y="289" font-size="10" fill="#4a4459">What share of it counts as material, about 5%</text>
+    <text x="136" y="309" font-size="10.5" font-weight="650" fill="#4a4459">Performance materiality</text>
+    <text x="136" y="322" font-size="10" fill="#4a4459">A buffer below the headline used while testing, 50 to 75%</text>
+    <text x="136" y="342" font-size="10.5" font-weight="650" fill="#4a4459">Clearly trivial threshold</text>
+    <text x="136" y="355" font-size="10" fill="#4a4459">A floor, about 5%. Below it, noted but not investigated</text>
+    <path d="M476,214 L512,214" stroke="#8fc8d8" stroke-width="1.4" fill="none" marker-end="url(#ec)"/>
+    <rect x="514" y="182" width="440" height="62" rx="8" fill="#f2fbfd" stroke="#8fc8d8" stroke-width="1.4"/>
+    <text x="532" y="202" font-size="10.5" font-weight="700" fill="#0e7490">Live preview as you type</text>
+    <text x="532" y="219" font-size="10" fill="#4a4459">The four grade bands appear in money before anything is committed,</text>
+    <text x="532" y="234" font-size="10" fill="#4a4459">so the effect on a finding is visible in advance</text>
+    <path d="M476,282 L512,282" stroke="#8fc8d8" stroke-width="1.4" fill="none" marker-end="url(#ec)"/>
+    <rect x="514" y="256" width="440" height="52" rx="8" fill="#f2fbfd" stroke="#8fc8d8" stroke-width="1.4"/>
+    <text x="532" y="275" font-size="10.5" font-weight="700" fill="#0e7490">Why the buffer exists</text>
+    <text x="532" y="292" font-size="10" fill="#4a4459">Many small errors add up, so testing works to a lower number</text>
+    <text x="532" y="304" font-size="10" fill="#4a4459">than the one the accounts are judged against</text>
+    <path d="M476,344 L512,344" stroke="#8fc8d8" stroke-width="1.4" fill="none" marker-end="url(#ec)"/>
+    <rect x="514" y="318" width="440" height="50" rx="8" fill="#f2fbfd" stroke="#8fc8d8" stroke-width="1.4"/>
+    <text x="532" y="337" font-size="10.5" font-weight="700" fill="#0e7490">Both files are optional here</text>
+    <text x="532" y="354" font-size="10" fill="#4a4459">They can be attached later. Where each file came from is answered</text>
+    <text x="532" y="366" font-size="10" fill="#4a4459">on the file itself, not in this step</text>
+    <path d="M296,368 L296,390" stroke="#8b7bb8" stroke-width="1.7" fill="none" marker-end="url(#e)"/>
+
+    <rect x="116" y="394" width="360" height="150" rx="8" fill="#f5f2fc" stroke="#c4b5e8" stroke-width="1.4"/>
+    <text x="136" y="416" font-size="12.5" font-weight="700">3. Scope</text>
+    <text x="136" y="438" font-size="10.5" font-weight="650" fill="#4a4459">By entity</text>
+    <text x="136" y="452" font-size="10" fill="#4a4459">Which companies in the group this audit covers</text>
+    <text x="136" y="474" font-size="10.5" font-weight="650" fill="#4a4459">By RACM</text>
+    <text x="136" y="488" font-size="10" fill="#4a4459">Which matrices, and which controls inside each one</text>
+    <text x="136" y="503" font-size="10" fill="#4a4459">Mark a control key or non key with its star</text>
+    <text x="136" y="518" font-size="10" fill="#4a4459">Add a control that is missing</text>
+    <text x="136" y="533" font-size="10" fill="#4a4459">Or switch on key controls only to take every key control</text>
+    <path d="M476,448 L512,448" stroke="#8fc8d8" stroke-width="1.4" fill="none" marker-end="url(#ec)"/>
+    <rect x="514" y="402" width="440" height="60" rx="8" fill="#f2fbfd" stroke="#8fc8d8" stroke-width="1.4"/>
+    <text x="532" y="422" font-size="10.5" font-weight="700" fill="#0e7490">Entity scope is proposed for you</text>
+    <text x="532" y="439" font-size="10" fill="#4a4459">Each company is compared against performance materiality and the</text>
+    <text x="532" y="453" font-size="10" fill="#4a4459">reason is printed on the row, in or out</text>
+    <path d="M476,506 L512,506" stroke="#8fc8d8" stroke-width="1.4" fill="none" marker-end="url(#ec)"/>
+    <rect x="514" y="474" width="440" height="60" rx="8" fill="#f2fbfd" stroke="#8fc8d8" stroke-width="1.4"/>
+    <text x="532" y="494" font-size="10.5" font-weight="700" fill="#0e7490">Key changes here reach the engagement</text>
+    <text x="532" y="511" font-size="10" fill="#4a4459">Marking a control key or non key updates the RACM at engagement</text>
+    <text x="532" y="525" font-size="10" fill="#4a4459">level, so every later audit inherits the judgement</text>
+    <path d="M296,544 L296,566" stroke="#8b7bb8" stroke-width="1.7" fill="none" marker-end="url(#e)"/>
+
+    <rect x="116" y="570" width="360" height="60" rx="8" fill="#f5f2fc" stroke="#c4b5e8" stroke-width="1.4"/>
+    <text x="136" y="592" font-size="12.5" font-weight="700">4. Review</text>
+    <text x="136" y="610" font-size="10.5" fill="#4a4459">Period, round, the three thresholds, file status,</text>
+    <text x="136" y="623" font-size="10.5" fill="#4a4459">the matrices and the control count. Not the companies</text>
+    <path d="M476,600 L512,600" stroke="#8fc8d8" stroke-width="1.4" fill="none" marker-end="url(#ec)"/>
+    <rect x="514" y="576" width="440" height="46" rx="8" fill="#f2fbfd" stroke="#8fc8d8" stroke-width="1.4"/>
+    <text x="532" y="595" font-size="10.5" font-weight="700" fill="#0e7490">Last chance to change the thresholds</text>
+    <text x="532" y="612" font-size="10" fill="#4a4459">After this, editing them re grades findings and needs a reason</text>
+    <path d="M296,630 L296,654" stroke="#8b7bb8" stroke-width="1.7" fill="none" marker-end="url(#e)"/>
+
+    <rect x="196" y="658" width="200" height="40" rx="20" fill="#ede9fe" stroke="#a78bfa" stroke-width="1.4"/><text x="296" y="683" font-size="12" font-weight="700" text-anchor="middle" fill="#4c1d95">Audit created</text>
+    <path d="M296,698 L296,714" stroke="#8b7bb8" stroke-width="1.7" fill="none" marker-end="url(#e)"/>
+    <text x="136" y="728" font-size="10" fill="#4a4459">It appears on the engagement SOX testing tab with its controls untested and ready to work</text>
+  </g>
+</svg>
+</div>
+
+<h4>The files, and why they come first</h4>
+<p>Step 2 asks for the files before it asks for the numbers, because the numbers are read off the files. Two are offered, both optional at this point and both addable later.</p>
+<table>
+<tr><th>File</th><th>What it is</th><th>What it decides</th></tr>
+<tr><td>Trial balance</td><td>A summary of every account balance at a point in time</td><td>The benchmark figure materiality is calculated from, and the per company balances that decide entity scope. It also decides who <b>can</b> be scoped: the org chart proposes the group, the trial balance qualifies it, and a company the trial balance does not name is greyed out and cannot be scoped in by anyone, because there is no data behind it to test. It stays on the engagement register for the next audit.</td></tr>
+<tr><td>General ledger</td><td>The detailed record of every accounting transaction</td><td>The source most control populations are later drawn from, once a control reaches its population step</td></tr>
+</table>
+<div class="callout">
+<p><span class="lbl">R6.1 Size is not the only reason to test a company</span>
+Some companies matter for reasons a balance does not show: a recent acquisition, a system that went live this year, a history of errors, a business the group is unusually exposed to. Scoping one in on those grounds is a normal audit judgement and the product must allow it, not just tolerate it. The reason travels with the audit so a reviewer can see what the numbers alone would have missed.</p>
+</div>
+
+<div class="callout">
+<p><span class="lbl">R6.2 Changes made while scoping reach the engagement</span>
+Marking a control key or non key, and adding a control the matrix was missing, both update the RACM at <b>engagement level</b>, not only this audit. The person scoping is the person who spots the gap, and whether a control is key is a judgement about the control itself, so every later audit inherits both instead of deciding again.</p>
+</div>
+
+<h4>Edge cases</h4>
+<table class="edge">
+<tr><th>Situation</th><th>What should happen</th></tr>
+<tr><td>A company sits below performance materiality but its parent is in scope</td><td>Warn explicitly. <span class="q">"1 company is held by a company that IS in scope, but left out."</span> The auditor can still exclude it, but not by accident.</td></tr>
+<tr><td>The auditor disagrees with the proposed scope</td><td>Any company can be toggled in or out. The proposal is a starting point, never a lock. The move is held until a reason is written.</td></tr>
+<tr><td>A company is on the org chart but not in the trial balance</td><td>Greyed out, excluded, and not selectable. It stays on the engagement register so a later audit can pick it up.</td></tr>
+<tr><td>A company is in the trial balance but not on the org chart</td><td>Shown as found in the data only and not on the engagement. It is visible, not silently dropped, so someone can go and fix the register.</td></tr>
+<tr><td>The trial balance is removed after companies were toggled</td><td>The entities it introduced leave the list, and their overrides and reasons leave with them. A company with no row must not keep voting on the coverage total.</td></tr>
+<tr><td>Group coverage falls below the target</td><td>The coverage meter shows it against the target and says so. It does not block, because the auditor may have a reason.</td></tr>
+<tr><td>No trial balance or general ledger is available yet</td><td>Both uploads are optional and can be added later. Missing files must not stop an audit being planned.</td></tr>
+<tr><td>An audit is created for a period that overlaps an existing one</td><td>Allowed, since interim and roll forward legitimately share a year, but the period coverage grid must show the overlap so it is visible.</td></tr>
+<tr><td>Materiality changes after the audit exists</td><td>Treated as a dangerous act. See R7.2.</td></tr>
+</table>
+
+<h2>7 · Configuration</h2>
+<p>Every audit has its own settings screen. Edits save instantly and apply to this audit only, and the engagement's other audits keep theirs. Five blocks.</p>
+<ol>
+<li><b>Audit period.</b> Financial year (April to March) or calendar year (January to December), and which cycle this audit belongs to. The screen states the consequence: <span class="q">"Testing runs Jan 2026 to Dec 2026."</span></li>
+<li><b>What this audit covers.</b> Scope by company or by process, with the chosen processes ticked. The RACM and the control register follow it, so narrowing here narrows what the team sees everywhere else.</li>
+<li><b>Source files.</b> Every file this audit holds, in one list. Each shows its name, row count, which audit it belongs to, who added it and when, how many controls draw on it, and its origin, <b>System export</b> or <b>Client prepared</b>. This screen is a register, not an editor: <b>origin is read only here</b>, because it is answered once when the file enters the audit and changing it after testing has started would move the ground under work already concluded.</li>
+<li><b>Materiality and the severity ladder.</b> One block, not two. Basis, benchmark amount and percentage at the top, the three thresholds in money below, the four grade bands underneath in the same money. Changing the rule recomputes all of them, so the bands cannot drift out of step. The significant deficiency band is the one part adjustable on its own, as a percentage of materiality. How a grade is then arrived at is section 10.</li>
+<li><b>Policies and indicators.</b> Whether aggregation is on, and the five material weakness indicators.</li>
+</ol>
+
+<div class="callout">
+<p><span class="lbl">R7.1 Materiality belongs to the cycle, not the engagement</span>
+Every round of the same cycle shares one materiality, and the engagement says so on the audit card: <span class="q">"All 2 rounds of CY 2026 share materiality ₹12 Cr."</span> An interim and a year end testing the same year must be measured against the same number. What must never happen is a later cycle re grading a concluded one.</p>
+</div>
+
+<div class="callout">
+<p><span class="lbl">R7.2 Show what an edit will move before it lands</span>
+Materiality edits are a draft until applied. Applying must show <b>exactly which open findings in this audit change grade</b>, flag any promoted to material weakness, require a written reason, and write the change to a permanent log alongside the findings it moved.</p>
+</div>
+
+<h4>Edge cases</h4>
+<table class="edge">
+<tr><th>Situation</th><th>What should happen</th></tr>
+<tr><td>A file's origin was answered wrongly</td><td>It cannot be corrected from here. The fix happens where the file entered the audit, and every control that already concluded on the old answer gets a review note. See R8.4.</td></tr>
+<tr><td>Materiality is edited after testing has started</td><td>R7.2 applies. Other audits are untouched.</td></tr>
+<tr><td>Aggregation is switched off part way through</td><td>Grades that were raised by aggregation fall back to their standalone value. This must be surfaced, not silent, because a material weakness could become a significant deficiency.</td></tr>
+<tr><td>The significant deficiency band is moved</td><td>Every open deficiency re grades immediately. Same treatment as a materiality change.</td></tr>
+<tr><td>Scope is narrowed after testing has started</td><td>Controls dropped from scope are archived, not deleted, so the work is not lost if scope is widened again.</td></tr>
+</table>
+
+<h2>8 · Testing one control</h2>
+
+<h3>8.1 Test of Design</h3>
+<p><b>Is this control built well enough to work at all?</b></p>
+
+<div class="flow">
+<svg viewBox="0 0 960 268" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Test of Design flowchart">
+  <defs><marker id="f" markerWidth="9" markerHeight="9" refX="7" refY="4.5" orient="auto"><path d="M1,1 L7,4.5 L1,8" fill="none" stroke="#8b7bb8" stroke-width="1.7"/></marker></defs>
+  <g font-family="Helvetica, Arial, sans-serif">
+    <rect x="4" y="14" width="126" height="40" rx="8" fill="#f5f2fc" stroke="#c4b5e8" stroke-width="1.4"/><text x="67" y="32" font-size="10.5" font-weight="650" text-anchor="middle">List required</text><text x="67" y="46" font-size="10.5" font-weight="650" text-anchor="middle">documents</text>
+    <path d="M130,34 L162,34" stroke="#8b7bb8" stroke-width="1.7" fill="none" marker-end="url(#f)"/>
+    <path d="M228,14 L292,34 L228,54 L164,34 Z" fill="#fffbf2" stroke="#e8c98a" stroke-width="1.4"/><text x="228" y="32" font-size="9.5" font-weight="650" text-anchor="middle">Document</text><text x="228" y="43" font-size="9.5" font-weight="650" text-anchor="middle">provided?</text>
+    <path d="M292,34 L340,34" stroke="#8b7bb8" stroke-width="1.7" fill="none" marker-end="url(#f)"/><text x="316" y="28" font-size="9" fill="#15803d">yes</text>
+    <rect x="342" y="14" width="118" height="40" rx="8" fill="#f5f2fc" stroke="#c4b5e8" stroke-width="1.4"/><text x="401" y="39" font-size="10.5" font-weight="650" text-anchor="middle">Mark evidenced</text>
+    <path d="M228,54 L228,86" stroke="#8b7bb8" stroke-width="1.7" fill="none" marker-end="url(#f)"/><text x="238" y="74" font-size="9" fill="#b45309">no</text>
+    <rect x="150" y="90" width="156" height="38" rx="8" fill="#fffbf2" stroke="#e8c98a" stroke-width="1.4"/><text x="228" y="106" font-size="10" font-weight="650" text-anchor="middle">Request from owner,</text><text x="228" y="119" font-size="10" font-weight="650" text-anchor="middle">or waive with a reason</text>
+    <path d="M228,128 L228,158" stroke="#8b7bb8" stroke-width="1.7" fill="none" marker-end="url(#f)"/>
+    <rect x="138" y="162" width="180" height="38" rx="8" fill="#fef6f6" stroke="#e0a5a5" stroke-width="1.4"/><text x="228" y="178" font-size="10" font-weight="650" text-anchor="middle">Never arrives: unable to test,</text><text x="228" y="191" font-size="10" font-weight="650" text-anchor="middle">escalate as a finding</text>
+    <path d="M460,34 L500,34" stroke="#8b7bb8" stroke-width="1.7" fill="none" marker-end="url(#f)"/>
+    <rect x="502" y="14" width="126" height="40" rx="8" fill="#f5f2fc" stroke="#c4b5e8" stroke-width="1.4"/><text x="565" y="32" font-size="10.5" font-weight="650" text-anchor="middle">Validate each</text><text x="565" y="46" font-size="10.5" font-weight="650" text-anchor="middle">design check</text>
+    <path d="M628,34 L662,34" stroke="#8b7bb8" stroke-width="1.7" fill="none" marker-end="url(#f)"/>
+    <path d="M728,10 L800,34 L728,58 L656,34 Z" fill="#fffbf2" stroke="#e8c98a" stroke-width="1.4"/><text x="728" y="32" font-size="9.5" font-weight="650" text-anchor="middle">All checks</text><text x="728" y="43" font-size="9.5" font-weight="650" text-anchor="middle">pass?</text>
+    <path d="M800,34 L836,34" stroke="#8b7bb8" stroke-width="1.7" fill="none" marker-end="url(#f)"/><text x="816" y="28" font-size="9" fill="#15803d">yes</text>
+    <rect x="838" y="12" width="118" height="44" rx="8" fill="#f0fdf4" stroke="#86c9a0" stroke-width="1.4"/><text x="897" y="30" font-size="10.5" font-weight="700" text-anchor="middle" fill="#15803d">Design effective</text><text x="897" y="45" font-size="9.5" text-anchor="middle" fill="#4a4459">unlocks steps 2 to 4</text>
+    <path d="M728,58 L728,96" stroke="#8b7bb8" stroke-width="1.7" fill="none" marker-end="url(#f)"/><text x="738" y="82" font-size="9" fill="#b45309">no</text>
+    <rect x="654" y="100" width="148" height="44" rx="8" fill="#fef6f6" stroke="#e0a5a5" stroke-width="1.4"/><text x="728" y="118" font-size="10.5" font-weight="700" text-anchor="middle" fill="#b91c1c">Design ineffective</text><text x="728" y="133" font-size="9.5" text-anchor="middle" fill="#4a4459">deficiency raised automatically</text>
+    <rect x="502" y="212" width="454" height="44" rx="8" fill="#f2fbfd" stroke="#8fc8d8" stroke-width="1.4"/><text x="729" y="230" font-size="10.5" font-weight="700" text-anchor="middle" fill="#0e7490">Either conclusion can be overridden by the auditor</text><text x="729" y="245" font-size="9.5" text-anchor="middle" fill="#4a4459">going against the evidence records a formal reason on the paper</text>
+  </g>
+</svg>
+</div>
+
+<h4>How it works</h4>
+<ul>
+<li><b>Design documents</b> arrive with the control, each marked required or optional. Usually a process description, a flowchart and a walkthrough. Each one is provided, waived with a reason, or requested. <b>Request data</b> emails the outstanding ones to the control owner, and each moves to <b>Requested</b> until something is attached.</li>
+<li><b>Design checks</b> are the specific things that must be true for the design to hold. They come from the RACM, and each is validated on its own.</li>
+<li><b>Checks are grouped, not one flat list.</b> The first group asks about the control as a whole: does it address the stated risk, and does it operate at sufficient precision. After that, one group for each attribute the control will later be tested against, so the design question and the operating question line up.</li>
+<li><b>Each check has two evidence lanes.</b> <b>Evidenced by</b> links the client's documents. <b>Auditor's proof</b> is what the audit team produced itself. A check carrying only the client's document was read, and one carrying the auditor's own proof was tested. A whole set can be passed or failed at once, but the lanes still print per check.</li>
+<li><b>The product proposes further checks</b> from the control's objective, its assertions and its nature. Each suggestion is accepted or dismissed one at a time, and nothing is inserted automatically.</li>
+</ul>
+
+<div class="callout">
+<p><span class="lbl">R8.1 Design checks and attributes come from the RACM</span>
+Both are defined once on the matrix and inherited by every audit that tests the control, so the same control is not re specified each cycle. Where the RACM carries none, the auditor can add them by hand on the control itself, and what they add flows back to the matrix instead of living only on this audit.</p>
+</div>
+
+<div class="callout">
+<p><span class="lbl">R8.2 Conclusions are suggested, never forced</span>
+The product states what the evidence suggests and pre writes the reasoning. Concluding against it records a formal override with the auditor reason on the paper.</p>
+</div>
+
+<h4>Edge cases</h4>
+<table class="edge">
+<tr><th>Situation</th><th>What should happen</th></tr>
+<tr><td>A required document genuinely does not exist</td><td>Waive it, choosing one of three reasons: prepared by the audit team, held by the client and inspected in place, or not applicable. A written note is mandatory. A waiver counts as dealt with, not missing.</td></tr>
+<tr><td>A document is requested and never arrives</td><td>Mark the control <b>unable to test</b>. The auditor records what is blocking it and what the owner must produce, and it routes to the process owner. Two exits: it arrives and testing resumes, or it never does and a finding is raised with the reason attached.</td></tr>
+<tr><td>The evidence suggests effective but the auditor disagrees</td><td>They may conclude either way, but concluding against the evidence records a formal override with their reason on the working paper.</td></tr>
+<tr><td>The control has no design checks defined yet</td><td>It cannot be concluded effective. The score reads 0%, and this must be distinguishable from a control whose checks all failed.</td></tr>
+<tr><td>Only optional documents are missing</td><td>They do not block the conclusion. Optional evidence strengthens the file but never gates it.</td></tr>
+<tr><td>A check passes on the client's document alone, with no auditor proof</td><td>Allowed, but the working paper prints the basis so a reader can see which checks were only read and which were independently tested.</td></tr>
+<tr><td>The control is automated and the IT general controls hold</td><td>Steps 2, 3 and 4 do not apply. The control concludes on its design alone. The page must say which three steps are absent, why, and what would bring them back, because a short form paper that does not name its own precondition reads as work somebody skipped.</td></tr>
+<tr><td>An IT general control fails after an automated control already concluded</td><td>The three steps come back and the conclusion is flagged for retesting. See section 8.3.</td></tr>
+</table>
+
+<h3>8.2 Population extraction</h3>
+<p>Before you can pick which transactions to test, you have to decide which transactions the control applies to at all. That set is the <b>population</b>. Getting it wrong quietly invalidates everything built on it, which is why this step ends in a lock.</p>
+
+<div class="flow">
+<svg viewBox="0 0 960 300" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Population extraction flowchart ending in a lock">
+  <defs><marker id="g" markerWidth="9" markerHeight="9" refX="7" refY="4.5" orient="auto"><path d="M1,1 L7,4.5 L1,8" fill="none" stroke="#8b7bb8" stroke-width="1.7"/></marker></defs>
+  <g font-family="Helvetica, Arial, sans-serif">
+    <rect x="4" y="16" width="120" height="40" rx="8" fill="#f5f2fc" stroke="#c4b5e8" stroke-width="1.4"/><text x="64" y="41" font-size="10.5" font-weight="650" text-anchor="middle">Pick a source file</text>
+    <path d="M124,36 L156,36" stroke="#8b7bb8" stroke-width="1.7" fill="none" marker-end="url(#g)"/>
+    <path d="M222,12 L292,36 L222,60 L152,36 Z" fill="#fffbf2" stroke="#e8c98a" stroke-width="1.4"/><text x="222" y="33" font-size="9.5" font-weight="650" text-anchor="middle">Origin</text><text x="222" y="44" font-size="9.5" font-weight="650" text-anchor="middle">answered?</text>
+    <path d="M222,60 L222,88" stroke="#8b7bb8" stroke-width="1.7" fill="none" marker-end="url(#g)"/><text x="232" y="78" font-size="9" fill="#b45309">no</text>
+    <rect x="140" y="92" width="164" height="34" rx="8" fill="#fef6f6" stroke="#e0a5a5" stroke-width="1.4"/><text x="222" y="113" font-size="10" font-weight="650" text-anchor="middle">File unusable until answered</text>
+    <path d="M292,36 L326,36" stroke="#8b7bb8" stroke-width="1.7" fill="none" marker-end="url(#g)"/><text x="308" y="30" font-size="9" fill="#15803d">yes</text>
+    <rect x="328" y="10" width="140" height="52" rx="8" fill="#f5f2fc" stroke="#c4b5e8" stroke-width="1.4"/><text x="398" y="30" font-size="10.5" font-weight="650" text-anchor="middle">Filter it down and</text><text x="398" y="44" font-size="10.5" font-weight="650" text-anchor="middle">state expected count</text>
+    <path d="M468,36 L500,36" stroke="#8b7bb8" stroke-width="1.7" fill="none" marker-end="url(#g)"/>
+    <rect x="502" y="16" width="120" height="40" rx="8" fill="#f5f2fc" stroke="#c4b5e8" stroke-width="1.4"/><text x="562" y="41" font-size="10.5" font-weight="650" text-anchor="middle">Extract</text>
+    <path d="M562,56 L562,84" stroke="#8b7bb8" stroke-width="1.7" fill="none" marker-end="url(#g)"/>
+    <rect x="470" y="88" width="184" height="34" rx="8" fill="#f2fbfd" stroke="#8fc8d8" stroke-width="1.4"/><text x="562" y="109" font-size="10" font-weight="650" text-anchor="middle">Count check against expected</text>
+    <path d="M654,105 L692,105" stroke="#8b7bb8" stroke-width="1.7" fill="none" marker-end="url(#g)"/>
+    <rect x="694" y="86" width="140" height="38" rx="8" fill="#f5f2fc" stroke="#c4b5e8" stroke-width="1.4"/><text x="764" y="101" font-size="10.5" font-weight="650" text-anchor="middle">Register the report</text><text x="764" y="115" font-size="10.5" font-weight="650" text-anchor="middle">behind it (IPE)</text>
+    <path d="M764,124 L764,152" stroke="#8b7bb8" stroke-width="1.7" fill="none" marker-end="url(#g)"/>
+    <rect x="646" y="156" width="236" height="52" rx="8" fill="#f5f2fc" stroke="#c4b5e8" stroke-width="1.4"/><text x="764" y="172" font-size="10" font-weight="650" text-anchor="middle">Four IPE checks: source and parameters,</text><text x="764" y="186" font-size="10" font-weight="650" text-anchor="middle">period coverage, completeness, accuracy</text><text x="764" y="202" font-size="9.5" text-anchor="middle" fill="#6b6580">a written finding is required on each</text>
+    <path d="M646,182 L604,182" stroke="#8b7bb8" stroke-width="1.7" fill="none" marker-end="url(#g)"/>
+    <path d="M534,158 L602,182 L534,206 L466,182 Z" fill="#fffbf2" stroke="#e8c98a" stroke-width="1.4"/><text x="534" y="179" font-size="9.5" font-weight="650" text-anchor="middle">All four</text><text x="534" y="190" font-size="9.5" font-weight="650" text-anchor="middle">pass?</text>
+    <path d="M534,206 L534,236" stroke="#8b7bb8" stroke-width="1.7" fill="none" marker-end="url(#g)"/><text x="544" y="226" font-size="9" fill="#b45309">no</text>
+    <rect x="428" y="240" width="212" height="40" rx="8" fill="#fef6f6" stroke="#e0a5a5" stroke-width="1.4"/><text x="534" y="257" font-size="10" font-weight="700" text-anchor="middle" fill="#b91c1c">Not reliable, so nothing can lock</text><text x="534" y="271" font-size="9.5" text-anchor="middle" fill="#4a4459">no sample, no testing, no sign off</text>
+    <path d="M466,182 L400,182" stroke="#8b7bb8" stroke-width="1.7" fill="none" marker-end="url(#g)"/><text x="428" y="176" font-size="9" fill="#15803d">yes</text>
+    <rect x="252" y="160" width="146" height="44" rx="8" fill="#f0fdf4" stroke="#86c9a0" stroke-width="1.4"/><text x="325" y="178" font-size="10.5" font-weight="700" text-anchor="middle" fill="#15803d">Lock the population</text><text x="325" y="193" font-size="9.5" text-anchor="middle" fill="#4a4459">version stamped, downstream open</text>
+  </g>
+</svg>
+</div>
+
+<p>The source file is picked <b>from the files already uploaded to this audit</b>. The expected count is stated <i>before</i> the extract runs, which turns it into a check rather than an observation.</p>
+
+<h4>A population can come from more than one file</h4>
+<p>One control often needs two extracts, because the year sits in two systems or two halves. So a population is a <b>named set built from one or more files</b>, and it carries its own reference and a total across all of them.</p>
+<p>The rule that keeps it honest: <b>each file is proved on its own and sampled on its own, but the verdict is one for all of them.</b> A check that fails on any file sinks the whole population. Half a proven population is not a population.</p>
+<p>Each file shows its own row, its own instance count, and its own state: done, or not drawn yet.</p>
+
+<p>Extracting gives you a set of rows. It does not give you the right to use them. Before the population locks, the report those rows came out of is itself put under test. That test is called <b>IPE</b>.</p>
+
+<h4>IPE: proving the report first</h4>
+<p>IPE means <b>Information Produced by the Entity</b>: a report the company produced about itself. It is not trustworthy just because it arrived. It could have been run over the wrong months, with a filter nobody mentioned, or from a copy of the system rather than the live one. So the report is what gets tested here, not the transactions in it.</p>
+<p>There is no form. The moment a population exists the audit already knows the report, because it is the source file, so the record is created from the file and the auditor arrives at the checks. If the wrong file was registered, <b>Withdraw</b> clears it and testing restarts.</p>
+
+<h5>Four checks</h5>
+<table>
+<tr><th>Check</th><th>What is being asserted</th><th>How it is proven</th></tr>
+<tr><td>Source and parameters</td><td>The report was run from the live system over the audit period, with the filters this test assumes</td><td>Inspect the parameter screen capture and agree system, company code, date range and document types to the test scope</td></tr>
+<tr><td>Period coverage</td><td>The extract spans the whole period, and an empty month inside it is the control not running rather than the extract stopping short</td><td>Agree the earliest and latest instance to the audit period. The screen shows the span and names every empty month but does not grade it, because arithmetic cannot tell a hole from a quiet month</td></tr>
+<tr><td>Completeness</td><td>Every record that should be in the report is in it</td><td>Agree the count and control total to the system or the general ledger. A <b>Count it yourself</b> box takes the auditor's own count and shows the variance; <b>Write it up</b> turns it into the finding</td></tr>
+<tr><td>Accuracy</td><td>What the report says about each record is true</td><td>Vouch a spot check back to source documents field by field, and re perform any calculated column</td></tr>
+</table>
+
+<h5>Concluding</h5>
+<ul>
+<li>Pass and Fail stay disabled until a finding is typed, and what is written prints on the working paper.</li>
+<li><b>One failure sinks the report.</b> Reliable is unavailable if any check failed, and neither verdict is available until all four are answered.</li>
+<li>Reopening a check drops the conclusion back to not tested.</li>
+<li>Only the auditor concludes. The owner attaches evidence but never grades it.</li>
+</ul>
+
+<h4>Three gates, not one</h4>
+<p>IPE is three separate gates at three points in the flow, not one check at one moment.</p>
+<table>
+<tr><th>Gate</th><th>Where it sits</th><th>What it proves</th></tr>
+<tr><td>The report is reliable</td><td>Inside population extraction, before the lock</td><td>The extract the population came out of can be relied on</td></tr>
+<tr><td>Extraction is confirmed</td><td>After the sample is drawn</td><td>The drawn items trace back to the locked population, and the method and seed are on the paper</td></tr>
+<tr><td>Evidence reports are proven</td><td>During operating testing</td><td>Any report the control itself reads is proven too. A perfect review performed over a wrong report is zero protection, so the control cannot be effective while the report it runs on is unproven.</td></tr>
+</table>
+
+<p>Only a report concluded reliable lets the population lock. Locking stamps a <b>version</b>, and every later step draws off that version. A later round <b>re versions instead of editing</b>, so the earlier round's paper still shows the population it actually used.</p>
+
+<div class="callout">
+<p><span class="lbl">R8.3 No lock without a proven source</span>
+The population cannot lock until the report behind it is concluded reliable, and the sample, the testing and the sign off all sit behind that lock. <b>Not currently enforced. The live product allows a population to lock with the IPE untested.</b></p>
+</div>
+
+<div class="callout">
+<p><span class="lbl">R8.4 Correcting a file's origin reaches back</span>
+Provenance is answered once on the file and inherited by every control using it. Changing it later updates all of them and raises a review note on any control that already concluded on the old answer.</p>
+</div>
+
+<h4>Edge cases</h4>
+<table class="edge">
+<tr><th>Situation</th><th>What should happen</th></tr>
+<tr><td>An attribute has a workflow mapped but no input file</td><td>Say which attribute, and offer to <b>ask the owner to upload it</b> from here. The auditor should not have to leave the control to unblock their own test.</td></tr>
+<tr><td>The file has never had its origin answered</td><td>It cannot be used. The row is disabled with a tooltip saying to record where the file came from first. Provenance is answered on the file, once, not per control.</td></tr>
+<tr><td>The extracted population is the same size as the source file</td><td>Warn that nothing was filtered out. Usually this means the filter was not applied, and the auditor is about to test the wrong set.</td></tr>
+<tr><td>The count differs from what was expected</td><td>Show the variance. An overshoot and a shortfall are different problems and should not be reported identically.</td></tr>
+<tr><td>The IPE fails a check</td><td>The report is not reliable. The population cannot lock, so the sample, the testing and the sign off all stay shut. The screen states this cascade rather than just disabling a button.</td></tr>
+<tr><td>The IPE has not been tested at all</td><td>Same outcome as a failure. Untested is not the same as passed, and the lock stays closed.</td></tr>
+<tr><td>The wrong file was used and testing has started</td><td>Withdrawing the population takes the sample and every result with it. Warn before doing it, naming what will be lost.</td></tr>
+<tr><td>The filter was wrong but the file was right</td><td>Refiltering drops the extract and puts the old criteria back in the form, so the auditor edits instead of starting again.</td></tr>
+<tr><td>A later audit needs a different window</td><td>The new audit creates a new version rather than editing the old one, so the earlier audit's paper still shows the population it actually used.</td></tr>
+</table>
+
+<h3>8.3 Sample drawing</h3>
+<p>You cannot check every transaction, so you check a handful that fairly stands in for the rest. Two questions decide it: <b>how many</b>, and <b>which ones</b>.</p>
+<p>The population has already settled what "all of them" means. This step only picks from inside it, and never changes it.</p>
+<p>Where the population was built from several files, <b>the sample is drawn per file</b>, each sized off the same band, and the step shows how many of the files have been drawn so far.</p>
+
+<div class="flow">
+<svg viewBox="0 0 960 248" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Sample drawing flowchart with two gates and a redraw loop">
+  <defs><marker id="h" markerWidth="9" markerHeight="9" refX="7" refY="4.5" orient="auto"><path d="M1,1 L7,4.5 L1,8" fill="none" stroke="#8b7bb8" stroke-width="1.7"/></marker>
+  <marker id="hr" markerWidth="9" markerHeight="9" refX="7" refY="4.5" orient="auto"><path d="M1,1 L7,4.5 L1,8" fill="none" stroke="#c26a6a" stroke-width="1.7"/></marker></defs>
+  <g font-family="Helvetica, Arial, sans-serif">
+    <path d="M84,12 L164,38 L84,64 L4,38 Z" fill="#fffbf2" stroke="#e8c98a" stroke-width="1.4"/><text x="84" y="35" font-size="9.5" font-weight="650" text-anchor="middle">Design</text><text x="84" y="46" font-size="9.5" font-weight="650" text-anchor="middle">effective?</text>
+    <path d="M164,38 L200,38" stroke="#8b7bb8" stroke-width="1.7" fill="none" marker-end="url(#h)"/><text x="182" y="32" font-size="9" fill="#15803d">yes</text>
+    <path d="M282,12 L362,38 L282,64 L202,38 Z" fill="#fffbf2" stroke="#e8c98a" stroke-width="1.4"/><text x="282" y="35" font-size="9.5" font-weight="650" text-anchor="middle">Population</text><text x="282" y="46" font-size="9.5" font-weight="650" text-anchor="middle">locked?</text>
+    <path d="M84,64 L84,96" stroke="#8b7bb8" stroke-width="1.7" fill="none" marker-end="url(#h)"/><text x="94" y="86" font-size="9" fill="#b45309">no</text>
+    <path d="M282,64 L282,96" stroke="#8b7bb8" stroke-width="1.7" fill="none" marker-end="url(#h)"/><text x="292" y="86" font-size="9" fill="#b45309">no</text>
+    <rect x="14" y="100" width="330" height="32" rx="8" fill="#fef6f6" stroke="#e0a5a5" stroke-width="1.4"/><text x="179" y="120" font-size="10" font-weight="650" text-anchor="middle">Step stays locked, and the screen names which gate is holding it</text>
+    <path d="M362,38 L396,38" stroke="#8b7bb8" stroke-width="1.7" fill="none" marker-end="url(#h)"/><text x="378" y="32" font-size="9" fill="#15803d">yes</text>
+    <rect x="398" y="8" width="176" height="60" rx="8" fill="#f5f2fc" stroke="#c4b5e8" stroke-width="1.4"/><text x="486" y="26" font-size="10.5" font-weight="650" text-anchor="middle">Suggest a size from how</text><text x="486" y="40" font-size="10.5" font-weight="650" text-anchor="middle">often it runs and how</text><text x="486" y="54" font-size="10.5" font-weight="650" text-anchor="middle">risky it is</text>
+    <path d="M574,38 L606,38" stroke="#8b7bb8" stroke-width="1.7" fill="none" marker-end="url(#h)"/>
+    <rect x="608" y="8" width="160" height="60" rx="8" fill="#f5f2fc" stroke="#c4b5e8" stroke-width="1.4"/><text x="688" y="26" font-size="10.5" font-weight="650" text-anchor="middle">Draw, using a seed</text><text x="688" y="40" font-size="10.5" font-weight="650" text-anchor="middle">derived from the control</text><text x="688" y="54" font-size="10.5" font-weight="650" text-anchor="middle">and the round</text>
+    <path d="M768,38 L800,38" stroke="#8b7bb8" stroke-width="1.7" fill="none" marker-end="url(#h)"/>
+    <rect x="802" y="16" width="154" height="44" rx="8" fill="#f5f2fc" stroke="#c4b5e8" stroke-width="1.4"/><text x="879" y="34" font-size="10.5" font-weight="650" text-anchor="middle">Review the drawn items</text><text x="879" y="49" font-size="10.5" font-weight="650" text-anchor="middle">before accepting</text>
+    <path d="M879,60 L879,90" stroke="#8b7bb8" stroke-width="1.7" fill="none" marker-end="url(#h)"/>
+    <rect x="792" y="94" width="164" height="40" rx="8" fill="#f0fdf4" stroke="#86c9a0" stroke-width="1.4"/><text x="874" y="111" font-size="10.5" font-weight="700" text-anchor="middle" fill="#15803d">Accepted</text><text x="874" y="126" font-size="9.5" text-anchor="middle" fill="#4a4459">basis and seed recorded</text>
+    <path d="M792,114 L700,114 L700,74" stroke="#c26a6a" stroke-width="1.7" fill="none" stroke-dasharray="5 4" marker-end="url(#hr)"/>
+    <text x="700" y="132" font-size="9.5" text-anchor="middle" fill="#c26a6a">rejected, redraw</text><text x="700" y="144" font-size="9.5" text-anchor="middle" fill="#c26a6a">population untouched</text>
+    <rect x="14" y="168" width="942" height="66" rx="8" fill="#f2fbfd" stroke="#8fc8d8" stroke-width="1.4"/>
+    <text x="30" y="188" font-size="10.5" font-weight="700" fill="#0e7490">Automated controls take a different path</text>
+    <text x="30" y="205" font-size="10" fill="#4a4459">A computer does the same thing every time, so testing one instance is enough, but only while the IT controls around that system hold.</text>
+    <text x="30" y="222" font-size="10" fill="#4a4459">If any IT general control fails anywhere in the engagement, that shortcut is withdrawn from every automated control and sizes jump to manual levels.</text>
+  </g>
+</svg>
+</div>
+
+<h4>When this step opens</h4>
+<p>Two gates must both be green.</p>
+<table>
+<tr><th>Gate</th><th>Why</th></tr>
+<tr><td>Design is effective</td><td>A control that is not built right does not earn an operating test</td></tr>
+<tr><td>Population is locked</td><td>A sample only stands in for a set that can no longer change</td></tr>
+</table>
+<p>If either is shut, the step stays locked and the screen says which gate is holding it.</p>
+
+<p>A seed is just a number that makes a draw repeatable. Same seed, same items. It is derived from <b>this control, this round and this file</b>, and stored on the paper with the ask, so a reviewer can reperform the draw and land on the same items.</p>
+
+<h4>The draw is asked for in a sentence</h4>
+<p>The sample step does not just take a number. For each file it holds a written instruction, drafted by the product and editable by the auditor, for example <span class="q">"Take 4 of the 1,320 instances, one per period wherever the period has any, spread across the whole window."</span></p>
+<p>Underneath, the product says back <b>how it read the instruction</b>, and it is explicit when the answer is no longer random: <span class="q">"4 items, chosen to fit the ask rather than at random, a targeted draw."</span> A targeted draw is allowed, but it must never be mistaken for a random one, and the paper records the ask itself alongside the result.</p>
+<p>The suggested size stays visible beside the ask, with the band it came from, so a departure is obvious rather than hidden.</p>
+
+<h4>Automated controls, and the IT controls underneath them</h4>
+<p>A machine repeats itself, so one instance is enough. This is <b>test of one</b>. For a purely automated control it replaces the whole operating test: no population, no sample, no operating effectiveness. The design test is the test.</p>
+<p>That reasoning is about the <b>system</b>, not the control. It holds only while the IT general controls hold.</p>
+
+<h5>When an IT general control fails</h5>
+<p>One IT general control concluded ineffective withdraws test of one from <b>every automated and IT dependent control in the engagement</b>. Not just the same system. Not just the same audit.</p>
+<table>
+<tr><th>What changes</th><th>Detail</th></tr>
+<tr><td>The operating test returns</td><td>Population, sample and operating effectiveness come back on controls that had concluded on design alone</td></tr>
+<tr><td>The sample resizes</td><td>To the control's own frequency and risk band. A quarterly control does not become a daily one because an IT control broke</td></tr>
+<tr><td>Prior conclusions are flagged</td><td>Anything concluded on one instance is marked for retesting</td></tr>
+<tr><td>IT dependent controls are included</td><td>They never had the shortcut, but they lean on the same systems, so they carry the notice too</td></tr>
+</table>
+
+<h5>Where it is announced</h5>
+<p>The person who failed the IT general control was on another page. Elsewhere, a control grows three steps and its sample jumps. Unannounced, that reads as a bug. So it is said in six places, and each one <b>names the control that caused it</b>.</p>
+<table>
+<tr><th>Where</th><th>What it says</th></tr>
+<tr><td>Audit dashboard</td><td>A banner counting the affected controls, with the failed control named and linked</td></tr>
+<tr><td>Control register</td><td>The same banner, plus an action that <b>sets the filter</b> to the affected set</td></tr>
+<tr><td>Control library</td><td>The same again, so it lands with no audit open</td></tr>
+<tr><td>Register saved view</td><td>A test of one withdrawn filter, present <b>only while a failure is in force</b></td></tr>
+<tr><td>Each affected control</td><td>A notice naming the culprit</td></tr>
+<tr><td>The sample step</td><td>The size proposed, why, and that test of one returns once the culprit is remediated and retested</td></tr>
+</table>
+<p><b>Auditor and reviewer only.</b> Sample sizing is the audit team's method. The owner meets the consequence as data requests.</p>
+
+<h4>If a sampled item fails</h4>
+<p>A single failure does not end the test. The auditor decides whether it is a real pattern or a one off with a specific cause.</p>
+<ul>
+<li>Real pattern, or not sure: <b>draw more items</b> from the same locked population, same method, new seed saved.</li>
+<li>More failures in that batch: the control is ineffective, and an exception is raised.</li>
+<li>"One small miss, let it go" is not an option. Every failure is either explained on the record or carried into the conclusion.</li>
+</ul>
+
+<h4>What is saved</h4>
+<ul>
+<li>Which population version the draw came from, and its locked count</li>
+<li>The size, the frequency and risk behind it, the ask as written, and any change with its reason</li>
+<li>How the items were picked, and the seed, plus the second seed if more items were drawn</li>
+<li>The items themselves, and who accepted them</li>
+<li>For automated controls: the system, its IT control state at the time, and whether one instance testing was used</li>
+</ul>
+
+<h4>Rules for drawing a sample</h4>
+<ol>
+<li><b>Both gates green first.</b> Design effective and population locked. If either is shut, the step names the one holding it.</li>
+<li><b>The population is the set.</b> The ask selects within it and is recorded word for word. It can never widen the set, and a need to change the set means going back to fix the population.</li>
+<li><b>Rejecting a draw never edits the population.</b> It draws again from the same locked set, with the new seed saved alongside the first.</li>
+<li><b>Frequency and risk come from the RACM.</b> Neither is asked for twice, and both are shown beside the suggested size.</li>
+<li><b>A failed IT general control withdraws test of one across the engagement.</b> Not per system, not per audit.</li>
+<li><b>The withdrawal is announced and names the culprit.</b> A control that grows three steps because of something done elsewhere reads as a bug otherwise.</li>
+<li><b>The paper is sized the way the screen was sized.</b> A working paper printing test of one against a screen showing twenty five contradicts the file it records.</li>
+<li><b>Every size, ask, method and seed is saved,</b> so someone who was not there can reperform the draw and land on the same items.</li>
+</ol>
+
+<h4>Edge cases</h4>
+<table class="edge">
+<tr><th>Situation</th><th>What should happen</th></tr>
+<tr><td>The control runs on no fixed schedule</td><td>There is no band to read off. The size is a judgement call and the product says so rather than inventing a number.</td></tr>
+<tr><td>The population is withdrawn after the sample was drawn</td><td>The sample and all its results go with it, with a warning naming what will be lost before it happens.</td></tr>
+<tr><td>The suggested size is larger than the population</td><td>It is capped at the population. A sample cannot be bigger than the set it comes from.</td></tr>
+<tr><td>The control has several paths and the draw lands on one</td><td>Flag it. A draw that never touched the second approval route has not tested the second approval route.</td></tr>
+<tr><td>The ask is rewritten so the draw is no longer random</td><td>Allowed, but the product must say it is a targeted draw and the paper must carry the ask as written.</td></tr>
+</table>
+
+<h3>8.4 Test of Operating Effectiveness</h3>
+<p>Now the real question. <b>Did the control actually work, on every item you looked at?</b></p>
+
+<div class="flow">
+<svg viewBox="0 0 960 300" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Test of Operating Effectiveness flowchart, evidence routes and the pass gate">
+  <defs><marker id="j" markerWidth="9" markerHeight="9" refX="7" refY="4.5" orient="auto"><path d="M1,1 L7,4.5 L1,8" fill="none" stroke="#8b7bb8" stroke-width="1.7"/></marker></defs>
+  <g font-family="Helvetica, Arial, sans-serif">
+    <rect x="4" y="52" width="134" height="46" rx="8" fill="#f5f2fc" stroke="#c4b5e8" stroke-width="1.4"/><text x="71" y="72" font-size="10.5" font-weight="650" text-anchor="middle">Sample locked,</text><text x="71" y="86" font-size="10.5" font-weight="650" text-anchor="middle">attributes from the RACM</text>
+    <path d="M138,75 L172,75" stroke="#8b7bb8" stroke-width="1.7" fill="none" marker-end="url(#j)"/>
+    <rect x="174" y="48" width="152" height="54" rx="8" fill="#f5f2fc" stroke="#c4b5e8" stroke-width="1.4"/><text x="250" y="68" font-size="10.5" font-weight="650" text-anchor="middle">Every sampled item</text><text x="250" y="82" font-size="10.5" font-weight="650" text-anchor="middle">against every attribute</text><text x="250" y="95" font-size="9" text-anchor="middle" fill="#6b6580">3 attributes, 25 items, 75 checks</text>
+    <path d="M326,75 L360,75" stroke="#8b7bb8" stroke-width="1.7" fill="none" marker-end="url(#j)"/>
+
+    <rect x="362" y="10" width="196" height="52" rx="8" fill="#f5f2fc" stroke="#c4b5e8" stroke-width="1.4"/><text x="460" y="29" font-size="10.5" font-weight="700" text-anchor="middle">Validation, the default</text><text x="460" y="43" font-size="10" text-anchor="middle" fill="#4a4459">AI validation of an uploaded file,</text><text x="460" y="55" font-size="10" text-anchor="middle" fill="#4a4459">or a mapped workflow. Never both</text>
+    <rect x="362" y="88" width="196" height="52" rx="8" fill="#f5f2fc" stroke="#c4b5e8" stroke-width="1.4"/><text x="460" y="107" font-size="10.5" font-weight="700" text-anchor="middle">Self attestation, off by default</text><text x="460" y="121" font-size="10" text-anchor="middle" fill="#4a4459">Physical controls only. A written note</text><text x="460" y="133" font-size="10" text-anchor="middle" fill="#4a4459">is mandatory before pass or fail</text>
+    <path d="M348,75 L348,36 L360,36" stroke="#8b7bb8" stroke-width="1.4" fill="none" marker-end="url(#j)"/>
+    <path d="M348,75 L348,114 L360,114" stroke="#8b7bb8" stroke-width="1.4" fill="none" marker-end="url(#j)"/>
+
+    <path d="M558,36 L570,36 L570,75 L594,75" stroke="#8b7bb8" stroke-width="1.4" fill="none" marker-end="url(#j)"/>
+    <path d="M558,114 L570,114 L570,75" stroke="#8b7bb8" stroke-width="1.4" fill="none"/>
+    <path d="M664,44 L732,75 L664,106 L596,75 Z" fill="#fffbf2" stroke="#e8c98a" stroke-width="1.4"/><text x="664" y="72" font-size="9.5" font-weight="650" text-anchor="middle">Every attribute</text><text x="664" y="84" font-size="9.5" font-weight="650" text-anchor="middle">passes?</text>
+
+    <path d="M732,75 L772,75" stroke="#8b7bb8" stroke-width="1.7" fill="none" marker-end="url(#j)"/><text x="750" y="68" font-size="9" fill="#15803d">yes</text>
+    <rect x="774" y="52" width="182" height="46" rx="8" fill="#f0fdf4" stroke="#86c9a0" stroke-width="1.4"/><text x="865" y="72" font-size="10.5" font-weight="700" text-anchor="middle" fill="#15803d">Operating effective</text><text x="865" y="87" font-size="9.5" text-anchor="middle" fill="#4a4459">sign off unlocks</text>
+
+    <path d="M664,106 L664,148" stroke="#8b7bb8" stroke-width="1.7" fill="none" marker-end="url(#j)"/><text x="674" y="132" font-size="9" fill="#b45309">no</text>
+    <rect x="562" y="152" width="204" height="50" rx="8" fill="#fef6f6" stroke="#e0a5a5" stroke-width="1.4"/><text x="664" y="172" font-size="10.5" font-weight="700" text-anchor="middle" fill="#b91c1c">Operating ineffective</text><text x="664" y="187" font-size="9.5" text-anchor="middle" fill="#4a4459">one failed item fails the whole test</text>
+    <path d="M766,177 L804,177" stroke="#8b7bb8" stroke-width="1.7" fill="none" marker-end="url(#j)"/>
+    <rect x="806" y="155" width="150" height="44" rx="8" fill="#fef6f6" stroke="#e0a5a5" stroke-width="1.4"/><text x="881" y="173" font-size="10.5" font-weight="650" text-anchor="middle">Deficiency raised</text><text x="881" y="188" font-size="9.5" text-anchor="middle" fill="#4a4459">automatically, see section 9</text>
+
+    <rect x="174" y="240" width="782" height="46" rx="8" fill="#f2fbfd" stroke="#8fc8d8" stroke-width="1.4"/><text x="565" y="259" font-size="10.5" font-weight="700" text-anchor="middle" fill="#0e7490">The conclusion arrives pre written from the results, and any single result can be overridden</text><text x="565" y="274" font-size="9.5" text-anchor="middle" fill="#4a4459">an override carries a written reason and is recorded per attribute, never for the whole control</text>
+  </g>
+</svg>
+</div>
+
+<h4>How it works</h4>
+<p>An <b>attribute</b> is one thing that must be true, for example that the second approver is a different person from the requester. Attributes come from the RACM, and each one carries its assertion, its precision and its procedure.</p>
+<p><b>Self attestation</b> is for controls whose only evidence is that a person went and looked: counting inventory, confirming a cabinet of signed contracts is locked, watching a reconciliation on site. The tester writes what they saw and attaches whatever the visit produced.</p>
+
+<div class="callout">
+<p><span class="lbl">R8.5 Self attestation is for physical controls</span>
+Attestation is the answer to a control whose evidence is an inspection performed in person, not a fallback for a control whose file was inconvenient to obtain. It is off by default, always secondary to validation, and where validation contradicts an attestation the validation stands.</p>
+</div>
+
+<h4>Edge cases</h4>
+<table class="edge">
+<tr><th>Situation</th><th>What should happen</th></tr>
+<tr><td>No file has been uploaded for AI validation</td><td>The run button stays disabled and relabels itself to say what is needed. <span class="q">"Upload the required file first."</span></td></tr>
+<tr><td>No sample has been drawn</td><td>The control cannot be concluded effective, and the message points back to the sample step.</td></tr>
+<tr><td>One item out of twenty five fails</td><td>That attribute fails, and so does the whole operating test. No partial credit.</td></tr>
+<tr><td>The auditor disagrees with a result on one attribute</td><td>They can override it with a written reason, recorded per attribute, not for the whole control.</td></tr>
+<tr><td>The only evidence available is somebody saying it happened</td><td>Inquiry alone is not enough for an operating conclusion. The product should refuse or flag it, because an attribute concluded on nobody's word is not tested.</td></tr>
+<tr><td>The control is physical and produces no file at all</td><td>Self attestation is the intended route. The tester records what was inspected, where and when, and attaches whatever the visit produced.</td></tr>
+<tr><td>Attestation is used on a control that does produce a file</td><td>Allowed but weaker, and the working paper must show that the attribute rests on a statement rather than on the document that existed.</td></tr>
+<tr><td>The workflow run happened before the sample was drawn</td><td>Flag it as stale and require a re run. Results that predate the sample were not testing these items.</td></tr>
+<tr><td>The owner attests but the validation contradicts them</td><td>The validation result stands. Attestation supports evidence, it does not overrule it.</td></tr>
+</table>
+
+<h3>8.5 Sign off and the working paper</h3>
+<p>When both tracks conclude, the control is finished and the paperwork that proves it becomes available. This is the step that turns testing into something a regulator can read.</p>
+
+<div class="flow">
+<svg viewBox="0 0 960 236" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Sign off flowchart leading to the working paper">
+  <defs><marker id="j" markerWidth="9" markerHeight="9" refX="7" refY="4.5" orient="auto"><path d="M1,1 L7,4.5 L1,8" fill="none" stroke="#8b7bb8" stroke-width="1.7"/></marker>
+  <marker id="jr" markerWidth="9" markerHeight="9" refX="7" refY="4.5" orient="auto"><path d="M1,1 L7,4.5 L1,8" fill="none" stroke="#c26a6a" stroke-width="1.7"/></marker></defs>
+  <g font-family="Helvetica, Arial, sans-serif">
+    <rect x="4" y="20" width="148" height="44" rx="8" fill="#f5f2fc" stroke="#c4b5e8" stroke-width="1.4"/><text x="78" y="38" font-size="10.5" font-weight="650" text-anchor="middle">Both tracks</text><text x="78" y="53" font-size="10.5" font-weight="650" text-anchor="middle">concluded</text>
+    <path d="M152,42 L186,42" stroke="#8b7bb8" stroke-width="1.7" fill="none" marker-end="url(#j)"/>
+    <path d="M262,16 L340,42 L262,68 L184,42 Z" fill="#fffbf2" stroke="#e8c98a" stroke-width="1.4"/><text x="262" y="39" font-size="9.5" font-weight="650" text-anchor="middle">Review notes</text><text x="262" y="50" font-size="9.5" font-weight="650" text-anchor="middle">all closed?</text>
+    <path d="M262,68 L262,96" stroke="#8b7bb8" stroke-width="1.7" fill="none" marker-end="url(#j)"/><text x="272" y="86" font-size="9" fill="#b45309">no</text>
+    <rect x="180" y="100" width="164" height="32" rx="8" fill="#fef6f6" stroke="#e0a5a5" stroke-width="1.4"/><text x="262" y="120" font-size="10" font-weight="650" text-anchor="middle">Countersign stays blocked</text>
+    <path d="M340,42 L374,42" stroke="#8b7bb8" stroke-width="1.7" fill="none" marker-end="url(#j)"/><text x="356" y="36" font-size="9" fill="#15803d">yes</text>
+    <rect x="376" y="20" width="150" height="44" rx="8" fill="#f5f2fc" stroke="#c4b5e8" stroke-width="1.4"/><text x="451" y="38" font-size="10.5" font-weight="650" text-anchor="middle">Auditor signs</text><text x="451" y="53" font-size="9.5" text-anchor="middle" fill="#6b6580">as preparer</text>
+    <path d="M526,42 L560,42" stroke="#8b7bb8" stroke-width="1.7" fill="none" marker-end="url(#j)"/>
+    <rect x="562" y="14" width="164" height="56" rx="8" fill="#f2fbfd" stroke="#8fc8d8" stroke-width="1.4"/><text x="644" y="32" font-size="10.5" font-weight="650" text-anchor="middle">Reviewer countersigns</text><text x="644" y="47" font-size="9.5" text-anchor="middle" fill="#4a4459">must be a different person</text><text x="644" y="60" font-size="9.5" text-anchor="middle" fill="#4a4459">from the one who prepared it</text>
+    <path d="M726,42 L760,42" stroke="#8b7bb8" stroke-width="1.7" fill="none" marker-end="url(#j)"/>
+    <rect x="762" y="14" width="194" height="56" rx="8" fill="#f0fdf4" stroke="#86c9a0" stroke-width="1.4"/><text x="859" y="32" font-size="10.5" font-weight="700" text-anchor="middle" fill="#15803d">Control locked</text><text x="859" y="47" font-size="9.5" text-anchor="middle" fill="#4a4459">working paper available</text><text x="859" y="60" font-size="9.5" text-anchor="middle" fill="#4a4459">nothing changes without reopening</text>
+    <path d="M644,70 L644,110 L451,110 L451,66" stroke="#c26a6a" stroke-width="1.7" fill="none" stroke-dasharray="5 4" marker-end="url(#jr)"/>
+    <text x="548" y="126" font-size="9.5" text-anchor="middle" fill="#c26a6a">reviewer returns it instead: conclusions cleared, reason recorded</text>
+    <rect x="14" y="152" width="942" height="72" rx="8" fill="#fbfaff" stroke="#e9e3f7" stroke-width="1.4"/>
+    <text x="30" y="172" font-size="10.5" font-weight="700" fill="#6d28d9">What the working paper contains</text>
+    <text x="30" y="190" font-size="10" fill="#4a4459">The control and its objective, who owns it, the design documents and every design check with its proof, the IPE result, the population and its source,</text>
+    <text x="30" y="206" font-size="10" fill="#4a4459">the sample with its method and seed, the full grid of every item against every attribute, the conclusion, the reasoning behind it, and both signatures.</text>
+    <text x="30" y="220" font-size="9.5" fill="#8b849c">Nothing in it is typed for the paper. Every line is read off the testing already done.</text>
+  </g>
+</svg>
+</div>
+
+<div class="callout">
+<p><span class="lbl">R8.6 The paper is a by product, not a task</span>
+The working paper generates from the testing that has already happened. Nobody writes it. If a paper could say something the testing does not support, there would be two versions of the truth.</p>
+</div>
+
+<h4>Edge cases</h4>
+<table class="edge">
+<tr><th>Situation</th><th>What should happen</th></tr>
+<tr><td>The same person prepared and would countersign</td><td>Blocked, and the reason is stated by name, not by role. Wearing two hats does not make one person two people.</td></tr>
+<tr><td>A review note is still open</td><td>Countersign stays blocked and the screen says how many notes must close first.</td></tr>
+<tr><td>The reviewer is not satisfied</td><td>They return the paper instead of countersigning. Both conclusions are cleared, the reason is recorded, and the control goes back to the auditor. A returned paper without a reason costs the work twice.</td></tr>
+<tr><td>Something needs changing after sign off</td><td>Reopening requires a written reason and is logged. Evidence, population, sample and results are kept. Only the conclusions and signatures are cleared.</td></tr>
+<tr><td>The control concluded ineffective</td><td>It still gets signed off and still produces a working paper. Ineffective is a finished conclusion, not an unfinished one.</td></tr>
+<tr><td>Someone wants the paper before testing is complete</td><td>It can be exported at any time, but it prints the true state, including what is still outstanding. A draft paper must not look like a finished one.</td></tr>
+<tr><td>The whole round needs to be filed</td><td>An engagement level paper covers every control in one file, alongside a separate audit report written for management rather than for a regulator.</td></tr>
+</table>
+
+<h2>9 · Deficiency management</h2>
+<p>When a control fails, the finding is raised <b>automatically</b>. The auditor never creates one by hand, which is what keeps the register honest: every failure on the register traces back to a real conclusion.</p>
+
+<div class="flow">
+<svg viewBox="0 0 960 330" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Detailed deficiency management flowchart with decision points and loops">
+  <defs><marker id="k" markerWidth="9" markerHeight="9" refX="7" refY="4.5" orient="auto"><path d="M1,1 L7,4.5 L1,8" fill="none" stroke="#8b7bb8" stroke-width="1.7"/></marker>
+  <marker id="kr" markerWidth="9" markerHeight="9" refX="7" refY="4.5" orient="auto"><path d="M1,1 L7,4.5 L1,8" fill="none" stroke="#c26a6a" stroke-width="1.7"/></marker></defs>
+  <g font-family="Helvetica, Arial, sans-serif">
+    <rect x="4" y="18" width="132" height="42" rx="8" fill="#f5f2fc" stroke="#c4b5e8" stroke-width="1.4"/><text x="70" y="35" font-size="10.5" font-weight="650" text-anchor="middle">Control concludes</text><text x="70" y="50" font-size="10.5" font-weight="650" text-anchor="middle">ineffective</text>
+    <path d="M136,39 L168,39" stroke="#8b7bb8" stroke-width="1.7" fill="none" marker-end="url(#k)"/>
+    <rect x="170" y="18" width="132" height="42" rx="8" fill="#f5f2fc" stroke="#c4b5e8" stroke-width="1.4"/><text x="236" y="35" font-size="10.5" font-weight="650" text-anchor="middle">Write the root cause</text><text x="236" y="50" font-size="9.5" text-anchor="middle" fill="#6b6580">blank until someone does</text>
+    <path d="M302,39 L334,39" stroke="#8b7bb8" stroke-width="1.7" fill="none" marker-end="url(#k)"/>
+    <rect x="336" y="18" width="132" height="42" rx="8" fill="#f5f2fc" stroke="#c4b5e8" stroke-width="1.4"/><text x="402" y="35" font-size="10.5" font-weight="650" text-anchor="middle">Size it</text><text x="402" y="50" font-size="9.5" text-anchor="middle" fill="#6b6580">five inputs, grade computed</text>
+    <path d="M468,39 L500,39" stroke="#8b7bb8" stroke-width="1.7" fill="none" marker-end="url(#k)"/>
+    <path d="M578,12 L658,39 L578,66 L498,39 Z" fill="#fffbf2" stroke="#e8c98a" stroke-width="1.4"/><text x="578" y="36" font-size="9.5" font-weight="650" text-anchor="middle">Significant</text><text x="578" y="47" font-size="9.5" font-weight="650" text-anchor="middle">or worse?</text>
+    <path d="M578,66 L578,92" stroke="#8b7bb8" stroke-width="1.7" fill="none" marker-end="url(#k)"/><text x="588" y="84" font-size="9" fill="#b45309">yes</text>
+    <rect x="486" y="96" width="184" height="40" rx="8" fill="#f2fbfd" stroke="#8fc8d8" stroke-width="1.4"/><text x="578" y="113" font-size="10" font-weight="650" text-anchor="middle">Reviewer must confirm the rating</text><text x="578" y="127" font-size="9.5" text-anchor="middle" fill="#4a4459">the owner cannot start until they do</text>
+    <path d="M658,39 L700,39" stroke="#8b7bb8" stroke-width="1.7" fill="none" marker-end="url(#k)"/><text x="678" y="33" font-size="9" fill="#15803d">no</text>
+    <path d="M670,116 L720,116 L720,60" stroke="#8b7bb8" stroke-width="1.7" fill="none" marker-end="url(#k)"/>
+    <rect x="702" y="18" width="120" height="42" rx="8" fill="#fffbf2" stroke="#e8c98a" stroke-width="1.4"/><text x="762" y="35" font-size="10.5" font-weight="650" text-anchor="middle">Owner plans</text><text x="762" y="50" font-size="10.5" font-weight="650" text-anchor="middle">the fix</text>
+    <path d="M822,39 L854,39" stroke="#8b7bb8" stroke-width="1.7" fill="none" marker-end="url(#k)"/>
+    <path d="M906,16 L956,39 L906,62 L856,39 Z" fill="#fffbf2" stroke="#e8c98a" stroke-width="1.4"/><text x="906" y="36" font-size="9" font-weight="650" text-anchor="middle">Auditor</text><text x="906" y="46" font-size="9" font-weight="650" text-anchor="middle">accepts?</text>
+    <path d="M906,62 L906,92 L762,92 L762,62" stroke="#c26a6a" stroke-width="1.7" fill="none" stroke-dasharray="5 4" marker-end="url(#kr)"/><text x="834" y="107" font-size="9" text-anchor="middle" fill="#c26a6a">rejected with a reason, replan</text>
+    <path d="M906,16 L906,150 L120,150 L120,176" stroke="#8b7bb8" stroke-width="1.7" fill="none" marker-end="url(#k)"/><text x="500" y="145" font-size="9" text-anchor="middle" fill="#15803d">accepted</text>
+    <rect x="44" y="180" width="152" height="42" rx="8" fill="#fffbf2" stroke="#e8c98a" stroke-width="1.4"/><text x="120" y="197" font-size="10.5" font-weight="650" text-anchor="middle">Owner does the work</text><text x="120" y="212" font-size="9.5" text-anchor="middle" fill="#6b6580">evidence required to submit</text>
+    <path d="M196,201 L228,201" stroke="#8b7bb8" stroke-width="1.7" fill="none" marker-end="url(#k)"/>
+    <rect x="230" y="180" width="164" height="42" rx="8" fill="#f5f2fc" stroke="#c4b5e8" stroke-width="1.4"/><text x="312" y="197" font-size="10.5" font-weight="650" text-anchor="middle">Auditor retests</text><text x="312" y="212" font-size="9.5" text-anchor="middle" fill="#6b6580">only on items after the fix landed</text>
+    <path d="M394,201 L426,201" stroke="#8b7bb8" stroke-width="1.7" fill="none" marker-end="url(#k)"/>
+    <path d="M496,176 L566,201 L496,226 L426,201 Z" fill="#fffbf2" stroke="#e8c98a" stroke-width="1.4"/><text x="496" y="198" font-size="9.5" font-weight="650" text-anchor="middle">Retest</text><text x="496" y="209" font-size="9.5" font-weight="650" text-anchor="middle">passes?</text>
+    <path d="M566,201 L600,201" stroke="#8b7bb8" stroke-width="1.7" fill="none" marker-end="url(#k)"/><text x="582" y="195" font-size="9" fill="#15803d">yes</text>
+    <rect x="602" y="180" width="150" height="42" rx="8" fill="#f2fbfd" stroke="#8fc8d8" stroke-width="1.4"/><text x="677" y="197" font-size="10.5" font-weight="650" text-anchor="middle">Reviewer closes it</text><text x="677" y="212" font-size="9.5" text-anchor="middle" fill="#4a4459">not the person who retested</text>
+    <path d="M752,201 L786,201" stroke="#8b7bb8" stroke-width="1.7" fill="none" marker-end="url(#k)"/>
+    <rect x="788" y="180" width="168" height="42" rx="8" fill="#f0fdf4" stroke="#86c9a0" stroke-width="1.4"/><text x="872" y="205" font-size="11" font-weight="700" text-anchor="middle" fill="#15803d">Closed</text>
+    <path d="M496,226 L496,254 L762,254 L762,62" stroke="#c26a6a" stroke-width="1.7" fill="none" stroke-dasharray="5 4" marker-end="url(#kr)"/>
+    <text x="600" y="270" font-size="9.5" fill="#c26a6a">retest fails, so it goes back to planning, not to fixing</text>
+    <rect x="14" y="286" width="942" height="38" rx="8" fill="#fef6f6" stroke="#e0a5a5" stroke-width="1.4"/>
+    <text x="30" y="303" font-size="10.5" font-weight="700" fill="#b91c1c">Two failed retests escalate</text>
+    <text x="30" y="318" font-size="10" fill="#4a4459">At that point the problem is no longer the fix. It is the plan, the owner or the rating, and the reviewer is told so in those words.</text>
+  </g>
+</svg>
+</div>
+
+<h4>The six steps</h4>
+<table>
+<tr><th>#</th><th>Step</th><th>Who</th><th>What happens</th></tr>
+<tr><td>1</td><td>Raised</td><td>Automatic</td><td>Created from the failed control, with the failed items listed and the root cause left blank</td></tr>
+<tr><td>2</td><td>Size it</td><td>Auditor, then Reviewer</td><td>Auditor sets five inputs and the grade computes. Significant or worse parks with the reviewer</td></tr>
+<tr><td>3</td><td>Plan the fix</td><td>Owner, then Auditor</td><td>Owner writes what they will do, names themselves and a date. Auditor judges it against the root cause</td></tr>
+<tr><td>4</td><td>Fix and submit</td><td>Owner</td><td>Owner does the work and attaches proof</td></tr>
+<tr><td>5</td><td>Retest</td><td>Auditor</td><td>Fresh sample drawn only from after the fix landed</td></tr>
+<tr><td>6</td><td>Close</td><td>Reviewer</td><td>Independent close, by someone other than the person who retested</td></tr>
+</table>
+
+<h4>The rule at each step</h4>
+<ol>
+<li><b>Raised.</b> Created from the failed control, never by hand, so every finding traces back to a real conclusion.</li>
+<li><b>Size it.</b> While the finding is being sized the panel is live and editable, headed <span class="q">"Severity inputs, recomputed live vs the ground rules"</span>. From the next step it becomes read only, headed <span class="q">"Severity, evaluated by the auditor"</span>, and it also carries a <b>gap nature</b>, for example <span class="q">"Operating failure, manual control"</span> or <span class="q">"Design gap, manual control"</span>. The root cause starts blank and must be written before the finding can be sized. It has to say <b>why it happened</b>, the mechanism rather than the count. <span class="q">"The payment run releases on the first authorisation and queues the second as an after the fact review"</span> is a cause. "9 of 40 payments failed" is not. A rating of significant or worse then blocks everything until the reviewer confirms it, because a wrong rating must not drive weeks of remediation.</li>
+<li><b>Plan the fix.</b> The owner writes it and names a date. The auditor judges it against the root cause and can reject with a mandatory reason, but <b>never writes or executes it</b>.</li>
+<li><b>Fix and submit.</b> The owner does the work, attaches proof, and is the only one who can declare it ready.</li>
+<li><b>Retest.</b> On a fresh sample drawn <b>only from after the fix landed</b>. Anything earlier came out of the broken control and proves nothing about the repair.</li>
+<li><b>Close.</b> The reviewer closes, and never the person who ran the retest.</li>
+</ol>
+
+<h4>Edge cases</h4>
+<table class="edge">
+<tr><th>Situation</th><th>What should happen</th></tr>
+<tr><td>The exposure is below the clearly trivial floor</td><td>Logged and left alone. It is not evaluated, not aggregated, and does not consume anyone's time.</td></tr>
+<tr><td>A rating the reviewer already confirmed changes later</td><td>Warn and demand re confirmation. <span class="q">"The confirmed rating no longer matches. J. Fernandes confirmed this as Significant Deficiency; it now grades Material Weakness after combining with other exceptions."</span></td></tr>
+<tr><td>Someone tries to edit severity after the fix has started</td><td>Blocked. The inputs are editable through sizing and rating review, then read only. Re grading work already underway moves the goalposts on the person doing it.</td></tr>
+<tr><td>The owner marks the fix done with no evidence</td><td>Submission is blocked. Done needs proof.</td></tr>
+<tr><td>The control runs monthly and the fix landed in August</td><td>Say when a retest becomes possible rather than letting someone retest too early. <span class="q">"Retestable from 15 Dec 2026. Fixed 15 Aug 2026 plus three to four monthly closes."</span></td></tr>
+<tr><td>The earliest possible retest falls after year end</td><td>Warn now, while the date can still move. A fix that cannot be proven before the opinion date is a problem to raise in August, not December.</td></tr>
+<tr><td>The control runs annually</td><td>There is no second occurrence to sample this year. Say so plainly and carry it forward rather than pretending a retest is coming.</td></tr>
+<tr><td>The retest fails</td><td>Back to planning, not to fixing. If the fix did not work, the plan was wrong. Every attempt is kept with the reason it failed.</td></tr>
+<tr><td>The retest fails twice</td><td>Escalate to the reviewer with different wording, because the problem is now the plan, the owner or the rating.</td></tr>
+<tr><td>The person who retested tries to close it</td><td>Blocked. Closing is the reviewer's act, and independence is the point.</td></tr>
+<tr><td>The business disputes the exposure or likelihood</td><td>They can raise a formal challenge on the input rather than the grade, since the grade is computed. The auditor must respond with a reason either way, so the argument lands on the paper instead of in a corridor.</td></tr>
+<tr><td>The year ends with the finding still open</td><td>An open material weakness at year end means ICFR is declared ineffective. The countdown must show this every day until it closes.</td></tr>
+</table>
+
+<h2>10 · How severity is decided</h2>
+<table>
+<tr><th>Grade</th><th>Meaning</th><th>Consequence</th></tr>
+<tr><td>Clearly trivial</td><td>Too small to investigate</td><td>Logged and left alone</td></tr>
+<tr><td>Deficiency</td><td>Real but small</td><td>Tracked and fixed</td></tr>
+<tr><td>Significant deficiency</td><td>Senior people must know</td><td>Escalated, with the rating confirmed by the reviewer</td></tr>
+<tr><td>Material weakness</td><td>The numbers could be wrong in a way that matters</td><td>Reportable. Open at year end means controls are declared ineffective</td></tr>
+</table>
+
+<h3>The five inputs</h3>
+<table>
+<tr><th>Input</th><th>Asks</th></tr>
+<tr><td><b>Likelihood</b></td><td>How plausible was it that something slipped through? Remote, Reasonably possible, or Probable</td></tr>
+<tr><td><b>Exposure</b></td><td><b>What could have slipped through while the control was broken, not the error you found.</b> The most misunderstood field in the product</td></tr>
+<tr><td><b>MW indicators</b></td><td>Five red flags, such as fraud by senior management</td></tr>
+<tr><td><b>Compensating control</b></td><td>Another control partly covering the same risk</td></tr>
+<tr><td><b>Prudent official</b></td><td>Auditor judgement that it is worse than the maths says. Where the grade is already material weakness the screen says so: <span class="q">"already at the top of the ladder, nothing to raise."</span></td></tr>
+</table>
+
+<h3>The seven rules, in order</h3>
+<table>
+<tr><th>#</th><th>Rule</th><th>Effect</th></tr>
+<tr><td>1</td><td>MW indicator present?</td><td>Yes gives <b>Material weakness</b>, whatever the amount. Stop</td></tr>
+<tr><td>2</td><td>Compensating control available?</td><td>Only if that control is itself tested effective. Held for later</td></tr>
+<tr><td>3</td><td>Below the clearly trivial floor?</td><td>Yes gives <b>Clearly trivial</b>. Stop</td></tr>
+<tr><td>4</td><td>Likelihood more than remote?</td><td>Remote caps it at <b>Deficiency</b>, however large</td></tr>
+<tr><td>5</td><td>Exposure ladder</td><td>At or above materiality gives material weakness. At or above the significant band gives significant. Below gives deficiency</td></tr>
+<tr><td>2b</td><td>Apply the cap</td><td>Lowers material weakness to significant by one step, never to nothing</td></tr>
+<tr><td>6</td><td>Aggregation</td><td>Combine with findings sharing an <b>account line item</b> or an assertion, then re run the ladder. <b>Can only raise.</b> A material weakness indicator or an ITGC exception does not aggregate on one account</td></tr>
+<tr><td>7</td><td>Prudent official</td><td>The auditor may raise with a mandatory reason. Never lower</td></tr>
+</table>
+
+<div class="callout">
+<p><span class="lbl">R10.1 Severity is computed, never typed</span>
+No field stores a hand set grade. Change an input and the grade recomputes.</p>
+</div>
+
+<div class="callout">
+<p><span class="lbl">R10.2 The engine shows its working</span>
+Every rule the engine reached prints a line, <b>including rules that changed nothing</b>, and the reader can see where it stopped. A finding carrying an indicator prints two lines and stops: the indicator that decided it, then <span class="q">"No cap available, an indicator cannot be argued down by another control."</span> Rules the engine never reached are not shown, because a rule that did not run is not part of the reasoning.</p>
+</div>
+
+<div class="callout">
+<p><span class="lbl">R10.3 A failed control never leaves the register</span>
+Only one rule lowers a grade, the compensating control, and it drops it by one step. Nothing takes it to zero. <span class="q">"Capping Material Weakness to Significant Deficiency, never clears the exception."</span></p>
+</div>
+
+<div class="callout">
+<p><span class="lbl">R10.4 Changing the ground rules is a dangerous act</span>
+Materiality and the significant deficiency band are set per audit and can be edited from Configuration for the life of that audit. Editing either re grades every open finding in the audit, so it is treated as a draft until applied, and applying it follows R7.2.</p>
+</div>
+
+<h2>11 · Confidence scores</h2>
+<p>Seven read outs, four on the engagement and three on a control. All computed live from the evidence. None is stored, so none can drift or be set by hand.</p>
+<p>Every one is a percentage of the same shape, a count of what is done over a count of what there is.</p>
+
+<div class="eq"><i>score</i> = <span class="fx"><span class="n">done</span><span class="d">total</span></span> × 100</div>
+
+<h3>Engagement level</h3>
+
+<h4>1. RACM completeness</h4>
+<p>Is the matrix approved to test against?</p>
+<div class="eq"><i>C</i><sub>racm</sub> = <span class="fx"><span class="n"><i>a</i></span><span class="d"><i>n</i></span></span> × 100</div>
+<p class="where"><b>a</b> = RACM rows approved &nbsp;·&nbsp; <b>n</b> = controls in scope &nbsp;·&nbsp; reads <code>{a}/{n} rows approved · {r} remarks open</code></p>
+<p>One RACM row is one control, so the denominator is the scope itself. A remark is a blocker with a named condition, not a half approval, so <i>r</i> sits beside the score and never enters <i>a</i>.</p>
+
+<h4>2. Control effectiveness</h4>
+<p>Are the controls working?</p>
+<div class="eq"><i>C</i><sub>eff</sub> = <span class="fx"><span class="n"><i>e</i></span><span class="d"><i>n</i></span></span> × 100 &nbsp;&nbsp; and red whenever <i>x</i> &gt; 0</div>
+<p class="where"><b>e</b> = controls where <i>both</i> tracks concluded effective &nbsp;·&nbsp; <b>x</b> = controls concluded ineffective &nbsp;·&nbsp; reads <code>{e}/{n} controls effective · {x} ineffective</code></p>
+<p>Either track ineffective sinks the control, so <i>e</i> counts agreement between the two. Colour is not proportional here: one ineffective control turns it red whatever the percentage says.</p>
+
+<h4>3. Sample testing</h4>
+<p>How much of the testing ground is covered?</p>
+<div class="eq"><i>C</i><sub>samp</sub> = <span class="fx"><span class="n">Σ <i>d</i><sub>i</sub></span><span class="d">Σ <i>t</i><sub>i</sub></span></span> × 100 &nbsp;&nbsp; where <i>t</i><sub>i</sub> = <i>s</i><sub>i</sub> × <i>k</i><sub>i</sub></div>
+<p class="where"><b>d</b><sub>i</sub> = checks run on control <i>i</i> &nbsp;·&nbsp; <b>t</b><sub>i</sub> = checks the control has &nbsp;·&nbsp; <b>s</b><sub>i</sub> = sample size &nbsp;·&nbsp; <b>k</b><sub>i</sub> = attributes &nbsp;·&nbsp; sums run over every control in scope</p>
+<p>The two sums are taken before the division, not after, so each control weighs by its own check count. Where no sample has been drawn yet, <i>t</i><sub>i</sub> falls back to <i>k</i><sub>i</sub> so the denominator is never zero.</p>
+
+<h4>4. Engagement completeness</h4>
+<p>How much is finished?</p>
+<div class="eq"><i>C</i><sub>comp</sub> = <span class="fx"><span class="n">Σ <i>m</i><sub>i</sub></span><span class="d"><i>n</i></span></span> × 100 &nbsp;&nbsp; where 0 ≤ <i>m</i><sub>i</sub> ≤ 1</div>
+<div class="eq"><i>m</i><sub>i</sub> = 0.10<i>r</i> + 0.25<i>g</i> + 0.30<i>o</i> + 0.25<i>c</i> + 0.10<i>f</i></div>
+<p class="where"><b>m</b><sub>i</sub> = milestone credit for control <i>i</i>, each term 1 when done and 0 when not &nbsp;·&nbsp; <b>r</b> RACM row approved &nbsp;·&nbsp; <b>g</b> design concluded &nbsp;·&nbsp; <b>o</b> operating concluded &nbsp;·&nbsp; <b>c</b> paper countersigned &nbsp;·&nbsp; <b>f</b> no open deficiency</p>
+<p>The five weights sum to 1, so every control is worth exactly one whole unit however far along it is. A short form automated control has no operating track to conclude, so its 0.30 moves onto <i>g</i> instead of leaving it stuck below 1.</p>
+
+<h3>Control level</h3>
+
+<h4>5. Control completeness</h4>
+<p>Is the evidence file complete? <b>Blocks concluding design.</b></p>
+<div class="eq"><i>C</i><sub>ctrl</sub> = <span class="fx"><span class="n"><i>q</i></span><span class="d"><i>Q</i></span></span> × 100</div>
+<p class="where"><b>Q</b> = design elements marked required &nbsp;·&nbsp; <b>q</b> = of those, evidenced or waived &nbsp;·&nbsp; reads <code>{q}/{Q} required elements evidenced</code></p>
+<p>Optional elements are outside <i>Q</i> entirely, so attaching extras cannot move the score. A waived element counts inside <i>q</i>, because a recorded judgement with a mandatory reason is not a missing file.</p>
+
+<h4>6. Evidence validated</h4>
+<p>Have the operating checks run? <b>Blocks concluding operating.</b></p>
+<div class="eq"><i>C</i><sub>val</sub> = <span class="fx"><span class="n"><i>d</i></span><span class="d"><i>t</i></span></span> × 100 &nbsp;&nbsp; where <i>t</i> = <i>s</i> × <i>k</i></div>
+<p class="where">Same terms as score 3, for one control instead of the register</p>
+<p>Score 3 says how much ground is covered across the audit. This one says where the shortfall sits.</p>
+
+<h4>7. TOD coverage confidence</h4>
+<p>How well does the design hold up? Does not block.</p>
+<div class="eq"><i>C</i><sub>tod</sub> = <span class="fx"><span class="n"><i>p</i></span><span class="d"><i>D</i></span></span> × 100</div>
+<p class="where"><b>D</b> = design considerations on the control &nbsp;·&nbsp; <b>p</b> = of those, passing &nbsp;·&nbsp; reads <code>{p}/{D} considerations pass</code></p>
+<p>An overridden pass counts inside <i>p</i>, because the auditor's recorded judgement is the answer. Untested and failed both sit outside it, so an untested check drags the score down exactly as hard as a failed one. It is the only quality measure of the seven, and it gates nothing.</p>
+
+<h3>Colour</h3>
+<p>One rule, applied to every score.</p>
+<div class="eq">colour(<i>x</i>) = red if <i>x</i> &lt; 40, &nbsp; amber if <i>x</i> &lt; <i>G</i>, &nbsp; green if <i>x</i> ≥ <i>G</i></div>
+<p class="where"><b>G</b> = 100 for a gating score, 80 for the rest &nbsp;·&nbsp; scores 5 and 6 gate, so nothing but 100 is green on them</p>
+
+<!-- ==========================================================================
+     FINISHING THE YEAR. COMMENTED OUT, NOT DELETED.
+     Restore by removing this wrapper, re adding the contents entry,
+     and renumbering Glossary back to 13.
+     ==========================================================================
+
+<h2>12 · Finishing the year</h2>
+
+<h3>Roll forward</h3>
+<p>Starting the next audit <b>archives, never deletes</b>. The outgoing audit keeps a frozen snapshot. Controls reset to untested. <b>Open deficiencies carry forward and closed ones stay in the archive.</b> a new audit showed 0 of 45 controls tested with all four open deficiencies carried across.</p>
+
+<h3>Year end countdown</h3>
+<p>The dashboard counts down to the opinion date and lists what must close: open material weaknesses (<span class="q">"ICFR ineffective if still open at year end"</span>), deficiencies in remediation, controls not concluded, and papers awaiting signature.</p>
+
+<h3>The two documents</h3>
+<table>
+<tr><th></th><th>Working paper</th><th>Audit report</th></tr>
+<tr><td>Read by</td><td>A reviewer and a regulator</td><td>Management, who must act</td></tr>
+<tr><td>Proves</td><td>The testing was done properly</td><td>What was found and what happens next</td></tr>
+<tr><td>Contains</td><td>Every control, its evidence, sample grid, reasoning and signatures</td><td>Findings in plain English plus a management action plan with owners and dates</td></tr>
+</table>
+
+<div class="callout">
+<p><span class="lbl">R12.1 Nothing in the report is authored</span>
+Every line is read off the testing already done. A report that could say something the working paper does not would be a second version of the truth.</p>
+</div>
+
+-->
+<!-- ===================== END OF COMMENTED SECTION ===================== -->
+
+<h2>12 · Glossary</h2>
+<table>
+<tr><th>Term</th><th>Meaning</th></tr>
+<tr><td>Aggregation</td><td>Combining small findings that share a cause and judging them together</td></tr>
+<tr><td>Assertion</td><td>What a control protects about the numbers: complete, accurate, real, right period</td></tr>
+<tr><td>Attribute</td><td>One specific thing checked on each sampled item</td></tr>
+<tr><td>Compensating control</td><td>A different control partly covering the same risk</td></tr>
+<tr><td>COSO 2013</td><td>The recognised framework for what good internal control looks like</td></tr>
+<tr><td>Detective control</td><td>Catches a problem after it happens</td></tr>
+<tr><td>General ledger</td><td>The detailed record of every accounting transaction</td></tr>
+<tr><td>ICFR</td><td>Internal Control over Financial Reporting</td></tr>
+<tr><td>IPE</td><td>Information Produced by the Entity, a company produced report that must be proven before it is relied on</td></tr>
+<tr><td>ITGC</td><td>IT General Controls: access, change management, operations. Scoped by declaration rather than derived from the trial balance, and tested once for the group.</td></tr>
+<tr><td>Key control</td><td>A control that really matters for the numbers, not merely good practice</td></tr>
+<tr><td>Population</td><td>The full set of transactions a control applies to</td></tr>
+<tr><td>Preventive control</td><td>Stops a problem before it happens</td></tr>
+<tr><td>Provenance</td><td>Where a file came from, and whether the company or its system produced it</td></tr>
+<tr><td>RACM</td><td>Risk and Control Matrix</td></tr>
+<tr><td>Roll forward</td><td>Carrying interim testing forward to cover the rest of the year</td></tr>
+<tr><td>SOX 404</td><td>The section requiring an annual statement that internal controls work</td></tr>
+<tr><td>Test of one</td><td>Testing a single instance of an automated control, on the argument that a machine does the same thing every time. Valid only while the IT general controls hold.</td></tr>
+<tr><td>Trial balance</td><td>A summary of every account balance at a point in time</td></tr>
+<tr><td>Walkthrough</td><td>Following one real transaction end to end to confirm a control exists and makes sense</td></tr>
+<tr><td>Working paper</td><td>The audit file for one control</td></tr>
+</table>
+
+<footer></footer>
+
+</body>
+</html>

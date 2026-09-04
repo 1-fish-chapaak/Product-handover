@@ -216,20 +216,56 @@ const getInitialView = (): View => {
   if (v === 'bp-detail' && params.get('bp')) return 'bp-detail';
   if (v === 'engagement-detail') return 'engagement-detail';
   if (v === 'workflow-executor') return 'workflow-executor';
+  // New-tab deep link from an insight's "Edit workflow" action — lands straight
+  // in the edit-in-chat journey; the insight context rides in via ?wfedit=.
+  if (v === 'workflow-edit-in-chat' && params.get('workflowId')) return 'workflow-edit-in-chat';
+  // New-tab deep link from an insight's "Run frequency" action — lands on the
+  // workflow details page; ?tab=config opens straight onto Configuration where
+  // the cadence is actually set.
+  if (v === 'workflow-detail' && params.get('workflowId')) return 'workflow-detail';
   if (v === 'engagement-case-management' && params.get('eng')) return 'engagement-case-management';
   // New-tab deep link from the engagement insights drawer's "go to control"
   // chips — lands on the engagement workspace (EngagementOverviewView), which
   // consumes the optional ?tab= and ?focusControl= params itself.
   if (v === 'engagement-overview' && params.get('eng')) return 'engagement-overview';
+  // Smart Learn / Data Sources deep link — ?view=knowledge-hub&tab=learn
+  // (+ optional &memory=<id> to open one registry row's drawer).
+  if (v === 'knowledge-hub') return 'knowledge-hub';
   if (v === 'dev-configurable-engagement-v3') return 'dev-configurable-engagement-v3';
   return 'home';
+};
+
+/** ?view=knowledge-hub&tab=learn lands on the Smart Learn tab. */
+export const getInitialKnowledgeHubTab = (): 'data' | 'learn' => {
+  if (typeof window === 'undefined') return 'data';
+  const params = new URLSearchParams(window.location.search);
+  if (params.get('view') !== 'knowledge-hub') return 'data';
+  return params.get('tab') === 'learn' ? 'learn' : 'data';
+};
+
+/** ?view=knowledge-hub&tab=learn&memory=<id> focuses one registry row. */
+export const getInitialMemoryFocus = (): string | null => {
+  if (typeof window === 'undefined') return null;
+  const params = new URLSearchParams(window.location.search);
+  if (params.get('view') !== 'knowledge-hub') return null;
+  return params.get('memory');
 };
 
 const getInitialWorkflowId = (): string | null => {
   if (typeof window === 'undefined') return null;
   const params = new URLSearchParams(window.location.search);
-  if (params.get('view') !== 'workflow-executor') return null;
+  const v = params.get('view');
+  if (v !== 'workflow-executor' && v !== 'workflow-edit-in-chat' && v !== 'workflow-detail') return null;
   return params.get('workflowId');
+};
+
+/** ?view=workflow-detail&tab=config lands on the Configuration tab. */
+const getInitialWorkflowDetailTab = (): 'overview' | 'runs' | 'config' => {
+  if (typeof window === 'undefined') return 'runs';
+  const params = new URLSearchParams(window.location.search);
+  if (params.get('view') !== 'workflow-detail') return 'runs';
+  const tab = params.get('tab');
+  return tab === 'config' || tab === 'overview' || tab === 'runs' ? tab : 'runs';
 };
 
 const getInitialEngagementId = (): string | null => {
@@ -265,7 +301,7 @@ const INITIAL_STATE: AppState = {
   showArtifacts: false,
   showChatHistory: false,
   selectedWorkflowId: getInitialWorkflowId(),
-  workflowDetailInitialTab: 'runs',
+  workflowDetailInitialTab: getInitialWorkflowDetailTab(),
   workflowExecutorBackView: null,
   selectedBPId: getInitialBPId(),
   userProcesses: [],

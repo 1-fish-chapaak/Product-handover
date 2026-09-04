@@ -3,7 +3,7 @@ import type {
   AtrObservation, AtrActionPlan, AtrRisk, AtrClassification, AtrObservationStatus, AtrActionStatus,
 } from './atrTypes';
 
-const RISK_OPTS: AtrRisk[] = ['High', 'Medium', 'Low'];
+const RISK_OPTS: AtrRisk[] = ['Critical', 'High', 'Medium', 'Low'];
 const CLASS_OPTS: AtrClassification[] = ['Design Deficiency', 'System Deficiency', 'Procedural Non-Compliance'];
 const OBS_STATUS_OPTS: AtrObservationStatus[] = ['Open', 'In Progress', 'Closed', 'Overdue'];
 const ACTION_STATUS_OPTS: AtrActionStatus[] = ['Pending', 'Partially Implemented', 'Implemented', 'Overdue', 'Not Due'];
@@ -137,7 +137,7 @@ export default function AtrItemsEditor({ observations, onChange }: {
             {/* Action plans */}
             <div className="pt-1">
               <div className="flex items-center justify-between mb-2">
-                <span className="text-[0.6875rem] font-semibold uppercase tracking-[0.08em] text-ink-500">Management action plans</span>
+                <span className="text-[0.6875rem] font-semibold uppercase tracking-[0.08em] text-ink-500">Action plans</span>
                 <button onClick={() => addPlan(oIdx)} className="inline-flex items-center gap-1 h-7 px-2.5 text-[0.6875rem] font-semibold text-brand-700 hover:bg-brand-50 rounded-sm transition-colors cursor-pointer">
                   <Plus size={12} /> Add
                 </button>
@@ -149,7 +149,7 @@ export default function AtrItemsEditor({ observations, onChange }: {
                       <textarea
                         value={plan.text}
                         onChange={e => patchPlan(oIdx, pIdx, { text: e.target.value })}
-                        placeholder="Recommendation / management action plan"
+                        placeholder="Recommendation / action plan"
                         rows={2}
                         className={`${INPUT} resize-y`}
                       />

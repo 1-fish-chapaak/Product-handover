@@ -1,10 +1,12 @@
 import { useEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
-import { CheckCircle2, Circle, Download, Eye, FileSpreadsheet, PenLine, X } from 'lucide-react';
+import { CheckCircle2, Circle, Download, Eye, FileSpreadsheet, FileText, PenLine, X } from 'lucide-react';
 import { controlConclusion, icfrConclusion, isControlFinal, isControlLocked, isEngagementLocked, openMaterialWeaknesses, trackResult } from './helpers';
 import { buildIcfrPaper, controlPaperSections, downloadControlWorkingPaper, downloadIcfrWorkingPaper, ENG_SIGNOFF_TITLE, SIGNOFF_TITLE, type PaperBlock } from './icfrWorkingPaper';
 import { buildAuditReport, downloadAuditReport } from './icfrAuditReport';
+import { downloadAuditReportPdf } from './icfrReportPdf';
 import { useIcfr } from './store';
+import { useToast } from '../shared/Toast';
 import { cn } from '../../lib/cn';
 import type { Control, IcfrEngagement } from './types';
 
@@ -60,7 +62,8 @@ function Block({ b }: { b: PaperBlock }) {
                 <tr key={ri}>
                   {r.map((cell, ci) => (
                     <td key={ci} className={cn('px-2.5 py-1.5 align-top text-ink-700',
-                      b.tickFrom != null && ci >= b.tickFrom ? cn('font-mono text-center whitespace-nowrap', tickCls(cell)) : undefined,
+                      b.tickFrom != null && ci >= b.tickFrom && (b.tickTo == null || ci < b.tickTo)
+                        ? cn('font-mono text-center whitespace-nowrap', tickCls(cell)) : undefined,
                       ci === 0 && 'font-mono text-ink-400 whitespace-nowrap')}>{cell}</td>
                   ))}
                 </tr>
@@ -172,18 +175,32 @@ function EngagementSignoff({ eng, onAttest }: { eng: IcfrEngagement; onAttest: (
       </div>
       <div className="flex items-center gap-2 text-[12.5px] pt-1.5 border-t border-canvas-border">
         <span className="text-ink-500 w-[140px] shrink-0">ICFR conclusion</span>
-        <span className={cn('font-bold', effective ? 'text-compliant-700' : 'text-risk-700')}>{effective ? 'Effective' : 'Not effective'}</span>
-        <span className="text-[11px] text-ink-400">{stamped ? 'stamped at sign-off' : `live — not yet signed${mwOpen ? ` · ${mwOpen} material weakness${mwOpen === 1 ? '' : 'es'} open` : ''}`}</span>
+        {/* An interim never concludes the year — its window stops short of the
+            year end, so no verdict is stamped or shown here (user ask). Saying
+            "live — not yet signed" on a signed interim would be wrong twice. */}
+        {audit?.round === 'interim' ? (
+          <span className="text-[11px] text-ink-400">Not given at interim — the opinion is as of the year end, stamped by the roll-forward or year-end round.</span>
+        ) : (
+          <>
+            <span className={cn('font-bold', effective ? 'text-compliant-700' : 'text-risk-700')}>{effective ? 'Effective' : 'Not effective'}</span>
+            <span className="text-[11px] text-ink-400">{stamped ? 'stamped at sign-off' : `live — not yet signed${mwOpen ? ` · ${mwOpen} material weakness${mwOpen === 1 ? '' : 'es'} open` : ''}`}</span>
+          </>
+        )}
       </div>
     </div>
   );
 }
 
 export default function WorkingPaperModal({ eng, control, controls, report, onClose, onDownload }: { eng: IcfrEngagement; control?: Control; controls?: Control[];
-  /** Preview the AUDIT REPORT instead of the working paper. Same renderer, same
-   *  block union, same sheet tabs — it is a different document, not a different
-   *  viewer, so nothing here changes except which builder is read and what the
-   *  download writes. */
+  /** Preview the AUDIT REPORT instead of a working paper. Same renderer and the
+   *  same block union — but NOT the same reading model.
+   *
+   *  A working paper previews sheet by sheet because it exports to a workbook,
+   *  and the tabs on screen are that workbook's tabs (Jul 28). The report is not
+   *  a workbook: it is issued as a PDF, and a PDF is read straight through. Tabs
+   *  on it were the viewer's metaphor leaking onto a document that never had
+   *  sheets — so the report renders as ONE continuous scroll, its sheets becoming
+   *  sections of the deliverable in the order the PDF prints them. */
   report?: boolean; onClose: () => void; onDownload?: () => void }) {
   // A control's paper is view-only until BOTH tracks have concluded. Not a
   // permission — a readiness gate: the document does not yet say anything, and a
@@ -200,6 +217,7 @@ export default function WorkingPaperModal({ eng, control, controls, report, onCl
   // the engagement paper reads sheet by sheet, like the workbook it exports to
   const [sheetIx, setSheetIx] = useState(0);
   const bodyRef = useRef<HTMLDivElement>(null);
+  const { addToast } = useToast();
 
   // Escape closes the preview — but while the attest confirm is open it only
   // dismisses that confirm, so a stray Esc can never walk out of a sign-off.
@@ -216,12 +234,43 @@ export default function WorkingPaperModal({ eng, control, controls, report, onCl
   // the engagement paper follows the register's visible controls — a filtered
   // library exports (and previews) a filtered paper
   const included = controls ?? eng.controls;
-  const fileName = report ? `Audit_Report_ICFR_${eng.code}.xlsx`
+  // the report is issued as a PDF (user rule, Aug 2026); the papers stay .xlsx
+  const fileName = report ? `Audit_Report_ICFR_${eng.code}.pdf`
     : control ? `Working_Paper_${control.id}.xlsx`
     : `Working_Paper_ICFR_${eng.code}.xlsx`;
+
+  // Each sheet of the report becomes a page of the PDF; the .xlsx export keeps
+  // the same sheets as a workbook, so the three surfaces can never disagree.
+  const issuePdf = async () => {
+    try {
+      await downloadAuditReportPdf(eng, included);
+      onDownload?.(); onClose();
+    } catch {
+      addToast({ type: 'error', title: 'PDF not generated', message: 'The PDF engine could not be loaded — try again.' });
+    }
+  };
   const sheets = report ? buildAuditReport(eng, included)
     : control ? controlPaperSections(eng, control)
     : buildIcfrPaper(eng, included);
+
+  /** One block, wherever it is read from. Three blocks are more than their
+   *  printed selves on screen: the two sign-off panels stay live so the hat
+   *  reading the paper can sign it here, and a control's conclusion is the line
+   *  the whole document exists for, so it is stated rather than listed. */
+  const renderBlock = (b: PaperBlock, i: number) => {
+    if (control && b.kind === 'kv' && b.title === SIGNOFF_TITLE) return <ControlSignoff key={i} eng={eng} c={control} onAttest={setAttest} />;
+    if (!control && b.kind === 'kv' && b.title === ENG_SIGNOFF_TITLE) return <EngagementSignoff key={i} eng={eng} onAttest={setAttest} />;
+    if (control && b.kind === 'note' && b.label === 'Conclusion') {
+      const bad = b.tone === 'bad';
+      return (
+        <div key={i} className={cn('rounded-lg border-2 px-3 py-2.5 text-[13px] font-bold inline-flex items-center gap-2',
+          b.tone === 'good' ? 'border-compliant-300 bg-compliant-50/50 text-compliant-700' : bad ? 'border-risk-300 bg-risk-50/50 text-risk-700' : 'border-canvas-border text-ink-600')}>
+          <span className="uppercase tracking-wide text-[10.5px]">Conclusion</span> {b.text}
+        </div>
+      );
+    }
+    return <Block key={i} b={b} />;
+  };
 
   return createPortal(
     <>
@@ -230,41 +279,51 @@ export default function WorkingPaperModal({ eng, control, controls, report, onCl
     <div className="modal-backdrop" onClick={onClose}>
       <div className="modal modal-wide flex flex-col" onClick={e => e.stopPropagation()}>
         <div className="flex items-center justify-between px-5 py-3.5 border-b border-canvas-border shrink-0">
-          <h3 className="text-[14px] font-bold text-ink-900 inline-flex items-center gap-2"><FileSpreadsheet size={15} className="text-brand-600" /> {report ? 'Audit report — preview' : 'Working paper — preview'}</h3>
+          {/* the icon follows the artefact: the report is issued as a PDF, the
+              papers as a workbook */}
+          <h3 className="text-[14px] font-bold text-ink-900 inline-flex items-center gap-2">
+            {report ? <FileText size={15} className="text-brand-600" /> : <FileSpreadsheet size={15} className="text-brand-600" />}
+            {report ? 'Audit report — preview' : 'Working paper — preview'}
+          </h3>
           <button onClick={onClose} className="h-8 w-8 inline-flex items-center justify-center rounded-lg text-ink-400 hover:text-ink-800 hover:bg-paper-50 cursor-pointer"><X size={16} /></button>
         </div>
 
         {/* the workbook's sheet tabs — one sheet on screen at a time (for the
-            control paper these page through the sections of its single sheet) */}
-        <div className="flex items-end gap-1 px-5 pt-2.5 border-b border-canvas-border shrink-0 overflow-x-auto">
-          {sheets.map((s, i) => (
-            <button key={s.name} onClick={() => { setSheetIx(i); bodyRef.current?.scrollTo({ top: 0 }); }} aria-current={i === sheetIx ? 'true' : undefined}
-              className={cn('-mb-px shrink-0 inline-flex items-center gap-1.5 rounded-t-md border px-2.5 py-1.5 text-[11px] font-semibold whitespace-nowrap cursor-pointer transition-colors',
-                i === sheetIx ? 'border-canvas-border border-b-white bg-white text-ink-900' : 'border-canvas-border bg-paper-50 text-ink-500 hover:text-ink-800')}>
-              <FileSpreadsheet size={12} className={i === sheetIx ? 'text-compliant-600' : 'text-ink-300'} /> {s.name}
-            </button>
-          ))}
-        </div>
+            control paper these page through the sections of its single sheet).
+            The report has no sheets to tab through; it scrolls. */}
+        {!report && (
+          <div className="flex items-end gap-1 px-5 pt-2.5 border-b border-canvas-border shrink-0 overflow-x-auto">
+            {sheets.map((s, i) => (
+              <button key={s.name} onClick={() => { setSheetIx(i); bodyRef.current?.scrollTo({ top: 0 }); }} aria-current={i === sheetIx ? 'true' : undefined}
+                className={cn('-mb-px shrink-0 inline-flex items-center gap-1.5 rounded-t-md border px-2.5 py-1.5 text-[11px] font-semibold whitespace-nowrap cursor-pointer transition-colors',
+                  i === sheetIx ? 'border-canvas-border border-b-white bg-white text-ink-900' : 'border-canvas-border bg-paper-50 text-ink-500 hover:text-ink-800')}>
+                <FileSpreadsheet size={12} className={i === sheetIx ? 'text-compliant-600' : 'text-ink-300'} /> {s.name}
+              </button>
+            ))}
+          </div>
+        )}
 
         {/* fixed height — the modal doesn't jump as sheet tabs switch; short
             sheets leave room, long ones scroll */}
-        <div ref={bodyRef} className="p-5 space-y-4 overflow-y-auto min-h-0" style={{ height: 'min(72vh, 760px)' }}>
-          {/* the active sheet, rendered in full — the sign-off blocks stay live
-              so the preparer / reviewer can sign right here */}
-          {sheets[sheetIx].blocks.map((b, i) => {
-            if (control && b.kind === 'kv' && b.title === SIGNOFF_TITLE) return <ControlSignoff key={i} eng={eng} c={control} onAttest={setAttest} />;
-            if (!control && b.kind === 'kv' && b.title === ENG_SIGNOFF_TITLE) return <EngagementSignoff key={i} eng={eng} onAttest={setAttest} />;
-            if (control && b.kind === 'note' && b.label === 'Conclusion') {
-              const bad = b.tone === 'bad';
-              return (
-                <div key={i} className={cn('rounded-lg border-2 px-3 py-2.5 text-[13px] font-bold inline-flex items-center gap-2',
-                  b.tone === 'good' ? 'border-compliant-300 bg-compliant-50/50 text-compliant-700' : bad ? 'border-risk-300 bg-risk-50/50 text-risk-700' : 'border-canvas-border text-ink-600')}>
-                  <span className="uppercase tracking-wide text-[10.5px]">Conclusion</span> {b.text}
-                </div>
-              );
-            }
-            return <Block key={i} b={b} />;
-          })}
+        <div ref={bodyRef} className={cn('p-5 overflow-y-auto min-h-0', !report && 'space-y-4')} style={{ height: 'min(72vh, 760px)' }}>
+          {report ? (
+            /* The whole deliverable, top to bottom, in the order the PDF prints.
+               Each former sheet is a section: a rule and its name, except the
+               first — it opens on the report's own title block, and an eyebrow
+               above that would be a label on a label. */
+            sheets.map((s, si) => (
+              <section key={s.name} className={si === 0 ? undefined : 'mt-7 pt-6 border-t border-canvas-border'}>
+                {si > 0 && (
+                  <h4 className="text-[12.5px] font-bold text-ink-900 mb-3" style={{ fontFamily: "'Source Serif 4', serif" }}>{s.name}</h4>
+                )}
+                <div className="space-y-4">{s.blocks.map(renderBlock)}</div>
+              </section>
+            ))
+          ) : (
+            /* the active sheet, rendered in full — the sign-off blocks stay live
+               so the preparer / reviewer can sign right here */
+            sheets[sheetIx].blocks.map(renderBlock)
+          )}
         </div>
 
         <div className="flex items-center justify-between gap-2 px-5 py-3.5 border-t border-canvas-border shrink-0">
@@ -280,10 +339,21 @@ export default function WorkingPaperModal({ eng, control, controls, report, onCl
               </span>
             )}
             <button onClick={onClose} className="h-9 px-3.5 rounded-lg border border-canvas-border text-[12.5px] font-semibold text-ink-600 hover:bg-paper-50 cursor-pointer">Close</button>
-            <button disabled={downloadBlocked}
-              title={downloadBlocked ? `Not downloadable yet — ${blockedWhy}` : undefined}
-              onClick={() => { if (report) downloadAuditReport(eng, included); else if (control) downloadControlWorkingPaper(eng, control); else downloadIcfrWorkingPaper(eng, included); onDownload?.(); onClose(); }}
-              className="h-9 px-4 rounded-lg bg-brand-600 text-white text-[12.5px] font-semibold enabled:hover:bg-brand-700 disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer inline-flex items-center gap-1.5"><Download size={14} /> Download .xlsx</button>
+            {report ? (
+              <>
+                {/* the report is ISSUED as a PDF (each sheet a page); the .xlsx
+                    is a secondary export of the same sheets */}
+                <button onClick={() => { downloadAuditReport(eng, included); onDownload?.(); onClose(); }}
+                  className="h-9 px-3.5 rounded-lg border border-canvas-border text-[12.5px] font-semibold text-ink-600 hover:bg-paper-50 cursor-pointer inline-flex items-center gap-1.5"><FileSpreadsheet size={14} /> Export .xlsx</button>
+                <button onClick={issuePdf}
+                  className="h-9 px-4 rounded-lg bg-brand-600 text-white text-[12.5px] font-semibold hover:bg-brand-700 cursor-pointer inline-flex items-center gap-1.5"><Download size={14} /> Download PDF</button>
+              </>
+            ) : (
+              <button disabled={downloadBlocked}
+                title={downloadBlocked ? `Not downloadable yet — ${blockedWhy}` : undefined}
+                onClick={() => { if (control) downloadControlWorkingPaper(eng, control); else downloadIcfrWorkingPaper(eng, included); onDownload?.(); onClose(); }}
+                className="h-9 px-4 rounded-lg bg-brand-600 text-white text-[12.5px] font-semibold enabled:hover:bg-brand-700 disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer inline-flex items-center gap-1.5"><Download size={14} /> Download .xlsx</button>
+            )}
           </div>
         </div>
       </div>

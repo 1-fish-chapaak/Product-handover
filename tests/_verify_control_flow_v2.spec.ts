@@ -60,12 +60,16 @@ test('five steps, and only five', async ({ page }) => {
     await expect(page.getByText('Account', { exact: true })).toHaveCount(0);
     // Date from / to were parked earlier — the window comes from the audit.
     await expect(page.getByText('Date from')).toHaveCount(0);
-    // The expectation is stated BEFORE the extract runs, and gates it — a number
-    // written down afterwards can only ever agree with the answer.
-    await expect(page.getByText('Expected instances')).toBeVisible();
+    // "Expected instances" was cut (dev call, Aug 2026): the reference number is
+    // already visible on the source, so asking the auditor to type one was
+    // asking twice. Nothing gates the extract now except picking a file.
+    await expect(page.getByText('Expected instances')).toHaveCount(0);
+    // "Add a source" went with it — the platform's data catalogue and its
+    // connect-a-database tab are not where a control's evidence comes from.
+    await expect(page.getByRole('button', { name: /Add a source/ })).toHaveCount(0);
+    await expect(page.getByRole('button', { name: /Upload file/ }).first()).toBeVisible();
     const extract = page.getByRole('button', { name: 'Extract', exact: true });
     await expect(extract).toBeVisible();
-    await expect(extract).toBeDisabled();
   } else {
     // The "Checked automatically" strip — count, period covered, and the window
     // sentence — was parked in Aug 2026: three rows that greened themselves and
@@ -162,7 +166,12 @@ test('header, sign-off gating and the working paper', async ({ page }) => {
   // so it came off every control surface and survives only in the exports. The
   // court badge kept its place in the header.
   await expect(page.locator('.leadsheet-stamp')).toHaveCount(0);
-  await expect(page.getByText(/court$/i).first()).toBeVisible();
+  // The badge names whose custody the control is in, and the wording follows the
+  // custody AND who is reading it: "Your court" only when the ball is with the
+  // hat you are wearing, otherwise the holder is named. Matching /court$/ pinned
+  // the assertion to one of those states and went red the moment the seeded
+  // control sat in somebody else's hands — the badge was there the whole time.
+  await expect(page.getByText(/^(Your court|Auditor|Risk owner|Reviewer|You|Closed)$/).first()).toBeVisible();
 
   // ── the working paper is view-only until both tracks conclude ─────────────
   await page.getByRole('button', { name: /Working paper/ }).first().click();

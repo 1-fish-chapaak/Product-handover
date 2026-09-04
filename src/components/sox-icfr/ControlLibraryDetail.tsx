@@ -108,7 +108,10 @@ export default function ControlLibraryDetail() {
   const control = eng.controls.find(c => c.id === selectedControlId);
   if (!control) return <div className="text-ink-500">Control not found. <button onClick={back} className="text-brand-700 font-semibold cursor-pointer">Back to Control Library</button></div>;
 
-  const canEdit = role === 'auditor' || role === 'risk-owner';
+  // Attributes are what the control gets tested against, so writing them is the
+  // auditor's — matching the store's own guard. The owner reads them; a pen here
+  // would let the first line set the questions its own work is marked on.
+  const canEdit = role === 'auditor';
   const detailOwners = ownersOf(control);
   // Auditor only, matching the store's own guard on updateControlMeta. Rendering
   // the dropdown for the risk owner would offer a click that silently does

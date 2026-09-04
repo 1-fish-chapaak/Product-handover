@@ -8,7 +8,7 @@ import type {
   // PARKED (Aug 2026) — `GapType` went with the Gap type field; see types.ts.
   // GapType,
   EvidenceFile, ExceptionStatus, ExecKind, ExecutionEvent, Frequency, HandoffTask, IcfrEngagement, IpeTest, Nature, OperatingStep, OperatingTrack,
-  ControlClass, ControlType, FiveWOneH, RacmReview, ReviewNote, RiskRating, Role, Severity, RunControlOutcome, RunRecord, Sampling, SignificantAccount, TestProcedure, TestResult, TrackConclusion,
+  ControlClass, ControlType, FiveWOneH, RacmReview, ReviewNote, RiskRating, Role, Sample, Severity, RunControlOutcome, RunRecord, Sampling, SignificantAccount, SourceRole, TestProcedure, TestResult, TrackConclusion,
 } from './types';
 
 // ── builders ─────────────────────────────────────────────────────────────────────
@@ -65,8 +65,8 @@ const activityOf = (owner: string, subProcess: string, frequency: Frequency, nat
 };
 
 let _p = 0;
-const point = (text: string, result: DesignPoint['result'] = 'Pass', wfName = 'Design walkthrough check'): DesignPoint =>
-  ({ id: `dp${++_p}`, text, result, workflowId: `wf-tod-${_p}`, workflowName: wfName, workflowRunRef: result !== 'Not tested' ? 'run · validated' : undefined, validation: result !== 'Not tested' ? { qa: validationQA(text, result === 'Fail'), at: '14 Apr' } : undefined });
+const point = (text: string, result: DesignPoint['result'] = 'Pass', wfName = 'Design walkthrough check', stepId?: string): DesignPoint =>
+  ({ id: `dp${++_p}`, text, stepId, result, workflowId: `wf-tod-${_p}`, workflowName: wfName, workflowRunRef: result !== 'Not tested' ? 'run · validated' : undefined, validation: result !== 'Not tested' ? { qa: validationQA(text, result === 'Fail'), at: '14 Apr' } : undefined });
 
 let _s = 0;
 const step = (code: string, description: string, assertion: Assertion, precision: string, procedures: TestProcedure[], result: OperatingStep['result'] = 'Not tested', extra: Partial<OperatingStep> = {}): OperatingStep => {
@@ -85,7 +85,16 @@ const designTrack = (conclusion: TrackConclusion, documents: DesignDoc[], points
     testedAt: conclusion !== 'Not tested' ? '14 Apr' : null,
   });
 
-const manualTrack = (conclusion: TrackConclusion, steps: OperatingStep[], sampling?: Sampling, popCount = 0, popSource = 'SAP — full-period extract', popFile = 'population_full_period.xlsx'): OperatingTrack => ({
+/** A second source file behind a seeded population.
+ *
+ *  Most controls stand on one file, so this is the exception rather than the
+ *  shape — but "one control, several files" has to be reachable without anyone
+ *  building it by hand, or the per-file proof and the per-file draw are features
+ *  nobody ever sees. See PopulationSource. */
+const secondSource = (file: string, rows: number, count: number, criteria: string, drawn = true, role: SourceRole = 'assisting') =>
+  ({ file, rows, count, criteria, drawn, role });
+
+const manualTrack = (conclusion: TrackConclusion, steps: OperatingStep[], sampling?: Sampling, popCount = 0, popSource = 'SAP — full-period extract', popFile = 'population_full_period.xlsx', extra?: ReturnType<typeof secondSource>): OperatingTrack => ({
   method: 'Manual',
   // What the population IS, recorded before it was pulled in — the row count on
   // its own never says whether it counted the right things.
@@ -96,25 +105,93 @@ const manualTrack = (conclusion: TrackConclusion, steps: OperatingStep[], sampli
     by: 'A. Mehta', at: '12 Apr',
   } : undefined,
   population: popCount ? {
-    source: popSource, count: popCount, tieOut: 'Agreed to GL control account',
-    sourceFile: popFile, sourceCount: popCount * 7,
+    source: popSource, count: popCount + (extra?.count ?? 0), tieOut: 'Agreed to GL control account',
+    sourceFile: popFile, sourceCount: popCount * 7 + (extra?.rows ?? 0),
     criteria: `type ${popSource.split('—')[0].trim()}`,
+    // The files it stands on. Written out even for the single-file case so the
+    // seeds and the application agree on one shape — populationSources() would
+    // synthesise the same entry, but a seed that leaves it to a shim is a seed
+    // that reads differently from anything the app itself produces.
+    sources: [
+      {
+        id: 'src-1', file: popFile, rows: popCount * 7, count: popCount, criteria: `type ${popSource.split('—')[0].trim()}`,
+        // The ask, not just the answer. Every seeded draw carries the words it
+        // was made in, because the paper prints them and a seed that skipped
+        // them would print a blank row on every control that was never touched.
+        ...(sampling ? { draw: {
+          size: extra?.drawn && extra.role !== 'assisting' ? Math.ceil(sampling.size / 2) : sampling.size,
+          method: sampling.method, seed: sampling.seed ?? 40817,
+          prompt: `Take ${extra?.drawn && extra.role !== 'assisting' ? Math.ceil(sampling.size / 2) : sampling.size} of the ${popCount.toLocaleString()} instances in ${popFile}, spread across the whole window.`,
+        } } : {}),
+        // The first file is worked through and ticked. Something is always left
+        // undone on the second — that is the state the call described a ten-file
+        // control returning in ("चार का तुमने कर दिया था, दो बच रहा था"), and it
+        // only reads as a state at all if the whole thing is not finished.
+        ...(extra ? { approvedIpe: { by: 'A. Mehta', at: '13 Apr' }, ...(sampling ? { approvedSample: { by: 'A. Mehta', at: '15 Apr' } } : {}) } : {}),
+      },
+      ...(extra ? [{
+        id: 'src-2', file: extra.file, rows: extra.rows, count: extra.count, criteria: extra.criteria, role: extra.role,
+        // A different file is a different draw, so it is a different seed. The
+        // whole point of storing one is that the reviewer can reperform THIS
+        // selection, and one seed shared by two draws reperforms one of them.
+        // A different file is a different question. This one is a vendor master,
+        // so the ask is about vendors rather than about a spread of dates —
+        // which is the reason the ask is written per file at all.
+        ...(sampling && extra.drawn && extra.role !== 'assisting' ? { draw: {
+          size: Math.floor(sampling.size / 2), method: sampling.method, seed: 51923,
+          prompt: `Take ${Math.floor(sampling.size / 2)} vendors from ${extra.file} that had a payment in the period.`,
+        } } : {}),
+        // Proven, never marked. A file whose proof is done and whose draw is not
+        // is the ordinary half-finished state, and the marks exist to show it.
+        approvedIpe: { by: 'A. Mehta', at: '13 Apr' },
+      }] : []),
+    ],
     // filterFrom / filterTo / version are stamped by stampPopulationWindows once
     // the audits exist — a population belongs to ONE round and carries that
     // round's window, which cannot be known from in here.
-    // What the auditor said to expect before pulling it. Rounded to the nearest
-    // fifty because a stated expectation is an estimate, not a readback — it
-    // lands just inside tolerance, which is what a healthy extract looks like.
-    expectedCount: Math.round(popCount / 50) * 50,
+    // expectedCount went with the "Expected instances" field (dev call, Aug
+    // 2026). sourceCount above is the reference number now — the population is
+    // a seventh of the file it was filtered out of, which is what a filter
+    // that filtered looks like.
     // Where it came from. Not derivable from the file, so it was recorded.
     provenance: { system: `${popSource.split('—')[0].trim()} — Production`, extractedBy: 'R. Nair', extractedOn: '2026-04-12' },
     checks: { countMatches: true, dateRangeFull: true, productionSource: true },
     locked: { by: 'A. Mehta', at: '13 Apr' }, version: 'POP-YE',
     evidence: [{ id: 'ev1', name: popFile, kind: 'XLSX', uploadedBy: 'Risk Owner', uploadedAt: '12 Apr' }],
   } : undefined,
+  // ── the report behind each file, proven ────────────────────────────────────
+  // Seeded only where there are several files. A single-source control registers
+  // its report the moment an auditor opens the step, so seeding one would be
+  // seeding work the application already does — but a control that has already
+  // CONCLUDED never opens that path, and its per-file proof would be a thing the
+  // feature supports and nobody can look at.
+  //
+  // Four dimensions per file, all passed, one verdict for the lot: that is the
+  // shape the call settled on ("सेंट्रलाइज्ड कर दो ना").
+  ipe: popCount && extra ? {
+    reportName: popFile, system: `${popSource.split('—')[0].trim()} — Production`,
+    reportRef: 'FBL3N / MK03', parameters: `Company code · full period · ${popSource.split('—')[0].trim()}`,
+    generatedBy: 'R. Nair — client finance', generatedAt: '12 Apr',
+    recordCount: popCount * 7 + extra.rows, controlTotal: 'Agreed to the GL control account',
+    checks: [
+      ...ipeChecklist(popFile).map((k, i) => ({ ...k, id: `ipe-s1-${i}`, sourceId: 'src-1', result: 'Pass' as TestResult })),
+      ...ipeChecklist(extra.file).map((k, i) => ({ ...k, id: `ipe-s2-${i}`, sourceId: 'src-2', result: 'Pass' as TestResult })),
+    ],
+    conclusion: 'Reliable', testedBy: 'A. Mehta', testedAt: '13 Apr',
+  } : undefined,
   // A draw nobody can reperform is not a procedure — every seeded sample carries
   // the method and the seed that produced it.
-  sampling: sampling ? { ...sampling, seed: sampling.seed ?? 40817 } : undefined,
+  // Every drawn item says which file it came out of, because a control standing
+  // on two files that drew from one has tested one — and a paper that cannot
+  // show the split cannot show that either. Split down the middle: the seeds are
+  // an illustration, not an inference about how many rows each file holds.
+  sampling: sampling ? {
+    ...sampling,
+    seed: sampling.seed ?? 40817,
+    samples: extra
+      ? sampling.samples.map((s, i) => ({ ...s, sourceId: extra.drawn && extra.role !== 'assisting' && i % 2 !== 0 ? 'src-2' : 'src-1' }))
+      : sampling.samples,
+  } : undefined,
   steps,
   conclusion,
   testedBy: conclusion !== 'Not tested' ? 'A. Mehta' : null,
@@ -802,7 +879,10 @@ const DEFICIENCIES: Deficiency[] = [
   //   gapType: 'TG',
   //   exposure: { recovery: 740_000, workingCapital: 440_000, leakage: 0, basis: '4 variant duplicates totalling ₹11.8L. 2 reached payment (₹7.4L) and are recoverable from the vendors by debit note; 2 (₹4.4L) were stopped before the payment run and release working capital on cancellation. Nothing has left the business permanently.' },
   { id: 'DEF-001', controlId: 'P2P-C-04', track: 'operating', description: 'Duplicate-invoice block does not catch reference variants (leading zeros / whitespace); 4 variant duplicates posted in period.', rootCause: 'Match key compares raw reference without normalisation.', likelihood: 'Reasonably possible', magnitude: 1_180_000, mwIndicators: [], compensatingControlId: undefined, aggregationGroup: 'AP payments', reportRef: '4.4',
-    remediation: { action: 'Normalise reference in match key; re-test.', date: '30 Jun', owner: 'M. Nair', status: 'In progress' }, status: 'Remediation' },
+    remediation: { action: 'Normalise reference in match key; re-test.', date: '30 Jun', owner: 'M. Nair', status: 'In progress' }, status: 'Remediation',
+    // Past the reviewer's rating gate, so it carries their agreement to the grade —
+    // every finding passes that rung now, whatever it is rated.
+    ratingConfirm: { grade: 'Significant Deficiency', by: REVIEWER, at: '20 Apr' } },
   // DEF-002 was found in the walkthrough, on a manual control — the review sits
   // after the posting it is meant to stop. Nothing has gone wrong yet; the number
   // is what could pass unchecked in a month of manual journals.
@@ -1097,6 +1177,105 @@ function libraryAudits(processes: string[], controls: Control[]): AuditRecord[] 
 }
 
 /**
+ * The payee control — the clearest case of one control answering for a group.
+ *
+ * Group treasury verifies a new payee on one master, under one approval matrix,
+ * whoever the payee will end up being paid by. It is performed in one place and
+ * it answers for every company in the group, which is what `entities` records.
+ *
+ * It is left MID-FLIGHT and deliberately short: the draw reaches three of its
+ * four companies. A conclusion recorded now would cover a company nothing was
+ * tested at, and the sample step says so instead of letting the total size —
+ * which looks perfectly healthy — carry the reader past it.
+ */
+function alturaPayeeControl(controls: Control[]): Control[] {
+  // 'New payee setup independently verified' — index 2 of the Treasury spread.
+  const base = controls.find(c => c.process === 'Treasury' && /new payee/i.test(c.description));
+  const covered = base?.entities;
+  if (!base || !covered || covered.length < 2) return controls;
+  // The draw reaches all but the last company. That last one is the whole point:
+  // it is what the coverage strip names, and what stands between this control and
+  // a conclusion it has not earned.
+  const reach = covered.slice(0, -1);
+  const at = (i: number) => reach[i % reach.length]!;
+
+  const items: Sample[] = [
+    { id: 'py-1', ref: 'PAYEE-2026-0114', result: 'Pass', sourceId: 'src-1', entity: at(0) },
+    { id: 'py-2', ref: 'PAYEE-2026-0139', result: 'Pass', sourceId: 'src-1', entity: at(1) },
+    { id: 'py-3', ref: 'PAYEE-2026-0162', result: 'Pass', sourceId: 'src-1', entity: at(2) },
+    { id: 'py-4', ref: 'PAYEE-2026-0177', result: 'Not tested', sourceId: 'src-1', entity: at(0) },
+    { id: 'py-5', ref: 'PAYEE-2026-0208', result: 'Not tested', sourceId: 'src-1', entity: at(1) },
+  ];
+
+  const shaped: Control = {
+    ...base,
+    controlActivity: 'Group treasury verifies every new payee against the company\u2019s own bank confirmation and a call-back to a published number before the payee is released for payment. One master serves the whole group, so a payee set up here can be paid by any company in it.',
+    // Mid-flight ON PURPOSE — the coverage warning only says something while the
+    // conclusion is still open. A concluded, signed paper is exactly the state
+    // this control must not be in.
+    wpSignoff: undefined,
+    design: { ...base.design, conclusion: 'Effective', override: undefined },
+    operating: {
+      ...base.operating,
+      conclusion: 'Not tested',
+      override: undefined,
+      testedBy: null,
+      testedAt: null,
+      steps: base.operating.steps.map(s => ({ ...s, result: 'Not tested' as TestResult, override: undefined })),
+      population: {
+        source: 'Payee master — change log export',
+        sourceFile: 'payee_master_changes_h1_2026.csv',
+        sourceCount: 1860, count: 214,
+        criteria: `New payees created 1 Jan \u2013 30 Jun 2026, across all ${covered.length} companies`,
+        tieOut: 'Change-log count agreed to the payee master\u2019s creation-date filter.',
+        evidence: [{ id: 'py-pop-ev', name: 'payee_master_changes_h1_2026.csv', kind: 'CSV', uploadedBy: 'A. Mehta', uploadedAt: '18 Jul 2026' }],
+        locked: { by: 'A. Mehta', at: '18 Jul 2026' },
+        sources: [{
+          id: 'src-1', file: 'payee_master_changes_h1_2026.csv', rows: 1860, count: 214,
+          criteria: `New payees created 1 Jan \u2013 30 Jun 2026, across all ${covered.length} companies`,
+          draw: { size: 5, method: 'Random', seed: 4417 },
+        }],
+      },
+      sampling: { basis: 'Monthly control — five items across the half-year.', method: 'Random', size: 5, seed: 4417, samples: items },
+    },
+  };
+
+  return controls.map(c => (c === base ? shaped : c));
+}
+
+/**
+ * The MULTI-PATH case — one control, two ways through it, and a draw that only
+ * ever landed on one.
+ *
+ * The payment-run control releases payments two ways: the ordinary run, where
+ * two authorisers release by hand, and an auto-release lane for payments under
+ * the board-set threshold, where the system releases on its own and the second
+ * pair of eyes is a configuration. Both lanes are THIS control — and a sample
+ * drawn entirely from the manual lane has never tested the auto-release lane,
+ * however healthy its size. One Altura instance is tagged so the sample step
+ * demonstrates the warning rather than describing it.
+ */
+function alturaPathControl(controls: Control[]): Control[] {
+  const target = controls.find(c => /payment runs approved/i.test(c.description) && (c.operating.sampling?.samples.length ?? 0) > 0);
+  if (!target) return controls;
+  const samp = target.operating.sampling!;
+  return controls.map(c => (c !== target ? c : {
+    ...c,
+    paths: ['Manual dual-authorised release', 'Auto-release under threshold'],
+    operating: {
+      ...c.operating,
+      sampling: {
+        ...samp,
+        // Every drawn item went down the manual lane — which is exactly what a
+        // random draw over a manual-heavy period does, and exactly the hole the
+        // path strip exists to name.
+        samples: samp.samples.map(s => ({ ...s, path: 'Manual dual-authorised release' })),
+      },
+    },
+  }));
+}
+
+/**
  * The findings Altura's live cycle has raised — and the controls they came from.
  *
  * A deficiency is a conclusion about a control that FAILED, so seeding one
@@ -1116,33 +1295,74 @@ function libraryAudits(processes: string[], controls: Control[]): AuditRecord[] 
  *                  so this one stays a material weakness and drives the audit's
  *                  ICFR conclusion to "not effective"
  *   Order 3        Significant Deficiency in its own right
- *   Order 4        a Deficiency that AGGREGATES with the one above — same group,
- *                  combined ₹6.4 Cr against a ₹2.4 Cr band
+ *   Order 4        a Deficiency that AGGREGATES with the one above — same line
+ *                  item, combined ₹6.4 Cr against a ₹2.4 Cr band
+ *   Fixed 1-4      four Significant Deficiencies of ₹4 Cr on one line item that
+ *                  together clear the ₹12 Cr materiality — the group grades a
+ *                  Material Weakness and raises all four (alturaPpeAggregation)
  *   Fixed 4        clearly trivial (₹45 L, under the ₹60 L floor) and closed —
  *                  logged, and deliberately never aggregated
- *   ITGC 0         a Significant Deficiency on its own exposure that AGGREGATES
- *                  to a Material Weakness — and the one finding whose real cost
- *                  is not a number at all: a failed IT general control withdraws
+ *   ITGC 0         a Significant Deficiency on its own exposure that a PRUDENT
+ *                  OFFICIAL raises to a Material Weakness — and the one finding
+ *                  whose real cost is not a number at all: a failed ITGC withdraws
  *                  "test of one" from every automated and IT-dependent control in
  *                  the engagement (helpers.itgcHolds), so it is paid for in work
  *                  that comes back rather than in rupees that moved
  *
- * The five are also spread down the exception lifecycle, one per stage, so the
- * tab shows the whole journey rather than five rows all sitting at the start:
- *   DEF-A-01  Rating review    graded, waiting on the reviewer to confirm it
- *   DEF-A-02  Planning         rating confirmed, owner writing the plan
+ * They are also spread down the exception lifecycle rather than left in a column
+ * all sitting at the start, so the tab shows the whole journey:
+ *   DEF-A-01  Identified       raised, the auditor is still sizing it
+ *   DEF-A-02  Rating review    graded, waiting on the reviewer to confirm it
  *   DEF-A-03  Plan review      plan submitted, auditor has not judged it yet
  *   DEF-A-04  Retest           plan accepted, fix in, ONE failed round on the clock
  *   DEF-A-05  Closed           passed its retest and countersigned
  *   DEF-A-06  Planning         the ITGC — rating confirmed, owner writing the plan
+ *   DEF-A-07  Identified       PP&E — being sized, and already raised by its group
+ *   DEF-A-08  Rating review    PP&E
+ *   DEF-A-09  Rating review    PP&E
+ *   DEF-A-10  Planning         PP&E — confirmed at the grade the GROUP reaches
  *
  * Priced against Altura's own thresholds, not the flagship's: materiality
  * ₹12 Cr, SD band 20% (₹2.4 Cr), clearly trivial ₹60 L — see soxConfig on the
  * engagement record. Change those and these grades move, which is the point.
  */
+/**
+ * The reviewer's notes on Altura's papers — one at each stage, so every hat
+ * arrives on a move it can actually make: an OPEN note for the auditor to answer,
+ * a RESOLVED one for the reviewer to verify, and a CLOSED one showing the whole
+ * exchange as it reads afterwards.
+ *
+ * They ride papers the preparer has signed but the reviewer has not, because that
+ * is the only moment a note means anything: before the signature there is nothing
+ * to question, and after it the paper is closed.
+ */
+function alturaReviewNotes(controls: Control[]): ReviewNote[] {
+  const awaiting = controls.filter(c => !!c.wpSignoff?.preparer && !c.wpSignoff?.reviewer);
+  const notes: ReviewNote[] = [];
+  const [a, b, c] = awaiting;
+  if (a) notes.push({
+    id: 'rn-a1', controlId: a.id, status: 'Open', raisedBy: 'J. Fernandes', raisedAt: '2d',
+    text: `The conclusion on ${a.wpRef} rests on the sample passing, but the paper doesn't show which items were drawn from the second half of the period — attach the selection so the coverage can be read off it.`,
+  });
+  if (b) notes.push({
+    id: 'rn-a2', controlId: b.id, status: 'Resolved', raisedBy: 'J. Fernandes', raisedAt: '4d',
+    text: `${b.wpRef} records the reviewer's name but not the date each review happened, so timeliness can't be tested from the paper.`,
+    resolution: { text: 'Added the approval timestamps from the workflow export — every item was reviewed within two working days of posting.', by: 'A. Mehta', at: '1d' },
+  });
+  if (c) notes.push({
+    id: 'rn-a3', controlId: c.id, status: 'Closed', raisedBy: 'J. Fernandes', raisedAt: '9d',
+    text: `Confirm the population for ${c.wpRef} covers the entities added mid-period, not only those in scope at the start.`,
+    resolution: { text: 'Re-pulled against the period-end entity list — the two added in May are in the extract and in the sample frame.', by: 'A. Mehta', at: '8d' },
+    verified: { by: 'J. Fernandes', at: '7d' },
+  });
+  return notes;
+}
+
 function alturaDeficiencies(controls: Control[]): Deficiency[] {
   /** The nth control of a process, in RACM order. Undefined when the process
-   *  was never scoped — the caller skips rather than inventing a control id. */
+   *  was never scoped — the caller skips rather than inventing a control id.
+   *  Order is the RACM's own: one row per control, nothing prepended and nothing
+   *  cloned, so index i here is the i-th control of that process on screen. */
   const pick = (process: string, i: number): Control | undefined =>
     controls.filter(c => c.process === process)[i];
 
@@ -1357,8 +1577,10 @@ function alturaDeficiencies(controls: Control[]): Deficiency[] {
       failedSamples: ['FA-DSP-0119', 'FA-DSP-0126'],
       likelihood: 'Reasonably possible', magnitude: 4_500_000, mwIndicators: [],
       aggregationGroup: 'Fixed Assets',
-      // No ratingConfirm, and none is owed: ₹45 L is under Altura's ₹60 L floor,
-      // so it grades clearly trivial and never reached the reviewer's rating gate.
+      // Confirmed even at clearly trivial — ₹45 L is under Altura's ₹60 L floor,
+      // and the reviewer still agreed that reading before any fix was planned.
+      // Calling a finding small is a judgement like any other.
+      ratingConfirm: { grade: 'Clearly Trivial', by: REVIEWER, at: '08 Jun 2026' },
       remediation: {
         action: 'Route the disposal note to finance on approval rather than with the monthly asset run.',
         date: '30 Jun', owner: 'S. Iyer', status: 'Done',
@@ -1401,13 +1623,27 @@ function alturaDeficiencies(controls: Control[]): Deficiency[] {
       magnitude: 68_000_000,
       // Deliberately NO indicator. On its own ₹6.8 Cr is a Significant
       // Deficiency — above Altura's ₹2.4 Cr band, below the ₹12 Cr materiality.
-      // It grades a Material Weakness anyway, because rule 6 combines it with
-      // every other live exception failing on Accuracy and the group clears
-      // materiality several times over. That is the engine doing its job, and it
-      // is a truer answer than an indicator hand-set here: an access failure this
-      // wide is material because of what it sits on top of, not because someone
-      // typed that it was.
+      //
+      // It used to reach Material Weakness through rule 6, back when exceptions
+      // grouped by process and assertion: this one was combined with everything
+      // else failing on Accuracy and the total cleared materiality. Aggregation
+      // groups on the FS LINE ITEM now (13 Aug 2026), and an ITGC exception
+      // deliberately joins no line-item group — it does not land on one number,
+      // it withdraws reliance across the engagement (helpers.joinsNoDerivedGroup).
+      // So the grade it used to arrive at by arithmetic has to be reached the way
+      // an auditor would actually reach it.
+      //
+      // Rule 7, and not an indicator. Typing an indicator here would say the
+      // engagement HAS a reportable condition of that kind, which is a statement
+      // about the facts; what is true is that a named person judged this access
+      // failure material for what it sits on top of. That is judgment, it is
+      // recorded as judgment, and it carries the sentence it was made in.
       mwIndicators: [],
+      prudentOverride: {
+        to: 'Material Weakness',
+        rationale: 'Eleven standing conflicts across the ERP and procurement platforms leave one person able to post and release a payment unchallenged. A prudent official would not accept that as merely significant on the strength of its own ₹6.8 Cr — every automated and IT-dependent control in the engagement stands on this one holding.',
+        by: 'J. Fernandes', at: '02 Jul 2026',
+      },
       aggregationGroup: 'IT general controls',
       ratingConfirm: { grade: 'Material Weakness', by: 'J. Fernandes', at: '02 Jul 2026' },
       remediation: {
@@ -1424,7 +1660,170 @@ function alturaDeficiencies(controls: Control[]): Deficiency[] {
     });
   }
 
+  out.push(...alturaPpeAggregation(controls, fail));
+
   return out;
+}
+
+/**
+ * Four exceptions on the fixed asset cycle, each a significant deficiency on its
+ * own and a MATERIAL WEAKNESS once they are read together.
+ *
+ * This is the case aggregation exists for, and it is the one case a demo cannot
+ * improvise: it needs four separate control failures landing on ONE line item,
+ * each sized below materiality and above the band, drawn from four DIFFERENT
+ * populations. ₹4 Cr each against Altura's ₹12 Cr materiality — individually
+ * Significant Deficiency (over the ₹2.4 Cr band), ₹16 Cr together, which clears
+ * materiality and rolls back down to raise all four members.
+ *
+ * Fixed Assets is the process that makes it clean. Every one of its controls
+ * lands on property, plant & equipment and nothing else, and no other finding in
+ * the seed touches that line item — so the group is exactly these four, and the
+ * grade it reaches is the arithmetic rather than an indicator somebody set.
+ *
+ * Two things this has to get right, or it silently proves nothing:
+ *
+ *  · FOUR POPULATIONS, NOT ONE. combinedExposure takes the LARGEST inside a
+ *    population and adds ACROSS them, because a control failing twice on one
+ *    extract is one hole and not two. The generated seed gives every control in
+ *    a process the same population_full_period.xlsx under the same filter, which
+ *    is one population by that rule — four members would have totalled ₹4 Cr and
+ *    graded nothing. So each control is put on the extract it would really
+ *    stand on: a capex register, a capitalisation listing, the depreciation run,
+ *    the disposal log. That is also simply truer than one file behind everything.
+ *
+ *  · NO STALE CONFIRMATION. reconcileConfirmations is a mutation-time sweep and
+ *    does not run on seed load, so a confirmation seeded here has to already
+ *    agree with what the engine computes on arrival. Only one of the four is
+ *    confirmed, and at Material Weakness — the grade the group actually reaches.
+ *    Take two members away and it becomes stale for real: that is the reset the
+ *    sweep is for, and it is now something to demonstrate rather than describe.
+ *
+ * The automated control (index 1) is made manual here, because the exposure has
+ * to be placeable against a file and an automated control carries no population
+ * at all — every other process keeps its automated row untouched. Index 4, the
+ * one control the live seed leaves untested in every process, is not touched:
+ * a finding against an untested control is a contradiction, and specs walk into
+ * that row precisely because nothing has happened to it.
+ */
+function alturaPpeAggregation(
+  controls: Control[],
+  fail: (c: Control, track: 'design' | 'operating') => void,
+): Deficiency[] {
+  const fa = controls.filter(c => c.process === 'Fixed Assets');
+  const [capex, lives, deprec, disposals] = fa;
+  if (!capex || !lives || !deprec || !disposals) return [];
+
+  /** Put a control on the extract it would really be tested from. Only the first
+   *  source moves — a second file is a different thing (an assisting table), and
+   *  it answers a different question. */
+  const standOn = (c: Control, file: string, criteria: string) => {
+    const pop = c.operating.population;
+    if (!pop) return;
+    c.operating = {
+      ...c.operating,
+      population: {
+        ...pop, sourceFile: file, criteria,
+        sources: (pop.sources ?? []).map((s, i) => (i === 0
+          ? { ...s, file, criteria, ...(s.draw ? { draw: { ...s.draw, prompt: s.draw.prompt?.replace(pop.sourceFile ?? '', file) } } : {}) }
+          : s)),
+      },
+    };
+  };
+
+  /** Every drawn item says which file it came from. Without that a control with
+   *  more than one source cannot place its exposure at all — populationIdentity
+   *  reads the failed items to decide, and an untagged item names no file. */
+  const drawnFrom = (c: Control, prefix: string) => {
+    const s = c.operating.sampling;
+    if (!s) return;
+    c.operating = {
+      ...c.operating,
+      sampling: { ...s, samples: s.samples.map((it, i) => ({ ...it, ref: `${prefix}-26-${101 + i}`, sourceId: 'src-1' })) },
+    };
+  };
+
+  // The capitalisation control is generated Automated, which means no population
+  // and therefore no way to place ₹4 Cr against a file. A reviewer checking the
+  // life an asset was commissioned on is a manual control anyway.
+  lives.nature = 'Manual';
+  lives.frequency = 'Monthly';
+  lives.controlActivity = activityOf(lives.owner, lives.subProcess === 'General' ? 'Fixed Assets' : lives.subProcess, 'Monthly', 'Manual');
+  lives.operating = manualTrack(
+    'Effective', lives.operating.steps,
+    sampling(25, 'Standard sample — moderate reliance.', 'Random'),
+    2014, 'SAP — asset accounting', 'capitalisations_fy26.xlsx',
+  );
+
+  standOn(capex, 'capex_additions_register_fy26.xlsx', 'Capex additions posted to the asset register in the period');
+  standOn(lives, 'capitalisations_fy26.xlsx', 'Assets capitalised in the period, by asset class');
+  standOn(deprec, 'depreciation_run_fy26.xlsx', 'Monthly depreciation runs posted in the period');
+  standOn(disposals, 'disposals_register_fy26.xlsx', 'Disposals recorded in the period');
+  drawnFrom(capex, 'CAP');
+  drawnFrom(lives, 'CPT');
+  drawnFrom(deprec, 'DEP');
+
+  fail(capex, 'operating');
+  fail(lives, 'operating');
+  fail(deprec, 'operating');
+  // The disposal control already failed its OPERATING track for DEF-A-05, which
+  // was a timing error, remediated and closed. This is the design of the same
+  // control failing — a different question, and the reason a control can carry
+  // more than one finding.
+  fail(disposals, 'design');
+
+  const CR4 = 40_000_000;
+
+  return [
+    {
+      id: 'DEF-A-07', controlId: capex.id, track: 'operating', reportRef: '4.7',
+      description: 'Eleven of twenty-five capex additions were posted with no delegation-of-authority approval on file. Four of the eleven were above the ₹50 L board limit.',
+      rootCause: 'The asset master is created from the purchase order rather than from the approval, so an addition posts the moment goods are received. The approval is filed against the project afterwards, and nothing in the posting asks whether one exists.',
+      failedSamples: ['CAP-26-104', 'CAP-26-111', 'CAP-26-119'],
+      likelihood: 'Reasonably possible', magnitude: CR4, mwIndicators: [],
+      aggregationGroup: 'Fixed Assets',
+      remediation: { action: '', date: null, owner: 'S. Iyer', status: 'Open' },
+      // Freshly raised and still with the auditor. On its own the panel reads
+      // Significant Deficiency; the group underneath it reads Material Weakness,
+      // which is the whole demonstration in one screen.
+      status: 'Identified',
+    },
+    {
+      id: 'DEF-A-08', controlId: lives.id, track: 'operating', reportRef: '4.8',
+      description: 'Assets capitalised in the period took the useful life of the class they were purchased under rather than the one they were commissioned as; nine inverters are being depreciated over twenty-five years against a twelve-year life.',
+      rootCause: 'Useful life is inherited from the purchase order\'s material group and never revisited at commissioning, so an asset bought under a generic plant code keeps that code\'s life for the whole of its time on the register.',
+      failedSamples: ['CPT-26-107', 'CPT-26-113', 'CPT-26-122'],
+      likelihood: 'Reasonably possible', magnitude: CR4, mwIndicators: [],
+      aggregationGroup: 'Fixed Assets',
+      remediation: { action: '', date: null, owner: 'S. Iyer', status: 'Open' },
+      status: 'Rating review',
+    },
+    {
+      id: 'DEF-A-09', controlId: deprec.id, track: 'operating', reportRef: '4.9',
+      description: 'The monthly depreciation run was reviewed on the total charge alone. Three months were signed while the register carried commissioned assets with no depreciation start date, which a total could never have shown.',
+      rootCause: 'The review compares this month\'s charge with last month\'s and asks about the movement, so an asset that never started depreciating produces no movement to ask about — the check cannot see the thing it exists for.',
+      failedSamples: ['DEP-26-103', 'DEP-26-115'],
+      likelihood: 'Reasonably possible', magnitude: CR4, mwIndicators: [],
+      aggregationGroup: 'Fixed Assets',
+      remediation: { action: '', date: null, owner: 'S. Iyer', status: 'Open' },
+      status: 'Rating review',
+    },
+    {
+      id: 'DEF-A-10', controlId: disposals.id, track: 'design', reportRef: '4.10',
+      description: 'The disposal approval threshold is applied to each asset line rather than to the disposal event, so a substation sold as one package of forty-one assets cleared without approval at any level.',
+      rootCause: 'Approval is evaluated per asset record because that is the unit the register holds, and a sale is not a record — nothing in the design groups the lines being retired into the transaction they belong to.',
+      failedSamples: ['FA-DSP-0287'],
+      likelihood: 'Reasonably possible', magnitude: CR4, mwIndicators: [],
+      aggregationGroup: 'Fixed Assets',
+      // Confirmed at the grade the GROUP reaches, not the one this exception
+      // reaches alone — which is the point of confirming after aggregation and
+      // not before. It is also the confirmation the sweep will drop the moment
+      // the group falls back under materiality.
+      ratingConfirm: { grade: 'Material Weakness', by: REVIEWER, at: '07 Aug 2026' },
+      remediation: { action: '', date: null, owner: 'S. Iyer', status: 'Open' },
+      status: 'Planning',
+    },
+  ];
 }
 
 /**
@@ -1442,7 +1841,9 @@ function alturaDeficiencies(controls: Control[]): Deficiency[] {
  * blocked, and the two on one row would read as a data error.
  */
 function alturaUnableToTest(controls: Control[]): void {
-  const fxDeals = controls.filter(c => c.process === 'Treasury')[4];
+  // Same index shift as alturaFindings' pick: the prepended SHARED payee row
+  // must not count, or [4] lands on the borrowing control instead of FX.
+  const fxDeals = controls.filter(c => c.process === 'Treasury' && (c.entities?.length ?? 0) < 2)[4];
   if (!fxDeals) return;
   fxDeals.unableToTest = {
     track: 'operating',
@@ -1487,12 +1888,110 @@ function singleAudit(meta: SeedMeta, controls: Control[]): AuditRecord[] {
   }];
 }
 
+/** The roll-forward demo's audit (eng-sox-rf): one interim, tested and signed
+ *  by BOTH hands — which is what "concluded" means to the New audit wizard's
+ *  round gates — so Roll forward is walkable on this engagement from the first
+ *  click. Its results stay live on the controls (the seed concludes all but
+ *  one control per process), which is exactly what the wizard's scope step
+ *  reads for a signed-but-live parent. No icfrConclusion on purpose: an
+ *  interim never produces the final year answer. */
+function signedInterim(meta: SeedMeta, controls: Control[]): AuditRecord[] {
+  if (!controls.length) return [];
+  const year = Number(/(\d{4})/.exec(meta.periodEnd ?? '')?.[1] ?? new Date().getFullYear());
+  const processes = Array.from(new Set(controls.map(c => c.process)));
+  return [{
+    id: `audit-${meta.id ?? 'eng'}-int`,
+    period: `FY ${year - 1}-${String(year).slice(-2)}`,
+    yearBasis: 'fy',
+    fiscalYear: year,
+    periodSpan: `Apr ${year - 1} – Mar ${year}`,
+    round: 'interim',
+    // Cut-off at end of July: the roll-forward the wizard derives from this
+    // starts 01 Aug and runs to the year end.
+    windowFrom: `${year - 1}-04-01`,
+    windowTo: `${year - 1}-07-31`,
+    scopeKind: 'racm',
+    scopeNames: processes,
+    scopeIds: [],
+    files: [{ name: `altura-renewables-tb-fy${String(year).slice(-2)}.xlsx`, kind: 'tb' }],
+    materiality: { basisLabel: 'Profit before tax (consolidated)', benchmark: 240, pct: 5, pmPct: 75, ctPct: 5 },
+    overall: 12,
+    signoff: {
+      preparer: { by: 'A. Mehta', at: `12 Aug ${year - 1}` },
+      reviewer: { by: 'J. Fernandes', at: `14 Aug ${year - 1}` },
+    },
+    by: meta.owner ?? 'A. Mehta',
+    role: 'auditor',
+    at: `01 Apr ${year - 1}`,
+  }];
+}
+
+/** The roll-forward demo's interim failures — one per retest story the scope
+ *  step tells. A TOE-only failure (design held, the sample didn't): its design
+ *  carries into the roll-forward and only operating is retested. A TOD failure:
+ *  the design itself is retested too. Both come with an open finding, because
+ *  "failed controls and their deficiencies all go" is the rule the demo shows. */
+function rfDemoFailures(controls: Control[]): Control[] {
+  const o2c = controls.filter(c => c.process === 'Order to Cash');
+  const trs = controls.filter(c => c.process === 'Treasury');
+  const toeFailId = o2c[2]?.id;      // effective in the 'live' seed — flip TOE
+  const todFailId = trs[1]?.id;      // flip TOD; its TOE never ran (TOD gates TOE)
+  return controls.map(c => {
+    if (c.id === toeFailId) {
+      return { ...c, operating: { ...c.operating, conclusion: 'Ineffective' as const, testedBy: 'A. Mehta', testedAt: '18 Jul 2026' } };
+    }
+    if (c.id === todFailId) {
+      return {
+        ...c,
+        design: { ...c.design, conclusion: 'Ineffective' as const, testedBy: 'A. Mehta', testedAt: '10 Jul 2026' },
+        operating: { ...c.operating, conclusion: 'Not tested' as const, testedBy: null, testedAt: null },
+      };
+    }
+    return c;
+  });
+}
+
+/** Their open findings — raised at interim, still open, so they ride into the
+ *  roll-forward the way createAudit already carries every open exception. */
+function rfDemoDeficiencies(controls: Control[]): Deficiency[] {
+  const failed = controls.filter(c => c.design.conclusion === 'Ineffective' || c.operating.conclusion === 'Ineffective');
+  return failed.map((c, i) => ({
+    id: `def-rf-0${i + 1}`,
+    controlId: c.id,
+    track: c.design.conclusion === 'Ineffective' ? ('design' as const) : ('operating' as const),
+    description: c.design.conclusion === 'Ineffective'
+      ? 'The design has no step that catches a change made after approval — the walkthrough traced one straight through.'
+      : 'Two of the sampled items were released without the required second signature.',
+    rootCause: c.design.conclusion === 'Ineffective'
+      ? 'Post-approval edits are not routed back for re-approval.'
+      : 'The approval matrix is not enforced in the release run.',
+    likelihood: 'Reasonably possible' as const,
+    magnitude: i === 0 ? 3.4 : 1.6,
+    mwIndicators: [],
+    // Freshly raised — no fix planned yet; that is the roll-forward's opening state.
+    remediation: { action: '', date: null, owner: 'R. Iyer', status: 'Open' as const },
+    status: 'Identified' as const,
+  }));
+}
+
 /** Identity carried in from the app-level Engagement record (engagements.ts). */
-export interface SeedMeta { id?: string; code?: string; name?: string; process?: string; /** Scoping-derived process list — when present, the workspace seeds one RACM per entry. */ processes?: string[]; /** Testing state for scoping-derived RACMs — see Engagement.soxSeedMode. */ seedMode?: 'fresh' | 'live' | 'carried'; periodStart?: string; periodEnd?: string; owner?: string; materiality?: number; performanceMateriality?: number; clearlyTrivial?: number; sdBandPct?: number; }
+export interface SeedMeta { id?: string; code?: string; name?: string; /** The company being audited. Carried because the workspace clones the flagship
+  *  seed: without it every engagement inherited the flagship's own company, and
+  *  the audit report — which names the entity in its title and its first table —
+  *  issued under the wrong client. */ entity?: string; process?: string; /** Scoping-derived process list — when present, the workspace seeds one RACM per entry. */ processes?: string[]; /** Testing state for scoping-derived RACMs — see Engagement.soxSeedMode. */ seedMode?: 'fresh' | 'live' | 'carried'; periodStart?: string; periodEnd?: string; owner?: string; materiality?: number; performanceMateriality?: number; clearlyTrivial?: number; sdBandPct?: number; }
+
+/** A group is recorded with its listing status attached — "Altura Infra Holdings
+ *  Ltd (Listed)" — because that is what the scoping screens key off. A document
+ *  names the company, not its listing state, so the parenthetical comes off on
+ *  the way into the workspace. */
+const legalName = (g: string) => g.replace(/\s*\((listed|unlisted|nyse|nasdaq|bse|nse)[^)]*\)\s*$/i, '').trim();
 const PROC_LABEL: Record<string, string> = { P2P: 'Procure to Pay', O2C: 'Order to Cash', R2R: 'Record to Report', S2C: 'Order to Cash', ITGC: 'IT General Controls' };
 
 export function seedIcfrEngagement(meta?: SeedMeta): IcfrEngagement {
   const base = structuredClone(ENGAGEMENT);
+  // Before anything reads it: withEntityCoverage takes this as the fallback
+  // company, and the report prints it as the client.
+  if (meta?.entity) base.entity = legalName(meta.entity);
   if (meta?.materiality) base.materiality = meta.materiality;
   if (meta?.performanceMateriality) base.performanceMateriality = meta.performanceMateriality;
   if (meta?.clearlyTrivial != null) base.rules.clearlyTrivial = meta.clearlyTrivial;
@@ -1511,7 +2010,7 @@ export function seedIcfrEngagement(meta?: SeedMeta): IcfrEngagement {
     // engagement with the most data in it.
     // The flagship was never scoped from trial balances, so it is one company —
     // its own. Named on every row rather than left blank.
-    base.controls = withEntityInstances(base.controls, base.id, base.entity);
+    base.controls = withAccounts(withEntityCoverage(base.controls, base.id, base.entity));
     base.audits = singleAudit({ id: base.id, periodEnd: base.periodEnd, owner: base.preparer }, base.controls);
     stampPopulationWindows(base.controls, base.audits);
     return base;
@@ -1530,12 +2029,24 @@ export function seedIcfrEngagement(meta?: SeedMeta): IcfrEngagement {
   const built = meta.processes
     ? (meta.processes.length ? racmTemplateForProcesses(meta.processes, meta.seedMode, rich) : [])
     : racmTemplate(proc);
-  // Every control gets the company it is tested at, and a process the scoping
-  // spread across several companies gets a row each — see withEntityInstances.
-  // Only Altura's scoping actually spans companies today, so every other
-  // engagement keeps the exact one-row-per-control register it had, now with its
-  // own company named on every row.
-  const controls = withEntityInstances(built, meta.id, base.entity);
+  // Every control gets the company it is performed at, plus — where its process
+  // reaches further — the companies its one conclusion answers for. One row per
+  // control either way. Only Altura's scoping actually spans companies today, so
+  // every other engagement keeps the register it had, now with its own company
+  // named on every row.
+  let controls = withAccounts(withEntityCoverage(built, meta.id, base.entity));
+  // The draw is then dealt across those companies, because a conclusion covering
+  // four of them is worth only what the sample behind it touched.
+  controls = tagSamplesByEntity(controls);
+  // …and the payee control is held one company short on purpose: that is the
+  // coverage warning the demo shows rather than describes.
+  if (rich) controls = alturaPayeeControl(controls);
+  // …and one has two routes through it, with a draw that only touched one.
+  if (rich) controls = alturaPathControl(controls);
+  // The roll-forward demo's two interim failures — set BEFORE the run record
+  // below is built from the controls, so the register and the run agree.
+  const rfDemo = meta.id === 'eng-sox-rf';
+  if (rfDemo) controls = rfDemoFailures(controls);
   // A 'live' cycle claims tested controls — back that claim with the run that
   // produced them, so the SOX audit registry isn't empty on arrival. Control
   // test, not bulk test — SOX controls aren't tested in a bulk batch.
@@ -1561,11 +2072,15 @@ export function seedIcfrEngagement(meta?: SeedMeta): IcfrEngagement {
   // fails five of the controls those runs concluded on, and a run record states
   // the outcome as it stood when it ran, so re-reading it here would be wrong.
   // Every other engagement stays clean, as before.
-  const deficiencies = rich ? alturaDeficiencies(controls) : [];
+  const deficiencies = rich ? alturaDeficiencies(controls) : rfDemo ? rfDemoDeficiencies(controls) : [];
   // A blocked control, not a finding — see alturaUnableToTest. Altura only, like
   // the findings above; every other engagement stays clean.
   if (rich) alturaUnableToTest(controls);
-  const audits = rich ? libraryAudits(meta.processes ?? [], controls) : singleAudit(meta, controls);
+  const audits = rich ? libraryAudits(meta.processes ?? [], controls)
+    // The roll-forward demo — a countersigned interim instead of the open
+    // year-end every other engagement gets. See signedInterim.
+    : meta.id === 'eng-sox-rf' ? signedInterim(meta, controls)
+    : singleAudit(meta, controls);
   stampPopulationWindows(controls, audits);
   return {
     ...base,
@@ -1574,6 +2089,12 @@ export function seedIcfrEngagement(meta?: SeedMeta): IcfrEngagement {
     // flagship-only and the scope page falls back to the three threshold fields.
     materialityBasis: undefined,
     id: meta.id,
+    // PP&E carries Altura's fixed asset cycle, and that cycle is scoped — so the
+    // line item is in scope here whatever the flagship's own worksheet says. An
+    // aggregation group standing on an account the same engagement calls "Out"
+    // would read as a data error, and this is the engagement that has one (see
+    // alturaPpeAggregation). Altura only, like every other finding in this file.
+    accounts: rich ? base.accounts.map(a => (a.id === 'a5' ? { ...a, inScope: true, process: 'Fixed Assets' } : a)) : base.accounts,
     code: meta.code ?? base.code,
     name: meta.name ?? base.name,
     periodStart: meta.periodStart ?? base.periodStart,
@@ -1583,7 +2104,7 @@ export function seedIcfrEngagement(meta?: SeedMeta): IcfrEngagement {
     deficiencies,
     tasks: [],
     discussions: [],
-    reviewNotes: [],
+    reviewNotes: rich ? alturaReviewNotes(controls) : [],
     executions: [],
     runs,
     // Every SOX engagement has at least one audit now: the Overview IS the audit
@@ -1625,100 +2146,119 @@ function stampPopulationWindows(controls: Control[], audits: AuditRecord[]): voi
     pop.filterTo = audit.windowTo;
     pop.version = `POP-${ROUND_TAG[audit.round]}`;
     pop.criteria = `${pop.criteria} · ${ROUND_WINDOW_LABEL[audit.round]}`;
+    // Each file's own filter carries the round too — the per-file rows print
+    // these rather than the population-level line, so stamping only the latter
+    // would leave the round visible in one place and missing in the other.
+    pop.sources = pop.sources?.map(s => ({ ...s, criteria: `${s.criteria} · ${ROUND_WINDOW_LABEL[audit.round]}` }));
   }
 }
 
-// ── The same control, at every company in its scope ─────────────────────────────
+// ── One control, every company it answers for ───────────────────────────────────
 //
-// A group audit does not test a control once. It tests it separately at each
-// entity the scoping brought in: same control number, same wording, four
-// separate lives. Altura's Treasury RACM covers Holdings, Solar, Wind and Smart
-// Metering, so TRY-01 is four rows — and one being concluded effective says
-// nothing at all about the other three.
+// A control is ONE row, whatever the group's shape. It is run once, tested once,
+// and concluded once — and that single conclusion carries to every company the
+// scoping brought in. Altura's Treasury RACM covers Holdings, Solar, Wind and
+// Smart Metering, so TRY-01 is one row that names all four.
 //
-// Which companies each control runs at is NOT invented here. It is read straight
-// off the programme's own RACM derivation — the same mapping the scoping wizard
-// wrote when it decided which trial-balance captions were in scope — so the
-// register can never disagree with the Configuration tab.
-
-/** Where the row's testing has got to. The whole point of separate rows is that
- *  entities are at different points, so the clones spread across these. */
-type EntityStage = 'fresh' | 'design' | 'part' | 'done';
-
-/** One entity's copy of a control: same number, its own working paper, its own
- *  design and operating tracks reset to `stage`. */
-function instanceAt(base: Control, entity: string, short: string, stage: EntityStage): Control {
-  const designDone = stage !== 'fresh';
-  const opDone = stage === 'done';
-  return {
-    ...base,
-    // `id` is the key everything else in the workspace hangs off (findings,
-    // tasks, run records), so it has to be unique. `code` is what people read.
-    id: `${base.id}@${short.toLowerCase()}`,
-    code: base.code ?? base.id,
-    // A working paper index has to be unique too — the entity suffix is exactly
-    // how a group file references the same control at a different company.
-    wpRef: `${base.wpRef}/${short.slice(0, 3).toUpperCase()}`,
-    entity,
-    design: {
-      ...base.design,
-      documents: base.design.documents.map(d => ({ ...d, status: (designDone ? 'Received' : 'Requested') as DocStatus })),
-      points: base.design.points.map(p => ({ ...p, result: (designDone ? 'Pass' : 'Not tested') as TestResult })),
-      conclusion: (designDone ? 'Effective' : 'Not tested') as TrackConclusion,
-      testedBy: designDone ? base.design.testedBy : null,
-      testedAt: designDone ? base.design.testedAt : null,
-    },
-    operating: {
-      ...base.operating,
-      // Nothing is sampled until design is signed off, so a row that hasn't got
-      // there carries no population and no sample — the control page opens at ①.
-      population: designDone ? base.operating.population : undefined,
-      sampling: opDone ? base.operating.sampling : undefined,
-      steps: base.operating.steps.map((s, i) => ({
-        ...s,
-        result: (opDone ? 'Pass' : stage === 'part' && i === 0 ? 'Pass' : 'Not tested') as TestResult,
-      })),
-      conclusion: (opDone ? 'Effective' : 'Not tested') as TrackConclusion,
-      testedBy: opDone ? base.operating.testedBy : null,
-      testedAt: opDone ? base.operating.testedAt : null,
-    },
-  };
-}
+// Which is exactly why the sample has to reach each of them: one conclusion
+// covering four companies is only worth what the draw behind it touched, and a
+// company with no item drawn has had nothing tested however healthy the total
+// size looks. See `Control.entities`, `Sample.entity` and the coverage strip on
+// the sample step.
+//
+// Which companies each control answers for is NOT invented here. It is read
+// straight off the programme's own RACM derivation — the same mapping the
+// scoping wizard wrote when it decided which trial-balance captions were in
+// scope — so the register can never disagree with the Configuration tab.
 
 /**
- * Give every control its entity, and add a row for each further company its
- * process covers.
+ * Give every control the company it is performed at, and — when its process
+ * reaches further — the full list of companies its one conclusion answers for.
  *
- * The originals keep their ids and their place at the front of the array —
- * everything that picks a control by position (the seeded findings, the run
- * history) goes on meaning what it meant before. The copies are appended.
+ * No control is ever split into a row per company. The register carries ONE row
+ * per control; `entities` is what makes the reach of that row visible, and the
+ * sample step is where the reach has to be earned.
  */
-function withEntityInstances(controls: Control[], engagementId: string, fallback: string): Control[] {
+/**
+ * The FS line items a control stands behind — the grouping key for aggregation.
+ *
+ * Seeded off the process, but deliberately NOT one-for-one with it: a payment
+ * run settles payables as well as moving cash, and a three-way match is as much
+ * an inventory control as a payables one. If every process mapped to exactly one
+ * account, account groups and process groups would be the same thing wearing a
+ * different name — which is the arrangement this replaced.
+ *
+ * IT General Controls map to nothing on purpose: an ITGC does not land on one
+ * line item, it withdraws reliance across the engagement. See
+ * `joinsNoDerivedGroup`.
+ */
+const ACCOUNTS_FOR_PROCESS: Record<string, string[]> = {
+  'Procure to Pay': ['a1', 'a2'],
+  Treasury: ['a4', 'a1'],
+  'Order to Cash': ['a3'],
+  'Record to Report': ['a5'],
+  // The one process whose whole reason for existing is a single line item, which
+  // is what makes it the clean case: four separate control failures on the fixed
+  // asset cycle land on PP&E and nowhere else. See alturaPpeAggregation.
+  'Fixed Assets': ['a5'],
+  Inventory: ['a2'],
+};
+
+/** Attach them, without overwriting a control that already names its own. */
+function withAccounts(controls: Control[]): Control[] {
+  controls.forEach(c => {
+    if (!c.accountIds?.length) c.accountIds = ACCOUNTS_FOR_PROCESS[c.process] ?? [];
+  });
+  return controls;
+}
+
+function withEntityCoverage(controls: Control[], engagementId: string, fallback: string): Control[] {
   const prog = programmeFor(engagementId);
   // The single company the whole engagement is against. Every audit has one, even
   // the ones that were never scoped from trial balances — it is who is being
   // audited — so a control always has an entity to name, and the register never
-  // shows a column of dashes.
-  const wholeAudit = prog?.groupName ?? fallback;
+  // shows a column of dashes. `legalName` strips a listing suffix so the group
+  // reads with the same name here as it does in the entity register — otherwise
+  // the register's Entity filter lists one company twice.
+  const wholeAudit = legalName(prog?.groupName ?? fallback);
   const fullName = new Map((prog?.entities ?? []).map(e => [entityShort(e.id, prog!.entities), e.name]));
   const scopeOf = new Map<string, string[]>();
   prog?.racms.forEach(r => scopeOf.set(normaliseProcess(r.process), r.entities));
 
-  const STAGES: EntityStage[] = ['done', 'part', 'design', 'fresh'];
-  const copies: Control[] = [];
-  controls.forEach((c, i) => {
-    // A process the scoping mapped to several companies splits into a row each —
-    // same control number, separate lives. A process mapped to one, or an
-    // engagement whose RACM was uploaded rather than derived, is the audit's own
-    // company and stays one row.
-    const shorts = scopeOf.get(normaliseProcess(c.process)) ?? [];
-    if (!shorts.length) { c.entity = wholeAudit; return; }
-    c.entity = fullName.get(shorts[0]!) ?? shorts[0]!;
-    shorts.slice(1).forEach((short, k) => {
-      copies.push(instanceAt(c, fullName.get(short) ?? short, short, STAGES[(i + k) % STAGES.length]!));
-    });
+  controls.forEach(c => {
+    // A process the scoping mapped to several companies gives this control its
+    // reach. A process mapped to one — or an engagement whose RACM was uploaded
+    // rather than derived — is the audit's own company, and the row answers for
+    // that company alone.
+    const names = (scopeOf.get(normaliseProcess(c.process)) ?? []).map(s => fullName.get(s) ?? s);
+    if (!names.length) { c.entity = wholeAudit; return; }
+    // Performed where, then who it answers for — two different questions, and a
+    // row that reaches only one company must not claim to be shared.
+    c.entity = names[0]!;
+    if (names.length > 1) c.entities = names;
   });
-  return copies.length ? [...controls, ...copies] : controls;
+  return controls;
+}
+
+/**
+ * Every drawn item belongs to one of the companies the control answers for.
+ *
+ * A conclusion that covers four companies is worth what the draw behind it
+ * touched, so each item is dealt to a company in turn — and the coverage strip
+ * on the sample step reads the result back. `short` deliberately holds one
+ * company out of the deal, which is how a control is left mid-flight with a
+ * company nothing was tested at: the warning is then shown, not described.
+ */
+function tagSamplesByEntity(controls: Control[], short?: (c: Control) => boolean): Control[] {
+  controls.forEach(c => {
+    const names = c.entities;
+    const items = c.operating.sampling?.samples;
+    if (!names || names.length < 2 || !items?.length) return;
+    const reach = short?.(c) ? names.slice(0, -1) : names;
+    if (!reach.length) return;
+    c.operating.sampling!.samples = items.map((s, i) => ({ ...s, entity: reach[i % reach.length]! }));
+  });
+  return controls;
 }
 
 /** The attributes a seeded control is tested against, in the order an auditor
@@ -1789,7 +2329,20 @@ export function racmTemplateForProcesses(names: string[], mode: 'fresh' | 'live'
         }));
     return shells.map((c, i) => {
       const last = i === shells.length - 1;
-      const designDone = mode === 'carried' || (mode === 'live' && !last);
+      // ── the one control caught mid-flight ──────────────────────────────────
+      // Every other control is either untouched or finished, and both of those
+      // hide the per-file marks: a finished control is locked, so its Approve
+      // and Reject buttons are gone, and an untouched one has no files to mark.
+      // The half-done state is the one the call actually described — "चार का
+      // तुमने कर दिया था, दो बच रहा था" — so exactly one control is left in it:
+      // population locked, both files proven, the first sampled and ticked, the
+      // second still waiting for its draw.
+      //
+      // Treasury only, and only its last control, so every other process keeps
+      // its untouched control exactly as it was — several specs walk into that
+      // one precisely because nothing has happened to it.
+      const midFlight = mode === 'live' && last && name === 'Treasury';
+      const designDone = mode === 'carried' || (mode === 'live' && !last) || midFlight;
       const opDone = mode === 'live' && !last;
       // `&& !last` is load-bearing. Every process carries 5 shells, so the one
       // untested control is always i=4 — and 4 % 3 === 1 made it Automated in
@@ -1804,16 +2357,22 @@ export function racmTemplateForProcesses(names: string[], mode: 'fresh' | 'live'
         doc('Flowchart', `${name} flowchart.pdf`, 'Received'),
         doc('Walkthrough', `Walkthrough — ${name}.pdf`, designDone ? 'Received' : 'Requested'),
       ];
-      const points: DesignPoint[] = [
-        point('Control addresses the stated risk and assertion.', designDone ? 'Pass' : 'Not tested'),
-        point('Control operates at sufficient precision.', designDone ? 'Pass' : 'Not tested'),
-      ];
       // How many attributes this control carries, and how many of them a
       // workflow evidences. An automated control is fully instrumented; a manual
       // one is mapped partially or not at all, which is what makes "3 of 4
       // workflows mapped" a fact worth putting on a card.
-      const attrCount = rich ? 2 + (i % 4) : 2;
+      // The untouched control carries three attributes rather than two, so the
+      // population step can show all three states a file can be in at once: one
+      // structured input, one PDF (offered, never given a row count) and one
+      // attribute still waiting for its file.
+      const attrCount = rich && last ? 3 : rich ? 2 + (i % 4) : 2;
       const mapped = nature === 'Automated' ? attrCount
+        // The untouched control is the only one an auditor can actually start
+        // from, so it is the only place the population step's file list can be
+        // seen being built. Two wired attributes rather than one: the first
+        // names its input file, the second has none — which is what makes the
+        // list and the thing still owed both visible at once.
+        : rich && last ? Math.min(3, attrCount)
         : rich ? (i % 3 === 0 ? 0 : i % 3 === 1 ? 1 : attrCount - 1)
         : 0;
       const opSteps: OperatingStep[] = ATTRIBUTE_SPINE.slice(0, attrCount).map((a, k) => step(
@@ -1826,9 +2385,47 @@ export function racmTemplateForProcesses(names: string[], mode: 'fresh' | 'live'
         nature === 'Automated' && k === 0 ? ['Reperformance'] : a.procedures,
         opDone ? 'Pass' : 'Not tested',
         k < mapped
-          ? wf(`wf-${c.id.toLowerCase()}-${k + 1}`, `${title} — check ${k + 1}`, opDone ? `run #${6000 + i * (rich ? 8 : 3) + k + 1}` : undefined)
+          ? {
+            ...wf(`wf-${c.id.toLowerCase()}-${k + 1}`, `${title} — check ${k + 1}`, opDone ? `run #${6000 + i * (rich ? 8 : 3) + k + 1}` : undefined),
+            // The file the linked workflow reads. It is one of the files this
+            // control's population stands on, because that is what the call
+            // settled: the population's sources ARE the workflows' inputs
+            // ("वर्कफ्लो लिंकिंग में जो इनपुट फाइल्स हैं, वो सारी फाइल्स की
+            // लिस्ट"). The last mapped attribute is deliberately left without
+            // one — an attribute wired to a workflow with no file attached is
+            // the ordinary half-finished state, and the step has to be able to
+            // say so rather than look complete.
+            // The untouched control's second attribute reads a PDF — signed
+            // approvals, scanned. A real case ("PDF अपलोड किया है वर्कफ्लो
+            // बनाते समय"), and the only one that shows the rule: a PDF is
+            // offered like any other file and is never given a row count,
+            // because it has none.
+            ...(rich && last && k === 1
+              ? { inputFile: file(`signed_approvals_${name.toLowerCase().replace(/[^a-z]+/g, '_')}.pdf`, 'R. Nair', 'PDF') }
+              : k < mapped - 1
+                ? { inputFile: file(k === 0 ? 'population_full_period.xlsx' : `vendor_master_${name.toLowerCase().replace(/[^a-z]+/g, '_')}.xlsx`, 'R. Nair', 'XLSX') }
+                : {}),
+          }
           : {},
       ));
+      // Design checks: the control-level pair FIRST, then one per attribute
+      // (dev call, Aug 2026 — every attribute carries its own design check).
+      //
+      // Order is load-bearing twice over. The control-level ones lead because
+      // that is how the step reads — does this control address the risk at all,
+      // then is each thing it has to do designed to happen. And alturaDeficiencies
+      // fails points[0] to seed its design failure, so anything prepended here
+      // would silently move which check that finding is against.
+      const points: DesignPoint[] = [
+        point('Control addresses the stated risk and assertion.', designDone ? 'Pass' : 'Not tested'),
+        point('Control operates at sufficient precision.', designDone ? 'Pass' : 'Not tested'),
+        ...opSteps.map(s => point(
+          `${s.description.replace(/\.$/, '')} — designed to happen, at ${s.precision.toLowerCase()}.`,
+          designDone ? 'Pass' : 'Not tested',
+          'Design walkthrough check',
+          s.id,
+        )),
+      ];
       const frequency: Frequency = nature === 'Automated' ? 'Recurring' : c.frequency;
       return {
         ...c,
@@ -1839,10 +2436,49 @@ export function racmTemplateForProcesses(names: string[], mode: 'fresh' | 'live'
         // 'General' is the placeholder sub-process on generated rows — naming the
         // process reads better than "over general records".
         controlActivity: activityOf(c.owner, c.subProcess === 'General' ? name : c.subProcess, frequency, nature),
+        // A concluded paper is signed by the auditor and then waits for the
+        // reviewer. Without a few of those the reviewer's queue is empty of
+        // papers, the countersign is never exercised, and a review note has
+        // nothing to ride — a note only means something between the two
+        // signatures. Every second concluded row is left waiting.
+        wpSignoff: designDone && opDone
+          ? (i % 2 === 0
+            ? { preparer: { by: 'A. Mehta', at: '12 Jun 2026' } }
+            : { preparer: { by: 'A. Mehta', at: '12 Jun 2026' }, reviewer: { by: 'J. Fernandes', at: '14 Jun 2026' } })
+          : undefined,
         design: designTrack(designDone ? 'Effective' : 'Not tested', docs, points),
         operating: nature === 'Automated'
           ? autoTrack(opDone ? 'Effective' : 'Not tested', opSteps)
-          : manualTrack(opDone ? 'Effective' : 'Not tested', opSteps, opDone ? sampling(25, 'Standard sample — moderate reliance.', 'Random') : undefined, opDone ? 2000 + i * 7 : 0),
+          // The first tested control of every process stands on TWO source files
+          // (dev call, Aug 2026 — "मल्टीपल फाइल्स वो डाल सकता है"). Seeded rather
+          // than left to be built by hand: the per-file IPE proof, the per-file
+          // draw and the Source column on the paper are all invisible until a
+          // control actually has more than one file, and a feature nobody can
+          // reach on arrival is a feature nobody reviews. One control, not all
+          // of them — several files is the exception, and a register where every
+          // control had two would misrepresent the ordinary case.
+          : manualTrack(
+            opDone ? 'Effective' : 'Not tested', opSteps,
+            opDone || midFlight ? sampling(midFlight ? 12 : 25, 'Standard sample — moderate reliance.', 'Random') : undefined,
+            opDone || midFlight ? 2000 + i * 7 : 0, undefined, undefined,
+            // Two different second files, because they are two different things.
+            // The concluded control reads a vendor master — the call's own
+            // example of an assisting table: joined onto the population by the
+            // workflow, proven, and never sampled. The mid-flight control reads
+            // a second half-year extract, which IS population and is the file
+            // still waiting for its draw.
+            opDone && i === 0
+              ? secondSource(
+                `vendor_master_${name.toLowerCase().replace(/[^a-z]+/g, '_')}.xlsx`, 1840, 265,
+                'Active vendors with a payment in the period', false, 'assisting',
+              )
+              : midFlight
+                ? secondSource(
+                  `${name.toLowerCase().replace(/[^a-z]+/g, '_')}_h2_extract.csv`, 9240, 1320,
+                  'Second half of the period', false, 'population',
+                )
+                : undefined,
+          ),
       };
     });
   });

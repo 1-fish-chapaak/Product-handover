@@ -1,7 +1,7 @@
 import { useMemo } from 'react';
 import { useIcfr } from './store';
 import { programmeFor } from './auditScope';
-import { controlsUsingFile, defaultFileOrigin, fileOriginOf, guessFileKind } from './helpers';
+import { controlsUsingFile, defaultFileOrigin, fileOriginOf, guessFileKind, populationSources } from './helpers';
 import type { AuditFileRecord, Control } from './types';
 
 /** A file record as everything downstream reads it: the file's own facts, its
@@ -11,6 +11,18 @@ export interface AuditFile extends AuditFileRecord {
   /** True where the record came out of the registry rather than being derived —
    *  i.e. somebody uploaded it through the app or corrected its answer. */
   recorded: boolean;
+  /** Was this file PUT HERE, for this audit — the trial balance and ledger
+   *  attached when the audit was created, and anything uploaded through the app
+   *  since. False for everything the engagement merely holds: scoping trial
+   *  balances, system pulls another control drew on, files a workflow elsewhere
+   *  reads.
+   *
+   *  Note this is not the same question as `recorded`. Answering "where did this
+   *  come from" on a SAP pull writes a registry entry, which makes it recorded —
+   *  but nobody uploaded it, so it did not arrive for this audit. The population
+   *  step's source picker asks THIS question (user ask, 12 Aug); the file
+   *  registry and the working paper still show everything. */
+  ofAudit: boolean;
 }
 
 /**
@@ -41,13 +53,19 @@ export function useAuditFiles(): AuditFile[] {
     const prog = programmeFor(eng.id);
     const audit = eng.audits.find(a => a.id === openAuditId);
     const derived: AuditFileRecord[] = [];
+    /** Names that arrived FOR this audit rather than being inherited — see
+     *  `ofAudit`. Collected by name because that is what dedupe keys on. */
+    const auditOwn = new Set<string>();
     const add = (name: string, kind: string, rows: number, from: string, by: string) => {
       derived.push({ name, kind, rows, from, uploadedBy: by, uploadedAt: 'at scoping', origin: defaultFileOrigin(kind) });
     };
-    audit?.files.forEach(f => add(
-      f.name, f.kind === 'tb' ? 'Trial balance' : 'General ledger',
-      f.kind === 'tb' ? 1240 : 18432, `${audit.period} audit`, audit.by,
-    ));
+    audit?.files.forEach(f => {
+      add(
+        f.name, f.kind === 'tb' ? 'Trial balance' : 'General ledger',
+        f.kind === 'tb' ? 1240 : 18432, `${audit.period} audit`, audit.by,
+      );
+      auditOwn.add(f.name);
+    });
     prog?.entities.forEach((en: { name: string; tbFile?: string; tbLines?: number }) => {
       if (en.tbFile) add(en.tbFile, 'Trial balance', en.tbLines ?? 1240, `${en.name} · engagement scoping`, eng.preparer);
     });
@@ -59,11 +77,41 @@ export function useAuditFiles(): AuditFile[] {
     // the question, so it lands answered rather than blocking work that is done.
     eng.controls.forEach(c => {
       const p = c.operating.population;
-      if (!p?.sourceFile) return;
-      derived.push({
-        name: p.sourceFile, kind: guessFileKind(p.sourceFile), rows: p.sourceCount ?? p.count,
-        from: p.source, uploadedBy: p.provenance?.extractedBy || eng.preparer, uploadedAt: p.provenance?.extractedOn || 'at scoping',
-        origin: fileOriginOf(eng, p.sourceFile, p.provenance?.system).origin,
+      if (!p) return;
+      // Every file the population stands on. A control drawing off a ledger and
+      // a vendor master names two, and leaving the second out of the registry
+      // would hide a file the audit is demonstrably reading.
+      populationSources(c).forEach(s => {
+        if (!s.file) return;
+        derived.push({
+          name: s.file, kind: guessFileKind(s.file), rows: s.rows || s.count,
+          from: p.source, uploadedBy: p.provenance?.extractedBy || eng.preparer, uploadedAt: p.provenance?.extractedOn || 'at scoping',
+          origin: fileOriginOf(eng, s.file, p.provenance?.system).origin,
+        });
+      });
+    });
+
+    // Files an ATTRIBUTE's workflow reads. They are files the audit holds by any
+    // reading — a workflow runs on them and a validation is recorded against
+    // them — and leaving them out meant the population step could not offer the
+    // very files the call says it should ("वर्कफ्लो लिंकिंग में जो इनपुट फाइल्स
+    // हैं, वो सारी फाइल्स की लिस्ट").
+    eng.controls.forEach(c => {
+      c.operating.steps.forEach(s => {
+        if (!s.inputFile?.name) return;
+        const name = s.inputFile.name;
+        // A PDF has no rows to count, so it is given none — the row count is
+        // suppressed downstream by name, and a fabricated number here would be
+        // a number somebody has to explain. Structured files get a stable one.
+        const rows = /\.pdf$/i.test(name)
+          ? 0
+          : 400 + (name.split('').reduce((a, ch) => (a * 31 + ch.charCodeAt(0)) >>> 0, 7) % 4200);
+        derived.push({
+          name, kind: guessFileKind(name), rows,
+          from: `${s.workflowName ?? 'Workflow'} · ${c.id}`,
+          uploadedBy: s.inputFile.uploadedBy || eng.preparer, uploadedAt: s.inputFile.uploadedAt || 'at scoping',
+          origin: fileOriginOf(eng, name).origin,
+        });
       });
     });
 
@@ -85,15 +133,17 @@ export function useAuditFiles(): AuditFile[] {
         ...(rec ? { origin: rec.origin, systemFetched: rec.systemFetched, originBy: rec.originBy, originAt: rec.originAt } : {}),
         usedBy: controlsUsingFile(eng, d.name),
         recorded: !!rec,
+        ofAudit: auditOwn.has(d.name),
       });
     }
     // Registered files the engagement doesn't derive — the ones a control
     // uploaded. They are in the registry precisely so every other control can
-    // reuse them without being asked where they came from again.
+    // reuse them without being asked where they came from again. Nothing derives
+    // them, so an entry here IS the upload: it arrived for this audit.
     for (const r of registry) {
       if (seen.has(r.name)) continue;
       seen.add(r.name);
-      out.push({ ...r, usedBy: controlsUsingFile(eng, r.name), recorded: true });
+      out.push({ ...r, usedBy: controlsUsingFile(eng, r.name), recorded: true, ofAudit: true });
     }
     return out;
   }, [eng, racmDocs, openAuditId]);

@@ -7,7 +7,9 @@ import {
   Shield, Search as SearchIcon, Settings, Clock, Check,
   Wand2, MoreHorizontal, LogOut, HelpCircle, ExternalLink,
   ClipboardCheck, FlaskConical, Layers, Bell, Inbox, BarChart3,
+  Brain,
 } from 'lucide-react';
+import PersonalMemoryDrawer from './PersonalMemoryDrawer';
 import type { View } from '../../hooks/useAppState';
 import { useCurrentUser } from '../../context/CurrentUserContext';
 import type { PermissionKey } from '../../data/rbac';
@@ -130,6 +132,9 @@ export default function Sidebar({ view, setView, expanded, toggleSidebar, unread
   const teamRef = useRef<HTMLDivElement>(null);
   const [userMenuOpen, setUserMenuOpen] = useState(false);
   const [signOutConfirm, setSignOutConfirm] = useState(false);
+  // "What IRA knows about me" — the personal-memory home (scope follows
+  // surface: personal memory governance hangs off the identity menu).
+  const [memoryDrawerOpen, setMemoryDrawerOpen] = useState(false);
   const [helpOpen, setHelpOpen] = useState(false);
   const userMenuRef = useRef<HTMLDivElement>(null);
 
@@ -476,6 +481,13 @@ export default function Sidebar({ view, setView, expanded, toggleSidebar, unread
                       Irame Labs Pvt Ltd
                     </div>
                     <button
+                      onClick={() => { setUserMenuOpen(false); setHelpOpen(false); setMemoryDrawerOpen(true); }}
+                      className="w-full flex items-center gap-2.5 px-4 py-2.5 text-[0.8125rem] text-white hover:bg-white/[0.06] transition-colors cursor-pointer"
+                    >
+                      <Brain size={14} className="text-white" />
+                      What IRA knows about me
+                    </button>
+                    <button
                       onClick={() => setHelpOpen(p => !p)}
                       className="w-full flex items-center gap-2.5 px-4 py-2.5 text-[0.8125rem] text-white hover:bg-white/[0.06] transition-colors cursor-pointer"
                     >
@@ -531,6 +543,12 @@ export default function Sidebar({ view, setView, expanded, toggleSidebar, unread
           </button>
         )}
       </div>
+
+      {/* Personal memory home — rendered at the shell level so the drawer
+          overlays the app, not the sidebar column. */}
+      <AnimatePresence>
+        {memoryDrawerOpen && <PersonalMemoryDrawer onClose={() => setMemoryDrawerOpen(false)} />}
+      </AnimatePresence>
     </motion.div>
   );
 }

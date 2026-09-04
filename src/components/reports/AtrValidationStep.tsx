@@ -26,7 +26,7 @@ const STATUS_PILL: Record<string, string> = {
   Overdue: 'bg-risk-50 text-risk-700 border-risk/30',
 };
 
-const RISK_OPTS: AtrRisk[] = ['High', 'Medium', 'Low'];
+const RISK_OPTS: AtrRisk[] = ['Critical', 'High', 'Medium', 'Low'];
 
 // Status pips for the right-rail "By status" rollup.
 const STATUS_DOT: Record<string, string> = {
@@ -87,7 +87,7 @@ export default function AtrValidationStep({ observations, onChange }: {
 
   // Right-rail rollup (selected only).
   const sel = observations.filter(o => o.selected);
-  const byRisk = { High: 0, Medium: 0, Low: 0 } as Record<AtrRisk, number>;
+  const byRisk = { Critical: 0, High: 0, Medium: 0, Low: 0 } as Record<AtrRisk, number>;
   const byClass = { 'Design Deficiency': 0, 'System Deficiency': 0, 'Procedural Non-Compliance': 0 } as Record<AtrClassification, number>;
   // Status is the most audit-critical dimension — how many findings are fully
   // remediated vs still open. 'Closed' surfaces as "Complete" for the reader.
@@ -202,7 +202,7 @@ export default function AtrValidationStep({ observations, onChange }: {
                         <ViewField label="Risk summary" value={o.riskSummary} />
                         {o.actionPlans.length > 0 && (
                           <div>
-                            <div className="text-[0.625rem] font-semibold uppercase tracking-[0.08em] text-ink-500 mb-1.5">Management action plans</div>
+                            <div className="text-[0.625rem] font-semibold uppercase tracking-[0.08em] text-ink-500 mb-1.5">Action plans</div>
                             <div className="space-y-2">
                               {o.actionPlans.map((p, pi) => (
                                 <div key={pi} className="rounded-sm border border-canvas-border bg-canvas p-2.5 space-y-1.5">

@@ -1,7 +1,7 @@
 import { useRef, useEffect, useState, useCallback } from 'react';
 import { AnimatePresence, motion } from 'motion/react';
 import { Sparkles } from 'lucide-react';
-import { useAppState, type View } from './hooks/useAppState';
+import { useAppState, getInitialKnowledgeHubTab, getInitialMemoryFocus, type View } from './hooks/useAppState';
 import type { ControlDetail } from './components/engagement/engagementData';
 import { ToastProvider } from './components/shared/Toast';
 import { BulkRunProgressProvider } from './components/shared/BulkRunProgress';
@@ -197,6 +197,26 @@ function AppInner() {
 
   const { can, canAny } = useCurrentUser();
   const logEvent = useAuditLog();
+
+  // Knowledge Hub deep-link state — which tab to land on and (optionally)
+  // which Smart Learn row to open. Seeded from ?view=knowledge-hub&tab=&memory=
+  // and updated by app:navigate-view events carrying tab/focusId.
+  const [khTab, setKhTab] = useState<'data' | 'learn'>(getInitialKnowledgeHubTab);
+  const [khMemoryFocus, setKhMemoryFocus] = useState<string | null>(getInitialMemoryFocus);
+
+  // Memory governance events → Admin audit log, module "Memory". The session
+  // layer (data/memorySession.ts) dispatches these on every learn / approve /
+  // forget / renew / drift decision so the trail is complete no matter which
+  // surface acted.
+  useEffect(() => {
+    const handler = (e: Event) => {
+      const detail = (e as CustomEvent<{ action: 'Create' | 'Update' | 'Delete'; description: string; entity: string }>).detail;
+      if (!detail) return;
+      logEvent({ action: detail.action, description: detail.description, module: 'Memory', entity: detail.entity });
+    };
+    window.addEventListener('irame:memory-audit', handler);
+    return () => window.removeEventListener('irame:memory-audit', handler);
+  }, [logEvent]);
 
   // Every dashboard-creation path funnels through here so the audit log (and
   // the Platform Usage "What got created" card) sees each new dashboard.
@@ -466,9 +486,15 @@ function AppInner() {
   // switch views without prop-drilling setView through every layer.
   useEffect(() => {
     const handler = (e: Event) => {
-      const detail = (e as CustomEvent<{ view?: string; engTab?: string }>).detail;
+      const detail = (e as CustomEvent<{ view?: string; engTab?: string; tab?: string; focusId?: string }>).detail;
       // Optional: open the Engagements view directly on its Approval Flow tab.
       if (detail?.engTab === 'approval-flow') setEngApprovalFlow(true);
+      // Knowledge Hub targets — land on a tab ('learn') and optionally focus
+      // one Smart Learn row (every memory chip's "Manage →" uses this).
+      if (detail?.view === 'knowledge-hub') {
+        setKhTab(detail.tab === 'learn' ? 'learn' : 'data');
+        setKhMemoryFocus(detail.focusId ?? null);
+      }
       if (detail?.view) setView(detail.view as View);
     };
     window.addEventListener('app:navigate-view', handler);
@@ -786,7 +812,13 @@ function AppInner() {
               }
             }}
             onOpenExecutor={() => openWorkflowExecutor(state.selectedWorkflowId!)}
-            onEditInChat={() => enterWorkflowMode({ workflowId: state.selectedWorkflowId! })}
+            // Same journey the insight card's "Edit workflow" tile opens — the
+            // edit-in-chat landing in a NEW tab, so the details page stays put.
+            onEditInChat={() => {
+              try {
+                window.open(`?view=workflow-edit-in-chat&workflowId=${encodeURIComponent(state.selectedWorkflowId!)}`, '_blank', 'noopener,noreferrer');
+              } catch { /* popup blocked */ }
+            }}
             initialTab={state.workflowDetailInitialTab}
           />
         );
@@ -1101,7 +1133,7 @@ function AppInner() {
         }} />;
 
       case 'knowledge-hub':
-        return <KnowledgeHubView />;
+        return <KnowledgeHubView key={`kh-${khTab}-${khMemoryFocus ?? ''}`} initialTab={khTab} focusMemoryId={khMemoryFocus} />;
 
       case 'data-sources':
       case 'configuration':

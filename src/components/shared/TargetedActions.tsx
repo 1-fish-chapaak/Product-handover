@@ -23,8 +23,8 @@ import {
   LAYER_META, REC_INTENT_META, REC_PRIORITY_META, REC_PRIORITY_RANK,
   type EntityKind, type LayeredInsight, type RecIntent, type RecPriority,
 } from '../../data/layeredInsights';
-import { openInChat } from './insightChat';
-import LayeredInsightCard from './LayeredInsightCard';
+import { runActionInChat } from './insightChat';
+import LayeredInsightCard, { InsightStatLine } from './LayeredInsightCard';
 import { useToast } from './Toast';
 import {
   getActionStatus, setActionStatus, actionKey,
@@ -34,7 +34,7 @@ import {
 // ─── Small lookups ──────────────────────────────────────────────────────────
 
 const LAYER_WORD: Record<string, string> = {
-  control: 'control-level', risk: 'risk-level', sop: 'SOP-level', engagement: 'engagement-level',
+  control: 'control-level', risk: 'risk-level', sop: 'SOP-level', engagement: 'engagement-level', portfolio: 'portfolio-level', exception: 'cross-exception',
 };
 
 const SEV_LABEL: Record<string, string> = { high: 'High', med: 'Medium', low: 'Low' };
@@ -75,6 +75,7 @@ const TARGET_CHIP: Record<EntityKind, string> = {
   sop:        'bg-brand-50 text-brand-700',
   engagement: 'bg-paper-100 text-ink-600',
   workflow:   'bg-evidence-50 text-evidence-700',
+  exception:  'bg-high-50 text-high-700',
 };
 
 function IntentIcon({ intent, size = 11 }: { intent?: RecIntent; size?: number }) {
@@ -239,7 +240,12 @@ export function InsightSummaryStrip({
                 </span>
               )}
             </div>
-            <p className="mt-1 text-[12.5px] font-semibold text-ink-900 leading-snug">{insight.takeaway}</p>
+            {/* The B stat line leads (review decision Aug 6) — the same hero
+                figure · chips · cause anatomy as every other list surface;
+                the full sentence stays one hover (and one click) away. */}
+            <span title={insight.takeaway} className="block mt-1.5">
+              <InsightStatLine insight={insight} />
+            </span>
             <div className="mt-1.5 flex items-center gap-3">
               {onViewFull && (
                 <button
@@ -392,13 +398,25 @@ export function InsightDrawer({
 
 // ─── 3. Action drawer — act in place ────────────────────────────────────────
 
+/** A host-supplied way to EXECUTE an action in the surface's real flow (open
+ *  the classify drawer, preselect + assign, …) instead of only recording it. */
+export interface ActionExecuteSpec {
+  label: string;
+  hint?: string;
+  run: () => void;
+}
+
 export function ActionDrawer({
-  action, onClose, onViewAnchor,
+  action, onClose, onViewAnchor, execute,
 }: {
   action: TargetedAction | null;
   onClose: () => void;
   /** Navigate to the anchor card's surface; the drawer closes first. */
   onViewAnchor?: () => void;
+  /** When this returns a spec for the action, the primary footer CTA runs the
+   *  host flow (drawer closes first) — the host marks the action applied when
+   *  that flow completes, so "Applied" stays a statement of fact, not intent. */
+  execute?: (a: TargetedAction) => ActionExecuteSpec | null;
 }) {
   const { addToast } = useToast();
 
@@ -498,20 +516,35 @@ export function ActionDrawer({
                 <span className="inline-flex items-center gap-1.5 text-[12px] font-semibold text-compliant-700">
                   <Check size={13} aria-hidden="true" /> Applied — recorded for this period.
                 </span>
-              ) : (
-                <button
-                  type="button" onClick={() => apply(action)}
-                  className="inline-flex items-center gap-1.5 rounded-md bg-brand-600 text-white px-3.5 h-9 text-[12.5px] font-semibold hover:bg-brand-500 transition-colors cursor-pointer"
-                >
-                  <IntentIcon intent={action.rec.intent} size={13} />
-                  {action.rec.intent ? REC_INTENT_META[action.rec.intent].applyLabel : 'Apply'}
-                </button>
-              )}
+              ) : (() => {
+                // A host execute spec upgrades Apply into the real flow — the
+                // generic "record it" button is the fallback, not a sibling.
+                const exec = execute?.(action) ?? null;
+                return exec ? (
+                  <button
+                    type="button" onClick={() => { onClose(); exec.run(); }}
+                    title={exec.hint}
+                    className="inline-flex items-center gap-1.5 rounded-md bg-brand-600 text-white px-3.5 h-9 text-[12.5px] font-semibold hover:bg-brand-500 transition-colors cursor-pointer"
+                  >
+                    <IntentIcon intent={action.rec.intent} size={13} />
+                    {exec.label}
+                  </button>
+                ) : (
+                  <button
+                    type="button" onClick={() => apply(action)}
+                    className="inline-flex items-center gap-1.5 rounded-md bg-brand-600 text-white px-3.5 h-9 text-[12.5px] font-semibold hover:bg-brand-500 transition-colors cursor-pointer"
+                  >
+                    <IntentIcon intent={action.rec.intent} size={13} />
+                    {action.rec.intent ? REC_INTENT_META[action.rec.intent].applyLabel : 'Apply'}
+                  </button>
+                );
+              })()}
               <button
-                type="button" onClick={() => openInChat(action.rec.title, action.source.subjectLabel)}
+                type="button" onClick={() => runActionInChat({ rec: action.rec, insight: action.source })}
+                title="Runs in a new Ask IRA tab — the insight's evidence goes with it"
                 className="inline-flex items-center gap-1.5 rounded-md border border-canvas-border bg-canvas-elevated px-3 h-9 text-[12px] font-semibold text-ink-700 hover:border-brand-300 hover:text-brand-700 transition-colors cursor-pointer"
               >
-                Open in Ask IRA
+                Run in Ask IRA
               </button>
               {getActionStatus(action) !== 'applied' && (
                 <button

@@ -50,7 +50,9 @@ test('the control working paper previews sheet-wise, and downloads what it shows
   await modal.getByRole('button', { name: 'TOD', exact: true }).click();
   await expect(modal.getByText('TOD', { exact: true }).first()).toBeVisible();
   await modal.getByRole('button', { name: 'TOE', exact: true }).click();
-  await expect(modal.getByText(/Details of samples tested|attribute-level/).first()).toBeVisible();
+  // The TOE tab now reads in the reference papers' order — Sample details opens it
+  await expect(modal.getByText('Sample details', { exact: true }).first()).toBeVisible();
+  await expect(modal.getByText(/Test of Operating Effectiveness — testing results|attribute-level/).first()).toBeVisible();
   await page.screenshot({ path: `${SHOT_DIR}/07-control-operating.png` });
   await modal.getByRole('button', { name: 'Results', exact: true }).click();
   await expect(modal.getByText('Test results', { exact: true })).toBeVisible();
@@ -71,7 +73,7 @@ test('the engagement working paper is sheet-wise and follows the register filter
   await page.waitForTimeout(900);
 
   const modal = page.locator('.modal-wide');
-  await page.getByRole('button', { name: 'Export working paper' }).click();
+  await page.getByRole('button', { name: 'Working paper', exact: true }).click();
   await page.waitForTimeout(500);
   await expect(modal.getByText('Working paper — preview')).toBeVisible();
 
@@ -97,7 +99,7 @@ test('the engagement working paper is sheet-wise and follows the register filter
   const showing = await page.getByText(/Showing \d+ of \d+ controls/).textContent();
   const [, visible, total] = showing!.match(/Showing (\d+) of (\d+)/)!;
   expect(Number(visible)).toBeLessThan(Number(total));
-  await page.getByRole('button', { name: 'Export working paper' }).click();
+  await page.getByRole('button', { name: 'Working paper', exact: true }).click();
   await page.waitForTimeout(500);
   await expect(modal.getByText(new RegExp(`covers the ${visible} controls visible`))).toBeVisible();
 });

@@ -55,6 +55,36 @@ import AtrReviewDrawer from './AtrReviewDrawer';
 import { loadBaselineVersions, appendVersion, saveVersions, nowStamp, type AtrVersion } from './atrReview';
 import type { TemplateSection, ScaleMap } from './reportShared';
 import ReportDownloadModal, { type DownloadPreviewSection } from './ReportDownloadModal';
+import { MemoryChip } from '../shared/memory/MemoryKit';
+import { MEMORY_STORE, type PlatformMemory } from '../../data/memoryStore';
+
+// ─── Report memory strip — what shaped this draft (Memory PRD §4) ───────────
+// The bundle attribution home: house format, vocabulary, calendar, materiality
+// and content rules all applied at generation, each a door to its provenance.
+// The strip is how "no new UI for style/structure/columns" stays honest — the
+// draft arrives right, and this one line says why.
+function ReportMemoryStrip() {
+  const rows = [
+    { id: 'mem-usr-001', label: 'Bullets · amounts to 2 dp (your format)' },
+    { id: 'mem-team-007', label: '“net revenue”, never “revenue”' },
+    { id: 'mem-org-004', label: 'FY starts 1 Apr — Q3 = Oct–Dec' },
+    { id: 'mem-eng-001', label: 'Materiality $250k · <$500 aggregated' },
+    { id: 'mem-org-003', label: 'Employee names → IDs at export' },
+  ]
+    .map(r => ({ ...r, memory: MEMORY_STORE.find(m => m.id === r.id) }))
+    .filter(r => !!r.memory) as { id: string; label: string; memory: PlatformMemory }[];
+  if (rows.length === 0) return null;
+  return (
+    <div className="mb-5 flex flex-wrap items-center gap-2 print:hidden">
+      <span className="text-[0.625rem] font-bold uppercase tracking-[0.08em] text-ink-400">
+        This draft used {rows.length} memories
+      </span>
+      {rows.map(r => (
+        <MemoryChip key={r.id} memory={r.memory} form="badge" label={r.label} />
+      ))}
+    </div>
+  );
+}
 import AddObservationModal, {
   computeNextObservationId,
   isImageMime,
@@ -3269,7 +3299,20 @@ export default function ReportView({ report, onBack, backLabel, onShare, onOpenQ
         </button>
       )}
       <button
-        onClick={() => setShowDownloadModal(true)}
+        onClick={() => {
+          // Org content rules fire again at the export gate (Memory PRD §4:
+          // "at generation, and again just before export or send") — enforced,
+          // reported, logged; never silent and never overridable.
+          window.dispatchEvent(new CustomEvent('irame:memory-audit', {
+            detail: {
+              action: 'Update',
+              description: 'Content rules applied at export — employee names replaced with IDs; PII excluded (org rules mem-org-001, mem-org-003)',
+              entity: 'report-export-gate',
+            },
+          }));
+          addToast({ type: 'info', message: 'Content rules applied — employee names → IDs, PII excluded. Logged to the audit trail.' });
+          setShowDownloadModal(true);
+        }}
         className="flex items-center gap-1.5 h-9 px-3.5 text-[0.75rem] font-semibold text-brand-700 bg-brand-50 border border-brand-200 rounded-md hover:bg-brand-100 hover:border-brand-300 transition-colors cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600/40"
       >
         <Download size={14} /> Download
@@ -3406,6 +3449,8 @@ export default function ReportView({ report, onBack, backLabel, onShare, onOpenQ
               </ReportBrandBanner>
             </div>
 
+            {/* What memory shaped this draft — each chip opens its provenance. */}
+            <ReportMemoryStrip />
 
             {/* Summary Stats Bar — ATR-style KPI tiles. A custom template with
                 its own summary section carries the tiles there instead, so the

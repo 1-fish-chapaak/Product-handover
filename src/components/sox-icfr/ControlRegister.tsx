@@ -10,14 +10,14 @@ import { useIcfr } from './store';
 import { defWord } from './flow';
 import {
   conclusionOf, controlCode, courtFor, operatingApplies, designProgress, designStarted, failedItgcs, isAwaitingReview, isControlFinal, isEngagementLocked, isItgcDependent, openDiscussionCount,
-  operatingProgress, operatingStarted, isTestDueNow, pendingReviewNoteCount, testDueDisplay, testsDueNow, trackResult,
+  operatingProgress, operatingStarted, isTestDueNow, pendingReviewNoteCount, testDueDisplay, testsDueNow, trackResult, entityCell,
 } from './helpers';
 import { ConclusionPill, ItgcCascadeBanner, NatureChip, Th, Tickmark } from './parts';
 import NewControlPanel from './NewControlPanel';
 import WorkingPaperModal from './WorkingPaperModal';
 import { useToast } from '../shared/Toast';
 import { cn } from '../../lib/cn';
-import { GROUP_OPTIONS, groupKeyOf, useColumnWidths, type GroupBy } from './registerColumns';
+import { GROUP_OPTIONS, groupKeyOf, groupKeysOf, rowCovers, rowEntities, useColumnWidths, type GroupBy } from './registerColumns';
 import { isOwnerOf, ownersOf } from './auditScope';
 import type { Conclusion, Control } from './types';
 
@@ -58,7 +58,7 @@ function spineColor(p: string): string { let h = 0; for (let i = 0; i < p.length
 const REG_COLS = [
   { key: 'process', w: 130 },
   { key: 'control', w: 330 },
-  { key: 'entity', w: 160 },
+  { key: 'entity', w: 215 },
   { key: 'type', w: 124 },
   { key: 'frequency', w: 116 },
   { key: 'owner', w: 144 },
@@ -107,15 +107,18 @@ function ControlCard({ c, concl, discN, noteN, onOpen, selectable, selected, onT
         {controlCode(c)} · {c.nature} ·{' '}
         {(() => { const dd = testDueDisplay(c); return <span className={dd.cls}>{dd.label}</span>; })()}
       </div>
-      {/* The company this row is tested at, on its own line — a company name and
-          a process name side by side in the eyebrow left neither of them
-          readable, and in a group audit the entity is the stronger identity: the
-          same control number at another company is a different card, with its own
-          design, its own sample and its own conclusion. */}
-      {c.entity && (
-        <div className="mt-1 flex items-center gap-1.5 text-[0.6875rem] text-ink-600 min-w-0" title={c.entity}>
+      {/* Where this control is performed, on its own line — a company name and a
+          process name side by side in the eyebrow left neither of them readable.
+          A control is ONE card however many companies it answers for, so the
+          "+N" is what carries the reach: one conclusion, this many companies
+          riding on it. The full list is on the title. */}
+      {entityCell(c) && (
+        <div className="mt-1 flex items-center gap-1.5 text-[0.6875rem] text-ink-600 min-w-0" title={entityCell(c)!.title}>
           <Building2 size={11} className="text-ink-300 shrink-0" />
-          <span className="truncate font-medium">{c.entity}</span>
+          <span className="truncate font-medium">{entityCell(c)!.label}</span>
+          {entityCell(c)!.more > 0 && (
+            <span className="shrink-0 font-semibold text-ink-500">+{entityCell(c)!.more}</span>
+          )}
         </div>
       )}
       <div className="ac-div" />
@@ -184,9 +187,11 @@ export default function ControlRegister() {
   const [owner, setOwner] = useState('All');
 
   const { widthOf, totalWidth, th } = useColumnWidths(COLW_KEY, REG_COLS);
-  // What the register is stacked by. Process is how an audit is planned; entity is
-  // how a group audit is reported ("is Solar done?"), and the register carries one
-  // row per control per company, so both are real ways to read the same list.
+  // What the register is stacked by. Process is how an audit is planned; entity
+  // is how a group audit is reported ("is Solar done?"). The register carries ONE
+  // row per control, so stacking by entity files a shared row under every company
+  // its conclusion covers — otherwise "is Solar done?" would answer without the
+  // controls that actually conclude for Solar. See groupKeysOf.
   const [groupBy, setGroupBy] = useState<GroupBy>('process');
   const [dense, setDense] = useState(false);
   // Inside an audit the register is a working list, not a browse surface — open on the
@@ -208,7 +213,7 @@ export default function ControlRegister() {
   // Column-filter option lists — built from what is actually in front of you, so a
   // filter can never offer a value that returns nothing.
   const processes = useMemo(() => ['All', ...Array.from(new Set(scoped.map(c => c.process)))], [scoped]);
-  const entities = useMemo(() => ['All', ...Array.from(new Set(scoped.map(c => c.entity).filter(Boolean) as string[])).sort()], [scoped]);
+  const entities = useMemo(() => ['All', ...Array.from(new Set(scoped.flatMap(rowEntities))).sort()], [scoped]);
   const frequencies = useMemo(() => ['All', ...Array.from(new Set(scoped.map(c => c.frequency)))], [scoped]);
   const owners = useMemo(() => ['All', ...Array.from(new Set(scoped.flatMap(c => { const o = ownersOf(c); return o.single ? [o.controlOwner] : [o.controlOwner, o.processOwner]; }))).sort()], [scoped]);
   const ctypes = useMemo(() => ['All', ...Array.from(new Set(scoped.map(c => c.type))).sort()], [scoped]);
@@ -239,11 +244,11 @@ export default function ControlRegister() {
     return scoped.filter(c => {
       if (process !== 'All' && c.process !== process) return false;
       if (nature !== 'All' && c.nature !== nature) return false;
-      if (entity !== 'All' && c.entity !== entity) return false;
+      if (entity !== 'All' && !rowCovers(c, entity)) return false;
       if (ctype !== 'All' && c.type !== ctype) return false;
       if (frequency !== 'All' && c.frequency !== frequency) return false;
       if (owner !== 'All' && !isOwnerOf(c, owner)) return false;
-      if (term && !(`${controlCode(c)} ${c.description} ${c.entity ?? ''} ${c.process} ${c.subProcess} ${c.owner}`.toLowerCase().includes(term))) return false;
+      if (term && !(`${controlCode(c)} ${c.description} ${rowEntities(c).join(' ')} ${c.process} ${c.subProcess} ${c.owner}`.toLowerCase().includes(term))) return false;
       return true;
     });
   }, [scoped, q, process, nature, entity, ctype, frequency, owner]);
@@ -257,9 +262,11 @@ export default function ControlRegister() {
     if (groupBy === 'none') return [{ key: '', rows: filtered }];
     const map = new Map<string, Control[]>();
     for (const c of filtered) {
-      const k = groupKeyOf(c, groupBy);
-      if (!map.has(k)) map.set(k, []);
-      map.get(k)!.push(c);
+      // A shared row files under every company it covers — see groupKeysOf.
+      for (const k of groupKeysOf(c, groupBy)) {
+        if (!map.has(k)) map.set(k, []);
+        map.get(k)!.push(c);
+      }
     }
     return Array.from(map, ([key, rows]) => ({ key, rows: rows.sort((a, b) => controlCode(a).localeCompare(controlCode(b))) }));
   }, [filtered, groupBy]);
@@ -323,10 +330,12 @@ export default function ControlRegister() {
               it: buildIcfrPaper still assembles Index, Control Summary, TOE and
               Scope, and nothing opened them. Audit report is a different
               document — what management reads, not the evidence file — so it was
-              never a substitute. Icon-only, as it was: the name is in the
-              tooltip and on the modal it opens.
+              never a substitute. NAMED like its sibling (user ask, Aug 2026):
+              two documents whose difference is a rule cannot have one of them
+              anonymous — an unlabelled icon next to a labelled report reads as
+              "what is this?", which is exactly the question it caused.
               Absent for the risk owner: see the note on the control page. */}
-          {role !== 'risk-owner' && <button onClick={() => setWpPreview(true)} title="Working paper — the audit's evidence file, every control the filters leave visible" aria-label="Export working paper" className="h-9 w-9 inline-flex items-center justify-center rounded-lg border border-canvas-border text-ink-500 hover:text-ink-900 hover:border-ink-300 transition-colors cursor-pointer"><FileSpreadsheet size={15} /></button>}
+          {role !== 'risk-owner' && <button onClick={() => setWpPreview(true)} title="Working paper — the audit's evidence file, every control the filters leave visible" className="h-9 px-3 inline-flex items-center gap-1.5 rounded-lg border border-canvas-border text-[12.5px] font-semibold text-ink-600 hover:text-ink-900 hover:border-ink-300 transition-colors cursor-pointer"><FileSpreadsheet size={14} /> Working paper</button>}
           {/* the audit report — what management and the board actually read: the
               observations, what they are worth, and who has committed to the fix */}
           {role !== 'risk-owner' && <button onClick={() => setReportPreview(true)} title="Audit report — observations and the management action plan" className="h-9 px-3 inline-flex items-center gap-1.5 rounded-lg border border-canvas-border text-[12.5px] font-semibold text-ink-600 hover:text-ink-900 hover:border-ink-300 transition-colors cursor-pointer"><FileText size={14} /> Audit report</button>}
@@ -349,11 +358,23 @@ export default function ControlRegister() {
         ))}
       </div>
 
-      {/* The cascade, where the affected controls are listed — above the list
-          because it changes what the list means, and it sets the filter rather
-          than describing it. Not to the risk owner: how the audit sizes its
-          samples is the auditor's method, and the owner meets it as data
-          requests. Same gate as the notice on the control page. */}
+      {/* PARKED (user ask, 12 Aug) — the ITGC cascade banner is off the Control
+          Library. Only this block is commented out: ItgcCascadeBanner, the
+          `failedItgc` derivation, `isItgcDependent` and the 'itgc' saved view
+          all stay wired and compiling, so restoring it is uncommenting this.
+
+          The cascade is NOT lost — it still renders on the audit Dashboard
+          (Overview.tsx), which is where the blast radius is read. What goes with
+          it here is the one-click route into the affected controls: "Show the N
+          affected" set this register's filter to the 'itgc' view. That view is
+          still reachable from the saved-view control above.
+
+          Original note — The cascade, where the affected controls are listed —
+          above the list because it changes what the list means, and it sets the
+          filter rather than describing it. Not to the risk owner: how the audit
+          sizes its samples is the auditor's method, and the owner meets it as
+          data requests. Same gate as the notice on the control page.
+
       {role !== 'risk-owner' && failedItgc.length > 0 && (
         <div className="mb-4">
           <ItgcCascadeBanner
@@ -364,6 +385,7 @@ export default function ControlRegister() {
           />
         </div>
       )}
+      */}
 
       {/* register body — table (default) or cards */}
       {layout === 'cards' ? (
@@ -403,7 +425,8 @@ export default function ControlRegister() {
             <tr>
               {/* Column filters live in the headers — the toolbar dropdowns moved
                   up here (Jul 24), and Entity / Control type / Frequency / Owner
-                  joined them once the register went one-row-per-company. */}
+                  joined them once controls started naming their companies. The
+                  Entity filter matches performed-at OR covered — see rowCovers. */}
               <Th {...th('process')}><HeaderFilter label="Process" value={process} options={processes} allLabel="All processes" onChange={setProcess} ariaLabel="Filter by process" /></Th>
               <Th {...th('control')}>Control</Th>
               <Th {...th('entity')}><HeaderFilter label="Entity" value={entity} options={entities} allLabel="All entities" onChange={setEntity} ariaLabel="Filter by entity" /></Th>
@@ -462,8 +485,8 @@ export default function ControlRegister() {
                         </div>
                       </td>
                       <td className="text-[0.71875rem] text-ink-700">
-                        {c.entity
-                          ? <span className="inline-flex items-center gap-1.5 min-w-0" title={c.entity}><Building2 size={12} className="text-ink-300 shrink-0" /><span className="truncate">{c.entity}</span></span>
+                        {entityCell(c)
+                          ? <span className="flex items-center gap-1.5 min-w-0 max-w-full" title={entityCell(c)!.title}><Building2 size={12} className="text-ink-300 shrink-0" /><span className="truncate">{entityCell(c)!.label}</span>{entityCell(c)!.more > 0 && <span className="shrink-0 font-semibold text-ink-500">+{entityCell(c)!.more}</span>}</span>
                           : <span className="text-ink-300">—</span>}
                       </td>
                       <td className="text-[0.71875rem] text-ink-600">{c.type}</td>

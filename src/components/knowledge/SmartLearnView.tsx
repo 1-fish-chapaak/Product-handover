@@ -1,72 +1,77 @@
-// ─── Knowledge Hub — Smart Learn (platform memory registry) ────────────────
+// ─── Knowledge Hub — Smart Learn (the ONE platform memory registry) ─────────
 //
-// The browsable home of the shared memory store (Memory Management PRD §4).
-// Scope follows surface for governance — approvals & renewals happen in My
-// Queue, tenant guardrails in Admin — so this page is deliberately NOT a
-// fourth approval surface. It answers one question: "what does IRA know
-// about how we work, and why?" Every row carries its provenance; safe
-// lifecycle actions (forget, renew, undo) run inline; governance actions
-// deep-link out to their owning surface.
+// Decision D2 (9 Aug 2026): every memory — engagement, report, dashboard,
+// source, all of it — lists HERE with the rest. The complexity rule that keeps
+// the chrome calm: each axis gets exactly one job —
+//   · SCOPE structures the page (sections, closest-to-you first, + Source)
+//   · KIND badges the row (icon + label, never page structure)
+//   · SURFACE ("fires in") filters — one Filter menu, no extra toolbar chrome
+// Engagement and Source sections sub-group rows under their owning entity,
+// collapsed with attention counts, so a lead scans headers, not sixty rows.
+//
+// Governance still follows scope-follows-surface: approvals in My Queue, org
+// rules in Admin, personal forgets on the avatar menu. Rows here run only the
+// safe inline actions (forget/retire, renew, undo) — all through the shared
+// session layer (memorySession.ts) so every surface reflects each decision.
 
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { AnimatePresence, motion } from 'motion/react';
 import {
-  UserRound, Users, Briefcase, Building2,
-  SlidersHorizontal, BookOpen, Landmark, PenLine, ShieldCheck,
+  UserRound, Users, Briefcase, Building2, Database,
+  SlidersHorizontal, BookOpen, Landmark, PenLine, ShieldCheck, Route, Repeat,
   Brain, Search, ChevronDown, ChevronRight, CalendarClock, Zap,
   Eye, Inbox, Info, Check, CircleSlash, Undo2, ArrowRight, Lock,
-  ArrowUpRight, ScrollText, History, Clock,
+  ArrowUpRight, ScrollText, History, Clock, TriangleAlert, Filter,
 } from 'lucide-react';
 import Drawer from '../shared/Drawer';
-import ConfirmationModal from '../shared/ConfirmationModal';
 import {
-  MEMORY_STORE, SCOPE_META, SCOPE_ORDER, KIND_META,
-  RECALLS_THIS_WEEK, RENEWAL_TARGET,
-  type PlatformMemory, type MemoryScope, type MemoryKind,
+  SCOPE_META, SCOPE_ORDER, KIND_META, KIND_ORDER, SURFACE_META, SURFACE_ORDER,
+  RECALLS_THIS_WEEK, RENEWAL_TARGET, entitiesForScope,
+  type PlatformMemory, type MemoryScope, type MemoryKind, type MemorySurface,
 } from '../../data/memoryStore';
+import {
+  useMemorySessionVersion, allMemories, isGone, decisionFor,
+  forgetMemory, undoForget, renewMemory, isPersonalCleared, undoClearPersonal,
+} from '../../data/memorySession';
+import { FiresInChips } from '../shared/memory/MemoryKit';
 
 // ─── Icon maps (meta stores lucide names; this surface binds them) ─────────
 
 const SCOPE_ICON: Record<MemoryScope, React.ComponentType<{ size?: number; className?: string }>> = {
-  personal: UserRound, team: Users, engagement: Briefcase, tenant: Building2,
+  personal: UserRound, team: Users, engagement: Briefcase, organization: Building2, source: Database,
 };
 
 const KIND_ICON: Record<MemoryKind, React.ComponentType<{ size?: number; className?: string }>> = {
-  preference: SlidersHorizontal, vocabulary: BookOpen, convention: Users,
-  fact: Landmark, correction: PenLine, guardrail: ShieldCheck,
+  preference: SlidersHorizontal, vocabulary: BookOpen, fact: Landmark,
+  correction: PenLine, decision: Route, routine: Repeat, rule: ShieldCheck,
 };
 
-// Personalization kinds carry brand; governed facts stay neutral; compliance
-// guardrails read evidence-blue. Colour is a scanning aid, never the only
+// Personalization kinds carry brand; governed facts/decisions stay neutral;
+// enforced rules read evidence-blue. Colour is a scanning aid, never the only
 // signal — the kind label is always written out in the meta line.
 const KIND_TINT: Record<MemoryKind, string> = {
   preference: 'bg-brand-50 text-brand-700',
   vocabulary: 'bg-brand-50 text-brand-700',
   correction: 'bg-brand-50 text-brand-700',
-  convention: 'bg-canvas text-ink-500',
+  routine: 'bg-brand-50 text-brand-700',
   fact: 'bg-canvas text-ink-500',
-  guardrail: 'bg-evidence-50 text-evidence-700',
+  decision: 'bg-canvas text-ink-500',
+  rule: 'bg-evidence-50 text-evidence-700',
 };
 
 const SCOPE_PILL: Record<MemoryScope, string> = {
   personal: 'bg-brand-50 text-brand-700',
   team: 'bg-canvas text-ink-600',
   engagement: 'bg-canvas text-ink-600',
-  tenant: 'bg-evidence-50 text-evidence-700',
+  organization: 'bg-evidence-50 text-evidence-700',
+  source: 'bg-evidence-50 text-evidence-700',
 };
 
-// ─── Local state shapes ─────────────────────────────────────────────────────
-
-/** Per-memory local decisions layered over the seed store. `forgotten` covers
- *  both a personal forget and a governed retire — same mechanics, different
- *  copy. `renewedTo` replaces the review date and clears the renewal flag. */
-interface MemoryOverride { forgotten?: boolean; renewedTo?: string; }
-
-type StatusFilterId = 'all' | 'active' | 'pending' | 'review';
+type StatusFilterId = 'all' | 'active' | 'proposed' | 'review';
 const STATUS_FILTERS: { id: StatusFilterId; label: string }[] = [
   { id: 'all', label: 'All statuses' },
   { id: 'active', label: 'Active' },
-  { id: 'pending', label: 'Awaiting approval' },
+  { id: 'proposed', label: 'Awaiting approval' },
   { id: 'review', label: 'Review due' },
 ];
 
@@ -76,19 +81,13 @@ function navigateTo(view: string) {
   window.dispatchEvent(new CustomEvent('app:navigate-view', { detail: { view } }));
 }
 
-/** The seed memory with local overrides applied. */
-function effective(m: PlatformMemory, o?: MemoryOverride): PlatformMemory {
-  if (!o?.renewedTo) return m;
-  return { ...m, reviewBy: o.renewedTo, renewDue: false };
-}
-
 // ─── How memory works (explainer strip) ─────────────────────────────────────
 
 function MemoryExplainer() {
   const points = [
-    { icon: Eye, title: 'Observed with evidence', body: 'IRA notices repeated preferences, corrections and conventions across sessions, runs and edits — and keeps the receipts for each.' },
+    { icon: Eye, title: 'Observed with evidence', body: 'IRA notices repeated preferences, corrections and decisions across sessions, runs and edits — and keeps the receipts for each.' },
     { icon: Inbox, title: 'Approved by humans', body: 'Anything shared needs a human yes. Proposals and renewals arrive in My Queue as badged work; personal memories stay yours.' },
-    { icon: Zap, title: 'One shared store', body: 'Chat, workflows and reports read the same store — an approval in one place changes what every surface applies.' },
+    { icon: Zap, title: 'One shared store', body: 'Chat, runs, reports, dashboards and sources read the same store — an approval in one place changes what every surface applies.' },
     { icon: ShieldCheck, title: 'Versioned & audited', body: 'Every memory carries scope, version and review date. Changes and overrides land in the audit log’s Memory category.' },
   ];
   return (
@@ -115,54 +114,104 @@ function MemoryExplainer() {
   );
 }
 
-// ─── Status filter (single-select dropdown) ─────────────────────────────────
+// ─── Unified Filter menu — Status · Kind · Fires in (one control, D2 spec) ──
 
-function StatusFilterMenu({ active, counts, onChange }: {
-  active: StatusFilterId;
-  counts: Record<StatusFilterId, number>;
-  onChange: (id: StatusFilterId) => void;
+interface Filters {
+  status: StatusFilterId;
+  kind: 'all' | MemoryKind;
+  surface: 'all' | MemorySurface;
+}
+
+function FilterSection<T extends string>({ title, options, active, onPick }: {
+  title: string;
+  options: { id: T; label: string; count: number }[];
+  active: T;
+  onPick: (id: T) => void;
+}) {
+  return (
+    <div>
+      <div className="px-2 pb-1 pt-2 text-[10px] font-bold uppercase tracking-wider text-ink-400">{title}</div>
+      {options.map(o => {
+        const checked = active === o.id;
+        return (
+          <button
+            key={o.id}
+            type="button"
+            onClick={() => onPick(o.id)}
+            aria-pressed={checked}
+            className="flex w-full items-center gap-2.5 rounded-md px-2 py-1.5 text-left hover:bg-canvas transition-colors cursor-pointer"
+          >
+            <span className={`flex size-4 items-center justify-center rounded-full border transition-colors ${checked ? 'border-brand-600 bg-brand-600 text-white' : 'border-canvas-border bg-canvas-elevated'}`}>
+              {checked && <Check size={11} strokeWidth={3} />}
+            </span>
+            <span className="flex-1 text-[12px] font-medium text-ink-800">{o.label}</span>
+            <span className="text-[11px] tabular-nums text-ink-400">{o.count}</span>
+          </button>
+        );
+      })}
+    </div>
+  );
+}
+
+function FilterMenu({ filters, onChange, live }: {
+  filters: Filters;
+  onChange: (f: Filters) => void;
+  live: PlatformMemory[];
 }) {
   const [open, setOpen] = useState(false);
-  const current = STATUS_FILTERS.find(f => f.id === active)!;
+  const activeCount = (filters.status !== 'all' ? 1 : 0) + (filters.kind !== 'all' ? 1 : 0) + (filters.surface !== 'all' ? 1 : 0);
+  const statusCount = (f: StatusFilterId) =>
+    f === 'all' ? live.length
+      : f === 'proposed' ? live.filter(m => m.status === 'proposed').length
+        : f === 'review' ? live.filter(m => m.renewDue).length
+          : live.filter(m => m.status === 'active').length;
   return (
     <div className="relative">
       <button
         type="button"
         onClick={() => setOpen(o => !o)}
         aria-expanded={open}
-        className={`inline-flex items-center gap-1.5 px-3 h-9 rounded-md border text-[12px] font-semibold transition-colors cursor-pointer ${open || active !== 'all' ? 'border-brand-300 text-brand-700 bg-brand-50' : 'border-canvas-border text-ink-500 hover:border-brand-300'}`}
+        className={`inline-flex items-center gap-1.5 px-3 h-9 rounded-md border text-[12px] font-semibold transition-colors cursor-pointer ${open || activeCount > 0 ? 'border-brand-300 text-brand-700 bg-brand-50' : 'border-canvas-border text-ink-500 hover:border-brand-300'}`}
       >
-        {active === 'all' ? 'Status' : current.label}
+        <Filter size={12} />
+        Filter{activeCount > 0 && <span className="tabular-nums">· {activeCount}</span>}
         <ChevronDown size={13} className={`transition-transform ${open ? 'rotate-180' : ''}`} />
       </button>
       <AnimatePresence>
         {open && (
           <>
-            {/* click-away layer */}
             <div className="fixed inset-0 z-20" onClick={() => setOpen(false)} />
             <motion.div
               initial={{ opacity: 0, y: -4 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -4 }}
               transition={{ duration: 0.15 }}
-              className="absolute right-0 z-30 mt-2 w-[220px] rounded-xl border border-canvas-border bg-canvas-elevated shadow-xl p-2"
+              className="absolute right-0 z-30 mt-2 max-h-[420px] w-[250px] overflow-y-auto rounded-xl border border-canvas-border bg-canvas-elevated shadow-xl p-2"
             >
-              {STATUS_FILTERS.map(f => {
-                const checked = active === f.id;
-                return (
-                  <button
-                    key={f.id}
-                    type="button"
-                    onClick={() => { onChange(f.id); setOpen(false); }}
-                    aria-pressed={checked}
-                    className="flex w-full items-center gap-2.5 rounded-md px-2 py-1.5 text-left hover:bg-canvas transition-colors cursor-pointer"
-                  >
-                    <span className={`flex size-4 items-center justify-center rounded-full border transition-colors ${checked ? 'border-brand-600 bg-brand-600 text-white' : 'border-canvas-border bg-canvas-elevated'}`}>
-                      {checked && <Check size={11} strokeWidth={3} />}
-                    </span>
-                    <span className="flex-1 text-[12px] font-medium text-ink-800">{f.label}</span>
-                    <span className="text-[11px] tabular-nums text-ink-400">{counts[f.id]}</span>
-                  </button>
-                );
-              })}
+              <FilterSection
+                title="Status"
+                active={filters.status}
+                onPick={id => onChange({ ...filters, status: id })}
+                options={STATUS_FILTERS.map(f => ({ id: f.id, label: f.label, count: statusCount(f.id) }))}
+              />
+              <div className="my-1 h-px bg-canvas-border" />
+              <FilterSection
+                title="Kind"
+                active={filters.kind}
+                onPick={id => onChange({ ...filters, kind: id })}
+                options={[
+                  { id: 'all' as const, label: 'All kinds', count: live.length },
+                  ...KIND_ORDER.map(k => ({ id: k, label: KIND_META[k].label, count: live.filter(m => m.kind === k).length })),
+                ]}
+              />
+              <div className="my-1 h-px bg-canvas-border" />
+              <FilterSection
+                title="Fires in"
+                active={filters.surface}
+                onPick={id => onChange({ ...filters, surface: id })}
+                options={[
+                  { id: 'all' as const, label: 'All surfaces', count: live.length },
+                  ...SURFACE_ORDER.map(s => ({ id: s, label: SURFACE_META[s].label, count: live.filter(m => m.firesIn.includes(s)).length })),
+                ]}
+              />
             </motion.div>
           </>
         )}
@@ -181,7 +230,7 @@ function MemoryRow({ memory, index, onOpen, onRenew }: {
 }) {
   const KindIcon = KIND_ICON[memory.kind];
   const kind = KIND_META[memory.kind];
-  const isPending = memory.status === 'pending';
+  const isProposed = memory.status === 'proposed';
   return (
     <motion.div
       layout
@@ -192,6 +241,7 @@ function MemoryRow({ memory, index, onOpen, onRenew }: {
       <button
         type="button"
         onClick={onOpen}
+        id={`memory-row-${memory.id}`}
         className="group w-full rounded-xl border border-canvas-border bg-canvas-elevated px-4 py-3 text-left hover:border-brand-200 transition-colors cursor-pointer"
       >
         <div className="flex items-start gap-3">
@@ -200,26 +250,31 @@ function MemoryRow({ memory, index, onOpen, onRenew }: {
           </span>
           <div className="min-w-0 flex-1">
             <p className="text-[13px] font-medium leading-snug text-ink-900">{memory.statement}</p>
-            {isPending && memory.pendingNote ? (
+            {isProposed && memory.pendingNote ? (
               <p className="mt-1 text-[11px] leading-relaxed text-ink-500">
                 <span className="font-semibold text-ink-600">{kind.label}</span>
                 <span className="text-ink-300"> · </span>
                 {memory.pendingNote}
               </p>
             ) : (
-              <p className="mt-1 flex flex-wrap items-center gap-x-1.5 text-[11px] text-ink-400">
+              <p className="mt-1 flex flex-wrap items-center gap-x-1.5 gap-y-1 text-[11px] text-ink-400">
                 <span className="font-semibold text-ink-600">{kind.label}</span>
+                <span className="text-ink-300">·</span>
+                <FiresInChips memory={memory} />
                 <span className="text-ink-300">·</span>
                 <span>{memory.source}</span>
                 <span className="text-ink-300">·</span>
-                <span className="tabular-nums">Recalled {memory.recallCount} times</span>
-                <span className="text-ink-300">·</span>
-                <span>Last used {memory.lastRecalled}</span>
+                <span className="tabular-nums">Recalled {memory.recallCount}×</span>
               </p>
             )}
           </div>
           <div className="flex shrink-0 items-center gap-2 pt-0.5">
-            {isPending && (
+            {memory.drifted && (
+              <span className="inline-flex items-center gap-1.5 rounded-full border border-mitigated-200 bg-mitigated-50 px-2 py-0.5 text-[10px] font-bold text-mitigated-700">
+                <TriangleAlert size={10} /> Drifted
+              </span>
+            )}
+            {isProposed && (
               <span className="inline-flex items-center gap-1.5 rounded-full border border-mitigated-200 bg-mitigated-50 px-2 py-0.5 text-[10px] font-bold text-mitigated-700">
                 <Clock size={10} /> Awaiting approval
               </span>
@@ -240,7 +295,7 @@ function MemoryRow({ memory, index, onOpen, onRenew }: {
                 </span>
               </>
             )}
-            {memory.scope === 'tenant' && (
+            {(memory.scope === 'organization' || memory.kind === 'rule') && (
               <span title="Managed in Admin" className="text-ink-300">
                 <Lock size={12} aria-label="Managed in Admin" />
               </span>
@@ -253,8 +308,7 @@ function MemoryRow({ memory, index, onOpen, onRenew }: {
   );
 }
 
-// A forgotten/retired row collapses to a slim undo strip — same recipe as the
-// insight approval gate's dismissed state, so the vocabulary stays consistent.
+// A forgotten/retired row collapses to a slim undo strip.
 function ForgottenStrip({ memory, onUndo }: { memory: PlatformMemory; onUndo: () => void }) {
   const governed = memory.scope !== 'personal';
   return (
@@ -294,9 +348,9 @@ function MemoryDrawer({ memory, justRenewed, onClose, onForget, onRenew }: {
 }) {
   const scope = SCOPE_META[memory.scope];
   const kind = KIND_META[memory.kind];
-  const isPending = memory.status === 'pending';
+  const isProposed = memory.status === 'proposed';
   const isPersonal = memory.scope === 'personal';
-  const isTenant = memory.scope === 'tenant';
+  const isGoverned = memory.scope === 'organization' || memory.kind === 'rule';
   const version = memory.versions?.[0]?.version;
 
   const footer = (
@@ -307,7 +361,7 @@ function MemoryDrawer({ memory, justRenewed, onClose, onForget, onRenew }: {
           <CircleSlash size={13} /> Forget this memory
         </button>
       )}
-      {!isPersonal && !isTenant && !isPending && (
+      {!isPersonal && !isGoverned && !isProposed && (
         <button type="button" onClick={onForget}
           className="inline-flex h-9 items-center gap-1.5 rounded-md border border-risk/30 px-3.5 text-[12px] font-semibold text-risk hover:bg-risk-50 transition-colors cursor-pointer">
           <CircleSlash size={13} /> Retire memory
@@ -319,13 +373,13 @@ function MemoryDrawer({ memory, justRenewed, onClose, onForget, onRenew }: {
           <CalendarClock size={13} /> Renew until {RENEWAL_TARGET}
         </button>
       )}
-      {isPending && (
+      {isProposed && (
         <button type="button" onClick={() => navigateTo('my-queue')}
           className="inline-flex h-9 items-center gap-1.5 rounded-md bg-brand-600 px-3.5 text-[12px] font-semibold text-white hover:bg-brand-500 transition-colors cursor-pointer">
           Review in My Queue <ArrowRight size={13} />
         </button>
       )}
-      {isTenant && (
+      {isGoverned && (
         <button type="button" onClick={() => navigateTo('admin-logs')}
           className="inline-flex h-9 items-center gap-1.5 rounded-md border border-canvas-border px-3.5 text-[12px] font-semibold text-ink-600 hover:border-brand-300 hover:text-brand-700 transition-colors cursor-pointer">
           View in audit log <ArrowUpRight size={13} />
@@ -337,7 +391,7 @@ function MemoryDrawer({ memory, justRenewed, onClose, onForget, onRenew }: {
   return (
     <Drawer
       title={kind.label}
-      subtitle={<span className="font-mono text-[11px] text-ink-400">{memory.id} · {scope.label} scope · learned {memory.learnedOn}</span>}
+      subtitle={<span className="font-mono text-[11px] text-ink-400">{memory.id} · {scope.label} scope{memory.entity ? ` · ${memory.entity.label}` : ''} · learned {memory.learnedOn}</span>}
       onClose={onClose}
       footer={footer}
     >
@@ -347,10 +401,15 @@ function MemoryDrawer({ memory, justRenewed, onClose, onForget, onRenew }: {
           <p className="text-[15px] font-medium leading-relaxed text-ink-900">{memory.statement}</p>
           <div className="mt-2.5 flex flex-wrap items-center gap-1.5">
             <span className={`inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-bold ${SCOPE_PILL[memory.scope]}`}>{scope.label}</span>
-            {isPending ? (
+            {isProposed ? (
               <span className="inline-flex items-center rounded-full bg-mitigated-50 px-2 py-0.5 text-[10px] font-bold text-mitigated-700">Awaiting approval</span>
+            ) : memory.status === 'retired' ? (
+              <span className="inline-flex items-center rounded-full bg-canvas px-2 py-0.5 text-[10px] font-bold text-ink-500">Retired</span>
             ) : (
               <span className="inline-flex items-center rounded-full bg-compliant-50 px-2 py-0.5 text-[10px] font-bold text-compliant-700">Active</span>
+            )}
+            {memory.drifted && (
+              <span className="inline-flex items-center gap-1 rounded-full bg-mitigated-50 px-2 py-0.5 text-[10px] font-bold text-mitigated-700"><TriangleAlert size={9} /> Schema drifted</span>
             )}
             {memory.confidence != null && (
               <span className="inline-flex items-center gap-1.5 rounded-full border border-canvas-border bg-canvas-elevated px-2 py-0.5 text-[10px] font-semibold text-ink-700">
@@ -371,13 +430,23 @@ function MemoryDrawer({ memory, justRenewed, onClose, onForget, onRenew }: {
           </div>
         )}
 
+        {memory.drifted && (
+          <div className="flex items-start gap-2 rounded-lg border border-mitigated-200 bg-mitigated-50 px-3 py-2.5">
+            <TriangleAlert size={14} className="mt-px shrink-0 text-mitigated-700" />
+            <span className="text-[12px] leading-relaxed text-mitigated-700">
+              The schema this was written against changed ({memory.fingerprint}). Review it in the source’s drift list before the next run relies on it.
+            </span>
+          </div>
+        )}
+
         {/* Facts about the fact */}
         <div className="grid grid-cols-2 gap-x-4 gap-y-3.5">
           <MetaCell label="Recalled">{memory.recallCount} times</MetaCell>
           <MetaCell label="Last recalled">{memory.lastRecalled}</MetaCell>
           {memory.approvedBy && <MetaCell label="Approved by">{memory.approvedBy}{memory.approvedOn ? ` · ${memory.approvedOn}` : ''}</MetaCell>}
           {memory.reviewBy && <MetaCell label="Review by">{memory.reviewBy}</MetaCell>}
-          <MetaCell label="Source">{memory.source}</MetaCell>
+          {memory.entity && <MetaCell label={memory.scope === 'source' ? 'Source' : 'Engagement'}>{memory.entity.label}</MetaCell>}
+          <MetaCell label="Learned from">{memory.source}</MetaCell>
         </div>
 
         {/* Provenance — the receipts */}
@@ -396,15 +465,15 @@ function MemoryDrawer({ memory, justRenewed, onClose, onForget, onRenew }: {
           </div>
         </div>
 
-        {/* Who reads it — the "one store, many surfaces" contract */}
+        {/* Where it fires — the "one store, many surfaces" contract, made real */}
         <div>
           <div className="mb-2 flex items-center gap-1.5">
             <Zap size={13} className="text-ink-400" />
-            <h3 className="text-[12px] font-bold text-ink-800">Read by</h3>
+            <h3 className="text-[12px] font-bold text-ink-800">Fires in</h3>
           </div>
           <div className="flex flex-wrap gap-1.5">
-            {memory.readBy.map(r => (
-              <span key={r} className="inline-flex items-center rounded-md bg-brand-50 px-2 py-1 text-[11px] font-semibold text-brand-700">{r}</span>
+            {memory.firesIn.map(r => (
+              <span key={r} className="inline-flex items-center rounded-md bg-brand-50 px-2 py-1 text-[11px] font-semibold text-brand-700">{SURFACE_META[r].label}</span>
             ))}
           </div>
         </div>
@@ -449,88 +518,110 @@ function MemoryDrawer({ memory, justRenewed, onClose, onForget, onRenew }: {
 
 // ─── Main view ──────────────────────────────────────────────────────────────
 
-export default function SmartLearnView() {
+export default function SmartLearnView({ focusMemoryId }: { focusMemoryId?: string | null }) {
+  useMemorySessionVersion();
+
   const [scopeFilter, setScopeFilter] = useState<'all' | MemoryScope>('all');
-  const [statusFilter, setStatusFilter] = useState<StatusFilterId>('all');
+  const [filters, setFilters] = useState<Filters>({ status: 'all', kind: 'all', surface: 'all' });
   const [query, setQuery] = useState('');
-  const [overrides, setOverrides] = useState<Record<string, MemoryOverride>>({});
-  const [personalCleared, setPersonalCleared] = useState(false);
-  const [confirmClear, setConfirmClear] = useState(false);
   const [showExplainer, setShowExplainer] = useState(false);
   const [selectedId, setSelectedId] = useState<string | null>(null);
+  const [openGroups, setOpenGroups] = useState<Set<string>>(() => new Set());
 
-  const renew = (id: string) =>
-    setOverrides(o => ({ ...o, [id]: { ...o[id], renewedTo: RENEWAL_TARGET } }));
-  const forget = (id: string) =>
-    setOverrides(o => ({ ...o, [id]: { ...o[id], forgotten: true } }));
-  const undo = (id: string) =>
-    setOverrides(o => { const next = { ...o }; delete next[id]; return next; });
-
-  // Seed + overrides. Personal-cleared removes the whole personal scope.
-  const memories = useMemo(
-    () => MEMORY_STORE.map(m => effective(m, overrides[m.id])),
-    [overrides],
-  );
-  const isGone = (m: PlatformMemory) =>
-    (personalCleared && m.scope === 'personal') || !!overrides[m.id]?.forgotten;
+  const memories = allMemories();
+  const personalCleared = isPersonalCleared();
   const live = memories.filter(m => !isGone(m));
 
-  const matchesStatus = (m: PlatformMemory, f: StatusFilterId) =>
-    f === 'all' ||
-    (f === 'pending' && m.status === 'pending') ||
-    (f === 'review' && !!m.renewDue) ||
-    (f === 'active' && m.status === 'active');
+  // Deep-link focus ("Manage →" from any chip, or ?memory= in the URL):
+  // open the row's drawer and expand its entity group.
+  useEffect(() => {
+    if (!focusMemoryId) return;
+    const target = memories.find(m => m.id === focusMemoryId);
+    if (!target) return;
+    setSelectedId(focusMemoryId);
+    if (target.entity) setOpenGroups(g => new Set([...g, `${target.scope}:${target.entity!.id}`]));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [focusMemoryId]);
+
+  const matchesFilters = (m: PlatformMemory) => {
+    if (filters.status === 'proposed' && m.status !== 'proposed') return false;
+    if (filters.status === 'review' && !m.renewDue) return false;
+    if (filters.status === 'active' && m.status !== 'active') return false;
+    if (filters.kind !== 'all' && m.kind !== filters.kind) return false;
+    if (filters.surface !== 'all' && !m.firesIn.includes(filters.surface)) return false;
+    return true;
+  };
   const matchesQuery = (m: PlatformMemory) => {
     if (!query.trim()) return true;
     const q = query.toLowerCase();
     return (
       m.statement.toLowerCase().includes(q) ||
       m.source.toLowerCase().includes(q) ||
-      KIND_META[m.kind].label.toLowerCase().includes(q)
+      KIND_META[m.kind].label.toLowerCase().includes(q) ||
+      (m.entity?.label.toLowerCase().includes(q) ?? false) ||
+      m.firesIn.some(s => SURFACE_META[s].label.toLowerCase().includes(q))
     );
   };
 
-  // Rows per scope — forgotten items stay in place as undo strips (but a
-  // cleared personal scope collapses to one card instead of five strips).
   const groups = SCOPE_ORDER
     .filter(s => scopeFilter === 'all' || scopeFilter === s)
     .map(s => ({
       scope: s,
       items: memories.filter(m =>
-        m.scope === s && matchesStatus(m, statusFilter) && matchesQuery(m) &&
+        m.scope === s && matchesFilters(m) && matchesQuery(m) &&
         !(personalCleared && s === 'personal')),
     }));
 
-  const scopeCounts: Record<'all' | MemoryScope, number> = {
-    all: live.length,
-    personal: live.filter(m => m.scope === 'personal').length,
-    team: live.filter(m => m.scope === 'team').length,
-    engagement: live.filter(m => m.scope === 'engagement').length,
-    tenant: live.filter(m => m.scope === 'tenant').length,
-  };
-  const statusCounts: Record<StatusFilterId, number> = {
-    all: live.length,
-    active: live.filter(m => m.status === 'active').length,
-    pending: live.filter(m => m.status === 'pending').length,
-    review: live.filter(m => m.renewDue).length,
-  };
+  const scopeCounts = useMemo(() => {
+    const counts = { all: live.length } as Record<'all' | MemoryScope, number>;
+    SCOPE_ORDER.forEach(s => { counts[s] = live.filter(m => m.scope === s).length; });
+    return counts;
+  }, [live]);
+
+  const proposedCount = live.filter(m => m.status === 'proposed').length;
+  const reviewCount = live.filter(m => m.renewDue).length;
 
   const stats = [
-    { label: 'Active memories', value: statusCounts.active, tone: 'text-ink-900', Icon: Brain, iconWrap: 'bg-brand-50 text-brand-600' },
-    { label: 'Awaiting approval', value: statusCounts.pending, tone: statusCounts.pending > 0 ? 'text-mitigated-700' : 'text-ink-900', Icon: Inbox, iconWrap: statusCounts.pending > 0 ? 'bg-mitigated-50 text-mitigated-700' : 'bg-canvas text-ink-400', onClick: () => navigateTo('my-queue'), hint: 'Review in My Queue' },
-    { label: 'Due for review', value: statusCounts.review, tone: statusCounts.review > 0 ? 'text-mitigated-700' : 'text-ink-900', Icon: CalendarClock, iconWrap: statusCounts.review > 0 ? 'bg-mitigated-50 text-mitigated-700' : 'bg-canvas text-ink-400' },
+    { label: 'Active memories', value: live.filter(m => m.status === 'active').length, tone: 'text-ink-900', Icon: Brain, iconWrap: 'bg-brand-50 text-brand-600' },
+    { label: 'Awaiting approval', value: proposedCount, tone: proposedCount > 0 ? 'text-mitigated-700' : 'text-ink-900', Icon: Inbox, iconWrap: proposedCount > 0 ? 'bg-mitigated-50 text-mitigated-700' : 'bg-canvas text-ink-400', onClick: () => navigateTo('my-queue'), hint: 'Review in My Queue' },
+    { label: 'Due for review', value: reviewCount, tone: reviewCount > 0 ? 'text-mitigated-700' : 'text-ink-900', Icon: CalendarClock, iconWrap: reviewCount > 0 ? 'bg-mitigated-50 text-mitigated-700' : 'bg-canvas text-ink-400' },
     { label: 'Recalls this week', value: RECALLS_THIS_WEEK, tone: 'text-ink-900', Icon: Zap, iconWrap: 'bg-compliant-50 text-compliant-700' },
   ] as const;
 
   const selected = selectedId ? memories.find(m => m.id === selectedId) : undefined;
   const anyVisible = groups.some(g => g.items.length > 0) || (personalCleared && groups.some(g => g.scope === 'personal'));
 
+  const toggleGroup = (key: string) =>
+    setOpenGroups(g => {
+      const next = new Set(g);
+      if (next.has(key)) next.delete(key); else next.add(key);
+      return next;
+    });
+
+  const renderRows = (items: PlatformMemory[]) => (
+    <div className="space-y-2">
+      {items.map((m, i) =>
+        decisionFor(m.id)?.forgotten ? (
+          <ForgottenStrip key={m.id} memory={m} onUndo={() => undoForget(m)} />
+        ) : (
+          <MemoryRow
+            key={m.id}
+            memory={m}
+            index={i}
+            onOpen={() => setSelectedId(m.id)}
+            onRenew={() => renewMemory(m)}
+          />
+        ),
+      )}
+    </div>
+  );
+
   return (
     <div className="pb-8">
       {/* Intro row — what this registry is + page-level controls */}
       <div className="flex items-start justify-between gap-4 pb-4">
         <p className="mt-1 text-[13px] text-ink-500">
-          Every memory <span className="font-semibold text-ink-800">IRA</span> holds, in one place — traceable to its source, scoped to its owner, and never shared without approval.
+          Every memory <span className="font-semibold text-ink-800">IRA</span> holds — across chat, runs, engagements, reports, dashboards and data sources — in one place, traceable and governed. Worked where it fires; listed here.
         </p>
         <div className="flex shrink-0 items-center gap-2">
           <button
@@ -585,7 +676,7 @@ export default function SmartLearnView() {
         })}
       </div>
 
-      {/* Toolbar — scope chips · search · status */}
+      {/* Toolbar — scope chips · search · one Filter menu (zero net new chrome) */}
       <div className="mb-4 flex flex-wrap items-center gap-2">
         <div className="flex flex-wrap items-center gap-1.5">
           {(['all', ...SCOPE_ORDER] as const).map(s => {
@@ -616,7 +707,7 @@ export default function SmartLearnView() {
               className="h-9 w-[220px] rounded-md border border-canvas-border bg-canvas-elevated pl-8 pr-3 text-[12px] text-ink-800 placeholder:text-ink-400 transition-colors focus:border-brand-300 focus:outline-none"
             />
           </div>
-          <StatusFilterMenu active={statusFilter} counts={statusCounts} onChange={setStatusFilter} />
+          <FilterMenu filters={filters} onChange={setFilters} live={live} />
         </div>
       </div>
 
@@ -626,7 +717,7 @@ export default function SmartLearnView() {
           <p className="text-[13px] font-semibold text-ink-700">No memories match this filter.</p>
           <button
             type="button"
-            onClick={() => { setScopeFilter('all'); setStatusFilter('all'); setQuery(''); }}
+            onClick={() => { setScopeFilter('all'); setFilters({ status: 'all', kind: 'all', surface: 'all' }); setQuery(''); }}
             className="mt-1.5 cursor-pointer text-[12px] font-semibold text-brand-700 hover:underline"
           >
             Clear filters
@@ -639,6 +730,10 @@ export default function SmartLearnView() {
             const ScopeIcon = SCOPE_ICON[g.scope];
             const clearedHere = g.scope === 'personal' && personalCleared;
             if (g.items.length === 0 && !clearedHere) return null;
+            // Engagement and Source sections sub-group under their entity —
+            // collapsed headers carry the attention counts (D2 spec).
+            const entities = entitiesForScope(g.scope, g.items);
+            const grouped = (g.scope === 'engagement' || g.scope === 'source') && entities.length > 0;
             return (
               <section key={g.scope} aria-label={`${meta.label} memories`}>
                 <div className="mb-2.5 flex flex-wrap items-baseline gap-x-2 gap-y-1">
@@ -650,15 +745,6 @@ export default function SmartLearnView() {
                     </span>
                   </span>
                   <span className="text-[11px] text-ink-400">{meta.note}</span>
-                  {g.scope === 'personal' && !personalCleared && (
-                    <button
-                      type="button"
-                      onClick={() => setConfirmClear(true)}
-                      className="ml-auto cursor-pointer text-[11px] font-semibold text-risk hover:underline"
-                    >
-                      Forget everything about me
-                    </button>
-                  )}
                 </div>
                 {clearedHere ? (
                   <div className="rounded-2xl border border-dashed border-canvas-border bg-canvas-elevated px-6 py-8 text-center">
@@ -671,28 +757,61 @@ export default function SmartLearnView() {
                     </p>
                     <button
                       type="button"
-                      onClick={() => setPersonalCleared(false)}
+                      onClick={() => undoClearPersonal()}
                       className="mt-2.5 inline-flex cursor-pointer items-center gap-1 text-[12px] font-semibold text-brand-700 hover:underline"
                     >
                       <Undo2 size={12} /> Undo
                     </button>
                   </div>
-                ) : (
-                  <div className="space-y-2">
-                    {g.items.map((m, i) =>
-                      overrides[m.id]?.forgotten ? (
-                        <ForgottenStrip key={m.id} memory={m} onUndo={() => undo(m.id)} />
-                      ) : (
-                        <MemoryRow
-                          key={m.id}
-                          memory={m}
-                          index={i}
-                          onOpen={() => setSelectedId(m.id)}
-                          onRenew={() => renew(m.id)}
-                        />
-                      ),
-                    )}
+                ) : grouped ? (
+                  <div className="space-y-2.5">
+                    {entities.map(ent => {
+                      const key = `${g.scope}:${ent.id}`;
+                      const rows = g.items.filter(m => m.entity?.id === ent.id);
+                      if (rows.length === 0) return null;
+                      const liveRows = rows.filter(m => !isGone(m));
+                      const pending = liveRows.filter(m => m.status === 'proposed').length;
+                      const drifted = liveRows.filter(m => m.drifted).length;
+                      const review = liveRows.filter(m => m.renewDue).length;
+                      const open = openGroups.has(key);
+                      return (
+                        <div key={key} className="rounded-xl border border-canvas-border bg-canvas">
+                          <button
+                            type="button"
+                            onClick={() => toggleGroup(key)}
+                            aria-expanded={open}
+                            className="flex w-full items-center gap-2 px-3.5 py-2.5 text-left cursor-pointer"
+                          >
+                            <motion.span animate={{ rotate: open ? 90 : 0 }} transition={{ type: 'spring', stiffness: 360, damping: 26 }} className="inline-flex text-ink-400">
+                              <ChevronRight size={13} />
+                            </motion.span>
+                            <span className="min-w-0 truncate font-mono text-[12px] font-semibold text-ink-800">{ent.label}</span>
+                            <span className="rounded-full border border-canvas-border bg-canvas-elevated px-1.5 py-px text-[10px] font-bold tabular-nums text-ink-500">{liveRows.length}</span>
+                            <span className="ml-auto flex items-center gap-1.5">
+                              {pending > 0 && <span className="rounded-full bg-mitigated-50 px-2 py-0.5 text-[10px] font-bold text-mitigated-700">{pending} pending</span>}
+                              {drifted > 0 && <span className="inline-flex items-center gap-1 rounded-full bg-mitigated-50 px-2 py-0.5 text-[10px] font-bold text-mitigated-700"><TriangleAlert size={9} /> {drifted} drifted</span>}
+                              {review > 0 && <span className="rounded-full bg-mitigated-50 px-2 py-0.5 text-[10px] font-bold text-mitigated-700">{review} review due</span>}
+                            </span>
+                          </button>
+                          <AnimatePresence initial={false}>
+                            {open && (
+                              <motion.div
+                                initial={{ height: 0, opacity: 0 }} animate={{ height: 'auto', opacity: 1 }} exit={{ height: 0, opacity: 0 }}
+                                transition={{ height: { duration: 0.25, ease: [0.22, 1, 0.36, 1] }, opacity: { duration: 0.18 } }}
+                                className="overflow-hidden"
+                              >
+                                <div className="border-t border-canvas-border p-2.5">{renderRows(rows)}</div>
+                              </motion.div>
+                            )}
+                          </AnimatePresence>
+                        </div>
+                      );
+                    })}
+                    {/* Rows without an entity (e.g. team routines shown under a scope filter) */}
+                    {g.items.some(m => !m.entity) && renderRows(g.items.filter(m => !m.entity))}
                   </div>
+                ) : (
+                  renderRows(g.items)
                 )}
               </section>
             );
@@ -705,24 +824,13 @@ export default function SmartLearnView() {
         {selected && !isGone(selected) && (
           <MemoryDrawer
             memory={selected}
-            justRenewed={!!overrides[selected.id]?.renewedTo}
+            justRenewed={!!decisionFor(selected.id)?.renewedTo}
             onClose={() => setSelectedId(null)}
-            onForget={() => { forget(selected.id); setSelectedId(null); }}
-            onRenew={() => renew(selected.id)}
+            onForget={() => { forgetMemory(selected); setSelectedId(null); }}
+            onRenew={() => renewMemory(selected)}
           />
         )}
       </AnimatePresence>
-
-      {/* Forget-everything confirm — destructive, so it always asks */}
-      <ConfirmationModal
-        open={confirmClear}
-        title="Forget everything about you?"
-        description="IRA will stop using all personal preferences, vocabulary and corrections it has learned. Team, engagement and organization memories are not affected."
-        confirmLabel="Forget everything"
-        tone="destructive"
-        onConfirm={() => { setPersonalCleared(true); setConfirmClear(false); setSelectedId(null); }}
-        onClose={() => setConfirmClear(false)}
-      />
     </div>
   );
 }

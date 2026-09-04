@@ -1,11 +1,21 @@
 import { useState } from 'react';
 import { AnimatePresence } from 'motion/react';
 import { Building2, Grid3x3, Paperclip, Plus, RefreshCw, ScrollText } from 'lucide-react';
-import type { AuditRecord } from './types';
+import type { AuditRecord, AuditRound } from './types';
 import { useIcfr } from './store';
+import { auditStatus, type AuditStatus } from './auditPortfolio';
 import EmptyState from '../shared/EmptyState';
+import { Pill } from '../shared/StatusBadge';
 import NewAuditWizard from './NewAuditWizard';
-import RollForwardSheet from './RollForwardSheet';
+
+// Same vocabulary the engagement Overview's portfolio uses — a register row
+// has to say WHICH pass this is and where it stands, or a concluded interim
+// (the one worth rolling forward) is indistinguishable from a planned round.
+const ROUND_LABEL: Record<AuditRound, string> = { interim: 'Interim', rollforward: 'Roll-forward', yearend: 'Year-end' };
+const STATUS_TONE: Record<AuditStatus, 'compliant' | 'evidence' | 'draft'> = {
+  concluded: 'compliant', active: 'evidence', planned: 'draft',
+};
+const STATUS_LABEL: Record<AuditStatus, string> = { concluded: 'Concluded', active: 'Active', planned: 'Planned' };
 
 /**
  * SOX audit — the engagement's audit register, and the tab an audit lands on
@@ -29,11 +39,21 @@ export default function AuditLogsView() {
   const [rolling, setRolling] = useState<AuditRecord | null>(null);
   // Starting a cycle is not the first line's call.
   const canCreate = role !== 'risk-owner';
+  // An audit scopes itself from the matrix, so an engagement with no RACM has
+  // nothing for one to cover — whichever way the wizard is walked it ends in an
+  // audit that tests zero controls. A RACM here IS a process's set of controls
+  // (the equivalence Racm.tsx and the wizard both work from), so an empty
+  // control library is an empty matrix, and the door stays shut until one
+  // exists rather than opening onto a scope step with nothing in it.
+  const noRacm = eng.controls.length === 0;
+  const racmFirst = 'Add a RACM first — an audit with no controls has nothing to test.';
 
   const sheets = (
     <AnimatePresence>
       {creating && <NewAuditWizard onClose={() => setCreating(false)} />}
-      {rolling && <RollForwardSheet prior={rolling} onClose={() => setRolling(null)} />}
+      {/* Roll forward opens the same wizard prefilled (user ask) — one screen,
+          one rulebook. The old standalone roll-forward sheet is gone. */}
+      {rolling && <NewAuditWizard prefillFrom={rolling} onClose={() => setRolling(null)} />}
     </AnimatePresence>
   );
 
@@ -47,12 +67,18 @@ export default function AuditLogsView() {
           title="No audits yet"
           body="An audit sets the period, what it covers and the materiality it is measured against. Start one to begin testing."
           action={canCreate ? (
-            <button
-              onClick={() => setCreating(true)}
-              className="h-9 px-4 inline-flex items-center gap-1.5 rounded-lg bg-brand-600 text-white text-[12.5px] font-semibold hover:bg-brand-700 transition-colors cursor-pointer"
-            >
-              <Plus size={15} /> New audit
-            </button>
+            <div className="flex flex-col items-center gap-2">
+              <button
+                onClick={() => setCreating(true)}
+                disabled={noRacm}
+                className="h-9 px-4 inline-flex items-center gap-1.5 rounded-lg bg-brand-600 text-white text-[12.5px] font-semibold enabled:hover:bg-brand-700 disabled:opacity-40 disabled:cursor-not-allowed transition-colors cursor-pointer"
+              >
+                <Plus size={15} /> New audit
+              </button>
+              {/* Said here rather than in the body copy above: the body explains
+                  what an audit is, this explains why the button won't move. */}
+              {noRacm && <p className="text-[11.5px] text-ink-400">{racmFirst}</p>}
+            </div>
           ) : undefined}
         />
         {sheets}
@@ -71,17 +97,25 @@ export default function AuditLogsView() {
         </span>
         <div className="flex-1" />
         {canCreate && (
-          <button
-            onClick={() => setCreating(true)}
-            className="h-9 px-3.5 inline-flex items-center gap-1.5 rounded-lg bg-brand-600 text-white text-[12.5px] font-semibold hover:bg-brand-700 transition-colors cursor-pointer"
-          >
-            <Plus size={15} /> New audit
-          </button>
+          <>
+            {/* Beside the button, not under it — the toolbar is one row, and the
+                reason has to arrive with the thing it disables. */}
+            {noRacm && <span className="text-[11.5px] text-ink-400">{racmFirst}</span>}
+            <button
+              onClick={() => setCreating(true)}
+              disabled={noRacm}
+              className="h-9 px-3.5 inline-flex items-center gap-1.5 rounded-lg bg-brand-600 text-white text-[12.5px] font-semibold enabled:hover:bg-brand-700 disabled:opacity-40 disabled:cursor-not-allowed transition-colors cursor-pointer"
+            >
+              <Plus size={15} /> New audit
+            </button>
+          </>
         )}
       </div>
 
       <div className="space-y-2">
-          {eng.audits.map(a => (
+          {eng.audits.map(a => {
+            const status = auditStatus(a, eng);
+            return (
             <div
               key={a.id}
               onClick={() => openAudit(a.id)}
@@ -93,7 +127,11 @@ export default function AuditLogsView() {
             >
               <div className="flex items-start justify-between gap-3 mb-2">
                 <div className="min-w-0">
-                  <div className="text-[13px] font-semibold text-ink-900">{a.period}</div>
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <span className="text-[13px] font-semibold text-ink-900">{a.period}</span>
+                    <span className="text-[11px] font-semibold text-ink-500">{ROUND_LABEL[a.round]}</span>
+                    <Pill tone={STATUS_TONE[status]}>{STATUS_LABEL[status]}</Pill>
+                  </div>
                   <div className="text-[11px] text-ink-400">{a.periodSpan}</div>
                 </div>
                 <div className="flex items-center gap-2 shrink-0">
@@ -130,7 +168,8 @@ export default function AuditLogsView() {
                 )}
               </div>
             </div>
-          ))}
+            );
+          })}
       </div>
       {sheets}
     </div>

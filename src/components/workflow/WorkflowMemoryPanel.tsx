@@ -140,6 +140,17 @@ export function SourceDriftBanner() {
   const decide = (choice: 'reconfirmed' | 'kept') => {
     setResolved(choice);
     setOpen(false);
+    // Drift decisions are governance — they land in the audit log's Memory
+    // module via the same bridge the session layer uses (App.tsx listener).
+    window.dispatchEvent(new CustomEvent('irame:memory-audit', {
+      detail: {
+        action: 'Update',
+        description: choice === 'reconfirmed'
+          ? 'Source mapping re-confirmed after drift (Acme · Amount, column F → H) — memory updated'
+          : 'Drifted mapping kept for this run (Acme · Amount) — flagged for review on the next run',
+        entity: 'source-mapping-acme-amount',
+      },
+    }));
   };
 
   const isGreen = resolved === 'reconfirmed';
@@ -266,6 +277,14 @@ export function SourceDriftBanner() {
                     className="inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-lg border border-canvas-border bg-canvas-elevated text-ink-600 text-[0.75rem] font-semibold hover:bg-canvas hover:border-ink-300 transition-colors cursor-pointer"
                   >
                     Keep old mapping
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => window.dispatchEvent(new CustomEvent('app:navigate-view', { detail: { view: 'knowledge-hub' } }))}
+                    className="ml-auto text-[0.6875rem] font-semibold text-ink-500 hover:text-brand-700 transition-colors cursor-pointer"
+                    title="Every source memory and its drift status, on the source's page"
+                  >
+                    Review source memory in Knowledge Hub →
                   </button>
                 </div>
               </div>

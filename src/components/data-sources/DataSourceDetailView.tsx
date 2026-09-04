@@ -14,6 +14,7 @@ import { Button } from '../shared/Button';
 import InlineRename from '../shared/InlineRename';
 import FloatingLines from '../shared/FloatingLines';
 import ConfirmationModal from '../shared/ConfirmationModal';
+import SourceMemoryPanel from '../shared/memory/SourceMemoryPanel';
 import {
   filesForSource, getFileBlob, loadFileBlob, registerFileBlob, setSourceFiles, metaForFormat, countPdfPages, countSheetRows, getPdfjs,
   validateUploadFile, isAllowedKnowledgeFile, KH_ALLOWED_LABEL, KH_ALLOWED_ACCEPT,
@@ -512,6 +513,11 @@ export default function DataSourceDetailView({ source, onBack, onRename, startRe
         )}
         </div>
       </motion.div>
+
+      {/* ── Source memory — what IRA knows about this table (Memory PRD §6:
+          Knowledge Hub manages source memory, and only source memory). Drift
+          review surfaces here first, before a run gets hit by it. */}
+      <SourceMemoryPanel sourceId={source.id} sourceName={source.name} />
 
       {/* ── Body branches by source type ── A folder shows the reading pane
           (its own rail/preview scroll internally); everything else fills the

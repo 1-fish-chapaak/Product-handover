@@ -81,7 +81,7 @@ function seedTrail(seed: VersionSeed): AtrVersion[] {
     { version: 1, label: 'Initial draft', status: 'draft', at: daysAgo(12, 9, 14), by: author },
     { version: 2, label: 'Drafted observations', status: 'draft', at: daysAgo(9, 15, 33), by: author,
       changes: obs.slice(0, 3).map(t => `Added observation “${clip(t)}”`) },
-    { version: 3, label: 'Added management action plans', status: 'draft', at: daysAgo(6, 11, 8), by: author,
+    { version: 3, label: 'Added action plans', status: 'draft', at: daysAgo(6, 11, 8), by: author,
       changes: [`OBS-01 ${label(0)}: added 1 action plan`, ...(obs[1] ? [`OBS-02 ${label(1)}: added 1 action plan`] : [])] },
     { version: 4, label: 'Updated remediation status', status: 'draft', at: daysAgo(3, 16, 45), by: reviewer,
       changes: [`OBS-01 ${label(0)}: status Open → Closed`, ...(obs[1] ? [`OBS-02 ${label(1)}: status Open → In Progress`] : [])] },

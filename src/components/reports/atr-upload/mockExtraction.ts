@@ -33,6 +33,8 @@ export const PROCESSING_DURATION_MS = 15000;
 // Report metadata — matches the IRAME.AI brand sample in the brief.
 const SEED_META: ReportMeta = {
   reportId: 'ATR-2025-Q3-001',
+  reportName: 'Q3 FY24-25 — Procurement, Inventory & Dispatch ATR',
+  financialYear: 'FY 2024-25',
   auditTitle: 'Procurement, Inventory & Dispatch Process A',
   auditPeriod: 'Q3 FY 2024-25',
   preparedBy: 'Internal Audit Team (HT Consulting Ltd)',
@@ -44,7 +46,7 @@ const FIELD_LABEL: Record<MissingField['key'], string> = {
   title: 'Observation Title',
   description: 'Observation Description',
   riskSummary: 'Risk Summary',
-  recommendation: 'Recommendation / Management Action Plan',
+  recommendation: 'Recommendation / Action Plan',
   actionTaken: 'Action Taken',
   evidence: 'Evidence',
   verification: 'Management Comments / Auditor Verification',

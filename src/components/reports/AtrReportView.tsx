@@ -207,8 +207,6 @@ export default function AtrReportView({ report, onBack, onShare, onSave, onManag
     { key: 'summary' as AtrSectionKey, id: 'atr-exec', title: 'Executive Summary' },
     { key: 'process' as AtrSectionKey, id: 'atr-obs-summary', title: 'Observation Wise Summary' },
     { key: 'details' as AtrSectionKey, id: 'atr-obs-details', title: 'Observation Details' },
-    ...(insights.length > 0 ? [{ key: 'insights' as AtrSectionKey, id: 'atr-insights', title: 'Key Insights & Recommendations' }] : []),
-    { key: 'signoff' as AtrSectionKey, id: 'atr-signoff', title: 'Approvals & Sign-Off' },
   ].filter(e => !hiddenSections.includes(e.key));
 
   const scrollRef = useRef<HTMLDivElement>(null);
@@ -257,13 +255,13 @@ export default function AtrReportView({ report, onBack, onShare, onSave, onManag
         id: 'atr-exec',
         kind: 'summary',
         title: 'Executive Summary',
-        content: `${ex.totalObservations} observation${ex.totalObservations === 1 ? '' : 's'} carrying ${totalExceptions} exception${totalExceptions === 1 ? '' : 's'} across ${ex.totalActionPlans} management action plan${ex.totalActionPlans === 1 ? '' : 's'}${ex.progressPct != null ? `, ${ex.progressPct}% remediated` : ''}.`,
+        content: `${ex.totalObservations} observation${ex.totalObservations === 1 ? '' : 's'} carrying ${totalExceptions} exception${totalExceptions === 1 ? '' : 's'} across ${ex.totalActionPlans} action plan${ex.totalActionPlans === 1 ? '' : 's'}${ex.progressPct != null ? `, ${ex.progressPct}% remediated` : ''}.`,
         stats,
       },
       ...observations.map((o, i): DownloadPreviewSection => {
         const apCount = o.actionPlans.length;
         const apRoll = apCount
-          ? ` ${apCount} management action plan${apCount === 1 ? '' : 's'}: ${o.actionPlans.map(p => p.title || p.text).filter(Boolean).join('; ')}.`
+          ? ` ${apCount} action plan${apCount === 1 ? '' : 's'}: ${o.actionPlans.map(p => p.title || p.text).filter(Boolean).join('; ')}.`
           : '';
         return {
           id: `atr-obs-${i}`,
@@ -273,9 +271,6 @@ export default function AtrReportView({ report, onBack, onShare, onSave, onManag
           description: `${o.description ?? ''}${apRoll}`.trim() || o.title,
         };
       }),
-      ...insights.map((ins, i): DownloadPreviewSection => ({
-        id: `atr-insight-${i}`, kind: 'note', title: ins.title, content: ins.body,
-      })),
     ];
   };
 

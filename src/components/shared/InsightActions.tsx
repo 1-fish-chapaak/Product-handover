@@ -15,7 +15,8 @@
 import { useState } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { Sparkles, ChevronDown, ScrollText, MessageSquare } from 'lucide-react';
-import type { CheckMoreOption, EntityKind, EntityRef, RecIntent } from '../../data/layeredInsights';
+import type { CheckMoreOption, EntityKind, EntityRef, LayeredInsight, RecIntent } from '../../data/layeredInsights';
+import UniversalInsightActions from './UniversalInsightActions';
 
 export const REC_CAP = 6;
 
@@ -27,17 +28,19 @@ const TARGET_TONE: Record<EntityKind, string> = {
   sop:        'bg-brand-50 text-brand-700',
   engagement: 'bg-paper-100 text-ink-600',
   workflow:   'bg-evidence-50 text-evidence-700',
+  exception:  'bg-high-50 text-high-700',
 };
 
 // ─── Recommended-action tile (grid cell) ────────────────────────────────────
 // Pared to the essential: the imperative, plus (when the action lands on a
-// different entity) its target chip. The whole tile opens the step in Ask IRA —
-// where the full rationale and methodology live.
+// different entity) its target chip. The whole tile RUNS the step in Ask IRA —
+// the click sends the action with its evidence attached, rather than parking
+// the sentence in a composer for the reader to send.
 export function RecTile({ title, onOpen, target, intent }: { title: string; onOpen: () => void; target?: EntityRef; intent?: RecIntent }) {
   return (
     <button
       type="button" onClick={onOpen}
-      title="Open this recommendation in Ask IRA (new tab)"
+      title="Run this recommendation in Ask IRA (new tab) — its evidence goes with it"
       className="group flex w-full items-start gap-2 text-left rounded-lg border border-canvas-border bg-canvas-elevated py-2.5 pl-3 pr-2.5 hover:border-brand-300 hover:bg-brand-50/40 transition-colors cursor-pointer"
     >
       <span className="min-w-0 flex-1 text-[12.5px] font-semibold text-ink-900 leading-snug group-hover:text-brand-700 transition-colors">
@@ -59,33 +62,47 @@ export function RecTile({ title, onOpen, target, intent }: { title: string; onOp
 export interface RecItem { id: string; title: string; target?: EntityRef; intent?: RecIntent }
 
 // The fix, foregrounded. Tiles two-per-row so a 4–6 item set reads in a couple
-// of rows, not a tall wall. Each tile opens in Ask IRA with the step pre-filled.
+// of rows, not a tall wall. Each tile hands the WHOLE rec back (not just its
+// title) so the caller can carry its rationale, guardrail and target into the
+// run — a title alone is what made these read as follow-ups.
+//
+// When the caller holds the whole insight, the three platform verbs (drill
+// down / run frequency / edit workflow) join the SAME grid as detailed tiles
+// and the block holds at FOUR tiles total — the AI's single top action plus
+// the three verbs (review call Aug 11). The remaining recommendations fold to
+// the overflow line; Ask IRA walks the full set. Without an insight (the
+// workflow compare card) the grid stays recs-only at the normal cap.
 export function RecommendedActions({
-  recs, onOpen, cap = REC_CAP, className = 'mt-2.5',
+  recs, onOpen, cap = REC_CAP, className = 'mt-2.5', insight,
 }: {
   recs: RecItem[];
-  onOpen: (title: string) => void;
+  onOpen: (rec: RecItem) => void;
   cap?: number;
   className?: string;
+  /** The parent card's insight — adds the three platform-verb tiles. */
+  insight?: LayeredInsight;
 }) {
-  if (recs.length === 0) return null;
+  if (recs.length === 0 && !insight) return null;
+  const shown = insight ? recs.slice(0, 1) : recs.slice(0, cap);
+  const recTiles = shown.map((r) => (
+    <li key={r.id} className="min-w-0">
+      <RecTile title={r.title} onOpen={() => onOpen(r)} target={r.target} intent={r.intent} />
+    </li>
+  ));
   return (
     <div className={`${className} rounded-xl bg-canvas border border-canvas-border p-3`}>
       <div className="flex items-center gap-1.5 text-[10px] font-bold uppercase tracking-wider text-ink-500 mb-2">
         <Sparkles size={12} className="text-brand-600" aria-hidden="true" />
         Recommended actions
-        <span className="text-ink-400">· {recs.length}</span>
+        <span className="text-ink-400">· {shown.length + (insight ? 3 : 0)}</span>
       </div>
-      <ul className="grid sm:grid-cols-2 gap-1.5 items-start">
-        {recs.slice(0, cap).map((r) => (
-          <li key={r.id} className="min-w-0">
-            <RecTile title={r.title} onOpen={() => onOpen(r.title)} target={r.target} intent={r.intent} />
-          </li>
-        ))}
-      </ul>
-      {recs.length > cap && (
-        <p className="text-[10px] text-ink-400 mt-2 px-0.5">+{recs.length - cap} more — ask IRA to walk the full set.</p>
+      {insight ? (
+        <UniversalInsightActions insight={insight} gridChildren={recTiles} />
+      ) : (
+        <ul className="grid sm:grid-cols-2 gap-1.5 items-start">{recTiles}</ul>
       )}
+      {/* No overflow line (review call Aug 11 — card declutter): the folded
+          recommendations surface through Ask IRA, not a counter. */}
     </div>
   );
 }
@@ -129,7 +146,8 @@ export function EvidenceDisclosure({
           <ScrollText size={12} aria-hidden="true" /> {label} · {evidence.length}
         </button>
       </div>
-      {note && <p className="mt-1 text-[0.65625rem] text-ink-400 leading-snug">{note}</p>}
+      {/* The scope-note line under the toggle was removed (review call Aug 11 —
+          card declutter); `note` stays accepted for API compatibility. */}
       <AnimatePresence initial={false}>
         {evidence.length > 0 && show && (
           <motion.div

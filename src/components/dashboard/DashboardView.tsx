@@ -18,6 +18,8 @@ import {
 } from 'lucide-react';
 import Orb from '../shared/Orb';
 import { useToast, type ToastType } from '../shared/Toast';
+import { MemoryChip, SinceYouLeft } from '../shared/memory/MemoryKit';
+import { MEMORY_STORE } from '../../data/memoryStore';
 import { useCan } from '../../context/CurrentUserContext';
 import { useAuditLog } from '../../context/AdminDataContext';
 import Gated from '../shared/Gated';
@@ -36,6 +38,8 @@ import { ConfigurableChart } from './add-widget/ConfigurableChart';
 import SlicerWidget, { type SlicerMode } from './add-widget/SlicerWidget';
 import DashboardAssistant from './assistant/DashboardAssistant';
 import { runAssistant, type AssistantResult, type UserWidget as AssistantWidget } from './assistant/assistantEngine';
+import DashboardSyncScheduler from './sync/DashboardSyncScheduler';
+import { type SyncSchedule, DEFAULT_SYNC_SCHEDULE, cloneSchedule, summarizeSchedule, toDemoIntervalMs } from './sync/syncSchedule';
 import LegendSection from './add-widget/imports/LegendSection';
 import TypographySection from './add-widget/imports/TypographySection-1760-98';
 import ConditionalFormattingSection from './add-widget/imports/ConditionalFormattingSection';
@@ -3954,6 +3958,10 @@ export default function DashboardView({ initialDashboardId, initialDashboardName
   const { openShare } = useShare();
   const { can } = useCan();
   const [loading, setLoading] = useState(true);
+  // Memory defaults applied on open (Preference · Personal) — visible,
+  // removable chips, never hidden (Memory PRD §5). Removal is per-session;
+  // removing the same default 3× is the signal that retires it.
+  const [removedMemoryDefaults, setRemovedMemoryDefaults] = useState<Set<string>>(() => new Set());
   const isCustomInitial = !!initialDashboardId && !DASHBOARDS.some(d => d.id === initialDashboardId);
   const [activeId, setActiveId] = useState<DashboardId>(
     !isCustomInitial && (initialDashboardId as DashboardId) && DASHBOARDS.some(d => d.id === initialDashboardId)
@@ -3987,9 +3995,15 @@ export default function DashboardView({ initialDashboardId, initialDashboardName
 
   // Action bar state
   const [lastRefreshTime, setLastRefreshTime] = useState('2 mins ago');
-  const [autoRefresh, setAutoRefresh] = useState(false);
-  const [autoRefreshFrequency, setAutoRefreshFrequency] = useState('Off');
-  const [showFrequencyDropdown, setShowFrequencyDropdown] = useState(false);
+  // Scheduled data sync (live/SQL dashboards). Persisted per dashboard so an
+  // enabled schedule survives navigation + reload.
+  const syncKey = `irame.dashboard.sync.${initialDashboardId ?? 'default'}`;
+  const [schedulerOpen, setSchedulerOpen] = useState(false);
+  const [syncSchedule, setSyncSchedule] = useState<SyncSchedule>(() => {
+    try { const raw = localStorage.getItem(`irame.dashboard.sync.${initialDashboardId ?? 'default'}`); if (raw) return { ...DEFAULT_SYNC_SCHEDULE, ...JSON.parse(raw) }; } catch { /* ignore */ }
+    return cloneSchedule(DEFAULT_SYNC_SCHEDULE);
+  });
+  useEffect(() => { try { localStorage.setItem(syncKey, JSON.stringify(syncSchedule)); } catch { /* ignore */ } }, [syncKey, syncSchedule]);
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [widgetLoadingStates, setWidgetLoadingStates] = useState<Record<string, 'loading' | 'loaded' | 'error'>>({});
   const [hasLoadedOnce, setHasLoadedOnce] = useState(false);
@@ -4190,29 +4204,19 @@ export default function DashboardView({ initialDashboardId, initialDashboardName
   const isRefreshingRef = useRef(isRefreshing);
   isRefreshingRef.current = isRefreshing;
 
-  // Auto-refresh interval. Demo intervals are compressed (Daily=60s) so the
-  // behavior is observable in a session; real intervals would be 86_400_000
-  // (Daily) etc. Off = no interval. Ticks that land during an in-flight
-  // refresh are silently skipped — the next tick catches up.
+  // Scheduled-sync ticker. The cadence maps to a demo-compressed interval (see
+  // toDemoIntervalMs) so an enabled schedule visibly refreshes within a session;
+  // real cadences would be hourly/daily. Disabled = no interval. Ticks landing
+  // during an in-flight refresh are skipped — the next tick catches up.
   useEffect(() => {
-    const intervalMs: Record<string, number | null> = {
-      Off: null,
-      Daily: 60_000,
-      Weekly: 300_000,
-      Biweekly: 600_000,
-      Monthly: 1_200_000,
-      Quarterly: 1_800_000,
-      'Semi-Annually': 2_700_000,
-      Annually: 3_600_000,
-    };
-    const ms = intervalMs[autoRefreshFrequency];
+    const ms = syncSchedule.enabled ? toDemoIntervalMs(syncSchedule) : null;
     if (!ms) return;
     const handle = setInterval(() => {
       if (isRefreshingRef.current) return;
       handleRefreshRef.current();
     }, ms);
     return () => clearInterval(handle);
-  }, [autoRefreshFrequency]);
+  }, [syncSchedule]);
 
   const handleExport = () => {
     if (isExporting) return;
@@ -4342,49 +4346,23 @@ export default function DashboardView({ initialDashboardId, initialDashboardName
                   </button>
                   )}
 
-                  {/* Auto refresh with frequency dropdown — hidden for static file dashboards */}
+                  {/* Auto-sync scheduler — opens the modern scheduler modal.
+                      Hidden for static file dashboards (no live source to sync). */}
                   {!isStaticFileDashboard && (
-                  <div className="relative">
                     <button
-                      onClick={() => setShowFrequencyDropdown(!showFrequencyDropdown)}
+                      onClick={() => setSchedulerOpen(true)}
+                      title={syncSchedule.enabled ? `Auto-sync — ${summarizeSchedule(syncSchedule)}` : 'Set up automatic data sync'}
                       className={`flex items-center gap-1.5 px-4 h-9 rounded-full text-[0.75rem] font-medium transition-colors cursor-pointer border shadow-sm ${
-                        autoRefreshFrequency !== 'Off'
+                        syncSchedule.enabled
                           ? 'border-brand-300 bg-brand-50 text-brand-700'
                           : 'border-canvas-border bg-white text-ink-500 hover:border-brand-200'
                       }`}
                     >
-                      <Clock size={13} />
-                      Auto refresh: {autoRefreshFrequency !== 'Off' ? 'On' : 'Off'}
+                      {syncSchedule.enabled
+                        ? <span className="w-1.5 h-1.5 rounded-full bg-brand-500 animate-pulse motion-reduce:animate-none" aria-hidden="true" />
+                        : <Clock size={13} />}
+                      Auto-sync{syncSchedule.enabled ? <span className="max-w-[150px] truncate">: {summarizeSchedule(syncSchedule)}</span> : ': Off'}
                     </button>
-                    {showFrequencyDropdown && (
-                      <>
-                        <div className="fixed inset-0 z-40" onClick={() => setShowFrequencyDropdown(false)} />
-                        <div className="absolute top-full left-0 mt-2 w-48 bg-canvas-elevated border border-canvas-border rounded-lg shadow-xl py-1.5 z-50">
-                          {['Off', 'Daily', 'Weekly', 'Biweekly', 'Monthly', 'Quarterly', 'Semi-Annually', 'Annually'].map(freq => (
-                            <button
-                              key={freq}
-                              onClick={() => {
-                                setAutoRefreshFrequency(freq);
-                                setAutoRefresh(freq !== 'Off');
-                                setShowFrequencyDropdown(false);
-                                addToast({ message: freq === 'Off' ? 'Auto refresh disabled' : `Auto refresh set to ${freq}`, type: 'info' });
-                              }}
-                              className={`w-full flex items-center justify-between px-4 py-2 text-[0.8125rem] transition-colors cursor-pointer ${
-                                autoRefreshFrequency === freq
-                                  ? 'bg-brand-50 text-brand-700 font-medium'
-                                  : 'text-ink-700 hover:bg-brand-50 hover:text-brand-700'
-                              }`}
-                            >
-                              {freq}
-                              {autoRefreshFrequency === freq && (
-                                <CheckCircle2 size={14} className="text-brand-600" />
-                              )}
-                            </button>
-                          ))}
-                        </div>
-                      </>
-                    )}
-                  </div>
                   )}
 
                   {/* Divider */}
@@ -4480,6 +4458,55 @@ export default function DashboardView({ initialDashboardId, initialDashboardName
                 </div>
               </div>
             </div>
+
+            {/* Since-you-last-looked digest + the memory defaults this board
+                opened with (Memory PRD §5 — a dashboard is looked at, not
+                asked, so memory is the only way it can be personal). */}
+            {!isCustomDashboard && !isExcelDashboard && (
+              <>
+                <SinceYouLeft
+                  className="mb-4"
+                  kicker="Since Friday"
+                  headline={<>14 new exceptions · 3 above your ₹5&nbsp;L floor · vendor <span className="font-semibold">ABC</span> is new to this list.</>}
+                />
+                {(() => {
+                  const defaults = [
+                    { key: 'range', memId: 'mem-usr-007', label: 'Last 90 days' },
+                    { key: 'test-entities', memId: 'mem-usr-007', label: 'Excl. test entities' },
+                    { key: 'carve-out', memId: 'mem-eng-007', label: 'Excl. Subsidiary XYZ · FY26 carve-out' },
+                  ].filter(d => !removedMemoryDefaults.has(d.key));
+                  const defMemory = MEMORY_STORE.find(m => m.id === 'mem-org-005');
+                  if (defaults.length === 0 && !defMemory) return null;
+                  return (
+                    <div className="mb-5 flex flex-wrap items-center gap-2">
+                      <span className="text-[0.625rem] font-bold uppercase tracking-[0.08em] text-ink-400">Opened with your defaults</span>
+                      {defaults.map(d => {
+                        const mem = MEMORY_STORE.find(m => m.id === d.memId);
+                        return mem ? (
+                          <MemoryChip
+                            key={d.key}
+                            memory={mem}
+                            form="filter"
+                            label={d.label}
+                            onRemove={() => {
+                              setRemovedMemoryDefaults(prev => new Set([...prev, d.key]));
+                              addToast({ type: 'info', message: 'Removed for this session — remove it three times and IRA retires the default.' });
+                            }}
+                          />
+                        ) : null;
+                      })}
+                      {defMemory && (
+                        <MemoryChip
+                          memory={defMemory}
+                          form="definition"
+                          label="on-time % counts from invoice date — org definition"
+                        />
+                      )}
+                    </div>
+                  );
+                })()}
+              </>
+            )}
 
             {/* AI Summary — Generate / View / Edit */}
             {/* Alerts & Daily Digest */}
@@ -5306,6 +5333,27 @@ export default function DashboardView({ initialDashboardId, initialDashboardName
           addToast({ message: `Primary source set to ${src.name}`, type: 'success' });
         }}
       />
+
+      {/* Scheduled data sync (live/SQL dashboards) */}
+      <AnimatePresence>
+        {schedulerOpen && (
+          <DashboardSyncScheduler
+            open
+            onClose={() => setSchedulerOpen(false)}
+            schedule={syncSchedule}
+            onSave={(s) => {
+              setSyncSchedule(s);
+              setSchedulerOpen(false);
+              addToast({ message: s.enabled ? `Auto-sync on — ${summarizeSchedule(s).toLowerCase()}` : 'Auto-sync turned off', type: s.enabled ? 'success' : 'info' });
+              logEvent({ action: 'Update', description: s.enabled ? `Enabled auto-sync (${summarizeSchedule(s)}) on dashboard "${displayName}"` : `Disabled auto-sync on dashboard "${displayName}"`, module: 'Dashboards', entity: 'Sync schedule' });
+            }}
+            onSyncNow={handleRefresh}
+            sourceName={dashboardSourceName}
+            provider={sqlIntegration?.provider}
+            lastSyncedLabel={lastRefreshTime}
+          />
+        )}
+      </AnimatePresence>
 
       {/* Ira — the dashboard AI assistant (floating, bottom-right) */}
       <DashboardAssistant

@@ -43,6 +43,8 @@ export const ATR_LIBRARY: AtrLibraryReport[] = [
     atrData: {
       meta: {
         reportId: 'ATR-P2P-FY26Q1',
+        reportName: 'FY26 Q1 — Procure-to-Pay Controls ATR',
+        financialYear: 'FY 2025-26',
         auditTitle: 'Procure-to-Pay Controls Review',
         auditPeriod: 'FY26 Q1 (Jan–Mar 2026)',
         preparedBy: 'Karan Mehta',
@@ -57,7 +59,7 @@ export const ATR_LIBRARY: AtrLibraryReport[] = [
           description: 'Three-way match was not enforced before payment release for 7 vendors, allowing duplicate invoices to be paid.',
           riskSummary: 'Financial loss from overpayment; weakened payment controls.',
           classification: 'Design Deficiency',
-          risk: 'High',
+          risk: 'Critical',
           status: 'Closed',
           actionPlans: [
             { title: 'Enforce three-way match in ERP', text: 'Configure ERP to enforce PO/GRN/Invoice match before payment.', dueDate: '30 Apr 2026', status: 'Implemented', actionTaken: 'Enabled the mandatory three-way match in SAP MM for all PO-based invoices; tolerance set to 0% on quantity and 2% on price. Re-ran the 7 flagged duplicate invoices — all now block at posting.', evidence: 'P2P_3way_match_config.pdf', verification: 'Auditor verified configuration in production.' },
@@ -101,6 +103,8 @@ export const ATR_LIBRARY: AtrLibraryReport[] = [
     atrData: {
       meta: {
         reportId: 'ATR-ITGC-FY26Q1',
+        reportName: 'FY26 Q1 — IT General Controls ATR',
+        financialYear: 'FY 2025-26',
         auditTitle: 'IT General Controls Review',
         auditPeriod: 'FY26 Q1 (Jan–Mar 2026)',
         preparedBy: 'Priya Mehta',
@@ -115,7 +119,7 @@ export const ATR_LIBRARY: AtrLibraryReport[] = [
           description: 'MFA bypass was configured at the system level for 6 C-suite accounts without Security Committee approval.',
           riskSummary: 'Account takeover risk for privileged users.',
           classification: 'System Deficiency',
-          risk: 'High',
+          risk: 'Critical',
           status: 'In Progress',
           actionPlans: [
             { title: 'FIDO2 hardware keys for executives', text: 'Remove MFA bypass and enforce FIDO2 hardware keys for executives.', dueDate: '05 May 2026', status: 'Partially Implemented', actionTaken: 'Revoked the system-level MFA bypass on all 6 C-suite accounts and issued FIDO2 hardware keys. 4 of 6 executives enrolled; 2 pending key collection while travelling.', evidence: 'MFA_enforcement_screenshots.png', verification: 'Pending re-test by IT audit.' },
@@ -159,6 +163,8 @@ export const ATR_LIBRARY: AtrLibraryReport[] = [
     atrData: {
       meta: {
         reportId: 'ATR-O2C-FY26',
+        reportName: 'FY26 — Order-to-Cash Revenue ATR',
+        financialYear: 'FY 2025-26',
         auditTitle: 'Order-to-Cash Revenue Review',
         auditPeriod: 'FY26 (Apr 2025–Mar 2026)',
         preparedBy: 'Neha Joshi',

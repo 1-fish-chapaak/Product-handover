@@ -151,6 +151,21 @@ export interface AuditorProof {
 export interface DesignPoint {
   id: string;
   text: string;
+  /** THE ATTRIBUTE THIS CHECK IS ABOUT — an `OperatingStep.id`.
+   *
+   *  Set on an attribute-level check (dev call, Aug 2026: "हर एट्रिब्यूट का अपना
+   *  चेक होगा"), absent on a control-level one. Both live in the same
+   *  `design.points` array on purpose: a check is a check, and everything that
+   *  already acts on one — pass/fail, evidence links, the auditor's own proof,
+   *  validation, override, and the rule that sinks TOD when any check fails —
+   *  keeps working without knowing which kind it is holding.
+   *
+   *  The two kinds ask different questions and both are worth asking. Control
+   *  level: does this control address the risk at all, and at what precision.
+   *  Attribute level: is THIS thing the control has to do actually designed to
+   *  happen. Dropping either would leave a design test that cannot fail for a
+   *  reason the other one covers. */
+  stepId?: string;
   workflowId?: string;
   workflowName?: string;
   workflowRunRef?: string;
@@ -254,6 +269,11 @@ export interface DesignTrack {
    *  conclusion, because a half-walked transaction proves nothing. */
   walkthrough?: Walkthrough;
   conclusion: TrackConclusion;
+  /** Set when a roll-forward carried this design conclusion from its parent
+   *  interim (user ask): TOD is retested only where TOD failed, so an effective
+   *  design travels — named here so the control page can say where the
+   *  conclusion came from. Cleared by the next cycle's reset. */
+  carriedFrom?: string;
   /** Why the track concluded the way it did — recorded on EVERY conclusion, not
    *  only on an override. A working paper whose conclusion carries no words is a
    *  hole; see `concludeRationale`, which drafts it from the evidence so agreeing
@@ -299,6 +319,12 @@ export interface OperatingStep {
   aiValidation?: boolean;
   inputFile?: EvidenceFile;      // the required file AI validation runs against
   validation?: ValidationResult;
+  /** The recorded run predates the current draw. Set when the sample changes
+   *  under an attribute that already carries a validation or workflow result —
+   *  results that predate the sample were not testing these items — and cleared
+   *  by the next run (or a fresh attestation). While it stands, the operating
+   *  track refuses to conclude. */
+  staleRun?: boolean;
   attestEnabled?: boolean;
   attestation?: Attestation;
   result: TestResult;
@@ -310,7 +336,29 @@ export interface OperatingStep {
 /** One sampled item. `extension` marks an item drawn in the extension round that
  *  followed an exception, so the paper can show the original draw and what was
  *  added to it without holding two lists. */
-export interface Sample { id: string; ref: string; result: TestResult; extension?: boolean; }
+export interface Sample {
+  id: string; ref: string; result: TestResult; extension?: boolean;
+  /** Which source file this item was drawn out of — see PopulationSource. Absent
+   *  on a control standing on a single file, which is every control seeded before
+   *  a control could stand on several. */
+  sourceId?: string;
+  /** WHICH COMPANY THIS ITEM BELONGS TO. Only meaningful on a shared control (see
+   *  `Control.entities`), where one test has to answer for several companies: a
+   *  company with no item in the sample has had nothing tested, whatever the
+   *  overall size says. Absent on a control that answers for one company, where
+   *  every item is that company's by construction. */
+  entity?: string;
+  /** WHICH ROUTE THIS ITEM WENT DOWN. Only meaningful on a control with more
+   *  than one path (see `Control.paths`) — the sample step reads these to say
+   *  which routes the draw has actually touched. Absent on a single-route
+   *  control, where there is only one way through. */
+  path?: string;
+}
+/** The control's sample — every item drawn, across every source file it stands
+ *  on. `size` and `samples` are the totals; which file each item came out of is
+ *  on the item (`Sample.sourceId`), and how each file's own draw was made is on
+ *  the file (`PopulationSource.draw`). TOE reads this one list and never has to
+ *  ask how many files fed it. */
 export interface Sampling {
   basis: string;
   method: 'Random' | 'Systematic' | 'Statistical' | 'Targeted' | 'Full population';
@@ -320,6 +368,44 @@ export interface Sampling {
    *  else can walk, and the reviewer cannot land on the same items. */
   seed?: number;
   samples: Sample[];
+}
+
+/**
+ * A round of operating testing that has been SET ASIDE, kept whole.
+ *
+ * Operating testing runs in at most two rounds (user, 12 Aug). A failure in the
+ * first is not automatically the control's failure: the draw itself may have
+ * been wrong — the window, the entity, reversals and test postings left in —
+ * and a population that never tested the control cannot condemn it. So the
+ * auditor may correct the criteria and draw once more.
+ *
+ * Once, and never silently. Opening the second round REQUIRES a written reason,
+ * because the alternative is drawing until a clean sample turns up, which is
+ * not sampling at all. The reason, the person and the round it set aside are
+ * all kept here, and all three print on the working paper and the audit report:
+ * a round that is not on the paper is a round that was hidden.
+ *
+ * The LIVE round is not stored here — it is the ordinary `sampling` and the
+ * per-sample results on each attribute. This holds only what has closed, oldest
+ * first, so the live round's number is `rounds.length + 1`.
+ */
+export interface ToeRound {
+  /** 1-based, and matched by what the paper prints. */
+  n: number;
+  /** The draw exactly as it stood — items, size, method and seed — so the round
+   *  stays reperformable after the live draw has moved on. */
+  sampling: Sampling;
+  /** attribute id → sample id → the result recorded against that item. */
+  results: Record<string, Record<string, TestResult>>;
+  /** attribute id → the verdict its items derived, as it stood at close. Stored
+   *  rather than recomputed: an attribute can carry a result no sample produced
+   *  (an attestation, a workflow run), and the paper has to print what the round
+   *  actually concluded. */
+  stepResults: Record<string, TestResult>;
+  outcome: 'Pass' | 'Fail';
+  /** Why this round was set aside and another drawn. Never blank — the store
+   *  refuses to open the next round without it. */
+  setAside: { reason: string; by: string; at: string };
 }
 
 /** Transaction-based counts rows; occurrence-based counts times the control ran.
@@ -429,8 +515,82 @@ export interface AuditFileRecord {
   originAt?: string;
 }
 
+/** One source file a control's population stands on.
+ *
+ *  A control rarely stands on one file. A three-way match reads the purchase
+ *  order, the goods receipt and the invoice; a quarterly review is four
+ *  extracts, one per quarter. Each file is proven on its own — its own four IPE
+ *  dimensions — and sampled on its own, because a file nobody proved is a file
+ *  nobody may sample from, and proving one file says nothing about the next.
+ *
+ *  What is NOT here, on purpose:
+ *  - provenance. It belongs to the file record and is inherited, exactly as it
+ *    was when a control had one source. `file` is the join back to it.
+ *  - the four checks. They live in `IpeTest.checks`, tagged with `sourceId`, so
+ *    the single centralised Reliable / Not reliable verdict still reads one flat
+ *    list and one failure anywhere still sinks the report.
+ *  - the drawn items. They live in `Sampling.samples`, tagged the same way, so
+ *    TOE tests one list of items and does not have to know how many files they
+ *    came out of. */
+/** What a source file IS to the control.
+ *
+ *  Not every file a control reads is a population. Testing for duplicate vendor
+ *  invoices reads a journal table AND a vendor master, but the invoices are the
+ *  thing being tested and the vendor master is only joined onto them — "वेंडर
+ *  मास्टर इज ए असिस्टिंग टेबल… वेंडर मास्टर का पापुलेशन ड्रा नहीं होगा, सिर्फ
+ *  BKPF का ही होगा". An assisting file is still PROVEN — a join onto an
+ *  unreliable table produces an unreliable answer — but it is never sampled and
+ *  its rows are never counted as instances of the control. */
+export type SourceRole = 'population' | 'assisting';
+
+export interface PopulationSource {
+  id: string;
+  /** The file record's name. */
+  file: string;
+  /** What the file held, and what this control's filter left of it. */
+  rows: number;
+  count: number;
+  criteria?: string;
+  /** Absent means population — every file drawn before the distinction existed
+   *  was one. The FIRST file is a population by default and everything added
+   *  after it is assisting until somebody says otherwise: the common reason to
+   *  add a second file is to join something onto the first, and a file that is
+   *  silently sampled is a sample nobody asked for. */
+  role?: SourceRole;
+  /** The draw made off THIS file — what was asked for, how many it came to, and
+   *  the seed that makes it reperformable. The items themselves are in
+   *  `Sampling.samples`. Absent until this file is sampled; a control can have
+   *  three files sampled and a fourth still waiting.
+   *
+   *  `prompt` is what the auditor actually asked for, in their own words. A
+   *  number could not carry it: the selection unit is not always a quantity
+   *  (dev call, Aug 2026 — "कभी क्वांटिटी हो रहा है X, तो कभी हो रहा है टाइम"),
+   *  and duplicate-invoice work over a journal table is not a thing 25 rows can
+   *  find at all. It is stored because with a prompt the prompt IS the method,
+   *  and a draw nobody can read back is not a procedure. */
+  draw?: { size: number; method: Sampling['method']; seed: number; prompt?: string };
+  /** The tick on this file's accordion — "done with this one, on to the next".
+   *
+   *  Deliberately NOT a lock (dev call, Aug 2026: "लॉक ऐसे नहीं, बस अप्रूव मतलब
+   *  टिक लग गया" — the section ticks on a tax return, not a signature). Two of
+   *  them because the file is worked twice, once to prove it and once to sample
+   *  it, and a control opened tomorrow has to be able to say which halves of
+   *  which files are still owed: "चार का तुमने कर दिया था, दो बच रहा था".
+   *
+   *  Reversible on purpose. Re-drawing a file clears its sample tick, and
+   *  answering one of its checks again clears its proof tick — a tick that
+   *  survived the work it stood for would be a tick that means nothing. */
+  approvedIpe?: { by: string; at: string };
+  approvedSample?: { by: string; at: string };
+}
+
 export interface Population {
   source: string;
+  /** The files this population was built out of, in the order they were added.
+   *  Absent on a population drawn before a control could stand on more than one
+   *  — read it through `populationSources`, which presents the single-file case
+   *  as a one-entry list so nothing downstream has to branch. */
+  sources?: PopulationSource[];
   /** Instances of THIS control — what the filter produced, not what the file held. */
   count: number;
   tieOut: string;
@@ -454,9 +614,12 @@ export interface Population {
    *  that was filtered on, and prose cannot be grouped by. */
   filterType?: string;
   filterAccount?: string;
-  /** What the count should have been, for controls whose frequency gives no
-   *  answer. Asked only in that case; derived everywhere else. */
-  expectedCount?: number;
+  /* PARKED (dev call, Aug 2026) — `expectedCount?: number` sat here: what the
+     auditor said the count should be, typed before the extract ran so the two
+     could be compared afterwards. The call cut the field on the grounds that the
+     reference number is already visible on the source. NOTE this is NOT
+     PopulationDefinition.expectedCount, which is a different field on a
+     different type and is still live. */
   /** NOTE — there is no provenance field here on purpose. Where the data came
    *  from belongs to the FILE (see AuditFileRecord), is answered once when the
    *  file enters the audit, and is inherited by every population drawn off it.
@@ -520,6 +683,11 @@ export const IPE_DIMENSIONS: IpeDimension[] = ['Source & parameters', 'Period co
 /** One dimension's proof — what is claimed, how it was proven, what was found. */
 export interface IpeCheck {
   id: string;
+  /** Which source file this dimension was proven on — see PopulationSource. A
+   *  control standing on three files has three sets of four checks, and the
+   *  verdict they roll up to is still one (dev call, Aug 2026: "सेंट्रलाइज्ड कर
+   *  दो ना"). Absent on a control standing on a single file. */
+  sourceId?: string;
   dimension: IpeDimension;
   description: string;          // the assertion being proven
   method: string;               // how it was proven — the procedure
@@ -562,6 +730,10 @@ export interface OperatingTrack {
   definition?: PopulationDefinition;
   population?: Population;
   sampling?: Sampling;
+  /** Rounds of testing that have CLOSED, oldest first — see ToeRound. Absent or
+   *  empty means the live draw is the first round, which is every control that
+   *  has never been redrawn. */
+  rounds?: ToeRound[];
   /** IPE gate 2 — the auditor confirmed the drawn items trace to the locked
    *  population and that the method and seed are on the paper. */
   extractionConfirmed?: { by: string; at: string };
@@ -627,6 +799,32 @@ export interface Control {
    *
    *  Absent on engagements that were never scoped by entity. */
   entity?: string;
+  /** THE COMPANIES THIS ONE ROW ANSWERS FOR — a SHARED control.
+   *
+   *  The opposite arrangement to the instances above, and both are real. Some
+   *  controls are run once, centrally, for several companies at once: a group
+   *  treasury releasing payments for every subsidiary is performed by one team,
+   *  on one system, under one approval matrix. Testing it four times would be
+   *  testing the same act four times.
+   *
+   *  So it stays ONE row with one design track, one population, one sample and
+   *  one conclusion — and that conclusion carries to every company named here.
+   *  Which is exactly why the sample has to reach each of them: a company with
+   *  no item drawn has had nothing tested, and a conclusion that covers it would
+   *  be saying more than the work supports. See `Sample.entity`.
+   *
+   *  Absent on ordinary rows, which answer for the one company in `entity`. */
+  entities?: string[];
+  /** THE DISTINCT ROUTES WORK CAN TAKE through this control — a control with
+   *  more than one path (a payment released manually vs auto-released under a
+   *  threshold, a change approved in-system vs on an emergency form) is only
+   *  tested when the draw has touched each of them: a sample that never landed
+   *  on the second route has not tested the second route, however healthy its
+   *  size. Each drawn item says which route it went down (`Sample.path`), and
+   *  the sample step warns on any route left untouched — the same rule the
+   *  per-file draws and the shared control's companies already follow.
+   *  Absent on the ordinary single-route control. */
+  paths?: string[];
   wpRef: string;            // working-paper cross-reference (the signature)
   description: string;
   process: string;
@@ -686,6 +884,16 @@ export interface Control {
   wpRefSoft?: string;
   /** The paragraph in the issued report this row lands in, once it has a finding. */
   reportRef?: string;
+  /** The FS line items this control stands behind — ids into the engagement's
+   *  significant accounts, never free text, so two controls naming the same
+   *  account always land in the same group. A control can carry several: a
+   *  payment run touches Cash and Accounts Payable both, and a group that saw
+   *  only one of them would be missing half the exposure on the other.
+   *
+   *  This is the grouping key for aggregation. Process and assertion are NOT —
+   *  they were, and they grouped things that share a workflow rather than
+   *  things that hit the same number. */
+  accountIds?: string[];
   assertions: Assertion[];
   /** Days until the next scheduled test — 0 = due today, negative = overdue.
    *  Optional: when absent it is derived from the control's frequency. */
@@ -700,6 +908,10 @@ export interface Control {
   /** The reviewer sent the concluded paper back instead of countersigning —
    *  conclusions cleared, note recorded; cleared when the auditor re-concludes. */
   reviewReturn?: { reason: string; by: string; at: string };
+  /** The auditor unlocked a concluded control to test it again. The reason is
+   *  kept in full here — the trail only carries a truncated line — because
+   *  "why was a signed conclusion undone" is a working-paper question. */
+  reopened?: { reason: string; by: string; at: string };
   /** The auditor could not test at all. Deliberately NOT an exception: nothing
    *  has been shown to have failed, so exposure and likelihood do not apply and
    *  a severity would be a fabrication. See `UnableToTest`. */
@@ -777,6 +989,12 @@ export interface HandoffTask {
   assigneeRole: Role;
   raisedBy: string;
   dueLabel: string;
+  /** Which step on the control page answers this task. A row that names a
+   *  specific thing should land on that thing rather than on a page the
+   *  reader then has to search — the same reasoning `focusDefId` follows for
+   *  deficiencies. Absent means the top of the page, which is right for a
+   *  task that is about the control as a whole. */
+  focus?: 'population';
   overdue: boolean;
   status: TaskStatus;
 }
@@ -881,12 +1099,28 @@ export interface Deficiency {
   mwIndicators: string[];
   compensatingControlId?: string;
   aggregationGroup?: string;
-  /** The auditor's "these two share a root cause" link. Process and assertion
-   *  aggregate on their own from the control and the failed attributes; a shared
-   *  mechanism cannot be read off free prose, so it is stated here instead. */
+  /** PARKED (13 Aug 2026) — the single "same root cause as" link. Superseded by
+   *  `rootCauseGroupIds`: one exception can share a mechanism with several
+   *  others, and a single id could only ever name one of them. Still read when
+   *  present so a seeded engagement does not lose its link.
+   *  rootCauseLinkId?: string; */
   rootCauseLinkId?: string;
-  /** Reviewer's confirmation of a Significant Deficiency or worse. Nothing moves
-   *  until this exists — a wrong rating must not drive weeks of remediation. */
+  /** Root-cause groups this exception has been put in, by a person. A shared
+   *  mechanism cannot be read off free prose — the auditor names it by pointing
+   *  at the others — and membership is symmetric: every member of the group
+   *  carries the same id. */
+  rootCauseGroupIds?: string[];
+  /** Set when a recompute moved this exception's final grade after its rating
+   *  had already been confirmed. The confirmation is cleared at the same moment:
+   *  it was given for a grade that no longer stands. Kept so the screen and the
+   *  paper can say WHY the rating went back, rather than showing a confirmation
+   *  that silently vanished. */
+  ratingReset?: { was: string; reason: string; at: string };
+  /** Who sized it and sent it up. Kept so the next rung can refuse the same
+   *  person: a rating is only confirmed if a second pair of eyes confirms it. */
+  sized?: { by: string; at: string };
+  /** Reviewer's confirmation of the grade. Nothing moves until this exists — a
+   *  wrong rating must not drive weeks of remediation. */
   ratingConfirm?: { grade: string; by: string; at: string };
   /** Reviewer disagreed and sent the rating back to the auditor, with a reason. */
   ratingReturn?: { reason: string; by: string; at: string };
@@ -895,6 +1129,9 @@ export interface Deficiency {
   remediation: { action: string; date: string | null; owner: string; status: 'Open' | 'In progress' | 'Done'; evidence?: EvidenceFile[] };
   /** The owner has put the plan up for the auditor to judge. */
   planSubmitted?: { by: string; at: string };
+  /** The owner declaring the fix done and ready to be tested — stamped so the
+   *  retest can refuse the same person. You do not test your own repair. */
+  fixSubmitted?: { by: string; at: string };
   /** The auditor's verdict on the plan — does it address the root cause? A
    *  rejection carries the reason back to the owner. The auditor never writes
    *  or executes the fix; this is the whole of their say in it. */
@@ -1000,6 +1237,79 @@ export const EXCEPTION_STEPS: { n: number; title: string; role: Role; states: Ex
   { n: 5, title: 'Retest', role: 'auditor', states: ['Retest'] },
   { n: 6, title: 'Close', role: 'reviewer', states: ['Awaiting reviewer', 'Closed'] },
 ];
+
+/* ── Deficiency aggregation ───────────────────────────────────────────────────
+ *
+ * Several small deficiencies on the same financial-statement line item can add
+ * up to a material weakness even when none of them is one on its own. That is
+ * the whole of what aggregation is for, and it is the group's OWN result — not
+ * the members' — that has to be computed and shown.
+ *
+ * Two kinds of group, and the difference matters:
+ *
+ *   derived    — key is one FS line item. Formed by the system off the control's
+ *                accounts, maintained by the system, and NOT editable: a member
+ *                cannot be removed, because "these two hit Accounts Payable" is
+ *                a fact, not an opinion. Where the auditor judges that members
+ *                do not actually compound, that judgement is RECORDED on the
+ *                group (see `GroupConclusion`) and the combined grade still
+ *                stands.
+ *   root cause — created by a person, free-text name, any number of members,
+ *                and it may cross accounts. A shared mechanism cannot be read
+ *                off free prose, so it is stated by pointing.
+ *
+ * A deficiency can be in several groups at once — one per account on its
+ * control, plus any root-cause groups it has been put in. Its final grade is
+ * the WORST of its own and every group's. Aggregation never lowers a grade.
+ *
+ * Not built (13 Aug, user's call): disclosure groups — accounts and disclosures
+ * share one undifferentiated list today; and system groups for ITGC — nothing
+ * records which system a control relies on. ITGC deficiencies therefore join no
+ * derived group at all, which is the one rule from that design worth keeping.
+ */
+
+/** A root-cause group as the user made it. Membership lives here rather than on
+ *  each deficiency so it can only ever be symmetric. */
+export interface RootCauseGroup {
+  id: string;
+  name: string;
+  memberIds: string[];
+  by: string;
+  at: string;
+}
+
+/** The auditor's recorded judgement that a group's members do not compound.
+ *  Keyed by the group's key, and deliberately NOT a way to break the group up:
+ *  the combined grade stands, and this is the reasoning filed beside it. */
+export interface GroupConclusion {
+  groupKey: string;
+  note: string;
+  by: string;
+  at: string;
+}
+
+/** A group as computed for display — never stored. Derived groups are rebuilt
+ *  from the controls' accounts every read, so they cannot go stale. */
+export interface DeficiencyGroup {
+  key: string;
+  kind: 'account' | 'root cause';
+  /** What the group is called on screen — the account's name, or the user's. */
+  name: string;
+  members: Deficiency[];
+  /** Partitions of members that share a population, and the figure each
+   *  contributed. See combinedExposure — the largest inside a partition, added
+   *  across partitions. */
+  exposure: number;
+  /** True where a member had no population to place, so its figure had to be
+   *  treated as its own partition and the total cannot be proven. */
+  unverified: boolean;
+  likelihood: Likelihood;
+  /** The group's own grade, before roll-down. */
+  grade: ExceptionGrade;
+  /** The cap applied to the GROUP, if a compensating control earned one. */
+  cap?: { from: ExceptionGrade; to: ExceptionGrade; by: string };
+  conclusion?: GroupConclusion;
+}
 
 export interface SignificantAccount {
   id: string; name: string; balance: number; inScope: boolean; assertions: Assertion[];
@@ -1228,6 +1538,34 @@ export interface AuditRecord {
 
 // ─── Ground-rules change log — materiality is set before testing; a mid-engagement
 // change is warned, previewed (which exceptions re-grade), and recorded here. ──────
+/** One narrowing of scope, with everything that left the register in it.
+ *
+ *  Scope moves both ways. A process dropped mid-audit has usually been tested
+ *  already, and deleting that work means a scope decision reversed a week later
+ *  costs the whole test again — so the controls are parked here with their
+ *  samples, results, conclusions and everything filed against them, and put back
+ *  untouched if the process returns. It is the same promise roll forward makes
+ *  at year end, kept for a change that happens mid-audit and by accident. */
+export interface ScopeArchiveEntry {
+  id: string;
+  at: string;
+  /** The processes that left, so a widening knows what to look for. */
+  processes: string[];
+  controls: Control[];
+  deficiencies: Deficiency[];
+  tasks: HandoffTask[];
+  discussions: Discussion[];
+  reviewNotes: ReviewNote[];
+  executions: ExecutionEvent[];
+  /** Run rows belonging to archived controls, each with the run they sat in —
+   *  put back into that run if it survived, or restored whole if it did not. */
+  runs: { run: RunRecord; entries: RunControlOutcome[] }[];
+  /** Which hand-picked audits held these controls, by audit id. An audit scoped
+   *  by RACM filters by process and needs nothing remembered; one scoped by
+   *  hand names its controls, and would otherwise come back a control short. */
+  auditControlIds: Record<string, string[]>;
+}
+
 export interface RulesChangeEntry {
   id: string;
   changes: { field: string; from: string; to: string }[];
@@ -1256,6 +1594,12 @@ export interface IcfrEngagement {
   accounts: SignificantAccount[];
   controls: Control[];
   deficiencies: Deficiency[];
+  /** Groups a person made. Derived groups are not here — they are recomputed
+   *  from the controls' accounts on every read and can never go stale. */
+  rootCauseGroups?: RootCauseGroup[];
+  /** "These members do not compound, and here is why" — filed against a group,
+   *  never breaking it up. */
+  groupConclusions?: GroupConclusion[];
   tasks: HandoffTask[];
   discussions: Discussion[];
   reviewNotes: ReviewNote[];
@@ -1264,6 +1608,10 @@ export interface IcfrEngagement {
   audits: AuditRecord[];
   signoff: EngagementSignoff;
   rulesLog: RulesChangeEntry[];
+  /** Controls that left the register when scope narrowed, kept whole rather than
+   *  deleted (see reconcileScope). Nothing on the register reads this — it is a
+   *  holding bay, and widening scope again empties it back. */
+  scopeArchive?: ScopeArchiveEntry[];
   /** The audit's file registry — every file that entered, with where it came
    *  from. Holds the files uploaded through the app and any answer corrected
    *  afterwards; files the engagement derives from scoping are merged in on

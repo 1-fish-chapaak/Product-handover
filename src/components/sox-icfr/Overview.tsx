@@ -14,6 +14,7 @@ import {
 import { cn } from '../../lib/cn';
 import { ItgcCascadeBanner, RagStrip, type RagMeterDef } from './parts';
 import { PROGRAMMES } from '../audit/sox-testing/soxTestingData';
+import { isOwnerOf } from './auditScope';
 import RiskOwnerPortal from './RiskOwnerPortal';
 import ReviewerQueue from './ReviewerQueue';
 import type { Control, IcfrEngagement, Severity, TaskType } from './types';
@@ -96,8 +97,10 @@ export default function Overview() {
   const scopingGap = !!prog?.scopingSkipped && racmMissing;
   // The owner's overview is their court only — engagement-wide dashboards,
   // materiality and the sign-off chain are audit-side surfaces.
-  const myControls = isOwner ? scoped.filter(c => c.owner === meOwner) : [];
-  const myDefs = isOwner ? scopedDefs.filter(d => scoped.find(c => c.id === d.controlId)?.owner === meOwner) : [];
+  // Owning is either capacity, control or process — the same question the
+  // register asks, so the counts here agree with the lists they open.
+  const myControls = isOwner ? scoped.filter(c => isOwnerOf(c, meOwner)) : [];
+  const myDefs = isOwner ? scopedDefs.filter(d => { const c = scoped.find(x => x.id === d.controlId); return !!c && isOwnerOf(c, meOwner); }) : [];
 
   // sign-off readiness — every control concluded AND its paper countersigned;
   // the reviewer's per-paper gate feeds the engagement-level one.
@@ -127,13 +130,23 @@ export default function Overview() {
   // An open MW never blocks signing — it flips what the signature concludes.
   // Once signed, the stamped conclusion wins over the live derivation.
   const signsEffective = so.icfrConclusion ? so.icfrConclusion !== 'Not effective' : sev.mwOpen === 0;
+  // An interim's signature concludes the ROUND, never the year — its window
+  // stops short of the year end, so no ICFR verdict is stamped or claimed
+  // (user ask). The opinion arrives with the roll-forward or year-end.
+  const isInterim = eng.audits.find(a => a.id === openAuditId)?.round === 'interim';
   const signPreparer = () => {
     signOffAudit('preparer');
-    addToast({ type: signsEffective ? 'success' : 'warning', title: 'Signed off', message: signsEffective ? `Prepared by ${eng.preparer} — over to the reviewer.` : `Prepared by ${eng.preparer} as ICFR not effective — over to the reviewer.` });
+    addToast({ type: signsEffective ? 'success' : 'warning', title: 'Signed off', message: signsEffective || isInterim ? `Prepared by ${eng.preparer} — over to the reviewer.` : `Prepared by ${eng.preparer} as ICFR not effective — over to the reviewer.` });
   };
   const signReviewer = () => {
     signOffAudit('reviewer');
-    addToast({ type: signsEffective ? 'success' : 'warning', title: 'Countersigned', message: signsEffective ? 'This audit is concluded — ICFR effective.' : 'This audit is concluded — ICFR not effective (material weakness open).' });
+    addToast({
+      type: signsEffective || isInterim ? 'success' : 'warning',
+      title: 'Countersigned',
+      message: isInterim
+        ? 'Interim concluded — roll-forward can now extend it. The year\'s ICFR opinion comes at year end.'
+        : signsEffective ? 'This audit is concluded — ICFR effective.' : 'This audit is concluded — ICFR not effective (material weakness open).',
+    });
   };
 
   const openTasks = eng.tasks.filter(t => t.status === 'open');
@@ -183,10 +196,17 @@ export default function Overview() {
           audit is created from the engagement's SOX audit tab, one level up —
           not from inside a cycle that is already open. */}
       {!isOwner && !inAudit && (
-        <div className="flex items-center justify-end">
+        <div className="flex items-center justify-end gap-2.5">
+          {/* No matrix, no audit. An audit covers a set of controls however it is
+              scoped, so on an engagement with none the wizard has no path that
+              ends in something testable — and a RACM here IS a process's set of
+              controls, so an empty library is an empty matrix. The reason rides
+              beside the dead button; the fix lives on the RACM tab. */}
+          {racmMissing && <span className="text-[11.5px] text-ink-400">Add a RACM first — an audit with no controls has nothing to test.</span>}
           <button
             onClick={() => setCreating(true)}
-            className="h-9 px-3.5 inline-flex items-center gap-1.5 rounded-lg bg-brand-600 text-white text-[12.5px] font-semibold hover:bg-brand-700 transition-colors cursor-pointer"
+            disabled={racmMissing}
+            className="h-9 px-3.5 inline-flex items-center gap-1.5 rounded-lg bg-brand-600 text-white text-[12.5px] font-semibold enabled:hover:bg-brand-700 disabled:opacity-40 disabled:cursor-not-allowed transition-colors cursor-pointer"
           >
             <Plus size={15} /> New audit
           </button>
@@ -247,12 +267,30 @@ export default function Overview() {
         </div>
       )}
 
-      {/* ── the ITGC cascade ─────────────────────────────────────────────────────
-          Above the health meters, because it is the one thing on this page that
-          happened TO the audit rather than in it: an ITGC concluded ineffective
-          takes the one-instance shortcut off every automated and IT-dependent
-          control at once. Whoever concluded it was on a different page and had
-          no way to see the size of what they had just done. */}
+      {/* PARKED (user ask, 12 Aug) — the ITGC cascade banner is off the Dashboard
+          too. This was the last of its three homes (the two Control Library
+          screens went first), so the banner no longer renders anywhere.
+
+          Only this block is commented out. ItgcCascadeBanner itself, the
+          `failedItgc` derivation here, `isItgcDependent`, and the register's
+          'itgc' view all stay wired and compiling, so restoring is uncommenting
+          this and the two blocks in ControlRegister / ControlLibrary.
+
+          Known consequence while it is off: nothing announces the cascade. A
+          failed ITGC still does the work — the shortcut is withdrawn, samples
+          resize, and the control page's own notice still says so on each
+          affected control — but the count of what it hit is no longer stated
+          anywhere, and the one-click route to those controls is gone. The 'itgc'
+          view remains in the register's saved-view list whenever an ITGC has
+          actually failed.
+
+          Original note — Above the health meters, because it is the one thing on
+          this page that happened TO the audit rather than in it: an ITGC
+          concluded ineffective takes the one-instance shortcut off every
+          automated and IT-dependent control at once. Whoever concluded it was on
+          a different page and had no way to see the size of what they had just
+          done.
+
       {!isOwner && failedItgc.length > 0 && (
         <ItgcCascadeBanner
           failed={failedItgc.map(f => ({ id: f.id, code: controlCode(f), description: f.description }))}
@@ -261,6 +299,7 @@ export default function Overview() {
           onShowAffected={() => openRegister({ view: 'itgc' })}
         />
       )}
+      */}
 
       {/* progress rail */}
       {!isOwner && <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
@@ -424,23 +463,31 @@ export default function Overview() {
             {/* the closure moment — the checklist's final step, not a separate card */}
             <div className={cn('flex items-start justify-between gap-4 flex-wrap', !isConcluded && 'mt-3 pt-3.5 border-t border-canvas-border/70')}>
               <div className="min-w-0 flex-1">
-                <h2 className="text-[13px] font-bold text-ink-800 inline-flex items-center gap-1.5"><PenLine size={15} className="text-brand-600" /> Engagement sign-off</h2>
+                <h2 className="text-[13px] font-bold text-ink-800 inline-flex items-center gap-1.5"><PenLine size={15} className="text-brand-600" /> Audit sign-off</h2>
                 <p className="text-[12px] text-ink-500 mt-1">
                   {isConcluded
-                    ? 'Signed and countersigned — this engagement is concluded.'
+                    ? 'Signed and countersigned — this audit is concluded.'
                     : signoffReady
-                      ? 'Every control is concluded and countersigned — the engagement is ready for sign-off.'
+                      ? 'Every control is concluded and countersigned — the audit is ready for sign-off.'
                       : 'Unlocks once everything above is closed. The preparer signs first; the reviewer countersigns to conclude.'}
                 </p>
                 {(signoffReady || !!so.preparer) && (
                   <div className={cn('inline-flex items-center gap-1.5 mt-2.5 px-2.5 py-1.5 rounded-lg border text-[12px] font-semibold',
                     signsEffective ? 'text-compliant-700 bg-compliant-50/50 border-compliant-200' : 'text-risk-700 bg-risk-50/50 border-risk-200')}>
                     {signsEffective ? <ShieldCheck size={13} /> : <ShieldAlert size={13} />}
-                    {isConcluded
-                      ? (signsEffective ? 'Concluded — ICFR effective' : 'Concluded — ICFR not effective (material weakness open at period end)')
-                      : signsEffective
-                        ? 'ICFR effective — ready to sign'
-                        : `Signing concludes ICFR not effective — ${sev.mwOpen} material weakness${sev.mwOpen === 1 ? '' : 'es'} open`}
+                    {/* Interim wording never claims the year's opinion — the
+                        signature concludes the round; the ICFR verdict is
+                        stamped by the roll-forward or year-end (user ask). The
+                        colour still reflects open MWs: they carry forward. */}
+                    {isInterim
+                      ? (isConcluded
+                        ? 'Interim concluded — carried to the year-end opinion'
+                        : `Sign-off concludes the interim round${sev.mwOpen ? ` — ${sev.mwOpen} material weakness${sev.mwOpen === 1 ? '' : 'es'} carr${sev.mwOpen === 1 ? 'ies' : 'y'} forward` : ''} — the year's ICFR opinion comes at year end`)
+                      : isConcluded
+                        ? (signsEffective ? 'Concluded — ICFR effective' : 'Concluded — ICFR not effective (material weakness open at period end)')
+                        : signsEffective
+                          ? 'ICFR effective — ready to sign'
+                          : `Signing concludes ICFR not effective — ${sev.mwOpen} material weakness${sev.mwOpen === 1 ? '' : 'es'} open`}
                   </div>
                 )}
                 <div className="flex items-center gap-4 mt-2.5 flex-wrap text-[12px]">
@@ -531,9 +578,9 @@ export default function Overview() {
               <p className="text-[12.5px] text-ink-600 leading-relaxed">
                 {confirmSign === 'preparer'
                   ? (signsEffective
-                      ? 'This records your preparer signature and hands the engagement to the reviewer. You can’t un-sign.'
+                      ? 'This records your preparer signature and hands the audit to the reviewer. You can’t un-sign.'
                       : <>This concludes ICFR <b className="font-semibold text-risk-700">not effective</b> — {sev.mwOpen} material weakness{sev.mwOpen === 1 ? '' : 'es'} open at period end. You can’t un-sign.</>)
-                  : <>This countersigns and concludes the engagement as ICFR {signsEffective ? 'effective' : 'not effective'}. This can’t be undone.</>}
+                  : <>This countersigns and concludes this audit as ICFR {signsEffective ? 'effective' : 'not effective'}. This can’t be undone.</>}
               </p>
               <div className="mt-4 flex items-center justify-end gap-2">
                 <button onClick={() => setConfirmSign(null)} className="h-9 px-3.5 rounded-lg border border-canvas-border text-[12.5px] font-semibold text-ink-600 hover:text-ink-900 cursor-pointer">Cancel</button>

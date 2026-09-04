@@ -1,0 +1,234 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>irame.ai Platform — Defect &amp; Gap List</title>
+<style>
+  @page { size: A4 landscape; margin: 14mm 12mm; }
+  * { box-sizing: border-box; }
+  body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif;
+         color: #1c1a24; line-height: 1.55; max-width: 1180px; margin: 0 auto; padding: 28px 24px; font-size: 13px; }
+  h1 { font-size: 27px; margin: 0 0 6px; letter-spacing: -0.4px; }
+  h2 { font-size: 18px; margin: 30px 0 10px; padding-top: 12px; border-top: 2px solid #ede9f6; color: #4c1d95; }
+  .sub { color: #6b6580; font-size: 13.5px; margin: 0 0 18px; }
+  .meta { background: #faf8ff; border: 1px solid #e6e0f5; border-radius: 8px; padding: 12px 15px; margin: 0 0 22px; font-size: 12.5px; }
+  .meta b { color: #4c1d95; display: inline-block; min-width: 120px; }
+  table { width: 100%; border-collapse: collapse; margin: 12px 0 16px; font-size: 11.5px; }
+  th { background: #f5f2fc; text-align: left; padding: 7px 8px; border: 1px solid #e2dcf0; font-weight: 650; color: #37304a; }
+  td { padding: 7px 8px; border: 1px solid #e8e4f2; vertical-align: top; }
+  tr:nth-child(even) td { background: #fcfbfe; }
+  .id { font-family: ui-monospace, Menlo, monospace; font-weight: 700; white-space: nowrap; }
+  .sev { font-weight: 700; white-space: nowrap; text-align: center; }
+  .s1 { background: #fee2e2 !important; color: #991b1b; }
+  .s2 { background: #ffedd5 !important; color: #9a3412; }
+  .s3 { background: #fef3c7 !important; color: #92400e; }
+  .s4 { background: #f1f5f9 !important; color: #475569; }
+  .callout { border-left: 4px solid #dc2626; background: #fef6f6; padding: 12px 15px; margin: 14px 0; border-radius: 0 6px 6px 0; }
+  .callout.ok { border-left-color: #16a34a; background: #f4fdf7; }
+  .callout p { margin: 5px 0; }
+  ul, ol { margin: 6px 0 10px; padding-left: 20px; }
+  li { margin: 4px 0; }
+  code { background: #f3f0fa; padding: 1px 5px; border-radius: 3px; font-size: 11px; }
+  footer { margin-top: 34px; padding-top: 12px; border-top: 1px solid #e8e4f2; color: #8b849c; font-size: 11.5px; }
+  .legend span { display: inline-block; padding: 3px 10px; border-radius: 10px; font-size: 11.5px; font-weight: 700; margin-right: 8px; }
+</style>
+</head>
+<body>
+
+<h1>Defect &amp; Gap List</h1>
+<p class="sub">irame.ai audit platform — findings from a live session, including a full pass through the SOX / ICFR engagement.</p>
+
+<div class="meta">
+  <div><b>Environment</b> product-handover-ujihgyhrpa-uc.a.run.app</div>
+  <div><b>Session</b> Nilesh Anand (System Admin) · engagement role Auditor · desktop Chrome</div>
+  <div><b>Scope covered</b> Home, Ask IRA, Audit Planning, Engagements, Process Hub, Dashboard, Risk Register, and the SOX/ICFR engagement end to end (engagement → audit → control register → control dossier → deficiency severity engine)</div>
+  <div><b>Total findings</b> 24 — 3 blocker, 6 high, 10 medium, 5 low</div>
+  <div><b>Creation flows tested</b> Plan Engagement (Audit Planning), Create Engagement wizard (5-step, type-driven), New audit wizard (4-step, incl. materiality and entity scoping) — all completed end to end</div>
+</div>
+
+<p class="legend">
+  <span class="s1">P1 Blocker</span><span class="s2">P2 High</span><span class="s3">P3 Medium</span><span class="s4">P4 Low</span>
+</p>
+
+<h2>P1 — Blockers</h2>
+<table>
+<tr><th style="width:46px">ID</th><th style="width:46px">Sev</th><th style="width:100px">Area</th><th>Finding</th><th style="width:230px">Reproduce</th><th style="width:190px">Impact</th></tr>
+<tr><td class="id">D-01</td><td class="sev s1">P1</td><td>Navigation</td>
+<td><b>Sidebar navigation does not change the page.</b> Clicking a module moves the highlight immediately, but the content area keeps rendering the previous module. Confirmed on Recents, My Queue, Report, Control Library, Workflow Library. Reproduced after a full reload, so not stale state.</td>
+<td>Open any loaded module → click a different sidebar item → highlight moves, content does not. Wait 30s.</td>
+<td>Nine of sixteen modules unreachable. Product cannot be demoed reliably.</td></tr>
+
+<tr><td class="id">D-02</td><td class="sev s1">P1</td><td>Performance</td>
+<td><b>Screen transitions take 10–30 seconds</b> showing a blank or ghosted pane with no spinner. Measured: Audit Planning ~7s, Engagements ~15s, Dashboard ~13s, Risk Register ~25s, SOX control register ~30s, control dossier ~40s.</td>
+<td>Click any module or tab from cold and time it.</td>
+<td>Reads as a hang. Users click again, compounding it. Worst inside SOX, where the depth matters most.</td></tr>
+
+<tr><td class="id">D-03</td><td class="sev s1">P1</td><td>Data</td>
+<td><b>No persistence — a reload discards everything.</b> The engagement created minutes earlier was gone and the setup checklist reset to 0/5. State is in memory only.</td>
+<td>Create an engagement → confirm → reload → gone.</td>
+<td>No real work can be done; any refresh loses the session.</td></tr>
+</table>
+
+<h2>P2 — High</h2>
+<table>
+<tr><th style="width:46px">ID</th><th style="width:46px">Sev</th><th style="width:100px">Area</th><th>Finding</th><th style="width:230px">Reproduce</th><th style="width:190px">Impact</th></tr>
+
+<tr><td class="id">D-04</td><td class="sev s2">P2</td><td>SOX · dossier</td>
+<td><b>Population is locked while its IPE is untested.</b> Control TRY-01 shows "Population locked · 2,000 instances" but the IPE test beneath it reads <i>Not tested</i> — "The report behind this population has not been registered yet." The stated rule is that nothing downstream runs until the population locks, and the population should not lock until the report it came from is proven reliable.</td>
+<td>SOX engagement → CY 2026 → Control Library → TRY-01 → step 2 Population.</td>
+<td>A sample has been drawn off a population whose source report was never validated. In a real audit this invalidates the testing built on it.</td></tr>
+
+<tr><td class="id">D-05</td><td class="sev s2">P2</td><td>SOX · navigation</td>
+<td><b>Breadcrumb from a control dossier lands on "Control not found".</b> Clicking <i>Control Library</i> in the breadcrumb while inside control T-01 renders an error state with a "Back to register" link instead of the register.</td>
+<td>Open any control dossier → click "Control Library" in the breadcrumb.</td>
+<td>The natural way back out of the deepest screen in the product is broken.</td></tr>
+
+<tr><td class="id">D-22</td><td class="sev s2">P2</td><td>SOX · audit creation</td>
+<td><b>Materiality entered in the New audit wizard is not shown on the created audit.</b> An audit was created with overall ₹21.00 Cr / PM ₹15.75 Cr / CTT ₹1.05 Cr, and the audit row in SOX testing correctly reads "Materiality ₹21 Cr" — but the new audit's Dashboard Materiality card shows <b>₹12.00 Cr / ₹9.00 Cr / ₹60.0 L</b>, the previous round's figures. Grading appears to use the new value (the deficiency mix changed from 4 MW + 1 Deficiency to 2 MW + 2 SD, consistent with a ₹21 Cr ceiling), so the card is stale rather than the engine.</td>
+<td>SOX engagement → SOX testing → New audit → set a different materiality → Create → open the new audit's Dashboard → compare the Materiality card with the audit row.</td>
+<td>The dashboard states one ruler while exceptions are graded against another. In a SOX file this is the most dangerous kind of inconsistency.</td></tr>
+
+<tr><td class="id">D-06</td><td class="sev s2">P2</td><td>Ask IRA</td>
+<td><b>Clarifying questions ignore the question asked.</b> "Summarize this quarter's exceptions" produced four questions about duplicate-invoice detection, then a duplicate-payment analysis.</td>
+<td>Ask IRA → ask anything other than a duplicate-invoice question.</td>
+<td>The AI answers a different question than the one asked — the riskiest failure mode in an audit tool.</td></tr>
+
+<tr><td class="id">D-07</td><td class="sev s2">P2</td><td>Routing</td>
+<td><b>The URL never changes.</b> Every screen, including individual controls and deficiencies, shares the root address.</td>
+<td>Navigate anywhere → check the address bar.</td>
+<td>No deep links, bookmarks, sharing or browser back — which matters more given D-01 and D-05.</td></tr>
+
+<tr><td class="id">D-08</td><td class="sev s2">P2</td><td>Data integrity</td>
+<td><b>Counts disagree between screens.</b> Home reports "1 active engagements"; the Engagement Library reports "Active 8".</td>
+<td>Compare the Home active-engagements widget with the Engagements Overview tiles.</td>
+<td>Undermines trust in every number — the one thing an audit product cannot afford.</td></tr>
+</table>
+
+<h2>P3 — Medium</h2>
+<table>
+<tr><th style="width:46px">ID</th><th style="width:46px">Sev</th><th style="width:100px">Area</th><th>Finding</th><th style="width:230px">Reproduce</th><th style="width:190px">Impact</th></tr>
+
+<tr><td class="id">D-09</td><td class="sev s3">P3</td><td>SOX · data</td>
+<td><b>Four of five deficiencies are Material Weakness, including two below the threshold.</b> Against materiality ₹12 Cr and a 20% band (₹2.4 Cr), DEF-A-03 (₹4.60 Cr) should ladder to Significant Deficiency and DEF-A-04 (₹1.80 Cr) to Deficiency — unless MW indicators or aggregation are driving them, which the register does not show.</td>
+<td>SOX engagement → CY 2026 → Deficiency management.</td>
+<td>Either the seed data is unrealistic or grading is wrong. Both need checking before this is shown to an auditor.</td></tr>
+
+<tr><td class="id">D-10</td><td class="sev s3">P3</td><td>SOX · scores</td>
+<td><b>RACM score reads 0% with 0/45 rows approved</b> while 36 of 45 controls already have TOD concluded. The score's own explainer says every row needs approval "before testing leans on it" — yet testing has proceeded on an entirely unapproved matrix.</td>
+<td>SOX engagement → CY 2026 → Dashboard → Audit health.</td>
+<td>Either the gate is not enforced or the seed bypassed it. As designed, this state should not be reachable.</td></tr>
+
+<tr><td class="id">D-11</td><td class="sev s3">P3</td><td>Uploads</td>
+<td><b>Upload controls open a native OS file picker</b> rather than exposing a file input, and the trigger is a <code>&lt;button type="submit"&gt;</code>. No upload flow could be completed or automated.</td>
+<td>Control dossier → TOE attribute → "Upload file".</td>
+<td>All upload paths untested — population files, evidence, RACM/SOP, trial balance. A submit-typed button inside a form also risks unintended submission.</td></tr>
+
+<tr><td class="id">D-23</td><td class="sev s3">P3</td><td>SOX · audit creation</td>
+<td><b>Date fields show a <code>dd/mm/yyyy</code> placeholder but reject typed input.</b> Typing "01/07/2026" into From or To does nothing; only calendar selection registers.</td>
+<td>New audit → Step 1 → click a date field and type.</td>
+<td>The placeholder promises keyboard entry the field does not accept. Picking a date months away needs repeated calendar paging.</td></tr>
+
+<tr><td class="id">D-24</td><td class="sev s3">P3</td><td>SOX · audit creation</td>
+<td><b>The New audit wizard does not close after a successful create.</b> The audit is created and the page navigates to it underneath, but the drawer stays open on the Review step with "Create audit" still live — inviting a duplicate.</td>
+<td>New audit → complete all four steps → Create audit.</td>
+<td>Risk of creating the same round twice; the user must find the X to dismiss.</td></tr>
+
+<tr><td class="id">D-12</td><td class="sev s3">P3</td><td>Date picker</td>
+<td><b>Calendar popover does not close after selection</b>, so picking a start date then an end date leaves two calendars on screen at once.</td>
+<td>Plan Engagement → pick Planned Start → pick Planned End.</td>
+<td>Users cannot tell which calendar is live.</td></tr>
+
+<tr><td class="id">D-13</td><td class="sev s3">P3</td><td>Date picker</td>
+<td><b>Calendar renders semi-transparent over the form</b>, so labels and values behind it show through.</td>
+<td>Plan Engagement → click any date field.</td>
+<td>Legibility. Missing opaque background or z-index.</td></tr>
+
+<tr><td class="id">D-14</td><td class="sev s3">P3</td><td>Loading states</td>
+<td><b>No loading indicator during transitions</b> — faded placeholder content with no spinner or progress.</td>
+<td>Click any module and watch.</td>
+<td>Indistinguishable from a frozen app; would materially soften D-02.</td></tr>
+
+<tr><td class="id">D-15</td><td class="sev s3">P3</td><td>Identity</td>
+<td><b>The greeting names a different person than the signed-in user</b> — "Good evening, Kapil" while the account is Nilesh Anand.</td>
+<td>Load Home → compare greeting with account footer.</td>
+<td>In a product with role gates and four-eyes review, showing the wrong identity is a credibility problem.</td></tr>
+
+<tr><td class="id">D-16</td><td class="sev s3">P3</td><td>Risk Register</td>
+<td><b>Gap in risk ID sequence</b> — RSK-001 to RSK-014, then RSK-021 to RSK-024. Six IDs missing.</td>
+<td>Risk Register → scroll.</td>
+<td>Suggests deleted records or a seeding error; auditors will ask.</td></tr>
+</table>
+
+<h2>P4 — Low</h2>
+<table>
+<tr><th style="width:46px">ID</th><th style="width:46px">Sev</th><th style="width:100px">Area</th><th>Finding</th><th style="width:230px">Reproduce</th><th style="width:190px">Impact</th></tr>
+
+<tr><td class="id">D-17</td><td class="sev s4">P4</td><td>Process Hub</td>
+<td><b>Source to Contract is entirely empty</b> (0% / 0 risks / 0 controls / 0 RACMs) but presented identically to populated processes.</td>
+<td>Process Hub → S2C card.</td>
+<td>Unconfigured is indistinguishable from failing. Needs a "not set up" state.</td></tr>
+
+<tr><td class="id">D-18</td><td class="sev s4">P4</td><td>Onboarding</td>
+<td><b>Setup checklist does not respond to work done</b> — "Create a test engagement" stayed unticked after one was created.</td>
+<td>Home → 0/5 → create engagement → return to Home.</td>
+<td>Checklist can never be completed; becomes permanent clutter.</td></tr>
+
+<tr><td class="id">D-19</td><td class="sev s4">P4</td><td>Sidebar</td>
+<td><b>Collapse/expand toggle is unreliable</b> and icon-only mode has no tooltips; after a reload the sidebar returns collapsed.</td>
+<td>Click the collapse control repeatedly.</td>
+<td>Modules become unidentifiable in icon mode.</td></tr>
+
+<tr><td class="id">D-20</td><td class="sev s4">P4</td><td>Ask IRA</td>
+<td><b>Placeholder text is clipped</b> — reads "Ask a quest" instead of the full string.</td>
+<td>Ask IRA → look at the empty input.</td>
+<td>Cosmetic, but it is the first thing read on the flagship screen.</td></tr>
+
+<tr><td class="id">D-21</td><td class="sev s4">P4</td><td>Content</td>
+<td><b>A 41-word report title</b> breaks the recent-reports layout on Home.</td>
+<td>Home → recent reports widget.</td>
+<td>Seed-data issue; needs a truncation rule.</td></tr>
+</table>
+
+<h2>What worked correctly</h2>
+<div class="callout ok">
+<p>Recording these matters as much as the defects.</p>
+<ul>
+<li><b>The SOX severity engine is correct and auditable.</b> "Show working" on DEF-A-01 printed all seven rules in order and the arithmetic held: the compensating control genuinely capped Material Weakness → Significant Deficiency, then aggregation across three exceptions sharing an assertion (₹36.40 Cr combined) raised it back to Material Weakness. Clearly-trivial also behaved — DEF-A-05 at ₹45.0 L fell under the ₹60.0 L floor and was logged, not evaluated.</li>
+<li><b>The five-step control dossier works as designed</b> — TOD concluding effective, population locked and versioned (POP-INT) with its source file and provenance recorded, a 25-item sample with its basis stated, per-attribute TOE evidence, and a sign-off step that names both preparer and reviewer.</li>
+<li><b>Evidence gating is enforced.</b> "Run AI validation" was disabled and relabelled "Upload the required file first", with an explicit warning.</li>
+<li><b>All six confidence scores render live and correctly</b> — RACM 0%, Control effectiveness 44%, Sample testing 1% at engagement level; Control completeness 100%, Evidence validated 0% (amber, gated), TOD coverage confidence 100% on the control.</li>
+<li><b>The entity-instance model works</b> — one control tested at four companies renders as four rows with independent due dates and statuses.</li>
+<li><b>Plan Engagement creation</b> — correct validation, successful save, accurate toast, immediate appearance on the timeline with the process count incrementing.</li>
+<li><b>The New audit wizard computes materiality correctly and shows its effect before you commit.</b> ₹420 Cr × 5% produced overall ₹21.00 Cr, PM ₹15.75 Cr (75%) and CTT ₹1.05 Cr (5%), and the "Where an exception would land" preview banded the ladder correctly — trivial ≤ ₹1.05 Cr, deficiency to ₹4.20 Cr, significant at ≥ ₹4.20 Cr (20% of overall), material weakness at ≥ ₹21.00 Cr.</li>
+<li><b>Entity scoping is derived, not asked.</b> Each company is scoped by comparing its balance against performance materiality, with the reason printed on the row ("₹648.50 Cr clears performance materiality" vs "₹8.00 Cr is below ₹15.75 Cr"), a group-coverage meter against a 60% target, and a warning when an in-scope parent's subsidiary is left out.</li>
+<li><b>Roll-forward on a new round behaves correctly</b> — all 45 controls reset to untested while the four open deficiencies carried forward.</li>
+<li><b>The Create Engagement wizard is genuinely type-driven</b> — choosing SOX / ICFR collapsed it from five steps to three, and "There are no separate entities" auto-filled the holding company and unblocked Continue.</li>
+<li><b>Ask IRA execution</b> — clarifying interview, five-step plan with dataset attribution, mid-run follow-up question, and a rendered result.</li>
+<li><b>Role model is present throughout</b> — Auditor / Risk Owner / Reviewer switching, "Your court" badges, a court column on the deficiency register, and "Nobody countersigns work they prepared" stated on the sign-off step.</li>
+</ul>
+</div>
+
+<h2>Suggested fix order</h2>
+<ol>
+<li><b>D-01 and D-02 together</b> — almost certainly one root cause, and nothing else can be properly tested until navigation is reliable.</li>
+<li><b>D-22, D-04 and D-10</b> — three SOX correctness issues: a dashboard showing the wrong materiality, a population locked without a validated IPE, and testing proceeding on an unapproved RACM. These undermine the product's core claim, and D-22 is the sharpest of them.</li>
+<li><b>D-03 persistence</b> — decide whether this build is meant to persist; if it is a demo, say so in the UI.</li>
+<li><b>D-05 breadcrumb</b> — small fix, removes a dead end from the deepest screen.</li>
+<li><b>D-14 loading indicator</b> — cheap, and takes the sting out of D-02 while the real fix lands.</li>
+<li><b>D-06 Ask IRA routing</b>, then <b>D-08 and D-15</b>, then the rest.</li>
+</ol>
+
+<h2>Still not tested</h2>
+<ul>
+<li>Nine modules: Recents, My Queue, Report, Control Library (global), Workflow Library, AI Concierge, Knowledge Hub, Platform Usage, Admin.</li>
+<li><b>All file-upload flows</b> (D-11) — population sources, evidence attachment, RACM/SOP upload, trial balance and GL.</li>
+<li>Within SOX: the RACM tab, Configuration / materiality workspace, roll-forward, working-paper and audit-report export, the remediation steps past sizing (plan, fix, retest, close), and the Risk Owner and Reviewer role views.</li>
+<li>Engagement sub-tabs (All Engagements, Approval Flow) and Create Dashboard.</li>
+</ul>
+
+<footer>
+Findings recorded from direct interaction with the deployed build; each lists reproduction steps so it can be verified independently. Severities reflect impact on a user trying to complete real audit work.
+</footer>
+
+</body>
+</html>

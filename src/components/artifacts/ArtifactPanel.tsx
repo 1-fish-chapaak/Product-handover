@@ -15,6 +15,7 @@ import { SEED as DATA_SOURCE_SEED, TYPE_META, formatDate, type DataSource } from
 import { type ComposerContext, editCodeContext } from '../chat/composerContext';
 import { QueryExecutionPlanCard, AssumptionsCard, type PlanCardStep, type PlanAssumption } from '../shared/PlanCards';
 import { CHAT_PLAN_STEPS } from '../../data/chatPlan';
+import { buildActionAssumptions, buildActionPlan, getActiveActionRun } from '../../data/actionRun';
 import { useAuditLog } from '../../context/AdminDataContext';
 
 interface ArtifactPanelProps {
@@ -45,9 +46,17 @@ interface ArtifactPanelProps {
   showHistory?: boolean;
 }
 
-// Counts must match CHAT_PLAN_STEPS.length and QUERY_SOURCES.length defined below.
+// When this tab was opened by a recommended action (?action=<id>), the whole
+// workspace describes THAT run: the plan it built and the things it took as
+// given because the action brought them. Boot-time fact, read once — the chat
+// thread and this panel resolve it independently rather than one owning the
+// other.
+const ACTION_RUN = getActiveActionRun();
+const ACTION_PLAN = ACTION_RUN ? buildActionPlan(ACTION_RUN) : null;
+
+// Counts must match the active plan's step count and QUERY_SOURCES.length below.
 const TABS: { id: ArtifactTab; label: string; icon: React.ElementType; count?: number }[] = [
-  { id: 'plan', label: 'Plan', icon: ListChecks, count: 5 },
+  { id: 'plan', label: 'Plan', icon: ListChecks, count: (ACTION_PLAN?.steps ?? CHAT_PLAN_STEPS).length },
   { id: 'code', label: 'Code', icon: FileCode },
   { id: 'sources', label: 'Sources', icon: Database, count: 5 },
 ];
@@ -157,8 +166,8 @@ function PlanRegenerateSkeleton() {
 }
 
 function PlanTab({
-  steps = CHAT_PLAN_STEPS,
-  assumptions = PLAN_ASSUMPTIONS,
+  steps = ACTION_PLAN?.steps ?? CHAT_PLAN_STEPS,
+  assumptions = (ACTION_RUN ? buildActionAssumptions(ACTION_RUN) : PLAN_ASSUMPTIONS),
   onComposeInChat,
   onCanvasAction,
 }: {
@@ -206,6 +215,9 @@ function PlanTab({
       <AssumptionsCard
         assumptions={assumptions}
         context="query"
+        // An action's run took nothing as a default — it was handed every one
+        // of these by the insight it came from, so the card says so.
+        caption={ACTION_RUN ? `${assumptions.length} carried in with the action — nothing was assumed` : undefined}
         onEdit={onComposeInChat ? handleEditAssumptions : undefined}
         onCorrectAssumption={onComposeInChat ? (a) => {
           // Tapping "Correct it" on a recalled assumption seeds the composer
