@@ -33,7 +33,7 @@ import { ActionTooltip, ReportNameCell, SourceChip } from '../reports/reportTabl
 import { REPORT_COL_W, renderedQueryCount, renderedSectionCount, startReportDownload } from '../reports/reportShared';
 import ColumnFilter from '../shared/ColumnFilter';
 import { ApplyTemplateChip } from '../reports/ReportBarControls';
-import { REPORT_TEMPLATES, GENERATED_REPORTS } from '../../data/mockData';
+import { REPORT_TEMPLATES, GENERATED_REPORTS, GENERATED_REPORTS_KEY } from '../../data/mockData';
 import ReportView from '../reports/ReportView';
 import { BulkAuditVariantView } from '../reports/BulkAuditVariants';
 import type { GeneratedReport } from '../reports/reportShared';
@@ -118,11 +118,36 @@ function saveCustomTemplate(t: typeof REPORT_TEMPLATES[number]): void {
   } catch { /* a full or blocked store — the format just does not persist */ }
 }
 
-/** What the reader changed on one of this audit's reports: the format applied
- *  to it, its description, its sign-offs, and who can open it. Keyed by
- *  engagement, then report, so the audit's copy keeps its own state. */
-const REPORT_OVERRIDE_KEY = 'irame.engagements.reportOverrides.v1';
+/** What the reader changes on a report: the format applied to it, its
+ *  description, its sign-offs, and who can open it. */
 type ReportOverride = Partial<Pick<GeneratedReport, 'appliedTemplateId' | 'description' | 'signoffs' | 'shareAudience'>>;
+
+/** The report library the Reports module keeps. An audit lists the same
+ *  reports it does, so a change made from the reader here is written straight
+ *  back to that library: one report, one format, wherever it is opened. */
+function readStoredReports(): GeneratedReport[] {
+  try {
+    const raw = localStorage.getItem(GENERATED_REPORTS_KEY);
+    const parsed = raw ? JSON.parse(raw) : null;
+    if (Array.isArray(parsed)) return parsed as GeneratedReport[];
+  } catch { /* an unreadable blob — fall back to the seed library */ }
+  return [...GENERATED_REPORTS] as GeneratedReport[];
+}
+function writeStoredReports(next: GeneratedReport[]): void {
+  try {
+    const raw = JSON.stringify(next);
+    localStorage.setItem(GENERATED_REPORTS_KEY, raw);
+    // A real storage event reaches only the other tabs, so the one the Reports
+    // module listens for is dispatched by hand: the list — and any report open
+    // in it — picks the change up without a reload.
+    window.dispatchEvent(new StorageEvent('storage', { key: GENERATED_REPORTS_KEY, newValue: raw }));
+  } catch { /* a full or blocked store — the change just does not persist */ }
+}
+
+/** The audit's own bulk run is not in that library: it is built for this
+ *  engagement and named after it, so what the reader changes on it is kept
+ *  per engagement instead. */
+const REPORT_OVERRIDE_KEY = 'irame.engagements.reportOverrides.v1';
 function readReportOverrides(engagementId: string): Record<string, ReportOverride> {
   try {
     const raw = localStorage.getItem(REPORT_OVERRIDE_KEY);
@@ -483,6 +508,10 @@ export default function WorkingPaperTab({ engagement, onReaderChange, onOpenFind
   // So no internal-audit surface says working paper — not the heading, not a
   // button, not a toast, not the activity log. One place decides the word.
   const docNoun = isIA ? 'report' : 'working paper';
+  // An audit report is the same report the Reports library holds, so taking it
+  // off this list removes it from the audit rather than deleting it. A control's
+  // working paper belongs to this audit alone, so that one is a delete.
+  const rmVerb = isIA ? 'Remove' : 'Delete';
   const DocNoun = isIA ? 'Report' : 'Working paper';
   const logEntity = isIA ? 'Report' : 'Working Paper';
 
@@ -532,14 +561,37 @@ export default function WorkingPaperTab({ engagement, onReaderChange, onOpenFind
   // so a format saved from inside an open report is immediately pickable.
   const [customFormats, setCustomFormats] = useState<typeof REPORT_TEMPLATES[number][]>(() => readCustomTemplates());
   const customFormatIds = useMemo(() => new Set(customFormats.map(t => t.id)), [customFormats]);
-  // What the reader changed on this audit's reports, and the writer that keeps
-  // it. Applying a format writes here, so the report reopens on it.
+  // The report library, and what the reader changed on the audit's own bulk
+  // run. A change to a library report is written back to the library; the bulk
+  // run is not in it, so its changes are kept per engagement.
+  const [storedReports, setStoredReports] = useState<GeneratedReport[]>(readStoredReports);
   const [reportOverrides, setReportOverrides] = useState<Record<string, ReportOverride>>(() => readReportOverrides(engagement.id));
-  const patchReport = (reportId: string, patch: ReportOverride) => setReportOverrides(prev => {
-    const next = { ...prev, [reportId]: { ...prev[reportId], ...patch } };
-    writeReportOverrides(engagement.id, next);
-    return next;
-  });
+  // Somewhere else in the app changed the library — the Reports list, or
+  // another tab. Take what it wrote rather than holding a stale copy.
+  useEffect(() => {
+    const onStorage = (e: StorageEvent) => {
+      if (e.key !== GENERATED_REPORTS_KEY || e.newValue == null) return;
+      try {
+        const parsed = JSON.parse(e.newValue);
+        if (Array.isArray(parsed)) setStoredReports(parsed as GeneratedReport[]);
+      } catch { /* a half-written blob — keep what we have */ }
+    };
+    window.addEventListener('storage', onStorage);
+    return () => window.removeEventListener('storage', onStorage);
+  }, []);
+  const patchReport = (reportId: string, patch: ReportOverride) => {
+    if (storedReports.some(r => r.id === reportId)) {
+      const next = storedReports.map(r => (r.id === reportId ? { ...r, ...patch } : r));
+      setStoredReports(next);
+      writeStoredReports(next);
+      return;
+    }
+    setReportOverrides(prev => {
+      const next = { ...prev, [reportId]: { ...prev[reportId], ...patch } };
+      writeReportOverrides(engagement.id, next);
+      return next;
+    });
+  };
 
   // The reports this internal audit publishes. An internal audit does not write
   // one document per control: it writes audit reports, the same object the
@@ -547,19 +599,17 @@ export default function WorkingPaperTab({ engagement, onReaderChange, onOpenFind
   // audit. A compliance engagement keeps its per-control papers above.
   const engagementReports = useMemo<GeneratedReport[]>(() => {
     if (!isIA) return [];
-    return GENERATED_REPORTS
+    return storedReports
       .filter(r => r.tag === 'Internal Audit')
-      // The report keeps its own id, so it is the same report the Reports
-      // module lists rather than a second copy of it — the reader's letterhead
-      // reads GR-001, and comments, versions and sharing all land on the one
-      // report. Only the period is restated, from the engagement it belongs to.
-      .map(seed => ({
-        ...seed,
+      // Read straight from the library, so the report here is the report there
+      // — same id, same format, same comments and versions. Only the period is
+      // restated, from the engagement it belongs to.
+      .map(r => ({
+        ...r,
         reportPeriod: `${engagement.periodStart} – ${engagement.periodEnd}`,
-        ...reportOverrides[seed.id],
       } as GeneratedReport))
       .filter(r => !removedPapers.includes(r.id));
-  }, [isIA, engagement.periodStart, engagement.periodEnd, removedPapers, reportOverrides]);
+  }, [isIA, engagement.periodStart, engagement.periodEnd, removedPapers, storedReports]);
   const reportById = useMemo(() => new Map(engagementReports.map(r => [r.id, r])), [engagementReports]);
   // The format this engagement's report comes out in — the same control every
   // open report carries, so a format picked in Reports is pickable here too.
@@ -1577,10 +1627,10 @@ export default function WorkingPaperTab({ engagement, onReaderChange, onOpenFind
                           </button>
                         </ActionTooltip>
                       )}
-                      <ActionTooltip label="Delete">
+                      <ActionTooltip label={rmVerb}>
                         <button
                           onClick={(e) => { e.stopPropagation(); setPaperToDelete({ id, name: row.name }); }}
-                          aria-label="Delete report"
+                          aria-label={`${rmVerb} report`}
                           className="inline-flex items-center justify-center w-7 h-7 rounded-md border border-canvas-border bg-canvas-elevated text-ink-500 hover:border-risk-200 hover:text-risk-700 hover:bg-risk-50 transition-colors cursor-pointer"
                         >
                           <Trash2 size={14} />
@@ -1613,10 +1663,10 @@ export default function WorkingPaperTab({ engagement, onReaderChange, onOpenFind
                             </button>
                           </ActionTooltip>
                         )}
-                        <ActionTooltip label="Delete">
+                        <ActionTooltip label={rmVerb}>
                           <button
                             onClick={(e) => { e.stopPropagation(); setPaperToDelete({ id, name: row.name }); }}
-                            aria-label={`Delete ${docNoun}`}
+                            aria-label={`${rmVerb} ${docNoun}`}
                             className="inline-flex items-center justify-center w-7 h-7 rounded-md border border-canvas-border bg-canvas-elevated text-ink-500 hover:border-risk-200 hover:text-risk-700 hover:bg-risk-50 transition-colors cursor-pointer"
                           >
                             <Trash2 size={14} />
@@ -1658,9 +1708,9 @@ export default function WorkingPaperTab({ engagement, onReaderChange, onOpenFind
       <ConfirmDialog
         open={bulkDeleteOpen}
         onClose={() => setBulkDeleteOpen(false)}
-        title={`Delete ${bulkDeletableIds.length} ${bulkDeletableIds.length === 1 ? docNoun : `${docNoun}s`}?`}
+        title={`${rmVerb} ${bulkDeletableIds.length} ${bulkDeletableIds.length === 1 ? docNoun : `${docNoun}s`}${isIA ? ' from this audit' : ''}?`}
         description={<>This will remove <span className="font-semibold text-ink-800">{bulkDeletableIds.length} {bulkDeletableIds.length === 1 ? docNoun : `${docNoun}s`}</span> from this audit. You can undo this from the toast for a few seconds.</>}
-        confirmLabel="Delete"
+        confirmLabel={rmVerb}
         destructive
         onConfirm={() => {
           const ids = bulkDeletableIds;
@@ -1670,7 +1720,7 @@ export default function WorkingPaperTab({ engagement, onReaderChange, onOpenFind
           logEvent({ action: 'Delete', description: `Deleted ${ids.length} ${docNoun}${ids.length === 1 ? '' : 's'} on ${engagement.name}`, module: 'Engagements', entity: logEntity });
           addToast({
             type: 'success',
-            message: `${ids.length} ${docNoun}${ids.length === 1 ? '' : 's'} deleted.`,
+            message: `${ids.length} ${docNoun}${ids.length === 1 ? '' : 's'} ${isIA ? 'removed from this audit' : 'deleted'}.`,
             action: ids.length ? { label: 'Undo', onClick: () => setRemoved(readRemovedPapers(engagement.id).filter(x => !ids.includes(x))) } : undefined,
           });
         }}
@@ -1680,11 +1730,11 @@ export default function WorkingPaperTab({ engagement, onReaderChange, onOpenFind
       <ConfirmDialog
         open={!!paperToDelete}
         onClose={() => setPaperToDelete(null)}
-        title={`Delete ${docNoun}?`}
+        title={`${rmVerb} ${docNoun}${isIA ? ' from this audit' : ''}?`}
         description={paperToDelete && (
           <>This will remove <span className="font-semibold text-ink-800">{paperToDelete.name}</span> from this audit's {docNoun}s. You can undo this from the toast for a few seconds.</>
         )}
-        confirmLabel="Delete"
+        confirmLabel={rmVerb}
         destructive
         onConfirm={() => {
           if (!paperToDelete) return;
@@ -1695,7 +1745,7 @@ export default function WorkingPaperTab({ engagement, onReaderChange, onOpenFind
           logEvent({ action: 'Delete', description: `Deleted ${docNoun} for control ${id}`, module: 'Engagements', entity: logEntity });
           addToast({
             type: 'success',
-            message: `${name} deleted.`,
+            message: `${name} ${isIA ? 'removed from this audit' : 'deleted'}.`,
             action: { label: 'Undo', onClick: () => setRemoved(readRemovedPapers(engagement.id).filter(x => x !== id)) },
           });
         }}
