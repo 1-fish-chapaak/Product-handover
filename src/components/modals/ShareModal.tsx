@@ -2,6 +2,7 @@ import { useState, useEffect, useRef, useMemo, useLayoutEffect } from 'react';
 import { createPortal } from 'react-dom';
 import { motion, AnimatePresence, useReducedMotion } from 'motion/react';
 import { Link2, Globe, Lock, ChevronDown, Check, Users, Trash2, Building2, X } from 'lucide-react';
+import { AUDIENCES, type Audience } from '../shared/audience';
 import { useToast } from '../shared/Toast';
 import { useAuditLog } from '../../context/AdminDataContext';
 import { Button } from '../shared/Button';
@@ -21,6 +22,13 @@ interface Props {
   /** Rect of the element that opened the popover, so it anchors next to it.
    *  Null → top-right of the viewport. */
   anchor?: Anchor | null;
+  /** The audience already saved on the thing being shared. Without it the
+   *  dialog would open on a default and quietly disagree with the visibility
+   *  control on the open report. */
+  initialAudience?: Audience;
+  /** Called when the audience changes here, so the saved record and the
+   *  report's own visibility control stay the same answer. */
+  onAudienceChange?: (a: Audience) => void;
 }
 
 interface Member {
@@ -40,8 +48,6 @@ type DirEntry =
 
 const ACCESS_OPTIONS = ['Full access', 'Can edit', 'Can view'] as const;
 const GENERAL_PERMS = ['Can view', 'Can comment', 'Can edit'] as const;
-const AUDIENCES = ['Only invited users', 'Everyone at Irame', 'Anyone with the link'] as const;
-type Audience = typeof AUDIENCES[number];
 
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 const POPOVER_W = 460;
@@ -246,7 +252,7 @@ function MemberRowSkeleton({ pulse, widths }: { pulse: boolean; widths: [string,
   );
 }
 
-export default function ShareModal({ onClose, onShare, scope, subjectName, anchor }: Props) {
+export default function ShareModal({ onClose, onShare, scope, subjectName, anchor, initialAudience, onAudienceChange }: Props) {
   const { addToast } = useToast();
   const logEvent = useAuditLog();
   const reduce = useReducedMotion();
@@ -258,9 +264,10 @@ export default function ShareModal({ onClose, onShare, scope, subjectName, ancho
   // general access off, so it reaches exactly the people invited to it and
   // opening it up is a deliberate act. The workspace itself is the one thing
   // everybody is already in, so it keeps the workspace-wide default.
-  const [audience, setAudience] = useState<Audience>(
-    scope && scope !== 'workspace' ? 'Only invited users' : 'Everyone at Irame',
+  const [audience, setAudienceState] = useState<Audience>(
+    initialAudience ?? (scope && scope !== 'workspace' ? 'Only invited users' : 'Everyone at Irame'),
   );
+  const setAudience = (a: Audience) => { setAudienceState(a); onAudienceChange?.(a); };
   const [generalPerm, setGeneralPerm] = useState('Can view');
   const [openMenu, setOpenMenu] = useState<string | null>(null);
   const [focused, setFocused] = useState(false);

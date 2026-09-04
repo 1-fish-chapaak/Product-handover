@@ -196,11 +196,10 @@ const KIND_CHIP: Record<'sox' | 'ia' | 'atr', string> = {
  *    counted here, instead of the page silently reporting on a frozen snapshot.
  *
  * 2. **It classifies with `reportKind()`**, the platform's own classifier, not
- *    the cosmetic `tag` string. Those disagree: `rt-001` *is* the SOX template
- *    (TEMPLATE_KIND in reportShared), yet every rt-001 report is tagged
- *    "Internal Audit". Counting by tag made SOX — a first-class kind with its
- *    own filter on the Reports page — vanish from this section entirely, and had
- *    the same report reading as SOX on one screen and Internal Audit on another.
+ *    the cosmetic `tag` string. The two can disagree — a report's template and
+ *    its tag are set at different moments — and counting by tag had the same
+ *    report reading as one kind on this screen and another kind on the Reports
+ *    page.
  *
  * "Shared" is deliberately *not* on the kind axis. Sharing is a distribution
  * fact, not a kind — a shared report is still SOX or IA — so mixing it in both

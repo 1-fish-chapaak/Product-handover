@@ -118,7 +118,7 @@ export function BulkRunProgressProvider({ children }: { children: React.ReactNod
 
       const newReport = {
         id: `gr-bulk-${Date.now()}`,
-        templateId: 'rt-001',
+        templateId: 'rt-internal-audit',
         name: `${run.name} — Bulk Audit Report`,
         tag: 'Bulk Audit',
         generatedBy: 'AI Copilot',

@@ -1,7 +1,12 @@
 /**
- * SOX / ICFR control-testing working paper — multi-sheet .xlsx export.
+ * Control-testing export — multi-sheet .xlsx.
  *
- * Structure (standard ICFR W/P layout):
+ * A compliance engagement gets the standard ICFR working-paper layout and its
+ * wording. An internal audit gets the same sheets under audit wording: it
+ * issues a report, not a working paper, and it does not classify controls as
+ * key or deficiencies as significant.
+ *
+ * Structure:
  *   1. Index            — cover: entity, scope, preparer/reviewer, conclusion, legend
  *   2. Control Summary  — one row per control (the RACM/summary sheet)
  *   3. Attribute Testing — one row per attribute (pass/fail detail)
@@ -43,6 +48,9 @@ export interface WpMeta {
   preparedBy: string;
   reviewedBy: string;
   preparedOn: string;
+  /** The report format applied on the Audit Report tab. Printed on the cover
+   *  sheet so the exported file says which format it was produced in. */
+  reportFormat?: string;
 }
 
 function autofit(rows: (string | number)[][], max = 60): XLSX.ColInfo[] {
@@ -54,21 +62,22 @@ function autofit(rows: (string | number)[][], max = 60): XLSX.ColInfo[] {
   return widths.map(wch => ({ wch }));
 }
 
-export function downloadWorkingPaper(engagement: Engagement, controls: WpControl[], meta: WpMeta): void {
+export function downloadWorkingPaper(engagement: Engagement, controls: WpControl[], meta: WpMeta): string {
+  const isIA = engagement.type === 'Internal Audit';
   const wb = XLSX.utils.book_new();
   const allAttrs = controls.flatMap(c => c.attributes);
   const keyCount = controls.filter(c => c.isKey).length;
   const passC = controls.filter(c => c.status === 'Pass').length;
   const failC = controls.filter(c => c.status === 'Fail').length;
   const overall = failC > 0
-    ? 'Exceptions noted — control deficiencies identified (see Exceptions sheet)'
+    ? (isIA ? 'Exceptions noted — see the Exceptions sheet' : 'Exceptions noted — control deficiencies identified (see Exceptions sheet)')
     : controls.length > 0 && controls.every(c => c.status === 'Pass')
-      ? 'Effective — no exceptions noted'
+      ? (isIA ? 'Satisfactory — no exceptions noted' : 'Effective — no exceptions noted')
       : 'Testing in progress';
 
   // ── Sheet 1: Index / cover ──
   const indexRows: (string | number)[][] = [
-    ['Internal Controls over Financial Reporting (ICFR) — Control Testing Working Paper'],
+    [isIA ? 'Internal Audit — Control Testing Report' : 'Internal Controls over Financial Reporting (ICFR) — Control Testing Working Paper'],
     [],
     ['Entity / Engagement', `${engagement.name} (${engagement.code})`],
     ['Framework', engagement.framework],
@@ -78,10 +87,11 @@ export function downloadWorkingPaper(engagement: Engagement, controls: WpControl
     ['Prepared by', meta.preparedBy],
     ['Reviewed by', meta.reviewedBy],
     ['Date', meta.preparedOn],
+    ...(meta.reportFormat ? [['Report format', meta.reportFormat]] : []),
     [],
     ['— Scope —', ''],
     ['Controls in scope', controls.length],
-    ['Key controls', keyCount],
+    ...(isIA ? [] : [['Key controls', keyCount]]),
     ['Attributes tested', allAttrs.length],
     ['Controls — Pass', passC],
     ['Controls — Fail', failC],
@@ -91,7 +101,7 @@ export function downloadWorkingPaper(engagement: Engagement, controls: WpControl
     ['— Legend —', ''],
     ['Result', 'Pass = no exceptions · Fail = exception(s) noted · Not tested = pending'],
     ['Test method', 'Automated = Pass/Fail from a workflow run · Self-assessed = owner attestation + evidence'],
-    ['W/P reference', `WP-${engagement.code}`],
+    [isIA ? 'Report reference' : 'W/P reference', `${isIA ? 'IA' : 'WP'}-${engagement.code}`],
   ];
   const index = XLSX.utils.aoa_to_sheet(indexRows);
   index['!cols'] = [{ wch: 26 }, { wch: 78 }];
@@ -126,15 +136,20 @@ export function downloadWorkingPaper(engagement: Engagement, controls: WpControl
   const exRows: (string | number)[][] = failed.length > 0
     ? failed.map(a => {
         const ctrl = controls.find(c => c.controlId === a.controlId);
-        const severity = ctrl?.isKey ? 'Significant Deficiency' : 'Control Deficiency';
-        return [a.controlId, a.attrId, a.remark || 'Exception noted during testing', 'Operating effectiveness', severity, ctrl?.owner ?? engagement.owner, 'Open', 'Remediation pending — Action Taken Report raised'];
+        // Significant / control deficiency is the ICFR severity ladder. An
+        // internal audit rates a finding instead, the same words the Findings
+        // tab uses.
+        const severity = isIA ? (ctrl?.isKey ? 'High' : 'Medium') : (ctrl?.isKey ? 'Significant Deficiency' : 'Control Deficiency');
+        return [a.controlId, a.attrId, a.remark || 'Exception noted during testing', isIA ? 'Control operation' : 'Operating effectiveness', severity, ctrl?.owner ?? engagement.owner, 'Open', 'Remediation pending — Action Taken Report raised'];
       })
     : [['—', '—', 'No exceptions noted in the tested population', '—', '—', '—', 'Closed', '—']];
   const exSheet = XLSX.utils.aoa_to_sheet([exHeader, ...exRows]);
   exSheet['!cols'] = autofit([exHeader, ...exRows]);
   XLSX.utils.book_append_sheet(wb, exSheet, 'Exceptions');
 
-  XLSX.writeFile(wb, `Working_Paper_${engagement.code}.xlsx`);
+  const fileName = `${isIA ? 'Audit_Report' : 'Working_Paper'}_${engagement.code}.xlsx`;
+  XLSX.writeFile(wb, fileName);
+  return fileName;
 }
 
 // ─── Shared assembly (same seeds the Controls tab uses) ───────────────────────────
@@ -242,16 +257,20 @@ export interface WpSampling {
   samples: { ref: string; result: 'Pass' | 'Fail' }[];
 }
 
-/** Per-control working paper: Control cover + Attribute Testing (+ Sampling, + Exceptions if any). */
-export function downloadControlWorkingPaper(engagement: Engagement, control: WpControl, meta: WpMeta, sampling?: WpSampling): void {
+/** One control's paper: Control cover + Attribute Testing (+ Sampling, + Exceptions
+ *  if any). Returns the file name it wrote, so the caller's toast can name it. */
+export function downloadControlWorkingPaper(engagement: Engagement, control: WpControl, meta: WpMeta, sampling?: WpSampling): string {
+  const isIA = engagement.type === 'Internal Audit';
   const wb = XLSX.utils.book_new();
   const tested = control.attributes.filter(a => a.result !== 'Not tested').length;
   const pass = control.attributes.filter(a => a.result === 'Pass').length;
   const fail = control.attributes.filter(a => a.result === 'Fail').length;
-  const conclusion = control.status === 'Pass' ? 'Effective' : control.status === 'Fail' ? 'Ineffective' : control.status === 'In test' ? 'In progress' : 'Not started';
+  const conclusion = control.status === 'Pass' ? (isIA ? 'Satisfactory' : 'Effective')
+    : control.status === 'Fail' ? (isIA ? 'Needs improvement' : 'Ineffective')
+    : control.status === 'In test' ? 'In progress' : 'Not started';
 
   const coverRows: (string | number)[][] = [
-    ['Control Testing Working Paper'],
+    [isIA ? 'Internal Audit — Control Report' : 'Control Testing Working Paper'],
     [],
     ['Engagement', `${engagement.name} (${engagement.code})`],
     ['Framework', engagement.framework],
@@ -263,7 +282,7 @@ export function downloadControlWorkingPaper(engagement: Engagement, control: WpC
     ['Sub-process', control.subProcess],
     ['Type', control.type],
     ['Frequency', control.frequency],
-    ['Key control', control.isKey ? 'Yes' : 'No'],
+    ...(isIA ? [] : [['Key control', control.isKey ? 'Yes' : 'No']]),
     ['Owner', control.owner],
   ];
   if (sampling) {
@@ -286,7 +305,7 @@ export function downloadControlWorkingPaper(engagement: Engagement, control: WpC
     ['Prepared by', meta.preparedBy],
     ['Reviewed by', meta.reviewedBy],
     ['Date', meta.preparedOn],
-    ['W/P reference', `WP-${control.controlId}`],
+    [isIA ? 'Report reference' : 'W/P reference', `${isIA ? 'IA' : 'WP'}-${control.controlId}`],
   );
   const cover = XLSX.utils.aoa_to_sheet(coverRows);
   cover['!cols'] = [{ wch: 16 }, { wch: 74 }];
@@ -316,5 +335,7 @@ export function downloadControlWorkingPaper(engagement: Engagement, control: WpC
     XLSX.utils.book_append_sheet(wb, exSheet, 'Exceptions');
   }
 
-  XLSX.writeFile(wb, `Working_Paper_${control.controlId}.xlsx`);
+  const fileName = `${isIA ? 'Audit_Report' : 'Working_Paper'}_${control.controlId}.xlsx`;
+  XLSX.writeFile(wb, fileName);
+  return fileName;
 }

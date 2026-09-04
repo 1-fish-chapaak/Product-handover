@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { motion } from 'motion/react';
 import { X, Printer, Save, FileText } from 'lucide-react';
 import AtrDocument from '../reports/AtrDocument';
@@ -46,6 +46,23 @@ export default function GenerateATRModal({
   const [showSavePrompt, setShowSavePrompt] = useState(false);
   const [label, setLabel] = useState('');
   const logEvent = useAuditLog();
+
+  // Escape closes the way it closes everywhere else (shared Modal.tsx): the
+  // save prompt first if it is up, then the report itself. Body scroll is
+  // locked while the document is on screen so the page behind does not move.
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key !== 'Escape') return;
+      if (showSavePrompt) setShowSavePrompt(false); else onClose();
+    };
+    document.addEventListener('keydown', onKey);
+    const prev = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
+    return () => {
+      document.removeEventListener('keydown', onKey);
+      document.body.style.overflow = prev;
+    };
+  }, [onClose, showSavePrompt]);
 
   const today = new Date().toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' });
   const meta: AtrMeta = atrData?.meta ?? {

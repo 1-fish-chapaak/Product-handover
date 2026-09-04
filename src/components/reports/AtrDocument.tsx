@@ -125,6 +125,7 @@ export default function AtrDocument({
   editable, onMetaChange, onObservationsChange,
   sectionOrder = ATR_SECTION_ORDER, hiddenSections = [],
   renderObservationActions, onDeleteSection,
+  gradient, logo,
 }: {
   meta: AtrMeta;
   observations: AtrObservation[];
@@ -133,6 +134,10 @@ export default function AtrDocument({
   version?: number;
   /** Optional CTAs rendered in the banner top-right (e.g. on the saved report). */
   headerActions?: React.ReactNode;
+  /** Letterhead branding carried from an applied template, so the format picked
+   *  in the reader's command bar actually shows on the ATR's cover. */
+  gradient?: [string, string];
+  logo?: string;
   /** Width of the document surface. */
   maxWidthClass?: string;
   /** Opt-in inline editing (default off → existing read-only usages unchanged). */
@@ -268,6 +273,8 @@ export default function AtrDocument({
           compact padding. */}
       <ReportBrandBanner
         title="Action Taken Report"
+        gradient={gradient}
+        logo={logo}
         actions={headerActions}
         className="!py-7"
       />

@@ -6,10 +6,10 @@
 // palette inherited from the rest of the report system. Variants differ in
 // typography, rhythm, and information density — never in the underlying data.
 
-import { useEffect, useRef, useState, type ElementType } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { AnimatePresence, motion, Reorder, useDragControls } from 'motion/react';
-import { ArrowLeft, Download, History, MoreVertical, SquareArrowOutUpRight, Trash2, Plus, X, BarChart3, Table as TableIcon, AlertTriangle, CheckCircle2, Check, TrendingUp, Shield, Layers, List, FileText, Lightbulb, BookOpen, Share2, ChevronDown, Layout, Loader2, GripVertical, Edit3, StickyNote, Sparkles, RefreshCw } from 'lucide-react';
+import { ArrowLeft, Download, History, MoreVertical, SquareArrowOutUpRight, Trash2, Plus, X, BarChart3, Table as TableIcon, AlertTriangle, CheckCircle2, TrendingUp, Shield, Layers, List, FileText, Share2, Loader2, GripVertical, Edit3, StickyNote, Sparkles, RefreshCw } from 'lucide-react';
 import { useToast } from '../shared/Toast';
 import { useCan } from '../../context/CurrentUserContext';
 import { useAuditLog } from '../../context/AdminDataContext';
@@ -21,9 +21,9 @@ import { statTone } from './reportTones';
 import { exportBulkAuditExcel } from './reportExport';
 import ReportDownloadModal, { type DownloadPreviewSection } from './ReportDownloadModal';
 import { REPORT_TEMPLATES } from '../../data/mockData';
-import type { WorkflowResult, EditableTemplate } from './reportShared';
-import { templateScopeLine } from './templateScope';
-import { findEngagement } from '../../data/engagements';
+import { ApplyTemplateChip, ReportVisibilityChip } from './ReportBarControls';
+import { DEFAULT_REPORT_AUDIENCE, type Audience } from '../shared/audience';
+import type { WorkflowResult } from './reportShared';
 import AddObservationModal, {
   computeNextObservationId,
   type EditingObservationInput,
@@ -106,22 +106,30 @@ type Report = {
   aestheticVariant?: 'editorial';
   /** Template last applied from the reader — restored when it reopens. */
   appliedTemplateId?: string;
+  shareAudience?: Audience;
 };
 
 export function BulkAuditVariantView({
   report,
   templates = REPORT_TEMPLATES,
   onBack,
+  backLabel,
   onShare,
   onApplyTemplate,
+  onChangeAudience,
 }: {
   report: Report;
   /** Options listed in the Apply Template dropdown (standard + custom). */
   templates?: typeof REPORT_TEMPLATES[number][];
   onBack: () => void;
+  /** Where Back returns to, when the reader is opened from outside Reports
+   *  (an engagement's Audit Report tab, say). */
+  backLabel?: string;
   onShare?: () => void;
   /** Persist the applied template on the report so it survives a reopen. */
   onApplyTemplate?: (reportId: string, templateId: string) => void;
+  /** Persist who can open this report. */
+  onChangeAudience?: (reportId: string, audience: Audience) => void;
 }) {
   const { addToast } = useToast();
   const logEvent = useAuditLog();
@@ -361,7 +369,7 @@ export function BulkAuditVariantView({
       {/* Report actions — pinned to the top of the scroll area (page-coloured,
           borderless — no header-bar chrome) so they stay reachable on scroll. */}
       <div className="sticky top-0 z-30 bg-canvas px-6 lg:px-12 xl:px-[124px] h-16 flex items-center justify-between gap-4 print:hidden">
-        <BulkBackLink onBack={onBack} />
+        <BulkBackLink onBack={onBack} backLabel={backLabel} />
         {!allFailed && (
           <div className="flex items-center gap-2">
             <BulkCoverActions
@@ -370,6 +378,8 @@ export function BulkAuditVariantView({
               templates={templates}
               appliedTemplateId={report.appliedTemplateId}
               onApplyTemplate={onApplyTemplate ? (templateId: string) => onApplyTemplate(report.id, templateId) : undefined}
+              audience={report.shareAudience ?? DEFAULT_REPORT_AUDIENCE}
+              onChangeAudience={onChangeAudience ? (a: Audience) => onChangeAudience(report.id, a) : undefined}
             />
           </div>
         )}
@@ -468,7 +478,6 @@ export function BulkAuditVariantView({
           <ReportDownloadModal
             reportName={report.name}
             reportTag={report.tag}
-            reportId={report.id?.toUpperCase()}
             generatedBy={report.generatedBy}
             generatedAt={report.generatedAt}
             sections={buildDownloadSections()}
@@ -641,82 +650,15 @@ function computeTotals(workflows: WorkflowResult[]): Totals {
   return { workflows: workflows.length, records, high, medium, low, bps };
 }
 
-const ICON_MAP: Record<string, ElementType> = {
-  shield: Shield,
-  'alert-triangle': AlertTriangle,
-  'check-circle': CheckCircle2,
-  'bar-chart': BarChart3,
-  'file-text': FileText,
-  'trending-up': TrendingUp,
-  'clipboard-check': CheckCircle2,
-  'lightbulb': Lightbulb,
-  'book-open': BookOpen,
-};
-
-const CATEGORY_COLORS: Record<string, string> = {
-  Compliance: 'text-evidence-700 bg-evidence-50',
-  Risk: 'text-high-700 bg-high-50',
-  Controls: 'text-brand-700 bg-brand-50',
-  Analytics: 'text-brand-700 bg-brand-50',
-  Audit: 'text-risk-700 bg-risk-50',
-  Executive: 'text-indigo-600 bg-indigo-50',
-};
-
-// ─── Apply Template Dropdown ───
-function ApplyTemplateDropdown({ templates = REPORT_TEMPLATES, activeId = null, onSelect, onClose }: { templates?: typeof REPORT_TEMPLATES[number][]; activeId?: string | null; onSelect: (template: typeof REPORT_TEMPLATES[0]) => void; onClose: () => void }) {
-  return (
-    <motion.div
-      initial={{ opacity: 0, y: -5, scale: 0.97 }}
-      animate={{ opacity: 1, y: 0, scale: 1 }}
-      exit={{ opacity: 0, y: -5, scale: 0.97 }}
-      className="absolute right-0 top-full mt-1 w-[280px] bg-white rounded-md shadow-xl border border-canvas-border z-50 overflow-hidden"
-    >
-      <div className="px-3 py-2 border-b border-canvas-border">
-        <span className="text-[0.6875rem] font-semibold text-ink-400 uppercase tracking-wider">Select Template</span>
-      </div>
-      <div className="max-h-[260px] overflow-y-auto p-1.5">
-        {templates.map(rt => {
-          const Icon = ICON_MAP[rt.icon] || FileText;
-          const isActive = rt.id === activeId;
-          return (
-            <button
-              key={rt.id}
-              onClick={() => { onSelect(rt); onClose(); }}
-              aria-current={isActive || undefined}
-              className={`w-full text-left px-3 py-2.5 rounded-md transition-colors cursor-pointer flex items-center gap-2.5 ${isActive ? 'bg-brand-50' : 'hover:bg-brand-50'}`}
-            >
-              <div className={`p-1.5 rounded-md ${CATEGORY_COLORS[rt.category] || 'text-ink-500 bg-paper-50'}`}>
-                <Icon size={12} />
-              </div>
-              <div className="flex-1 min-w-0">
-                <div className={`text-[0.75rem] truncate ${isActive ? 'font-semibold text-brand-600' : 'font-medium text-ink-800'}`}>{rt.name}</div>
-                {/* Same line the report reader's picker carries: where this
-                    format may be used, as answered when it was saved. */}
-                <div className="flex items-center gap-1.5 text-[0.625rem] text-ink-400">
-                  <span className="shrink-0">{rt.category}</span>
-                  {templateScopeLine(rt as EditableTemplate, findEngagement((rt as EditableTemplate).engagementId ?? '')?.name) && (
-                    <span className="min-w-0 truncate">· {templateScopeLine(rt as EditableTemplate, findEngagement((rt as EditableTemplate).engagementId ?? '')?.name)}</span>
-                  )}
-                </div>
-              </div>
-              {isActive && <Check size={14} className="shrink-0 text-brand-600" />}
-            </button>
-          );
-        })}
-      </div>
-    </motion.div>
-  );
-}
-
 // Back affordance + report actions, shown plainly on the light page surface
 // (no header bar — the platform doesn't use page headers).
-function BulkBackLink({ onBack }: { onBack: () => void }) {
+function BulkBackLink({ onBack, backLabel }: { onBack: () => void; backLabel?: string }) {
   return (
     <button
       onClick={onBack}
       className="inline-flex items-center gap-1.5 h-9 px-3 text-[0.75rem] font-semibold text-ink-600 bg-canvas-elevated border border-canvas-border rounded-md hover:bg-canvas hover:text-ink-900 transition-colors cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600/30"
     >
-      <ArrowLeft size={14} /> Back to Reports
+      <ArrowLeft size={14} /> {backLabel ?? 'Back to Reports'}
     </button>
   );
 }
@@ -724,16 +666,17 @@ function BulkBackLink({ onBack }: { onBack: () => void }) {
 // Apply Template / Share / Download — rendered in the cover banner's action slot.
 // Apply Template is a UX match here: a bulk audit report has a fixed editorial
 // layout, so applying a template animates + toasts without swapping sections.
-function BulkCoverActions({ onShare, onDownload, templates = REPORT_TEMPLATES, appliedTemplateId, onApplyTemplate }: {
+function BulkCoverActions({ onShare, onDownload, templates = REPORT_TEMPLATES, appliedTemplateId, onApplyTemplate, audience = DEFAULT_REPORT_AUDIENCE, onChangeAudience }: {
   onShare?: () => void;
   onDownload: () => void;
   templates?: typeof REPORT_TEMPLATES[number][];
   /** Template saved on the report — the control opens on it. */
   appliedTemplateId?: string;
   onApplyTemplate?: (templateId: string) => void;
+  audience?: Audience;
+  onChangeAudience?: (a: Audience) => void;
 }) {
   const { addToast } = useToast();
-  const [showApplyTemplate, setShowApplyTemplate] = useState(false);
   // Restored from the report, not reset to null on every mount.
   const [appliedTemplate, setAppliedTemplate] = useState<typeof REPORT_TEMPLATES[0] | null>(
     () => (appliedTemplateId ? templates.find(t => t.id === appliedTemplateId) ?? null : null)
@@ -752,34 +695,15 @@ function BulkCoverActions({ onShare, onDownload, templates = REPORT_TEMPLATES, a
 
   return (
     <>
-      {/* Apply Template */}
-      <div className="relative">
-        <button
-          onClick={() => setShowApplyTemplate(p => !p)}
-          disabled={applyingTemplate}
-          aria-busy={applyingTemplate || undefined}
-          className="flex items-center gap-1.5 h-9 px-3.5 text-[0.75rem] font-semibold text-ink-700 bg-canvas-elevated border border-canvas-border rounded-md hover:bg-canvas hover:border-ink-300/70 disabled:opacity-60 disabled:cursor-wait transition-colors cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600/30"
-        >
-          {applyingTemplate ? <Loader2 size={14} className="animate-spin" /> : <Layout size={14} />}
-          <span className="truncate max-w-[200px] hidden md:inline">{applyingTemplate ? 'Applying…' : (appliedTemplate?.name ?? 'Apply Template')}</span>
-          <motion.span animate={{ rotate: showApplyTemplate ? 180 : 0 }} transition={{ duration: 0.2, ease: [0.22, 1, 0.36, 1] }} className="inline-flex">
-            <ChevronDown size={14} />
-          </motion.span>
-        </button>
-        <AnimatePresence>
-          {showApplyTemplate && (
-            <>
-              <div className="fixed inset-0 z-40" onClick={() => setShowApplyTemplate(false)} />
-              <ApplyTemplateDropdown
-                templates={templates}
-                activeId={appliedTemplate?.id ?? null}
-                onSelect={handleApplyTemplate}
-                onClose={() => setShowApplyTemplate(false)}
-              />
-            </>
-          )}
-        </AnimatePresence>
-      </div>
+      {/* The same format and visibility controls every other open report has. */}
+      <ApplyTemplateChip
+        templates={templates}
+        activeId={appliedTemplate?.id ?? null}
+        activeName={appliedTemplate?.name ?? null}
+        onSelect={handleApplyTemplate}
+        busy={applyingTemplate}
+      />
+      <ReportVisibilityChip audience={audience} onChange={a => onChangeAudience?.(a)} disabled={!onChangeAudience} />
       {/* Share */}
       {onShare && (
         <button
@@ -906,9 +830,6 @@ function EditorialLayout({
       <ReportBrandBanner
         title={report.name}
         className="rounded-t-lg"
-        eyebrow={report.id && (
-          <span className="font-mono text-[0.6875rem] tracking-[0.04em] text-white/65">{report.id.toUpperCase()}</span>
-        )}
         actions={
           <button
             onClick={onGenerateAtr}

@@ -216,16 +216,10 @@ export function toGeneratedQuery(item: PickableQuery, addedBy: string): Generate
 
 /**
  * Template arrangement — presentation-only ordering of the selected queries.
- * SOX groups by risk/control area; Internal Audit and customs keep the
- * selection order the user assembled.
+ * Every template keeps the selection order the user assembled; the one format
+ * that regrouped them (the SOX report) no longer exists.
  */
-export function arrangeForTemplate(templateId: string, defs: GeneratedQueryDef[]): GeneratedQueryDef[] {
-  if (templateId === 'rt-001') {
-    const sevRank = { High: 0, Medium: 1, Low: 2 } as Record<string, number>;
-    return [...defs].sort(
-      (a, b) => a.risk.localeCompare(b.risk) || (sevRank[a.severity] ?? 3) - (sevRank[b.severity] ?? 3),
-    );
-  }
+export function arrangeForTemplate(_templateId: string, defs: GeneratedQueryDef[]): GeneratedQueryDef[] {
   return defs;
 }
 

@@ -15,13 +15,16 @@ interface CheckboxProps {
 
 export default function Checkbox({ checked, onChange, disabled, ariaLabel }: CheckboxProps) {
   const interactive = !!onChange && !disabled;
+  // A presentational checkbox sits inside a row that is itself a button (the
+  // filter menus do exactly this), and a button inside a button is invalid HTML
+  // that React logs on every render. Only the interactive one is a button.
+  const Tag = interactive ? 'button' : 'span';
   return (
-    <button
-      type="button"
+    <Tag
+      type={interactive ? 'button' : undefined}
       role="checkbox"
       aria-checked={checked}
       aria-label={ariaLabel}
-      disabled={!interactive}
       tabIndex={interactive ? 0 : -1}
       onClick={interactive ? () => onChange!(!checked) : undefined}
       className={[
@@ -33,6 +36,6 @@ export default function Checkbox({ checked, onChange, disabled, ariaLabel }: Che
       ].filter(Boolean).join(' ')}
     >
       {checked && <Check size={11} className="text-white" strokeWidth={3} />}
-    </button>
+    </Tag>
   );
 }

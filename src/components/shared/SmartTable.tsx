@@ -14,6 +14,9 @@ export interface Column<T> {
    *  cell so an inner `truncate` element ellipsizes rather than pushing the
    *  table into horizontal scroll. Use on the single fluid column. */
   truncate?: boolean;
+  /** A filter control for this column, shown in its header beside the sort
+   *  icon. Clicks inside it never sort the column. */
+  filter?: ReactNode;
   render?: (item: T, index: number) => ReactNode;
 }
 
@@ -288,6 +291,9 @@ export default function SmartTable<T extends Record<string, unknown>>({
                     {col.label}
                     {col.sortable !== false && (
                       <SortIcon direction={sortKey === col.key ? sortDir : null} quiet={isModern && !showSortHint} />
+                    )}
+                    {col.filter && (
+                      <span className="inline-flex" onClick={(e) => e.stopPropagation()}>{col.filter}</span>
                     )}
                   </span>
                 </th>

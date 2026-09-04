@@ -34,6 +34,7 @@ import KnowledgeHubView from './components/knowledge/KnowledgeHubView';
 import ExceptionManagementModal from './components/modals/ExceptionManagementModal';
 import EmailPreviewModal from './components/modals/EmailPreviewModal';
 import ShareModal from './components/modals/ShareModal';
+import type { Audience } from './components/shared/audience';
 import PowerBIImportWizard from './components/modals/PowerBIImportWizard';
 import ReportBuilder from './components/reports/ReportBuilder';
 import AuditPlanningPage from './components/audit/AuditPlanningPage';
@@ -250,6 +251,10 @@ function AppInner() {
   };
 
   const mainScrollRef = useRef<HTMLDivElement>(null);
+  // The audience of the report the share dialog was opened for, plus the setter
+  // that writes it back. Set as the dialog opens and read while it renders, so
+  // the dialog opens on what the report actually says.
+  const [shareAudienceCtl, setShareAudienceCtl] = useState<{ audience?: Audience; onAudienceChange?: (a: Audience) => void }>({});
   const chatSplitContainerRef = useRef<HTMLDivElement>(null);
   const [viewLoading, setViewLoading] = useState(false);
   // One-shot canvas → composer handoff. A right-side workspace CTA (Plan ▸
@@ -718,7 +723,7 @@ function AppInner() {
                   const today = new Date().toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
                   const newReport = {
                     id: payload.reportId,
-                    templateId: 'rt-001',
+                    templateId: 'rt-internal-audit',
                     name: payload.reportName,
                     tag: 'From chat',
                     generatedBy: 'You',
@@ -987,7 +992,12 @@ function AppInner() {
         return (
           <ReportsView
             onOpenBuilder={() => openReportBuilder('new')}
-            onShare={(id, name) => setShowShareModal(true, { type: 'report', id, name })}
+            onShare={(id, name, audience, onAudienceChange) => {
+              // The report's saved audience rides along so the dialog opens on
+              // what the report actually says, and writes back to the same place.
+              setShareAudienceCtl({ audience, onAudienceChange });
+              setShowShareModal(true, { type: 'report', id, name });
+            }}
             onManageExceptions={(returnId) => { setMexReturnReportId(returnId ?? null); setView('manage-exceptions'); }}
             onOpenQuery={(q) => {
               setChatInitialQuery(`Open ${q.id}: ${q.title}`);
@@ -1308,6 +1318,8 @@ function AppInner() {
             <ShareModal
               scope={state.shareContext?.type === 'workflow-output' ? 'result' : state.shareContext?.type}
               subjectName={state.shareContext?.name}
+              initialAudience={state.shareContext?.type === 'report' ? shareAudienceCtl.audience : undefined}
+              onAudienceChange={state.shareContext?.type === 'report' ? shareAudienceCtl.onAudienceChange : undefined}
               anchor={state.shareAnchor}
               onClose={() => setShowShareModal(false)}
               onShare={(recipients) => {

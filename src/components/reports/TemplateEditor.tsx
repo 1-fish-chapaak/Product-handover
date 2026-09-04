@@ -27,8 +27,7 @@ import {
   LETTERHEAD_SOFT_MAX, letterheadLine, templateCoverFields,
   proposeScaleMap, unusedScaleWords, OUR_SCALE,
   type EditableTemplate, type WatermarkConfig, type ScaleMap,
-  type TemplateSection, type SignatorySlot, type TemplateBlock,
-} from './reportShared';
+  type TemplateSection, type SignatorySlot, type TemplateBlock, templateCategoryLabel } from './reportShared';
 import { readTemplateFromReport, classifyUpload, PAGE_CAP, type UploadKind } from './byot/byotRead';
 import type { ReadResult, ReadOutcome } from './byot/byotRead';
 import SectionReviewCanvas from './SectionReviewCanvas';
@@ -497,7 +496,7 @@ export function ApplyTemplateDropdown({ templates = REPORT_TEMPLATES, activeId =
                     only on the Templates list. A format for every internal
                     audit says nothing extra. */}
                 <div className={`flex items-center gap-1.5 text-[0.75rem] transition-colors ${isActive ? 'text-brand-600/70' : 'text-ink-400 group-hover/item:text-ink-500'}`}>
-                  <span className="shrink-0">{rt.category}</span>
+                  <span className="shrink-0">{templateCategoryLabel(rt)}</span>
                   {scopeLine(rt as EditableTemplate) && <span className="min-w-0 truncate">· {scopeLine(rt as EditableTemplate)}</span>}
                 </div>
               </div>
