@@ -302,6 +302,19 @@ export function reportGradient(theme?: string, brandColor?: string): [string, st
   if (isValidHexColor(brandColor)) return brandGradient(brandColor);
   return theme ? TEMPLATE_THEME_GRADIENT[theme] : undefined;
 }
+// What a format calls itself on the surfaces that label one. The formats that
+// ship with the product are ours, and saying "Audit" makes them look like one
+// more thing somebody here wrote — so they say whose they are. A format built
+// in this workspace keeps its own category.
+export const STANDARD_TEMPLATE_LABEL = 'Irame Standard Template';
+const STANDARD_TEMPLATE_IDS = new Set(REPORT_TEMPLATES.map(t => t.id));
+export function isStandardTemplate(id?: string): boolean {
+  return !!id && STANDARD_TEMPLATE_IDS.has(id);
+}
+export function templateCategoryLabel(t: { id?: string; category?: string }): string {
+  return isStandardTemplate(t.id) ? STANDARD_TEMPLATE_LABEL : (t.category ?? 'Custom');
+}
+
 /** The report body accent (numbers/ticks): custom brandColor wins, else theme. */
 export function reportAccent(theme?: string, brandColor?: string): string {
   if (isValidHexColor(brandColor)) return brandAccent(brandColor);
@@ -445,6 +458,12 @@ export function mergeTemplateOptions(
   return out;
 }
 
+// One column-width scheme for every report table (All · Shared · ATR ·
+// per-control) so columns line up list to list. The Report (name) column has no
+// fixed width, so under SmartTable `fixedLayout` it absorbs the slack — the
+// detail columns and actions stay packed together on the right with no gap.
+export const REPORT_COL_W = { type: '180px', queries: '112px', sharedBy: '200px', generated: '150px', actions: '120px', source: '110px' };
+
 // ─── Report-type classification ──────────────────────────────────────────────
 //
 // A report's type is resolved from the most authoritative signal available, in
@@ -452,7 +471,6 @@ export function mergeTemplateOptions(
 // → name match (last resort, so renaming can never silently reclassify).
 const TEMPLATE_KIND: Record<string, 'atr' | 'sox' | 'ia'> = {
   'rt-007': 'atr',
-  'rt-001': 'sox',
   'rt-internal-audit': 'ia',
 };
 

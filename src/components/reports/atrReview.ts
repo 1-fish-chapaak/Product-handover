@@ -122,6 +122,15 @@ export function currentVersion(id: string, seed: VersionSeed): number {
   const list = existing && existing.length ? existing : seedTrail(seed);
   return list[list.length - 1]?.version ?? 1;
 }
+
+/** What version a document is on right now, without seeding a trail for one
+ *  that has none. A document with no stored history is on v1 — the same thing
+ *  loadBaselineVersions would write the first time it is opened. Read-only, so
+ *  a list can print it without writing history for every row it draws. */
+export function peekVersion(id: string): number {
+  const existing = read<AtrVersion[]>(VKEY(id));
+  return existing && existing.length ? existing[existing.length - 1].version : 1;
+}
 export function saveVersions(id: string, list: AtrVersion[]) {
   write(VKEY(id), list);
 }

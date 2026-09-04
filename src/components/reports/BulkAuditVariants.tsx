@@ -113,6 +113,7 @@ export function BulkAuditVariantView({
   report,
   templates = REPORT_TEMPLATES,
   onBack,
+  backLabel,
   onShare,
   onApplyTemplate,
   onChangeAudience,
@@ -121,6 +122,9 @@ export function BulkAuditVariantView({
   /** Options listed in the Apply Template dropdown (standard + custom). */
   templates?: typeof REPORT_TEMPLATES[number][];
   onBack: () => void;
+  /** Where Back returns to, when the reader is opened from outside Reports
+   *  (an engagement's Audit Report tab, say). */
+  backLabel?: string;
   onShare?: () => void;
   /** Persist the applied template on the report so it survives a reopen. */
   onApplyTemplate?: (reportId: string, templateId: string) => void;
@@ -365,7 +369,7 @@ export function BulkAuditVariantView({
       {/* Report actions — pinned to the top of the scroll area (page-coloured,
           borderless — no header-bar chrome) so they stay reachable on scroll. */}
       <div className="sticky top-0 z-30 bg-canvas px-6 lg:px-12 xl:px-[124px] h-16 flex items-center justify-between gap-4 print:hidden">
-        <BulkBackLink onBack={onBack} />
+        <BulkBackLink onBack={onBack} backLabel={backLabel} />
         {!allFailed && (
           <div className="flex items-center gap-2">
             <BulkCoverActions
@@ -474,7 +478,6 @@ export function BulkAuditVariantView({
           <ReportDownloadModal
             reportName={report.name}
             reportTag={report.tag}
-            reportId={report.id?.toUpperCase()}
             generatedBy={report.generatedBy}
             generatedAt={report.generatedAt}
             sections={buildDownloadSections()}
@@ -649,13 +652,13 @@ function computeTotals(workflows: WorkflowResult[]): Totals {
 
 // Back affordance + report actions, shown plainly on the light page surface
 // (no header bar — the platform doesn't use page headers).
-function BulkBackLink({ onBack }: { onBack: () => void }) {
+function BulkBackLink({ onBack, backLabel }: { onBack: () => void; backLabel?: string }) {
   return (
     <button
       onClick={onBack}
       className="inline-flex items-center gap-1.5 h-9 px-3 text-[0.75rem] font-semibold text-ink-600 bg-canvas-elevated border border-canvas-border rounded-md hover:bg-canvas hover:text-ink-900 transition-colors cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600/30"
     >
-      <ArrowLeft size={14} /> Back to Reports
+      <ArrowLeft size={14} /> {backLabel ?? 'Back to Reports'}
     </button>
   );
 }
@@ -827,9 +830,6 @@ function EditorialLayout({
       <ReportBrandBanner
         title={report.name}
         className="rounded-t-lg"
-        eyebrow={report.id && (
-          <span className="font-mono text-[0.6875rem] tracking-[0.04em] text-white/65">{report.id.toUpperCase()}</span>
-        )}
         actions={
           <button
             onClick={onGenerateAtr}

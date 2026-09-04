@@ -697,7 +697,7 @@ function AppInner() {
                   const today = new Date().toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
                   const newReport = {
                     id: payload.reportId,
-                    templateId: 'rt-001',
+                    templateId: 'rt-internal-audit',
                     name: payload.reportName,
                     tag: 'From chat',
                     generatedBy: 'You',

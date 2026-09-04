@@ -12,8 +12,7 @@ import { ArrowLeft, Edit3, Copy, Trash2, FileText } from 'lucide-react';
 import TemplateSheet from './TemplateSheet';
 import {
   ICON_MAP, CATEGORY_COLORS,
-  type EditableTemplate,
-} from './reportShared';
+  type EditableTemplate, templateCategoryLabel } from './reportShared';
 import { findEngagement } from '../../data/engagements';
 import { templateScope, templateScopeLine } from './templateScope';
 
@@ -94,7 +93,7 @@ export default function TemplatePreview({
             <span className={`inline-flex items-center justify-center w-6 h-6 rounded-md ${tintBg}`}>
               <Icon size={12} className={eyebrowTone} strokeWidth={1.75} />
             </span>
-            <span className={`text-[0.625rem] font-semibold uppercase tracking-[0.14em] ${eyebrowTone}`}>{template.category}</span>
+            <span className={`text-[0.625rem] font-semibold uppercase tracking-[0.14em] ${eyebrowTone}`}>{templateCategoryLabel(template)}</span>
             <span className="text-ink-300">·</span>
             <span>{sections.length} {sections.length === 1 ? 'section' : 'sections'}</span>
             <span className="text-ink-300">·</span>

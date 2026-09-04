@@ -54,6 +54,8 @@ export type DownloadPreviewSection =
 interface Props {
   reportName: string;
   reportTag?: string;
+  /** The document's own reference, printed on the exported cover. An ATR
+   *  carries one; an audit report does not, so it simply passes nothing. */
   reportId?: string;
   templateName?: string;
   generatedBy: string;

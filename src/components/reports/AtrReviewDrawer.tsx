@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { motion } from 'motion/react';
 import { X, MessageSquare, GitBranch, Send, CheckCircle2, Pencil, Check, History } from 'lucide-react';
 import {
@@ -21,6 +21,19 @@ export default function AtrReviewDrawer({ reportId, reportName, tab, onClose, on
   const [draft, setDraft] = useState('');
   const [editingVersion, setEditingVersion] = useState<number | null>(null);
   const [labelDraft, setLabelDraft] = useState('');
+
+  // Escape closes the drawer the way it closes every other overlay (shared
+  // Modal.tsx), unless a version label is mid-rename — there Escape cancels the
+  // rename first. Without this the backdrop stayed up and swallowed every click.
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key !== 'Escape') return;
+      if (editingVersion != null) return;
+      onClose();
+    };
+    document.addEventListener('keydown', onKey);
+    return () => document.removeEventListener('keydown', onKey);
+  }, [onClose, editingVersion]);
 
   const addComment = () => {
     if (!draft.trim()) return;
@@ -71,7 +84,7 @@ export default function AtrReviewDrawer({ reportId, reportName, tab, onClose, on
                     </motion.span>
                   )}
                 </div>
-                <p className="text-[0.75rem] text-ink-400 mt-0.5 leading-snug truncate">Comments and version history for this report.</p>
+                <p className="text-[0.75rem] text-ink-400 mt-0.5 leading-snug truncate" title={reportName}>Comments and version history for <span className="text-ink-600 font-medium">{reportName}</span>.</p>
               </div>
             </div>
             <motion.button

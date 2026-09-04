@@ -34,6 +34,7 @@ import { DEFAULT_REPORT_AUDIENCE, type Audience } from '../shared/audience';
 import {
   SECTION_ICONS, reportGradient, reportAccent, mergeTemplateOptions,
   computeQueryKpis, rollupReportStats, reportKind, collectBlockLibrary, sayRating,
+  renderedSectionCount,
   sectionBlurb, isSectionGuidance,
   type WorkflowResult,
   type QueryShape, type QueryComment, type GeneratedReport,
@@ -1986,9 +1987,12 @@ function DraggableQuerySection({
 // ─── Attached Query Card — compact pending card for queries the user just attached ───
 
 // ─── Report View (with multiple queries) ───
-export default function ReportView({ report, onBack, onShare, onOpenQuery, initialTemplate, customTemplates = [], onUpdateDescription, onUpdateSignoffs, onApplyTemplate, onChangeAudience, onSaveAsTemplate, onSaveAtrVersion }: {
+export default function ReportView({ report, onBack, backLabel, onShare, onOpenQuery, initialTemplate, customTemplates = [], onUpdateDescription, onUpdateSignoffs, onApplyTemplate, onChangeAudience, onSaveAsTemplate, onSaveAtrVersion }: {
   report: GeneratedReport;
   onBack: () => void;
+  /** Where Back returns to, when the reader is opened from outside Reports
+   *  (an engagement's Audit Report tab, say). */
+  backLabel?: string;
   onShare?: () => void;
   onManageExceptions?: () => void;
   onOpenQuery?: (query: { id: string; title: string }) => void;
@@ -2375,6 +2379,9 @@ export default function ReportView({ report, onBack, onShare, onOpenQuery, initi
 
   const isBulkAudit = report.tag === 'Bulk Audit';
   const reportWorkflows: WorkflowResult[] = report.workflowResults ?? [];
+  // The same section count the Reports list prints on the card, so the row and
+  // the letterhead never disagree.
+  const bulkSectionCount = renderedSectionCount(report);
   // One block printed in two places is stored once. Placements resolve back to
   // that stored shape here, so both positions always print the same thing.
   const templateBlockLibrary = useMemo(
@@ -3221,7 +3228,7 @@ export default function ReportView({ report, onBack, onShare, onOpenQuery, initi
       onClick={onBack}
       className="inline-flex items-center gap-1.5 h-9 px-3 text-[0.75rem] font-semibold text-ink-600 bg-canvas-elevated border border-canvas-border rounded-md hover:bg-canvas hover:text-ink-900 transition-colors cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600/30"
     >
-      <ArrowLeft size={14} /> Back to Reports
+      <ArrowLeft size={14} /> {backLabel ?? 'Back to Reports'}
     </button>
   );
   const coverActions = (
@@ -3376,12 +3383,24 @@ export default function ReportView({ report, onBack, onShare, onOpenQuery, initi
                   <span className="text-white/30 mx-0.5">|</span>
                   <span className="text-white/70">{report.generatedAt}</span>
                   <span className="text-white/30 mx-0.5">|</span>
-                  <span className="text-white/70">{activeQueries.length} {activeQueries.length === 1 ? 'query' : 'queries'}</span>
+                  {/* A bulk audit is measured in the workflows it ran and the
+                      sections it prints, never in queries. */}
+                  {isBulkAudit ? (
+                    <>
+                      <span className="text-white/70">{reportWorkflows.length} {reportWorkflows.length === 1 ? 'workflow' : 'workflows'}</span>
+                      <span className="text-white/30 mx-0.5">|</span>
+                      <span className="text-white/70">{bulkSectionCount} {bulkSectionCount === 1 ? 'section' : 'sections'}</span>
+                    </>
+                  ) : (
+                    <span className="text-white/70">{activeQueries.length} {activeQueries.length === 1 ? 'query' : 'queries'}</span>
+                  )}
                   <span className="text-white/30 mx-0.5">|</span>
                   <span className="text-white/70">{reportAuditPeriod(report.reportPeriod)}</span>
-                  {/* When a template is applied, show only the applied-template chip. */}
+                  {/* One chip. A bulk audit names what it is; every other report
+                      names the format it is printed in. The applied format stays
+                      on the command bar's own chip either way. */}
                   <span className="inline-flex items-center h-6 px-2.5 ml-1 text-[0.6875rem] font-medium text-white bg-white/15 border border-white/25 rounded-full whitespace-nowrap">
-                    {appliedTemplate.name}
+                    {isBulkAudit && report.tag ? report.tag : appliedTemplate.name}
                   </span>
                 </div>
               </ReportBrandBanner>
@@ -3643,7 +3662,10 @@ export default function ReportView({ report, onBack, onShare, onOpenQuery, initi
                     // reader actually shows, never "0 queries".
                     const cardTotal = sections.reduce((n, s) => n + (s.kind === 'tblock' && (s.tsec.kind === 'cards' || s.tsec.blocks?.some(b => b.kind === 'cards')) ? (s.cards?.length ?? 0) : 0), 0);
                     const scopeLabel = isBulkAudit
-                      ? (() => { const n = sections.filter(s => s.kind === 'workflow').length; return `${n} ${n === 1 ? 'workflow' : 'workflows'}`; })()
+                      ? (() => {
+                          const n = sections.filter(s => s.kind === 'workflow').length;
+                          return `${n} ${n === 1 ? 'workflow' : 'workflows'}`;
+                        })()
                       : cardTotal > 0
                         ? `${cardTotal} ${cardTotal === 1 ? 'finding' : 'findings'}`
                         : (() => { const n = sections.filter(s => s.kind === 'query').length; return `${n} ${n === 1 ? 'query' : 'queries'}`; })();
@@ -3654,14 +3676,18 @@ export default function ReportView({ report, onBack, onShare, onOpenQuery, initi
                           logo={report.logoDataUrl}
                                     className="rounded-t-lg"
                           gradient={reportGradient(report.theme, report.brandColor)}
-                          eyebrow={report.id && (
-                            <span className="font-mono text-[0.6875rem] tracking-[0.04em] text-white/65">{report.id.toUpperCase()}</span>
-                          )}
                           footer={(() => {
-                            // Inline byline: who/when/scope plus the Audit Period. The
-                            // meta strip below carries the Report ID + Report Type.
+                            // Inline byline: who/when/scope plus the Audit Period.
                             const latestVersion = versions[versions.length - 1]?.version;
-                            const parts = [report.generatedBy, report.generatedAt, latestVersion ? `v${latestVersion}` : null, scopeLabel, reportAuditPeriod(report.reportPeriod)].filter(Boolean);
+                            const parts = [
+                              report.generatedBy,
+                              report.generatedAt,
+                              latestVersion ? `v${latestVersion}` : null,
+                              scopeLabel,
+                              // A bulk audit also says how much it prints.
+                              isBulkAudit ? `${bulkSectionCount} ${bulkSectionCount === 1 ? 'section' : 'sections'}` : null,
+                              reportAuditPeriod(report.reportPeriod),
+                            ].filter(Boolean);
                             if (parts.length === 0) return null;
                             return (
                               <div className="flex items-center gap-2.5 text-[0.8125rem] flex-wrap">
@@ -3671,6 +3697,14 @@ export default function ReportView({ report, onBack, onShare, onOpenQuery, initi
                                     <span className={i === 0 ? 'font-semibold text-white' : 'text-white/70'}>{p}</span>
                                   </span>
                                 ))}
+                                {/* A bulk audit names itself on its letterhead, the
+                                    same chip its own banner already uses. Other
+                                    reports carry no chip here, as before. */}
+                                {isBulkAudit && report.tag && (
+                                  <span className="inline-flex items-center px-2 h-5 ml-0.5 text-[0.625rem] font-semibold whitespace-nowrap rounded-full bg-white/15 text-white border border-white/25">
+                                    {report.tag}
+                                  </span>
+                                )}
                               </div>
                             );
                           })()}
@@ -3933,7 +3967,6 @@ export default function ReportView({ report, onBack, onShare, onOpenQuery, initi
           <ReportDownloadModal
             reportName={report.name}
             reportTag={report.tag}
-            reportId={report.id?.toUpperCase()}
             templateName={reportTemplate?.name}
             generatedBy={report.generatedBy}
             generatedAt={report.generatedAt}

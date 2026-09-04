@@ -32,7 +32,7 @@ test.describe('Audit Report tab — per-control reports', () => {
     const download = page.waitForEvent('download');
     await page.locator('tbody tr').first()
       .getByRole('button', { name: 'Download working paper' }).click();
-    expect((await download).suggestedFilename()).toMatch(/^Working_Paper_P2P-C-01\.xlsx$/);
+    expect((await download).suggestedFilename()).toMatch(/^Audit_Report_P2P-C-01\.xlsx$/);
   });
 
   // The engagement whose process the library does cover must be unaffected.

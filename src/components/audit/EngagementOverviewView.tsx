@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { motion, AnimatePresence, Reorder } from 'motion/react';
 import {
   ArrowLeft, ArrowUpRight, AlertTriangle, Calendar,
@@ -6,7 +6,7 @@ import {
   Shield, ShieldCheck, Sparkles, User, Workflow, Zap, Upload,
   ChevronRight, Plus, Activity, MessageSquare, ListChecks,
   RefreshCw, X, Settings, Database, BookOpen, Search, ArrowUpDown,
-  LayoutDashboard, Table2, GripHorizontal, Eye, EyeOff, Share2, Loader2,
+  LayoutDashboard, Table2, GripHorizontal, Eye, EyeOff, Loader2,
 } from 'lucide-react';
 import { PieChart, Pie, Cell, BarChart, Bar, XAxis, YAxis, ResponsiveContainer, Tooltip as RechartsTooltip } from 'recharts';
 import Orb from '../shared/Orb';
@@ -20,7 +20,6 @@ import { InsightSummaryStrip, ActionDrawer, InsightDrawer } from '../shared/Targ
 import type { StackRowNav } from '../shared/InsightStack';
 import { getGeneratedInsight, useInsightCacheVersion, type TargetedAction } from '../shared/insightCache';
 import { buildWorkflowInsight, isPricingSubject, type BuildInsightInput, type LayeredInsight, type EntityRef } from '../../data/layeredInsights';
-import { useShare, rectFromEvent } from '../../context/ShareContext';
 import {
   ENGAGEMENTS,
   PROCESS_COLORS,
@@ -50,6 +49,7 @@ import RACMTab from './RACMTab';
 import ControlsTab, { seededControlStatus } from './ControlsTab';
 import EvidenceTab from './EvidenceTab';
 import WorkingPaperTab from './WorkingPaperTab';
+import { buildWpControls } from './workingPaper';
 import { BulkExecuteModal, Checkbox } from '../workflow/BulkExecuteModal';
 import type { LibraryWorkflow } from '../workflow/WorkflowLibraryView';
 import LinkWorkflowModal from './LinkWorkflowModal';
@@ -125,7 +125,7 @@ function tabsForType(type: EngType): { id: TabId; label: string; icon: React.Ele
       // Workflows tab removed — attribute→workflow mapping now lives inline on the Controls tab.
       return [mk('overview', 'Overview'), mk('racm', 'RACM'), mk('controls', 'Controls'), mk('evidence', 'Evidence'), mk('working-paper', 'Working Paper'), mk('trail', 'Action Trail'), mk('config', 'Configuration')];
     case 'Internal Audit':
-      return [mk('overview', 'Overview'), mk('racm', 'RACM'), mk('controls', 'Controls'), mk('workflows', 'Workflows'), mk('exceptions', 'Exception Management'), mk('working-paper', 'Audit Report'), mk('trail', 'Action Trail'), mk('config', 'Configuration')];
+      return [mk('overview', 'Overview'), mk('racm', 'RACM'), mk('controls', 'Controls'), mk('workflows', 'Workflows'), mk('exceptions', 'Findings'), mk('working-paper', 'Audit Report'), mk('trail', 'Action Trail'), mk('config', 'Configuration')];
   }
 }
 
@@ -310,7 +310,6 @@ function healthTier(pct: number): { bar: string; text: string } {
 export default function EngagementDetailView({ engagementId, onBack, onOpenExecution, onOpenRacmFullEditor, onLaunchWorkflowBuilder, onOpenWorkflow, onRunWorkflow, onCreateWorkflowForEngagement }: Props) {
   const { addToast } = useToast();
   const logEvent = useAuditLog();
-  const { openShare } = useShare();
   const engagement = useMemo(() => ENGAGEMENTS.find(e => e.id === engagementId), [engagementId]);
 
   // Default the tab to overview; pick the first tab for the type once we know
@@ -331,7 +330,15 @@ export default function EngagementDetailView({ engagementId, onBack, onOpenExecu
   // engagement chrome (its own back button, the header, the KPIs, the tabs)
   // steps aside so the report has one back button, not two.
   const [reportReaderOpen, setReportReaderOpen] = useState(false);
-  const handleReportReaderChange = useCallback((open: boolean) => setReportReaderOpen(open), []);
+  // The engagement page is what scrolls, and opening a document replaces the
+  // tab body with the reader while leaving the scroll where the list was — so
+  // a report opened from halfway down the list opened halfway down the report.
+  // Every document starts at its first line.
+  const pageScrollRef = useRef<HTMLDivElement | null>(null);
+  const handleReportReaderChange = useCallback((open: boolean) => {
+    setReportReaderOpen(open);
+    if (open) pageScrollRef.current?.scrollTo({ top: 0, behavior: 'auto' });
+  }, []);
   const [configWorkflow, setConfigWorkflow] = useState<string | null>(null);
   // Control to auto-open in the Evidence tab's Attribute Testing step (from Controls → "Test evidence").
   const [evidenceTarget, setEvidenceTarget] = useState<string | null>(null);
@@ -463,17 +470,43 @@ export default function EngagementDetailView({ engagementId, onBack, onOpenExecu
     else openCaseWorkspace();
   };
 
-  // KPI strip — adapt the secondary numbers to the engagement type.
-  const tested = Math.round(eng.controls * (eng.health > 0 ? eng.health / 100 : 0));
-  const failed = eng.openIssues;
-  const effective = Math.max(0, tested - failed);
+  // KPI strip — the control counts come from the same attribute results the
+  // Audit Report tab reads and the working paper exports, so the header cannot
+  // say one thing while the tab under it says another.
+  const wpRollup = useMemo(() => {
+    const controls = buildWpControls(baseControlsFor(eng), {
+      health: eng.health,
+      owner: eng.owner,
+      testedOn: '',
+      // Links only decide how an attribute was tested, never the result, so the
+      // rollup does not need them.
+      linkedWorkflows: () => [],
+      riskForControl: () => undefined,
+    });
+    return {
+      inScope: controls.length,
+      tested: controls.filter(c => c.status !== 'Not tested').length,
+      effective: controls.filter(c => c.status === 'Pass').length,
+      failed: controls.filter(c => c.status === 'Fail').length,
+    };
+  }, [eng]);
+  const { inScope, tested, effective, failed } = wpRollup;
+
+  // This workspace is an internal audit workspace, so it reads in internal
+  // audit's words by default: a control is rated satisfactory or needing
+  // improvement. Compliance and SOX ICFR conclude on effectiveness instead,
+  // so they are the ones that translate.
+  const concludesOnEffectiveness = eng.type === 'Compliance' || eng.type === 'SOX / ICFR';
 
   // Non-Automation types keep the engagement-level 6-card grid.
   const kpis = [
-    { label: 'Controls in Scope', value: eng.controls, icon: Shield },
+    // The seeded engagement.controls said eight while the rows underneath it
+    // said ten. On an internal audit the tile counts the same controls the
+    // Controls tab lists and the Audit Report concludes on.
+    { label: 'Controls in Scope', value: concludesOnEffectiveness ? eng.controls : inScope, icon: Shield },
     { label: 'Tested', value: notStarted ? '—' : tested, icon: CheckCircle2 },
-    { label: 'Effective', value: notStarted ? '—' : effective, icon: ShieldCheck },
-    { label: 'Failed', value: notStarted ? '—' : failed, icon: AlertTriangle },
+    { label: concludesOnEffectiveness ? 'Effective' : 'Satisfactory', value: notStarted ? '—' : effective, icon: ShieldCheck },
+    { label: concludesOnEffectiveness ? 'Failed' : 'Needs improvement', value: notStarted ? '—' : failed, icon: AlertTriangle },
     { label: 'Workflows', value: MOCK_WORKFLOWS.length, icon: Workflow },
     { label: 'Evidence', value: MOCK_EVIDENCE.length, icon: FolderOpen },
   ];
@@ -501,9 +534,13 @@ export default function EngagementDetailView({ engagementId, onBack, onOpenExecu
 
   return (
     <EngagementWorkspaceProvider engagement={eng} workflows={WORKSPACE_WORKFLOWS}>
-    <div className="h-full overflow-y-auto bg-white bg-mesh-gradient relative">
+    <div ref={pageScrollRef} className={`h-full bg-white bg-mesh-gradient relative ${reportReaderOpen ? 'overflow-hidden' : 'overflow-y-auto'}`}>
       <Orb hoverIntensity={0.06} rotateOnHover hue={275} opacity={0.05} />
-      <div className="p-8 relative">
+      {/* An opened working paper is a report reader, not a tab panel: it brings
+          its own command bar and page gutters, so the engagement page drops its
+          padding underneath it and the paper sits exactly where a report opened
+          from Reports does. */}
+      <div className={`relative ${reportReaderOpen ? 'h-full flex flex-col min-h-0' : 'p-8'}`}>
         {!reportReaderOpen && (
         <button onClick={onBack} className="flex items-center gap-1.5 text-[0.75rem] text-text-muted hover:text-primary font-medium mb-4 cursor-pointer transition-colors">
           <ArrowLeft size={14} />Back to Engagements
@@ -556,7 +593,7 @@ export default function EngagementDetailView({ engagementId, onBack, onOpenExecu
                 {notStarted ? '—' : `${eng.health}%`}
               </div>
               <div className="text-[0.625rem] text-text-muted uppercase tracking-wide mt-0.5">
-                {eng.type === 'Automation' ? 'Pass Rate' : 'Effective'}
+                {eng.type === 'Automation' ? 'Pass Rate' : concludesOnEffectiveness ? 'Effective' : 'Coverage'}
               </div>
               {!notStarted && (
                 <div className="mt-2 w-20 h-1.5 bg-surface-3 rounded-full overflow-hidden mx-auto">
@@ -588,8 +625,7 @@ export default function EngagementDetailView({ engagementId, onBack, onOpenExecu
           </div>
         )}
 
-        {/* Tabs — colorful icons + drag horizontally to reorder (Configuration → show/hide).
-            Share sits on the right of the tab line, sharing the same divider. */}
+        {/* Tabs — colorful icons + drag horizontally to reorder (Configuration → show/hide). */}
         {!reportReaderOpen && (
         <div className="flex items-center gap-3 border-b border-border-light mb-5">
         <Reorder.Group
@@ -626,14 +662,6 @@ export default function EngagementDetailView({ engagementId, onBack, onOpenExecu
             );
           })}
         </Reorder.Group>
-          <Gated permission="eng_share">
-            <button
-              onClick={(e) => { e.stopPropagation(); openShare({ type: 'engagement', id: eng.id, anchor: rectFromEvent(e) }); }}
-              className="shrink-0 inline-flex items-center gap-1.5 px-3 h-9 rounded-lg border border-border bg-white text-[0.8125rem] font-semibold text-text-secondary hover:text-primary hover:border-primary/30 transition-colors cursor-pointer"
-            >
-              <Share2 size={14} /> Share
-            </button>
-          </Gated>
         </div>
         )}
 
@@ -645,6 +673,9 @@ export default function EngagementDetailView({ engagementId, onBack, onOpenExecu
             animate={{ opacity: 1, y: 0 }}
             exit={{ opacity: 0, y: -4 }}
             transition={{ duration: 0.15 }}
+            // An open report reader owns the height it is given and scrolls its
+            // own document, so the page behind it never scrolls with it.
+            className={reportReaderOpen ? 'flex-1 min-h-0' : undefined}
           >
             {/* ═══ OVERVIEW — Health dashboard for all three engagement types ═══ */}
             {activeTab === 'overview' && (
@@ -701,7 +732,7 @@ export default function EngagementDetailView({ engagementId, onBack, onOpenExecu
             )}
             {/* ═══ WORKING PAPER (Compliance) / AUDIT REPORT (IA) ═══ */}
             {activeTab === 'working-paper' && (
-              <WorkingPaperTab engagement={eng} onReaderChange={handleReportReaderChange} />
+              <WorkingPaperTab engagement={eng} onReaderChange={handleReportReaderChange} onOpenFindings={goToExceptionsTab} />
             )}
 
             {/* ═══ ACTION TRAIL (all types) ═══ */}
@@ -1008,6 +1039,10 @@ function ExceptionManagementTab({
 }) {
   const allExceptions = useMemo(() => exceptionsForEngagement(eng.id), [eng.id]);
   const groups = useMemo(() => groupByWorkflow(allExceptions), [allExceptions]);
+  // What an audit reports is a finding. Only an automation raises raw
+  // exceptions, so that is the one type that keeps the other word.
+  const issue = eng.type === 'Automation' ? 'exception' : 'finding';
+  const Issue = eng.type === 'Automation' ? 'Exception' : 'Finding';
 
   const totals = useMemo(() => {
     const t = { open: 0, triaging: 0, resolved: 0 };
@@ -1077,7 +1112,7 @@ function ExceptionManagementTab({
       {/* Exception signals — borderless inline stats (out of the box); each drills into the workspace. */}
       <div className="flex flex-wrap items-center gap-y-3 px-1 py-1">
         {([
-          { label: 'All Exceptions', value: allExceptions.length, sub: `Across ${allWorkflowsView.length} workflows`, tone: 'text-text', onClick: () => onOpenWorkspace() },
+          { label: `All ${Issue}s`, value: allExceptions.length, sub: `Across ${allWorkflowsView.length} workflows`, tone: 'text-text', onClick: () => onOpenWorkspace() },
           { label: 'Open', value: totals.open, sub: 'Awaiting triage', tone: 'text-risk-700', onClick: () => onOpenWorkspace({ status: 'Open' }) },
           { label: 'In Progress', value: totals.triaging, sub: 'Owner assigned', tone: 'text-mitigated-700', onClick: () => onOpenWorkspace({ status: 'Triaging' }) },
           { label: 'Resolved', value: totals.resolved, sub: 'Closed this engagement', tone: 'text-compliant-700', onClick: () => onOpenWorkspace({ status: 'Resolved' }) },
@@ -1097,7 +1132,7 @@ function ExceptionManagementTab({
       {/* Compact toolbar — title, search, sort, workspace link. */}
       <div className="flex items-center justify-between gap-3 flex-wrap">
         <div className="flex items-baseline gap-2 shrink-0">
-          <h4 className="text-[0.8125rem] font-semibold text-text">Exceptions by workflow</h4>
+          <h4 className="text-[0.8125rem] font-semibold text-text">{Issue}s by workflow</h4>
           <span className="text-[0.6875rem] text-text-muted">{visibleWorkflows.length} of {allWorkflowsView.length}</span>
         </div>
         <div className="flex items-center gap-2 flex-wrap">
@@ -1188,12 +1223,12 @@ function ExceptionManagementTab({
 
               <div className="ml-auto flex items-center gap-4 shrink-0">
                 {hasNone ? (
-                  <span className="text-[0.6875rem] text-text-muted/70 italic">No open exceptions</span>
+                  <span className="text-[0.6875rem] text-text-muted/70 italic">No open {issue}s</span>
                 ) : (
-                  /* Single signal per workflow: open exceptions */
+                  /* Single signal per workflow: what is still open */
                   <span className="inline-flex items-baseline gap-1.5">
                     <span className={`text-[1.125rem] font-bold tabular-nums leading-none ${group.openCount > 0 ? 'text-risk-700' : 'text-compliant-700'}`}>{group.openCount}</span>
-                    <span className="text-[0.6875rem] text-text-muted">open exception{group.openCount === 1 ? '' : 's'}</span>
+                    <span className="text-[0.6875rem] text-text-muted">open {issue}{group.openCount === 1 ? '' : 's'}</span>
                   </span>
                 )}
                 <ArrowUpRight size={14} className={hasNone ? 'text-transparent' : 'text-text-muted group-hover/row:text-primary transition-colors'} aria-label="Opens in a new tab" />
@@ -1573,7 +1608,9 @@ export function HealthOverviewTab({
     kpi1Sub: isAutomation
       ? `${MOCK_WORKFLOWS.filter(wf => wf.cadence.kind === 'Frequency').length} live · ${MOCK_WORKFLOWS.filter(wf => wf.cadence.kind === 'Ad-hoc').length} ad-hoc`
       : `${MOCK_WORKFLOWS.length} test workflows linked`,
-    kpi1Value: isAutomation ? MOCK_WORKFLOWS.length : eng.controls,
+    // The same rows the header strip, the Controls tab and the Audit Report
+    // count, rather than the seeded engagement.controls they disagreed with.
+    kpi1Value: isAutomation ? MOCK_WORKFLOWS.length : isCompliance ? eng.controls : baseControlsFor(eng).length,
     kpi2Label: `Open ${issueWordCap}`,
     kpi3Label: isIA ? 'Action Plans Open' : 'In Progress',
     kpi4Label: isAutomation ? 'Health' : (isCompliance ? 'Pass Rate' : 'Coverage'),
@@ -1769,12 +1806,12 @@ export function HealthOverviewTab({
           <div className="flex items-center justify-between mb-3">
             <div>
               <h3 className="text-[0.8125rem] font-semibold text-text">{labels.donutHeader}</h3>
-              <p className="text-[0.6875rem] text-text-muted mt-0.5">Click a slice to drill into Exception Management.</p>
+              <p className="text-[0.6875rem] text-text-muted mt-0.5">Click a slice to drill into {isAutomation ? 'Exception Management' : 'Findings'}.</p>
             </div>
             <span className="text-[0.6875rem] text-text-muted">{totalOpenForDonut} open</span>
           </div>
           {severityData.length === 0 ? (
-            <div className="h-[180px] flex items-center justify-center text-[0.75rem] text-text-muted">No open exceptions</div>
+            <div className="h-[180px] flex items-center justify-center text-[0.75rem] text-text-muted">No open {issueWord}s</div>
           ) : (
             <div className="flex items-center gap-4">
               <div className="w-[180px] h-[180px] shrink-0 relative">
@@ -1827,11 +1864,11 @@ export function HealthOverviewTab({
           <div className="flex items-center justify-between mb-3">
             <div>
               <h3 className="text-[0.8125rem] font-semibold text-text">{labels.barHeader}</h3>
-              <p className="text-[0.6875rem] text-text-muted mt-0.5">Click a bar to filter the Exception Management tab.</p>
+              <p className="text-[0.6875rem] text-text-muted mt-0.5">Click a bar to filter the {isAutomation ? 'Exception Management' : 'Findings'} tab.</p>
             </div>
           </div>
           {workflowData.length === 0 ? (
-            <div className="h-[180px] flex items-center justify-center text-[0.75rem] text-text-muted">No exception activity</div>
+            <div className="h-[180px] flex items-center justify-center text-[0.75rem] text-text-muted">No {issueWord} activity</div>
           ) : (
             <div className="h-[180px]">
               <ResponsiveContainer>
@@ -1848,7 +1885,7 @@ export function HealthOverviewTab({
                   <RechartsTooltip
                     contentStyle={{ borderRadius: 8, border: '1px solid rgba(0,0,0,0.08)', fontSize: 12, padding: '6px 10px' }}
                     cursor={{ fill: 'rgba(106, 18, 205, 0.06)' }}
-                    formatter={(value) => [`${value as number} open`, 'Exceptions']}
+                    formatter={(value) => [`${value as number} open`, issueWordCap]}
                   />
                   <Bar
                     dataKey="count"
@@ -1890,7 +1927,7 @@ export function HealthOverviewTab({
           </div>
         </div>
         {!heatmapHasData ? (
-          <div className="h-[120px] flex items-center justify-center text-[0.75rem] text-text-muted">No exception activity in the last {heatmapDays} days</div>
+          <div className="h-[120px] flex items-center justify-center text-[0.75rem] text-text-muted">No {issueWord} activity in the last {heatmapDays} days</div>
         ) : (
           <div className="space-y-1.5">
             {heatmapData.map(row => (
@@ -2127,7 +2164,7 @@ export function HealthOverviewTab({
         <div className="glass-card p-5">
           <h3 className="text-[0.75rem] font-bold text-ink-500 uppercase tracking-wider mb-3">Engagement at a glance</h3>
           <dl className="space-y-2.5 text-[0.78125rem]">
-            <div className="flex items-center justify-between"><dt className="text-text-muted">Type</dt><dd className="text-text font-medium">Automation{eng.subtype ? ` · ${eng.subtype}` : ''}</dd></div>
+            <div className="flex items-center justify-between"><dt className="text-text-muted">Type</dt><dd className="text-text font-medium">{eng.type}{eng.subtype ? ` · ${eng.subtype}` : ''}</dd></div>
             <div className="flex items-center justify-between"><dt className="text-text-muted">Process</dt><dd className="text-text font-medium">{eng.process}</dd></div>
             <div className="flex items-center justify-between"><dt className="text-text-muted">Framework</dt><dd className="text-text font-medium">{eng.framework}</dd></div>
             <div className="flex items-center justify-between"><dt className="text-text-muted">Period</dt><dd className="text-text font-medium">{eng.periodStart} – {eng.periodEnd}</dd></div>
@@ -2149,8 +2186,8 @@ export function HealthOverviewTab({
               <div>
                 <div className="text-text">
                   {openCount + inProgressCount > 0
-                    ? `${openCount + inProgressCount} open / in-progress exception(s)`
-                    : 'No open exceptions'}
+                    ? `${openCount + inProgressCount} open / in-progress ${issueWord}${openCount + inProgressCount === 1 ? '' : 's'}`
+                    : `No open ${issueWord}s`}
                 </div>
                 <div className="text-[0.6875rem] text-text-muted">Updated {eng.lastActivity}</div>
               </div>
@@ -2158,8 +2195,8 @@ export function HealthOverviewTab({
             <li className="flex items-start gap-2.5">
               <div className="mt-0.5 w-1.5 h-1.5 rounded-full bg-mitigated-500 shrink-0" />
               <div>
-                <div className="text-text">Next run: {eng.nextScheduled}</div>
-                <div className="text-[0.6875rem] text-text-muted">On schedule</div>
+                <div className="text-text">{isAutomation ? 'Next run' : 'Next step'}: {eng.nextScheduled}</div>
+                <div className="text-[0.6875rem] text-text-muted">{isAutomation ? 'On schedule' : eng.status}</div>
               </div>
             </li>
           </ul>

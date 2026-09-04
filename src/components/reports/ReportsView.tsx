@@ -8,7 +8,7 @@ import { BTN_CTA_PRIMARY } from '../admin/adminTokens';
 import InfiniteCardGrid from '../shared/InfiniteCardGrid';
 import {
   FileText, Shield, AlertTriangle, Download, Share2, ArrowRight, ArrowLeft,
-  X, BookOpen, Trash2, Plus, Search, Layers, Check,
+  X, BookOpen, Trash2, Plus, Search, Layers,
   WifiOff, FileCheck2, FolderArchive, CloudUpload,
 } from 'lucide-react';
 import TemplatePreview from './TemplatePreview';
@@ -26,6 +26,7 @@ import { exportAtrWord } from './atrTemplate';
 import { currentVersion } from './atrReview';
 import { Pill, type Tone } from '../shared/StatusBadge';
 import { ReportPill } from './ReportPill';
+import { SourceChip, ActionTooltip, ReportNameCell, TYPE_PILL } from './reportTableCells';
 import { reportDisplayName } from './reportName';
 import { TemplateEditor } from './TemplateEditor';
 import TemplateScopeModal from './TemplateScopeModal';
@@ -33,10 +34,9 @@ import { templateScopeTag } from './templateScope';
 import { findEngagement } from '../../data/engagements';
 import {
   ICON_MAP, CATEGORY_COLORS, BLANK_TEMPLATE, mergeTemplateOptions,
-  reportKind, startReportDownload, oneDefaultOnly,
+  reportKind, startReportDownload, oneDefaultOnly, REPORT_COL_W as COL_W,
   renderedQueryCount, renderedSectionCount,
-  type EditableTemplate, type GeneratedReport,
-} from './reportShared';
+  type EditableTemplate, type GeneratedReport, templateCategoryLabel } from './reportShared';
 import SmartTable from '../shared/SmartTable';
 import { useToast } from '../shared/Toast';
 import { useAuditLog } from '../../context/AdminDataContext';
@@ -175,23 +175,6 @@ function ReportOpenSkeleton({ onBack }: { onBack: () => void }) {
 }
 
 // Source chip — where a report came from. Bordered + semibold (the platform's
-// default chip), cool-toned. Custom = user-made, so it carries the brand tint;
-// System = generated, stays neutral.
-// Which format the report is written in: one of the standard ones, or a format
-// somebody here built. The column is headed "Format" rather than "Source" —
-// "Source" reads as where the data came from, which is not what this says.
-function SourceChip({ source }: { source: 'system' | 'custom' | string }) {
-  const custom = source === 'custom';
-  return (
-    <span
-      title={custom ? 'Written in a format built in this workspace' : 'Written in one of the standard formats'}
-      className={`inline-flex items-center h-6 px-2.5 rounded-full border text-[0.6875rem] font-semibold whitespace-nowrap shrink-0 ${custom ? 'bg-brand-50 text-brand-700 border-brand-200' : 'bg-draft-50 text-ink-600 border-canvas-border'}`}
-    >
-      {custom ? 'Custom' : 'Standard'}
-    </span>
-  );
-}
-
 // ─── Main Reports View ───
 export default function ReportsView({
   onShare,
@@ -531,7 +514,10 @@ export default function ReportsView({
     // actually prints rather than reporting "0 queries".
     const w = r.workflowResults?.length ?? 0;
     const q = renderedQueryCount(r);
-    const sec = renderedSectionCount(r);
+    // A format applied from the reader rewrites the body, so the card counts
+    // the sections that format brings rather than the ones it was made with.
+    const applied = [...REPORT_TEMPLATES, ...customTemplates].find(t => t.id === r.appliedTemplateId);
+    const sec = renderedSectionCount(applied?.sections?.length ? { ...r, templateSections: applied.sections } : r);
     const body = w > 0
       ? `${w} ${w === 1 ? 'workflow' : 'workflows'}`
       : `${q} ${q === 1 ? 'query' : 'queries'}`;
@@ -878,75 +864,11 @@ export default function ReportsView({
 
   const TAG_FILTER_OPTIONS = ['Internal Audit', 'Bulk Audit'];
 
-  const ActionTooltip = ({ label, children }: { label: string; children: React.ReactNode }) => (
-    <span className="relative group/tt inline-flex">
-      {children}
-      <span className="pointer-events-none absolute bottom-[calc(100%+4px)] left-1/2 -translate-x-1/2 px-2 py-1 bg-ink-900 text-white text-[0.625rem] font-medium rounded-md whitespace-nowrap opacity-0 group-hover/tt:opacity-100 group-focus-within/tt:opacity-100 transition-opacity z-50">
-        {label}
-      </span>
-    </span>
-  );
-
-
-  // Canonical "Report" name cell shared by every list-view table (All · SOX · IA
-  // · Shared) so the lists never drift: brand tile + type icon, 14.5px name with
-  // a quiet secondary subline. Hover affordances only when the row is openable.
-  const ReportNameCell = ({ icon: Icon, iconClass, name, subline, onClick, selectable, selected, isSelecting, onToggleSelect }: { icon: React.ElementType; iconClass?: string; name: string; subline?: React.ReactNode; onClick?: () => void; selectable?: boolean; selected?: boolean; isSelecting?: boolean; onToggleSelect?: () => void }) => {
-    const display = reportDisplayName(name);
-    const truncated = display.length > 100 ? display.slice(0, 100) + '…' : display;
-    const clickable = Boolean(onClick) || Boolean(selectable);
-    // While selecting, a plain row click toggles selection instead of opening.
-    const handleClick = () => { if (selectable && isSelecting) onToggleSelect?.(); else onClick?.(); };
-    return (
-      <div className={`flex items-center gap-3 min-w-0 ${clickable ? 'cursor-pointer' : ''}`} onClick={handleClick}>
-        <span className="relative shrink-0 w-9 h-9 flex items-center justify-center">
-          {/* Type tile — a soft tone-tinted square so each row carries the same
-              type anchor the grid card uses (list↔grid parity). Fades out on
-              hover/select so the checkbox sits cleanly on the row bg. */}
-          <span aria-hidden="true" className={`absolute inset-0 flex items-center justify-center rounded-md transition-opacity duration-150 ${iconClass ?? 'text-ink-400'} ${selectable ? (selected || isSelecting ? 'opacity-0' : 'opacity-100 group-hover:opacity-0') : 'opacity-100'}`}>
-            <Icon size={16} strokeWidth={1.75} />
-          </span>
-          {selectable && (
-            <span
-              role="checkbox"
-              aria-checked={selected}
-              aria-label={selected ? `Deselect ${display}` : `Select ${display}`}
-              tabIndex={0}
-              onClick={(e) => { e.stopPropagation(); onToggleSelect?.(); }}
-              onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.stopPropagation(); e.preventDefault(); onToggleSelect?.(); } }}
-              className={`relative w-4 h-4 rounded-sm border flex items-center justify-center transition-opacity duration-150 cursor-pointer ${
-                selected
-                  ? 'bg-brand-600 border-brand-600 text-white opacity-100'
-                  : isSelecting
-                    ? 'bg-paper-0 border-ink-300 opacity-100 hover:border-brand-500'
-                    : 'bg-paper-0 border-ink-300 opacity-0 group-hover:opacity-100 hover:border-brand-500'
-              }`}
-            >
-              {selected && <Check size={11} strokeWidth={3} />}
-            </span>
-          )}
-        </span>
-        <div className="min-w-0">
-          <div className="text-[0.875rem] font-semibold tracking-[-0.006em] text-ink-900 truncate" title={display.length > 100 ? display : undefined}>{truncated}</div>
-          {subline && <div className="mt-0.5 text-[0.75rem] text-ink-400 truncate">{subline}</div>}
-        </div>
-      </div>
-    );
-  };
-
-  // Full, un-abbreviated type label for a list row's Type column.
-  // Canonical bordered tone pill (StatusBadge §7.10.4) for every Type/category chip.
-  const TYPE_PILL = (label: string, tone: Tone) => <ReportPill tone={tone}>{label}</ReportPill>;
   // Bulk Audit — mitigated bordered chip, distinct from the kind chips
-  // (IA=brand/purple, ATR=blue, SOX=amber) so it stands out as the
-  // cross-cutting engagement type. Routed through the canonical ReportPill
-  // (§7.10.4) rather than a hand-rolled span.
+  // (IA=brand/purple, ATR=blue) so it stands out as the cross-cutting
+  // engagement type. Routed through the canonical ReportPill (§7.10.4) rather
+  // than a hand-rolled span.
   const BULK_PILL = <ReportPill tone="mitigated">Bulk Audit</ReportPill>;
-  // One column-width scheme for every report table (All · SOX/IA · Shared · ATR)
-  // so columns line up tab to tab. The Report (name) column has no fixed width,
-  // so under SmartTable `fixedLayout` it absorbs the slack — the detail columns
-  // and actions stay packed together on the right with no empty gap.
-  const COL_W = { type: '180px', queries: '112px', sharedBy: '200px', generated: '150px', actions: '120px', source: '110px' };
   // Muted placeholder for the Type column when a row has no special type.
 
 
@@ -1185,16 +1107,20 @@ export default function ReportsView({
             searchPlaceholder="Search all reports…"
             trailing={
               <>
-                <ColumnFilter
-                  variant="button"
-                  icon
-                  selectIndicator="checkbox"
-                  label="Type"
-                  options={allTypeOptions}
-                  value={allTypeFilter}
-                  onChange={setAllTypeFilter}
-                  align="end"
-                />
+                {/* The type filter lives in the table's Type header, on the column
+                    it filters. Cards have no header, so the toolbar keeps it there. */}
+                {viewMode === 'grid' && (
+                  <ColumnFilter
+                    variant="button"
+                    icon
+                    selectIndicator="checkbox"
+                    label="Type"
+                    options={allTypeOptions}
+                    value={allTypeFilter}
+                    onChange={setAllTypeFilter}
+                    align="end"
+                  />
+                )}
                 <ToolbarViewToggle mode={viewMode} onChange={setViewMode} />
                 <button
                   onClick={() => setAtrUploadOpen(true)}
@@ -1289,7 +1215,9 @@ export default function ReportsView({
                   />
                 );
               }},
-              { key: 'kind', label: 'Type', width: COL_W.type, render: (item) => {
+              { key: 'kind', label: 'Type', width: COL_W.type,
+                filter: <ColumnFilter selectIndicator="checkbox" label="Type" options={allTypeOptions} value={allTypeFilter} onChange={setAllTypeFilter} align="end" />,
+                render: (item) => {
                 const k = item.kind as UnifiedKind;
                 return (
                   <div className="flex items-center gap-1.5 flex-wrap">
@@ -1330,16 +1258,20 @@ export default function ReportsView({
             searchPlaceholder="Search shared reports…"
             trailing={
               <>
-                <ColumnFilter
-                  variant="button"
-                  icon
-                  selectIndicator="checkbox"
-                  label="Type"
-                  options={sharedTypeOptions}
-                  value={sharedTypeFilter}
-                  onChange={setSharedTypeFilter}
-                  align="end"
-                />
+                {/* The type filter lives in the table's Type header, on the column
+                    it filters. Cards have no header, so the toolbar keeps it there. */}
+                {viewMode === 'grid' && (
+                  <ColumnFilter
+                    variant="button"
+                    icon
+                    selectIndicator="checkbox"
+                    label="Type"
+                    options={sharedTypeOptions}
+                    value={sharedTypeFilter}
+                    onChange={setSharedTypeFilter}
+                    align="end"
+                  />
+                )}
                 <ToolbarViewToggle mode={viewMode} onChange={setViewMode} />
               </>
             }
@@ -1386,7 +1318,9 @@ export default function ReportsView({
                   onClick={() => openSharedReport(item as unknown as typeof SHARED_REPORTS[number])}
                 />
               )},
-              { key: 'kind', label: 'Type', width: COL_W.type, render: (item) => {
+              { key: 'kind', label: 'Type', width: COL_W.type,
+                filter: <ColumnFilter selectIndicator="checkbox" label="Type" options={sharedTypeOptions} value={sharedTypeFilter} onChange={setSharedTypeFilter} align="end" />,
+                render: (item) => {
                 const k = (item.kind as UnifiedKind) ?? 'ia';
                 return TYPE_PILL(KIND_FULL_LABEL[k], KIND_TONE[k]);
               }},
@@ -1511,7 +1445,7 @@ export default function ReportsView({
                   </div>
                   <div className="relative flex items-center h-7">
                     <span className={`text-[0.625rem] font-semibold uppercase tracking-[0.14em] transition-opacity duration-200 group-hover:opacity-0 ${eyebrowTone}`}>
-                      {rt.category}
+                      {templateCategoryLabel(rt)}
                     </span>
                     <span
                       aria-hidden
@@ -1623,7 +1557,7 @@ export default function ReportsView({
                       {templateScopeTag(rt as EditableTemplate, findEngagement((rt as EditableTemplate).engagementId ?? '')?.name)}
                     </Pill>
                   )}
-                  <span className={`hidden md:inline w-[5.5rem] text-right text-[0.625rem] font-semibold uppercase tracking-[0.12em] ${eyebrowTone}`}>{rt.category}</span>
+                  <span className={`hidden md:inline whitespace-nowrap text-right text-[0.625rem] font-semibold uppercase tracking-[0.12em] ${eyebrowTone}`}>{templateCategoryLabel(rt)}</span>
                   {/* No actions on the row: it opens the template, and Delete
                       lives inside it. */}
                 </div>

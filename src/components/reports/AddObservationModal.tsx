@@ -3,7 +3,7 @@ import { createPortal } from 'react-dom';
 import Gated from '../shared/Gated';
 import { motion, AnimatePresence } from 'motion/react';
 import {
-  X, CloudUpload, Paperclip, FileText, FileSpreadsheet, Loader2, Lock,
+  X, CloudUpload, Paperclip, FileText, FileSpreadsheet, Loader2, Lock, ExternalLink,
 } from 'lucide-react';
 import { useToast } from '../shared/Toast';
 import { useFocusTrap } from '../../hooks/useFocusTrap';
@@ -63,6 +63,34 @@ export function attachmentVisual(mime: string): { Icon: React.ElementType; tone:
   if (mime === 'application/msword' || mime.includes('wordprocessing'))
     return { Icon: FileText, tone: 'text-evidence-700' };
   return { Icon: Paperclip, tone: 'text-ink-400' };
+}
+
+/** A data: URL back into a Blob, so an attachment can be opened in a tab.
+ *  Chrome refuses to navigate a top-level tab to a data: URL, so the stored
+ *  data URL has to become an object URL first. */
+function dataUrlToBlob(dataUrl: string): Blob | null {
+  const m = /^data:([^;,]*)(;base64)?,([\s\S]*)$/.exec(dataUrl);
+  if (!m) return null;
+  const mime = m[1] || 'application/octet-stream';
+  const body = m[3];
+  if (m[2]) {
+    const bin = atob(body);
+    const bytes = new Uint8Array(bin.length);
+    for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
+    return new Blob([bytes], { type: mime });
+  }
+  return new Blob([decodeURIComponent(body)], { type: mime });
+}
+
+/** Open one attachment in a new browser tab — the image or the PDF itself, in
+ *  the viewer the browser already has, rather than a download. */
+export function openAttachmentInNewTab(att: ObservationAttachment): void {
+  const blob = dataUrlToBlob(att.dataUrl);
+  if (!blob) return;
+  const url = URL.createObjectURL(blob);
+  window.open(url, '_blank', 'noopener');
+  // The tab has the bytes by then; keeping the URL alive leaks it.
+  window.setTimeout(() => URL.revokeObjectURL(url), 60_000);
 }
 
 // Compute the next OBS-NNN id given the list of existing ids.
@@ -412,35 +440,43 @@ export default function AddObservationModal({ open, editing, nextObsId, onClose,
                   className="w-full bg-transparent border-0 px-3 pt-2 pb-1 text-[0.8125rem] text-ink-800 focus:outline-none focus:ring-0 resize-none"
                 />
                 {obsForm.attachments.length > 0 && (
-                  <ul className="px-3 pb-2 space-y-1.5">
+                  /* What was attached, shown as itself: the image, or the PDF's
+                     first frame stands in as its icon. Clicking one opens the
+                     file in a new tab. */
+                  <ul className="px-3 pb-2 grid grid-cols-3 gap-2">
                     {obsForm.attachments.map(att => {
                       const isImage = isImageMime(att.mimeType);
                       const { Icon, tone } = attachmentVisual(att.mimeType);
                       return (
-                        <li
-                          key={att.id}
-                          className="flex items-center gap-2.5 px-2 py-1.5 bg-canvas border border-canvas-border rounded-md"
-                        >
-                          {isImage ? (
-                            <div className="w-8 h-8 rounded-md border border-canvas-border overflow-hidden bg-white shrink-0">
-                              <img src={att.dataUrl} alt="" className="w-full h-full object-cover" />
+                        <li key={att.id} className="relative group/att">
+                          <button
+                            type="button"
+                            onClick={() => openAttachmentInNewTab(att)}
+                            title={`Open ${att.name} in a new tab`}
+                            className="w-full text-left bg-canvas border border-canvas-border rounded-md overflow-hidden hover:border-brand-600/40 transition-colors cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600/30"
+                          >
+                            <div className="relative h-[88px] bg-white flex items-center justify-center overflow-hidden">
+                              {isImage ? (
+                                <img src={att.dataUrl} alt={att.name} className="w-full h-full object-cover" />
+                              ) : (
+                                <Icon size={28} className={tone} />
+                              )}
+                              <span className="absolute right-1.5 bottom-1.5 inline-flex items-center justify-center w-6 h-6 rounded-md bg-white/90 border border-canvas-border text-ink-500 opacity-0 group-hover/att:opacity-100 transition-opacity">
+                                <ExternalLink size={12} />
+                              </span>
                             </div>
-                          ) : (
-                            <div className={`w-8 h-8 rounded-md border border-canvas-border bg-white inline-flex items-center justify-center shrink-0 ${tone}`}>
-                              <Icon size={16} />
+                            <div className="px-2 py-1.5 border-t border-canvas-border">
+                              <div className="text-[0.75rem] text-ink-800 font-medium truncate">{att.name}</div>
+                              <div className="text-[0.625rem] text-ink-400 tabular-nums">{formatFileSize(att.size)}</div>
                             </div>
-                          )}
-                          <div className="min-w-0 flex-1">
-                            <div className="text-[0.75rem] text-ink-800 font-medium truncate">{att.name}</div>
-                            <div className="text-[0.625rem] text-ink-400 tabular-nums">{formatFileSize(att.size)}</div>
-                          </div>
+                          </button>
                           <button
                             type="button"
                             onClick={() => removeAttachment(att.id)}
                             aria-label={`Remove ${att.name}`}
-                            className="shrink-0 inline-flex items-center justify-center w-6 h-6 rounded-md text-ink-400 hover:text-risk-700 hover:bg-white transition-colors cursor-pointer"
+                            className="absolute right-1.5 top-1.5 inline-flex items-center justify-center w-6 h-6 rounded-md bg-white/90 border border-canvas-border text-ink-400 hover:text-risk-700 transition-colors cursor-pointer"
                           >
-                            <X size={14} />
+                            <X size={13} />
                           </button>
                         </li>
                       );

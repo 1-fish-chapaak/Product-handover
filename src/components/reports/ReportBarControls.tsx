@@ -2,8 +2,9 @@
 // the reports reader, the Bulk Audit reader, the ATR reader and the
 // engagement's Audit Report tab. They live here rather than in each reader so
 // the bar reads as the same object on all four, and a change lands once.
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
+import { isStandardTemplate } from './reportShared';
 import { Layout, ChevronDown, Check, Loader2, Globe, Building2, Lock } from 'lucide-react';
 import { ApplyTemplateDropdown } from './TemplateEditor';
 import type { REPORT_TEMPLATES } from '../../data/mockData';
@@ -22,6 +23,18 @@ type Template = typeof REPORT_TEMPLATES[number];
 /** The format this report comes out in. Brand-tinted, because the format is
  *  the one control here that rewrites the document rather than moving it
  *  around. */
+/** Escape closes an open chip menu, the way it closes every other menu in the
+ *  product (ColumnFilter, the toolbar filters). Without it the click-catcher
+ *  behind the menu stayed up and swallowed the next click on the command bar. */
+function useCloseOnEscape(open: boolean, close: () => void): void {
+  useEffect(() => {
+    if (!open) return;
+    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') { e.stopPropagation(); close(); } };
+    document.addEventListener('keydown', onKey, true);
+    return () => document.removeEventListener('keydown', onKey, true);
+  }, [open, close]);
+}
+
 export function ApplyTemplateChip({
   templates, activeId, activeName, onSelect, onSaveAsTemplate, busy = false, disabled = false,
 }: {
@@ -34,6 +47,7 @@ export function ApplyTemplateChip({
   disabled?: boolean;
 }) {
   const [open, setOpen] = useState(false);
+  useCloseOnEscape(open, () => setOpen(false));
   return (
     <div className="relative">
       <button
@@ -47,7 +61,10 @@ export function ApplyTemplateChip({
       >
         {busy ? <Loader2 size={14} className="animate-spin" /> : <Layout size={14} />}
         <span className="truncate max-w-[180px] hidden md:inline">
-          {busy ? 'Applying…' : (activeName ?? 'Apply Template')}
+          {/* A format that ships with the product is the report's default shape,
+              so the chip stays the plain invitation to change it. A format built
+              in this workspace is somebody's choice, so the chip names it. */}
+          {busy ? 'Applying…' : (activeId && !isStandardTemplate(activeId) && activeName ? activeName : 'Apply Template')}
         </span>
         <motion.span
           animate={{ rotate: open ? 180 : 0 }}
@@ -86,6 +103,7 @@ export function ReportVisibilityChip({
   disabled?: boolean;
 }) {
   const [open, setOpen] = useState(false);
+  useCloseOnEscape(open, () => setOpen(false));
   const isPublic = audience === 'Anyone with the link';
   return (
     <div className="relative">
