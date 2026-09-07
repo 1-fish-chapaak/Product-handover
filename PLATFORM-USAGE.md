@@ -1,160 +1,106 @@
 # Platform Usage
 
-System > Platform Usage. System admins only (`ad_usage`).
+What this workspace has done, counted from the record and from nothing else.
 
-Code: `src/components/usage/`, `src/data/platform-usage.ts`. Every formula is written out in `PRD-PLATFORM-USAGE.md`, Appendix A.
+Every figure on the page has a column behind it. Nothing is estimated, modelled or priced, because
+the platform records no price, no token and no salary, and a number invented here would be one a
+reader could never check against anything.
 
-## The problem
+Rebuilt on 7 Sep 2026, after an audit of the real backend showed most of what the page printed had
+no column behind it.
 
-Admins cannot see how the platform is being used.
+---
 
-They have two places to look and neither helps. Admin > Users shows who has an account, which is not the same as using it. The Audit Log shows what happened one row at a time, and nobody scrolls a log to work out whether a rollout is landing.
+## What it answers
 
-So the person who set up the workspace cannot answer the one thing they get asked: is anyone actually using this?
+**What ran.** 330 checks finished this quarter, in 11.5 hours of machine time, returning 6,24,796
+rows for somebody to look at. 22 failed or were blocked and spent 40 minutes producing nothing.
 
-The data is already there. We just never showed it back to them.
+**What was tested.** 11 populations holding 14,28,000 rows and 111.4 MB, plus 39 samples drawn and
+77 sample tests run.
 
-## How it works
+**What it found.** 346 exceptions, 57 of them high, 52% closed, 71 open past a date somebody set.
 
-Every action already writes a record: who did it, what they did, what to, and where in the product. That is the only input. The page collects nothing new and estimates nothing. If a feature does not write a record, it does not appear here, and we say so rather than invent a number.
+**What came out.** 7 reports and 4 generated documents, 126 pages.
 
-Counts of *things*, as opposed to counts of actions, are read straight off the register that owns them. Reports from the report library, controls from the Control Library, risks from the Risk Register, sources from the Knowledge Hub, seats from the member list, findings from the exception register.
+**Queries against your own databases.** 469 queries returning 60,06,634 rows, median 1.7 seconds,
+slowest 39.8 seconds, 2.2 GB scanned on the engines that report it.
 
-The rule: this page reports on the other screens, so it must count the same rows they do. If the Control Library says 14 controls, this page says 14.
+---
 
-That was a real failure, not a hypothetical. The page used to keep its own idea of each register and claimed 25 controls against a library of 14, 29 sources against a hub of 20, and 9 dashboards, two of which existed on no screen a user could open. Every count now comes from the register the module itself renders.
+## The rules
 
-No test asserts that parity yet. It is the thing most likely to drift back, so it is on the verification list rather than being treated as solved.
+**A figure has a column or it is not on the page.** No assumed rate, no modelled saving, no
+projection. If the platform does not write it, the page does not print it.
 
-## The window
+**An unknown is never a nought.** Snowflake, BigQuery and Athena report how much data a query
+scanned. Postgres and MySQL do not, so those rows read "not reported". A nought there would say the
+query touched nothing.
 
-One control at the top: all time, today, 7, 30 or 90 days, or a custom range. Every number is shown against the same number for the period before it. Fifty downloads means nothing until you know last month was twelve.
+**A gap is named, not left blank.** Six questions people ask of a usage page are refused on the page
+itself, each with the column that is missing. A page that quietly omits what it cannot measure reads
+as a complete picture.
 
-Each preset prints the dates it will actually hand you, because "last 30 days" is a promise about the calendar and this page does not keep it: the window counts back from the newest record, not from today. Pick "Last 30 days" in July and you get 23 March to 21 April. The label alone gives you nothing to catch that with, so the label is not alone.
+**Coverage is never claimed.** The page says how many rows a check returned and how many rows a
+population holds. It never says how many rows a check read, because nothing records that.
 
-When there is no earlier period, we show no comparison at all. Not a zero, not a dash standing in for data. A made-up baseline is worse than none, because people act on it.
+**A run belongs to a team, never to a person.** `workflow_executions` carries no user. The column
+exists and nothing writes it, so the own work view refuses that section in words.
 
-## Where the clock starts
+**A floor says it is one.** Only an exception somebody put a due date on can be overdue, so the
+overdue count is a floor.
 
-The window counts back from the newest activity, not from today.
+---
 
-If it counted from today and nobody had signed in for a while, every number would read zero. That looks like the platform is dead, when really nobody logged in this month. So the page anchors to the newest real record and counts back from there.
+## Where every figure comes from
 
-That anchor is also a trap, so the page says both dates out loud. "Showing 30 days up to 21 Apr 2026" is true and still tells you nothing on its own, because you have no second date to measure it against. Next to it the page names today and how stale the records are: "Today is 14 Jul 2026, the newest record is 84 days old." One date is a fact; two dates are a finding.
-
-Work you do right now lands on the anchor day immediately. The anchor itself does not move: if it jumped to today on every click, the window would slide with it and empty itself.
-
-## What is on the page
-
-Five tabs. One question each, in the order the person reading actually asks them.
-
-| Tab | The question |
-| --- | --- |
-| Overview | Is anyone using this? |
-| Seats | Are we paying for seats nobody uses? |
-| People | Who is doing the work, and who has gone quiet? |
-| Areas | Which parts of the product get used, and which sit idle? |
-| Output | What did we get out of it? |
-
-The reader is an audit lead, not an analyst. They will not carry a question in their head across a tab switch, so no tab needs another tab to finish its own point. Seats used to carry People as well, seven bands deep: the licence verdict, the seat bands, the funnel, the recommendations, and then the whole member table underneath. Two questions on one tab is a page inside a page, and the second question always loses.
-
-Between them the tabs hold the headline numbers, what stands out, daily activity, most-used areas, per-section deep-dives, AI usage, members and seats, a day-by-hour grid, what got created, workflow runs, sharing, downloads, and a table of people and teams that exports to CSV.
-
-"What stands out" is four findings, and none of them is new data. Three restate an aggregate that is somewhere else on the page. The fourth is the share of all activity the top three members drive, and it is the only one you cannot get any other way: three people doing 70% of everything is exactly what a healthy-looking total hides, and no total, chart or table here can be read to reveal it. Every finding clicks through to its evidence, because a finding you cannot check is an assertion.
-
-Every number is built from single events, so you can click any of them and see the events behind it. The detail always adds back up to the number you clicked.
-
-## How each number is worked out
-
-| Number | How we get it |
-| --- | --- |
-| Actions | Every recorded event in the window |
-| Active users | The people behind those events. An account that did nothing is not active, and neither is someone who signed in and then did nothing. Active means they did something |
-| AI use | Questions asked, plus tool runs, plus chats started |
-| Areas | Each part of the product, ranked by how many events happened in it |
-| Reports | Counted from the report library, not from the events |
-| Downloads | Every export, with the file type read off the record |
-| Comparison | The same count for the period just before, as a percent. Nothing shown when there is no earlier period |
-| Segments | Each person against the average of the people who were actually active, which sorts them into heavy, regular, light or no activity |
-| Concentration | The share of all activity coming from the top three people |
-| Spikes | Days that stand out from the rest of the window, with the area that caused them named |
-| Day by hour grid | The clock time on each record. Records with no clock time are counted to one side, not spread across hours we would be guessing at |
-| Seats | The member list: who is invited, who is active, who is suspended, and when each person last signed in |
-
-Five of those need a word of explanation.
-
-**Areas.** Every module name the platform writes is mapped to exactly one area, and anything unrecognised lands in "Other" so the gap is visible. It used to default into Risk and Controls instead, which quietly swallowed exception triage, audit planning, the Process Hub and every Concierge tool run. Risk and Controls then read as the busiest area on the platform, which said more about the default than about the workspace.
-
-**Segments.** We average across the people who were active, not across everybody. Averaging across everybody drags the bar down and makes light users look better than they are.
-
-**Concentration.** This is the one an admin will not spot alone. If three people do 70% of everything, the total still looks healthy. The workspace is leaning on three people rather than a team, and the total will never tell you that.
-
-**Comparison.** When there is no earlier period we show nothing, not a zero. An invented baseline is worse than a missing one, because people act on it.
-
-**AI use.** A question and a tool run are both counted once. A Concierge tool writes two records, one for the run and one for the thing it made, so counting both would count the same action twice and read a generated RACM as a question someone asked.
-
-## What a new member looks like
-
-- Invited: they sit in the seats list as invited and nowhere else. Everything reads zero, last active reads "Never".
-- First sign-in: they count as someone who has signed in, but not yet as an active user. Signing in is not using.
-- First action: now they are active, and their numbers move with what they do.
-- First week: the numbers are real, but no comparison shows. There is no earlier week to compare with.
-- Later: the 7-day trend means something after a week. The 30-day trend needs two months behind it, and the 90-day trend needs six.
-- Quiet for a month: they drop into "no sign-in for 30+ days" and fall out of the shorter views.
-
-A new workspace behaves the same way. Everything sits at zero and fills in as people use the product.
-
-## What we cannot see
-
-Reports and chats save the day but not the hour, so they cannot go on the day-by-hour grid. Its total is honestly lower than the action total.
-
-Per-person AI use is incomplete, because older chats did not record who asked. Platform-wide AI volume is solid.
-
-Both are stated on the page. We would rather say we cannot see something than fill the gap with a number that looks right.
-
-While there is no backend, records written in the current session only last as long as the browser session.
-
-## Scope
-
-The page reports. It does not act. Managing people stays in Administration, and every list here links across instead of copying the flow. If two pages both manage people they drift apart, and then admins trust neither.
-
-Not in scope: billing, backend tracking, signing in as someone else, and any people-management action inside this view.
-
-## Why this is not the Audit Log
-
-The log tells you what people did. It cannot tell you what people did **not** do.
-
-Think of a class register. It lists every student who turned up. Now ask which students never came. You cannot find them, because they are not in it. You need the enrolment list beside it.
-
-Same here. Someone invited who never signed in writes zero rows, so they do not exist in the log, and they are the first person an admin needs to see. The log also cannot show a pattern: "three people do 70% of the work" is on no single line, and only appears once you count all the lines.
-
-It does not work the other way either. If someone asks whether Tom exported the client file on the 14th, a chart saying activity is up 12% is useless. You need the line.
-
-| | Audit Log | Platform Usage |
+| Section | Table | Columns |
 | --- | --- | --- |
-| The question | What exactly happened? | Is anyone using this? |
-| The answer | One row per event | Counts and trends |
-| When you open it | Something went wrong | You have to decide something |
-| Must it be complete? | Yes. It is evidence | No. It reports what it can see |
+| What ran | `workflow_executions`, `workflows` | `status`, `started_at`, `duration_secs`, output tables, `team_id` |
+| What was tested | `engagement_populations`, `engagement_samples`, `engagement_sample_runs` | `row_count`, `size_bytes`, `uploaded_by`, `status`, `actor_user_external_id` |
+| What it found | `report_card_cases_staging` | `severity`, `status`, `flagged_by_user_external_id`, `flagged_at`, due date |
+| What came out | `reports`, `report_atr_snapshots` | `status`, `owner`, `page_count`, `size_bytes`, `generated_by_user_external_id` |
+| Queries | `db_connection_audit`, `db_connections` | `row_count`, `latency_ms`, `bytes_scanned`, `error_code`, `engine` |
+| What was imported | `racm_imports` | `rows_total`, `rows_processed`, `risks_created`, `controls_created` |
+| Who is on the workspace | `tenant_memberships`, `accounts`, `activity_logs` | `status`, `joined_at`, `last_login_at`, `action` |
 
-## Why not merge them
+---
 
-Merging the pages is easy. Merging the jobs is not.
+## What the page refuses
 
-Put charts on the audit log and you still cannot see the people who never showed up, because they are not in it. You would read the member list anyway, so nothing is saved.
+| Question | Why |
+| --- | --- |
+| Who ran a check | `workflow_executions` records no user. The column exists and nothing writes it. |
+| How many rows a check read | Only the rows a run returned exist, derived from its output at read time. |
+| What the AI cost | No table records a model, a token count or a price. |
+| How often people sign in | One last-login timestamp, overwritten each time. No history, no active users. |
+| Which screens people use | Nothing records a page view. The activity log covers only admin changes. |
+| How much data the workspace holds | Sizes sit on five tables and are never summed anywhere. |
 
-And you break the log. Evidence works by keeping every row exactly as it happened. Usage works by dropping rows and adding the rest up. Both are correct, and they cannot both be correct on one screen.
+Each becomes answerable the day the platform writes the column.
 
-A merge saves one item in the nav and costs a trustworthy audit trail.
+---
 
-The one real overlap is the recent-activity feeds. They show the newest few events, filtered to one action, as context for the number above them: no filters, no paging, not evidence. If they ever grow filters and paging they have become a second audit log, and that is the line to hold.
+## What was removed, and why
 
-## Open questions
+The page used to open on 7,131 hours saved, 14.9 auditors you never had to hire and ₹35.7 lakh of
+work avoided, then a cost section in rupees and dollars.
 
-1. Should Usage sit next to the Audit Log in the nav? Same person, related questions. I lean yes.
-2. Do the recent-activity feeds belong here at all, or should they be cut with a link to the log?
-3. Should anyone besides system admins see this? A team lead might want their own team's activity.
-4. The "data as of" anchor is a workaround for having no backend. It should go once records persist.
-5. Should the page act, or only report? It tells you 3 invites are pending and sends you to Administration. Should it let you revoke from here?
-6. Per-person AI use is incomplete. Backfill, accept the gap, or stop reporting AI per person until it is reliable?
-7. Should an owner be able to turn per-person activity off? Today anyone with `ad_usage` sees every named member's activity, with no switch. Slack ships that switch. Not built, and not a bug until we decide it should exist.
+All of it is gone. The hours rested on a rows-covered figure that no column produces and a manual
+review pace of 200 rows an hour that we picked. The rupees rested on an auditor hour of ₹530 that we
+also picked. The model spend rested on tokens and prices that no table records. The connector spend
+rested on a rate card and an operations catalogue that do not exist in the backend.
+
+The page answers a smaller question now. It answers it from the record.
+
+---
+
+## Files
+
+| File | What it holds |
+| --- | --- |
+| `src/data/usage/seed.ts` | The records, one interface per real table, with the backend path on each |
+| `src/data/usage/metrics.ts` | Every figure, scoped and windowed. No assumptions block, because there are none |
+| `src/components/usage/PlatformUsageView.tsx` | The page |
+| `src/components/usage/chrome.tsx` | Its small vocabulary: type and hairlines, no tiles |
+| `tests/platform-usage.spec.ts` | Ten tests, run against the real page |
