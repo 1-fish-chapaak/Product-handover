@@ -41,22 +41,6 @@ export const test = base.extend({
 });
 
 /**
- * Switch Platform Usage to one of its tabs.
- *
- * The page used to be one 5,900px scroll; it is now five tabs (Overview,
- * Adoption, Output, Sections, People) sharing one period filter. Nothing was
- * removed — a spec that used to find a card by scrolling now has to open the
- * tab it lives on first.
- */
-export async function usageTab(
-  page: Page,
-  name: 'Overview' | 'Seats' | 'People' | 'Areas' | 'Output',
-) {
-  await page.getByRole('button', { name: new RegExp(`^${name}\\b`) }).first().click();
-  await page.waitForTimeout(1000);
-}
-
-/**
  * Answer the query/workflow clarification card end-to-end.
  *
  * The card was redesigned from an auto-advancing role="option" listbox into a
