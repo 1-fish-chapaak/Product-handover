@@ -7,7 +7,7 @@ import {
   Shield, Search as SearchIcon, Settings, Clock, Check,
   Wand2, MoreHorizontal, LogOut, HelpCircle, ExternalLink,
   ClipboardCheck, FlaskConical, Layers, Bell, Inbox, BarChart3,
-  Brain,
+  Brain, TrendingUp,
 } from 'lucide-react';
 import PersonalMemoryDrawer from './PersonalMemoryDrawer';
 import type { View } from '../../hooks/useAppState';
@@ -403,6 +403,15 @@ export default function Sidebar({ view, setView, expanded, toggleSidebar, unread
 
           {can('ds_live') && <NavItem icon={Database} label="Knowledge Hub" active={view === 'knowledge-hub' || view === 'data-sources' || view === 'configuration'} expanded={isExpanded} onClick={() => setView('knowledge-hub')} />}
           {canAny(['ad_usage', 'ad_usage_people']) && <NavItem icon={BarChart3} label="Platform Usage" active={view === 'platform-usage'} expanded={isExpanded} onClick={() => setView('platform-usage')} />}
+          {/* Two pages, two jobs, not one page and its replacement. Platform
+              Usage counts what the platform records; Platform Value compares
+              that against what the same work costs by hand.
+
+              Open to everybody, unlike Platform Usage above. Every signed in
+              person can read how much of their own week came back, and the
+              scope switch inside the page never offers a view their role could
+              not already see. */}
+          <NavItem icon={TrendingUp} label="Platform Value" active={view === 'platform-value'} expanded={isExpanded} onClick={() => setView('platform-value')} />
           {adminVisible && <NavItem icon={Settings} label="Admin" active={adminViews.includes(view)} expanded={isExpanded} onClick={() => setView(firstAdminView)} />}
 
         </div>

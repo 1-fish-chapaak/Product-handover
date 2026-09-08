@@ -68,6 +68,7 @@ export type View =
   | 'admin-roles'
   | 'admin-logs'
   | 'platform-usage'
+  | 'platform-value'
   // One-Click Audit
   | 'one-click-audit'
   // Case Management

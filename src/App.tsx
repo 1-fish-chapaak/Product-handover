@@ -68,6 +68,7 @@ import type { ComposerContext } from './components/chat/composerContext';
 import WorkflowBuilderJourney from './components/concierge-workflow-builder/WorkflowBuilderJourney';
 import AdminView from './components/admin/AdminView';
 import PlatformUsageView from './components/usage/PlatformUsageView';
+import PlatformValueView from './components/value/PlatformValueView';
 import WorkflowExecutor from './components/workflow/WorkflowExecutor';
 import WorkflowEditInChatJourney from './components/workflow-edit-in-chat/WorkflowEditInChatJourney';
 import ControlDetailDrawer from './components/engagement/ControlDetailDrawer';
@@ -1237,6 +1238,9 @@ function AppInner() {
 
       case 'platform-usage':
         return <PlatformUsageView />;
+
+      case 'platform-value':
+        return <PlatformValueView />;
 
       // V3 Configurable Engagement — dev-only preview route
       case 'dev-configurable-engagement-v3':
