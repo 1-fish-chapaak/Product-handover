@@ -67,7 +67,6 @@ export type View =
   | 'admin-users'
   | 'admin-roles'
   | 'admin-logs'
-  | 'admin-usage'
   | 'connectors'
   | 'platform-usage'
   // One-Click Audit

@@ -3,38 +3,94 @@
  *
  * Two surfaces behind one nav entry.
  *
- * · **Usage and cost** — one row per metered turn, and what it cost to run.
  * · **Connectors** — what can be looked up outside this workspace, and the
  *   price of each lookup.
+ * · **Usage and cost** — one row per metered turn, and what it cost to run.
  *
- * They answer the same question from two ends, what we spent and what we can
- * spend it on, so they sit together rather than a nav entry apart.
+ * They answer the same question from two ends, what we can spend on and what
+ * we spent, so they sit together rather than a nav entry apart.
  *
- * The shell owns the tab strip and nothing else. Each tab is the page it
- * always was, with its own controls and its own scroll, so moving one in or
- * out of here changes nothing about how it reads.
+ * The chrome is Knowledge Hub's, to the pixel: one full-bleed elevated strip
+ * carrying the display title, the subhead and the tabs, with the strip's own
+ * bottom hairline serving as the underline track. A reader who has learned one
+ * page of this platform should not have to learn another.
  *
  * A tab the reader's role cannot see is not rendered, and the page opens on
  * the first tab they can see, so the entry never lands somebody on a refusal.
  */
 
 import { useState } from 'react';
+import { motion, AnimatePresence } from 'motion/react';
 import { Coins, Plug } from 'lucide-react';
 import UsageCostSection from '../admin/usage/UsageCostSection';
-import ConnectorsView from '../connectors/ConnectorsView';
+import ConnectorsSection from '../connectors/ConnectorsView';
+import FloatingLines from '../shared/FloatingLines';
 import { useCurrentUser } from '../../context/CurrentUserContext';
-import TabPills from '../ui/TabPills';
+import { CONNECTOR_OPERATIONS, govtOperations } from '../../data/connectors/catalogue';
+import { USAGE_TURNS } from '../../data/usage/metering';
 
-type TabId = 'cost' | 'connectors';
+type TabId = 'connectors' | 'cost';
 
 interface Tab {
   id: TabId;
   label: string;
-  icon: typeof Coins;
+  icon: React.ElementType;
   /** False where the reader's role does not carry this surface. */
   visible: boolean;
+  count: number;
   body: () => React.ReactElement;
 }
+
+// ─── Underlined tabs ────────────────────────────────────────────────────────
+
+// Knowledge Hub's tab recipe, unchanged: pb-3 + font-semibold + a motion.div
+// underline with layoutId so the active brand bar springs between tabs.
+// Thicker (3px) and rounded-full so it reads as an intentional indicator, not
+// a CSS border.
+function UnderlinedTabs({
+  tabs, active, onChange,
+}: {
+  tabs: Tab[];
+  active: TabId;
+  onChange: (id: TabId) => void;
+}) {
+  return (
+    <div className="flex gap-6">
+      {tabs.map(tab => {
+        const Icon = tab.icon;
+        const isActive = active === tab.id;
+        return (
+          <button
+            key={tab.id}
+            onClick={() => onChange(tab.id)}
+            className={`pb-3 text-[0.8125rem] font-semibold relative transition-colors cursor-pointer whitespace-nowrap ${
+              isActive ? 'text-brand-700' : 'text-ink-500 hover:text-ink-700'
+            }`}
+          >
+            <span className="flex items-center gap-2">
+              <Icon size={14} />
+              {tab.label}
+              <span className={`text-[0.625rem] font-bold px-1.5 py-0.5 rounded-full tabular-nums ${
+                isActive ? 'bg-brand-100 text-brand-700' : 'bg-paper-50 text-ink-500'
+              }`}>
+                {tab.count}
+              </span>
+            </span>
+            {isActive && (
+              <motion.div
+                layoutId="platform-usage-tab-underline"
+                className="absolute bottom-0 left-0 right-0 h-[3px] bg-brand-600 rounded-full"
+                transition={{ type: 'spring', stiffness: 380, damping: 32 }}
+              />
+            )}
+          </button>
+        );
+      })}
+    </div>
+  );
+}
+
+// ─── Page ────────────────────────────────────────────────────────────────────
 
 export default function PlatformUsageTabs() {
   const { can } = useCurrentUser();
@@ -44,45 +100,110 @@ export default function PlatformUsageTabs() {
   const readsUsage = can('ad_usage') || can('ad_usage_people');
 
   const tabs: Tab[] = [
+    // Connectors leads, because it is the tab everybody can see and it reads
+    // as the catalogue the spending is against. Cost follows it.
+    {
+      id: 'connectors',
+      label: 'Connectors',
+      icon: Plug,
+      visible: true,
+      count: govtOperations(CONNECTOR_OPERATIONS).length,
+      body: () => <ConnectorsSection />,
+    },
     {
       id: 'cost',
       label: 'Usage and cost',
       icon: Coins,
       visible: readsUsage,
-      body: () => (
-        // A section rather than a page, so the shell gives it the scroller, the
-        // measured column and the heading that Connectors already carries.
-        <div className="h-full overflow-y-auto">
-          <div className="mx-auto max-w-6xl px-8 py-10">
-            <h1 className="text-[1.25rem] font-semibold text-ink-900">Usage and cost</h1>
-            <p className="mb-6 mt-1 text-[0.875rem] text-ink-500">
-              One row for every metered turn, and what it cost to run.
-            </p>
-            <UsageCostSection />
-          </div>
-        </div>
-      ),
+      count: USAGE_TURNS.length,
+      body: () => <UsageCostSection />,
     },
-    { id: 'connectors', label: 'Connectors', icon: Plug, visible: true, body: () => <ConnectorsView /> },
   ];
 
   const offered = tabs.filter(t => t.visible);
   const [current, setCurrent] = useState<TabId>(offered[0]?.id ?? 'connectors');
   const active = offered.find(t => t.id === current) ?? offered[0];
 
+  // One line each, at the width the strip gives them: a subhead that wraps on
+  // one tab and not the other moves the tab strip down when you switch, which
+  // reads as the page jumping.
+  const subhead =
+    active.id === 'connectors'
+      ? 'External lookups a run can make, and what each one costs per call.'
+      : 'One row for every metered turn, and what it cost to run.';
+
+  // The page insets step up with the window (px-6 → lg:px-12 → xl:px-[124px])
+  // so narrow windows keep room for wide tables. The strip's negative margins
+  // mirror the same scale so the full-bleed stays aligned.
   return (
-    <div className="flex h-full flex-col overflow-hidden">
-      <div className="shrink-0 border-b border-canvas-border bg-canvas-elevated px-8 py-3">
-        <TabPills
-          tabs={offered.map(t => ({ id: t.id, label: t.label, icon: t.icon }))}
-          current={active.id}
-          onSelect={setCurrent}
-        />
+    <div className="h-full flex flex-col overflow-hidden bg-canvas">
+      <div className="px-6 lg:px-12 xl:px-[124px] pt-8 shrink-0">
+        {/* Header + tabs share a single full-bleed white strip — bg-canvas-
+            elevated extends past the outer insets via negative margins.
+            Border-b separates strip from content. FloatingLines paints across
+            the strip behind the type so the header reads as a brand surface,
+            not a flat panel. */}
+        <div className="bg-canvas-elevated -mx-6 lg:-mx-12 xl:-mx-[124px] px-6 lg:px-12 xl:px-[124px] -mt-8 pt-8 border-b border-canvas-border relative overflow-hidden">
+          {/* Ambient FloatingLines — top and bottom waves only, never the
+              middle one where the H1 sits. Low opacity keeps the lines as
+              texture rather than a competing element. */}
+          <FloatingLines
+            enabledWaves={['top', 'bottom']}
+            lineCount={3}
+            lineDistance={10}
+            bendRadius={5}
+            bendStrength={-0.3}
+            interactive
+            parallax
+            color="#6a12cd"
+            opacity={0.05}
+          />
+          <motion.div
+            initial={{ opacity: 0, y: 8 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.4, ease: [0.22, 1, 0.36, 1] }}
+            className="mb-6"
+          >
+            <div className="min-w-0">
+              <h1 className="text-[2.125rem] font-semibold tracking-tight text-ink-900 leading-[1.15]">
+                Platform Usage
+              </h1>
+              <p className="mt-2 text-[0.9375rem] text-ink-500 leading-relaxed max-w-2xl">
+                {subhead}
+              </p>
+            </div>
+          </motion.div>
+
+          {/* Tabs at the bottom of the strip — the strip's border-b serves as
+              the underline track for the active brand-600 indicator. */}
+          <motion.div
+            initial={{ opacity: 0, y: 6 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.4, delay: 0.08, ease: [0.22, 1, 0.36, 1] }}
+            className="-mb-px"
+          >
+            <UnderlinedTabs tabs={offered} active={active.id} onChange={setCurrent} />
+          </motion.div>
+        </div>
       </div>
 
-      {/* min-h-0 so the tab body scrolls inside this column rather than
-          stretching it and taking the scroll off the page entirely. */}
-      <div className="min-h-0 flex-1">{active.body()}</div>
+      {/* Content area — fills the remaining viewport height. Each tab is a
+          section rather than a page: it brings its own controls and its own
+          table, and this column is the single scroll region. */}
+      <div className="px-6 lg:px-12 xl:px-[124px] pt-4 pb-8 flex-1 min-h-0 flex flex-col overflow-hidden">
+        <AnimatePresence mode="wait">
+          <motion.div
+            key={active.id}
+            initial={{ opacity: 0, y: 8 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: -8 }}
+            transition={{ duration: 0.2, ease: [0.2, 0, 0, 1] }}
+            className="flex-1 min-h-0 overflow-y-auto"
+          >
+            {active.body()}
+          </motion.div>
+        </AnimatePresence>
+      </div>
     </div>
   );
 }

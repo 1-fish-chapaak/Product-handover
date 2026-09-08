@@ -375,8 +375,5 @@ export const VIEW_PERMISSIONS: Partial<Record<View, PermissionKey | PermissionKe
   'admin-users': 'ad_users_manage',
   'admin-roles': 'ad_roles_manage',
   'admin-logs': 'ad_logs',
-  // What a turn cost is the same workspace-level figure Platform Usage is
-  // gated on, so the Administration tab carries the same gate.
-  'admin-usage': ['ad_usage', 'ad_usage_people'],
   // home, recents, dev routes intentionally ungated (open to all)
 };

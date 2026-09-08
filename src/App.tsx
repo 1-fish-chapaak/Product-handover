@@ -67,7 +67,6 @@ import ChatWorkflowWorkspace from './components/chat/ChatWorkflowWorkspace';
 import type { ComposerContext } from './components/chat/composerContext';
 import WorkflowBuilderJourney from './components/concierge-workflow-builder/WorkflowBuilderJourney';
 import AdminView from './components/admin/AdminView';
-import ConnectorsView from './components/connectors/ConnectorsView';
 import PlatformUsageTabs from './components/usage/PlatformUsageTabs';
 import WorkflowExecutor from './components/workflow/WorkflowExecutor';
 import WorkflowEditInChatJourney from './components/workflow-edit-in-chat/WorkflowEditInChatJourney';
@@ -1239,11 +1238,12 @@ function AppInner() {
       case 'admin-logs':
         return <AdminView activeTab="logs" />;
 
-      case 'admin-usage':
-        return <AdminView activeTab="usage" />;
-
+      // Connectors has no nav entry of its own any more — it is a tab on the
+      // Platform Usage page, and the sidebar marks that entry active for this
+      // view. A stale link therefore lands on the page that carries it rather
+      // than on a section with no title above it.
       case 'connectors':
-        return <ConnectorsView />;
+        return <PlatformUsageTabs />;
 
       // V3 Configurable Engagement — dev-only preview route
       case 'dev-configurable-engagement-v3':
