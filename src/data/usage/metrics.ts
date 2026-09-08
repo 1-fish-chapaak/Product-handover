@@ -202,7 +202,7 @@ export interface WorkflowLine {
   team: string;
   runs: number;
   failed: number;
-  machineSeconds: number;
+  platformSeconds: number;
   lastRunAt: number | null;
 }
 
@@ -214,7 +214,7 @@ export interface RunFigures {
   blocked: number;
   total: number;
   /** Summed `duration_secs` over completed runs. */
-  machineSeconds: number;
+  platformSeconds: number;
   /** Summed `duration_secs` over runs that failed or were blocked. */
   wastedSeconds: number;
   medianSeconds: number;
@@ -253,7 +253,7 @@ function runsOf(p: Period, scope: Scope): RunFigures {
         team: w.team,
         runs: own.length,
         failed: own.filter(e => e.status !== 'complete').length,
-        machineSeconds: secs(own.filter(e => e.status === 'complete')),
+        platformSeconds: secs(own.filter(e => e.status === 'complete')),
         lastRunAt: own.length === 0 ? null : Math.max(...own.map(e => e.startedAt)),
       };
     })
@@ -276,7 +276,7 @@ function runsOf(p: Period, scope: Scope): RunFigures {
     failed: failed.length,
     blocked: blocked.length,
     total: inside.length,
-    machineSeconds: secs(complete),
+    platformSeconds: secs(complete),
     wastedSeconds: secs([...failed, ...blocked]),
     medianSeconds: median(complete.map(e => e.durationSecs ?? 0)),
     outputRows: complete.reduce((s, e) => s + (e.outputRows ?? 0), 0),
@@ -560,28 +560,39 @@ function workspaceOf(p: Period, scope: Scope): WorkspaceFigures {
  */
 export const GAPS: { question: string; why: string }[] = [
   {
-    question: 'Who ran a check',
-    why: 'A workflow execution records no user. The column exists and nothing writes it, so a run can be put against a team through its workflow but never against a person.',
-  },
-  {
     question: 'How many rows a check read',
-    why: 'Only the rows a run returned are recorded, derived from its output tables. Nothing records how much of a table a query touched, so coverage cannot be claimed.',
-  },
-  {
-    question: 'What the AI cost, in tokens or in money',
-    why: 'No table records a model, a token count or a price. The figures the providers return are read and discarded, so there is nothing to total.',
+    why: 'Only what a run returned. A workflow execution carries a total in its status document, and a row count sits on the population, the sample and the export. Nothing records how much of a source table a query touched, so coverage still cannot be claimed.',
   },
   {
     question: 'How often people sign in, or who is active',
-    why: 'There is no sign-in event and no last-active column. A single last-login timestamp is overwritten on each sign in, so there is no history behind it and no active-user count above it.',
+    why: 'There is no sign-in event. An account carries one last-login timestamp, overwritten on each sign in, and a failed-login count beside it. So there is a most recent sign in, no history behind it, and no active-user count above it.',
   },
   {
     question: 'Which screens or features people use',
-    why: 'Nothing records a page view or a feature use. The activity log covers only user, team, role and invitation changes.',
+    why: 'Nothing records a page view. The activity log writes an action against a resource with its before and after state, which is a record of what changed rather than of what anybody looked at.',
   },
   {
     question: 'How much data the workspace holds in total',
-    why: 'Sizes are recorded on five separate tables and never summed anywhere, so a storage total would be assembled here rather than read.',
+    why: 'A size sits on eleven separate tables and is summed nowhere, so a storage total would be assembled here rather than read.',
+  },
+];
+
+/**
+ * The two the platform started writing.
+ *
+ * They were on the list above, and the note under it said each would become
+ * answerable the day the platform wrote the column. It has, so they move here
+ * rather than quietly disappearing: a page that drops a gap without saying so
+ * leaves a reader thinking it was never asked.
+ */
+export const NOW_RECORDED: { question: string; how: string }[] = [
+  {
+    question: 'Who ran a check',
+    how: 'A workflow execution records the person who launched it, and run visibility depends on it: a run is private to its owner rather than shared with the team. A metered turn carries the same person again, with the email beside it.',
+  },
+  {
+    question: 'What the AI cost, in tokens or in money',
+    how: 'One row per turn, carrying the models used, tokens in, out, cached and reasoning, and the cost snapshotted at the time it ran. Dollars for the models, rupees for the government lookups, never added together. A model with no rate on file is written as not priced rather than as nought.',
   },
 ];
 

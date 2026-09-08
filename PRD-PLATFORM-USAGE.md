@@ -46,7 +46,7 @@ words rather than shown an empty page.
 start. Anchored to 31 March 2026, a quarter end, so this quarter against last compares a whole
 window with a whole one.
 
-**What ran.** Executions that completed, failed and were blocked, the machine time they took from
+**What ran.** Executions that completed, failed and were blocked, the platform time they took from
 `duration_secs`, the median run, and the rows the completed runs returned. Per workflow with its
 team and its last run, and per month. On the own work view this section refuses in words: a run
 reaches a team through its workflow and never reaches a person.
@@ -92,7 +92,7 @@ overwritten each time, so the page says there is no history behind it and never 
 
 | Id | Criterion |
 | --- | --- |
-| PU-01 | The quarter reads 330 completed runs, 11.5 hours of machine time and 6,24,796 rows returned |
+| PU-01 | The quarter reads 330 completed runs, 11.5 hours of platform time and 6,24,796 rows returned |
 | PU-02 | No ₹ or $ appears anywhere on the page, in any view or window |
 | PU-03 | The words hours saved, auditor hour, rows an hour and estimated appear in no figure section |
 | PU-04 | The own work view refuses the run section in words and never shows a count of nought there |

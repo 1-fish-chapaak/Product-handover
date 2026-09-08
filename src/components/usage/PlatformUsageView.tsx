@@ -15,7 +15,7 @@
 
 import { useState } from 'react';
 import {
-  GAPS, PERSONA_QUESTION, PERSONA_TITLE, REFUSAL, TEAMS, dataAsOfLabel, entitledViews, fmtBytes,
+  GAPS, NOW_RECORDED, PERSONA_QUESTION, PERSONA_TITLE, REFUSAL, TEAMS, dataAsOfLabel, entitledViews, fmtBytes,
   fmtInt, fmtLatency, fmtPct, fmtSeconds, formatDate, formatMonth, period, periodOptions,
   personaFor, plural, snapshot, type Persona, type PeriodId, type Scope,
 } from '../../data/usage/metrics';
@@ -61,9 +61,13 @@ export default function PlatformUsageView() {
   // permissions bug.
   if (!offered.includes(persona)) {
     return (
-      <div className="mx-auto max-w-3xl px-8 py-16">
-        <h1 className="text-[1.25rem] font-semibold text-ink-900">Platform Usage</h1>
-        <p className="mt-3 text-[1rem] leading-relaxed text-ink-500">{REFUSAL}</p>
+      // The shell hands a view a fixed height and clips it, so every view owns
+      // its own scroll. Without this the page is simply cut off at the fold.
+      <div className="h-full overflow-y-auto">
+        <div className="mx-auto max-w-3xl px-8 py-16">
+          <h1 className="text-[1.25rem] font-semibold text-ink-900">Platform Usage</h1>
+          <p className="mt-3 text-[1rem] leading-relaxed text-ink-500">{REFUSAL}</p>
+        </div>
       </div>
     );
   }
@@ -79,7 +83,7 @@ export default function PlatformUsageView() {
       ? 'A check that ran cannot be put against a person, so this is read on the team or company view.'
       : runs.total === 0
         ? `Nothing ran ${p.phrase}.`
-        : `${plural(runs.complete, 'check finished', 'checks finished')} in ${fmtSeconds(runs.machineSeconds)} of machine time.`,
+        : `${plural(runs.complete, 'check finished', 'checks finished')} in ${fmtSeconds(runs.platformSeconds)} of platform time.`,
     body: !runs.attributable ? (
       <Unmeasured>
         A workflow execution records which workflow ran and when, and no user. The column for it
@@ -100,9 +104,9 @@ export default function PlatformUsageView() {
           </Working>{' '}
           checks finished {p.phrase}, taking{' '}
           <Working sum={`Summed duration_secs across the ${fmtInt(runs.complete)} completed runs. The median run took ${fmtSeconds(runs.medianSeconds)}. This is the only duration the product records anywhere.`}>
-            <Num>{fmtSeconds(runs.machineSeconds)}</Num>
+            <Num>{fmtSeconds(runs.platformSeconds)}</Num>
           </Working>{' '}
-          of machine time between them, and they returned{' '}
+          of platform time between them, and they returned{' '}
           <Working sum={`Rows across the output tables of the completed runs, derived from each run's output at read time rather than stored as a column. These are the rows a check returned, not the rows it read.`}>
             <Num>{fmtInt(runs.outputRows)}</Num>
           </Working>{' '}
@@ -113,7 +117,7 @@ export default function PlatformUsageView() {
           <Line
             label="Failed or blocked"
             value={fmtInt(runs.failed + runs.blocked)}
-            sub={`${fmtSeconds(runs.wastedSeconds)} of machine time spent on runs that produced nothing. A failed run makes no output tables, so it carries no row count either.`}
+            sub={`${fmtSeconds(runs.wastedSeconds)} of platform time spent on runs that produced nothing. A failed run makes no output tables, so it carries no row count either.`}
           />
           <Line
             label="Median run"
@@ -128,7 +132,7 @@ export default function PlatformUsageView() {
             { head: 'Team' },
             { head: 'Runs', align: 'right' },
             { head: 'Failed', align: 'right' },
-            { head: 'Machine time', align: 'right' },
+            { head: 'Platform time', align: 'right' },
             { head: 'Last run', align: 'right' },
           ]}
           rows={runs.workflows.map(w => [
@@ -136,7 +140,7 @@ export default function PlatformUsageView() {
             w.team,
             fmtInt(w.runs),
             fmtInt(w.failed),
-            fmtSeconds(w.machineSeconds),
+            fmtSeconds(w.platformSeconds),
             w.lastRunAt === null ? '—' : formatDate(w.lastRunAt),
           ])}
           caption={
@@ -460,69 +464,86 @@ export default function PlatformUsageView() {
           Each of these becomes answerable the day the platform writes the column. Until then a
           figure here would be a guess wearing a number's clothes.
         </Note>
+        {NOW_RECORDED.length > 0 ? (
+          <>
+            <Lede>
+              {plural(NOW_RECORDED.length, 'question', 'questions')} that used to be on that list, and
+              are not any more. The platform writes the column now, so the page can read it.
+            </Lede>
+            <Grid
+              columns={[{ head: 'Question' }, { head: 'What is recorded' }]}
+              rows={NOW_RECORDED.map(g => [g.question, g.how])}
+            />
+          </>
+        ) : null}
       </>
     ),
   });
 
   return (
-    <div className="mx-auto max-w-4xl px-8 py-10">
-      <header className="border-b border-canvas-border pb-5">
-        <h1 className="text-[1.25rem] font-semibold text-ink-900">Platform Usage</h1>
-        <p className="mt-1 text-[0.875rem] text-ink-500">
-          {PERSONA_QUESTION[persona]}? Read for {scope.subject}, {p.label.toLowerCase()}.{' '}
-          {dataAsOfLabel()}.
-        </p>
+    // The shell gives a view a fixed height and clips whatever overflows, so
+    // the scroll belongs to the view. The measured column sits inside the
+    // scroller rather than around it, so the scrollbar tracks the window edge.
+    <div className="h-full overflow-y-auto">
+      <div className="mx-auto max-w-4xl px-8 py-10">
+        <header className="border-b border-canvas-border pb-5">
+          <h1 className="text-[1.25rem] font-semibold text-ink-900">Platform Usage</h1>
+          <p className="mt-1 text-[0.875rem] text-ink-500">
+            {PERSONA_QUESTION[persona]}? Read for {scope.subject}, {p.label.toLowerCase()}.{' '}
+            {dataAsOfLabel()}.
+          </p>
 
-        <div className="mt-4 flex flex-wrap items-center gap-x-6 gap-y-3">
-          {offered.length > 1 ? (
-            <div className="flex items-center gap-1">
-              {offered.map(view => (
-                <button
-                  key={view}
-                  type="button"
-                  onClick={() => setPersona(view)}
-                  className={`rounded px-2.5 py-1 text-[0.875rem] ${
-                    view === persona
-                      ? 'bg-ink-900 text-canvas-elevated'
-                      : 'text-ink-500 hover:bg-canvas hover:text-ink-800'
-                  }`}
-                >
-                  {PERSONA_TITLE[view]}
-                </button>
-              ))}
-            </div>
-          ) : null}
-          <label className="flex items-center gap-2 text-[0.875rem] text-ink-500">
-            Window
-            <select
-              value={periodId}
-              onChange={e => setPeriodId(e.target.value as PeriodId)}
-              className="rounded border border-canvas-border bg-canvas-elevated px-2 py-1 text-[0.875rem] text-ink-800"
-            >
-              {periodOptions.map(o => (
-                <option key={o.id} value={o.id}>{o.label}</option>
-              ))}
-            </select>
-          </label>
+          <div className="mt-4 flex flex-wrap items-center gap-x-6 gap-y-3">
+            {offered.length > 1 ? (
+              <div className="flex items-center gap-1">
+                {offered.map(view => (
+                  <button
+                    key={view}
+                    type="button"
+                    onClick={() => setPersona(view)}
+                    className={`rounded px-2.5 py-1 text-[0.875rem] ${
+                      view === persona
+                        ? 'bg-ink-900 text-canvas-elevated'
+                        : 'text-ink-500 hover:bg-canvas hover:text-ink-800'
+                    }`}
+                  >
+                    {PERSONA_TITLE[view]}
+                  </button>
+                ))}
+              </div>
+            ) : null}
+            <label className="flex items-center gap-2 text-[0.875rem] text-ink-500">
+              Window
+              <select
+                value={periodId}
+                onChange={e => setPeriodId(e.target.value as PeriodId)}
+                className="rounded border border-canvas-border bg-canvas-elevated px-2 py-1 text-[0.875rem] text-ink-800"
+              >
+                {periodOptions.map(o => (
+                  <option key={o.id} value={o.id}>{o.label}</option>
+                ))}
+              </select>
+            </label>
+          </div>
+        </header>
+
+        <div>
+          {groups.map(spec => (
+            <Group
+              key={spec.id}
+              spec={spec}
+              open={open[spec.id] ?? false}
+              onToggle={() => setOpen(o => ({ ...o, [spec.id]: !(o[spec.id] ?? false) }))}
+            />
+          ))}
         </div>
-      </header>
 
-      <div>
-        {groups.map(spec => (
-          <Group
-            key={spec.id}
-            spec={spec}
-            open={open[spec.id] ?? false}
-            onToggle={() => setOpen(o => ({ ...o, [spec.id]: !(o[spec.id] ?? false) }))}
-          />
-        ))}
+        <p className="mt-6 text-[0.75rem] leading-relaxed text-ink-400">
+          This page reads and never writes. Nothing on it is estimated, modelled or priced: every
+          figure is a count or a sum of something the platform records. Teams on this workspace:{' '}
+          {TEAMS.join(', ')}.
+        </p>
       </div>
-
-      <p className="mt-6 text-[0.75rem] leading-relaxed text-ink-400">
-        This page reads and never writes. Nothing on it is estimated, modelled or priced: every
-        figure is a count or a sum of something the platform records. Teams on this workspace:{' '}
-        {TEAMS.join(', ')}.
-      </p>
     </div>
   );
 }

@@ -13,7 +13,7 @@ no column behind it.
 
 ## What it answers
 
-**What ran.** 330 checks finished this quarter, in 11.5 hours of machine time, returning 6,24,796
+**What ran.** 330 checks finished this quarter, in 11.5 hours of platform time, returning 6,24,796
 rows for somebody to look at. 22 failed or were blocked and spent 40 minutes producing nothing.
 
 **What was tested.** 11 populations holding 14,28,000 rows and 111.4 MB, plus 39 samples drawn and
