@@ -67,8 +67,9 @@ export type View =
   | 'admin-users'
   | 'admin-roles'
   | 'admin-logs'
+  | 'admin-usage'
+  | 'connectors'
   | 'platform-usage'
-  | 'platform-value'
   // One-Click Audit
   | 'one-click-audit'
   // Case Management
@@ -204,8 +205,14 @@ export interface AppState {
   focusedNotificationRefId: string | null;
 }
 
+/** Where the app opens.
+ *
+ *  Ask IRA, not Home. Asking is what people come here to do, so the first
+ *  screen is the one with a composer on it rather than a page they have to
+ *  cross to reach it. Home stays a click away on the rail, and `?view=home`
+ *  still lands on it. */
 const getInitialView = (): View => {
-  if (typeof window === 'undefined') return 'home';
+  if (typeof window === 'undefined') return 'chat';
   const params = new URLSearchParams(window.location.search);
   const v = params.get('view');
   if (v === 'reports') return 'reports';
@@ -233,7 +240,8 @@ const getInitialView = (): View => {
   // (+ optional &memory=<id> to open one registry row's drawer).
   if (v === 'knowledge-hub') return 'knowledge-hub';
   if (v === 'dev-configurable-engagement-v3') return 'dev-configurable-engagement-v3';
-  return 'home';
+  if (v === 'home') return 'home';
+  return 'chat';
 };
 
 /** ?view=knowledge-hub&tab=learn lands on the Smart Learn tab. */

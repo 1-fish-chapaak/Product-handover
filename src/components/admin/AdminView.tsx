@@ -15,7 +15,7 @@ import {
   Users, User, Shield, ScrollText,
   UserPlus, Plus, Download, ArrowRight,
   ChevronDown, Pencil, Trash2, X, Check, Crown, Send, UserCheck, UserX, Gauge, UserMinus,
-  Brain, Lock, CircleSlash, Undo2,
+  Brain, Lock, CircleSlash, Undo2, Coins,
 } from 'lucide-react';
 import { MEMORY_STORE, KIND_META, SCOPE_META } from '../../data/memoryStore';
 import {
@@ -39,6 +39,7 @@ import {
   BTN_CTA_PRIMARY, BTN_CTA_OUTLINE, BTN_ROW, type Stat,
 } from './adminTokens';
 import { InitialsAvatar, AvatarStack, MemberSearch, RowActions, AdminKpiRow, AdminSelect } from './AdminPrimitives';
+import UsageCostSection from './usage/UsageCostSection';
 
 interface Props {
   activeTab?: string;
@@ -48,7 +49,7 @@ interface Props {
  *  (search left · filters/CTA right) → content. People & Teams are two views of
  *  one "Members" tab, toggled by a segmented switch above the (unchanged) People
  *  / Teams screens. */
-type SectionId = 'members' | 'roles' | 'memory' | 'logs';
+type SectionId = 'members' | 'roles' | 'memory' | 'logs' | 'usage';
 type MembersView = 'people' | 'teams';
 
 const STATUS_MAP: Record<UserStatus, string> = {
@@ -2194,7 +2195,11 @@ function MemoryGovernanceSection({ onOpenLogs }: { onOpenLogs: () => void }) {
 export default function AdminView({ activeTab }: Props) {
   // Map sidebar view ids onto the flat three-tab shell. People & Teams both land
   // on the Members tab; a 'teams' deep-link opens Members on the Teams view.
-  const initialSection: SectionId = activeTab === 'logs' ? 'logs' : activeTab === 'roles' ? 'roles' : 'members';
+  const initialSection: SectionId =
+    activeTab === 'logs' ? 'logs'
+    : activeTab === 'roles' ? 'roles'
+    : activeTab === 'usage' ? 'usage'
+    : 'members';
   const initialMembersView: MembersView = activeTab === 'teams' ? 'teams' : 'people';
 
   const prefersReduced = useReducedMotion();
@@ -2225,6 +2230,10 @@ export default function AdminView({ activeTab }: Props) {
     { id: 'roles', label: 'Roles & Permissions', icon: Shield },
     { id: 'memory', label: 'Memory', icon: Brain },
     { id: 'logs', label: 'Audit Log', icon: ScrollText },
+    // What the workspace spent, on the account tab rather than beside Platform
+    // Usage: Platform Usage is an adoption question and carries no money, this
+    // one is the bill.
+    { id: 'usage', label: 'Usage & Cost', icon: Coins },
   ];
 
   // Audit-log CSV export now lives inside AuditLogSection (it owns the filter
@@ -2334,6 +2343,17 @@ export default function AdminView({ activeTab }: Props) {
             transition={{ duration: prefersReduced ? 0 : 0.18, ease: [0.4, 0, 0.2, 1] }}
           >
             <MemoryGovernanceSection onOpenLogs={() => setSection('logs')} />
+          </motion.div>
+        ) : section === 'usage' ? (
+          <motion.div
+            key="usage"
+            className="pt-4"
+            initial={prefersReduced ? false : { opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={prefersReduced ? undefined : { opacity: 0 }}
+            transition={{ duration: prefersReduced ? 0 : 0.18, ease: [0.4, 0, 0.2, 1] }}
+          >
+            <UsageCostSection />
           </motion.div>
         ) : (
           <motion.div

@@ -7,7 +7,7 @@ import {
   Shield, Search as SearchIcon, Settings, Clock, Check,
   Wand2, MoreHorizontal, LogOut, HelpCircle, ExternalLink,
   ClipboardCheck, FlaskConical, Layers, Bell, Inbox, BarChart3,
-  Brain, TrendingUp,
+  Brain,
 } from 'lucide-react';
 import PersonalMemoryDrawer from './PersonalMemoryDrawer';
 import type { View } from '../../hooks/useAppState';
@@ -170,6 +170,7 @@ export default function Sidebar({ view, setView, expanded, toggleSidebar, unread
     { view: 'admin-users', perm: 'ad_users_manage' },
     { view: 'admin-roles', perm: 'ad_roles_manage' },
     { view: 'admin-logs', perm: 'ad_logs' },
+    { view: 'admin-usage', perm: 'ad_usage' },
   ];
   const adminVisible = adminTabPerms.some(t => can(t.perm));
   const firstAdminView: View = (adminTabPerms.find(t => can(t.perm))?.view) ?? 'admin-users';
@@ -198,7 +199,7 @@ export default function Sidebar({ view, setView, expanded, toggleSidebar, unread
   /* View group helpers for active detection */
   const workflowViews: View[] = ['workflow-templates', 'workflow-detail', 'workflow-library', 'workflow-executor'];
   const aiConciergeViews: View[] = ['ai-concierge', 'ai-concierge-forensics', 'ai-concierge-table-extractor'];
-  const adminViews: View[] = ['admin-users', 'admin-roles', 'admin-logs'];
+  const adminViews: View[] = ['admin-users', 'admin-roles', 'admin-logs', 'admin-usage'];
 
   return (
     // In-flow rail — animating its width reflows the page, so expanding (hover
@@ -402,16 +403,14 @@ export default function Sidebar({ view, setView, expanded, toggleSidebar, unread
           <Divider label="System" expanded={isExpanded} />
 
           {can('ds_live') && <NavItem icon={Database} label="Knowledge Hub" active={view === 'knowledge-hub' || view === 'data-sources' || view === 'configuration'} expanded={isExpanded} onClick={() => setView('knowledge-hub')} />}
-          {canAny(['ad_usage', 'ad_usage_people']) && <NavItem icon={BarChart3} label="Platform Usage" active={view === 'platform-usage'} expanded={isExpanded} onClick={() => setView('platform-usage')} />}
-          {/* Two pages, two jobs, not one page and its replacement. Platform
-              Usage counts what the platform records; Platform Value compares
-              that against what the same work costs by hand.
+          {/* One entry, four tabs: what the platform did, what that work was
+              worth, what it cost to run, and what can be looked up outside
+              this workspace. They answer the same question from different
+              ends, so they sit behind one nav entry rather than four.
 
-              Open to everybody, unlike Platform Usage above. Every signed in
-              person can read how much of their own week came back, and the
-              scope switch inside the page never offers a view their role could
-              not already see. */}
-          <NavItem icon={TrendingUp} label="Platform Value" active={view === 'platform-value'} expanded={isExpanded} onClick={() => setView('platform-value')} />
+              Ungated, because two of the four tabs are open to everybody. The
+              page itself drops the tabs a reader's role does not carry. */}
+          <NavItem icon={BarChart3} label="Platform Usage" active={view === 'platform-usage' || view === 'connectors'} expanded={isExpanded} onClick={() => setView('platform-usage')} />
           {adminVisible && <NavItem icon={Settings} label="Admin" active={adminViews.includes(view)} expanded={isExpanded} onClick={() => setView(firstAdminView)} />}
 
         </div>

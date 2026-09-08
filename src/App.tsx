@@ -67,8 +67,8 @@ import ChatWorkflowWorkspace from './components/chat/ChatWorkflowWorkspace';
 import type { ComposerContext } from './components/chat/composerContext';
 import WorkflowBuilderJourney from './components/concierge-workflow-builder/WorkflowBuilderJourney';
 import AdminView from './components/admin/AdminView';
-import PlatformUsageView from './components/usage/PlatformUsageView';
-import PlatformValueView from './components/value/PlatformValueView';
+import ConnectorsView from './components/connectors/ConnectorsView';
+import PlatformUsageTabs from './components/usage/PlatformUsageTabs';
 import WorkflowExecutor from './components/workflow/WorkflowExecutor';
 import WorkflowEditInChatJourney from './components/workflow-edit-in-chat/WorkflowEditInChatJourney';
 import ControlDetailDrawer from './components/engagement/ControlDetailDrawer';
@@ -1229,6 +1229,9 @@ function AppInner() {
         );
 
       // Admin
+      case 'platform-usage':
+        return <PlatformUsageTabs />;
+
       case 'admin-users':
         return <AdminView activeTab="users" />;
       case 'admin-roles':
@@ -1236,11 +1239,11 @@ function AppInner() {
       case 'admin-logs':
         return <AdminView activeTab="logs" />;
 
-      case 'platform-usage':
-        return <PlatformUsageView />;
+      case 'admin-usage':
+        return <AdminView activeTab="usage" />;
 
-      case 'platform-value':
-        return <PlatformValueView />;
+      case 'connectors':
+        return <ConnectorsView />;
 
       // V3 Configurable Engagement — dev-only preview route
       case 'dev-configurable-engagement-v3':
