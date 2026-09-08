@@ -1,10 +1,11 @@
 import { useState } from 'react';
+import { motion, AnimatePresence } from 'motion/react';
 import { Check, ChevronDown, ChevronRight, Plus, Trash2, Workflow as WorkflowIcon } from 'lucide-react';
 import { useIcfr } from './store';
 import { useAuditLog } from '../../context/AdminDataContext';
 import { controlConclusion } from './helpers';
 import { ownersOf } from './auditScope';
-import { ConclusionPill, NatureChip } from './parts';
+import { ConclusionPill } from './parts';
 import { Pill } from '../shared/StatusBadge';
 import { Dropdown, KeyControlChip, menuItem, WORKFLOW_LIBRARY } from './ControlDossier';
 import { attributeStats, auditsForControl, LastRunFact, runsForControl, RunHistoryList } from './ControlLibrary';
@@ -76,25 +77,67 @@ function AttributeTableRow({ control, step, canEdit }: { control: Control; step:
   );
 }
 
-/** One owner line, reassignable in place. Read-only for anyone who can't edit,
- *  so the name still reads the same — it just stops being a button. */
-function OwnerField({ label, value, options, canEdit, onChange }: { label: string; value: string; options: string[]; canEdit: boolean; onChange: (v: string) => void }) {
-  if (!canEdit) return <span className="inline-flex items-center gap-1"><span className="text-ink-400">{label}</span> · <b className="font-semibold text-ink-700">{value}</b></span>;
+/**
+ * One owner value, reassignable in place. The label is the fact list's, not
+ * this component's.
+ *
+ * At rest the name is set as text, because that is what it is: a fact about the
+ * control, sitting in a list of facts that are read far more often than they
+ * are changed. The bordered button it used to wear made two of the eight facts
+ * shout, and broke the baseline of the line they sat on. The affordance comes
+ * back on hover and focus, where it is asked for. Read-only for anyone who
+ * cannot edit, and the name reads identically either way.
+ */
+function OwnerField({ value, options, canEdit, onChange }: { value: string; options: string[]; canEdit: boolean; onChange: (v: string) => void }) {
+  if (!canEdit) return <>{value}</>;
   return (
-    <span className="inline-flex items-center gap-1">
-      <span className="text-ink-400">{label}</span> ·
-      <Dropdown trigger={<span className="inline-flex items-center gap-1 font-semibold text-ink-700 hover:text-brand-700"><b>{value}</b><ChevronDown size={12} className="text-ink-400" /></span>}>
-        {close => (
-          <>
-            {options.map(o => (
-              <button key={o} className={menuItem} onClick={() => { if (o !== value) onChange(o); close(); }}>
-                {o === value && <Check size={12} className="text-brand-600" />}
-                <span className={o === value ? 'font-semibold' : undefined}>{o}</span>
-              </button>
-            ))}
-          </>
-        )}
-      </Dropdown>
+    <Dropdown
+      triggerClass="-ml-1.5 px-1.5 py-0.5 inline-flex items-center gap-1 rounded-md border border-transparent text-[0.8125rem] font-medium text-ink-800 hover:border-canvas-border hover:bg-canvas-elevated hover:text-brand-700 transition-colors cursor-pointer"
+      trigger={value}
+    >
+      {close => (
+        <>
+          {options.map(o => (
+            <button key={o} className={menuItem} onClick={() => { if (o !== value) onChange(o); close(); }}>
+              {o === value && <Check size={12} className="text-brand-600" />}
+              <span className={o === value ? 'font-semibold' : undefined}>{o}</span>
+            </button>
+          ))}
+        </>
+      )}
+    </Dropdown>
+  );
+}
+
+/** The open / close control for the header's detail half. It sits at the end of
+ *  the activity line — where the sentence stops and the reader is already asking
+ *  for the rest — and stays in that one place whether it reads more or less, so
+ *  the thing that opened the detail is the thing that closes it. The chevron
+ *  turns with the state; the word carries the underline, not the arrow. */
+function MoreLink({ open, onClick }: { open: boolean; onClick: () => void }) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      aria-expanded={open}
+      className="group shrink-0 inline-flex items-center gap-0.5 font-medium text-brand-700 hover:text-brand-800 transition-colors cursor-pointer rounded-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-500/40"
+    >
+      <span className="underline underline-offset-2 decoration-brand-300 group-hover:decoration-brand-500 transition-colors">{open ? 'less' : 'more'}</span>
+      <ChevronDown size={13} className={cn('text-brand-500 transition-transform duration-200 ease-out', open && 'rotate-180')} />
+    </button>
+  );
+}
+
+/** One named field, read as "name: value". Short facts that need their name
+ *  said, sitting under the activity rather than in the line beside the title —
+ *  a run of bare values up there made an auditor guess which word was the
+ *  frequency and which the nature. */
+function Field({ label, value }: { label: string; value?: string }) {
+  if (!value) return null;
+  return (
+    <span className="inline-flex items-baseline gap-1.5">
+      <span className="text-ink-400">{label}:</span>
+      <span className="font-medium text-ink-800">{value}</span>
     </span>
   );
 }
@@ -103,6 +146,8 @@ export default function ControlLibraryDetail() {
   const { eng, role, selectedControlId, back, openControl, openAudit, addAttribute, updateControlMeta } = useIcfr();
   const logEvent = useAuditLog();
   const [newAttr, setNewAttr] = useState('');
+  /** The header's detail half — activity and fields — open by default. */
+  const [detailOpen, setDetailOpen] = useState(true);
   const [addingAttr, setAddingAttr] = useState(false);
 
   const control = eng.controls.find(c => c.id === selectedControlId);
@@ -140,45 +185,118 @@ export default function ControlLibraryDetail() {
           working paper button, no RAG tiles. Those are testing concepts, and
           testing only happens inside an audit. Not its own card — this page is
           one continuous surface, just a rule below to close the header off. */}
-      <div className="mb-5">
-        <div className="flex items-start justify-between gap-4">
-          <div className="min-w-0">
-            <div className="flex items-center gap-2 mb-1.5 flex-wrap">
-              <KeyControlChip control={control} canEdit={canEdit} />
-              {control.clazz && <Pill tone="draft">{control.clazz}</Pill>}
-              <NatureChip nature={control.nature} /><Pill tone="draft">{control.type}</Pill><Pill tone="draft">{control.frequency}</Pill>
-              {control.riskRating && <Pill tone={control.riskRating === 'High' ? 'risk' : control.riskRating === 'Medium' ? 'mitigated' : 'draft'}>{control.riskRating} risk</Pill>}
-              <span className="text-[0.6875rem] text-ink-400 font-mono">{control.id}</span>
-            </div>
-            <h1 className="leadsheet-title text-[1.25rem] text-ink-900 leading-snug max-w-[640px]">{control.objective ?? control.description}</h1>
-            {control.objective && (
-              <p className="text-[0.78125rem] text-ink-500 mt-1.5 leading-relaxed">
-                <b className="text-ink-700 font-semibold">Control —</b> {control.description}
-              </p>
-            )}
-            {control.controlActivity && (
-              <p className="text-[0.78125rem] text-ink-500 mt-1.5 leading-relaxed">
-                <b className="text-ink-700 font-semibold">Control activity —</b> {control.controlActivity}
-              </p>
-            )}
-            <div className="flex flex-wrap items-center gap-x-5 gap-y-1 mt-3 text-[0.71875rem] text-ink-500">
-              <span><span className="text-ink-400">Process</span> · {control.process} / {control.subProcess}</span>
-              {/* both names — the accountable one and the one you actually ask.
-                  Reassignable here rather than only at creation: people move
-                  roles mid-cycle, and a control still addressed to whoever held
-                  the job in April sends every request into an empty inbox. */}
-              <OwnerField label="Control owner" value={detailOwners.controlOwner} options={ownerNames} canEdit={canReassign}
-                onChange={v => { updateControlMeta(control.id, { owner: v }); logEvent({ action: 'Update', description: `Reassigned control owner for ${control.id} to ${v}`, module: 'SOX ICFR', entity: 'Control' }); }} />
-              <OwnerField label="Process owner" value={detailOwners.processOwner} options={ownerNames} canEdit={canReassign}
-                onChange={v => { updateControlMeta(control.id, { processOwner: v }); logEvent({ action: 'Update', description: `Reassigned process owner for ${control.id} to ${v}`, module: 'SOX ICFR', entity: 'Control' }); }} />
-              <span><span className="text-ink-400">Risk {control.riskId}</span> · {control.riskDescription}</span>
-              <span><span className="text-ink-400">Assertions</span> · {control.assertions.join(', ')}</span>
-              {control.rootCause && <span><span className="text-ink-400">Root cause</span> · {control.rootCause}</span>}
-            </div>
-          </div>
+      {/*
+        A record header.
+
+        Three shapes came before this one and each failed the same way. One
+        wrapping 11.5px line that mixed a two-word process with a sentence of
+        risk. Then a label rail down the left, which read as a form and pushed
+        the audit runs below the fold. Then a full-width properties bar, which
+        aligned with the page but gave eight facts eight uppercase labels — and
+        those labels, all 10px and all grey, became the loudest repeated thing
+        on the screen, so nothing led and the whole header sat at one tonal
+        value.
+
+        What this page is, is a record. So it is built like one. The name of the
+        record leads, in the size and the face that says so. Underneath it, one
+        quiet line of the facts an auditor recognises on sight — a frequency
+        does not need to be labelled "frequency". Below the rule, the three
+        things that DO need naming, because they are three different SOX
+        artefacts and they look alike as paragraphs: the objective, the risk,
+        and the activity.
+
+        Eight labels became three. The title carries the weight.
+      */}
+      {/* The header is its own band: white, fenced top and bottom, running to
+          both screen edges while its content stays on the page's own column.
+          Negative margins only reach the container's gutter, and this container
+          is centred at 1320px — so the white is painted by a layer that
+          overshoots on both sides instead, and the scroll parent clips it
+          (SoxClassicApp, overflow-x-hidden). */}
+      <header className="relative pt-5 pb-5 mb-6">
+        <div aria-hidden className="absolute inset-y-0 left-[-50vw] right-[-50vw] bg-canvas-elevated border-b border-canvas-border" />
+        <div className="relative">
+        {/* The objective is the headline (user ask): what this control is FOR is
+            the thing worth reading first, and the control's own sentence is
+            said again by every attribute in the table below. */}
+        <h1 className="leadsheet-title text-[1.625rem] leading-[1.25] text-ink-900 max-w-[64ch]">{control.objective ?? control.description}</h1>
+
+        {/* One line, no labels. Judgements are chips because they are somebody's
+            call; the rest is plain text because it is just what the control is. */}
+        <div className="mt-3 flex items-center gap-2.5 flex-wrap text-[0.78125rem] text-ink-500">
+          <KeyControlChip control={control} canEdit={canEdit} />
+          {control.riskRating && <Pill tone={control.riskRating === 'High' ? 'risk' : control.riskRating === 'Medium' ? 'mitigated' : 'draft'}>{control.riskRating} risk</Pill>}
+          <span aria-hidden className="w-px h-3.5 bg-canvas-border" />
+          {/* Which matrix this control answers to. A RACM is named by its
+              process (Racm.tsx keys them `sox-racm-{eng}-{process}`), so the
+              name is the process — labelled, because "Treasury" on its own
+              reads as a location rather than as the register the control is
+              scoped through. */}
+          <span className="inline-flex items-center gap-1.5">
+            <span className="text-ink-400">RACM</span>
+            <span className="font-medium text-ink-800">{control.process}</span>
+          </span>
+          <span aria-hidden className="w-px h-3.5 bg-canvas-border" />
+          {/* both names — the accountable one and the one you actually ask.
+              Reassignable here rather than only at creation: people move roles
+              mid-cycle, and a control still addressed to whoever held the job
+              in April sends every request into an empty inbox. */}
+          <span className="inline-flex items-center gap-1.5">
+            <span className="text-ink-400">Control owner</span>
+            <OwnerField value={detailOwners.controlOwner} options={ownerNames} canEdit={canReassign}
+              onChange={v => { updateControlMeta(control.id, { owner: v }); logEvent({ action: 'Update', description: `Reassigned control owner for ${control.id} to ${v}`, module: 'SOX ICFR', entity: 'Control' }); }} />
+          </span>
+          <span className="inline-flex items-center gap-1.5">
+            <span className="text-ink-400">Process owner</span>
+            <OwnerField value={detailOwners.processOwner} options={ownerNames} canEdit={canReassign}
+              onChange={v => { updateControlMeta(control.id, { processOwner: v }); logEvent({ action: 'Update', description: `Reassigned process owner for ${control.id} to ${v}`, module: 'SOX ICFR', entity: 'Control' }); }} />
+          </span>
         </div>
-        <div className="ac-div mt-3" />
-      </div>
+
+        {/* One paragraph under the rule: how the control is actually performed
+            (user ask). The objective moved up to the headline, and the risk and
+            the control's own sentence came out of the header entirely. */}
+        {/* The detail half of the band. Closed it is one line that stops where
+            the row does; open it runs on and the rest follows. Either way the
+            toggle sits at the end of the activity text, in the one place — a
+            chevron in front of the label asked the reader to find the control
+            before they knew there was more to read. */}
+        <div className="mt-4 text-[0.8125rem] leading-[1.7] text-ink-600">
+          <p className={cn('min-w-0', !detailOpen && 'flex items-baseline')}>
+            <span className="font-semibold text-ink-900 shrink-0">Control activity</span>
+            <span className="text-ink-300 mx-1.5 shrink-0">·</span>
+            <span className={cn('min-w-0', !detailOpen && 'truncate')}>{control.controlActivity}</span>
+            <span className="shrink-0 ml-1.5"><MoreLink open={detailOpen} onClick={() => setDetailOpen(o => !o)} /></span>
+          </p>
+          <AnimatePresence initial={false}>
+            {detailOpen && (
+              <motion.div
+                key="detail"
+                initial={{ height: 0, opacity: 0 }}
+                animate={{ height: 'auto', opacity: 1 }}
+                exit={{ height: 0, opacity: 0 }}
+                transition={{ duration: 0.24, ease: [0.22, 1, 0.36, 1] }}
+                className="overflow-hidden"
+              >
+                {/* The short facts, each said with its name (user ask). They used
+                    to run bare beside the title — "Payments · Financial · Manual
+                    · Preventive · Monthly" asks the reader to know the schema by
+                    heart. */}
+                <div className="mt-3.5 flex flex-wrap items-baseline gap-x-6 gap-y-2">
+                  <Field label="Sub-process" value={control.subProcess} />
+                  <Field label="Class" value={control.clazz} />
+                  <Field label="Nature" value={control.nature} />
+                  <Field label="Type" value={control.type} />
+                  <Field label="Frequency" value={control.frequency} />
+                  <Field label="Assertions" value={control.assertions.join(', ')} />
+                  {control.rootCause && <Field label="Root cause" value={control.rootCause} />}
+                </div>
+              </motion.div>
+            )}
+          </AnimatePresence>
+        </div>
+        </div>
+      </header>
 
       {/* audit runs — shown upfront, not behind a tab or a drawer: each audit
           this control sits in, and what THAT audit concluded (a frozen

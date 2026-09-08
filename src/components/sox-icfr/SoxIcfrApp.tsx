@@ -251,7 +251,9 @@ function Inner({ onBack, backLabel = 'Back to Engagements' }: { onBack?: () => v
     : <ControlRegister />;
 
   return (
-    <div className="sox-book-ui h-full overflow-y-auto bg-canvas">
+    <div className="sox-book-ui h-full overflow-y-auto overflow-x-hidden bg-canvas">
+      {/* overflow-x-hidden above lets the control page's full-bleed header band
+          overshoot the centred container without opening a sideways scrollbar. */}
       {/* The control detail page and the RACM matrix stand alone — no engagement
           header, no role switcher; the persona is fixed until you go back to the
           engagement. */}
@@ -316,13 +318,23 @@ function Inner({ onBack, backLabel = 'Back to Engagements' }: { onBack?: () => v
           };
           const from = VIEW_LABEL[returnView ?? ''] ?? VIEW_LABEL[tab === 'controls' ? 'register' : tab] ?? 'Overview';
           const wpRef = eng.controls.find(c => c.id === selectedControlId)?.wpRef ?? 'Control';
-          return (
+          const trail = (
             <SoxBreadcrumb onBack={back} items={[
               ...(onBack ? [{ label: backCrumb, onClick: onBack }] : []),
               { label: eng.name, onClick: () => setTab('overview') },
               { label: from, onClick: back },
               { label: wpRef },
             ]} />
+          );
+          // The library's control page carries a white header band that runs to
+          // both screen edges; the trail sits on the same white, so the two read
+          // as one region rather than a strip floating on the canvas. Inside an
+          // Both control pages carry that band now, so both trails sit on it.
+          return (
+            <div className="relative flow-root -mt-4 pt-4">
+              <div aria-hidden className="absolute inset-y-0 left-[-50vw] right-[-50vw] bg-canvas-elevated" />
+              <div className="relative">{trail}</div>
+            </div>
           );
         })()}
         {isHandoffs && (
