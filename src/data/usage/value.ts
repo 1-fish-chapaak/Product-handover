@@ -277,19 +277,6 @@ export interface UnvaluedGroup {
   rows: UsageTurn[];
 }
 
-/** One kind of work with timings still outstanding: how many sittings would
- *  close it, and how much work that would price. This is what turns the gap
- *  list from a complaint into a worklist. */
-export interface TimingGap {
-  surface: string;
-  /** The named things needing a stopwatch, so the worklist can say WHICH
-   *  workflow rather than which kind. */
-  names: string[];
-  /** Sizes of that work with no timing on file, in view. */
-  sittings: number;
-  turns: number;
-}
-
 /** One size, and the sum that makes it. Size is the page's top-level split:
  *  every kind of activity lands in one of three buckets by how long it takes a
  *  person by hand. */
@@ -405,8 +392,6 @@ export interface ValueRollup {
   fx: Dated<number> | null;
 
   unvalued: UnvaluedGroup[];
-  /** Work with no timing, grouped by the kind of work that would close it. */
-  timing_gaps: TimingGap[];
   /** Work in view carrying no value only because nobody has timed it yet. */
   untimed_turns: number;
   by_band: BandSplit[];
@@ -473,32 +458,6 @@ export function rollUp(rows: UsageTurn[]): ValueRollup {
     list.push(v.turn);
     unvaluedMap.set(v.unvalued_reason, list);
   });
-
-  /* ONE SITTING CLOSES ONE NAMED THING, so the worklist is keyed on the named
-     thing and never on the kind that reached it. Keyed on the kind, a workflow
-     that also runs in batches came back as two rows asking for two stopwatch
-     sittings on the same workflow, and the total was double what the work
-     actually is. */
-  const gapNames = new Map<string, string>();
-  const gapSurface = new Map<string, string>();
-  const gapTurns = new Map<string, number>();
-  valued.forEach(v => {
-    if (v.unvalued_kind !== 'no-timing') return;
-    const surface = v.turn.surface;
-    const key = `${surface}:${timingTargetFor(v.turn) ?? ''}`;
-    if (v.turn.workflow_name) gapNames.set(key, v.turn.workflow_name);
-    gapSurface.set(key, surface);
-    gapTurns.set(key, (gapTurns.get(key) ?? 0) + 1);
-  });
-  const timing_gaps: TimingGap[] = [...gapTurns.entries()]
-    .map(([key, turns]) => ({
-      surface: gapSurface.get(key) as string,
-      names: gapNames.has(key) ? [gapNames.get(key) as string] : [],
-      // One named thing, one sitting. Always.
-      sittings: 1,
-      turns,
-    }))
-    .sort((a, b) => b.turns - a.turns);
 
   const by_band: BandSplit[] = BAND_ORDER.map(band => {
     const inBand = valued.filter(v => v.size === band && v.returned_minutes != null);
@@ -712,7 +671,6 @@ export function rollUp(rows: UsageTurn[]): ValueRollup {
     unvalued: [...unvaluedMap.entries()]
       .map(([reason, list]) => ({ reason, turns: list.length, rows: list }))
       .sort((a, b) => b.turns - a.turns),
-    timing_gaps,
     untimed_turns: valued.filter(v => v.unvalued_kind === 'no-timing').length,
     by_band,
     by_surface,

@@ -1333,11 +1333,6 @@ export default function PlatformValueSection() {
     ],
   };
 
-  /* The gap list read as a complaint until it said what closes it. File reads
-     are 18 of 18 unpriced here, and three sittings fixes all eighteen. */
-  const totalSittings = r.timing_gaps.reduce((n, g) => n + g.sittings, 0);
-  const unpricedTotal = r.unvalued.reduce((n, u) => n + u.turns, 0);
-
   /* ── The page ──────────────────────────────────────────────────────────── */
 
   return (
@@ -1535,32 +1530,6 @@ export default function PlatformValueSection() {
         ) : (
           r.unvalued.map(u => <UnvaluedRow key={u.reason} group={u} />)
         )}
-        {r.timing_gaps.length > 0 ? (
-          <div className="px-5 py-3.5">
-            <p className="text-[0.625rem] font-bold uppercase tracking-wider text-ink-400">
-              What would close this
-            </p>
-            <ul className="mt-1.5 space-y-1">
-              {r.timing_gaps.map(g => (
-                <li
-                  key={g.surface}
-                  className="max-w-[78ch] text-[0.75rem] leading-relaxed text-ink-600"
-                >
-                  {plural(g.sittings, 'sitting')} with a stopwatch on{' '}
-                  {g.names.length ? g.names.join(', ') : workNoun(g.surface)} would
-                  price {activities(g.turns)} on this list.
-                </li>
-              ))}
-            </ul>
-            <p className="mt-2 max-w-[78ch] text-[0.75rem] leading-relaxed text-ink-500">
-              {plural(totalSittings, 'sitting')} in all would price {count(r.untimed_turns)} of the{' '}
-              {count(unpricedTotal)} here and take the figure at the top of the page from{' '}
-              {pct(r.coverage)} to{' '}
-              {pct((r.valued_turns + r.untimed_turns) / Math.max(1, r.counted_turns))}. The rest are
-              activities that did not finish, and no timing prices those.
-            </p>
-          </div>
-        ) : null}
       </ValueSection>
     </div>
   );
