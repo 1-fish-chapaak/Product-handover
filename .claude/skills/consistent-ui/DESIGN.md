@@ -47,6 +47,8 @@
 | MemberSearch | src/components/admin/AdminPrimitives.tsx | Search-left input | h-10 rounded-lg | toolbar search (glyph-left, clear-on-X) |
 | StatLedger | src/components/admin/AdminPrimitives.tsx | Inline `label · value` stat strip | clickable (filter) | dense alternative to the KPI band |
 | adminTokens | src/components/admin/adminTokens.ts | Shared admin form / button / row classes | FIELD_INPUT/LABEL · BTN_CANCEL/PRIMARY/CTA_*/ROW · presetChip | the single class source `AdminView` + `RolesWorkspace` consume — extend here, don't re-inline |
+| ValueSection | src/components/usage/ValueSection.tsx | Titled section card on Platform Value (header inside the card, hairline body) | — | Surface-local, the shape `audit/SectionCard` uses. Header `px-5 py-3.5`, blurb capped at 78ch, body `divide-y`. Padding matches `SmartTable` modern cells so a table lines up with its heading |
+| ValueTable | src/components/usage/ValueTable.tsx | Platform Value's summary tables | — | A thin `SmartTable` `variant="modern"` wrapper (no card of its own, no search/sort/paging/striping/cascade) + `note` slot in a header cell. Replaced six hand-rolled `<table>`s. **Not a new table** — reuse `SmartTable` directly elsewhere |
 
 ---
 
@@ -80,6 +82,16 @@
   re-inlining. Root `/DESIGN.md` gained §2 token coverage (now 72/72) and §7.11–§7.18
   surface specs (Admin, Auth, Recents, Engagements, Workflow Builder, Exceptions,
   Intelligence, Notifications). Admin avatars are monochrome by rule — never per-person colour.
+
+- 2026-09-09 — **Platform Value tab re-dressed in platform components.** The tab was a
+  stack of ten identical hairline slabs with the heading floating outside each one, six
+  hand-rolled `<table>`s, bespoke KPI tiles and 12px prose running the full page width.
+  Now: `ValueTile` wears the `AdminKpiCard` vocabulary (brand-50 icon chip, 18px bold
+  tabular value, 12px label, the admin spring cascade at `0.08 + i*0.08`) so the band
+  matches the one on Usage and cost next door; `ValueSection` puts the title inside the
+  card; the tables are `SmartTable` (§7.10.3) via `ValueTable`; every measure is capped
+  at 78ch and every gutter is `px-5`. No icon chips on section headers — type and
+  hairlines carry those, per the minimal-UI rule. Connectors and Usage and cost untouched.
 
 ---
 

@@ -1,14 +1,24 @@
 /**
  * Platform Usage.
  *
- * Two surfaces behind one nav entry.
+ * Three surfaces behind one nav entry.
  *
  * · **Connectors** — what can be looked up outside this workspace, and the
  *   price of each lookup.
- * · **Usage and cost** — one row per metered turn, and what it cost to run.
+ * · **Usage and cost** — one row per activity, and what it cost to run.
+ * · **Platform Value** — the same activities read backwards: what the work gave
+ *   back, timed against how long it takes a person.
  *
- * They answer the same question from two ends, what we can spend on and what
- * we spent, so they sit together rather than a nav entry apart.
+ * A row is an ACTIVITY on all three, in those words. It used to be a metered
+ * turn here, a piece of work in the value panels and an activity in the tables,
+ * which is three names for one thing on a page whose argument depends on a
+ * reader following one number from one tab to the next.
+ *
+ * They answer the same question from three ends, what we can spend on, what we
+ * spent, and what came of it, so they sit together rather than a nav entry
+ * apart. Cost and Value read the same rows through the same filters on purpose:
+ * a page that could not be reconciled against the one beside it would not be
+ * believed by anybody who tried.
  *
  * The chrome is Knowledge Hub's, to the pixel: one full-bleed elevated strip
  * carrying the display title, the subhead and the tabs, with the strip's own
@@ -21,15 +31,14 @@
 
 import { useState } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
-import { Coins, Plug } from 'lucide-react';
+import { Coins, Plug, TrendingUp } from 'lucide-react';
 import UsageCostSection from '../admin/usage/UsageCostSection';
+import PlatformValueSection from './PlatformValueSection';
 import ConnectorsSection from '../connectors/ConnectorsView';
 import FloatingLines from '../shared/FloatingLines';
 import { useCurrentUser } from '../../context/CurrentUserContext';
-import { CONNECTOR_OPERATIONS, govtOperations } from '../../data/connectors/catalogue';
-import { USAGE_TURNS } from '../../data/usage/metering';
 
-type TabId = 'connectors' | 'cost';
+type TabId = 'connectors' | 'cost' | 'value';
 
 interface Tab {
   id: TabId;
@@ -37,7 +46,6 @@ interface Tab {
   icon: React.ElementType;
   /** False where the reader's role does not carry this surface. */
   visible: boolean;
-  count: number;
   body: () => React.ReactElement;
 }
 
@@ -70,11 +78,6 @@ function UnderlinedTabs({
             <span className="flex items-center gap-2">
               <Icon size={14} />
               {tab.label}
-              <span className={`text-[0.625rem] font-bold px-1.5 py-0.5 rounded-full tabular-nums ${
-                isActive ? 'bg-brand-100 text-brand-700' : 'bg-paper-50 text-ink-500'
-              }`}>
-                {tab.count}
-              </span>
             </span>
             {isActive && (
               <motion.div
@@ -107,7 +110,6 @@ export default function PlatformUsageTabs() {
       label: 'Connectors',
       icon: Plug,
       visible: true,
-      count: govtOperations(CONNECTOR_OPERATIONS).length,
       body: () => <ConnectorsSection />,
     },
     {
@@ -115,8 +117,21 @@ export default function PlatformUsageTabs() {
       label: 'Usage and cost',
       icon: Coins,
       visible: readsUsage,
-      count: USAGE_TURNS.length,
       body: () => <UsageCostSection />,
+    },
+    // Value sits after Cost and reads the same rows. Same gate, because the
+    // Cost lens on it prints the workspace's bill.
+    //
+    // The label is "Platform Value" and not "Usages". It sat as "Usages" for an
+    // afternoon and read as a near-duplicate of "Usage and cost" beside it: two
+    // tabs a letter apart, with the new one having dropped the word that says
+    // it answers a different question. Value is the question this tab asks.
+    {
+      id: 'value',
+      label: 'Platform Value',
+      icon: TrendingUp,
+      visible: readsUsage,
+      body: () => <PlatformValueSection />,
     },
   ];
 
@@ -129,8 +144,10 @@ export default function PlatformUsageTabs() {
   // reads as the page jumping.
   const subhead =
     active.id === 'connectors'
-      ? 'External lookups a run can make, and what each one costs per call.'
-      : 'One row for every metered turn, and what it cost to run.';
+      ? 'External lookups an activity can make, and what each one costs per call.'
+      : active.id === 'cost'
+        ? 'One row for every activity, and what it cost to run.'
+        : 'What the same work gave back.';
 
   // The page insets step up with the window (px-6 → lg:px-12 → xl:px-[124px])
   // so narrow windows keep room for wide tables. The strip's negative margins

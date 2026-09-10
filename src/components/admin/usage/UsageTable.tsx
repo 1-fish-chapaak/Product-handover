@@ -1,21 +1,24 @@
 /**
- * One row per metered turn.
+ * One row per activity.
  *
  * The columns are the record: who ran it, on which surface, what it spent in
  * tokens and in registry calls, and what both cost. Nothing is derived here
  * that the row does not carry.
  */
 
+import type { ReactNode } from 'react';
 import SmartTable, { type Column } from '../../shared/SmartTable';
 import {
   formatDuration,
   formatTokens,
   formatUsageAmount,
+  statusLabel,
   surfaceLabel,
   turnKindLabel,
   type UsageTurn,
 } from '../../../data/usage/metering';
 import UsageLlmCostCell from './UsageLlmCostCell';
+import UsageLookupsCell from './UsageLookupsCell';
 import UsageModelsCell from './UsageModelsCell';
 import UsageSessionCell from './UsageSessionCell';
 
@@ -25,6 +28,9 @@ type UsageRow = UsageTurn & Record<string, unknown>;
 
 interface Props {
   rows: UsageTurn[];
+  /** The filter strip, rendered as the card's toolbar the way Administration
+   *  and every other list on the platform carries its filters. */
+  toolbar?: ReactNode;
 }
 
 const COLUMNS: Column<UsageRow>[] = [
@@ -130,7 +136,14 @@ const COLUMNS: Column<UsageRow>[] = [
     width: '110px',
     render: r => <UsageLlmCostCell turn={r} />,
   },
-  { key: 'govt_calls', label: 'Lookups', align: 'right', sortable: true, width: '85px' },
+  {
+    key: 'govt_calls',
+    label: 'Lookups',
+    align: 'right',
+    sortable: true,
+    width: '120px',
+    render: r => <UsageLookupsCell turn={r} />,
+  },
   {
     key: 'govt_cost',
     label: 'Lookup cost',
@@ -154,15 +167,25 @@ const COLUMNS: Column<UsageRow>[] = [
     key: 'status',
     label: 'Status',
     width: '85px',
+    // Stopped is not failed. A run somebody halted did what it did and then
+    // stopped, so it reads in the neutral colour a failure does not get.
     render: r => (
-      <span className={r.status === 'ok' ? 'text-text-secondary' : 'text-risk-700'}>
-        {r.status === 'ok' ? 'Succeeded' : 'Failed'}
+      <span
+        className={
+          r.status === 'failed'
+            ? 'text-risk-700'
+            : r.status === 'stopped'
+              ? 'text-ink-700'
+              : 'text-text-secondary'
+        }
+      >
+        {statusLabel(r.status)}
       </span>
     ),
   },
 ];
 
-export default function UsageTable({ rows }: Props) {
+export default function UsageTable({ rows, toolbar }: Props) {
   return (
     <SmartTable<UsageRow>
       columns={COLUMNS}
@@ -172,11 +195,12 @@ export default function UsageTable({ rows }: Props) {
       // and a second search box that narrows it differently is two answers to
       // one question.
       searchable={false}
+      headerExtra={toolbar}
       paginated
       pageSize={25}
       variant="modern"
       dense
-      emptyMessage="No turns match. Chat turns, workflow runs and file ingestions are metered from the moment they run, and there is no backfill behind them."
+      emptyMessage="No activities match. Questions in chat, workflow runs and file reads are metered from the moment they run, and there is no backfill behind them."
     />
   );
 }
