@@ -1,21 +1,21 @@
 import { useState } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
-import { Check, ChevronDown, ChevronRight, Plus, Trash2, Workflow as WorkflowIcon } from 'lucide-react';
+import { Check, ChevronDown, ChevronRight, Plus, Trash2, X } from 'lucide-react';
 import { useIcfr } from './store';
 import { useAuditLog } from '../../context/AdminDataContext';
-import { controlConclusion } from './helpers';
+import { controlConclusion, requiredFilesOf } from './helpers';
 import { ownersOf } from './auditScope';
 import { ConclusionPill } from './parts';
 import { Pill } from '../shared/StatusBadge';
-import { Dropdown, KeyControlChip, menuItem, WORKFLOW_LIBRARY } from './ControlDossier';
+import { Dropdown, KeyControlChip, menuItem } from './ControlDossier';
 import { attributeStats, auditsForControl, LastRunFact, runsForControl, RunHistoryList } from './ControlLibrary';
 import { cn } from '../../lib/cn';
-import type { AuditRound, Control, OperatingStep } from './types';
+import type { AuditRound, Control, OperatingStep, RequiredFile } from './types';
 
 /**
  * The engagement-root control page — the LIBRARY lens's own detail view (user
- * ask, 30 Jul). What a control IS (its attributes, and which of them a
- * workflow evidences) lives here, always editable, independent of any audit.
+ * ask, 30 Jul). What a control IS (its attributes, and the files each attribute
+ * needs as evidence) lives here, always editable, independent of any audit.
  * What it CONCLUDED is read per audit below, not tested here — testing only
  * happens inside an audit, on ControlDossier, which this page links out to.
  *
@@ -25,44 +25,89 @@ import type { AuditRound, Control, OperatingStep } from './types';
 
 const ROUND_LABEL: Record<AuditRound, string> = { interim: 'Interim', rollforward: 'Roll-forward', yearend: 'Year-end' };
 
+/** The files one attribute is proven against — the RACM's Control Evidence,
+ *  split per attribute. Edited in place here; uploads are an audit's business
+ *  (the TOE step on ControlDossier), so no upload state shows on this page. */
+function RequiredFilesCell({ control, step, canEdit }: { control: Control; step: OperatingStep; canEdit: boolean }) {
+  const { addRequiredFile, renameRequiredFile, removeRequiredFile } = useIcfr();
+  const logEvent = useAuditLog();
+  const files = requiredFilesOf(step, control);
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [draft, setDraft] = useState('');
+  const [adding, setAdding] = useState(false);
+  const [newLabel, setNewLabel] = useState('');
+
+  const inputCls = 'w-full h-7 px-2 rounded-lg border border-canvas-border bg-canvas-elevated text-[0.75rem] text-ink-800 placeholder:text-ink-400 focus:outline-none focus:ring-2 focus:ring-brand-200';
+
+  const saveRename = (f: RequiredFile) => {
+    const label = draft.trim();
+    setEditingId(null);
+    // An empty or unchanged name is a cancel, not an edit — nothing to log.
+    if (!label || label === f.label) return;
+    renameRequiredFile(control.id, step.id, f.id, label);
+    logEvent({ action: 'Update', description: `Renamed required file "${f.label}" to "${label}" on attribute ${step.code} (${control.id})`, module: 'SOX ICFR', entity: 'Control' });
+  };
+  const submitNew = () => {
+    const label = newLabel.trim();
+    if (!label) return;
+    addRequiredFile(control.id, step.id, label);
+    logEvent({ action: 'Create', description: `Added required file "${label}" to attribute ${step.code} (${control.id})`, module: 'SOX ICFR', entity: 'Control' });
+    setNewLabel(''); setAdding(false);
+  };
+
+  return (
+    <div className="flex flex-col gap-0.5">
+      {files.length === 0 && <span className="text-[0.75rem] text-ink-400">None listed</span>}
+      {files.map(f => (
+        <div key={f.id} className="flex items-center gap-1 min-h-6">
+          {canEdit && editingId === f.id ? (
+            <input autoFocus value={draft} onChange={e => setDraft(e.target.value)}
+              onKeyDown={e => { if (e.key === 'Enter') saveRename(f); if (e.key === 'Escape') setEditingId(null); }}
+              onBlur={() => setEditingId(null)}
+              aria-label={`Rename required file ${f.label}`}
+              className={inputCls} />
+          ) : canEdit ? (
+            <>
+              <button type="button" onClick={() => { setDraft(f.label); setEditingId(f.id); }} title="Rename"
+                className="min-w-0 text-left text-[0.75rem] text-ink-700 hover:text-brand-700 cursor-pointer break-words">{f.label}</button>
+              <button type="button"
+                onClick={() => { removeRequiredFile(control.id, step.id, f.id); logEvent({ action: 'Delete', description: `Removed required file "${f.label}" from attribute ${step.code} (${control.id})`, module: 'SOX ICFR', entity: 'Control' }); }}
+                aria-label={`Remove required file ${f.label}`} title="Remove"
+                className="h-5 w-5 shrink-0 inline-flex items-center justify-center rounded text-ink-300 hover:text-risk-600 cursor-pointer"
+              ><X size={11} /></button>
+            </>
+          ) : (
+            <span className="min-w-0 text-[0.75rem] text-ink-700 break-words">{f.label}</span>
+          )}
+        </div>
+      ))}
+      {canEdit && (adding ? (
+        <input autoFocus value={newLabel} onChange={e => setNewLabel(e.target.value)}
+          onKeyDown={e => { if (e.key === 'Enter') submitNew(); if (e.key === 'Escape') { setAdding(false); setNewLabel(''); } }}
+          placeholder="e.g. Signed approval record" aria-label={`Add a required file to ${step.code}`}
+          className={cn(inputCls, 'mt-0.5')} />
+      ) : (
+        <button type="button" onClick={() => setAdding(true)}
+          className="self-start mt-0.5 inline-flex items-center gap-1 text-[0.71875rem] font-semibold text-ink-500 hover:text-brand-700 cursor-pointer">
+          <Plus size={11} /> Add file
+        </button>
+      ))}
+    </div>
+  );
+}
+
 function AttributeTableRow({ control, step, canEdit }: { control: Control; step: OperatingStep; canEdit: boolean }) {
-  const { mapStepWorkflow, removeAttribute } = useIcfr();
+  const { removeAttribute } = useIcfr();
   const logEvent = useAuditLog();
   return (
     <tr className="reg-row">
       <td className="tight"><span className="wp-ref">{step.code}</span></td>
       <td className="tight">
-        <div className="flex items-center gap-2">
-          <Pill tone={step.workflowId ? 'compliant' : 'draft'}>{step.workflowId ? 'Mapped' : 'Not mapped'}</Pill>
-          <span className="font-medium text-ink-800">{step.description}</span>
-        </div>
+        <div className="font-medium text-ink-800">{step.description}</div>
         <div className="text-[0.6875rem] text-ink-400 mt-0.5">{step.assertion} · {step.precision}</div>
       </td>
       <td className="tight">
-        {step.workflowId ? (
-          <div className="flex items-center gap-1.5 flex-wrap">
-            <span className="wf-tag">{step.workflowName}</span>
-            {canEdit && (
-              <Dropdown trigger={<span className="text-brand-700 font-semibold text-[0.75rem] hover:underline cursor-pointer inline-flex items-center gap-1"><Plus size={11} /> Add workflow</span>}>
-                {close => WORKFLOW_LIBRARY.map(w => (
-                  <button key={w} className={menuItem} onClick={() => { mapStepWorkflow(control.id, step.id, w); close(); }}>
-                    <WorkflowIcon size={12} className="text-evidence-600" />{w}
-                  </button>
-                ))}
-              </Dropdown>
-            )}
-          </div>
-        ) : canEdit ? (
-          <Dropdown trigger={<><WorkflowIcon size={12} /> Map a workflow</>}>
-            {close => WORKFLOW_LIBRARY.map(w => (
-              <button key={w} className={menuItem} onClick={() => { mapStepWorkflow(control.id, step.id, w); close(); }}>
-                <WorkflowIcon size={12} className="text-evidence-600" />{w}
-              </button>
-            ))}
-          </Dropdown>
-        ) : (
-          <span className="text-[0.75rem] text-ink-400">No workflow mapped</span>
-        )}
+        <RequiredFilesCell control={control} step={step} canEdit={canEdit} />
       </td>
       <td className="tight" style={{ textAlign: 'right' }}>
         {canEdit && (
@@ -165,8 +210,7 @@ export default function ControlLibraryDetail() {
   // Everyone already named on the engagement, in either capacity — reassignment
   // is between people who exist, not an invitation to invent one.
   const ownerNames = Array.from(new Set(eng.controls.flatMap(c => { const o = ownersOf(c); return [o.controlOwner, o.processOwner]; }))).sort();
-  const { attrs, mapped } = attributeStats(control);
-  const pct = attrs === 0 ? 0 : Math.round((mapped / attrs) * 100);
+  const { attrs, files } = attributeStats(control);
   const audits = auditsForControl(eng, control);
   const runs = runsForControl(eng.runs, control.id);
 
@@ -304,7 +348,7 @@ export default function ControlLibraryDetail() {
       <div className="mb-5">
         <h3 className="text-[0.8125rem] font-bold text-ink-900 mb-3">Audit runs <span className="font-normal text-ink-400">· {audits.length}</span></h3>
         {audits.length === 0 ? (
-          <p className="text-[0.75rem] text-ink-400 leading-relaxed">Not in any audit yet — attributes and workflow mapping still work here; testing starts once an audit picks this control up.</p>
+          <p className="text-[0.75rem] text-ink-400 leading-relaxed">Not in any audit yet — attributes and their required files can still be edited here; testing starts once an audit picks this control up.</p>
         ) : (
           <div className="grid grid-cols-2 sm:grid-cols-3 gap-2.5">
             {audits.map(a => {
@@ -331,15 +375,12 @@ export default function ControlLibraryDetail() {
       {/* attributes — as a table. Structure, not testing: always editable
           here regardless of any audit's progress */}
       <div className="mb-5">
-        <div className="flex items-center gap-2 mb-3">
+        <div className="flex items-center gap-2 mb-1">
           <h3 className="text-[0.8125rem] font-bold text-ink-900">Attributes</h3>
-          <span className={cn('text-[0.75rem] font-semibold tabular-nums', mapped === 0 ? 'text-ink-400' : 'text-ink-900')}>{mapped} of {attrs}</span>
-          <span className="text-[0.75rem] text-ink-500">mapped to a workflow</span>
-          {attrs > 0 && (
-            <span className="meter" aria-hidden>
-              <span style={{ width: `${pct}%`, background: mapped === attrs ? 'var(--color-compliant-500)' : mapped === 0 ? 'var(--color-ink-300)' : 'var(--color-evidence-500)' }} />
-            </span>
-          )}
+          <span className={cn('text-[0.75rem] font-semibold tabular-nums', attrs === 0 ? 'text-ink-400' : 'text-ink-900')}>{attrs}</span>
+          <span className="text-[0.75rem] text-ink-500">attribute{attrs === 1 ? '' : 's'} ·</span>
+          <span className={cn('text-[0.75rem] font-semibold tabular-nums', files === 0 ? 'text-ink-400' : 'text-ink-900')}>{files}</span>
+          <span className="text-[0.75rem] text-ink-500">required file{files === 1 ? '' : 's'}</span>
           {canEdit && (
             <div className="ml-auto flex items-center gap-2">
               {addingAttr ? (
@@ -358,6 +399,8 @@ export default function ControlLibraryDetail() {
             </div>
           )}
         </div>
+        {/* where the list comes from, said once — the cell itself stays a plain list */}
+        <p className="text-[0.71875rem] text-ink-500 mb-3">Required files come from the RACM's Control Evidence column, split per attribute by Ira. Edit them here — every audit's TOE asks for these uploads.</p>
         {control.operating.steps.length > 0 && (
           <div className="reg-wrap">
             <table className="w-full border-collapse">
@@ -365,7 +408,7 @@ export default function ControlLibraryDetail() {
                 <tr>
                   <th style={{ width: 64 }}>Code</th>
                   <th>Attribute</th>
-                  <th style={{ width: 260 }}>Workflow</th>
+                  <th style={{ width: 320 }}>Required files</th>
                   <th style={{ width: 56 }} />
                 </tr>
               </thead>

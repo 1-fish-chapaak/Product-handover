@@ -12,6 +12,7 @@ import { useIcfr } from './store';
 import { auditCovers, isOwnerOf, ownersOf } from './auditScope';
 import {
   conclusionOf, controlCode, courtFor, entityCell, failedItgcs, isAwaitingReview, isControlFinal, isEngagementLocked, isItgcDependent, isTestDueNow,
+  requiredFilesOf,
 } from './helpers';
 import { ItgcCascadeBanner, NatureChip, Th, Tickmark } from './parts';
 import NewControlPanel from './NewControlPanel';
@@ -25,7 +26,7 @@ import type { AuditRecord, Control, IcfrEngagement, RunKind, RunRecord } from '.
  *
  * What the engagement-level Control Library answers here is "what is this
  * control made of and what has happened to it": how many attributes it is
- * tested against, how many of those a workflow evidences, what has been run on
+ * tested against, how many files those attributes ask for, what has been run on
  * it and when, and which audit cycles it sits in. Four facts, all of them
  * already in the store — nothing here is invented.
  *
@@ -57,15 +58,15 @@ export const KIND_META: Record<RunKind, { label: string; Icon: typeof FlaskConic
 
 // ── the four facts ───────────────────────────────────────────────────────────────
 
-/** Attributes, and how many of them a workflow evidences.
+/** Attributes, and how many files they are proven against in total.
  *
- *  Attribute-level only, deliberately: every seeded design consideration also
- *  carries a workflow, so counting those would add the same constant to every
- *  control and say nothing. Attributes are where mapping is a choice — it is
- *  what `mapStepWorkflow` writes — so that is the number worth showing. */
-export function attributeStats(c: Control): { attrs: number; mapped: number } {
+ *  Attribute-level only: each attribute names its own required files (the
+ *  RACM's Control Evidence, split per attribute), read through `requiredFilesOf`
+ *  so an attribute nobody has edited still counts its derived list. Uploads are
+ *  per audit, so this counts what is asked for, never what has arrived. */
+export function attributeStats(c: Control): { attrs: number; files: number } {
   const attrs = c.operating.steps.length;
-  return { attrs, mapped: c.operating.steps.filter(s => s.workflowId).length };
+  return { attrs, files: c.operating.steps.reduce((n, s) => n + requiredFilesOf(s, c).length, 0) };
 }
 
 /** Every run this control appears in, newest first (the registry is stored that
@@ -80,12 +81,9 @@ export const outcomeIn = (r: RunRecord, controlId: string) => r.controls.find(rc
 export const auditsForControl = (eng: IcfrEngagement, c: Control): AuditRecord[] =>
   eng.audits.filter(a => auditCovers(a, c, eng.id));
 
-// ── filters ─────────────────────────────────────────────────────────────────────
-
-type Coverage = 'All' | 'full' | 'partial' | 'none' | 'run' | 'never';
 // ── Columns ─────────────────────────────────────────────────────────────────────
 //
-// The library's own lens (attributes, workflow coverage, where it has been used)
+// The library's own lens (attributes, where it has been used)
 // with the RACM columns the audit register grew. Widths and drag behaviour come
 // from the shared hook, so the two registers can never diverge on how they feel.
 const LIB_COLS = [
@@ -98,20 +96,10 @@ const LIB_COLS = [
   { key: 'objective', w: 250 },
   { key: 'nature', w: 108 },
   { key: 'attributes', w: 92 },
-  { key: 'workflows', w: 150 },
   { key: 'runs', w: 120 },
   { key: 'last', w: 180 },
 ] as const;
 const COLW_KEY = 'sox-library-colw';
-
-const COVERAGE_OPTIONS: { value: Coverage; label: string }[] = [
-  { value: 'All', label: 'All controls' },
-  { value: 'full', label: 'Every attribute mapped' },
-  { value: 'partial', label: 'Some attributes mapped' },
-  { value: 'none', label: 'No workflows mapped' },
-  { value: 'run', label: 'Has been run' },
-  { value: 'never', label: 'Never run' },
-];
 
 /** The Overview's counts still deep-link in. They are testing questions, so the
  *  lens has no dropdown for them — it honours the preset once and says so. */
@@ -163,7 +151,7 @@ function LibraryCard({ c, runs, audits, onOpen, selectable, selected, onToggle }
   onOpen: () => void;
   selectable?: boolean; selected?: boolean; onToggle?: () => void;
 }) {
-  const { attrs, mapped } = attributeStats(c);
+  const { attrs, files } = attributeStats(c);
 
   return (
     <div role="button" tabIndex={0} className={cn('ac-card text-left', selected && 'ring-2 ring-brand-200 border-brand-300')}
@@ -201,8 +189,8 @@ function LibraryCard({ c, runs, audits, onOpen, selectable, selected, onToggle }
           <div className="text-[0.65625rem] text-ink-500 font-medium mt-1.5">Attributes</div>
         </div>
         <div>
-          <div className={cn('text-[1.0625rem] font-bold tabular-nums leading-none', mapped === 0 ? 'text-ink-400' : 'text-ink-900')}>{mapped}</div>
-          <div className="text-[0.65625rem] text-ink-500 font-medium mt-1.5">Mapped</div>
+          <div className={cn('text-[1.0625rem] font-bold tabular-nums leading-none', files === 0 ? 'text-ink-400' : 'text-ink-900')}>{files}</div>
+          <div className="text-[0.65625rem] text-ink-500 font-medium mt-1.5">Required files</div>
         </div>
         <div>
           <div className={cn('text-[1.0625rem] font-bold tabular-nums leading-none', audits.length === 0 ? 'text-ink-400' : 'text-ink-900')}>{audits.length}</div>
@@ -305,7 +293,6 @@ export default function ControlLibrary() {
   const [q, setQ] = useState('');
   const [process, setProcess] = useState('All');
   const [nature, setNature] = useState('All');
-  const [coverage, setCoverage] = useState<Coverage>('All');
   // Parity with the audit register: stacked by process or by company, opening on
   // the table because the library is a working list, not a browse surface.
   const [groupBy, setGroupBy] = useState<GroupBy>('process');
@@ -361,21 +348,12 @@ export default function ControlLibrary() {
 
   const rail = useMemo(() => {
     const attrs = scoped.reduce((n, c) => n + attributeStats(c).attrs, 0);
-    const mapped = scoped.reduce((n, c) => n + attributeStats(c).mapped, 0);
+    const files = scoped.reduce((n, c) => n + attributeStats(c).files, 0);
     const runIds = new Set<string>();
     scoped.forEach(c => (runsBy.get(c.id) ?? []).forEach(r => runIds.add(r.id)));
-    return { attrs, mapped, runs: runIds.size };
+    return { attrs, files, runs: runIds.size };
   }, [scoped, runsBy]);
 
-  const matchesCoverage = (c: Control): boolean => {
-    if (coverage === 'All') return true;
-    const { attrs, mapped } = attributeStats(c);
-    if (coverage === 'full') return attrs > 0 && mapped === attrs;
-    if (coverage === 'partial') return mapped > 0 && mapped < attrs;
-    if (coverage === 'none') return mapped === 0;
-    const n = (runsBy.get(c.id) ?? []).length;
-    return coverage === 'run' ? n > 0 : n === 0;
-  };
   // The parked testing lens owned these predicates; the preset chip borrows them.
   const matchesPreset = (c: Control): boolean => {
     switch (preset) {
@@ -408,12 +386,11 @@ export default function ControlLibrary() {
       if (ctype !== 'All' && c.type !== ctype) return false;
       if (frequency !== 'All' && c.frequency !== frequency) return false;
       if (owner !== 'All' && !isOwnerOf(c, owner)) return false;
-      if (!matchesCoverage(c)) return false;
       if (preset && !matchesPreset(c)) return false;
       if (term && !(`${controlCode(c)} ${c.description} ${rowEntities(c).join(' ')} ${c.process} ${c.subProcess} ${c.owner}`.toLowerCase().includes(term))) return false;
       return true;
     });
-  }, [scoped, q, process, nature, entity, ctype, frequency, owner, coverage, preset, runsBy, eng.tasks, eng.reviewNotes, role]);
+  }, [scoped, q, process, nature, entity, ctype, frequency, owner, preset, eng.tasks, eng.reviewNotes, role]);
 
   const groups = useMemo(() => {
     if (groupBy === 'none') return [{ key: '', rows: filtered }];
@@ -429,7 +406,7 @@ export default function ControlLibrary() {
   //   const allSelected = allVisible.length > 0 && allVisible.every(id => sel.has(id));
   //   const toggleAll = () => setSel(allSelected ? new Set() : new Set(allVisible));
   const toggle = (id: string) => setSel(prev => { const n = new Set(prev); if (n.has(id)) n.delete(id); else n.add(id); return n; });
-  const clearFilters = () => { setQ(''); setProcess('All'); setNature('All'); setCoverage('All'); setEntity('All'); setCtype('All'); setFrequency('All'); setOwner('All'); setPreset(null); };
+  const clearFilters = () => { setQ(''); setProcess('All'); setNature('All'); setEntity('All'); setCtype('All'); setFrequency('All'); setOwner('All'); setPreset(null); };
 
   const historyControl = historyFor ? scoped.find(c => c.id === historyFor) : undefined;
   const colSpan = LIB_COLS.length;
@@ -472,7 +449,7 @@ export default function ControlLibrary() {
         {[
           { k: role === 'risk-owner' ? 'Controls in your name' : 'Controls', v: String(scoped.length), t: 'text-ink-900' },
           { k: 'Attributes', v: String(rail.attrs), t: 'text-ink-900' },
-          { k: 'Workflows mapped', v: `${rail.mapped} of ${rail.attrs}`, t: rail.mapped === rail.attrs && rail.attrs > 0 ? 'text-compliant-700' : 'text-evidence-700' },
+          { k: 'Required files', v: String(rail.files), t: 'text-ink-900' },
           { k: 'Runs logged', v: String(rail.runs), t: 'text-brand-700' },
           { k: 'Audit runs', v: String(eng.audits.length), t: 'text-mitigated-700' },
         ].map(s => (
@@ -529,7 +506,7 @@ export default function ControlLibrary() {
         <div>
           {groups.map(g => {
             const attrs = g.rows.reduce((n, c) => n + attributeStats(c).attrs, 0);
-            const mapped = g.rows.reduce((n, c) => n + attributeStats(c).mapped, 0);
+            const files = g.rows.reduce((n, c) => n + attributeStats(c).files, 0);
             return (
               <div key={g.key || 'flat'} className="shelf">
                 {g.key && (
@@ -537,7 +514,7 @@ export default function ControlLibrary() {
                     <span className="shelf-swatch" style={{ background: spineColor(g.key) }} />
                     <span className="shelf-title">{g.key}</span>
                     <span className="text-[0.71875rem] text-ink-400 font-medium">· {g.rows.length}</span>
-                    <span className="text-[0.65625rem] font-semibold text-ink-400 hidden md:inline">{attrs} attributes · {mapped} mapped to workflows</span>
+                    <span className="text-[0.65625rem] font-semibold text-ink-400 hidden md:inline">{attrs} attributes · {files} required files</span>
                     <span className="shelf-board" />
                   </div>
                 )}
@@ -574,10 +551,6 @@ export default function ControlLibrary() {
                 <Th {...th('objective')} title="What the control is for — the outcome it secures">Objective</Th>
                 <Th {...th('nature')}><HeaderFilter label="Nature" value={nature} options={['All', 'Manual', 'Automated', 'IT-dependent']} allLabel="All natures" onChange={setNature} ariaLabel="Filter by nature" /></Th>
                 <Th {...th('attributes')} title="Test attributes this control is proven against">Attributes</Th>
-                <Th {...th('workflows')}>
-                  <HeaderFilter label="Workflows" value={coverage} engaged={coverage !== 'All'}
-                    options={COVERAGE_OPTIONS} onChange={v => setCoverage(v as Coverage)} ariaLabel="Filter by workflow coverage" />
-                </Th>
                 <Th {...th('runs')} title="Audit cycles whose scope covers this control">Audit runs</Th>
                 <Th {...th('last')}>Last run</Th>
               </tr>
@@ -589,14 +562,13 @@ export default function ControlLibrary() {
                     <tr className="reg-group-row"><td colSpan={colSpan}>
                       <span className="inline-flex items-center gap-2">{g.key}<span className="text-ink-400 font-medium">· {g.rows.length}</span>
                         <span className="ml-2 text-[0.65625rem] font-semibold text-ink-400">
-                          {g.rows.reduce((n, c) => n + attributeStats(c).attrs, 0)} attributes · {g.rows.reduce((n, c) => n + attributeStats(c).mapped, 0)} mapped to workflows
+                          {g.rows.reduce((n, c) => n + attributeStats(c).attrs, 0)} attributes · {g.rows.reduce((n, c) => n + attributeStats(c).files, 0)} required files
                         </span>
                       </span>
                     </td></tr>
                   )}
                   {g.rows.map(c => {
-                    const { attrs, mapped } = attributeStats(c);
-                    const pct = attrs === 0 ? 0 : Math.round((mapped / attrs) * 100);
+                    const { attrs } = attributeStats(c);
                     const rs = runsBy.get(c.id) ?? [];
                     const as = auditsBy.get(c.id) ?? [];
                     const last = rs[0];
@@ -631,12 +603,6 @@ export default function ControlLibrary() {
                         </td>
                         <td><NatureChip nature={c.nature} small /></td>
                         <td className="tabular-nums font-semibold text-ink-800">{attrs}</td>
-                        <td>
-                          <span className="cell-track">
-                            <span className={cn('text-[0.6875rem] font-semibold tabular-nums', mapped === 0 ? 'text-ink-400' : 'text-ink-700')}>{mapped} of {attrs}</span>
-                            <span className="meter" aria-hidden><span style={{ width: `${pct}%`, background: mapped === attrs && attrs > 0 ? 'var(--color-compliant-500)' : mapped === 0 ? 'var(--color-ink-300)' : 'var(--color-evidence-500)' }} /></span>
-                          </span>
-                        </td>
                         <td>
                           {as.length === 0
                             ? <span className="text-ink-400 text-[0.6875rem]">None yet</span>

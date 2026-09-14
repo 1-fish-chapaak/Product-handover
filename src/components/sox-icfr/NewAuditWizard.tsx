@@ -374,6 +374,9 @@ export default function NewAuditWizard({ onClose, prefillFrom }: {
    *  the RACM is settled by the row the button was pressed on, so the form
    *  never has to ask which matrix this belongs to. */
   const [addCtrlRacm, setAddCtrlRacm] = useState<string | null>(null);
+  /** Controls created on this wizard's add-control screen. Handed to
+   *  createAudit so they aren't reset along with the rest of the scope. */
+  const [addedControlIds, setAddedControlIds] = useState<string[]>([]);
   /** Controls chosen inside the RACMs, by id. A RACM ticked whole puts all of
    *  its ids in; unticking one row leaves the RACM partly selected. */
   const [pickedControls, setPickedControls] = useState<string[]>([]);
@@ -687,7 +690,7 @@ export default function NewAuditWizard({ onClose, prefillFrom }: {
       // verbatim, or the step's own inputs.
       materiality: { basisLabel: matFinal.basisLabel, benchmark: matFinal.benchmark, pct: matFinal.pct, pmPct: matFinal.pmPct, ctPct: matFinal.ctPct },
       overall: matFinal.overall,
-    });
+    }, { freshControlIds: addedControlIds });
     // The answers given upstairs become the files' records, so every control on
     // this audit inherits them and none is asked again.
     files.forEach(f => {
@@ -737,6 +740,8 @@ export default function NewAuditWizard({ onClose, prefillFrom }: {
     // considerations — the SOX equivalent of "what this control has to achieve",
     // and the list its walkthrough is tested against.
     input.attributes.map(a => a.trim()).filter(Boolean).forEach(a => addDesignPoint(id, a));
+    // Remembered so creating the audit doesn't reset it and wipe those checks.
+    setAddedControlIds(prev => [...prev, id]);
     // A non-key control added while "key controls only" is on would be ticked
     // into scope and then filtered out of sight — selected but invisible, which
     // is exactly what that switch was written to avoid. Turning it off costs

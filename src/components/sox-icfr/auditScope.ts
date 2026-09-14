@@ -251,6 +251,19 @@ export function auditCovers(a: AuditRecord, c: Control, engagementId: string): b
 }
 
 /**
+ * Which audits a process's RACM is already in, and how many of its controls
+ * they cover. A RACM an audit has picked up carries testing, findings and
+ * sign-offs on its controls, so it cannot simply be deleted — the RACM tab
+ * reads this to say why, and the store reads it to refuse.
+ */
+export function racmAuditUse(eng: { id: string; audits: AuditRecord[]; controls: Control[] }, process: string): { audits: AuditRecord[]; controls: number } {
+  const rows = eng.controls.filter(c => c.process === process);
+  const audits = eng.audits.filter(a => rows.some(c => auditCovers(a, c, eng.id)));
+  const controls = rows.filter(c => audits.some(a => auditCovers(a, c, eng.id))).length;
+  return { audits, controls };
+}
+
+/**
  * Every process an engagement has a RACM for — the ones the trial balances
  * derived, and the ones that were declared beyond them.
  *

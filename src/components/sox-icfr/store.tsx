@@ -1,11 +1,11 @@
 import { createContext, useCallback, useContext, useMemo, useState, type ReactNode } from 'react';
 import { racmTemplateForProcesses, requiredDatasetsFor, sampleRefs, seedIcfrEngagement, type SeedMeta } from './mockData';
-import { assessSeverity, attestationOverruled, canExtendToe, canRedrawToe, controlConclusion, reconcileConfirmations, formatINR, gradeException, icfrConclusion, inquiryOnlyAttributes, isControlLocked, isEngagementLocked, itgcHolds, parseLooseDate, samePerson, populationSources, previewRegrades, sampleSizeGuide, samplesFor, sourceTotals, staleSteps, stepResult, TOE_MAX_ROUNDS, toeRoundFailed, toeRoundNo, toeRounds, trackResult, validationQA, validationSummary, validationTable, wfRunRef, LEGACY_SOURCE_ID, type RulesPatch } from './helpers';
+import { assessSeverity, attestationOverruled, requiredFilesOf, requiredFilesReady, canExtendToe, canRedrawToe, controlConclusion, reconcileConfirmations, formatINR, gradeException, icfrConclusion, inquiryOnlyAttributes, isControlLocked, isEngagementLocked, itgcHolds, parseLooseDate, samePerson, populationSources, previewRegrades, sampleSizeGuide, samplesFor, sourceTotals, staleSteps, stepResult, TOE_MAX_ROUNDS, toeRoundFailed, toeRoundNo, toeRounds, trackResult, validationQA, validationSummary, validationTable, wfRunRef, LEGACY_SOURCE_ID, type RulesPatch } from './helpers';
 import type {
   Assertion, Attestation, AuditArchive, AuditFileRecord, AuditorProof, AuditRecord, Control, Deficiency, DesignDoc, DesignDocKind, DesignPoint, DiscussionAnchor, DocStatus, FileOrigin,
   DesignJudgements, DesignWaiverReason, EvidenceFile, EvidenceMode, ExceptionStatus, ExecKind, ExecutionEvent, Frequency, HandoffTask, IcfrEngagement,
   DesignBasis, EvidenceType, ExceptionKind, IpeConclusion, PopulationChecks, IpeTest, MaterialityRules, Walkthrough, Nature, OperatingStep, Override, Population, PopulationDefinition, RacmReview, Role, RulesChangeEntry, RunControlOutcome, RunRecord, ScopeArchiveEntry,
-  PopulationSource, Sample, Sampling, SignificantAccount, SourceRole, TestResult, ToeRound, TrackConclusion, RetestRound, UnableToTest, ChallengedInput, SeverityChallenge,
+  PopulationSource, RequiredFile, Sample, Sampling, SignificantAccount, SourceRole, TestResult, ToeRound, TrackConclusion, RetestRound, UnableToTest, ChallengedInput, SeverityChallenge,
 } from './types';
 
 let _uid = 0;
@@ -92,7 +92,7 @@ const stampSamples = (c: Control, s: OperatingStep, res: TestResult): OperatingS
 };
 // PARKED (Aug 2026): `defaultGapType` — the exception no longer carries a gap type.
 import { ipeChecklist, ROLE_LABEL } from './types';
-import { isOwnerOf, normaliseProcess, ownersOf, peopleForProcess, processesForAudit } from './auditScope';
+import { isOwnerOf, normaliseProcess, ownersOf, peopleForProcess, processesForAudit, racmAuditUse } from './auditScope';
 import { useToast } from '../shared/Toast';
 import { defWord } from './flow';
 
@@ -332,6 +332,16 @@ interface IcfrCtx {
   toggleStepAI: (controlId: string, stepId: string, on: boolean) => void;
   runStepValidation: (controlId: string, stepId: string) => void;
   testAllAttributes: (controlId: string) => void;
+  // Required files — the evidence each attribute's AI validation runs against.
+  // The list is edited on the engagement control page; uploads happen in TOE.
+  addRequiredFile: (controlId: string, stepId: string, label: string) => void;
+  renameRequiredFile: (controlId: string, stepId: string, fileId: string, label: string) => void;
+  removeRequiredFile: (controlId: string, stepId: string, fileId: string) => void;
+  uploadRequiredFile: (controlId: string, stepId: string, fileId: string, fileName: string) => void;
+  clearRequiredFile: (controlId: string, stepId: string, fileId: string) => void;
+  /** Run AI validation on every attribute whose required files are all in;
+   *  the rest are left untouched. */
+  validateReadyAttributes: (controlId: string) => void;
   // RACM row review — auditor approval / remark, plus bulk testing
   approveRacmRows: (controlIds: string[]) => void;
   remarkRacmRow: (controlId: string, remark: string) => void;
@@ -339,7 +349,10 @@ interface IcfrCtx {
   bulkTestControls: (controlIds: string[]) => void;
   // Audit logs tab — the New audit wizard hands back everything but the
   // stamp (id / by / role / at), which the store adds.
-  createAudit: (draft: Omit<AuditRecord, 'id' | 'by' | 'role' | 'at'>) => void;
+  /** `freshControlIds`: controls created inside the New audit wizard itself.
+   *  They have no earlier cycle to archive or reset, so they keep the design
+   *  checks typed in on the form. */
+  createAudit: (draft: Omit<AuditRecord, 'id' | 'by' | 'role' | 'at'>, opts?: { freshControlIds?: string[] }) => void;
   /** Edit an audit from its own Configuration tab. The stamp (who / when) is
    *  left alone — it records creation, not the last touch. */
   updateAudit: (auditId: string, patch: Partial<Omit<AuditRecord, 'id' | 'by' | 'role' | 'at'>>) => void;
@@ -354,11 +367,18 @@ interface IcfrCtx {
   // RACM / SOP source documents uploaded on the RACM page
   // an uploaded RACM/SOP belongs to ONE process's matrix (a RACM is per-process);
   // docs without a process are legacy engagement-wide pins and show everywhere
-  racmDocs: (EvidenceFile & { process?: string })[];
-  addRacmDoc: (fileName: string, process?: string) => void;
+  /** Files a RACM came from. `source` says whether it was a workbook or an SOP;
+   *  `url` is a link to the uploaded file for this session, so View SOP can
+   *  open it (absent on seeded documents and after a reload). */
+  racmDocs: (EvidenceFile & { process?: string; source?: 'racm' | 'sop'; url?: string })[];
+  addRacmDoc: (fileName: string, process?: string, opts?: { source?: 'racm' | 'sop'; url?: string }) => void;
   // a RACM here IS a process's set of controls, so creating one brings a new
   // process into scope and seeds its risks & controls from the template
-  createRacm: (process: string, sourceFileName?: string, entity?: string) => void;
+  /** `opts.controls`: the controls read out of the uploaded file (or accepted
+   *  from an SOP extraction). Omitted → the process's template, as before. */
+  createRacm: (process: string, sourceFileName?: string, entity?: string, opts?: { controls?: Control[]; source?: 'racm' | 'sop'; url?: string }) => void;
+  /** Delete a process's RACM and its controls — refused while any audit covers them. */
+  deleteRacm: (process: string) => void;
   // discussions
   addComment: (controlId: string, anchor: DiscussionAnchor, text: string) => void;
   resolveDiscussion: (discussionId: string, resolved: boolean) => void;
@@ -457,7 +477,7 @@ export function IcfrProvider({ children, initialRole = 'auditor', seedMeta }: { 
   const [returnView, setReturnView] = useState<View | null>(null);
   // Which business process's RACM the matrix view shows — one RACM per process.
   const [racmProcess, setRacmProcess] = useState<string | null>(null);
-  const [racmDocs, setRacmDocs] = useState<(EvidenceFile & { process?: string })[]>([]);
+  const [racmDocs, setRacmDocs] = useState<(EvidenceFile & { process?: string; source?: 'racm' | 'sop'; url?: string })[]>([]);
   // Owner mode is a person-lane, not a role-lane: "mine" = this named owner's
   // controls, tasks and exceptions. The picker in the top bar switches personas.
   // Start on an owner who actually has something to do. A hard-coded name lands
@@ -821,7 +841,10 @@ export function IcfrProvider({ children, initialRole = 'auditor', seedMeta }: { 
   }, [patchControl, role]);
   const addDesignPoint = useCallback<IcfrCtx['addDesignPoint']>((controlId, text, stepId) => {
     if (role !== 'auditor') return;
-    patchControl(controlId, c => ({ ...c, design: { ...c.design, points: [...c.design.points, { id: uid('dp'), text, stepId, result: 'Not tested', workflowId: uid('wf-tod'), workflowName: 'Design walkthrough check' } as DesignPoint] } }));
+    // The same check twice is one check (R2) — the second copy would be answered
+    // twice and counted twice. Compared on its words, ignoring case and spacing.
+    const same = (a: string) => a.trim().replace(/\s+/g, ' ').toLowerCase();
+    patchControl(controlId, c => (c.design.points.some(p => same(p.text) === same(text)) ? c : { ...c, design: { ...c.design, points: [...c.design.points, { id: uid('dp'), text, stepId, result: 'Not tested', workflowId: uid('wf-tod'), workflowName: 'Design walkthrough check' } as DesignPoint] } }));
   }, [patchControl, role]);
   const removeDesignPoint = useCallback<IcfrCtx['removeDesignPoint']>((controlId, pointId) => {
     if (role !== 'auditor') return;
@@ -1577,7 +1600,7 @@ export function IcfrProvider({ children, initialRole = 'auditor', seedMeta }: { 
   //
   // Only the controls in THIS audit's scope are reset — another audit scoped to
   // different entities keeps its own progress.
-  const createAudit = useCallback((draft: Omit<AuditRecord, 'id' | 'by' | 'role' | 'at'>) => {
+  const createAudit = useCallback((draft: Omit<AuditRecord, 'id' | 'by' | 'role' | 'at'>, opts?: { freshControlIds?: string[] }) => {
     setEng(prev => {
       const audit: AuditRecord = { id: uid('audit'), by: me, role, at: 'just now', ...draft };
       // Creating an audit OPENS it (user ask): the sheet closes onto the new
@@ -1594,7 +1617,11 @@ export function IcfrProvider({ children, initialRole = 'auditor', seedMeta }: { 
       const covers = (c: Control) => (picked
         ? picked.has(c.id)
         : !procs || procs.includes(normaliseProcess(c.process)));
-      const resetIds = new Set(prev.controls.filter(covers).map(c => c.id));
+      // A control added on this wizard's scope step was born for this audit: it
+      // has no last cycle to archive, and resetting it would wipe the design
+      // checks typed in when it was added. Everything else in scope resets.
+      const fresh = new Set(opts?.freshControlIds ?? []);
+      const resetIds = new Set(prev.controls.filter(c => covers(c) && !fresh.has(c.id)).map(c => c.id));
       const hit = (controlId: string) => resetIds.has(controlId);
 
       // ARCHIVE, don't delete. The outgoing cycle's results are snapshotted onto
@@ -1850,25 +1877,89 @@ export function IcfrProvider({ children, initialRole = 'auditor', seedMeta }: { 
     if (role !== 'auditor') return;
     patchStep(controlId, stepId, s => ({ ...s, aiValidation: on }));
   }, [patchStep, role]);
+  // AI validation reads every required file, so it runs only once all are in —
+  // an attribute validated against half its evidence was not validated. The
+  // refusal is silent here; the button says why before it is ever pressed.
+  const validatedStep = (s: OperatingStep, c: Control, controlId: string): OperatingStep => {
+    const willFail = (s.override ? s.override.result : s.result) === 'Fail';
+    const res: TestResult = willFail ? 'Fail' : 'Pass';
+    const names = requiredFilesOf(s, c).map(f => f.file?.name).filter(Boolean).join(', ');
+    return stampSamples(c, { ...s, result: res, staleRun: undefined, workflowRunRef: 'Ask IRA · validated · just now', validation: { result: res, qa: validationQA(s.description, willFail), summary: validationSummary(s.description, willFail, controlId + s.id, c.operating.sampling?.size), table: validationTable(willFail, controlId + s.id), fileName: names || undefined, at: 'just now' } }, res);
+  };
   const runStepValidation = useCallback<IcfrCtx['runStepValidation']>((controlId, stepId) => {
     if (role !== 'auditor') return;
+    let ran = false;
     patchStep(controlId, stepId, (s, c) => {
-      const willFail = (s.override ? s.override.result : s.result) === 'Fail';
-      const res: TestResult = willFail ? 'Fail' : 'Pass';
-      return stampSamples(c, { ...s, result: res, staleRun: undefined, workflowRunRef: 'Ask IRA · validated · just now', validation: { result: res, qa: validationQA(s.description, willFail), summary: validationSummary(s.description, willFail, controlId + s.id, c.operating.sampling?.size), table: validationTable(willFail, controlId + s.id), fileName: s.inputFile?.name, at: 'just now' } }, res);
+      if (!requiredFilesReady(s, c)) return s;
+      ran = true;
+      return validatedStep(s, c, controlId);
     });
-    pushExec(prev => { const s = prev.controls.find(c => c.id === controlId)?.operating.steps.find(st => st.id === stepId); return s ? { controlId, track: 'operating', kind: 'validate', verb: 'validated against file', target: s.code, result: s.result } : null; });
+    pushExec(prev => { const s = prev.controls.find(c => c.id === controlId)?.operating.steps.find(st => st.id === stepId); return s && ran ? { controlId, track: 'operating', kind: 'validate', verb: 'validated against its required files', target: s.code, result: s.result } : null; });
     pushRun(prev => {
       const c = prev.controls.find(cc => cc.id === controlId);
       const s = c?.operating.steps.find(st => st.id === stepId);
-      if (!c || !s) return null;
+      if (!c || !s || !ran) return null;
+      const names = requiredFilesOf(s, c).map(f => f.file?.name).filter(Boolean);
       return {
         kind: 'ai-validation', label: `AI validation — ${c.wpRef} · ${s.code}`,
-        detail: s.inputFile ? `Checked against ${s.inputFile.name}` : 'Checked against attached evidence',
+        detail: `Checked against ${names.length} required file${names.length === 1 ? '' : 's'}: ${names.join(', ')}`,
         controls: [{ controlId: c.id, wpRef: c.wpRef, description: c.description, outcome: s.result === 'Fail' ? 'Ineffective' : 'Effective', checks: 1 }],
       };
     });
   }, [patchStep, pushExec, pushRun, role]);
+
+  const validateReadyAttributes = useCallback<IcfrCtx['validateReadyAttributes']>((controlId) => {
+    if (role !== 'auditor') return;
+    let codes: string[] = [];
+    patchControl(controlId, c => {
+      codes = c.operating.steps.filter(s => requiredFilesReady(s, c)).map(s => s.code);
+      if (!codes.length) return c;
+      return { ...c, operating: { ...c.operating, steps: c.operating.steps.map(s => (requiredFilesReady(s, c) ? validatedStep(s, c, controlId) : s)) } };
+    });
+    pushExec(prev => {
+      if (!codes.length) return null;
+      const steps = prev.controls.find(cc => cc.id === controlId)?.operating.steps.filter(s => codes.includes(s.code)) ?? [];
+      return { controlId, track: 'operating', kind: 'validate', verb: 'ran AI validation on the ready attributes', target: codes.join(', '), result: steps.some(s => s.result === 'Fail') ? 'Fail' : 'Pass' };
+    });
+    pushRun(prev => {
+      const c = prev.controls.find(cc => cc.id === controlId);
+      if (!c || !codes.length) return null;
+      return {
+        kind: 'ai-validation', label: `AI validation — ${c.wpRef} · ${codes.length} attribute${codes.length === 1 ? '' : 's'}`,
+        detail: `Ran on ${codes.join(', ')} — every required file uploaded`,
+        controls: [controlOutcome(c)],
+      };
+    });
+  }, [patchControl, pushExec, pushRun, role]);
+
+  // The list itself. Editing writes the whole list onto the attribute, so the
+  // split read off its wording stops applying the moment anyone changes it.
+  // An attribute is the auditor's to write (see addAttribute), and so is the
+  // evidence it is proven against.
+  const editRequiredFiles = useCallback((controlId: string, stepId: string, fn: (list: RequiredFile[]) => RequiredFile[]) => {
+    if (role !== 'auditor') return;
+    patchStep(controlId, stepId, (s, c) => ({ ...s, requiredFiles: fn(requiredFilesOf(s, c)) }));
+  }, [patchStep, role]);
+  const addRequiredFile = useCallback<IcfrCtx['addRequiredFile']>((controlId, stepId, label) => {
+    const l = label.trim();
+    if (!l) return;
+    editRequiredFiles(controlId, stepId, list => [...list, { id: uid('rf'), label: l }]);
+  }, [editRequiredFiles]);
+  const renameRequiredFile = useCallback<IcfrCtx['renameRequiredFile']>((controlId, stepId, fileId, label) => {
+    const l = label.trim();
+    if (!l) return;
+    editRequiredFiles(controlId, stepId, list => list.map(f => (f.id === fileId ? { ...f, label: l } : f)));
+  }, [editRequiredFiles]);
+  const removeRequiredFile = useCallback<IcfrCtx['removeRequiredFile']>((controlId, stepId, fileId) => {
+    editRequiredFiles(controlId, stepId, list => list.filter(f => f.id !== fileId));
+  }, [editRequiredFiles]);
+  const uploadRequiredFile = useCallback<IcfrCtx['uploadRequiredFile']>((controlId, stepId, fileId, fileName) => {
+    const kind: EvidenceFile['kind'] = /\.xlsx?$/i.test(fileName) ? 'XLSX' : /\.csv$/i.test(fileName) ? 'CSV' : /\.(png|jpe?g)$/i.test(fileName) ? 'IMG' : 'PDF';
+    editRequiredFiles(controlId, stepId, list => list.map(f => (f.id === fileId ? { ...f, file: { id: uid('f'), name: fileName, kind, uploadedBy: me, uploadedAt: 'just now' } } : f)));
+  }, [editRequiredFiles, me]);
+  const clearRequiredFile = useCallback<IcfrCtx['clearRequiredFile']>((controlId, stepId, fileId) => {
+    editRequiredFiles(controlId, stepId, list => list.map(f => (f.id === fileId ? { id: f.id, label: f.label } : f)));
+  }, [editRequiredFiles]);
   const testAllAttributes = useCallback<IcfrCtx['testAllAttributes']>((controlId) => {
     if (role !== 'auditor') return;
     patchControl(controlId, c => ({ ...c, operating: { ...c.operating, steps: c.operating.steps.map(s => {
@@ -1915,6 +2006,10 @@ export function IcfrProvider({ children, initialRole = 'auditor', seedMeta }: { 
       // itself. Extend the sample, redraw with a reason, or conclude the
       // failure.
       if (conclusion === 'Effective' && toeRoundFailed(c)) return c;
+      // Nor on an attribute nobody has tested. Any route counts — AI
+      // validation, a manual result, an attestation or an override — but an
+      // attribute with no result at all has not been shown to operate.
+      if (conclusion === 'Effective' && c.operating.steps.some(s => stepResult(s) === 'Not tested')) return c;
       return { ...c, reviewReturn: conclusion === 'Not tested' ? c.reviewReturn : undefined, operating: { ...c.operating, conclusion, rationale: conclusion === 'Not tested' ? undefined : (rationale?.trim() || c.operating.rationale), testedBy: me, testedAt: 'just now' } };
     });
     // Reads the state the patch produced: a stale-run refusal above leaves the
@@ -2091,10 +2186,10 @@ export function IcfrProvider({ children, initialRole = 'auditor', seedMeta }: { 
     });
   }, [me, role, raiseDeficiencyIfIneffective]);
 
-  const addRacmDoc = useCallback<IcfrCtx['addRacmDoc']>((fileName, process) => {
+  const addRacmDoc = useCallback<IcfrCtx['addRacmDoc']>((fileName, process, opts) => {
     const lower = fileName.toLowerCase();
     const kind: EvidenceFile['kind'] = lower.endsWith('.csv') ? 'CSV' : lower.endsWith('.xlsx') || lower.endsWith('.xls') ? 'XLSX' : lower.endsWith('.png') || lower.endsWith('.jpg') ? 'IMG' : 'PDF';
-    setRacmDocs(prev => [{ id: uid('rd'), name: fileName, kind, uploadedBy: me, uploadedAt: 'just now', process }, ...prev]);
+    setRacmDocs(prev => [{ id: uid('rd'), name: fileName, kind, uploadedBy: me, uploadedAt: 'just now', process, ...(opts?.source ? { source: opts.source } : {}), ...(opts?.url ? { url: opts.url } : {}) }, ...prev]);
   }, [me]);
 
   // Creating a RACM brings a process into scope: the template seeds its risks
@@ -2102,7 +2197,7 @@ export function IcfrProvider({ children, initialRole = 'auditor', seedMeta }: { 
   // processes), and the workbook / SOP that produced it is pinned to the new
   // matrix as its source document. A process that already has a RACM is a
   // no-op — the landing lists one RACM per process.
-  const createRacm = useCallback<IcfrCtx['createRacm']>((process, sourceFileName, entity) => {
+  const createRacm = useCallback<IcfrCtx['createRacm']>((process, sourceFileName, entity, opts) => {
     if (role !== 'auditor') return;
     setEng(prev => {
       if (isEngagementLocked(prev)) return prev;
@@ -2116,16 +2211,46 @@ export function IcfrProvider({ children, initialRole = 'auditor', seedMeta }: { 
       // afterwards used to land with neither, so every control it made arrived
       // with a template name on it and nobody real to ask for evidence.
       const people = peopleForProcess(process);
-      const rows = racmTemplateForProcesses([process], 'fresh')
-        .map(c => ({
-          ...c,
-          ...(entity ? { entity } : {}),
-          ...(people ? { owner: people.controlOwner, processOwner: people.processOwner } : {}),
-        }));
+      // Controls read out of the file keep the owners the file names; only a
+      // blank one falls back to the process's people, then the template does.
+      const imported = opts?.controls;
+      const taken = new Set(prev.controls.map(c => c.id));
+      const rows = (imported ?? racmTemplateForProcesses([process], 'fresh'))
+        .map(c => {
+          // A file's control IDs are the client's own numbering and can repeat
+          // one already on the engagement. The row keeps that number as its
+          // `code` and takes a unique id, the same convention entity copies use.
+          let id = c.id;
+          if (imported && taken.has(id)) { let n = 2; while (taken.has(`${c.id}-${n}`)) n++; id = `${c.id}-${n}`; }
+          taken.add(id);
+          return {
+            ...c,
+            id,
+            ...(id !== c.id ? { code: c.code ?? c.id } : {}),
+            process,
+            ...(entity ? { entity } : {}),
+            ...(imported
+              ? { owner: c.owner || people?.controlOwner || c.owner, processOwner: c.processOwner || people?.processOwner }
+              : people ? { owner: people.controlOwner, processOwner: people.processOwner } : {}),
+          };
+        });
       return { ...prev, controls: [...prev.controls, ...rows] };
     });
-    if (sourceFileName) addRacmDoc(sourceFileName, process);
+    if (sourceFileName) addRacmDoc(sourceFileName, process, { source: opts?.source, url: opts?.url });
   }, [role, addRacmDoc]);
+
+  // Deleting a RACM takes its controls with it, so it is refused the moment an
+  // audit covers any of them — testing, findings and sign-offs hang off those
+  // controls. The RACM tab says why before the button is ever pressed.
+  const deleteRacm = useCallback<IcfrCtx['deleteRacm']>((process) => {
+    if (role !== 'auditor') return;
+    setEng(prev => {
+      if (isEngagementLocked(prev)) return prev;
+      if (racmAuditUse(prev, process).audits.length) return prev;
+      return { ...prev, controls: prev.controls.filter(c => c.process !== process) };
+    });
+    setRacmDocs(prev => prev.filter(d => d.process !== process));
+  }, [role]);
 
   // ── discussions ───────────────────────────────────────────────────────────────
   const addComment = useCallback<IcfrCtx['addComment']>((controlId, anchor, text) => {
@@ -3219,14 +3344,15 @@ export function IcfrProvider({ children, initialRole = 'auditor', seedMeta }: { 
     addEvidenceReport, removeEvidenceReport, proveEvidenceReport,
     registerIpe, setIpeCheck, concludeIpe, clearIpe, setMrc, setSampling, extendSample, resizeSample, setSampleResult, setStepResult, overrideStep, pullStepRun, attestStep, addStepEvidence, setStepInputFile, concludeOperating, overrideOperating, startToeRound,
     addAttribute, removeAttribute, mapStepWorkflow, setStepEvidenceMode, toggleStepAttest, toggleStepAI, runStepValidation, testAllAttributes,
+    addRequiredFile, renameRequiredFile, removeRequiredFile, uploadRequiredFile, clearRequiredFile, validateReadyAttributes,
     approveRacmRows, remarkRacmRow, clearRacmReview, bulkTestControls,
-    createAudit, updateAudit, openAuditId, openAudit, closeAudit, racmDocs, addRacmDoc, createRacm,
+    createAudit, updateAudit, openAuditId, openAudit, closeAudit, racmDocs, addRacmDoc, createRacm, deleteRacm,
     addComment, resolveDiscussion,
     submitTask, clearTask, raiseQuery, requestDesignDocs,
     updateRules, applyRules, updateMateriality, reconcileScope, updateDeficiency, linkRootCause, unlinkRootCause, setGroupConclusion, updateAccount, setExceptionStatus, completeSizing, confirmRating, returnRating, submitPlan, reviewPlan, drawRetestSample, setRetestResult, recordRetest, signOffException, reopenException, updateRemediation, addRemediationEvidence, raiseChallenge, respondToChallenge, markUnableToTest, resolveUnableToTest, escalateUnableToTest,
     addControl, signOffAudit, reopenControl, signOffControlWp, returnControl,
     raiseReviewNote, resolveReviewNote, verifyReviewNote, reopenReviewNote,
-  }), [eng, role, tab, view, selectedControlId, racmEditor, me, meOwner, racmProcess, changeRole, setTab, openRacmMatrix, openRacmEditor, openControl, focusStep, clearFocusStep, openDeficiency, focusDefId, clearFocusDef, back, returnView, registerPreset, openRegister, clearRegisterPreset, racmCreateOpen, openRacmCreate, clearRacmCreate, setDocStatus, setDesignPoint, concludeDesign, overrideDesign, addDesignDoc, attachDesignEvidence, removeDesignDoc, waiveDesignDoc, clearDesignWaiver, updateControlMeta, setControlKey, setDesignJudgements, startWalkthrough, setWalkthroughAttribute, setWalkthroughMeta, addDesignPoint, removeDesignPoint, validateDesignPoint, overrideDesignPoint, linkDesignPointEvidence, setDesignPointProof, requestDataByEmail, setPointEvidenceType, setStepEvidenceType, setDesignBasis, setPopulation, setPopulationDefinition, clearPopulation, setPopulationCheck, setPopulationFacts, addPopulationSource, removePopulationSource, setSourceRole, drawSourceSample, approveSource, redrawSource, remindOwnerForFiles, registerFile, setFileOrigin, lockPopulation, lockAttributes, confirmExtraction, recordException, addEvidenceReport, removeEvidenceReport, proveEvidenceReport, registerIpe, setIpeCheck, concludeIpe, clearIpe, setMrc, setSampling, extendSample, resizeSample, setSampleResult, setStepResult, overrideStep, pullStepRun, attestStep, addStepEvidence, setStepInputFile, concludeOperating, overrideOperating, startToeRound, addAttribute, removeAttribute, mapStepWorkflow, setStepEvidenceMode, toggleStepAttest, toggleStepAI, runStepValidation, testAllAttributes, approveRacmRows, remarkRacmRow, clearRacmReview, bulkTestControls, createAudit, updateAudit, openAuditId, openAudit, closeAudit, racmDocs, addRacmDoc, createRacm, addComment, resolveDiscussion, submitTask, clearTask, raiseQuery, requestDesignDocs, updateRules, applyRules, updateMateriality, reconcileScope, updateDeficiency, linkRootCause, unlinkRootCause, setGroupConclusion, updateAccount, setExceptionStatus, completeSizing, confirmRating, returnRating, submitPlan, reviewPlan, drawRetestSample, setRetestResult, recordRetest, signOffException, reopenException, updateRemediation, addRemediationEvidence, raiseChallenge, respondToChallenge, markUnableToTest, resolveUnableToTest, escalateUnableToTest, addControl, signOffAudit, reopenControl, signOffControlWp, returnControl, raiseReviewNote, resolveReviewNote, verifyReviewNote, reopenReviewNote]);
+  }), [eng, role, tab, view, selectedControlId, racmEditor, me, meOwner, racmProcess, changeRole, setTab, openRacmMatrix, openRacmEditor, openControl, focusStep, clearFocusStep, openDeficiency, focusDefId, clearFocusDef, back, returnView, registerPreset, openRegister, clearRegisterPreset, racmCreateOpen, openRacmCreate, clearRacmCreate, setDocStatus, setDesignPoint, concludeDesign, overrideDesign, addDesignDoc, attachDesignEvidence, removeDesignDoc, waiveDesignDoc, clearDesignWaiver, updateControlMeta, setControlKey, setDesignJudgements, startWalkthrough, setWalkthroughAttribute, setWalkthroughMeta, addDesignPoint, removeDesignPoint, validateDesignPoint, overrideDesignPoint, linkDesignPointEvidence, setDesignPointProof, requestDataByEmail, setPointEvidenceType, setStepEvidenceType, setDesignBasis, setPopulation, setPopulationDefinition, clearPopulation, setPopulationCheck, setPopulationFacts, addPopulationSource, removePopulationSource, setSourceRole, drawSourceSample, approveSource, redrawSource, remindOwnerForFiles, registerFile, setFileOrigin, lockPopulation, lockAttributes, confirmExtraction, recordException, addEvidenceReport, removeEvidenceReport, proveEvidenceReport, registerIpe, setIpeCheck, concludeIpe, clearIpe, setMrc, setSampling, extendSample, resizeSample, setSampleResult, setStepResult, overrideStep, pullStepRun, attestStep, addStepEvidence, setStepInputFile, concludeOperating, overrideOperating, startToeRound, addAttribute, removeAttribute, mapStepWorkflow, setStepEvidenceMode, toggleStepAttest, toggleStepAI, runStepValidation, testAllAttributes, addRequiredFile, renameRequiredFile, removeRequiredFile, uploadRequiredFile, clearRequiredFile, validateReadyAttributes, approveRacmRows, remarkRacmRow, clearRacmReview, bulkTestControls, createAudit, updateAudit, openAuditId, openAudit, closeAudit, racmDocs, addRacmDoc, createRacm, deleteRacm, addComment, resolveDiscussion, submitTask, clearTask, raiseQuery, requestDesignDocs, updateRules, applyRules, updateMateriality, reconcileScope, updateDeficiency, linkRootCause, unlinkRootCause, setGroupConclusion, updateAccount, setExceptionStatus, completeSizing, confirmRating, returnRating, submitPlan, reviewPlan, drawRetestSample, setRetestResult, recordRetest, signOffException, reopenException, updateRemediation, addRemediationEvidence, raiseChallenge, respondToChallenge, markUnableToTest, resolveUnableToTest, escalateUnableToTest, addControl, signOffAudit, reopenControl, signOffControlWp, returnControl, raiseReviewNote, resolveReviewNote, verifyReviewNote, reopenReviewNote]);
 
   return <Ctx.Provider value={value}>{children}</Ctx.Provider>;
 }

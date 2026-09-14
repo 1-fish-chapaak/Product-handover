@@ -54,6 +54,19 @@ export interface EvidenceFile {
   uploadedAt: string;
 }
 
+/** ONE FILE AN ATTRIBUTE NEEDS BEFORE AI VALIDATION CAN RUN — the evidence.
+ *  The list comes from the RACM's Control Evidence column, split per attribute
+ *  (`requiredFilesOf` in helpers.ts supplies it until someone edits it). It is
+ *  edited on the engagement control page and read as a checklist in TOE, where
+ *  each line takes its upload. */
+export interface RequiredFile {
+  id: string;
+  /** What the file is — "Signed approval record", "Invoice register extract". */
+  label: string;
+  /** What was uploaded against it. Absent until someone uploads it. */
+  file?: EvidenceFile;
+}
+
 // ─── Design track (TOD) ─────────────────────────────────────────────────────────
 
 export type DesignDocKind =
@@ -317,7 +330,12 @@ export interface OperatingStep {
   workflowName?: string;
   workflowRunRef?: string;
   aiValidation?: boolean;
-  inputFile?: EvidenceFile;      // the required file AI validation runs against
+  /** The single required file the list below replaced. Still read — as the
+   *  first line's upload — until `requiredFiles` is written. */
+  inputFile?: EvidenceFile;
+  /** The files AI validation runs against; all must be uploaded before it can
+   *  run. Absent means never edited — read it through `requiredFilesOf`. */
+  requiredFiles?: RequiredFile[];
   validation?: ValidationResult;
   /** The recorded run predates the current draw. Set when the sample changes
    *  under an attribute that already carries a validation or workflow result —

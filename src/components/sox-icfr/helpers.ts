@@ -845,15 +845,16 @@ export function expectedInputsFor(c: Control): { inputs: ExpectedInput[]; awaiti
   for (const s of c.operating.steps) {
     // An attribute with no workflow and no validation reads nothing — it is
     // evidenced by inspection or attestation, and it expects no file.
-    const linked = !!s.workflowName || s.evidenceMode === 'workflow' || s.evidenceMode === 'ai' || !!s.aiValidation;
-    if (!linked) continue;
-    if (s.inputFile?.name) {
-      const hit = byName.get(s.inputFile.name);
-      if (hit) { hit.attributes.push(s.code); hit.workflow = hit.workflow ?? s.workflowName; }
-      else byName.set(s.inputFile.name, { name: s.inputFile.name, attributes: [s.code], workflow: s.workflowName });
-    } else {
-      awaiting.push({ code: s.code, workflow: s.workflowName });
-    }
+    // Every attribute names the files its AI validation reads (requiredFilesOf).
+    // The uploaded ones are inputs; any still missing is something owed.
+    const files = requiredFilesOf(s, c);
+    files.forEach(f => {
+      if (!f.file) return;
+      const hit = byName.get(f.file.name);
+      if (hit) { if (!hit.attributes.includes(s.code)) hit.attributes.push(s.code); }
+      else byName.set(f.file.name, { name: f.file.name, attributes: [s.code] });
+    });
+    if (files.some(f => !f.file)) awaiting.push({ code: s.code });
   }
   return { inputs: [...byName.values()], awaiting };
 }
@@ -1580,7 +1581,7 @@ export function pendingReviewNoteCount(eng: IcfrEngagement, controlId: string): 
 
 // ─── Track progress ──────────────────────────────────────────────────────────────
 
-import type { DesignPoint, OperatingStep, TestResult, ValidationQA, ValidationTable } from './types';
+import type { DesignPoint, OperatingStep, RequiredFile, TestResult, ValidationQA, ValidationTable } from './types';
 export function pointResult(p: DesignPoint): TestResult { return p.override ? (p.override.result as TestResult) : p.result; }
 
 /** A validated file and a person's attestation reached opposite conclusions on
@@ -1601,6 +1602,54 @@ export function stepResult(s: OperatingStep): TestResult {
   if (s.override) return s.override.result as TestResult;
   if (attestationOverruled(s)) return s.validation!.result as TestResult;
   return s.result;
+}
+
+// ─── Required files — the evidence an attribute's AI validation runs against ─────
+// The RACM's Control Evidence column names what proves a control; Ira splits it
+// per attribute. Uploads carry no real bytes in this prototype, so the split is
+// read off the attribute's own wording: the records it talks about are the
+// records it needs. Deterministic, so an attribute asks for the same files on
+// every render until somebody edits the list.
+const EVIDENCE_FROM_WORDING: [RegExp, string][] = [
+  [/approv|sign|authori/i, 'Signed approval record'],
+  [/reconcil/i, 'Reconciliation workpaper'],
+  [/invoice/i, 'Invoice register extract'],
+  [/\bpo\b|purchase order/i, 'Purchase order report'],
+  [/\bgrn\b|goods receipt/i, 'Goods receipt notes'],
+  [/journal/i, 'Journal entry register'],
+  [/vendor|supplier|payee/i, 'Vendor master change log'],
+  [/confirm/i, 'Bank or third-party confirmation'],
+  [/call-?back/i, 'Call-back log'],
+  [/bank|payment/i, 'Payment run report'],
+  [/access|user|role|password/i, 'User access listing'],
+  [/change|ticket/i, 'Change ticket log'],
+  [/toleran|exception|breach|hold/i, 'Exception and hold report'],
+  [/review/i, 'Reviewer sign-off evidence'],
+  [/timestamp|before|date|timely|period/i, 'System audit-trail extract'],
+];
+
+/** The attribute's required files: the edited list when there is one, otherwise
+ *  the split read off its wording and then its control's activity (up to three),
+ *  with the old single required file standing as the first line's upload. The
+ *  control matters because many attributes are worded generically ("primary
+ *  attribute tested") while the activity names the records the work leaves. */
+type EvidenceSource = Pick<Control, 'description' | 'controlActivity'>;
+export function requiredFilesOf(s: OperatingStep, c: EvidenceSource): RequiredFile[] {
+  if (s.requiredFiles) return s.requiredFiles;
+  const read = (text: string) => EVIDENCE_FROM_WORDING.filter(([re]) => re.test(text)).map(([, label]) => label);
+  const labels = Array.from(new Set([...read(s.description), ...read(c.controlActivity ?? c.description)])).slice(0, 3);
+  const list = labels.length ? labels : ['Supporting document for the sampled items'];
+  return list.map((label, i) => ({ id: `${s.id}-rf${i + 1}`, label, ...(i === 0 && s.inputFile ? { file: s.inputFile } : {}) }));
+}
+/** Uploaded out of required, e.g. 2 of 3. */
+export function requiredFilesCount(s: OperatingStep, c: EvidenceSource): { uploaded: number; total: number } {
+  const list = requiredFilesOf(s, c);
+  return { uploaded: list.filter(f => f.file).length, total: list.length };
+}
+/** AI validation can run only once every required file is in. */
+export function requiredFilesReady(s: OperatingStep, c: EvidenceSource): boolean {
+  const { uploaded, total } = requiredFilesCount(s, c);
+  return total > 0 && uploaded === total;
 }
 
 /** Deterministic Q&A a design-validation workflow returns for a consideration. */
@@ -2011,6 +2060,7 @@ export function courtFor(c: Control, tasks: HandoffTask[], notes: ReviewNote[] =
 // the next cycle; an untested control can be due today or overdue.
 
 import type { Frequency } from './types';
+import type { ProcurementRacmRow } from '../../data/procurement-racm';
 const CYCLE_DAYS: Record<Frequency, number> = { Daily: 1, Weekly: 7, Monthly: 30, Quarterly: 90, Annual: 365, Recurring: 7, 'Ad-hoc': 30 };
 
 /** A concluded control (Effective or Ineffective) is off the due schedule —
@@ -2170,4 +2220,55 @@ export function formatDueDate(date: string | null | undefined): string {
   const s = date.trim();
   if (/^\d{4}-\d{2}-\d{2}$/.test(s)) return new Date(`${s}T00:00:00`).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' });
   return s;
+}
+
+// ─── RACM editor rows — the matrix a SOX RACM actually holds ─────────────────────
+// Clicking a RACM on the RACM tab opens the spreadsheet editor in a new tab. That
+// tab has none of this engagement's state, so the rows travel with it: this lays
+// a process's controls out in the editor's spreadsheet columns (the same grouping
+// Racm.tsx uses), and openEditorTab hands them over. Columns a control has no
+// field for stay blank.
+export const RACM_ROWS_KEY = (racmId: string) => `sox-racm-rows:${racmId}`;
+export function racmEditorRows(controls: Control[], process: string): ProcurementRacmRow[] {
+  const seen = new Set<string>();
+  return controls
+    .filter(c => c.process === process)
+    .map(c => {
+      // The editor keys a row on risk + control id. The same control tested at
+      // several companies shares its client-facing number, so a repeat falls
+      // back to the row's own unique id rather than colliding with the first.
+      const shown = c.code ?? c.id;
+      const controlId = seen.has(`${c.riskId}-${shown}`) ? c.id : shown;
+      seen.add(`${c.riskId}-${controlId}`);
+      const evidence = Array.from(new Set(c.operating.steps.flatMap(s => requiredFilesOf(s, c).map(f => f.label))));
+      return {
+        riskId: c.riskId,
+        controlId,
+        isKey: c.isKey,
+        processArea: c.process,
+        subProcess: c.subProcess,
+        riskCategory: c.clazz ?? '',
+        riskDescription: c.riskDescription,
+        riskRating: c.riskRating ?? '',
+        likelihood: '',
+        impact: '',
+        controlObjective: c.objective ?? '',
+        controlActivity: c.controlActivity ?? c.description,
+        controlType: c.type,
+        controlNature: c.nature,
+        frequency: c.frequency,
+        controlOwner: c.owner,
+        controlEvidence: evidence.join('; '),
+        assertions: c.assertions.join(', '),
+        fsLineItem: '',
+        regulatoryRef: '',
+        keyReport: c.reportRef ?? '',
+        ipeIceDetails: '',
+        segregationOfDuties: '',
+        mgmtReviewControl: c.isMrc ? 'Yes' : '',
+        confidence: '',
+        sopSectionRef: '',
+        attributes: c.operating.steps.map(s => s.description).join(' | '),
+      };
+    });
 }

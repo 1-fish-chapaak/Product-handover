@@ -1,7 +1,7 @@
 import { useMemo } from 'react';
 import { useIcfr } from './store';
 import { programmeFor } from './auditScope';
-import { controlsUsingFile, defaultFileOrigin, fileOriginOf, guessFileKind, populationSources } from './helpers';
+import { controlsUsingFile, defaultFileOrigin, fileOriginOf, guessFileKind, populationSources, requiredFilesOf } from './helpers';
 import type { AuditFileRecord, Control } from './types';
 
 /** A file record as everything downstream reads it: the file's own facts, its
@@ -97,9 +97,9 @@ export function useAuditFiles(): AuditFile[] {
     // very files the call says it should ("वर्कफ्लो लिंकिंग में जो इनपुट फाइल्स
     // हैं, वो सारी फाइल्स की लिस्ट").
     eng.controls.forEach(c => {
-      c.operating.steps.forEach(s => {
-        if (!s.inputFile?.name) return;
-        const name = s.inputFile.name;
+      c.operating.steps.forEach(s => requiredFilesOf(s, c).forEach(({ file }) => {
+        if (!file?.name) return;
+        const name = file.name;
         // A PDF has no rows to count, so it is given none — the row count is
         // suppressed downstream by name, and a fabricated number here would be
         // a number somebody has to explain. Structured files get a stable one.
@@ -108,11 +108,11 @@ export function useAuditFiles(): AuditFile[] {
           : 400 + (name.split('').reduce((a, ch) => (a * 31 + ch.charCodeAt(0)) >>> 0, 7) % 4200);
         derived.push({
           name, kind: guessFileKind(name), rows,
-          from: `${s.workflowName ?? 'Workflow'} · ${c.id}`,
-          uploadedBy: s.inputFile.uploadedBy || eng.preparer, uploadedAt: s.inputFile.uploadedAt || 'at scoping',
+          from: `${s.code} required file · ${c.id}`,
+          uploadedBy: file.uploadedBy || eng.preparer, uploadedAt: file.uploadedAt || 'at scoping',
           origin: fileOriginOf(eng, name).origin,
         });
-      });
+      }));
     });
 
     const registry = eng.fileRegistry ?? [];

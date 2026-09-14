@@ -19,6 +19,7 @@ import {
   countVerdict, coverageVerdict, derivedRunCount, populationReady, designBasis, auditorProvenChecks, suggestedDesignChecks, suggestPopulationFile, fmtDay, parseDay,
   monthlyBreakdown, spikeMonths, priorRoundCount, fileUsable, originLabel, guessFileKind, populationSources, ipeChecksFor, samplesFor,
   draftSamplePrompt, readSamplePrompt, windowMonths, expectedInputsFor, hasRowCount, isAssisting, sampledSources, reviewNotesFor, isShared, entityCoverage, uncoveredEntities, hasPaths, pathCoverage, untouchedPaths, type PopVerdict,
+  requiredFilesOf, requiredFilesCount, requiredFilesReady,
 } from './helpers';
 import { useAuditFiles, type AuditFile } from './useAuditFiles';
 import { ownersOf, programmeFor } from './auditScope';
@@ -523,6 +524,7 @@ function QAResultsModal({ title, validation, control, step, onClose }: { title: 
  * extracted sample, so the answer worth showing isn't the attribute's single
  * Pass / Fail — it's which sampled items passed and which didn't.
  */
+// PARKED (S1, workflows removed from SOX)
 function RunResultsModal({ control, step, onClose }: { control: Control; step: OperatingStep; onClose: () => void }) {
   const samples = control.operating.sampling?.samples ?? [];
   const passed = samples.filter(s => step.sampleResults?.[s.id] === 'Pass').length;
@@ -539,7 +541,6 @@ function RunResultsModal({ control, step, onClose }: { control: Control; step: O
         </div>
         <div className="px-5 py-2.5 border-b border-canvas-border bg-paper-50/40 flex items-center gap-2 flex-wrap">
           <p className="text-[0.75rem] text-ink-600"><b className="text-ink-800">Tested —</b> {step.code} · {step.description}</p>
-          {step.workflowName && <span className="inline-flex items-center gap-1 text-[0.65625rem] font-semibold text-ink-600 bg-canvas-elevated border border-canvas-border rounded-md px-1.5 h-[20px]"><WorkflowIcon size={9} />{step.workflowName}</span>}
           {step.workflowRunRef && <span className="font-mono text-[0.65625rem] text-ink-400">{step.workflowRunRef}</span>}
         </div>
         <div className="px-5 py-4 max-h-[58vh] overflow-y-auto">
@@ -971,22 +972,24 @@ function WalkthroughCard({ control, canEdit }: { control: Control; canEdit: bool
  *  narrative and a conversation is a different animal from one walked end to end,
  *  and while the walkthrough is parked this is what stops the paper claiming the
  *  stronger of the two. */
-// ── operating attribute — its own workflow and/or self-attestation ────────────────
+// ── operating attribute — its required files + AI validation, and/or self-attestation ─
 function AttributeRow({ control, step, canEdit, testing }: { control: Control; step: OperatingStep; canEdit: boolean; testing: boolean }) {
-  const { me, setStepResult, overrideStep, pullStepRun, attestStep, addStepEvidence, setStepInputFile, mapStepWorkflow, setStepEvidenceMode, toggleStepAttest, runStepValidation, removeAttribute } = useIcfr();
+  const { me, setStepResult, overrideStep, attestStep, addStepEvidence, uploadRequiredFile, clearRequiredFile, toggleStepAttest, runStepValidation, removeAttribute } = useIcfr();
   const logEvent = useAuditLog();
   const [over, setOver] = useState(false);
   const [noteDraft, setNoteDraft] = useState(step.attestation?.note ?? '');
   const [validatingWf, setValidatingWf] = useState(false);
   const [showQA, setShowQA] = useState(false);
-  const [showRun, setShowRun] = useState(false);
   const eff = stepResult(step);
   const att = step.attestation;
   const attestOn = step.attestEnabled ?? !!att;   // section 2 — separate toggle, default off (on if already attested)
   const overruled = attestationOverruled(step);   // the file and the attester disagree — the file wins, and says so
   const wordAlone = restsOnStatementAlone(step);  // attested, with nothing behind it — cannot carry an effective conclusion
-  // section 1 — validation: AI validation is the default; can switch to a mapped workflow
-  const v1: 'ai' | 'workflow' = step.evidenceMode === 'workflow' ? 'workflow' : step.evidenceMode === 'ai' ? 'ai' : (step.workflowName ? 'workflow' : 'ai');
+  // section 1 — the files this attribute is proven against. AI validation reads
+  // all of them, so it waits until every line on the checklist has its upload.
+  const reqFiles = requiredFilesOf(step, control);
+  const { uploaded, total } = requiredFilesCount(step, control);
+  const ready = requiredFilesReady(step, control);
   const busy = testing || validatingWf;
   const runAI = () => { setValidatingWf(true); window.setTimeout(() => { runStepValidation(control.id, step.id); setValidatingWf(false); }, 4000); };
 
@@ -1018,17 +1021,11 @@ function AttributeRow({ control, step, canEdit, testing }: { control: Control; s
         )}
       </div>
 
-      {/* evidence — Section 1: validation (AI validation default / workflow) · Section 2: self-attest (separate) */}
+      {/* evidence — Section 1: required files + AI validation · Section 2: self-attest (separate) */}
       <div className="mt-3 ml-[36px] space-y-2">
         <div className="rounded-lg border border-canvas-border px-3 py-2.5">
-          <div className="flex items-center justify-between gap-2 mb-2">
-            <span className="text-[0.6875rem] font-bold text-ink-600">Validation</span>
-            {canEdit && (
-              <div className="inline-flex items-center p-0.5 rounded-md border border-canvas-border bg-paper-50/60">
-                <button disabled={busy} onClick={() => setStepEvidenceMode(control.id, step.id, 'ai')} className={cn('h-6 px-2 rounded text-[0.6875rem] font-semibold inline-flex items-center gap-1 transition-colors cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed', v1 === 'ai' ? 'bg-canvas-elevated text-brand-700 ring-1 ring-canvas-border' : 'text-ink-500 hover:text-ink-800')}><Sparkles size={11} /> AI validation</button>
-                <button disabled={busy} onClick={() => setStepEvidenceMode(control.id, step.id, 'workflow')} className={cn('h-6 px-2 rounded text-[0.6875rem] font-semibold inline-flex items-center gap-1 transition-colors cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed', v1 === 'workflow' ? 'bg-canvas-elevated text-brand-700 ring-1 ring-canvas-border' : 'text-ink-500 hover:text-ink-800')}><WorkflowIcon size={11} /> Workflow</button>
-              </div>
-            )}
+          <div className="mb-2">
+            <span className="text-[0.6875rem] font-bold text-ink-600">Required files &amp; AI validation</span>
           </div>
           {/* The recorded run was made over a draw that no longer exists — the
               sample changed underneath it. Results that predate the sample were
@@ -1040,49 +1037,71 @@ function AttributeRow({ control, step, canEdit, testing }: { control: Control; s
               <span>This run predates the current draw — the items it tested are no longer the sample. Re-run it before the operating test can conclude.</span>
             </div>
           )}
-          {v1 === 'ai' ? (
-            <div className="rounded-md bg-brand-50/30 border border-brand-100 px-2.5 py-2.5 space-y-2">
-              {/* required file the AI validates against */}
+          <div className="rounded-md bg-brand-50/30 border border-brand-100 px-2.5 py-2.5 space-y-2">
+            {/* The required files, as a checklist — one line per file the AI
+                validation reads. The list itself is written on the engagement
+                control page; here each line only takes its upload. */}
+            <div>
               <div className="flex items-center gap-2 flex-wrap">
                 <Upload size={13} className="text-brand-600 shrink-0" />
-                <span className="text-[0.6875rem] font-semibold text-ink-600">Required file</span>
-                {step.inputFile
-                  ? <span className="inline-flex items-center gap-1 text-[0.65625rem] font-semibold text-ink-700 bg-canvas-elevated border border-canvas-border rounded-md px-1.5 h-[20px] max-w-[180px]"><Paperclip size={9} className="shrink-0" /><span className="truncate">{step.inputFile.name}</span></span>
-                  : <span className="text-[0.6875rem] text-ink-400">none uploaded yet</span>}
-                {canEdit && !busy && <button onClick={() => { setStepInputFile(control.id, step.id, `${step.code}-evidence.xlsx`); logEvent({ action: 'Upload', description: `Uploaded required file for attribute ${step.code} (${control.id})`, module: 'SOX ICFR', entity: 'Evidence' }); }} className="h-6 px-2 rounded-md border border-canvas-border bg-canvas-elevated text-ink-600 text-[0.6875rem] font-semibold hover:border-brand-300 hover:text-brand-700 inline-flex items-center gap-1 cursor-pointer"><Upload size={10} /> {step.inputFile ? 'Replace' : 'Upload file'}</button>}
+                <span className="text-[0.6875rem] font-semibold text-ink-600">Required files</span>
+                {total > 0 && <span className="text-[0.6875rem] text-ink-400 tabular-nums">{uploaded} of {total} uploaded</span>}
               </div>
-              {/* run + result */}
-              <div className="flex items-center gap-2.5 flex-wrap pt-2 border-t border-brand-100/70">
-                <Sparkles size={14} className="text-brand-600 shrink-0" />
-                <span className="text-[0.71875rem] text-ink-600 flex-1 min-w-0">AI validation by Ask IRA · <span className="font-mono text-[0.65625rem] text-ink-400">{validatingWf ? 'checking the file…' : (step.validation ? 'done' : 'not run yet')}</span></span>
-                {/* the verdict lives on the attribute's tickmark above — repeating
-                    it here said the same thing twice */}
-                {canEdit && (validatingWf
-                  ? <span className="text-[0.71875rem] font-semibold text-brand-600 inline-flex items-center gap-1.5"><Loader2 size={13} className="animate-spin" /> Validating…</span>
-                  : <button onClick={runAI} disabled={!step.inputFile} title={step.inputFile ? '' : 'Upload the required file first'} className="h-7 px-2.5 rounded-md bg-brand-600 text-white text-[0.71875rem] font-semibold enabled:hover:bg-brand-700 disabled:opacity-40 disabled:cursor-not-allowed inline-flex items-center gap-1 cursor-pointer"><Sparkles size={12} /> {step.validation ? 'Re-run' : 'Run AI validation'}</button>)}
-                {step.validation && <button onClick={() => setShowQA(true)} className="text-[0.71875rem] font-semibold text-brand-700 underline underline-offset-2 hover:text-brand-800 inline-flex items-center gap-1 cursor-pointer"><ListChecks size={12} /> View results</button>}
-              </div>
-              {step.validation?.summary && !validatingWf && <p className="text-[0.71875rem] text-ink-600 leading-snug">{step.validation.summary}</p>}
-              {!step.inputFile && canEdit && <p className="text-[0.65625rem] text-mitigated-700 inline-flex items-center gap-1"><AlertTriangle size={10} /> Upload the file the AI should check before running validation.</p>}
+              {total === 0 ? (
+                <p className="mt-1.5 text-[0.6875rem] text-ink-400">No required files listed — add them on the engagement control page.</p>
+              ) : (
+                <ul className="mt-1.5 space-y-1.5">
+                  {reqFiles.map(f => (
+                    <li key={f.id} className="flex items-start gap-2">
+                      {f.file
+                        ? <CheckCircle2 size={13} className="text-compliant-600 shrink-0 mt-0.5" />
+                        : <Circle size={13} className="text-ink-300 shrink-0 mt-0.5" />}
+                      <div className="min-w-0 flex-1">
+                        <div className="flex items-center gap-2 flex-wrap">
+                          <span className="text-[0.71875rem] font-medium text-ink-800">{f.label}</span>
+                          {f.file && <span title={f.file.name} className="inline-flex items-center gap-1 text-[0.65625rem] font-semibold text-ink-700 bg-canvas-elevated border border-canvas-border rounded-md px-1.5 h-[20px] max-w-[180px]"><Paperclip size={9} className="shrink-0" /><span className="truncate">{f.file.name}</span></span>}
+                        </div>
+                        {f.file && <div className="text-[0.65625rem] text-ink-400 mt-0.5">Uploaded by {f.file.uploadedBy} · {f.file.uploadedAt}</div>}
+                      </div>
+                      {canEdit && !busy && (
+                        <div className="flex items-center gap-1 shrink-0">
+                          <label className="h-6 px-2 rounded-md border border-canvas-border bg-canvas-elevated text-ink-600 text-[0.6875rem] font-semibold hover:border-brand-300 hover:text-brand-700 focus-within:ring-2 focus-within:ring-brand-200 inline-flex items-center gap-1 cursor-pointer">
+                            <input type="file" className="sr-only" aria-label={`Upload ${f.label} for ${step.code}`}
+                              onChange={e => {
+                                const file = e.target.files?.[0];
+                                if (file) {
+                                  uploadRequiredFile(control.id, step.id, f.id, file.name);
+                                  logEvent({ action: 'Upload', description: `Uploaded ${file.name} as "${f.label}" for attribute ${step.code} (${control.id})`, module: 'SOX ICFR', entity: 'Evidence' });
+                                }
+                                e.target.value = '';
+                              }} />
+                            <Upload size={10} /> {f.file ? 'Replace' : 'Upload'}
+                          </label>
+                          {f.file && <button onClick={() => { clearRequiredFile(control.id, step.id, f.id); logEvent({ action: 'Delete', description: `Removed the file uploaded as "${f.label}" for attribute ${step.code} (${control.id})`, module: 'SOX ICFR', entity: 'Evidence' }); }}
+                            aria-label={`Remove the uploaded file for ${f.label}`} title="Remove the uploaded file"
+                            className="h-6 w-6 inline-flex items-center justify-center rounded-md border border-canvas-border bg-canvas-elevated text-ink-400 hover:border-risk-300 hover:text-risk-600 cursor-pointer"><X size={11} /></button>}
+                        </div>
+                      )}
+                    </li>
+                  ))}
+                </ul>
+              )}
             </div>
-          ) : (
-            step.workflowName ? (
-              <div className="rounded-md border border-evidence-100 bg-evidence-50/40 px-2.5 py-2 flex items-center gap-2.5">
-                <Cpu size={14} className="text-evidence-700 shrink-0" />
-                <div className="min-w-0 flex-1"><div className="text-[0.75rem] font-semibold text-ink-800 truncate">{step.workflowName}</div><div className="text-[0.65625rem] font-mono text-ink-400">{step.workflowRunRef ?? 'not run yet'}</div></div>
-                {/* no Pass / Fail chip here — the attribute's own tickmark above
-                    already carries the result; this is just the way into the
-                    per-sample detail behind it */}
-                {step.workflowRunRef && <button onClick={() => setShowRun(true)} className="text-[0.71875rem] font-semibold text-evidence-700 underline underline-offset-2 hover:text-evidence-800 inline-flex items-center gap-1 cursor-pointer shrink-0"><ListChecks size={12} /> View results</button>}
-                {canEdit && !busy && <>
-                  <button onClick={() => pullStepRun(control.id, step.id)} className="h-7 px-2.5 rounded-md bg-evidence-600 text-white text-[0.71875rem] font-semibold hover:bg-evidence-700 inline-flex items-center gap-1 cursor-pointer"><WorkflowIcon size={12} /> {step.workflowRunRef ? 'Re-pull' : 'Pull run'}</button>
-                  <Dropdown trigger={<><Link2 size={12} /> Remap</>}>{close => WORKFLOW_LIBRARY.map(w => <button key={w} className={menuItem} onClick={() => { mapStepWorkflow(control.id, step.id, w); close(); }}><WorkflowIcon size={12} className="text-evidence-600" />{w}</button>)}</Dropdown>
-                </>}
-              </div>
-            ) : canEdit ? (
-              <Dropdown trigger={<><WorkflowIcon size={12} className="text-evidence-600" /> Map a workflow</>}>{close => WORKFLOW_LIBRARY.map(w => <button key={w} className={menuItem} onClick={() => { mapStepWorkflow(control.id, step.id, w); close(); }}><WorkflowIcon size={12} className="text-evidence-600" />{w}</button>)}</Dropdown>
-            ) : <span className="text-[0.71875rem] text-ink-400">No workflow mapped</span>
-          )}
+            {/* run + result */}
+            <div className="flex items-center gap-2.5 flex-wrap pt-2 border-t border-brand-100/70">
+              <Sparkles size={14} className="text-brand-600 shrink-0" />
+              <span className="text-[0.71875rem] text-ink-600 flex-1 min-w-0">AI validation by Ask IRA · <span className="font-mono text-[0.65625rem] text-ink-400">{validatingWf ? 'checking the file…' : (step.validation ? 'done' : 'not run yet')}</span></span>
+              {/* the verdict lives on the attribute's tickmark above — repeating
+                  it here said the same thing twice */}
+              {canEdit && (validatingWf
+                ? <span className="text-[0.71875rem] font-semibold text-brand-600 inline-flex items-center gap-1.5"><Loader2 size={13} className="animate-spin" /> Validating…</span>
+                : <button onClick={runAI} disabled={!ready} title={ready ? undefined : total > 0 ? `Upload all ${total} required files first` : 'No required files listed for this attribute'} className="h-7 px-2.5 rounded-md bg-brand-600 text-white text-[0.71875rem] font-semibold enabled:hover:bg-brand-700 disabled:opacity-40 disabled:cursor-not-allowed inline-flex items-center gap-1 cursor-pointer"><Sparkles size={12} /> {step.validation ? 'Re-run' : 'Run AI validation'}</button>)}
+              {step.validation && <button onClick={() => setShowQA(true)} className="text-[0.71875rem] font-semibold text-brand-700 underline underline-offset-2 hover:text-brand-800 inline-flex items-center gap-1 cursor-pointer"><ListChecks size={12} /> View results</button>}
+            </div>
+            {step.validation?.summary && !validatingWf && <p className="text-[0.71875rem] text-ink-600 leading-snug">{step.validation.summary}</p>}
+            {/* only for a list that exists — an empty one already says where to add files */}
+            {canEdit && !ready && total > 0 && <p className="text-[0.65625rem] text-mitigated-700 inline-flex items-center gap-1"><AlertTriangle size={10} /> Upload every required file to run AI validation — {uploaded} of {total} in.</p>}
+          </div>
         </div>
 
         <div className="rounded-lg border border-canvas-border px-3 py-2.5">
@@ -1141,7 +1160,6 @@ function AttributeRow({ control, step, canEdit, testing }: { control: Control; s
             { label: 'Override · Fail', onClick: n => { overrideStep(control.id, step.id, { result: 'Fail', by: me, at: 'just now', rationale: n }); setOver(false); } },
           ]} />)}
       <AnimatePresence>{showQA && step.validation && <QAResultsModal title={step.description} validation={step.validation} control={control} step={step} onClose={() => setShowQA(false)} />}</AnimatePresence>
-      <AnimatePresence>{showRun && <RunResultsModal control={control} step={step} onClose={() => setShowRun(false)} />}</AnimatePresence>
     </div>
   );
 }
@@ -2336,11 +2354,11 @@ function AwaitingInputs({ control, canAsk }: { control: Control; canAsk: boolean
   return (
     <div className="mt-1.5">
       <p className="text-[0.65625rem] text-mitigated-800 leading-relaxed">
-        {awaiting.length} attribute{awaiting.length === 1 ? '' : 's'} — {awaiting.map(a => a.code).join(', ')} — {awaiting.length === 1 ? 'has a workflow with no input file attached' : 'have workflows with no input file attached'}. Upload {awaiting.length === 1 ? 'it' : 'them'} on the attribute, or here.
+        {awaiting.length} attribute{awaiting.length === 1 ? '' : 's'} — {awaiting.map(a => a.code).join(', ')} — {awaiting.length === 1 ? 'is still missing a required file' : 'are still missing required files'}. {awaiting.length === 1 ? 'It is' : 'They are'} uploaded on the attribute's checklist in TOE.
       </p>
       {canAsk && (
         <button onClick={() => {
-          const what = `Attribute${awaiting.length === 1 ? '' : 's'} ${awaiting.map(a => a.code).join(', ')} on ${control.id} need the source data their workflow reads. Upload it on the control's Population step.`;
+          const what = `Attribute${awaiting.length === 1 ? '' : 's'} ${awaiting.map(a => a.code).join(', ')} on ${control.id} ${awaiting.length === 1 ? 'is' : 'are'} still missing required files. Send them to the auditor, who attaches them on the attribute's checklist in TOE.`;
           remindOwnerForFiles(control.id, what);
           logEvent({ action: 'Update', description: `Asked the owner of ${control.id} to upload the source data`, module: 'SOX ICFR', entity: 'Evidence' });
           addToast({ type: 'success', title: 'Owner asked', message: `${ownersOf(control).processOwner} has it on their list — due in 3 days.` });
@@ -2385,9 +2403,9 @@ function SourcePickerForm({ control, exclude, submitLabel, onSubmit, seedFile, s
   // and ledger attached when the audit was created, plus anything sent in
   // through Upload file since. What this drops is everything the engagement
   // merely holds: scoping trial balances, the system pulls other controls drew
-  // on, and the files workflows elsewhere read. Those were offered because a
-  // file the audit demonstrably has is a file this step could use — but they
-  // made the list read as the engagement's drive rather than this audit's
+  // on, and the required files attributes elsewhere were proven against. Those
+  // were offered because a file the audit demonstrably has is a file this step
+  // could use — but they made the list read as the engagement's drive rather than this audit's
   // evidence, and picking one meant drawing a population off a file nobody put
   // here. The registry on Configuration and the working paper still list
   // everything; this narrowing is the picker's alone.
@@ -2421,18 +2439,18 @@ function SourcePickerForm({ control, exclude, submitLabel, onSubmit, seedFile, s
   // missing rather than sitting disabled with a full-looking form.
   const seedFileMissing = !!seedFile && !all.some(f => f.name === seedFile);
 
-  // What the attributes' workflows actually read. This is the answer to "which
-  // files", and it beats any heuristic: a linked workflow naming its input is a
-  // fact, not a guess.
+  // What the attributes' required files actually are. This is the answer to
+  // "which files", and it beats any heuristic: a file uploaded against an
+  // attribute is a fact, not a guess.
   const { inputs } = useMemo(() => expectedInputsFor(control), [control]);
-  // …of which only the ones actually on this audit can be offered. A workflow
-  // input that nobody uploaded here is still worth knowing about — AwaitingInputs
+  // …of which only the ones actually on this audit can be offered. A required
+  // file that nobody uploaded here is still worth knowing about — AwaitingInputs
   // below says who owes it — but it is not a row in this list, and a banner
   // pointing at rows that are not there is worse than no banner.
   const onAudit = new Set(files.map(f => f.name));
   const expected = new Map(inputs.filter(i => onAudit.has(i.name)).map(i => [i.name, i]));
-  // Files the workflows name come first. The rest of the audit's files stay
-  // selectable — a manual control links no workflow at all, and a step that
+  // The attributes' required files come first. The rest of the audit's files stay
+  // selectable — a manual control may list no required file at all, and a step that
   // could offer it nothing would be a step it could never finish — but they are
   // visibly not what anything here reads.
   const ordered = useMemo(
@@ -2498,29 +2516,29 @@ function SourcePickerForm({ control, exclude, submitLabel, onSubmit, seedFile, s
       )}
       {/* ── where the list comes from ────────────────────────────────────────
           Said out loud, because otherwise the ordering is a mystery: these are
-          the files the control's own attributes are wired to read, and picking
-          anything else is picking a file no workflow here will run on.
+          the files the control's own attributes were proven against, and
+          picking anything else is picking a file no attribute here names.
 
           Two versions now that the list holds only what was uploaded for this
-          audit. A workflow input that IS here is still called out and still
+          audit. A required file that IS here is still called out and still
           sorts first. One that is NOT here used to be pointed at as "first in
           the list" while not being in the list at all — so it is named instead,
           as a file this control reads that somebody still has to send in. */}
       {inputs.length > 0 && (
         <div className="mb-3 rounded-lg border border-brand-200 bg-brand-50/40 px-3.5 py-2.5 flex items-start gap-2">
-          <WorkflowIcon size={13} className="text-brand-600 mt-0.5 shrink-0" />
+          <Paperclip size={13} className="text-brand-600 mt-0.5 shrink-0" />
           <div className="min-w-0">
             {expected.size > 0 ? (
               <p className="text-[0.71875rem] text-ink-700 leading-relaxed">
-                <span className="font-semibold text-ink-900">{expected.size === 1 ? 'One file is' : `${expected.size} files are`} what this control reads</span> — the input{expected.size === 1 ? '' : 's'} of the workflows linked to its attributes. {expected.size === 1 ? 'It is' : 'They are'} first in the list.
+                <span className="font-semibold text-ink-900">{expected.size === 1 ? 'One file is' : `${expected.size} files are`} what this control reads</span> — {expected.size === 1 ? 'a required file' : 'required files'} on its attributes. {expected.size === 1 ? 'It is' : 'They are'} first in the list.
               </p>
             ) : (
               <p className="text-[0.71875rem] text-ink-700 leading-relaxed">
-                <span className="font-semibold text-ink-900">{inputs.length === 1 ? 'The file' : 'The files'} this control reads {inputs.length === 1 ? 'is' : 'are'} not on this audit</span> — {inputs.map(i => i.name).join(', ')}. {inputs.length === 1 ? 'Its' : 'Their'} workflow{inputs.length === 1 ? '' : 's'} name{inputs.length === 1 ? 's' : ''} {inputs.length === 1 ? 'it' : 'them'}, but nobody has uploaded {inputs.length === 1 ? 'it' : 'them'} here. Upload above, or draw this population off a file that is.
+                <span className="font-semibold text-ink-900">{inputs.length === 1 ? 'The file' : 'The files'} this control reads {inputs.length === 1 ? 'is' : 'are'} not on this audit</span> — {inputs.map(i => i.name).join(', ')}. {inputs.length === 1 ? 'It was' : 'They were'} uploaded as {inputs.length === 1 ? 'a required file' : 'required files'} on {inputs.length === 1 ? 'an attribute' : 'its attributes'}, but nobody has uploaded {inputs.length === 1 ? 'it' : 'them'} here. Upload above, or draw this population off a file that is.
               </p>
             )}
-            {/* The other half of the truth. An attribute wired to a workflow with
-                no file attached is a thing somebody owes, and hiding it here
+            {/* The other half of the truth. An attribute still missing a
+                required file is a thing somebody owes, and hiding it here
                 would make the list look complete when it is not. */}
             <AwaitingInputs control={control} canAsk={isAuditor} />
           </div>
@@ -2552,11 +2570,11 @@ function SourcePickerForm({ control, exclude, submitLabel, onSubmit, seedFile, s
           const wanted = expected.get(f.name);
           return (
             <div key={f.name}>
-              {/* The line between what the workflows read and everything else.
+              {/* The line between the attributes' required files and everything else.
                   Only drawn when there is something on both sides of it. */}
               {inputs.length > 0 && idx === firstOther && idx > 0 && (
                 <div className="px-3 py-1.5 bg-paper-50/70 border-b border-canvas-border text-[0.625rem] font-bold uppercase tracking-wide text-ink-400">
-                  Not read by any of this control's workflows
+                  Not a required file on any of this control's attributes
                 </div>
               )}
               <button onClick={() => usable && setPicked(f.name)} disabled={!usable}
@@ -2574,7 +2592,7 @@ function SourcePickerForm({ control, exclude, submitLabel, onSubmit, seedFile, s
                     the list belongs on the row, not in a paragraph above it. */}
                 {wanted && (
                   <span className="shrink-0 inline-flex items-center gap-1 px-1.5 py-0.5 rounded bg-brand-50 text-brand-700 text-[0.59375rem] font-bold whitespace-nowrap">
-                    <WorkflowIcon size={9} /> {wanted.attributes.join(', ')}
+                    <Paperclip size={9} /> {wanted.attributes.join(', ')}
                   </span>
                 )}
                 {f.system && <span className="shrink-0 text-[0.6875rem] text-ink-400 hidden lg:inline">{f.system}</span>}
@@ -2950,8 +2968,8 @@ function PopulationSection({ control, canEdit }: { control: Control; canEdit: bo
             </p>
             {/* ── still owed ──────────────────────────────────────────────────
                 A control with a population can still be short a file: an
-                attribute wired to a workflow that has no input attached owes
-                one, and until this was said here the only place it appeared was
+                attribute still missing a required file owes one, and until
+                this was said here the only place it appeared was
                 the picker — which is closed the moment the first file lands. A
                 gap you can only see while doing something else is a gap nobody
                 chases. */}
@@ -4147,8 +4165,9 @@ function RoundActions({ control, canEdit }: { control: Control; canEdit: boolean
 
 // ── operating section (TOE) — locked until design effective ───────────────────────
 function OperatingSection({ control, canEdit, locked }: { control: Control; canEdit: boolean; locked: boolean }) {
-  const { addAttribute, testAllAttributes } = useIcfr();
+  const { addAttribute, validateReadyAttributes } = useIcfr();
   const logEvent = useAuditLog();
+  const { addToast } = useToast();
   const o = control.operating; const prog = operatingProgress(control);
   const anyFail = o.steps.some(s => stepResult(s) === 'Fail');
   const allTested = o.steps.length > 0 && o.steps.every(s => stepResult(s) !== 'Not tested');
@@ -4156,10 +4175,28 @@ function OperatingSection({ control, canEdit, locked }: { control: Control; canE
   const [testing, setTesting] = useState(false);
   const [newAttr, setNewAttr] = useState('');
   const [addingAttr, setAddingAttr] = useState(false);
-  const wfCount = o.steps.filter(s => s.workflowName).length;
   const attCount = o.steps.filter(s => s.attestEnabled || s.attestation).length;
+  // Only an attribute with every required file in can be validated; the rest
+  // are skipped, and the toast says which and how many files each is short.
+  const ready = o.steps.filter(s => requiredFilesReady(s, control)).length;
+  const untested = o.steps.filter(s => stepResult(s) === 'Not tested').length;
 
-  const runAll = () => { setTesting(true); logEvent({ action: 'Run', description: `Tested all attributes for ${control.id}`, module: 'SOX ICFR', entity: 'Test Result' }); window.setTimeout(() => { testAllAttributes(control.id); setTesting(false); }, 2400); };
+  const runAll = () => {
+    setTesting(true);
+    logEvent({ action: 'Run', description: `Ran AI validation on ${ready} ready attribute(s) for ${control.id}`, module: 'SOX ICFR', entity: 'Test Result' });
+    const skipped = o.steps.filter(s => !requiredFilesReady(s, control)).map(s => {
+      const { uploaded, total } = requiredFilesCount(s, control);
+      const missing = total - uploaded;
+      // an attribute with an empty list isn't short a file — it has none to upload
+      return total === 0 ? `${s.code}: no required files listed` : `${s.code}: ${missing} file${missing === 1 ? '' : 's'} missing`;
+    });
+    window.setTimeout(() => {
+      validateReadyAttributes(control.id);
+      setTesting(false);
+      if (skipped.length) addToast({ type: 'warning', title: `AI validation ran on ${ready} attribute${ready === 1 ? '' : 's'}`, message: skipped.join(' · ') });
+      else addToast({ type: 'success', title: `AI validation ran on all ${ready} attributes`, message: 'The result is on each attribute.' });
+    }, 2400);
+  };
 
   if (locked) {
     return (
@@ -4204,8 +4241,8 @@ function OperatingSection({ control, canEdit, locked }: { control: Control; canE
       <div className="flex items-center justify-between mb-3 gap-3 flex-wrap">
         <h4 className="text-[0.78125rem] font-bold text-ink-700 inline-flex items-center gap-1.5"><ClipboardCheck size={14} /> Test attributes <span className="font-normal text-ink-400">· each evidenced independently</span></h4>
         <div className="flex items-center gap-2">
-          <span className="text-[0.6875rem] text-ink-400 tabular-nums hidden md:inline">{wfCount} workflow · {attCount} attested · {prog.passed} pass · {prog.failed} fail</span>
-          {canEdit && o.steps.length > 0 && <button disabled={testing} onClick={runAll} className="h-8 px-3 inline-flex items-center gap-1.5 rounded-lg bg-evidence-600 text-white text-[0.75rem] font-semibold enabled:hover:bg-evidence-700 disabled:opacity-70 transition-colors cursor-pointer">{testing ? <><Loader2 size={13} className="animate-spin" /> Testing…</> : <><PlayCircle size={14} /> Test attributes</>}</button>}
+          <span className="text-[0.6875rem] text-ink-400 tabular-nums hidden md:inline">{attCount} attested · {prog.passed} pass · {prog.failed} fail</span>
+          {canEdit && o.steps.length > 0 && <button disabled={testing || ready === 0} onClick={runAll} title={ready === 0 ? 'No attribute has all its required files uploaded yet' : undefined} className={cn('h-8 px-3 inline-flex items-center gap-1.5 rounded-lg bg-evidence-600 text-white text-[0.75rem] font-semibold enabled:hover:bg-evidence-700 transition-colors cursor-pointer', testing ? 'disabled:opacity-70' : 'disabled:opacity-40 disabled:cursor-not-allowed')}>{testing ? <><Loader2 size={13} className="animate-spin" /> Validating…</> : <><Sparkles size={14} /> {`Run AI validation on ready attributes (${ready} of ${o.steps.length})`}</>}</button>}
           {canEdit && <button onClick={() => setAddingAttr(a => !a)} className="h-8 px-2.5 inline-flex items-center gap-1.5 rounded-lg border border-canvas-border bg-canvas-elevated text-[0.75rem] font-semibold text-ink-700 hover:border-brand-300 hover:text-brand-700 cursor-pointer"><Plus size={13} /> Add</button>}
         </div>
       </div>
@@ -4216,22 +4253,23 @@ function OperatingSection({ control, canEdit, locked }: { control: Control; canE
         </div>
       )}
       {o.steps.length === 0 ? (
-        <EmptyState icon={<ClipboardCheck size={18} />} title="No test attributes yet" hint="Add the attributes that prove the control operated. Each attribute is evidenced on its own — map a workflow to automate it, or toggle self-attestation for manual evidence.">
+        <EmptyState icon={<ClipboardCheck size={18} />} title="No test attributes yet" hint="Add the attributes that prove the control operated. Each attribute lists the files it needs — once they're uploaded, run AI validation, or record the result yourself.">
           {canEdit && <button onClick={() => setAddingAttr(true)} className="h-8 px-3 inline-flex items-center gap-1.5 rounded-lg bg-brand-600 text-white text-[0.75rem] font-semibold hover:bg-brand-700 cursor-pointer"><Plus size={13} /> Add the first attribute</button>}
         </EmptyState>
       ) : (
-        <div className="space-y-3 mb-5">{o.steps.map(s => <AttributeRow key={s.id} control={control} step={s} canEdit={canEdit} testing={testing && stepResult(s) === 'Not tested'} />)}</div>
+        <div className="space-y-3 mb-5">{o.steps.map(s => <AttributeRow key={s.id} control={control} step={s} canEdit={canEdit} testing={testing && requiredFilesReady(s, control)} />)}</div>
       )}
 
       {/* What a failure opens — and, in the last round, what it closes. Directly
           under the attributes, because that is where the failure was just read. */}
       <RoundActions control={control} canEdit={canEdit} />
 
-      {/* No sample, no opinion. A failing attribute concludes ineffective and the
+      {/* No sample, no opinion — and no effective call while any attribute is
+          still untested. A failing attribute concludes ineffective and the
           exception is raised — remediation and retest happen outside this flow. */}
       {o.steps.length > 0 && <ConcludeFooter control={control} which="operating" suggestion={suggestion} canEdit={canEdit}
-        disableEffective={!o.sampling}
-        disableEffectiveNote={o.sampling ? undefined : 'Locked — draw the sample in step ③ first'} />}
+        disableEffective={!o.sampling || untested > 0}
+        disableEffectiveNote={!o.sampling ? 'Locked — draw the sample in step ③ first' : untested > 0 ? `${untested} attribute${untested === 1 ? ' is' : 's are'} still untested — give each a result first` : undefined} />}
     </div>
   );
 }
