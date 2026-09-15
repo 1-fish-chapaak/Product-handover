@@ -10,12 +10,18 @@ import { ENGAGEMENTS, registerEngagement } from '../../../data/engagements';
  * the existing engagement or SOX workspace data.
  */
 
-export type EntityType = 'Holding' | 'Subsidiary';
+export type EntityType = 'Holding' | 'Subsidiary' | 'Joint venture' | 'Associate' | 'Branch';
+
+/** Every type the entity table's dropdown offers, in the order it lists them. */
+export const ENTITY_TYPES: readonly EntityType[] = ['Holding', 'Subsidiary', 'Joint venture', 'Associate', 'Branch'];
 
 export interface GroupEntity {
   id: string;
   name: string;
   type: EntityType;
+  /** Where the company is incorporated — read off an org chart, or typed on
+   *  the row. Free text: absent until someone says. */
+  country?: string;
   /** Group ownership, % — the DIRECT holding of whoever sits above it. */
   ownership: number;
   /** The entity that holds this one, when it is not held by the listed parent

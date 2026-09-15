@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import {
   ClipboardCheck, Calendar, ArrowUpRight, Search, Plus,
-  Play, Trash2, AlertTriangle, X, LayoutDashboard, List,
+  Trash2, AlertTriangle, X, LayoutDashboard, List,
   Pencil, UserPlus, CheckCircle2, GitBranch, Sparkles,
 } from 'lucide-react';
 import Orb from '../shared/Orb';
@@ -500,15 +500,9 @@ export default function EngagementsView({ onOpenEngagement, onOpenAuditPlanning,
                     )}
                   </div>
 
-                  {/* Actions column */}
+                  {/* Actions column — no ▶ Open icon (feedback #9): it read as
+                      "run", and the whole card already opens the engagement. */}
                   <div className="flex items-start justify-end gap-1">
-                    <IconAction
-                      label="Open engagement"
-                      onClick={(e) => { e.stopPropagation(); onOpenEngagement(eng.id); }}
-                      className="text-text-muted hover:text-primary hover:bg-primary/10"
-                    >
-                      <Play size={14} />
-                    </IconAction>
                     {can('eng_edit') && (
                       <IconAction
                         label="Edit engagement"

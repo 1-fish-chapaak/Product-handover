@@ -8,9 +8,10 @@ import {
 } from 'lucide-react';
 import { useToast } from '../shared/Toast';
 import { useAuditLog } from '../../context/AdminDataContext';
-import type {
-  Engagement, EngType, AutomationSubtype, ProcessCode, EngagementMilestone,
-  EngagementEntity,
+import {
+  uniqueEngagementName,
+  type Engagement, type EngType, type AutomationSubtype, type ProcessCode, type EngagementMilestone,
+  type EngagementEntity,
 } from '../../data/engagements';
 import { OWNER_NAMES, SUB_PROCESSES } from '../../data/grc-domain';
 
@@ -24,6 +25,9 @@ const segIdleCls = 'border-canvas-border bg-white text-ink-600 hover:bg-canvas';
 // ─── Constants ─────────────────────────────────────────────────────────────
 type UIProcess = ProcessCode | 'Cross';
 const PROCESS_OPTIONS: UIProcess[] = ['P2P', 'O2C', 'R2R', 'S2C', 'ITGC', 'Cross'];
+/** Longest name a SOX / ICFR edit accepts (trimmed) — same cap as the SOX
+ *  creation sheet. Checked, never cut: no maxLength on the input. */
+const NAME_MAX = 200;
 
 const FRAMEWORKS = ['SOX ICFR', 'IFC', 'SOC 1', 'SOC 2', 'ISO 27001', 'GDPR', 'Custom'];
 const RACM_VERSIONS = ['v3.2 — May 2025 (current)', 'v3.1 — Feb 2025', 'v3.0 — Nov 2024'];
@@ -255,7 +259,14 @@ export default function CreateEngagementWizard({ onClose, onCreated, initial, on
 
   // ── Validation — every step gates for real, no silent skips ──
   const typeValid = type !== null;
-  const basicsValid = name.trim().length > 0
+  // SOX / ICFR edit only — the SOX creation sheet's name rules: over NAME_MAX
+  // blocks Next, and a name another engagement already uses saves as the next
+  // free "(2)" (never against itself). Other types and creates are untouched.
+  const soxEdit = isEdit && initial?.type === 'SOX / ICFR';
+  const nameTooLong = soxEdit && name.trim().length > NAME_MAX;
+  const finalName = soxEdit ? uniqueEngagementName(name, initial?.id) : name.trim();
+  const nameTaken = soxEdit && finalName !== name.trim();
+  const basicsValid = name.trim().length > 0 && !nameTooLong
     && code.trim().length > 0
     && periodStart !== '' && periodEnd !== '' && periodStart <= periodEnd;
 
@@ -300,7 +311,7 @@ export default function CreateEngagementWizard({ onClose, onCreated, initial, on
     return {
       id: initial?.id ?? `eng-new-${Date.now()}`,
       code: code.trim().toUpperCase(),
-      name: name.trim(),
+      name: finalName,
       description: description.trim(),
       type: type ?? 'Compliance',
       subtype: type === 'Automation' ? autoSubtype : undefined,
@@ -476,6 +487,11 @@ export default function CreateEngagementWizard({ onClose, onCreated, initial, on
                     <label className={labelCls}>Engagement name <span className="text-risk-700">*</span></label>
                     <input type="text" value={name} onChange={e => setName(e.target.value)} placeholder="e.g. P2P — SOX Q3 Testing" className={inputCls} />
                     {name.trim().length === 0 && <Hint text="Name is required" />}
+                    {nameTooLong && <Hint text={`Name must be ${NAME_MAX} characters or fewer — this one is ${name.trim().length}.`} />}
+                    {/* Informational, not an error — a taken name still saves. */}
+                    {nameTaken && !nameTooLong && (
+                      <p className="text-[0.6875rem] text-ink-500 mt-1">An engagement called “{name.trim()}” already exists — this one will be saved as “{finalName}”.</p>
+                    )}
                   </div>
                   <div className="grid grid-cols-2 gap-3">
                     <div>
@@ -889,7 +905,7 @@ export default function CreateEngagementWizard({ onClose, onCreated, initial, on
                   <SectionTitle title={isEdit ? 'Review & save' : 'Review & create'} subtitle="Everything below is carried onto the engagement" />
                   <ReviewSection title="Type & basics" open={openSections.basics} onToggle={() => toggleSection('basics')}>
                     <ReviewRow k="Type" v={type ?? '—'} />
-                    <ReviewRow k="Name" v={name || '—'} />
+                    <ReviewRow k="Name" v={(soxEdit ? finalName : name) || '—'} />
                     <ReviewRow k="Code" v={<span className="font-mono">{code.toUpperCase()}</span>} />
                     <ReviewRow k="Group" v={entity.trim() || '—'} />
                     <ReviewRow k="Entities" v={groupEntities.filter(e => e.name.trim()).map(e => e.name.trim()).join(', ') || '—'} />

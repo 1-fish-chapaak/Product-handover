@@ -8,10 +8,10 @@ import {
 import { SourceChips } from './ProgrammeView';
 import { FormSelect } from '../../shared/FilterSelect';
 import { OWNER_NAMES } from '../../../data/grc-domain';
-import { registerEngagement, type EngType, type ProcessCode } from '../../../data/engagements';
+import { registerEngagement, uniqueEngagementName, type EngType, type ProcessCode } from '../../../data/engagements';
 import { useAuditLog } from '../../../context/AdminDataContext';
 import {
-  BASIS_OPTIONS, BEYOND_TB, QUAL_REASONS, SEED_ENTITIES,
+  BASIS_OPTIONS, BEYOND_TB, ENTITY_TYPES, QUAL_REASONS, SEED_ENTITIES,
   SEED_GROUP_NAME, SEED_QUAL_PICKS, SEED_TB_FILES, captionsForEntities,
   currentFyEnd, cycleYears, deriveRacms, entityShort, fmtCr, genCode,
   type GroupEntity, type MaterialityBasis, type ProcessName, type QualPick,
@@ -62,7 +62,10 @@ const basicsLabelInlineCls = 'text-[0.6875rem] font-bold text-ink-500 uppercase 
  *  chart tells you that a list of names cannot, so each sample carries both.
  *
  *  Entities are authored in the order the chart reads — parent, then everything
- *  held beneath it — because the table indents rather than sorts. */
+ *  held beneath it — because the table indents rather than sorts.
+ *
+ *  Country is the jurisdiction the document gives each company, so it lands
+ *  with the row instead of being typed again. */
 interface SampleChart {
   /** Recognised off the uploaded file's NAME. A prototype stand-in for reading
    *  the document: uploads here carry no bytes, so the filename is the only
@@ -77,18 +80,20 @@ const MERIDIAN_CHART: SampleChart = {
   match: /meridian/i,
   groupName: 'Meridian Global Holdings, Inc. (NYSE: MGH)',
   entities: [
-    { id: 'ent-mgh', name: 'Meridian Global Holdings, Inc.', type: 'Holding', ownership: 100 },
-    { id: 'ent-mfs', name: 'Meridian Freight Systems LLC', type: 'Subsidiary', ownership: 100, parentId: 'ent-mgh' },
-    { id: 'ent-mtm', name: 'Meridian Trucking Midwest LLC', type: 'Subsidiary', ownership: 100, parentId: 'ent-mfs' },
-    { id: 'ent-mlm', name: 'Meridian Last Mile LLC', type: 'Subsidiary', ownership: 80, parentId: 'ent-mfs' },
-    { id: 'ent-mac', name: 'Meridian Air Cargo, Inc.', type: 'Subsidiary', ownership: 100, parentId: 'ent-mgh' },
-    { id: 'ent-macc', name: 'Meridian Air Cargo Canada ULC', type: 'Subsidiary', ownership: 100, parentId: 'ent-mac' },
-    { id: 'ent-mcs', name: 'Meridian Charter Services LLC', type: 'Subsidiary', ownership: 100, parentId: 'ent-mac' },
-    { id: 'ent-mle', name: 'Meridian Logistics Europe B.V.', type: 'Subsidiary', ownership: 100, parentId: 'ent-mgh' },
-    { id: 'ent-mld', name: 'Meridian Logistics Deutschland GmbH', type: 'Subsidiary', ownership: 100, parentId: 'ent-mle' },
-    { id: 'ent-mlf', name: 'Meridian Logistics France SAS', type: 'Subsidiary', ownership: 95, parentId: 'ent-mle' },
-    { id: 'ent-mps', name: 'Meridian Port Services LLC', type: 'Subsidiary', ownership: 74, parentId: 'ent-mgh' },
-    { id: 'ent-gto', name: 'Gulf Terminal Operations LLC', type: 'Subsidiary', ownership: 100, parentId: 'ent-mps' },
+    { id: 'ent-mgh', name: 'Meridian Global Holdings, Inc.', type: 'Holding', ownership: 100, country: 'United States' },
+    { id: 'ent-mfs', name: 'Meridian Freight Systems LLC', type: 'Subsidiary', ownership: 100, parentId: 'ent-mgh', country: 'United States' },
+    { id: 'ent-mtm', name: 'Meridian Trucking Midwest LLC', type: 'Subsidiary', ownership: 100, parentId: 'ent-mfs', country: 'United States' },
+    { id: 'ent-mlm', name: 'Meridian Last Mile LLC', type: 'Subsidiary', ownership: 80, parentId: 'ent-mfs', country: 'United States' },
+    { id: 'ent-mac', name: 'Meridian Air Cargo, Inc.', type: 'Subsidiary', ownership: 100, parentId: 'ent-mgh', country: 'United States' },
+    { id: 'ent-macc', name: 'Meridian Air Cargo Canada ULC', type: 'Subsidiary', ownership: 100, parentId: 'ent-mac', country: 'Canada' },
+    { id: 'ent-mcs', name: 'Meridian Charter Services LLC', type: 'Subsidiary', ownership: 100, parentId: 'ent-mac', country: 'United States' },
+    { id: 'ent-mle', name: 'Meridian Logistics Europe B.V.', type: 'Subsidiary', ownership: 100, parentId: 'ent-mgh', country: 'Netherlands' },
+    { id: 'ent-mld', name: 'Meridian Logistics Deutschland GmbH', type: 'Subsidiary', ownership: 100, parentId: 'ent-mle', country: 'Germany' },
+    { id: 'ent-mlf', name: 'Meridian Logistics France SAS', type: 'Subsidiary', ownership: 95, parentId: 'ent-mle', country: 'France' },
+    { id: 'ent-mps', name: 'Meridian Port Services LLC', type: 'Subsidiary', ownership: 74, parentId: 'ent-mgh', country: 'United States' },
+    // Not the Gulf states the name suggests — the chart puts it in Texas, USA,
+    // beside the port operation that holds it.
+    { id: 'ent-gto', name: 'Gulf Terminal Operations LLC', type: 'Subsidiary', ownership: 100, parentId: 'ent-mps', country: 'United States' },
   ],
 };
 
@@ -103,14 +108,14 @@ const ALTURA_CHART: SampleChart = {
   match: /altura/i,
   groupName: 'Altura Infra Holdings Ltd (Listed)',
   entities: [
-    { id: 'ent-aih', name: 'Altura Infra Holdings Limited', type: 'Holding', ownership: 100 },
-    { id: 'ent-aso', name: 'Altura Solar One Pvt Ltd', type: 'Subsidiary', ownership: 100, parentId: 'ent-aih' },
-    { id: 'ent-awt', name: 'Altura Wind Two Pvt Ltd', type: 'Subsidiary', ownership: 100, parentId: 'ent-aih' },
-    { id: 'ent-aro', name: 'Altura Roadways Pvt Ltd', type: 'Subsidiary', ownership: 100, parentId: 'ent-aih' },
-    { id: 'ent-atr', name: 'Altura Transmission Pvt Ltd', type: 'Subsidiary', ownership: 74, parentId: 'ent-aih' },
-    { id: 'ent-asm', name: 'Altura Smart Metering Pvt Ltd', type: 'Subsidiary', ownership: 100, parentId: 'ent-atr' },
-    { id: 'ent-awu', name: 'Altura Water Utilities Pvt Ltd', type: 'Subsidiary', ownership: 51, parentId: 'ent-aih' },
-    { id: 'ent-alp', name: 'Altura Logistics Parks Pvt Ltd', type: 'Subsidiary', ownership: 100, parentId: 'ent-aih' },
+    { id: 'ent-aih', name: 'Altura Infra Holdings Limited', type: 'Holding', ownership: 100, country: 'India' },
+    { id: 'ent-aso', name: 'Altura Solar One Pvt Ltd', type: 'Subsidiary', ownership: 100, parentId: 'ent-aih', country: 'India' },
+    { id: 'ent-awt', name: 'Altura Wind Two Pvt Ltd', type: 'Subsidiary', ownership: 100, parentId: 'ent-aih', country: 'India' },
+    { id: 'ent-aro', name: 'Altura Roadways Pvt Ltd', type: 'Subsidiary', ownership: 100, parentId: 'ent-aih', country: 'India' },
+    { id: 'ent-atr', name: 'Altura Transmission Pvt Ltd', type: 'Subsidiary', ownership: 74, parentId: 'ent-aih', country: 'India' },
+    { id: 'ent-asm', name: 'Altura Smart Metering Pvt Ltd', type: 'Subsidiary', ownership: 100, parentId: 'ent-atr', country: 'India' },
+    { id: 'ent-awu', name: 'Altura Water Utilities Pvt Ltd', type: 'Subsidiary', ownership: 51, parentId: 'ent-aih', country: 'India' },
+    { id: 'ent-alp', name: 'Altura Logistics Parks Pvt Ltd', type: 'Subsidiary', ownership: 100, parentId: 'ent-aih', country: 'India' },
   ],
 };
 
@@ -277,6 +282,10 @@ const PROCESS_NAMES: ProcessName[] = [
   'Payroll (Hire to Retire)', 'Treasury', 'Tax',
 ];
 
+/** Longest engagement name Basics accepts (trimmed). Checked, never cut — a
+ *  maxLength would silently clip a pasted name and the user would never see why. */
+const NAME_MAX = 200;
+
 interface Props {
   onCancel: () => void;
   onCreated: (p: SoxProgramme) => void;
@@ -415,6 +424,13 @@ export default function ScopingWizard({ onCancel, onCreated, typePreselected, on
     // eslint-disable-next-line react-hooks/exhaustive-deps
     [inScope]);
 
+  // Name checks. Too long blocks Continue; a name already in the library does
+  // not — it saves as the next free "(2)", and Basics says so before it does.
+  // The suggested name counts too: it can collide before anyone types.
+  const nameTooLong = name.trim().length > NAME_MAX;
+  const finalName = uniqueEngagementName(name);
+  const nameTaken = finalName !== name.trim();
+
   const canContinue = [
     // Type — this journey only continues for SOX / ICFR.
     type === 'SOX / ICFR',
@@ -422,7 +438,7 @@ export default function ScopingWizard({ onCancel, onCreated, typePreselected, on
     // Scoping parked this is the only step that collects entities, so it gates
     // on them: at least one named row, or the company itself via the checkbox.
     // RACMs stay optional — an entity can be listed before its matrix exists.
-    name.trim().length > 0 && code.trim().length > 0 && groupName.trim().length > 0
+    name.trim().length > 0 && !nameTooLong && code.trim().length > 0 && groupName.trim().length > 0
       && entities.length > 0 && entities.every(e => e.name.trim()),
     // Scoping (parked) — every required document needs at least one attached
     // file (RACM / TB attachments trigger the parses that fill the table). With
@@ -510,7 +526,15 @@ export default function ScopingWizard({ onCancel, onCreated, typePreselected, on
       const kept = existing
         .filter(e => !swap.has(e.id))
         .map(e => (e.parentId && swap.has(e.parentId) ? { ...e, parentId: swap.get(e.parentId) } : e));
-      return [...src.entities.map(e => ({ ...e })), ...kept];
+      // The chart's row wins — except for a country the user typed on theirs.
+      // An extraction fills a blank; it does not overwrite an answer.
+      return [
+        ...src.entities.map(e => {
+          const mine = byName.get(e.name.toLowerCase());
+          return mine?.country?.trim() ? { ...e, country: mine.country } : { ...e };
+        }),
+        ...kept,
+      ];
     }
     const adopted = new Map<string, string>(); // the chart's row id → the user's
     src.entities.forEach(e => {
@@ -520,7 +544,14 @@ export default function ScopingWizard({ onCancel, onCreated, typePreselected, on
     const fresh = src.entities
       .filter(e => !byName.has(e.name.toLowerCase()))
       .map(e => ({ ...e, parentId: e.parentId ? adopted.get(e.parentId) ?? e.parentId : undefined }));
-    return [...existing, ...fresh];
+    // The user's row stays as typed; only a country it was left without is
+    // taken from the chart.
+    const filled = existing.map(mine => {
+      if (mine.country?.trim()) return mine;
+      const theirs = src.entities.find(e => e.name.toLowerCase() === mine.name.trim().toLowerCase());
+      return theirs?.country ? { ...mine, country: theirs.country } : mine;
+    });
+    return [...filled, ...fresh];
   };
 
   const resolveClash = (mode: 'adopt' | 'replace') => {
@@ -762,7 +793,8 @@ export default function ScopingWizard({ onCancel, onCreated, typePreselected, on
     registerEngagement({
       id,
       code: code.trim().toUpperCase(),
-      name: name.trim(),
+      // the suffixed name when the typed one is taken — the same one Basics promised
+      name: finalName,
       description: description.trim() || `SOX 404 / ICFR programme — ${entities.length} ${entities.length === 1 ? 'company' : 'companies'} in scope; RACMs added from the RACM tab.`,
       type: 'SOX / ICFR',
       soxConfig: {
@@ -798,14 +830,14 @@ export default function ScopingWizard({ onCancel, onCreated, typePreselected, on
     });
     logEvent({
       action: 'Create',
-      description: `Created SOX ICFR engagement "${name.trim()}" — ${entities.length} companies in scope, no RACM yet, materiality ${fmtCr(overallCr)}`,
+      description: `Created SOX ICFR engagement "${finalName}" — ${entities.length} companies in scope, no RACM yet, materiality ${fmtCr(overallCr)}`,
       module: 'SOX ICFR',
       entity: 'Engagement',
     });
     const programme: SoxProgramme = {
       id,
       engagementId: id,
-      name: name.trim(),
+      name: finalName,
       code: code.trim().toUpperCase(),
       owner,
       fy,
@@ -945,6 +977,11 @@ export default function ScopingWizard({ onCancel, onCreated, typePreselected, on
                   <p className="text-[0.6875rem] text-ink-500 mt-1">Suggested from the group — edit if your team names them differently.</p>
                 )}
                 {name.trim().length === 0 && <Hint text="Name is required" />}
+                {nameTooLong && <Hint text={`Name must be ${NAME_MAX} characters or fewer — this one is ${name.trim().length}.`} />}
+                {/* Informational, not an error — a taken name still continues. */}
+                {nameTaken && !nameTooLong && (
+                  <p className="text-[0.6875rem] text-ink-500 mt-1">An engagement called “{name.trim()}” already exists — this one will be saved as “{finalName}”.</p>
+                )}
               </div>
               <div className="grid grid-cols-2 gap-3">
                 <div>
@@ -1167,8 +1204,8 @@ export default function ScopingWizard({ onCancel, onCreated, typePreselected, on
                   <p className="flex items-start gap-1.5 text-[11px] text-compliant-700 mb-1.5">
                     <Sparkles size={11} className="shrink-0 mt-0.5" />
                     <span>
-                      Read {chart.entities.length} companies off the chart — check the names and types before
-                      you continue.
+                      Read {chart.entities.length} companies off the chart — check the names, types and
+                      countries before you continue.
                     </span>
                   </p>
                 )}
@@ -1192,17 +1229,26 @@ export default function ScopingWizard({ onCancel, onCreated, typePreselected, on
                     the 1px border) so nothing squares off without the clip. */}
                 <div className="border border-border-light rounded-xl bg-white">
                   {/* PARKED (user ask): the "Processes — extracted" column.
-                      Grid was [2.6fr_0.95fr_1.05fr_34px] with a
-                      <div>Processes — extracted</div> header cell here and the
-                      per-row cell below; both are commented out in place, and
-                      `entityProcesses` / `manualProcs` / `applyManualProcs` stay
-                      wired so restoring is uncommenting three blocks and putting
-                      the third column back in the two grids.
+                      With it, the grid was [2.6fr_0.95fr_1.05fr_34px] —
+                      Entity | Type | Processes | remove, before Country
+                      existed. A <div>Processes — extracted</div> header cell
+                      sits commented out here and the per-row cell below;
+                      `entityProcesses` / `manualProcs` / `applyManualProcs`
+                      stay wired, so restoring is uncommenting three blocks and
+                      adding a fifth track to both grids (after Country, before
+                      the 34px remove column) — take its width from the entity
+                      track, or the Type labels start to clip.
 
-                      Its width goes to the entity name, which is the row's
-                      identity and was clipping the longest ones. */}
-                  <div className="grid grid-cols-[2.8fr_0.95fr_34px] gap-2.5 px-4 py-2 rounded-t-[11px] text-[10.5px] uppercase tracking-wider font-semibold text-text-muted/80 border-b border-border-light bg-surface-2/50">
-                    <div>Entity</div><div>Type</div>{/* <div>Processes — extracted</div> */}<div />
+                      Its width went to the entity name, which is the row's
+                      identity and was clipping the longest ones.
+
+                      Country (user ask) took some of it back. The tracks are
+                      sized off the sheet's ~414px of usable row width: Type
+                      ≈114px is the least that shows "Joint venture" whole in
+                      the compact dropdown, Country ≈83px fits "United States",
+                      and everything else stays with the entity name. */}
+                  <div className="grid grid-cols-[2.1fr_1.1fr_0.8fr_34px] gap-2.5 px-4 py-2 rounded-t-[11px] text-[10.5px] uppercase tracking-wider font-semibold text-text-muted/80 border-b border-border-light bg-surface-2/50">
+                    <div>Entity</div><div>Type</div><div>Country</div>{/* <div>Processes — extracted</div> */}<div />
                   </div>
                   {entities.length === 0 && (
                     <div className="px-4 py-6 text-center text-[12px] text-text-muted border-b border-border-light">
@@ -1239,7 +1285,7 @@ export default function ScopingWizard({ onCancel, onCreated, typePreselected, on
                     <div key={ent.id} className="border-b border-border-light last:border-b-0">
                       {/* py, not pt: the RACM line under each row used to supply
                           the bottom padding and is parked. */}
-                      <div className="grid grid-cols-[2.8fr_0.95fr_34px] gap-2.5 px-4 py-2.5 items-center">
+                      <div className="grid grid-cols-[2.1fr_1.1fr_0.8fr_34px] gap-2.5 px-4 py-2.5 items-center">
                       {/* Indented by its depth in the chain, so the table keeps
                           the shape the chart had instead of flattening twelve
                           companies into twelve peers. */}
@@ -1274,16 +1320,29 @@ export default function ScopingWizard({ onCancel, onCreated, typePreselected, on
                       ) : (
                         <FormSelect
                           value={ent.type}
-                          options={['Holding', 'Subsidiary']}
+                          options={ENTITY_TYPES}
                           onChange={v => setEntities(prev => prev.map((x, j) => j === i ? { ...x, type: v as GroupEntity['type'] } : x))}
                           className={rowSelectCls}
                           ariaLabel={`Type for ${ent.name || `entity ${i + 1}`}`}
                           menuCls="w-full min-w-[150px]"
                         />
                       )}
+                      {/* Editable on every row — imported, hand-added and the
+                          company's own — since a chart can be wrong about it
+                          and a typed row starts without one. min-w-0: an input
+                          otherwise holds its column at its default width. */}
+                      <input
+                        value={ent.country ?? ''}
+                        onChange={e => setEntities(prev => prev.map((x, j) => j === i ? { ...x, country: e.target.value } : x))}
+                        placeholder="Country"
+                        aria-label={`Country for ${ent.name.trim() || `entity ${i + 1}`}`}
+                        title={ent.country}
+                        className="w-full min-w-0 text-[12px] text-text-secondary bg-transparent outline-none border-b border-transparent focus:border-primary/40 transition-colors py-0.5"
+                      />
                       {/* PARKED (user ask): the per-row "Processes — extracted"
-                          cell. Uncomment with its header cell and the third
-                          column in both grids to bring it back.
+                          cell. Uncomment with its header cell and a fifth
+                          track in both grids to bring it back (see the header
+                          note). It sits after Country, matching the header.
 
                       {(() => {
                         // A parsed RACM speaks for its own entity, whoever added it.
@@ -1834,6 +1893,8 @@ export default function ScopingWizard({ onCancel, onCreated, typePreselected, on
                   <div key={e.id} className="flex items-center gap-1.5 text-[11.5px] text-text-secondary py-0.5 min-w-0">
                     {e.type === 'Holding' ? <Landmark size={11} className="text-brand-700 shrink-0" /> : <Building2 size={11} className="text-text-muted shrink-0" />}
                     <span className="truncate">{e.name}</span>
+                    {/* Its own span so a long name truncates before the country does. */}
+                    {e.country?.trim() && <span className="shrink-0">· {e.country.trim()}</span>}
                     {/* Say plainly whether the matrix is in — a missing RACM is
                         the thing that stalls the engagement later. */}
                     {entityRacm[e.id]
