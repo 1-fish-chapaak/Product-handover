@@ -15,7 +15,7 @@ import {
 } from '../audit/sox-testing/soxTestingData';
 import { auditStatus } from './auditPortfolio';
 import {
-  auditCovers, chainDepth, COVERAGE_TARGET, type DerivedScopeRow, deriveEntityScope,
+  auditCovers, chainDepth, COVERAGE_TARGET, programmeFor, type DerivedScopeRow, deriveEntityScope,
   entitiesFor, entitiesInFiles, entityTotals, materialAccounts, mergeScopeEntities, normaliseProcess,
   type ProcessScopeRow, recommendProcesses, SOX_MAPPING_PROCESSES,
 } from './auditScope';
@@ -33,6 +33,14 @@ import { cn } from '../../lib/cn';
 /**
  * New audit — the wizard behind the New audit button on the Overview and the
  * SOX audit tab.
+ *
+ * Audit period → Review (S11 follow-up, user ask). Materiality, the trial
+ * balance and scoping are done once, when the engagement is created, so an audit
+ * no longer asks for them: it tests every control in the engagement's Control
+ * Library (the ones scoped at creation plus any added since with Add RACM) and
+ * takes its materiality and TB / GL from the engagement. The two steps that used
+ * to sit in between are PARKED behind SCOPING_STEPS below; what follows
+ * describes them as they were.
  *
  * Period → Materiality & files → Scope → Review (user ask). Materiality leads
  * because that is the order the work happens in: you set the threshold, load the
@@ -55,7 +63,14 @@ import { cn } from '../../lib/cn';
  * controls, the same equivalence Racm.tsx and createRacm() work from.
  */
 
-const STEPS = ['Audit period', 'Materiality & files', 'Scope', 'Review'] as const;
+/** PARKED (S11 follow-up): Materiality & files and Scope. Scoping moved to
+ *  engagement creation. Flip back to true to restore both steps — their blocks,
+ *  gates and footer hints are all behind this flag, and create() goes back to
+ *  building the scope from them. */
+const SCOPING_STEPS = false;
+const STEPS: readonly string[] = SCOPING_STEPS
+  ? ['Audit period', 'Materiality & files', 'Scope', 'Review']
+  : ['Audit period', 'Review'];
 const REVIEW = STEPS.length - 1;
 
 const inputCls = 'w-full px-3 py-2 text-[13px] border border-canvas-border rounded-lg bg-white text-ink-900 outline-none focus:border-brand-400 focus:ring-2 focus:ring-brand-500/10 transition-all';
@@ -372,6 +387,34 @@ export default function NewAuditWizard({ onClose, prefillFrom }: {
     : { basisLabel: basisOpt.label, benchmark, pct, pmPct, ctPct, overall };
   const matPerf = matFinal.overall * matFinal.pmPct / 100;
   const matTrivial = matFinal.overall * matFinal.ctPct / 100;
+
+  // ── From the engagement (S11 follow-up) ──────────────────────────────────
+  // What the audit is created with now the wizard no longer asks: the rule and
+  // files set when the engagement was created. The programme record holds them
+  // (every SOX engagement has one, created or back-filled); an engagement
+  // without one falls back to its own thresholds, stored in rupees.
+  const programme = useMemo(() => programmeFor(eng.id), [eng.id]);
+  const engMat = useMemo(() => {
+    const m = programme?.materiality;
+    if (m) return { basisLabel: m.benchmarkLabel, benchmark: m.benchmark, pct: m.pct, pmPct: m.pmPct, ctPct: m.cttPct, overall: m.overall };
+    const overallCr = eng.materiality / 10_000_000;
+    return {
+      basisLabel: 'Overall materiality', benchmark: overallCr, pct: 100, overall: overallCr,
+      pmPct: eng.materiality ? Math.round(eng.performanceMateriality / eng.materiality * 100) : 75,
+      ctPct: eng.materiality ? Math.round(eng.rules.clearlyTrivial / eng.materiality * 100) : 5,
+    };
+  }, [programme, eng.materiality, eng.performanceMateriality, eng.rules.clearlyTrivial]);
+  const engFiles = useMemo<{ name: string; kind: 'tb' | 'gl' }[]>(() => {
+    if (programme?.scoping?.files.length) return programme.scoping.files;
+    const tbs = Array.from(new Set((programme?.entities ?? []).map(e => e.tbFile).filter((f): f is string => !!f)));
+    return tbs.map(name => ({ name, kind: 'tb' as const }));
+  }, [programme]);
+  /** Every control the audit will test — the whole Control Library, by process. */
+  const libraryByProcess = useMemo(() => {
+    const map = new Map<string, number>();
+    eng.controls.forEach(c => map.set(c.process, (map.get(c.process) ?? 0) + 1));
+    return Array.from(map, ([process, count]) => ({ process, count })).sort((a, b) => a.process.localeCompare(b.process));
+  }, [eng.controls]);
 
   // ── Scope ────────────────────────────────────────────────────────────────
   const [scopeKind, setScopeKind] = useState<AuditScopeKind>('entity');
@@ -831,6 +874,7 @@ export default function NewAuditWizard({ onClose, prefillFrom }: {
   // — the account mapping and the Scope step's recommendation both read it. The
   // general ledger never holds Continue.
   const canContinue = step === 0 ? periodValid
+    : !SCOPING_STEPS ? true
     // Roll-forward inherits the rule read-only, so its materiality half has
     // nothing to answer — the step is only its (optional) files.
     : step === 1 ? (round === 'rollforward' || (hasTb && benchmark > 0 && (basis === 'custom' || pct > 0)))
@@ -860,6 +904,36 @@ export default function NewAuditWizard({ onClose, prefillFrom }: {
      *  stored as hand-picked controlIds so the covers() precedence does the rest. */
     const rfIds = [...rfPicked, ...rfFailed.map(v => v.id)];
     const rfNames = Array.from(new Set(parentVerdicts.filter(v => rfIds.includes(v.id)).map(v => v.process)));
+    if (!SCOPING_STEPS) {
+      // S11 follow-up: every control in the Control Library, whatever the round —
+      // a roll-forward too. createAudit still carries an effective interim design
+      // forward and resets the rest; it just carries it across the whole library.
+      createAudit({
+        period: periodLabel,
+        yearBasis,
+        fiscalYear: year,
+        periodSpan,
+        round,
+        windowFrom,
+        windowTo,
+        rolledFromId: isRf ? parent!.id : undefined,
+        scopeKind: 'racm',
+        scopeNames: libraryByProcess.map(p => p.process),
+        scopeIds: [],
+        controlIds: eng.controls.map(c => c.id),
+        files: engFiles,
+        materiality: { basisLabel: engMat.basisLabel, benchmark: engMat.benchmark, pct: engMat.pct, pmPct: engMat.pmPct, ctPct: engMat.ctPct },
+        overall: engMat.overall,
+        sampling: sampFinal,
+      });
+      addToast({
+        type: 'success',
+        title: 'Audit created',
+        message: `${periodLabel}${isRf ? ` roll-forward from the ${parent!.period} interim` : ''} — ${eng.controls.length} control${eng.controls.length === 1 ? '' : 's'} across ${libraryByProcess.length} process${libraryByProcess.length === 1 ? '' : 'es'}.`,
+      });
+      onClose();
+      return;
+    }
     createAudit({
       period: periodLabel,
       // A real fy/cy again — the 'custom' this used to stamp kept every audit
@@ -1273,7 +1347,7 @@ export default function NewAuditWizard({ onClose, prefillFrom }: {
         {/* No StepShell here (user ask): the step title and strapline were removed.
             The rail above already names the step, and each half carries its own
             heading, so a third layer of titling was just noise. */}
-        {step === 1 && (
+        {SCOPING_STEPS && step === 1 && (
           <div>
             {/* Files lead (user ask): the trial balance is what the threshold
                 below gets applied TO, so it is loaded first. Required now for
@@ -1575,7 +1649,7 @@ export default function NewAuditWizard({ onClose, prefillFrom }: {
             carry controls the parent interim tested and concluded effective.
             The list is narrowable, never widenable: what failed or went
             untested is shown excluded, each with its reason. */}
-        {step === 2 && round === 'rollforward' && parent && (
+        {SCOPING_STEPS && step === 2 && round === 'rollforward' && parent && (
           <StepShell title="What this audit covers" sub={`What the ${parent.period} interim proved carries forward, and what it failed comes along for a full retest — with its open findings.`}>
             <p className="mb-2 px-1 text-[11px] text-ink-500">
               <span className="font-semibold text-ink-900 tabular-nums">{rfPicked.length}</span> of {rfEffective.length} effective control{rfEffective.length === 1 ? '' : 's'} carried forward
@@ -1676,7 +1750,7 @@ export default function NewAuditWizard({ onClose, prefillFrom }: {
           </StepShell>
         )}
 
-        {step === 2 && !(round === 'rollforward' && parent) && (
+        {SCOPING_STEPS && step === 2 && !(round === 'rollforward' && parent) && (
           <StepShell title="What this audit covers" sub="Scope by entity or by RACM — one or the other, then pick as many as the audit covers.">
             {/* ── Processes (A34b / A34c) ─────────────────────────────────────
                 Above the entity / RACM choice, because it holds for both: Ira's
@@ -2255,6 +2329,30 @@ export default function NewAuditWizard({ onClose, prefillFrom }: {
               )}
               <ReviewRow label="Window" value={windowFrom && windowTo ? `${fmtDate(windowFrom)} – ${fmtDate(windowTo)}` : '—'} />
               <ReviewRow label="Sampling" value={<>{sampFinal.method} <span className="font-normal text-ink-400">· {spreadPhrase(sampFinal.spread)}{round === 'rollforward' ? ' · from parent' : ''}</span></>} />
+              {/* S11 follow-up — what the engagement already settled, read-only:
+                  the rule and files set when it was created, and the whole
+                  Control Library as the scope. */}
+              {!SCOPING_STEPS && (
+                <>
+                  <ReviewRow label="Materiality" value={<>{money(engMat.overall)} <span className="font-normal text-ink-400">· {engMat.basisLabel}</span></>} />
+                  <ReviewRow label="Performance materiality" value={<>{money(engMat.overall * engMat.pmPct / 100)} <span className="font-normal text-ink-400">· {engMat.pmPct}% of overall</span></>} />
+                  <ReviewRow label="Clearly trivial" value={<>{money(engMat.overall * engMat.ctPct / 100)} <span className="font-normal text-ink-400">· {engMat.ctPct}% of overall</span></>} />
+                  <ReviewRow label="TB / GL" value={engFiles.length === 0 ? <span className="font-normal text-ink-400">None on the engagement</span> : engFiles.map(f => f.name).join(', ')} />
+                  <p className="text-[0.6875rem] text-ink-400 -mt-1 mb-2">Materiality and the trial balance were set when the engagement was created.</p>
+                  <ReviewRow
+                    label="Controls"
+                    value={<>
+                      {eng.controls.length} <span className="font-normal text-ink-400">· every control in the Control Library</span>
+                      <span className="block space-y-0.5 mt-1">
+                        {libraryByProcess.map(p => (
+                          <span key={p.process} className="block text-[0.6875rem] font-normal text-ink-500">{p.process} · {p.count}</span>
+                        ))}
+                      </span>
+                    </>}
+                  />
+                </>
+              )}
+              {SCOPING_STEPS && <>
               {/* matFinal, not the step's inputs — a roll-forward reviews the
                   rule it will actually be created with: its parent's. */}
               <ReviewRow label="Materiality" value={<>₹{matFinal.overall} Cr <span className="font-normal text-ink-400">· {matFinal.basisLabel}{round === 'rollforward' ? ' · from parent' : ''}</span></>} />
@@ -2350,6 +2448,7 @@ export default function NewAuditWizard({ onClose, prefillFrom }: {
                   )}
                 />
               )}
+              </>}
             </div>
           </StepShell>
         )}
@@ -2369,16 +2468,16 @@ export default function NewAuditWizard({ onClose, prefillFrom }: {
         <div className="flex items-center gap-2">
           {/* Says what the greyed button is waiting for. Without it a disabled
               Continue is a dead end — the boxes are further up the scroll. */}
-          {step === 1 && round !== 'rollforward' && !hasTb && (
+          {SCOPING_STEPS && step === 1 && round !== 'rollforward' && !hasTb && (
             <span className="text-[0.71875rem] text-high-700 font-medium">Upload a trial balance to continue</span>
           )}
           {/* A process that can't be tested outranks a missing note — it names
               what to upload, which the boxes further up don't. */}
-          {step === 2 && round !== 'rollforward' && noRacmInScope.length > 0 ? (
+          {SCOPING_STEPS && step === 2 && round !== 'rollforward' && noRacmInScope.length > 0 ? (
             <span className="text-[0.71875rem] text-high-700 font-medium text-right">
               {noRacmInScope.join(', ').replace(/, ([^,]*)$/, ' and $1')} {noRacmInScope.length === 1 ? 'has' : 'have'} no RACM
             </span>
-          ) : step === 2 && notesDue > 0 && (
+          ) : SCOPING_STEPS && step === 2 && notesDue > 0 && (
             <span className="text-[0.71875rem] text-high-700 font-medium">
               {notesDue} change{notesDue === 1 ? '' : 's'} need{notesDue === 1 ? 's' : ''} a note
             </span>

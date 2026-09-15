@@ -903,18 +903,11 @@ export default function EngagementOverview() {
           className="md:col-span-6 lg:col-span-2"
           kind="Masters"
           title="Shared across every audit"
-          caption="Maintained once here, consumed by each audit."
+          caption="Set up once for this engagement, used by each audit."
         >
           <div className="-mx-4 px-4 border-t border-canvas-border divide-y divide-canvas-border">
-            <MasterRow
-              icon={Table2}
-              title="RACM"
-              body="Risks and the controls that answer them."
-              count={`${processes.length || eng.controls.length} matrices`}
-              /* The RACM tab is parked (S11) — the engagement's copy of its
-                 RACMs is its Control Library, so that is where this lands. */
-              onClick={() => setTab('controls')}
-            />
+            {/* No RACM row (S11 follow-up): RACMs live on the Engagements page and
+                the engagement keeps only the controls it copied — the row below. */}
             <MasterRow
               icon={Layers}
               title="Control library"

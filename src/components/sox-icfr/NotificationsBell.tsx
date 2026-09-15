@@ -233,11 +233,11 @@ export default function NotificationsBell() {
       if (pending > 0) {
         out.push({
           id: 'review-racm', kind: 'review',
-          title: `${pending} RACM row${pending === 1 ? '' : 's'} awaiting your review`,
-          detail: 'Approve each row or leave a remark for the risk owner.',
-          // The RACM tab is parked (S11) — the rows under review are the
-          // engagement's own copies, which live in its Control Library.
-          onOpen: () => { setOpen(false); setTab('controls'); },
+          title: `${pending} control${pending === 1 ? '' : 's'} awaiting your review`,
+          detail: 'Approve each control or leave a remark for the risk owner, before testing starts.',
+          // The RACM tab is parked (S11) — pre-testing review happens on the
+          // Control Library's rows, so land there on the pending ones.
+          onOpen: () => { setOpen(false); openRegister({ view: 'pending-review' }); },
         });
       }
       // ── the plan is up and waiting on the auditor's one say in it: does it
@@ -276,7 +276,7 @@ export default function NotificationsBell() {
       }
     }
     return out;
-  }, [eng, role, meOwner, openControl, setTab, setView, openAudit]);
+  }, [eng, role, meOwner, openControl, openRegister, setTab, setView, openAudit]);
 
   const urgent = items.filter(i => i.kind === 'ineffective').length;
   // The badge tells the truth even where the list truncates: the "+N more"
