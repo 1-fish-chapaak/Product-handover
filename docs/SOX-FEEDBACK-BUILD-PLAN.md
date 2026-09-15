@@ -10,6 +10,18 @@
 - **A4 Delete RACM:** blocked while any audit covers its controls (menu item disabled with the reason); otherwise confirm → delete.
 - **A4 Version history:** parked. **View SOP** appears only on RACMs made from an SOP and opens the uploaded file for the session.
 
+## S2 decisions (15 Sep)
+- **A1/A2 name checks:** on the SOX New engagement sheet (Basics) and on Edit engagement for SOX engagements only. Other engagement types don't change.
+  - Over 200 characters → red error, Continue / Next blocked.
+  - A name already used by any engagement in the list → grey note "…will be saved as “X (2)”", and it saves with the next free number.
+- **A3 Country + types:** only the SOX New engagement sheet's entity table. Edit engagement's "Group & entities" table doesn't change.
+  - Types: Holding, Subsidiary, Joint venture, Associate, Branch.
+  - Country column: editable, filled from the org chart import (Meridian per its chart, Altura = India) and never overwrites a typed country.
+- **R1:** the ▶ icon is removed from engagement cards; clicking the card still opens it.
+- **Left open, not built:**
+  - The ownership note ("74% owned") and New audit scoping treat Joint venture / Associate / Branch the same as a Subsidiary.
+  - The hidden Configuration screen's entity type list still has only Holding / Subsidiary.
+
 ## What changed in revision 3 (your answers to D1–D12)
 - **Parked:** A18 design parameters (D1), A27 PDF population (D8), A35 three scope buckets (D5), and scoping at Create engagement (D4).
 - **Dropped:** C8, the walkthrough card. A walkthrough doc is just a design element that evidences the checks (D7).
@@ -223,9 +235,9 @@ Already there in New audit (confirmed in `sox-icfr/NewAuditWizard.tsx`): Audit p
 | Stage | Rows |
 |---|---|
 | S0 Prerequisites | C12 ✅ built 15 Sep (C1 removed: not a real issue) |
-| S1 Remove workflows + new TOE | R5, R6, T1–T7 ✅ built 15 Sep (not committed). Import-time split + its review screen land with A5 in S3; defaults are read off each attribute's wording and its control's activity until then. |
-| S2 Create engagement + list | A1–A3, R1 |
-| S3 RACM tab: RACM/SOP import review, prompt step, row actions | C1, A4 (version history parked), A5–A10, R2, A13/R7 ✅ built 15 Sep (not committed; build passes; on-screen check skipped at your call) |
+| S1 Remove workflows + new TOE | R5, R6, T1–T7 ✅ built 15 Sep, pushed in ed3542b. Import-time split + its review screen land with A5 in S3; defaults are read off each attribute's wording and its control's activity until then. |
+| S2 Create engagement + list | A1–A3, R1 ✅ built 15 Sep (not committed; build passes; not checked on screen) |
+| S3 RACM tab: RACM/SOP import review, prompt step, row actions | C1, A4 (version history parked), A5–A10, R2, A13/R7 ✅ built 15 Sep, pushed in ed3542b (on-screen check skipped at your call) |
 | S4 RACM template + fields | A11, A12, A14, A15 |
 | S5 Control pages | C3–C5 |
 | S6 TOD | A17 (AI for TOD + override), A19–A21, A36 (design sign-off), C7, C9 (A18 parked, C8 dropped) |
