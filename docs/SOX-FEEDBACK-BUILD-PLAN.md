@@ -10,6 +10,22 @@
 - **A4 Delete RACM:** blocked while any audit covers its controls (menu item disabled with the reason); otherwise confirm → delete.
 - **A4 Version history:** parked. **View SOP** appears only on RACMs made from an SOP and opens the uploaded file for the session.
 
+## S6 decisions (15 Sep)
+- **A17 AI for TOD (changed mid-build):** Ira does NOT run on upload. "Pass all" / "Fail all" are replaced by one button, **"Run Ira on design checks"** (auditor only), in the same place; the design checks themselves stay as they were. After a file changes it reads **"Re-run Ira"**. Disabled with no checks, no files on any element, or once TOD is concluded. Verdict (prototype): a check fails while a required element is still outstanding, or if it was already marked failed; otherwise it passes. Ira adds the elements it read to "Evidenced by". The override pencil is back on each check; a file change after an override flags "Evidence changed since override". Per-check ✓/✗ stay.
+- **A19 / A21 / C7:** real file picker (several files at once), each file shows "Uploaded by ‹person› · ‹date, time›" and opens a preview (PDF/image files picked this session; sample files say no preview), and each file has its own remove X (auditor: any file; control owner: their own).
+- **A20:** History records adding/removing a design element and a design check.
+- **A36 design approval:** after TOD concludes, a Design approval block (Prepared by → reviewer Approve / Return with a note; whoever concluded TOD can't approve). Population, Sample and TOE (the control owner's Population too) stay locked until approved: "Unlocks after TOD is approved" / "Waiting for design approval".
+  - Seeds: every already-concluded TOD is approved, on every engagement. Altura's **O2C-02** is left waiting. No control was already in that state, so its TOE results and its countersigned paper were taken off (Order to Cash shows 1 effective control instead of 2).
+  - Not gated: the end-of-control sign-off while a TOD concluded *ineffective* is still waiting for approval.
+- **C9:** "Control effective / Control ineffective" pills (control page header, Controls register, audit runs on the engagement control page); header bar reads "TOD effective › TOE effective" (your call after the build — not "Design / Operating"). Step names TOD / TOE unchanged.
+- **Specs likely stale** (Population/Sample now locked until TOD is approved): `_verify_sample_extract`, `_verify_multi_source_population`, `_verify_population_removals`, `_verify_conclude_gates`, `_sox-golive`, `_sox-review-gate`, `_sox-prd-unverified`.
+
+## S5 decisions (15 Sep, built before S4 at your call)
+- **C3:** the objective runs the full width of the header on both control pages (on the audit page it runs up to the court badge).
+- **C4:** the engagement control page reads "Risk R-xx · risk text… More" under the identity line, exactly like the audit page; More opens Control activity and the other facts.
+- **C5:** attributes say only their own words, on every SOX engagement. The placeholder first attribute becomes "Performed as described for each sampled item"; the others keep their wording ("Exceptions handled per policy", "Performed within the required timeframe", …). Design checks built from attributes drop the repeated sentence too. The flagship demo's hand-written attributes don't change.
+  - Required files still come out the same on Altura and the other generated engagements: the rule now reads the attribute together with its control's sentence. On the unlisted flagship demo (ENG-001), 16 attribute lists shift slightly as a result (e.g. the vendor master control now asks for the vendor master change log).
+
 ## S2 decisions (15 Sep)
 - **A1/A2 name checks:** on the SOX New engagement sheet (Basics) and on Edit engagement for SOX engagements only. Other engagement types don't change.
   - Over 200 characters → red error, Continue / Next blocked.
@@ -236,11 +252,11 @@ Already there in New audit (confirmed in `sox-icfr/NewAuditWizard.tsx`): Audit p
 |---|---|
 | S0 Prerequisites | C12 ✅ built 15 Sep (C1 removed: not a real issue) |
 | S1 Remove workflows + new TOE | R5, R6, T1–T7 ✅ built 15 Sep, pushed in ed3542b. Import-time split + its review screen land with A5 in S3; defaults are read off each attribute's wording and its control's activity until then. |
-| S2 Create engagement + list | A1–A3, R1 ✅ built 15 Sep (not committed; build passes; not checked on screen) |
+| S2 Create engagement + list | A1–A3, R1 ✅ built 15 Sep, pushed in 6b1aab3 (not checked on screen) |
 | S3 RACM tab: RACM/SOP import review, prompt step, row actions | C1, A4 (version history parked), A5–A10, R2, A13/R7 ✅ built 15 Sep, pushed in ed3542b (on-screen check skipped at your call) |
 | S4 RACM template + fields | A11, A12, A14, A15 |
-| S5 Control pages | C3–C5 |
-| S6 TOD | A17 (AI for TOD + override), A19–A21, A36 (design sign-off), C7, C9 (A18 parked, C8 dropped) |
+| S5 Control pages | C3–C5 ✅ built 15 Sep, before S4 (not committed; build passes; not checked on screen) |
+| S6 TOD | A17 (AI for TOD + override), A19–A21, A36 (design sign-off), C7, C9 (A18 parked, C8 dropped) ✅ built 15 Sep (not committed; build passes; not checked on screen) |
 | S7 Population / Sample | A22, A24, C6 |
 | S8 New audit + year-end | A28, A29 |
 | S9 Deficiencies | A30–A33, C10, C11 |
