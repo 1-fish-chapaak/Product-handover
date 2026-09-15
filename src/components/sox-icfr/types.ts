@@ -52,6 +52,9 @@ export interface EvidenceFile {
   kind: 'PDF' | 'XLSX' | 'IMG' | 'CSV';
   uploadedBy: string;
   uploadedAt: string;
+  /** A file picked from this machine in this session — an object URL the preview
+   *  opens. Seeded files carry no bytes, so they have none. */
+  url?: string;
 }
 
 /** ONE FILE AN ATTRIBUTE NEEDS BEFORE AI VALIDATION CAN RUN — the evidence.
@@ -202,6 +205,10 @@ export interface DesignPoint {
   auditorProof?: AuditorProof;
   result: TestResult;
   override?: Override;
+  /** A file on a design element was added or removed after this override was
+   *  recorded (S6, A17) — the override stands, flagged "Evidence changed since
+   *  override". Cleared when the override is removed or recorded again. */
+  overrideEvidenceChanged?: boolean;
 }
 /** The walkthrough — the design tested against ONE live transaction.
  *
@@ -296,6 +303,23 @@ export interface DesignTrack {
   override?: Override;
   testedBy: string | null;
   testedAt: string | null;
+  /** Ira's last read of the design checks (S6, A17): who ran it, when, and
+   *  whether a design element's files changed since — which turns its button
+   *  into Re-run. */
+  ira?: { by: string; at: string; evidenceChanged?: boolean };
+  /** The reviewer's approval of a concluded TOD (S6, A36). Population, Sample and
+   *  TOE stay locked until `approvedBy` is set. Cleared whenever the design
+   *  conclusion is. */
+  approval?: DesignApproval;
+  /** Why the reviewer sent TOD back (S6, A36) — shown on the reopened TOD step
+   *  until the auditor concludes it again. */
+  designReturn?: { note: string; by: string; at: string };
+}
+/** Design sign-off after TOD (S6, A36) — prepared by whoever concluded TOD,
+ *  approved by a different person (four-eyes). One approver. */
+export interface DesignApproval {
+  preparedBy: { by: string; at: string };
+  approvedBy?: { by: string; at: string };
 }
 
 // ─── Operating track (TOE) ──────────────────────────────────────────────────────
@@ -1379,7 +1403,10 @@ export interface MaterialityRules {
 // so the auditor and the risk owner each see what the other ran on a control, and when.
 export type ExecKind =
   | 'validate' | 'test-all' | 'pull-run' | 'attest' | 'conclude'
-  | 'override' | 'request-docs' | 'receive-doc' | 'waive-doc' | 'walkthrough' | 'ipe' | 'population' | 'sample' | 'reopen' | 'wp-signoff' | 'review-return' | 'exception' | 'challenge';
+  | 'override' | 'request-docs' | 'receive-doc' | 'waive-doc' | 'walkthrough' | 'ipe' | 'population' | 'sample' | 'reopen' | 'wp-signoff' | 'review-return' | 'exception' | 'challenge'
+  // TOD's own trail (S6): elements, files and checks coming and going, Ira's
+  // read of the checks, and the design approval after TOD concludes.
+  | 'add-element' | 'remove-element' | 'remove-file' | 'add-check' | 'remove-check' | 'ai-review' | 'design-approval';
 export interface ExecutionEvent {
   id: string;
   controlId: string;

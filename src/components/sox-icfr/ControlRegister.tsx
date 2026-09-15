@@ -66,7 +66,9 @@ const REG_COLS = [
   { key: 'nature', w: 108 },
   { key: 'design', w: 150 },
   { key: 'operating', w: 168 },
-  { key: 'conclusion', w: 126 },
+  // 160, not 126: the pill says "Control ineffective" now, and fixed layout
+  // clips what the column can't hold rather than letting it widen.
+  { key: 'conclusion', w: 160 },
   // Court removed Aug 2026 (Step-2 action item 3). Whose move it is still drives
   // the 'My court' saved view and the badge in the control-page header — only the
   // register column went.

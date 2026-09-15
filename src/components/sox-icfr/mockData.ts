@@ -812,8 +812,9 @@ function generate(): Control[] {
         ? wf(`wf-${sp.prefix.toLowerCase()}-${idx}-${k}`, `${title} — check ${k}`, evidenced ? `run #${5000 + n}` : undefined)
         : evidenced ? attest(`Evidence for attribute ${k} of "${title.toLowerCase()}" attached and reviewed.`, sp.owner, [`${sp.prefix}-attr${k}.pdf`]) : {};
       const opSteps: OperatingStep[] = [
-        step(`${n}.1`, `${title} — primary attribute tested.`, 'Accuracy', nature === 'Automated' ? 'Per transaction' : 'Per item', nature === 'Automated' ? ['Reperformance'] : ['Inspection', 'Reperformance'], evidenced ? 'Pass' : 'Not tested', stepExtra(1)),
-        step(`${n}.2`, `${title} — exceptions handled per policy.`, 'Existence / Occurrence', 'Per exception', ['Inspection'], evidenced ? 'Pass' : 'Not tested', stepExtra(2)),
+        // the attribute's own words — the control's sentence is the header's (feedback #27)
+        step(`${n}.1`, 'Performed as described for each sampled item.', 'Accuracy', nature === 'Automated' ? 'Per transaction' : 'Per item', nature === 'Automated' ? ['Reperformance'] : ['Inspection', 'Reperformance'], evidenced ? 'Pass' : 'Not tested', stepExtra(1)),
+        step(`${n}.2`, 'Exceptions handled per policy.', 'Existence / Occurrence', 'Per exception', ['Inspection'], evidenced ? 'Pass' : 'Not tested', stepExtra(2)),
       ];
       const op = nature === 'Automated'
         ? autoTrack(operating, opSteps)
@@ -1855,6 +1856,60 @@ function alturaUnableToTest(controls: Control[]): void {
 }
 
 /**
+ * Every concluded TOD in a seed arrives approved (S6, A36).
+ *
+ * Population, Sample and TOE stay locked until the reviewer approves TOD, so a
+ * seed that concluded a design without saying who approved it would lock every
+ * control it had already put in progress. Prepared by whoever tested the design,
+ * approved by the engagement's reviewer on the same day. A control that already
+ * carries an approval — approved or deliberately left waiting — keeps it.
+ * Mutates in place, like the other finishing passes here.
+ */
+function withDesignApprovals(controls: Control[], preparer: string, reviewer: string): Control[] {
+  controls.forEach(c => {
+    if (c.design.approval) return;
+    if (c.design.conclusion === 'Not tested' && !c.design.override) return;
+    const at = c.design.testedAt ?? '14 Apr';
+    c.design = { ...c.design, approval: { preparedBy: { by: c.design.testedBy ?? preparer, at }, approvedBy: { by: reviewer, at } } };
+  });
+  return controls;
+}
+
+/**
+ * The one design still waiting on the reviewer — Altura only.
+ *
+ * Every other concluded TOD is approved on arrival (see withDesignApprovals), so
+ * without this nobody would ever see the approval block or a step waiting on it.
+ * No control in the seed was in that state already: every concluded manual
+ * control has a locked population, the payee and mid-flight Treasury controls
+ * have their draws on the page, and the last control of each process is the
+ * untouched one specs walk into. So it is the O2C price-master control, the
+ * automated one: it never had a population to lose, and with the privileged-
+ * access ITGC down its test of one is withdrawn anyway — Population, Sample and
+ * TOE are back on it, which is exactly where they now wait for the approval. Its
+ * TOE results and signatures go, because they were concluded on a design nobody
+ * has approved yet.
+ */
+function alturaAwaitingApproval(controls: Control[]): Control[] {
+  const base = controls.find(c => c.process === 'Order to Cash' && /priced from the approved price master/i.test(c.description));
+  if (!base || base.design.conclusion === 'Not tested') return controls;
+  const shaped: Control = {
+    ...base,
+    wpSignoff: undefined,
+    design: { ...base.design, approval: { preparedBy: { by: base.design.testedBy ?? 'A. Mehta', at: base.design.testedAt ?? '14 Apr' } } },
+    operating: {
+      ...base.operating,
+      conclusion: 'Not tested',
+      override: undefined,
+      testedBy: null,
+      testedAt: null,
+      steps: base.operating.steps.map(s => ({ ...s, result: 'Not tested' as TestResult, override: undefined, workflowRunRef: undefined })),
+    },
+  };
+  return controls.map(c => (c === base ? shaped : c));
+}
+
+/**
  * The one cycle a plain SOX engagement has under way.
  *
  * Every SOX engagement's Overview is the audit portfolio now, so an engagement
@@ -2011,6 +2066,8 @@ export function seedIcfrEngagement(meta?: SeedMeta): IcfrEngagement {
     // The flagship was never scoped from trial balances, so it is one company —
     // its own. Named on every row rather than left blank.
     base.controls = withAccounts(withEntityCoverage(base.controls, base.id, base.entity));
+    // Its concluded designs arrive approved — see withDesignApprovals.
+    base.controls = withDesignApprovals(base.controls, base.preparer, base.reviewer);
     base.audits = singleAudit({ id: base.id, periodEnd: base.periodEnd, owner: base.preparer }, base.controls);
     stampPopulationWindows(base.controls, base.audits);
     return base;
@@ -2043,6 +2100,9 @@ export function seedIcfrEngagement(meta?: SeedMeta): IcfrEngagement {
   if (rich) controls = alturaPayeeControl(controls);
   // …and one has two routes through it, with a draw that only touched one.
   if (rich) controls = alturaPathControl(controls);
+  // …and one design still waits on the reviewer. Before the run records below,
+  // so no run claims an Effective TOE on the control this takes it off.
+  if (rich) controls = alturaAwaitingApproval(controls);
   // The roll-forward demo's two interim failures — set BEFORE the run record
   // below is built from the controls, so the register and the run agree.
   const rfDemo = meta.id === 'eng-sox-rf';
@@ -2076,6 +2136,10 @@ export function seedIcfrEngagement(meta?: SeedMeta): IcfrEngagement {
   // A blocked control, not a finding — see alturaUnableToTest. Altura only, like
   // the findings above; every other engagement stays clean.
   if (rich) alturaUnableToTest(controls);
+  // Last of the passes that touch a design conclusion (the findings above fail
+  // two), so every concluded TOD is approved on arrival — except the one Altura
+  // control alturaAwaitingApproval left waiting.
+  controls = withDesignApprovals(controls, meta.owner ?? base.preparer, base.reviewer);
   const audits = rich ? libraryAudits(meta.processes ?? [], controls)
     // The roll-forward demo — a countersigned interim instead of the open
     // year-end every other engagement gets. See signedInterim.
@@ -2265,13 +2329,16 @@ function tagSamplesByEntity(controls: Control[], short?: (c: Control) => boolean
  *  would write them: does the check itself hold, are the exceptions dealt with,
  *  was it done in time, is the evidence there, and was the person allowed to do
  *  it. A control takes the first N of these — see `rich` on
- *  racmTemplateForProcesses. */
-const ATTRIBUTE_SPINE: { suffix: string; assertion: Assertion; precision: string; procedures: TestProcedure[] }[] = [
-  { suffix: 'primary attribute tested', assertion: 'Accuracy', precision: 'Per item', procedures: ['Inspection', 'Reperformance'] },
-  { suffix: 'exceptions handled per policy', assertion: 'Existence / Occurrence', precision: 'Per exception', procedures: ['Inspection'] },
-  { suffix: 'performed within the required timeframe', assertion: 'Cut-off', precision: 'Per occurrence', procedures: ['Inspection'] },
-  { suffix: 'evidence retained and independently inspectable', assertion: 'Completeness', precision: 'Per item', procedures: ['Inspection'] },
-  { suffix: 'performed by someone independent of the transaction', assertion: 'Rights & Obligations', precision: 'Per approver', procedures: ['Inspection', 'Inquiry'] },
+ *  racmTemplateForProcesses.
+ *
+ *  The attribute's own words only (feedback #27): each one used to open with
+ *  the control's sentence, which the header already says. */
+const ATTRIBUTE_SPINE: { text: string; assertion: Assertion; precision: string; procedures: TestProcedure[] }[] = [
+  { text: 'Performed as described for each sampled item', assertion: 'Accuracy', precision: 'Per item', procedures: ['Inspection', 'Reperformance'] },
+  { text: 'Exceptions handled per policy', assertion: 'Existence / Occurrence', precision: 'Per exception', procedures: ['Inspection'] },
+  { text: 'Performed within the required timeframe', assertion: 'Cut-off', precision: 'Per occurrence', procedures: ['Inspection'] },
+  { text: 'Evidence retained and independently inspectable', assertion: 'Completeness', precision: 'Per item', procedures: ['Inspection'] },
+  { text: 'Performed by someone independent of the transaction', assertion: 'Rights & Obligations', precision: 'Per approver', procedures: ['Inspection', 'Inquiry'] },
 ];
 
 /**
@@ -2377,7 +2444,7 @@ export function racmTemplateForProcesses(names: string[], mode: 'fresh' | 'live'
         : 0;
       const opSteps: OperatingStep[] = ATTRIBUTE_SPINE.slice(0, attrCount).map((a, k) => step(
         `${i + 1}.${k + 1}`,
-        `${title} — ${a.suffix}.`,
+        `${a.text}.`,
         a.assertion,
         a.precision,
         // an automated control reperforms its primary attribute rather than

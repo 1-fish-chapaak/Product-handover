@@ -261,9 +261,9 @@ export default function ControlLibraryDetail() {
         <div aria-hidden className="absolute inset-y-0 left-[-50vw] right-[-50vw] bg-canvas-elevated border-b border-canvas-border" />
         <div className="relative">
         {/* The objective is the headline (user ask): what this control is FOR is
-            the thing worth reading first, and the control's own sentence is
-            said again by every attribute in the table below. */}
-        <h1 className="leadsheet-title text-[1.625rem] leading-[1.25] text-ink-900 max-w-[64ch]">{control.objective ?? control.description}</h1>
+            the thing worth reading first. Full width (feedback #27) — the old
+            64ch cap wrapped a long objective with half the header empty. */}
+        <h1 className="leadsheet-title text-[1.625rem] leading-[1.25] text-ink-900">{control.objective ?? control.description}</h1>
 
         {/* One line, no labels. Judgements are chips because they are somebody's
             call; the rest is plain text because it is just what the control is. */}
@@ -297,19 +297,18 @@ export default function ControlLibraryDetail() {
           </span>
         </div>
 
-        {/* One paragraph under the rule: how the control is actually performed
-            (user ask). The objective moved up to the headline, and the risk and
-            the control's own sentence came out of the header entirely. */}
-        {/* The detail half of the band. Closed it is one line that stops where
-            the row does; open it runs on and the rest follows. Either way the
-            toggle sits at the end of the activity text, in the one place — a
-            chevron in front of the label asked the reader to find the control
-            before they knew there was more to read. */}
+        {/* The detail half of the band, read the way the audit control page
+            reads it (feedback #27): the risk the control answers, then how it is
+            performed. Closed it is one line that stops where the row does; open
+            it runs on and the rest follows. Either way the toggle sits at the
+            end of that first line, in the one place — a chevron in front of the
+            label asked the reader to find the control before they knew there was
+            more to read. */}
         <div className="mt-4 text-[0.8125rem] leading-[1.7] text-ink-600">
           <p className={cn('min-w-0', !detailOpen && 'flex items-baseline')}>
-            <span className="font-semibold text-ink-900 shrink-0">Control activity</span>
+            <span className="font-semibold text-ink-900 shrink-0">Risk {control.riskId}</span>
             <span className="text-ink-300 mx-1.5 shrink-0">·</span>
-            <span className={cn('min-w-0', !detailOpen && 'truncate')}>{control.controlActivity}</span>
+            <span className={cn('min-w-0', !detailOpen && 'truncate')}>{control.riskDescription}</span>
             <span className="shrink-0 ml-1.5"><MoreLink open={detailOpen} onClick={() => setDetailOpen(o => !o)} /></span>
           </p>
           <AnimatePresence initial={false}>
@@ -322,6 +321,11 @@ export default function ControlLibraryDetail() {
                 transition={{ duration: 0.24, ease: [0.22, 1, 0.36, 1] }}
                 className="overflow-hidden"
               >
+                <p className="mt-2">
+                  <span className="font-semibold text-ink-900">Control activity</span>
+                  <span className="text-ink-300 mx-1.5">·</span>
+                  {control.controlActivity}
+                </p>
                 {/* The short facts, each said with its name (user ask). They used
                     to run bare beside the title — "Payments · Financial · Manual
                     · Preventive · Monthly" asks the reader to know the schema by

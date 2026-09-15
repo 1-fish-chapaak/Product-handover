@@ -997,6 +997,15 @@ export function fmtDay(iso?: string, empty = '—'): string {
   return d ? d.toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' }) : iso;
 }
 
+/** An instant as a person reads it on the page — '15 Sep 2026, 14:32'. Built by
+ *  hand rather than through toLocaleString: newer browsers print September as
+ *  "Sept" in en-GB, and a stamp should read the same on every machine. */
+const MONTH_SHORT = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+export function fmtDateTime(d: Date = new Date()): string {
+  const pad = (n: number) => String(n).padStart(2, '0');
+  return `${d.getDate()} ${MONTH_SHORT[d.getMonth()]} ${d.getFullYear()}, ${pad(d.getHours())}:${pad(d.getMinutes())}`;
+}
+
 const fmtDate = (iso?: string) => fmtDay(iso);
 const dayGap = (a?: string, b?: string) => {
   const x = parseDay(a), y = parseDay(b);
@@ -1489,6 +1498,13 @@ export function trackResult(t: DesignTrack | OperatingTrack): TrackConclusion {
   if (t.override) return t.override.result === 'Effective' ? 'Effective' : 'Ineffective';
   return t.conclusion;
 }
+/** Has the reviewer approved the concluded TOD (S6, A36)? Population, Sample and
+ *  TOE stay locked until they have — a design nobody has checked is not a design
+ *  worth pulling data against. A cleared conclusion is never approved, whatever
+ *  an older approval on the record says. */
+export function designApproved(c: Control): boolean {
+  return trackResult(c.design) !== 'Not tested' && !!c.design.approval?.approvedBy;
+}
 export function designStarted(c: Control): boolean {
   return !!c.design.override || c.design.conclusion !== 'Not tested'
     || c.design.documents.some(d => d.status === 'Received') || c.design.points.some(p => p.result !== 'Not tested');
@@ -1581,7 +1597,7 @@ export function pendingReviewNoteCount(eng: IcfrEngagement, controlId: string): 
 
 // ─── Track progress ──────────────────────────────────────────────────────────────
 
-import type { DesignPoint, OperatingStep, RequiredFile, TestResult, ValidationQA, ValidationTable } from './types';
+import type { DesignPoint, EvidenceFile, OperatingStep, RequiredFile, TestResult, ValidationQA, ValidationTable } from './types';
 export function pointResult(p: DesignPoint): TestResult { return p.override ? (p.override.result as TestResult) : p.result; }
 
 /** A validated file and a person's attestation reached opposite conclusions on
@@ -1629,15 +1645,16 @@ const EVIDENCE_FROM_WORDING: [RegExp, string][] = [
 ];
 
 /** The attribute's required files: the edited list when there is one, otherwise
- *  the split read off its wording and then its control's activity (up to three),
- *  with the old single required file standing as the first line's upload. The
- *  control matters because many attributes are worded generically ("primary
- *  attribute tested") while the activity names the records the work leaves. */
+ *  the split read off its wording together with its control's own sentence, and
+ *  then the control's activity (up to three), with the old single required file
+ *  standing as the first line's upload. The control matters because attributes
+ *  are worded generically ("Exceptions handled per policy") — they no longer
+ *  repeat the control's sentence, which is what names the records. */
 type EvidenceSource = Pick<Control, 'description' | 'controlActivity'>;
 export function requiredFilesOf(s: OperatingStep, c: EvidenceSource): RequiredFile[] {
   if (s.requiredFiles) return s.requiredFiles;
   const read = (text: string) => EVIDENCE_FROM_WORDING.filter(([re]) => re.test(text)).map(([, label]) => label);
-  const labels = Array.from(new Set([...read(s.description), ...read(c.controlActivity ?? c.description)])).slice(0, 3);
+  const labels = Array.from(new Set([...read(`${s.description} ${c.description}`), ...read(c.controlActivity ?? c.description)])).slice(0, 3);
   const list = labels.length ? labels : ['Supporting document for the sampled items'];
   return list.map((label, i) => ({ id: `${s.id}-rf${i + 1}`, label, ...(i === 0 && s.inputFile ? { file: s.inputFile } : {}) }));
 }
@@ -1725,6 +1742,14 @@ export function designCompleteness(c: Control): { done: number; total: number; p
 /** Elements still genuinely outstanding — neither evidenced nor waived. */
 export function designOutstanding(c: Control): DesignDoc[] {
   return c.design.documents.filter(d => d.status !== 'Received' && !d.waiver);
+}
+/** The files on a design element. An older seeded element can read Received with
+ *  no file list at all — its one file is the element itself — so that case is
+ *  read as a single file with a stable id, and the page, the trail and a removal
+ *  all see the same thing. */
+export function designFilesOf(d: DesignDoc): EvidenceFile[] {
+  if (d.files) return d.files;
+  return d.status === 'Received' ? [{ id: `${d.id}-f`, name: d.name, kind: 'PDF', uploadedBy: d.uploadedBy ?? 'Risk Owner', uploadedAt: d.at ?? '' }] : [];
 }
 /** Attributes the walkthrough hasn't settled yet. Empty when it hasn't started —
  *  the gate is soft until the auditor commits to walking a transaction. */

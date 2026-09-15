@@ -19,7 +19,8 @@ import {
   countVerdict, coverageVerdict, derivedRunCount, populationReady, designBasis, auditorProvenChecks, suggestedDesignChecks, suggestPopulationFile, fmtDay, parseDay,
   monthlyBreakdown, spikeMonths, priorRoundCount, fileUsable, originLabel, guessFileKind, populationSources, ipeChecksFor, samplesFor,
   draftSamplePrompt, readSamplePrompt, windowMonths, expectedInputsFor, hasRowCount, isAssisting, sampledSources, reviewNotesFor, isShared, entityCoverage, uncoveredEntities, hasPaths, pathCoverage, untouchedPaths, type PopVerdict,
-  requiredFilesOf, requiredFilesCount, requiredFilesReady,
+  requiredFilesOf, requiredFilesCount, requiredFilesReady, designFilesOf,
+  designApproved, isEngagementLocked, samePerson,
 } from './helpers';
 import { useAuditFiles, type AuditFile } from './useAuditFiles';
 import { ownersOf, programmeFor } from './auditScope';
@@ -574,10 +575,13 @@ function evidenceKindOf(name: string): EvidenceFile['kind'] {
   return 'PDF';
 }
 
-function PointRow({ control, point, canEdit }: { control: Control; point: DesignPoint; canEdit: boolean }) {
+/** `checking` — Ira is running across every design check from the section header
+ *  (S6, A17). The row wears the same busy state its own validation used to. */
+function PointRow({ control, point, canEdit, checking = false }: { control: Control; point: DesignPoint; canEdit: boolean; checking?: boolean }) {
   const { me, setDesignPoint, validateDesignPoint, overrideDesignPoint, removeDesignPoint, linkDesignPointEvidence, setDesignPointProof } = useIcfr();
   const [over, setOver] = useState(false);
-  const [validating, setValidating] = useState(false);
+  const [validatingOne, setValidating] = useState(false);
+  const validating = validatingOne || checking;
   const [showQA, setShowQA] = useState(false);
   const [linking, setLinking] = useState(false);
   const [proving, setProving] = useState(false);
@@ -611,8 +615,16 @@ function PointRow({ control, point, canEdit }: { control: Control; point: Design
         {validating ? <span className="w-5 h-5 inline-flex items-center justify-center"><Loader2 size={15} className="animate-spin text-evidence-600" /></span> : <Tickmark result={eff} size={20} />}
         <div className="min-w-0 flex-1">
           <div className="flex items-center gap-2"><span className="text-[0.78125rem] font-medium text-ink-800">{point.text}</span>{point.override && <span className="override-tag"><Pencil size={9} /> Overridden</span>}</div>
-          <div className="text-[0.6875rem] text-ink-400 mt-1 inline-flex items-center gap-1.5"><WorkflowIcon size={11} /> {point.workflowName ?? 'Design walkthrough check'} · {validating ? 'validating…' : (point.workflowRunRef ?? 'not validated')}</div>
-          {point.override && <div className="text-[0.6875rem] text-high-700 mt-1 flex items-start gap-1"><CornerDownRight size={11} className="mt-0.5 shrink-0" /> {point.override.rationale}</div>}
+          <div className="text-[0.6875rem] text-ink-400 mt-1 inline-flex items-center gap-1.5"><WorkflowIcon size={11} /> {point.workflowName ?? 'Design walkthrough check'} · {checking ? 'checking…' : validating ? 'validating…' : (point.workflowRunRef ?? 'not validated')}</div>
+          {/* The override stands when a file comes or goes after it — it is still
+              the auditor's recorded judgement — but it says the evidence under it
+              moved, so the reader knows to look again. */}
+          {point.override && (
+            <div className="text-[0.6875rem] text-high-700 mt-1 flex items-start gap-1 flex-wrap">
+              <CornerDownRight size={11} className="mt-0.5 shrink-0" /> <span className="min-w-0">{point.override.rationale}</span>
+              {point.overrideEvidenceChanged && <span className="inline-flex items-center gap-1 font-semibold text-mitigated-700"><AlertTriangle size={10} className="shrink-0" /> Evidence changed since override</span>}
+            </div>
+          )}
 
           {/* ── what proves this check ──────────────────────────────────────────
               Two lines, and the difference between them is the whole point: the
@@ -751,9 +763,11 @@ function PointRow({ control, point, canEdit }: { control: Control; point: Design
           <div className="flex items-center gap-1.5 shrink-0">
             {point.validation && <button onClick={() => setShowQA(true)} className="h-7 px-2.5 inline-flex items-center gap-1 rounded-md border border-canvas-border bg-canvas-elevated text-[0.71875rem] font-semibold text-ink-600 hover:border-brand-300 hover:text-brand-700 cursor-pointer"><ListChecks size={12} /> View results</button>}
             {/* PARKED (Aug 2026, user ask) — the workflow Validate / Re-run button.
-                The tester states the result themselves now, with the two buttons
-                below. `runValidate` and the `validating` machinery are left in
-                place above, so putting this back is one line:
+                The tester can state the result themselves with the two buttons
+                below, and Ira now reads every check at once from the Design
+                checks header (S6, A17) rather than one row at a time.
+                `runValidate` and the `validating` machinery are left in place
+                above, so putting this back is one line:
                 <button onClick={runValidate} title="Validate via workflow" className="h-7 px-2.5 inline-flex items-center gap-1 rounded-md border border-canvas-border bg-canvas-elevated text-[0.71875rem] font-semibold text-ink-600 hover:border-evidence-300 hover:text-evidence-700 cursor-pointer"><PlayCircle size={12} /> {point.validation ? 'Re-run' : 'Validate'}</button> */}
             <button onClick={() => setDesignPoint(control.id, point.id, 'Pass')} title="Mark this check passed" aria-label="Mark this check passed"
               className={cn('h-7 w-7 inline-flex items-center justify-center rounded-md border transition-colors cursor-pointer',
@@ -765,22 +779,23 @@ function PointRow({ control, point, canEdit }: { control: Control; point: Design
                 eff === 'Fail' ? 'bg-risk-50 border-risk-300 text-risk-700' : 'border-canvas-border bg-canvas-elevated text-ink-500 hover:border-risk-300 hover:text-risk-700')}>
               <X size={13} />
             </button>
-            {/* PARKED (Aug 2026, user ask) — the override pencil. It existed to
-                contradict a workflow's verdict; with Pass / Fail set by hand there
-                is nothing left to contradict. The `over` state and the
-                RationaleForm below stay put, so this goes back as one line:
-                <button onClick={() => setOver(o => !o)} title="Override" className={cn('h-7 w-7 inline-flex items-center justify-center rounded-md border cursor-pointer', point.override ? 'bg-high-50 border-high-300 text-high-700' : 'border-canvas-border bg-canvas-elevated text-ink-600 hover:border-high-300 hover:text-high-700')}><Pencil size={12} /></button> */}
+            {/* The override pencil — back (S6, A17) now that Ira gives a verdict
+                to contradict again. It opens the rationale form below; an existing
+                override opens Remove override instead. */}
+            <button onClick={() => setOver(o => !o)} title={point.override ? 'Remove the override' : 'Override this check — record why'} aria-label={point.override ? 'Remove the override' : 'Override this check'} className={cn('h-7 w-7 inline-flex items-center justify-center rounded-md border cursor-pointer', point.override ? 'bg-high-50 border-high-300 text-high-700' : 'border-canvas-border bg-canvas-elevated text-ink-600 hover:border-high-300 hover:text-high-700')}><Pencil size={12} /></button>
             <button onClick={() => removeDesignPoint(control.id, point.id)} title="Remove" className="h-7 w-7 inline-flex items-center justify-center rounded-md border border-canvas-border bg-canvas-elevated text-ink-400 hover:border-risk-300 hover:text-risk-600 cursor-pointer"><Trash2 size={12} /></button>
           </div>
         )}
-        {validating && <span className="text-[0.6875rem] font-semibold text-evidence-600 shrink-0">Validating…</span>}
+        {validating && <span className="text-[0.6875rem] font-semibold text-evidence-600 shrink-0">{checking ? 'Checking…' : 'Validating…'}</span>}
       </div>
       {validating && <div className="mt-2.5 ml-8 h-1.5 rounded-full bg-paper-100 overflow-hidden"><motion.div className="h-full bg-evidence-500" initial={{ width: 0 }} animate={{ width: '100%' }} transition={{ duration: VALIDATE_MS / 1000, ease: 'linear' }} /></div>}
       {over && (point.override
         ? <div className="mt-2 flex justify-end"><button onClick={() => { overrideDesignPoint(control.id, point.id, null); setOver(false); }} className="h-7 px-3 text-[0.75rem] font-semibold rounded-lg border border-canvas-border text-ink-600 hover:text-ink-900 inline-flex items-center gap-1.5 cursor-pointer"><RotateCcw size={12} /> Remove override</button></div>
         : <RationaleForm title="Override this consideration — record why" onCancel={() => setOver(false)} buttons={[
             { label: 'Override · Pass', onClick: n => { overrideDesignPoint(control.id, point.id, { result: 'Pass', by: me, at: 'just now', rationale: n }); setOver(false); } },
-            { label: 'Override · Fail', onClick: n => { setDesignPoint(control.id, point.id, 'Fail'); overrideDesignPoint(control.id, point.id, { result: 'Fail', by: me, at: 'just now', rationale: n }); setOver(false); } },
+            // The override sits on top of the result — Ira's answer stays on the
+            // check underneath it, so a failed override no longer rewrites it.
+            { label: 'Override · Fail', onClick: n => { overrideDesignPoint(control.id, point.id, { result: 'Fail', by: me, at: 'just now', rationale: n }); setOver(false); } },
           ]} />)}
       <AnimatePresence>{showQA && point.validation && <QAResultsModal title={point.text} validation={point.validation} onClose={() => setShowQA(false)} />}</AnimatePresence>
     </div>
@@ -1220,17 +1235,72 @@ function designRagMeters(c: Control): RagMeterDef[] {
   ];
 }
 
+// ── one evidence file, opened (S6, A19) ─────────────────────────────────────────────
+/** A file's type as its name says it — 'PDF', 'DOCX'. Read off the name rather than
+ *  `kind`, which has no word for a Word file and files one under PDF. */
+function fileTypeOf(f: EvidenceFile): string {
+  const m = /\.([a-z0-9]+)$/i.exec(f.name);
+  return m ? m[1].toUpperCase() : f.kind;
+}
+
+/** Only a file picked off this machine in this session carries bytes (`url`). A
+ *  sample file has a name and a record but nothing to show, and the modal says so
+ *  plainly rather than drawing a page that isn't there. */
+function EvidencePreviewModal({ file, element, onClose }: { file: EvidenceFile; element: string; onClose: () => void }) {
+  const type = fileTypeOf(file);
+  const isPdf = type === 'PDF';
+  const isImage = file.kind === 'IMG' || ['PNG', 'JPG', 'JPEG', 'GIF', 'WEBP'].includes(type);
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose(); };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [onClose]);
+  return createPortal(
+    <div className="modal-backdrop" onClick={onClose}>
+      <motion.div className="modal modal-wide" role="dialog" aria-modal="true" aria-label={`Preview of ${file.name}`} onClick={e => e.stopPropagation()} initial={{ opacity: 0, y: 14, scale: 0.98 }} animate={{ opacity: 1, y: 0, scale: 1 }} exit={{ opacity: 0, y: 10, scale: 0.98 }}>
+        <div className="flex items-center justify-between gap-3 px-5 py-3.5 border-b border-canvas-border">
+          <div className="flex items-center gap-2 min-w-0"><FileText size={16} className="text-brand-600 shrink-0" /><h3 className="text-[0.875rem] font-bold text-ink-900 truncate" title={file.name}>{file.name}</h3></div>
+          <button onClick={onClose} aria-label="Close" className="h-8 w-8 shrink-0 inline-flex items-center justify-center rounded-lg text-ink-400 hover:text-ink-800 hover:bg-paper-50 cursor-pointer"><X size={16} /></button>
+        </div>
+        <div className="px-5 py-2.5 border-b border-canvas-border bg-paper-50/40 text-[0.75rem] text-ink-600 flex items-center gap-x-2 gap-y-1 flex-wrap">
+          <span className="font-mono text-[0.65625rem] font-semibold text-ink-600 bg-canvas-elevated border border-canvas-border rounded-md px-1.5 h-[20px] inline-flex items-center">{type}</span>
+          <span><b className="text-ink-800">{element}</b></span>
+          <span className="text-ink-300">·</span>
+          <span>Uploaded by {file.uploadedBy}{file.uploadedAt ? ` · ${file.uploadedAt}` : ''}</span>
+        </div>
+        <div className="px-5 py-4 max-h-[70vh] overflow-auto">
+          {!file.url ? (
+            <p className="text-[0.78125rem] text-ink-500 leading-relaxed">A preview isn’t available for sample files in this prototype.</p>
+          ) : isPdf ? (
+            <iframe src={file.url} title={file.name} className="w-full h-[62vh] rounded-lg border border-canvas-border bg-paper-50" />
+          ) : isImage ? (
+            <img src={file.url} alt={file.name} className="block max-w-full max-h-[62vh] mx-auto rounded-lg border border-canvas-border" />
+          ) : (
+            <p className="text-[0.78125rem] text-ink-500 leading-relaxed">{type} files can’t be shown here. The file is attached to {element} all the same.</p>
+          )}
+        </div>
+        <div className="flex items-center justify-end px-5 py-3.5 border-t border-canvas-border">
+          <button onClick={onClose} className="h-9 px-4 rounded-lg bg-brand-600 text-white text-[0.78125rem] font-semibold hover:bg-brand-700 cursor-pointer">Close</button>
+        </div>
+      </motion.div>
+    </div>,
+    document.body,
+  );
+}
+
 // ── design section (TOD) ──────────────────────────────────────────────────────────
-// Realistic evidence file name for a design element — what the "upload" attaches.
-const EVIDENCE_EXT: Partial<Record<DesignDocKind, string>> = { 'Precision & thresholds': 'xlsx', 'Segregation of duties': 'xlsx' };
 /** A custom element is titled by its name; the standard ones by their kind. */
 function docLabel(doc: DesignDoc): string { return doc.kind === 'Custom' ? doc.name : doc.kind; }
+// PARKED (S6, C7) — the invented file name the old 900ms "upload" attached. The
+// Attach evidence button now opens a real file picker and keeps each file's own
+// name, so nothing calls these; left in place in case a seeded demo wants them.
+const EVIDENCE_EXT: Partial<Record<DesignDocKind, string>> = { 'Precision & thresholds': 'xlsx', 'Segregation of duties': 'xlsx' };
 function evidenceFileName(label: string, wpRef: string, kind: DesignDocKind): string {
   return `${label.replace(/[^A-Za-z0-9]+/g, '_')}_${wpRef}_FY26.${EVIDENCE_EXT[kind] ?? 'pdf'}`;
 }
 
 function DesignSection({ control, canEdit }: { control: Control; canEdit: boolean }) {
-  const { role, addDesignDoc, attachDesignEvidence, removeDesignDoc, waiveDesignDoc, clearDesignWaiver, addDesignPoint, setDesignPoint, validateDesignPoint } = useIcfr();
+  const { role, me, addDesignDoc, attachDesignEvidence, removeDesignFile, removeDesignDoc, waiveDesignDoc, clearDesignWaiver, addDesignPoint, setDesignPoint, validateDesignPoint, runDesignIra } = useIcfr();
   // The owner keeps the evidence lane and loses the testing lane — see the note
   // on the dossier's own canEdit / canTest split.
   const isOwner = role === 'risk-owner';
@@ -1246,23 +1316,60 @@ function DesignSection({ control, canEdit }: { control: Control; canEdit: boolea
    *  whole — the kind of check that has no single attribute to sit under. */
   const [newPointStep, setNewPointStep] = useState('');
   const [validatingAll, setValidatingAll] = useState(false);
-  const [attaching, setAttaching] = useState<string | null>(null);
+  // One hidden file picker for every element: the button that opens it says which
+  // element the chosen files belong to. No "Uploading…" state — the files are on
+  // this machine already, so they land the moment they are chosen.
+  const filePicker = useRef<HTMLInputElement>(null);
+  const pickingFor = useRef<DesignDoc | null>(null);
+  const [previewing, setPreviewing] = useState<{ file: EvidenceFile; element: string } | null>(null);
+  const [iraRunning, setIraRunning] = useState(false);
   // custom element — named by the auditor, same inline-form shape as Add check
   const [addingCustom, setAddingCustom] = useState(false);
   const [customName, setCustomName] = useState('');
   const [customDesc, setCustomDesc] = useState('');
   const runValidateAll = () => { setValidatingAll(true); logEvent({ action: 'Run', description: `Validated all design considerations for ${control.id}`, module: 'SOX ICFR', entity: 'Test Result' }); window.setTimeout(() => { control.design.points.forEach(p => validateDesignPoint(control.id, p.id)); setValidatingAll(false); }, VALIDATE_MS); };
+  // PARKED (S6, A17) — Pass all / Fail all. The header's one button is now "Run
+  // Ira on design checks"; the per-row ✓ / ✗ stay for marking a check by hand.
   // Every check at once, the same call the row buttons make one at a time — so
   // the trail reads identically whether they were marked together or singly.
   const markAll = (result: TestResult) => {
     logEvent({ action: 'Update', description: `Marked every design consideration ${result.toLowerCase()} for ${control.id}`, module: 'SOX ICFR', entity: 'Test Result' });
     control.design.points.forEach(p => setDesignPoint(control.id, p.id, result));
   };
+  // Opens the picker for this element. What was chosen comes back to `attachPicked`.
   const attach = (doc: DesignDoc) => {
-    setAttaching(doc.id);
-    const label = docLabel(doc);
-    logEvent({ action: 'Upload', description: `Attached design evidence (${label}) to ${control.id}`, module: 'SOX ICFR', entity: 'Control' });
-    window.setTimeout(() => { attachDesignEvidence(control.id, doc.id, evidenceFileName(label, control.wpRef, doc.kind)); setAttaching(null); }, 900);
+    pickingFor.current = doc;
+    filePicker.current?.click();
+  };
+  const attachPicked = (list: FileList | null) => {
+    const doc = pickingFor.current;
+    pickingFor.current = null;
+    if (!doc || !list || list.length === 0) return;
+    const files = Array.from(list).map(f => ({ name: f.name, kind: evidenceKindOf(f.name), url: URL.createObjectURL(f) }));
+    attachDesignEvidence(control.id, doc.id, files);
+    logEvent({ action: 'Upload', description: `Attached ${files.map(f => f.name).join(', ')} to the ${docLabel(doc)} design element on ${control.id}`, module: 'SOX ICFR', entity: 'Control' });
+  };
+  // The auditor can take any file off; the control owner only one they uploaded.
+  const canRemoveFile = (f: EvidenceFile) => canEdit && (role === 'auditor' || (isOwner && f.uploadedBy === me));
+  const removeFile = (doc: DesignDoc, f: EvidenceFile) => {
+    removeDesignFile(control.id, doc.id, f.id);
+    logEvent({ action: 'Delete', description: `Removed ${f.name} from the ${docLabel(doc)} design element on ${control.id}`, module: 'SOX ICFR', entity: 'Control' });
+  };
+
+  // ── Ira on the design checks (S6, A17) ────────────────────────────────────
+  // One button in the checks header, run on the auditor's ask — never on upload.
+  // It says why it can't run rather than hiding: no checks, nothing on file, or a
+  // concluded TOD. A file coming or going after a run turns it into Re-run.
+  const elementsOnFile = d.documents.filter(doc => designFilesOf(doc).length > 0).length;
+  const iraBlocked = d.points.length === 0 ? 'Add a design check first'
+    : elementsOnFile === 0 ? 'Upload evidence to a design element first'
+    : d.conclusion !== 'Not tested' ? 'TOD is concluded — it has to be reopened or returned before Ira runs again'
+    : null;
+  const iraStale = !!d.ira?.evidenceChanged;
+  const runIra = () => {
+    setIraRunning(true);
+    logEvent({ action: 'Run', description: `Ran Ira on the design checks for ${control.id}`, module: 'SOX ICFR', entity: 'Test Result' });
+    window.setTimeout(() => { runDesignIra(control.id); setIraRunning(false); }, VALIDATE_MS);
   };
   const addStandard = (k: DesignDocKind) => { addDesignDoc(control.id, k); logEvent({ action: 'Create', description: `Added design element to ${control.id}`, module: 'SOX ICFR', entity: 'Control' }); };
   const saveCustom = () => {
@@ -1358,13 +1465,11 @@ function DesignSection({ control, canEdit }: { control: Control; canEdit: boolea
           {d.documents.length === 0 ? <p className="text-[0.75rem] text-ink-400 mb-5">{addingCustom ? '' : 'No elements yet — add one or request data.'}</p> : (
             <div className="mb-5 space-y-1.5">
               {d.documents.map(doc => {
-                const files = doc.files ?? (doc.status === 'Received' ? [{ id: doc.id + '-f', name: doc.name, kind: 'PDF' as const, uploadedBy: doc.uploadedBy ?? 'Risk Owner', uploadedAt: doc.at ?? '' }] : []);
-                const busy = attaching === doc.id;
+                const files = designFilesOf(doc);
                 return (
                   <div key={doc.id}>
                   <div className={cn('doc-row', doc.status === 'Received' && '!border-compliant-200', doc.waiver && doc.status !== 'Received' && '!border-evidence-200')}>
-                    {busy ? <Loader2 size={15} className="animate-spin text-brand-600 shrink-0" />
-                      : doc.waiver && doc.status !== 'Received' ? <BadgeCheck size={15} className="shrink-0 text-evidence-600" />
+                    {doc.waiver && doc.status !== 'Received' ? <BadgeCheck size={15} className="shrink-0 text-evidence-600" />
                       : <FileCheck2 size={15} className={cn('shrink-0', DOC_TONE[doc.status])} />}
                     <div className="min-w-0 flex-1">
                       <div className="flex items-center gap-1.5">
@@ -1373,16 +1478,26 @@ function DesignSection({ control, canEdit }: { control: Control; canEdit: boolea
                       </div>
                       {doc.description && <div className="text-[0.6875rem] text-ink-500 mt-0.5">{doc.description}</div>}
                       {files.length > 0 ? (
-                        <div className="flex items-center gap-1 mt-0.5 flex-wrap">
-                          {files.map(f => <span key={f.id} className="inline-flex items-center gap-1 text-[0.65625rem] font-medium text-ink-600 bg-paper-50/70 border border-canvas-border rounded px-1.5 h-[18px] max-w-[240px]"><Paperclip size={9} className="shrink-0" /><span className="truncate">{f.name}</span></span>)}
-                          {/* When it arrived, not who sent it. Who supplied a
-                              document is not a fact this step turns on — the
-                              auditor reads what is on file and judges the design
-                              from it — and printing a supplier here invited the
-                              reader to weigh the evidence by its sender. The name
-                              is still on the record: `uploadedBy` is untouched on
-                              the file, and History carries the handover. */}
-                          <span className="text-[0.65625rem] text-ink-400">{doc.at ? `· ${doc.at}` : ''}</span>
+                        <div className="flex items-start gap-1.5 mt-1 flex-wrap">
+                          {/* Each file says who uploaded it and when (S6, A19 — the
+                              user asked for the uploader back on the file). Its name
+                              opens a preview; the X takes that one file off. */}
+                          {files.map(f => (
+                            <span key={f.id} className={cn('inline-flex items-center gap-1 max-w-full rounded-md border border-canvas-border bg-paper-50/70 pl-1.5 py-0.5', canRemoveFile(f) ? 'pr-0.5' : 'pr-1.5')}>
+                              <button onClick={() => setPreviewing({ file: f, element: docLabel(doc) })} title={`Preview ${f.name}`}
+                                className="group min-w-0 inline-flex items-start gap-1.5 text-left rounded-sm cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-500/40">
+                                <Paperclip size={10} className="shrink-0 mt-[3px] text-ink-400" />
+                                <span className="min-w-0">
+                                  <span className="block max-w-[16rem] truncate text-[0.65625rem] font-medium text-ink-700 underline-offset-2 group-hover:text-brand-700 group-hover:underline">{f.name}</span>
+                                  <span className="block max-w-[16rem] truncate text-[0.625rem] text-ink-400">Uploaded by {f.uploadedBy}{f.uploadedAt ? ` · ${f.uploadedAt}` : ''}</span>
+                                </span>
+                              </button>
+                              {canRemoveFile(f) && (
+                                <button onClick={() => removeFile(doc, f)} title="Remove this file" aria-label={`Remove ${f.name}`}
+                                  className="h-5 w-5 shrink-0 inline-flex items-center justify-center rounded text-ink-400 hover:text-risk-600 hover:bg-risk-50 cursor-pointer"><X size={10} /></button>
+                              )}
+                            </span>
+                          ))}
                         </div>
                       ) : doc.waiver ? (
                         <div className="text-[0.6875rem] text-evidence-700 mt-0.5 flex items-start gap-1">
@@ -1390,15 +1505,15 @@ function DesignSection({ control, canEdit }: { control: Control; canEdit: boolea
                           <span><span className="font-semibold">{doc.waiver.reason}</span> — {doc.waiver.note} <span className="text-ink-400">· {doc.waiver.by}, {doc.waiver.at}</span></span>
                         </div>
                       ) : (
-                        <div className="text-[0.6875rem] text-ink-400 mt-0.5 truncate">{busy ? 'Uploading evidence…' : doc.status === 'Requested' ? 'Requested from the control owner' : 'No evidence attached yet'}</div>
+                        <div className="text-[0.6875rem] text-ink-400 mt-0.5 truncate">{doc.status === 'Requested' ? 'Requested from the control owner' : 'No evidence attached yet'}</div>
                       )}
                     </div>
                     <Pill tone={doc.status === 'Received' ? 'compliant' : doc.waiver ? 'evidence' : doc.status === 'Requested' ? 'mitigated' : 'draft'}>{doc.status === 'Received' ? 'Evidenced' : doc.waiver ? 'Waived' : doc.status}</Pill>
                     {canEdit && <div className="flex items-center gap-1">
-                      {doc.status !== 'Received' && !doc.waiver && <button disabled={busy} onClick={() => setWaiving(x => x === doc.id ? null : doc.id)} title="Account for this element without a file" className="h-7 px-2.5 text-[0.71875rem] font-semibold rounded-md border border-canvas-border bg-canvas-elevated text-ink-600 hover:text-evidence-700 hover:border-evidence-300 disabled:opacity-50 inline-flex items-center gap-1 cursor-pointer"><BadgeCheck size={11} /> Not applicable</button>}
+                      {doc.status !== 'Received' && !doc.waiver && <button onClick={() => setWaiving(x => x === doc.id ? null : doc.id)} title="Account for this element without a file" className="h-7 px-2.5 text-[0.71875rem] font-semibold rounded-md border border-canvas-border bg-canvas-elevated text-ink-600 hover:text-evidence-700 hover:border-evidence-300 disabled:opacity-50 inline-flex items-center gap-1 cursor-pointer"><BadgeCheck size={11} /> Not applicable</button>}
                       {doc.waiver && <button onClick={() => clearDesignWaiver(control.id, doc.id)} title="Remove the waiver — the element is required again" className="h-7 w-7 inline-flex items-center justify-center rounded-md border border-canvas-border bg-canvas-elevated text-ink-400 hover:border-brand-300 hover:text-brand-700 cursor-pointer"><RotateCcw size={12} /></button>}
-                      {doc.status !== 'Received' && <button disabled={busy} onClick={() => attach(doc)} className="h-7 px-2.5 text-[0.71875rem] font-semibold rounded-md border border-canvas-border bg-canvas-elevated text-ink-600 hover:text-compliant-700 hover:border-compliant-300 disabled:opacity-50 inline-flex items-center gap-1 cursor-pointer"><Upload size={11} /> Attach evidence</button>}
-                      {doc.status === 'Received' && <button disabled={busy} onClick={() => attach(doc)} title="Attach another file" className="h-7 w-7 inline-flex items-center justify-center rounded-md border border-canvas-border bg-canvas-elevated text-ink-400 hover:border-brand-300 hover:text-brand-700 cursor-pointer"><Plus size={12} /></button>}
+                      {doc.status !== 'Received' && <button onClick={() => attach(doc)} title="Choose one or more files — PDF, image, XLSX, CSV or Word" className="h-7 px-2.5 text-[0.71875rem] font-semibold rounded-md border border-canvas-border bg-canvas-elevated text-ink-600 hover:text-compliant-700 hover:border-compliant-300 disabled:opacity-50 inline-flex items-center gap-1 cursor-pointer"><Upload size={11} /> Attach evidence</button>}
+                      {doc.status === 'Received' && <button onClick={() => attach(doc)} title="Attach another file" aria-label={`Attach another file to ${docLabel(doc)}`} className="h-7 w-7 inline-flex items-center justify-center rounded-md border border-canvas-border bg-canvas-elevated text-ink-400 hover:border-brand-300 hover:text-brand-700 cursor-pointer"><Plus size={12} /></button>}
                       <button onClick={() => { removeDesignDoc(control.id, doc.id); logEvent({ action: 'Delete', description: `Removed design element from ${control.id}`, module: 'SOX ICFR', entity: 'Control' }); }} title="Remove" className="h-7 w-7 inline-flex items-center justify-center rounded-md border border-canvas-border bg-canvas-elevated text-ink-400 hover:border-risk-300 hover:text-risk-600 cursor-pointer"><Trash2 size={12} /></button>
                     </div>}
                   </div>
@@ -1470,12 +1585,19 @@ function DesignSection({ control, canEdit }: { control: Control; canEdit: boolea
               {/* PARKED (Aug 2026, user ask) — the Validate all button. `runValidateAll`
                   and `validatingAll` are left above so restoring it is one line:
                   <button disabled={validatingAll} onClick={runValidateAll} className="h-7 px-2.5 inline-flex items-center gap-1.5 rounded-md bg-evidence-600 text-white text-[0.71875rem] font-semibold enabled:hover:bg-evidence-700 disabled:opacity-70 cursor-pointer">{validatingAll ? <><Loader2 size={12} className="animate-spin" /> Validating…</> : <><PlayCircle size={12} /> Validate all</>}</button> */}
-              {canEdit && d.points.length > 0 && (<>
-                <button onClick={() => markAll('Pass')} title="Mark every check passed"
-                  className="h-7 px-2.5 inline-flex items-center gap-1.5 rounded-md border border-compliant-300 bg-compliant-50 text-[0.71875rem] font-semibold text-compliant-700 hover:bg-compliant-100 transition-colors cursor-pointer"><CheckCircle2 size={12} /> Pass all</button>
-                <button onClick={() => markAll('Fail')} title="Mark every check failed"
-                  className="h-7 px-2.5 inline-flex items-center gap-1.5 rounded-md border border-canvas-border bg-canvas-elevated text-[0.71875rem] font-semibold text-ink-600 hover:border-risk-300 hover:text-risk-700 transition-colors cursor-pointer"><XCircle size={12} /> Fail all</button>
-              </>)}
+              {/* PARKED (S6, A17) — Pass all / Fail all, replaced by the Ira button
+                  beside them. `markAll` is left above, so restoring them is:
+                <button onClick={() => markAll('Pass')} title="Mark every check passed" className="h-7 px-2.5 inline-flex items-center gap-1.5 rounded-md border border-compliant-300 bg-compliant-50 text-[0.71875rem] font-semibold text-compliant-700 hover:bg-compliant-100 transition-colors cursor-pointer"><CheckCircle2 size={12} /> Pass all</button>
+                <button onClick={() => markAll('Fail')} title="Mark every check failed" className="h-7 px-2.5 inline-flex items-center gap-1.5 rounded-md border border-canvas-border bg-canvas-elevated text-[0.71875rem] font-semibold text-ink-600 hover:border-risk-300 hover:text-risk-700 transition-colors cursor-pointer"><XCircle size={12} /> Fail all</button> */}
+              {canTest && (iraRunning
+                ? <span className="h-7 inline-flex items-center gap-1.5 text-[0.71875rem] font-semibold text-brand-600"><Loader2 size={12} className="animate-spin" /> Ira is checking {d.points.length} design check{d.points.length === 1 ? '' : 's'}…</span>
+                : <button onClick={runIra} disabled={!!iraBlocked}
+                    title={iraBlocked ?? (iraStale
+                      ? 'A design element’s files changed since Ira last ran — run it again to check against what is on file now'
+                      : 'Ira reads every design check against the evidence on file and marks each one Pass or Fail')}
+                    className="h-7 px-2.5 inline-flex items-center gap-1.5 rounded-md bg-brand-600 text-white text-[0.71875rem] font-semibold enabled:hover:bg-brand-700 disabled:opacity-40 disabled:cursor-not-allowed transition-colors cursor-pointer">
+                    <Sparkles size={12} /> {iraStale ? 'Re-run Ira' : 'Run Ira on design checks'}
+                  </button>)}
               {/* Named, because "Add" is not unique on this screen — the element
                   menu and every Ira suggestion carry one too, and three buttons
                   reading the same word is three buttons nobody can tell apart. */}
@@ -1516,7 +1638,7 @@ function DesignSection({ control, canEdit }: { control: Control; canEdit: boolea
                   {stepChecks.length > 0 && (
                     <p className="text-[0.65625rem] font-semibold uppercase tracking-wide text-ink-400">The control as a whole</p>
                   )}
-                  {controlChecks.map(p => <PointRow key={p.id} control={control} point={p} canEdit={canEdit} />)}
+                  {controlChecks.map(p => <PointRow key={p.id} control={control} point={p} canEdit={canEdit} checking={iraRunning} />)}
                 </div>
               )}
               {stepChecks.map(g => (
@@ -1525,7 +1647,7 @@ function DesignSection({ control, canEdit }: { control: Control; canEdit: boolea
                     <span className="font-mono normal-case text-ink-500 shrink-0">{g.step.code}</span>
                     <span className="truncate normal-case font-medium text-ink-500">{g.step.description}</span>
                   </p>
-                  {g.points.map(p => <PointRow key={p.id} control={control} point={p} canEdit={canEdit} />)}
+                  {g.points.map(p => <PointRow key={p.id} control={control} point={p} canEdit={canEdit} checking={iraRunning} />)}
                 </div>
               ))}
             </div>
@@ -1578,6 +1700,10 @@ function DesignSection({ control, canEdit }: { control: Control; canEdit: boolea
         </>
       )}
       <AnimatePresence>{modal && <RequestDataModal control={control} onClose={() => setModal(false)} />}</AnimatePresence>
+      {/* the one picker behind every element's Attach evidence and + */}
+      <input ref={filePicker} type="file" multiple accept=".pdf,.png,.jpg,.jpeg,.xlsx,.xls,.csv,.doc,.docx" className="sr-only" tabIndex={-1} aria-hidden="true"
+        onChange={e => { attachPicked(e.target.files); e.target.value = ''; }} />
+      <AnimatePresence>{previewing && <EvidencePreviewModal file={previewing.file} element={previewing.element} onClose={() => setPreviewing(null)} />}</AnimatePresence>
     </div>
   );
 }
@@ -2668,7 +2794,7 @@ function SourcePickerForm({ control, exclude, submitLabel, onSubmit, seedFile, s
   );
 }
 
-function PopulationSection({ control, canEdit }: { control: Control; canEdit: boolean }) {
+function PopulationSection({ control, canEdit, locked: gated = false }: { control: Control; canEdit: boolean; locked?: boolean }) {
   const { eng, openAuditId, role, me, setPopulation, clearPopulation, addPopulationSource, removePopulationSource, setSourceRole, lockPopulation } = useIcfr();
   const logEvent = useAuditLog();
   const { addToast } = useToast();
@@ -2801,6 +2927,26 @@ function PopulationSection({ control, canEdit }: { control: Control; canEdit: bo
             : ipe.conclusion === 'Not reliable' ? 'The report behind this population is not reliable — nothing can be locked off it.'
               : ipe.conclusion === 'Not tested' ? 'Finish the IPE test on the report before locking.'
                 : 'A check that did not hold needs resolving before locking.';
+
+  // Locked until the reviewer approves TOD (S6, A36). Named `gated` in here
+  // because `locked` already means the population's own lock. Nothing live sits
+  // behind it — a picker under a lock is a pen that lands nowhere. The owner is
+  // told what to wait for without being told how TOD went.
+  if (gated) {
+    const concluded = trackResult(control.design) !== 'Not tested';
+    return (
+      <div className="p-5">
+        <EmptyState icon={<Lock size={18} />} title="Population is locked"
+          hint={`${isOwnerView
+            ? 'The auditor’s design test comes first, and the reviewer approves it. Uploading and filtering the data opens after that.'
+            : concluded
+              ? 'TOD is concluded and waiting for the reviewer’s approval. The population opens as soon as it is approved.'
+              : 'Conclude TOD first, then the reviewer approves it — data is only worth pulling against a design someone has checked.'}${pop ? ' What was already extracted stays as it is.' : ''}`}>
+          {!isOwnerView && <span className="inline-flex items-center gap-1.5 text-[0.75rem] text-ink-500"><span>TOD is currently</span><TrackPill c={trackResult(control.design)} /></span>}
+        </EmptyState>
+      </div>
+    );
+  }
 
   return (
     <div className="p-5">
@@ -3582,13 +3728,17 @@ function SampleExtractSection({ control, canEdit, locked }: { control: Control; 
   const [openSource, setOpenSource] = useState<string | null>(() => sources.find(s => !s.approvedSample)?.id ?? null);
 
   // Two gates stand in front of the draw, and they fail for different reasons —
-  // so the locked state names the one actually holding it up.
+  // so the locked state names the one actually holding it up. The design gate
+  // includes the reviewer's approval of TOD (S6, A36).
   if (locked) {
-    const designBlocked = trackResult(control.design) !== 'Effective';
+    const awaitingApproval = trackResult(control.design) === 'Effective' && !designApproved(control);
+    const designBlocked = trackResult(control.design) !== 'Effective' || awaitingApproval;
     return (
       <div className="p-5">
         {designBlocked ? (
-          <EmptyState icon={<Lock size={18} />} title="The draw is locked" hint="Conclude TOD as effective first — a sample is only worth pulling for a control that is designed to work.">
+          <EmptyState icon={<Lock size={18} />} title="The draw is locked" hint={awaitingApproval
+            ? 'TOD is concluded effective and waiting for the reviewer’s approval. The draw opens once it is approved.'
+            : 'Conclude TOD as effective first — a sample is only worth pulling for a control that is designed to work.'}>
             <span className="inline-flex items-center gap-1.5 text-[0.75rem] text-ink-500"><span>TOD is currently</span><TrackPill c={trackResult(control.design)} /></span>
           </EmptyState>
         ) : (
@@ -3749,8 +3899,10 @@ function SampleExtractSection({ control, canEdit, locked }: { control: Control; 
  *  button isn't there.
  */
 /** The reason a paper goes back. Its own component so the textarea keeps its
- *  draft while the parent re-renders around it. */
-function ReturnForm({ onCancel, onReturn }: { onCancel: () => void; onReturn: (reason: string) => void }) {
+ *  draft while the parent re-renders around it. `consequence` says what a return
+ *  clears — the whole paper at sign-off, TOD alone from the design approval. Left
+ *  out, it reads as it always has. */
+function ReturnForm({ onCancel, onReturn, consequence = 'Both conclusions clear, and the paper reopens for the auditor.' }: { onCancel: () => void; onReturn: (reason: string) => void; consequence?: string }) {
   const [reason, setReason] = useState('');
   return (
     <>
@@ -3762,7 +3914,7 @@ function ReturnForm({ onCancel, onReturn }: { onCancel: () => void; onReturn: (r
           onClick={() => onReturn(reason.trim())}
           className="h-8 px-3.5 inline-flex items-center gap-1.5 rounded-md bg-risk-600 text-white text-[0.71875rem] font-semibold enabled:hover:bg-risk-700 disabled:opacity-40 disabled:cursor-not-allowed transition-colors cursor-pointer"><CornerDownRight size={12} /> Return</button>
         <button onClick={onCancel} className="h-8 px-3 text-[0.71875rem] font-semibold text-ink-500 hover:text-ink-900 cursor-pointer">Cancel</button>
-        <span className="text-[0.625rem] text-ink-400">Both conclusions clear, and the paper reopens for the auditor.</span>
+        <span className="text-[0.625rem] text-ink-400">{consequence}</span>
       </div>
     </>
   );
@@ -3870,6 +4022,101 @@ function ReviewNotesBlock({ control }: { control: Control }) {
             className="w-full px-3 py-2 rounded-lg border border-canvas-border bg-canvas-elevated text-[0.75rem] resize-none focus:outline-none focus:border-brand-300 focus:ring-2 focus:ring-brand-50" />
           <button disabled={!raising.trim()} onClick={() => { raiseReviewNote(control.id, raising.trim()); setRaising(''); }}
             className="mt-2 h-8 px-3 rounded-lg bg-brand-600 text-white text-[0.71875rem] font-semibold enabled:hover:bg-brand-700 disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer">Raise review note</button>
+        </div>
+      )}
+    </div>
+  );
+}
+
+/**
+ * Design sign-off after TOD (S6, A36).
+ *
+ * TOD is concluded first and everything after it stands on it, so it gets its
+ * own second pair of eyes before any data is pulled: prepared by whoever
+ * concluded it, approved by the engagement's reviewer. Population, Sample and
+ * TOE stay locked until the approval lands.
+ *
+ * The same shape as the paper's sign-off at step ⑤ — two named rows, one line
+ * saying what happens next, the reviewer's two answers side by side — because it
+ * is the same act, earlier. Absent for the control owner: how the auditor's design
+ * test went is not theirs to read.
+ */
+function DesignApprovalBlock({ control }: { control: Control }) {
+  const { eng, role, me, approveDesign, returnDesign } = useIcfr();
+  const logEvent = useAuditLog();
+  // Required note, same as the paper's return: TOD sent back without a reason
+  // costs the auditor the work twice.
+  const [returning, setReturning] = useState(false);
+  const result = trackResult(control.design);
+  if (role === 'risk-owner' || result === 'Not tested') return null;
+
+  const approval = control.design.approval;
+  // A conclusion stamped before approvals existed names its preparer the way the
+  // rest of the paper does — whoever tested it. approveDesign reads it the same way.
+  const preparedBy = approval?.preparedBy ?? (control.design.testedBy ? { by: control.design.testedBy, at: control.design.testedAt ?? '' } : undefined);
+  const approvedBy = approval?.approvedBy;
+  const ownConclusion = samePerson(preparedBy, me);
+  // Mirrors what the store refuses: a sealed audit, and a paper already
+  // countersigned. Once approved the answers go — the way back from there is the
+  // return at sign-off.
+  const open = role === 'reviewer' && !approvedBy && !control.wpSignoff?.reviewer && !isEngagementLocked(eng);
+  const canApprove = open && !ownConclusion;
+
+  const Row = ({ label, entry, waiting }: { label: string; entry?: { by: string; at: string }; waiting: string }) => (
+    <div className="flex items-center gap-2.5 py-2">
+      {entry ? <CheckCircle2 size={16} className="text-compliant-700 shrink-0" /> : <Circle size={15} className="text-ink-300 shrink-0" />}
+      <span className="text-[0.71875rem] text-ink-400 w-[110px] shrink-0">{label}</span>
+      <span className={cn('text-[0.78125rem] min-w-0 truncate', entry ? 'font-semibold text-ink-800' : 'text-ink-400')}>
+        {entry ? `${entry.by}${entry.at ? ` · ${entry.at}` : ''}` : waiting}
+      </span>
+    </div>
+  );
+
+  return (
+    <div className="px-5 pb-5">
+      <div className="rounded-xl border border-canvas-border overflow-hidden">
+        <div className="px-3.5 py-2 bg-paper-50/60 border-b border-canvas-border flex items-center gap-2">
+          <BadgeCheck size={13} className="text-ink-500" />
+          <span className="text-[0.71875rem] font-bold text-ink-700">Design approval</span>
+          <span className="text-[0.65625rem] text-ink-400">{approvedBy ? '1 of 1 approved' : '0 of 1 approved'}</span>
+        </div>
+        <div className="px-3.5 py-1.5">
+          <Row label="Prepared by" entry={preparedBy} waiting="—" />
+          <div className="ac-div" />
+          <Row label="Approved by" entry={approvedBy} waiting={`${eng.reviewer} — not yet approved`} />
+        </div>
+      </div>
+
+      {/* Approved, the rows above already say so — nothing to add underneath. */}
+      {!approvedBy && (
+        <div className="mt-3 flex items-center justify-between gap-3 flex-wrap">
+          <p className="text-[0.6875rem] text-ink-400 leading-relaxed min-w-0">
+            {role === 'auditor' ? 'Waiting for the reviewer to approve TOD.'
+              : ownConclusion ? 'You concluded TOD, so you can’t approve it — four-eyes.'
+              : canApprove ? `Approving states the design test above is sound${result === 'Effective' ? ' — Population, Sample and TOE open once you do' : ''}.`
+              : 'Waits for the reviewer.'}
+          </p>
+          {open && (
+            <span className="shrink-0 flex items-center gap-2">
+              <button onClick={() => setReturning(r => !r)}
+                className="h-9 px-3.5 inline-flex items-center gap-1.5 rounded-lg border border-canvas-border bg-canvas-elevated text-[0.78125rem] font-semibold text-ink-600 hover:border-risk-300 hover:text-risk-700 transition-colors cursor-pointer"><CornerDownRight size={14} /> Return to the auditor</button>
+              {canApprove && (
+                <button onClick={() => { approveDesign(control.id); logEvent({ action: 'Update', description: `Approved TOD for ${control.id}`, module: 'SOX ICFR', entity: 'Control' }); }}
+                  className="h-9 px-4 inline-flex items-center gap-1.5 rounded-lg bg-brand-600 text-white text-[0.78125rem] font-semibold hover:bg-brand-700 transition-colors cursor-pointer"><Check size={14} /> Approve</button>
+              )}
+            </span>
+          )}
+        </div>
+      )}
+
+      {returning && open && (
+        <div className="mt-3 rounded-xl border border-risk-200 bg-risk-50/30 p-3.5">
+          <span className="block text-[0.65625rem] font-bold uppercase tracking-wider text-ink-400 mb-1.5">What needs rework in TOD?</span>
+          <ReturnForm consequence="The TOD conclusion clears, and TOD reopens for the auditor." onCancel={() => setReturning(false)} onReturn={note => {
+            returnDesign(control.id, note);
+            setReturning(false);
+            logEvent({ action: 'Update', description: `Returned TOD on ${control.id} to the auditor — ${note}`, module: 'SOX ICFR', entity: 'Control' });
+          }} />
         </div>
       )}
     </div>
@@ -4201,7 +4448,10 @@ function OperatingSection({ control, canEdit, locked }: { control: Control; canE
   if (locked) {
     return (
       <div className="p-5">
-        <EmptyState icon={<Lock size={18} />} title="TOE is locked" hint="Conclude TOD as effective to unlock TOE. A control that isn’t designed effectively isn’t tested for operation.">
+        <EmptyState icon={<Lock size={18} />} title="TOE is locked" hint={trackResult(control.design) === 'Effective' && !designApproved(control)
+          // S6, A36 — concluded, but the reviewer has not approved it yet
+          ? 'TOD is concluded effective and waiting for the reviewer’s approval. TOE opens once it is approved.'
+          : 'Conclude TOD as effective to unlock TOE. A control that isn’t designed effectively isn’t tested for operation.'}>
           <span className="inline-flex items-center gap-1.5 text-[0.75rem] text-ink-500"><span>TOD is currently</span><TrackPill c={trackResult(control.design)} /></span>
         </EmptyState>
       </div>
@@ -4606,15 +4856,28 @@ export default function ControlDossier() {
   const headOwners = ownersOf(control);
   const designResult = trackResult(control.design);
   const opResult = trackResult(control.operating);
-  const toeLocked = designResult !== 'Effective';
-  // Step ① stands on its own — nothing gates it, and it gates nothing until the
-  // draw. Design can be worked in parallel: reading narratives and validating
-  // considerations needs no data, and what "one instance" means only becomes
-  // answerable once you understand the control anyway.
+  // ── locked until approved (S6, A36) ─────────────────────────────────────────
+  // TOD comes first and the reviewer approves it before anything else opens:
+  // Population, Sample and TOE all wait on that approval, because data pulled
+  // against a design nobody has checked is work done on spec. It used to be that
+  // the population stood on its own and design could be worked in parallel —
+  // not any more. Clearing the TOD conclusion (a reopen, a return) clears the
+  // approval too, so the steps lock again until TOD is concluded and approved.
+  const todApproved = designApproved(control);
+  // What a locked step is waiting for, said on the step: TOD not concluded yet,
+  // concluded and with the reviewer, or approved but ineffective — which still
+  // keeps Sample and TOE shut, because a failed design is not tested for operation.
+  const gateNote = designResult === 'Not tested' ? 'Unlocks after TOD is approved'
+    : !todApproved ? 'Waiting for design approval'
+    : 'Unlocks once TOD is effective';
+  const toeLocked = designResult !== 'Effective' || !todApproved;
+  // Step ② waits on the approval and nothing else.
+  const popGated = !todApproved;
   const popLocked = populationLocked(control);
-  // The draw sits behind two gates: design has to conclude effective, and the
-  // population has to have cleared gate 1. An already-drawn sample is never
-  // re-locked — that work is done, and its own gate is on the paper.
+  // The draw sits behind both of those: an approved, effective design, and a
+  // population that has cleared its own gate. Past the approval, an already-drawn
+  // sample is never re-locked by the population — that work is done, and its own
+  // gate is on the paper.
   const sampleLocked = toeLocked || (!control.operating.sampling && !popLocked);
   const def = eng.deficiencies.find(d => d.controlId === control.id);
 
@@ -4637,8 +4900,10 @@ export default function ControlDossier() {
                 the control is for, which is what the reviewer reads first. The
                 control's own one-line statement used to sit under it prefixed
                 "Control —", directly beneath a title that could only be the
-                control's; every attribute in the stepper says it again. */}
-            <h1 className="leadsheet-title text-[1.625rem] leading-[1.25] text-ink-900 max-w-[64ch] min-w-0">{control.objective ?? control.description}</h1>
+                control's. It runs to the court badge (feedback #27): the old
+                64ch cap wrapped a long objective into a narrow column with half
+                the header empty beside it. */}
+            <h1 className="leadsheet-title text-[1.625rem] leading-[1.25] text-ink-900 flex-1 min-w-0">{control.objective ?? control.description}</h1>
             {/* whose court it is, right-aligned. The W/P stamp that used to sit
                 beside it is gone: a working-paper reference is an audit output,
                 and the control page is where the work happens, not where the
@@ -4769,9 +5034,9 @@ export default function ControlDossier() {
               <span className="text-[0.71875rem] font-semibold text-ink-400 uppercase tracking-wide">Your control</span>
             ) : (
               <>
-                <span className="text-[0.71875rem] text-ink-400 inline-flex items-center gap-1.5"><Tickmark result={designResult === 'Effective' ? 'Pass' : designResult === 'Ineffective' ? 'Fail' : 'Not tested'} size={14} /> TOD {designResult}</span>
+                <span className="text-[0.71875rem] text-ink-400 inline-flex items-center gap-1.5"><Tickmark result={designResult === 'Effective' ? 'Pass' : designResult === 'Ineffective' ? 'Fail' : 'Not tested'} size={14} /> TOD {designResult.toLowerCase()}</span>
                 <ChevronRight size={13} className="text-ink-300" />
-                <span className="text-[0.71875rem] text-ink-400 inline-flex items-center gap-1.5"><Tickmark result={opResult === 'Effective' ? 'Pass' : opResult === 'Ineffective' ? 'Fail' : 'Not tested'} size={14} /> TOE {toeLocked ? 'locked' : opResult}</span>
+                <span className="text-[0.71875rem] text-ink-400 inline-flex items-center gap-1.5"><Tickmark result={opResult === 'Effective' ? 'Pass' : opResult === 'Ineffective' ? 'Fail' : 'Not tested'} size={14} /> TOE {toeLocked ? 'locked' : opResult.toLowerCase()}</span>
               </>
             )}
             {/* Secondary, per DESIGN.md: a tinted purple chip rather than the
@@ -4892,7 +5157,21 @@ export default function ControlDossier() {
               // says where the verdict came from instead of asking for it again.
               ? <span className="text-[0.6875rem] font-semibold text-compliant-700 inline-flex items-center gap-1"><CheckCircle2 size={12} /> Carried from the {control.design.carriedFrom} — retest only if the control changed</span>
               : undefined}>
+            {/* Sent back by the reviewer (S6, A36) — first thing in the step,
+                because it is the reason TOD is open again. Goes the moment TOD is
+                concluded again. Reviewer correspondence is not the owner's. */}
+            {!isOwner && control.design.designReturn && (
+              <div className="px-5 pt-5">
+                <div className="rounded-xl border border-mitigated-200 bg-mitigated-50/40 px-3.5 py-3 flex items-start gap-2.5">
+                  <CornerDownRight size={15} className="text-mitigated-700 mt-0.5 shrink-0" />
+                  <p className="text-[0.75rem] text-ink-700 leading-relaxed min-w-0">
+                    <b className="font-semibold text-mitigated-800">Returned by {control.design.designReturn.by} · {control.design.designReturn.at}</b> — {control.design.designReturn.note}
+                  </p>
+                </div>
+              </div>
+            )}
             <DesignSection control={control} canEdit={canEdit} />
+            <DesignApprovalBlock control={control} />
           </VStep>
           {/* An automated control stops here while its ITGCs hold — see
               operatingApplies. The steps are not rendered locked, they are not
@@ -4915,11 +5194,13 @@ export default function ControlDossier() {
               line must not learn what will be tested or at what threshold. */}
           {isOwner ? (opApplies && (
             <VStep n={2} id="vstep-population" arrived={arrivedAt === 'population'} title="Population" subtitle="The data this control ran on. Upload the source files and filter them down to this control's instances — the auditor tests what you produce here." hideStatus
-              status={control.operating.population ? 'Effective' : 'Not tested'}
-              right={control.operating.population
+              status={control.operating.population && !popGated ? 'Effective' : 'Not tested'} locked={popGated}
+              right={popGated
+                ? <span className="text-[0.6875rem] font-semibold text-ink-400 inline-flex items-center gap-1"><Lock size={11} /> {gateNote}</span>
+                : control.operating.population
                 ? <span className="text-[0.6875rem] font-bold text-compliant-700 inline-flex items-center gap-1"><CheckCircle2 size={12} /> {control.operating.population.count.toLocaleString()} instances</span>
                 : <span className="text-[0.6875rem] font-semibold text-ink-400">Nothing extracted yet</span>}>
-              <PopulationSection control={control} canEdit={canEdit} />
+              <PopulationSection control={control} canEdit={canEdit} locked={popGated} />
             </VStep>
           )) : !opApplies ? (
             <ShortFormNote control={control} />
@@ -4931,18 +5212,20 @@ export default function ControlDossier() {
               conclusion: four checks somebody actually performs on the report the
               population came out of. */}
           <VStep n={2} id="vstep-population" arrived={arrivedAt === 'population'} title="Population" subtitle="Pick the source file and filter it down to this control's instances, then test the report it came from before locking it. Nothing downstream runs until it is locked." hideStatus
-            status={popLocked ? 'Effective' : 'Not tested'}
-            right={popLocked
+            status={popLocked && !popGated ? 'Effective' : 'Not tested'} locked={popGated}
+            right={popGated
+              ? <span className="text-[0.6875rem] font-semibold text-ink-400 inline-flex items-center gap-1"><Lock size={11} /> {gateNote}</span>
+              : popLocked
               ? <span className="text-[0.6875rem] font-bold text-compliant-700 inline-flex items-center gap-1"><Lock size={12} /> Locked · {control.operating.population?.count.toLocaleString()} instances</span>
               : control.operating.population
                 ? <span className="text-[0.6875rem] font-semibold text-mitigated-800 inline-flex items-center gap-1"><AlertTriangle size={11} /> Extracted, not yet locked</span>
                 : <span className="text-[0.6875rem] font-semibold text-ink-400">Nothing extracted yet</span>}>
-            <PopulationSection control={control} canEdit={canEdit} />
+            <PopulationSection control={control} canEdit={canEdit} locked={popGated} />
           </VStep>
           <VStep n={3} title="Sample" subtitle="Drawn off the locked population, sized by how often the control runs, with the selection method and its seed stored so anyone can reproduce the same items." hideStatus
             status={sampleLocked ? 'Not tested' : control.operating.sampling ? 'Effective' : 'Not tested'} locked={sampleLocked}
             right={toeLocked
-              ? <span className="text-[0.6875rem] font-semibold text-ink-400 inline-flex items-center gap-1"><Lock size={11} /> Unlocks after TOD</span>
+              ? <span className="text-[0.6875rem] font-semibold text-ink-400 inline-flex items-center gap-1"><Lock size={11} /> {gateNote}</span>
               : control.operating.sampling
                 ? <span className="text-[0.6875rem] font-bold text-compliant-700 inline-flex items-center gap-1"><CheckCircle2 size={12} /> {control.operating.sampling.size} items</span>
                 : !popLocked
@@ -4951,7 +5234,7 @@ export default function ControlDossier() {
             <SampleExtractSection control={control} canEdit={canEdit} locked={sampleLocked} />
           </VStep>
           <VStep n={4} id="vstep-toe" title="TOE" subtitle="Test of operating effectiveness — each sampled item against each attribute, pass or fail, with the evidence attached. Concludes effective or ineffective." status={toeLocked ? 'Not tested' : opResult} locked={toeLocked}
-            right={toeLocked ? <span className="text-[0.6875rem] font-semibold text-ink-400 inline-flex items-center gap-1"><Lock size={11} /> Unlocks after TOD</span> : undefined}>
+            right={toeLocked ? <span className="text-[0.6875rem] font-semibold text-ink-400 inline-flex items-center gap-1"><Lock size={11} /> {gateNote}</span> : undefined}>
             <OperatingSection control={control} canEdit={canEdit} locked={toeLocked} />
           </VStep>
           </>
