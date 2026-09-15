@@ -56,8 +56,12 @@ export function useAuditFiles(): AuditFile[] {
     /** Names that arrived FOR this audit rather than being inherited — see
      *  `ofAudit`. Collected by name because that is what dedupe keys on. */
     const auditOwn = new Set<string>();
+    // The source picked for each file on New engagement's Materiality step. An
+    // audit copies the engagement's files by name, so the answer follows them
+    // there too; only a file nobody was asked about takes its kind's default.
+    const scopingOrigin = new Map((prog?.scoping?.files ?? []).filter(f => f.origin).map(f => [f.name, f.origin!]));
     const add = (name: string, kind: string, rows: number, from: string, by: string) => {
-      derived.push({ name, kind, rows, from, uploadedBy: by, uploadedAt: 'at scoping', origin: defaultFileOrigin(kind) });
+      derived.push({ name, kind, rows, from, uploadedBy: by, uploadedAt: 'at scoping', origin: scopingOrigin.get(name) ?? defaultFileOrigin(kind) });
     };
     audit?.files.forEach(f => {
       add(
@@ -69,6 +73,9 @@ export function useAuditFiles(): AuditFile[] {
     prog?.entities.forEach((en: { name: string; tbFile?: string; tbLines?: number }) => {
       if (en.tbFile) add(en.tbFile, 'Trial balance', en.tbLines ?? 1240, `${en.name} · engagement scoping`, eng.preparer);
     });
+    // Every file uploaded at engagement creation, the general ledgers included —
+    // a company's TB above already carries its own name, and dedupe drops repeats.
+    prog?.scoping?.files.forEach(f => add(f.name, f.kind === 'tb' ? 'Trial balance' : 'General ledger', f.kind === 'tb' ? 1240 : 18432, 'Engagement creation', eng.preparer));
     if (prog) add(`general_ledger_${prog.fy}.csv`, 'General ledger', 18432, 'Engagement scoping', eng.preparer);
     racmDocs.forEach(d => add(d.name, 'RACM / SOP', 480, d.process ? `${d.process} RACM` : 'RACM page', eng.preparer));
     // Files a population already names as its source. A registry that leaves out

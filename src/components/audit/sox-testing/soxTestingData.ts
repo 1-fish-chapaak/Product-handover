@@ -1,4 +1,5 @@
 import { ENGAGEMENTS, registerEngagement } from '../../../data/engagements';
+import type { FileOrigin } from '../../sox-icfr/types';
 
 /**
  * SOX Testing tab — data layer for the scoping-first flow prototype.
@@ -368,7 +369,9 @@ export interface SoxProgramme {
  */
 export interface EngagementScoping {
   /** The trial balance(s) and general ledger(s) attached. */
-  files: { name: string; kind: 'tb' | 'gl' }[];
+  /** `origin` is the source the user picked for each file as it was uploaded
+   *  (System generated → 'System export', Client prepared → 'Client-prepared'). */
+  files: { name: string; kind: 'tb' | 'gl'; origin?: FileOrigin }[];
   /** Material accounts (caption id → process), as mapped. */
   accountProcesses: Record<string, string>;
   /** The Processes panel: one row per process Ira weighed, her call, and where

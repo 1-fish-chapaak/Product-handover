@@ -304,13 +304,8 @@ export default function EngagementsView({ onOpenEngagement, onOpenAuditPlanning,
             <div className="text-[0.6875rem] font-semibold text-text-muted tracking-wider uppercase mb-1">Engagements</div>
             <h1 className="text-[2rem] font-bold text-text leading-tight">Engagement Library</h1>
             <p className="text-[0.8125rem] text-text-secondary mt-1.5 max-w-xl">
-              {mode === 'overview'
-                ? 'A cross-engagement snapshot — health, attention, and activity across your whole portfolio.'
-                : mode === 'approval-flow'
-                  ? 'Manage reusable approval chains used when exceptions are sent for approval across engagements.'
-                : mode === 'racm'
-                  ? 'The risk and control matrices SOX engagements are scoped from — upload them here, pick them when an engagement is created.'
-                  : 'Browse all engagements — compliance audits, internal audits, and automation programs.'}
+              {/* One line for the whole library, whichever tab is open (user ask). */}
+              A cross-engagement snapshot — health, attention, and activity across your whole portfolio.
             </p>
           </div>
           <div className="flex items-center gap-2 shrink-0">

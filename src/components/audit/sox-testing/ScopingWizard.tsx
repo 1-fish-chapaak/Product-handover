@@ -5,13 +5,14 @@ import {
   Building2, Landmark, Upload, FileText, Check, Circle, Plus, Trash2, X,
   ArrowRight, ArrowLeft, Loader2, Info, Sparkles,
   ShieldCheck, ClipboardList, Zap, AlertCircle, AlertTriangle,
-  FileSpreadsheet, Grid3x3, Paperclip, Pencil,
+  FileSpreadsheet, Grid3x3, Paperclip, Pencil, Minus,
 } from 'lucide-react';
 import { SourceChips } from './ProgrammeView';
 import { FormSelect } from '../../shared/FilterSelect';
 import { OWNER_NAMES } from '../../../data/grc-domain';
 import { registerEngagement, uniqueEngagementName, type EngType, type ProcessCode } from '../../../data/engagements';
 import { useAuditLog } from '../../../context/AdminDataContext';
+import type { FileOrigin } from '../../sox-icfr/types';
 import { cn } from '../../../lib/cn';
 import {
   BASIS_OPTIONS, BEYOND_TB, ENTITY_TYPES, QUAL_REASONS, SEED_ENTITIES,
@@ -55,7 +56,7 @@ const SCOPING_STEP = false;
 /** S11 — materiality, the trial balance and process scope moved here from New
  *  audit's first pass at it: the engagement is scoped once, when it is created,
  *  and picks its RACMs from the RACM tab on the Engagements page. */
-const STEPS: readonly string[] = ['Type', 'Basics', 'Materiality & TB', 'Scope', 'Review'];
+const STEPS: readonly string[] = ['Type', 'Basics', 'Materiality', 'Scope', 'Review'];
 const MAT_TB_STEP = 2;
 const SCOPE_STEP = 3;
 /** Review is always last. */
@@ -513,10 +514,13 @@ export default function ScopingWizard({ onCancel, onCreated, typePreselected, on
    *  flags and the seeded-company merge, and neither belongs to this upload —
    *  the companies are the ones the user put on Basics.
    *
-   *  No "Came from" question, unlike New audit: at creation there is no file
-   *  register to record the answer in, so asking would throw it away. The
-   *  workspace lists these files with the default their kind implies. */
-  const [scopeFiles, setScopeFiles] = useState<{ name: string; kind: 'tb' | 'gl' }[]>([]);
+   *  Each file's source is asked as it lands (user ask, 15 Sep) — System
+   *  generated or Client prepared — and Continue waits on every answer. It is
+   *  saved on the programme's scoping record, which is where the engagement's
+   *  file list reads it back (useAuditFiles), so no control asks it again. */
+  const [scopeFiles, setScopeFiles] = useState<{ name: string; kind: 'tb' | 'gl'; origin?: FileOrigin }[]>([]);
+  /** Files still waiting on their source. */
+  const unsourcedFiles = scopeFiles.filter(f => !f.origin).length;
   /** Required before Materiality & TB will pass — the account mapping and Ira's
    *  process recommendation both read it. The general ledger never is. */
   const hasTb = scopeFiles.some(f => f.kind === 'tb');
@@ -774,6 +778,12 @@ export default function ScopingWizard({ onCancel, onCreated, typePreselected, on
       return { ...prev, [process]: cur.includes(id) ? cur.filter(x => x !== id) : [...cur, id] };
     });
   };
+  /** The process's own tick (user ask, 15 Sep): every RACM the tab holds for
+   *  it, or none. Ticks all even where two share control IDs — the clash note
+   *  shows and Continue holds, as for ticks made one by one. */
+  const setAllRacms = (process: string, on: boolean) => {
+    setRacmPicks(prev => ({ ...prev, [process]: on ? racmsFor(process).map(r => r.id) : [] }));
+  };
   /** What each in-scope process takes, in the order the processes are listed
    *  (biggest material balance first) — which is also the order their controls
    *  are copied in. */
@@ -835,7 +845,7 @@ export default function ScopingWizard({ onCancel, onCreated, typePreselected, on
   }, [racmUploadFor]);
 
   // ── Gates ────────────────────────────────────────────────────────────────
-  const matTbReady = hasTb && benchmark > 0 && (basis === 'custom' || pct > 0);
+  const matTbReady = hasTb && unsourcedFiles === 0 && benchmark > 0 && (basis === 'custom' || pct > 0);
   /** Moved companies and moved processes still owed a note — one count for the
    *  footer. */
   const notesDue = notesOutstanding + procNotesOutstanding;
@@ -856,7 +866,9 @@ export default function ScopingWizard({ onCancel, onCreated, typePreselected, on
     // Scoping parked this is the only step that collects entities, so it gates
     // on them: at least one named row, or the company itself via the checkbox.
     // RACMs stay optional — an entity can be listed before its matrix exists.
-    name.trim().length > 0 && !nameTooLong && code.trim().length > 0 && groupName.trim().length > 0
+    // Code and Owner are parked from the step (user ask) — the code is always the
+    // auto-generated one, so it no longer gates. Description is required, as on staging.
+    name.trim().length > 0 && !nameTooLong && description.trim().length > 0 && groupName.trim().length > 0
       && entities.length > 0 && entities.every(e => e.name.trim()),
     // Materiality & TB — the rule answered and a trial balance attached (the
     // general ledger never holds Continue). The parked Scoping step's gate that
@@ -872,7 +884,8 @@ export default function ScopingWizard({ onCancel, onCreated, typePreselected, on
    *  usually further up the scroll. A clash outranks a missing RACM (it names
    *  the thing to untick), which outranks a missing note. */
   const footerHint = step === MAT_TB_STEP
-    ? (!hasTb ? 'Upload a trial balance to continue' : null)
+    ? (!hasTb ? 'Upload a trial balance to continue'
+      : unsourcedFiles > 0 ? 'Answer the source of every file to continue' : null)
     : step === SCOPE_STEP
       ? (clashes.length > 0 ? 'Untick one of the RACMs whose control IDs clash'
         : noRacmInScope.length > 0 ? `${andList(noRacmInScope)} ${noRacmInScope.length === 1 ? 'has' : 'have'} no RACM picked`
@@ -1341,7 +1354,7 @@ export default function ScopingWizard({ onCancel, onCreated, typePreselected, on
       // workspace has nothing missing to nag about.
       scopingSkipped: undefined,
       scoping: {
-        files: scopeFiles.map(f => ({ name: f.name, kind: f.kind })),
+        files: scopeFiles.map(f => ({ name: f.name, kind: f.kind, ...(f.origin ? { origin: f.origin } : {}) })),
         accountProcesses: Object.fromEntries(materialRows.map(c => [c.id, processOf(c)])),
         processScope: processRows.map(r => {
           const move = procChanges.find(c => c.process === r.process);
@@ -1466,6 +1479,10 @@ export default function ScopingWizard({ onCancel, onCreated, typePreselected, on
                   <p className="text-[0.6875rem] text-ink-500 mt-1">An engagement called “{name.trim()}” already exists — this one will be saved as “{finalName}”.</p>
                 )}
               </div>
+              {/* PARKED (user ask, 15 Sep): Code and Owner — Basics matches staging's
+                  (name, description, company / group, entities). The engagement
+                  is still saved with the auto-generated code and the default
+                  owner, so nothing downstream changes. To restore, uncomment.
               <div className="grid grid-cols-2 gap-3">
                 <div>
                   <label className={basicsLabelCls}>Code <span className="text-risk-700">*</span></label>
@@ -1478,6 +1495,7 @@ export default function ScopingWizard({ onCancel, onCreated, typePreselected, on
                   <FormSelect value={owner} options={OWNER_NAMES} onChange={setOwner} className={selectCls} ariaLabel="Owner" menuCls="w-full" />
                 </div>
               </div>
+              */}
               {AUDIT_PERIOD_FIELD && (<>
               <div className="grid grid-cols-2 gap-3">
                 {YEAR_TYPE_PICKER && (
@@ -1513,8 +1531,9 @@ export default function ScopingWizard({ onCancel, onCreated, typePreselected, on
               </p>
               </>)}
               <div>
-                <label className={basicsLabelCls}>Description <span className="normal-case font-medium text-ink-400">(optional)</span></label>
+                <label className={basicsLabelCls}>Description <span className="text-risk-700">*</span></label>
                 <textarea rows={2} value={description} onChange={e => setDescription(e.target.value)} placeholder="One-line description of scope and intent." className={inputCls + ' resize-none'} />
+                {description.trim().length === 0 && <Hint text="Description is required" />}
               </div>
 
               {/* Group & entities — moved up from Scoping (user ask): who the
@@ -1523,9 +1542,34 @@ export default function ScopingWizard({ onCancel, onCreated, typePreselected, on
                   and trial-balance uploads on the Scoping step map entities in
                   by name, so anything typed here is merged, never duplicated. */}
               <div>
-                <label className={basicsLabelCls}>Group (listed / holding) <span className="text-risk-700">*</span></label>
-                <input value={groupName} onChange={e => setGroupName(e.target.value)} className={inputCls} />
-                {groupName.trim().length === 0 && <Hint text="Group name is required" />}
+                {/* Staging's label (user ask, 15 Sep) — still required: the group
+                    names the company list on the RACM tab, and the company itself
+                    when there are no separate entities. */}
+                <label className={basicsLabelCls}>Company / group name</label>
+                <input value={groupName} onChange={e => setGroupName(e.target.value)} placeholder="e.g. Altura Infra Group" className={inputCls} />
+                {groupName.trim().length === 0 && <Hint text="Company / group name is required" />}
+                {/* No subsidiaries is a real answer, not an empty table — asked
+                    right under the company, as staging does (user ask, 15 Sep). */}
+                <button
+                  role="checkbox"
+                  aria-checked={soloEntity}
+                  onClick={toggleSoloEntity}
+                  className={`mt-2 w-full text-left flex items-start gap-2.5 p-2.5 rounded-lg border transition-colors cursor-pointer ${
+                    soloEntity ? 'border-primary/30 bg-primary/5' : 'border-transparent bg-surface-2/50 hover:bg-surface-2'
+                  }`}
+                >
+                  <span className={`w-4 h-4 rounded inline-flex items-center justify-center shrink-0 mt-0.5 border ${
+                    soloEntity ? 'bg-primary border-primary text-white' : 'border-border bg-white'
+                  }`}>
+                    {soloEntity && <Check size={10} />}
+                  </span>
+                  <span>
+                    <span className="block text-[12px] font-semibold text-text">There are no separate entities</span>
+                    <span className="block text-[11px] text-text-muted leading-relaxed mt-0.5">
+                      This company is audited as the single entity in scope — no subsidiaries to list.
+                    </span>
+                  </span>
+                </button>
               </div>
 
               {/* PARKED (user ask): the group trial balance / general ledger
@@ -1983,27 +2027,8 @@ export default function ScopingWizard({ onCancel, onCreated, typePreselected, on
                       the point of deciding you needed another company. */}
                 </div>
 
-                {/* No subsidiaries is a real answer, not an empty table. */}
-                <button
-                  role="checkbox"
-                  aria-checked={soloEntity}
-                  onClick={toggleSoloEntity}
-                  className={`mt-2 w-full text-left flex items-start gap-2.5 p-2.5 rounded-lg border transition-colors cursor-pointer ${
-                    soloEntity ? 'border-primary/30 bg-primary/5' : 'border-transparent bg-surface-2/50 hover:bg-surface-2'
-                  }`}
-                >
-                  <span className={`w-4 h-4 rounded inline-flex items-center justify-center shrink-0 mt-0.5 border ${
-                    soloEntity ? 'bg-primary border-primary text-white' : 'border-border bg-white'
-                  }`}>
-                    {soloEntity && <Check size={10} />}
-                  </span>
-                  <span>
-                    <span className="block text-[12px] font-semibold text-text">There are no separate entities</span>
-                    <span className="block text-[11px] text-text-muted leading-relaxed mt-0.5">
-                      {groupShort(groupName) || 'The company'} is audited as the single entity in scope — no subsidiaries to list.
-                    </span>
-                  </span>
-                </button>
+                {/* Staging's check, under the table (user ask, 15 Sep). */}
+                {!soloEntity && entities.length === 0 && <Hint text="Add at least one entity, or tick 'There are no separate entities'." />}
               </div>
             </div>
           </StepShell>
@@ -2075,6 +2100,23 @@ export default function ScopingWizard({ onCancel, onCreated, typePreselected, on
                               >
                                 <Trash2 size={13} />
                               </button>
+                            </div>
+                            {/* The source, asked as the file enters (user ask) —
+                                this step's wording; the rest of SOX keeps System
+                                export / Client-prepared for the same two answers. */}
+                            <div className="mt-2">
+                              <span className="block text-[0.65625rem] font-bold uppercase tracking-wider text-ink-400 mb-1">Source of the document</span>
+                              <div className="grid grid-cols-2 gap-1.5" role="group" aria-label={`Source of ${f.name}`}>
+                                {([['System export', 'System generated'], ['Client-prepared', 'Client prepared']] as const).map(([o, label]) => (
+                                  <button key={o} type="button" aria-pressed={f.origin === o}
+                                    onClick={() => setScopeFiles(prev => prev.map((x, n) => (n === i ? { ...x, origin: o } : x)))}
+                                    className={cn('h-7 px-2 rounded-md border text-[0.6875rem] font-semibold transition-colors cursor-pointer inline-flex items-center justify-center gap-1',
+                                      f.origin === o ? 'border-brand-300 bg-brand-50 text-brand-700' : 'border-canvas-border bg-white text-ink-600 hover:border-ink-300')}>
+                                    {f.origin === o && <Check size={11} className="shrink-0" />}{label}
+                                  </button>
+                                ))}
+                              </div>
+                              {!f.origin && <p className="text-[0.65625rem] text-high-700 font-semibold mt-1">Pick the source to continue</p>}
                             </div>
                           </div>
                         ))}
@@ -2570,11 +2612,36 @@ export default function ScopingWizard({ onCancel, onCreated, typePreselected, on
                     const count = g.racms.reduce((s, r) => s + r.controls.length, 0);
                     /** Nothing on the tab to tick — uploading is the only way on. */
                     const nothingOnTab = onTab.length === 0;
+                    const allTicked = !nothingOnTab && g.racms.length === onTab.length;
+                    const someTicked = g.racms.length > 0 && !allTicked;
                     return (
                       <div key={g.process} className="rounded-xl border border-canvas-border bg-white overflow-hidden">
                         <div className="flex flex-wrap items-center gap-x-2 gap-y-1.5 px-4 py-2.5 border-b border-canvas-border">
-                          <Grid3x3 size={14} className="text-ink-400 shrink-0" />
-                          <span className="text-[0.8125rem] font-semibold text-ink-900 min-w-0 truncate">{g.process}</span>
+                          {/* The process's tick sits in the RACM ticks' column:
+                              all of them, or none (a dash when some). Nothing
+                              on the tab leaves nothing to tick — the icon stays. */}
+                          {nothingOnTab ? (
+                            <>
+                              <Grid3x3 size={14} className="text-ink-400 shrink-0" />
+                              <span className="text-[0.8125rem] font-semibold text-ink-900 min-w-0 truncate">{g.process}</span>
+                            </>
+                          ) : (
+                            <button
+                              role="checkbox"
+                              aria-checked={allTicked ? true : someTicked ? 'mixed' : false}
+                              aria-label={`${allTicked ? 'Untick' : 'Tick'} every ${g.process} RACM`}
+                              onClick={() => setAllRacms(g.process, !allTicked)}
+                              className="inline-flex items-center gap-3 min-w-0 cursor-pointer text-left"
+                            >
+                              <span className={cn(
+                                'w-4 h-4 rounded border flex items-center justify-center shrink-0 transition-colors',
+                                allTicked || someTicked ? 'bg-brand-600 border-brand-600 text-white' : 'border-canvas-border bg-white',
+                              )}>
+                                {allTicked ? <Check size={11} strokeWidth={3} /> : someTicked ? <Minus size={11} strokeWidth={3} /> : null}
+                              </span>
+                              <span className="text-[0.8125rem] font-semibold text-ink-900 min-w-0 truncate">{g.process}</span>
+                            </button>
+                          )}
                           {/* Said once: an empty process explains itself in the
                               body below, so the header count only shows when
                               there is something to count. */}

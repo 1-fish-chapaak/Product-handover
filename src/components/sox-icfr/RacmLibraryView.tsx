@@ -4,7 +4,8 @@
  * What used to be each SOX engagement's RACM tab, moved up a level: Create RACM
  * (upload a matrix, or an SOP → prompt → extract), the import review, the list,
  * the spreadsheet editor in a new tab, and the ⋯ menu with View SOP and Delete.
- * A process can have several RACMs, so the list is grouped by process.
+ * One flat table (user ask, 15 Sep): a Process column says whose RACM each row
+ * is, and the process filter narrows the same table rather than hiding groups.
  *
  * Pre-testing review is not here — it belongs to each engagement's copy.
  * Internal Audit and Compliance keep their own RACM screens; this tab is SOX only.
@@ -104,15 +105,13 @@ export default function RacmLibraryView({ canManage }: {
   const [deleting, setDeleting] = useState<LibraryRacm | null>(null);
 
   const processes = useMemo(() => Array.from(new Set(racms.map(r => r.process))).sort((a, b) => a.localeCompare(b)), [racms]);
-  const groups = useMemo(() => {
+  /** The rows on screen — newest first, as the tab keeps them, so a RACM just
+   *  created lands at the top. */
+  const shown = useMemo(() => {
     const q = search.trim().toLowerCase();
-    const shown = racms.filter(r => (process === 'All' || r.process === process)
-      && (!q || `${r.name} ${r.entity} ${r.fileName ?? ''} ${r.usedBy.map(u => u.name).join(' ')}`.toLowerCase().includes(q)));
-    return processes
-      .map(p => ({ process: p, rows: shown.filter(r => r.process === p) }))
-      .filter(g => g.rows.length > 0);
-  }, [racms, processes, process, search]);
-  const shownCount = groups.reduce((n, g) => n + g.rows.length, 0);
+    return racms.filter(r => (process === 'All' || r.process === process)
+      && (!q || `${r.name} ${r.process} ${r.entity} ${r.fileName ?? ''} ${r.usedBy.map(u => u.name).join(' ')}`.toLowerCase().includes(q)));
+  }, [racms, process, search]);
 
   const confirmDelete = (r: LibraryRacm) => {
     setDeleting(null);
@@ -126,7 +125,7 @@ export default function RacmLibraryView({ canManage }: {
 
   return (
     <div>
-      <div className="flex items-center gap-2 mb-2 flex-wrap">
+      <div className="flex items-center gap-2 mb-5 flex-wrap">
         <div className="relative flex-1 min-w-[220px] max-w-md">
           <Search size={14} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-text-muted" />
           <input
@@ -154,80 +153,71 @@ export default function RacmLibraryView({ canManage }: {
           </button>
         )}
       </div>
-      <p className="text-[0.75rem] text-text-muted mb-5 max-w-2xl">
-        RACMs for SOX engagements. A new engagement picks the ones it tests and keeps its own copy, so changes here only reach engagements created afterwards.
-      </p>
 
-      {groups.length === 0 ? (
+      {shown.length === 0 ? (
         <div className="border border-border-light rounded-xl p-14 text-center bg-white">
           <Table2 size={32} className="text-text-muted mx-auto mb-3" />
           <p className="text-[0.875rem] font-semibold text-text mb-1">{racms.length ? 'No RACMs match your search' : 'No RACMs yet'}</p>
           <p className="text-[0.75rem] text-text-muted">{racms.length ? 'Try clearing the process filter or search.' : 'Create one from a matrix or an SOP.'}</p>
         </div>
       ) : (
-        <div className="space-y-6">
-          {groups.map(g => (
-            <section key={g.process} aria-labelledby={`racm-group-${g.process}`}>
-              <h2 id={`racm-group-${g.process}`} className="flex items-baseline gap-2 mb-2 px-1">
-                <span className="text-[0.8125rem] font-semibold text-text">{g.process}</span>
-                <span className="text-[0.6875rem] text-text-muted tabular-nums">{g.rows.length} RACM{g.rows.length === 1 ? '' : 's'}</span>
-              </h2>
-              <div className="reg-wrap">
-                <table className="w-full border-collapse" style={{ minWidth: 860 }}>
-                  <thead className="reg-head">
-                    <tr>
-                      <th>RACM</th>
-                      <th style={{ width: 220 }}>Company</th>
-                      <th style={{ width: 64 }}>Risks</th>
-                      <th style={{ width: 76 }}>Controls</th>
-                      <th style={{ width: 200 }}>Used by</th>
-                      <th style={{ width: 190 }} aria-label="Actions" />
+        <>
+          <div className="reg-wrap">
+            <table className="w-full border-collapse" style={{ minWidth: 1020 }}>
+              <thead className="reg-head">
+                <tr>
+                  <th>RACM</th>
+                  <th style={{ width: 170 }}>Process</th>
+                  <th style={{ width: 200 }}>Company</th>
+                  <th style={{ width: 64 }}>Risks</th>
+                  <th style={{ width: 76 }}>Controls</th>
+                  <th style={{ width: 190 }}>Used by</th>
+                  <th style={{ width: 190 }} aria-label="Actions" />
+                </tr>
+              </thead>
+              <tbody>
+                {shown.map(r => {
+                  const risks = new Set(r.controls.map(c => c.riskId)).size;
+                  return (
+                    <tr key={r.id} className="reg-row" role="button" tabIndex={0}
+                      aria-label={`Open ${r.name} in the spreadsheet editor — opens in a new tab`}
+                      onClick={() => openEditorTab(r)} onKeyDown={e => { if (e.key === 'Enter') openEditorTab(r); }}>
+                      <td>
+                        <span className="flex items-center gap-2.5 min-w-0">
+                          <span className="w-8 h-8 rounded-lg bg-brand-50 text-brand-700 flex items-center justify-center shrink-0"><Table2 size={15} /></span>
+                          <span className="min-w-0">
+                            <span className="block text-[13px] font-semibold text-ink-900 truncate">{r.name}</span>
+                            <span className="block text-[11.5px] text-ink-400 truncate">{sourceLine(r)}</span>
+                          </span>
+                        </span>
+                      </td>
+                      <td><span className="text-[12.5px] text-ink-700">{r.process}</span></td>
+                      <td><span className="text-[12.5px] text-ink-700">{r.entity || '—'}</span></td>
+                      <td><span className="tabular-nums font-medium text-ink-600">{risks}</span></td>
+                      <td><span className="tabular-nums font-medium text-ink-600">{r.controls.length}</span></td>
+                      <td>
+                        {r.usedBy.length
+                          ? <span className="block text-[12px] text-ink-700 leading-snug" title={r.usedBy.map(u => u.name).join('\n')}>
+                              {r.usedBy[0]!.name}{r.usedBy.length > 1 && <span className="text-ink-400"> +{r.usedBy.length - 1}</span>}
+                            </span>
+                          : <span className="text-[12px] text-ink-400">Not used yet</span>}
+                      </td>
+                      <td>
+                        <span className="flex items-center justify-end gap-2 whitespace-nowrap">
+                          <span className="flex items-center gap-1.5 text-[12px] font-semibold text-ink-500">
+                            <FileSpreadsheet size={13} className="text-ink-400" /> Spreadsheet editor <ExternalLink size={12} className="text-ink-400" />
+                          </span>
+                          <RowActions racm={r} canManage={canManage} onDelete={() => setDeleting(r)} />
+                        </span>
+                      </td>
                     </tr>
-                  </thead>
-                  <tbody>
-                    {g.rows.map(r => {
-                      const risks = new Set(r.controls.map(c => c.riskId)).size;
-                      return (
-                        <tr key={r.id} className="reg-row" role="button" tabIndex={0}
-                          aria-label={`Open ${r.name} in the spreadsheet editor — opens in a new tab`}
-                          onClick={() => openEditorTab(r)} onKeyDown={e => { if (e.key === 'Enter') openEditorTab(r); }}>
-                          <td>
-                            <span className="flex items-center gap-2.5 min-w-0">
-                              <span className="w-8 h-8 rounded-lg bg-brand-50 text-brand-700 flex items-center justify-center shrink-0"><Table2 size={15} /></span>
-                              <span className="min-w-0">
-                                <span className="block text-[13px] font-semibold text-ink-900 truncate">{r.name}</span>
-                                <span className="block text-[11.5px] text-ink-400 truncate">{sourceLine(r)}</span>
-                              </span>
-                            </span>
-                          </td>
-                          <td><span className="text-[12.5px] text-ink-700">{r.entity || '—'}</span></td>
-                          <td><span className="tabular-nums font-medium text-ink-600">{risks}</span></td>
-                          <td><span className="tabular-nums font-medium text-ink-600">{r.controls.length}</span></td>
-                          <td>
-                            {r.usedBy.length
-                              ? <span className="block text-[12px] text-ink-700 leading-snug" title={r.usedBy.map(u => u.name).join('\n')}>
-                                  {r.usedBy[0]!.name}{r.usedBy.length > 1 && <span className="text-ink-400"> +{r.usedBy.length - 1}</span>}
-                                </span>
-                              : <span className="text-[12px] text-ink-400">Not used yet</span>}
-                          </td>
-                          <td>
-                            <span className="flex items-center justify-end gap-2 whitespace-nowrap">
-                              <span className="flex items-center gap-1.5 text-[12px] font-semibold text-ink-500">
-                                <FileSpreadsheet size={13} className="text-ink-400" /> Spreadsheet editor <ExternalLink size={12} className="text-ink-400" />
-                              </span>
-                              <RowActions racm={r} canManage={canManage} onDelete={() => setDeleting(r)} />
-                            </span>
-                          </td>
-                        </tr>
-                      );
-                    })}
-                  </tbody>
-                </table>
-              </div>
-            </section>
-          ))}
-          <p className="px-1 text-[0.6875rem] text-text-muted tabular-nums">{shownCount} of {racms.length} RACMs</p>
-        </div>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+          <p className="mt-3 px-1 text-[0.6875rem] text-text-muted tabular-nums">{shown.length} of {racms.length} RACMs</p>
+        </>
       )}
 
       {creating && (
