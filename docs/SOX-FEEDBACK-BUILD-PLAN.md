@@ -10,6 +10,68 @@
 - **A4 Delete RACM:** blocked while any audit covers its controls (menu item disabled with the reason); otherwise confirm → delete.
 - **A4 Version history:** parked. **View SOP** appears only on RACMs made from an SOP and opens the uploaded file for the session.
 
+## S11 — RACM library + scoping at engagement creation (built 15 Sep, not committed)
+- **RACM tab moves to the Engagements page**, beside Approval Flow: Overview · All Engagements · **RACM** · Approval Flow. RACMs are uploaded / created there. **Several RACMs can exist for one process.**
+- **A SOX engagement has no RACM tab** — only its **Control library**, holding only the scoped controls.
+- **New engagement (SOX):** ① Basics (name, group, entities / org chart) → ② **Materiality & TB** (rule, trial balance upload required, material accounts mapped to processes) → ③ **Scope** (companies in scope with the coverage bar and notes; ✦ Ira-recommended processes with notes / qualitative reasons; for each in-scope process **pick its RACM** from the RACM tab) → ④ Review. An in-scope process with no RACM offers **Upload RACM** right there (same import review; saved to the RACM tab), and blocks until uploaded or moved out with a note.
+- **Scoping is by process, not by RACM.**
+- **New audit: left as it is for now** (you'll handle it later) — it still carries the S10 materiality / TB / scope steps.
+- **ID format (supersedes A14):** Risk ID = `PROCESS/ENTITY/R001`, Control ID = `PROCESS/ENTITY/R001/C001`, with **short codes** (e.g. `TRY/ASO/R001/C001`). Codes are **made from the names automatically and editable** (entity code on the Basics entity table, process code on the RACM tab), unique within the engagement. The **entity comes from the RACM file** (its entity/subsidiary column, or the entity chosen at upload). **R/C numbers use the file's own Risk ID / Control ID** when present, else file order. **Seeded controls and risks are renamed too** (e.g. TRY-01 → `TRY/AIH/R001/C001`).
+- **Answered 15 Sep (after "go"):**
+  1. **SOX only** — Internal Audit / Compliance keep their own RACM screens, unchanged.
+  2. **Everything moves** from the SOX RACM tab to the Engagements page tab: Create RACM (upload RACM / upload SOP → prompt → extract), the import review, the RACM list, the spreadsheet editor (new tab), ⋯ View SOP / Delete. A process can have several RACMs.
+  3. **Pre-testing review stays with the engagement** — the tab's list drops that column; each engagement approves its own copy (Overview meter as today).
+  4. **Copy at pick time** — an engagement copies the RACM's controls when it picks it; later edits on the tab only reach engagements created afterwards.
+  5. **Delete blocked while in use** — disabled with the reason ("Used by FY26 ICFR — Altura Infra Group") while any engagement was created from it.
+  6. **Entity: pick or type** — Create RACM keeps an Entity field listing every company already named on a SOX engagement (grouped by group) plus "type a new company"; the file's entity column, when present, overrides it per row.
+  7. **Several RACMs, any mix** per in-scope process on the Scope step (whatever company they're for); a process with none picked blocks.
+  8. **IDs made at import on the RACM tab** — the import review shows the process and entity codes (from the names, editable) and each row's new ID; engagements copy them unchanged.
+  9. **ID clash = flag and block** on the Scope step ("3 control IDs appear in both Treasury RACMs") until one RACM is unticked.
+  10. **Existing engagements' RACMs seed the tab** (SOX-104, SOX-105, ENG-002, ENG-010 …), each "Used by" its engagement, IDs renamed; engagements keep their controls as their copy.
+  11. **S4 stays separate, after S11** — S11 uses today's columns; S4 later adds the template and fields to the new tab.
+  12. **Add later = "Add RACM"** on the engagement's Control library and Overview: pick RACMs from the tab (or upload one then), same clash check, controls copied in.
+  13. **All controls** of a picked RACM are copied; narrowing (key only, untick) stays in New audit.
+- **Defaults taken (say if wrong):** anyone who can create engagements can create/edit/delete on the tab (the prototype is always System Admin); the Materiality & TB step copies New audit's (TB required, GL optional); a RACM uploaded from the Scope step is saved to the tab and picked for that process.
+- **Built (15 Sep, build passes, not checked on screen):**
+  - New: `racmIds.ts` (codes + ID building + engagement rename + code register), `racmLibrary.ts` (the tab's store, seeded from 24 existing engagement RACMs), `CreateRacmFlow.tsx` (entity pick-or-type → process → RACM/SOP → import review → saved to tab), `RacmLibraryView.tsx` (Engagements → RACM, grouped by process), `AddRacmModal.tsx`.
+  - Import review: no engagement needed; new **Entity** column; editable process/entity codes with the new ID per row ("File: C-12" underneath); codes another name holds are refused.
+  - Seeds renamed on the way out of `seedIcfrEngagement` (every reference follows); each control keeps `seedKey` (old id) so every demo number hashes the same.
+  - New engagement (SOX): Type → Basics → Materiality & TB → Scope → Review; `soxControls` / `soxRacms` on the engagement; RACMs marked used.
+  - Engagement: RACM tab parked in both shells; "Add RACM" on Control library, Controls register (no audit open) and Overview; notifications that pointed at the RACM tab go to the Control library.
+  - Hand-added controls (New control) number in the new format.
+- **Defaults the build took (raised to you):** RACMs pre-tick on Scope when their company is in scope (Ltd/Limited spellings match); Scope also needs ≥1 process and ≥1 company in; chart companies other than the Airline samples get 4 generic TB accounts (so Ira recommends only O2C and P2P); several TB files → the first is stamped on every company.
+- **Open after the build:** (1) pre-testing review approve/remark has no reachable screen (it was only on the parked matrix page since S3) — the Overview meter can't move; (2) the engagement Overview's "Shared across every audit" tile still says "Maintained once here" with a RACM row that now opens the Control library; (3) New audit still says "create one from the RACM tab first" (New audit left as is).
+
+## S9 decisions (15 Sep) — built
+- **A30 register columns:** Deficiency · Finding · Track · Exposure · Severity · **Risk owner** (the control's owner) · **Deficiency owner** (the plan's "Responsible person", — until written) · **Stage with due date** ("Remediation · due 30 Nov", red "overdue 4d") · Court.
+- **A31 Ira pre-fills** likelihood, exposure and compensating control when a deficiency is raised, each tagged "✦ Ira suggested — ‹reason›"; the grade computes straight away; editing a field removes its tag. Seeded deficiencies keep their values.
+- **A32 exposure from data = value at risk:** total value of the population transactions in the failure window (first failed item → fix), with the maths and "[Use ₹…] or type your own". TOD deficiency or no population: the whole audit period, valued from the trial balance accounts mapped to the control's process.
+- **A33 gap quantification: parked.**
+- **C10:** "Clearly Trivial" is its own grade on every screen (Dashboard own row, counted once; Engagement Overview; working paper; reviewer queue; archive). Still out of the ICFR opinion.
+- **C11:** a TOD deficiency's retest has no sample — it re-checks the design checks that failed, against the fix evidence (✓/✗ or "Run Ira on these checks"); passes when all pass; a fail needs a reason. TOE retests unchanged.
+
+- **Raised after the S9/S10 build:** (1) a design (TOD) deficiency's exposure is the whole period's trial balance value, so it will usually read as a material weakness (e.g. FIX-05 ₹77 Cr against ₹12 Cr materiality); (2) the "Retestable from…" wait still counts from the control's frequency for a TOD retest; (3) the CY 2025 archive's two seeded Significant Deficiencies (₹4.2 / ₹1.1) would grade Clearly Trivial if recalculated — left as seeded.
+
+## S10 decisions (15 Sep) — built
+- **Trial balance required** on New audit (interim / year-end); roll-forward unchanged.
+- **A34a:** after the TB upload, Materiality & files lists only **material accounts (≥ performance materiality)** with a process dropdown pre-filled by Ira. Options: the standard SOX list plus the engagement's own RACM processes; ones without a RACM marked "no RACM yet". Saved on the audit.
+- **A34b:** a **Processes panel at the top of Scope** — "Ira recommends N processes", in scope when a material account maps to it; moving against Ira needs a note; the RACM side pre-ticks in-scope processes' RACMs (replacing the pre-tick from companies). **An in-scope process with no RACM blocks Continue** and offers **"Upload RACM"** right there (the same import review as the RACM tab); after import its controls are pre-ticked.
+- **Raised after the build:** (1) the Processes panel is a record — what the audit tests still comes from the company or RACM side, so a process marked Out is still tested if an in-scope company feeds it; (2) with a trial balance now always attached, the company side shows Altura Water as "Not in the trial balance" and Altura Green Hydrogen appears, so coverage figures change; (3) the wizard's materiality still opens on ₹420 Cr × 5% (PM ₹15.75 Cr), not Altura's ₹12 Cr / ₹9 Cr, so 7 accounts are listed rather than 11.
+- **A34c:** switching an out process in asks for a **reason from a list** (High transaction velocity / Complex accounting / Fraud risk / Regulatory focus / Management estimate) plus a note, tagged "Qualitative".
+
+## S8 decisions (15 Sep)
+- **A28 methodology on the audit:** New audit → step 1 gets **Selection** (Random / Systematic / Targeted) and **Spread by** (Quarters / Countries / Entities, any). New audits default to Random, no spread. A roll-forward inherits its interim's methodology read-only. Every existing audit is seeded Random, spread by entity. The control's Sample step shows it read-only ("Method: Random · spread by entity (set on the audit)") and only asks **how many items**. The written draw request and its "Read as" line are gone (replaced by a number). The draw shapes itself to the spread (even per quarter; every entity/country reached before any doubles) and shows the split with empty groups flagged. Entities carry a country (new engagements from the S2 entity table; seeded engagements = India).
+- **A28 yearly running total:** "This year so far: X of Y samples tested", split per audit in the same year, target = the control's suggested sample size (frequency + risk). Past audits save their tested count when the next audit starts; seeded audits get a stand-in count.
+- **A29 year-end controls = frequency Annual.** In an interim or roll-forward audit their Population, Sample and TOE are locked "Pending until ‹31 Dec / 31 Mar› — tested in the year-end audit" (TOD works); registers, dashboard, risk-owner inbox and the bell read "Pending until …" and leave them out of Due now. No seed change (Altura has no Annual control).
+- **Your answers after the build:** (1) over-target totals read "26 samples tested this year — above the target of 5" (target stays the size guide; seeds unchanged) — applied; (2) **bring the written draw request back** with its "Read as" line — words set how many items and which months, never the method (method/spread stay from the audit) — built ("Ask for the sample" box + "Read as: 5 items · Jan–Jun"; a method named in the words reads "method stays Random — set on the audit"; the button stays "Draw sample"); (3) yearly counts split **by sample date** — built (undated seeded items belong to the round that drew them, so Altura reads Interim 25 · Roll-forward 0 with either audit open; stand-in counts removed); (4) in interim/roll-forward audits, **year-end-pending controls don't block the audit sign-off** — built on the Dashboard and the working-paper sign-off box ("2 controls pending until 31 Dec 2026 — tested in the year-end audit").
+- **Noticed, not fixed:** a random draw's item dates cluster on consecutive days; starting a new Altura audit archives the interim with the roll-forward's items counted in it.
+- **Specs:** `_verify_multi_source_population` ("asked for in words") needs 2 assertions updated (label now "Ask for the sample from …", months reading changed); `_verify_sample_extract` already stale; re-check `_verify_new_audit_wizard`, `_verify_bell_badge`.
+
+## S7 decisions (15 Sep)
+- **A22 parked** (count check against the control's frequency) — not built.
+- **C6 dropped for the prototype** — feedback #62 was about a section on staging; added to the staging list (O1).
+- **A24 built — inside Ira's TOE AI validation, no new button.** Each attribute keeps its one "View results" link (shown for Pass and Fail). The results window's per-item table is replaced on every attribute by **Document vs system data — each sampled item**: Sample · Field · Document says · System says · Match/Mismatch, one row per item of the drawn sample (the sample drawn after the population is extracted, which is what TOE tests). The field each item is compared on comes from the attribute's required files (approval record → approver, vendor master log → bank account, payment run → payment amount, …). The mismatch row is the same item the sample grid fails. Ira's summary names it; with no sample yet, Ira compares 4 items from the files instead. Q&A stays as it was.
+
 ## S6 decisions (15 Sep)
 - **A17 AI for TOD (changed mid-build):** Ira does NOT run on upload. "Pass all" / "Fail all" are replaced by one button, **"Run Ira on design checks"** (auditor only), in the same place; the design checks themselves stay as they were. After a file changes it reads **"Re-run Ira"**. Disabled with no checks, no files on any element, or once TOD is concluded. Verdict (prototype): a check fails while a required element is still outstanding, or if it was already marked failed; otherwise it passes. Ira adds the elements it read to "Evidenced by". The override pencil is back on each check; a file change after an override flags "Evidence changed since override". Per-check ✓/✗ stay.
 - **A19 / A21 / C7:** real file picker (several files at once), each file shows "Uploaded by ‹person› · ‹date, time›" and opens a preview (PDF/image files picked this session; sample files say no preview), and each file has its own remove X (auditor: any file; control owner: their own).
@@ -34,6 +96,7 @@
   - Types: Holding, Subsidiary, Joint venture, Associate, Branch.
   - Country column: editable, filled from the org chart import (Meridian per its chart, Altura = India) and never overwrites a typed country.
 - **R1:** the ▶ icon is removed from engagement cards; clicking the card still opens it.
+- **Org chart upload formats (added 15 Sep, your note):** the New engagement org chart upload accepts Excel (.xlsx/.xls), CSV, images, Visio and PDF, and still PowerPoint and draw.io. Hint: "Excel, CSV, image, Visio or PDF". The companies are still filled from the sample chart matched by file name (no real reading of the file).
 - **Left open, not built:**
   - The ownership note ("74% owned") and New audit scoping treat Joint venture / Associate / Branch the same as a Subsidiary.
   - The hidden Configuration screen's entity type list still has only Holding / Subsidiary.
@@ -168,7 +231,7 @@ The outcome: what's already built, what to add, change or remove, and which call
 ### 2e. Audit → Population & Sample
 | ID | What the user will see | Source | Where |
 |---|---|---|---|
-| A22 | Population shows the **expected count for the control's frequency** (e.g. 12 for monthly) and checks it before lock | #67 | ControlDossier, reuse the switched-off count row |
+| ~~A22~~ | **Parked (15 Sep).** Population shows the expected count for the control's frequency (e.g. 12 for monthly) and checks it before lock | #67 | not built |
 | A24 | A TOE check that compares source documents against system/master data | Dubai | could run as part of AI validation (T2) |
 | ~~A27~~ | **Parked (D8)** until it's discussed with Deepanshu. PDF as a population source; the Population step stays spreadsheet-only. | #66 | not built |
 
@@ -184,7 +247,7 @@ The outcome: what's already built, what to add, change or remove, and which call
 | A30 | Register gains **Risk owner, Deficiency owner and Due date** columns | #80 | `sox-icfr/extraViews.tsx` |
 | A31 | Ira suggests **likelihood, exposure and compensating control**; the auditor accepts or edits | #82 | sizing form |
 | A32 | **Exposure worked out from the data** (failed sample / population amounts), with the maths shown | Dubai | sizing + sample model |
-| A33 | "Headroom to the next grade" shown on the conclusion | Dubai | sizing conclusion |
+| ~~A33~~ | **Parked (15 Sep).** "Headroom to the next grade" shown on the conclusion | Dubai | not built |
 
 ### 2h. Scoping, inside the New audit wizard (D4 answered)
 Already there in New audit (confirmed in `sox-icfr/NewAuditWizard.tsx`): Audit period → Materiality & files (TB + GL upload, materiality rule) → Scope (entities worked out from the TB with a coverage bar, overrides need a reason; or by RACM, pre-ticked from in-scope entities, Key controls only) → Review. **Create engagement scoping stays parked** (Type → Basics → Review; `ScopingWizard.tsx` flags untouched).
@@ -203,7 +266,7 @@ Already there in New audit (confirmed in `sox-icfr/NewAuditWizard.tsx`): Audit p
 | C3 | Control objective capped at ~64 characters wide → fills the page, on both control pages | #27 | ControlLibraryDetail, ControlDossier |
 | C4 | Engagement control page has no risk in the header → under the objective, show **"Risk R-xx · risk text… More"**, which opens Control activity and the other facts, exactly like the audit control page (already built there in abd9f5b; that page doesn't change) | #27 | `ControlLibraryDetail.tsx` header, copying `ControlDossier.tsx` ~4688–4720 (D6 answered) |
 | C5 | Attribute rows repeat the control sentence → attribute text only | #27 | `sox-icfr/mockData.ts` |
-| C6 | Population "source" section shows when it doesn't apply → hidden | #62 | ControlDossier |
+| ~~C6~~ | **Dropped for the prototype (15 Sep)** — a staging section; see O1. Population "source" section shows when it doesn't apply → hidden | #62 | staging only |
 | C7 | Design element "Attach evidence" invents a file name → real file picker and real name | Dubai | ControlDossier |
 | ~~C8~~ | **Dropped (D7).** The Dubai row only meant that a walkthrough document uploaded as a design element becomes evidence for the design checks (covered by A17). The walkthrough card stays switched off. | Dubai | not built |
 | C9 | Status labels → one clear pair: **Design effective / Operating effective / Control effective** | Dubai | ControlDossier header, dashboard |
@@ -241,7 +304,7 @@ Already there in New audit (confirmed in `sox-icfr/NewAuditWizard.tsx`): Audit p
 ## 6. Not prototype work
 | ID | Item | Why |
 |---|---|---|
-| O1 | Staging/backend fixes: RACM upload speed, SOP extraction inventing controls / dropping IDs (#14), merged cells (#87), attribute parsing (#90), Visio org chart (#6), staging control-page header (#27). Plus the staging bugs I logged: side panel keeps previous row's text, source-decision prompt needs a reload, "Conclude ineffective" error, track/severity labels, sample bigger than population, materiality ₹0, same person signs twice, "Your court" label. | Real product: dev ticket list |
+| O1 | Staging/backend fixes: RACM upload speed, SOP extraction inventing controls / dropping IDs (#14), merged cells (#87), attribute parsing (#90), Visio org chart (#6), staging control-page header (#27). Plus the staging bugs I logged: side panel keeps previous row's text, source-decision prompt needs a reload, "Conclude ineffective" error, track/severity labels, sample bigger than population, materiality ₹0, same person signs twice, "Your court" label. Also #62: hide the Population source section when it doesn't apply (staging). | Real product: dev ticket list |
 | O2 | Dubai follow-ups: stabilise, updated BRD, M365 requirements doc with checkboxes, Tue/Fri calls, progress updates, pilot on real data | Process |
 | O3 | "Share the list of the current 36 headers" | Ours to send (list captured from staging) |
 | O4 | "Map the end-to-end IFC/SOX process, in vs outside the product" | A document |
@@ -255,12 +318,13 @@ Already there in New audit (confirmed in `sox-icfr/NewAuditWizard.tsx`): Audit p
 | S2 Create engagement + list | A1–A3, R1 ✅ built 15 Sep, pushed in 6b1aab3 (not checked on screen) |
 | S3 RACM tab: RACM/SOP import review, prompt step, row actions | C1, A4 (version history parked), A5–A10, R2, A13/R7 ✅ built 15 Sep, pushed in ed3542b (on-screen check skipped at your call) |
 | S4 RACM template + fields | A11, A12, A14, A15 |
-| S5 Control pages | C3–C5 ✅ built 15 Sep, before S4 (not committed; build passes; not checked on screen) |
-| S6 TOD | A17 (AI for TOD + override), A19–A21, A36 (design sign-off), C7, C9 (A18 parked, C8 dropped) ✅ built 15 Sep (not committed; build passes; not checked on screen) |
-| S7 Population / Sample | A22, A24, C6 |
-| S8 New audit + year-end | A28, A29 |
-| S9 Deficiencies | A30–A33, C10, C11 |
-| S10 Scoping in New audit | A34a–c (A35 parked) |
+| S5 Control pages | C3–C5 ✅ built 15 Sep, before S4, pushed in 8859db9 (not checked on screen) |
+| S6 TOD | A17 (AI for TOD + override), A19–A21, A36 (design sign-off), C7, C9 (A18 parked, C8 dropped) ✅ built 15 Sep, pushed in 8859db9 (not checked on screen) |
+| S7 Population / Sample | A24 ✅ built 15 Sep (not committed; build passes; not checked on screen) — A22 parked, C6 staging only |
+| S8 New audit + year-end | A28, A29 ✅ built 15 Sep, with your 4 follow-up answers (not committed; build passes; not checked on screen) |
+| S9 Deficiencies | A30–A32, C10, C11 ✅ built 15 Sep (not committed; build passes; not checked on screen) — A33 parked |
+| S11 RACM library + scoping at engagement creation + ID format | ✅ built 15 Sep (not committed; build passes; not checked on screen) |
+| S10 Scoping in New audit | A34a–c ✅ built 15 Sep (not committed; build passes; not checked on screen) — A35 parked |
 
 ## Verification (per stage)
 - Run the full `npm run build` (tsc -b + vite build). It must pass before a stage counts as done.
