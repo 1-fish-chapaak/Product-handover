@@ -302,7 +302,7 @@ export function RacmLanding() {
   // openRacmMatrix is deliberately not read here any more — the row opens the
   // spreadsheet editor. The action stays on the store (parked, house
   // convention), and with it the drilled matrix page it used to reach.
-  const { eng, role, deleteRacm, racmDocs, racmCreateOpen, clearRacmCreate } = useIcfr();
+  const { eng, role, deleteRacm, createRacm, racmDocs, racmCreateOpen, clearRacmCreate } = useIcfr();
   const { addToast } = useToast();
   const logEvent = useAuditLog();
 
@@ -410,7 +410,8 @@ export function RacmLanding() {
     {creating && <NewRacmModal available={available} inScope={inScope} entities={racmEntities} onClose={() => setCreating(false)} onPick={onPick} />}
     {importing && (
       <RacmImportReview mode={importing.mode} file={importing.file} process={importing.process} entity={importing.entity}
-        onClose={closeImport} onImported={closeImport} />
+        existing={eng.controls} onClose={closeImport}
+        onImport={(controls, meta) => { createRacm(importing.process, meta.fileName, importing.entity, { controls, source: meta.source, url: meta.url }); closeImport(); }} />
     )}
     {/* delete confirmation — only reached when no audit covers the RACM */}
     {deleting && (() => {

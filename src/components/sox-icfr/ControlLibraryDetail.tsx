@@ -306,7 +306,7 @@ export default function ControlLibraryDetail() {
             more to read. */}
         <div className="mt-4 text-[0.8125rem] leading-[1.7] text-ink-600">
           <p className={cn('min-w-0', !detailOpen && 'flex items-baseline')}>
-            <span className="font-semibold text-ink-900 shrink-0">Risk {control.riskId}</span>
+            <span className="font-semibold text-ink-900 shrink-0 whitespace-nowrap">Risk {control.riskId}</span>
             <span className="text-ink-300 mx-1.5 shrink-0">·</span>
             <span className={cn('min-w-0', !detailOpen && 'truncate')}>{control.riskDescription}</span>
             <span className="shrink-0 ml-1.5"><MoreLink open={detailOpen} onClick={() => setDetailOpen(o => !o)} /></span>

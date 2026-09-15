@@ -3,7 +3,7 @@ import { Building2, CalendarRange, CheckCircle2, FileSpreadsheet, Grid3x3, Lock,
 import { Pill } from '../shared/StatusBadge';
 import { SeverityPill } from './parts';
 import { formatINR } from './helpers';
-import type { AuditRecord, Severity, SoxTabLike } from './types';
+import type { AuditRecord, ExceptionGrade, SoxTabLike } from './types';
 import { cn } from '../../lib/cn';
 
 /**
@@ -23,7 +23,10 @@ import { cn } from '../../lib/cn';
  */
 
 const ROUND_LABEL = { interim: 'Interim', rollforward: 'Roll-forward', yearend: 'Year-end' } as const;
-const SEVERITY_ORDER: Severity[] = ['Material Weakness', 'Significant Deficiency', 'Deficiency'];
+// All four grades — the snapshot stores Clearly Trivial as its own grade, so the
+// tally names it rather than dropping the finding from every row.
+const SEVERITY_ORDER: ExceptionGrade[] = ['Material Weakness', 'Significant Deficiency', 'Deficiency', 'Clearly Trivial'];
+const SEVERITY_DOT: Record<ExceptionGrade, string> = { 'Material Weakness': 'bg-risk-500', 'Significant Deficiency': 'bg-high-500', Deficiency: 'bg-mitigated-500', 'Clearly Trivial': 'bg-draft' };
 const cardCls = 'rounded-lg border border-canvas-border bg-canvas-elevated p-4';
 
 export default function AuditArchiveView({ audit, tab }: { audit: AuditRecord; tab: SoxTabLike }) {
@@ -198,8 +201,7 @@ export default function AuditArchiveView({ audit, tab }: { audit: AuditRecord; t
               <div className="space-y-1.5">
                 {bySeverity.map(({ severity, all, open }) => (
                   <div key={severity} className="flex items-center gap-2 text-[0.75rem]">
-                    <span className={cn('w-2 h-2 rounded-full shrink-0',
-                      severity === 'Material Weakness' ? 'bg-risk-500' : severity === 'Significant Deficiency' ? 'bg-high-500' : 'bg-mitigated-500')} aria-hidden />
+                    <span className={cn('w-2 h-2 rounded-full shrink-0', SEVERITY_DOT[severity])} aria-hidden />
                     <span className="text-ink-600">{severity}</span>
                     <span className="ml-auto text-ink-400 tabular-nums">{open.length} open of {all.length}</span>
                   </div>

@@ -30,7 +30,7 @@ export type RacmFieldKey =
   | 'controlId' | 'controlTitle' | 'objective' | 'controlActivity'
   | 'subProcess' | 'type' | 'nature' | 'frequency' | 'isKey'
   | 'owner' | 'processOwner' | 'assertions' | 'attributes'
-  | 'controlEvidence' | 'designChecks' | 'sopSectionRef';
+  | 'controlEvidence' | 'designChecks' | 'sopSectionRef' | 'entity';
 
 export interface RacmField {
   key: RacmFieldKey;
@@ -64,6 +64,9 @@ export const RACM_FIELDS: RacmField[] = [
   { key: 'controlEvidence', label: 'Control evidence', required: false, synonyms: ['control evidence', 'evidence', 'supporting evidence', 'documents'] },
   { key: 'designChecks', label: 'Design checks (TOD)', required: false, synonyms: ['tod checks performed', 'tod checks', 'design checks', 'test of design', 'tod'] },
   { key: 'sopSectionRef', label: 'SOP section', required: false, synonyms: ['sop section ref', 'sop section', 'sop reference', 'sop ref'] },
+  // The company a row is tested at — the ENTITY part of its ID (S11). A file
+  // without one takes the company chosen when the RACM was created.
+  { key: 'entity', label: 'Entity', required: false, synonyms: ['entity', 'legal entity', 'entity name', 'subsidiary', 'company', 'company name'] },
 ];
 
 // ─── Text helpers (private) ──────────────────────────────────────────────────────

@@ -18,12 +18,16 @@ import {
   AlertTriangle, ArrowLeft, Check, CheckCircle2, ChevronRight, Circle, FileSpreadsheet, FileText, FileWarning,
   Loader2, Paperclip, RotateCcw, Sparkles, Star, Wand2, X,
 } from 'lucide-react';
-import { useIcfr } from './store';
+import { racmTemplateForProcesses } from './mockData';
+import {
+  CODE_OK, assignRacmIds, cleanCode, entityCodeTakenBy, peekEntityCode, peekProcessCode, processCodeTakenBy,
+  setEntityCode, setProcessCode,
+} from './racmIds';
 import { useToast } from '../shared/Toast';
 import { useAuditLog } from '../../context/AdminDataContext';
 import { Pill } from '../shared/StatusBadge';
 import { cn } from '../../lib/cn';
-import type { Frequency } from './types';
+import type { Control, Frequency } from './types';
 import {
   RACM_FIELDS, DEFAULT_SOP_PROMPT,
   readRacmWorkbook, guessHeaderRow, matchColumns, needsAttention,
@@ -33,15 +37,29 @@ import {
 
 type Step = 'columns' | 'prompt' | 'review';
 
+export interface RacmImportMeta {
+  source: 'racm' | 'sop';
+  fileName: string;
+  /** The SOP, viewable for the session. */
+  url?: string;
+  /** True when the file had no rows and the process template was used instead. */
+  fromTemplate?: boolean;
+}
+
 export interface RacmImportReviewProps {
   mode: 'racm' | 'sop';
   file: File;
   process: string;
-  /** The company chosen in the Create RACM chooser — '' when the engagement names none. */
+  /** The company chosen in the Create RACM chooser — rows without an entity
+   *  column take it. '' when none was chosen. */
   entity: string;
+  /** The controls a new row is checked against for duplicates (A8) — every RACM
+   *  on the RACM tab, or the engagement's own register. */
+  existing: Control[];
   onClose: () => void;
-  /** Called after the RACM is created, with the number of controls it got. */
-  onImported: (count: number) => void;
+  /** Import pressed: the rows as controls, IDs already PROCESS/ENTITY/R001/C001.
+   *  The caller saves them (to the RACM tab, or the engagement). */
+  onImport: (controls: Control[], meta: RacmImportMeta) => void;
 }
 
 const RACM_STEPS: { key: Step; label: string }[] = [{ key: 'columns', label: 'Columns' }, { key: 'review', label: 'Review' }];
@@ -70,6 +88,8 @@ const secondaryBtn = 'h-9 px-3.5 inline-flex items-center gap-1.5 rounded-lg bor
 const quietBtn = 'h-7 px-2 inline-flex items-center gap-1 rounded-md border border-canvas-border bg-canvas-elevated text-[0.71875rem] font-semibold text-ink-600 hover:text-ink-900 hover:border-ink-300 disabled:opacity-40 disabled:cursor-not-allowed transition-colors cursor-pointer';
 
 const plural = (n: number, one: string, many = `${one}s`) => `${n} ${n === 1 ? one : many}`;
+/** The register keeps names lower-cased; say them the way people write them. */
+const titleCase = (s: string) => s.replace(/\b\w/g, ch => ch.toUpperCase());
 const cell = (c: string | undefined) => String(c ?? '').trim();
 const isBlankRow = (r: string[] | undefined) => !r || r.every(c => !cell(c));
 const firstDataRow = (rows: string[][], headerRow: number) => rows.slice(headerRow + 1).find(r => !isBlankRow(r));
@@ -145,8 +165,7 @@ function ConfidencePill({ match, missing }: { match: ColumnMatch; missing: boole
   return <Pill tone={tone}>{match.confidence}%</Pill>;
 }
 
-export default function RacmImportReview({ mode, file, process, entity, onClose, onImported }: RacmImportReviewProps) {
-  const { eng, createRacm } = useIcfr();
+export default function RacmImportReview({ mode, file, process, entity, existing, onClose, onImport }: RacmImportReviewProps) {
   const { addToast } = useToast();
   const logEvent = useAuditLog();
   const dialogRef = useRef<HTMLDivElement>(null);
@@ -239,7 +258,11 @@ export default function RacmImportReview({ mode, file, process, entity, onClose,
   };
 
   const startFromTemplate = () => {
-    createRacm(process, file.name, entity, { source: 'racm' });
+    const template = racmTemplateForProcesses([process], 'fresh').map(c => ({ ...c, ...(entity ? { entity } : {}) }));
+    const pc = peekProcessCode(process);
+    setProcessCode(process, pc);
+    const controls = assignRacmIds(template, { processCode: pc, entityCodeOf: e => codeForEntity(e), useFileNumbers: false });
+    onImport(controls, { source: 'racm', fileName: file.name, fromTemplate: true });
     logEvent({ action: 'Create', description: `Created the ${process} RACM from its template — "${file.name}" had no rows to read`, module: 'SOX ICFR', entity: 'RACM' });
     addToast({ type: 'success', title: 'RACM created', message: `The ${process} RACM starts from its template — "${file.name}" is kept as its source file.` });
     onClose();
@@ -249,7 +272,7 @@ export default function RacmImportReview({ mode, file, process, entity, onClose,
     if (!sheet) return;
     const sig = JSON.stringify([sheetIx, headerRow, matches]);
     if (builtFrom.current !== sig) {
-      setRows(buildImportRows(sheet.rows, headerRow, matches, eng.controls, process));
+      setRows(buildImportRows(sheet.rows, headerRow, matches, existing, process));
       resetReview();
       builtFrom.current = sig;
     }
@@ -278,7 +301,7 @@ export default function RacmImportReview({ mode, file, process, entity, onClose,
     // a beat after the last tick, so the finished list is seen before it goes
     timers.current.push(window.setTimeout(() => {
       try {
-        setRows(draftRowsFromSop(process, file.name, used, eng.controls));
+        setRows(draftRowsFromSop(process, file.name, used, existing));
         resetReview();
         builtFrom.current = used;
         setExtract({ phase: 'idle' });
@@ -318,12 +341,43 @@ export default function RacmImportReview({ mode, file, process, entity, onClose,
   const needFrequency = included.filter(r => r.frequency === null).length;
   const duplicateCount = included.filter(r => r.duplicateOf).length;
   const suggestedRowCount = rows.filter(r => r.origin === 'suggested').length;
-  const canImport = included.length > 0 && needFrequency === 0;
+  // ── IDs (S11) ─────────────────────────────────────────────────────────────────
+  // PROCESS/ENTITY/R001/C001. The codes start from the register (or the names)
+  // and can be edited here; a code another process or company already uses is
+  // refused, so an ID means the same thing on every RACM and engagement.
+  const [processCode, setProcessCodeDraft] = useState(() => peekProcessCode(process));
+  const [entityCodeDrafts, setEntityCodeDrafts] = useState<Record<string, string>>({});
+  const rowEntity = (row: ImportRow) => cell(row.values.entity) || entity;
+  const entityNames = useMemo(() => Array.from(new Set(included.map(rowEntity).filter(Boolean))), [included, entity]); // eslint-disable-line react-hooks/exhaustive-deps
+  const codeForEntity = (name: string | undefined) => (name ? entityCodeDrafts[name] ?? peekEntityCode(name) : entityCodeDrafts[''] ?? 'ENT');
+  const processCodeError = !CODE_OK(processCode) ? 'Use 2–6 letters or digits'
+    : processCodeTakenBy(processCode, process) ? `Already the code for ${titleCase(processCodeTakenBy(processCode, process)!)}` : null;
+  const entityCodeErrors = entityNames.map(name => {
+    const code = codeForEntity(name);
+    const clash = entityNames.find(other => other !== name && codeForEntity(other) === code);
+    const error = !CODE_OK(code) ? 'Use 2–6 letters or digits'
+      : entityCodeTakenBy(code, name) ? `Already the code for ${titleCase(entityCodeTakenBy(code, name)!)}`
+      : clash ? `Same code as ${clash}` : null;
+    return { name, code, error };
+  });
+  const codesOk = !processCodeError && entityCodeErrors.every(e => !e.error);
+  /** The ID each included row will import under, keyed by row. */
+  const newIds = useMemo(() => {
+    const stand = included.map((r, i) => ({
+      id: cell(r.values.controlId) || `C-${r.rowNo}`,
+      riskId: cell(r.values.riskId) || `R-${i + 1}`,
+      entity: rowEntity(r) || undefined,
+    }) as unknown as Control);
+    const out = assignRacmIds(stand, { processCode: cleanCode(processCode) || 'GEN', entityCodeOf: codeForEntity, useFileNumbers: true });
+    return new Map(included.map((r, i) => [r.key, out[i]!.id]));
+  }, [included, processCode, entityCodeDrafts, entity]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  const canImport = included.length > 0 && needFrequency === 0 && codesOk;
 
   const toggleExpanded = (key: string) => setExpanded(prev => { const n = new Set(prev); if (n.has(key)) n.delete(key); else n.add(key); return n; });
   const toggleRow = (key: string) => setAcceptedRows(prev => { const n = new Set(prev); if (n.has(key)) n.delete(key); else n.add(key); return n; });
   const pickFrequency = (rowKey: string, value: Frequency) =>
-    setRows(prev => prev.map(r => (r.key === rowKey ? rowFromValues({ ...r.values, frequency: value }, r, eng.controls, process) : r)));
+    setRows(prev => prev.map(r => (r.key === rowKey ? rowFromValues({ ...r.values, frequency: value }, r, existing, process) : r)));
   const acceptSuggestion = (rowKey: string, s: Suggestion) => setAcceptedSugg(prev => {
     const cur = prev[rowKey] ?? { attributes: [], designChecks: [] };
     return { ...prev, [rowKey]: s.kind === 'attribute' ? { ...cur, attributes: [...cur.attributes, s.text] } : { ...cur, designChecks: [...cur.designChecks, s.text] } };
@@ -346,29 +400,35 @@ export default function RacmImportReview({ mode, file, process, entity, onClose,
       n++;
     }));
     if (!n) return;
-    setRows(prev => prev.map(r => { const patch = byRow.get(r.key); return patch ? rowFromValues({ ...r.values, ...patch }, r, eng.controls, process) : r; }));
+    setRows(prev => prev.map(r => { const patch = byRow.get(r.key); return patch ? rowFromValues({ ...r.values, ...patch }, r, existing, process) : r; }));
     cancelFills();
     addToast({ type: 'success', title: `Filled ${n} blank${n === 1 ? '' : 's'}`, message: 'The values are in the review rows — nothing is saved until you import.' });
   };
 
   const doImport = () => {
     if (!canImport) return;
-    let controls;
+    let controls: Control[];
     try {
       controls = importRowsToControls(included, process);
     } catch {
       addToast({ type: 'error', title: "Couldn't import", message: 'Every row needs a frequency before it can be imported.' });
       return;
     }
+    // the codes as reviewed become the register's, then every row takes its ID
+    setProcessCode(process, processCode);
+    entityCodeErrors.forEach(e => setEntityCode(e.name, e.code));
+    controls = assignRacmIds(
+      controls.map((c, i) => ({ ...c, ...(rowEntity(included[i]!) ? { entity: rowEntity(included[i]!) } : {}) })),
+      { processCode, entityCodeOf: codeForEntity, useFileNumbers: true },
+    );
     // the SOP stays viewable from the RACM's row menu for this session
     const url = mode === 'sop' ? URL.createObjectURL(file) : undefined;
-    createRacm(process, file.name, entity, { controls, source: mode, url });
+    onImport(controls, { source: mode, fileName: file.name, url });
     const n = controls.length;
     logEvent(mode === 'sop'
       ? { action: 'Create', description: `Extracted the ${process} RACM from "${file.name}" — ${plural(n, 'control')}`, module: 'SOX ICFR', entity: 'RACM' }
       : { action: 'Upload', description: `Imported the ${process} RACM from "${file.name}" — ${plural(n, 'control')}`, module: 'SOX ICFR', entity: 'RACM' });
-    addToast({ type: 'success', title: mode === 'sop' ? 'RACM extracted' : 'RACM imported', message: `${plural(n, 'control')} added to the ${process} RACM` });
-    onImported(n);
+    addToast({ type: 'success', title: mode === 'sop' ? 'RACM extracted' : 'RACM imported', message: `${plural(n, 'control')} imported for ${process}` });
   };
 
   // ── Dialog behaviour ──────────────────────────────────────────────────────────
@@ -647,6 +707,38 @@ export default function RacmImportReview({ mode, file, process, entity, onClose,
                 </section>
               )}
 
+              {/* IDs (S11) — the two short codes every row's ID is built from,
+                  editable before import. */}
+              {included.length > 0 && (
+                <section aria-label="Control IDs" className="rounded-xl border border-canvas-border bg-canvas-elevated px-4 py-3 mb-3">
+                  <div className="flex flex-wrap items-start gap-x-5 gap-y-2.5">
+                    <div>
+                      <label htmlFor="racm-import-process-code" className={labelCls}>Process code · {process}</label>
+                      <input id="racm-import-process-code" value={processCode} onChange={e => setProcessCodeDraft(cleanCode(e.target.value))}
+                        aria-invalid={!!processCodeError} aria-describedby={processCodeError ? 'racm-import-process-code-error' : undefined}
+                        className={cn('h-8 w-[5.5rem] px-2 rounded-lg border bg-canvas text-[0.78125rem] font-mono font-semibold text-ink-900 uppercase focus:outline-none focus:ring-2 focus:ring-brand-200', processCodeError ? 'border-risk-400' : 'border-canvas-border')} />
+                      {processCodeError && <p id="racm-import-process-code-error" className="mt-1 text-[0.6875rem] text-risk-700">{processCodeError}</p>}
+                    </div>
+                    {entityCodeErrors.map(({ name, code, error }, i) => (
+                      <div key={name}>
+                        <label htmlFor={`racm-import-entity-code-${i}`} className={cn(labelCls, 'max-w-[16rem] truncate')} title={name}>Entity code · {name}</label>
+                        <input id={`racm-import-entity-code-${i}`} value={code} onChange={e => setEntityCodeDrafts(prev => ({ ...prev, [name]: cleanCode(e.target.value) }))}
+                          aria-invalid={!!error} aria-describedby={error ? `racm-import-entity-code-error-${i}` : undefined}
+                          className={cn('h-8 w-[5.5rem] px-2 rounded-lg border bg-canvas text-[0.78125rem] font-mono font-semibold text-ink-900 uppercase focus:outline-none focus:ring-2 focus:ring-brand-200', error ? 'border-risk-400' : 'border-canvas-border')} />
+                        {error && <p id={`racm-import-entity-code-error-${i}`} className="mt-1 text-[0.6875rem] text-risk-700">{error}</p>}
+                      </div>
+                    ))}
+                    <div className="min-w-0 flex-1 basis-[16rem]">
+                      <p className={labelCls}>IDs read</p>
+                      <p className="text-[0.75rem] text-ink-600 leading-snug">
+                        <span className="font-mono font-semibold text-ink-900">{newIds.get(included[0]!.key)}</span>
+                        {' '}— process / entity / risk / control. Numbers come from the file's own Risk ID and Control ID, else the row order.
+                      </p>
+                    </div>
+                  </div>
+                </section>
+              )}
+
               {rows.length === 0 ? (
                 <div className="rounded-xl border border-dashed border-canvas-border py-14 text-center text-[0.78125rem] text-ink-500">
                   {mode === 'racm' ? 'No rows to import — nothing sits below the header row you picked.' : `Ira found no controls to draft from ${file.name}.`}
@@ -658,7 +750,7 @@ export default function RacmImportReview({ mode, file, process, entity, onClose,
                       <tr>
                         {mode === 'sop' && <th style={{ width: 84 }}><span className="sr-only">Accept suggested row</span></th>}
                         <th style={{ width: 36 }}><span className="sr-only">Details</span></th>
-                        <th style={{ width: 100 }}>Control ID</th>
+                        <th style={{ width: 150 }}>Control ID</th>
                         <th>Control</th>
                         <th style={{ width: 184 }}>Frequency</th>
                         <th style={{ width: 52 }}>Key</th>
@@ -696,7 +788,12 @@ export default function RacmImportReview({ mode, file, process, entity, onClose,
                                   <ChevronRight size={14} className={cn('transition-transform', open && 'rotate-90')} />
                                 </button>
                               </td>
-                              <td><span className="font-mono text-[0.71875rem] font-semibold text-ink-700 break-all">{idOf(row)}</span></td>
+                              <td>
+                                {newIds.get(row.key)
+                                  ? <span className="font-mono text-[0.6875rem] font-semibold text-ink-800 break-all">{newIds.get(row.key)}</span>
+                                  : <span className="text-ink-300">—</span>}
+                                {cell(row.values.controlId) && <span className="block font-mono text-[0.625rem] text-ink-400 break-all mt-0.5">File: {cell(row.values.controlId)}</span>}
+                              </td>
                               <td className="tight">
                                 <div className="text-[0.78125rem] font-medium text-ink-900 leading-snug line-clamp-2" title={cell(row.values.controlActivity) || titleOf(row)}>{titleOf(row)}</div>
                                 <div className="mt-1 flex items-center gap-1.5 flex-wrap">
@@ -883,6 +980,9 @@ export default function RacmImportReview({ mode, file, process, entity, onClose,
             <>
               {needFrequency > 0 && (
                 <span className="text-[0.71875rem] text-mitigated-700">{needFrequency} {needFrequency === 1 ? 'row still needs' : 'rows still need'} a frequency</span>
+              )}
+              {needFrequency === 0 && !codesOk && (
+                <span className="text-[0.71875rem] text-risk-700">Fix the ID codes to import</span>
               )}
               <button type="button" onClick={doImport} disabled={!canImport} className={primaryBtn}>Import {plural(included.length, 'control')}</button>
             </>

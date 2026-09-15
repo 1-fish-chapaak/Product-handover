@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { AnimatePresence, motion, useReducedMotion } from 'motion/react';
 import {
   AlertTriangle, ArrowRight, Building2, CalendarClock, CalendarRange, Check, CheckCircle2, ChevronDown, Circle,
-  Grid3x3, Layers, Plus, Scale, ScrollText, ShieldAlert, SlidersHorizontal, Table2, UploadCloud, Users,
+  Grid3x3, Layers, Plus, Scale, ScrollText, ShieldAlert, SlidersHorizontal, Table2, Users,
 } from 'lucide-react';
 import { useIcfr } from './store';
 import { useToast } from '../shared/Toast';
@@ -10,7 +10,8 @@ import EmptyState from '../shared/EmptyState';
 import { Pill } from '../shared/StatusBadge';
 import { SeverityPill } from './parts';
 import NewAuditWizard from './NewAuditWizard';
-import { formatINR, retestAtRisk } from './helpers';
+import AddRacmModal from './AddRacmModal';
+import { formatINR, isEngagementLocked, retestAtRisk } from './helpers';
 import { entitiesFor, processesFor } from './auditScope';
 import {
   auditDeficiencies, auditProgress, auditStatus, controlsInManyAudits, crossAuditAggregation,
@@ -394,9 +395,11 @@ function MasterRow({ icon: Icon, title, body, count, onClick }: {
 // ── The page ─────────────────────────────────────────────────────────────────
 
 export default function EngagementOverview() {
-  const { eng, role, openAudit, openDeficiency, setTab, setView, openRacmCreate } = useIcfr();
+  const { eng, role, openAudit, openDeficiency, setTab, setView } = useIcfr();
   const { addToast } = useToast();
   const [creating, setCreating] = useState(false);
+  // Add RACM (S11) — the picker over the Engagements page's RACM tab.
+  const [addingRacm, setAddingRacm] = useState(false);
   const [rolling, setRolling] = useState<AuditRecord | null>(null);
   /* The MW watchlist arrives collapsed (user ask) — the headline and the count
      still say an entity-level finding is open, so nothing is hidden, and the
@@ -406,6 +409,9 @@ export default function EngagementOverview() {
   const still = useReducedMotion();
 
   const canCreate = role !== 'risk-owner';
+  // Copying RACMs in is the auditor's, and never onto a signed-off engagement —
+  // the same gate the store applies to addLibraryRacms.
+  const canAddRacm = role === 'auditor' && !isEngagementLocked(eng);
   /**
    * No matrix, no audit.
    *
@@ -540,6 +546,9 @@ export default function EngagementOverview() {
     // Here — and only here — the RACM leads. An audit scopes itself from the
     // matrix, so on a blank engagement "New audit" is the second move, not the
     // first: it would open a wizard whose Scope step has nothing to offer.
+    // Since S11 the move is Add RACM: the engagement has no RACM tab of its
+    // own, so it picks RACMs from the Engagements page's RACM tab (or uploads
+    // one there and then) and their controls are copied in.
     // Until the matrix exists that ranking is a gate rather than advice — the
     // wizard has no path that ends in a testable audit, so the second button
     // waits. Once there are audits, New audit is the toolbar's one create
@@ -547,13 +556,15 @@ export default function EngagementOverview() {
     const firstActions = canCreate ? (
       <div className="flex flex-col items-center gap-2">
         <div className="flex items-center justify-center gap-2 flex-wrap">
-          <button
-            onClick={openRacmCreate}
-            title="Import a matrix, or extract one from an SOP — the audit scopes itself from it"
-            className="h-9 px-3.5 shrink-0 inline-flex items-center gap-1.5 rounded-md bg-brand-600 text-white text-[0.8125rem] font-semibold shadow-sm shadow-brand-900/10 hover:bg-brand-500 active:bg-brand-800 transition-colors cursor-pointer"
-          >
-            <UploadCloud size={15} /> Upload RACM
-          </button>
+          {canAddRacm && (
+            <button
+              onClick={() => setAddingRacm(true)}
+              title="Pick RACMs from the RACM tab on the Engagements page, or upload one — the audit scopes itself from their controls"
+              className="h-9 px-3.5 shrink-0 inline-flex items-center gap-1.5 rounded-md bg-brand-600 text-white text-[0.8125rem] font-semibold shadow-sm shadow-brand-900/10 hover:bg-brand-500 active:bg-brand-800 transition-colors cursor-pointer"
+            >
+              <Table2 size={15} /> Add RACM
+            </button>
+          )}
           <button
             onClick={() => setCreating(true)}
             disabled={noRacm}
@@ -594,6 +605,7 @@ export default function EngagementOverview() {
           </ul>
         </div>
         {sheets}
+        {addingRacm && <AddRacmModal onClose={() => setAddingRacm(false)} />}
       </div>
     );
   }
@@ -899,7 +911,9 @@ export default function EngagementOverview() {
               title="RACM"
               body="Risks and the controls that answer them."
               count={`${processes.length || eng.controls.length} matrices`}
-              onClick={() => setTab('racm')}
+              /* The RACM tab is parked (S11) — the engagement's copy of its
+                 RACMs is its Control Library, so that is where this lands. */
+              onClick={() => setTab('controls')}
             />
             <MasterRow
               icon={Layers}
@@ -947,7 +961,9 @@ export default function EngagementOverview() {
           ) : (
             <>
               {/* A banded table, not a heat strip: one severity per row, each with
-                  its own label and dot (DESIGN.md No-RAG Rule). */}
+                  its own label and dot (DESIGN.md No-RAG Rule). All four grades,
+                  so a clearly trivial finding is counted under its own name —
+                  the one the register gives it — never as a Deficiency. */}
               <div className={cn(bandCls, 'grid grid-cols-[1fr_3.5rem_3.5rem] gap-2')}>
                 <span className={thCls}>Severity</span>
                 <span className={cn(thCls, 'text-right')}>Open</span>
@@ -958,6 +974,7 @@ export default function EngagementOverview() {
                   ['Material Weakness', 'bg-risk-500'],
                   ['Significant Deficiency', 'bg-high-500'],
                   ['Deficiency', 'bg-mitigated-500'],
+                  ['Clearly Trivial', 'bg-draft'],
                 ] as const).map(([sev, dot]) => {
                   const total = rangeDefs.filter(x => x.d.severity === sev).length;
                   const open = rangeDefs.filter(x => x.d.severity === sev && x.d.status !== 'Closed').length;

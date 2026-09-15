@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { AnimatePresence } from 'motion/react';
 import {
   Search, Plus, Building2, Rows3, Star, FileText, X, Send, LayoutGrid, List,
-  FlaskConical, ListChecks, Sparkles, Workflow, History, ArrowRight, Clock,
+  FlaskConical, ListChecks, Sparkles, Workflow, History, ArrowRight, Clock, Table2,
 } from 'lucide-react';
 import { FilterSelect, HeaderFilter, triggerCls } from '../shared/FilterSelect';
 import Drawer from '../shared/Drawer';
@@ -16,6 +16,7 @@ import {
 } from './helpers';
 import { ItgcCascadeBanner, NatureChip, Th, Tickmark } from './parts';
 import NewControlPanel from './NewControlPanel';
+import AddRacmModal from './AddRacmModal';
 import WorkingPaperModal from './WorkingPaperModal';
 import { useToast } from '../shared/Toast';
 import { cn } from '../../lib/cn';
@@ -285,9 +286,11 @@ export function RunHistoryDrawer({ c, runs, onClose, onOpenControl }: {
 // ── the tab ─────────────────────────────────────────────────────────────────────
 
 export default function ControlLibrary() {
-  const { eng, role, meOwner, openControl, requestDesignDocs, registerPreset, clearRegisterPreset } = useIcfr();
+  const { eng, role, meOwner, openControl, requestDesignDocs, registerPreset, clearRegisterPreset, openAuditId } = useIcfr();
   const { addToast } = useToast();
   const [creating, setCreating] = useState(false);
+  // Add RACM (S11) — copy RACMs in from the Engagements page's RACM tab.
+  const [addingRacm, setAddingRacm] = useState(false);
   const [historyFor, setHistoryFor] = useState<string | null>(null);
   const [reportPreview, setReportPreview] = useState(false);
   const [q, setQ] = useState('');
@@ -357,7 +360,8 @@ export default function ControlLibrary() {
   // The parked testing lens owned these predicates; the preset chip borrows them.
   const matchesPreset = (c: Control): boolean => {
     switch (preset) {
-      case 'due': return isTestDueNow(c);
+      // a year-end control the open audit holds back (A29) is pending, not due
+      case 'due': return isTestDueNow(c, eng.audits.find(a => a.id === openAuditId));
       case 'court': return courtFor(c, eng.tasks, eng.reviewNotes) === role;
       case 'design': return c.design.conclusion === 'Not tested';
       case 'design-done': return c.design.conclusion !== 'Not tested';
@@ -390,7 +394,7 @@ export default function ControlLibrary() {
       if (term && !(`${controlCode(c)} ${c.description} ${rowEntities(c).join(' ')} ${c.process} ${c.subProcess} ${c.owner}`.toLowerCase().includes(term))) return false;
       return true;
     });
-  }, [scoped, q, process, nature, entity, ctype, frequency, owner, preset, eng.tasks, eng.reviewNotes, role]);
+  }, [scoped, q, process, nature, entity, ctype, frequency, owner, preset, eng.tasks, eng.reviewNotes, role, openAuditId]);
 
   const groups = useMemo(() => {
     if (groupBy === 'none') return [{ key: '', rows: filtered }];
@@ -441,6 +445,11 @@ export default function ControlLibrary() {
         </div>
         <span className="w-px h-6 bg-canvas-border mx-0.5" aria-hidden />
         {role !== 'risk-owner' && <button onClick={() => setReportPreview(true)} title="Audit report — observations and the management action plan" className="h-9 px-3 inline-flex items-center gap-1.5 rounded-lg border border-canvas-border text-[0.78125rem] font-semibold text-ink-600 hover:text-ink-900 hover:border-ink-300 transition-colors cursor-pointer"><FileText size={14} /> Audit report</button>}
+        {/* Add RACM (S11) — the engagement's RACM tab is parked, so this is where
+            its controls come in from: RACMs picked off the Engagements page's
+            RACM tab and copied. Same gate as New control, kept left of it so
+            the primary action stays last. */}
+        {role === 'auditor' && !isEngagementLocked(eng) && <button onClick={() => setAddingRacm(true)} title="Copy controls in from RACMs on the Engagements page's RACM tab" className="h-9 px-3 inline-flex items-center gap-1.5 rounded-lg border border-canvas-border text-[0.78125rem] font-semibold text-ink-600 hover:text-ink-900 hover:border-ink-300 transition-colors cursor-pointer"><Table2 size={14} /> Add RACM</button>}
         {role === 'auditor' && !isEngagementLocked(eng) && <button onClick={() => setCreating(true)} className="h-9 px-3.5 inline-flex items-center gap-1.5 rounded-lg bg-brand-600 text-white text-[0.78125rem] font-semibold hover:bg-brand-700 transition-colors cursor-pointer"><Plus size={15} /> New control</button>}
       </div>
 
@@ -664,6 +673,7 @@ export default function ControlLibrary() {
       </AnimatePresence>
 
       {creating && <NewControlPanel onClose={() => setCreating(false)} />}
+      {addingRacm && <AddRacmModal onClose={() => setAddingRacm(false)} />}
       {/* the paper and the report follow the filters — only the visible controls go in */}
       {reportPreview && <WorkingPaperModal eng={eng} controls={filtered} report onClose={() => setReportPreview(false)} />}
     </div>

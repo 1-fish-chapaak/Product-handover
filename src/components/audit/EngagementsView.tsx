@@ -3,7 +3,7 @@ import { motion, AnimatePresence } from 'motion/react';
 import {
   ClipboardCheck, Calendar, ArrowUpRight, Search, Plus,
   Trash2, AlertTriangle, X, LayoutDashboard, List,
-  Pencil, UserPlus, CheckCircle2, GitBranch, Sparkles,
+  Pencil, UserPlus, CheckCircle2, GitBranch, Sparkles, Table2,
 } from 'lucide-react';
 import Orb from '../shared/Orb';
 import { findEngagement, libraryEngagements, registerEngagement, type AutomationSubtype, type Engagement, type EngStatus, type EngType, type ProcessCode } from '../../data/engagements';
@@ -28,8 +28,9 @@ import { getActionsForTarget, getReflectionsFor, useInsightCacheVersion, type Ta
 import { makePortfolioBuilder, portfolioInsightSubjects, portfolioStackSteps, PORTFOLIO_SUBJECT_ID } from '../../data/portfolioInsights';
 import WorkflowConfigurator from '../exceptions/workflow/WorkflowConfigurator';
 import type { Persona } from '../exceptions/workflow/workflowTypes';
+import RacmLibraryView from '../sox-icfr/RacmLibraryView';
 
-type EngViewMode = 'overview' | 'list' | 'approval-flow';
+type EngViewMode = 'overview' | 'list' | 'racm' | 'approval-flow';
 
 interface Props {
   onOpenEngagement: (engagementId: string) => void;
@@ -307,6 +308,8 @@ export default function EngagementsView({ onOpenEngagement, onOpenAuditPlanning,
                 ? 'A cross-engagement snapshot — health, attention, and activity across your whole portfolio.'
                 : mode === 'approval-flow'
                   ? 'Manage reusable approval chains used when exceptions are sent for approval across engagements.'
+                : mode === 'racm'
+                  ? 'The risk and control matrices SOX engagements are scoped from — upload them here, pick them when an engagement is created.'
                   : 'Browse all engagements — compliance audits, internal audits, and automation programs.'}
             </p>
           </div>
@@ -616,6 +619,10 @@ export default function EngagementsView({ onOpenEngagement, onOpenAuditPlanning,
         </>)}
 
 
+        {/* RACM (S11) — every SOX RACM, beside Approval Flow. SOX engagements
+            pick theirs at creation and no longer carry a RACM tab of their own. */}
+        {mode === 'racm' && <RacmLibraryView canManage={can('eng_create')} />}
+
         {mode === 'approval-flow' && (
           <div>
             <p className="text-[0.78125rem] text-text-secondary mb-4 max-w-[620px]">
@@ -686,9 +693,11 @@ export default function EngagementsView({ onOpenEngagement, onOpenAuditPlanning,
                   // Skipped scoping points at the RACM, not the trial balances:
                   // the Configuration tab this used to name is now Audit logs
                   // and carries no upload. Matches the Overview banner.
-                  message: p.scopingSkipped
-                    ? `${p.fy} programme created — add the RACM from the RACM tab`
-                    : `${p.fy} programme created — ${p.racms.length} RACMs derived from scoping`,
+                  // S11: say what was copied — RACMs picked on the Scope step and
+                  // their controls — not the processes the programme records.
+                  message: eng?.soxRacms?.length
+                    ? `${p.fy} programme created — ${eng.soxRacms.length} RACM${eng.soxRacms.length === 1 ? '' : 's'} and ${eng.soxControls?.length ?? 0} controls copied from the RACM tab`
+                    : `${p.fy} programme created — add RACMs from the Control library`,
                 });
               }}
             />
@@ -738,6 +747,7 @@ function ViewToggle({
   const tabs: { id: EngViewMode; label: string; Icon: typeof List; badge?: number }[] = [
     { id: 'overview', label: 'Overview', Icon: LayoutDashboard },
     { id: 'list', label: 'All Engagements', Icon: List, badge: count },
+    { id: 'racm', label: 'RACM', Icon: Table2 },
     { id: 'approval-flow', label: 'Approval Flow', Icon: GitBranch },
   ];
   return (

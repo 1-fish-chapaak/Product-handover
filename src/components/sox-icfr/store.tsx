@@ -1,6 +1,6 @@
 import { createContext, useCallback, useContext, useMemo, useState, type ReactNode } from 'react';
 import { racmTemplateForProcesses, requiredDatasetsFor, sampleRefs, seedIcfrEngagement, type SeedMeta } from './mockData';
-import { assessSeverity, attestationOverruled, designApproved, designFilesOf, designOutstanding, fmtDateTime, requiredFilesOf, requiredFilesReady, canExtendToe, canRedrawToe, controlConclusion, reconcileConfirmations, formatINR, gradeException, icfrConclusion, inquiryOnlyAttributes, isControlLocked, isEngagementLocked, itgcHolds, parseLooseDate, samePerson, populationSources, previewRegrades, sampleSizeGuide, samplesFor, sourceTotals, staleSteps, stepResult, TOE_MAX_ROUNDS, toeRoundFailed, toeRoundNo, toeRounds, trackResult, validationQA, validationSummary, validationTable, wfRunRef, LEGACY_SOURCE_ID, type RulesPatch } from './helpers';
+import { assessSeverity, attestationOverruled, designApproved, designFilesOf, designRetestChecks, designOutstanding, fmtDateTime, requiredFilesOf, requiredFilesReady, canExtendToe, canRedrawToe, controlConclusion, reconcileConfirmations, formatINR, gradeException, icfrConclusion, inquiryOnlyAttributes, isControlLocked, isEngagementLocked, itgcHolds, parseLooseDate, samePerson, populationSources, previewRegrades, sampleSizeGuide, samplesFor, sourceTotals, staleSteps, stepResult, TOE_MAX_ROUNDS, toeRoundFailed, toeRoundNo, toeRounds, trackResult, validationQA, validationSummary, validationTable, wfRunRef, auditSampling, dealSample, samplesTestedCount, sampleHome, spreadPhrase, workingAudit, yearEndPending, LEGACY_SOURCE_ID, type RulesPatch } from './helpers';
 import type {
   Assertion, Attestation, AuditArchive, AuditFileRecord, AuditorProof, AuditRecord, Control, Deficiency, DesignDoc, DesignDocKind, DesignPoint, DiscussionAnchor, DocStatus, FileOrigin,
   DesignJudgements, DesignWaiverReason, EvidenceFile, EvidenceMode, ExceptionStatus, ExecKind, ExecutionEvent, Frequency, HandoffTask, IcfrEngagement,
@@ -92,6 +92,28 @@ const short = (s: string, n = 40) => (s.length > n ? `${s.slice(0, n - 1)}…` :
 // already been marked failed before that.
 const IRA_ON_FILE_Q = 'Is every required design element on file?';
 const IRA_STOOD_FAILED_Q = 'Was this check already marked failed?';
+// The retest's version of the first question: a TOD retest reads the fix, so what
+// has to be on file is the owner's evidence of it, not the design elements.
+const RETEST_FIX_ON_FILE_Q = 'Is the evidence of the fix on file?';
+
+/** The design-track retest round in progress, started if there is none — there
+ *  is no sample to draw, so the first mark or Ira run is the start. A sampled
+ *  draft sitting on a design exception was never the right retest and never
+ *  recorded, so it is replaced rather than kept. Null when there is nothing to
+ *  re-check (a control with no design checks at all). */
+function designRetestDraft(state: IcfrEngagement, target: Deficiency, by: string): RetestRound | null {
+  if (target.retestDraft?.checks?.length) return target.retestDraft;
+  const checks = designRetestChecks(target, state.controls.find(x => x.id === target.controlId));
+  if (!checks.length) return null;
+  const iso = (dt: Date) => `${dt.getFullYear()}-${String(dt.getMonth() + 1).padStart(2, '0')}-${String(dt.getDate()).padStart(2, '0')}`;
+  return {
+    n: (target.retests?.length ?? 0) + 1,
+    windowFrom: iso(parseLooseDate(target.remediation.date) ?? new Date()), windowTo: iso(new Date()),
+    attributes: [], samples: [], results: {},
+    checks: checks.map(x => ({ ...x, result: 'Not tested' as TestResult })),
+    result: 'Fail', by, at: 'just now',
+  };
+}
 
 // When a flow concludes an attribute wholesale (workflow pull, AI validation,
 // attestation, test-all, bulk), stamp the per-sample grain to match: pass ⇒ every
@@ -105,7 +127,11 @@ const stampSamples = (c: Control, s: OperatingStep, res: TestResult): OperatingS
 };
 // PARKED (Aug 2026): `defaultGapType` — the exception no longer carries a gap type.
 import { ipeChecklist, ROLE_LABEL } from './types';
-import { isOwnerOf, normaliseProcess, ownersOf, peopleForProcess, processesForAudit, racmAuditUse } from './auditScope';
+import { auditCovers, captionsFor, countryOf, entitiesFor, isOwnerOf, normaliseProcess, ownersOf, peopleForProcess, processesForAudit, racmAuditUse } from './auditScope';
+import { seedKeyOf, suggestSizing, type ExposureContext } from './helpers';
+import { entityCodeFor, processCodeFor, riskIdOf } from './racmIds';
+import { controlIdClashes, copyRacmControls, findLibraryRacm, markRacmsUsed } from './racmLibrary';
+import { findEngagement, registerEngagement } from '../../data/engagements';
 import { useToast } from '../shared/Toast';
 import { defWord } from './flow';
 
@@ -403,6 +429,10 @@ interface IcfrCtx {
   createRacm: (process: string, sourceFileName?: string, entity?: string, opts?: { controls?: Control[]; source?: 'racm' | 'sop'; url?: string }) => void;
   /** Delete a process's RACM and its controls — refused while any audit covers them. */
   deleteRacm: (process: string) => void;
+  /** "Add RACM" (S11): copy RACMs from the Engagements page's RACM tab into this
+   *  engagement. Refused (0) when any control ID would clash with one already
+   *  here or between the RACMs. Returns how many controls came in. */
+  addLibraryRacms: (racmIds: string[]) => number;
   // discussions
   addComment: (controlId: string, anchor: DiscussionAnchor, text: string) => void;
   resolveDiscussion: (discussionId: string, resolved: boolean) => void;
@@ -443,6 +473,12 @@ interface IcfrCtx {
    *  attributes, item by item. The verdict is derived from the grid, never typed. */
   drawRetestSample: (id: string) => void;
   setRetestResult: (id: string, sampleId: string, attrCode: string, result: TestResult) => void;
+  /** ⑤ on a design-track (TOD) exception there is no sample: the auditor marks
+   *  each design check that failed again, against the fix evidence. The first
+   *  mark starts the round. */
+  setRetestCheck: (id: string, pointId: string, result: TestResult) => void;
+  /** ⑤ TOD — Ira reads just the retest's checks against the fix evidence. */
+  runRetestIra: (id: string) => void;
   recordRetest: (id: string, rationale?: string) => void;
   signOffException: (id: string) => void;
   reopenException: (id: string, reason: string) => void;
@@ -475,6 +511,32 @@ interface IcfrCtx {
   resolveReviewNote: (noteId: string, response: string) => void;
   verifyReviewNote: (noteId: string) => void;
   reopenReviewNote: (noteId: string) => void;
+}
+
+/** What Ira's first sizing reads from outside the engagement record (S9, A31/A32):
+ *  the audit it is sized under — the open one, else the live cycle, the same rule
+ *  a draw follows — the round that dated the control's items, and the trial
+ *  balance. The sizing form builds the same thing to show its working. */
+function exposureContext(eng: IcfrEngagement, openAuditId: string | null, c: Control): ExposureContext {
+  const entities = entitiesFor(eng.id);
+  return {
+    audit: workingAudit(eng, openAuditId),
+    home: sampleHome(eng, a => auditCovers(a, c, eng.id)),
+    captions: captionsFor(eng.id),
+    normalise: normaliseProcess,
+    entityName: id => entities.find(e => e.id === id)?.name ?? id,
+  };
+}
+/** The trail's line for that first sizing — Ira's, with the reasons it tagged, so
+ *  the history says where the starting figures came from before anyone moved them. */
+function iraSizingEvent(d: Deficiency, role: Role): ExecutionEvent {
+  const why = d.iraSuggested ?? {};
+  return {
+    id: uid('ex'), controlId: d.controlId, track: d.track, kind: 'exception',
+    verb: `suggested the sizing for ${d.id} — ${d.likelihood.toLowerCase()}, exposure ${formatINR(d.magnitude)}, ${d.compensatingControlId ? `compensating control ${d.compensatingControlId}` : 'no compensating control'}`,
+    rationale: [why.likelihood && `Likelihood: ${why.likelihood}.`, why.magnitude && `Exposure: ${why.magnitude}.`, why.compensatingControlId && `Compensating control: ${why.compensatingControlId}.`].filter(Boolean).join(' '),
+    by: 'Ira', role, at: 'just now',
+  };
 }
 
 const Ctx = createContext<IcfrCtx | null>(null);
@@ -540,6 +602,11 @@ export function IcfrProvider({ children, initialRole = 'auditor', seedMeta }: { 
     });
   }, [me, role]);
 
+  // Declared up here with the rest of the navigation state — openControl reads
+  // it to decide whether a focused open needs to enter an audit first, and the
+  // guard below reads it for the open audit's round.
+  const [openAuditId, setOpenAuditId] = useState<string | null>(null);
+
   // ── locked until approved (S6, A36) ───────────────────────────────────────────
   // Population, Sample and TOE wait on the reviewer's approval of TOD. The control
   // page renders those steps locked; this is the store backing it, so a stale
@@ -547,10 +614,15 @@ export function IcfrProvider({ children, initialRole = 'auditor', seedMeta }: { 
   // gates the actions that START the work — extracting and locking a population,
   // drawing a sample, recording TOE results and concluding — and leaves the ways
   // back out (withdraw, drop a file, redraw, clear a conclusion) alone.
+  //
+  // Year-end controls (A29) are held by the same guard: an Annual control in an
+  // interim or roll-forward audit has its Population, Sample and TOE pending
+  // until the year closes (yearEndPending). Same steps, same actions, so one
+  // guard — every action S6 gated refuses for either reason.
   const awaitingDesignApproval = useCallback((controlId: string) => {
     const c = eng.controls.find(x => x.id === controlId);
-    return !c || !designApproved(c);
-  }, [eng.controls]);
+    return !c || !designApproved(c) || !!yearEndPending(c, eng.audits.find(a => a.id === openAuditId));
+  }, [eng.controls, eng.audits, openAuditId]);
 
   // Selecting a tab resets to that tab's root view; both personas share the same tabs.
   const setTab = useCallback((t: SoxTab) => {
@@ -580,9 +652,6 @@ export function IcfrProvider({ children, initialRole = 'auditor', seedMeta }: { 
 
   const [focusDefId, setFocusDefId] = useState<string | null>(null);
   const clearFocusDef = useCallback(() => setFocusDefId(null), []);
-  // Declared up here with the rest of the navigation state — openControl reads
-  // it to decide whether a focused open needs to enter an audit first.
-  const [openAuditId, setOpenAuditId] = useState<string | null>(null);
   const [focusStep, setFocusStep] = useState<FocusStep | null>(null);
   const clearFocusStep = useCallback(() => setFocusStep(null), []);
   const openControl = useCallback((id: string, focus?: FocusStep) => {
@@ -667,8 +736,9 @@ export function IcfrProvider({ children, initialRole = 'auditor', seedMeta }: { 
   // An ineffective track never fizzles — it raises its exception automatically.
   // Runs against post-action state (queued after the conclude/override setEng),
   // no-ops unless the track actually reads Ineffective, and dedupes against an
-  // existing open exception for the same control + track. Severity starts at the
-  // floor until likelihood/magnitude are assessed on the exception card.
+  // existing open exception for the same control + track. Severity starts from
+  // Ira's first sizing (suggestSizing, S9 A31) — tagged, and the auditor's to
+  // change on the exception card.
   /** `onSecondRound` — the failure IS the finding, so the deficiency is raised
    *  when it happens rather than waiting for the conclusion (user, 12 Aug). The
    *  first round's failure never lands here: it is allowed to be the draw's
@@ -731,13 +801,27 @@ export function IcfrProvider({ children, initialRole = 'auditor', seedMeta }: { 
         remediation: { action: '', date: null, owner: c.owner, status: 'Open' },
         status: 'Identified',
       };
+      // The design twin of failedSamples: which checks failed, stamped now so a
+      // TOD retest re-checks exactly these however the TOD moves afterwards.
+      if (track === 'design') {
+        const failedChecks = c.design.points.filter(p => (p.override?.result ?? p.result) === 'Fail').map(p => ({ pointId: p.id, text: p.text }));
+        if (failedChecks.length) def.failedChecks = failedChecks;
+      }
+      // Ira's first sizing (S9, A31): likelihood, exposure and compensating
+      // control filled in from the evidence, each tagged with why. No accept
+      // click — the grade computes off them now, and the auditor changes any.
+      const sized = suggestSizing(def, prev, exposureContext(prev, openAuditId, c), onSecondRound);
+      def.likelihood = sized.likelihood;
+      def.magnitude = sized.magnitude;
+      def.compensatingControlId = sized.compensatingControlId;
+      def.iraSuggested = sized.iraSuggested;
       const event: ExecutionEvent = {
         id: uid('ex'), controlId, track, kind: 'exception',
         verb: `raised ${def.id} — severity to assess${prev.rules.autoRoute ? ` · auto-routed to ${c.owner}` : ''}`, by: me, role, at: 'just now',
       };
-      return { ...prev, deficiencies: [def, ...prev.deficiencies], executions: [event, ...prev.executions] };
+      return { ...prev, deficiencies: [def, ...prev.deficiencies], executions: [iraSizingEvent(def, role), event, ...prev.executions] };
     });
-  }, [me, role]);
+  }, [me, role, openAuditId]);
 
   const concludeDesign = useCallback<IcfrCtx['concludeDesign']>((controlId, conclusion, rationale) => {
     if (role !== 'auditor') return;
@@ -1324,6 +1408,14 @@ export function IcfrProvider({ children, initialRole = 'auditor', seedMeta }: { 
     });
   }, [patchControl, pushExec, role]);
 
+  // The audit a draw is made under, and the sampling methodology it agreed
+  // (A28). Every action that adds items to a sample deals them by it.
+  const drawAudit = workingAudit(eng, openAuditId);
+  const drawMethod = auditSampling(drawAudit);
+  // The round an undated item already on the control was drawn in (sampleHome),
+  // so a deal evens out against the quarters those items really fall in.
+  const drawHome = useCallback((c: Control) => sampleHome({ audits: eng.audits }, a => auditCovers(a, c, eng.id)), [eng.audits, eng.id]);
+
   // One file's draw. The items join the control's single list, tagged with the
   // file they came out of, so TOE keeps testing one list and the paper can still
   // say which file each item is from. Re-drawing the same file replaces its own
@@ -1334,15 +1426,19 @@ export function IcfrProvider({ children, initialRole = 'auditor', seedMeta }: { 
       const existing = populationSources(c);
       if (!existing.some(s => s.id === sourceId)) return c;
       const samp = c.operating.sampling;
-      // A control that answers for several companies has to deal its items among
-      // them, or the coverage strip cannot tell whether the draw reached each one.
-      // Round-robin, so a draw of any size spreads before it repeats.
-      const covers = c.entities ?? [];
+      // Each item is dealt as the audit's methodology says (A28): a quarter of
+      // the window, and — on a control answering for several companies — a
+      // company, so the coverage strip can tell whether the draw reached each
+      // one. The other files' items are what the deal evens out against; the
+      // Sample step previewed the same deal, so the rows approved are these.
+      const kept = (samp?.samples ?? []).filter(s => (s.sourceId ?? LEGACY_SOURCE_ID) !== sourceId);
+      // Inside the months the file's ask named, when it named some.
+      const stretch = drawAudit && draw.months ? { ...drawAudit, windowFrom: draw.months.from, windowTo: draw.months.to } : drawAudit;
+      const dealt = dealSample(c, stretch, drawMethod, refs.length, kept, `${seedKeyOf(c)}·${sourceId}`, e => countryOf(eng.id, e), drawHome(c));
       const added: Sample[] = refs.map((ref, i) => ({
-        id: `${sourceId}-s${i}`, ref, result: 'Not tested', sourceId,
-        ...(covers.length > 1 ? { entity: covers[i % covers.length]! } : {}),
+        id: `${sourceId}-s${i}`, ref, result: 'Not tested', sourceId, ...dealt[i],
       }));
-      const samples = [...(samp?.samples ?? []).filter(s => (s.sourceId ?? LEGACY_SOURCE_ID) !== sourceId), ...added];
+      const samples = [...kept, ...added];
       const sources = existing.map(s => (s.id === sourceId ? { ...s, draw } : s));
       const drawn = sources.filter(s => s.draw);
       const pop = c.operating.population;
@@ -1355,7 +1451,7 @@ export function IcfrProvider({ children, initialRole = 'auditor', seedMeta }: { 
           // stale; the next run (or a fresh attestation) clears it.
           steps: staleSteps(c.operating.steps),
           sampling: {
-            basis: `${samples.length} items drawn from ${drawn.length} of ${sources.length} source file${sources.length === 1 ? '' : 's'} · ${draw.method.toLowerCase()}, one seed per file · spread across the period`,
+            basis: `${samples.length} items drawn from ${drawn.length} of ${sources.length} source file${sources.length === 1 ? '' : 's'} · ${draw.method.toLowerCase()}, one seed per file · ${spreadPhrase(drawMethod.spread)}`,
             method: draw.method, size: samples.length, seed: draw.seed, samples,
           },
         },
@@ -1365,7 +1461,7 @@ export function IcfrProvider({ children, initialRole = 'auditor', seedMeta }: { 
       const file = prev.controls.find(c => c.id === controlId)?.operating.population?.sources?.find(s => s.id === sourceId)?.file;
       return { controlId, track: 'operating', kind: 'sample', verb: `drew ${draw.size} items from ${file ?? 'a source file'} — ${draw.method.toLowerCase()}, seed ${draw.seed}`, target: file };
     });
-  }, [patchControl, pushExec, role, awaitingDesignApproval]);
+  }, [patchControl, pushExec, role, awaitingDesignApproval, drawAudit, drawMethod, drawHome, eng.id]);
 
   // The tick on one file's accordion. Persisted rather than held on screen: a
   // control with ten files is not finished in one sitting, and the whole value
@@ -1688,25 +1784,19 @@ export function IcfrProvider({ children, initialRole = 'auditor', seedMeta }: { 
       // the first one is used; the exception's own file is what a later round of
       // this work will read (see PopulationSource).
       const src = populationSources(c)[0]?.id;
-      // On a control answering for several companies an extension is the answer
-      // to a coverage shortfall — "extend until every company is reached" is what
-      // the sample step tells the auditor to do. So the new items go to the
-      // companies with nothing drawn FIRST, and only then spread round-robin.
-      const covers = c.entities ?? [];
-      const short = covers.length > 1 ? covers.filter(e => !s.samples.some(x => x.entity === e)) : [];
-      const dealTo = (i: number): string | undefined =>
-        covers.length < 2 ? undefined
-        : i < short.length ? short[i]!
-        : covers[(i - short.length) % covers.length]!;
-      const added = sampleRefs(c.process, s.size + extra).slice(s.size).map((ref, i) => {
-        const entity = dealTo(i);
-        return { id: `s${s.size + i}`, ref, result: 'Not tested' as TestResult, extension: true, sourceId: src, ...(entity ? { entity } : {}) };
-      });
+      // An extension is often the answer to a coverage shortfall — "extend the
+      // sample" is what the Sample step tells the auditor when a company, a
+      // country or a quarter has no items. So the deal fills the groups the draw
+      // left empty FIRST, and only then evens out the rest (A28, dealSample).
+      const dealt = dealSample(c, drawAudit, drawMethod, extra, s.samples, `${seedKeyOf(c)}·ext`, e => countryOf(eng.id, e), drawHome(c));
+      const added = sampleRefs(c.process, s.size + extra).slice(s.size).map((ref, i) => (
+        { id: `s${s.size + i}`, ref, result: 'Not tested' as TestResult, extension: true, sourceId: src, ...dealt[i] }
+      ));
       // runs recorded before the extension never saw the new items — stale until re-run
       return { ...c, operating: { ...c.operating, steps: staleSteps(c.operating.steps), sampling: { ...s, size: s.size + extra, samples: [...s.samples, ...added], basis: `${s.size + extra} items — extended +${extra} after a failure (a miss is never ignored).` } } };
     });
     pushExec(() => ({ controlId, track: 'operating', kind: 'sample', verb: `extended the sample by ${extra} after a failure`, target: `+${extra} items` }));
-  }, [patchControl, pushExec, role, awaitingDesignApproval]);
+  }, [patchControl, pushExec, role, awaitingDesignApproval, drawAudit, drawMethod, drawHome, eng.id]);
 
   // Revise a drawn sample up or down. Growing appends fresh refs; shrinking keeps
   // the first N items (so results already recorded against them survive) and drops
@@ -1717,8 +1807,10 @@ export function IcfrProvider({ children, initialRole = 'auditor', seedMeta }: { 
     patchControl(controlId, c => {
       const s = c.operating.sampling;
       if (!s || size < 1 || size === s.size) return c;
+      // Growing deals the new items by the audit's methodology, like any draw (A28).
+      const dealt = size > s.size ? dealSample(c, drawAudit, drawMethod, size - s.size, s.samples, `${seedKeyOf(c)}·resize`, e => countryOf(eng.id, e), drawHome(c)) : [];
       const samples = size > s.size
-        ? [...s.samples, ...sampleRefs(c.process, size).slice(s.size).map((ref, i) => ({ id: `s${s.size + i}`, ref, result: 'Not tested' as TestResult }))]
+        ? [...s.samples, ...sampleRefs(c.process, size).slice(s.size).map((ref, i) => ({ id: `s${s.size + i}`, ref, result: 'Not tested' as TestResult, ...dealt[i] }))]
         : s.samples.slice(0, size);
       const kept = new Set(samples.map(x => x.id));
       const steps = c.operating.steps.map(st => st.sampleResults
@@ -1728,7 +1820,7 @@ export function IcfrProvider({ children, initialRole = 'auditor', seedMeta }: { 
       return { ...c, operating: { ...c.operating, steps: staleSteps(steps), sampling: { ...s, size, samples, basis: `${size} items — sample size revised by the auditor (judgment documented).` } } };
     });
     pushExec(() => ({ controlId, track: 'operating', kind: 'sample', verb: `revised the sample size to ${size}`, target: `${size} items` }));
-  }, [patchControl, pushExec, role, awaitingDesignApproval]);
+  }, [patchControl, pushExec, role, awaitingDesignApproval, drawAudit, drawMethod, drawHome, eng.id]);
 
   const setStepResult = useCallback<IcfrCtx['setStepResult']>((controlId, stepId, result) => {
     if (role !== 'auditor' || awaitingDesignApproval(controlId)) return;
@@ -1827,9 +1919,13 @@ export function IcfrProvider({ children, initialRole = 'auditor', seedMeta }: { 
           design: c.design.conclusion,
           operating: c.operating.conclusion,
           conclusion: controlConclusion(c),
+          // What the year's running total reads for this round once the
+          // controls reset (A28) — the items are about to go with them.
+          samplesTested: samplesTestedCount(c),
         })),
         // Severity is resolved NOW: assessSeverity applies the compensating-control
         // cap against the live engagement, and that engagement is about to change.
+        // All four grades — a clearly trivial finding archives as Clearly Trivial.
         deficiencies: prev.deficiencies.filter(d => hit(d.controlId))
           .map(d => ({ ...d, severity: assessSeverity(d, prev).final })),
         concludedAt: 'just now',
@@ -2077,7 +2173,7 @@ export function IcfrProvider({ children, initialRole = 'auditor', seedMeta }: { 
     const willFail = (s.override ? s.override.result : s.result) === 'Fail';
     const res: TestResult = willFail ? 'Fail' : 'Pass';
     const names = requiredFilesOf(s, c).map(f => f.file?.name).filter(Boolean).join(', ');
-    return stampSamples(c, { ...s, result: res, staleRun: undefined, workflowRunRef: 'Ask IRA · validated · just now', validation: { result: res, qa: validationQA(s.description, willFail), summary: validationSummary(s.description, willFail, controlId + s.id, c.operating.sampling?.size), table: validationTable(willFail, controlId + s.id), fileName: names || undefined, at: 'just now' } }, res);
+    return stampSamples(c, { ...s, result: res, staleRun: undefined, workflowRunRef: 'Ask IRA · validated · just now', validation: { result: res, qa: validationQA(s.description, willFail), summary: validationSummary(c, s, willFail, controlId + s.id), table: validationTable(c, s, willFail, controlId + s.id), fileName: names || undefined, at: 'just now' } }, res);
   };
   const runStepValidation = useCallback<IcfrCtx['runStepValidation']>((controlId, stepId) => {
     if (role !== 'auditor' || awaitingDesignApproval(controlId)) return;
@@ -2242,7 +2338,7 @@ export function IcfrProvider({ children, initialRole = 'auditor', seedMeta }: { 
       return stampSamples(c, {
         ...s, result: res, staleRun: undefined,
         workflowRunRef: s.workflowName ? (s.workflowRunRef ?? `${wfRunRef(controlId + s.id, fail)} · just now`) : s.workflowRunRef,
-        validation: wantsValidation ? (s.validation ?? { result: res, qa: validationQA(s.description, fail), summary: validationSummary(s.description, fail, controlId + s.id, c.operating.sampling?.size), table: validationTable(fail, controlId + s.id), fileName: s.inputFile?.name, at: 'just now' }) : s.validation,
+        validation: wantsValidation ? (s.validation ?? { result: res, qa: validationQA(s.description, fail), summary: validationSummary(c, s, fail, controlId + s.id), table: validationTable(c, s, fail, controlId + s.id), fileName: s.inputFile?.name, at: 'just now' }) : s.validation,
       }, res);
     }) } }));
     pushExec(prev => { const steps = prev.controls.find(cc => cc.id === controlId)?.operating.steps; return steps && steps.length ? { controlId, track: 'operating', kind: 'test-all', verb: 'tested all attributes', target: `${steps.length} attribute${steps.length === 1 ? '' : 's'}`, result: steps.some(s => s.result === 'Fail') ? 'Fail' : 'Pass' } : null; });
@@ -2422,8 +2518,8 @@ export function IcfrProvider({ children, initialRole = 'auditor', seedMeta }: { 
           const wantsValidation = s.aiValidation || s.evidenceMode === 'ai' || !!s.inputFile;
           return stampSamples(c, {
             ...s, result: res,
-            workflowRunRef: s.workflowName ? (s.workflowRunRef ?? `${wfRunRef(c.id + s.id, fail)} · just now`) : s.workflowRunRef,
-            validation: wantsValidation ? (s.validation ?? { result: res, qa: validationQA(s.description, fail), summary: validationSummary(s.description, fail, c.id + s.id, c.operating.sampling?.size), table: validationTable(fail, c.id + s.id), fileName: s.inputFile?.name, at: 'just now' }) : s.validation,
+            workflowRunRef: s.workflowName ? (s.workflowRunRef ?? `${wfRunRef(seedKeyOf(c) + s.id, fail)} · just now`) : s.workflowRunRef,
+            validation: wantsValidation ? (s.validation ?? { result: res, qa: validationQA(s.description, fail), summary: validationSummary(c, s, fail, seedKeyOf(c) + s.id), table: validationTable(c, s, fail, seedKeyOf(c) + s.id), fileName: s.inputFile?.name, at: 'just now' }) : s.validation,
           }, res);
         });
         const designConcl: TrackConclusion = points.some(p => p.result === 'Fail') ? 'Ineffective' : 'Effective';
@@ -2433,8 +2529,11 @@ export function IcfrProvider({ children, initialRole = 'auditor', seedMeta }: { 
         // design is left alone and TOE is tested behind it — re-concluding the
         // design would pull the approval out from under those results.
         const approved = designApproved(c);
+        // Year-end controls (A29): TOE waits for the year-end audit, so behind an
+        // approved design in an interim or roll-forward there is nothing to run.
+        const pending = !!yearEndPending(c, prev.audits.find(a => a.id === openAuditId));
         const dPoints = approved ? [] : points;
-        const oSteps = approved ? steps : [];
+        const oSteps = approved && !pending ? steps : [];
         const checks = dPoints.length + oSteps.length;
         if (checks > 0) execs.push({
           id: uid('ex'), controlId: c.id, track: 'operating', kind: 'test-all', verb: approved ? 'bulk tested operating' : 'bulk tested design',
@@ -2465,7 +2564,7 @@ export function IcfrProvider({ children, initialRole = 'auditor', seedMeta }: { 
       raiseDeficiencyIfIneffective(id, 'design');
       raiseDeficiencyIfIneffective(id, 'operating');
     });
-  }, [me, role, raiseDeficiencyIfIneffective]);
+  }, [me, role, raiseDeficiencyIfIneffective, openAuditId]);
 
   const addRacmDoc = useCallback<IcfrCtx['addRacmDoc']>((fileName, process, opts) => {
     const lower = fileName.toLowerCase();
@@ -2519,6 +2618,31 @@ export function IcfrProvider({ children, initialRole = 'auditor', seedMeta }: { 
     });
     if (sourceFileName) addRacmDoc(sourceFileName, process, { source: opts?.source, url: opts?.url });
   }, [role, addRacmDoc]);
+
+  // Copy RACMs in from the RACM tab (S11). The engagement keeps its copy — later
+  // edits on the tab never reach it — and the tab records it as a user, which is
+  // what blocks deleting the source. An ID that would repeat one already here, or
+  // one between the RACMs picked, refuses the whole add: the picker says which.
+  const addLibraryRacms = useCallback<IcfrCtx['addLibraryRacms']>((racmIds) => {
+    if (role !== 'auditor' || isEngagementLocked(eng)) return 0;
+    const racms = racmIds.map(findLibraryRacm).filter((r): r is NonNullable<typeof r> => !!r);
+    if (!racms.length) return 0;
+    const clashes = controlIdClashes([{ name: 'this engagement', controls: eng.controls }, ...racms.map(r => ({ name: r.name, controls: r.controls }))]);
+    if (clashes.length) return 0;
+    const copies = racms.flatMap(copyRacmControls);
+    setEng(prev => ({ ...prev, controls: [...prev.controls, ...copies] }));
+    markRacmsUsed(racms.map(r => r.id), { id: eng.id, name: eng.name });
+    // Keep the record in step, so the engagement still names its RACMs after a
+    // remount. Controls persist only on engagements created from the tab — a
+    // seeded engagement rebuilds its register from its seed.
+    const record = findEngagement(eng.id);
+    if (record) registerEngagement({
+      ...record,
+      soxRacms: [...(record.soxRacms ?? []), ...racms.map(r => ({ racmId: r.id, name: r.name }))],
+      ...(record.soxControls ? { soxControls: [...record.soxControls, ...copies] } : {}),
+    });
+    return copies.length;
+  }, [role, eng]);
 
   // Deleting a RACM takes its controls with it, so it is refused the moment an
   // audit covers any of them — testing, findings and sign-offs hang off those
@@ -2613,7 +2737,14 @@ export function IcfrProvider({ children, initialRole = 'auditor', seedMeta }: { 
       const before = prev.deficiencies.find(d => d.id === id);
       if (!before) return prev;
       if (ownsIt(prev, before.controlId, me)) return prev;
-      const after = { ...before, ...patch };
+      const after: Deficiency = { ...before, ...patch };
+      // Ira's tag comes off a field the moment that field changes (S9, A31): a
+      // tag left on a figure the auditor chose would credit Ira with their call.
+      if (before.iraSuggested) {
+        const tags = { ...before.iraSuggested };
+        (['likelihood', 'magnitude', 'compensatingControlId'] as const).forEach(k => { if (k in patch && patch[k] !== before[k]) delete tags[k]; });
+        after.iraSuggested = Object.keys(tags).length ? tags : undefined;
+      }
       const next = { ...prev, deficiencies: prev.deficiencies.map(d => (d.id === id ? after : d)) };
       const g0 = gradeException(before, prev).grade;
       const g1 = gradeException(after, next).grade;
@@ -3068,6 +3199,9 @@ export function IcfrProvider({ children, initialRole = 'auditor', seedMeta }: { 
       if (isEngagementLocked(prev)) return prev;
       const target = prev.deficiencies.find(d => d.id === id);
       if (!target || target.status !== 'Retest' || target.retestDraft) return prev;
+      // A design failure is not retested on a sample — its TOE attributes are not
+      // what failed. It re-checks its failed design checks (setRetestCheck).
+      if (target.track === 'design') return prev;
       if (ownsIt(prev, target.controlId, me)) return prev;
       const c = prev.controls.find(x => x.id === target.controlId);
       if (!c) return prev;
@@ -3119,6 +3253,72 @@ export function IcfrProvider({ children, initialRole = 'auditor', seedMeta }: { 
     }));
   }, [role]);
 
+  // ── The design-track retest ──────────────────────────────────────────────────
+  // A TOD failure has no sample to redraw: what failed was the design, so the
+  // retest re-checks the design checks that failed, against the evidence the
+  // owner attached to the fix. The same checks every round — `designRetestChecks`
+  // — and they are copied onto the round when it starts, so nothing done to the
+  // TOD while the retest is open can move them. Like the sampled retest it never
+  // writes to the control: the round is the evidence, the TOD stays as concluded.
+  const setRetestCheck = useCallback<IcfrCtx['setRetestCheck']>((id, pointId, result) => {
+    if (role !== 'auditor') return;
+    setEng(prev => {
+      if (isEngagementLocked(prev)) return prev;
+      const target = prev.deficiencies.find(d => d.id === id);
+      if (!target || target.track !== 'design' || target.status !== 'Retest') return prev;
+      if (ownsIt(prev, target.controlId, me)) return prev;
+      const draft = designRetestDraft(prev, target, me);
+      if (!draft?.checks?.some(x => x.pointId === pointId)) return prev;
+      const checks = draft.checks.map(x => (x.pointId === pointId ? { ...x, result } : x));
+      return { ...prev, deficiencies: prev.deficiencies.map(d => (d.id === id ? { ...d, retestDraft: { ...draft, checks } } : d)) };
+    });
+  }, [me, role]);
+
+  // Ira on the retest's checks only, on the auditor's ask — the retest's twin of
+  // runDesignIra, and deterministic the same way: with the fix evidence on file a
+  // check passes unless the auditor had already marked it failed. With nothing on
+  // file there is nothing to read, so it does not run.
+  const runRetestIra = useCallback<IcfrCtx['runRetestIra']>((id) => {
+    if (role !== 'auditor') return;
+    const at = fmtDateTime();
+    setEng(prev => {
+      if (isEngagementLocked(prev)) return prev;
+      const target = prev.deficiencies.find(d => d.id === id);
+      if (!target || target.track !== 'design' || target.status !== 'Retest') return prev;
+      if (ownsIt(prev, target.controlId, me)) return prev;
+      const files = (target.remediation.evidence ?? []).map(f => f.name);
+      if (!files.length) return prev;
+      const draft = designRetestDraft(prev, target, me);
+      if (!draft?.checks?.length) return prev;
+      const list = files.length < 2 ? files.join('') : `${files.slice(0, -1).join(', ')} and ${files[files.length - 1]}`;
+      let failed = 0;
+      const checks = draft.checks.map(x => {
+        const stoodFailed = x.result === 'Fail';
+        if (stoodFailed) failed += 1;
+        const res: TestResult = stoodFailed ? 'Fail' : 'Pass';
+        const qa = [
+          { q: RETEST_FIX_ON_FILE_Q, a: `Yes — ${list}.`, pass: true },
+          ...(stoodFailed ? [{ q: IRA_STOOD_FAILED_Q, a: 'Yes — it was marked failed before Ira ran.', pass: false }] : []),
+          ...validationQA(x.text, stoodFailed),
+        ];
+        const summary = stoodFailed
+          ? 'Ira read the fix evidence, and the design still falls short on this check — the answers below say where.'
+          : 'Ira read the fix evidence and found the fixed design supports this check.';
+        return { ...x, result: res, validation: { result: res, qa, summary, fileName: files.join(', '), at } };
+      });
+      const event: ExecutionEvent = {
+        id: uid('ex'), controlId: target.controlId, track: 'design', kind: 'ai-review',
+        verb: `ran Ira on ${checks.length} design check${checks.length === 1 ? '' : 's'} for retest ${draft.n} of ${id} — ${checks.length - failed} passed, ${failed} failed`,
+        result: failed > 0 ? 'Fail' : 'Pass', by: me, role, at: 'just now',
+      };
+      return {
+        ...prev,
+        deficiencies: prev.deficiencies.map(d => (d.id === id ? { ...d, retestDraft: { ...draft, checks } } : d)),
+        executions: [event, ...prev.executions],
+      };
+    });
+  }, [me, role]);
+
   // A passed retest never closes itself — it parks at 'Awaiting reviewer'. Only
   // the auditor records retest results; the owner never tests their own fix. A
   // failure reopens the WORK, not the plan: it lands back on the owner's fixing
@@ -3136,7 +3336,12 @@ export function IcfrProvider({ children, initialRole = 'auditor', seedMeta }: { 
       if (samePerson(target.fixSubmitted, me)) return prev;
       if (ownsIt(prev, target.controlId, me)) return prev;
       const draft = target.retestDraft;
-      const marks = draft.samples.flatMap(s => draft.attributes.map(a => draft.results[s.id]?.[a.code] ?? 'Not tested'));
+      // A design failure is only ever retested on its checks, never on a sample.
+      if (target.track === 'design' && !draft.checks?.length) return prev;
+      // Pass only when every listed check passes — the same rule as the grid.
+      const marks = draft.checks
+        ? draft.checks.map(x => x.result)
+        : draft.samples.flatMap(s => draft.attributes.map(a => draft.results[s.id]?.[a.code] ?? 'Not tested'));
       if (marks.some(m => m === 'Not tested')) return prev;             // finish the grid first
       const result: 'Pass' | 'Fail' = marks.includes('Fail') ? 'Fail' : 'Pass';
       if (result === 'Fail' && !rationale?.trim()) return prev;         // the owner has to be told why
@@ -3385,6 +3590,12 @@ export function IcfrProvider({ children, initialRole = 'auditor', seedMeta }: { 
         status: 'Identified',
         unableToTestReason: block.reason,
       };
+      // Ira's first sizing, as on every other raise (S9, A31).
+      const sized = suggestSizing(def, prev, exposureContext(prev, openAuditId, c));
+      def.likelihood = sized.likelihood;
+      def.magnitude = sized.magnitude;
+      def.compensatingControlId = sized.compensatingControlId;
+      def.iraSuggested = sized.iraSuggested;
       const event: ExecutionEvent = {
         id: uid('ex'), controlId, track: block.track, kind: 'exception',
         verb: `raised ${defId} — never evidenced, scope limitation at period end`,
@@ -3401,10 +3612,10 @@ export function IcfrProvider({ children, initialRole = 'auditor', seedMeta }: { 
               ...(block.track === 'design' ? { approval: { preparedBy: { by: me, at: 'just now' } }, designReturn: undefined } : {}) },
           } : x)),
         deficiencies: [def, ...prev.deficiencies],
-        executions: [event, ...prev.executions],
+        executions: [iraSizingEvent(def, role), event, ...prev.executions],
       };
     });
-  }, [me, role]);
+  }, [me, role, openAuditId]);
 
   // The only way back into a concluded control: the auditor reopens it with a
   // reason. Results stay; both tracks' conclusions clear; the trail records why.
@@ -3546,11 +3757,20 @@ export function IcfrProvider({ children, initialRole = 'auditor', seedMeta }: { 
       .filter(n => !Number.isNaN(n));
     const next = (nums.length ? Math.max(...nums) : 0) + 1;
     const wpRef = `${wpPrefix}-${String(next).padStart(2, '0')}`;
-    const idBase = inProc[0]?.id.replace(/-\d+$/, '') ?? `${wpPrefix}-C`;
-    let id = `${idBase}-${String(next).padStart(2, '0')}`;
-    if (eng.controls.some(c => c.id === id)) id = uid(idBase);
+    // IDs read PROCESS/ENTITY/R001/C001 (S11). An existing risk keeps its ID and
+    // the control takes the next C under it; a new risk takes the next R for the
+    // process at the company its other controls are tested at.
+    const entity = inProc[0]?.entity ?? eng.entity;
+    const pc = processCodeFor(draft.process);
+    const ec = entityCodeFor(entity);
+    const rPrefix = `${pc}/${ec}/R`;
+    const riskId = eng.controls.find(c => c.riskId === draft.riskId)?.riskId ?? riskIdOf(pc, ec, 1 + Math.max(0,
+      ...eng.controls.filter(c => c.riskId.startsWith(rPrefix)).map(c => parseInt(c.riskId.slice(rPrefix.length), 10)).filter(n => !Number.isNaN(n))));
+    const cNo = 1 + Math.max(0, ...eng.controls.filter(c => c.riskId === riskId).map(c => parseInt(c.id.split('/C').pop() ?? '', 10)).filter(n => !Number.isNaN(n)));
+    let id = `${riskId}/C${String(cNo).padStart(3, '0')}`;
+    if (eng.controls.some(c => c.id === id)) id = uid(riskId);
     const control: Control = {
-      id, wpRef, description: draft.description, process: draft.process,
+      id, wpRef, description: draft.description, process: draft.process, entity,
       controlActivity: draft.controlActivity?.trim() || undefined,
       subProcess: draft.subProcess.trim() || 'General',
       nature: draft.nature, type: 'Preventive', frequency: draft.frequency,
@@ -3558,7 +3778,7 @@ export function IcfrProvider({ children, initialRole = 'auditor', seedMeta }: { 
       // Falls through to the process's recorded process owner when the form
       // didn't name one, so a control created by hand still knows who to ask.
       processOwner: draft.processOwner?.trim() || peopleForProcess(draft.process)?.processOwner,
-      riskId: draft.riskId, riskDescription: draft.riskDescription,
+      riskId, riskDescription: draft.riskDescription,
       assertions: draft.assertions.length ? draft.assertions : ['Accuracy'],
       design: {
         documents: [
@@ -3630,13 +3850,13 @@ export function IcfrProvider({ children, initialRole = 'auditor', seedMeta }: { 
     addAttribute, removeAttribute, mapStepWorkflow, setStepEvidenceMode, toggleStepAttest, toggleStepAI, runStepValidation, testAllAttributes,
     addRequiredFile, renameRequiredFile, removeRequiredFile, uploadRequiredFile, clearRequiredFile, validateReadyAttributes,
     approveRacmRows, remarkRacmRow, clearRacmReview, bulkTestControls,
-    createAudit, updateAudit, openAuditId, openAudit, closeAudit, racmDocs, addRacmDoc, createRacm, deleteRacm,
+    createAudit, updateAudit, openAuditId, openAudit, closeAudit, racmDocs, addRacmDoc, createRacm, deleteRacm, addLibraryRacms,
     addComment, resolveDiscussion,
     submitTask, clearTask, raiseQuery, requestDesignDocs,
-    updateRules, applyRules, updateMateriality, reconcileScope, updateDeficiency, linkRootCause, unlinkRootCause, setGroupConclusion, updateAccount, setExceptionStatus, completeSizing, confirmRating, returnRating, submitPlan, reviewPlan, drawRetestSample, setRetestResult, recordRetest, signOffException, reopenException, updateRemediation, addRemediationEvidence, raiseChallenge, respondToChallenge, markUnableToTest, resolveUnableToTest, escalateUnableToTest,
+    updateRules, applyRules, updateMateriality, reconcileScope, updateDeficiency, linkRootCause, unlinkRootCause, setGroupConclusion, updateAccount, setExceptionStatus, completeSizing, confirmRating, returnRating, submitPlan, reviewPlan, drawRetestSample, setRetestResult, setRetestCheck, runRetestIra, recordRetest, signOffException, reopenException, updateRemediation, addRemediationEvidence, raiseChallenge, respondToChallenge, markUnableToTest, resolveUnableToTest, escalateUnableToTest,
     addControl, signOffAudit, reopenControl, signOffControlWp, returnControl,
     raiseReviewNote, resolveReviewNote, verifyReviewNote, reopenReviewNote,
-  }), [eng, role, tab, view, selectedControlId, racmEditor, me, meOwner, racmProcess, changeRole, setTab, openRacmMatrix, openRacmEditor, openControl, focusStep, clearFocusStep, openDeficiency, focusDefId, clearFocusDef, back, returnView, registerPreset, openRegister, clearRegisterPreset, racmCreateOpen, openRacmCreate, clearRacmCreate, setDocStatus, setDesignPoint, concludeDesign, overrideDesign, approveDesign, returnDesign, addDesignDoc, attachDesignEvidence, removeDesignDoc, waiveDesignDoc, clearDesignWaiver, updateControlMeta, setControlKey, setDesignJudgements, startWalkthrough, setWalkthroughAttribute, setWalkthroughMeta, addDesignPoint, removeDesignPoint, validateDesignPoint, overrideDesignPoint, removeDesignFile, runDesignIra, linkDesignPointEvidence, setDesignPointProof, requestDataByEmail, setPointEvidenceType, setStepEvidenceType, setDesignBasis, setPopulation, setPopulationDefinition, clearPopulation, setPopulationCheck, setPopulationFacts, addPopulationSource, removePopulationSource, setSourceRole, drawSourceSample, approveSource, redrawSource, remindOwnerForFiles, registerFile, setFileOrigin, lockPopulation, lockAttributes, confirmExtraction, recordException, addEvidenceReport, removeEvidenceReport, proveEvidenceReport, registerIpe, setIpeCheck, concludeIpe, clearIpe, setMrc, setSampling, extendSample, resizeSample, setSampleResult, setStepResult, overrideStep, pullStepRun, attestStep, addStepEvidence, setStepInputFile, concludeOperating, overrideOperating, startToeRound, addAttribute, removeAttribute, mapStepWorkflow, setStepEvidenceMode, toggleStepAttest, toggleStepAI, runStepValidation, testAllAttributes, addRequiredFile, renameRequiredFile, removeRequiredFile, uploadRequiredFile, clearRequiredFile, validateReadyAttributes, approveRacmRows, remarkRacmRow, clearRacmReview, bulkTestControls, createAudit, updateAudit, openAuditId, openAudit, closeAudit, racmDocs, addRacmDoc, createRacm, deleteRacm, addComment, resolveDiscussion, submitTask, clearTask, raiseQuery, requestDesignDocs, updateRules, applyRules, updateMateriality, reconcileScope, updateDeficiency, linkRootCause, unlinkRootCause, setGroupConclusion, updateAccount, setExceptionStatus, completeSizing, confirmRating, returnRating, submitPlan, reviewPlan, drawRetestSample, setRetestResult, recordRetest, signOffException, reopenException, updateRemediation, addRemediationEvidence, raiseChallenge, respondToChallenge, markUnableToTest, resolveUnableToTest, escalateUnableToTest, addControl, signOffAudit, reopenControl, signOffControlWp, returnControl, raiseReviewNote, resolveReviewNote, verifyReviewNote, reopenReviewNote]);
+  }), [eng, role, tab, view, selectedControlId, racmEditor, me, meOwner, racmProcess, changeRole, setTab, openRacmMatrix, openRacmEditor, openControl, focusStep, clearFocusStep, openDeficiency, focusDefId, clearFocusDef, back, returnView, registerPreset, openRegister, clearRegisterPreset, racmCreateOpen, openRacmCreate, clearRacmCreate, setDocStatus, setDesignPoint, concludeDesign, overrideDesign, approveDesign, returnDesign, addDesignDoc, attachDesignEvidence, removeDesignDoc, waiveDesignDoc, clearDesignWaiver, updateControlMeta, setControlKey, setDesignJudgements, startWalkthrough, setWalkthroughAttribute, setWalkthroughMeta, addDesignPoint, removeDesignPoint, validateDesignPoint, overrideDesignPoint, removeDesignFile, runDesignIra, linkDesignPointEvidence, setDesignPointProof, requestDataByEmail, setPointEvidenceType, setStepEvidenceType, setDesignBasis, setPopulation, setPopulationDefinition, clearPopulation, setPopulationCheck, setPopulationFacts, addPopulationSource, removePopulationSource, setSourceRole, drawSourceSample, approveSource, redrawSource, remindOwnerForFiles, registerFile, setFileOrigin, lockPopulation, lockAttributes, confirmExtraction, recordException, addEvidenceReport, removeEvidenceReport, proveEvidenceReport, registerIpe, setIpeCheck, concludeIpe, clearIpe, setMrc, setSampling, extendSample, resizeSample, setSampleResult, setStepResult, overrideStep, pullStepRun, attestStep, addStepEvidence, setStepInputFile, concludeOperating, overrideOperating, startToeRound, addAttribute, removeAttribute, mapStepWorkflow, setStepEvidenceMode, toggleStepAttest, toggleStepAI, runStepValidation, testAllAttributes, addRequiredFile, renameRequiredFile, removeRequiredFile, uploadRequiredFile, clearRequiredFile, validateReadyAttributes, approveRacmRows, remarkRacmRow, clearRacmReview, bulkTestControls, createAudit, updateAudit, openAuditId, openAudit, closeAudit, racmDocs, addRacmDoc, createRacm, deleteRacm, addLibraryRacms, addComment, resolveDiscussion, submitTask, clearTask, raiseQuery, requestDesignDocs, updateRules, applyRules, updateMateriality, reconcileScope, updateDeficiency, linkRootCause, unlinkRootCause, setGroupConclusion, updateAccount, setExceptionStatus, completeSizing, confirmRating, returnRating, submitPlan, reviewPlan, drawRetestSample, setRetestResult, setRetestCheck, runRetestIra, recordRetest, signOffException, reopenException, updateRemediation, addRemediationEvidence, raiseChallenge, respondToChallenge, markUnableToTest, resolveUnableToTest, escalateUnableToTest, addControl, signOffAudit, reopenControl, signOffControlWp, returnControl, raiseReviewNote, resolveReviewNote, verifyReviewNote, reopenReviewNote]);
 
   return <Ctx.Provider value={value}>{children}</Ctx.Provider>;
 }

@@ -18,12 +18,15 @@ import {
   isControlLocked, itgcHolds, failedItgcs, isItgcDependent, operatingProgress, TOE_MAX_ROUNDS, toeRoundFailed, toeRoundNo, toeRounds, toeSpent, canRedrawToe, canExtendToe, populationLocked, sampleSizeGuide, trackResult, pointResult, stepResult, attestationOverruled, inquiryOnlyAttributes, restsOnStatementAlone,
   countVerdict, coverageVerdict, derivedRunCount, populationReady, designBasis, auditorProvenChecks, suggestedDesignChecks, suggestPopulationFile, fmtDay, parseDay,
   monthlyBreakdown, spikeMonths, priorRoundCount, fileUsable, originLabel, guessFileKind, populationSources, ipeChecksFor, samplesFor,
-  draftSamplePrompt, readSamplePrompt, windowMonths, expectedInputsFor, hasRowCount, isAssisting, sampledSources, reviewNotesFor, isShared, entityCoverage, uncoveredEntities, hasPaths, pathCoverage, untouchedPaths, type PopVerdict,
+  expectedInputsFor, hasRowCount, isAssisting, sampledSources, reviewNotesFor, isShared, entityCoverage, uncoveredEntities, hasPaths, pathCoverage, untouchedPaths, type PopVerdict,
   requiredFilesOf, requiredFilesCount, requiredFilesReady, designFilesOf,
-  designApproved, isEngagementLocked, samePerson,
+  designApproved, isEngagementLocked, samePerson, documentSystemRows,
+  auditSampling, dealSample, NO_COUNTRY, sampleDate, sampleHome, sampleSplit, spreadPhrase, workingAudit, yearSampleRounds, LEGACY_SOURCE_ID, type SampleSplit, type YearRound, yearEndPending,
+  draftSamplePrompt, readSamplePrompt,
+  populationInstances, sampleAmount, seedKeyOf,
 } from './helpers';
 import { useAuditFiles, type AuditFile } from './useAuditFiles';
-import { ownersOf, programmeFor } from './auditScope';
+import { auditCovers, countryOf, ownersOf, programmeFor } from './auditScope';
 import { ConclusionPill, CourtBadge, NatureChip, OriginPicker, Toggle, TrackPill, Tickmark, Stamp, RagCard, type RagMeterDef } from './parts';
 import { Pill } from '../shared/StatusBadge';
 import { useToast } from '../shared/Toast';
@@ -37,7 +40,7 @@ import { cn } from '../../lib/cn';
 // types.ts say why. The imports go back with the blocks that used them:
 //   EXPOSURE_LABEL, exposureTotal, GAP_LABEL   (values)
 //   Exposure                                    (type)
-import { AUDITOR_PROOF_KINDS, DESIGN_DOC_KINDS, DESIGN_WAIVER_REASONS, FIVE_W_1H, ipeSuggestion, ROLE_LABEL, ROUND_TAG } from './types';
+import { AUDIT_ROUNDS, AUDITOR_PROOF_KINDS, DESIGN_DOC_KINDS, DESIGN_WAIVER_REASONS, FIVE_W_1H, ipeSuggestion, ROLE_LABEL, ROUND_TAG } from './types';
 import { requiredDatasetsFor, sampleRefs } from './mockData';
 import type {
   AuditRound, Control, DesignDoc, DesignDocKind, DesignPoint, DesignWaiverReason, DiscussionAnchor, DocStatus, EvidenceFile, OperatingStep,
@@ -276,7 +279,9 @@ function ItgcCascadeNotice({ control }: { control: Control }) {
           {failed.map(f => (
             <button key={f.id} onClick={() => openControl(f.id)} title={f.description}
               className="inline-flex items-center gap-1.5 max-w-full px-2 h-[22px] rounded-md border border-mitigated-200 bg-canvas-elevated text-[0.6875rem] font-semibold text-mitigated-800 hover:border-mitigated-400 transition-colors cursor-pointer">
-              <span className="font-mono">{controlCode(f)}</span>
+              {/* shrink-0 + nowrap: a TRY/AIH/R001/C001-length ID would otherwise
+                  break at its slashes inside this one-line chip */}
+              <span className="font-mono shrink-0 whitespace-nowrap">{controlCode(f)}</span>
               <span className="truncate font-medium text-ink-600">{f.description}</span>
             </button>
           ))}
@@ -409,18 +414,20 @@ function ConcludeFooter({ control, which, suggestion, canEdit, disabled, disable
  * sample has been extracted; the caller says what that means in its own words.
  */
 function SampleResultsTable({ control, step }: { control: Control; step: OperatingStep }) {
-  const samples = control.operating.sampling?.samples ?? [];
-  if (samples.length === 0) return null;
-  const rows = samples.map((s, i) => ({ ...s, i, res: step.sampleResults?.[s.id] ?? ('Not tested' as TestResult) }));
-  const passed = rows.filter(r => r.res === 'Pass').length;
+  const rows = documentSystemRows(control, step);
+  if (rows.length === 0) return null;
+  const matched = rows.filter(r => r.result === 'Pass').length;
   // a run pulled before the sample existed carries no per-item verdicts — say so
   // rather than showing a table that reads as "everything untested"
-  const stale = rows.every(r => r.res === 'Not tested');
+  const stale = rows.every(r => r.result === 'Not tested');
+  // Document against system (S7, A24): each drawn item, the field it was
+  // compared on, what the document says and what the system holds. It replaced
+  // the reference · date · amount · result list, which only restated a verdict.
   return (
     <div>
       <div className="flex items-baseline justify-between gap-2 mb-1.5">
-        <div className="text-[0.65625rem] font-bold uppercase tracking-wide text-ink-400">Result against each extracted sample</div>
-        {!stale && <span className="text-[0.6875rem] text-ink-400 tabular-nums">{passed}/{rows.length} passed</span>}
+        <div className="text-[0.65625rem] font-bold uppercase tracking-wide text-ink-400">Document vs system data — each sampled item</div>
+        {!stale && <span className="text-[0.6875rem] text-ink-400 tabular-nums">{matched}/{rows.length} match</span>}
       </div>
       {stale && (
         <p className="text-[0.71875rem] text-mitigated-700 inline-flex items-start gap-1 mb-2">
@@ -428,29 +435,34 @@ function SampleResultsTable({ control, step }: { control: Control; step: Operati
           This ran before the sample was extracted — run it again to test each item.
         </p>
       )}
-      <div className="rounded-lg border border-canvas-border overflow-hidden">
-        <div className="grid grid-cols-[1.2fr_1fr_0.8fr_0.7fr] gap-2 px-3 py-1.5 bg-paper-50/70 border-b border-canvas-border text-[0.625rem] font-bold uppercase tracking-wide text-ink-400">
-          <span>Reference</span><span>Date</span><span className="text-right">Amount</span><span className="text-right">Result</span>
+      <div className="rounded-lg border border-canvas-border overflow-x-auto">
+        <div className="min-w-[36rem]">
+          <div className="grid grid-cols-[1.1fr_1.1fr_1fr_1fr_0.8fr] gap-2 px-3 py-1.5 bg-paper-50/70 border-b border-canvas-border text-[0.625rem] font-bold uppercase tracking-wide text-ink-400">
+            <span>Sample</span><span>Field</span><span>Document says</span><span>System says</span><span className="text-right">Result</span>
+          </div>
+          {rows.map(r => {
+            const miss = r.result === 'Fail';
+            return (
+              <div key={r.id} className="grid grid-cols-[1.1fr_1.1fr_1fr_1fr_0.8fr] gap-2 px-3 py-1.5 border-b border-canvas-border last:border-b-0 text-[0.71875rem] items-center">
+                <span className="font-mono text-ink-700 truncate" title={r.ref}>{r.ref}</span>
+                <span className="text-ink-500 truncate" title={r.field}>{r.field}</span>
+                <span className="text-ink-700 tabular-nums truncate" title={r.document}>{r.document}</span>
+                <span className={cn('tabular-nums truncate', miss ? 'text-risk-700 font-semibold' : 'text-ink-700')} title={r.system}>{r.system}</span>
+                <span className={cn('inline-flex items-center justify-end gap-1 font-bold', r.result === 'Pass' ? 'text-compliant-700' : miss ? 'text-risk-700' : 'text-ink-400')}>
+                  <Tickmark result={r.result} size={13} /> {r.result === 'Pass' ? 'Match' : miss ? 'Mismatch' : 'Not compared'}
+                </span>
+              </div>
+            );
+          })}
         </div>
-        {rows.map(r => {
-          const f = sampleRowFacts(r.i);
-          return (
-            <div key={r.id} className="grid grid-cols-[1.2fr_1fr_0.8fr_0.7fr] gap-2 px-3 py-1.5 border-b border-canvas-border last:border-b-0 text-[0.71875rem] items-center">
-              <span className="font-mono text-ink-700">{r.ref}</span>
-              <span className="text-ink-500">{f.date}</span>
-              <span className="text-right tabular-nums text-ink-700">₹ {f.amountL} L</span>
-              <span className={cn('inline-flex items-center justify-end gap-1 font-bold', r.res === 'Pass' ? 'text-compliant-700' : r.res === 'Fail' ? 'text-risk-700' : 'text-ink-400')}>
-                <Tickmark result={r.res} size={13} /> {r.res}
-              </span>
-            </div>
-          );
-        })}
       </div>
     </div>
   );
 }
 
-function QAResultsModal({ title, validation, control, step, onClose }: { title: string; validation: ValidationResult; control?: Control; step?: OperatingStep; onClose: () => void }) {
+// Exported for the design-track retest (extraViews), whose checks carry the same
+// validation shape and read out the same way.
+export function QAResultsModal({ title, validation, control, step, onClose }: { title: string; validation: ValidationResult; control?: Control; step?: OperatingStep; onClose: () => void }) {
   const { qa, summary, table, result, fileName } = validation;
   const passed = qa.filter(x => x.pass).length;
   // An operating attribute is tested against the drawn sample, so its real
@@ -479,7 +491,7 @@ function QAResultsModal({ title, validation, control, step, onClose }: { title: 
           {sampled && <SampleResultsTable control={control!} step={step!} />}
           {table && !sampled && (
             <div>
-              <div className="text-[0.65625rem] font-bold uppercase tracking-wide text-ink-400 mb-1.5">Evidence checked</div>
+              <div className="text-[0.65625rem] font-bold uppercase tracking-wide text-ink-400 mb-1.5">{table.columns.includes('System says') ? 'Document vs system data' : 'Evidence checked'}</div>
               <div className="rounded-lg border border-canvas-border overflow-hidden">
                 <table className="w-full text-[0.75rem]">
                   <thead><tr className="bg-paper-50/60 border-b border-canvas-border">{table.columns.map(c => <th key={c} className="text-left font-semibold text-ink-600 px-3 py-1.5">{c}</th>)}</tr></thead>
@@ -488,7 +500,7 @@ function QAResultsModal({ title, validation, control, step, onClose }: { title: 
                       <tr key={ri} className="border-b border-canvas-border/60 last:border-0">
                         {row.map((cell, ci) => {
                           const isResult = ci === table.columns.length - 1;
-                          return <td key={ci} className={cn('px-3 py-1.5', isResult ? cn('font-bold', cell === 'Pass' ? 'text-compliant-700' : cell === 'Fail' ? 'text-risk-700' : 'text-ink-600') : 'text-ink-700', ci === 0 && 'font-mono text-[0.6875rem] text-ink-500')}>{cell}</td>;
+                          return <td key={ci} className={cn('px-3 py-1.5', isResult ? cn('font-bold', cell === 'Pass' || cell === 'Match' ? 'text-compliant-700' : cell === 'Fail' || cell === 'Mismatch' ? 'text-risk-700' : 'text-ink-600') : 'text-ink-700', ci === 0 && 'font-mono text-[0.6875rem] text-ink-500')}>{cell}</td>;
                         })}
                       </tr>
                     ))}
@@ -563,7 +575,7 @@ function RunResultsModal({ control, step, onClose }: { control: Control; step: O
 }
 
 // ── design consideration row — validated by its own workflow (Q&A) + override ─────
-const VALIDATE_MS = 6000;
+export const VALIDATE_MS = 6000;
 
 /** A picked file's extension, read as one of the four evidence kinds the model
  *  knows. Same mapping the store uses when a file arrives by any other door. */
@@ -1709,13 +1721,11 @@ function DesignSection({ control, canEdit }: { control: Control; canEdit: boolea
 }
 
 // ── sample extraction (step ③) — transaction detail → size/method/seed → draw ───
-/** Deterministic mock row facts so filters and specs are stable across runs. */
-function sampleRowFacts(i: number): { date: string; amountL: number } {
-  const MONTHS = ['Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec', 'Jan', 'Feb', 'Mar'];
-  const day = ((i * 7) % 27) + 1;
-  const amountL = 8 + ((i * 37) % 190); // ₹ lakh, 8–197
-  return { date: `${day} ${MONTHS[(i * 5) % 12]} FY26`, amountL };
-}
+/** A drawn row's amount, in full rupees. The date is the draw's (sampleDate,
+ *  A28) and the amount is the population instance on that date (sampleAmount,
+ *  S9 A32), so the row prices the same as the population preview and the
+ *  exposure working. */
+const rowRupees = (n: number): string => `₹${n.toLocaleString('en-IN')}`;
 
 // ── IPE (inside step ②) — the entity-produced report is itself under test ────────
 /** Rebuilt Aug 2026 (Step-2 action item 17).
@@ -2196,34 +2206,27 @@ function VerdictRow({ label, v, note, canWrite, placeholder, onNote, onRefilter,
  *  control's own id so the same population always shows the same items — this
  *  prototype holds no file bytes, and inventing a different set on every open
  *  would make the preview useless for exactly the thing it is for. */
-/** A Date back to 'YYYY-MM-DD' by its LOCAL parts. `toISOString().slice(0, 10)`
- *  would convert to UTC first and hand back the previous day west of it — the
- *  same drift `parseDay` exists to avoid. */
-function isoDay(d: Date): string {
-  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
-}
-
 function PopulationPreviewModal({ control, onClose }: { control: Control; onClose: () => void }) {
+  const { eng } = useIcfr();
   const pop = control.operating.population!;
   const SHOWN = 25;
+  const home = sampleHome(eng, a => auditCovers(a, control, eng.id));
   const rows = useMemo(() => {
-    // Deterministic — a tiny LCG seeded off the control id.
-    let s = control.id.split('').reduce((a, ch) => (a * 31 + ch.charCodeAt(0)) >>> 0, 7);
+    // Reference, date and amount are the population's own (populationInstances,
+    // S9 A32) — the same instances a drawn item's amount and the exposure working
+    // read, already in date order. The descriptive columns stay a tiny LCG
+    // seeded off the control id.
+    let s = seedKeyOf(control).split('').reduce((a, ch) => (a * 31 + ch.charCodeAt(0)) >>> 0, 7);
     const next = () => (s = (s * 1664525 + 1013904223) >>> 0) / 4294967296;
-    const start = (parseDay(pop.filterFrom) ?? new Date(2026, 0, 1)).getTime();
-    const end = (parseDay(pop.filterTo) ?? new Date(2026, 11, 31)).getTime();
-    const span = Math.max(1, end - start);
     const who = ['R. Nair', 'S. Kulkarni', 'A. Verma', 'P. Desai', 'M. Iyer'];
     const kind = ['Vendor payment run', 'Payroll disbursement', 'Inter-company transfer', 'Utility settlement', 'Treasury sweep'];
-    return Array.from({ length: Math.min(SHOWN, pop.count) }, (_, i) => ({
-      ref: `${control.id}-${String(i + 1).padStart(5, '0')}`,
-      date: isoDay(new Date(start + next() * span)),
+    return populationInstances(control, SHOWN, home).map(it => ({
+      ...it,
       description: kind[Math.floor(next() * kind.length)],
       account: `${2100 + Math.floor(next() * 6) * 10} — ${['Trade payables', 'Bank — current', 'Payroll clearing', 'Inter-company', 'Accruals', 'Treasury'][Math.floor(next() * 6)]}`,
-      amount: Math.round((next() * 480 + 12) * 1000),
       approver: who[Math.floor(next() * who.length)],
-    })).sort((a, b) => a.date.localeCompare(b.date));
-  }, [control.id, pop.count, pop.filterFrom, pop.filterTo]);
+    }));
+  }, [control, home]);
 
   return (
     <div className="modal-backdrop" onClick={onClose}>
@@ -2598,7 +2601,7 @@ function SourcePickerForm({ control, exclude, submitLabel, onSubmit, seedFile, s
       // its source is a file that was copied rather than filtered. Deterministic
       // from the control AND the file, so two files under one control narrow to
       // different numbers and the same extract run twice does not.
-      const seed = `${control.id}·${chosen.name}`.split('').reduce((a, ch) => (a * 31 + ch.charCodeAt(0)) >>> 0, 11);
+      const seed = `${seedKeyOf(control)}·${chosen.name}`.split('').reduce((a, ch) => (a * 31 + ch.charCodeAt(0)) >>> 0, 11);
       const share = 0.2 + (seed % 30) / 100;
       const narrowed = Math.max(1, Math.min(chosen.rows - 1, Math.round(chosen.rows * share)));
       onSubmit(chosen, criteria.trim() || 'No filter applied', narrowed);
@@ -2934,6 +2937,15 @@ function PopulationSection({ control, canEdit, locked: gated = false }: { contro
   // told what to wait for without being told how TOD went.
   if (gated) {
     const concluded = trackResult(control.design) !== 'Not tested';
+    // Pending until year end (A29) outranks the approval: it is the reason that
+    // decides this audit, and TOD's state has nothing to do with it.
+    const pending = yearEndPending(control, audit);
+    if (pending) return (
+      <div className="p-5">
+        <EmptyState icon={<Lock size={18} />} title={`Pending until ${pending.until} — tested in the year-end audit`}
+          hint={`This control runs once a year, so there is nothing to pull for it before the year closes.${pop ? ' What was already extracted stays as it is.' : ''}`} />
+      </div>
+    );
     return (
       <div className="p-5">
         <EmptyState icon={<Lock size={18} />} title="Population is locked"
@@ -3438,33 +3450,46 @@ function SourceDrawRow({ control, source, canDraw, single, isOpen, onToggle, onA
   const ext = already.filter(x => x.extension).length;
   // What to take out of THIS file, in words. Drafted from the sizing table and
   // the file, then the auditor's to rewrite — "प्रॉम्प्ट फॉलोज़, सैंपल फॉलोज़",
-  // one ask per file because each file's question is its own.
-  const drafted = draftSamplePrompt(control, source, guide.suggested);
+  // one ask per file because each file's question is its own. The words set how
+  // many and which months; how the items are picked and what they are spread
+  // across was agreed on the audit (A28), so that is never theirs to change.
+  const audit = workingAudit(eng, openAuditId);
+  const agreed = auditSampling(audit);
+  const method: Sampling['method'] = agreed.method;
+  const drafted = draftSamplePrompt(source, guide.suggested, audit);
   const [prompt, setPrompt] = useState(drafted);
   const [promptSeed, setPromptSeed] = useState(drafted);
   if (promptSeed !== drafted) { setPromptSeed(drafted); setPrompt(drafted); }
-  const audit = eng.audits.find(a => a.id === openAuditId);
-  const months = windowMonths(audit?.windowFrom, audit?.windowTo);
-  const plan = readSamplePrompt(prompt, source, guide.suggested, months);
-  // A draw that picked its items to fit an ask is not a random draw, and the
-  // paper has to say which it was.
-  const method: Sampling['method'] = plan.targeted ? 'Targeted' : 'Random';
+  const plan = readSamplePrompt(prompt, source, guide.suggested, audit, agreed);
+  // The stretch the items are dealt inside — the months the ask named, else the
+  // audit's whole window — and the round any undated item already here was drawn in.
+  const stretch = audit && plan.months ? { ...audit, windowFrom: plan.months.from, windowTo: plan.months.to } : audit;
+  const home = sampleHome(eng, a => auditCovers(a, control, eng.id));
   const seed = useMemo(
-    () => 10000 + (`${control.id}·${source.id}·${openAuditId ?? ''}`.split('').reduce((a, ch) => (a * 31 + ch.charCodeAt(0)) >>> 0, 17) % 89999),
+    () => 10000 + (`${seedKeyOf(control)}·${source.id}·${openAuditId ?? ''}`.split('').reduce((a, ch) => (a * 31 + ch.charCodeAt(0)) >>> 0, 17) % 89999),
     [control.id, source.id, openAuditId],
   );
 
   const draw = () => {
     setStage('drawing');
-    logEvent({ action: 'Run', description: `Drew ${plan.size} items from ${source.file} for ${control.id} — ${prompt.trim() || 'no ask recorded'}`, module: 'SOX ICFR', entity: 'Test Result' });
+    logEvent({ action: 'Run', description: `Drew ${plan.size} items from ${source.file} for ${control.id} — ${prompt.trim() || 'no ask recorded'} (${method.toLowerCase()}, ${spreadPhrase(agreed.spread)})`, module: 'SOX ICFR', entity: 'Test Result' });
     window.setTimeout(() => { setDrawn(sampleRefs(control.process, plan.size)); setStage('review'); }, 1800);
   };
+  // Where each drawn item falls — its date, and on a shared control its company.
+  // The store deals the approved items with the same call on the same inputs (the
+  // other files' items, this file's key, the months asked for), so the rows shown
+  // are the rows filed.
+  const dealt = drawn.length
+    ? dealSample(control, stretch, agreed, drawn.length,
+      (control.operating.sampling?.samples ?? []).filter(x => (x.sourceId ?? LEGACY_SOURCE_ID) !== source.id),
+      `${seedKeyOf(control)}·${source.id}`, e => countryOf(eng.id, e), home)
+    : [];
 
   const approve = () => {
-    // The ask travels with the draw. With a prompt the prompt IS the method, and
-    // a reviewer holding only "25 items, random" cannot tell whether the auditor
-    // asked for two months and got twenty-five rows instead.
-    drawSourceSample(control.id, source.id, { size: drawn.length, method, seed, prompt: prompt.trim() || undefined }, drawn);
+    // The ask travels with the draw, with the months it narrowed to, and so do
+    // method and seed — a reviewer holding only "25 items, random" cannot tell
+    // whether the auditor asked for two months and got twenty-five rows instead.
+    drawSourceSample(control.id, source.id, { size: drawn.length, method, seed, prompt: prompt.trim() || undefined, ...(plan.months ? { months: plan.months } : {}) }, drawn);
     logEvent({ action: 'Update', description: `Approved the sample from ${source.file} for ${control.id} — ${drawn.length} items, ${method.toLowerCase()}, seed ${seed}`, module: 'SOX ICFR', entity: 'Test Result' });
     addToast({ type: 'success', title: 'Sample drawn', message: `${drawn.length} items from ${source.file} — test them against the attributes.` });
     setStage('ready'); setDrawn([]);
@@ -3530,16 +3555,14 @@ function SourceDrawRow({ control, source, canDraw, single, isOpen, onToggle, onA
                   <div className="grid grid-cols-[1.2fr_1fr_0.8fr] gap-2 px-3 py-1.5 bg-paper-50/70 border-b border-canvas-border text-[0.625rem] font-bold uppercase tracking-wide text-ink-400">
                     <span>Reference</span><span>Date</span><span className="text-right">Amount</span>
                   </div>
-                  {already.slice(0, 6).map((smp, i) => {
-                    const f = sampleRowFacts(i);
-                    return (
-                      <div key={smp.id} className="grid grid-cols-[1.2fr_1fr_0.8fr] gap-2 px-3 py-1.5 border-b border-canvas-border last:border-b-0 text-[0.71875rem]">
-                        <span className="font-mono text-ink-700">{smp.ref}</span>
-                        <span className="text-ink-500">{f.date}</span>
-                        <span className="text-right tabular-nums text-ink-700">₹ {f.amountL} L</span>
-                      </div>
-                    );
-                  })}
+                  {already.slice(0, 6).map(smp => (
+                    <div key={smp.id} className="grid grid-cols-[1.2fr_1fr_0.8fr] gap-2 px-3 py-1.5 border-b border-canvas-border last:border-b-0 text-[0.71875rem]">
+                      <span className="font-mono text-ink-700">{smp.ref}</span>
+                      {/* the date the quarter split counts it under (A28) */}
+                      <span className="text-ink-500">{fmtDay(sampleDate(smp, home))}</span>
+                      <span className="text-right tabular-nums text-ink-700">{rowRupees(sampleAmount(control, smp.ref, sampleDate(smp, home), home))}</span>
+                    </div>
+                  ))}
                   {already.length > 6 && <div className="px-3 py-1.5 text-[0.6875rem] text-ink-400">+{already.length - 6} more items</div>}
                 </div>
               </div>
@@ -3579,19 +3602,20 @@ function SourceDrawRow({ control, source, canDraw, single, isOpen, onToggle, onA
                   of a journal table will not find a duplicate invoice, and the
                   real answer there is two months tested end to end. So the ask
                   is written, drafted from the sizing table so the ordinary case
-                  is still one read and a click. */}
+                  is still one read and a click. It sets how many and which
+                  months — the method and spread above are the audit's (A28). */}
               <div className="flex items-center justify-between gap-3 mb-2">
-                <span className="block text-[0.65625rem] font-bold uppercase tracking-wider text-ink-400">What to draw from this file</span>
+                <span className="block text-[0.65625rem] font-bold uppercase tracking-wider text-ink-400">Ask for the sample</span>
                 <span className="inline-flex items-center gap-1 text-[0.65625rem] text-ink-400"><Sparkles size={11} className="text-brand-500" /> drafted for you</span>
               </div>
               <textarea value={prompt} onChange={e => setPrompt(e.target.value)} rows={2} disabled={stage !== 'ready'}
-                aria-label={`What to draw from ${source.file}`}
-                placeholder="In plain English — how many, from where, over what period."
+                aria-label={`Ask for the sample from ${source.file}`}
+                placeholder="In plain English — how many items, and from which months."
                 className="w-full rounded-lg border border-canvas-border bg-canvas-elevated px-2.5 py-2 text-[0.78125rem] text-ink-800 placeholder:text-ink-400 focus:outline-none focus:ring-2 focus:ring-brand-200 resize-none disabled:opacity-60" />
               {/* How it was read, before it runs. A prompt nobody confirms the
                   reading of is a prompt that quietly did something else. */}
               <p className="mt-1.5 text-[0.65625rem] text-ink-500 leading-relaxed">
-                <span className="font-semibold text-ink-700">Read as</span> · {plan.reading}
+                <span className="font-semibold text-ink-700">Read as:</span> {plan.reading}
               </p>
               <div className="mt-3 flex items-center justify-between gap-3 flex-wrap">
                 <p className="text-[0.65625rem] text-ink-400 min-w-0">
@@ -3628,16 +3652,13 @@ function SourceDrawRow({ control, source, canDraw, single, isOpen, onToggle, onA
                     <div className="grid grid-cols-[1.2fr_1fr_0.8fr] gap-2 px-3 py-1.5 bg-paper-50/70 border-b border-canvas-border text-[0.625rem] font-bold uppercase tracking-wide text-ink-400">
                       <span>Reference</span><span>Date</span><span className="text-right">Amount</span>
                     </div>
-                    {drawn.slice(0, 8).map((ref, i) => {
-                      const f = sampleRowFacts(i);
-                      return (
-                        <div key={ref} className="grid grid-cols-[1.2fr_1fr_0.8fr] gap-2 px-3 py-1.5 border-b border-canvas-border last:border-b-0 text-[0.71875rem]">
-                          <span className="font-mono text-ink-700">{ref}</span>
-                          <span className="text-ink-500">{f.date}</span>
-                          <span className="text-right tabular-nums text-ink-700">₹ {f.amountL} L</span>
-                        </div>
-                      );
-                    })}
+                    {drawn.slice(0, 8).map((ref, i) => (
+                      <div key={ref} className="grid grid-cols-[1.2fr_1fr_0.8fr] gap-2 px-3 py-1.5 border-b border-canvas-border last:border-b-0 text-[0.71875rem]">
+                        <span className="font-mono text-ink-700">{ref}</span>
+                        <span className="text-ink-500">{fmtDay(dealt[i]?.date)}</span>
+                        <span className="text-right tabular-nums text-ink-700">{rowRupees(sampleAmount(control, ref, dealt[i]?.date, home))}</span>
+                      </div>
+                    ))}
                     {drawn.length > 8 && <div className="px-3 py-1.5 text-[0.6875rem] text-ink-400">+{drawn.length - 8} more rows in the extract</div>}
                   </div>
                   <div className="flex items-center justify-end gap-2">
@@ -3710,7 +3731,7 @@ function SourceDrawRow({ control, source, canDraw, single, isOpen, onToggle, onA
 }
 
 function SampleExtractSection({ control, canEdit, locked }: { control: Control; canEdit: boolean; locked: boolean }) {
-  const { eng, role } = useIcfr();
+  const { eng, role, openAuditId } = useIcfr();
   // Drawing a sample is the auditor's act — the store refuses it from anyone
   // else, so the journey is not offered to anyone else either.
   const canDraw = canEdit && role === 'auditor' && !isControlLocked(control);
@@ -3729,8 +3750,16 @@ function SampleExtractSection({ control, canEdit, locked }: { control: Control; 
 
   // Two gates stand in front of the draw, and they fail for different reasons —
   // so the locked state names the one actually holding it up. The design gate
-  // includes the reviewer's approval of TOD (S6, A36).
+  // includes the reviewer's approval of TOD (S6, A36). A year-end control in an
+  // interim or roll-forward audit (A29) is held ahead of both, and says only that.
   if (locked) {
+    const pending = yearEndPending(control, eng.audits.find(a => a.id === openAuditId));
+    if (pending) return (
+      <div className="p-5">
+        <EmptyState icon={<Lock size={18} />} title={`Pending until ${pending.until}`}
+          hint="This control runs once a year. Its sample is drawn in the year-end audit, once the year has closed." />
+      </div>
+    );
     const awaitingApproval = trackResult(control.design) === 'Effective' && !designApproved(control);
     const designBlocked = trackResult(control.design) !== 'Effective' || awaitingApproval;
     return (
@@ -3762,6 +3791,27 @@ function SampleExtractSection({ control, canEdit, locked }: { control: Control; 
   // to look at.
   const doneFiles = sources.filter(s => s.approvedSample).length;
 
+  // The audit's sampling methodology (A28) — what every file's draw below follows —
+  // and this control's tested items across the year's rounds, each counted in the
+  // round its date falls in, so the split reads the same from either round.
+  const current = workingAudit(eng, openAuditId);
+  const agreed = auditSampling(current);
+  const yearRounds = yearSampleRounds(eng, control, current, a => auditCovers(a, control, eng.id));
+  const yearTotal = yearRounds.reduce((n, r) => n + r.tested, 0);
+  const roundLabel = (r: YearRound) => {
+    const label = AUDIT_ROUNDS.find(x => x.id === r.audit.round)?.label ?? r.audit.round;
+    // Two rounds of one kind in a year are told apart by where they stop.
+    return yearRounds.filter(x => x.audit.round === r.audit.round).length > 1 ? `${label} to ${fmtDay(r.audit.windowTo)}` : label;
+  };
+  // The draw read back along each group the audit spreads by. A shared control's
+  // companies are counted in the coverage strip already, so that axis is left to
+  // the strip rather than said twice.
+  const splits = o.sampling?.samples.length
+    ? sampleSplit(control, current, agreed, e => countryOf(eng.id, e), sampleHome(eng, a => auditCovers(a, control, eng.id))).filter(sp => !(sp.axis === 'entity' && isShared(control)))
+    : [];
+  const emptyGroups = splits.flatMap(sp => sp.groups.filter(g => g.n === 0 && g.label !== NO_COUNTRY).map(g => g.label));
+  const SPLIT_LABEL: Record<SampleSplit['axis'], string> = { quarter: 'By quarter', country: 'By country', entity: 'By entity' };
+
   return (
     <div className="p-5">
       {/* what the draw comes off — stated, not asked for. The population was
@@ -3785,6 +3835,42 @@ function SampleExtractSection({ control, canEdit, locked }: { control: Control; 
           <span className="text-[0.6875rem] text-ink-400">
             {assisting.map(a => a.file).join(', ')} {assisting.length === 1 ? 'is an assisting table' : 'are assisting tables'} — joined, not sampled.
           </span>
+        )}
+      </div>
+
+      {/* ── how this audit samples, and the year so far (A28) ────────────────
+          Selection and spread were agreed on the audit, once for every control
+          in it, so they are stated here rather than asked — the files below ask
+          only how many and from which months. The running total answers #38: a control is tested
+          across the year's rounds, and nothing used to add them up against the
+          number the sizing table sets. */}
+      <div className="mt-4 rounded-xl border border-canvas-border bg-paper-50/40 p-3.5">
+        <p className="text-[0.71875rem] text-ink-700">
+          <span className="font-bold">Method: {agreed.method}</span> · {spreadPhrase(agreed.spread)} <span className="text-ink-400">(set on the audit)</span>
+        </p>
+        {yearRounds.length > 0 && (
+          <>
+            <div className="ac-div my-2.5" />
+            <div className="flex items-baseline justify-between gap-x-3 gap-y-1 flex-wrap">
+              {/* Past the target it stops being a fraction — "26 of 5" reads as a
+                  counting error rather than a control tested more than it had to be. */}
+              {yearTotal > guide.suggested
+                ? <span className="text-[0.71875rem] font-bold text-ink-700"><span className="tabular-nums">{yearTotal}</span> samples tested this year — above the target of <span className="tabular-nums">{guide.suggested}</span></span>
+                : <span className="text-[0.71875rem] font-bold text-ink-700">This year so far: <span className="tabular-nums">{yearTotal} of {guide.suggested}</span> samples tested</span>}
+              <span className="text-[0.65625rem] text-ink-400">
+                Target {guide.suggested} — {control.frequency.toLowerCase()} control{control.riskRating ? `, ${control.riskRating.toLowerCase()} risk` : ''}
+              </span>
+            </div>
+            <p className="mt-1 text-[0.6875rem] text-ink-500 tabular-nums">
+              {yearRounds.map((r, i) => (
+                <span key={r.audit.id}>
+                  {i > 0 && <span className="text-ink-300"> · </span>}
+                  {roundLabel(r)} {r.tested}
+                  {r.current && <span className="font-semibold text-brand-700"> ← this audit</span>}
+                </span>
+              ))}
+            </p>
+          </>
         )}
       </div>
 
@@ -3858,6 +3944,35 @@ function SampleExtractSection({ control, canEdit, locked }: { control: Control; 
           </div>
         );
       })()}
+
+      {/* ── how the draw is spread (A28) ─────────────────────────────────────
+          The audit asked for items in every quarter, country or company it
+          named. Once something is drawn this reads the sample back along each,
+          and names any group left with nothing — the same rule as the strips
+          above, along the audit's own axes. */}
+      {splits.length > 0 && (
+        <div className={cn('mt-4 rounded-xl border p-3.5', emptyGroups.length ? 'border-high-200 bg-high-50/30' : 'border-canvas-border bg-paper-50/40')}>
+          <div className="space-y-1">
+            {splits.map(sp => (
+              <p key={sp.axis} className="text-[0.6875rem] text-ink-500 tabular-nums leading-relaxed">
+                <span className="font-bold text-ink-700">{SPLIT_LABEL[sp.axis]}</span>{' '}
+                {sp.groups.map((g, i) => (
+                  <span key={g.label}>
+                    {i > 0 && <span className="text-ink-300"> · </span>}
+                    <span className={cn(g.n === 0 && g.label !== NO_COUNTRY && 'font-semibold text-high-700')}>{g.label} {g.n}</span>
+                  </span>
+                ))}
+              </p>
+            ))}
+          </div>
+          {emptyGroups.length > 0 && (
+            <p className="mt-2 text-[0.6875rem] text-high-700 leading-relaxed">
+              <b className="font-semibold">{emptyGroups.length > 1 ? `${emptyGroups.slice(0, -1).join(', ')} and ${emptyGroups[emptyGroups.length - 1]}` : emptyGroups[0]}</b>{' '}
+              {emptyGroups.length === 1 ? 'has' : 'have'} no items — extend the sample.
+            </p>
+          )}
+        </div>
+      )}
 
       {/* ── one row per file ─────────────────────────────────────────────────
           Each file is drawn from separately: a control standing on four
@@ -4042,7 +4157,7 @@ function ReviewNotesBlock({ control }: { control: Control }) {
  * test went is not theirs to read.
  */
 function DesignApprovalBlock({ control }: { control: Control }) {
-  const { eng, role, me, approveDesign, returnDesign } = useIcfr();
+  const { eng, role, me, openAuditId, approveDesign, returnDesign } = useIcfr();
   const logEvent = useAuditLog();
   // Required note, same as the paper's return: TOD sent back without a reason
   // costs the auditor the work twice.
@@ -4093,7 +4208,9 @@ function DesignApprovalBlock({ control }: { control: Control }) {
           <p className="text-[0.6875rem] text-ink-400 leading-relaxed min-w-0">
             {role === 'auditor' ? 'Waiting for the reviewer to approve TOD.'
               : ownConclusion ? 'You concluded TOD, so you can’t approve it — four-eyes.'
-              : canApprove ? `Approving states the design test above is sound${result === 'Effective' ? ' — Population, Sample and TOE open once you do' : ''}.`
+              // …unless the open audit holds them until year end (A29) — then
+              // approving opens nothing, and saying it would is the lie
+              : canApprove ? `Approving states the design test above is sound${result === 'Effective' && !yearEndPending(control, eng.audits.find(a => a.id === openAuditId)) ? ' — Population, Sample and TOE open once you do' : ''}.`
               : 'Waits for the reviewer.'}
           </p>
           {open && (
@@ -4412,7 +4529,7 @@ function RoundActions({ control, canEdit }: { control: Control; canEdit: boolean
 
 // ── operating section (TOE) — locked until design effective ───────────────────────
 function OperatingSection({ control, canEdit, locked }: { control: Control; canEdit: boolean; locked: boolean }) {
-  const { addAttribute, validateReadyAttributes } = useIcfr();
+  const { eng, openAuditId, addAttribute, validateReadyAttributes } = useIcfr();
   const logEvent = useAuditLog();
   const { addToast } = useToast();
   const o = control.operating; const prog = operatingProgress(control);
@@ -4446,6 +4563,15 @@ function OperatingSection({ control, canEdit, locked }: { control: Control; canE
   };
 
   if (locked) {
+    // A29 — a year-end control in an interim or roll-forward audit waits for the
+    // year-end audit whatever TOD's state, so that is the one reason given.
+    const pending = yearEndPending(control, eng.audits.find(a => a.id === openAuditId));
+    if (pending) return (
+      <div className="p-5">
+        <EmptyState icon={<Lock size={18} />} title={`Pending until ${pending.until}`}
+          hint="This control runs once a year. It is tested for operation in the year-end audit, once the year has closed." />
+      </div>
+    );
     return (
       <div className="p-5">
         <EmptyState icon={<Lock size={18} />} title="TOE is locked" hint={trackResult(control.design) === 'Effective' && !designApproved(control)
@@ -4777,7 +4903,7 @@ function UnableToTestBanner({ control }: { control: Control }) {
 
 // ── the dossier ──────────────────────────────────────────────────────────────────
 export default function ControlDossier() {
-  const { eng, role, selectedControlId, back, setView, reopenControl, focusStep, clearFocusStep } = useIcfr();
+  const { eng, role, selectedControlId, back, setView, reopenControl, focusStep, clearFocusStep, openAuditId } = useIcfr();
   const logEvent = useAuditLog();
   // preview-before-download for this control's working paper
   const [wpPreview, setWpPreview] = useState(false);
@@ -4864,15 +4990,25 @@ export default function ControlDossier() {
   // not any more. Clearing the TOD conclusion (a reopen, a return) clears the
   // approval too, so the steps lock again until TOD is concluded and approved.
   const todApproved = designApproved(control);
+  // ── pending until year end (A29) ────────────────────────────────────────────
+  // An Annual control has not run yet in an interim or roll-forward audit, so
+  // Population, Sample and TOE wait for the year-end audit (yearEndPending). TOD
+  // is untouched. Where the approval gate also applies, this is the reason that
+  // decides the audit — approving TOD would not open anything — so it takes the
+  // note on its own rather than stacking a second lock message beside it.
+  const yePending = yearEndPending(control, eng.audits.find(a => a.id === openAuditId));
   // What a locked step is waiting for, said on the step: TOD not concluded yet,
   // concluded and with the reviewer, or approved but ineffective — which still
   // keeps Sample and TOE shut, because a failed design is not tested for operation.
-  const gateNote = designResult === 'Not tested' ? 'Unlocks after TOD is approved'
+  const gateNote = yePending ? `Pending until ${yePending.until}`
+    : designResult === 'Not tested' ? 'Unlocks after TOD is approved'
     : !todApproved ? 'Waiting for design approval'
     : 'Unlocks once TOD is effective';
-  const toeLocked = designResult !== 'Effective' || !todApproved;
-  // Step ② waits on the approval and nothing else.
-  const popGated = !todApproved;
+  // Step ② is the one that says where the work went.
+  const popNote = yePending ? `${gateNote} — tested in the year-end audit` : gateNote;
+  const toeLocked = designResult !== 'Effective' || !todApproved || !!yePending;
+  // Step ② waits on the approval, and on the year end for an Annual control.
+  const popGated = !todApproved || !!yePending;
   const popLocked = populationLocked(control);
   // The draw sits behind both of those: an approved, effective design, and a
   // population that has cleared its own gate. Past the approval, an already-drawn
@@ -4990,7 +5126,7 @@ export default function ControlDossier() {
               to find the control before they knew there was more to read. */}
           <div className="mt-4 text-[0.8125rem] leading-[1.7] text-ink-600">
             <p className={cn('min-w-0', !headDetailOpen && 'flex items-baseline')}>
-              <span className="font-semibold text-ink-900 shrink-0">Risk {control.riskId}</span>
+              <span className="font-semibold text-ink-900 shrink-0 whitespace-nowrap">Risk {control.riskId}</span>
               <span className="text-ink-300 mx-1.5 shrink-0">·</span>
               <span className={cn('min-w-0', !headDetailOpen && 'truncate')}>{control.riskDescription}</span>
               <span className="shrink-0 ml-1.5"><MoreLink open={headDetailOpen} onClick={() => setHeadDetailOpen(o => !o)} /></span>
@@ -5196,7 +5332,7 @@ export default function ControlDossier() {
             <VStep n={2} id="vstep-population" arrived={arrivedAt === 'population'} title="Population" subtitle="The data this control ran on. Upload the source files and filter them down to this control's instances — the auditor tests what you produce here." hideStatus
               status={control.operating.population && !popGated ? 'Effective' : 'Not tested'} locked={popGated}
               right={popGated
-                ? <span className="text-[0.6875rem] font-semibold text-ink-400 inline-flex items-center gap-1"><Lock size={11} /> {gateNote}</span>
+                ? <span className="text-[0.6875rem] font-semibold text-ink-400 inline-flex items-center gap-1"><Lock size={11} /> {popNote}</span>
                 : control.operating.population
                 ? <span className="text-[0.6875rem] font-bold text-compliant-700 inline-flex items-center gap-1"><CheckCircle2 size={12} /> {control.operating.population.count.toLocaleString()} instances</span>
                 : <span className="text-[0.6875rem] font-semibold text-ink-400">Nothing extracted yet</span>}>
@@ -5214,7 +5350,7 @@ export default function ControlDossier() {
           <VStep n={2} id="vstep-population" arrived={arrivedAt === 'population'} title="Population" subtitle="Pick the source file and filter it down to this control's instances, then test the report it came from before locking it. Nothing downstream runs until it is locked." hideStatus
             status={popLocked && !popGated ? 'Effective' : 'Not tested'} locked={popGated}
             right={popGated
-              ? <span className="text-[0.6875rem] font-semibold text-ink-400 inline-flex items-center gap-1"><Lock size={11} /> {gateNote}</span>
+              ? <span className="text-[0.6875rem] font-semibold text-ink-400 inline-flex items-center gap-1"><Lock size={11} /> {popNote}</span>
               : popLocked
               ? <span className="text-[0.6875rem] font-bold text-compliant-700 inline-flex items-center gap-1"><Lock size={12} /> Locked · {control.operating.population?.count.toLocaleString()} instances</span>
               : control.operating.population

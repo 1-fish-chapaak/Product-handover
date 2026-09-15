@@ -2,9 +2,10 @@ import { entityShort } from '../audit/sox-testing/soxTestingData';
 import { normaliseProcess, programmeFor } from './auditScope';
 import { NEW_FLOW_ENGAGEMENT_ID } from './flow';
 import { validationQA } from './helpers';
+import { entityCodeFor, processCodeFor, renameEngagementIds } from './racmIds';
 import { FIVE_W_1H, ipeChecklist, ROUND_TAG, ROUND_WINDOW_LABEL } from './types';
 import type {
-  Assertion, Attestation, AuditArchive, AuditRecord, Control, DesignDoc, DesignPoint, DesignTrack, DesignWaiverReason, Deficiency, Discussion, DocStatus,
+  Assertion, Attestation, AuditArchive, AuditRecord, AuditSampling, Control, DesignDoc, DesignPoint, DesignTrack, DesignWaiverReason, Deficiency, Discussion, DocStatus,
   // PARKED (Aug 2026) — `GapType` went with the Gap type field; see types.ts.
   // GapType,
   EvidenceFile, ExceptionStatus, ExecKind, ExecutionEvent, Frequency, HandoffTask, IcfrEngagement, IpeTest, Nature, OperatingStep, OperatingTrack,
@@ -1072,6 +1073,12 @@ function libraryRunHistory(controls: Control[]): RunRecord[] {
   return runs;
 }
 
+/** Every seeded audit, on every SOX engagement, samples the same way (A28): at
+ *  random, spread so each company a control answers for gets items of its own.
+ *  Draws already on the seeded controls stay exactly as they were — only a new
+ *  draw follows it. */
+const SEEDED_SAMPLING: AuditSampling = { method: 'Random', spread: ['entity'] };
+
 /**
  * The cycles this engagement has run — the engagement Overview's primary content.
  *
@@ -1151,7 +1158,7 @@ function libraryAudits(processes: string[], controls: Control[]): AuditRecord[] 
       periodSpan: 'Jan 2026 – Dec 2026', round: 'interim', windowFrom: '2026-01-01', windowTo: '2026-06-30',
       scopeKind: 'racm', scopeNames: processes, scopeIds: [],
       files: [{ name: 'altura-group-tb-2026.xlsx', kind: 'tb' }, { name: 'altura-group-gl-2026.csv', kind: 'gl' }],
-      materiality: { basisLabel, benchmark: 240, pct: 5 }, overall: 12,
+      materiality: { basisLabel, benchmark: 240, pct: 5 }, overall: 12, sampling: SEEDED_SAMPLING,
       by: 'A. Mehta', role: 'auditor', at: '02 Jan 2026',
     },
     {
@@ -1160,7 +1167,7 @@ function libraryAudits(processes: string[], controls: Control[]): AuditRecord[] 
       scopeKind: 'racm', scopeNames: first, scopeIds: [],
       // Same threshold as the interim round on purpose: one opinion, one ruler.
       // The consistency check on the engagement Overview is reading these two.
-      files: [], materiality: { basisLabel, benchmark: 240, pct: 5 }, overall: 12,
+      files: [], materiality: { basisLabel, benchmark: 240, pct: 5 }, overall: 12, sampling: SEEDED_SAMPLING,
       rolledFromId: 'audit-cy26-interim',
       by: 'A. Mehta', role: 'auditor', at: '04 Jul 2026',
     },
@@ -1169,7 +1176,7 @@ function libraryAudits(processes: string[], controls: Control[]): AuditRecord[] 
       periodSpan: 'Jan 2025 – Dec 2025', round: 'yearend', windowFrom: '2025-10-01', windowTo: '2025-12-31',
       scopeKind: 'racm', scopeNames: first, scopeIds: [],
       files: [{ name: 'altura-group-tb-2025.xlsx', kind: 'tb' }],
-      materiality: { basisLabel, benchmark: 210, pct: 5 }, overall: 10.5,
+      materiality: { basisLabel, benchmark: 210, pct: 5 }, overall: 10.5, sampling: SEEDED_SAMPLING,
       signoff: { preparer: { by: 'A. Mehta', at: '10 Jan 2026' }, reviewer: { by: 'J. Fernandes', at: '12 Jan 2026' }, icfrConclusion: 'Effective' },
       archive,
       by: 'A. Mehta', role: 'auditor', at: '03 Jan 2025',
@@ -1505,17 +1512,20 @@ function alturaDeficiencies(controls: Control[]): Deficiency[] {
 
   if (creditNotes) {
     fail(creditNotes, 'design');
-    // A retest asks the SAME questions of a post-fix sample, so the round carries
-    // the control's own attributes rather than a fresh list written for it.
-    const cnAttrs = creditNotes.operating.steps.map(s => ({ code: s.code, description: s.description }));
-    // Drawn from July alone: the rolling monthly total went live on 30 June, and a
-    // sample reaching back before that proves nothing about the fix.
-    const cnSamples = [
-      { id: 'cn-rt1-1', ref: 'CN-26-0902', date: '2026-07-06' },
-      { id: 'cn-rt1-2', ref: 'CN-26-0917', date: '2026-07-13' },
-      { id: 'cn-rt1-3', ref: 'CN-26-0928', date: '2026-07-21' },
-      { id: 'cn-rt1-4', ref: 'CN-26-0941', date: '2026-07-29' },
-    ];
+    // A design failure is retested on the design checks that failed, not on a
+    // sample: the round re-checks exactly those, against the fix evidence.
+    const cnFailedChecks = creditNotes.design.points
+      .filter(p => p.result === 'Fail')
+      .map(p => ({ pointId: p.id, text: p.text }));
+    // PARKED (C11) — the credit-note sample the round used to carry. A TOD
+    // exception has no sample to redraw; kept so the old seed restores whole:
+    //   const cnAttrs = creditNotes.operating.steps.map(s => ({ code: s.code, description: s.description }));
+    //   const cnSamples = [
+    //     { id: 'cn-rt1-1', ref: 'CN-26-0902', date: '2026-07-06' },
+    //     { id: 'cn-rt1-2', ref: 'CN-26-0917', date: '2026-07-13' },
+    //     { id: 'cn-rt1-3', ref: 'CN-26-0928', date: '2026-07-21' },
+    //     { id: 'cn-rt1-4', ref: 'CN-26-0941', date: '2026-07-29' },
+    //   ];
     out.push({
       // PARKED (Aug 2026) — gapType: 'MDG',   (see the banner in types.ts)
       id: 'DEF-A-04', controlId: creditNotes.id, track: 'design', reportRef: '4.4',
@@ -1543,14 +1553,18 @@ function alturaDeficiencies(controls: Control[]): Deficiency[] {
       // One round run and failed, which is the loop this counter exists to show.
       // The round is never edited: round 2 will be appended alongside it, and
       // `retests.length` is what the reviewer reads as "how many times now?".
+      // The design checks that failed, as they stood when it was raised.
+      failedChecks: cnFailedChecks,
       retests: [{
         n: 1,
-        windowFrom: '2026-07-01', windowTo: '2026-07-31',
-        attributes: cnAttrs,
-        samples: cnSamples,
-        results: roundResults(cnSamples, cnAttrs, { 'cn-rt1-3': cnAttrs[0]?.code ?? '' }),
+        // No sample — the fix date to the day the checks were re-read.
+        windowFrom: '2026-06-30', windowTo: '2026-08-05',
+        attributes: [],
+        samples: [],
+        results: {},
+        checks: cnFailedChecks.map(x => ({ ...x, result: 'Fail' as TestResult })),
         result: 'Fail',
-        rationale: 'CN-26-0928 was approved by nobody. The customer had been set up under a second code that month, so the rolling total read ₹1.7 L against each code instead of ₹3.4 L against the customer. The rule works — the key it groups on does not.',
+        rationale: 'The approval rule in the fix evidence keeps the rolling monthly total per customer code, not per customer. A customer set up under a second code is measured twice — ₹1.7 L against each code instead of ₹3.4 L against the customer — and clears the threshold with nobody approving it. The rule works — the key it groups on does not.',
         by: 'A. Mehta', at: '05 Aug 2026',
       }],
       // The latest round's verdict, mirrored for readers that only want the answer.
@@ -1937,6 +1951,7 @@ function singleAudit(meta: SeedMeta, controls: Control[]): AuditRecord[] {
     files: [],
     materiality: { basisLabel: 'Profit before tax (consolidated)', benchmark: 240, pct: 5 },
     overall: 12,
+    sampling: SEEDED_SAMPLING,
     by: meta.owner ?? 'A. Mehta',
     role: 'auditor',
     at: `01 Apr ${year - 1}`,
@@ -1971,6 +1986,7 @@ function signedInterim(meta: SeedMeta, controls: Control[]): AuditRecord[] {
     files: [{ name: `altura-renewables-tb-fy${String(year).slice(-2)}.xlsx`, kind: 'tb' }],
     materiality: { basisLabel: 'Profit before tax (consolidated)', benchmark: 240, pct: 5, pmPct: 75, ctPct: 5 },
     overall: 12,
+    sampling: SEEDED_SAMPLING,
     signoff: {
       preparer: { by: 'A. Mehta', at: `12 Aug ${year - 1}` },
       reviewer: { by: 'J. Fernandes', at: `14 Aug ${year - 1}` },
@@ -2033,7 +2049,7 @@ function rfDemoDeficiencies(controls: Control[]): Deficiency[] {
 export interface SeedMeta { id?: string; code?: string; name?: string; /** The company being audited. Carried because the workspace clones the flagship
   *  seed: without it every engagement inherited the flagship's own company, and
   *  the audit report — which names the entity in its title and its first table —
-  *  issued under the wrong client. */ entity?: string; process?: string; /** Scoping-derived process list — when present, the workspace seeds one RACM per entry. */ processes?: string[]; /** Testing state for scoping-derived RACMs — see Engagement.soxSeedMode. */ seedMode?: 'fresh' | 'live' | 'carried'; periodStart?: string; periodEnd?: string; owner?: string; materiality?: number; performanceMateriality?: number; clearlyTrivial?: number; sdBandPct?: number; }
+  *  issued under the wrong client. */ entity?: string; process?: string; /** Scoping-derived process list — when present, the workspace seeds one RACM per entry. */ processes?: string[]; /** Testing state for scoping-derived RACMs — see Engagement.soxSeedMode. */ seedMode?: 'fresh' | 'live' | 'carried'; periodStart?: string; periodEnd?: string; owner?: string; materiality?: number; performanceMateriality?: number; clearlyTrivial?: number; sdBandPct?: number; /** Controls copied from the RACM tab when the engagement was created (S11) — when present they are the register, as picked. */ controls?: Control[]; }
 
 /** A group is recorded with its listing status attached — "Altura Infra Holdings
  *  Ltd (Listed)" — because that is what the scoping screens key off. A document
@@ -2042,7 +2058,19 @@ export interface SeedMeta { id?: string; code?: string; name?: string; /** The c
 const legalName = (g: string) => g.replace(/\s*\((listed|unlisted|nyse|nasdaq|bse|nse)[^)]*\)\s*$/i, '').trim();
 const PROC_LABEL: Record<string, string> = { P2P: 'Procure to Pay', O2C: 'Order to Cash', R2R: 'Record to Report', S2C: 'Order to Cash', ITGC: 'IT General Controls' };
 
+/**
+ * Seed an engagement's workspace. IDs come out in the PROCESS/ENTITY/R001/C001
+ * format (S11): the seeds below still build their controls under the old ids
+ * (TRY-01, O2C-C-03 …) — every hand-written demo state keys off those — and the
+ * whole engagement is renamed on the way out. A row with no company takes the
+ * engagement's own.
+ */
 export function seedIcfrEngagement(meta?: SeedMeta): IcfrEngagement {
+  const eng = seedEngagementBody(meta);
+  return renameEngagementIds(eng, processCodeFor, e => entityCodeFor(e || eng.entity));
+}
+
+function seedEngagementBody(meta?: SeedMeta): IcfrEngagement {
   const base = structuredClone(ENGAGEMENT);
   // Before anything reads it: withEntityCoverage takes this as the fallback
   // company, and the report prints it as the client.
@@ -2083,15 +2111,18 @@ export function seedIcfrEngagement(meta?: SeedMeta): IcfrEngagement {
   // history and the audits those cycles ran under. Every other engagement is
   // seeded exactly as before. See `rich` on racmTemplateForProcesses.
   const rich = meta.id === NEW_FLOW_ENGAGEMENT_ID;
-  const built = meta.processes
+  // Picked from the RACM tab at creation (S11): the copies the engagement took,
+  // already carrying their companies and IDs.
+  const picked = meta.controls ? structuredClone(meta.controls) : null;
+  const built = picked ?? (meta.processes
     ? (meta.processes.length ? racmTemplateForProcesses(meta.processes, meta.seedMode, rich) : [])
-    : racmTemplate(proc);
+    : racmTemplate(proc));
   // Every control gets the company it is performed at, plus — where its process
   // reaches further — the companies its one conclusion answers for. One row per
   // control either way. Only Altura's scoping actually spans companies today, so
   // every other engagement keeps the register it had, now with its own company
   // named on every row.
-  let controls = withAccounts(withEntityCoverage(built, meta.id, base.entity));
+  let controls = withAccounts(picked ?? withEntityCoverage(built, meta.id, base.entity));
   // The draw is then dealt across those companies, because a conclusion covering
   // four of them is worth only what the sample behind it touched.
   controls = tagSamplesByEntity(controls);

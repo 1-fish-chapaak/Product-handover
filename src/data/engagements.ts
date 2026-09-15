@@ -5,6 +5,8 @@
  * Single source of truth so adding/changing an engagement is one edit, not two.
  */
 
+import type { Control as SoxControl } from '../components/sox-icfr/types';
+
 export type ProcessCode = 'P2P' | 'O2C' | 'R2R' | 'S2C' | 'ITGC';
 export type EngStatus = 'Active' | 'In Progress' | 'Planned' | 'Review' | 'Draft' | 'Closed';
 export type EngType = 'Compliance' | 'Internal Audit' | 'Automation' | 'SOX / ICFR';
@@ -90,6 +92,14 @@ export interface Engagement {
    *  concluded), 'carried' = design carried from the prior cycle with the
    *  operating retest pending, 'fresh' (default) = nothing tested yet. */
   soxSeedMode?: 'fresh' | 'live' | 'carried';
+  /** SOX (S11): the RACMs picked from the Engagements page's RACM tab — at
+   *  creation, and any added later with "Add RACM". Names are kept so the
+   *  engagement can say where its controls came from even if the RACM is edited. */
+  soxRacms?: { racmId: string; name: string }[];
+  /** SOX (S11): the controls copied from those RACMs when they were picked.
+   *  Copy at pick time — later edits on the RACM tab never reach this engagement.
+   *  When present the workspace seeds exactly these. */
+  soxControls?: SoxControl[];
   /** Present only for Compliance engagements created via the wizard. */
   complianceConfig?: ComplianceConfig;
   /** Present only for Internal Audit engagements created via the wizard. */

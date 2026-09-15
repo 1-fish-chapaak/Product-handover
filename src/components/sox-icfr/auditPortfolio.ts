@@ -1,6 +1,6 @@
 import { assessSeverity, conclusionOf } from './helpers';
 import { auditCovers } from './auditScope';
-import type { AuditRecord, AuditRound, Conclusion, Control, Deficiency, IcfrEngagement, Severity } from './types';
+import type { AuditRecord, AuditRound, Conclusion, Control, Deficiency, ExceptionGrade, IcfrEngagement } from './types';
 
 /**
  * The engagement's audit portfolio — everything the engagement-level Overview
@@ -157,8 +157,10 @@ export function auditProgress(a: AuditRecord, eng: IcfrEngagement): AuditProgres
   };
 }
 
-/** An audit's deficiencies with severity resolved — archived ones carry theirs. */
-export function auditDeficiencies(a: AuditRecord, eng: IcfrEngagement): (Deficiency & { severity: Severity })[] {
+/** An audit's deficiencies with severity resolved — archived ones carry theirs.
+ *  All four grades: a clearly trivial finding counts as Clearly Trivial here,
+ *  exactly as the register shows it, not as a Deficiency. */
+export function auditDeficiencies(a: AuditRecord, eng: IcfrEngagement): (Deficiency & { severity: ExceptionGrade })[] {
   if (a.archive) return a.archive.deficiencies;
   // Same reason as auditProgress: a planned round has raised nothing.
   if (!isLiveAudit(a, eng)) return [];
@@ -170,8 +172,8 @@ export function auditDeficiencies(a: AuditRecord, eng: IcfrEngagement): (Deficie
 
 // ── Cross-audit ──────────────────────────────────────────────────────────────
 
-export type SeverityCount = Record<Severity, number>;
-const emptyCount = (): SeverityCount => ({ 'Material Weakness': 0, 'Significant Deficiency': 0, Deficiency: 0 });
+export type SeverityCount = Record<ExceptionGrade, number>;
+const emptyCount = (): SeverityCount => ({ 'Material Weakness': 0, 'Significant Deficiency': 0, Deficiency: 0, 'Clearly Trivial': 0 });
 
 /**
  * Deficiencies by severity across every audit of one fiscal year.
@@ -199,7 +201,7 @@ export function yearSeverityRollup(eng: IcfrEngagement, audits: AuditRecord[]): 
 /** Open material weaknesses anywhere on the engagement, with the audit that
  *  raised each one. One of these puts the whole entity's conclusion at risk, so
  *  it belongs above any single audit. */
-export function mwWatchlist(eng: IcfrEngagement): { audit: AuditRecord; deficiency: Deficiency & { severity: Severity } }[] {
+export function mwWatchlist(eng: IcfrEngagement): { audit: AuditRecord; deficiency: Deficiency & { severity: ExceptionGrade } }[] {
   return eng.audits.flatMap(a => auditDeficiencies(a, eng)
     .filter(d => d.severity === 'Material Weakness' && d.status !== 'Closed')
     .map(deficiency => ({ audit: a, deficiency })));
@@ -258,7 +260,7 @@ export function materialityConsistency(audits: AuditRecord[]): { consistent: boo
  * standing question, not history.
  */
 export function priorYearDeficiencies(eng: IcfrEngagement, currentYear: number): {
-  audit: AuditRecord; deficiency: Deficiency & { severity: Severity }; verified: boolean;
+  audit: AuditRecord; deficiency: Deficiency & { severity: ExceptionGrade }; verified: boolean;
 }[] {
   return eng.audits
     .filter(a => a.fiscalYear < currentYear)

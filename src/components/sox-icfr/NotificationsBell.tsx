@@ -38,7 +38,10 @@ const KIND_META: Record<Item['kind'], { Icon: typeof Bell; cls: string }> = {
 };
 
 export default function NotificationsBell() {
-  const { eng, role, meOwner, openControl, openRegister, setTab, setView, openDeficiency } = useIcfr();
+  const { eng, role, meOwner, openAuditId, openControl, openRegister, setTab, setView, openDeficiency } = useIcfr();
+  // Inside an audit, a year-end control it holds back (A29) is pending, not a
+  // test due — the same set its "Due now" view lists. No audit open, no change.
+  const openAudit = eng.audits.find(a => a.id === openAuditId);
   const [open, setOpen] = useState(false);
   const rootRef = useRef<HTMLDivElement>(null);
   // reduced-motion: the panel's scale/translate are JS transforms, which the
@@ -100,7 +103,7 @@ export default function NotificationsBell() {
     // ── control tests due — every control has a due date on its testing cycle.
     //    Regular testing is how the risk owner lives in the tool, so due tests
     //    are first-class notifications, not just document requests. ─────────────
-    const dueTests = testsDueNow(role === 'risk-owner' ? eng.controls.filter(c => c.owner === meOwner) : eng.controls);
+    const dueTests = testsDueNow(role === 'risk-owner' ? eng.controls.filter(c => c.owner === meOwner) : eng.controls, openAudit);
     for (const c of dueTests.slice(0, 5)) {
       const dd = testDueInDays(c);
       out.push({
@@ -232,7 +235,9 @@ export default function NotificationsBell() {
           id: 'review-racm', kind: 'review',
           title: `${pending} RACM row${pending === 1 ? '' : 's'} awaiting your review`,
           detail: 'Approve each row or leave a remark for the risk owner.',
-          onOpen: () => { setOpen(false); setTab('racm'); },
+          // The RACM tab is parked (S11) — the rows under review are the
+          // engagement's own copies, which live in its Control Library.
+          onOpen: () => { setOpen(false); setTab('controls'); },
         });
       }
       // ── the plan is up and waiting on the auditor's one say in it: does it
@@ -271,12 +276,12 @@ export default function NotificationsBell() {
       }
     }
     return out;
-  }, [eng, role, meOwner, openControl, setTab, setView]);
+  }, [eng, role, meOwner, openControl, setTab, setView, openAudit]);
 
   const urgent = items.filter(i => i.kind === 'ineffective').length;
   // The badge tells the truth even where the list truncates: the "+N more"
   // rollup line is one ROW but N pieces of work — count the work, not the row.
-  const hiddenTests = Math.max(0, testsDueNow(role === 'risk-owner' ? eng.controls.filter(c => c.owner === meOwner) : eng.controls).length - 5);
+  const hiddenTests = Math.max(0, testsDueNow(role === 'risk-owner' ? eng.controls.filter(c => c.owner === meOwner) : eng.controls, openAudit).length - 5);
   const pending = items.length - (hiddenTests > 0 ? 1 : 0) + hiddenTests;
 
   return (
