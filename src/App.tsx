@@ -1025,6 +1025,9 @@ function AppInner() {
             }}
             embedded={LAUNCHED_FROM_REPORT}
             showApprovalFlowAssign
+            // Opened from an ATR's Case Management button → actions taken here
+            // are recorded on that report's Report Snapshot timeline.
+            atrLink={mexReturnReportId ? { reportId: mexReturnReportId } : undefined}
           />
         );
 

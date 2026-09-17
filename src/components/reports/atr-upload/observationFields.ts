@@ -6,7 +6,7 @@
 import type { ExtractedObservation, ExtractedFieldKey, CompletenessStatus } from './types';
 import type { AtrClassification, AtrRisk, AtrActionPlan } from '../atrTypes';
 
-export type FieldKind = 'text' | 'textarea' | 'classification' | 'risk' | 'date';
+export type FieldKind = 'text' | 'textarea' | 'classification' | 'risk' | 'date' | 'select';
 
 export interface FieldDef {
   key: ExtractedFieldKey;
@@ -14,23 +14,36 @@ export interface FieldDef {
   kind: FieldKind;
   /** Where the value lives — on the observation or its first action plan. */
   loc: 'obs' | 'plan';
+  /** Options for kind === 'select'. */
+  options?: string[];
 }
 
+// LOVs for the audit-analysis selects, extracted from the report or picked here.
+export const ROOT_CAUSE_OPTIONS = ['Organization Design', 'Operating Design', 'People Effectiveness', 'Technology', 'Not Applicable'];
+export const SOLUTION_TYPE_OPTIONS = ['Incident', 'Systemic', 'Not applicable'];
+export const RISK_IMPLICATIONS_OPTIONS = ['Financial', 'Operational', 'Strategic Business', 'Potential of Fraud', 'Not Applicable'];
+
+// Ordered for the audit-review flow: the finding, then its root-cause analysis,
+// then the risk (summary → implications → detail → significance), then the fix.
+// Action Taken and Evidence are intentionally NOT extracted — they're recorded
+// by management after the audit (via Manage Exceptions / manual entry).
 export const OBSERVATION_FIELDS: FieldDef[] = [
-  { key: 'title',          label: 'Observation Title',                          kind: 'text',           loc: 'obs' },
-  { key: 'description',     label: 'Observation Description',                    kind: 'textarea',       loc: 'obs' },
-  { key: 'riskSummary',    label: 'Risk Summary',                               kind: 'textarea',       loc: 'obs' },
-  { key: 'recommendation', label: 'Recommendation / Action Plan',     kind: 'textarea',       loc: 'plan' },
-  { key: 'actionTaken',    label: 'Action Taken',                               kind: 'textarea',       loc: 'plan' },
-  { key: 'evidence',       label: 'Evidence',                                   kind: 'textarea',       loc: 'plan' },
-  { key: 'verification',   label: 'Management Comments / Auditor Verification',  kind: 'textarea',       loc: 'plan' },
-  { key: 'classification', label: 'Classification',                             kind: 'classification', loc: 'obs' },
-  { key: 'risk',           label: 'Risk Significance',                          kind: 'risk',           loc: 'obs' },
-  { key: 'dueDate',        label: 'Due Date / Timeline',                        kind: 'date',           loc: 'obs' },
+  { key: 'title',                  label: 'Observation Title',                          kind: 'text',           loc: 'obs' },
+  { key: 'description',             label: 'Observation Description',                    kind: 'textarea',       loc: 'obs' },
+  { key: 'rootCause',              label: 'Root Cause',                                 kind: 'select',         loc: 'obs', options: ROOT_CAUSE_OPTIONS },
+  { key: 'solutionType',           label: 'Solution Type',                              kind: 'select',         loc: 'obs', options: SOLUTION_TYPE_OPTIONS },
+  { key: 'riskSummary',            label: 'Risk Summary',                               kind: 'textarea',       loc: 'obs' },
+  { key: 'riskImplications',       label: 'Risk Implications',                          kind: 'select',         loc: 'obs', options: RISK_IMPLICATIONS_OPTIONS },
+  { key: 'riskImplicationsDetails', label: 'Risk Implication Details',                  kind: 'textarea',       loc: 'obs' },
+  { key: 'risk',                   label: 'Risk Significance',                          kind: 'risk',           loc: 'obs' },
+  { key: 'classification',         label: 'Classification',                             kind: 'classification', loc: 'obs' },
+  { key: 'recommendation',         label: 'Recommendation / Action Plan',               kind: 'textarea',       loc: 'plan' },
+  { key: 'dueDate',                label: 'Due Date / Timeline',                        kind: 'date',           loc: 'obs' },
+  { key: 'verification',           label: 'Management Comments / Auditor Verification',  kind: 'textarea',       loc: 'plan' },
 ];
 
 export const CLASSIFICATION_OPTIONS: AtrClassification[] = ['Design Deficiency', 'System Deficiency', 'Procedural Non-Compliance'];
-export const RISK_OPTIONS: AtrRisk[] = ['Critical', 'High', 'Medium', 'Low'];
+export const RISK_OPTIONS: AtrRisk[] = ['High', 'Medium', 'Low', 'Not Applicable'];
 
 const PLAN_PROP: Partial<Record<ExtractedFieldKey, keyof AtrActionPlan>> = {
   recommendation: 'text',
@@ -68,7 +81,7 @@ export function setFieldValue(obs: ExtractedObservation, key: ExtractedFieldKey,
 export function recomputeCompleteness(obs: ExtractedObservation): CompletenessStatus {
   const unresolved = obs.missingFields.filter(f => f.state === 'missing').map(f => f.key);
   if (unresolved.length === 0) return 'Complete';
-  if (unresolved.includes('title') || unresolved.includes('actionTaken')) return 'Incomplete';
+  if (unresolved.includes('title')) return 'Incomplete';
   return 'Partial';
 }
 

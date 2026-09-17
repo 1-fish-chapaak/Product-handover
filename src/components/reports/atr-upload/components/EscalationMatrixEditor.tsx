@@ -189,7 +189,7 @@ export default function EscalationMatrixEditor({ config, onApply, onCancel }: {
         <div className="w-9 h-9 rounded-[10px] bg-brand-50 text-brand-700 flex items-center justify-center shrink-0"><CalendarClock size={16} /></div>
         <div className="min-w-0">
           <h2 className="text-[0.9375rem] font-semibold text-ink-900 leading-tight">Escalation Matrix</h2>
-          <p className="text-[0.75rem] text-ink-500 leading-snug">Configure the mailer cadence that chases every open exception in this report.</p>
+          <p className="text-[0.75rem] text-ink-500 leading-snug">Configure the default mailer cadence that chases every open exception across your reports.</p>
         </div>
       </header>
 

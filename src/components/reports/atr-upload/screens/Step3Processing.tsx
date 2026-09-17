@@ -10,7 +10,7 @@ import { PROCESSING_MESSAGES } from '../mockExtraction';
 export default function Step3Processing({ progress, step }: { progress: number; step: number }) {
   return (
     <div
-      className="rounded-lg border border-canvas-border bg-canvas-elevated overflow-hidden"
+      className="max-w-[760px] mx-auto mt-2 rounded-lg border border-canvas-border bg-canvas-elevated overflow-hidden shadow-[0_1px_2px_rgb(15_8_30_/_0.04),0_8px_24px_-12px_rgb(15_8_30_/_0.12)]"
       aria-busy="true"
       aria-live="polite"
     >
