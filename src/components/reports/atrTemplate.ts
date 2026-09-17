@@ -113,7 +113,7 @@ export interface AtrExecSummary {
 
 export function computeExecSummary(observations: AtrObservation[]): AtrExecSummary {
   const classification: Record<AtrClassification, number> = { 'Design Deficiency': 0, 'System Deficiency': 0, 'Procedural Non-Compliance': 0 };
-  const risk: Record<AtrRisk, number> = { Critical: 0, High: 0, Medium: 0, Low: 0 };
+  const risk: Record<AtrRisk, number> = { Critical: 0, High: 0, Medium: 0, Low: 0, 'Not Applicable': 0 };
   const obsStatus: Record<AtrObservationStatus, number> = { Closed: 0, 'In Progress': 0, Open: 0, Overdue: 0 };
   const actionStatus: Record<AtrActionStatus, number> = { Implemented: 0, 'Partially Implemented': 0, Pending: 0, Overdue: 0, 'Not Due': 0 };
   let totalActionPlans = 0;

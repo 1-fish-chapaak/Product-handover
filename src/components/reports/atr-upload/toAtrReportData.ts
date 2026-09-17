@@ -12,9 +12,11 @@ function toAtrObservation(o: ExtractedObservation): AtrObservation {
   let e = o;
   o.missingFields.filter(f => f.state === 'skipped').forEach(f => { e = setFieldValue(e, f.key, ''); });
   // Strip the extraction-layer fields; what remains is AtrObservation-shaped.
-  const { id: _id, number: _n, completeness: _c, selected: _s, confidence: _cf, missingFields: _mf, dueDate: _dd, ...rest } = e;
-  void _id; void _n; void _c; void _s; void _cf; void _mf; void _dd;
-  return { ...rest, title: rest.title?.trim() || 'Untitled observation' };
+  // The source id is kept so the saved report can find this observation's
+  // linked annexures again (per-observation Manage Exceptions).
+  const { id, number: _n, completeness: _c, selected: _s, confidence: _cf, missingFields: _mf, dueDate: _dd, ...rest } = e;
+  void _n; void _c; void _s; void _cf; void _mf; void _dd;
+  return { ...rest, sourceObservationId: id, title: rest.title?.trim() || 'Untitled observation' };
 }
 
 export function toAtrReportData(session: ExtractionSession): AtrReportData {
