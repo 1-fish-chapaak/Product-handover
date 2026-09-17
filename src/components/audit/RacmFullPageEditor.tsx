@@ -14,7 +14,7 @@ import { AnimatePresence, motion } from 'motion/react';
 import {
   ArrowLeft, Search, Filter, Plus, Download, Upload, Columns3, Layers,
   X, ChevronRight, ChevronDown, Save, Lock, Share2,
-  AlertTriangle, Star, Trash2, Check,
+  AlertTriangle, Star, Trash2, Check, PencilLine,
 } from 'lucide-react';
 import { useShare, rectFromEvent } from '../../context/ShareContext';
 import { useAuditLog } from '../../context/AdminDataContext';
@@ -49,6 +49,12 @@ interface Props {
    * trailing "Ref" column is shown.
    */
   sourceFiles?: string[];
+  /**
+   * The RACM's own rows. The SOX RACM tab hands over the controls of the RACM
+   * that was clicked, so the grid shows that matrix rather than the procurement
+   * sample every other caller seeds from. Omitted → the procurement sample.
+   */
+  initialRows?: ProcurementRacmRow[];
 }
 
 // Trailing "Ref" column — shown only when a RACM was consolidated from 2+ files.
@@ -109,7 +115,27 @@ const GROUP_BY_OPTIONS: { value: GroupByMode; label: string }[] = [
   { value: 'riskRating', label: 'Risk Rating' },
 ];
 
-export default function RacmFullPageEditor({ onBack, backView, backLabel, racmName, racmId, processLabel, sourceFiles }: Props) {
+// Bulk "Update column" — the columns a reviewer can set across many rows at once.
+// Identity (Risk/Control ID) must stay unique per row, Key Control is a flag with
+// its own toggle, and Ref is the source file — none of those take one shared value.
+const BULK_EDIT_EXCLUDED = new Set<keyof ProcurementRacmRow>(['riskId', 'controlId', 'isKey', 'ref']);
+const BULK_EDIT_COLUMNS = PROCUREMENT_RACM_COLUMNS.filter(c => !BULK_EDIT_EXCLUDED.has(c.key));
+// Columns with a closed vocabulary get a picker, so a bulk edit can't mint a new
+// spelling ("high", "Adhoc") that would split the header filters and chips.
+const RATING_VALUES = ['High', 'Medium', 'Low'];
+const BULK_VALUE_OPTIONS: Partial<Record<keyof ProcurementRacmRow, string[]>> = {
+  riskRating: RATING_VALUES, likelihood: RATING_VALUES, impact: RATING_VALUES,
+  controlType: ['Preventive', 'Detective'],
+  controlNature: ['Manual', 'Automated', 'IT-dependent'],
+  frequency: ['Annual', 'Quarterly', 'Monthly', 'Weekly', 'Daily', 'Recurring', 'Ad-hoc'],
+};
+// Long-form columns get a textarea rather than a one-line input.
+const BULK_LONG_TEXT_KEYS = new Set<keyof ProcurementRacmRow>([
+  'riskDescription', 'controlObjective', 'controlActivity', 'controlEvidence',
+  'attributes', 'ipeIceDetails', 'mgmtReviewControl',
+]);
+
+export default function RacmFullPageEditor({ onBack, backView, backLabel, racmName, racmId, processLabel, sourceFiles, initialRows }: Props) {
   const { openShare } = useShare();
   const logEvent = useAuditLog();
   // When generated from 2+ files, show a trailing "Ref" column and tag each row
@@ -117,9 +143,11 @@ export default function RacmFullPageEditor({ onBack, backView, backLabel, racmNa
   const showRef = (sourceFiles?.length ?? 0) > 1;
   // ─── State ───────────────────────────────────────────────────────────
   const [rows, setRows] = useState<ProcurementRacmRow[]>(() =>
-    PROCUREMENT_RACM_ROWS.map((r, i) => ({
+    (initialRows ?? PROCUREMENT_RACM_ROWS).map((r, i) => ({
       ...r,
-      isKey: isKeyControl(r.controlId),
+      // A real RACM says which of its controls are key; only the procurement
+      // sample, which carries no such column, falls back to the stable hash.
+      isKey: r.isKey ?? isKeyControl(r.controlId),
       ...(showRef ? { ref: sourceFiles![i % sourceFiles!.length] } : {}),
     })));
   const [search, setSearch] = useState('');
@@ -156,6 +184,10 @@ export default function RacmFullPageEditor({ onBack, backView, backLabel, racmNa
   const [editingTitle, setEditingTitle] = useState(false);
   const [status] = useState<'Draft' | 'In Review' | 'Final'>('Draft');
   const [groupByOpen, setGroupByOpen] = useState(false);
+  // Bulk "Update column" popover — which column, and the value to write into it.
+  const [updateColOpen, setUpdateColOpen] = useState(false);
+  const [bulkCol, setBulkCol] = useState<keyof ProcurementRacmRow | ''>('');
+  const [bulkValue, setBulkValue] = useState('');
 
   // ─── Derived ─────────────────────────────────────────────────────────
   // Distinct values per multi-select column, sorted, for the header filter menus.
@@ -206,6 +238,17 @@ export default function RacmFullPageEditor({ onBack, backView, backLabel, racmNa
     document.addEventListener('keydown', onKey);
     return () => document.removeEventListener('keydown', onKey);
   }, [groupByOpen]);
+
+  // The Update-column popover lives in the selection bar, so it closes on Escape
+  // and whenever the selection empties (e.g. after Delete) — otherwise it would
+  // spring back open the next time a row is ticked.
+  useEffect(() => {
+    if (!updateColOpen) return;
+    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') setUpdateColOpen(false); };
+    document.addEventListener('keydown', onKey);
+    return () => document.removeEventListener('keydown', onKey);
+  }, [updateColOpen]);
+  useEffect(() => { if (selectedRowIds.size === 0) setUpdateColOpen(false); }, [selectedRowIds]);
 
   const grouped = useMemo(() => {
     if (groupBy === 'none') return [{ label: 'All Controls', rows: pagedRows, count: pagedRows.length }];
@@ -308,7 +351,7 @@ export default function RacmFullPageEditor({ onBack, backView, backLabel, racmNa
     const id = String(nextNum).padStart(3, '0');
     const blank: ProcurementRacmRow = {
       riskId: `R${id}`, controlId: `C${id}`,
-      processArea: 'Procurement Lifecycle Management', subProcess: '(Add sub-process)',
+      processArea: processLabel || 'Procurement Lifecycle Management', subProcess: '(Add sub-process)',
       riskCategory: '', riskDescription: '',
       riskRating: 'Medium', likelihood: 'Medium', impact: 'Medium',
       controlObjective: '', controlActivity: '',
@@ -328,6 +371,33 @@ export default function RacmFullPageEditor({ onBack, backView, backLabel, racmNa
     setRows(prev => prev.filter(r => !selectedRowIds.has(`${r.riskId}-${r.controlId}`)));
     setSelectedRowIds(new Set());
     setSaveStatus('saved');
+  };
+
+  // Bulk "Update column": write one value into one column on every selected row
+  // in a single pass. Same save feedback as a cell commit; selection is kept so
+  // the reviewer can set the next column on the same rows.
+  const openUpdateColumn = () => {
+    if (!updateColOpen) { setBulkCol(''); setBulkValue(''); }
+    setUpdateColOpen(o => !o);
+  };
+  const bulkOptions = bulkCol ? BULK_VALUE_OPTIONS[bulkCol] : undefined;
+  const canApplyBulk = !!bulkCol && (!bulkOptions || bulkValue !== '');
+  const applyBulkUpdate = () => {
+    if (!bulkCol || !canApplyBulk || selectedRowIds.size === 0) return;
+    const col = bulkCol;
+    const value = bulkOptions ? bulkValue : bulkValue.trim();
+    const label = BULK_EDIT_COLUMNS.find(c => c.key === col)?.label ?? col;
+    const n = selectedRowIds.size;
+    setSaveStatus('saving');
+    setRows(prev => prev.map(r => selectedRowIds.has(`${r.riskId}-${r.controlId}`) ? { ...r, [col]: value } : r));
+    window.setTimeout(() => { setSaveStatus('saved'); setSavedToast(true); }, 600);
+    const target = `${n} ${n === 1 ? 'row' : 'rows'} in ${racmName ?? 'the RACM'}`;
+    logEvent({
+      action: 'Update',
+      description: value ? `Set ${label} to "${value}" on ${target}` : `Cleared ${label} on ${target}`,
+      module: 'Audit', entity: 'Control',
+    });
+    setUpdateColOpen(false);
   };
 
   const toggleGroup = (label: string) =>
@@ -471,6 +541,64 @@ export default function RacmFullPageEditor({ onBack, backView, backLabel, racmNa
           {selectedRowIds.size > 0 && (
             <>
               <span className="text-xs text-text-muted">{selectedRowIds.size} selected</span>
+              {/* Update column — set one field on every selected row at once, so
+                  re-rating or re-owning a batch of controls isn't a cell-by-cell job.
+                  Popover styled like Group-by beside it. */}
+              <div className="relative">
+                <Button variant="outline" size="sm" leftIcon={<PencilLine size={12} />}
+                  aria-haspopup="dialog" aria-expanded={updateColOpen} onClick={openUpdateColumn}>
+                  Update column
+                </Button>
+                {updateColOpen && (
+                  <>
+                    <div className="fixed inset-0 z-10" onClick={() => setUpdateColOpen(false)} />
+                    <form role="dialog" aria-labelledby="racm-bulk-update-title"
+                      onSubmit={(e) => { e.preventDefault(); applyBulkUpdate(); }}
+                      className="absolute right-0 top-full mt-1 w-72 bg-white border border-border rounded-xl shadow-xl z-30 overflow-hidden">
+                      <div className="px-3 py-2 border-b border-border-light bg-surface-2/40">
+                        <h6 id="racm-bulk-update-title" className="text-[0.625rem] font-bold text-text uppercase tracking-wider">Update column</h6>
+                      </div>
+                      <div className="p-3 space-y-3">
+                        <div>
+                          <label htmlFor="racm-bulk-column" className="text-[0.5625rem] font-semibold text-text-muted uppercase tracking-wider block mb-1">Column</label>
+                          <select id="racm-bulk-column" autoFocus value={bulkCol}
+                            onChange={e => { setBulkCol(e.target.value as keyof ProcurementRacmRow | ''); setBulkValue(''); }}
+                            className="w-full h-7 px-2 border border-border rounded-lg text-xs text-text bg-white outline-none focus:border-primary/40 focus-visible:ring-2 focus-visible:ring-primary/20 cursor-pointer">
+                            <option value="">Choose a column…</option>
+                            {BULK_EDIT_COLUMNS.map(c => <option key={c.key} value={c.key}>{c.label}</option>)}
+                          </select>
+                        </div>
+                        {bulkCol && (
+                          <div>
+                            <label htmlFor="racm-bulk-value" className="text-[0.5625rem] font-semibold text-text-muted uppercase tracking-wider block mb-1">Value</label>
+                            {bulkOptions ? (
+                              <select id="racm-bulk-value" value={bulkValue} onChange={e => setBulkValue(e.target.value)}
+                                className="w-full h-7 px-2 border border-border rounded-lg text-xs text-text bg-white outline-none focus:border-primary/40 focus-visible:ring-2 focus-visible:ring-primary/20 cursor-pointer">
+                                <option value="">Choose a value…</option>
+                                {bulkOptions.map(v => <option key={v} value={v}>{v}</option>)}
+                              </select>
+                            ) : BULK_LONG_TEXT_KEYS.has(bulkCol) ? (
+                              <textarea id="racm-bulk-value" rows={3} value={bulkValue} onChange={e => setBulkValue(e.target.value)}
+                                className="w-full px-2.5 py-1.5 border border-border rounded-lg text-xs text-text bg-white outline-none focus:border-primary/40 focus-visible:ring-2 focus-visible:ring-primary/20 resize-none" />
+                            ) : (
+                              <input id="racm-bulk-value" value={bulkValue} onChange={e => setBulkValue(e.target.value)}
+                                className="w-full h-7 px-2.5 border border-border rounded-lg text-xs text-text bg-white outline-none focus:border-primary/40 focus-visible:ring-2 focus-visible:ring-primary/20" />
+                            )}
+                            {!bulkOptions && (
+                              <p className="mt-1 text-[0.625rem] text-text-muted">Leave blank to clear this column on the selected rows</p>
+                            )}
+                          </div>
+                        )}
+                      </div>
+                      <div className="px-3 py-2 border-t border-border-light bg-surface-2/20 flex items-center justify-end">
+                        <Button type="submit" variant="primary" size="sm" disabled={!canApplyBulk}>
+                          Apply to {selectedRowIds.size} {selectedRowIds.size === 1 ? 'row' : 'rows'}
+                        </Button>
+                      </div>
+                    </form>
+                  </>
+                )}
+              </div>
               <Button variant="destructive" size="sm" leftIcon={<Trash2 size={12} />} onClick={deleteSelected}>
                 Delete
               </Button>

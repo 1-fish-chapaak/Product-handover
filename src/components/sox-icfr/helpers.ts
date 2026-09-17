@@ -1,25 +1,38 @@
-import { isInquiryOnly, ipeReliable, GRADE_RANK } from './types';
+import { isInquiryOnly, ipeReliable, GRADE_RANK, AUDIT_SAMPLE_SPREADS, DEFAULT_AUDIT_SAMPLING } from './types';
 import type {
-  AuditorProofKind, Conclusion, Control, Court, Deficiency, DesignDoc, DesignTrack, ExceptionGrade, HandoffTask, IcfrEngagement,
+  AuditorProofKind, AuditSampleSpread, AuditSampling, Conclusion, Control, Court, Deficiency, DesignDoc, DesignTrack, ExceptionGrade, HandoffTask, IcfrEngagement,
   FileOrigin, IpeCheck, Likelihood, MaterialityRules, OperatingTrack, Population, PopulationBasis, PopulationSource, ReviewNote, RiskRating, Role,
   Sample, Severity, ToeRound, TrackConclusion, DeficiencyGroup, ExceptionStatus,
 } from './types';
 
 // ─── Severity (handbook §9.5) ────────────────────────────────────────────────────
 
+
+/** What a control's deterministic demo numbers hash — the id it was seeded
+ *  under, so the S11 ID rename moves nothing. See Control.seedKey. */
+export const seedKeyOf = (c: { id: string; seedKey?: string }): string => c.seedKey ?? c.id;
+
 export function isReasonablyPossible(l: Likelihood): boolean { return l !== 'Remote'; }
-export function computeSeverity(likelihood: Likelihood, magnitude: number, materiality: number, mwIndicators: string[], band = 0.2): Severity {
-  if (mwIndicators.length > 0) return 'Material Weakness';
-  if (!isReasonablyPossible(likelihood)) return 'Deficiency';
-  if (magnitude >= materiality) return 'Material Weakness';
-  if (magnitude >= materiality * band) return 'Significant Deficiency';
-  return 'Deficiency';
-}
+// ─── PARKED (Sep 2026) — the three-grade severity calculator ─────────────────────
+// computeSeverity / severityOf graded straight onto the ladder, with no
+// clearly-trivial floor, no compensating-control cap and no aggregation. Nothing
+// has called them since gradeException below became the one engine, and a second
+// calculation left lying around is how two screens come to disagree. Kept here as
+// the reference the compliance workspace's local copy points at
+// (complianceSeverityData.ts).
+//
+// export function computeSeverity(likelihood: Likelihood, magnitude: number, materiality: number, mwIndicators: string[], band = 0.2): Severity {
+//   if (mwIndicators.length > 0) return 'Material Weakness';
+//   if (!isReasonablyPossible(likelihood)) return 'Deficiency';
+//   if (magnitude >= materiality) return 'Material Weakness';
+//   if (magnitude >= materiality * band) return 'Significant Deficiency';
+//   return 'Deficiency';
+// }
+// export function severityOf(d: Deficiency, materiality: number, rules?: MaterialityRules): Severity {
+//   return computeSeverity(d.likelihood, d.magnitude, materiality, d.mwIndicators, rules ? rules.sdBandPct / 100 : 0.2);
+// }
 export function isClearlyTrivial(magnitude: number, rules: MaterialityRules): boolean {
   return magnitude <= rules.clearlyTrivial;
-}
-export function severityOf(d: Deficiency, materiality: number, rules?: MaterialityRules): Severity {
-  return computeSeverity(d.likelihood, d.magnitude, materiality, d.mwIndicators, rules ? rules.sdBandPct / 100 : 0.2);
 }
 
 // ─── Assessed severity — the raw grade plus the compensating-control cap ─────────
@@ -29,22 +42,26 @@ export function severityOf(d: Deficiency, materiality: number, rules?: Materiali
 // exception — capBlocked says why a chosen control had no effect.
 export const SEVERITY_RANK: Record<Severity, number> = { Deficiency: 0, 'Significant Deficiency': 1, 'Material Weakness': 2 };
 export interface SeverityAssessment {
-  raw: Severity;
-  final: Severity;
+  raw: ExceptionGrade;
+  final: ExceptionGrade;
   capped: boolean;
   capBlocked?: 'not-effective' | 'mw-indicator';
   bumped?: boolean;   // prudent-official judgment raised the grade above the math
 }
-// The three-value view of the grade, for the report, the archive and the
-// roll-ups — all of which name only the three reportable severities. It is a
-// projection of `gradeException` below, never a second calculation: one engine,
-// so the card, the working paper and the engagement conclusion cannot disagree.
+// The short form of `gradeException` below — the grade, and whether a cap or a
+// judgement moved it — for the dashboard, the roll-ups, the working paper, the
+// reviewer queue and the archive. It carries the SAME four grades the register
+// shows, Clearly Trivial included: this used to fold Clearly Trivial into
+// Deficiency, so one finding read as two different grades depending on the
+// screen (C10, Sep 2026). Never a second calculation — one engine, so the card,
+// the working paper and the engagement conclusion cannot disagree. The opinion
+// needs no three-grade view: it only ever asks whether a grade is Material
+// Weakness (openMaterialWeaknesses), and Clearly Trivial never is.
 export function assessSeverity(d: Deficiency, eng: IcfrEngagement): SeverityAssessment {
   const g = gradeException(d, eng);
-  const asSeverity = (x: ExceptionGrade): Severity => (x === 'Clearly Trivial' ? 'Deficiency' : x);
   return {
-    raw: asSeverity(g.ladderGrade),
-    final: asSeverity(g.grade),
+    raw: g.ladderGrade,
+    final: g.grade,
     capped: !!g.cap,
     capBlocked: g.capBlocked === 'none-chosen' ? undefined : g.capBlocked,
     bumped: !!g.bumped,
@@ -481,7 +498,7 @@ export function exceptionCourtDetail(d: Deficiency, eng: IcfrEngagement): { who:
     : d.status === 'Planning' ? (d.planReview?.decision === 'Rejected' ? 'rewriting the plan' : 'writing the plan')
     : d.status === 'Plan review' ? 'checking the plan against the root cause'
     : d.status === 'Remediation' ? 'implementing the fix and attaching evidence'
-    : d.status === 'Retest' ? 'retesting on a post-fix sample'
+    : d.status === 'Retest' ? (d.track === 'design' ? 're-checking the failed design checks against the fix' : 'retesting on a post-fix sample')
     : d.status === 'Awaiting reviewer' ? 'reading the retest evidence and closing'
     : 'closed';
   return { who: court === 'none' ? (d.signoff?.by ?? who) : who, doing };
@@ -595,6 +612,23 @@ export function retestAtRisk(eng: IcfrEngagement): { d: Deficiency; readiness: R
     .filter(x => x.readiness.beyondPeriodEnd);
 }
 
+/** The design checks a TOD retest re-checks — the ones whose failure raised the
+ *  exception, never a list written for the retest. First answer wins:
+ *    · a round already started or run — every round re-checks the same list;
+ *    · the list stamped on the exception when it was raised;
+ *    · the control's design checks reading Fail now — for an exception raised
+ *      before the stamp existed;
+ *    · every design check on the control — a design exception that never isolated
+ *      a failing check (never evidenced) has nothing narrower to re-check. */
+export function designRetestChecks(d: Deficiency, c: Control | undefined): { pointId: string; text: string }[] {
+  const run = d.retestDraft?.checks ?? d.retests?.find(r => r.checks?.length)?.checks;
+  if (run?.length) return run.map(x => ({ pointId: x.pointId, text: x.text }));
+  if (d.failedChecks?.length) return d.failedChecks;
+  const points = c?.design.points ?? [];
+  const failing = points.filter(p => pointResult(p) === 'Fail');
+  return (failing.length ? failing : points).map(p => ({ pointId: p.id, text: p.text }));
+}
+
 // ─── Ground-rules change preview ──────────────────────────────────────────────────
 // What would re-grade if the materiality rule set changed? Used by the review
 // modal before applying, and by the store to record the actual re-grades.
@@ -603,7 +637,7 @@ export function retestAtRisk(eng: IcfrEngagement): { d: Deficiency; readiness: R
 // that was only material because it combined falls back to significant. That is
 // a re-grade downwards, and it has to be seen before it happens.
 export interface RulesPatch { materiality?: number; performanceMateriality?: number; clearlyTrivial?: number; sdBandPct?: number; aggregate?: boolean }
-export function previewRegrades(eng: IcfrEngagement, patch: RulesPatch): { defId: string; from: Severity; to: Severity }[] {
+export function previewRegrades(eng: IcfrEngagement, patch: RulesPatch): { defId: string; from: ExceptionGrade; to: ExceptionGrade }[] {
   const next: IcfrEngagement = {
     ...eng,
     materiality: patch.materiality ?? eng.materiality,
@@ -808,6 +842,538 @@ export function untouchedPaths(c: Control): string[] {
   return pathCoverage(c).filter(p => p.drawn === 0).map(p => p.path);
 }
 
+// ─── The audit's sampling methodology (A28) ──────────────────────────────────────
+// How items are selected, and what they have to be spread across, is agreed once
+// on the audit (feedback #38; Dubai — "an agreed sampling methodology covering
+// quarters, countries and entities"). A control asks how many, and from which
+// months — in words, per file (see readSamplePrompt), never how. What follows
+// turns that agreement into a draw — which quarter each item falls in, which
+// company it is dealt to — and reads the draw back as the split the Sample step
+// prints, and as the year's running total of items tested.
+
+type AuditWindow = Pick<AuditRecord, 'windowFrom' | 'windowTo' | 'yearBasis'>;
+
+/** The audit a control is being worked under: the one that is open, else the
+ *  live cycle (newest unarchived) — the only record whose results sit on the
+ *  controls. */
+export function workingAudit(eng: Pick<IcfrEngagement, 'audits'>, openAuditId: string | null): AuditRecord | undefined {
+  return eng.audits.find(a => a.id === openAuditId) ?? eng.audits.find(a => !a.archive);
+}
+/** The audit's methodology, with the default standing in for a record older than it. */
+export const auditSampling = (a?: AuditRecord): AuditSampling => a?.sampling ?? DEFAULT_AUDIT_SAMPLING;
+
+/** "spread by quarter and entity", or "not spread" — named in the wizard's order. */
+export function spreadPhrase(spread: AuditSampleSpread[]): string {
+  const words = AUDIT_SAMPLE_SPREADS.map(s => s.id).filter(id => spread.includes(id));
+  if (!words.length) return 'not spread';
+  return `spread by ${words.length > 1 ? `${words.slice(0, -1).join(', ')} and ${words[words.length - 1]}` : words[0]}`;
+}
+
+// Whole days since the epoch, in UTC so no clock change can move a date by one.
+const DAY_MS = 86_400_000;
+const dayOf = (iso: string): number => { const [y, m, d] = iso.split('-').map(Number); return Math.round(Date.UTC(y!, m! - 1, d!) / DAY_MS); };
+const isoOf = (day: number): string => new Date(day * DAY_MS).toISOString().slice(0, 10);
+/** Where an item without an audit to date it falls — the demo's own FY26. */
+const FALLBACK_WINDOW = { windowFrom: '2025-04-01', windowTo: '2026-03-31' };
+
+/** The quarters an audit's window touches, each clipped to the window. Q1 opens
+ *  the year the audit runs on — April for an April–March year, January for the
+ *  rest. A window long enough to meet the same quarter twice names the year. */
+export function auditQuarters(a: AuditWindow): { label: string; from: string; to: string }[] {
+  const from = dayOf(a.windowFrom), to = dayOf(a.windowTo);
+  if (!(from <= to)) return [];
+  const opens = a.yearBasis === 'fy' ? 3 : 0;
+  const [y0, m0] = a.windowFrom.split('-').map(Number);
+  let y = y0!, m = m0! - 1 - (((m0! - 1 - opens) % 3) + 3) % 3;
+  if (m < 0) { m += 12; y -= 1; }
+  const out: { label: string; from: string; to: string; year: number }[] = [];
+  for (let guard = 0; guard < 40; guard++) {
+    const qFrom = Math.round(Date.UTC(y, m, 1) / DAY_MS);
+    if (qFrom > to) break;
+    const ny = m + 3 >= 12 ? y + 1 : y, nm = (m + 3) % 12;
+    const qTo = Math.round(Date.UTC(ny, nm, 1) / DAY_MS) - 1;
+    out.push({ label: `Q${Math.floor((((m - opens) % 12) + 12) % 12 / 3) + 1}`, from: isoOf(Math.max(qFrom, from)), to: isoOf(Math.min(qTo, to)), year: y });
+    y = ny; m = nm;
+  }
+  const repeats = new Set(out.map(q => q.label)).size < out.length;
+  return out.map(q => ({ label: repeats ? `${q.label} ${q.year}` : q.label, from: q.from, to: q.to }));
+}
+
+/** When an item happened. A draw made under the audit's methodology stored the
+ *  date it dealt; an older item gets a stable one off its own id, somewhere in
+ *  `home` — the round that drew it (sampleHome) — so the date on its row, the
+ *  quarter it counts in and the round it counts toward all agree. Never the open
+ *  audit's window: a date is a fact about the item, and opening the roll-forward
+ *  must not move it. */
+export function sampleDate(s: Sample, home?: Pick<AuditRecord, 'windowFrom' | 'windowTo'>): string {
+  if (s.date) return s.date;
+  const w = home ?? FALLBACK_WINDOW;
+  const from = dayOf(w.windowFrom), span = Math.max(1, dayOf(w.windowTo) - from + 1);
+  return isoOf(from + (hnum(`${s.id}·${s.ref}`) % span));
+}
+
+/** The round an undated item was drawn in. Items without a date sat on the
+ *  control before draws stored one, so they are the live cycle's — and inside
+ *  its year, the earliest audit that covers the control: the interim, where
+ *  there is one, since a roll-forward only adds to what the interim drew. The
+ *  open audit plays no part, so the answer is the same from either round. */
+export function sampleHome(eng: Pick<IcfrEngagement, 'audits'>, covers: (a: AuditRecord) => boolean): AuditRecord | undefined {
+  const live = eng.audits.find(a => !a.archive);
+  if (!live) return undefined;
+  return eng.audits
+    .filter(a => a.yearBasis === live.yearBasis && a.fiscalYear === live.fiscalYear && covers(a))
+    .sort((x, y) => x.windowFrom.localeCompare(y.windowFrom))[0] ?? live;
+}
+
+// ─── What a population is worth (S9, A32) ────────────────────────────────────────
+// The prototype holds no file bytes, so a population's instances are a model —
+// but ONE model. The preview's rows, a drawn item's amount and the exposure worked
+// out from the data all read it, so no two screens can price the same item two
+// ways. Deterministic off the control id: a population that reshaped itself
+// between renders would disagree with the paper it produced.
+//
+// Dates follow the population's own monthly shape (monthlyBreakdown), so the
+// months the Population step prints and the instances a failure window counts
+// are the same fact — a dead tail holds nothing here either. Amounts sit around a
+// typical figure the control is given off its id, skewed the way transaction
+// values are: most of them small, a few of them large.
+
+/** Uniform in [0, 1) off a seed and an index — one mulberry32 step. `hnum` on
+ *  its own will not do: consecutive indices hash to consecutive numbers. */
+function mix(seed: number, n: number): number {
+  let t = (seed + Math.imul(n + 1, 0x6d2b79f5)) >>> 0;
+  t = Math.imul(t ^ (t >>> 15), t | 1);
+  t ^= t + Math.imul(t ^ (t >>> 7), t | 61);
+  return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+}
+const ISO_DAY = /^\d{4}-\d{2}-\d{2}$/;
+type ModelWindow = Pick<AuditRecord, 'windowFrom' | 'windowTo'>;
+interface PopulationModel {
+  /** One epoch day per instance, in date order. */
+  days: number[];
+  seed: number;
+  /** The control's typical instance, ₹ — between ₹20K and ₹1.5L. */
+  typical: number;
+}
+export interface PopulationInstance { ref: string; date: string; amount: number }
+
+// A control is replaced, never mutated, whenever anything on it moves — so the
+// object is a safe cache key, and a list of twenty-five sample rows lays the
+// population out once rather than twenty-five times.
+const MODELS = new WeakMap<Control, Map<string, PopulationModel>>();
+
+/** `fallback` places a population whose filter carries no dates — the round
+ *  that drew it, else the audit. */
+function populationModel(c: Control, fallback?: ModelWindow): PopulationModel {
+  const w = fallback ?? FALLBACK_WINDOW;
+  const key = `${w.windowFrom}·${w.windowTo}`;
+  const cached = MODELS.get(c)?.get(key);
+  if (cached) return cached;
+  const pop = c.operating.population;
+  const count = Math.max(0, pop?.count ?? 0);
+  const seed = hnum(`${seedKeyOf(c)}·population`);
+  const typical = Math.round((20_000 + mix(hnum(`${seedKeyOf(c)}·typical`), 0) * 130_000) / 1000) * 1000;
+  const days: number[] = [];
+  // n instances inside [lo, hi], stepping evenly with a jitter under one step, so
+  // the days only ever go forward and the list needs no sort.
+  const lay = (lo: number, hi: number, n: number) => {
+    const span = Math.max(1, hi - lo + 1);
+    for (let j = 0; j < n; j++) days.push(lo + Math.min(span - 1, Math.floor(((j + mix(seed ^ 0x5bd1e995, days.length)) * span) / n)));
+  };
+  const pf = pop?.filterFrom && ISO_DAY.test(pop.filterFrom) ? dayOf(pop.filterFrom) : NaN;
+  const pt = pop?.filterTo && ISO_DAY.test(pop.filterTo) ? dayOf(pop.filterTo) : NaN;
+  const months = count > 0 && pf <= pt ? monthlyBreakdown(c) : [];
+  months.forEach(m => {
+    const [y, mo] = m.key.split('-').map(Number);
+    const lo = Math.max(pf, Math.round(Date.UTC(y!, mo! - 1, 1) / DAY_MS));
+    const hi = Math.min(pt, Math.round(Date.UTC(y!, mo!, 1) / DAY_MS) - 1);
+    if (m.n > 0 && lo <= hi) lay(lo, hi, m.n);
+  });
+  // No monthly shape to follow (or one that would not place every instance):
+  // spread the whole count across the filter window, else the fallback's.
+  if (days.length !== count) {
+    days.length = 0;
+    const lo = pf <= pt ? pf : dayOf(w.windowFrom), hi = pf <= pt ? pt : dayOf(w.windowTo);
+    if (lo <= hi) lay(lo, hi, count);
+  }
+  const model = { days, seed, typical };
+  const byWindow = MODELS.get(c) ?? new Map<string, PopulationModel>();
+  byWindow.set(key, model);
+  MODELS.set(c, byWindow);
+  return model;
+}
+/** 0.2× to 2.6× the typical figure, cubed so most instances sit low. */
+const instanceAmount = (m: PopulationModel, k: number): number =>
+  Math.round(m.typical * (0.2 + 2.4 * mix(m.seed, k) ** 3));
+/** The first index whose day is on or after `day`. */
+const firstOnOrAfter = (days: number[], day: number): number => {
+  let lo = 0, hi = days.length;
+  while (lo < hi) { const mid = (lo + hi) >> 1; if (days[mid]! < day) lo = mid + 1; else hi = mid; }
+  return lo;
+};
+
+/** The population's first `n` instances, in date order — what the preview lists. */
+export function populationInstances(c: Control, n: number, fallback?: ModelWindow): PopulationInstance[] {
+  const m = populationModel(c, fallback);
+  return m.days.slice(0, Math.max(0, n)).map((day, k) => ({ ref: `${seedKeyOf(c)}-${String(k + 1).padStart(5, '0')}`, date: isoOf(day), amount: instanceAmount(m, k) }));
+}
+
+/** How many instances fall between two ISO dates, both inclusive, and their total. */
+export function populationValue(c: Control, from: string, to: string, fallback?: ModelWindow): { count: number; value: number } {
+  const m = populationModel(c, fallback);
+  if (!ISO_DAY.test(from) || !ISO_DAY.test(to)) return { count: 0, value: 0 };
+  const lo = firstOnOrAfter(m.days, dayOf(from)), hi = firstOnOrAfter(m.days, dayOf(to) + 1);
+  let value = 0;
+  for (let k = lo; k < hi; k++) value += instanceAmount(m, k);
+  return { count: Math.max(0, hi - lo), value };
+}
+
+/** A drawn item's amount: the amount of the population instance it IS — one that
+ *  happened on the item's date, picked by its reference, else the nearest one to
+ *  that date. An item with no population behind it takes a figure off the same
+ *  curve, so the column still reads like this control's work. */
+export function sampleAmount(c: Control, ref: string, date: string | undefined, fallback?: ModelWindow): number {
+  const m = populationModel(c, fallback);
+  const h = hnum(ref);
+  const n = m.days.length;
+  if (!n || !date || !ISO_DAY.test(date)) return instanceAmount(m, n + (h % 100_000));
+  const day = dayOf(date);
+  const lo = firstOnOrAfter(m.days, day), hi = firstOnOrAfter(m.days, day + 1);
+  if (hi > lo) return instanceAmount(m, lo + (h % (hi - lo)));
+  const k = lo >= n ? n - 1 : lo === 0 ? 0 : m.days[lo]! - day <= day - m.days[lo - 1]! ? lo : lo - 1;
+  return instanceAmount(m, k);
+}
+
+// ─── Exposure, worked out from the data (S9, A32) ────────────────────────────────
+// Value at risk: what could have gone through the control while it was broken.
+// For an operating failure that is every population instance from the first
+// failed item to the fix — the remediation's done date, else the end of the
+// audit, since nothing inside the window says it stopped. A design failure was
+// built wrong from the day the period opened, so it has no first failure to
+// count from; nor does a control with no population to count. Both take the
+// whole audit period, priced off the trial balance: the material accounts mapped
+// to the control's process. Either way the figure is offered, never forced — the
+// auditor uses it or types their own.
+import type { TbCaption } from '../audit/sox-testing/soxTestingData';
+
+/** What the working needs from outside the engagement record. The store and the
+ *  sizing form each build one; helpers stays clear of the scope module. */
+export interface ExposureContext {
+  /** The audit it is sized under — open, else the live cycle (workingAudit). */
+  audit?: AuditRecord;
+  /** The round that drew the control's undated items (sampleHome). */
+  home?: ModelWindow;
+  /** The group's trial balance (captionsFor). Balances are ₹ Cr. */
+  captions: TbCaption[];
+  /** The register's spelling of a process (normaliseProcess). */
+  normalise: (process: string) => string;
+  /** A company's name from its register id. */
+  entityName: (entityId: string) => string;
+}
+export interface ExposureAccount { id: string; caption: string; entity: string; /** ₹ */ balance: number }
+export type DataExposure =
+  | {
+    kind: 'population'; value: number; count: number; population: number; from: string; to: string;
+    /** The earliest failed item, when one could be dated. Absent → `from` is the audit's start. */
+    firstFailed?: { ref: string; date: string };
+    /** `to` is the fix, not the end of the audit. */
+    fixed: boolean;
+  }
+  | {
+    kind: 'trial-balance'; value: number; from: string; to: string;
+    why: 'design' | 'no-population'; process: string;
+    /** Empty when no material account maps to the process — there is nothing to total. */
+    accounts: ExposureAccount[];
+  }
+  | { kind: 'no-audit' };
+
+/** 'YYYY-MM-DD' off a date string as it is written — ISO, '30 Jun 2026' or '30 Jun'. */
+const looseIso = (s: string | null | undefined): string | undefined => {
+  const d = parseLooseDate(s);
+  return d ? `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}` : undefined;
+};
+
+export function exposureFromData(d: Deficiency, eng: IcfrEngagement, x: ExposureContext): DataExposure {
+  const a = x.audit;
+  const c = eng.controls.find(k => k.id === d.controlId);
+  if (!a || !c) return { kind: 'no-audit' };
+  const pop = c.operating.population;
+  if (d.track === 'operating' && pop && pop.count > 0) {
+    const failed = new Set(d.failedSamples ?? []);
+    const firstFailed = (c.operating.sampling?.samples ?? [])
+      .filter(s => failed.has(s.ref))
+      .map(s => ({ ref: s.ref, date: sampleDate(s, x.home) }))
+      .sort((p, q) => p.date.localeCompare(q.date))[0];
+    // A fix dated after the audit closed ends nothing inside it.
+    const fix = d.remediation.status === 'Done' ? looseIso(d.remediation.date) : undefined;
+    const fixed = !!fix && fix <= a.windowTo;
+    const from = firstFailed?.date ?? a.windowFrom;
+    const to = fixed ? fix! : a.windowTo;
+    const { count, value } = populationValue(c, from, to, x.home ?? a);
+    return { kind: 'population', value, count, population: pop.count, from, to, firstFailed, fixed };
+  }
+  // The audit's own ruler decides what is material — the one its mapping was made
+  // against — and the mapping wins wherever one was made (S10, A34a).
+  const process = x.normalise(c.process);
+  const pmCr = a.overall > 0 ? (a.overall * (a.materiality.pmPct ?? 75)) / 100 : eng.performanceMateriality / 1e7;
+  const mapped = a.accountProcesses
+    ? x.captions.filter(k => a.accountProcesses![k.id] !== undefined && x.normalise(a.accountProcesses![k.id]!) === process)
+    : x.captions.filter(k => k.balance >= pmCr && x.normalise(k.process) === process);
+  const accounts = mapped
+    .map(k => ({ id: k.id, caption: k.caption, entity: x.entityName(k.entityId), balance: Math.round(k.balance * 1e7) }))
+    .sort((p, q) => q.balance - p.balance);
+  return {
+    kind: 'trial-balance', value: accounts.reduce((s, k) => s + k.balance, 0), from: a.windowFrom, to: a.windowTo,
+    why: d.track === 'design' ? 'design' : 'no-population', process, accounts,
+  };
+}
+
+// ─── Ira's first sizing (S9, A31) ────────────────────────────────────────────────
+// Pre-filled when an exception is raised, tagged with why, and the auditor's to
+// change — no accept click, and the grade computes off it straight away.
+//
+//  Likelihood — Probable when the failure is not a one-off: a design failure (it
+//    fails every time the control runs), a control never evidenced at all, a
+//    failure on the redrawn sample, or 1 failed item in 10 tested or worse.
+//    Reasonably possible below that. NEVER Remote: Remote caps the grade at a
+//    deficiency, and arguing a grade down is the auditor's call to make, not a
+//    default to accept by not looking.
+//  Exposure — the figure worked out from the data above. Left at ₹0 and untagged
+//    when there is nothing to work it out from.
+//  Compensating control — another control concluded effective on the same risk,
+//    else in the same process; the first in register order. None qualifying is
+//    still an answer, and is tagged as one.
+export interface SizingSuggestion {
+  likelihood: Likelihood;
+  magnitude: number;
+  compensatingControlId?: string;
+  iraSuggested: NonNullable<Deficiency['iraSuggested']>;
+}
+
+export function suggestSizing(d: Deficiency, eng: IcfrEngagement, x: ExposureContext, secondRound = false): SizingSuggestion {
+  const c = eng.controls.find(k => k.id === d.controlId);
+  const tag: NonNullable<Deficiency['iraSuggested']> = {};
+
+  let likelihood: Likelihood = 'Reasonably possible';
+  const f = d.failedSamples?.length ?? 0;
+  const n = Math.max(f, c ? samplesTestedCount(c) : 0);
+  const pct = n ? Math.round((f / n) * 100) : 0;
+  if (d.unableToTestReason) {
+    likelihood = 'Probable';
+    tag.likelihood = 'never evidenced — nothing shows the control ran at all';
+  } else if (d.track === 'design') {
+    likelihood = 'Probable';
+    tag.likelihood = 'design failure — built wrong, so it fails every time it runs';
+  } else if (secondRound) {
+    likelihood = 'Probable';
+    tag.likelihood = f ? `failed again on the redrawn sample — ${f} of ${n} items` : 'failed again on the redrawn sample';
+  } else if (!f) {
+    tag.likelihood = 'concluded ineffective with no failed item to read a rate from';
+  } else if (f * 10 >= n) {
+    likelihood = 'Probable';
+    tag.likelihood = `${f} of ${n} items failed (${pct}%) — 1 in 10 or more, a pattern`;
+  } else {
+    tag.likelihood = `${f} of ${n} items failed (${pct}%) — under 1 in 10, no pattern`;
+  }
+
+  let magnitude = 0;
+  const ex = exposureFromData(d, eng, x);
+  if (ex.kind === 'population' && ex.value > 0) {
+    magnitude = ex.value;
+    tag.magnitude = ex.firstFailed
+      ? `value at risk from the first failed item to the ${ex.fixed ? 'fix' : 'end of the audit'}, see working`
+      : 'value at risk across the whole audit — no failed item to date it from, see working';
+  } else if (ex.kind === 'trial-balance' && ex.value > 0) {
+    magnitude = ex.value;
+    tag.magnitude = 'whole period from the trial balance, see working';
+  }
+
+  let compensatingControlId: string | undefined;
+  if (c) {
+    const effective = eng.controls.filter(k => k.id !== c.id && controlConclusion(k) === 'Effective');
+    const sameRisk = c.riskId ? effective.find(k => k.riskId === c.riskId) : undefined;
+    const sameProcess = sameRisk ? undefined : effective.find(k => x.normalise(k.process) === x.normalise(c.process));
+    compensatingControlId = (sameRisk ?? sameProcess)?.id;
+    tag.compensatingControlId = sameRisk ? `${sameRisk.id} is concluded effective on the same risk, ${c.riskId}`
+      : sameProcess ? `${sameProcess.id} is concluded effective in the same process, ${x.normalise(c.process)}`
+      : 'none — no control on the same risk or process is concluded effective';
+  }
+
+  return { likelihood, magnitude, compensatingControlId, iraSuggested: tag };
+}
+
+/** The companies a draw deals among. Only a shared control deals: a row that
+ *  answers for one company owns every item by construction (see Sample.entity). */
+const dealtCompanies = (c: Control): string[] => ((c.entities?.length ?? 0) > 1 ? c.entities! : []);
+/** Every company the control has to reach, shared or not. */
+const reachedCompanies = (c: Control): string[] => ((c.entities?.length ?? 0) > 1 ? c.entities! : c.entity ? [c.entity] : []);
+/** The first of `xs` holding the fewest — ties go to the earlier one, so an even
+ *  deal runs in the order the groups are listed. */
+const fewest = <T,>(xs: T[], n: (x: T) => number): T => xs.reduce((best, x) => (n(x) < n(best) ? x : best));
+
+export interface DealtItem { date: string; entity?: string }
+
+/**
+ * Where each new item falls. `existing` is what already sits in the sample and
+ * stays, so an extension fills the groups a draw left short before it evens out
+ * anything else.
+ *
+ *   quarter — each item goes to the quarter of the audit window holding fewest,
+ *             so 25 across a full year lands 7 · 6 · 6 · 6.
+ *   country — each item goes to a company in the country holding fewest, so
+ *             every country is reached before any is doubled up.
+ *   entity  — each company gets one before any gets two. A shared control has
+ *             always been dealt this way (the coverage strip reads it), so it
+ *             still is whatever the audit asked for.
+ *
+ * Then the date inside whichever stretch the item landed in: evenly spaced for a
+ * systematic draw, anywhere for a random or targeted one. Deterministic — the
+ * Sample step previews a draw with this and the store files it with this, so the
+ * rows the auditor approved are the rows that land.
+ *
+ * `a` is the stretch to deal inside: the audit's window, or the narrower months
+ * a file's ask named (readSamplePrompt). `home` dates the existing items that
+ * carry no date of their own (sampleHome).
+ */
+export function dealSample(
+  c: Control, a: AuditWindow | undefined, sampling: AuditSampling, count: number, existing: Sample[], key: string,
+  countryOf: (entity: string) => string | undefined, home: Pick<AuditRecord, 'windowFrom' | 'windowTo'> | undefined,
+): DealtItem[] {
+  const spread = sampling.spread;
+  const companies = dealtCompanies(c);
+  const perCompany = new Map(companies.map(e => [e, existing.filter(s => s.entity === e).length]));
+  const countryKey = (e: string) => countryOf(e) ?? '';
+  const perCountry = new Map<string, number>();
+  companies.forEach(e => perCountry.set(countryKey(e), (perCountry.get(countryKey(e)) ?? 0) + perCompany.get(e)!));
+  const w = a ?? { ...FALLBACK_WINDOW, yearBasis: 'fy' as const };
+  const quarters = spread.includes('quarter') ? auditQuarters(w) : [];
+  const perQuarter = quarters.map(q => existing.filter(s => { const d = sampleDate(s, home); return d >= q.from && d <= q.to; }).length);
+
+  // First pass — which company and which stretch of the window each item takes.
+  const slots = Array.from({ length: count }, () => {
+    let entity: string | undefined;
+    if (companies.length) {
+      const pool = spread.includes('country')
+        ? companies.filter(e => countryKey(e) === fewest([...perCountry.keys()], k => perCountry.get(k)!))
+        : companies;
+      entity = fewest(pool, e => perCompany.get(e)!);
+      perCompany.set(entity, perCompany.get(entity)! + 1);
+      perCountry.set(countryKey(entity), perCountry.get(countryKey(entity))! + 1);
+    }
+    const q = quarters.length ? fewest(quarters.map((_, k) => k), k => perQuarter[k]!) : -1;
+    if (q >= 0) perQuarter[q] = perQuarter[q]! + 1;
+    return { entity, q };
+  });
+
+  // Second pass — the day. A systematic draw steps evenly through its stretch,
+  // so it needs to know how many items share it before it can space them.
+  const inStretch = new Map<number, number>();
+  const seen = new Map<number, number>();
+  slots.forEach(s => inStretch.set(s.q, (inStretch.get(s.q) ?? 0) + 1));
+  return slots.map((s, i) => {
+    const lo = dayOf(s.q >= 0 ? quarters[s.q]!.from : w.windowFrom);
+    const span = Math.max(1, dayOf(s.q >= 0 ? quarters[s.q]!.to : w.windowTo) - lo + 1);
+    const j = seen.get(s.q) ?? 0;
+    seen.set(s.q, j + 1);
+    const offset = sampling.method === 'Systematic'
+      ? Math.floor(((j + 0.5) * span) / inStretch.get(s.q)!)
+      : hnum(`${key}·${existing.length + i}`) % span;
+    return { date: isoOf(lo + Math.min(span - 1, offset)), ...(s.entity ? { entity: s.entity } : {}) };
+  });
+}
+
+/** Label for the companies a register left without a country. Listed, so the
+ *  gap shows, but never flagged as a group the draw missed — it isn't one. */
+export const NO_COUNTRY = 'Country not recorded';
+export interface SampleSplit { axis: AuditSampleSpread; groups: { label: string; n: number }[] }
+/**
+ * The draw read back along each axis the audit spreads by. The groups come from
+ * what the control has to reach — the quarters of the window, the companies it
+ * answers for, their countries — not from what happened to be drawn, so a group
+ * with nothing in it is listed at 0. That is the point of listing it.
+ */
+export function sampleSplit(
+  c: Control, a: AuditWindow | undefined, sampling: AuditSampling, countryOf: (entity: string) => string | undefined,
+  home: Pick<AuditRecord, 'windowFrom' | 'windowTo'> | undefined,
+): SampleSplit[] {
+  const items = c.operating.sampling?.samples ?? [];
+  const companies = reachedCompanies(c);
+  // A row answering for one company owns its items without tagging them.
+  const companyOf = (s: Sample) => s.entity ?? (companies.length === 1 ? companies[0] : undefined);
+  const countryKey = (e: string) => countryOf(e) ?? NO_COUNTRY;
+  return AUDIT_SAMPLE_SPREADS.map(x => x.id).filter(axis => sampling.spread.includes(axis)).map(axis => {
+    if (axis === 'quarter') {
+      const w = a ?? { ...FALLBACK_WINDOW, yearBasis: 'fy' as const };
+      return { axis, groups: auditQuarters(w).map(q => ({ label: q.label, n: items.filter(s => { const d = sampleDate(s, home); return d >= q.from && d <= q.to; }).length })) };
+    }
+    if (axis === 'entity') return { axis, groups: companies.map(e => ({ label: e, n: items.filter(s => companyOf(s) === e).length })) };
+    const countries = Array.from(new Set(companies.map(countryKey)));
+    return { axis, groups: countries.map(k => ({ label: k, n: items.filter(s => { const e = companyOf(s); return !!e && countryKey(e) === k; }).length })) };
+  });
+}
+
+/** Has a result been recorded against this item? Against an attribute — how the
+ *  TOE grid records — or on the item itself, which is where items tested before
+ *  that grid carry theirs. */
+export function sampleTested(c: Control, s: Sample): boolean {
+  return s.result !== 'Not tested'
+    || c.operating.steps.some(st => { const r = st.sampleResults?.[s.id]; return !!r && r !== 'Not tested'; });
+}
+export const samplesTestedCount = (c: Control): number =>
+  (c.operating.sampling?.samples ?? []).filter(s => sampleTested(c, s)).length;
+
+export interface YearRound { audit: AuditRecord; tested: number; current: boolean }
+/**
+ * A control's samples tested so far this year, audit by audit (#38 — "no
+ * mechanism to track the cumulative number of samples tested throughout the
+ * year for each control").
+ *
+ * The year is the working audit's: same fiscal year, same basis, and only the
+ * audits that cover this control. Each tested item counts toward the round whose
+ * window its date falls in — whichever audit is open, because both rounds of a
+ * year read the same live control, and an item tested in the interim is the
+ * interim's even while the roll-forward is open. An item dated between two
+ * rounds' windows counts toward the nearer; one dated outside the year is
+ * another year's and is not counted here.
+ *
+ * A round with nothing of its own left on the control — the next cycle reset it
+ * — reads the count it froze when that happened (createAudit). A round with
+ * neither reads 0: nothing was tested in it that the page can see.
+ */
+export function yearSampleRounds(
+  eng: Pick<IcfrEngagement, 'audits'>, c: Control, current: AuditRecord | undefined,
+  covers: (a: AuditRecord) => boolean,
+): YearRound[] {
+  if (!current) return [];
+  const year = eng.audits
+    .filter(a => a.yearBasis === current.yearBasis && a.fiscalYear === current.fiscalYear && (a.id === current.id || covers(a)))
+    .sort((x, y) => x.windowFrom.localeCompare(y.windowFrom));
+  // The days the year runs: calendar, or April to March (fiscalYear is the year
+  // it ends on), stretched to take in any window that runs past it. A quarter or
+  // custom check has no named year, so its audits' own windows bound it.
+  const fy = current.fiscalYear;
+  const bounds = current.yearBasis === 'cy' ? [dayOf(`${fy}-01-01`), dayOf(`${fy}-12-31`)]
+    : current.yearBasis === 'fy' ? [dayOf(`${fy - 1}-04-01`), dayOf(`${fy}-03-31`)]
+    : [];
+  const yearFrom = Math.min(...bounds.slice(0, 1), ...year.map(a => dayOf(a.windowFrom)));
+  const yearTo = Math.max(...bounds.slice(1), ...year.map(a => dayOf(a.windowTo)));
+  const home = sampleHome(eng, covers);
+  const live = year.map(() => 0);
+  for (const s of c.operating.sampling?.samples ?? []) {
+    if (!sampleTested(c, s)) continue;
+    const d = dayOf(sampleDate(s, home));
+    if (d < yearFrom || d > yearTo) continue;
+    const gaps = year.map(a => Math.max(0, dayOf(a.windowFrom) - d, d - dayOf(a.windowTo)));
+    const k = gaps.indexOf(Math.min(...gaps));
+    live[k] = (live[k] ?? 0) + 1;
+  }
+  return year.map((a, i) => ({
+    audit: a,
+    tested: live[i] || (a.archive?.conclusions.find(v => v.controlId === c.id)?.samplesTested ?? 0),
+    current: a.id === current.id,
+  }));
+}
+
 /** A draw change puts every already-recorded run out of date — results that
  *  predate the sample were not testing these items. Flag them; the next run (or
  *  a fresh attestation) clears the flag, and the operating track refuses to
@@ -845,15 +1411,16 @@ export function expectedInputsFor(c: Control): { inputs: ExpectedInput[]; awaiti
   for (const s of c.operating.steps) {
     // An attribute with no workflow and no validation reads nothing — it is
     // evidenced by inspection or attestation, and it expects no file.
-    const linked = !!s.workflowName || s.evidenceMode === 'workflow' || s.evidenceMode === 'ai' || !!s.aiValidation;
-    if (!linked) continue;
-    if (s.inputFile?.name) {
-      const hit = byName.get(s.inputFile.name);
-      if (hit) { hit.attributes.push(s.code); hit.workflow = hit.workflow ?? s.workflowName; }
-      else byName.set(s.inputFile.name, { name: s.inputFile.name, attributes: [s.code], workflow: s.workflowName });
-    } else {
-      awaiting.push({ code: s.code, workflow: s.workflowName });
-    }
+    // Every attribute names the files its AI validation reads (requiredFilesOf).
+    // The uploaded ones are inputs; any still missing is something owed.
+    const files = requiredFilesOf(s, c);
+    files.forEach(f => {
+      if (!f.file) return;
+      const hit = byName.get(f.file.name);
+      if (hit) { if (!hit.attributes.includes(s.code)) hit.attributes.push(s.code); }
+      else byName.set(f.file.name, { name: f.file.name, attributes: [s.code] });
+    });
+    if (files.some(f => !f.file)) awaiting.push({ code: s.code });
   }
   return { inputs: [...byName.values()], awaiting };
 }
@@ -866,62 +1433,136 @@ export function expectedInputsFor(c: Control): { inputs: ExpectedInput[]; awaiti
 // find at all, and the answer there is two months tested end to end. The
 // selection unit itself changes, so the ask is written rather than picked, and
 // each file is asked for separately: "प्रॉम्प्ट फॉलोज़, सैंपल फॉलोज़".
+//
+// The words decide two things: how many items, and which months — a stretch
+// inside the audit's window. How the items are picked and what they are spread
+// across was agreed on the audit (A28), so an ask that names another method is
+// drawn the audit's way, and the reading says so rather than quietly ignoring it.
+
+/** The months a stretch runs through — "Jan–Jun", or "Nov 2025–Feb 2026" when it
+ *  crosses a year. */
+function monthSpanLabel(from: string, to: string): string {
+  const [fy, fm] = from.split('-').map(Number);
+  const [ty, tm] = to.split('-').map(Number);
+  const name = (y: number, m: number) => `${MONTH_SHORT[m - 1]}${fy !== ty ? ` ${y}` : ''}`;
+  return fy === ty && fm === tm ? name(fy!, fm!) : `${name(fy!, fm!)}–${name(ty!, tm!)}`;
+}
 
 /** What the application would ask for, before the auditor edits it. Drafted from
- *  the sizing table and the file, so the ordinary case is one read and a click
- *  and only the unusual one is typed. */
-export function draftSamplePrompt(c: Control, source: PopulationSource, suggested: number): string {
-  const what = c.frequency === 'Monthly' || c.frequency === 'Quarterly'
-    ? `Take ${suggested} of the ${source.count.toLocaleString()} instances in ${source.file}, one per period wherever the period has any, spread across the whole window.`
-    : `Take ${suggested} items at random from the ${source.count.toLocaleString()} instances in ${source.file}, spread across the whole window.`;
-  return what;
+ *  the sizing table, the file and the audit's months, so the ordinary case is one
+ *  read and a click and only the unusual one is typed. It names no method — that
+ *  is the audit's. */
+export function draftSamplePrompt(source: PopulationSource, suggested: number, a?: AuditWindow): string {
+  const w = a ?? FALLBACK_WINDOW;
+  return `Take ${suggested} of the ${source.count.toLocaleString()} instances in ${source.file}, from ${monthSpanLabel(w.windowFrom, w.windowTo).replace('–', ' to ')}.`;
 }
 
 /** How the ask was read. Stated back on screen before the draw runs, because a
  *  prompt nobody confirms the reading of is a prompt that quietly did something
- *  else — and printed on the paper, because it is the method. */
+ *  else — and the ask itself is printed on the paper. */
 export interface SamplePlan {
   size: number;
+  /** The months the ask narrowed the draw to, clipped to the audit's window.
+   *  Absent when it named none, or named the whole window — the draw then runs
+   *  across all of it. */
+  months?: { from: string; to: string };
   /** One line, in the same plain English the ask was written in. */
   reading: string;
-  /** True when the ask narrowed by something other than a bare count — the draw
-   *  is then targeted rather than random, and the paper has to say so. */
-  targeted: boolean;
 }
 
-export function readSamplePrompt(prompt: string, source: PopulationSource, suggested: number, months: number): SamplePlan {
+// "Q1", "H2", "second quarter", "first half", "March", "Nov 2025" — each a run of
+// months. Groups: quarter number, half number, quarter word, half word, month.
+const WHEN = /\b(?:q([1-4])|h([12])|(first|second|third|fourth|1st|2nd|3rd|4th)\s+quarter|(first|second|1st|2nd)\s+half|(jan(?:uary)?|feb(?:ruary)?|mar(?:ch)?|apr(?:il)?|may|june?|july?|aug(?:ust)?|sep(?:t(?:ember)?)?|oct(?:ober)?|nov(?:ember)?|dec(?:ember)?))(?:\s+(?:19|20)\d{2})?\b/g;
+const ORDINAL: Record<string, number> = { first: 1, second: 2, third: 3, fourth: 4, '1st': 1, '2nd': 2, '3rd': 3, '4th': 4 };
+const NUMBER_WORDS: Record<string, number> = { one: 1, two: 2, three: 3, four: 4, five: 5, six: 6, seven: 7, eight: 8, nine: 9, ten: 10, eleven: 11, twelve: 12, fifteen: 15, twenty: 20, 'twenty-five': 25, thirty: 30, forty: 40, fifty: 50 };
+const UNIT = '(?:items?|rows?|instances?|samples?|vendors?|invoices?|entries|entry|transactions?|payments?|journals?)';
+const METHOD_WORDS: [RegExp, AuditSampling['method']][] = [
+  [/\b(?:at\s+)?random(?:ly)?\b/, 'Random'],
+  [/\bsystematic(?:ally)?\b|\bevery\s+(?:nth|\d+(?:st|nd|rd|th))\b|\bevenly\s+spaced\b/, 'Systematic'],
+  [/\btarget(?:ed)?\b|\blargest\b|\bhighest\b|\bbiggest\b|\bjudge?ment(?:al)?\b/, 'Targeted'],
+];
+
+export function readSamplePrompt(
+  prompt: string, source: PopulationSource, suggested: number, a: AuditWindow | undefined, sampling: AuditSampling,
+): SamplePlan {
+  const w = a ?? { ...FALLBACK_WINDOW, yearBasis: 'fy' as const };
+  const whole = monthSpanLabel(w.windowFrom, w.windowTo);
   const p = prompt.trim();
-  if (!p) return { size: suggested, reading: `Nothing asked for — the sizing table's ${suggested} items, at random.`, targeted: false };
-  const lower = p.toLowerCase();
+  if (!p) return { size: suggested, reading: `Nothing asked for — the sizing table's ${suggested} items · ${whole}` };
+  // The file's own name is not part of the ask — "Q1 extract.xlsx" names no months.
+  const lower = p.toLowerCase().split(source.file.toLowerCase()).join(' ');
 
-  // Time as the selection unit: "two months", "3 months". Every instance inside
-  // the chosen months is tested, so the size is the file's own run-rate over
-  // them — which is the whole reason this cannot be a count in a dropdown.
-  const byMonth = lower.match(/(\d+|one|two|three|four|six)\s*(?:calendar\s*)?months?/);
-  if (byMonth) {
-    const WORDS: Record<string, number> = { one: 1, two: 2, three: 3, four: 4, six: 6 };
-    const n = Math.max(1, Math.min(months, Number(byMonth[1]) || WORDS[byMonth[1]] || 1));
-    const perMonth = Math.max(1, Math.round(source.count / Math.max(1, months)));
-    return {
-      size: Math.max(1, n * perMonth),
-      reading: `${n} month${n === 1 ? '' : 's'} out of ${months}, every instance inside them — about ${(n * perMonth).toLocaleString()} items at this file's run rate.`,
-      targeted: true,
-    };
-  }
+  // ── which months ─────────────────────────────────────────────────────────────
+  // Named months, quarters and halves, in the order written. Two joined by "to"
+  // or a dash are a range; anything else adds up. Quarters open the year the
+  // audit runs on — April for an April–March year (auditQuarters).
+  const opens = w.yearBasis === 'fy' ? 3 : 0;
+  const tokens = [...lower.matchAll(WHEN)].map(m => {
+    const run = (first: number, n: number) => Array.from({ length: n }, (_, k) => (first + k) % 12);
+    const q = m[1] ? Number(m[1]) : m[3] ? ORDINAL[m[3]]! : 0;
+    const h = m[2] ? Number(m[2]) : m[4] ? ORDINAL[m[4]]! : 0;
+    const months = q ? run(opens + 3 * (q - 1), 3)
+      : h ? run(opens + 6 * (h - 1), 6)
+      : run(MONTH_SHORT.findIndex(x => m[5]!.startsWith(x.toLowerCase())), 1);
+    return { at: m.index!, end: m.index! + m[0].length, months };
+  });
+  const asked = new Set<number>();
+  tokens.forEach((t, i) => {
+    t.months.forEach(x => asked.add(x));
+    const next = tokens[i + 1];
+    if (next && /^\s*(?:-|–|—|to|through|thru|till|until)\s*$/.test(lower.slice(t.end, next.at))) {
+      for (let x = t.months[0]!, k = 0; k < 12; x = (x + 1) % 12, k++) { asked.add(x); if (x === next.months[next.months.length - 1]) break; }
+    }
+  });
+  // "two months", "3 months" — every instance inside them, so the size is the
+  // file's run rate over them. Which two, when none are named, is the first two.
+  const spanWords = lower.match(/\b(\d+|one|two|three|four|five|six|seven|eight|nine|ten|eleven|twelve)\s+(?:calendar\s+)?months?\b/);
+  const [fy0, fm0] = w.windowFrom.split('-').map(Number);
+  const [ty0, tm0] = w.windowTo.split('-').map(Number);
+  const inWindow = Array.from({ length: Math.max(0, (ty0! - fy0!) * 12 + (tm0! - fm0!) + 1) }, (_, k) => {
+    const n = fy0! * 12 + (fm0! - 1) + k;
+    return { y: Math.floor(n / 12), m: n % 12 };
+  });
+  const spanN = spanWords ? Math.max(1, Math.min(inWindow.length, Number(spanWords[1]) || NUMBER_WORDS[spanWords[1]!] || 1)) : 0;
+  const hit = asked.size ? inWindow.filter(x => asked.has(x.m)) : spanN ? inWindow.slice(0, spanN) : [];
+  const outside = asked.size > 0 && hit.length === 0;
+  const first = hit[0], last = hit[hit.length - 1];
+  const stretch = first && last ? {
+    from: [w.windowFrom, `${first.y}-${String(first.m + 1).padStart(2, '0')}-01`].sort()[1]!,
+    to: [w.windowTo, isoOf(Math.round(Date.UTC(last.y, last.m + 1, 1) / DAY_MS) - 1)].sort()[0]!,
+  } : undefined;
+  const months = stretch && (stretch.from !== w.windowFrom || stretch.to !== w.windowTo) ? stretch : undefined;
+  const label = months ? monthSpanLabel(months.from, months.to) : whole;
 
-  // A count, wherever it sits in the sentence.
-  const byCount = lower.match(/(\d[\d,]*)\s*(?:items?|rows?|instances?|vendors?|invoices?|entries|samples?)?/);
-  const n = byCount ? Number(byCount[1].replace(/,/g, '')) : NaN;
-  const size = Number.isFinite(n) && n > 0 ? Math.max(1, Math.min(source.count, n)) : suggested;
-  // Anything that names a slice of the population rather than just how many is a
-  // targeted draw, and calling it random on the paper would be untrue.
-  const targeted = /above|over|below|under|highest|largest|top |exceed|greater|only|where|month of|quarter|weekend|manual|duplicate|new |changed/.test(lower);
+  // ── how many ─────────────────────────────────────────────────────────────────
+  // The first number left once the months, years and dates are taken out — "Q1"
+  // and "Jan 2026" never read as a count.
+  const bare = lower
+    .replace(WHEN, ' ')
+    .replace(/\b\d{4}-\d{2}-\d{2}\b|\b\d{1,2}\/\d{1,2}(?:\/\d{2,4})?\b/g, ' ')
+    .replace(new RegExp(`\\b(?:fy|cy)\\s*'?\\d{2,4}\\b|\\b(?:19|20)\\d{2}\\b(?!\\s*${UNIT})`, 'g'), ' ')
+    .replace(/\b(?:\d+|one|two|three|four|five|six|seven|eight|nine|ten|eleven|twelve)\s+(?:calendar\s+)?months?\b/g, ' ');
+  const digits = bare.match(/\b(\d[\d,]*)\b/);
+  const worded = bare.match(new RegExp(`\\b(${Object.keys(NUMBER_WORDS).join('|')})\\s+${UNIT}\\b`));
+  const n = digits ? Number(digits[1]!.replace(/,/g, '')) : worded ? NUMBER_WORDS[worded[1]!]! : NaN;
+  const runRate = !(n > 0) && spanN > 0;
+  const monthsN = hit.length || spanN;
+  const perMonth = Math.max(1, Math.round(source.count / Math.max(1, windowMonths(w.windowFrom, w.windowTo))));
+  const size = n > 0 ? Math.max(1, Math.min(source.count, n))
+    : runRate ? Math.max(1, Math.min(source.count, monthsN * perMonth))
+    : suggested;
+
+  // ── the method is the audit's ────────────────────────────────────────────────
+  const named = METHOD_WORDS.filter(([re]) => re.test(lower)).map(([, m]) => m);
+  const notes = [
+    runRate ? `every instance in ${monthsN === 1 ? 'that month' : `those ${monthsN} months`}, at this file's run rate` : '',
+    outside ? 'the months asked for are outside this audit' : '',
+    named.some(m => m !== sampling.method) ? `method stays ${sampling.method} — set on the audit` : '',
+  ].filter(Boolean);
   return {
     size,
-    reading: targeted
-      ? `${size.toLocaleString()} items, chosen to fit the ask rather than at random — a targeted draw.`
-      : `${size.toLocaleString()} items at random, spread across the whole window.`,
-    targeted,
+    ...(months ? { months } : {}),
+    reading: [`${size.toLocaleString()} item${size === 1 ? '' : 's'}`, label, ...notes].join(' · '),
   };
 }
 
@@ -996,6 +1637,15 @@ export function fmtDay(iso?: string, empty = '—'): string {
   return d ? d.toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' }) : iso;
 }
 
+/** An instant as a person reads it on the page — '15 Sep 2026, 14:32'. Built by
+ *  hand rather than through toLocaleString: newer browsers print September as
+ *  "Sept" in en-GB, and a stamp should read the same on every machine. */
+const MONTH_SHORT = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+export function fmtDateTime(d: Date = new Date()): string {
+  const pad = (n: number) => String(n).padStart(2, '0');
+  return `${d.getDate()} ${MONTH_SHORT[d.getMonth()]} ${d.getFullYear()}, ${pad(d.getHours())}:${pad(d.getMinutes())}`;
+}
+
 const fmtDate = (iso?: string) => fmtDay(iso);
 const dayGap = (a?: string, b?: string) => {
   const x = parseDay(a), y = parseDay(b);
@@ -1039,7 +1689,7 @@ export function monthlyBreakdown(c: Control): PopMonth[] {
   const months = windowMonths(pop.filterFrom, pop.filterTo);
   if (months < 2 || months > 24) return [];
 
-  let s = c.id.split('').reduce((a, ch) => (a * 31 + ch.charCodeAt(0)) >>> 0, 7);
+  let s = seedKeyOf(c).split('').reduce((a, ch) => (a * 31 + ch.charCodeAt(0)) >>> 0, 7);
   const next = () => (s = (s * 1664525 + 1013904223) >>> 0) / 4294967296;
   // A tail that stops early — the case a correct-looking filter window hides.
   // One control in four, chosen by its own id so it is always the same ones.
@@ -1117,7 +1767,7 @@ export function priorRoundCount(eng: IcfrEngagement, c: Control, openAuditId?: s
     .filter(a => a.id !== openAuditId && (!open || a.windowFrom < open.windowFrom))
     .sort((a, b) => (a.windowFrom < b.windowFrom ? 1 : -1))[0];
   if (!prior) return null;
-  const s = c.id.split('').reduce((a, ch) => (a * 31 + ch.charCodeAt(0)) >>> 0, 3);
+  const s = seedKeyOf(c).split('').reduce((a, ch) => (a * 31 + ch.charCodeAt(0)) >>> 0, 3);
   const drift = ((s % 25) - 8) / 100;              // −8% … +16% on the round before
   return { label: `${prior.period} · ${prior.round === 'yearend' ? 'year-end' : prior.round === 'interim' ? 'interim' : 'roll-forward'}`, n: Math.max(1, Math.round(pop.count * (1 - drift))) };
 }
@@ -1488,6 +2138,13 @@ export function trackResult(t: DesignTrack | OperatingTrack): TrackConclusion {
   if (t.override) return t.override.result === 'Effective' ? 'Effective' : 'Ineffective';
   return t.conclusion;
 }
+/** Has the reviewer approved the concluded TOD (S6, A36)? Population, Sample and
+ *  TOE stay locked until they have — a design nobody has checked is not a design
+ *  worth pulling data against. A cleared conclusion is never approved, whatever
+ *  an older approval on the record says. */
+export function designApproved(c: Control): boolean {
+  return trackResult(c.design) !== 'Not tested' && !!c.design.approval?.approvedBy;
+}
 export function designStarted(c: Control): boolean {
   return !!c.design.override || c.design.conclusion !== 'Not tested'
     || c.design.documents.some(d => d.status === 'Received') || c.design.points.some(p => p.result !== 'Not tested');
@@ -1580,7 +2237,7 @@ export function pendingReviewNoteCount(eng: IcfrEngagement, controlId: string): 
 
 // ─── Track progress ──────────────────────────────────────────────────────────────
 
-import type { DesignPoint, OperatingStep, TestResult, ValidationQA, ValidationTable } from './types';
+import type { DesignPoint, EvidenceFile, OperatingStep, RequiredFile, TestResult, ValidationQA, ValidationTable } from './types';
 export function pointResult(p: DesignPoint): TestResult { return p.override ? (p.override.result as TestResult) : p.result; }
 
 /** A validated file and a person's attestation reached opposite conclusions on
@@ -1603,6 +2260,55 @@ export function stepResult(s: OperatingStep): TestResult {
   return s.result;
 }
 
+// ─── Required files — the evidence an attribute's AI validation runs against ─────
+// The RACM's Control Evidence column names what proves a control; Ira splits it
+// per attribute. Uploads carry no real bytes in this prototype, so the split is
+// read off the attribute's own wording: the records it talks about are the
+// records it needs. Deterministic, so an attribute asks for the same files on
+// every render until somebody edits the list.
+const EVIDENCE_FROM_WORDING: [RegExp, string][] = [
+  [/approv|sign|authori/i, 'Signed approval record'],
+  [/reconcil/i, 'Reconciliation workpaper'],
+  [/invoice/i, 'Invoice register extract'],
+  [/\bpo\b|purchase order/i, 'Purchase order report'],
+  [/\bgrn\b|goods receipt/i, 'Goods receipt notes'],
+  [/journal/i, 'Journal entry register'],
+  [/vendor|supplier|payee/i, 'Vendor master change log'],
+  [/confirm/i, 'Bank or third-party confirmation'],
+  [/call-?back/i, 'Call-back log'],
+  [/bank|payment/i, 'Payment run report'],
+  [/access|user|role|password/i, 'User access listing'],
+  [/change|ticket/i, 'Change ticket log'],
+  [/toleran|exception|breach|hold/i, 'Exception and hold report'],
+  [/review/i, 'Reviewer sign-off evidence'],
+  [/timestamp|before|date|timely|period/i, 'System audit-trail extract'],
+];
+
+/** The attribute's required files: the edited list when there is one, otherwise
+ *  the split read off its wording together with its control's own sentence, and
+ *  then the control's activity (up to three), with the old single required file
+ *  standing as the first line's upload. The control matters because attributes
+ *  are worded generically ("Exceptions handled per policy") — they no longer
+ *  repeat the control's sentence, which is what names the records. */
+type EvidenceSource = Pick<Control, 'description' | 'controlActivity'>;
+export function requiredFilesOf(s: OperatingStep, c: EvidenceSource): RequiredFile[] {
+  if (s.requiredFiles) return s.requiredFiles;
+  const read = (text: string) => EVIDENCE_FROM_WORDING.filter(([re]) => re.test(text)).map(([, label]) => label);
+  const labels = Array.from(new Set([...read(`${s.description} ${c.description}`), ...read(c.controlActivity ?? c.description)])).slice(0, 3);
+  const list = labels.length ? labels : ['Supporting document for the sampled items'];
+  return list.map((label, i) => ({ id: `${s.id}-rf${i + 1}`, label, ...(i === 0 && s.inputFile ? { file: s.inputFile } : {}) }));
+}
+/** Uploaded out of required, e.g. 2 of 3. */
+export function requiredFilesCount(s: OperatingStep, c: EvidenceSource): { uploaded: number; total: number } {
+  const list = requiredFilesOf(s, c);
+  return { uploaded: list.filter(f => f.file).length, total: list.length };
+}
+/** AI validation can run only once every required file is in. */
+export function requiredFilesReady(s: OperatingStep, c: EvidenceSource): boolean {
+  const { uploaded, total } = requiredFilesCount(s, c);
+  return total > 0 && uploaded === total;
+}
+
 /** Deterministic Q&A a design-validation workflow returns for a consideration. */
 export function validationQA(text: string, fail: boolean): ValidationQA[] {
   return [
@@ -1620,7 +2326,6 @@ const SAMPLE_VENDORS = [
   'Indian Oil Skytanking', 'Boeing Distribution Services', 'TajSATS Air Catering', 'Menzies Aviation',
   'Collins Aerospace', 'Amadeus IT Group', 'Lufthansa Technik', 'Shell MRPL Aviation Fuels',
 ];
-const TIERS = ['Tier 2 (S. Iyer)', 'Tier 3 (Head of Procurement)', 'Tier 4 (Supply Chain Director)'];
 const lakh = (n: number) => `₹${(n / 1e5).toFixed(1)}L`;
 
 /** A realistic workflow run reference — run number, population, exceptions. */
@@ -1632,35 +2337,94 @@ export function wfRunRef(key: string, fail: boolean): string {
   return `run #${run} · ${items} items checked · ${ex} exception${ex === 1 ? '' : 's'}`;
 }
 
-/** Plain-language summary the AI returns after checking the uploaded file. */
-export function validationSummary(text: string, fail: boolean, key = text, sampleCount?: number): string {
-  const h = hnum(key);
-  // the real drawn-sample count when there is one — the summary sits directly
-  // above the per-sample table, so an invented number would contradict it
-  const n = sampleCount || [15, 25, 25, 40][h % 4]!;
-  const ex = 1 + ((h >>> 5) % 3);
-  const po = `45000${12840 + (h % 25) * 7}`;
-  const vendor = SAMPLE_VENDORS[h % SAMPLE_VENDORS.length]!;
-  return fail
-    ? `Tested ${n} sampled items against “${text}”. ${ex} exception${ex === 1 ? '' : 's'} found — PO ${po} (${vendor}) could not evidence the required approval/threshold, so the attribute is concluded Fail. Item-level results are in the table below.`
-    : `Tested ${n} sampled items against “${text}”. All ${n} met the control — required approvals present and amounts within policy on each. No exceptions, so the attribute is concluded Pass.`;
+// ── document against system (S7, A24) ────────────────────────────────────────
+// Ira does not take a yes/no column's word for it (Dubai). For every sampled
+// item it reads what the document says and what the system or master data holds
+// for the same field, and a mismatch is the exception. The field each item is
+// compared on comes from the attribute's required files — an approval record is
+// compared on the approver, a vendor master log on the bank account.
+const APPROVERS = ['R. Iyer', 'S. Menon', 'A. Kapoor', 'P. Nair', 'D. Rao'];
+const BANKS = ['HDFC', 'ICICI', 'SBI', 'Axis'];
+const ROLES = ['AP clerk', 'AP approver', 'Treasury maker', 'Treasury checker'];
+const MONTHS_SHORT = ['Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec', 'Jan', 'Feb', 'Mar'];
+const onDay = (h: number) => `${(h % 27) + 1} ${MONTHS_SHORT[(h >>> 3) % 12]}`;
+const COMPARE_FIELDS: [RegExp, string, (h: number) => string][] = [
+  [/approval/i, 'Approver', h => APPROVERS[h % APPROVERS.length]!],
+  [/vendor master/i, 'Vendor bank account', h => `${BANKS[h % BANKS.length]} …${String(1000 + ((h >>> 2) % 9000))}`],
+  [/invoice/i, 'Invoice amount', h => lakh((((h >>> 4) % 60) + 8) * 100_000)],
+  [/purchase order/i, 'PO amount', h => lakh((((h >>> 4) % 60) + 8) * 100_000)],
+  [/goods receipt/i, 'Quantity received', h => `${20 + (h % 380)} units`],
+  [/journal/i, 'Journal amount', h => lakh((((h >>> 4) % 90) + 2) * 100_000)],
+  [/reconciliation/i, 'Reconciled balance', h => lakh((((h >>> 4) % 400) + 20) * 100_000)],
+  [/confirmation/i, 'Confirmed balance', h => lakh((((h >>> 4) % 400) + 20) * 100_000)],
+  [/call-back/i, 'Called-back account', h => `${BANKS[h % BANKS.length]} …${String(1000 + ((h >>> 2) % 9000))}`],
+  [/payment/i, 'Payment amount', h => lakh((((h >>> 4) % 60) + 8) * 100_000)],
+  [/access/i, 'User role', h => ROLES[h % ROLES.length]!],
+  [/change/i, 'Change ticket', h => `CHG-${10000 + (h % 9000)}`],
+  [/exception|hold/i, 'Hold release date', onDay],
+  [/sign-off/i, 'Review date', onDay],
+  [/audit-trail/i, 'Posting date', onDay],
+];
+/** The fields an attribute's items are compared on — one per required file that
+ *  names one, in the order the files are listed. */
+function compareFieldsFor(c: Control, s: OperatingStep): [string, (h: number) => string][] {
+  const out: [string, (h: number) => string][] = [];
+  for (const f of requiredFilesOf(s, c)) {
+    const hit = COMPARE_FIELDS.find(([re]) => re.test(f.label));
+    if (hit && !out.some(([name]) => name === hit[1])) out.push([hit[1], hit[2]]);
+  }
+  return out.length ? out : [['Amount', h => lakh((((h >>> 4) % 60) + 8) * 100_000)]];
+}
+export interface DocumentSystemRow { id: string; ref: string; field: string; document: string; system: string; result: TestResult }
+/** One row per item: the document's value, the system's value, and whether they
+ *  agree. Read off the verdicts already on the attribute, so this table and the
+ *  sample grid can never disagree about which item failed. */
+function compareRow(key: string, id: string, ref: string, i: number, fields: [string, (h: number) => string][], result: TestResult): DocumentSystemRow {
+  const [field, value] = fields[i % fields.length]!;
+  const h = hnum(key + id);
+  const document = value(h);
+  // a mismatch has to actually differ — walk the hash until it does
+  let system = document;
+  for (let k = 1; result === 'Fail' && system === document && k < 8; k++) system = value(h + k * 7919);
+  return { id, ref, field, document, system, result };
+}
+/** The drawn sample, compared item by item. Empty before a sample exists. */
+export function documentSystemRows(c: Control, s: OperatingStep): DocumentSystemRow[] {
+  const fields = compareFieldsFor(c, s);
+  return (c.operating.sampling?.samples ?? []).map((it, i) =>
+    compareRow(seedKeyOf(c) + s.id, it.id, it.ref, i, fields, s.sampleResults?.[it.id] ?? 'Not tested'));
 }
 
-/** A per-item evidence table to accompany the summary — real procurement documents. */
-export function validationTable(fail: boolean, key = 'seed'): ValidationTable {
+/** Plain-language summary the AI returns after comparing the sampled items'
+ *  documents with the system. Names the item that failed — the same one the
+ *  sample grid marks (stampSamples fails the first item). */
+export function validationSummary(c: Control, s: OperatingStep, fail: boolean, key = seedKeyOf(c) + s.id): string {
+  const samples = c.operating.sampling?.samples ?? [];
+  const fields = compareFieldsFor(c, s).map(([name]) => name.toLowerCase());
+  const on = fields.length > 1 ? `${fields.slice(0, -1).join(', ')} and ${fields[fields.length - 1]}` : fields[0]!;
+  if (!samples.length) {
+    const ref = `PO 45000${12840 + (hnum(key) % 25) * 7}`;
+    return fail
+      ? `No sample has been drawn yet, so Ira compared 4 items from the files instead, on ${on}. ${ref}'s document doesn't match the system, so the attribute is concluded Fail.`
+      : `No sample has been drawn yet, so Ira compared 4 items from the files instead, on ${on}. Each document matches the system, so the attribute is concluded Pass.`;
+  }
+  const n = samples.length;
+  return fail
+    ? `Ira compared each of the ${n} sampled items' documents with what the system and master data hold, on ${on}. ${samples[0]!.ref} doesn't match, so the attribute is concluded Fail.`
+    : `Ira compared each of the ${n} sampled items' documents with what the system and master data hold, on ${on}. All ${n} match, so the attribute is concluded Pass.`;
+}
+
+/** The comparison table for an attribute with no sample yet — four items read
+ *  straight off the files, in the same columns the sampled comparison uses. */
+export function validationTable(c: Control, s: OperatingStep, fail: boolean, key = seedKeyOf(c) + s.id): ValidationTable {
+  const fields = compareFieldsFor(c, s);
   const h = hnum(key);
   const rows = Array.from({ length: 4 }, (_, i) => {
-    const hi = h + i * 137;
-    const isFailRow = fail && i === 3;
-    return [
-      `PO 45000${12840 + ((hi >>> 2) % 25) * 7}`,
-      SAMPLE_VENDORS[hi % SAMPLE_VENDORS.length]!,
-      isFailRow ? 'No approver at required tier' : `Approved — ${TIERS[hi % TIERS.length]!}`,
-      lakh((((hi >>> 4) % 60) + 8) * 100_000),
-      isFailRow ? 'Fail' : 'Pass',
-    ];
+    const ref = `PO 45000${12840 + (((h + i * 137) >>> 2) % 25) * 7}`;
+    const r = compareRow(key, `item-${i}`, ref, i, fields, fail && i === 3 ? 'Fail' : 'Pass');
+    return [r.ref, r.field, r.document, r.system, r.result === 'Fail' ? 'Mismatch' : 'Match'];
   });
-  return { columns: ['Document', 'Vendor', 'Approval', 'Amount', 'Result'], rows };
+  return { columns: ['Item', 'Field', 'Document says', 'System says', 'Result'], rows };
 }
 
 /** TOD completeness — the share of REQUIRED design elements that carry evidence.
@@ -1676,6 +2440,14 @@ export function designCompleteness(c: Control): { done: number; total: number; p
 /** Elements still genuinely outstanding — neither evidenced nor waived. */
 export function designOutstanding(c: Control): DesignDoc[] {
   return c.design.documents.filter(d => d.status !== 'Received' && !d.waiver);
+}
+/** The files on a design element. An older seeded element can read Received with
+ *  no file list at all — its one file is the element itself — so that case is
+ *  read as a single file with a stable id, and the page, the trail and a removal
+ *  all see the same thing. */
+export function designFilesOf(d: DesignDoc): EvidenceFile[] {
+  if (d.files) return d.files;
+  return d.status === 'Received' ? [{ id: `${d.id}-f`, name: d.name, kind: 'PDF', uploadedBy: d.uploadedBy ?? 'Risk Owner', uploadedAt: d.at ?? '' }] : [];
 }
 /** Attributes the walkthrough hasn't settled yet. Empty when it hasn't started —
  *  the gate is soft until the auditor commits to walking a transaction. */
@@ -2010,8 +2782,29 @@ export function courtFor(c: Control, tasks: HandoffTask[], notes: ReviewNote[] =
 // on its frequency cycle. Concluding the operating track pushes the date out to
 // the next cycle; an untested control can be due today or overdue.
 
-import type { Frequency } from './types';
+import type { AuditRecord, Frequency } from './types';
+import type { ProcurementRacmRow } from '../../data/procurement-racm';
 const CYCLE_DAYS: Record<Frequency, number> = { Daily: 1, Weekly: 7, Monthly: 30, Quarterly: 90, Annual: 365, Recurring: 7, 'Ad-hoc': 30 };
+
+// ── year-end controls (A29) ──────────────────────────────────────────────────
+// A control that runs once a year (frequency Annual) has not operated yet when an
+// interim or roll-forward round is tested — so there is no population to pull,
+// nothing to sample and no TOE to run until the year closes. Those three wait for
+// the year-end audit; TOD does not, because a design can be walked through any
+// time. Nothing new is set on the control: Annual is the whole rule. A year-end
+// round, and quarter and custom audits (one-off checks with no rounds), hold
+// nothing back.
+/** The date an Annual control's operating work is pending until in this audit —
+ *  the last day of the audit's cycle — or null when nothing is held back. */
+export function yearEndPending(c: Control, audit?: AuditRecord | null): { until: string } | null {
+  if (!audit || c.frequency !== 'Annual') return null;
+  if (audit.round !== 'interim' && audit.round !== 'rollforward') return null;
+  // FY cycles run April to March (NewAuditWizard); fiscalYear is the year the
+  // cycle ends on, so FY 2026-27 ⇒ 31 Mar 2027 and CY 2026 ⇒ 31 Dec 2026.
+  if (audit.yearBasis === 'cy') return { until: `31 Dec ${audit.fiscalYear}` };
+  if (audit.yearBasis === 'fy') return { until: `31 Mar ${audit.fiscalYear}` };
+  return null;
+}
 
 /** A concluded control (Effective or Ineffective) is off the due schedule —
  *  effective ones wait for the next cycle, ineffective ones for remediation. */
@@ -2022,7 +2815,7 @@ export function isConcluded(c: Control, opApplies = true): boolean {
 
 export function testDueInDays(c: Control): number {
   const cycle = CYCLE_DAYS[c.frequency];
-  let h = 0; for (let i = 0; i < c.id.length; i++) h = (h * 31 + c.id.charCodeAt(i)) >>> 0;
+  let h = 0; const sk = seedKeyOf(c); for (let i = 0; i < sk.length; i++) h = (h * 31 + sk.charCodeAt(i)) >>> 0;
   // concluded (or operating already tested) → next cycle, never "due now"
   if (isConcluded(c) || trackResult(c.operating) !== 'Not tested') return Math.max(1, cycle - (h % Math.max(1, Math.floor(cycle / 3))));
   if (c.testDueInDays != null) return c.testDueInDays;
@@ -2036,21 +2829,42 @@ export function testDueLabel(d: number): string {
   return `Due in ${d}d`;
 }
 
-/** Row display — concluded controls read as scheduled/parked, never as due. */
-export function testDueDisplay(c: Control, opApplies = true): { label: string; cls: string } {
+/** Row display — concluded controls read as scheduled/parked, never as due.
+ *  `audit` is the open audit, when there is one: a year-end control it holds back
+ *  (yearEndPending) reads as pending rather than due or overdue. Left out — the
+ *  engagement level — every control reads as it always has. */
+export function testDueDisplay(c: Control, opApplies = true, audit?: AuditRecord | null): { label: string; cls: string } {
   const concl = controlConclusion(c, opApplies);
   if (concl === 'Ineffective') return { label: 'Retest after remediation', cls: 'text-risk-700' };
   const d = testDueInDays(c);
   if (concl === 'Effective') return { label: `Next test in ${d}d`, cls: '' };
+  const pending = yearEndPending(c, audit);
+  if (pending) return { label: `Pending until ${pending.until}`, cls: '' };
   if (d < 0) return { label: `Overdue ${-d}d`, cls: 'text-risk-700 font-semibold' };
   if (d === 0) return { label: 'Due today', cls: 'text-mitigated-700 font-semibold' };
   return { label: testDueLabel(d), cls: '' };
 }
 
-export function isTestDueNow(c: Control): boolean { return !isConcluded(c) && testDueInDays(c) <= 0; }
+/** Same `audit` as testDueDisplay: a control the open audit holds back until year
+ *  end is not due in it, so it is never counted as due now or overdue. */
+export function isTestDueNow(c: Control, audit?: AuditRecord | null): boolean {
+  return !isConcluded(c) && !yearEndPending(c, audit) && testDueInDays(c) <= 0;
+}
 
-export function testsDueNow(controls: Control[]): Control[] {
-  return controls.filter(isTestDueNow).sort((a, b) => testDueInDays(a) - testDueInDays(b));
+export function testsDueNow(controls: Control[], audit?: AuditRecord | null): Control[] {
+  return controls.filter(c => isTestDueNow(c, audit)).sort((a, b) => testDueInDays(a) - testDueInDays(b));
+}
+
+/** What an audit's sign-off waits on. A year-end control the audit holds back
+ *  (yearEndPending) cannot finish inside an interim or roll-forward, so waiting
+ *  on it would leave that audit unsignable: it is set aside as `pending`, with
+ *  the date it waits for, and the sign-off gate counts `gating` (user ask —
+ *  pending controls don't block). A year-end audit, and quarter and custom
+ *  audits, hold nothing back, so every control still gates them. */
+export function signoffControls(controls: Control[], audit?: AuditRecord | null): { gating: Control[]; pending: Control[]; until: string | null } {
+  const pending = controls.filter(c => !!yearEndPending(c, audit));
+  if (!pending.length) return { gating: controls, pending, until: null };
+  return { gating: controls.filter(c => !yearEndPending(c, audit)), pending, until: yearEndPending(pending[0]!, audit)!.until };
 }
 
 // ─── Engagement progress ─────────────────────────────────────────────────────────
@@ -2170,4 +2984,55 @@ export function formatDueDate(date: string | null | undefined): string {
   const s = date.trim();
   if (/^\d{4}-\d{2}-\d{2}$/.test(s)) return new Date(`${s}T00:00:00`).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' });
   return s;
+}
+
+// ─── RACM editor rows — the matrix a SOX RACM actually holds ─────────────────────
+// Clicking a RACM on the RACM tab opens the spreadsheet editor in a new tab. That
+// tab has none of this engagement's state, so the rows travel with it: this lays
+// a process's controls out in the editor's spreadsheet columns (the same grouping
+// Racm.tsx uses), and openEditorTab hands them over. Columns a control has no
+// field for stay blank.
+export const RACM_ROWS_KEY = (racmId: string) => `sox-racm-rows:${racmId}`;
+export function racmEditorRows(controls: Control[], process: string): ProcurementRacmRow[] {
+  const seen = new Set<string>();
+  return controls
+    .filter(c => c.process === process)
+    .map(c => {
+      // The editor keys a row on risk + control id. The same control tested at
+      // several companies shares its client-facing number, so a repeat falls
+      // back to the row's own unique id rather than colliding with the first.
+      const shown = c.code ?? c.id;
+      const controlId = seen.has(`${c.riskId}-${shown}`) ? c.id : shown;
+      seen.add(`${c.riskId}-${controlId}`);
+      const evidence = Array.from(new Set(c.operating.steps.flatMap(s => requiredFilesOf(s, c).map(f => f.label))));
+      return {
+        riskId: c.riskId,
+        controlId,
+        isKey: c.isKey,
+        processArea: c.process,
+        subProcess: c.subProcess,
+        riskCategory: c.clazz ?? '',
+        riskDescription: c.riskDescription,
+        riskRating: c.riskRating ?? '',
+        likelihood: '',
+        impact: '',
+        controlObjective: c.objective ?? '',
+        controlActivity: c.controlActivity ?? c.description,
+        controlType: c.type,
+        controlNature: c.nature,
+        frequency: c.frequency,
+        controlOwner: c.owner,
+        controlEvidence: evidence.join('; '),
+        assertions: c.assertions.join(', '),
+        fsLineItem: '',
+        regulatoryRef: '',
+        keyReport: c.reportRef ?? '',
+        ipeIceDetails: '',
+        segregationOfDuties: '',
+        mgmtReviewControl: c.isMrc ? 'Yes' : '',
+        confidence: '',
+        sopSectionRef: '',
+        attributes: c.operating.steps.map(s => s.description).join(' | '),
+      };
+    });
 }

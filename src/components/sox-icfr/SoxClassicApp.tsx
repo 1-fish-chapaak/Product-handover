@@ -45,7 +45,14 @@ const LIBRARY_LENS = true;
 
 const SOX_TABS: TabDef[] = [
   { id: 'overview', label: 'Overview' },
-  { id: 'racm', label: 'RACM' }, // 'Risk & Control Matrix' tooltip can't be set here — TabDef has no title field & EngagementTabBar owns the item title. Flagged.
+  /* RACM — PARKED (S11): RACMs live on the Engagements page's RACM tab. An
+     engagement keeps only its Control library, holding the controls it copied
+     in with Add RACM (AddRacmModal). Only this line is commented out: the
+     'racm' SoxTab/View types, the RacmLanding / Racm branches below, the
+     matrix breadcrumb and the store's RACM actions all stay wired and
+     compiling, so restoring the tab is uncommenting it. Every route that used
+     to land here now opens Add RACM or the Control Library tab instead. */
+  // { id: 'racm', label: 'RACM' }, // 'Risk & Control Matrix' tooltip can't be set here — TabDef has no title field & EngagementTabBar owns the item title. Flagged.
   /* Risk Register — PARKED from the engagement tabs (user ask), matching the
      park already in place on the reworked flow. Only this line is commented
      out: the 'risks' SoxTab/View types, TAB_ROOT, RETURNABLE, the

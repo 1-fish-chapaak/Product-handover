@@ -4,8 +4,9 @@ import type { TabDef } from '../audit/EngagementTabBar';
  * Which SOX engagement the reworked flow is being built on.
  *
  * The audit level is GONE from both shells (user ask): every SOX engagement now
- * opens on one level and the same four tabs — Overview · RACM · Control Library
- * · SOX audit — with deficiencies as a drill-in. The SOX audit tab is the audit
+ * opens on one level and the same tabs — Overview · Control Library · SOX audit —
+ * with deficiencies as a drill-in. (RACM is parked too, S11: RACMs live on the
+ * Engagements page's RACM tab and come in through Add RACM.) The SOX audit tab is the audit
  * register: audits are created from there and from the Overview, and an audit
  * sets a cycle's ground rules rather than opening a workspace of its own.
  * Risk Register, Configuration, the run registry and, on the reworked shell,

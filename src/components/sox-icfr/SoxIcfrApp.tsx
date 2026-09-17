@@ -10,6 +10,7 @@ import { IcfrProvider, useIcfr, type SoxTab } from './store';
 import type { SoxTabLike } from './types';
 import { AUDIT_TABS, defWord, isNewFlow, NEW_FLOW_BODY_CLASS } from './flow';
 import { ownersOf } from './auditScope';
+import { seedMetaFor } from './racmLibrary';
 import SoxClassicInner from './SoxClassicApp';
 import { OwnerPicker, RoleSwitcher, SoxBreadcrumb } from './parts';
 import NotificationsBell from './NotificationsBell';
@@ -53,7 +54,14 @@ const LIBRARY_LENS = true;
 
 const SOX_TABS: TabDef[] = [
   { id: 'overview', label: 'Overview' },
-  { id: 'racm', label: 'RACM' }, // 'Risk & Control Matrix' tooltip can't be set here — TabDef has no title field & EngagementTabBar owns the item title. Flagged.
+  /* RACM — PARKED (S11): RACMs live on the Engagements page's RACM tab. An
+     engagement keeps only its Control library, holding the controls it copied
+     in with Add RACM (AddRacmModal). Only this line is commented out: the
+     'racm' SoxTab/View types, the RacmLanding / Racm branches below, the
+     matrix breadcrumb and the store's RACM actions all stay wired and
+     compiling, so restoring the tab is uncommenting it. Every route that used
+     to land here now opens Add RACM or the Control Library tab instead. */
+  // { id: 'racm', label: 'RACM' }, // 'Risk & Control Matrix' tooltip can't be set here — TabDef has no title field & EngagementTabBar owns the item title. Flagged.
   /* Risk Register — PARKED from the engagement tabs (user ask). Only this one
      line is commented out: the 'risks' SoxTab/View types, TAB_ROOT, RETURNABLE,
      the `tab === 'risks' ? <RiskLibrary />` branch below and the dossier
@@ -79,8 +87,9 @@ const SOX_TABS: TabDef[] = [
 /**
  * Two levels again (user ask).
  *
- * The ENGAGEMENT is the four tabs in SOX_TABS above — Overview, RACM, Control
- * Library and SOX audit, the audit register. Opening an audit from that register,
+ * The ENGAGEMENT is the tabs in SOX_TABS above — Overview, Control Library and
+ * SOX audit, the audit register (RACM is parked, S11 — RACMs live on the
+ * Engagements page's RACM tab). Opening an audit from that register,
  * or creating one (createAudit opens what it creates), swaps in AUDIT_TABS behind
  * a breadcrumb: that cycle's Dashboard, its Control Library — only the controls
  * its scope covers, reset to Not started by createAudit — its deficiencies and
@@ -381,7 +390,7 @@ export default function SoxIcfrApp({ engagementId, onBack, backLabel }: { engage
   const { currentUser } = useCurrentUser();
   const initialRole = currentUser?.roleId === 'role-risk' ? 'risk-owner' : currentUser?.roleId === 'role-reviewer' ? 'reviewer' : 'auditor';
   const eng = engagementId ? findEngagement(engagementId) : undefined;
-  const seedMeta = eng ? { id: eng.id, code: eng.code, name: eng.name, entity: eng.entity, process: eng.process, processes: eng.soxProcesses, seedMode: eng.soxSeedMode, periodStart: eng.periodStart, periodEnd: eng.periodEnd, owner: eng.owner, materiality: eng.soxConfig?.overallMateriality, performanceMateriality: eng.soxConfig?.performanceMateriality, clearlyTrivial: eng.soxConfig?.clearlyTrivial, sdBandPct: eng.soxConfig?.sdBandPct } : undefined;
+  const seedMeta = eng ? seedMetaFor(eng) : undefined;
   return (
     <IcfrProvider key={currentUser?.id ?? 'signed-out'} initialRole={initialRole} seedMeta={seedMeta}>
       <Flow onBack={onBack} backLabel={backLabel} />

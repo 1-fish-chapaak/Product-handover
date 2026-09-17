@@ -5,6 +5,7 @@ import { FormSelect } from '../shared/FilterSelect';
 import { useToast } from '../shared/Toast';
 import { cn } from '../../lib/cn';
 import type { Assertion, Frequency, Nature } from './types';
+import { peekEntityCode, peekProcessCode, riskIdOf } from './racmIds';
 
 /**
  * New control — one focused form. The control lands in the library and the RACM
@@ -40,10 +41,6 @@ export default function NewControlPanel({ onClose }: { onClose: () => void }) {
     eng.controls.forEach(c => { if (!seen.has(c.riskId)) seen.set(c.riskId, c.riskDescription); });
     return Array.from(seen, ([id, description]) => ({ id, description }));
   }, [eng.controls]);
-  const nextRiskId = useMemo(() => {
-    const nums = eng.controls.map(c => parseInt(c.riskId.replace(/^R-/, ''), 10)).filter(n => !Number.isNaN(n));
-    return `R-${(nums.length ? Math.max(...nums) : 0) + 1}`;
-  }, [eng.controls]);
 
   const [description, setDescription] = useState('');
   const [controlActivity, setControlActivity] = useState('');
@@ -59,6 +56,16 @@ export default function NewControlPanel({ onClose }: { onClose: () => void }) {
   const [isKey, setIsKey] = useState(true);
   const [assertions, setAssertions] = useState<Assertion[]>(['Accuracy']);
   const [newProcess, setNewProcess] = useState('');
+  // The ID a new risk will get — PROCESS/ENTITY/R00n (S11), the same rule the
+  // store numbers it by: next R for the process at its controls' company.
+  const nextRiskId = useMemo(() => {
+    const proc = process === NEW_PROCESS ? newProcess.trim() || 'New process' : process;
+    const entity = eng.controls.find(c => c.process === proc)?.entity ?? eng.entity;
+    const pc = peekProcessCode(proc); const ec = peekEntityCode(entity);
+    const prefix = `${pc}/${ec}/R`;
+    const nums = eng.controls.filter(c => c.riskId.startsWith(prefix)).map(c => parseInt(c.riskId.slice(prefix.length), 10)).filter(n => !Number.isNaN(n));
+    return riskIdOf(pc, ec, (nums.length ? Math.max(...nums) : 0) + 1);
+  }, [eng.controls, eng.entity, process, newProcess]);
   const [newOwner, setNewOwner] = useState('');
   const [showDiscard, setShowDiscard] = useState(false);
 

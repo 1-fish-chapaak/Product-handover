@@ -52,6 +52,7 @@ import ProgramsView from './components/audit/ProgramsView';
 // New pages
 import RACMView from './components/governance/RACMView';
 import RacmFullPageEditor from './components/audit/RacmFullPageEditor';
+import type { ProcurementRacmRow } from './data/procurement-racm';
 import ControlLibraryView from './components/governance/ControlLibraryView';
 import ControlTestingView from './components/execution/ControlTestingView';
 import EvidenceView from './components/execution/EvidenceView';
@@ -309,7 +310,7 @@ function AppInner() {
   const [engagementBackView, setEngagementBackView] = useState<'programs' | 'audit-planning' | 'business-processes'>('programs');
   const [workflowBackView, setWorkflowBackView] = useState<'workflow-library' | 'business-processes' | null>(null);
   // Local context for the full-page RACM editor: which RACM, what process, where to go back to.
-  type RacmEditorContext = { racmId: string; racmName: string; processLabel: string; backView: 'engagement-overview' | 'business-processes' | 'bp-detail' | 'engagement-final' | 'ai-concierge' | 'ai-concierge-racm'; backLabel?: string; sourceFiles?: string[] };
+  type RacmEditorContext = { racmId: string; racmName: string; processLabel: string; backView: 'engagement-overview' | 'business-processes' | 'bp-detail' | 'engagement-final' | 'ai-concierge' | 'ai-concierge-racm'; backLabel?: string; sourceFiles?: string[]; initialRows?: ProcurementRacmRow[] };
   // Deep-link support: when this tab is opened at ?view=racm-full-editor (the
   // "Open in editor" new tab), restore the editor context at init so there's no
   // mount-time setState / double render. getInitialView (useAppState) already
@@ -318,8 +319,17 @@ function AppInner() {
     if (typeof window === 'undefined') return null;
     const params = new URLSearchParams(window.location.search);
     if (params.get('view') !== 'racm-full-editor') return null;
+    const racmId = params.get('racmId') ?? '';
+    // A SOX RACM hands its own rows over before opening this tab (Racm.tsx) —
+    // this tab has none of the engagement's state to read them from.
+    let initialRows: ProcurementRacmRow[] | undefined;
+    try {
+      const raw = racmId ? window.localStorage.getItem(`sox-racm-rows:${racmId}`) : null;
+      if (raw) initialRows = JSON.parse(raw) as ProcurementRacmRow[];
+    } catch { /* storage blocked or unreadable — the editor falls back to its sample */ }
     return {
-      racmId: params.get('racmId') ?? '',
+      racmId,
+      initialRows,
       racmName: params.get('racmName') ?? 'RACM',
       processLabel: params.get('processLabel') ?? '',
       backView: (params.get('backView') as RacmEditorContext['backView']) ?? 'business-processes',
@@ -1160,6 +1170,7 @@ function AppInner() {
             racmId={racmEditorContext?.racmId}
             processLabel={racmEditorContext?.processLabel}
             sourceFiles={racmEditorContext?.sourceFiles}
+            initialRows={racmEditorContext?.initialRows}
           />
         );
 
