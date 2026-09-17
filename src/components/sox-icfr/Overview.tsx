@@ -6,10 +6,11 @@ import {
 import { useIcfr } from './store';
 import { useAuditControls } from './useAuditControls';
 import NewAuditWizard from './NewAuditWizard';
+import AddRacmModal from './AddRacmModal';
 import { defWord } from './flow';
 import { useToast } from '../shared/Toast';
 import {
-  assessSeverity, conclusionOf, controlCode, engagementCompleteness, engagementProgress, failedItgcs, formatINR, isClearlyTrivial, isItgcDependent, testsDueNow, trackResult,
+  assessSeverity, conclusionOf, controlCode, engagementCompleteness, engagementProgress, failedItgcs, formatINR, isEngagementLocked, isItgcDependent, signoffControls, testsDueNow, trackResult,
 } from './helpers';
 import { cn } from '../../lib/cn';
 import { ItgcCascadeBanner, RagStrip, type RagMeterDef } from './parts';
@@ -17,7 +18,7 @@ import { PROGRAMMES } from '../audit/sox-testing/soxTestingData';
 import { isOwnerOf } from './auditScope';
 import RiskOwnerPortal from './RiskOwnerPortal';
 import ReviewerQueue from './ReviewerQueue';
-import type { Control, IcfrEngagement, Severity, TaskType } from './types';
+import type { Control, ExceptionGrade, IcfrEngagement, TaskType } from './types';
 
 const fmt = (n: number) => formatINR(n);
 
@@ -46,10 +47,14 @@ function fmtPeriodEnd(raw: string): string {
   return d ? `${d.getDate()} ${MONTHS[d.getMonth()]!} ${d.getFullYear()}` : raw;
 }
 
-const SEV_META: { key: Severity; label: string; dot: string; text: string }[] = [
+// All four grades, in the register's tones (SeverityPill). Clearly trivial is a
+// row of its own: it used to be counted under Deficiency AND again in a footnote
+// beneath, so one finding was tallied twice and read as two different grades.
+const SEV_META: { key: ExceptionGrade; label: string; dot: string; text: string }[] = [
   { key: 'Material Weakness', label: 'Material weakness', dot: 'bg-risk-500', text: 'text-risk-700' },
   { key: 'Significant Deficiency', label: 'Significant deficiency', dot: 'bg-high-500', text: 'text-high-700' },
   { key: 'Deficiency', label: 'Deficiency', dot: 'bg-mitigated-500', text: 'text-mitigated-700' },
+  { key: 'Clearly Trivial', label: 'Clearly trivial', dot: 'bg-draft', text: 'text-draft-700' },
 ];
 
 const HANDOFF_META: Record<TaskType, { label: string; Icon: typeof Upload; tone: string }> = {
@@ -65,6 +70,8 @@ export default function Overview() {
   const [confirmSign, setConfirmSign] = useState<null | 'preparer' | 'reviewer'>(null);
   // The New audit sheet — this tab and the SOX audit tab both open it.
   const [creating, setCreating] = useState(false);
+  // Add RACM (S11) — what the "RACM is missing" nag opens now the RACM tab is parked.
+  const [addingRacm, setAddingRacm] = useState(false);
   // Every count on this page is scoped to the OPEN AUDIT (user ask): as the
   // audit's Dashboard it must report what the audit covers, not the engagement.
   // With no audit open — the engagement's own Overview tab — useAuditControls
@@ -104,10 +111,17 @@ export default function Overview() {
 
   // sign-off readiness — every control concluded AND its paper countersigned;
   // the reviewer's per-paper gate feeds the engagement-level one.
-  const concludedCount = stats.effective + stats.ineffective;
+  // Year-end controls (A29) an interim or roll-forward holds back can't finish in
+  // it, so they are left out of every readiness count below and listed on their
+  // own instead (user ask) — waiting on them would leave the audit unsignable.
+  // Anywhere else nothing is left out and `ready` is `stats`.
+  const signScope = signoffControls(scoped, eng.audits.find(a => a.id === openAuditId));
+  const ready = signScope.pending.length ? engagementProgress(eng, signScope.gating) : stats;
+  const concludedCount = ready.effective + ready.ineffective;
   // Nothing to sign when no audit is open — the owner reaches this page at
-  // engagement level, and sign-off belongs to an audit.
-  const signoffReady = inAudit && stats.total > 0 && stats.reviewed === stats.total;
+  // engagement level, and sign-off belongs to an audit. The empty-scope check
+  // reads the whole scope: an audit whose every control is pending still has one.
+  const signoffReady = inAudit && stats.total > 0 && ready.reviewed === ready.total;
   // Sign-off belongs to the AUDIT, not the engagement: this page is the audit's
   // Dashboard, and the opinion covers the period the audit tested. Outside an
   // audit there is nothing to sign, which is why the engagement's own Overview is
@@ -116,7 +130,7 @@ export default function Overview() {
   const isConcluded = !!(so.preparer && so.reviewer);
 
   const sev = useMemo(() => {
-    const c: Record<Severity, number> = { 'Material Weakness': 0, 'Significant Deficiency': 0, Deficiency: 0 };
+    const c: Record<ExceptionGrade, number> = { 'Material Weakness': 0, 'Significant Deficiency': 0, Deficiency: 0, 'Clearly Trivial': 0 };
     let open = 0; let mwOpen = 0;
     scopedDefs.forEach(d => {
       // assessed severity — a validly-capped MW counts as an SD everywhere
@@ -124,7 +138,7 @@ export default function Overview() {
       c[s] += 1;
       if (d.status !== 'Closed') { open += 1; if (s === 'Material Weakness') mwOpen += 1; }
     });
-    return { c, open, mwOpen, trivial: scopedDefs.filter(d => isClearlyTrivial(d.magnitude, eng.rules)).length };
+    return { c, open, mwOpen };
   }, [eng, M, scopedDefs]);
 
   // An open MW never blocks signing — it flips what the signature concludes.
@@ -201,7 +215,7 @@ export default function Overview() {
               scoped, so on an engagement with none the wizard has no path that
               ends in something testable — and a RACM here IS a process's set of
               controls, so an empty library is an empty matrix. The reason rides
-              beside the dead button; the fix lives on the RACM tab. */}
+              beside the dead button; the fix is Add RACM. */}
           {racmMissing && <span className="text-[11.5px] text-ink-400">Add a RACM first — an audit with no controls has nothing to test.</span>}
           <button
             onClick={() => setCreating(true)}
@@ -215,6 +229,7 @@ export default function Overview() {
       <AnimatePresence>
         {creating && <NewAuditWizard onClose={() => setCreating(false)} />}
       </AnimatePresence>
+      {addingRacm && <AddRacmModal onClose={() => setAddingRacm(false)} />}
 
       {/* Risk owner's actionable inbox leads — first-line owners act before they browse status. */}
       {isOwner && <RiskOwnerPortal />}
@@ -223,7 +238,7 @@ export default function Overview() {
       {isOwner && (() => {
         const eff = myControls.filter(c => conclusionOf(eng, c) === 'Effective').length;
         const ineff = myControls.filter(c => conclusionOf(eng, c) === 'Ineffective').length;
-        const due = testsDueNow(myControls).length;
+        const due = testsDueNow(myControls, eng.audits.find(a => a.id === openAuditId)).length;
         const openDefs = myDefs.filter(d => d.status !== 'Closed');
         const inRem = openDefs.filter(d => d.status === 'Identified' || d.status === 'Remediation').length;
         const inRetest = openDefs.filter(d => d.status === 'Retest').length;
@@ -259,9 +274,16 @@ export default function Overview() {
           <AlertTriangle size={16} className="text-high-700 shrink-0 mt-0.5" />
           <div className="flex-1 min-w-0">
             <h2 className="text-[13px] font-bold text-ink-900">The RACM is missing</h2>
+            {/* The RACM tab is parked (S11) — the link opens Add RACM instead,
+                which picks from the Engagements page's RACM tab or uploads one.
+                It is the auditor's action, so everyone else is told whose it is. */}
             <p className="text-[12.5px] text-ink-600 mt-1 leading-relaxed">
-              Add or generate the RACM from the{' '}
-              <button onClick={() => setTab('racm')} className="font-semibold text-brand-700 hover:underline cursor-pointer">RACM tab</button>.
+              {role === 'auditor' && !isEngagementLocked(eng) ? (
+                <>
+                  Add or generate the RACM with{' '}
+                  <button onClick={() => setAddingRacm(true)} className="font-semibold text-brand-700 hover:underline cursor-pointer">Add RACM</button>.
+                </>
+              ) : 'The auditor adds it with Add RACM, from the RACM tab on the Engagements page.'}
             </p>
           </div>
         </div>
@@ -338,7 +360,6 @@ export default function Overview() {
                 <span className={cn('ml-auto text-[15px] font-bold tabular-nums', s.text)}>{sev.c[s.key]}</span>
               </div>
             ))}
-            {sev.trivial > 0 && <div className="text-[11px] text-ink-400 pt-1">{sev.trivial} clearly trivial (logged, not evaluated)</div>}
           </div>
           <button onClick={() => openDeficiencies()} className="mt-3 inline-flex items-center gap-1 text-[12px] font-semibold text-brand-700 hover:text-brand-800 cursor-pointer transition-colors">Manage {W.many} <ArrowRight size={13} /></button>
         </div>
@@ -409,13 +430,13 @@ export default function Overview() {
         const days = end ? Math.ceil((end.getTime() - Date.now()) / 86_400_000) : null;
         const past = days !== null && days < 0;
         const openOther = sev.open - sev.mwOpen;
-        const unconcluded = stats.total - concludedCount;
-        const papersAwaiting = stats.total - stats.reviewed - unconcluded;
+        const unconcluded = ready.total - concludedCount;
+        const papersAwaiting = ready.total - ready.reviewed - unconcluded;
         // the 8-vs-9 truth: most await the reviewer's countersign, the rest the
         // preparer's own signature — the row says the split instead of hiding it
-        const papersWithReviewer = stats.awaitingReview;
-        const papersWithPreparer = papersAwaiting - stats.awaitingReview;
-        const allClear = sev.mwOpen === 0 && openOther === 0 && unconcluded === 0 && stats.reviewed === stats.total;
+        const papersWithReviewer = ready.awaitingReview;
+        const papersWithPreparer = papersAwaiting - ready.awaitingReview;
+        const allClear = sev.mwOpen === 0 && openOther === 0 && unconcluded === 0 && ready.reviewed === ready.total;
         // One row per outstanding item — each keeps the same filtered destination it linked to before.
         // The exceptions count lives HERE and only here — the sign-off block below never restates it.
         const rows = [
@@ -468,7 +489,7 @@ export default function Overview() {
                   {isConcluded
                     ? 'Signed and countersigned — this audit is concluded.'
                     : signoffReady
-                      ? 'Every control is concluded and countersigned — the audit is ready for sign-off.'
+                      ? `Every control ${signScope.pending.length ? 'due in this audit ' : ''}is concluded and countersigned — the audit is ready for sign-off.`
                       : 'Unlocks once everything above is closed. The preparer signs first; the reviewer countersigns to conclude.'}
                 </p>
                 {(signoffReady || !!so.preparer) && (
@@ -492,8 +513,15 @@ export default function Overview() {
                 )}
                 <div className="flex items-center gap-4 mt-2.5 flex-wrap text-[12px]">
                   <span className={cn('inline-flex items-center gap-1.5 font-semibold', signoffReady ? 'text-compliant-700' : 'text-ink-500')}>
-                    {signoffReady ? <CheckCircle2 size={13} /> : <Circle size={13} />} {concludedCount}/{stats.total} concluded · {stats.reviewed}/{stats.total} countersigned
+                    {signoffReady ? <CheckCircle2 size={13} /> : <Circle size={13} />} {concludedCount}/{ready.total} concluded · {ready.reviewed}/{ready.total} countersigned
                   </span>
+                  {/* the controls the counts beside it leave out — they wait for
+                      the year to close, and stay listed once the audit concludes */}
+                  {signScope.pending.length > 0 && (
+                    <span className="inline-flex items-center gap-1.5 text-ink-500">
+                      <Hourglass size={13} className="text-ink-400" /> {signScope.pending.length} control{signScope.pending.length === 1 ? '' : 's'} pending until {signScope.until} — tested in the year-end audit
+                    </span>
+                  )}
                 </div>
               </div>
               <div className="flex flex-col gap-1.5 items-end shrink-0">

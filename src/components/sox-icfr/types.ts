@@ -52,6 +52,22 @@ export interface EvidenceFile {
   kind: 'PDF' | 'XLSX' | 'IMG' | 'CSV';
   uploadedBy: string;
   uploadedAt: string;
+  /** A file picked from this machine in this session — an object URL the preview
+   *  opens. Seeded files carry no bytes, so they have none. */
+  url?: string;
+}
+
+/** ONE FILE AN ATTRIBUTE NEEDS BEFORE AI VALIDATION CAN RUN — the evidence.
+ *  The list comes from the RACM's Control Evidence column, split per attribute
+ *  (`requiredFilesOf` in helpers.ts supplies it until someone edits it). It is
+ *  edited on the engagement control page and read as a checklist in TOE, where
+ *  each line takes its upload. */
+export interface RequiredFile {
+  id: string;
+  /** What the file is — "Signed approval record", "Invoice register extract". */
+  label: string;
+  /** What was uploaded against it. Absent until someone uploads it. */
+  file?: EvidenceFile;
 }
 
 // ─── Design track (TOD) ─────────────────────────────────────────────────────────
@@ -189,6 +205,10 @@ export interface DesignPoint {
   auditorProof?: AuditorProof;
   result: TestResult;
   override?: Override;
+  /** A file on a design element was added or removed after this override was
+   *  recorded (S6, A17) — the override stands, flagged "Evidence changed since
+   *  override". Cleared when the override is removed or recorded again. */
+  overrideEvidenceChanged?: boolean;
 }
 /** The walkthrough — the design tested against ONE live transaction.
  *
@@ -283,6 +303,23 @@ export interface DesignTrack {
   override?: Override;
   testedBy: string | null;
   testedAt: string | null;
+  /** Ira's last read of the design checks (S6, A17): who ran it, when, and
+   *  whether a design element's files changed since — which turns its button
+   *  into Re-run. */
+  ira?: { by: string; at: string; evidenceChanged?: boolean };
+  /** The reviewer's approval of a concluded TOD (S6, A36). Population, Sample and
+   *  TOE stay locked until `approvedBy` is set. Cleared whenever the design
+   *  conclusion is. */
+  approval?: DesignApproval;
+  /** Why the reviewer sent TOD back (S6, A36) — shown on the reopened TOD step
+   *  until the auditor concludes it again. */
+  designReturn?: { note: string; by: string; at: string };
+}
+/** Design sign-off after TOD (S6, A36) — prepared by whoever concluded TOD,
+ *  approved by a different person (four-eyes). One approver. */
+export interface DesignApproval {
+  preparedBy: { by: string; at: string };
+  approvedBy?: { by: string; at: string };
 }
 
 // ─── Operating track (TOE) ──────────────────────────────────────────────────────
@@ -317,7 +354,12 @@ export interface OperatingStep {
   workflowName?: string;
   workflowRunRef?: string;
   aiValidation?: boolean;
-  inputFile?: EvidenceFile;      // the required file AI validation runs against
+  /** The single required file the list below replaced. Still read — as the
+   *  first line's upload — until `requiredFiles` is written. */
+  inputFile?: EvidenceFile;
+  /** The files AI validation runs against; all must be uploaded before it can
+   *  run. Absent means never edited — read it through `requiredFilesOf`. */
+  requiredFiles?: RequiredFile[];
   validation?: ValidationResult;
   /** The recorded run predates the current draw. Set when the sample changes
    *  under an attribute that already carries a validation or workflow result —
@@ -353,6 +395,12 @@ export interface Sample {
    *  which routes the draw has actually touched. Absent on a single-route
    *  control, where there is only one way through. */
   path?: string;
+  /** WHEN THE ITEM HAPPENED, as an ISO date inside the audit's window. Set by
+   *  the draw (A28), which deals the items across the quarters when the audit
+   *  spreads by quarter — so the split the sample step prints and the date on
+   *  each row are the same fact. Absent on items drawn before that; `sampleDate`
+   *  derives a stable one for them. */
+  date?: string;
 }
 /** The control's sample — every item drawn, across every source file it stands
  *  on. `size` and `samples` are the totals; which file each item came out of is
@@ -566,9 +614,14 @@ export interface PopulationSource {
    *  number could not carry it: the selection unit is not always a quantity
    *  (dev call, Aug 2026 — "कभी क्वांटिटी हो रहा है X, तो कभी हो रहा है टाइम"),
    *  and duplicate-invoice work over a journal table is not a thing 25 rows can
-   *  find at all. It is stored because with a prompt the prompt IS the method,
-   *  and a draw nobody can read back is not a procedure. */
-  draw?: { size: number; method: Sampling['method']; seed: number; prompt?: string };
+   *  find at all. It is stored because a reviewer holding only "25 items,
+   *  random" cannot tell what was asked for, and a draw nobody can read back is
+   *  not a procedure. The words set how many and which months; the method is the
+   *  audit's (A28), whatever they say.
+   *
+   *  `months` is the stretch of the audit's window the ask narrowed the draw to,
+   *  when it named one — the items were dealt inside it. */
+  draw?: { size: number; method: Sampling['method']; seed: number; prompt?: string; months?: { from: string; to: string } };
   /** The tick on this file's accordion — "done with this one, on to the next".
    *
    *  Deliberately NOT a lock (dev call, Aug 2026: "लॉक ऐसे नहीं, बस अप्रूव मतलब
@@ -788,6 +841,12 @@ export interface Control {
    *  of the same control read with the same number and are told apart by their
    *  entity. See `entity`. */
   code?: string;
+  /** The id a seeded control was built under, before IDs moved to
+   *  PROCESS/ENTITY/R001/C001 (S11). Never shown. Every deterministic
+   *  "real-looking" number (population values, due dates, draws, Ira's reads)
+   *  hashes `seedKeyOf(c)`, so renaming the ID moves no demo number. Absent on
+   *  controls imported after the rename — they hash their own id. */
+  seedKey?: string;
   /** THE COMPANY THIS ROW IS TESTED AT.
    *
    *  A group audit tests the same control separately at every entity in its
@@ -1055,14 +1114,33 @@ export const gapNature = (track: 'design' | 'operating', nature: Nature): string
 // export const exposureTotal = (e?: Exposure): number =>
 //   e ? e.recovery + e.workingCapital + e.leakage : 0;
 
+/** One design check a TOD retest re-reads. Snapshotted — id AND wording — when
+ *  the round starts, so a check later reworded or removed on the control still
+ *  reads as what was re-checked. The control's own check is never written to:
+ *  the retest is evidence about the fix, not a second pen on the TOD. */
+export interface RetestCheck {
+  /** The `DesignPoint.id` it came from. */
+  pointId: string;
+  text: string;
+  result: TestResult;
+  /** Ira's read of this check against the fix evidence, when it has run. */
+  validation?: ValidationResult;
+}
+
 /** One pass of the retest. The control is tested AGAIN — its own attributes, a
  *  fresh sample drawn from the period since the fix landed, item by item. A round
  *  is never edited: a failure appends the next round, which is what the loop
- *  counter counts. */
+ *  counter counts.
+ *
+ *  A design-track (TOD) round has NO sample: it re-checks the design checks that
+ *  failed, against the owner's fix evidence. `checks` is present on that round
+ *  and only on it, and its attributes, samples and results stay empty. */
 export interface RetestRound {
   /** 1-based. Two or more failed rounds put the exception in front of the reviewer. */
   n: number;
-  /** The window the sample came off — from the day the fix landed, never earlier. */
+  /** The window the sample came off — from the day the fix landed, never earlier.
+   *  On a design round nothing is drawn from it: it runs from the fix date to the
+   *  day the re-check started. */
   windowFrom: string;
   windowTo: string;
   /** The attributes carried over from the original test, verbatim. */
@@ -1070,6 +1148,9 @@ export interface RetestRound {
   samples: { id: string; ref: string; date: string }[];
   /** sample id → attribute code → result. Any Fail fails the round. */
   results: Record<string, Record<string, TestResult>>;
+  /** Design-track rounds only — the failed design checks, each marked again.
+   *  Any Fail fails the round. */
+  checks?: RetestCheck[];
   result: 'Pass' | 'Fail';
   /** Required on a failure — the owner reads this when the plan comes back. */
   rationale?: string;
@@ -1094,10 +1175,21 @@ export interface Deficiency {
   rootCause: string;
   /** The sampled items that failed — what the exception was found in. */
   failedSamples?: string[];
+  /** Design track only — the design checks whose failure raised this exception,
+   *  stamped at raise (id and wording both). The design twin of `failedSamples`,
+   *  and the list a TOD retest re-checks: a retest that invents its own is not a
+   *  retest of anything. */
+  failedChecks?: { pointId: string; text: string }[];
   likelihood: Likelihood;
   magnitude: number;
   mwIndicators: string[];
   compensatingControlId?: string;
+  /** What Ira pre-filled when the exception was raised (S9, A31) — one line of
+   *  reason per field it filled, keyed by that field. A field's entry goes the
+   *  moment anyone changes the field (updateDeficiency), so a tag on screen always
+   *  means the value is still Ira's and not yet the auditor's. Absent on seeded
+   *  exceptions: a person sized those. */
+  iraSuggested?: Partial<Record<'likelihood' | 'magnitude' | 'compensatingControlId', string>>;
   aggregationGroup?: string;
   /** PARKED (13 Aug 2026) — the single "same root cause as" link. Superseded by
    *  `rootCauseGroupIds`: one exception can share a mechanism with several
@@ -1224,7 +1316,7 @@ export type ExceptionStatus =
   | 'Planning'            // ③ risk owner writes the plan
   | 'Plan review'         // ③ auditor judges it against the root cause
   | 'Remediation'         // ④ risk owner implements and attaches evidence
-  | 'Retest'              // ⑤ auditor retests on a post-fix sample
+  | 'Retest'              // ⑤ auditor retests — a post-fix sample (TOE), or the failed design checks against the fix (TOD)
   | 'Awaiting reviewer'   // ⑥ reviewer reads the retest evidence
   | 'Closed';             // ⑥ reviewer has signed off
 
@@ -1361,7 +1453,10 @@ export interface MaterialityRules {
 // so the auditor and the risk owner each see what the other ran on a control, and when.
 export type ExecKind =
   | 'validate' | 'test-all' | 'pull-run' | 'attest' | 'conclude'
-  | 'override' | 'request-docs' | 'receive-doc' | 'waive-doc' | 'walkthrough' | 'ipe' | 'population' | 'sample' | 'reopen' | 'wp-signoff' | 'review-return' | 'exception' | 'challenge';
+  | 'override' | 'request-docs' | 'receive-doc' | 'waive-doc' | 'walkthrough' | 'ipe' | 'population' | 'sample' | 'reopen' | 'wp-signoff' | 'review-return' | 'exception' | 'challenge'
+  // TOD's own trail (S6): elements, files and checks coming and going, Ira's
+  // read of the checks, and the design approval after TOD concludes.
+  | 'add-element' | 'remove-element' | 'remove-file' | 'add-check' | 'remove-check' | 'ai-review' | 'design-approval';
 export interface ExecutionEvent {
   id: string;
   controlId: string;
@@ -1442,6 +1537,39 @@ export const AUDIT_ROUNDS: { id: AuditRound; label: string; hint: string }[] = [
 ];
 
 /**
+ * How an audit's samples are picked, and what they have to be spread across
+ * (A28 — feedback #38, and the Dubai ask for "an agreed sampling methodology
+ * covering quarters, countries and entities").
+ *
+ * Set once, on the audit, rather than control by control: a methodology each
+ * control could choose for itself is not an agreed one. The control's Sample
+ * step reads it and asks only how many items. A roll-forward inherits its
+ * interim's, for the same reason it inherits the materiality rule — two halves
+ * of one year are sampled one way.
+ */
+export type AuditSampleMethod = 'Random' | 'Systematic' | 'Targeted';
+export type AuditSampleSpread = 'quarter' | 'country' | 'entity';
+export interface AuditSampling {
+  method: AuditSampleMethod;
+  /** Every group named here gets items of its own in each control's draw.
+   *  Empty is allowed — the selection then falls wherever it falls. */
+  spread: AuditSampleSpread[];
+}
+export const AUDIT_SAMPLE_METHODS: { id: AuditSampleMethod; hint: string }[] = [
+  { id: 'Random', hint: 'Items picked at random from the population.' },
+  { id: 'Systematic', hint: 'Every nth item from a random start, so the picks run evenly through the window.' },
+  { id: 'Targeted', hint: 'Items picked on purpose — the largest, the riskiest, the unusual.' },
+];
+/** In the order the wizard lists them, which is also the order a phrase names them. */
+export const AUDIT_SAMPLE_SPREADS: { id: AuditSampleSpread; label: string }[] = [
+  { id: 'quarter', label: 'Quarters' },
+  { id: 'country', label: 'Countries' },
+  { id: 'entity', label: 'Entities' },
+];
+/** A new audit starts on a plain random draw with no spread asked for. */
+export const DEFAULT_AUDIT_SAMPLING: AuditSampling = { method: 'Random', spread: [] };
+
+/**
  * What an audit concluded, frozen when the next audit starts.
  *
  * A control holds ONE live design / operating paper, so a new cycle has to reset
@@ -1453,7 +1581,9 @@ export const AUDIT_ROUNDS: { id: AuditRound; label: string; hint: string }[] = [
  *
  * Severity is stored ON the snapshot: assessSeverity() needs the live engagement
  * to apply the compensating-control cap, and that engagement no longer exists in
- * the state the deficiency was raised in.
+ * the state the deficiency was raised in. It is the full four-grade answer, so a
+ * clearly trivial finding is archived as Clearly Trivial — the same grade the
+ * register showed it under — never folded into Deficiency.
  */
 export interface AuditArchive {
   conclusions: {
@@ -1464,8 +1594,12 @@ export interface AuditArchive {
     design: TrackConclusion;
     operating: TrackConclusion;
     conclusion: Conclusion;
+    /** Items with a result recorded against them when the audit closed — what
+     *  the control's yearly running total reads for this round (A28). Optional
+     *  because archives written before the count existed have none. */
+    samplesTested?: number;
   }[];
-  deficiencies: (Deficiency & { severity: Severity })[];
+  deficiencies: (Deficiency & { severity: ExceptionGrade })[];
   concludedAt: string;
 }
 
@@ -1491,6 +1625,29 @@ export interface AuditRecord {
    *  months to place a bar and to spot an uncovered stretch. */
   windowFrom: string;               // '2026-01-01'
   windowTo: string;                 // '2026-06-30'
+  /** S10, A34a — the trial balance's MATERIAL accounts (caption id → process),
+   *  as mapped on Materiality & files. Absent on audits created before the
+   *  mapping existed; readers fall back to each caption's suggested process
+   *  (`TbCaption.process`). S9's exposure-from-data reads this too. */
+  accountProcesses?: Record<string, string>;
+  /** S10, A34b/c — the Processes panel on the Scope step, as the audit was
+   *  created with it: one row per process Ira weighed (every process a material
+   *  account mapped to, plus the engagement's other RACMs), her recommendation,
+   *  and where the auditor landed. A process moved against the recommendation
+   *  always carries a note; one brought IN against it is a qualitative pick and
+   *  carries a reason from QUAL_REASONS as well. A record only — what the audit
+   *  tests is still `scopeIds` / `controlIds`. Absent on audits created before
+   *  the panel existed, and on roll-forwards. */
+  processScope?: {
+    process: string;
+    /** ₹ Cr across its material accounts. */
+    total: number;
+    accounts: number;
+    recommended: boolean;
+    inScope: boolean;
+    qualitativeReason?: string;
+    note?: string;
+  }[];
   scopeKind: AuditScopeKind;
   /** Names of the entities or RACM processes selected — display-ready. */
   scopeNames: string[];
@@ -1521,6 +1678,10 @@ export interface AuditRecord {
   materiality: { basisLabel: string; benchmark: number; pct: number; pmPct?: number; ctPct?: number };
   /** ₹ Cr threshold the rule computes, frozen at creation. */
   overall: number;
+  /** How every control in this audit picks its sample (A28). Set on the period
+   *  step; a roll-forward carries its interim's. Optional only so a record that
+   *  predates it still reads — DEFAULT_AUDIT_SAMPLING stands in. */
+  sampling?: AuditSampling;
   /** This audit's own conclusion. Sign-off is per AUDIT, not per engagement —
    *  the testing happens inside an audit, so that is where the preparer signs and
    *  the reviewer countersigns. There is no engagement-level ICFR sign-off. */
@@ -1569,7 +1730,7 @@ export interface ScopeArchiveEntry {
 export interface RulesChangeEntry {
   id: string;
   changes: { field: string; from: string; to: string }[];
-  regraded: { defId: string; from: Severity; to: Severity }[];
+  regraded: { defId: string; from: ExceptionGrade; to: ExceptionGrade }[];
   reason: string;
   by: string;
   at: string;

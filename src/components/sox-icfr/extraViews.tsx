@@ -15,7 +15,15 @@ import { cn } from '../../lib/cn';
 // Exposure / GapType types — priced impact and the gap taxonomy are off the card.
 // `gapNature` replaces the latter, derived read-only from the track and the nature.
 import RemediationBriefModal from './RemediationBriefModal';
-import { isOwnerOf } from './auditScope';
+import { auditCovers, captionsFor, entitiesFor, isOwnerOf, normaliseProcess } from './auditScope';
+import { exposureFromData, fmtDay, sampleHome, workingAudit, type DataExposure } from './helpers';
+import type { ReactNode } from 'react';
+// The design-track retest reads its checks out the way the TOD's own do.
+import { AnimatePresence } from 'motion/react';
+import { ListChecks, Loader2 } from 'lucide-react';
+import { QAResultsModal, VALIDATE_MS } from './ControlDossier';
+import { designRetestChecks } from './helpers';
+import type { RetestCheck } from './types';
 import { CHALLENGED_INPUT_LABEL, EXCEPTION_STEPS, gapNature, GRADE_RANK, MW_INDICATOR_CATALOGUE, SEVERITY_URGENCY, type Assertion, type ChallengedInput, type Court, type Deficiency, type DeficiencyGroup, type ExceptionGrade, type ExceptionStatus, type IcfrEngagement, type RetestRound, type Severity, type SignificantAccount, type TaskType } from './types';
 
 const fmt = (n: number) => formatINR(n);
@@ -655,6 +663,26 @@ function formatDueLabel(date: string | null): string {
   if (/^\d{4}-\d{2}-\d{2}$/.test(s)) return new Date(`${s}T00:00:00`).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' });
   return s;
 }
+// Stored due → '30 Nov' for a register cell — the year only when it is not this one.
+function formatDueShort(date: string): string {
+  const t = parseDue(date);
+  if (t === null) return date.trim();
+  const d = new Date(t);
+  return d.toLocaleDateString('en-IN', { day: 'numeric', month: 'short', ...(d.getFullYear() === new Date().getFullYear() ? {} : { year: 'numeric' }) });
+}
+// Whole days a due date is behind today — 0 on the day itself.
+function daysPastDue(date: string | null): number {
+  const t = parseDue(date);
+  if (t === null) return 0;
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  return Math.max(0, Math.round((today.getTime() - t) / 86_400_000));
+}
+// The one overdue rule — past its date and the fix not declared done. The plan
+// block's escalate badge and the register's Stage cell both read it.
+function fixOverdue(r: Deficiency['remediation']): boolean {
+  return dueIsPast(r.date) && r.status !== 'Done';
+}
 
 // ─── ③ The plan — the owner writes it, the auditor only judges it ────────────────
 // Editable in the owner's hat while the exception is still theirs: step ③ before
@@ -665,7 +693,7 @@ function PlanBlock({ d, isOwner, locked = false, onPatch, onAttach }: { d: Defic
   // a sealed engagement retires the owner's pen along with everyone else's
   const editable = isOwner && !locked && (d.status === 'Planning' || d.status === 'Remediation');
   const planning = d.status === 'Planning';
-  const overdue = dueIsPast(r.date) && r.status !== 'Done';
+  const overdue = fixOverdue(r);
   const files = r.evidence ?? [];
   const rejected = d.planReview?.decision === 'Rejected';
   return (
@@ -862,6 +890,111 @@ function RetestPanel({ d }: { d: Deficiency }) {
   );
 }
 
+// ─── ⑤ The retest, design track ──────────────────────────────────────────────────
+// A TOD failure has no sample to redraw — the design is what failed. So the retest
+// re-checks the design checks that failed, one row each, against the evidence the
+// owner attached to the fix. The verdict still comes off the marks, never a
+// button: every check passes, or the retest fails.
+function DesignRetestPanel({ d }: { d: Deficiency }) {
+  const { eng, setRetestCheck, runRetestIra, recordRetest } = useIcfr();
+  const [rationale, setRationale] = useState('');
+  const [iraRunning, setIraRunning] = useState(false);
+  const [viewing, setViewing] = useState<string | null>(null);
+  const draft = d.retestDraft?.checks?.length ? d.retestDraft : undefined;
+  // Before the first mark there is no round yet — the list it will start with is
+  // shown as it will be copied onto the round.
+  const checks: RetestCheck[] = draft?.checks
+    ?? designRetestChecks(d, eng.controls.find(c => c.id === d.controlId)).map(x => ({ ...x, result: 'Not tested' }));
+  const n = draft?.n ?? (d.retests?.length ?? 0) + 1;
+  const files = d.remediation.evidence ?? [];
+  const marked = checks.filter(x => x.result !== 'Not tested').length;
+  const done = checks.length > 0 && marked === checks.length;
+  const willFail = checks.some(x => x.result === 'Fail');
+  const plural = checks.length === 1 ? '' : 's';
+  const iraBlocked = !files.length ? 'No evidence of the fix is on file — Ira has nothing to read'
+    : !checks.length ? 'There are no design checks to re-check'
+    : null;
+  const runIra = () => {
+    setIraRunning(true);
+    window.setTimeout(() => { runRetestIra(d.id); setIraRunning(false); }, VALIDATE_MS);
+  };
+  const shown = checks.find(x => x.pointId === viewing);
+
+  return (
+    <div className="rounded-lg border border-canvas-border bg-paper-50/40 px-3 py-3 space-y-2.5">
+      <div className="flex items-center gap-2 flex-wrap">
+        <span className="text-[0.6875rem] uppercase tracking-wide font-semibold text-ink-500">Retest — {d.id} (TOD)</span>
+        <span className="ml-auto text-[0.6875rem] font-semibold tabular-nums text-ink-500">{marked} / {checks.length} marked</span>
+      </div>
+      <p className="text-[0.75rem] text-ink-600">Re-check the design checks that failed — against the fix evidence.</p>
+      <div className="flex items-start gap-2 flex-wrap">
+        <p className="min-w-0 flex-1 text-[0.71875rem] text-ink-500">
+          <span className="font-semibold text-ink-600">Fix evidence:</span> {files.length ? files.map(f => f.name).join(', ') : 'none attached'}
+        </p>
+        {iraRunning
+          ? <span className="h-7 inline-flex items-center gap-1.5 text-[0.71875rem] font-semibold text-brand-600"><Loader2 size={12} className="animate-spin" /> Ira is checking {checks.length} design check{plural}…</span>
+          : <button onClick={runIra} disabled={!!iraBlocked}
+              title={iraBlocked ?? 'Ira reads each of these checks against the fix evidence and marks it Pass or Fail'}
+              className="h-7 px-2.5 inline-flex items-center gap-1.5 rounded-md bg-brand-600 text-white text-[0.71875rem] font-semibold enabled:hover:bg-brand-700 disabled:opacity-40 disabled:cursor-not-allowed transition-colors cursor-pointer">
+              <Sparkles size={12} /> Run Ira on these checks
+            </button>}
+      </div>
+
+      {checks.length ? (
+        <ol className="rounded-md border border-canvas-border bg-canvas-elevated divide-y divide-canvas-border">
+          {checks.map((x, i) => (
+            <li key={x.pointId} className="flex items-start gap-2 px-2.5 py-2">
+              <span className="mt-[5px] shrink-0 tabular-nums text-[0.71875rem] text-ink-400">{i + 1}.</span>
+              <span className="mt-[4px] min-w-0 flex-1 text-[0.75rem] leading-snug text-ink-800">{x.text}</span>
+              {iraRunning
+                ? <span className="mt-[4px] shrink-0 text-[0.6875rem] font-semibold text-evidence-600">Checking…</span>
+                : (
+                  <div className="flex items-center gap-1.5 shrink-0">
+                    {x.validation && <button onClick={() => setViewing(x.pointId)} className="h-7 px-2.5 inline-flex items-center gap-1 rounded-md border border-canvas-border bg-canvas-elevated text-[0.71875rem] font-semibold text-ink-600 hover:border-brand-300 hover:text-brand-700 cursor-pointer"><ListChecks size={12} /> View results</button>}
+                    <button onClick={() => setRetestCheck(d.id, x.pointId, 'Pass')} title="Mark this check passed" aria-label={`Check ${i + 1} passed`}
+                      className={cn('h-7 w-7 inline-flex items-center justify-center rounded-md border transition-colors cursor-pointer',
+                        x.result === 'Pass' ? 'bg-compliant-50 border-compliant-300 text-compliant-700' : 'border-canvas-border bg-canvas-elevated text-ink-500 hover:border-compliant-300 hover:text-compliant-700')}>
+                      <Check size={13} />
+                    </button>
+                    <button onClick={() => setRetestCheck(d.id, x.pointId, 'Fail')} title="Mark this check failed" aria-label={`Check ${i + 1} failed`}
+                      className={cn('h-7 w-7 inline-flex items-center justify-center rounded-md border transition-colors cursor-pointer',
+                        x.result === 'Fail' ? 'bg-risk-50 border-risk-300 text-risk-700' : 'border-canvas-border bg-canvas-elevated text-ink-500 hover:border-risk-300 hover:text-risk-700')}>
+                      <X size={13} />
+                    </button>
+                  </div>
+                )}
+            </li>
+          ))}
+        </ol>
+      ) : (
+        <p className="text-[0.75rem] text-ink-500">This control has no design checks to re-check. Add them on the control’s design test first.</p>
+      )}
+      <p className="text-[0.6875rem] text-ink-400">Same design checks that failed — a retest that invents its own is not a retest of anything.</p>
+
+      {done && willFail && (
+        <textarea value={rationale} onChange={e => setRationale(e.target.value)} rows={2}
+          placeholder="Why it failed again — the owner reads this when the plan comes back to them"
+          className="w-full px-2.5 py-2 rounded-md border border-canvas-border bg-canvas-elevated text-[0.75rem] resize-none focus:outline-none focus:border-brand-300" />
+      )}
+
+      <div className="flex items-center gap-2 flex-wrap">
+        {done ? (
+          <button onClick={() => recordRetest(d.id, rationale.trim() || undefined)} disabled={willFail && !rationale.trim()}
+            title={willFail && !rationale.trim() ? 'A failed retest goes back to the owner — tell them why' : undefined}
+            className={cn('h-8 px-3 rounded-lg text-white text-[0.75rem] font-semibold cursor-pointer inline-flex items-center gap-1.5 disabled:opacity-50 disabled:cursor-not-allowed',
+              willFail ? 'bg-risk-600 enabled:hover:bg-risk-700' : 'bg-compliant-600 enabled:hover:bg-compliant-700')}>
+            {willFail ? <><XCircle size={13} /> Record retest {n} — failed</> : <><CheckCircle2 size={13} /> Record retest {n} — passed</>}
+          </button>
+        ) : checks.length ? (
+          <span className="text-[0.71875rem] text-ink-400">Mark every check — the verdict comes off the checks, not a button.</span>
+        ) : null}
+      </div>
+
+      <AnimatePresence>{shown?.validation && <QAResultsModal title={shown.text} validation={shown.validation} onClose={() => setViewing(null)} />}</AnimatePresence>
+    </div>
+  );
+}
+
 /** Every retest that has already run. Two failures put it in front of the reviewer:
  *  a fix that has missed twice is not a remediation problem any more. */
 function RetestHistory({ rounds }: { rounds: RetestRound[] }) {
@@ -884,7 +1017,10 @@ function RetestHistory({ rounds }: { rounds: RetestRound[] }) {
             <span className="tabular-nums text-ink-400 shrink-0">{r.n}.</span>
             <span className="min-w-0">
               <b className={cn('font-semibold', r.result === 'Pass' ? 'text-compliant-700' : 'text-risk-700')}>{r.result}</b>
-              <span className="text-ink-400"> · {r.samples.length} items from {r.windowFrom} → {r.windowTo} · {r.by}</span>
+              {/* A design round re-checked checks, not items — there is no sample to count. */}
+              {r.checks
+                ? <span className="text-ink-400"> · {r.checks.length} design check{r.checks.length === 1 ? '' : 's'} re-checked against the fix · {r.by}</span>
+                : <span className="text-ink-400"> · {r.samples.length} items from {r.windowFrom} → {r.windowTo} · {r.by}</span>}
               {r.rationale && <span className="block text-ink-600">{r.rationale}</span>}
             </span>
           </li>
@@ -995,9 +1131,14 @@ const MW_INDICATORS = MW_INDICATOR_CATALOGUE as readonly string[];
 /** The register's columns. Widths are fixed on everything except the finding,
  *  which takes whatever is left — it is the only cell holding a sentence, and
  *  the rest are pills and one number that never need more room than they ask
- *  for. `DEF_COLS` is the colSpan an opened row's body sits across. */
-const DEF_COL_W = { id: 152, track: 104, exposure: 116, severity: 176, status: 136, court: 158 };
-const DEF_COLS = 7;
+ *  for. `DEF_COLS` is the colSpan an opened row's body sits across. The two
+ *  owner columns are sized to their headers ("Deficiency owner" outruns any
+ *  initial-and-surname under it); Stage is wide enough for "Awaiting reviewer",
+ *  with its due date on a line of its own beneath. The first column carries the
+ *  control ID under the finding's own, indented — 200 fits the S11 format
+ *  (TRY/AIH/R001/C001, up to ~21 characters) on one line. */
+const DEF_COL_W = { id: 200, track: 104, exposure: 116, severity: 176, riskOwner: 124, defOwner: 164, status: 152, court: 158 };
+const DEF_COLS = 9;
 
 /** Filter menus read in the order the thing itself runs in — severity worst
  *  first (it is a ladder), stage in lifecycle order, court in the order the
@@ -1006,6 +1147,55 @@ const SEVERITY_ORDER = ['Material Weakness', 'Significant Deficiency', 'Deficien
 const STAGE_ORDER = ['Identified', 'Rating review', 'Planning', 'Plan review', 'Remediation', 'Retest', 'Awaiting reviewer', 'Closed'] as const;
 const COURT_ORDER = ['auditor', 'risk-owner', 'reviewer', 'none'] as const;
 const COURT_LABEL: Record<Court, string> = { auditor: 'Auditor', 'risk-owner': 'Risk owner', reviewer: 'Reviewer', none: 'Closed' };
+
+/** The register's two people. The risk owner is the control's owner — who answers
+ *  for the control the finding sits on. The deficiency owner is the Responsible
+ *  person the fix plan names, and only once that plan has been submitted: until
+ *  then the field still holds the control owner it was pre-filled with at raise,
+ *  and a name nobody has committed to would read as an assignment. Every stage
+ *  past Planning is only reachable through a submitted plan, which covers seeds
+ *  written before the submission was stamped. */
+const PLAN_SUBMITTED_STAGES: readonly ExceptionStatus[] = ['Plan review', 'Remediation', 'Retest', 'Awaiting reviewer', 'Closed'];
+function riskOwnerOf(d: Deficiency, eng: IcfrEngagement): string | null {
+  return eng.controls.find(c => c.id === d.controlId)?.owner?.trim() || null;
+}
+function deficiencyOwnerOf(d: Deficiency): string | null {
+  const submitted = !!d.planSubmitted || PLAN_SUBMITTED_STAGES.includes(d.status);
+  return submitted ? d.remediation.owner.trim() || null : null;
+}
+
+/** The Stage cell's second line — when the fix is due, from the stage a plan can
+ *  carry a date. Before Planning nobody has been handed the fix yet, and a closed
+ *  finding's date is spent, so neither gets a line. */
+const DUE_STAGES: readonly ExceptionStatus[] = ['Planning', 'Plan review', 'Remediation', 'Retest', 'Awaiting reviewer'];
+function stageDue(d: Deficiency): { label: string; overdue: boolean } | null {
+  if (!DUE_STAGES.includes(d.status)) return null;
+  const r = d.remediation;
+  if (!r.date) return { label: 'no due date', overdue: false };
+  if (fixOverdue(r)) {
+    const days = daysPastDue(r.date);
+    return { label: days > 0 ? `overdue ${days}d` : 'due today', overdue: true };
+  }
+  return { label: `due ${formatDueShort(r.date)}`, overdue: false };
+}
+function StageDueLine({ d }: { d: Deficiency }) {
+  const due = stageDue(d);
+  if (!due) return null;
+  // indented to the pill's own text, so the two read as one cell
+  return <div className={cn('mt-0.5 pl-2.5 text-[0.6875rem] tabular-nums whitespace-nowrap', due.overdue ? 'text-risk-700 font-semibold' : 'text-ink-400')}>{due.label}</div>;
+}
+function OwnerName({ name, missing }: { name: string | null; missing?: string }) {
+  return name
+    ? <span className="block truncate" title={name}>{name}</span>
+    : <span className="text-ink-400" title={missing}>—</span>;
+}
+/** A filter for a column of names: the people actually on the page, A–Z, and a
+ *  "—" entry only when some row shows one. */
+const NO_NAME = '—';
+function peopleOpts(names: (string | null)[], noneLabel: string): (string | { value: string; label: string })[] {
+  const named = Array.from(new Set(names.filter((n): n is string => !!n))).sort((a, b) => a.localeCompare(b));
+  return ['All', ...named, ...(names.some(n => !n) ? [{ value: NO_NAME, label: noneLabel }] : [])];
+}
 
 export function DeficienciesView() {
   const { eng, role, meOwner, focusDefId } = useIcfr();
@@ -1030,13 +1220,17 @@ export function DeficienciesView() {
   const [severity, setSeverity] = useState('All');
   const [stage, setStage] = useState('All');
   const [court, setCourt] = useState('All');
-  const clearFilters = () => { setTrack('All'); setSeverity('All'); setStage('All'); setCourt('All'); };
-  const engaged = track !== 'All' || severity !== 'All' || stage !== 'All' || court !== 'All';
+  const [riskOwner, setRiskOwner] = useState('All');
+  const [defOwner, setDefOwner] = useState('All');
+  const clearFilters = () => { setTrack('All'); setSeverity('All'); setRiskOwner('All'); setDefOwner('All'); setStage('All'); setCourt('All'); };
+  const engaged = track !== 'All' || severity !== 'All' || riskOwner !== 'All' || defOwner !== 'All' || stage !== 'All' || court !== 'All';
 
   // Severity is computed, not stored — the same grade the row shows, so the
-  // filter can never disagree with the pill it filtered on.
+  // filter can never disagree with the pill it filtered on. The two owners are
+  // read by the same helpers the row prints with, for the same reason.
   const graded = useMemo(() => all.map(d => ({
     d, grade: gradeException(d, eng).grade, court: courtForException(d),
+    riskOwner: riskOwnerOf(d, eng), defOwner: deficiencyOwnerOf(d),
   })), [all, eng]);
 
   // Only the values actually present are offered: a menu naming a stage no
@@ -1049,10 +1243,14 @@ export function DeficienciesView() {
   const stageOpts = opts(Array.from(new Set(all.map(d => d.status))), STAGE_ORDER);
   const courtOpts = opts(Array.from(new Set(graded.map(g => g.court))), COURT_ORDER)
     .map(v => (v === 'All' ? v : { value: v, label: COURT_LABEL[v as Court] }));
+  const riskOwnerOpts = peopleOpts(graded.map(g => g.riskOwner), 'None recorded');
+  const defOwnerOpts = peopleOpts(graded.map(g => g.defOwner), 'No plan yet');
 
   const rows = graded.filter(g =>
     (track === 'All' || g.d.track === track)
     && (severity === 'All' || g.grade === severity)
+    && (riskOwner === 'All' || (g.riskOwner ?? NO_NAME) === riskOwner)
+    && (defOwner === 'All' || (g.defOwner ?? NO_NAME) === defOwner)
     && (stage === 'All' || g.d.status === stage)
     && (court === 'All' || g.court === court));
 
@@ -1076,13 +1274,15 @@ export function DeficienciesView() {
         // what makes a page of these triageable: severity, stage and whose court
         // it is in line up down the page instead of being re-found in each card.
         <div className="reg-wrap def-reg">
-          <table className="border-collapse w-full" style={{ tableLayout: 'fixed', minWidth: 1080 }}>
+          <table className="border-collapse w-full" style={{ tableLayout: 'fixed', minWidth: 1428 }}>
             <colgroup>
               <col style={{ width: DEF_COL_W.id }} />
               <col />
               <col style={{ width: DEF_COL_W.track }} />
               <col style={{ width: DEF_COL_W.exposure }} />
               <col style={{ width: DEF_COL_W.severity }} />
+              <col style={{ width: DEF_COL_W.riskOwner }} />
+              <col style={{ width: DEF_COL_W.defOwner }} />
               <col style={{ width: DEF_COL_W.status }} />
               <col style={{ width: DEF_COL_W.court }} />
             </colgroup>
@@ -1095,7 +1295,13 @@ export function DeficienciesView() {
                 </th>
                 <th className="num" title="What could have slipped through while the control was broken — not the error actually found">Exposure</th>
                 <th><HeaderFilter label="Severity" value={severity} options={severityOpts} allLabel="All severities" onChange={setSeverity} ariaLabel="Filter by severity" /></th>
-                <th><HeaderFilter label="Stage" value={stage} options={stageOpts} allLabel="All stages" onChange={setStage} ariaLabel="Filter by stage" /></th>
+                <th title="Who owns the control this was found on">
+                  <HeaderFilter label="Risk owner" value={riskOwner} options={riskOwnerOpts} allLabel="Anyone" onChange={setRiskOwner} ariaLabel="Filter by risk owner" />
+                </th>
+                <th title="The responsible person the fix plan names — shown once the plan is submitted">
+                  <HeaderFilter label="Deficiency owner" value={defOwner} options={defOwnerOpts} allLabel="Anyone" onChange={setDefOwner} ariaLabel="Filter by deficiency owner" />
+                </th>
+                <th title="Where it stands, and when the fix is due"><HeaderFilter label="Stage" value={stage} options={stageOpts} allLabel="All stages" onChange={setStage} ariaLabel="Filter by stage" /></th>
                 <th title="Whose move it is — the owner remediates, the auditor evaluates and retests, the reviewer closes">
                   <HeaderFilter label="Court" value={court} options={courtOpts} allLabel="Any court" onChange={setCourt} ariaLabel="Filter by court" />
                 </th>
@@ -1354,11 +1560,111 @@ function RootCauseLink({ d, eng }: { d: Deficiency; eng: IcfrEngagement }) {
   );
 }
 
+// ─── Ira's first sizing, and the exposure's working (S9, A31/A32) ────────────────
+/** "✦ Ira suggested — why", under a field Ira filled when the exception was
+ *  raised. The store drops the reason the moment the field changes, so the tag
+ *  only ever sits on Ira's own figure — no accept click, and nothing to dismiss. */
+function IraTag({ reason }: { reason?: string }) {
+  if (!reason) return null;
+  return (
+    <p className="text-[0.65625rem] leading-snug pl-[128px] -mt-1">
+      <span className="font-semibold text-brand-700">✦ Ira suggested</span>
+      <span className="text-ink-500"> — {reason}</span>
+    </p>
+  );
+}
+
+/** '14 May – 30 Jun 2026' — the year once, unless the window crosses one. */
+function dayRange(from: string, to: string): string {
+  const a = fmtDay(from), b = fmtDay(to);
+  return from.slice(0, 4) === to.slice(0, 4) ? `${a.replace(/\s\d{4}$/, '')} – ${b}` : `${a} – ${b}`;
+}
+
+function WorkingRow({ label, children }: { label?: string; children: ReactNode }) {
+  return (
+    <div className="flex items-baseline gap-2">
+      <span className="w-[8.5rem] shrink-0 text-ink-400">{label}</span>
+      <span className="min-w-0 flex-1 text-ink-700">{children}</span>
+    </div>
+  );
+}
+
+/** The exposure worked out from the data, with its working printed underneath.
+ *  Offered, never written on its own: the auditor takes the figure with one click
+ *  or types their own in the box above. */
+function ExposureWorking({ x, current, onUse }: { x: DataExposure; current: number; onUse: (value: number) => void }) {
+  if (x.kind === 'no-audit') {
+    return <p className="pl-[128px] -mt-1 text-[0.6875rem] text-ink-400">No audit on this engagement to work the exposure out over — type the figure by hand.</p>;
+  }
+  const figure = x.kind === 'population' || x.accounts.length > 0;
+  return (
+    <div className="ml-[128px] rounded-md border border-canvas-border bg-paper-50/40 px-2.5 py-2 space-y-1.5">
+      <div className="flex items-center gap-2 flex-wrap">
+        <span className="text-[0.6875rem] font-semibold text-ink-600">Exposure (worked out from the data)</span>
+        {figure && <span className="text-[0.75rem] font-bold tabular-nums text-ink-900">{fmt(x.value)}</span>}
+        {figure && (current === x.value
+          ? <span className="ml-auto inline-flex items-center gap-1 text-[0.6875rem] font-semibold text-compliant-700"><Check size={11} /> In use</span>
+          : (
+            <span className="ml-auto inline-flex items-center gap-1.5 text-[0.6875rem] text-ink-400">
+              <button onClick={() => onUse(x.value)} className="h-7 px-2.5 rounded-md border border-brand-200 bg-brand-50 text-[0.71875rem] font-semibold text-brand-700 hover:bg-brand-100 cursor-pointer transition-colors">Use {fmt(x.value)}</button>
+              or type your own
+            </span>
+          ))}
+      </div>
+      <div className="space-y-1 text-[0.6875rem] leading-snug">
+        {x.kind === 'population' ? (
+          <>
+            <WorkingRow label="Failure window">
+              {dayRange(x.from, x.to)}{' '}
+              <span className="text-ink-400">({x.firstFailed ? `first failed item ${x.firstFailed.ref}` : 'start of the audit — no failed item could be dated'} → {x.fixed ? 'fix' : 'end of the audit, not fixed yet'})</span>
+            </WorkingRow>
+            <WorkingRow label="Population">
+              <b className="font-semibold tabular-nums">{x.count.toLocaleString('en-IN')}</b> instances in that window <span className="text-ink-400">· of {x.population.toLocaleString('en-IN')}</span>
+            </WorkingRow>
+            <WorkingRow label="Value">
+              <b className="font-semibold tabular-nums">{fmt(x.value)}</b> <span className="text-ink-400">← total of those</span>
+            </WorkingRow>
+          </>
+        ) : (
+          <>
+            <WorkingRow label="Why the whole period">
+              {x.why === 'design'
+                ? `Design failure — the control was built wrong from ${fmtDay(x.from)}`
+                : 'No population was extracted, so nothing dates when the failure started'}
+            </WorkingRow>
+            <WorkingRow label="Failure window">
+              {dayRange(x.from, x.to)} <span className="text-ink-400">(the whole audit period)</span>
+            </WorkingRow>
+            <WorkingRow label="Source">
+              {x.accounts.length
+                ? `Trial balance accounts mapped to ${x.process}`
+                : `No material trial balance account is mapped to ${x.process} — nothing to total, so type the exposure by hand`}
+            </WorkingRow>
+            {x.accounts.map(k => (
+              <WorkingRow key={k.id}>
+                <span className="flex items-baseline gap-2">
+                  <span className="min-w-0">{k.caption} <span className="text-ink-400">· {k.entity}</span></span>
+                  <span className="ml-auto shrink-0 tabular-nums font-semibold text-ink-800">{fmt(k.balance)}</span>
+                </span>
+              </WorkingRow>
+            ))}
+            {x.accounts.length > 0 && (
+              <WorkingRow label="Value">
+                <b className="font-semibold tabular-nums">{fmt(x.value)}</b> <span className="text-ink-400">← total of those</span>
+              </WorkingRow>
+            )}
+          </>
+        )}
+      </div>
+    </div>
+  );
+}
+
 export function DeficiencyCard({ d, defaultOpen = false, showControlLink = true, layout = 'card' }: { d: Deficiency; defaultOpen?: boolean; showControlLink?: boolean; layout?: 'card' | 'row' }) {
   const {
     eng, role, me, openControl, updateDeficiency, setExceptionStatus, completeSizing, confirmRating, returnRating,
     submitPlan, reviewPlan, signOffException, reopenException, updateRemediation, addRemediationEvidence,
-    raiseChallenge, respondToChallenge, meOwner, focusDefId, clearFocusDef,
+    raiseChallenge, respondToChallenge, meOwner, focusDefId, clearFocusDef, openAuditId,
   } = useIcfr();
   const { addToast } = useToast();
   const W = defWord(eng.id);
@@ -1426,6 +1732,21 @@ export function DeficiencyCard({ d, defaultOpen = false, showControlLink = true,
   // `updateDeficiency` handles, so the reviewer never silently owns a number
   // they did not agree.
   const sizing = isAuditor && !locked && (d.status === 'Identified' || d.status === 'Rating review');
+  // The exposure worked out from the data (S9, A32), under the audit that is open
+  // — else the live cycle, the same audit a draw would be made under. Only while
+  // the figures are the auditor's to set; the owner never sees the working.
+  const dataExposure = useMemo(() => {
+    const tested = eng.controls.find(c => c.id === d.controlId);
+    if (!sizing || !tested) return null;
+    const entities = entitiesFor(eng.id);
+    return exposureFromData(d, eng, {
+      audit: workingAudit(eng, openAuditId),
+      home: sampleHome(eng, a => auditCovers(a, tested, eng.id)),
+      captions: captionsFor(eng.id),
+      normalise: normaliseProcess,
+      entityName: id => entities.find(e => e.id === id)?.name ?? id,
+    });
+  }, [sizing, d, eng, openAuditId]);
   const r = d.remediation;
   const planReady = !!r.action.trim() && !!r.owner.trim() && !!r.date;
 
@@ -1519,12 +1840,15 @@ export function DeficiencyCard({ d, defaultOpen = false, showControlLink = true,
                 <button key={l} onClick={() => updateDeficiency(d.id, { likelihood: l })} className={cn('h-7 px-2.5 rounded-md border text-[11.5px] font-semibold cursor-pointer transition-colors', d.likelihood === l ? 'bg-brand-50 border-brand-200 text-brand-700' : 'border-canvas-border text-ink-600 hover:bg-paper-50')}>{l}</button>
               ))}
             </div>
+            <IraTag reason={d.iraSuggested?.likelihood} />
             <div className="flex items-center gap-2 text-[12px]">
               <span className="text-ink-500 w-[120px]">Exposure ₹</span>
               <input type="number" value={d.magnitude} onChange={e => updateDeficiency(d.id, { magnitude: Number(e.target.value) || 0 })} aria-label="Exposure in rupees" className="h-8 w-44 px-2.5 rounded-md border border-canvas-border text-[0.78125rem] tabular-nums focus:outline-none focus:border-brand-300 focus:ring-2 focus:ring-brand-50" />
               <span className={cn('text-[11.5px]', material ? 'text-risk-700 font-semibold' : 'text-ink-400')}>{material ? '≥' : '<'} materiality {fmt(M)}{ct ? ' · clearly trivial' : ''}</span>
             </div>
             <p className="text-[10.5px] text-ink-400 pl-[128px] -mt-1">What <b className="font-semibold text-ink-500">could</b> have slipped through while the control was broken — not the error actually found.</p>
+            <IraTag reason={d.iraSuggested?.magnitude} />
+            {dataExposure && <ExposureWorking x={dataExposure} current={d.magnitude} onUse={v => updateDeficiency(d.id, { magnitude: v })} />}
             {/* The indicators read in full — the same checkbox rows as the ground
                 rules panel. Clipped to 34 characters they all began "Ineffective
                 …" or "Material misstatement …" and could not be told apart, which
@@ -1554,6 +1878,7 @@ export function DeficiencyCard({ d, defaultOpen = false, showControlLink = true,
                 : <span className="text-ink-400 text-[11px]">in place — the cap only rescues a Material Weakness grade, and never clears the exception</span>
               )}
             </div>
+            <IraTag reason={d.iraSuggested?.compensatingControlId} />
             {/* Aggregation — the GROUP'S own result, which is the only thing
                 aggregation is for. What used to sit here was two chips and a
                 dropdown reading "Not linked": it named the keys and never once
@@ -1778,11 +2103,12 @@ export function DeficiencyCard({ d, defaultOpen = false, showControlLink = true,
             books close, raised now while a date can still be moved. */}
         {step >= 3 && d.status !== 'Closed' && <RetestReadyLine readiness={readiness} />}
 
-        {/* ⑤ The retest itself — the auditor's grid, in their hat only. */}
+        {/* ⑤ The retest itself — the auditor's grid, in their hat only. A design
+            failure re-checks its failed design checks instead of drawing a sample. */}
         {!locked && d.status === 'Retest' && isAuditor && (
           samePerson(d.fixSubmitted, me)
             ? <span className="text-[0.75rem] font-semibold text-high-700 inline-flex items-center gap-1.5"><XCircle size={14} /> A different person must retest this — you declared the fix done.</span>
-            : <RetestPanel d={d} />
+            : d.track === 'design' ? <DesignRetestPanel d={d} /> : <RetestPanel d={d} />
         )}
 
         <RetestHistory rounds={rounds} />
@@ -1993,7 +2319,13 @@ export function DeficiencyCard({ d, defaultOpen = false, showControlLink = true,
           {fmt(d.magnitude)}
         </td>
         <td><SeverityPill s={grade} /></td>
-        <td><Pill tone={STATUS_TONE[d.status]}>{d.status}</Pill></td>
+        {/* Names, not thresholds — so the owner's own view keeps both columns. */}
+        <td><OwnerName name={riskOwnerOf(d, eng)} /></td>
+        <td><OwnerName name={deficiencyOwnerOf(d)} missing="Named once the fix plan is submitted" /></td>
+        <td className="tight">
+          <Pill tone={STATUS_TONE[d.status]}>{d.status}</Pill>
+          <StageDueLine d={d} />
+        </td>
         {/* By name: a register that says which ROLE holds a finding still leaves
             the reader asking who to chase. */}
         <td><CourtBadge court={courtForException(d)} fromRole={role} who={exceptionCourtDetail(d, eng).who} /></td>

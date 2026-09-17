@@ -5,6 +5,8 @@
  * Single source of truth so adding/changing an engagement is one edit, not two.
  */
 
+import type { Control as SoxControl } from '../components/sox-icfr/types';
+
 export type ProcessCode = 'P2P' | 'O2C' | 'R2R' | 'S2C' | 'ITGC';
 export type EngStatus = 'Active' | 'In Progress' | 'Planned' | 'Review' | 'Draft' | 'Closed';
 export type EngType = 'Compliance' | 'Internal Audit' | 'Automation' | 'SOX / ICFR';
@@ -90,6 +92,14 @@ export interface Engagement {
    *  concluded), 'carried' = design carried from the prior cycle with the
    *  operating retest pending, 'fresh' (default) = nothing tested yet. */
   soxSeedMode?: 'fresh' | 'live' | 'carried';
+  /** SOX (S11): the RACMs picked from the Engagements page's RACM tab — at
+   *  creation, and any added later with "Add RACM". Names are kept so the
+   *  engagement can say where its controls came from even if the RACM is edited. */
+  soxRacms?: { racmId: string; name: string }[];
+  /** SOX (S11): the controls copied from those RACMs when they were picked.
+   *  Copy at pick time — later edits on the RACM tab never reach this engagement.
+   *  When present the workspace seeds exactly these. */
+  soxControls?: SoxControl[];
   /** Present only for Compliance engagements created via the wizard. */
   complianceConfig?: ComplianceConfig;
   /** Present only for Internal Audit engagements created via the wizard. */
@@ -347,4 +357,24 @@ export function findEngagement(id: string): Engagement | undefined {
 export function libraryEngagements(): Engagement[] {
   const fresh = RUNTIME_ENGAGEMENTS.filter(r => !ENGAGEMENTS.some(s => s.id === r.id));
   return [...fresh, ...ENGAGEMENTS.map(s => RUNTIME_ENGAGEMENTS.find(r => r.id === s.id) ?? s)];
+}
+/** The name an engagement will actually be saved under. A name already used by
+ *  any engagement in the library (every type; trimmed, case-insensitive) gets
+ *  the next free " (2)", " (3)"… — an existing "X (2)" counts as taken. A free
+ *  name comes back as typed (trimmed). `excludeId` is the engagement being
+ *  edited, so an unchanged name never collides with itself.
+ *  libraryEngagements() is already the complete set: the created-engagements
+ *  store (One-Click Audit) registers every entry into the runtime registry at
+ *  load and on add, so reading it again would only double count — and
+ *  importing it here would be a circular import. */
+export function uniqueEngagementName(name: string, excludeId?: string): string {
+  const base = name.trim();
+  if (!base) return base;
+  const taken = new Set(libraryEngagements()
+    .filter(e => e.id !== excludeId)
+    .map(e => e.name.trim().toLowerCase()));
+  if (!taken.has(base.toLowerCase())) return base;
+  let n = 2;
+  while (taken.has(`${base} (${n})`.toLowerCase())) n++;
+  return `${base} (${n})`;
 }

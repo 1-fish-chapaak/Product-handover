@@ -13,7 +13,7 @@ const TASK_META: Record<TaskType, { label: string; Icon: typeof Upload; action: 
 };
 
 export default function RiskOwnerPortal() {
-  const { eng, meOwner, submitTask, openControl, openRegister, setTab, setView, setExceptionStatus } = useIcfr();
+  const { eng, meOwner, openAuditId, submitTask, openControl, openRegister, setTab, setView, setExceptionStatus } = useIcfr();
   const { addToast } = useToast();
   // person-lane: only this persona's tasks and controls — never the whole engagement
   const mine = eng.tasks.filter(t => isOwnerTask(eng, t, meOwner));
@@ -78,7 +78,8 @@ export default function RiskOwnerPortal() {
     addToast({ type: 'success', title: 'Sent to audit', message: 'Submitted — we’ll let you know if more is needed.' });
   };
 
-  const dueTests = testsDueNow(eng.controls.filter(c => isOwnerOf(c, meOwner)));
+  // Inside an audit, a year-end control it holds back (A29) is not a test due.
+  const dueTests = testsDueNow(eng.controls.filter(c => isOwnerOf(c, meOwner)), eng.audits.find(a => a.id === openAuditId));
   const shownTests = dueTests.slice(0, 5);
   const hasWork = dueTests.length > 0 || open.length > 0;
   const anyOverdue = open.some(t => t.overdue) || dueTests.some(c => testDueInDays(c) < 0);

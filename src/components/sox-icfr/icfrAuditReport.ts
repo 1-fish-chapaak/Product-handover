@@ -298,7 +298,7 @@ export function buildAuditReport(eng: IcfrEngagement, controls: Control[] = eng.
     name: MAP_TITLE, blocks: [
       {
         kind: 'note', label: MAP_TITLE, tone: 'neutral',
-        text: 'The actions below are management’s, not the audit team’s: each is the fix the control owner has committed to, with the date they committed to. The audit team retests the fix and states the outcome in the last column — a fix is not closed because it was delivered, it is closed because a fresh sample proved it.',
+        text: 'The actions below are management’s, not the audit team’s: each is the fix the control owner has committed to, with the date they committed to. The audit team retests the fix and states the outcome in the last column — a fix is not closed because it was delivered, it is closed because a retest proved it: a fresh sample for an operating failure, the failed design checks re-checked against the fix for a design one.',
       },
       {
         kind: 'table', title: 'Agreed actions',

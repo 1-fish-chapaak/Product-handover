@@ -1,4 +1,5 @@
 import { ENGAGEMENTS, registerEngagement } from '../../../data/engagements';
+import type { FileOrigin } from '../../sox-icfr/types';
 
 /**
  * SOX Testing tab — data layer for the scoping-first flow prototype.
@@ -10,12 +11,18 @@ import { ENGAGEMENTS, registerEngagement } from '../../../data/engagements';
  * the existing engagement or SOX workspace data.
  */
 
-export type EntityType = 'Holding' | 'Subsidiary';
+export type EntityType = 'Holding' | 'Subsidiary' | 'Joint venture' | 'Associate' | 'Branch';
+
+/** Every type the entity table's dropdown offers, in the order it lists them. */
+export const ENTITY_TYPES: readonly EntityType[] = ['Holding', 'Subsidiary', 'Joint venture', 'Associate', 'Branch'];
 
 export interface GroupEntity {
   id: string;
   name: string;
   type: EntityType;
+  /** Where the company is incorporated — read off an org chart, or typed on
+   *  the row. Free text: absent until someone says. */
+  country?: string;
   /** Group ownership, % — the DIRECT holding of whoever sits above it. */
   ownership: number;
   /** The entity that holds this one, when it is not held by the listed parent
@@ -347,6 +354,43 @@ export interface SoxProgramme {
    *  story is already a card there (ENG-001 ≡ the seeded FY26 programme). The
    *  record still powers the workspace Configuration tab. */
   unlisted?: boolean;
+  /** S11 — the scoping New engagement ran, as the engagement was created with
+   *  it. Absent on seeds and on programmes created before New engagement asked. */
+  scoping?: EngagementScoping;
+}
+
+/**
+ * What New engagement's Materiality & TB and Scope steps decided (S11).
+ *
+ * A record, not a driver: what the engagement tests is the controls it copied
+ * from the RACM tab (`soxControls` / `soxRacms` on the engagement). Same shapes
+ * as the New audit record (`AuditRecord` in sox-icfr/types) so one reader can
+ * take either.
+ */
+export interface EngagementScoping {
+  /** The trial balance(s) and general ledger(s) attached. */
+  /** `origin` is the source the user picked for each file as it was uploaded
+   *  (System generated → 'System export', Client prepared → 'Client-prepared'). */
+  files: { name: string; kind: 'tb' | 'gl'; origin?: FileOrigin }[];
+  /** Material accounts (caption id → process), as mapped. */
+  accountProcesses: Record<string, string>;
+  /** The Processes panel: one row per process Ira weighed, her call, and where
+   *  the user landed. A move against her carries a note; a process brought IN
+   *  against her is a qualitative pick and carries a reason from QUAL_REASONS. */
+  processScope: {
+    process: string;
+    /** ₹ Cr across its material accounts. */
+    total: number;
+    accounts: number;
+    recommended: boolean;
+    inScope: boolean;
+    qualitativeReason?: string;
+    note?: string;
+  }[];
+  /** Companies in scope, by entity id. */
+  entityIds: string[];
+  /** Where the user overruled the derived company scope, and why. */
+  scopeNotes: { entityId: string; name: string; inScope: boolean; note: string }[];
 }
 
 const ENTITY_SHORT: Record<string, string> = {

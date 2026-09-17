@@ -1,5 +1,5 @@
 import * as XLSX from 'xlsx';
-import { assessSeverity, attestationOverruled, restsOnStatementAlone, auditorProvenChecks, combinedSample, conclusionOf, controlConclusion, designBasis, operatingApplies, countVerdict, coverageVerdict, fileOriginOf, designOutstanding, formatDueDate, formatINR, icfrConclusion, isControlLocked, itgcHolds, openMaterialWeaknesses, populationSources, sampleSizeGuide, trackResult, designProgress, hasRowCount, isAssisting, toeRounds, LEGACY_SOURCE_ID } from './helpers';
+import { assessSeverity, attestationOverruled, requiredFilesOf, restsOnStatementAlone, auditorProvenChecks, combinedSample, conclusionOf, controlConclusion, designBasis, operatingApplies, countVerdict, coverageVerdict, fileOriginOf, designOutstanding, formatDueDate, formatINR, icfrConclusion, isControlLocked, itgcHolds, openMaterialWeaknesses, populationSources, sampleSizeGuide, trackResult, designProgress, hasRowCount, isAssisting, toeRounds, LEGACY_SOURCE_ID } from './helpers';
 import { FIVE_W_1H, gapNature } from './types';
 import { ownersOf } from './auditScope';
 // ─── PARKED (Aug 2026) — Priced impact & Gap type ────────────────────────────
@@ -412,9 +412,7 @@ export function buildControlPaper(eng: IcfrEngagement, c: Control): PaperBlock[]
     headers: ['', 'Attribute', 'Evidence — W/P reference', 'Provided by'],
     rows: steps.map((s, i) => {
       const ev = [
-        s.workflowName ? `${s.workflowName}${s.workflowRunRef ? ` (${s.workflowRunRef})` : ''}` : null,
-        s.inputFile?.name ?? null,
-        s.validation?.fileName && s.validation.fileName !== s.inputFile?.name ? s.validation.fileName : null,
+        ...requiredFilesOf(s, c).map(f => f.file?.name ?? null),
         ...(s.attestation?.evidence.map(e => e.name) ?? []),
       ].filter(Boolean).join(' · ');
       return [letter(i), s.code, ev || '—', s.attestation?.by ?? c.owner];

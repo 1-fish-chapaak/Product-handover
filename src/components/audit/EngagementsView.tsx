@@ -2,8 +2,8 @@ import { useEffect, useMemo, useState } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import {
   ClipboardCheck, Calendar, ArrowUpRight, Search, Plus,
-  Play, Trash2, AlertTriangle, X, LayoutDashboard, List,
-  Pencil, UserPlus, CheckCircle2, GitBranch, Sparkles,
+  Trash2, AlertTriangle, X, LayoutDashboard, List,
+  Pencil, UserPlus, CheckCircle2, GitBranch, Sparkles, Table2,
 } from 'lucide-react';
 import Orb from '../shared/Orb';
 import { findEngagement, libraryEngagements, registerEngagement, type AutomationSubtype, type Engagement, type EngStatus, type EngType, type ProcessCode } from '../../data/engagements';
@@ -28,8 +28,9 @@ import { getActionsForTarget, getReflectionsFor, useInsightCacheVersion, type Ta
 import { makePortfolioBuilder, portfolioInsightSubjects, portfolioStackSteps, PORTFOLIO_SUBJECT_ID } from '../../data/portfolioInsights';
 import WorkflowConfigurator from '../exceptions/workflow/WorkflowConfigurator';
 import type { Persona } from '../exceptions/workflow/workflowTypes';
+import RacmLibraryView from '../sox-icfr/RacmLibraryView';
 
-type EngViewMode = 'overview' | 'list' | 'approval-flow';
+type EngViewMode = 'overview' | 'list' | 'racm' | 'approval-flow';
 
 interface Props {
   onOpenEngagement: (engagementId: string) => void;
@@ -303,11 +304,8 @@ export default function EngagementsView({ onOpenEngagement, onOpenAuditPlanning,
             <div className="text-[0.6875rem] font-semibold text-text-muted tracking-wider uppercase mb-1">Engagements</div>
             <h1 className="text-[2rem] font-bold text-text leading-tight">Engagement Library</h1>
             <p className="text-[0.8125rem] text-text-secondary mt-1.5 max-w-xl">
-              {mode === 'overview'
-                ? 'A cross-engagement snapshot — health, attention, and activity across your whole portfolio.'
-                : mode === 'approval-flow'
-                  ? 'Manage reusable approval chains used when exceptions are sent for approval across engagements.'
-                  : 'Browse all engagements — compliance audits, internal audits, and automation programs.'}
+              {/* One line for the whole library, whichever tab is open (user ask). */}
+              A cross-engagement snapshot — health, attention, and activity across your whole portfolio.
             </p>
           </div>
           <div className="flex items-center gap-2 shrink-0">
@@ -500,15 +498,9 @@ export default function EngagementsView({ onOpenEngagement, onOpenAuditPlanning,
                     )}
                   </div>
 
-                  {/* Actions column */}
+                  {/* Actions column — no ▶ Open icon (feedback #9): it read as
+                      "run", and the whole card already opens the engagement. */}
                   <div className="flex items-start justify-end gap-1">
-                    <IconAction
-                      label="Open engagement"
-                      onClick={(e) => { e.stopPropagation(); onOpenEngagement(eng.id); }}
-                      className="text-text-muted hover:text-primary hover:bg-primary/10"
-                    >
-                      <Play size={14} />
-                    </IconAction>
                     {can('eng_edit') && (
                       <IconAction
                         label="Edit engagement"
@@ -622,6 +614,10 @@ export default function EngagementsView({ onOpenEngagement, onOpenAuditPlanning,
         </>)}
 
 
+        {/* RACM (S11) — every SOX RACM, beside Approval Flow. SOX engagements
+            pick theirs at creation and no longer carry a RACM tab of their own. */}
+        {mode === 'racm' && <RacmLibraryView canManage={can('eng_create')} />}
+
         {mode === 'approval-flow' && (
           <div>
             <p className="text-[0.78125rem] text-text-secondary mb-4 max-w-[620px]">
@@ -692,9 +688,11 @@ export default function EngagementsView({ onOpenEngagement, onOpenAuditPlanning,
                   // Skipped scoping points at the RACM, not the trial balances:
                   // the Configuration tab this used to name is now Audit logs
                   // and carries no upload. Matches the Overview banner.
-                  message: p.scopingSkipped
-                    ? `${p.fy} programme created — add the RACM from the RACM tab`
-                    : `${p.fy} programme created — ${p.racms.length} RACMs derived from scoping`,
+                  // S11: say what was copied — RACMs picked on the Scope step and
+                  // their controls — not the processes the programme records.
+                  message: eng?.soxRacms?.length
+                    ? `${p.fy} programme created — ${eng.soxRacms.length} RACM${eng.soxRacms.length === 1 ? '' : 's'} and ${eng.soxControls?.length ?? 0} controls copied from the RACM tab`
+                    : `${p.fy} programme created — add RACMs from the Control library`,
                 });
               }}
             />
@@ -744,6 +742,7 @@ function ViewToggle({
   const tabs: { id: EngViewMode; label: string; Icon: typeof List; badge?: number }[] = [
     { id: 'overview', label: 'Overview', Icon: LayoutDashboard },
     { id: 'list', label: 'All Engagements', Icon: List, badge: count },
+    { id: 'racm', label: 'RACM', Icon: Table2 },
     { id: 'approval-flow', label: 'Approval Flow', Icon: GitBranch },
   ];
   return (
