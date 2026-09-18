@@ -5,7 +5,7 @@ import {
   Building2, Landmark, Upload, FileText, Check, Circle, Plus, Trash2, X,
   ArrowRight, ArrowLeft, Loader2, Info, Sparkles,
   ShieldCheck, ClipboardList, Zap, AlertCircle, AlertTriangle,
-  FileSpreadsheet, Grid3x3, Paperclip, Pencil, Minus,
+  FileSpreadsheet, Grid3x3, Paperclip, Pencil, Minus, ChevronDown,
 } from 'lucide-react';
 import { SourceChips } from './ProgrammeView';
 import { FormSelect } from '../../shared/FilterSelect';
@@ -313,6 +313,14 @@ const YEAR_TYPE_PICKER = false;
  *  the field (and its annual-cycle explainer) back. */
 const AUDIT_PERIOD_FIELD = false;
 
+/** "Map material accounts to processes" table on Materiality & TB — PARKED
+ *  (user ask, 17 Sep: scoping happens on the Scope step, by entity and by
+ *  process). The mapping still runs on Ira's suggestion from each account's
+ *  caption, so the Scope step's process recommendation and the saved
+ *  accountProcesses are unchanged. Flip to bring the table back; the Scope
+ *  step's "you mapped" wording follows this flag. */
+const ACCOUNT_MAPPING = false;
+
 const yeSegActive = 'border-brand-500 bg-brand-50 text-brand-700 ring-2 ring-brand-500/20';
 const yeSegIdle = 'border-border bg-white text-text-secondary hover:bg-surface-2';
 /** Required documents for scoping (user ask): listed in a "Required files"
@@ -587,6 +595,18 @@ export default function ScopingWizard({ onCancel, onCreated, typePreselected, on
   /** The qualitative reason, saved and draft. '' in a draft = not picked yet. */
   const [procReasons, setProcReasons] = useState<Record<string, string>>({});
   const [procReasonDrafts, setProcReasonDrafts] = useState<Record<string, string>>({});
+  /** The one process whose RACM list is open (user ask, 17 Sep: RACMs are
+   *  picked inside the process row). One at a time keeps the step short.
+   *  `undefined` until Scope first shows — then it opens the first in-scope
+   *  process still waiting on a RACM, and the user drives it from there. */
+  const [openProc, setOpenProc] = useState<string | null | undefined>(undefined);
+  /** Processes with no material accounts sit behind "Show more" unless one is
+   *  in scope or was moved — they are the long, quiet tail of the list. */
+  const [showAllProcs, setShowAllProcs] = useState(false);
+  /** Each Scope section folds from its header (user ask, 17 Sep). Open on
+   *  arrival; the header's count still reads while folded. */
+  const [entitiesOpen, setEntitiesOpen] = useState(true);
+  const [processesOpen, setProcessesOpen] = useState(true);
   const procInScope = (r: ProcessScopeRow) => procOverrides[r.process] ?? r.recommended;
 
   /** Drop every trace of a move — the process is back where Ira had it. */
@@ -605,6 +625,8 @@ export default function ScopingWizard({ onCancel, onCreated, typePreselected, on
    *  the move and its note — there is nothing left to explain. */
   const flipProcess = (r: ProcessScopeRow) => {
     const next = !procInScope(r);
+    // Switching a process in opens its RACM list — picking them comes next.
+    if (next) setOpenProc(r.process);
     if (next === r.recommended) { clearProcMove(r.process); return; }
     setProcOverrides(prev => ({ ...prev, [r.process]: next }));
     setProcNoteDrafts(prev => ({ ...prev, [r.process]: procNotes[r.process] ?? '' }));
@@ -653,6 +675,10 @@ export default function ScopingWizard({ onCancel, onCreated, typePreselected, on
   const procNotesOutstanding = procChanges.filter(c => !c.note || (c.qualitative && !c.reason)).length;
   const scopedProcesses = processRows.filter(procInScope);
   const recommendedCount = processRows.filter(r => r.recommended).length;
+  /** Never recommended, not in scope, not moved — shown only on "Show more". */
+  const isQuietProc = (r: ProcessScopeRow) => !r.recommended && !procInScope(r) && procOverrides[r.process] === undefined;
+  const quietProcCount = processRows.filter(isQuietProc).length;
+  const visibleProcs = showAllProcs ? processRows : processRows.filter(r => !isQuietProc(r));
 
   // ── Companies ────────────────────────────────────────────────────────────
   // The Basics table, weighed against performance materiality. Built straight
@@ -740,6 +766,7 @@ export default function ScopingWizard({ onCancel, onCreated, typePreselected, on
   const coveragePct = scope.groupTotal
     ? Math.round((scopedEntities.reduce((s, r) => s + r.total, 0) / scope.groupTotal) * 1000) / 10
     : 0;
+  const coverageMet = coveragePct >= COVERAGE_TARGET;
   // A company deleted on Basics takes its override and note with it — a reason
   // for a row that no longer exists would hold Continue hostage.
   useEffect(() => {
@@ -796,6 +823,14 @@ export default function ScopingWizard({ onCancel, onCreated, typePreselected, on
   /** In scope with nothing to test it with. Continue holds until each has a
    *  RACM ticked (or uploaded), or is moved out with a note. */
   const noRacmInScope = pickedByProcess.filter(g => g.racms.length === 0).map(g => g.process);
+  // First look at Scope: open the first in-scope process still waiting on a
+  // RACM (else the first in scope). After that the user opens and folds.
+  useEffect(() => {
+    if (step !== SCOPE_STEP || openProc !== undefined) return;
+    setOpenProc((pickedByProcess.find(g => g.racms.length === 0) ?? pickedByProcess[0])?.process ?? null);
+    // Only the arrival matters — later ticks must not move the open list.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [step, openProc]);
   /** Two ticked RACMs holding one control ID — two matrices written for one
    *  process at one company, both numbering from R001/C001. Flag and block
    *  (decision 9): copying both would put two controls under one ID. */
@@ -888,10 +923,10 @@ export default function ScopingWizard({ onCancel, onCreated, typePreselected, on
       : unsourcedFiles > 0 ? 'Answer the source of every file to continue' : null)
     : step === SCOPE_STEP
       ? (clashes.length > 0 ? 'Untick one of the RACMs whose control IDs clash'
-        : noRacmInScope.length > 0 ? `${andList(noRacmInScope)} ${noRacmInScope.length === 1 ? 'has' : 'have'} no RACM picked`
+        : noRacmInScope.length > 0 ? `Choose RACMs for ${andList(noRacmInScope)}`
         : notesDue > 0 ? `${notesDue} change${notesDue === 1 ? '' : 's'} need${notesDue === 1 ? 's' : ''} a note`
-        : scopedProcesses.length === 0 ? 'Bring at least one process into scope'
-        : scopedEntities.length === 0 ? 'Bring at least one company into scope'
+        : scopedProcesses.length === 0 ? 'Tick at least one process'
+        : scopedEntities.length === 0 ? 'Tick at least one entity'
         : null)
       : null;
 
@@ -2225,8 +2260,8 @@ export default function ScopingWizard({ onCancel, onCreated, typePreselected, on
             {/* ── Map material accounts to processes ─────────────────────────
                 After the rule, because it reads it: only accounts at or above
                 performance materiality, redrawn as the rule changes. Appears
-                once a trial balance is attached. */}
-            {hasTb && (
+                once a trial balance is attached. Parked — ACCOUNT_MAPPING. */}
+            {ACCOUNT_MAPPING && hasTb && (
               <div className="mt-6 pt-5 border-t border-canvas-border">
                 <h4 className="text-[0.8125rem] font-semibold text-ink-900 mb-0.5">
                   Map material accounts to processes
@@ -2270,458 +2305,467 @@ export default function ScopingWizard({ onCancel, onCreated, typePreselected, on
         )}
 
         {/* ── S11 · Scope ────────────────────────────────────────────────────
-            Three answers, top to bottom, each built on the one above it:
-            which processes (Ira's call from the mapping), which companies (the
-            numbers' call), and which RACMs each in-scope process is tested with
-            — picked off the RACM tab, whose companies default the ticks. */}
+            Two sections (entities first — user ask, 17 Sep): which entities
+            (the numbers' call), then which processes (Ira's call from the
+            mapping), each opening onto the RACMs it is tested with.
+            Simplified the same day ("so much is happening here"): one tick on
+            the left for every choice, each section's count said once in its
+            header, a reason line only where it is news, one RACM list open at
+            a time, and the processes with no material accounts behind
+            "Show more". */}
         {step === SCOPE_STEP && (
-          <StepShell sub="Which processes and companies this engagement covers, and the RACMs each process is tested with.">
-            {/* ── 1 · Processes ── overruled row by row with a note; bringing
-                one IN against Ira is a qualitative pick and takes a reason from
-                the list too. */}
-            <div className="mb-6">
-              <h4 className="text-[0.8125rem] font-semibold text-ink-900 mb-0.5 flex items-center gap-1.5">
-                <Sparkles size={13} className="text-brand-600 shrink-0" />
-                <span>
-                  Ira recommends {recommendedCount} process{recommendedCount === 1 ? '' : 'es'}
-                  <span className="font-normal text-ink-500"> — from the material accounts you mapped</span>
-                </span>
-              </h4>
-              <p className="text-[0.75rem] text-ink-500 mb-2 leading-relaxed">
-                Move any process against the recommendation and say why.
-              </p>
-              <div className="border border-canvas-border rounded-xl overflow-hidden">
-                {processRows.length === 0 ? (
-                  <p className="text-[0.71875rem] text-ink-400 px-4 py-6 text-center">
-                    No material accounts mapped and no RACMs on the RACM tab yet.
-                  </p>
-                ) : processRows.map(r => {
-                  const on = procInScope(r);
-                  const picks = on ? pickedByProcess.find(g => g.process === r.process)?.racms ?? [] : [];
-                  const pickedControls = picks.reduce((s, x) => s + x.controls.length, 0);
-                  const move = procOverrides[r.process];
-                  const qualitative = move === true;
-                  const editing = procNoteDrafts[r.process] !== undefined;
-                  const reasonDraft = procReasonDrafts[r.process] ?? '';
-                  return (
-                    <div key={r.process} className="bg-white border-b border-canvas-border last:border-b-0 hover:bg-brand-50/40 transition-colors">
-                      <div className="flex items-start gap-3 px-4 py-2.5">
-                        <Grid3x3 size={14} className="text-ink-400 shrink-0 mt-0.5" />
-                        <span className="flex-1 min-w-0">
-                          <span className="flex items-center gap-2">
-                            <span className="text-[0.8125rem] text-ink-900 truncate">{r.process}</span>
-                            {qualitative && (
-                              <span className="shrink-0 px-1.5 rounded border border-brand-200 bg-brand-50 text-[0.625rem] font-semibold text-brand-700 leading-4">Qualitative</span>
-                            )}
-                          </span>
-                          <span className="block text-[0.65625rem] text-ink-500 mt-0.5 leading-relaxed tabular-nums">
-                            {r.accounts > 0
-                              ? `${money(r.total)} · ${r.accounts} material account${r.accounts === 1 ? '' : 's'}`
-                              : 'No material accounts'}
-                          </span>
-                          {/* Can it be tested — asked only of a process that is
-                              in. The picking itself happens further down. */}
-                          {on && (picks.length > 0 ? (
-                            <span className="flex items-center gap-1 mt-1 text-[0.65625rem] font-semibold text-compliant-700">
-                              <Check size={11} className="shrink-0" /> {picks.length} RACM{picks.length === 1 ? '' : 's'} picked · {pickedControls} control{pickedControls === 1 ? '' : 's'}
-                            </span>
-                          ) : (
-                            <span className="flex items-start gap-1 mt-1 text-[0.65625rem] font-semibold text-risk-700">
-                              <X size={11} className="shrink-0 mt-px" /> No RACM picked — pick or upload one below, or move it out with a note.
-                            </span>
-                          ))}
-                        </span>
-                        <span className={cn('shrink-0 mt-1 text-[0.6875rem] font-semibold', on ? 'text-ink-700' : 'text-ink-400')}>
-                          {on ? 'In scope' : 'Out'}
-                        </span>
-                        <button
-                          role="switch"
-                          aria-checked={on}
-                          aria-label={`${on ? 'Take' : 'Bring'} ${r.process} ${on ? 'out of' : 'into'} scope`}
-                          onClick={() => flipProcess(r)}
-                          className="shrink-0 mt-1 cursor-pointer"
-                        >
-                          <span className={cn('block w-8 h-[18px] rounded-full relative transition-colors', on ? 'bg-brand-600' : 'bg-canvas-border')}>
-                            <span className={cn('absolute top-[2px] w-3.5 h-3.5 rounded-full bg-white transition-all', on ? 'left-[16px]' : 'left-[2px]')} />
-                          </span>
-                        </button>
-                      </div>
-
-                      {/* ── Why ── same box, tint and Save / Edit / Cancel as a
-                          moved company. A qualitative pick asks for its reason
-                          from the list first, then the note. */}
-                      <AnimatePresence initial={false}>
-                        {move !== undefined && (
-                          <motion.div
-                            initial={{ opacity: 0, height: 0 }}
-                            animate={{ opacity: 1, height: 'auto' }}
-                            exit={{ opacity: 0, height: 0 }}
-                            transition={{ duration: 0.18 }}
-                            className="overflow-hidden"
-                          >
-                            <div className="mx-4 mb-3 p-3 rounded-xl border border-high-200 bg-high-50/40">
-                              <span className="text-[0.6875rem] font-semibold text-high-700 mb-1.5 flex items-center gap-1.5">
-                                <Pencil size={11} className="shrink-0" />
-                                {on ? 'Why is this process in scope?' : 'Why is this process out of scope?'}
-                              </span>
-                              {editing ? (
-                                <>
-                                  {qualitative && (
-                                    <div className="flex flex-wrap gap-1.5 mb-2" role="group" aria-label={`Reason ${r.process} is in scope`}>
-                                      {QUAL_REASONS.map(q => (
-                                        <button
-                                          key={q}
-                                          onClick={() => setProcReasonDrafts(prev => ({ ...prev, [r.process]: q }))}
-                                          aria-pressed={reasonDraft === q}
-                                          className={cn('h-7 px-2 rounded-md border text-[0.6875rem] font-semibold transition-colors cursor-pointer inline-flex items-center gap-1',
-                                            reasonDraft === q ? 'border-brand-300 bg-brand-50 text-brand-700' : 'border-canvas-border bg-white text-ink-600 hover:border-ink-300')}
-                                        >
-                                          {reasonDraft === q && <Check size={11} className="shrink-0" />}{q}
-                                        </button>
-                                      ))}
-                                    </div>
-                                  )}
-                                  <textarea
-                                    aria-label={on ? `Why ${r.process} is in scope` : `Why ${r.process} is out of scope`}
-                                    autoFocus
-                                    rows={2}
-                                    value={procNoteDrafts[r.process] ?? ''}
-                                    onChange={e => setProcNoteDrafts(prev => ({ ...prev, [r.process]: e.target.value }))}
-                                    placeholder="Record your rationale — retained in the working paper."
-                                    className="w-full text-[0.75rem] rounded-lg border border-canvas-border bg-white px-2.5 py-2 text-ink-800 placeholder:text-ink-400 outline-none focus:border-high-300 focus:ring-2 focus:ring-high-200/60 resize-none transition-all"
-                                  />
-                                  <div className="flex items-center justify-end gap-2 mt-2">
-                                    <button
-                                      onClick={() => cancelProcNote(r.process)}
-                                      className="h-7 px-2.5 text-[0.71875rem] font-semibold text-ink-500 hover:text-ink-800 transition-colors cursor-pointer"
-                                    >
-                                      Cancel
-                                    </button>
-                                    <button
-                                      onClick={() => saveProcNote(r.process)}
-                                      disabled={!(procNoteDrafts[r.process] ?? '').trim() || (qualitative && !reasonDraft)}
-                                      className="h-7 px-3 text-[0.71875rem] font-semibold rounded-lg bg-high-600 text-white disabled:opacity-40 enabled:hover:bg-high-700 transition-colors cursor-pointer"
-                                    >
-                                      Save
-                                    </button>
-                                  </div>
-                                </>
-                              ) : (
-                                <div className="flex items-start justify-between gap-3">
-                                  <p className="text-[0.75rem] text-ink-700 leading-relaxed min-w-0 whitespace-pre-wrap">
-                                    {qualitative && procReasons[r.process] && <span className="font-semibold text-ink-900">{procReasons[r.process]} — </span>}
-                                    {procNotes[r.process]}
-                                  </p>
-                                  <button
-                                    onClick={() => {
-                                      setProcNoteDrafts(prev => ({ ...prev, [r.process]: procNotes[r.process] ?? '' }));
-                                      if (qualitative) setProcReasonDrafts(prev => ({ ...prev, [r.process]: procReasons[r.process] ?? '' }));
-                                    }}
-                                    className="shrink-0 h-6 px-2 text-[0.71875rem] font-semibold text-high-700 hover:bg-high-100/60 rounded-md transition-colors cursor-pointer"
-                                  >
-                                    Edit
-                                  </button>
-                                </div>
-                              )}
-                            </div>
-                          </motion.div>
-                        )}
-                      </AnimatePresence>
-                    </div>
-                  );
-                })}
-              </div>
-            </div>
-
-            {/* ── 2 · Companies ── derived, not picked. The coverage bar is the
+          <StepShell>
+            {/* ── 1 · Entities ── derived, not picked. The coverage line is the
                 headline: the one number that says whether the engagement
                 reaches far enough across the group. */}
-            <div className="mb-6">
-              <h4 className="text-[0.8125rem] font-semibold text-ink-900 mb-0.5">Companies in scope</h4>
-              <p className="text-[0.75rem] text-ink-500 mb-2 leading-relaxed">
-                Weighed against performance materiality ({money(perf)}). Move any company and say why.
-              </p>
-              {scope.rows.length > 0 && (
-                <div className="mb-3 rounded-xl border border-canvas-border bg-white px-3.5 py-3">
-                  <p className="text-[0.71875rem] text-ink-600 leading-relaxed">
-                    <span className="text-[0.9375rem] font-bold text-ink-900 tabular-nums">{coveragePct}%</span> of the group covered
-                    <span className="text-ink-400"> · target {COVERAGE_TARGET}%</span>
-                  </p>
-                  <span className="relative mt-2 block h-1.5 rounded-full bg-paper-100 overflow-visible">
-                    <span
-                      className={cn('absolute inset-y-0 left-0 rounded-full transition-all', coveragePct >= COVERAGE_TARGET ? 'bg-compliant-600' : 'bg-mitigated-500')}
-                      style={{ width: `${Math.min(100, coveragePct)}%` }}
-                    />
-                    {/* The target, drawn where it falls. */}
-                    <span className="absolute -top-0.5 h-2.5 w-px bg-ink-400" style={{ left: `${COVERAGE_TARGET}%` }} aria-hidden />
+            <section aria-labelledby="scope-entities">
+              <div className="flex items-baseline justify-between gap-3 mb-0.5">
+                <h4 id="scope-entities" className="text-[0.875rem] font-semibold text-ink-900">
+                  <button
+                    type="button"
+                    onClick={() => setEntitiesOpen(v => !v)}
+                    aria-expanded={entitiesOpen}
+                    aria-controls="scope-entities-body"
+                    className="inline-flex items-center gap-1.5 rounded-md cursor-pointer hover:text-brand-700 transition-colors"
+                  >
+                    Entities
+                    <ChevronDown size={14} className={cn('shrink-0 text-ink-400 transition-transform', entitiesOpen && 'rotate-180')} />
+                  </button>
+                </h4>
+                {scope.rows.length > 0 && (
+                  <span className="shrink-0 text-[0.75rem] text-ink-500 tabular-nums">
+                    {scopedEntities.length} of {scope.rows.length} in scope
                   </span>
-                  <p className="text-[0.6875rem] text-ink-400 mt-1.5 leading-relaxed">
-                    {coveragePct >= COVERAGE_TARGET
-                      ? 'Enough of the group is covered. Toggle any company in or out to overrule this.'
-                      : `Below target — bring more companies in until ${COVERAGE_TARGET}% of the group is covered.`}
-                  </p>
-                </div>
-              )}
+                )}
+              </div>
+              <AnimatePresence initial={false}>
+                {entitiesOpen && (
+                  <motion.div
+                    id="scope-entities-body"
+                    initial={{ opacity: 0, height: 0 }}
+                    animate={{ opacity: 1, height: 'auto' }}
+                    exit={{ opacity: 0, height: 0 }}
+                    transition={{ duration: 0.2, ease: [0.2, 0, 0, 1] }}
+                    className="overflow-hidden"
+                  >
+                    <p className="text-[0.75rem] text-ink-500 mb-3 leading-relaxed">
+                      Ticked from the trial balance against performance materiality ({money(perf)}).
+                    </p>
 
-              {splitFromParent.length > 0 && (
-                <p className="flex items-start gap-1.5 mb-2 text-[0.6875rem] text-high-700">
-                  <AlertTriangle size={11} className="shrink-0 mt-0.5" />
-                  <span>
-                    {splitFromParent.length} compan{splitFromParent.length === 1 ? 'y is' : 'ies are'} held by a
-                    company that IS in scope, but left out{': '}
-                    <b className="font-semibold">{splitFromParent.map(r => r.name).join(', ')}</b>.
-                  </span>
-                </p>
-              )}
-
-              <div className="border border-canvas-border rounded-xl overflow-hidden">
-                {scope.rows.length === 0 ? (
-                  <p className="text-[0.71875rem] text-ink-400 px-4 py-6 text-center">No companies yet — add them on Basics.</p>
-                ) : scope.rows.map(row => {
-                  const on = companyInScope(row);
-                  const absent = row.status === 'absent';
-                  const depth = chainDepth(row, scope.rows);
-                  const changed = !absent && overrides[row.id] !== undefined;
-                  const editing = noteDrafts[row.id] !== undefined;
-                  return (
-                    <div
-                      key={row.id}
-                      className={cn('bg-white border-b border-canvas-border last:border-b-0 transition-colors', absent ? 'opacity-50' : 'hover:bg-brand-50/40')}
-                    >
-                      <div className="flex items-start gap-3 px-4 py-2.5">
-                        {/* Only the name indents — the switches stay one
-                            straight column however deep a company sits. */}
-                        {depth > 0 && <span aria-hidden className="shrink-0" style={{ width: depth * 12 }} />}
-                        {depth >= 2 && (
-                          <span aria-hidden className="text-[0.6875rem] text-ink-300 leading-none shrink-0 mt-1 -mr-1.5">↳</span>
-                        )}
-                        {row.type === 'Holding'
-                          ? <Landmark size={14} className="text-brand-600 shrink-0 mt-0.5" />
-                          : <Building2 size={14} className="text-ink-400 shrink-0 mt-0.5" />}
-                        <span className="flex-1 min-w-0">
-                          <span className="flex items-center gap-2">
-                            <span className="text-[0.8125rem] text-ink-900 truncate">{row.name}</span>
-                            {!absent && row.sharePct > 0 && (
-                              <span className="text-[0.6875rem] tabular-nums text-ink-400 shrink-0 ml-auto">{row.sharePct}%</span>
-                            )}
+                    {scope.rows.length > 0 && (
+                      <div className="mb-3">
+                        <div className="flex items-baseline justify-between gap-3 text-[0.75rem]">
+                          <span className="text-ink-600">
+                            <span className="font-semibold text-ink-900 tabular-nums">{coveragePct}%</span> of the group covered
                           </span>
-                          <span className="block text-[0.65625rem] text-ink-500 mt-0.5 leading-relaxed">{row.reason}</span>
+                          <span className="shrink-0 text-ink-400 tabular-nums">Target {COVERAGE_TARGET}%</span>
+                        </div>
+                        <span className="relative mt-1.5 block h-1 rounded-full bg-paper-100">
+                          <span
+                            className={cn('absolute inset-y-0 left-0 rounded-full transition-all', coverageMet ? 'bg-compliant-600' : 'bg-mitigated-500')}
+                            style={{ width: `${Math.min(100, coveragePct)}%` }}
+                          />
+                          {/* The target, drawn where it falls. */}
+                          <span className="absolute -top-0.5 h-2 w-px bg-ink-400" style={{ left: `${COVERAGE_TARGET}%` }} aria-hidden />
                         </span>
-                        {/* Nothing to weigh, nothing to test — so no switch. */}
-                        {!absent && (
-                          <button
-                            role="switch"
-                            aria-checked={on}
-                            aria-label={`${on ? 'Take' : 'Bring'} ${row.name} ${on ? 'out of' : 'into'} scope`}
-                            onClick={() => flipEntity(row)}
-                            className="shrink-0 mt-1 cursor-pointer"
-                          >
-                            <span className={cn('block w-8 h-[18px] rounded-full relative transition-colors', on ? 'bg-brand-600' : 'bg-canvas-border')}>
-                              <span className={cn('absolute top-[2px] w-3.5 h-3.5 rounded-full bg-white transition-all', on ? 'left-[16px]' : 'left-[2px]')} />
-                            </span>
-                          </button>
+                        {!coverageMet && (
+                          <p className="flex items-start gap-1.5 mt-1.5 text-[0.6875rem] text-mitigated-700">
+                            <AlertTriangle size={11} className="shrink-0 mt-0.5" />
+                            <span>Below target — tick more entities until {COVERAGE_TARGET}% of the group is covered.</span>
+                          </p>
                         )}
                       </div>
+                    )}
 
-                      <AnimatePresence initial={false}>
-                        {changed && (
-                          <motion.div
-                            initial={{ opacity: 0, height: 0 }}
-                            animate={{ opacity: 1, height: 'auto' }}
-                            exit={{ opacity: 0, height: 0 }}
-                            transition={{ duration: 0.18 }}
-                            className="overflow-hidden"
-                          >
-                            <div className="mx-4 mb-3 p-3 rounded-xl border border-high-200 bg-high-50/40">
-                              <span className="text-[0.6875rem] font-semibold text-high-700 mb-1.5 flex items-center gap-1.5">
-                                <Pencil size={11} className="shrink-0" />
-                                {on ? 'Why is this company in scope?' : 'Why is this company out of scope?'}
+                    {splitFromParent.length > 0 && (
+                      <p className="flex items-start gap-1.5 mb-2 text-[0.6875rem] text-high-700">
+                        <AlertTriangle size={11} className="shrink-0 mt-0.5" />
+                        <span>
+                          {splitFromParent.length} entit{splitFromParent.length === 1 ? 'y is' : 'ies are'} held by an
+                          entity that is in scope, but left out{': '}
+                          <b className="font-semibold">{splitFromParent.map(r => r.name).join(', ')}</b>.
+                        </span>
+                      </p>
+                    )}
+
+                    <div className="rounded-lg border border-canvas-border bg-white overflow-hidden">
+                      {scope.rows.length === 0 ? (
+                        <p className="text-[0.75rem] text-ink-400 px-4 py-6 text-center">No entities yet — add them on Basics.</p>
+                      ) : scope.rows.map(row => {
+                        const on = companyInScope(row);
+                        const absent = row.status === 'absent';
+                        const depth = chainDepth(row, scope.rows);
+                        const changed = !absent && overrides[row.id] !== undefined;
+                        const editing = noteDrafts[row.id] !== undefined;
+                        /** Only the exceptions get a line — "clears performance
+                         *  materiality" is what the tick already says. */
+                        const exception = absent ? 'Not in the trial balance'
+                          : row.status === 'coverage' ? `Added to reach ${COVERAGE_TARGET}% coverage`
+                          : row.status === 'out' ? 'Below performance materiality'
+                          : null;
+                        return (
+                          <div key={row.id} className="border-b border-canvas-border last:border-b-0">
+                            <button
+                              type="button"
+                              role="checkbox"
+                              aria-checked={on}
+                              aria-label={absent ? `${row.name} — not in the trial balance` : row.name}
+                              disabled={absent}
+                              onClick={() => flipEntity(row)}
+                              className={cn(
+                                'group w-full flex items-center gap-3 px-4 py-2 text-left transition-colors',
+                                absent ? 'cursor-not-allowed' : 'cursor-pointer hover:bg-brand-50/40',
+                              )}
+                            >
+                              <TickBox state={on} disabled={absent} />
+                              {/* Only the name indents — the ticks stay one straight
+                                  column however deep an entity sits. */}
+                              {depth > 0 && <span aria-hidden className="shrink-0" style={{ width: `${depth * 0.75}rem` }} />}
+                              {depth >= 2 && (
+                                <span aria-hidden className="text-[0.6875rem] text-ink-300 leading-none shrink-0 -mr-1.5">↳</span>
+                              )}
+                              <span className="flex-1 min-w-0">
+                                <span className={cn('block text-[0.8125rem] truncate', absent ? 'text-ink-400' : 'text-ink-900')} title={row.name}>
+                                  {row.name}
+                                </span>
+                                {exception && <span className="block text-[0.6875rem] text-ink-500 mt-0.5">{exception}</span>}
                               </span>
-                              {editing ? (
-                                <>
-                                  <textarea
-                                    aria-label={on ? `Why ${row.name} is in scope` : `Why ${row.name} is out of scope`}
-                                    autoFocus
-                                    rows={2}
-                                    value={noteDrafts[row.id] ?? ''}
-                                    onChange={e => setNoteDrafts(prev => ({ ...prev, [row.id]: e.target.value }))}
-                                    placeholder="Record your rationale — retained in the working paper."
-                                    className="w-full text-[0.75rem] rounded-lg border border-canvas-border bg-white px-2.5 py-2 text-ink-800 placeholder:text-ink-400 outline-none focus:border-high-300 focus:ring-2 focus:ring-high-200/60 resize-none transition-all"
+                              {!absent && (
+                                <span className="shrink-0 text-[0.71875rem] text-ink-400 tabular-nums">
+                                  {money(row.total)} · {row.sharePct}%
+                                </span>
+                              )}
+                            </button>
+
+                            <AnimatePresence initial={false}>
+                              {changed && (
+                                <motion.div
+                                  initial={{ opacity: 0, height: 0 }}
+                                  animate={{ opacity: 1, height: 'auto' }}
+                                  exit={{ opacity: 0, height: 0 }}
+                                  transition={{ duration: 0.18, ease: [0.2, 0, 0, 1] }}
+                                  className="overflow-hidden"
+                                >
+                                  <ScopeNote
+                                    question={on ? 'Why is this entity in scope?' : 'Why is this entity out of scope?'}
+                                    ariaLabel={on ? `Why ${row.name} is in scope` : `Why ${row.name} is out of scope`}
+                                    editing={editing}
+                                    draft={noteDrafts[row.id] ?? ''}
+                                    onDraft={v => setNoteDrafts(prev => ({ ...prev, [row.id]: v }))}
+                                    canSave={!!(noteDrafts[row.id] ?? '').trim()}
+                                    onSave={() => saveNote(row.id)}
+                                    onCancel={() => cancelNote(row)}
+                                    onEdit={() => setNoteDrafts(prev => ({ ...prev, [row.id]: scopeNotes[row.id] ?? '' }))}
+                                    saved={scopeNotes[row.id]}
                                   />
-                                  <div className="flex items-center justify-end gap-2 mt-2">
-                                    <button
-                                      onClick={() => cancelNote(row)}
-                                      className="h-7 px-2.5 text-[0.71875rem] font-semibold text-ink-500 hover:text-ink-800 transition-colors cursor-pointer"
+                                </motion.div>
+                              )}
+                            </AnimatePresence>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </motion.div>
+                )}
+              </AnimatePresence>
+            </section>
+
+            {/* ── 2 · Processes and their RACMs ── overruled row by row with a
+                note; bringing one IN against Ira is a qualitative pick and
+                takes a reason from the list too. An in-scope row opens onto
+                its RACM ticks (user ask, 17 Sep — no separate RACM section). */}
+            <section aria-labelledby="scope-processes" className="mt-8 pt-6 border-t border-canvas-border">
+              <div className="flex items-baseline justify-between gap-3 mb-0.5">
+                <h4 id="scope-processes" className="text-[0.875rem] font-semibold text-ink-900">
+                  <button
+                    type="button"
+                    onClick={() => setProcessesOpen(v => !v)}
+                    aria-expanded={processesOpen}
+                    aria-controls="scope-processes-body"
+                    className="inline-flex items-center gap-1.5 rounded-md cursor-pointer hover:text-brand-700 transition-colors"
+                  >
+                    Processes and RACMs
+                    <ChevronDown size={14} className={cn('shrink-0 text-ink-400 transition-transform', processesOpen && 'rotate-180')} />
+                  </button>
+                </h4>
+                {processRows.length > 0 && (
+                  <span className="shrink-0 text-[0.75rem] text-ink-500 tabular-nums">
+                    {scopedProcesses.length} in scope · {tickedRacms.length} RACM{tickedRacms.length === 1 ? '' : 's'} · {tickedControlCount} control{tickedControlCount === 1 ? '' : 's'}
+                  </span>
+                )}
+              </div>
+              <AnimatePresence initial={false}>
+                {processesOpen && (
+                  <motion.div
+                    id="scope-processes-body"
+                    initial={{ opacity: 0, height: 0 }}
+                    animate={{ opacity: 1, height: 'auto' }}
+                    exit={{ opacity: 0, height: 0 }}
+                    transition={{ duration: 0.2, ease: [0.2, 0, 0, 1] }}
+                    className="overflow-hidden"
+                  >
+                    <p className="text-[0.75rem] text-ink-500 mb-3 leading-relaxed">
+                      {recommendedCount > 0
+                        ? `Ira ticked the ${recommendedCount === 1 ? 'process' : `${recommendedCount} processes`} with material accounts. Choose the RACMs each one is tested with — their controls are copied in.`
+                        : 'No process has material accounts in the trial balance. Tick the ones to test and choose their RACMs.'}
+                    </p>
+                    {crossClashLines.length > 0 && (
+                      <ClashNote lines={crossClashLines} />
+                    )}
+
+                    <div className="rounded-lg border border-canvas-border bg-white overflow-hidden">
+                      {processRows.length === 0 ? (
+                        <p className="text-[0.75rem] text-ink-400 px-4 py-6 text-center">
+                          {ACCOUNT_MAPPING
+                            ? 'No material accounts mapped and no RACMs on the RACM tab yet.'
+                            : 'No material accounts in the trial balance and no RACMs on the RACM tab yet.'}
+                        </p>
+                      ) : (
+                        <>
+                          {visibleProcs.map(r => {
+                            const on = procInScope(r);
+                            const picks = on ? pickedByProcess.find(g => g.process === r.process)?.racms ?? [] : [];
+                            const pickedControls = picks.reduce((s, x) => s + x.controls.length, 0);
+                            const move = procOverrides[r.process];
+                            const qualitative = move === true;
+                            const editing = procNoteDrafts[r.process] !== undefined;
+                            const reasonDraft = procReasonDrafts[r.process] ?? '';
+                            const onTab = on ? racmsFor(r.process) : [];
+                            /** Nothing on the tab to tick — uploading is the only way on. */
+                            const nothingOnTab = onTab.length === 0;
+                            const allTicked = !nothingOnTab && picks.length === onTab.length;
+                            const someTicked = picks.length > 0 && !allTicked;
+                            const groupLines = on ? clashLinesFor(picks) : [];
+                            const listOpen = on && openProc === r.process;
+                            const listId = `scope-racms-${r.process.replace(/\W+/g, '-').toLowerCase()}`;
+                            return (
+                              <div key={r.process} className="border-b border-canvas-border last:border-b-0">
+                                <button
+                                  type="button"
+                                  role="checkbox"
+                                  aria-checked={on}
+                                  aria-label={r.process}
+                                  onClick={() => flipProcess(r)}
+                                  className={cn(
+                                    'group w-full flex items-center gap-3 px-4 text-left cursor-pointer hover:bg-brand-50/40 transition-colors',
+                                    on ? 'pt-2.5 pb-1.5' : 'py-2.5',
+                                  )}
+                                >
+                                  <TickBox state={on} />
+                                  <span className="flex-1 min-w-0 flex items-center gap-2">
+                                    <span className="text-[0.8125rem] font-medium text-ink-900 truncate">{r.process}</span>
+                                    {qualitative && (
+                                      <span className="shrink-0 px-1.5 rounded border border-brand-200 bg-brand-50 text-[0.625rem] font-semibold text-brand-700 leading-4">Qualitative</span>
+                                    )}
+                                  </span>
+                                  {r.accounts > 0 && (
+                                    <span className="shrink-0 text-[0.71875rem] text-ink-400 tabular-nums">
+                                      {money(r.total)} · {r.accounts} account{r.accounts === 1 ? '' : 's'}
+                                    </span>
+                                  )}
+                                </button>
+
+                                {/* ── Why ── a qualitative pick asks for its reason
+                                    from the list first, then the note. */}
+                                <AnimatePresence initial={false}>
+                                  {move !== undefined && (
+                                    <motion.div
+                                      initial={{ opacity: 0, height: 0 }}
+                                      animate={{ opacity: 1, height: 'auto' }}
+                                      exit={{ opacity: 0, height: 0 }}
+                                      transition={{ duration: 0.18, ease: [0.2, 0, 0, 1] }}
+                                      className="overflow-hidden"
                                     >
-                                      Cancel
-                                    </button>
+                                      <ScopeNote
+                                        question={on ? 'Why is this process in scope?' : 'Why is this process out of scope?'}
+                                        ariaLabel={on ? `Why ${r.process} is in scope` : `Why ${r.process} is out of scope`}
+                                        editing={editing}
+                                        draft={procNoteDrafts[r.process] ?? ''}
+                                        onDraft={v => setProcNoteDrafts(prev => ({ ...prev, [r.process]: v }))}
+                                        canSave={!!(procNoteDrafts[r.process] ?? '').trim() && (!qualitative || !!reasonDraft)}
+                                        onSave={() => saveProcNote(r.process)}
+                                        onCancel={() => cancelProcNote(r.process)}
+                                        onEdit={() => {
+                                          setProcNoteDrafts(prev => ({ ...prev, [r.process]: procNotes[r.process] ?? '' }));
+                                          if (qualitative) setProcReasonDrafts(prev => ({ ...prev, [r.process]: procReasons[r.process] ?? '' }));
+                                        }}
+                                        saved={<>
+                                          {qualitative && procReasons[r.process] && <span className="font-semibold text-ink-900">{procReasons[r.process]} — </span>}
+                                          {procNotes[r.process]}
+                                        </>}
+                                      >
+                                        {qualitative && (
+                                          <div className="flex flex-wrap gap-1.5 mb-2" role="group" aria-label={`Reason ${r.process} is in scope`}>
+                                            {QUAL_REASONS.map(q => (
+                                              <button
+                                                key={q}
+                                                type="button"
+                                                onClick={() => setProcReasonDrafts(prev => ({ ...prev, [r.process]: q }))}
+                                                aria-pressed={reasonDraft === q}
+                                                className={cn('h-7 px-2 rounded-md border text-[0.6875rem] font-semibold transition-colors cursor-pointer inline-flex items-center gap-1',
+                                                  reasonDraft === q ? 'border-brand-300 bg-brand-50 text-brand-700' : 'border-canvas-border bg-white text-ink-600 hover:border-ink-300')}
+                                              >
+                                                {reasonDraft === q && <Check size={11} className="shrink-0" />}{q}
+                                              </button>
+                                            ))}
+                                          </div>
+                                        )}
+                                      </ScopeNote>
+                                    </motion.div>
+                                  )}
+                                </AnimatePresence>
+
+                                {/* Where its RACMs stand — and the handle that opens
+                                    and folds them, so a folded row still says it. */}
+                                {on && (
+                                  <div className="pl-[2.75rem] pr-4 pb-2.5">
                                     <button
-                                      onClick={() => saveNote(row.id)}
-                                      disabled={!(noteDrafts[row.id] ?? '').trim()}
-                                      className="h-7 px-3 text-[0.71875rem] font-semibold rounded-lg bg-high-600 text-white disabled:opacity-40 enabled:hover:bg-high-700 transition-colors cursor-pointer"
+                                      type="button"
+                                      onClick={() => setOpenProc(listOpen ? null : r.process)}
+                                      aria-expanded={listOpen}
+                                      aria-controls={listId}
+                                      className={cn(
+                                        'inline-flex items-center gap-1.5 text-left text-[0.71875rem] font-semibold cursor-pointer hover:underline underline-offset-2',
+                                        groupLines.length > 0 ? 'text-risk-700'
+                                          : picks.length > 0 ? 'text-ink-700'
+                                          : nothingOnTab ? 'text-ink-500'
+                                          : 'text-brand-700',
+                                      )}
                                     >
-                                      Save
+                                      {groupLines.length > 0
+                                        ? <AlertTriangle size={12} className="shrink-0" />
+                                        : picks.length > 0 && <Check size={12} className="shrink-0 text-compliant-600" />}
+                                      <span className="tabular-nums">
+                                        {groupLines.length > 0
+                                          ? 'Control IDs clash — untick one RACM'
+                                          : picks.length > 0
+                                            ? `${picks.length} of ${onTab.length} RACM${onTab.length === 1 ? '' : 's'} · ${pickedControls} control${pickedControls === 1 ? '' : 's'}`
+                                            : nothingOnTab
+                                              ? 'No RACM for this process on the RACM tab'
+                                              : `Choose RACMs · ${onTab.length} on the RACM tab`}
+                                      </span>
+                                      <ChevronDown size={12} className={cn('shrink-0 transition-transform', listOpen && 'rotate-180')} />
                                     </button>
                                   </div>
-                                </>
-                              ) : (
-                                <div className="flex items-start justify-between gap-3">
-                                  <p className="text-[0.75rem] text-ink-700 leading-relaxed min-w-0 whitespace-pre-wrap">{scopeNotes[row.id]}</p>
-                                  <button
-                                    onClick={() => setNoteDrafts(prev => ({ ...prev, [row.id]: scopeNotes[row.id] ?? '' }))}
-                                    className="shrink-0 h-6 px-2 text-[0.71875rem] font-semibold text-high-700 hover:bg-high-100/60 rounded-md transition-colors cursor-pointer"
-                                  >
-                                    Edit
-                                  </button>
-                                </div>
-                              )}
-                            </div>
-                          </motion.div>
-                        )}
-                      </AnimatePresence>
-                    </div>
-                  );
-                })}
-              </div>
-              <p className="text-[0.71875rem] text-ink-400 mt-2">
-                {scopedEntities.length} of {scope.rows.length} compan{scope.rows.length === 1 ? 'y' : 'ies'} in scope
-              </p>
-            </div>
+                                )}
 
-            {/* ── 3 · RACMs ── one box per process in scope, listing the RACMs
-                the tab holds for it. Ticks default to the RACMs written for a
-                company in scope; any number, from any company, can be ticked.
-                Every control of a ticked RACM is copied in at creation. */}
-            <div>
-              <h4 className="text-[0.8125rem] font-semibold text-ink-900 mb-0.5">RACMs for each process in scope</h4>
-              <p className="text-[0.75rem] text-ink-500 mb-3 leading-relaxed">
-                Tick the RACMs from the RACM tab this engagement tests. All their controls are copied in when it is created.
-              </p>
-              {crossClashLines.length > 0 && (
-                <ClashNote lines={crossClashLines} />
-              )}
-              {pickedByProcess.length === 0 ? (
-                <p className="rounded-xl border border-dashed border-canvas-border bg-white text-[0.71875rem] text-ink-400 px-4 py-5 text-center">
-                  No process is in scope — bring one in above to pick its RACMs.
-                </p>
-              ) : (
-                <div className="space-y-3">
-                  {pickedByProcess.map(g => {
-                    const onTab = racmsFor(g.process);
-                    const groupLines = clashLinesFor(g.racms);
-                    const count = g.racms.reduce((s, r) => s + r.controls.length, 0);
-                    /** Nothing on the tab to tick — uploading is the only way on. */
-                    const nothingOnTab = onTab.length === 0;
-                    const allTicked = !nothingOnTab && g.racms.length === onTab.length;
-                    const someTicked = g.racms.length > 0 && !allTicked;
-                    return (
-                      <div key={g.process} className="rounded-xl border border-canvas-border bg-white overflow-hidden">
-                        <div className="flex flex-wrap items-center gap-x-2 gap-y-1.5 px-4 py-2.5 border-b border-canvas-border">
-                          {/* The process's tick sits in the RACM ticks' column:
-                              all of them, or none (a dash when some). Nothing
-                              on the tab leaves nothing to tick — the icon stays. */}
-                          {nothingOnTab ? (
-                            <>
-                              <Grid3x3 size={14} className="text-ink-400 shrink-0" />
-                              <span className="text-[0.8125rem] font-semibold text-ink-900 min-w-0 truncate">{g.process}</span>
-                            </>
-                          ) : (
-                            <button
-                              role="checkbox"
-                              aria-checked={allTicked ? true : someTicked ? 'mixed' : false}
-                              aria-label={`${allTicked ? 'Untick' : 'Tick'} every ${g.process} RACM`}
-                              onClick={() => setAllRacms(g.process, !allTicked)}
-                              className="inline-flex items-center gap-3 min-w-0 cursor-pointer text-left"
-                            >
-                              <span className={cn(
-                                'w-4 h-4 rounded border flex items-center justify-center shrink-0 transition-colors',
-                                allTicked || someTicked ? 'bg-brand-600 border-brand-600 text-white' : 'border-canvas-border bg-white',
-                              )}>
-                                {allTicked ? <Check size={11} strokeWidth={3} /> : someTicked ? <Minus size={11} strokeWidth={3} /> : null}
-                              </span>
-                              <span className="text-[0.8125rem] font-semibold text-ink-900 min-w-0 truncate">{g.process}</span>
-                            </button>
-                          )}
-                          {/* Said once: an empty process explains itself in the
-                              body below, so the header count only shows when
-                              there is something to count. */}
-                          {!nothingOnTab && (
-                            <span className="text-[0.6875rem] text-ink-400 tabular-nums">
-                              {g.racms.length} of {onTab.length} picked · {count} control{count === 1 ? '' : 's'}
-                            </span>
-                          )}
-                          {/* Filled only when the tab has nothing for this
-                              process — then it is the one way past the block.
-                              With RACMs to tick it stays quiet, so it doesn't
-                              invite a duplicate of a matrix already there. */}
-                          <button
-                            onClick={() => openRacmUpload(g.process)}
-                            title={`Upload a RACM for ${g.process} — it's saved to the RACM tab and ticked here`}
-                            className={cn(
-                              'ml-auto h-7 px-3 inline-flex items-center gap-1.5 rounded-lg text-[0.71875rem] font-semibold transition-colors cursor-pointer shrink-0',
-                              nothingOnTab
-                                ? 'bg-brand-600 text-white hover:bg-brand-700'
-                                : 'border border-canvas-border bg-white text-ink-600 hover:text-ink-900 hover:border-ink-300',
-                            )}
-                          >
-                            <Upload size={12} /> Upload RACM
-                          </button>
-                        </div>
-                        {groupLines.length > 0 && (
-                          <div className="px-4 pt-2.5"><ClashNote lines={groupLines} /></div>
-                        )}
-                        {nothingOnTab ? (
-                          <p className="text-[0.71875rem] text-ink-400 px-4 py-4 text-center">
-                            The RACM tab has nothing for {g.process} yet — upload one, or move the process out with a note.
-                          </p>
-                        ) : onTab.map(r => {
-                          const ticked = g.racms.some(x => x.id === r.id);
-                          return (
-                            <button
-                              key={r.id}
-                              role="checkbox"
-                              aria-checked={ticked}
-                              aria-label={`${r.name} — ${r.controls.length} controls`}
-                              onClick={() => toggleRacm(g.process, r.id)}
-                              className="w-full flex items-start gap-3 px-4 py-2.5 border-b border-canvas-border last:border-b-0 bg-white hover:bg-brand-50/40 transition-colors cursor-pointer text-left"
-                            >
-                              <span className={cn(
-                                'w-4 h-4 rounded border flex items-center justify-center shrink-0 mt-0.5 transition-colors',
-                                ticked ? 'bg-brand-600 border-brand-600 text-white' : 'border-canvas-border bg-white',
-                              )}>
-                                {ticked && <Check size={11} strokeWidth={3} />}
-                              </span>
-                              <span className="flex-1 min-w-0">
-                                <span className="block text-[0.78125rem] text-ink-900 truncate" title={r.name}>{r.name}</span>
-                                <span className="flex flex-wrap items-center gap-x-1.5 mt-0.5 text-[0.65625rem] text-ink-400">
-                                  <span className="inline-flex items-center gap-1 min-w-0 max-w-full" title={r.entity}>
-                                    <Building2 size={10} className="shrink-0 text-ink-300" />
-                                    <span className="truncate">{r.entity || '—'}</span>
-                                  </span>
-                                  <span className="text-ink-300">·</span>
-                                  <span className="tabular-nums">{r.controls.length} control{r.controls.length === 1 ? '' : 's'}</span>
-                                  {r.usedBy.length > 0 && (
-                                    <>
-                                      <span className="text-ink-300">·</span>
-                                      <span title={r.usedBy.map(u => u.name).join(', ')}>
-                                        Used by {r.usedBy.length} engagement{r.usedBy.length === 1 ? '' : 's'}
-                                      </span>
-                                    </>
+                                {/* ── RACMs ── the tab's RACMs for this process, hung
+                                    under its name. Ticks default to the ones written
+                                    for an entity in scope; any number, from any
+                                    entity, can be ticked. */}
+                                <AnimatePresence initial={false}>
+                                  {listOpen && (
+                                    <motion.div
+                                      id={listId}
+                                      initial={{ opacity: 0, height: 0 }}
+                                      animate={{ opacity: 1, height: 'auto' }}
+                                      exit={{ opacity: 0, height: 0 }}
+                                      transition={{ duration: 0.18, ease: [0.2, 0, 0, 1] }}
+                                      className="overflow-hidden"
+                                    >
+                                      <div className="ml-[2.75rem] mr-4 pb-3">
+                                        {groupLines.length > 0 && <ClashNote lines={groupLines} />}
+                                        {nothingOnTab ? (
+                                          <div className="flex items-center gap-3">
+                                            <p className="flex-1 min-w-0 text-[0.71875rem] text-ink-500 leading-relaxed">
+                                              Upload one, or untick {r.process} and say why.
+                                            </p>
+                                            <button
+                                              type="button"
+                                              onClick={() => openRacmUpload(r.process)}
+                                              title={`Upload a RACM for ${r.process} — it's saved to the RACM tab and ticked here`}
+                                              className="shrink-0 h-7 px-3 inline-flex items-center gap-1.5 rounded-lg bg-brand-600 text-white text-[0.71875rem] font-semibold hover:bg-brand-700 transition-colors cursor-pointer"
+                                            >
+                                              <Upload size={12} /> Upload RACM
+                                            </button>
+                                          </div>
+                                        ) : (
+                                          <>
+                                            <div className="border-t border-canvas-border">
+                                              {onTab.length > 1 && (
+                                                <button
+                                                  type="button"
+                                                  role="checkbox"
+                                                  aria-checked={allTicked ? true : someTicked ? 'mixed' : false}
+                                                  aria-label={`${allTicked ? 'Untick' : 'Tick'} every ${r.process} RACM`}
+                                                  onClick={() => setAllRacms(r.process, !allTicked)}
+                                                  className="group w-full flex items-center gap-3 py-2 border-b border-canvas-border text-left cursor-pointer"
+                                                >
+                                                  <TickBox state={allTicked ? true : someTicked ? 'mixed' : false} />
+                                                  <span className="text-[0.75rem] font-semibold text-ink-700">Select all</span>
+                                                </button>
+                                              )}
+                                              {onTab.map(x => {
+                                                const ticked = picks.some(p => p.id === x.id);
+                                                // The name usually carries its entity
+                                                // ("Order to Cash — Airline Group Ltd");
+                                                // say it only when it doesn't.
+                                                const showEntity = !!x.entity && !x.name.toLowerCase().includes(x.entity.toLowerCase());
+                                                return (
+                                                  <button
+                                                    key={x.id}
+                                                    type="button"
+                                                    role="checkbox"
+                                                    aria-checked={ticked}
+                                                    aria-label={`${x.name} — ${x.controls.length} controls`}
+                                                    onClick={() => toggleRacm(r.process, x.id)}
+                                                    title={x.usedBy.length > 0 ? `Used by ${x.usedBy.map(u => u.name).join(', ')}` : undefined}
+                                                    className="group w-full flex items-center gap-3 py-2 border-b border-canvas-border text-left cursor-pointer"
+                                                  >
+                                                    <TickBox state={ticked} />
+                                                    <span className="flex-1 min-w-0 truncate text-[0.78125rem] text-ink-900">
+                                                      {x.name}
+                                                      {showEntity && <span className="text-ink-400"> · {x.entity}</span>}
+                                                    </span>
+                                                    <span className="shrink-0 text-[0.71875rem] text-ink-400 tabular-nums">
+                                                      {x.controls.length} control{x.controls.length === 1 ? '' : 's'}
+                                                    </span>
+                                                  </button>
+                                                );
+                                              })}
+                                            </div>
+                                            {/* Quiet while there are RACMs to tick, so it
+                                                doesn't invite a duplicate of one already
+                                                there. */}
+                                            <button
+                                              type="button"
+                                              onClick={() => openRacmUpload(r.process)}
+                                              title={`Upload a RACM for ${r.process} — it's saved to the RACM tab and ticked here`}
+                                              className="mt-1.5 -ml-2 h-7 px-2 inline-flex items-center gap-1.5 rounded-lg text-[0.71875rem] font-semibold text-brand-700 hover:bg-brand-50 transition-colors cursor-pointer"
+                                            >
+                                              <Upload size={12} /> Upload a RACM
+                                            </button>
+                                          </>
+                                        )}
+                                      </div>
+                                    </motion.div>
                                   )}
-                                </span>
+                                </AnimatePresence>
+                              </div>
+                            );
+                          })}
+                          {quietProcCount > 0 && (
+                            <button
+                              type="button"
+                              onClick={() => setShowAllProcs(v => !v)}
+                              aria-expanded={showAllProcs}
+                              className="w-full flex items-center gap-3 px-4 py-2.5 text-left text-[0.75rem] font-semibold text-ink-600 hover:text-ink-900 hover:bg-brand-50/40 transition-colors cursor-pointer"
+                            >
+                              <span className="w-4 flex justify-center shrink-0">
+                                <ChevronDown size={14} className={cn('transition-transform', showAllProcs && 'rotate-180')} />
                               </span>
+                              {showAllProcs
+                                ? 'Hide processes with no material accounts'
+                                : <span>Show {quietProcCount} more process{quietProcCount === 1 ? '' : 'es'} <span className="font-normal text-ink-400">— no material accounts</span></span>}
                             </button>
-                          );
-                        })}
-                      </div>
-                    );
-                  })}
-                </div>
-              )}
-              <p className="text-[0.71875rem] text-ink-400 mt-2">
-                {tickedRacms.length} RACM{tickedRacms.length === 1 ? '' : 's'} · {tickedControlCount} control{tickedControlCount === 1 ? '' : 's'} to copy in
-              </p>
-            </div>
+                          )}
+                        </>
+                      )}
+                    </div>
+                  </motion.div>
+                )}
+              </AnimatePresence>
+            </section>
           </StepShell>
         )}
 
@@ -3420,6 +3464,92 @@ export function StepRail({ steps, step, onStepClick }: {
 
 /** Control IDs held by two ticked RACMs. Blocks Continue, so it reads as the
  *  same warning box Basics uses when an org chart clashes with the table. */
+/** The one tick on the Scope step — entities, processes and RACMs all use it,
+ *  so a single control means "in". Sits inside a `group` row button, which
+ *  carries the role, the state and the focus ring. */
+function TickBox({ state, disabled }: { state: boolean | 'mixed'; disabled?: boolean }) {
+  const filled = state === true || state === 'mixed';
+  return (
+    <span
+      aria-hidden
+      className={cn(
+        'w-4 h-4 rounded border flex items-center justify-center shrink-0 transition-colors',
+        disabled ? 'border-canvas-border bg-paper-50'
+          : filled ? 'bg-brand-600 border-brand-600 text-white'
+          : 'border-ink-300 bg-white group-hover:border-ink-400',
+      )}
+    >
+      {state === 'mixed' ? <Minus size={11} strokeWidth={3} /> : state ? <Check size={11} strokeWidth={3} /> : null}
+    </span>
+  );
+}
+
+/** The "why" under a Scope row moved against the numbers or against Ira. Set
+ *  on workpaper tones — the note is retained in the working paper — and hung
+ *  under the row's name like the RACM list. `children` sits above the text
+ *  box (a qualitative pick's reason chips). */
+function ScopeNote({ question, ariaLabel, editing, draft, onDraft, canSave, onSave, onCancel, onEdit, saved, children }: {
+  question: string;
+  ariaLabel: string;
+  editing: boolean;
+  draft: string;
+  onDraft: (v: string) => void;
+  canSave: boolean;
+  onSave: () => void;
+  onCancel: () => void;
+  onEdit: () => void;
+  saved: React.ReactNode;
+  children?: React.ReactNode;
+}) {
+  return (
+    <div className="ml-[2.75rem] mr-4 mb-3 p-3 rounded-lg border border-paper-300/70 bg-paper-50">
+      <p className="text-[0.71875rem] font-semibold text-ink-800 mb-1.5">{question}</p>
+      {editing ? (
+        <>
+          {children}
+          <textarea
+            aria-label={ariaLabel}
+            autoFocus
+            rows={2}
+            value={draft}
+            onChange={e => onDraft(e.target.value)}
+            placeholder="Record your rationale — retained in the working paper."
+            className="w-full text-[0.75rem] rounded-lg border border-canvas-border bg-white px-2.5 py-2 text-ink-800 placeholder:text-ink-400 outline-none focus:border-brand-400 resize-none transition-colors"
+          />
+          <div className="flex items-center justify-end gap-1.5 mt-2">
+            <button
+              type="button"
+              onClick={onCancel}
+              className="h-7 px-2.5 rounded-lg text-[0.71875rem] font-semibold text-ink-500 hover:text-ink-800 hover:bg-white transition-colors cursor-pointer"
+            >
+              Cancel
+            </button>
+            <button
+              type="button"
+              onClick={onSave}
+              disabled={!canSave}
+              className="h-7 px-3 rounded-lg text-[0.71875rem] font-semibold bg-brand-600 text-white disabled:opacity-40 disabled:cursor-not-allowed enabled:hover:bg-brand-700 transition-colors cursor-pointer"
+            >
+              Save
+            </button>
+          </div>
+        </>
+      ) : (
+        <div className="flex items-start justify-between gap-3">
+          <p className="text-[0.75rem] text-ink-700 leading-relaxed min-w-0 whitespace-pre-wrap">{saved}</p>
+          <button
+            type="button"
+            onClick={onEdit}
+            className="shrink-0 h-6 px-2 rounded-md text-[0.71875rem] font-semibold text-brand-700 hover:bg-brand-50 transition-colors cursor-pointer"
+          >
+            Edit
+          </button>
+        </div>
+      )}
+    </div>
+  );
+}
+
 function ClashNote({ lines }: { lines: string[] }) {
   return (
     <div className="mb-2.5 rounded-md border border-high-100 bg-high-50 px-2.5 py-2">
