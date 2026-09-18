@@ -96,12 +96,23 @@ export interface AtrMeta {
   reviewType?: string;
   /** Audit location — Corporate / Circle / Corporate & Circle. */
   auditLocation?: string;
+  /** Region / city — from the report details. */
+  region?: string;
+  location?: string;
+  /** Business function the audit belongs to. */
+  auditFunction?: string;
+  /** The signed-in user who created the ATR. */
+  auditSpoc?: string;
   auditTitle?: string;
   auditPeriod?: string;
   preparedBy?: string;
   reviewedBy?: string;
   generatedOn?: string;
   auditEntity?: string;
+  /** Admin-added custom report-details fields — values by key, and the labels
+   *  they were shown under (so the ATR prints them without the admin store). */
+  custom?: Record<string, string>;
+  customLabels?: Record<string, string>;
   /** Optional override for the Total Exceptions KPI (else summed from observations). */
   totalExceptions?: number;
   /** Customize: brand accent (hex) applied to the cover banner. */

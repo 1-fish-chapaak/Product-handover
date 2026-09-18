@@ -2,6 +2,8 @@ import { useState, useEffect, useCallback, createContext, useContext, useRef } f
 import { motion, AnimatePresence } from 'motion/react';
 import { ChevronDown, ChevronUp, X, FileText, LayersPlus, Check } from 'lucide-react';
 import { useToast } from './Toast';
+import { useNotify } from '../../notifications/NotificationContext';
+import { ROSTER } from '../../notifications/triggers/caseTriggers';
 import { GENERATED_REPORTS_KEY } from '../../data/mockData';
 
 type BulkRunWorkflow = { id: string; name: string; businessProcess?: string };
@@ -29,6 +31,7 @@ export function useBulkRunProgress() {
 export function BulkRunProgressProvider({ children }: { children: React.ReactNode }) {
   const [run, setRun] = useState<BulkRunState | null>(null);
   const { addToast } = useToast();
+  const notify = useNotify();
   const completedRunsRef = useRef<Set<string>>(new Set());
 
   const startBulkRun = useCallback((data: { name: string; workflows: BulkRunWorkflow[] }) => {
@@ -143,6 +146,25 @@ export function BulkRunProgressProvider({ children }: { children: React.ReactNod
       // Hot-update ReportsView if it is already mounted.
       window.dispatchEvent(new CustomEvent('irame:bulk-report-created', { detail: newReport }));
 
+      // WFL-07 — one completion message for the whole bulk run; WFL-02 for
+      // each workflow that errored inside it (suppressed if it repeats).
+      const failed = workflowResults.filter(w => w.runStatus === 'failed');
+      const passed = workflowResults.length - failed.length;
+      notify({
+        eventId: 'WFL-07', title: `Bulk run finished — ${workflowResults.length} workflows, ${failed.length} failed`, actor: 'System',
+        message: `${passed} passed · ${failed.length} failed. Report “${newReport.name}” generated.`,
+        facts: [{ label: 'Workflows', value: run.workflows.map(w => w.name).join(', ') }, { label: 'Pass / fail', value: `${passed} / ${failed.length}` }, { label: 'Report', value: newReport.name }, ...(failed.length ? [{ label: 'Failed', value: failed.map(f => `${f.name} (${f.failureReason})`).join(', ') }] : [])],
+        recipients: [{ name: 'You', role: 'Initiator' }], watchers: failed.length ? [{ name: 'Nilesh Anand', role: 'Owner of failed workflow' }] : [],
+        link: { view: 'reports', ref: { kind: 'report', id: newReport.id } }, linkLabel: 'Open report', operationKey: `bulk-${run.id}`,
+      });
+      failed.filter(f => f.failureReason === 'errored').forEach(f => notify({
+        eventId: 'WFL-02', title: `Workflow ${f.workflowId} failed — ${f.name}`, actor: 'System',
+        message: `The run ended in Error during bulk run ${run.id}. No evidence was produced for this workflow.`,
+        facts: [{ label: 'Workflow', value: `${f.workflowId} · ${f.name}` }, { label: 'Run', value: run.id }, { label: 'Error', value: 'Workflow errored' }, { label: 'Engagement', value: ROSTER.engagementCode }],
+        recipients: [{ name: 'Nilesh Anand', role: 'Workflow owner' }, ROSTER.engagementOwner], watchers: [ROSTER.systemAdmin],
+        link: { view: 'workflow-library' }, linkLabel: 'Open run', dedupKey: `${f.workflowId}:errored`,
+      }));
+
       // Swap overlay → success toast with an Open-report action.
       setRun(null);
       addToast({
@@ -158,7 +180,7 @@ export function BulkRunProgressProvider({ children }: { children: React.ReactNod
     }, 800);
 
     return () => clearTimeout(tid);
-  }, [run?.id, run?.progress, addToast]);
+  }, [run?.id, run?.progress, addToast, notify]);
 
   const setCollapsed = (collapsed: boolean) =>
     setRun(prev => (prev ? { ...prev, collapsed } : prev));

@@ -24,7 +24,7 @@ import type { GrcException, GrcCaseDetail } from '../../data/mockData';
 
 export type AtrEventRole = 'Auditor' | 'Risk Owner' | 'Preparer' | 'System';
 export type AtrEventKind =
-  | 'generated' | 'edited'
+  | 'generated' | 'edited' | 'regenerated'
   | 'case-assigned' | 'case-classified'
   | 'plan-submitted' | 'plan-accepted' | 'plan-rejected'
   | 'action-completed' | 'action-verified' | 'action-discrepancy'
@@ -208,6 +208,42 @@ export function editEvent(next: AtrReportData, actor: string, changes: string[])
     id: newId(), ts: new Date().toISOString(), actor, role: 'Preparer', kind: 'edited',
     summary, detail: changes.length > 1 ? changes.join('\n') : undefined,
     patch: { replace: next },
+  };
+}
+
+/** The ATR regenerated from its extracted observations (edited in Create
+ *  Report → Observations Extracted). Replaces the report content wholesale,
+ *  with the case links and status carried over by `carryCaseState`. */
+export function regeneratedEvent(next: AtrReportData, actor: string, detail?: string, summary = 'Regenerated from the extracted observations'): AtrEvent {
+  return {
+    id: newId(), ts: new Date().toISOString(), actor, role: 'Preparer', kind: 'regenerated',
+    summary, detail,
+    patch: { replace: next },
+  };
+}
+
+/** Regenerating rebuilds the observations from the wizard; anything case
+ *  management attached to the saved report — plan case ids, observation status,
+ *  linked annexures — is carried onto the matching observation (by source id,
+ *  falling back to title) so the remediation trail is not lost. */
+export function carryCaseState(prev: AtrReportData, next: AtrReportData): AtrReportData {
+  const find = (o: AtrObservation) => prev.observations.find(p => (o.sourceObservationId && p.sourceObservationId === o.sourceObservationId) || (!!o.title && p.title === o.title));
+  return {
+    ...next,
+    observations: next.observations.map(o => {
+      const p = find(o);
+      if (!p) return o;
+      const plans = (o.actionPlans ?? []).map((pl, i) => {
+        const pp = p.actionPlans?.[i];
+        return pp?.caseId && !pl.caseId ? { ...pl, caseId: pp.caseId } : pl;
+      });
+      return {
+        ...o,
+        status: p.status ?? o.status,
+        linkedAnnexures: p.linkedAnnexures?.length ? p.linkedAnnexures : o.linkedAnnexures,
+        actionPlans: o.actionPlans ? plans : o.actionPlans,
+      };
+    }),
   };
 }
 

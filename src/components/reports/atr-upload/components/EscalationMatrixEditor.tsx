@@ -132,9 +132,50 @@ export default function EscalationMatrixEditor({ config, onApply, onCancel }: {
   onCancel: () => void;
 }) {
   const [draft, setDraft] = useState<EscalationMatrixConfig>(() => JSON.parse(JSON.stringify(config)));
+
+  return (
+    <div className="flex flex-col h-full min-h-0 bg-canvas-elevated">
+      {/* Header — a back affordance replaces the wizard chrome while editing */}
+      <header className="shrink-0 flex items-center gap-3 px-6 pt-3.5 pb-3 border-b border-canvas-border">
+        <button onClick={onCancel} className="w-8 h-8 -ml-1 rounded-full text-ink-500 hover:text-ink-800 hover:bg-draft-50 flex items-center justify-center cursor-pointer shrink-0" aria-label="Back to upload">
+          <ArrowLeft size={17} />
+        </button>
+        <div className="w-9 h-9 rounded-[10px] bg-brand-50 text-brand-700 flex items-center justify-center shrink-0"><CalendarClock size={16} /></div>
+        <div className="min-w-0">
+          <h2 className="text-[0.9375rem] font-semibold text-ink-900 leading-tight">Escalation Matrix</h2>
+          <p className="text-[0.75rem] text-ink-500 leading-snug">Configure the default mailer cadence that chases every open exception across your reports.</p>
+        </div>
+      </header>
+
+      {/* Body */}
+      <div className="flex-1 min-h-0 overflow-hidden px-6 py-4">
+        <EscalationCadenceEditor value={draft} onChange={setDraft} />
+      </div>
+
+      {/* Footer */}
+      <footer className="shrink-0 flex items-center gap-3 border-t border-canvas-border px-6 py-3">
+        <Button variant="ghost" size="md" leftIcon={<RotateCcw size={14} />} onClick={() => setDraft(cloneDefaultMatrix())}>Reset to default</Button>
+        <div className="flex-1" />
+        <Button variant="outline" size="md" onClick={onCancel}>Cancel</Button>
+        <Button variant="primary" size="md" onClick={() => onApply(draft)}>Apply configuration</Button>
+      </footer>
+    </div>
+  );
+}
+
+/**
+ * One cadence, as a controlled form: the master switch, heads-ups, reminders,
+ * escalations, recurrence and delivery rules on the left, the live schedule
+ * preview on the right. Fills whatever height its host gives it. Used by the
+ * legacy per-report editor above and by the Admin tab's severity-aware matrix.
+ */
+export function EscalationCadenceEditor({ value: draft, onChange }: {
+  value: EscalationMatrixConfig;
+  onChange: (next: EscalationMatrixConfig) => void;
+}) {
   const [sampleISO, setSampleISO] = useState<string>(defaultSampleISO);
 
-  const patch = (p: Partial<EscalationMatrixConfig>) => setDraft(d => ({ ...d, ...p }));
+  const patch = (p: Partial<EscalationMatrixConfig>) => onChange({ ...draft, ...p });
 
   // initial triggers (days-before list; 0 = on due date)
   const setTrigger = (i: number, v: number) => patch({ initialTriggers: draft.initialTriggers.map((t, idx) => idx === i ? v : t) });
@@ -180,21 +221,6 @@ export default function EscalationMatrixEditor({ config, onApply, onCancel }: {
   const QUICK_TRIGGERS = [7, 3, 1, 0];
 
   return (
-    <div className="flex flex-col h-full min-h-0 bg-canvas-elevated">
-      {/* Header — a back affordance replaces the wizard chrome while editing */}
-      <header className="shrink-0 flex items-center gap-3 px-6 pt-3.5 pb-3 border-b border-canvas-border">
-        <button onClick={onCancel} className="w-8 h-8 -ml-1 rounded-full text-ink-500 hover:text-ink-800 hover:bg-draft-50 flex items-center justify-center cursor-pointer shrink-0" aria-label="Back to upload">
-          <ArrowLeft size={17} />
-        </button>
-        <div className="w-9 h-9 rounded-[10px] bg-brand-50 text-brand-700 flex items-center justify-center shrink-0"><CalendarClock size={16} /></div>
-        <div className="min-w-0">
-          <h2 className="text-[0.9375rem] font-semibold text-ink-900 leading-tight">Escalation Matrix</h2>
-          <p className="text-[0.75rem] text-ink-500 leading-snug">Configure the default mailer cadence that chases every open exception across your reports.</p>
-        </div>
-      </header>
-
-      {/* Body */}
-      <div className="flex-1 min-h-0 overflow-hidden px-6 py-4">
         <div className="grid lg:grid-cols-[1fr_360px] gap-5 h-full min-h-0">
         {/* ── Editor ── */}
         <div className="min-h-0 overflow-y-auto pr-1 -mr-1 space-y-3.5">
@@ -344,15 +370,5 @@ export default function EscalationMatrixEditor({ config, onApply, onCancel }: {
           </div>
         </div>
         </div>
-      </div>
-
-      {/* Footer */}
-      <footer className="shrink-0 flex items-center gap-3 border-t border-canvas-border px-6 py-3">
-        <Button variant="ghost" size="md" leftIcon={<RotateCcw size={14} />} onClick={() => setDraft(cloneDefaultMatrix())}>Reset to default</Button>
-        <div className="flex-1" />
-        <Button variant="outline" size="md" onClick={onCancel}>Cancel</Button>
-        <Button variant="primary" size="md" onClick={() => onApply(draft)}>Apply configuration</Button>
-      </footer>
-    </div>
   );
 }

@@ -19,6 +19,8 @@ import EngagementsOverview, { type ListFilter } from './EngagementsOverview';
 import { useCan } from '../../context/CurrentUserContext';
 import { useToast } from '../shared/Toast';
 import { useAuditLog } from '../../context/AdminDataContext';
+import { useNotify } from '../../notifications/NotificationContext';
+import { ROSTER } from '../../notifications/triggers/caseTriggers';
 import { useInsightStackRun } from '../shared/useInsightStackRun';
 import InsightLauncherPill from '../shared/InsightLauncherPill';
 import InsightStackDrawer from '../shared/InsightStackDrawer';
@@ -113,6 +115,7 @@ export default function EngagementsView({ onOpenEngagement, onOpenAuditPlanning,
   const { can } = useCan();
   const { addToast } = useToast();
   const logEvent = useAuditLog();
+  const notify = useNotify();
   const presetType = initialTypeFilter && initialTypeFilter !== 'All';
   // When routed with an initial type (e.g. SOX → 'Compliance'), open straight
   // onto the list view, pre-filtered to that type. When routed to create an
@@ -247,6 +250,25 @@ export default function EngagementsView({ onOpenEngagement, onOpenAuditPlanning,
   const handleClose = (eng: Engagement) => {
     const prevStatus = eng.status;
     patchEngagement(eng.id, { status: 'Closed' });
+    const openIssues = eng.openIssues ?? 0;
+    const engFacts = [{ label: 'Engagement', value: `${eng.code} · ${eng.name}` }, { label: 'New status', value: 'Closed' }, { label: 'Closed by', value: 'You' }];
+    // ENG-04 to everyone on it; ENG-05 on top when findings are still open.
+    notify({
+      eventId: 'ENG-04', title: `${eng.code} moved to Closed`, actor: 'You',
+      message: `${eng.name} is Closed.${openIssues ? ` ${openIssues} issue${openIssues === 1 ? '' : 's'} remain open.` : ' Nothing remains open.'}`,
+      facts: [...engFacts, { label: 'Remaining open', value: openIssues ? String(openIssues) : 'None' }],
+      recipients: [{ name: eng.owner, role: 'Participant' }, ...(eng.team?.auditors ?? []).map(n => ({ name: n, role: 'Participant' })), ...(eng.team?.riskOwners ?? []).map(n => ({ name: n, role: 'Participant' }))],
+      link: { view: 'engagement-overview', ref: { kind: 'engagement', id: eng.id } }, linkLabel: 'Open engagement', operationKey: `close-${eng.id}`,
+    });
+    if (openIssues > 0) {
+      notify({
+        eventId: 'ENG-05', title: `${eng.code} closed with ${openIssues} unresolved exception${openIssues === 1 ? '' : 's'}`, actor: 'You',
+        message: `${eng.name} was Completed while ${openIssues} exception${openIssues === 1 ? '' : 's'} remain open. Closing over open findings is a reportable control weakness.`,
+        facts: [...engFacts, { label: 'Open exceptions', value: String(openIssues) }],
+        recipients: [{ name: eng.owner, role: 'Engagement owner' }, ROSTER.engagementAuditor], watchers: [ROSTER.compliance],
+        link: { view: 'engagement-overview', ref: { kind: 'engagement', id: eng.id } }, linkLabel: 'Open engagement',
+      });
+    }
     addToast({
       message: `"${eng.name}" closed`,
       type: 'success',
@@ -260,6 +282,13 @@ export default function EngagementsView({ onOpenEngagement, onOpenAuditPlanning,
     if (newOwner === eng.owner) return;
     patchEngagement(eng.id, { owner: newOwner });
     addToast({ message: `"${eng.name}" reassigned to ${newOwner}`, type: 'success' });
+    notify({
+      eventId: 'ENG-03', title: `You are now the owner of ${eng.code}`, actor: 'You',
+      message: `Ownership of ${eng.name} moved from ${eng.owner} to ${newOwner}. ${eng.openIssues ?? 0} exception${(eng.openIssues ?? 0) === 1 ? '' : 's'} open.`,
+      facts: [{ label: 'Engagement', value: `${eng.code} · ${eng.name}` }, { label: 'Previous owner', value: eng.owner }, { label: 'Open exceptions', value: String(eng.openIssues ?? 0) }],
+      recipients: [{ name: newOwner, role: 'New owner' }, { name: eng.owner, role: 'Previous owner' }], watchers: [ROSTER.engagementAuditor],
+      link: { view: 'engagement-overview', ref: { kind: 'engagement', id: eng.id } }, linkLabel: 'Open engagement',
+    });
     logEvent({ action: 'Update', description: `Reassigned "${eng.name}" to ${newOwner}`, module: 'Engagements', entity: 'Engagement' });
   };
 
@@ -649,6 +678,30 @@ export default function EngagementsView({ onOpenEngagement, onOpenAuditPlanning,
                 : [eng, ...prev]);
               setWizardOpen(false);
               setEditTarget(null);
+              if (!editTarget) {
+                const facts = [{ label: 'Engagement', value: `${eng.code} · ${eng.name}` }, { label: 'Type', value: eng.type }, { label: 'Process', value: eng.process }, { label: 'Period', value: `${eng.periodStart} – ${eng.periodEnd}` }];
+                // ENG-01 to the named owner; ENG-02 to everyone in scope when it starts Active.
+                notify({
+                  eventId: 'ENG-01', title: `You own new engagement ${eng.code} — ${eng.name}`, actor: 'You',
+                  message: `${eng.type} · ${eng.process} · ${eng.periodStart} – ${eng.periodEnd}. Created as ${eng.status}.`,
+                  facts, recipients: [{ name: eng.owner, role: 'Named owner' }],
+                  link: { view: 'engagement-overview', ref: { kind: 'engagement', id: eng.id } }, linkLabel: 'Open engagement',
+                });
+                if (eng.status === 'Active' || eng.status === 'In Progress') {
+                  const people = [
+                    { name: eng.owner, role: 'Engagement owner' },
+                    ...(eng.team?.auditors ?? []).map(n => ({ name: n, role: 'Engagement auditor' })),
+                    ...(eng.team?.riskOwners ?? []).map(n => ({ name: n, role: 'Risk Owner' })),
+                    ...(eng.team?.reviewer ? [{ name: eng.team.reviewer, role: 'Reviewer' }] : []),
+                  ];
+                  people.forEach(p => notify({
+                    eventId: 'ENG-02', title: `${eng.code} kicked off — you’re the ${p.role}`, actor: 'You',
+                    message: `${eng.name} is ${eng.status}. Period ${eng.periodStart} – ${eng.periodEnd}.`,
+                    facts: [...facts, { label: 'Your role', value: p.role }],
+                    recipients: [p], link: { view: 'engagement-overview', ref: { kind: 'engagement', id: eng.id } }, linkLabel: 'Open engagement', operationKey: `kickoff-${eng.id}`, itemLabel: p.name,
+                  }));
+                }
+              }
             }}
             onPickSox={() => { setWizardOpen(false); setEditTarget(null); setSoxWizardOpen(true); }}
           />

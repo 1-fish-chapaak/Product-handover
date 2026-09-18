@@ -3,7 +3,8 @@ import { ListChecks, CalendarClock, Settings2, ScrollText } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
 import LovManager from '../components/LovManager';
 import TransactionLogs from '../components/TransactionLogs';
-import EscalationMatrixEditor from '../components/EscalationMatrixEditor';
+import EscalationMatrixAdmin from '../components/EscalationMatrixAdmin';
+import { summarizeMatrixSet } from '../escalationMatrix';
 import { useToast } from '../../../shared/Toast';
 import { useAdminSettings } from '../adminStore';
 
@@ -12,27 +13,24 @@ interface Feature { id: string; label: string; desc: string; icon: LucideIcon }
 // Each admin capability is its own segregated feature; more will be added here.
 const FEATURES: Feature[] = [
   { id: 'lov', label: 'Fields & Lists of Values', desc: 'Mandatory fields, custom fields, dropdown options', icon: ListChecks },
-  { id: 'escalation', label: 'Escalation Matrix', desc: 'Default reminder & escalation cadence', icon: CalendarClock },
+  { id: 'escalation', label: 'Escalation Matrix', desc: 'Reminder & escalation cadence per severity', icon: CalendarClock },
   { id: 'logs', label: 'Transaction Logs', desc: 'Action-level change history', icon: ScrollText },
 ];
 
-/** Escalation Matrix admin feature — the full editor, opened directly, editing
- *  the org-wide default cadence applied to every new report's exceptions. */
+/** Escalation Matrix admin feature — the severity-aware matrix (one shared
+ *  cadence, or one per Critical / High / Medium / Low) applied to every new
+ *  report's exceptions, with the "how it works" explainer on top. */
 function EscalationFeature() {
   const { escalation, setEscalation, addLog } = useAdminSettings();
   const { addToast } = useToast();
-  // Bump to remount the editor → discard the working draft on Cancel.
-  const [rev, setRev] = useState(0);
   return (
-    <EscalationMatrixEditor
-      key={rev}
-      config={escalation}
-      onApply={next => {
+    <EscalationMatrixAdmin
+      value={escalation}
+      onSave={next => {
         setEscalation(next);
-        addToast({ type: 'success', message: 'Default escalation matrix saved.' });
-        addLog({ action: 'Config', target: 'Escalation Matrix', detail: next.enabled ? 'Updated the default escalation matrix' : 'Turned off escalation mailers' });
+        addToast({ type: 'success', message: 'Escalation matrix saved.' });
+        addLog({ action: 'Config', target: 'Escalation Matrix', detail: summarizeMatrixSet(next) });
       }}
-      onCancel={() => setRev(r => r + 1)}
     />
   );
 }

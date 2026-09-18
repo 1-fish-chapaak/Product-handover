@@ -14,7 +14,8 @@ export interface AtrLibraryReport {
   generatedBy: string;
   generatedAt: string;
   /** Reports have no draft state — an ATR is either issued or locked. */
-  status: 'final' | 'frozen';
+  /** 'draft' = saved from Create Report, not yet generated. */
+  status: 'draft' | 'final' | 'frozen';
   pages: number;
   queries: number;
   /** Audit area used to group/segregate. */
