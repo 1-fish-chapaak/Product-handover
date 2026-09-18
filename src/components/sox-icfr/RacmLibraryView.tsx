@@ -11,7 +11,7 @@
  * Internal Audit and Compliance keep their own RACM screens; this tab is SOX only.
  */
 import { useLayoutEffect, useMemo, useRef, useState } from 'react';
-import { CheckCircle2, ExternalLink, FileSpreadsheet, FileText, Lock, MoreHorizontal, Plus, Search, Table2, Trash2, X } from 'lucide-react';
+import { CheckCircle2, ExternalLink, FileSpreadsheet, FileText, History, Lock, MoreHorizontal, Plus, Search, Table2, Trash2, X } from 'lucide-react';
 import './register.css';
 import { useAuditLog } from '../../context/AdminDataContext';
 import { useCurrentUser } from '../../context/CurrentUserContext';
@@ -20,7 +20,7 @@ import { FilterSelect } from '../shared/FilterSelect';
 import { Pill } from '../shared/StatusBadge';
 import { Dropdown, menuItem } from './ControlDossier';
 import CreateRacmFlow from './CreateRacmFlow';
-import { deleteLibraryRacm, publishRacm, racmInUse, racmStatus, useRacmLibrary, writeEditorHandoff, type LibraryRacm } from './racmLibrary';
+import { currentVersion, deleteLibraryRacm, publishRacm, racmInUse, racmStatus, useRacmLibrary, writeEditorHandoff, type LibraryRacm } from './racmLibrary';
 
 /** The spreadsheet editor opens in its own tab, handed this RACM's rows first —
  *  the new tab has none of this page's state. */
@@ -47,19 +47,26 @@ const menuDangerCls = menuRowCls.replace('text-ink-700', 'text-risk-700').replac
  *  matrix nobody can pick up yet is the single most useful thing to see here. */
 function StatusCell({ racm }: { racm: LibraryRacm }) {
   const { status, draftCount, publishedCount } = racmStatus(racm);
+  const v = currentVersion(racm);
   if (status === 'Draft') return <Pill tone="draft">Draft</Pill>;
-  if (status === 'Published') return <Pill tone="compliant">Published</Pill>;
   return (
     <span className="inline-flex flex-col gap-0.5 items-start">
-      <Pill tone="compliant">Published</Pill>
-      <span className="text-[11px] text-ink-500" title={`${publishedCount} published, ${draftCount} still draft`}>
-        +{draftCount} draft
+      <span className="inline-flex items-center gap-1.5">
+        <Pill tone="compliant">Published</Pill>
+        {/* The version is only meaningful once something has been published,
+            which is why a draft never shows one. */}
+        {v > 0 && <span className="font-mono text-[11px] text-ink-400 tabular-nums">v{v}</span>}
       </span>
+      {status === 'Published · additions' && (
+        <span className="text-[11px] text-ink-500" title={`${publishedCount} published, ${draftCount} still draft`}>
+          +{draftCount} draft
+        </span>
+      )}
     </span>
   );
 }
 
-function RowActions({ racm, canManage, onDelete, onPublish }: { racm: LibraryRacm; canManage: boolean; onDelete: () => void; onPublish: () => void }) {
+function RowActions({ racm, canManage, onDelete, onPublish, onHistory }: { racm: LibraryRacm; canManage: boolean; onDelete: () => void; onPublish: () => void; onHistory: () => void }) {
   const wrap = useRef<HTMLSpanElement>(null);
   // Dropdown draws its own trigger and takes no props for its name
   useLayoutEffect(() => {
@@ -91,6 +98,9 @@ function RowActions({ racm, canManage, onDelete, onPublish }: { racm: LibraryRac
                 <FileText size={13} className="text-ink-400 mt-0.5 shrink-0" /> View SOP
               </button>
             )}
+            <button type="button" className={menuRowCls} onClick={() => { close(); onHistory(); }}>
+              <History size={13} className="text-ink-400 mt-0.5 shrink-0" /> View history
+            </button>
             {canManage && draftCount > 0 && (
               <button type="button" className={menuRowCls} onClick={() => { close(); onPublish(); }}>
                 <CheckCircle2 size={13} className="text-ink-400 mt-0.5 shrink-0" />
@@ -133,6 +143,7 @@ export default function RacmLibraryView({ canManage }: {
   const [creating, setCreating] = useState(false);
   const [deleting, setDeleting] = useState<LibraryRacm | null>(null);
   const [publishing, setPublishing] = useState<LibraryRacm | null>(null);
+  const [historyFor, setHistoryFor] = useState<LibraryRacm | null>(null);
   const [status, setStatus] = useState('All');
 
   const processes = useMemo(() => Array.from(new Set(racms.map(r => r.process))).sort((a, b) => a.localeCompare(b)), [racms]);
@@ -261,7 +272,7 @@ export default function RacmLibraryView({ canManage }: {
                           <span className="flex items-center gap-1.5 text-[12px] font-semibold text-ink-500">
                             <FileSpreadsheet size={13} className="text-ink-400" /> Spreadsheet editor <ExternalLink size={12} className="text-ink-400" />
                           </span>
-                          <RowActions racm={r} canManage={canManage} onDelete={() => setDeleting(r)} onPublish={() => setPublishing(r)} />
+                          <RowActions racm={r} canManage={canManage} onDelete={() => setDeleting(r)} onPublish={() => setPublishing(r)} onHistory={() => setHistoryFor(r)} />
                         </span>
                       </td>
                     </tr>
@@ -277,6 +288,42 @@ export default function RacmLibraryView({ canManage }: {
       {creating && (
         <CreateRacmFlow onClose={() => setCreating(false)}
           onCreated={r => { setCreating(false); setProcess('All'); setSearch(''); addToast({ type: 'success', title: 'Saved to the RACM tab', message: `${r.name} — ${r.controls.length} control${r.controls.length === 1 ? '' : 's'}` }); }} />
+      )}
+
+      {/* A published RACM is something engagements are tested against, so what
+          happened to it is part of the audit trail rather than housekeeping.
+          Newest first — the question is almost always "what changed last". */}
+      {historyFor && (
+        <div className="modal-backdrop" onClick={() => setHistoryFor(null)}>
+          <div className="modal" onClick={e => e.stopPropagation()} role="dialog" aria-modal="true" aria-labelledby="racm-history-title"
+            onKeyDown={e => { if (e.key === 'Escape') setHistoryFor(null); }}>
+            <div className="px-5 pt-4 pb-3 border-b border-canvas-border">
+              <div className="flex items-center justify-between gap-3">
+                <h2 id="racm-history-title" className="text-[0.9375rem] font-semibold text-ink-900">{historyFor.name}</h2>
+                <button onClick={() => setHistoryFor(null)} className="h-7 w-7 inline-flex items-center justify-center rounded-md text-ink-400 hover:text-ink-700 cursor-pointer" aria-label="Close"><X size={15} /></button>
+              </div>
+              <p className="mt-0.5 text-[0.71875rem] text-ink-500">Everything that has happened to this matrix.</p>
+            </div>
+            <div className="p-5 max-h-[24rem] overflow-y-auto">
+              <ol className="space-y-3">
+                {[...historyFor.history].reverse().map((h, i) => (
+                  <li key={`${h.at}-${h.kind}-${i}`} className="flex items-baseline gap-3">
+                    <span className="shrink-0 w-9 font-mono text-[0.71875rem] text-ink-400 tabular-nums">
+                      {h.version > 0 ? `v${h.version}` : '—'}
+                    </span>
+                    <span className="min-w-0">
+                      <span className="block text-[0.78125rem] text-ink-800 leading-snug">{h.what}</span>
+                      <span className="block text-[0.6875rem] text-ink-400">{h.by} · {h.at}</span>
+                    </span>
+                  </li>
+                ))}
+              </ol>
+              {historyFor.history.length === 0 && (
+                <p className="text-[0.78125rem] text-ink-500">Nothing has happened to this matrix yet.</p>
+              )}
+            </div>
+          </div>
+        </div>
       )}
 
       {/* Publishing is the moment a matrix stops being editable, so it is asked

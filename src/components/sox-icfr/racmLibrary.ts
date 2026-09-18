@@ -60,6 +60,23 @@ export interface LibraryRacm {
   /** When the matrix was last published, and by whom — for the list's Status column. */
   publishedAt?: string;
   publishedBy?: string;
+  /** WHAT HAS HAPPENED TO THIS MATRIX, newest last.
+   *
+   *  A published RACM is a thing engagements are tested against, so "who changed
+   *  it and when" stops being housekeeping and becomes part of the audit trail.
+   *  Each entry is one event a person caused — never a keystroke — so the list
+   *  reads as a history rather than a log. */
+  history: RacmEvent[];
+}
+
+export interface RacmEvent {
+  /** v1, v2, v3 — counted from the first publish, so a draft has no version. */
+  version: number;
+  kind: 'created' | 'published' | 'controls-added' | 'edited';
+  at: string;
+  by: string;
+  /** One line saying what changed, in the same plain English the toasts use. */
+  what: string;
 }
 
 /** Draft until a row is published; Published once every row is. In between it is
@@ -83,6 +100,12 @@ export function racmStatus(r: LibraryRacm): {
  *  What an engagement already concluded against cannot change underneath it. */
 export const isRowPublished = (r: LibraryRacm, controlId: string): boolean => r.published.includes(controlId);
 
+/** The version a publish would create. v1 is the first publish; a draft that has
+ *  never been published is still v0, which is why the list shows no version
+ *  against it. */
+export const nextVersion = (r: LibraryRacm): number => Math.max(0, ...r.history.map(h => h.version)) + 1;
+export const currentVersion = (r: LibraryRacm): number => Math.max(0, ...r.history.map(h => h.version));
+
 /** Publish every row not yet published, and stamp who did it. Returns how many
  *  rows moved — 0 when there was nothing to publish. */
 export function publishRacm(id: string, by: string): number {
@@ -90,8 +113,21 @@ export function publishRacm(id: string, by: string): number {
   if (!r) return 0;
   const { draftIds } = racmStatus(r);
   if (!draftIds.length) return 0;
+  const version = nextVersion(r);
+  const first = version === 1;
   commit(all().map(x => (x.id === id
-    ? { ...x, published: [...x.published, ...draftIds], publishedAt: 'just now', publishedBy: by }
+    ? {
+        ...x,
+        published: [...x.published, ...draftIds],
+        publishedAt: 'just now',
+        publishedBy: by,
+        history: [...x.history, {
+          version, kind: 'published' as const, at: 'just now', by,
+          what: first
+            ? `${draftIds.length} control${draftIds.length === 1 ? '' : 's'} published`
+            : `${draftIds.length} new control${draftIds.length === 1 ? '' : 's'} published`,
+        }],
+      }
     : x)));
   return draftIds.length;
 }
@@ -105,7 +141,16 @@ export function addRacmControls(id: string, controls: Control[]): number {
   const have = new Set(r.controls.map(c => c.id));
   const fresh = controls.map(racmRowOf).filter(c => !have.has(c.id));
   if (!fresh.length) return 0;
-  commit(all().map(x => (x.id === id ? { ...x, controls: [...x.controls, ...fresh] } : x)));
+  commit(all().map(x => (x.id === id
+    ? {
+        ...x,
+        controls: [...x.controls, ...fresh],
+        history: [...x.history, {
+          version: currentVersion(x), kind: 'controls-added' as const, at: 'just now', by: 'You',
+          what: `${fresh.length} control${fresh.length === 1 ? '' : 's'} added, not published yet`,
+        }],
+      }
+    : x)));
   return fresh.length;
 }
 
@@ -147,7 +192,7 @@ export const findLibraryRacm = (id: string): LibraryRacm | undefined => all().fi
 
 let seq = 0;
 /** Put a new RACM on the tab. Its rows are stripped to RACM rows on the way in. */
-export function addLibraryRacm(input: Omit<LibraryRacm, 'id' | 'usedBy' | 'createdAt' | 'published'> & { createdAt?: string; published?: string[] }): LibraryRacm {
+export function addLibraryRacm(input: Omit<LibraryRacm, 'id' | 'usedBy' | 'createdAt' | 'published' | 'history'> & { createdAt?: string; published?: string[] }): LibraryRacm {
   const racm: LibraryRacm = {
     ...input,
     id: `racm-${Date.now().toString(36)}-${(++seq).toString(36)}`,
@@ -155,7 +200,21 @@ export function addLibraryRacm(input: Omit<LibraryRacm, 'id' | 'usedBy' | 'creat
     createdAt: input.createdAt ?? 'just now',
     usedBy: [],
     published: input.published ?? [],
+    history: [],
   };
+  const how = racm.source === 'sop' ? 'Extracted from' : racm.source === 'engagement' ? 'Read back from' : 'Imported from';
+  racm.history.push({
+    version: 0, kind: 'created', at: racm.createdAt, by: racm.createdBy,
+    what: `${how} ${racm.fileName ?? 'an existing engagement'} — ${racm.controls.length} control${racm.controls.length === 1 ? '' : 's'}`,
+  });
+  // A RACM that arrives already published (the seeds, and the Scope step's own
+  // upload) has a first version from the moment it exists.
+  if (racm.published.length) {
+    racm.history.push({
+      version: 1, kind: 'published', at: racm.publishedAt ?? racm.createdAt, by: racm.publishedBy ?? racm.createdBy,
+      what: `${racm.published.length} control${racm.published.length === 1 ? '' : 's'} published`,
+    });
+  }
   commit([racm, ...all()]);
   return racm;
 }
@@ -182,7 +241,20 @@ function applyEditorWrite(key: string, raw: string | null): void {
   if (!Array.isArray(rows)) return;
   const { controls, changed, added } = applyEditorRows(racm.controls, racm.process, rows, new Set(racm.published));
   if (!changed && !added) return;
-  commit(all().map(r => (r.id === racm.id ? { ...r, controls } : r)));
+  const what = [
+    changed ? `${changed} row${changed === 1 ? '' : 's'} edited` : '',
+    added ? `${added} control${added === 1 ? '' : 's'} added` : '',
+  ].filter(Boolean).join(', ');
+  commit(all().map(r => (r.id === racm.id
+    ? {
+        ...r,
+        controls,
+        history: [...r.history, {
+          version: currentVersion(r), kind: 'edited' as const, at: 'just now', by: 'You',
+          what: `${what} in the spreadsheet editor`,
+        }],
+      }
+    : r)));
 }
 
 if (typeof window !== 'undefined') {
@@ -345,6 +417,10 @@ function seedFromEngagements(): LibraryRacm[] {
         published: controls.map(c => c.id),
         publishedAt: e.periodStart ? `with ${e.code}` : 'earlier',
         publishedBy: e.owner,
+        history: [{
+          version: 1, kind: 'published', at: e.periodStart ? `with ${e.code}` : 'earlier', by: e.owner,
+          what: `Read back from ${e.name} — ${controls.length} control${controls.length === 1 ? '' : 's'}`,
+        }],
       });
     });
   });
