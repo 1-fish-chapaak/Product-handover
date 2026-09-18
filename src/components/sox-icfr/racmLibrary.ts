@@ -37,7 +37,7 @@ export interface LibraryRacm {
   fileName?: string;
   /** The SOP behind an extracted RACM, viewable for the session. */
   sopUrl?: string;
-  /** The rows, IDs already PROCESS/ENTITY/R001/C001. */
+  /** The rows, IDs already ENTITY/PROCESS/R001/C001. */
   controls: Control[];
   createdBy: string;
   createdAt: string;

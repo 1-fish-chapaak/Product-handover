@@ -1,5 +1,16 @@
 # Plan — SOX feedback sheets vs the current flow (revision 3)
 
+## 17 Sep dev call — Stage 1 quick fixes (built 17 Sep, not committed; build passes)
+Decisions were asked one at a time: TOD labels only; exactly 3-character codes (IT General Controls = ITG); risk category and the "RACM" wording unchanged; "engagement = audit" waits for the architecture meeting.
+- **TOD buttons** read **Design effective / Design ineffective** (TOE keeps Conclude effective / ineffective); TOD guidance copy and the toast follow.
+- **IDs are entity first:** `ENTITY/PROCESS/R001/C001` (e.g. `AIH/TRY/R001/C001`). Codes are exactly 3 letters or digits, suggested from the name and editable on upload; a clash takes other letters from the name (AirConnect Regional → ACR) before a digit (AR2). Lists still group by process.
+- **Upload review:** a row with a blank risk description, control title/activity, frequency, nature, type, or no attributes can't be imported. Each blank is filled in place — typed, or Ira's suggestion read off the row's other cells — or the row is left out ("Put back" undoes it). Blank IDs are built at import (rows with no Risk ID and the same risk description share a risk).
+- **No silent defaults:** a blank nature/type is a pick (no quiet Manual / Preventive); a blank assertion or sub-process stays empty; Ira no longer offers bare defaults (Manual / Preventive / Medium).
+- **Evidence gate:** Pass, Override → Pass and a self-attested Pass all wait for every required file; TOE can't be concluded effective while a passing attribute lacks one. Fail never waits.
+- **Sampling:** a shared control's items are dealt only to its companies in scope (the audit's entity scope, else the engagement's creation scope). Every drawn item is listed (no "+N more"). The count reads the number tied to taking ("from the 60 rows, take 15" → 15); "may" is a month only when it reads like one.
+- **Root cause:** Ira drafts it from what failed, tagged; step 1 completes only once the auditor edits it or clicks **Use this**.
+
+
 ## Correction (15 Sep, during S3) — C1 is real after all
 - On 15 Sep, during S0, I said no SOX screen opens the full-page RACM editor, undid C1 and removed it. **That was wrong.** Clicking a RACM on Engagement → RACM tab opens the spreadsheet editor **in a new browser tab** (`openEditorTab`, `?view=racm-full-editor`), and that tab showed the 124 procurement sample rows for every RACM. I had only searched the in-app route.
 - **C1 is restored in S3.** The RACM tab hands the RACM's own controls to the new tab (via local storage), and the editor shows them. **A10 (bulk-edit a column) is back in that editor.**
@@ -16,7 +27,7 @@
 - **New engagement (SOX):** ① Basics (name, group, entities / org chart) → ② **Materiality & TB** (rule, trial balance upload required, material accounts mapped to processes) → ③ **Scope** (companies in scope with the coverage bar and notes; ✦ Ira-recommended processes with notes / qualitative reasons; for each in-scope process **pick its RACM** from the RACM tab) → ④ Review. An in-scope process with no RACM offers **Upload RACM** right there (same import review; saved to the RACM tab), and blocks until uploaded or moved out with a note.
 - **Scoping is by process, not by RACM.**
 - **New audit: left as it is for now** (you'll handle it later) — it still carries the S10 materiality / TB / scope steps.
-- **ID format (supersedes A14):** Risk ID = `PROCESS/ENTITY/R001`, Control ID = `PROCESS/ENTITY/R001/C001`, with **short codes** (e.g. `TRY/ASO/R001/C001`). Codes are **made from the names automatically and editable** (entity code on the Basics entity table, process code on the RACM tab), unique within the engagement. The **entity comes from the RACM file** (its entity/subsidiary column, or the entity chosen at upload). **R/C numbers use the file's own Risk ID / Control ID** when present, else file order. **Seeded controls and risks are renamed too** (e.g. TRY-01 → `TRY/AIH/R001/C001`).
+- **ID format (supersedes A14; order swapped 17 Sep — see top):** Risk ID = `ENTITY/PROCESS/R001`, Control ID = `ENTITY/PROCESS/R001/C001`, with **3-character codes** (e.g. `ASO/TRY/R001/C001`). Codes are **made from the names automatically and editable** (entity code on the Basics entity table, process code on the RACM tab), unique within the engagement. The **entity comes from the RACM file** (its entity/subsidiary column, or the entity chosen at upload). **R/C numbers use the file's own Risk ID / Control ID** when present, else file order. **Seeded controls and risks are renamed too** (e.g. TRY-01 → `AIH/TRY/R001/C001`).
 - **Answered 15 Sep (after "go"):**
   1. **SOX only** — Internal Audit / Compliance keep their own RACM screens, unchanged.
   2. **Everything moves** from the SOX RACM tab to the Engagements page tab: Create RACM (upload RACM / upload SOP → prompt → extract), the import review, the RACM list, the spreadsheet editor (new tab), ⋯ View SOP / Delete. A process can have several RACMs.

@@ -1,6 +1,6 @@
 import { createContext, useCallback, useContext, useMemo, useState, type ReactNode } from 'react';
 import { racmTemplateForProcesses, requiredDatasetsFor, sampleRefs, seedIcfrEngagement, type SeedMeta } from './mockData';
-import { assessSeverity, attestationOverruled, designApproved, designFilesOf, designRetestChecks, designOutstanding, fmtDateTime, requiredFilesOf, requiredFilesReady, canExtendToe, canRedrawToe, controlConclusion, reconcileConfirmations, formatINR, gradeException, icfrConclusion, inquiryOnlyAttributes, isControlLocked, isEngagementLocked, itgcHolds, parseLooseDate, samePerson, populationSources, previewRegrades, sampleSizeGuide, samplesFor, sourceTotals, staleSteps, stepResult, TOE_MAX_ROUNDS, toeRoundFailed, toeRoundNo, toeRounds, trackResult, validationQA, validationSummary, validationTable, wfRunRef, auditSampling, dealSample, samplesTestedCount, sampleHome, spreadPhrase, workingAudit, yearEndPending, LEGACY_SOURCE_ID, type RulesPatch } from './helpers';
+import { assessSeverity, attestationOverruled, designApproved, designFilesOf, designRetestChecks, designOutstanding, fmtDateTime, requiredFilesOf, requiredFilesReady, canExtendToe, canRedrawToe, controlConclusion, reconcileConfirmations, formatINR, gradeException, icfrConclusion, inquiryOnlyAttributes, passedWithoutFiles, isControlLocked, isEngagementLocked, itgcHolds, parseLooseDate, samePerson, populationSources, previewRegrades, sampleSizeGuide, samplesFor, sourceTotals, staleSteps, stepResult, TOE_MAX_ROUNDS, toeRoundFailed, toeRoundNo, toeRounds, trackResult, validationQA, validationSummary, validationTable, wfRunRef, auditSampling, dealSample, samplesTestedCount, sampleHome, spreadPhrase, workingAudit, yearEndPending, LEGACY_SOURCE_ID, type RulesPatch } from './helpers';
 import type {
   Assertion, Attestation, AuditArchive, AuditFileRecord, AuditorProof, AuditRecord, Control, Deficiency, DesignDoc, DesignDocKind, DesignPoint, DiscussionAnchor, DocStatus, FileOrigin,
   DesignJudgements, DesignWaiverReason, EvidenceFile, EvidenceMode, ExceptionStatus, ExecKind, ExecutionEvent, Frequency, HandoffTask, IcfrEngagement,
@@ -127,8 +127,8 @@ const stampSamples = (c: Control, s: OperatingStep, res: TestResult): OperatingS
 };
 // PARKED (Aug 2026): `defaultGapType` — the exception no longer carries a gap type.
 import { ipeChecklist, ROLE_LABEL } from './types';
-import { auditCovers, captionsFor, countryOf, entitiesFor, isOwnerOf, normaliseProcess, ownersOf, peopleForProcess, processesForAudit, racmAuditUse } from './auditScope';
-import { seedKeyOf, suggestSizing, type ExposureContext } from './helpers';
+import { auditCovers, captionsFor, countryOf, entitiesFor, inScopeEntityNames, isOwnerOf, normaliseProcess, ownersOf, peopleForProcess, processesForAudit, racmAuditUse, scopedForDraw } from './auditScope';
+import { rootCauseReady, seedKeyOf, suggestRootCause, suggestSizing, type ExposureContext } from './helpers';
 import { entityCodeFor, processCodeFor, riskIdOf } from './racmIds';
 import { controlIdClashes, copyRacmControls, findLibraryRacm, markRacmsUsed } from './racmLibrary';
 import { findEngagement, registerEngagement } from '../../data/engagements';
@@ -779,9 +779,9 @@ export function IcfrProvider({ children, initialRole = 'auditor', seedMeta }: { 
           if (onSecondRound) return `TOE failed again on ${c.wpRef}, on the redrawn sample${what}`;
           return `${track === 'design' ? 'TOD' : 'TOE'} concluded ineffective on ${c.wpRef}${what}`;
         })(),
-        // Deliberately blank, not pre-filled with a plausible sentence: the whole
-        // exception turns on this, and a default here would be a guess the auditor
-        // never made. Step 1 is not complete until it is written.
+        // Ira drafts it from what failed (17 Sep dev call), but a draft is not a
+        // root cause: step 1 stays open until the auditor edits it or takes it
+        // (rootCauseReady) — the whole exception turns on this sentence.
         rootCause: '',
         failedSamples,
         likelihood: 'Reasonably possible',
@@ -815,6 +815,11 @@ export function IcfrProvider({ children, initialRole = 'auditor', seedMeta }: { 
       def.magnitude = sized.magnitude;
       def.compensatingControlId = sized.compensatingControlId;
       def.iraSuggested = sized.iraSuggested;
+      const drafted = suggestRootCause(c, track, failedSamples, onSecondRound);
+      if (drafted) {
+        def.rootCause = drafted.text;
+        def.iraSuggested = { ...def.iraSuggested, rootCause: drafted.reason };
+      }
       const event: ExecutionEvent = {
         id: uid('ex'), controlId, track, kind: 'exception',
         verb: `raised ${def.id} — severity to assess${prev.rules.autoRoute ? ` · auto-routed to ${c.owner}` : ''}`, by: me, role, at: 'just now',
@@ -1412,6 +1417,8 @@ export function IcfrProvider({ children, initialRole = 'auditor', seedMeta }: { 
   // (A28). Every action that adds items to a sample deals them by it.
   const drawAudit = workingAudit(eng, openAuditId);
   const drawMethod = auditSampling(drawAudit);
+  /** The companies a draw may deal to — the audit's (or engagement's) scope. */
+  const drawScope = inScopeEntityNames(eng.id, drawAudit);
   // The round an undated item already on the control was drawn in (sampleHome),
   // so a deal evens out against the quarters those items really fall in.
   const drawHome = useCallback((c: Control) => sampleHome({ audits: eng.audits }, a => auditCovers(a, c, eng.id)), [eng.audits, eng.id]);
@@ -1434,7 +1441,7 @@ export function IcfrProvider({ children, initialRole = 'auditor', seedMeta }: { 
       const kept = (samp?.samples ?? []).filter(s => (s.sourceId ?? LEGACY_SOURCE_ID) !== sourceId);
       // Inside the months the file's ask named, when it named some.
       const stretch = drawAudit && draw.months ? { ...drawAudit, windowFrom: draw.months.from, windowTo: draw.months.to } : drawAudit;
-      const dealt = dealSample(c, stretch, drawMethod, refs.length, kept, `${seedKeyOf(c)}·${sourceId}`, e => countryOf(eng.id, e), drawHome(c));
+      const dealt = dealSample(scopedForDraw(c, drawScope), stretch, drawMethod, refs.length, kept, `${seedKeyOf(c)}·${sourceId}`, e => countryOf(eng.id, e), drawHome(c));
       const added: Sample[] = refs.map((ref, i) => ({
         id: `${sourceId}-s${i}`, ref, result: 'Not tested', sourceId, ...dealt[i],
       }));
@@ -1788,7 +1795,7 @@ export function IcfrProvider({ children, initialRole = 'auditor', seedMeta }: { 
       // sample" is what the Sample step tells the auditor when a company, a
       // country or a quarter has no items. So the deal fills the groups the draw
       // left empty FIRST, and only then evens out the rest (A28, dealSample).
-      const dealt = dealSample(c, drawAudit, drawMethod, extra, s.samples, `${seedKeyOf(c)}·ext`, e => countryOf(eng.id, e), drawHome(c));
+      const dealt = dealSample(scopedForDraw(c, drawScope), drawAudit, drawMethod, extra, s.samples, `${seedKeyOf(c)}·ext`, e => countryOf(eng.id, e), drawHome(c));
       const added = sampleRefs(c.process, s.size + extra).slice(s.size).map((ref, i) => (
         { id: `s${s.size + i}`, ref, result: 'Not tested' as TestResult, extension: true, sourceId: src, ...dealt[i] }
       ));
@@ -1808,7 +1815,7 @@ export function IcfrProvider({ children, initialRole = 'auditor', seedMeta }: { 
       const s = c.operating.sampling;
       if (!s || size < 1 || size === s.size) return c;
       // Growing deals the new items by the audit's methodology, like any draw (A28).
-      const dealt = size > s.size ? dealSample(c, drawAudit, drawMethod, size - s.size, s.samples, `${seedKeyOf(c)}·resize`, e => countryOf(eng.id, e), drawHome(c)) : [];
+      const dealt = size > s.size ? dealSample(scopedForDraw(c, drawScope), drawAudit, drawMethod, size - s.size, s.samples, `${seedKeyOf(c)}·resize`, e => countryOf(eng.id, e), drawHome(c)) : [];
       const samples = size > s.size
         ? [...s.samples, ...sampleRefs(c.process, size).slice(s.size).map((ref, i) => ({ id: `s${s.size + i}`, ref, result: 'Not tested' as TestResult, ...dealt[i] }))]
         : s.samples.slice(0, size);
@@ -1824,7 +1831,13 @@ export function IcfrProvider({ children, initialRole = 'auditor', seedMeta }: { 
 
   const setStepResult = useCallback<IcfrCtx['setStepResult']>((controlId, stepId, result) => {
     if (role !== 'auditor' || awaitingDesignApproval(controlId)) return;
-    patchControl(controlId, c => ({ ...c, operating: { ...c.operating, steps: c.operating.steps.map(s => s.id === stepId ? stampSamples(c, { ...s, result }, result) : s) } }));
+    // No Pass without the evidence (17 Sep): every required file has to be in.
+    // Fail never waits.
+    patchControl(controlId, c => ({ ...c, operating: { ...c.operating, steps: c.operating.steps.map(s => {
+      if (s.id !== stepId) return s;
+      if (result === 'Pass' && !requiredFilesReady(s, c)) return s;
+      return stampSamples(c, { ...s, result }, result);
+    }) } }));
     if (result === 'Fail') raiseDeficiencyIfIneffective(controlId, 'operating', true);
   }, [patchControl, role, raiseDeficiencyIfIneffective, awaitingDesignApproval]);
 
@@ -1848,7 +1861,12 @@ export function IcfrProvider({ children, initialRole = 'auditor', seedMeta }: { 
 
   const overrideStep = useCallback<IcfrCtx['overrideStep']>((controlId, stepId, override) => {
     if (role !== 'auditor' || (override && awaitingDesignApproval(controlId))) return;
-    patchControl(controlId, c => ({ ...c, operating: { ...c.operating, steps: c.operating.steps.map(s => s.id === stepId ? { ...s, override: override ?? undefined } : s) } }));
+    // An override to Pass still needs the files (17 Sep); to Fail it never waits.
+    patchControl(controlId, c => ({ ...c, operating: { ...c.operating, steps: c.operating.steps.map(s => {
+      if (s.id !== stepId) return s;
+      if (override?.result === 'Pass' && !requiredFilesReady(s, c)) return s;
+      return { ...s, override: override ?? undefined };
+    }) } }));
   }, [patchControl, role, awaitingDesignApproval]);
 
   const patchStep = useCallback((controlId: string, stepId: string, fn: (s: OperatingStep, c: Control) => OperatingStep) => {
@@ -2103,7 +2121,10 @@ export function IcfrProvider({ children, initialRole = 'auditor', seedMeta }: { 
   // override if they judge the file wrong — a named act with a reason on it.
   const attestStep = useCallback<IcfrCtx['attestStep']>((controlId, stepId, note, result) => {
     if (role === 'reviewer' || awaitingDesignApproval(controlId)) return;
+    // An attested Pass needs the required files like any other Pass (17 Sep).
+    let refused = false;
     patchStep(controlId, stepId, (s, c) => {
+      if (result === 'Pass' && !requiredFilesReady(s, c)) { refused = true; return s; }
       const att: Attestation = { result, note, by: me, role, at: 'just now', evidence: s.attestation?.evidence ?? [] };
       const overruled = !!(s.validation?.result && s.validation.result !== result);
       // A stale run is stale evidence, and an attestation is not a re-run of it:
@@ -2113,7 +2134,7 @@ export function IcfrProvider({ children, initialRole = 'auditor', seedMeta }: { 
     });
     pushExec(prev => {
       const s = prev.controls.find(c => c.id === controlId)?.operating.steps.find(st => st.id === stepId);
-      if (!s) return null;
+      if (!s || refused) return null;
       const overruled = attestationOverruled(s);
       return { controlId, track: 'operating', kind: 'attest', target: s.code, result: stepResult(s),
         verb: overruled ? `attested ${result.toLowerCase()} — the validation stands` : `attested ${result.toLowerCase()}` };
@@ -2380,6 +2401,9 @@ export function IcfrProvider({ children, initialRole = 'auditor', seedMeta }: { 
       // validation, a manual result, an attestation or an override — but an
       // attribute with no result at all has not been shown to operate.
       if (conclusion === 'Effective' && c.operating.steps.some(s => stepResult(s) === 'Not tested')) return c;
+      // Nor on a Pass the files don't back (17 Sep) — every passing attribute
+      // needs its required files in.
+      if (conclusion === 'Effective' && passedWithoutFiles(c).length) return c;
       return { ...c, reviewReturn: conclusion === 'Not tested' ? c.reviewReturn : undefined, operating: { ...c.operating, conclusion, rationale: conclusion === 'Not tested' ? undefined : (rationale?.trim() || c.operating.rationale), testedBy: me, testedAt: 'just now' } };
     });
     // Reads the state the patch produced: a stale-run refusal above leaves the
@@ -2740,9 +2764,11 @@ export function IcfrProvider({ children, initialRole = 'auditor', seedMeta }: { 
       const after: Deficiency = { ...before, ...patch };
       // Ira's tag comes off a field the moment that field changes (S9, A31): a
       // tag left on a figure the auditor chose would credit Ira with their call.
-      if (before.iraSuggested) {
+      // A patch that sets the tags itself ("Use this" on Ira's root cause) is
+      // taken as written.
+      if (before.iraSuggested && !('iraSuggested' in patch)) {
         const tags = { ...before.iraSuggested };
-        (['likelihood', 'magnitude', 'compensatingControlId'] as const).forEach(k => { if (k in patch && patch[k] !== before[k]) delete tags[k]; });
+        (['likelihood', 'magnitude', 'compensatingControlId', 'rootCause'] as const).forEach(k => { if (k in patch && patch[k] !== before[k]) delete tags[k]; });
         after.iraSuggested = Object.keys(tags).length ? tags : undefined;
       }
       const next = { ...prev, deficiencies: prev.deficiencies.map(d => (d.id === id ? after : d)) };
@@ -2833,7 +2859,7 @@ export function IcfrProvider({ children, initialRole = 'auditor', seedMeta }: { 
       const target = prev.deficiencies.find(d => d.id === id);
       if (!target || target.status !== 'Identified') return prev;
       if (ownsIt(prev, target.controlId, me)) return prev;
-      if (!target.rootCause.trim()) return prev;               // step 1 is not done
+      if (!rootCauseReady(target)) return prev;               // step 1 is not done — unwritten, or Ira's draft unchecked
       const grade = gradeException(target, prev).grade;
       // A confirmation already standing (a re-size after the reviewer sent it
       // back on something other than the grade) is not asked for twice.
@@ -3757,14 +3783,14 @@ export function IcfrProvider({ children, initialRole = 'auditor', seedMeta }: { 
       .filter(n => !Number.isNaN(n));
     const next = (nums.length ? Math.max(...nums) : 0) + 1;
     const wpRef = `${wpPrefix}-${String(next).padStart(2, '0')}`;
-    // IDs read PROCESS/ENTITY/R001/C001 (S11). An existing risk keeps its ID and
+    // IDs read ENTITY/PROCESS/R001/C001 (S11; entity first since 17 Sep). An existing risk keeps its ID and
     // the control takes the next C under it; a new risk takes the next R for the
     // process at the company its other controls are tested at.
     const entity = inProc[0]?.entity ?? eng.entity;
     const pc = processCodeFor(draft.process);
     const ec = entityCodeFor(entity);
-    const rPrefix = `${pc}/${ec}/R`;
-    const riskId = eng.controls.find(c => c.riskId === draft.riskId)?.riskId ?? riskIdOf(pc, ec, 1 + Math.max(0,
+    const rPrefix = `${ec}/${pc}/R`;
+    const riskId = eng.controls.find(c => c.riskId === draft.riskId)?.riskId ?? riskIdOf(ec, pc, 1 + Math.max(0,
       ...eng.controls.filter(c => c.riskId.startsWith(rPrefix)).map(c => parseInt(c.riskId.slice(rPrefix.length), 10)).filter(n => !Number.isNaN(n))));
     const cNo = 1 + Math.max(0, ...eng.controls.filter(c => c.riskId === riskId).map(c => parseInt(c.id.split('/C').pop() ?? '', 10)).filter(n => !Number.isNaN(n)));
     let id = `${riskId}/C${String(cNo).padStart(3, '0')}`;

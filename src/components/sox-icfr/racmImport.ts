@@ -210,7 +210,6 @@ function alreadySaid(have: string[], candidate: string): boolean {
   });
 }
 
-function pad3(n: number): string { return String(n).padStart(3, '0'); }
 
 function hashString(text: string): number {
   let h = 2166136261;
@@ -351,8 +350,13 @@ export interface ImportRow {
   frequency: Frequency | null;
   frequencyFlag?: 'continuous' | 'unreadable' | 'blank';
   isKey: boolean;
-  nature: Nature;
-  type: ControlType;
+  /** null when the file leaves it blank or says something we can't read — the
+   *  reviewer picks it (17 Sep: no silent "Manual"). */
+  nature: Nature | null;
+  natureFlag?: 'unreadable' | 'blank';
+  /** null the same way — no silent "Preventive". */
+  type: ControlType | null;
+  typeFlag?: 'unreadable' | 'blank';
   assertions: Assertion[];
   riskRating?: RiskRating;
   /** A8: this looks like a control another RACM on the engagement already has. */
@@ -390,15 +394,22 @@ function parseIsKey(cell: string): boolean {
   return ['yes', 'y', 'true', 'key', '1', '✓', '✔'].includes(String(cell ?? '').trim().toLowerCase());
 }
 
-function parseNature(cell: string): Nature {
+function parseNature(cell: string): { nature: Nature | null; flag?: 'unreadable' | 'blank' } {
   const t = normaliseHeader(cell);
-  if (/\bit dependent\b|\bsemi automated\b|\bitdm\b/.test(t)) return 'IT-dependent';
-  if (/\bautomat(?:ed|ic|ically)\b/.test(t)) return 'Automated';
-  return 'Manual';
+  if (!t) return { nature: null, flag: 'blank' };
+  if (/\bit dependent\b|\bsemi automated\b|\bitdm\b/.test(t)) return { nature: 'IT-dependent' };
+  if (/\bautomat(?:ed|ic|ically)\b/.test(t)) return { nature: 'Automated' };
+  if (/\bmanual(?:ly)?\b/.test(t)) return { nature: 'Manual' };
+  return { nature: null, flag: 'unreadable' };
 }
 
-function parseType(cell: string): ControlType {
-  return /detect/i.test(cell) ? 'Detective' : 'Preventive';
+function parseType(cell: string): { type: ControlType | null; flag?: 'unreadable' | 'blank' } {
+  const t = normaliseHeader(cell);
+  if (!t) return { type: null, flag: 'blank' };
+  const detect = /\bdetect/.test(t);
+  const prevent = /\bprevent/.test(t);
+  if (detect !== prevent) return { type: detect ? 'Detective' : 'Preventive' };
+  return { type: null, flag: 'unreadable' };
 }
 
 const ASSERTION_ORDER: Assertion[] = ['Completeness', 'Accuracy', 'Existence / Occurrence', 'Cut-off', 'Valuation', 'Rights & Obligations', 'Presentation'];
@@ -504,9 +515,9 @@ export function buildImportRows(rows: string[][], headerRow: number, matches: Co
  *  review), re-deriving everything else the same way buildImportRows does. */
 export function rowFromValues(values: Partial<Record<RacmFieldKey, string>>, base: Pick<ImportRow, 'key' | 'rowNo' | 'origin' | 'sectionRef'>, existing: Control[], process: string): ImportRow {
   const v: Partial<Record<RacmFieldKey, string>> = { ...values };
-  const generatedId = `C-${pad3(base.rowNo)}`;
-  if (!(v.controlId ?? '').trim()) v.controlId = generatedId;
-  const idWasGenerated = v.controlId === generatedId;
+  // A blank Control ID stays blank — the ID is built at import from the codes
+  // and the row order (17 Sep: no "C-00n" that reads as if the file said it).
+  const idWasGenerated = !(v.controlId ?? '').trim();
 
   const attributeTexts = splitList(v.attributes ?? '');
   const evidence = splitList(v.controlEvidence ?? '');
@@ -521,6 +532,8 @@ export function rowFromValues(values: Partial<Record<RacmFieldKey, string>>, bas
 
   const { checks, merged } = mergeChecks(splitList(v.designChecks ?? ''));
   const freq = parseFrequency(v.frequency ?? '');
+  const nature = parseNature(v.nature ?? '');
+  const type = parseType(v.type ?? '');
 
   const row: ImportRow = {
     key: base.key,
@@ -532,12 +545,14 @@ export function rowFromValues(values: Partial<Record<RacmFieldKey, string>>, bas
     mergedDuplicateChecks: merged,
     frequency: freq.frequency,
     isKey: parseIsKey(v.isKey ?? ''),
-    nature: parseNature(v.nature ?? ''),
-    type: parseType(v.type ?? ''),
+    nature: nature.nature,
+    type: type.type,
     assertions: parseAssertions(v.assertions ?? ''),
   };
   if (base.sectionRef) row.sectionRef = base.sectionRef;
   if (freq.flag) row.frequencyFlag = freq.flag;
+  if (nature.flag) row.natureFlag = nature.flag;
+  if (type.flag) row.typeFlag = type.flag;
   const rating = parseRiskRating(v.riskRating ?? '');
   if (rating) row.riskRating = rating;
   const dup = findDuplicate(v, idWasGenerated, existing, process);
@@ -589,6 +604,41 @@ const ASSERTION_RISK_WORDS: [RegExp, Assertion][] = [
   [/\bpresentation\b|\bdisclos\w*|\bclassif\w*/i, 'Presentation'],
 ];
 
+/** "To ensure vendor invoices are approved" → "Risk that vendor invoices are
+ *  not approved." Only the words the row already has — when there is no verb to
+ *  turn round, the control's own words are quoted. */
+function riskFromText(text: string): string {
+  const clause = firstClause(text.replace(/^\s*to\s+ensure\s+(?:that\s+)?/i, '')).replace(/[.;:]+$/, '').trim();
+  if (clause.length < 3) return '';
+  const aux = /\b(is|are|was|were|will)\b/i.exec(clause);
+  const lower = clause[0]!.toLowerCase() + clause.slice(1);
+  if (aux) {
+    const at = aux.index + aux[0].length;
+    const turned = lower.slice(0, at) + ' not' + lower.slice(at);
+    return `Risk that ${turned}.`;
+  }
+  return `Risk that "${lower}" does not happen, so errors go unnoticed.`;
+}
+
+/** The core values a row can't be imported without (17 Sep dev call). A blank
+ *  Risk or Control ID is not one — the ID is built at import. */
+export type CoreBlank = 'riskDescription' | 'control' | 'nature' | 'type' | 'attributes';
+export const CORE_BLANK_LABEL: Record<CoreBlank, string> = {
+  riskDescription: 'a risk description', control: 'a control title or activity', nature: 'a nature', type: 'a type', attributes: 'attributes',
+};
+export function coreBlanks(row: ImportRow): CoreBlank[] {
+  const val = (k: RacmFieldKey) => (row.values[k] ?? '').trim();
+  const out: CoreBlank[] = [];
+  if (!val('riskDescription')) out.push('riskDescription');
+  if (!val('controlTitle') && !val('controlActivity')) out.push('control');
+  if (row.nature === null) out.push('nature');
+  if (row.type === null) out.push('type');
+  if (row.attributes.length === 0) out.push('attributes');
+  return out;
+}
+/** Held back from import: no frequency, or a core value missing. */
+export const rowBlocked = (row: ImportRow) => row.frequency === null || coreBlanks(row).length > 0;
+
 /** A9: values for this row's empty fields, read off its other columns. Never
  *  proposes a value for a field that already has one, and never for isKey. */
 export function proposeBlankFills(row: ImportRow): BlankFill[] {
@@ -622,17 +672,20 @@ export function proposeBlankFills(row: ImportRow): BlankFill[] {
     const source = activity ? 'Activity' : 'Title';
     const auto = /\bautomatically\b|\bconfigured\b|\bsystem blocks\b/i.exec(text);
     const it = /\b(?:SAP|ERP|systems?|reports?)\b/i.exec(text);
+    const manual = /\bmanually\b|\breviews?\b|\bapproves?\b|\bsigns?\b|\bchecks?\b/i.exec(text);
     if (auto) fills.push({ field: 'nature', value: 'Automated', reason: `${source} says '${phraseAt(text, auto.index)}'` });
     else if (it) fills.push({ field: 'nature', value: 'IT-dependent', reason: `${source} mentions '${it[0]}' — a person working off system output` });
-    else fills.push({ field: 'nature', value: 'Manual', reason: `${source} names no system — a person does the work` });
+    else if (manual) fills.push({ field: 'nature', value: 'Manual', reason: `${source} says '${phraseAt(text, manual.index)}' — a person does the work` });
+    // Nothing in the text says either way: no proposal (17 Sep — no bare defaults).
   }
 
   // Type — does it stop the error, or find it afterwards?
   if (blank('type') && (activity || title || objective)) {
     const text = [activity, title, objective].filter(Boolean).join(' ');
     const m = /\breview\w*|\breconcil\w*|\bmonitor\w*|\binvestigat\w*/i.exec(text);
+    const stop = /\bapprov\w*|\bauthori[sz]\w*|\bblocks?\b|\bprevents?\b|\bbefore\b/i.exec(text);
     if (m) fills.push({ field: 'type', value: 'Detective', reason: `Says '${phraseAt(text, m.index)}' — it finds errors after the fact` });
-    else fills.push({ field: 'type', value: 'Preventive', reason: 'Nothing reviews or reconciles after the fact — it stops the error up front' });
+    else if (stop) fills.push({ field: 'type', value: 'Preventive', reason: `Says '${phraseAt(text, stop.index)}' — it stops the error up front` });
   }
 
   // Owner — the (WHO) of the activity.
@@ -642,6 +695,13 @@ export function proposeBlankFills(row: ImportRow): BlankFill[] {
       const who = (m[1].split(/[.;:,]/).pop() ?? '').trim().replace(/^the\s+/i, '').trim();
       if (who) fills.push({ field: 'owner', value: who, reason: `Activity names '${who}' as the WHO` });
     }
+  }
+
+  // Risk description — what goes wrong if the control's aim isn't met.
+  if (blank('riskDescription')) {
+    const source = objective ? ['objective', objective] as const : title ? ['title', title] as const : activity ? ['activity', activity] as const : null;
+    const text = source ? riskFromText(source[1]) : '';
+    if (source && text) fills.push({ field: 'riskDescription', value: text, reason: `The control ${source[0]}, turned round into what could go wrong` });
   }
 
   // Control title — the objective as a statement, else the activity's first clause.
@@ -659,7 +719,6 @@ export function proposeBlankFills(row: ImportRow): BlankFill[] {
   if (blank('riskRating') && risk) {
     const m = /\bfraud\w*|\bmaterial\w*|\bmisstat\w*/i.exec(risk);
     if (m) fills.push({ field: 'riskRating', value: 'High', reason: `Risk mentions '${m[0].toLowerCase()}'` });
-    else fills.push({ field: 'riskRating', value: 'Medium', reason: 'Risk names no fraud or material misstatement — Medium until agreed with management' });
   }
 
   // Assertions — what the risk says could go wrong.
@@ -707,7 +766,8 @@ export function suggestForRow(row: ImportRow, process: string): { attributes: st
   const have = new Set(row.designChecks.map(sameText));
   const designChecks = suggestedDesignChecks(control).filter(t => !have.has(sameText(t)));
   const present = row.attributes.map(a => a.text);
-  const attributes = row.attributes.length < 2
+  // Attributes follow the control's type — none are offered until it is known.
+  const attributes = row.attributes.length < 2 && row.type
     ? SUGGESTED_ATTRIBUTES[row.type].filter(t => !alreadySaid(present, t))
     : [];
   return { attributes, designChecks };
@@ -733,15 +793,22 @@ function clazzOf(category: string): ControlClass {
   return 'Financial';
 }
 
-/** One row as an engagement control. `n` is the row's 1-based place in the import. */
+/** Placeholder keys for rows the file gave no ID — digit-free, so the ID
+ *  builder numbers them by row order instead of reading a number out of them. */
+const noDigits = (s: string) => s.replace(/\d/g, d => 'abcdefghij'[Number(d)]!);
+
+/** One row as an engagement control. `n` is the row's 1-based place in the import.
+ *  Nature and type are read as given — callers that import make sure both are
+ *  set (rowBlocked); suggestions read the row before they are. */
 function controlFromRow(row: ImportRow, process: string, n: number, frequency: Frequency, wpPrefix = processInitials(process)): Control {
   const val = (k: RacmFieldKey) => (row.values[k] ?? '').trim();
-  const id = val('controlId') || `C-${pad3(row.rowNo)}`;
+  const id = val('controlId') || `~row-${noDigits(row.key)}`;
   const wpRef = `${wpPrefix}-${String(n).padStart(2, '0')}`;
   const activity = val('controlActivity');
   const objective = val('objective');
-  const description = val('controlTitle') || (activity ? firstSentence(activity) : '') || objective || `Control ${id}`;
-  const assertions: Assertion[] = row.assertions.length ? row.assertions : ['Accuracy'];
+  const description = val('controlTitle') || (activity ? firstSentence(activity) : '') || objective;
+  // No assertion in the file stays no assertion (17 Sep — no silent "Accuracy").
+  const assertions: Assertion[] = row.assertions;
 
   const steps: OperatingStep[] = row.attributes.map((a, k) => {
     const stepId = nid('st');
@@ -771,15 +838,16 @@ function controlFromRow(row: ImportRow, process: string, n: number, frequency: F
     wpRef,
     description,
     process,
-    subProcess: val('subProcess') || 'General',
-    nature: row.nature,
-    type: row.type,
+    subProcess: val('subProcess'),
+    nature: row.nature as Nature,
+    type: row.type as ControlType,
     frequency,
     isKey: row.isKey,
     clazz: clazzOf(val('riskCategory')),
     precision: description,
     owner: val('owner'),
-    riskId: val('riskId') || `R-${n}`,
+    // Rows with no Risk ID and the same risk description are one risk.
+    riskId: val('riskId') || `~risk-${noDigits(sameText(val('riskDescription')) || row.key)}`,
     riskDescription: val('riskDescription'),
     assertions,
     design: {
@@ -806,10 +874,10 @@ function controlFromRow(row: ImportRow, process: string, n: number, frequency: F
  *  have a frequency by now. Attributes become operating steps with their
  *  `requiredFiles`; design checks become design points (merged, not doubled). */
 export function importRowsToControls(rows: ImportRow[], process: string): Control[] {
-  const missing = rows.filter(r => r.frequency === null);
+  const missing = rows.filter(rowBlocked);
   if (missing.length) {
     const ids = missing.map(r => (r.values.controlId ?? '').trim() || `row ${r.rowNo}`);
-    throw new Error(`Pick a frequency before importing — ${missing.length === 1 ? `${ids[0]} has` : `${ids.join(', ')} have`} none.`);
+    throw new Error(`Fill the blanks before importing — ${missing.length === 1 ? `${ids[0]} has` : `${ids.join(', ')} have`} some.`);
   }
   const prefix = processInitials(process);
   return rows.map((row, i) => controlFromRow(row, process, i + 1, row.frequency as Frequency, prefix));

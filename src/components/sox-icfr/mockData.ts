@@ -2059,7 +2059,7 @@ const legalName = (g: string) => g.replace(/\s*\((listed|unlisted|nyse|nasdaq|bs
 const PROC_LABEL: Record<string, string> = { P2P: 'Procure to Pay', O2C: 'Order to Cash', R2R: 'Record to Report', S2C: 'Order to Cash', ITGC: 'IT General Controls' };
 
 /**
- * Seed an engagement's workspace. IDs come out in the PROCESS/ENTITY/R001/C001
+ * Seed an engagement's workspace. IDs come out in the ENTITY/PROCESS/R001/C001
  * format (S11): the seeds below still build their controls under the old ids
  * (TRY-01, O2C-C-03 …) — every hand-written demo state keys off those — and the
  * whole engagement is renamed on the way out. A row with no company takes the

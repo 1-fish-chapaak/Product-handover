@@ -307,7 +307,7 @@ export function buildControlPaper(eng: IcfrEngagement, c: Control): PaperBlock[]
         headers: ['', 'Attribute', 'Assertion', 'Result on ' + w.sampleRef, 'Tick'],
         rows: steps.map((s, i) => {
           const r = w.attributeResults[s.id] ?? 'Not tested';
-          return [letter(i), `${s.description} (${s.code})`, s.assertion, r, tick(r)];
+          return [letter(i), `${s.description} (${s.code})`, s.assertion ?? '—', r, tick(r)];
         }),
         tickFrom: 4,
       });
@@ -402,7 +402,7 @@ export function buildControlPaper(eng: IcfrEngagement, c: Control): PaperBlock[]
       const results = samples.map(smp => s.sampleResults?.[smp.id]).filter(r => r && r !== 'Not tested');
       const fails = results.filter(r => r === 'Fail').length;
       const exceptions = results.length ? String(fails) : s.result === 'Fail' ? '1' : s.result === 'Pass' ? '0' : '—';
-      return [letter(i), `${s.description} (${s.code})`, s.assertion, pop ? String(pop.count) : '—', String(samples.length), samples.length ? String(results.length) : s.result !== 'Not tested' ? 'attribute-level' : '—', exceptions];
+      return [letter(i), `${s.description} (${s.code})`, s.assertion ?? '—', pop ? String(pop.count) : '—', String(samples.length), samples.length ? String(results.length) : s.result !== 'Not tested' ? 'attribute-level' : '—', exceptions];
     }),
   });
 
@@ -753,7 +753,7 @@ export function buildIcfrPaper(eng: IcfrEngagement, controls: Control[] = eng.co
   // The validation column is carried next to the attestation columns on purpose:
   // where an attribute rests on somebody's statement rather than on the document
   // that existed, the paper has to show both and which one answered.
-  const opRows = controls.flatMap(c => c.operating.steps.map(s => [c.wpRef, c.id, s.code, s.description, s.assertion, s.procedures.join('; '), s.workflowName ? `${s.workflowName}${s.workflowRunRef ? ` (${s.workflowRunRef})` : ''}` : '—', s.validation?.result ? `${s.validation.result}${s.validation.fileName ? ` — ${s.validation.fileName}` : ''}` : '—', s.attestation?.by ?? '—', s.attestation?.note ?? '', s.attestation?.evidence.map(e => e.name).join('; ') ?? '', stepResult(s), s.override?.rationale ?? '']));
+  const opRows = controls.flatMap(c => c.operating.steps.map(s => [c.wpRef, c.id, s.code, s.description, s.assertion ?? '—', s.procedures.join('; '), s.workflowName ? `${s.workflowName}${s.workflowRunRef ? ` (${s.workflowRunRef})` : ''}` : '—', s.validation?.result ? `${s.validation.result}${s.validation.fileName ? ` — ${s.validation.fileName}` : ''}` : '—', s.attestation?.by ?? '—', s.attestation?.note ?? '', s.attestation?.evidence.map(e => e.name).join('; ') ?? '', stepResult(s), s.override?.rationale ?? '']));
   const operating: IcfrSheet = {
     name: 'TOE', blocks: [{
       kind: 'table', title: 'TOE', note: `${opRows.length} attribute rows`,

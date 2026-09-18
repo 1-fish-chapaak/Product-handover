@@ -212,7 +212,7 @@ export function buildAuditReport(eng: IcfrEngagement, controls: Control[] = eng.
         smp.ref,
         s.code,
         s.description,
-        s.assertion,
+        s.assertion ?? '—',
         s.aiValidation ? 'AI validation' : 'Manual testing',
         defs.find(d => d.controlId === c.id && d.failedSamples?.includes(smp.ref))?.description
           ?? defs.find(d => d.controlId === c.id && d.track === 'operating')?.description

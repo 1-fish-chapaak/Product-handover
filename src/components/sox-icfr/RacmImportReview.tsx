@@ -6,7 +6,9 @@
  *   Upload an SOP (A6):  Prompt (read it, edit it, validate it) → extraction → Review → Import
  *
  * Review is the same screen for both: a frequency Ira can't use blocks its row
- * until one is picked (A13), Ira suggests missing attributes and design checks
+ * until one is picked (A13), and so does a blank risk description, control,
+ * nature, type or attribute list — filled in place, with Ira's suggestion, or
+ * the row left out (17 Sep). Ira suggests missing attributes and design checks
  * per row (A7), a row that repeats another RACM's control is flagged (A8), blank
  * cells can be filled from the row's other columns — previewed, decided, then
  * applied (A9) — and merged duplicate design checks are counted (R2). The
@@ -27,12 +29,13 @@ import { useToast } from '../shared/Toast';
 import { useAuditLog } from '../../context/AdminDataContext';
 import { Pill } from '../shared/StatusBadge';
 import { cn } from '../../lib/cn';
-import type { Control, Frequency } from './types';
+import type { Control, ControlType, Frequency, Nature } from './types';
 import {
-  RACM_FIELDS, DEFAULT_SOP_PROMPT,
+  RACM_FIELDS, DEFAULT_SOP_PROMPT, CORE_BLANK_LABEL,
   readRacmWorkbook, guessHeaderRow, matchColumns, needsAttention,
   buildImportRows, rowFromValues, proposeBlankFills, suggestForRow, importRowsToControls, draftRowsFromSop,
-  type ColumnMatch, type ImportRow, type RacmFieldKey, type SheetData,
+  coreBlanks, rowBlocked,
+  type BlankFill, type ColumnMatch, type CoreBlank, type ImportRow, type RacmFieldKey, type SheetData,
 } from './racmImport';
 
 type Step = 'columns' | 'prompt' | 'review';
@@ -57,7 +60,7 @@ export interface RacmImportReviewProps {
    *  on the RACM tab, or the engagement's own register. */
   existing: Control[];
   onClose: () => void;
-  /** Import pressed: the rows as controls, IDs already PROCESS/ENTITY/R001/C001.
+  /** Import pressed: the rows as controls, IDs already ENTITY/PROCESS/R001/C001.
    *  The caller saves them (to the RACM tab, or the engagement). */
   onImport: (controls: Control[], meta: RacmImportMeta) => void;
 }
@@ -68,6 +71,9 @@ const SOP_STEPS: { key: Step; label: string }[] = [{ key: 'prompt', label: 'Prom
 /** Never "Continuous" — a control that runs all the time is tested at the
  *  frequency its evidence is produced at, so the reviewer picks that. */
 const FREQUENCIES: Frequency[] = ['Annual', 'Quarterly', 'Monthly', 'Weekly', 'Daily', 'Recurring', 'Ad-hoc'];
+
+const NATURES: Nature[] = ['Manual', 'Automated', 'IT-dependent'];
+const TYPES: ControlType[] = ['Preventive', 'Detective'];
 
 const EXTRACT_STEPS = ['Parsing the SOP', 'Identifying risks & control points', 'Mapping controls to risks', 'Drafting attributes & required files'];
 const EXTRACT_STEP_MS = 400;
@@ -135,6 +141,114 @@ function withAccepted(row: ImportRow, extra: Accepted | undefined): ImportRow {
   };
 }
 
+/** The field a core blank is written into. */
+const BLANK_FIELD: Record<CoreBlank, RacmFieldKey> = {
+  riskDescription: 'riskDescription', control: 'controlTitle', nature: 'nature', type: 'type', attributes: 'attributes',
+};
+const BLANK_TITLE: Record<CoreBlank, string> = {
+  riskDescription: 'Risk description', control: 'Control', nature: 'Nature', type: 'Type', attributes: 'Attributes',
+};
+
+/**
+ * The values a row can't be imported without, asked for right under it (17 Sep
+ * dev call). Each blank takes a typed value or Ira's suggestion — read off the
+ * row's other cells, never a bare default — and the whole row can be left out
+ * instead. A text value is written when the box loses focus (or on Enter), so
+ * the row isn't rebuilt under the cursor.
+ */
+function BlankFixRow({ row, blanks, fills, attributeIdeas, colSpan, onSet, onLeaveOut }: {
+  row: ImportRow;
+  blanks: CoreBlank[];
+  fills: BlankFill[];
+  attributeIdeas: string[];
+  colSpan: number;
+  onSet: (field: RacmFieldKey, value: string) => void;
+  onLeaveOut: () => void;
+}) {
+  const [drafts, setDrafts] = useState<Partial<Record<CoreBlank, string>>>({});
+  const commit = (b: CoreBlank) => {
+    const v = (drafts[b] ?? '').trim();
+    if (v) onSet(BLANK_FIELD[b], v);
+  };
+  const ideaFor = (b: CoreBlank): { value: string; shown: string; reason: string } | null => {
+    if (b === 'attributes') {
+      return attributeIdeas.length
+        ? { value: attributeIdeas.join('\n'), shown: attributeIdeas.join('; '), reason: `the usual attributes for a ${row.type?.toLowerCase()} control` }
+        : null;
+    }
+    const f = fills.find(x => x.field === BLANK_FIELD[b]);
+    return f ? { value: f.value, shown: f.value, reason: f.reason } : null;
+  };
+  const note = (b: CoreBlank) => {
+    if (b === 'nature' && row.natureFlag === 'unreadable') return `"${cell(row.values.nature)}" isn't a nature we know — pick one`;
+    if (b === 'type' && row.typeFlag === 'unreadable') return `"${cell(row.values.type)}" isn't a type we know — pick one`;
+    if (b === 'attributes' && !row.type) return 'Pick the type first and Ira can suggest some';
+    return null;
+  };
+  const inputCls = 'w-full h-8 px-2.5 rounded-lg border border-mitigated-300 bg-canvas-elevated text-[0.75rem] text-ink-800 placeholder:text-ink-400 focus:outline-none focus:ring-2 focus:ring-brand-200';
+  return (
+    <tr className="def-detail">
+      <td colSpan={colSpan}>
+        <div className="my-2 rounded-lg border border-canvas-border bg-paper-50/60 px-3.5 py-3">
+          <div className="flex items-center gap-2 mb-2.5">
+            <AlertTriangle size={12} className="text-mitigated-700 shrink-0" />
+            <p className="text-[0.71875rem] font-semibold text-mitigated-700">
+              Blank in the file — fill {blanks.length === 1 ? 'it' : 'these'} in to import this row
+            </p>
+            <div className="flex-1" />
+            <button type="button" onClick={onLeaveOut} className={quietBtn}>Leave out</button>
+          </div>
+          <div className="space-y-2.5">
+            {blanks.map(b => {
+              const id = `racm-import-fix-${row.key}-${b}`;
+              const idea = ideaFor(b);
+              const hint = note(b);
+              return (
+                <div key={b} className="grid grid-cols-[7rem_minmax(0,1fr)] gap-x-3 items-start">
+                  <label htmlFor={id} className="pt-1.5 text-[0.71875rem] font-semibold text-ink-600">{BLANK_TITLE[b]}</label>
+                  <div className="min-w-0">
+                    {b === 'nature' || b === 'type' ? (
+                      <select id={id} value="" onChange={e => { if (e.target.value) onSet(BLANK_FIELD[b], e.target.value); }}
+                        className={cn(inputCls, 'w-48 cursor-pointer')}>
+                        <option value="" disabled>{b === 'nature' ? 'Pick a nature' : 'Pick a type'}</option>
+                        {(b === 'nature' ? NATURES : TYPES).map(o => <option key={o} value={o}>{o}</option>)}
+                      </select>
+                    ) : b === 'attributes' ? (
+                      <textarea id={id} rows={2} value={drafts[b] ?? ''} placeholder="One attribute per line"
+                        onChange={e => setDrafts(prev => ({ ...prev, [b]: e.target.value }))} onBlur={() => commit(b)}
+                        className={cn(inputCls, 'h-auto py-1.5 resize-y leading-snug')} />
+                    ) : (
+                      <input id={id} value={drafts[b] ?? ''} placeholder={b === 'control' ? 'Control title' : 'What could go wrong'}
+                        onChange={e => setDrafts(prev => ({ ...prev, [b]: e.target.value }))} onBlur={() => commit(b)}
+                        onKeyDown={e => { if (e.key === 'Enter') commit(b); }}
+                        className={inputCls} />
+                    )}
+                    {hint && <p className="mt-1 text-[0.65625rem] leading-snug text-mitigated-700">{hint}</p>}
+                    {idea && (
+                      <p className="mt-1 flex items-start gap-1.5 text-[0.6875rem] leading-snug text-ink-600">
+                        <Sparkles size={11} className="text-brand-600 mt-0.5 shrink-0" aria-hidden />
+                        <span className="min-w-0">
+                          <span className="font-semibold text-ink-800">Ira suggests:</span> {idea.shown}
+                          <span className="text-ink-400"> — {idea.reason}</span>
+                        </span>
+                        <button type="button" onClick={() => onSet(BLANK_FIELD[b], idea.value)}
+                          aria-label={`Use Ira's ${BLANK_TITLE[b].toLowerCase()} for row ${row.rowNo}`}
+                          className="shrink-0 h-5 px-1.5 -my-0.5 rounded font-semibold text-brand-700 hover:bg-brand-50 transition-colors cursor-pointer">
+                          Use
+                        </button>
+                      </p>
+                    )}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      </td>
+    </tr>
+  );
+}
+
 function StepRail({ steps, current }: { steps: { key: Step; label: string }[]; current: Step }) {
   const at = steps.findIndex(s => s.key === current);
   return (
@@ -187,10 +301,12 @@ export default function RacmImportReview({ mode, file, process, entity, existing
   const [fillOpen, setFillOpen] = useState(false);
   /** Keyed `${row.key}|${field}`; absent = undecided. Nothing is written until Apply. */
   const [fillDecisions, setFillDecisions] = useState<Record<string, 'accept' | 'reject'>>({});
+  /** Rows the reviewer chose not to import rather than fix (17 Sep). */
+  const [leftOut, setLeftOut] = useState<Set<string>>(new Set());
 
   const resetReview = () => {
     setAcceptedRows(new Set()); setAcceptedSugg({}); setDismissedSugg({});
-    setExpanded(new Set()); setFillOpen(false); setFillDecisions({});
+    setExpanded(new Set()); setFillOpen(false); setFillDecisions({}); setLeftOut(new Set());
   };
 
   // ── Columns step (RACM) ───────────────────────────────────────────────────────
@@ -314,7 +430,8 @@ export default function RacmImportReview({ mode, file, process, entity, existing
 
   // ── Review derivations ────────────────────────────────────────────────────────
   const effective = useMemo(() => rows.map(r => withAccepted(r, acceptedSugg[r.key])), [rows, acceptedSugg]);
-  const included = useMemo(() => effective.filter(r => r.origin !== 'suggested' || acceptedRows.has(r.key)), [effective, acceptedRows]);
+  const isCandidate = (r: ImportRow) => r.origin !== 'suggested' || acceptedRows.has(r.key);
+  const included = useMemo(() => effective.filter(r => (r.origin !== 'suggested' || acceptedRows.has(r.key)) && !leftOut.has(r.key)), [effective, acceptedRows, leftOut]);
   const suggestions = useMemo(() => {
     const out = new Map<string, Suggestion[]>();
     effective.forEach(r => {
@@ -338,11 +455,23 @@ export default function RacmImportReview({ mode, file, process, entity, existing
   const attributeCount = included.reduce((n, r) => n + r.attributes.length, 0);
   const requiredFileCount = included.reduce((n, r) => n + r.attributes.reduce((m, a) => m + a.requiredFiles.length, 0), 0);
   const mergedCount = included.reduce((n, r) => n + r.mergedDuplicateChecks, 0);
-  const needFrequency = included.filter(r => r.frequency === null).length;
+  /** Rows still held back — no frequency, or a core value blank. */
+  const needFix = included.filter(rowBlocked).length;
+  /** What those rows are missing, said once each, in a fixed order. */
+  const missingLabels = useMemo(() => {
+    const found = new Set<string>();
+    included.forEach(r => {
+      if (r.frequency === null) found.add('a frequency');
+      coreBlanks(r).forEach(b => found.add(CORE_BLANK_LABEL[b]));
+    });
+    const order = ['a risk description', 'a control title or activity', 'a frequency', 'a nature', 'a type', 'attributes'];
+    return order.filter(l => found.has(l));
+  }, [included]);
+  const fillsByRow = useMemo(() => new Map(fills.map(g => [g.row.key, g.fills])), [fills]);
   const duplicateCount = included.filter(r => r.duplicateOf).length;
   const suggestedRowCount = rows.filter(r => r.origin === 'suggested').length;
   // ── IDs (S11) ─────────────────────────────────────────────────────────────────
-  // PROCESS/ENTITY/R001/C001. The codes start from the register (or the names)
+  // ENTITY/PROCESS/R001/C001. The codes start from the register (or the names)
   // and can be edited here; a code another process or company already uses is
   // refused, so an ID means the same thing on every RACM and engagement.
   const [processCode, setProcessCodeDraft] = useState(() => peekProcessCode(process));
@@ -350,12 +479,12 @@ export default function RacmImportReview({ mode, file, process, entity, existing
   const rowEntity = (row: ImportRow) => cell(row.values.entity) || entity;
   const entityNames = useMemo(() => Array.from(new Set(included.map(rowEntity).filter(Boolean))), [included, entity]); // eslint-disable-line react-hooks/exhaustive-deps
   const codeForEntity = (name: string | undefined) => (name ? entityCodeDrafts[name] ?? peekEntityCode(name) : entityCodeDrafts[''] ?? 'ENT');
-  const processCodeError = !CODE_OK(processCode) ? 'Use 2–6 letters or digits'
+  const processCodeError = !CODE_OK(processCode) ? 'Use exactly 3 letters or digits'
     : processCodeTakenBy(processCode, process) ? `Already the code for ${titleCase(processCodeTakenBy(processCode, process)!)}` : null;
   const entityCodeErrors = entityNames.map(name => {
     const code = codeForEntity(name);
     const clash = entityNames.find(other => other !== name && codeForEntity(other) === code);
-    const error = !CODE_OK(code) ? 'Use 2–6 letters or digits'
+    const error = !CODE_OK(code) ? 'Use exactly 3 letters or digits'
       : entityCodeTakenBy(code, name) ? `Already the code for ${titleCase(entityCodeTakenBy(code, name)!)}`
       : clash ? `Same code as ${clash}` : null;
     return { name, code, error };
@@ -363,21 +492,27 @@ export default function RacmImportReview({ mode, file, process, entity, existing
   const codesOk = !processCodeError && entityCodeErrors.every(e => !e.error);
   /** The ID each included row will import under, keyed by row. */
   const newIds = useMemo(() => {
-    const stand = included.map((r, i) => ({
-      id: cell(r.values.controlId) || `C-${r.rowNo}`,
-      riskId: cell(r.values.riskId) || `R-${i + 1}`,
+    // No ID in the file: numbered by row order, and rows with no Risk ID but the
+    // same risk description share a risk — the same rule the import uses.
+    const noDigits = (t: string) => t.replace(/\d/g, d => 'abcdefghij'[Number(d)]!);
+    const stand = included.map(r => ({
+      id: cell(r.values.controlId) || `~row-${noDigits(r.key)}`,
+      riskId: cell(r.values.riskId) || `~risk-${noDigits(norm(cell(r.values.riskDescription)) || r.key)}`,
       entity: rowEntity(r) || undefined,
     }) as unknown as Control);
     const out = assignRacmIds(stand, { processCode: cleanCode(processCode) || 'GEN', entityCodeOf: codeForEntity, useFileNumbers: true });
     return new Map(included.map((r, i) => [r.key, out[i]!.id]));
   }, [included, processCode, entityCodeDrafts, entity]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  const canImport = included.length > 0 && needFrequency === 0 && codesOk;
+  const canImport = included.length > 0 && needFix === 0 && codesOk;
 
   const toggleExpanded = (key: string) => setExpanded(prev => { const n = new Set(prev); if (n.has(key)) n.delete(key); else n.add(key); return n; });
   const toggleRow = (key: string) => setAcceptedRows(prev => { const n = new Set(prev); if (n.has(key)) n.delete(key); else n.add(key); return n; });
-  const pickFrequency = (rowKey: string, value: Frequency) =>
-    setRows(prev => prev.map(r => (r.key === rowKey ? rowFromValues({ ...r.values, frequency: value }, r, existing, process) : r)));
+  const pickFrequency = (rowKey: string, value: Frequency) => setValue(rowKey, 'frequency', value);
+  /** Write one value into a row and rebuild it — a blank filled in review. */
+  const setValue = (rowKey: string, field: RacmFieldKey, value: string) =>
+    setRows(prev => prev.map(r => (r.key === rowKey ? rowFromValues({ ...r.values, [field]: value }, r, existing, process) : r)));
+  const toggleLeftOut = (rowKey: string) => setLeftOut(prev => { const n = new Set(prev); if (n.has(rowKey)) n.delete(rowKey); else n.add(rowKey); return n; });
   const acceptSuggestion = (rowKey: string, s: Suggestion) => setAcceptedSugg(prev => {
     const cur = prev[rowKey] ?? { attributes: [], designChecks: [] };
     return { ...prev, [rowKey]: s.kind === 'attribute' ? { ...cur, attributes: [...cur.attributes, s.text] } : { ...cur, designChecks: [...cur.designChecks, s.text] } };
@@ -411,7 +546,7 @@ export default function RacmImportReview({ mode, file, process, entity, existing
     try {
       controls = importRowsToControls(included, process);
     } catch {
-      addToast({ type: 'error', title: "Couldn't import", message: 'Every row needs a frequency before it can be imported.' });
+      addToast({ type: 'error', title: "Couldn't import", message: 'Fill every blank, or leave the row out, before importing.' });
       return;
     }
     // the codes as reviewed become the register's, then every row takes its ID
@@ -635,7 +770,8 @@ export default function RacmImportReview({ mode, file, process, entity, existing
                   <span className="font-semibold text-ink-900">{plural(included.length, 'control')}</span> · {plural(attributeCount, 'attribute')} · {plural(requiredFileCount, 'required file')}
                 </p>
                 {mergedCount > 0 && <span className="text-[0.71875rem] text-ink-500 tabular-nums">{plural(mergedCount, 'duplicate design check')} merged</span>}
-                {needFrequency > 0 && <Pill tone="mitigated">{needFrequency} {needFrequency === 1 ? 'row needs' : 'rows need'} a frequency</Pill>}
+                {needFix > 0 && <Pill tone="mitigated">{needFix} {needFix === 1 ? 'row needs' : 'rows need'} a value</Pill>}
+                {leftOut.size > 0 && <span className="text-[0.71875rem] text-ink-500 tabular-nums">{leftOut.size} left out</span>}
                 {duplicateCount > 0 && <Pill tone="mitigated">{plural(duplicateCount, 'possible duplicate')}</Pill>}
                 {mode === 'sop' && suggestedRowCount > 0 && (
                   <span className="text-[0.71875rem] text-ink-500 tabular-nums">{suggestedRowCount} suggested by Ira · {acceptedRows.size} accepted</span>
@@ -707,32 +843,33 @@ export default function RacmImportReview({ mode, file, process, entity, existing
                 </section>
               )}
 
-              {/* IDs (S11) — the two short codes every row's ID is built from,
-                  editable before import. */}
+              {/* IDs (S11) — the short codes every row's ID is built from, in
+                  the order they read (entity, then process), editable before
+                  import. Exactly three characters each (17 Sep). */}
               {included.length > 0 && (
                 <section aria-label="Control IDs" className="rounded-xl border border-canvas-border bg-canvas-elevated px-4 py-3 mb-3">
                   <div className="flex flex-wrap items-start gap-x-5 gap-y-2.5">
-                    <div>
-                      <label htmlFor="racm-import-process-code" className={labelCls}>Process code · {process}</label>
-                      <input id="racm-import-process-code" value={processCode} onChange={e => setProcessCodeDraft(cleanCode(e.target.value))}
-                        aria-invalid={!!processCodeError} aria-describedby={processCodeError ? 'racm-import-process-code-error' : undefined}
-                        className={cn('h-8 w-[5.5rem] px-2 rounded-lg border bg-canvas text-[0.78125rem] font-mono font-semibold text-ink-900 uppercase focus:outline-none focus:ring-2 focus:ring-brand-200', processCodeError ? 'border-risk-400' : 'border-canvas-border')} />
-                      {processCodeError && <p id="racm-import-process-code-error" className="mt-1 text-[0.6875rem] text-risk-700">{processCodeError}</p>}
-                    </div>
                     {entityCodeErrors.map(({ name, code, error }, i) => (
                       <div key={name}>
                         <label htmlFor={`racm-import-entity-code-${i}`} className={cn(labelCls, 'max-w-[16rem] truncate')} title={name}>Entity code · {name}</label>
-                        <input id={`racm-import-entity-code-${i}`} value={code} onChange={e => setEntityCodeDrafts(prev => ({ ...prev, [name]: cleanCode(e.target.value) }))}
+                        <input id={`racm-import-entity-code-${i}`} value={code} maxLength={3} onChange={e => setEntityCodeDrafts(prev => ({ ...prev, [name]: cleanCode(e.target.value) }))}
                           aria-invalid={!!error} aria-describedby={error ? `racm-import-entity-code-error-${i}` : undefined}
                           className={cn('h-8 w-[5.5rem] px-2 rounded-lg border bg-canvas text-[0.78125rem] font-mono font-semibold text-ink-900 uppercase focus:outline-none focus:ring-2 focus:ring-brand-200', error ? 'border-risk-400' : 'border-canvas-border')} />
                         {error && <p id={`racm-import-entity-code-error-${i}`} className="mt-1 text-[0.6875rem] text-risk-700">{error}</p>}
                       </div>
                     ))}
+                    <div>
+                      <label htmlFor="racm-import-process-code" className={labelCls}>Process code · {process}</label>
+                      <input id="racm-import-process-code" value={processCode} maxLength={3} onChange={e => setProcessCodeDraft(cleanCode(e.target.value))}
+                        aria-invalid={!!processCodeError} aria-describedby={processCodeError ? 'racm-import-process-code-error' : undefined}
+                        className={cn('h-8 w-[5.5rem] px-2 rounded-lg border bg-canvas text-[0.78125rem] font-mono font-semibold text-ink-900 uppercase focus:outline-none focus:ring-2 focus:ring-brand-200', processCodeError ? 'border-risk-400' : 'border-canvas-border')} />
+                      {processCodeError && <p id="racm-import-process-code-error" className="mt-1 text-[0.6875rem] text-risk-700">{processCodeError}</p>}
+                    </div>
                     <div className="min-w-0 flex-1 basis-[16rem]">
                       <p className={labelCls}>IDs read</p>
                       <p className="text-[0.75rem] text-ink-600 leading-snug">
                         <span className="font-mono font-semibold text-ink-900">{newIds.get(included[0]!.key)}</span>
-                        {' '}— process / entity / risk / control. Numbers come from the file's own Risk ID and Control ID, else the row order.
+                        {' '}— entity / process / risk / control. Numbers come from the file's own Risk ID and Control ID, else the row order.
                       </p>
                     </div>
                   </div>
@@ -768,9 +905,13 @@ export default function RacmImportReview({ mode, file, process, entity, existing
                         const detailId = `racm-import-detail-${row.key}`;
                         const addedAttrs = new Set((acceptedSugg[row.key]?.attributes ?? []).map(norm));
                         const addedChecks = new Set((acceptedSugg[row.key]?.designChecks ?? []).map(norm));
+                        const isLeftOut = leftOut.has(row.key);
+                        const blanks = isCandidate(row) && !isLeftOut ? coreBlanks(row) : [];
+                        const rowFills = fillsByRow.get(row.key) ?? [];
+                        const freqIdea = row.frequency ? undefined : rowFills.find(f => f.field === 'frequency');
                         return (
                           <Fragment key={row.key}>
-                            <tr className="reg-row reg-static">
+                            <tr className={cn('reg-row reg-static', isLeftOut && 'opacity-50')}>
                               {mode === 'sop' && (
                                 <td>
                                   {row.origin === 'suggested' && (
@@ -818,6 +959,23 @@ export default function RacmImportReview({ mode, file, process, entity, existing
                                       {FREQUENCIES.map(f => <option key={f} value={f}>{f}</option>)}
                                     </select>
                                     <p id={`racm-import-freq-note-${row.key}`} className="mt-1 text-[0.65625rem] leading-snug text-mitigated-700 whitespace-normal">{frequencyNote(row)}</p>
+                                    {freqIdea && !isLeftOut && (
+                                      <p className="mt-1 flex items-center gap-1 text-[0.65625rem] leading-snug text-ink-600 whitespace-normal" title={freqIdea.reason}>
+                                        <Sparkles size={10} className="text-brand-600 shrink-0" aria-hidden />
+                                        <span>Ira: <span className="font-semibold text-ink-800">{freqIdea.value}</span></span>
+                                        <button type="button" onClick={() => pickFrequency(row.key, freqIdea.value as Frequency)}
+                                          aria-label={`Use Ira's frequency (${freqIdea.value}) for row ${row.rowNo}`}
+                                          className="h-5 px-1.5 rounded font-semibold text-brand-700 hover:bg-brand-50 transition-colors cursor-pointer">Use</button>
+                                      </p>
+                                    )}
+                                    {/* A row held only by its frequency can be left out here — one
+                                        with other blanks offers it in the box beneath. */}
+                                    {blanks.length === 0 && !isLeftOut && isCandidate(row) && (
+                                      <button type="button" onClick={() => toggleLeftOut(row.key)}
+                                        className="mt-1 h-5 px-1.5 -ml-1.5 rounded text-[0.65625rem] font-semibold text-ink-500 hover:text-ink-800 hover:bg-paper-50 transition-colors cursor-pointer">
+                                        Leave out
+                                      </button>
+                                    )}
                                   </>
                                 )}
                               </td>
@@ -848,6 +1006,21 @@ export default function RacmImportReview({ mode, file, process, entity, existing
                               </td>
                             </tr>
 
+                            {blanks.length > 0 && (
+                              <BlankFixRow key={`fix-${row.key}`} row={row} blanks={blanks} fills={rowFills}
+                                attributeIdeas={sugg.filter(x => x.kind === 'attribute').map(x => x.text)}
+                                colSpan={reviewCols} onSet={(field, value) => setValue(row.key, field, value)} onLeaveOut={() => toggleLeftOut(row.key)} />
+                            )}
+                            {isLeftOut && (
+                              <tr className="def-detail">
+                                <td colSpan={reviewCols}>
+                                  <div className="my-1.5 flex items-center gap-2 text-[0.71875rem] text-ink-500">
+                                    <span>Left out — row {row.rowNo} won't be imported.</span>
+                                    <button type="button" onClick={() => toggleLeftOut(row.key)} className="h-6 px-1.5 rounded font-semibold text-brand-700 hover:bg-brand-50 transition-colors cursor-pointer">Put back</button>
+                                  </div>
+                                </td>
+                              </tr>
+                            )}
                             {open && (
                               <tr className="def-detail" id={detailId}>
                                 <td colSpan={reviewCols}>
@@ -978,10 +1151,12 @@ export default function RacmImportReview({ mode, file, process, entity, existing
 
           {step === 'review' && (
             <>
-              {needFrequency > 0 && (
-                <span className="text-[0.71875rem] text-mitigated-700">{needFrequency} {needFrequency === 1 ? 'row still needs' : 'rows still need'} a frequency</span>
+              {needFix > 0 && (
+                <span className="text-[0.71875rem] text-mitigated-700">
+                  {needFix} {needFix === 1 ? 'row still needs' : 'rows still need'} {missingLabels.length > 1 ? `${missingLabels.slice(0, -1).join(', ')} or ${missingLabels[missingLabels.length - 1]}` : missingLabels[0]}
+                </span>
               )}
-              {needFrequency === 0 && !codesOk && (
+              {needFix === 0 && !codesOk && (
                 <span className="text-[0.71875rem] text-risk-700">Fix the ID codes to import</span>
               )}
               <button type="button" onClick={doImport} disabled={!canImport} className={primaryBtn}>Import {plural(included.length, 'control')}</button>

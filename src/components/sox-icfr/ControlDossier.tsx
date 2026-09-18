@@ -19,14 +19,14 @@ import {
   countVerdict, coverageVerdict, derivedRunCount, populationReady, designBasis, auditorProvenChecks, suggestedDesignChecks, suggestPopulationFile, fmtDay, parseDay,
   monthlyBreakdown, spikeMonths, priorRoundCount, fileUsable, originLabel, guessFileKind, populationSources, ipeChecksFor, samplesFor,
   expectedInputsFor, hasRowCount, isAssisting, sampledSources, reviewNotesFor, isShared, entityCoverage, uncoveredEntities, hasPaths, pathCoverage, untouchedPaths, type PopVerdict,
-  requiredFilesOf, requiredFilesCount, requiredFilesReady, designFilesOf,
+  requiredFilesOf, requiredFilesCount, requiredFilesReady, passedWithoutFiles, designFilesOf,
   designApproved, isEngagementLocked, samePerson, documentSystemRows,
   auditSampling, dealSample, NO_COUNTRY, sampleDate, sampleHome, sampleSplit, spreadPhrase, workingAudit, yearSampleRounds, LEGACY_SOURCE_ID, type SampleSplit, type YearRound, yearEndPending,
   draftSamplePrompt, readSamplePrompt,
   populationInstances, sampleAmount, seedKeyOf,
 } from './helpers';
 import { useAuditFiles, type AuditFile } from './useAuditFiles';
-import { auditCovers, countryOf, ownersOf, programmeFor } from './auditScope';
+import { auditCovers, countryOf, inScopeEntityNames, ownersOf, programmeFor, scopedForDraw } from './auditScope';
 import { ConclusionPill, CourtBadge, NatureChip, OriginPicker, Toggle, TrackPill, Tickmark, Stamp, RagCard, type RagMeterDef } from './parts';
 import { Pill } from '../shared/StatusBadge';
 import { useToast } from '../shared/Toast';
@@ -59,7 +59,7 @@ const DOC_TONE: Record<DocStatus, string> = { Received: 'text-compliant-700', Re
 export const WORKFLOW_LIBRARY = ['Three-way match check', 'Approval-tier check', 'Duplicate-invoice detection', 'Segregation-of-duties scan', 'Timeliness / cut-off check', 'Reconciliation completeness', 'Access review', 'Tolerance-breach monitor'];
 
 // ── primitives ───────────────────────────────────────────────────────────────────
-function RationaleForm({ title, onCancel, buttons }: { title: string; onCancel: () => void; buttons: { label: string; onClick: (note: string) => void }[] }) {
+function RationaleForm({ title, onCancel, buttons }: { title: string; onCancel: () => void; buttons: { label: string; onClick: (note: string) => void; disabled?: boolean; title?: string }[] }) {
   const [note, setNote] = useState('');
   return (
     <motion.div initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: 'auto' }} className="mt-2 p-3 rounded-xl border border-high-200 bg-high-50/40">
@@ -67,7 +67,7 @@ function RationaleForm({ title, onCancel, buttons }: { title: string; onCancel: 
       <textarea autoFocus value={note} onChange={e => setNote(e.target.value)} rows={2} placeholder="Record your rationale — retained in the working paper." className="w-full text-[0.75rem] rounded-lg border border-canvas-border bg-canvas-elevated px-2.5 py-2 text-ink-800 placeholder:text-ink-400 focus:outline-none focus:ring-2 focus:ring-high-200 resize-none" />
       <div className="flex items-center justify-end gap-2 mt-2">
         <button onClick={onCancel} className="h-7 px-2.5 text-[0.75rem] font-semibold text-ink-500 hover:text-ink-800 cursor-pointer">Cancel</button>
-        {buttons.map(b => <button key={b.label} disabled={!note.trim()} onClick={() => b.onClick(note.trim())} className="h-7 px-3 text-[0.75rem] font-semibold rounded-lg bg-high-600 text-white disabled:opacity-40 enabled:hover:bg-high-700 transition-colors cursor-pointer">{b.label}</button>)}
+        {buttons.map(b => <button key={b.label} disabled={!note.trim() || b.disabled} title={b.title} onClick={() => b.onClick(note.trim())} className="h-7 px-3 text-[0.75rem] font-semibold rounded-lg bg-high-600 text-white disabled:opacity-40 enabled:hover:bg-high-700 transition-colors cursor-pointer">{b.label}</button>)}
       </div>
     </motion.div>
   );
@@ -279,7 +279,7 @@ function ItgcCascadeNotice({ control }: { control: Control }) {
           {failed.map(f => (
             <button key={f.id} onClick={() => openControl(f.id)} title={f.description}
               className="inline-flex items-center gap-1.5 max-w-full px-2 h-[22px] rounded-md border border-mitigated-200 bg-canvas-elevated text-[0.6875rem] font-semibold text-mitigated-800 hover:border-mitigated-400 transition-colors cursor-pointer">
-              {/* shrink-0 + nowrap: a TRY/AIH/R001/C001-length ID would otherwise
+              {/* shrink-0 + nowrap: a AIH/TRY/R001/C001-length ID would otherwise
                   break at its slashes inside this one-line chip */}
               <span className="font-mono shrink-0 whitespace-nowrap">{controlCode(f)}</span>
               <span className="truncate font-medium text-ink-600">{f.description}</span>
@@ -331,6 +331,10 @@ function ConcludeFooter({ control, which, suggestion, canEdit, disabled, disable
   const conclude = which === 'design' ? concludeDesign : concludeOperating;
   const override = which === 'design' ? overrideDesign : overrideOperating;
   const label = which === 'design' ? 'TOD' : 'TOE';
+  // TOD names what it concludes (17 Sep dev call): "Design effective", not
+  // "Conclude effective". TOE keeps its wording.
+  const effectiveLabel = which === 'design' ? 'Design effective' : 'Conclude effective';
+  const ineffectiveLabel = which === 'design' ? 'Design ineffective' : 'Conclude ineffective';
   // The box is open before either button is pressed, drafted from the evidence.
   // Seeded once per track state so a rationale already on the paper is what you
   // come back to, and re-testing redrafts rather than leaving stale words behind.
@@ -360,7 +364,7 @@ function ConcludeFooter({ control, which, suggestion, canEdit, disabled, disable
     const contradicts = suggestion !== 'Not tested' && target !== suggestion;
     if (contradicts) override(control.id, { result: target === 'Effective' ? 'Effective' : 'Ineffective', by: me, at: 'just now', rationale });
     else override(control.id, null);
-    addToast({ type: 'success', title: `${label} concluded ${target.toLowerCase()}`, message: contradicts ? 'Saved against the evidence — your rationale is on the paper.' : 'Saved to the working paper.' });
+    addToast({ type: 'success', title: which === 'design' ? `TOD: design ${target.toLowerCase()}` : `${label} concluded ${target.toLowerCase()}`, message: contradicts ? 'Saved against the evidence — your rationale is on the paper.' : 'Saved to the working paper.' });
   };
   return (
     <div className="mt-4 pt-4 border-t border-canvas-border">
@@ -375,8 +379,8 @@ function ConcludeFooter({ control, which, suggestion, canEdit, disabled, disable
           className="mt-1 w-full text-[0.75rem] rounded-lg border border-canvas-border bg-canvas-elevated px-2.5 py-2 text-ink-800 placeholder:text-ink-400 focus:outline-none focus:ring-2 focus:ring-brand-200 resize-none" />
       </label>
       <div className="flex items-center gap-2.5 flex-wrap mt-2.5">
-        <button disabled={disabled || disableEffective || staleRuns > 0 || onWordAlone > 0 || roundFail} title={disableEffective ? disableEffectiveNote : undefined} onClick={() => apply('Effective')} className="h-9 px-4 inline-flex items-center gap-1.5 rounded-lg bg-compliant-600 text-white text-[0.78125rem] font-semibold enabled:hover:bg-compliant-700 disabled:opacity-40 transition-colors cursor-pointer">{disableEffective ? <Lock size={14} /> : <CheckCircle2 size={15} />} Conclude effective</button>
-        <button disabled={disabled || staleRuns > 0} onClick={() => apply('Ineffective')} className="h-9 px-4 inline-flex items-center gap-1.5 rounded-lg border border-risk-300 text-risk-700 text-[0.78125rem] font-semibold enabled:hover:bg-risk-50 disabled:opacity-40 transition-colors cursor-pointer"><XCircle size={15} /> Conclude ineffective</button>
+        <button disabled={disabled || disableEffective || staleRuns > 0 || onWordAlone > 0 || roundFail} title={disableEffective ? disableEffectiveNote : undefined} onClick={() => apply('Effective')} className="h-9 px-4 inline-flex items-center gap-1.5 rounded-lg bg-compliant-600 text-white text-[0.78125rem] font-semibold enabled:hover:bg-compliant-700 disabled:opacity-40 transition-colors cursor-pointer">{disableEffective ? <Lock size={14} /> : <CheckCircle2 size={15} />} {effectiveLabel}</button>
+        <button disabled={disabled || staleRuns > 0} onClick={() => apply('Ineffective')} className="h-9 px-4 inline-flex items-center gap-1.5 rounded-lg border border-risk-300 text-risk-700 text-[0.78125rem] font-semibold enabled:hover:bg-risk-50 disabled:opacity-40 transition-colors cursor-pointer"><XCircle size={15} /> {ineffectiveLabel}</button>
         {disableEffective && disableEffectiveNote && <span className="text-[0.71875rem] text-mitigated-700 inline-flex items-center gap-1"><Lock size={11} /> {disableEffectiveNote}</span>}
         {staleRuns > 0 && (
           <span className="text-[0.71875rem] text-mitigated-700 inline-flex items-center gap-1">
@@ -942,7 +946,7 @@ function WalkthroughCard({ control, canEdit }: { control: Control; canEdit: bool
                 <Tickmark result={r} size={17} />
                 <div className="min-w-0 flex-1">
                   <span className="text-[0.75rem] text-ink-800">{s.description}</span>
-                  <span className="text-[0.65625rem] text-ink-400 ml-1.5">({s.code} · {s.assertion})</span>
+                  <span className="text-[0.65625rem] text-ink-400 ml-1.5">({[s.code, s.assertion].filter(Boolean).join(' · ')})</span>
                 </div>
                 {canEdit && (
                   <div className="flex items-center gap-1 shrink-0">
@@ -1020,10 +1024,16 @@ function AttributeRow({ control, step, canEdit, testing }: { control: Control; s
   const busy = testing || validatingWf;
   const runAI = () => { setValidatingWf(true); window.setTimeout(() => { runStepValidation(control.id, step.id); setValidatingWf(false); }, 4000); };
 
-  const resultBtn = (target: TestResult, label: string, Icon: typeof CheckCircle2, on: boolean, tone: string) => (
-    <button onClick={() => setStepResult(control.id, step.id, target)}
-      className={cn('h-8 px-2.5 inline-flex items-center gap-1 rounded-lg border text-[0.75rem] font-semibold transition-colors cursor-pointer', on ? tone : 'border-canvas-border bg-canvas-elevated text-ink-600 hover:border-ink-300 hover:text-ink-900')}><Icon size={13} />{label}</button>
-  );
+  // No Pass without the evidence (17 Sep dev call) — the Pass button, an
+  // override and an attestation all wait for every required file. Fail never does.
+  const passLock = ready ? undefined : `Upload all ${total} required files first`;
+  const resultBtn = (target: TestResult, label: string, Icon: typeof CheckCircle2, on: boolean, tone: string) => {
+    const locked = target === 'Pass' && !ready;
+    return (
+      <button onClick={() => setStepResult(control.id, step.id, target)} disabled={locked} title={locked ? passLock : undefined}
+        className={cn('h-8 px-2.5 inline-flex items-center gap-1 rounded-lg border text-[0.75rem] font-semibold transition-colors cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed', on ? tone : 'border-canvas-border bg-canvas-elevated text-ink-600 enabled:hover:border-ink-300 enabled:hover:text-ink-900')}>{locked ? <Lock size={12} /> : <Icon size={13} />}{label}</button>
+    );
+  };
 
   return (
     <div className={cn('step-row', eff === 'Fail' && 'fail', eff === 'Pass' && 'pass')}>
@@ -1035,7 +1045,7 @@ function AttributeRow({ control, step, canEdit, testing }: { control: Control; s
             <span className="text-[0.8125rem] font-semibold text-ink-900">{step.description}</span>
             {step.override && <span className="override-tag"><Pencil size={9} /> Overridden</span>}
           </div>
-          <div className="text-[0.6875rem] text-ink-400 mt-1">{step.assertion} · {step.precision} · {step.procedures.join(' / ')}</div>
+          <div className="text-[0.6875rem] text-ink-400 mt-1">{[step.assertion, step.precision, step.procedures.join(' / ')].filter(Boolean).join(' · ')}</div>
           {step.override && <div className="text-[0.6875rem] text-high-700 mt-1.5 flex items-start gap-1"><CornerDownRight size={11} className="mt-0.5 shrink-0" /> {step.override.rationale} <span className="text-ink-400">— {step.override.by}</span></div>}
         </div>
         {canEdit && (
@@ -1127,7 +1137,7 @@ function AttributeRow({ control, step, canEdit, testing }: { control: Control; s
             </div>
             {step.validation?.summary && !validatingWf && <p className="text-[0.71875rem] text-ink-600 leading-snug">{step.validation.summary}</p>}
             {/* only for a list that exists — an empty one already says where to add files */}
-            {canEdit && !ready && total > 0 && <p className="text-[0.65625rem] text-mitigated-700 inline-flex items-center gap-1"><AlertTriangle size={10} /> Upload every required file to run AI validation — {uploaded} of {total} in.</p>}
+            {canEdit && !ready && total > 0 && <p className="text-[0.65625rem] text-mitigated-700 inline-flex items-center gap-1"><AlertTriangle size={10} /> Upload every required file to pass this attribute or run AI validation — {uploaded} of {total} in.</p>}
           </div>
         </div>
 
@@ -1170,7 +1180,7 @@ function AttributeRow({ control, step, canEdit, testing }: { control: Control; s
                 <textarea value={noteDraft} onChange={e => setNoteDraft(e.target.value)} rows={2} placeholder="Describe how this attribute is satisfied — recorded with your attestation." className="w-full text-[0.75rem] rounded-lg border border-canvas-border bg-canvas-elevated px-2.5 py-2 text-ink-800 placeholder:text-ink-400 focus:outline-none focus:ring-2 focus:ring-brand-200 resize-none" />
                 <div className="flex items-center gap-2 mt-1.5 flex-wrap">
                   <span className="text-[0.65625rem] font-semibold text-ink-400 uppercase tracking-wide">Attest</span>
-                  <button disabled={!noteDraft.trim()} onClick={() => { attestStep(control.id, step.id, noteDraft.trim(), 'Pass'); logEvent({ action: 'Update', description: `Attested ${step.code} for ${control.id}`, module: 'SOX ICFR', entity: 'Test Result' }); }} className="h-7 px-2.5 rounded-md bg-compliant-600 text-white text-[0.71875rem] font-semibold disabled:opacity-40 enabled:hover:bg-compliant-700 inline-flex items-center gap-1 cursor-pointer"><CheckCircle2 size={12} /> Pass</button>
+                  <button disabled={!noteDraft.trim() || !ready} title={passLock} onClick={() => { attestStep(control.id, step.id, noteDraft.trim(), 'Pass'); logEvent({ action: 'Update', description: `Attested ${step.code} for ${control.id}`, module: 'SOX ICFR', entity: 'Test Result' }); }} className="h-7 px-2.5 rounded-md bg-compliant-600 text-white text-[0.71875rem] font-semibold disabled:opacity-40 enabled:hover:bg-compliant-700 inline-flex items-center gap-1 cursor-pointer"><CheckCircle2 size={12} /> Pass</button>
                   <button disabled={!noteDraft.trim()} onClick={() => { attestStep(control.id, step.id, noteDraft.trim(), 'Fail'); logEvent({ action: 'Update', description: `Attested ${step.code} for ${control.id}`, module: 'SOX ICFR', entity: 'Test Result' }); }} className="h-7 px-2.5 rounded-md border border-risk-300 text-risk-700 text-[0.71875rem] font-semibold disabled:opacity-40 enabled:hover:bg-risk-50 inline-flex items-center gap-1 cursor-pointer"><XCircle size={12} /> Fail</button>
                   <button onClick={() => { addStepEvidence(control.id, step.id, `evidence-${step.code}.pdf`); logEvent({ action: 'Upload', description: `Attached evidence to attribute ${step.code} (${control.id})`, module: 'SOX ICFR', entity: 'Evidence' }); }} className="h-7 px-2.5 rounded-md border border-canvas-border bg-canvas-elevated text-ink-600 text-[0.71875rem] font-semibold hover:border-brand-300 hover:text-brand-700 inline-flex items-center gap-1 cursor-pointer"><Upload size={11} /> Attach evidence</button>
                 </div>
@@ -1183,7 +1193,7 @@ function AttributeRow({ control, step, canEdit, testing }: { control: Control; s
       {over && (step.override
         ? <div className="mt-2 flex justify-end"><button onClick={() => { overrideStep(control.id, step.id, null); setOver(false); }} className="h-7 px-3 text-[0.75rem] font-semibold rounded-lg border border-canvas-border text-ink-600 hover:text-ink-900 inline-flex items-center gap-1.5 cursor-pointer"><RotateCcw size={12} /> Remove override</button></div>
         : <RationaleForm title="Override this result — record why" onCancel={() => setOver(false)} buttons={[
-            { label: 'Override · Pass', onClick: n => { overrideStep(control.id, step.id, { result: 'Pass', by: me, at: 'just now', rationale: n }); setOver(false); } },
+            { label: 'Override · Pass', disabled: !ready, title: passLock, onClick: n => { overrideStep(control.id, step.id, { result: 'Pass', by: me, at: 'just now', rationale: n }); setOver(false); } },
             { label: 'Override · Fail', onClick: n => { overrideStep(control.id, step.id, { result: 'Fail', by: me, at: 'just now', rationale: n }); setOver(false); } },
           ]} />)}
       <AnimatePresence>{showQA && step.validation && <QAResultsModal title={step.description} validation={step.validation} control={control} step={step} onClose={() => setShowQA(false)} />}</AnimatePresence>
@@ -2854,7 +2864,7 @@ function PopulationSection({ control, canEdit, locked: gated = false }: { contro
       // needs a dimension to name ("type Banking 1,180 · type Other 238"). The
       // sub-process is what the old Transaction-type box defaulted to, so this
       // is the same answer it always gave — just no longer typed by hand.
-      filterType: control.subProcess !== 'General' ? control.subProcess : undefined,
+      filterType: control.subProcess && control.subProcess !== 'General' ? control.subProcess : undefined,
       count: narrowed,
       // The person signed in is the person who just ran the extract, so that
       // one fact is filled in rather than asked for. The system fills itself in
@@ -2953,7 +2963,7 @@ function PopulationSection({ control, canEdit, locked: gated = false }: { contro
             ? 'The auditor’s design test comes first, and the reviewer approves it. Uploading and filtering the data opens after that.'
             : concluded
               ? 'TOD is concluded and waiting for the reviewer’s approval. The population opens as soon as it is approved.'
-              : 'Conclude TOD first, then the reviewer approves it — data is only worth pulling against a design someone has checked.'}${pop ? ' What was already extracted stays as it is.' : ''}`}>
+              : 'Finish TOD first — mark the design effective — then the reviewer approves it. Data is only worth pulling against a design someone has checked.'}${pop ? ' What was already extracted stays as it is.' : ''}`}>
           {!isOwnerView && <span className="inline-flex items-center gap-1.5 text-[0.75rem] text-ink-500"><span>TOD is currently</span><TrackPill c={trackResult(control.design)} /></span>}
         </EmptyState>
       </div>
@@ -3441,6 +3451,8 @@ function SourceDrawRow({ control, source, canDraw, single, isOpen, onToggle, onA
   const holds = itgcHolds(eng, control);
   const guide = sampleSizeGuide(control, holds);
   const already = samplesFor(control, source.id);
+  // Only the companies in scope take items (17 Sep) — the store deals with the same list.
+  const drawControl = scopedForDraw(control, inScopeEntityNames(eng.id, workingAudit(eng, openAuditId)));
 
   type Stage = 'ready' | 'drawing' | 'review';
   const [stage, setStage] = useState<Stage>('ready');
@@ -3480,7 +3492,7 @@ function SourceDrawRow({ control, source, canDraw, single, isOpen, onToggle, onA
   // other files' items, this file's key, the months asked for), so the rows shown
   // are the rows filed.
   const dealt = drawn.length
-    ? dealSample(control, stretch, agreed, drawn.length,
+    ? dealSample(drawControl, stretch, agreed, drawn.length,
       (control.operating.sampling?.samples ?? []).filter(x => (x.sourceId ?? LEGACY_SOURCE_ID) !== source.id),
       `${seedKeyOf(control)}·${source.id}`, e => countryOf(eng.id, e), home)
     : [];
@@ -3555,15 +3567,18 @@ function SourceDrawRow({ control, source, canDraw, single, isOpen, onToggle, onA
                   <div className="grid grid-cols-[1.2fr_1fr_0.8fr] gap-2 px-3 py-1.5 bg-paper-50/70 border-b border-canvas-border text-[0.625rem] font-bold uppercase tracking-wide text-ink-400">
                     <span>Reference</span><span>Date</span><span className="text-right">Amount</span>
                   </div>
-                  {already.slice(0, 6).map(smp => (
-                    <div key={smp.id} className="grid grid-cols-[1.2fr_1fr_0.8fr] gap-2 px-3 py-1.5 border-b border-canvas-border last:border-b-0 text-[0.71875rem]">
-                      <span className="font-mono text-ink-700">{smp.ref}</span>
-                      {/* the date the quarter split counts it under (A28) */}
-                      <span className="text-ink-500">{fmtDay(sampleDate(smp, home))}</span>
-                      <span className="text-right tabular-nums text-ink-700">{rowRupees(sampleAmount(control, smp.ref, sampleDate(smp, home), home))}</span>
-                    </div>
-                  ))}
-                  {already.length > 6 && <div className="px-3 py-1.5 text-[0.6875rem] text-ink-400">+{already.length - 6} more items</div>}
+                  {/* Every drawn item, not the first few (17 Sep — a list cut at
+                      six read as a draw of six). Long draws scroll in place. */}
+                  <div className="max-h-[16rem] overflow-y-auto">
+                    {already.map(smp => (
+                      <div key={smp.id} className="grid grid-cols-[1.2fr_1fr_0.8fr] gap-2 px-3 py-1.5 border-b border-canvas-border last:border-b-0 text-[0.71875rem]">
+                        <span className="font-mono text-ink-700">{smp.ref}</span>
+                        {/* the date the quarter split counts it under (A28) */}
+                        <span className="text-ink-500">{fmtDay(sampleDate(smp, home))}</span>
+                        <span className="text-right tabular-nums text-ink-700">{rowRupees(sampleAmount(control, smp.ref, sampleDate(smp, home), home))}</span>
+                      </div>
+                    ))}
+                  </div>
                 </div>
               </div>
               {canDraw && (
@@ -3652,14 +3667,15 @@ function SourceDrawRow({ control, source, canDraw, single, isOpen, onToggle, onA
                     <div className="grid grid-cols-[1.2fr_1fr_0.8fr] gap-2 px-3 py-1.5 bg-paper-50/70 border-b border-canvas-border text-[0.625rem] font-bold uppercase tracking-wide text-ink-400">
                       <span>Reference</span><span>Date</span><span className="text-right">Amount</span>
                     </div>
-                    {drawn.slice(0, 8).map((ref, i) => (
-                      <div key={ref} className="grid grid-cols-[1.2fr_1fr_0.8fr] gap-2 px-3 py-1.5 border-b border-canvas-border last:border-b-0 text-[0.71875rem]">
-                        <span className="font-mono text-ink-700">{ref}</span>
-                        <span className="text-ink-500">{fmtDay(dealt[i]?.date)}</span>
-                        <span className="text-right tabular-nums text-ink-700">{rowRupees(sampleAmount(control, ref, dealt[i]?.date, home))}</span>
-                      </div>
-                    ))}
-                    {drawn.length > 8 && <div className="px-3 py-1.5 text-[0.6875rem] text-ink-400">+{drawn.length - 8} more rows in the extract</div>}
+                    <div className="max-h-[16rem] overflow-y-auto">
+                      {drawn.map((ref, i) => (
+                        <div key={`${ref}-${i}`} className="grid grid-cols-[1.2fr_1fr_0.8fr] gap-2 px-3 py-1.5 border-b border-canvas-border last:border-b-0 text-[0.71875rem]">
+                          <span className="font-mono text-ink-700">{ref}</span>
+                          <span className="text-ink-500">{fmtDay(dealt[i]?.date)}</span>
+                          <span className="text-right tabular-nums text-ink-700">{rowRupees(sampleAmount(control, ref, dealt[i]?.date, home))}</span>
+                        </div>
+                      ))}
+                    </div>
                   </div>
                   <div className="flex items-center justify-end gap-2">
                     <button onClick={() => setRejecting(true)} className="h-9 px-3.5 inline-flex items-center gap-1.5 rounded-lg border border-risk-200 text-[0.78125rem] font-semibold text-risk-700 hover:bg-risk-50 transition-colors cursor-pointer">
@@ -3766,8 +3782,8 @@ function SampleExtractSection({ control, canEdit, locked }: { control: Control; 
       <div className="p-5">
         {designBlocked ? (
           <EmptyState icon={<Lock size={18} />} title="The draw is locked" hint={awaitingApproval
-            ? 'TOD is concluded effective and waiting for the reviewer’s approval. The draw opens once it is approved.'
-            : 'Conclude TOD as effective first — a sample is only worth pulling for a control that is designed to work.'}>
+            ? 'TOD is marked Design effective and waiting for the reviewer’s approval. The draw opens once it is approved.'
+            : 'Mark TOD as Design effective first — a sample is only worth pulling for a control that is designed to work.'}>
             <span className="inline-flex items-center gap-1.5 text-[0.75rem] text-ink-500"><span>TOD is currently</span><TrackPill c={trackResult(control.design)} /></span>
           </EmptyState>
         ) : (
@@ -3796,6 +3812,8 @@ function SampleExtractSection({ control, canEdit, locked }: { control: Control; 
   // round its date falls in, so the split reads the same from either round.
   const current = workingAudit(eng, openAuditId);
   const agreed = auditSampling(current);
+  /** The control as the draw saw it — only its companies in scope (17 Sep). */
+  const drawControl = scopedForDraw(control, inScopeEntityNames(eng.id, current));
   const yearRounds = yearSampleRounds(eng, control, current, a => auditCovers(a, control, eng.id));
   const yearTotal = yearRounds.reduce((n, r) => n + r.tested, 0);
   const roundLabel = (r: YearRound) => {
@@ -3807,7 +3825,7 @@ function SampleExtractSection({ control, canEdit, locked }: { control: Control; 
   // companies are counted in the coverage strip already, so that axis is left to
   // the strip rather than said twice.
   const splits = o.sampling?.samples.length
-    ? sampleSplit(control, current, agreed, e => countryOf(eng.id, e), sampleHome(eng, a => auditCovers(a, control, eng.id))).filter(sp => !(sp.axis === 'entity' && isShared(control)))
+    ? sampleSplit(drawControl, current, agreed, e => countryOf(eng.id, e), sampleHome(eng, a => auditCovers(a, control, eng.id))).filter(sp => !(sp.axis === 'entity' && isShared(control)))
     : [];
   const emptyGroups = splits.flatMap(sp => sp.groups.filter(g => g.n === 0 && g.label !== NO_COUNTRY).map(g => g.label));
   const SPLIT_LABEL: Record<SampleSplit['axis'], string> = { quarter: 'By quarter', country: 'By country', entity: 'By entity' };
@@ -3882,8 +3900,8 @@ function SampleExtractSection({ control, canEdit, locked }: { control: Control; 
           (which looks perfectly healthy) would carry the reader straight past
           that unless this strip says it. */}
       {isShared(control) && (() => {
-        const cov = entityCoverage(control);
-        const missing = uncoveredEntities(control);
+        const cov = entityCoverage(drawControl);
+        const missing = uncoveredEntities(drawControl);
         return (
           <div className={cn('mt-4 rounded-xl border p-3.5', missing.length ? 'border-high-200 bg-high-50/30' : 'border-canvas-border bg-paper-50/40')}>
             <div className="flex items-center gap-2 flex-wrap">
@@ -4544,6 +4562,8 @@ function OperatingSection({ control, canEdit, locked }: { control: Control; canE
   // are skipped, and the toast says which and how many files each is short.
   const ready = o.steps.filter(s => requiredFilesReady(s, control)).length;
   const untested = o.steps.filter(s => stepResult(s) === 'Not tested').length;
+  /** Passing attributes the required files don't back yet (17 Sep). */
+  const unbacked = passedWithoutFiles(control).length;
 
   const runAll = () => {
     setTesting(true);
@@ -4576,8 +4596,8 @@ function OperatingSection({ control, canEdit, locked }: { control: Control; canE
       <div className="p-5">
         <EmptyState icon={<Lock size={18} />} title="TOE is locked" hint={trackResult(control.design) === 'Effective' && !designApproved(control)
           // S6, A36 — concluded, but the reviewer has not approved it yet
-          ? 'TOD is concluded effective and waiting for the reviewer’s approval. TOE opens once it is approved.'
-          : 'Conclude TOD as effective to unlock TOE. A control that isn’t designed effectively isn’t tested for operation.'}>
+          ? 'TOD is marked Design effective and waiting for the reviewer’s approval. TOE opens once it is approved.'
+          : 'Mark TOD as Design effective to unlock TOE. A control that isn’t designed effectively isn’t tested for operation.'}>
           <span className="inline-flex items-center gap-1.5 text-[0.75rem] text-ink-500"><span>TOD is currently</span><TrackPill c={trackResult(control.design)} /></span>
         </EmptyState>
       </div>
@@ -4644,8 +4664,11 @@ function OperatingSection({ control, canEdit, locked }: { control: Control; canE
           still untested. A failing attribute concludes ineffective and the
           exception is raised — remediation and retest happen outside this flow. */}
       {o.steps.length > 0 && <ConcludeFooter control={control} which="operating" suggestion={suggestion} canEdit={canEdit}
-        disableEffective={!o.sampling || untested > 0}
-        disableEffectiveNote={!o.sampling ? 'Locked — draw the sample in step ③ first' : untested > 0 ? `${untested} attribute${untested === 1 ? ' is' : 's are'} still untested — give each a result first` : undefined} />}
+        disableEffective={!o.sampling || untested > 0 || unbacked > 0}
+        disableEffectiveNote={!o.sampling ? 'Locked — draw the sample in step ③ first'
+          : untested > 0 ? `${untested} attribute${untested === 1 ? ' is' : 's are'} still untested — give each a result first`
+          : unbacked > 0 ? `${unbacked} passed attribute${unbacked === 1 ? ' is' : 's are'} missing required files`
+          : undefined} />}
     </div>
   );
 }
@@ -5285,7 +5308,7 @@ export default function ControlDossier() {
           <VStep n={1} title={isOwner ? 'Documents' : 'TOD'}
             subtitle={isOwner
               ? 'The documents this control needs on file. Attach what you hold — the auditor tests them.'
-              : 'Test of design — the documents on file, one transaction traced end-to-end, and a design check for each thing that has to be true. Concludes effective or ineffective.'}
+              : 'Test of design — the documents on file, one transaction traced end-to-end, and a design check for each thing that has to be true. Ends with the design marked effective or ineffective.'}
             status={designResult} hideStatus={isOwner}
             right={!isOwner && control.design.carriedFrom
               // A roll-forward carried this conclusion from its parent interim —

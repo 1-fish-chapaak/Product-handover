@@ -343,7 +343,8 @@ export interface OperatingStep {
   id: string;
   code: string;
   description: string;
-  assertion: Assertion;
+  /** Absent when the RACM names none (17 Sep — imports no longer assume "Accuracy"). */
+  assertion?: Assertion;
   precision: string;
   procedures: TestProcedure[];
   evidenceMode?: EvidenceMode;
@@ -842,7 +843,7 @@ export interface Control {
    *  entity. See `entity`. */
   code?: string;
   /** The id a seeded control was built under, before IDs moved to
-   *  PROCESS/ENTITY/R001/C001 (S11). Never shown. Every deterministic
+   *  ENTITY/PROCESS/R001/C001 (S11). Never shown. Every deterministic
    *  "real-looking" number (population values, due dates, draws, Ira's reads)
    *  hashes `seedKeyOf(c)`, so renaming the ID moves no demo number. Absent on
    *  controls imported after the rename — they hash their own id. */
@@ -1188,8 +1189,12 @@ export interface Deficiency {
    *  reason per field it filled, keyed by that field. A field's entry goes the
    *  moment anyone changes the field (updateDeficiency), so a tag on screen always
    *  means the value is still Ira's and not yet the auditor's. Absent on seeded
-   *  exceptions: a person sized those. */
-  iraSuggested?: Partial<Record<'likelihood' | 'magnitude' | 'compensatingControlId', string>>;
+   *  exceptions: a person sized those.
+   *
+   *  `rootCause` (17 Sep dev call) is different in one way: while its tag is on,
+   *  the root cause is Ira's draft and step 1 is not done — the auditor edits it
+   *  or takes it ("Use this"), and either removes the tag (rootCauseReady). */
+  iraSuggested?: Partial<Record<'likelihood' | 'magnitude' | 'compensatingControlId' | 'rootCause', string>>;
   aggregationGroup?: string;
   /** PARKED (13 Aug 2026) — the single "same root cause as" link. Superseded by
    *  `rootCauseGroupIds`: one exception can share a mechanism with several

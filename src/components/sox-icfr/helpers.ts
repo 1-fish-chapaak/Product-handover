@@ -487,13 +487,55 @@ export function courtForException(d: Deficiency): Court {
   }
 }
 
+/** Step 1 is done: a root cause is written, and it is the auditor's — not an
+ *  Ira draft nobody has looked at yet (17 Sep dev call). */
+export function rootCauseReady(d: Pick<Deficiency, 'rootCause' | 'iraSuggested'>): boolean {
+  return !!d.rootCause.trim() && !d.iraSuggested?.rootCause;
+}
+
+/**
+ * Ira's draft root cause, read off what failed — the failed design checks for a
+ * TOD exception, the failed attributes, the items they failed on and the notes
+ * written against those items for a TOE one. It names the mechanism the evidence
+ * points at, not the count, and quotes the evidence it came from. null when
+ * nothing failed that it could read (an unable-to-test exception).
+ */
+export function suggestRootCause(
+  c: Control, track: 'design' | 'operating', failedSamples: string[], onSecondRound: boolean,
+): { text: string; reason: string } | null {
+  const quote = (t: string) => `"${t.replace(/[.\s]+$/, '')}"`;
+  const lowerFirst = (t: string) => (t.charAt(0).toLowerCase() + t.slice(1).replace(/[.\s]+$/, '')).replace(/^(control|process|system|review|approval)\b/, 'the $1');
+  const again = onSecondRound ? ' It failed again on the redrawn sample, so it is not a one-off.' : '';
+  if (track === 'design') {
+    const checks = c.design.points.filter(p => (p.override?.result ?? p.result) === 'Fail').map(p => p.text);
+    if (!checks.length) return null;
+    const more = checks.length > 1 ? ` ${checks.length - 1} other design check${checks.length === 2 ? '' : 's'} failed the same way.` : '';
+    return {
+      text: `The control as designed does not make sure that ${lowerFirst(checks[0]!)} — nothing in the way it is set up forces that step.${more}`,
+      reason: `from the failed design check ${quote(checks[0]!)}`,
+    };
+  }
+  const steps = c.operating.steps.filter(s => stepResult(s) === 'Fail');
+  if (!steps.length) return null;
+  const first = steps[0]!;
+  const noted = (c.operating.exceptions ?? []).find(x => x.reason.trim())?.reason.trim();
+  const items = failedSamples.length
+    ? ` ${failedSamples.length} sampled item${failedSamples.length === 1 ? '' : 's'} (${failedSamples.slice(0, 3).join(', ')}${failedSamples.length > 3 ? '…' : ''}) went through without it.`
+    : '';
+  const who = c.owner ? `${c.owner} applying` : 'someone applying';
+  return {
+    text: `The control relies on ${who} ${quote(first.description)} every time, and nothing stops the step being skipped.${items}${noted ? ` The notes on the failed items say: ${quote(noted)}.` : ''}${again}`,
+    reason: `from the failed attribute ${first.code}${failedSamples.length ? ` and the items it failed on` : ''}${noted ? ', with the notes against them' : ''}`,
+  };
+}
+
 /** The named person the baton actually sits with, and what they are doing with
  *  it — "the auditor" is a role, and a role cannot be chased for an answer. */
 export function exceptionCourtDetail(d: Deficiency, eng: IcfrEngagement): { who: string; doing: string } {
   const court = courtForException(d);
   const who = court === 'auditor' ? eng.preparer : court === 'reviewer' ? eng.reviewer : d.remediation.owner;
   const doing =
-    d.status === 'Identified' ? (d.rootCause.trim() ? 'sizing it' : 'writing the root cause')
+    d.status === 'Identified' ? (rootCauseReady(d) ? 'sizing it' : d.rootCause.trim() ? 'checking Ira\'s root cause' : 'writing the root cause')
     : d.status === 'Rating review' ? 'confirming the rating before any fix starts'
     : d.status === 'Planning' ? (d.planReview?.decision === 'Rejected' ? 'rewriting the plan' : 'writing the plan')
     : d.status === 'Plan review' ? 'checking the plan against the root cause'
@@ -1490,7 +1532,18 @@ export function readSamplePrompt(
   const p = prompt.trim();
   if (!p) return { size: suggested, reading: `Nothing asked for — the sizing table's ${suggested} items · ${whole}` };
   // The file's own name is not part of the ask — "Q1 extract.xlsx" names no months.
-  const lower = p.toLowerCase().split(source.file.toLowerCase()).join(' ');
+  const cased = source.file ? p.replace(new RegExp(source.file.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'gi'), ' ') : p;
+  // "may" is the month only when it reads like one — "May", "May 2026", "in may",
+  // "Apr to may". "You may take 15" is not a month (17 Sep: it narrowed the draw).
+  const lower = cased.toLowerCase().replace(/\bmay\b/g, (m: string, at: number) => {
+    const written = cased.slice(at, at + 3);
+    const before = cased.slice(0, at);
+    const capital = written === 'May' && !/(?:^|[.!?]\s*)$/.test(before);
+    const nextToYear = /^\s+(?:19|20)\d{2}\b/.test(cased.slice(at + 3));
+    const opensRange = /^\s*(?:-|–|—|to|through|thru|till|until)\s*(?:jan|feb|mar|apr|jun|jul|aug|sep|oct|nov|dec)/i.test(cased.slice(at + 3));
+    const afterWord = /\b(?:in|during|for|from|of|to|till|until|through|thru|and|since)\s*$|[-–—]\s*$/i.test(before);
+    return capital || nextToYear || opensRange || afterWord ? m : 'm~y';
+  });
 
   // ── which months ─────────────────────────────────────────────────────────────
   // Named months, quarters and halves, in the order written. Two joined by "to"
@@ -1542,7 +1595,14 @@ export function readSamplePrompt(
     .replace(/\b\d{4}-\d{2}-\d{2}\b|\b\d{1,2}\/\d{1,2}(?:\/\d{2,4})?\b/g, ' ')
     .replace(new RegExp(`\\b(?:fy|cy)\\s*'?\\d{2,4}\\b|\\b(?:19|20)\\d{2}\\b(?!\\s*${UNIT})`, 'g'), ' ')
     .replace(/\b(?:\d+|one|two|three|four|five|six|seven|eight|nine|ten|eleven|twelve)\s+(?:calendar\s+)?months?\b/g, ' ');
-  const digits = bare.match(/\b(\d[\d,]*)\b/);
+  // The count is the number the ask ties to taking something — "take 15",
+  // "15 invoices" — before any other number, so "from the 60 rows, take 15"
+  // reads 15 (17 Sep, bug #31). A number after "from / of / out of" is the
+  // population, not the ask.
+  const verbNum = bare.match(/\b(?:take|pick|draw|select|sample|pull|choose|test|need|want)\s+(?:any\s+|about\s+|around\s+|only\s+|a\s+sample\s+of\s+)?(\d[\d,]*)\b/);
+  const unitNum = [...bare.matchAll(new RegExp(`\\b(\\d[\\d,]*)\\s+(?:[a-z]+\\s+)?${UNIT}\\b`, 'g'))]
+    .find(m => !/\b(?:from|of|out\s+of|among|amongst|in|within|population\s+of)\s*(?:the\s+|all\s+|these\s+)?$/.test(bare.slice(0, m.index)));
+  const digits = verbNum ?? unitNum ?? bare.match(/\b(\d[\d,]*)\b/);
   const worded = bare.match(new RegExp(`\\b(${Object.keys(NUMBER_WORDS).join('|')})\\s+${UNIT}\\b`));
   const n = digits ? Number(digits[1]!.replace(/,/g, '')) : worded ? NUMBER_WORDS[worded[1]!]! : NaN;
   const runRate = !(n > 0) && spanN > 0;
@@ -2307,6 +2367,12 @@ export function requiredFilesCount(s: OperatingStep, c: EvidenceSource): { uploa
 export function requiredFilesReady(s: OperatingStep, c: EvidenceSource): boolean {
   const { uploaded, total } = requiredFilesCount(s, c);
   return total > 0 && uploaded === total;
+}
+/** Attributes standing at Pass while a required file is still missing (17 Sep
+ *  dev call: no Pass without the evidence, whichever way it was given — the
+ *  Pass button, an override, an attestation). They can't carry an effective TOE. */
+export function passedWithoutFiles(c: Control): OperatingStep[] {
+  return c.operating.steps.filter(s => stepResult(s) === 'Pass' && !requiredFilesReady(s, c));
 }
 
 /** Deterministic Q&A a design-validation workflow returns for a consideration. */

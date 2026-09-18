@@ -606,7 +606,7 @@ export default function Racm() {
       if (operatingF.length && !operatingF.includes(trackResult(c.operating))) return false;
       if (term && !(`${c.id} ${c.riskId} ${c.riskDescription} ${c.description} ${c.subProcess} ${c.owner}`.toLowerCase().includes(term))) return false;
       return true;
-    }).sort((a, b) => controlCode(a).localeCompare(controlCode(b)));
+    }).sort((a, b) => a.process.localeCompare(b.process) || controlCode(a).localeCompare(controlCode(b)));
   }, [controls, q, review, classF, natureF, designF, operatingF]);
 
   const allVisible = filtered.map(c => c.id);

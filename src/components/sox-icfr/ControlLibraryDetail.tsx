@@ -104,7 +104,7 @@ function AttributeTableRow({ control, step, canEdit }: { control: Control; step:
       <td className="tight"><span className="wp-ref">{step.code}</span></td>
       <td className="tight">
         <div className="font-medium text-ink-800">{step.description}</div>
-        <div className="text-[0.6875rem] text-ink-400 mt-0.5">{step.assertion} · {step.precision}</div>
+        <div className="text-[0.6875rem] text-ink-400 mt-0.5">{[step.assertion, step.precision].filter(Boolean).join(' · ')}</div>
       </td>
       <td className="tight">
         <RequiredFilesCell control={control} step={step} canEdit={canEdit} />

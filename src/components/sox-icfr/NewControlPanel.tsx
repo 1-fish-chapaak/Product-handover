@@ -56,15 +56,15 @@ export default function NewControlPanel({ onClose }: { onClose: () => void }) {
   const [isKey, setIsKey] = useState(true);
   const [assertions, setAssertions] = useState<Assertion[]>(['Accuracy']);
   const [newProcess, setNewProcess] = useState('');
-  // The ID a new risk will get — PROCESS/ENTITY/R00n (S11), the same rule the
+  // The ID a new risk will get — ENTITY/PROCESS/R00n (S11), the same rule the
   // store numbers it by: next R for the process at its controls' company.
   const nextRiskId = useMemo(() => {
     const proc = process === NEW_PROCESS ? newProcess.trim() || 'New process' : process;
     const entity = eng.controls.find(c => c.process === proc)?.entity ?? eng.entity;
     const pc = peekProcessCode(proc); const ec = peekEntityCode(entity);
-    const prefix = `${pc}/${ec}/R`;
+    const prefix = `${ec}/${pc}/R`;
     const nums = eng.controls.filter(c => c.riskId.startsWith(prefix)).map(c => parseInt(c.riskId.slice(prefix.length), 10)).filter(n => !Number.isNaN(n));
-    return riskIdOf(pc, ec, (nums.length ? Math.max(...nums) : 0) + 1);
+    return riskIdOf(ec, pc, (nums.length ? Math.max(...nums) : 0) + 1);
   }, [eng.controls, eng.entity, process, newProcess]);
   const [newOwner, setNewOwner] = useState('');
   const [showDiscard, setShowDiscard] = useState(false);

@@ -184,6 +184,32 @@ export function sameCompany(a: string, b: string): boolean {
   return legal(a) === legal(b);
 }
 
+/**
+ * The companies a draw may reach (17 Sep dev call: sample only what is in
+ * scope). The audit's own entity scope when it has one, else the companies the
+ * engagement was created with. undefined means no filter — an audit scoped by
+ * RACM on an engagement never scoped by company.
+ */
+export function inScopeEntityNames(
+  engagementId: string, audit: Pick<AuditRecord, 'scopeKind' | 'scopeNames' | 'scopeIds'> | undefined,
+): string[] | undefined {
+  if (audit?.scopeKind === 'entity' && audit.scopeIds.length) return audit.scopeNames;
+  const prog = programmeFor(engagementId);
+  const ids = prog?.scoping?.entityIds;
+  if (!prog || !ids?.length) return undefined;
+  return prog.entities.filter(e => ids.includes(e.id)).map(e => e.name);
+}
+
+/** A shared control as a draw sees it — its companies narrowed to the ones in
+ *  scope. One none of whose companies match keeps them all: dealing to nobody
+ *  would lose the items, and a control like that is a scoping question, not a
+ *  sampling one. */
+export function scopedForDraw(c: Control, inScope: string[] | undefined): Control {
+  if (!inScope?.length || (c.entities?.length ?? 0) < 2) return c;
+  const kept = c.entities!.filter(e => inScope.some(n => sameCompany(n, e)));
+  return kept.length && kept.length < c.entities!.length ? { ...c, entities: kept } : c;
+}
+
 export type ScopeStatus = 'tb' | 'coverage' | 'out' | 'absent';
 
 export interface DerivedScopeRow extends ScopeEntityRow {
