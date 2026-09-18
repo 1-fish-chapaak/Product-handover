@@ -276,7 +276,7 @@ export default function ControlRegister() {
         map.get(k)!.push(c);
       }
     }
-    return Array.from(map, ([key, rows]) => ({ key, rows: rows.sort((a, b) => controlCode(a).localeCompare(controlCode(b))) }));
+    return Array.from(map, ([key, rows]) => ({ key, rows: rows.sort((a, b) => a.process.localeCompare(b.process) || controlCode(a).localeCompare(controlCode(b))) }));
   }, [filtered, groupBy]);
 
   // PARKED (Aug 2026) — select-all went with the checkbox column. `toggle` stays:
@@ -494,7 +494,7 @@ export default function ControlRegister() {
                         {/* process and owner have their own columns now — saying
                             them twice on the same row is noise. */}
                         <div className="text-[11px] text-ink-400 mt-0.5">
-                          {controlCode(c)} · {c.subProcess} ·{' '}
+                          {controlCode(c)}{c.subProcess ? ` · ${c.subProcess}` : ''} ·{' '}
                           {(() => { const dd = testDueDisplay(c, true, openAudit); return <span className={dd.cls}>{dd.label}</span>; })()}
                         </div>
                       </td>

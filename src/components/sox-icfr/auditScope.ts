@@ -62,6 +62,33 @@ export function countryOf(engagementId: string, entity: string): string | undefi
 }
 
 /**
+ * The country a single RACM row answers for, and where that answer came from.
+ *
+ * Two sources, never merged. A row carries `country` only when an uploaded file
+ * named one; every other row takes the country of the entity it is tested at.
+ * The distinction is worth keeping on screen — a country that disagrees with its
+ * entity is either a genuine cross-border arrangement or a bad column mapping,
+ * and the reader can only tell which if the screen says which side it came from.
+ *
+ * A shared control spanning entities in different countries reports all of them:
+ * one conclusion covering India and Singapore is a conclusion about both.
+ */
+export function countryFor(
+  engagementId: string,
+  c: { entity?: string; entities?: string[]; country?: string },
+): { value: string; source: 'file' | 'entity' | 'none'; from?: string } {
+  const own = c.country?.trim();
+  if (own) return { value: own, source: 'file' };
+  const names = c.entities?.length ? c.entities : c.entity ? [c.entity] : [];
+  const found = names
+    .map(n => ({ n, country: countryOf(engagementId, n) }))
+    .filter((r): r is { n: string; country: string } => !!r.country);
+  if (!found.length) return { value: '—', source: 'none' };
+  const unique = [...new Set(found.map(r => r.country))];
+  return { value: unique.join(', '), source: 'entity', from: found[0]!.n };
+}
+
+/**
  * Entities the audit's uploaded trial balance / GL turned out to contain.
  *
  * A SIMULATED parse — prototype uploads carry no bytes, so this stands in for
@@ -182,6 +209,32 @@ export function sameCompany(a: string, b: string): boolean {
   // and a RACM file rarely agree on which.
   const legal = (n: string) => bareName(n).replace(/\blimited\b/g, 'ltd').replace(/\bprivate\b/g, 'pvt').replace(/[.,]/g, '').replace(/\s+/g, ' ');
   return legal(a) === legal(b);
+}
+
+/**
+ * The companies a draw may reach (17 Sep dev call: sample only what is in
+ * scope). The audit's own entity scope when it has one, else the companies the
+ * engagement was created with. undefined means no filter — an audit scoped by
+ * RACM on an engagement never scoped by company.
+ */
+export function inScopeEntityNames(
+  engagementId: string, audit: Pick<AuditRecord, 'scopeKind' | 'scopeNames' | 'scopeIds'> | undefined,
+): string[] | undefined {
+  if (audit?.scopeKind === 'entity' && audit.scopeIds.length) return audit.scopeNames;
+  const prog = programmeFor(engagementId);
+  const ids = prog?.scoping?.entityIds;
+  if (!prog || !ids?.length) return undefined;
+  return prog.entities.filter(e => ids.includes(e.id)).map(e => e.name);
+}
+
+/** A shared control as a draw sees it — its companies narrowed to the ones in
+ *  scope. One none of whose companies match keeps them all: dealing to nobody
+ *  would lose the items, and a control like that is a scoping question, not a
+ *  sampling one. */
+export function scopedForDraw(c: Control, inScope: string[] | undefined): Control {
+  if (!inScope?.length || (c.entities?.length ?? 0) < 2) return c;
+  const kept = c.entities!.filter(e => inScope.some(n => sameCompany(n, e)));
+  return kept.length && kept.length < c.entities!.length ? { ...c, entities: kept } : c;
 }
 
 export type ScopeStatus = 'tb' | 'coverage' | 'out' | 'absent';

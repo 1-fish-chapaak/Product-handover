@@ -1,8 +1,9 @@
-import { isInquiryOnly, ipeReliable, GRADE_RANK, AUDIT_SAMPLE_SPREADS, DEFAULT_AUDIT_SAMPLING } from './types';
+import { isInquiryOnly, ipeReliable, GRADE_RANK, AUDIT_SAMPLE_SPREADS, DEFAULT_AUDIT_SAMPLING, TESTING_STRATEGIES } from './types';
 import type {
   AuditorProofKind, AuditSampleSpread, AuditSampling, Conclusion, Control, Court, Deficiency, DesignDoc, DesignTrack, ExceptionGrade, HandoffTask, IcfrEngagement,
   FileOrigin, IpeCheck, Likelihood, MaterialityRules, OperatingTrack, Population, PopulationBasis, PopulationSource, ReviewNote, RiskRating, Role,
-  Sample, Severity, ToeRound, TrackConclusion, DeficiencyGroup, ExceptionStatus,
+  Sample, Severity, TestingStrategy, ToeRound, TrackConclusion, DeficiencyGroup, ExceptionStatus,
+  ControlType, Nature,
 } from './types';
 
 // ─── Severity (handbook §9.5) ────────────────────────────────────────────────────
@@ -487,13 +488,55 @@ export function courtForException(d: Deficiency): Court {
   }
 }
 
+/** Step 1 is done: a root cause is written, and it is the auditor's — not an
+ *  Ira draft nobody has looked at yet (17 Sep dev call). */
+export function rootCauseReady(d: Pick<Deficiency, 'rootCause' | 'iraSuggested'>): boolean {
+  return !!d.rootCause.trim() && !d.iraSuggested?.rootCause;
+}
+
+/**
+ * Ira's draft root cause, read off what failed — the failed design checks for a
+ * TOD exception, the failed attributes, the items they failed on and the notes
+ * written against those items for a TOE one. It names the mechanism the evidence
+ * points at, not the count, and quotes the evidence it came from. null when
+ * nothing failed that it could read (an unable-to-test exception).
+ */
+export function suggestRootCause(
+  c: Control, track: 'design' | 'operating', failedSamples: string[], onSecondRound: boolean,
+): { text: string; reason: string } | null {
+  const quote = (t: string) => `"${t.replace(/[.\s]+$/, '')}"`;
+  const lowerFirst = (t: string) => (t.charAt(0).toLowerCase() + t.slice(1).replace(/[.\s]+$/, '')).replace(/^(control|process|system|review|approval)\b/, 'the $1');
+  const again = onSecondRound ? ' It failed again on the redrawn sample, so it is not a one-off.' : '';
+  if (track === 'design') {
+    const checks = c.design.points.filter(p => (p.override?.result ?? p.result) === 'Fail').map(p => p.text);
+    if (!checks.length) return null;
+    const more = checks.length > 1 ? ` ${checks.length - 1} other design check${checks.length === 2 ? '' : 's'} failed the same way.` : '';
+    return {
+      text: `The control as designed does not make sure that ${lowerFirst(checks[0]!)} — nothing in the way it is set up forces that step.${more}`,
+      reason: `from the failed design check ${quote(checks[0]!)}`,
+    };
+  }
+  const steps = c.operating.steps.filter(s => stepResult(s) === 'Fail');
+  if (!steps.length) return null;
+  const first = steps[0]!;
+  const noted = (c.operating.exceptions ?? []).find(x => x.reason.trim())?.reason.trim();
+  const items = failedSamples.length
+    ? ` ${failedSamples.length} sampled item${failedSamples.length === 1 ? '' : 's'} (${failedSamples.slice(0, 3).join(', ')}${failedSamples.length > 3 ? '…' : ''}) went through without it.`
+    : '';
+  const who = c.owner ? `${c.owner} applying` : 'someone applying';
+  return {
+    text: `The control relies on ${who} ${quote(first.description)} every time, and nothing stops the step being skipped.${items}${noted ? ` The notes on the failed items say: ${quote(noted)}.` : ''}${again}`,
+    reason: `from the failed attribute ${first.code}${failedSamples.length ? ` and the items it failed on` : ''}${noted ? ', with the notes against them' : ''}`,
+  };
+}
+
 /** The named person the baton actually sits with, and what they are doing with
  *  it — "the auditor" is a role, and a role cannot be chased for an answer. */
 export function exceptionCourtDetail(d: Deficiency, eng: IcfrEngagement): { who: string; doing: string } {
   const court = courtForException(d);
   const who = court === 'auditor' ? eng.preparer : court === 'reviewer' ? eng.reviewer : d.remediation.owner;
   const doing =
-    d.status === 'Identified' ? (d.rootCause.trim() ? 'sizing it' : 'writing the root cause')
+    d.status === 'Identified' ? (rootCauseReady(d) ? 'sizing it' : d.rootCause.trim() ? 'checking Ira\'s root cause' : 'writing the root cause')
     : d.status === 'Rating review' ? 'confirming the rating before any fix starts'
     : d.status === 'Planning' ? (d.planReview?.decision === 'Rejected' ? 'rewriting the plan' : 'writing the plan')
     : d.status === 'Plan review' ? 'checking the plan against the root cause'
@@ -1490,7 +1533,18 @@ export function readSamplePrompt(
   const p = prompt.trim();
   if (!p) return { size: suggested, reading: `Nothing asked for — the sizing table's ${suggested} items · ${whole}` };
   // The file's own name is not part of the ask — "Q1 extract.xlsx" names no months.
-  const lower = p.toLowerCase().split(source.file.toLowerCase()).join(' ');
+  const cased = source.file ? p.replace(new RegExp(source.file.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'gi'), ' ') : p;
+  // "may" is the month only when it reads like one — "May", "May 2026", "in may",
+  // "Apr to may". "You may take 15" is not a month (17 Sep: it narrowed the draw).
+  const lower = cased.toLowerCase().replace(/\bmay\b/g, (m: string, at: number) => {
+    const written = cased.slice(at, at + 3);
+    const before = cased.slice(0, at);
+    const capital = written === 'May' && !/(?:^|[.!?]\s*)$/.test(before);
+    const nextToYear = /^\s+(?:19|20)\d{2}\b/.test(cased.slice(at + 3));
+    const opensRange = /^\s*(?:-|–|—|to|through|thru|till|until)\s*(?:jan|feb|mar|apr|jun|jul|aug|sep|oct|nov|dec)/i.test(cased.slice(at + 3));
+    const afterWord = /\b(?:in|during|for|from|of|to|till|until|through|thru|and|since)\s*$|[-–—]\s*$/i.test(before);
+    return capital || nextToYear || opensRange || afterWord ? m : 'm~y';
+  });
 
   // ── which months ─────────────────────────────────────────────────────────────
   // Named months, quarters and halves, in the order written. Two joined by "to"
@@ -1542,7 +1596,14 @@ export function readSamplePrompt(
     .replace(/\b\d{4}-\d{2}-\d{2}\b|\b\d{1,2}\/\d{1,2}(?:\/\d{2,4})?\b/g, ' ')
     .replace(new RegExp(`\\b(?:fy|cy)\\s*'?\\d{2,4}\\b|\\b(?:19|20)\\d{2}\\b(?!\\s*${UNIT})`, 'g'), ' ')
     .replace(/\b(?:\d+|one|two|three|four|five|six|seven|eight|nine|ten|eleven|twelve)\s+(?:calendar\s+)?months?\b/g, ' ');
-  const digits = bare.match(/\b(\d[\d,]*)\b/);
+  // The count is the number the ask ties to taking something — "take 15",
+  // "15 invoices" — before any other number, so "from the 60 rows, take 15"
+  // reads 15 (17 Sep, bug #31). A number after "from / of / out of" is the
+  // population, not the ask.
+  const verbNum = bare.match(/\b(?:take|pick|draw|select|sample|pull|choose|test|need|want)\s+(?:any\s+|about\s+|around\s+|only\s+|a\s+sample\s+of\s+)?(\d[\d,]*)\b/);
+  const unitNum = [...bare.matchAll(new RegExp(`\\b(\\d[\\d,]*)\\s+(?:[a-z]+\\s+)?${UNIT}\\b`, 'g'))]
+    .find(m => !/\b(?:from|of|out\s+of|among|amongst|in|within|population\s+of)\s*(?:the\s+|all\s+|these\s+)?$/.test(bare.slice(0, m.index)));
+  const digits = verbNum ?? unitNum ?? bare.match(/\b(\d[\d,]*)\b/);
   const worded = bare.match(new RegExp(`\\b(${Object.keys(NUMBER_WORDS).join('|')})\\s+${UNIT}\\b`));
   const n = digits ? Number(digits[1]!.replace(/,/g, '')) : worded ? NUMBER_WORDS[worded[1]!]! : NaN;
   const runRate = !(n > 0) && spanN > 0;
@@ -2308,6 +2369,12 @@ export function requiredFilesReady(s: OperatingStep, c: EvidenceSource): boolean
   const { uploaded, total } = requiredFilesCount(s, c);
   return total > 0 && uploaded === total;
 }
+/** Attributes standing at Pass while a required file is still missing (17 Sep
+ *  dev call: no Pass without the evidence, whichever way it was given — the
+ *  Pass button, an override, an attestation). They can't carry an effective TOE. */
+export function passedWithoutFiles(c: Control): OperatingStep[] {
+  return c.operating.steps.filter(s => stepResult(s) === 'Pass' && !requiredFilesReady(s, c));
+}
 
 /** Deterministic Q&A a design-validation workflow returns for a consideration. */
 export function validationQA(text: string, fail: boolean): ValidationQA[] {
@@ -2993,6 +3060,12 @@ export function formatDueDate(date: string | null | undefined): string {
 // Racm.tsx uses), and openEditorTab hands them over. Columns a control has no
 // field for stay blank.
 export const RACM_ROWS_KEY = (racmId: string) => `sox-racm-rows:${racmId}`;
+/** The rows the editor must not let anyone change — published control IDs, in
+ *  the editor's own spelling. Handed over beside the rows: the editor refuses to
+ *  edit them, and `applyEditorRows` refuses them again on the way back, because
+ *  the first lock lives in another browser tab and can be reached by other
+ *  means. */
+export const RACM_LOCKED_KEY = (racmId: string) => `sox-racm-locked:${racmId}`;
 export function racmEditorRows(controls: Control[], process: string): ProcurementRacmRow[] {
   const seen = new Set<string>();
   return controls
@@ -3011,16 +3084,26 @@ export function racmEditorRows(controls: Control[], process: string): Procuremen
         isKey: c.isKey,
         processArea: c.process,
         subProcess: c.subProcess,
+        // A shared control is operated at several companies, so the grid lists
+        // them all rather than picking one.
+        entity: c.entities?.length ? c.entities.join(', ') : (c.entity ?? ''),
+        // Left blank when the control carries no country of its own — the row
+        // inherits its entity's, which is resolved where the row is read.
+        country: c.country ?? '',
         riskCategory: c.clazz ?? '',
+        riskTitle: c.riskTitle ?? '',
         riskDescription: c.riskDescription,
         riskRating: c.riskRating ?? '',
         likelihood: '',
         impact: '',
+        controlTitle: c.description,
         controlObjective: c.objective ?? '',
         controlActivity: c.controlActivity ?? c.description,
         controlType: c.type,
         controlNature: c.nature,
         frequency: c.frequency,
+        effectiveDate: c.effectiveDate ?? '',
+        testingStrategy: c.testingStrategy ?? '',
         controlOwner: c.owner,
         controlEvidence: evidence.join('; '),
         assertions: c.assertions.join(', '),
@@ -3035,4 +3118,171 @@ export function racmEditorRows(controls: Control[], process: string): Procuremen
         attributes: c.operating.steps.map(s => s.description).join(' | '),
       };
     });
+}
+
+/** The editor's key for a row — the same pair `racmEditorRows` writes out, so a
+ *  row that came from a control can be matched back to it. */
+const editorKey = (riskId: string, controlId: string) => `${riskId}|${controlId}`;
+
+/** The published rows, named the way the EDITOR names them.
+ *
+ *  A control's id and the id the grid shows are not always the same string —
+ *  the grid shows the client-facing number (`code`) where there is one. The
+ *  editor can only match on what it can see, so the lock list is translated on
+ *  the way out; a row whose control has since gone is dropped rather than
+ *  locking a row that no longer answers to anything. */
+export function lockedEditorIds(controls: Control[], process: string, published: string[]): string[] {
+  const inProcess = controls.filter(c => c.process === process);
+  const live = new Set(published);
+  return racmEditorRows(controls, process)
+    .filter((_, i) => { const c = inProcess[i]; return !!c && live.has(c.id); })
+    .map(r => r.controlId);
+}
+
+const NATURES: Nature[] = ['Manual', 'Automated', 'IT-dependent'];
+const TYPES: ControlType[] = ['Preventive', 'Detective'];
+const RATINGS: RiskRating[] = ['High', 'Medium', 'Low'];
+const FREQS: Frequency[] = ['Daily', 'Weekly', 'Monthly', 'Quarterly', 'Annual', 'Recurring', 'Ad-hoc'];
+const oneOf = <T extends string>(allowed: T[], cell: string): T | undefined =>
+  allowed.find(a => a.toLowerCase() === cell.trim().toLowerCase());
+
+/**
+ * The spreadsheet editor's rows, written back onto the controls they came from.
+ *
+ * The editor is a grid of strings in a separate browser tab; a control is a
+ * record with test results hanging off it. So this maps back only the columns a
+ * person can meaningfully type into, and refuses anything it cannot read: a
+ * frequency cell saying "fortnightly" leaves the frequency alone rather than
+ * guessing, because a wrong frequency silently changes how big a sample has to
+ * be. Test results, populations, samples and sign-offs are never touched — they
+ * are not in the grid and nothing in the grid should be able to move them.
+ *
+ * Rows the editor added have no control to match and become new ones. Rows that
+ * disappeared are NOT deleted here: a row vanishing from a grid is as likely to
+ * be a bad round-trip as a deliberate removal, and deleting a tested control on
+ * that evidence is not a risk worth taking.
+ *
+ * `locked` names the control ids that must not move — the published ones. The
+ * editor already refuses to edit them; this is the second lock, because the
+ * first one lives in another browser tab and can be reached by other means.
+ */
+export function applyEditorRows(
+  controls: Control[], process: string, rows: ProcurementRacmRow[], locked: Set<string>,
+): { controls: Control[]; changed: number; added: number } {
+  const byKey = new Map<string, string>();
+  racmEditorRows(controls, process).forEach((r, i) => {
+    const c = controls.filter(x => x.process === process)[i];
+    if (c) byKey.set(editorKey(r.riskId, r.controlId), c.id);
+  });
+
+  let changed = 0;
+  const seen = new Set<string>();
+  const next = controls.map(c => {
+    const id = [...byKey.entries()].find(([, v]) => v === c.id)?.[0];
+    const row = id ? rows.find(r => editorKey(r.riskId, r.controlId) === id) : undefined;
+    if (!row || locked.has(c.id)) return c;
+    seen.add(editorKey(row.riskId, row.controlId));
+    const text = (v: string | undefined) => (v ?? '').trim();
+    const patch: Partial<Control> = {};
+    if (text(row.controlTitle) && text(row.controlTitle) !== c.description) patch.description = text(row.controlTitle);
+    if (text(row.riskDescription) && text(row.riskDescription) !== c.riskDescription) patch.riskDescription = text(row.riskDescription);
+    if (text(row.riskTitle) !== (c.riskTitle ?? '')) patch.riskTitle = text(row.riskTitle) || undefined;
+    if (text(row.controlObjective) !== (c.objective ?? '')) patch.objective = text(row.controlObjective) || undefined;
+    if (text(row.controlActivity) !== (c.controlActivity ?? '')) patch.controlActivity = text(row.controlActivity) || undefined;
+    if (text(row.subProcess) !== c.subProcess) patch.subProcess = text(row.subProcess);
+    if (text(row.controlOwner) && text(row.controlOwner) !== c.owner) patch.owner = text(row.controlOwner);
+    if (text(row.effectiveDate) !== (c.effectiveDate ?? '')) patch.effectiveDate = text(row.effectiveDate) || undefined;
+    if (text(row.country) !== (c.country ?? '')) patch.country = text(row.country) || undefined;
+    const nature = oneOf(NATURES, text(row.controlNature));
+    if (nature && nature !== c.nature) patch.nature = nature;
+    const type = oneOf(TYPES, text(row.controlType));
+    if (type && type !== c.type) patch.type = type;
+    const freq = oneOf(FREQS, text(row.frequency));
+    if (freq && freq !== c.frequency) patch.frequency = freq;
+    const rating = oneOf(RATINGS, text(row.riskRating));
+    if (rating && rating !== c.riskRating) patch.riskRating = rating;
+    const strategy = oneOf(TESTING_STRATEGIES, text(row.testingStrategy));
+    if (strategy && strategy !== c.testingStrategy) patch.testingStrategy = strategy;
+    if (typeof row.isKey === 'boolean' && row.isKey !== c.isKey) patch.isKey = row.isKey;
+    if (!Object.keys(patch).length) return c;
+    changed++;
+    return { ...c, ...patch };
+  });
+
+  // Anything the grid has that no control answers to is new work, and lands as
+  // a draft row — publishing it is a separate, deliberate act.
+  const fresh: Control[] = [];
+  const taken = new Set(next.map(c => c.id));
+  rows.forEach(row => {
+    const key = editorKey(row.riskId, row.controlId);
+    if (byKey.has(key) || seen.has(key)) return;
+    const title = (row.controlTitle ?? '').trim() || (row.controlActivity ?? '').trim();
+    if (!title || !(row.riskDescription ?? '').trim()) return;
+    let id = (row.controlId ?? '').trim() || `${row.riskId}/C${String(fresh.length + 1).padStart(3, '0')}`;
+    while (taken.has(id)) id = `${id}-2`;
+    taken.add(id);
+    fresh.push({
+      id,
+      wpRef: id,
+      description: title,
+      process,
+      subProcess: (row.subProcess ?? '').trim(),
+      nature: oneOf(NATURES, row.controlNature ?? '') ?? 'Manual',
+      type: oneOf(TYPES, row.controlType ?? '') ?? 'Preventive',
+      frequency: oneOf(FREQS, row.frequency ?? '') ?? 'Monthly',
+      isKey: row.isKey === true,
+      precision: title,
+      owner: (row.controlOwner ?? '').trim(),
+      riskId: (row.riskId ?? '').trim() || id,
+      riskDescription: (row.riskDescription ?? '').trim(),
+      assertions: [],
+      ...((row.riskTitle ?? '').trim() ? { riskTitle: row.riskTitle!.trim() } : {}),
+      ...((row.controlObjective ?? '').trim() ? { objective: row.controlObjective!.trim() } : {}),
+      ...((row.controlActivity ?? '').trim() ? { controlActivity: row.controlActivity!.trim() } : {}),
+      ...((row.entity ?? '').trim() ? { entity: row.entity!.trim() } : {}),
+      ...((row.effectiveDate ?? '').trim() ? { effectiveDate: row.effectiveDate!.trim() } : {}),
+      ...((row.country ?? '').trim() ? { country: row.country!.trim() } : {}),
+      ...(oneOf(TESTING_STRATEGIES, row.testingStrategy ?? '') ? { testingStrategy: oneOf(TESTING_STRATEGIES, row.testingStrategy ?? '')! } : {}),
+      ...(oneOf(RATINGS, row.riskRating ?? '') ? { riskRating: oneOf(RATINGS, row.riskRating ?? '')! } : {}),
+      design: { documents: [], points: [], conclusion: 'Not tested', testedBy: null, testedAt: null },
+      operating: { method: 'Manual', steps: [], conclusion: 'Not tested', testedBy: null, testedAt: null },
+    });
+  });
+
+  return { controls: [...next, ...fresh], changed, added: fresh.length };
+}
+
+/** "Risk that year-end accruals are understated because no review is performed"
+ *  → "Year-end accruals are understated". A TRIM, never a rewrite: the words a
+ *  risk sentence always opens with are dropped, and what explains WHY the risk
+ *  exists is cut, because the reason belongs to the description. Nothing is
+ *  added that the description did not already say.
+ *
+ *  What is deliberately NOT cut is a trailing qualifier — "granted WITHOUT
+ *  approval", "paid TWICE". Those carry the negative the whole risk turns on,
+ *  and a title that dropped them would state the opposite of the risk it names.
+ *  So the length cap is a last resort, applied at a word boundary, and a title
+ *  that needs every one of its words keeps them.
+ *
+ *  Used where an uploaded file carried no Risk title of its own, and by the seed
+ *  registers, which predate the column (17 Sep). */
+export function titleFromRisk(text: string): string {
+  const body = String(text ?? '')
+    .replace(/^\s*(?:the\s+)?risk\s+(?:that|of|is\s+that)\s+/i, '')
+    .replace(/^\s*there\s+is\s+a\s+risk\s+(?:that|of)\s+/i, '')
+    .replace(/^\s*(?:potential|possibility|chance)\s+(?:that|of)\s+/i, '')
+    .trim();
+  if (!body) return '';
+  // First the sentence's own punctuation, then the connector that introduces the
+  // cause — "because no review is performed" is the description's job, not the
+  // title's.
+  const firstClause = (body.split(/[,;:]\s|\s[—–-]\s|\.(?:\s|$)/)[0] ?? '').trim();
+  const reason = /\s\b(?:because|since|as|due\s+to|owing\s+to|resulting\s+in|leading\s+to|so\s+that|such\s+that|thereby|which\s+(?:could|may|might|would))\b\s/i.exec(firstClause);
+  const cut = (reason ? firstClause.slice(0, reason.index) : firstClause).replace(/[.;:,]+$/, '').trim();
+  if (!cut) return '';
+  // Only a genuinely unwieldy title is truncated, and then at a word boundary so
+  // it never ends mid-word.
+  const MAX = 72;
+  const out = cut.length <= MAX ? cut : `${cut.slice(0, cut.lastIndexOf(' ', MAX)).replace(/[.;:,]+$/, '')}…`;
+  return out[0]!.toUpperCase() + out.slice(1);
 }

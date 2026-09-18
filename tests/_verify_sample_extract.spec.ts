@@ -107,7 +107,7 @@ async function concludeDesignEffective(page: Page) {
     await validateAll.click();
     await page.waitForTimeout(7000);
   }
-  await page.getByRole('button', { name: 'Conclude effective' }).first().click();
+  await page.getByRole('button', { name: 'Design effective' }).first().click();
   await page.waitForTimeout(900);
 }
 

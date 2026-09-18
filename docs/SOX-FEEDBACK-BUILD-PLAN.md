@@ -1,5 +1,52 @@
 # Plan — SOX feedback sheets vs the current flow (revision 3)
 
+## 17 Sep dev call — stages 2 to 7 (built 18 Sep; build passes)
+Decisions were asked one at a time, as before.
+
+### Stage 2 — RACM fields
+- **Risk title** beside the risk description; where an uploaded file carries no title column, Ira shortens the description into one. It is a trim, not a rewrite, and it keeps the negative the risk turns on ("granted without approval" never becomes "granted"). The seeded registers get the same treatment, since they predate the column.
+- **Control title / Control description**: the one-line statement is now labelled *Control title* and the narrative *Control description*; **Objective survives as its own field** (user's call). Both control pages lead with the title instead of the objective.
+- **Effective date, Country, Testing strategy** (Sampling / Full population / Test of one) on every row. **None of them blocks an import** — a file without them still lands, and Ira offers a fill per row. Effective date gets no suggestion: nothing in the row can be read for it, and a made-up date is worse than an empty one.
+- **Country is resolved, not duplicated**: a row stores one only when a file named one, otherwise it takes its entity's, and the screens say which.
+- **Entity** is read on import like any other cell instead of being patched on afterwards, and now shows on the control detail page, the RACM matrix, the spreadsheet editor and both exports.
+
+### Stage 3 — Draft → Publish, locks, the editor that saves
+- **Rows publish individually, not matrix by matrix** (user's call: *"user can add a control, but the already added controls cannot be changed"*). A published row is fixed; a control added later is a draft until it is published too.
+- **Status, a filter and Publish** on the RACM tab, with a confirm that says what publishing fixes. Seeded RACMs arrive published — they were read back out of engagements already testing them.
+- **Only published work can be scoped.** A process whose only matrix is a draft says so rather than reading as a process with no RACM. The exception is the Scope step's own upload, which publishes as it saves: uploading a RACM into a scoping decision *is* the decision to use it.
+- **The spreadsheet editor saves back.** It runs in its own browser tab, so edits return the way the rows went out — through storage — and are mapped onto the controls they came from. Only columns a person can type into are written back; a cell that can't be read leaves the value alone rather than guessing. Published rows show a padlock and refuse every edit path.
+- **Duplicate check** now looks inside the matrix being built and across the file's own rows, and blocks what it finds. *The same matrix* means the same process **at the same company** — one process has a matrix per company on purpose, and comparing on process alone would reject a second company's upload row for row. A control that also answers for another process stays a note.
+
+### Stage 4 — configurable columns
+- A **Config tab** beside RACM: which columns a row can't be imported without, which of the client's own columns to keep, and what a file heading meant last time.
+- **Core columns come from that set-up**, so a client whose file never carries a column can switch it off rather than fail every upload.
+- **Columns we have no field for are kept**, not dropped: they ride along on the row, show in the import review and on the control page, and survive into the library. Nothing reads them.
+- **The first upload sets the team up**; after that later uploads only add to what a heading means. A heading matched once is matched the same way next time, including one deliberately left out.
+- **Parked:** one library *per team*. Workspaces here are decorative, so this waits until they are real; the store is shaped to take a team key in front of it.
+
+### Stage 5 — closed with nothing to build
+- **RACM ticks stay** on the Scope step (user's call, overriding the call's "controls follow automatically"): when a process has two RACMs at different companies, someone has to say which apply.
+- The **published guard** was built in stage 3.
+- **Links instead of copies** waits for the architecture meeting — it reshapes the same relationship "engagement = one audit" reshapes.
+
+### Stage 6 — waits for the architecture meeting
+Engagement = one audit, workflow engagements without a RACM, workflow ↔ process, annual controls at year end.
+
+### Stage 7 — version history only
+- Each matrix keeps a history of the events a person caused, with who and when. **Versions count from the first publish**, so a draft shows none. The RACM tab shows the current version beside the status and opens the history from the row menu.
+- **Not built** (the call itself put these in a later phase): chat-style import, per-attribute populations with a database source, the testing copilot, PDF annotation.
+
+## 17 Sep dev call — Stage 1 quick fixes (built 17 Sep; build passes)
+Decisions were asked one at a time: TOD labels only; exactly 3-character codes (IT General Controls = ITG); risk category and the "RACM" wording unchanged; "engagement = audit" waits for the architecture meeting.
+- **TOD buttons** read **Design effective / Design ineffective** (TOE keeps Conclude effective / ineffective); TOD guidance copy and the toast follow.
+- **IDs are entity first:** `ENTITY/PROCESS/R001/C001` (e.g. `AIH/TRY/R001/C001`). Codes are exactly 3 letters or digits, suggested from the name and editable on upload; a clash takes other letters from the name (AirConnect Regional → ACR) before a digit (AR2). Lists still group by process.
+- **Upload review:** a row with a blank risk description, control title/activity, frequency, nature, type, or no attributes can't be imported. Each blank is filled in place — typed, or Ira's suggestion read off the row's other cells — or the row is left out ("Put back" undoes it). Blank IDs are built at import (rows with no Risk ID and the same risk description share a risk).
+- **No silent defaults:** a blank nature/type is a pick (no quiet Manual / Preventive); a blank assertion or sub-process stays empty; Ira no longer offers bare defaults (Manual / Preventive / Medium).
+- **Evidence gate:** Pass, Override → Pass and a self-attested Pass all wait for every required file; TOE can't be concluded effective while a passing attribute lacks one. Fail never waits.
+- **Sampling:** a shared control's items are dealt only to its companies in scope (the audit's entity scope, else the engagement's creation scope). Every drawn item is listed (no "+N more"). The count reads the number tied to taking ("from the 60 rows, take 15" → 15); "may" is a month only when it reads like one.
+- **Root cause:** Ira drafts it from what failed, tagged; step 1 completes only once the auditor edits it or clicks **Use this**.
+
+
 ## Correction (15 Sep, during S3) — C1 is real after all
 - On 15 Sep, during S0, I said no SOX screen opens the full-page RACM editor, undid C1 and removed it. **That was wrong.** Clicking a RACM on Engagement → RACM tab opens the spreadsheet editor **in a new browser tab** (`openEditorTab`, `?view=racm-full-editor`), and that tab showed the 124 procurement sample rows for every RACM. I had only searched the in-app route.
 - **C1 is restored in S3.** The RACM tab hands the RACM's own controls to the new tab (via local storage), and the editor shows them. **A10 (bulk-edit a column) is back in that editor.**
@@ -16,7 +63,7 @@
 - **New engagement (SOX):** ① Basics (name, group, entities / org chart) → ② **Materiality & TB** (rule, trial balance upload required, material accounts mapped to processes) → ③ **Scope** (companies in scope with the coverage bar and notes; ✦ Ira-recommended processes with notes / qualitative reasons; for each in-scope process **pick its RACM** from the RACM tab) → ④ Review. An in-scope process with no RACM offers **Upload RACM** right there (same import review; saved to the RACM tab), and blocks until uploaded or moved out with a note.
 - **Scoping is by process, not by RACM.**
 - **New audit: left as it is for now** (you'll handle it later) — it still carries the S10 materiality / TB / scope steps.
-- **ID format (supersedes A14):** Risk ID = `PROCESS/ENTITY/R001`, Control ID = `PROCESS/ENTITY/R001/C001`, with **short codes** (e.g. `TRY/ASO/R001/C001`). Codes are **made from the names automatically and editable** (entity code on the Basics entity table, process code on the RACM tab), unique within the engagement. The **entity comes from the RACM file** (its entity/subsidiary column, or the entity chosen at upload). **R/C numbers use the file's own Risk ID / Control ID** when present, else file order. **Seeded controls and risks are renamed too** (e.g. TRY-01 → `TRY/AIH/R001/C001`).
+- **ID format (supersedes A14; order swapped 17 Sep — see top):** Risk ID = `ENTITY/PROCESS/R001`, Control ID = `ENTITY/PROCESS/R001/C001`, with **3-character codes** (e.g. `ASO/TRY/R001/C001`). Codes are **made from the names automatically and editable** (entity code on the Basics entity table, process code on the RACM tab), unique within the engagement. The **entity comes from the RACM file** (its entity/subsidiary column, or the entity chosen at upload). **R/C numbers use the file's own Risk ID / Control ID** when present, else file order. **Seeded controls and risks are renamed too** (e.g. TRY-01 → `AIH/TRY/R001/C001`).
 - **Answered 15 Sep (after "go"):**
   1. **SOX only** — Internal Audit / Compliance keep their own RACM screens, unchanged.
   2. **Everything moves** from the SOX RACM tab to the Engagements page tab: Create RACM (upload RACM / upload SOP → prompt → extract), the import review, the RACM list, the spreadsheet editor (new tab), ⋯ View SOP / Delete. A process can have several RACMs.

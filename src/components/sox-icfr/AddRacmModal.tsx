@@ -26,7 +26,7 @@ import { cn } from '../../lib/cn';
 import { useIcfr } from './store';
 import { isEngagementLocked } from './helpers';
 import CreateRacmFlow from './CreateRacmFlow';
-import { clashSummary, controlIdClashes, useRacmLibrary, type LibraryRacm } from './racmLibrary';
+import { clashSummary, controlIdClashes, racmStatus, useRacmLibrary, type LibraryRacm } from './racmLibrary';
 
 /** Already copied into this engagement — shown, but can't be ticked again. */
 const usedHere = (r: LibraryRacm, engId: string) => r.usedBy.some(u => u.id === engId);
@@ -61,6 +61,10 @@ export default function AddRacmModal({ onClose }: { onClose: () => void }) {
   const rows = useMemo(() => {
     const term = q.trim().toLowerCase();
     const hit = racms.filter(r => (process === 'All' || r.process === process)
+      // Drafts are not offered: the engagement would copy nothing, because only
+      // published rows are copied. An empty RACM added to a register is worse
+      // than one that was never listed.
+      && racmStatus(r).status !== 'Draft'
       && (!term || `${r.name} ${r.process} ${r.entity} ${r.fileName ?? ''}`.toLowerCase().includes(term)));
     // What can still be added leads; what this engagement already copied follows, greyed.
     return [...hit.filter(r => !usedHere(r, eng.id)), ...hit.filter(r => usedHere(r, eng.id))];
@@ -71,7 +75,9 @@ export default function AddRacmModal({ onClose }: { onClose: () => void }) {
     () => ticked.map(id => racms.find(r => r.id === id)).filter((r): r is LibraryRacm => !!r && !usedHere(r, eng.id)),
     [ticked, racms, eng.id],
   );
-  const controlCount = picked.reduce((n, r) => n + r.controls.length, 0);
+  // Published rows only — the same rows `copyRacmControls` will hand over, so
+  // the footer never promises a number the engagement doesn't receive.
+  const controlCount = picked.reduce((n, r) => n + racmStatus(r).publishedCount, 0);
   const clashes = useMemo(() => (picked.length
     ? clashSummary(controlIdClashes([
       { name: 'this engagement', controls: eng.controls },
@@ -176,7 +182,16 @@ export default function AddRacmModal({ onClose }: { onClose: () => void }) {
                       <span aria-hidden className="text-ink-300">·</span>
                       <span>{r.entity || '—'}</span>
                       <span aria-hidden className="text-ink-300">·</span>
-                      <span className="tabular-nums">{plural(r.controls.length, 'control')}</span>
+                      {/* The count is what will actually be copied, not the row
+                          count — a matrix with additions still being written
+                          would otherwise promise controls it can't hand over. */}
+                      <span className="tabular-nums">{plural(racmStatus(r).publishedCount, 'control')}</span>
+                      {racmStatus(r).draftCount > 0 && (
+                        <>
+                          <span aria-hidden className="text-ink-300">·</span>
+                          <span title="Draft rows stay on the RACM tab until they are published">{racmStatus(r).draftCount} not published yet</span>
+                        </>
+                      )}
                       {r.usedBy.length > 0 && (
                         <>
                           <span aria-hidden className="text-ink-300">·</span>

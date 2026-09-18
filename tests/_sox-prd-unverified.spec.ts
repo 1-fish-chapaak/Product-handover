@@ -222,8 +222,8 @@ test('an attribute resting on a statement alone cannot carry an effective conclu
 
   // 2 · the conclusion is held, and the footer says why — Ineffective stays live
   await expect(page.getByText(/rests? on a statement alone/).last()).toBeVisible();
-  // Design and operating each have a conclude footer, so take the second — the
-  // operating one, which is the track this rule holds.
+  // Design and operating each have a conclude footer; TOD's reads "Design
+  // effective" (17 Sep), so "Conclude effective" is the operating one.
   const effective = page.getByRole('button', { name: 'Conclude effective' }).last();
   await effective.scrollIntoViewIfNeeded();
   await expect(effective).toBeDisabled();

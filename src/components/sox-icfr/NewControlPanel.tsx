@@ -4,7 +4,8 @@ import { useIcfr } from './store';
 import { FormSelect } from '../shared/FilterSelect';
 import { useToast } from '../shared/Toast';
 import { cn } from '../../lib/cn';
-import type { Assertion, Frequency, Nature } from './types';
+import { TESTING_STRATEGIES } from './types';
+import type { Assertion, Frequency, Nature, TestingStrategy } from './types';
 import { peekEntityCode, peekProcessCode, riskIdOf } from './racmIds';
 
 /**
@@ -38,12 +39,15 @@ export default function NewControlPanel({ onClose }: { onClose: () => void }) {
   const owners = useMemo(() => Array.from(new Set(eng.controls.map(c => c.owner))), [eng.controls]);
   const riskOptions = useMemo(() => {
     const seen = new Map<string, string>();
-    eng.controls.forEach(c => { if (!seen.has(c.riskId)) seen.set(c.riskId, c.riskDescription); });
+    eng.controls.forEach(c => { if (!seen.has(c.riskId)) seen.set(c.riskId, c.riskTitle ?? c.riskDescription); });
     return Array.from(seen, ([id, description]) => ({ id, description }));
   }, [eng.controls]);
 
   const [description, setDescription] = useState('');
   const [controlActivity, setControlActivity] = useState('');
+  const [newRiskTitle, setNewRiskTitle] = useState('');
+  const [effectiveDate, setEffectiveDate] = useState('');
+  const [testingStrategy, setTestingStrategy] = useState<TestingStrategy>('Sampling');
   const [process, setProcess] = useState(processes[0] ?? 'Procure to Pay');
   const [subProcess, setSubProcess] = useState('');
   const [riskChoice, setRiskChoice] = useState<string>(riskOptions[0]?.id ?? NEW_RISK);
@@ -56,15 +60,15 @@ export default function NewControlPanel({ onClose }: { onClose: () => void }) {
   const [isKey, setIsKey] = useState(true);
   const [assertions, setAssertions] = useState<Assertion[]>(['Accuracy']);
   const [newProcess, setNewProcess] = useState('');
-  // The ID a new risk will get — PROCESS/ENTITY/R00n (S11), the same rule the
+  // The ID a new risk will get — ENTITY/PROCESS/R00n (S11), the same rule the
   // store numbers it by: next R for the process at its controls' company.
   const nextRiskId = useMemo(() => {
     const proc = process === NEW_PROCESS ? newProcess.trim() || 'New process' : process;
     const entity = eng.controls.find(c => c.process === proc)?.entity ?? eng.entity;
     const pc = peekProcessCode(proc); const ec = peekEntityCode(entity);
-    const prefix = `${pc}/${ec}/R`;
+    const prefix = `${ec}/${pc}/R`;
     const nums = eng.controls.filter(c => c.riskId.startsWith(prefix)).map(c => parseInt(c.riskId.slice(prefix.length), 10)).filter(n => !Number.isNaN(n));
-    return riskIdOf(pc, ec, (nums.length ? Math.max(...nums) : 0) + 1);
+    return riskIdOf(ec, pc, (nums.length ? Math.max(...nums) : 0) + 1);
   }, [eng.controls, eng.entity, process, newProcess]);
   const [newOwner, setNewOwner] = useState('');
   const [showDiscard, setShowDiscard] = useState(false);
@@ -101,7 +105,7 @@ export default function NewControlPanel({ onClose }: { onClose: () => void }) {
 
   // The single most-specific blocker, surfaced on the disabled button so it's never trial-and-error.
   const missingHint =
-    !description.trim() ? 'Description required'
+    !description.trim() ? 'Control title required'
     : riskChoice === NEW_RISK && !newRiskDesc.trim() ? 'New-risk description required'
     : process === NEW_PROCESS && !newProcess.trim() ? 'New process name required'
     : owner === NEW_OWNER && !newOwner.trim() ? 'New control owner name required'
@@ -110,9 +114,18 @@ export default function NewControlPanel({ onClose }: { onClose: () => void }) {
 
   const create = () => {
     if (!canCreate) return;
+    const existing = eng.controls.find(c => c.riskId === riskChoice);
     const risk = riskChoice === NEW_RISK
-      ? { riskId: nextRiskId, riskDescription: newRiskDesc.trim() }
-      : { riskId: riskChoice, riskDescription: riskOptions.find(r => r.id === riskChoice)?.description ?? '' };
+      ? {
+          riskId: nextRiskId,
+          riskDescription: newRiskDesc.trim(),
+          // Blank stays blank — the register shortens the description on the way
+          // in only for uploaded rows, where nobody was there to be asked.
+          ...(newRiskTitle.trim() ? { riskTitle: newRiskTitle.trim() } : {}),
+        }
+      // An existing risk keeps the name and sentence it already had; picking it
+      // again is not an occasion to restate either.
+      : { riskId: riskChoice, riskDescription: existing?.riskDescription ?? '', ...(existing?.riskTitle ? { riskTitle: existing.riskTitle } : {}) };
     const id = addControl({
       description: description.trim(),
       controlActivity: controlActivity.trim(),
@@ -123,7 +136,9 @@ export default function NewControlPanel({ onClose }: { onClose: () => void }) {
       // the control owner if that comes up empty too.
       processOwner: processOwner === SAME_OWNER ? undefined
         : processOwner === NEW_PROC_OWNER ? newProcOwner.trim() : processOwner,
-      isKey, assertions, ...risk,
+      isKey, assertions, testingStrategy,
+      ...(effectiveDate.trim() ? { effectiveDate: effectiveDate.trim() } : {}),
+      ...risk,
     });
     addToast({ type: 'success', title: 'Control created', message: `Linked to ${risk.riskId} — now in the library and the RACM.` });
     onClose();
@@ -142,7 +157,7 @@ export default function NewControlPanel({ onClose }: { onClose: () => void }) {
         </div>
 
         <div className="p-5 space-y-3.5">
-          <Field label="Control description" required>
+          <Field label="Control title" required>
             <input value={description} onChange={e => setDescription(e.target.value)} autoFocus aria-required="true"
               placeholder="e.g. Vendor bank-detail changes are independently verified before payment"
               className={inputCls} />
@@ -152,7 +167,7 @@ export default function NewControlPanel({ onClose }: { onClose: () => void }) {
               statement in a scoping session and written up afterwards. The
               header and the working paper both fall back gracefully when it's
               blank, so requiring it here would only block the quick raise. */}
-          <Field label="Control activity">
+          <Field label="Control description">
             <textarea value={controlActivity} onChange={e => setControlActivity(e.target.value)} rows={3}
               placeholder="Who performs it, over which records, when, how it's evidenced, and where exceptions go"
               className={`${inputCls} resize-none leading-relaxed`} />
@@ -178,9 +193,14 @@ export default function NewControlPanel({ onClose }: { onClose: () => void }) {
               options={[...riskOptions.map(r => ({ value: r.id, label: `${r.id} — ${r.description.length > 56 ? `${r.description.slice(0, 55)}…` : r.description}` })), { value: NEW_RISK, label: `＋ New risk (${nextRiskId})` }]} />
           </Field>
           {riskChoice === NEW_RISK && (
-            <Field label={`New risk description (${nextRiskId})`} required>
-              <input value={newRiskDesc} onChange={e => setNewRiskDesc(e.target.value)} aria-required="true" placeholder="What could go wrong that this control prevents or detects?" className={inputCls} />
-            </Field>
+            <>
+              <Field label={`New risk title (${nextRiskId})`}>
+                <input value={newRiskTitle} onChange={e => setNewRiskTitle(e.target.value)} placeholder="e.g. Unauthorised vendor payments" className={inputCls} />
+              </Field>
+              <Field label="New risk description" required>
+                <input value={newRiskDesc} onChange={e => setNewRiskDesc(e.target.value)} aria-required="true" placeholder="What could go wrong that this control prevents or detects?" className={inputCls} />
+              </Field>
+            </>
           )}
 
           <div className="grid grid-cols-2 gap-3">
@@ -206,6 +226,19 @@ export default function NewControlPanel({ onClose }: { onClose: () => void }) {
                   isKey ? 'border-mitigated-300 bg-mitigated-50 text-mitigated-700' : 'border-canvas-border text-ink-500 hover:text-ink-800')}>
                 <Star size={13} className={isKey ? 'fill-mitigated-200' : undefined} /> {isKey ? 'Key control' : 'Not key'}
               </button>
+            </Field>
+            {/* How much of the population the control is tested over. Left on
+                Sampling because that is what all but the annual controls get;
+                the sample step is what reads it. */}
+            <Field label="Testing strategy">
+              <FormSelect value={testingStrategy} onChange={v => setTestingStrategy(v as TestingStrategy)} className={inputCls} ariaLabel="Testing strategy" options={TESTING_STRATEGIES} />
+            </Field>
+            {/* Optional, and blank on most rows: a control in place before the
+                period began has no date worth recording. It earns its place when
+                the control started mid-year, because the sample then cannot be
+                drawn from months it did not exist. */}
+            <Field label="Effective date">
+              <input value={effectiveDate} onChange={e => setEffectiveDate(e.target.value)} placeholder="e.g. 1 Apr 2026" className={inputCls} />
             </Field>
           </div>
           {owner === NEW_OWNER && (

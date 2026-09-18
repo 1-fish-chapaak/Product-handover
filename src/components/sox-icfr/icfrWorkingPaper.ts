@@ -1,7 +1,7 @@
 import * as XLSX from 'xlsx';
 import { assessSeverity, attestationOverruled, requiredFilesOf, restsOnStatementAlone, auditorProvenChecks, combinedSample, conclusionOf, controlConclusion, designBasis, operatingApplies, countVerdict, coverageVerdict, fileOriginOf, designOutstanding, formatDueDate, formatINR, icfrConclusion, isControlLocked, itgcHolds, openMaterialWeaknesses, populationSources, sampleSizeGuide, trackResult, designProgress, hasRowCount, isAssisting, toeRounds, LEGACY_SOURCE_ID } from './helpers';
 import { FIVE_W_1H, gapNature } from './types';
-import { ownersOf } from './auditScope';
+import { countryFor, ownersOf } from './auditScope';
 // ─── PARKED (Aug 2026) — Priced impact & Gap type ────────────────────────────
 // Restore this import alongside the blocks parked further down the file.
 //
@@ -119,11 +119,18 @@ export function buildControlPaper(eng: IcfrEngagement, c: Control): PaperBlock[]
       // the process owner, and it is not always the accountable name above.
       ...(ownersOf(c).single ? [] : [['Process owner', ownersOf(c).processOwner] as [string, string]]),
       ['Control number', c.id],
-      // what the control is FOR, above what it does and how it is worded
+      // what the control is FOR, above what it is called and how it is worded
       ['Control objective', c.objective ?? '—'],
-      ['Control description', c.description],
-      ['Control activity', c.controlActivity ?? '—'],
+      ['Control title', c.description],
+      ['Control description', c.controlActivity ?? '—'],
       ['Classification', c.clazz ?? '—'],
+      // Since when, and where. A control that only started operating part-way
+      // through the period cannot be sampled across the whole of it, so the
+      // date belongs on the paper beside the frequency it is sized on. The
+      // country is the row's own only where an uploaded file named one —
+      // otherwise it is read off the entity the control is tested at.
+      ['Effective date', c.effectiveDate ?? '—'],
+      ['Country', countryFor(eng.id, c).value],
       ['Control frequency', c.frequency],
       ['Nature / type', `${c.nature} · ${c.type} · ${c.isKey ? 'Key control' : 'Non-key control'}`],
       // The answer, stated in the header the way the reference papers state it —
@@ -133,6 +140,10 @@ export function buildControlPaper(eng: IcfrEngagement, c: Control): PaperBlock[]
       // frequency AND rating, so a paper that prints one without the other is
       // asking the reader to take the number on trust
       ['Risk rating', c.riskRating ?? 'Not rated'],
+      // How the population was covered — sampled, tested whole, or the single
+      // occurrence a test of one is drawn from. It sits with the rating because
+      // the two together are what the number of items tested is justified on.
+      ['Testing strategy', c.testingStrategy ?? '—'],
       ['Population filter', c.operating.population?.criteria ?? '—'],
       // Every file the population stands on, not the first one. A paper that
       // names one of four extracts describes a population nobody can reperform,
@@ -187,7 +198,9 @@ export function buildControlPaper(eng: IcfrEngagement, c: Control): PaperBlock[]
       ['Count agreed', c.operating.population?.countConfirmed
         ? `${c.operating.population.countConfirmed.by}, ${c.operating.population.countConfirmed.at}`
         : '—'],
-      ['Risk addressed', `${c.riskId} — ${c.riskDescription}`],
+      // The risk's short name leads where the RACM carries one — a reader scans
+      // titles, and the description is what they read once the title lands.
+      ['Risk addressed', `${c.riskId} — ${c.riskTitle ? `${c.riskTitle}: ` : ''}${c.riskDescription}`],
       ['Root cause', c.rootCause ?? '—'],
       ['Assertions', c.assertions.join(', ')],
       ['Precision', c.precision],
@@ -307,7 +320,7 @@ export function buildControlPaper(eng: IcfrEngagement, c: Control): PaperBlock[]
         headers: ['', 'Attribute', 'Assertion', 'Result on ' + w.sampleRef, 'Tick'],
         rows: steps.map((s, i) => {
           const r = w.attributeResults[s.id] ?? 'Not tested';
-          return [letter(i), `${s.description} (${s.code})`, s.assertion, r, tick(r)];
+          return [letter(i), `${s.description} (${s.code})`, s.assertion ?? '—', r, tick(r)];
         }),
         tickFrom: 4,
       });
@@ -402,7 +415,7 @@ export function buildControlPaper(eng: IcfrEngagement, c: Control): PaperBlock[]
       const results = samples.map(smp => s.sampleResults?.[smp.id]).filter(r => r && r !== 'Not tested');
       const fails = results.filter(r => r === 'Fail').length;
       const exceptions = results.length ? String(fails) : s.result === 'Fail' ? '1' : s.result === 'Pass' ? '0' : '—';
-      return [letter(i), `${s.description} (${s.code})`, s.assertion, pop ? String(pop.count) : '—', String(samples.length), samples.length ? String(results.length) : s.result !== 'Not tested' ? 'attribute-level' : '—', exceptions];
+      return [letter(i), `${s.description} (${s.code})`, s.assertion ?? '—', pop ? String(pop.count) : '—', String(samples.length), samples.length ? String(results.length) : s.result !== 'Not tested' ? 'attribute-level' : '—', exceptions];
     }),
   });
 
@@ -728,8 +741,14 @@ export function buildIcfrPaper(eng: IcfrEngagement, controls: Control[] = eng.co
   const summary: IcfrSheet = {
     name: 'Control Summary', blocks: [{
       kind: 'table', title: 'Control summary', note: `${controls.length} controls`,
-      headers: ['W/P', 'Control ID', 'Description', 'Process', 'Nature', 'Key', 'Control owner', 'Process owner', 'Root cause', 'TOD', 'Report (IPE)', 'TOE', 'TOE method', 'Conclusion', 'Conclusion rationale', 'Performed by', 'W/P hard copy', 'W/P soft copy', 'Report ref'],
-      rows: controls.map(c => [c.wpRef, c.id, c.description, c.process, c.nature, c.isKey ? 'Yes' : 'No', c.owner, ownersOf(c).processOwner, c.rootCause ?? '—', trackResult(c.design), c.operating.ipe?.conclusion ?? 'Not registered', trackResult(c.operating), c.operating.method, controlConclusion(c),
+      // Header and row are written in the same order — the four scope columns
+      // after Process answer "tested where, since when, and how" on a register
+      // a reviewer reads across without opening a single control's paper. A
+      // shared control is tested at several entities, so all of them are named.
+      headers: ['W/P', 'Control ID', 'Description', 'Process', 'Entity', 'Effective date', 'Country', 'Testing strategy', 'Nature', 'Key', 'Control owner', 'Process owner', 'Root cause', 'TOD', 'Report (IPE)', 'TOE', 'TOE method', 'Conclusion', 'Conclusion rationale', 'Performed by', 'W/P hard copy', 'W/P soft copy', 'Report ref'],
+      rows: controls.map(c => [c.wpRef, c.id, c.description, c.process,
+        c.entities?.length ? c.entities.join(', ') : (c.entity ?? '—'), c.effectiveDate ?? '—', countryFor(eng.id, c).value, c.testingStrategy ?? '—',
+        c.nature, c.isKey ? 'Yes' : 'No', c.owner, ownersOf(c).processOwner, c.rootCause ?? '—', trackResult(c.design), c.operating.ipe?.conclusion ?? 'Not registered', trackResult(c.operating), c.operating.method, controlConclusion(c),
         // one column, both tracks — the register answers "why does this read the
         // way it does" without opening the control's own paper
         [c.design.rationale && `TOD — ${c.design.rationale}`, c.operating.rationale && `TOE — ${c.operating.rationale}`].filter(Boolean).join(' ') || '—',
@@ -753,7 +772,7 @@ export function buildIcfrPaper(eng: IcfrEngagement, controls: Control[] = eng.co
   // The validation column is carried next to the attestation columns on purpose:
   // where an attribute rests on somebody's statement rather than on the document
   // that existed, the paper has to show both and which one answered.
-  const opRows = controls.flatMap(c => c.operating.steps.map(s => [c.wpRef, c.id, s.code, s.description, s.assertion, s.procedures.join('; '), s.workflowName ? `${s.workflowName}${s.workflowRunRef ? ` (${s.workflowRunRef})` : ''}` : '—', s.validation?.result ? `${s.validation.result}${s.validation.fileName ? ` — ${s.validation.fileName}` : ''}` : '—', s.attestation?.by ?? '—', s.attestation?.note ?? '', s.attestation?.evidence.map(e => e.name).join('; ') ?? '', stepResult(s), s.override?.rationale ?? '']));
+  const opRows = controls.flatMap(c => c.operating.steps.map(s => [c.wpRef, c.id, s.code, s.description, s.assertion ?? '—', s.procedures.join('; '), s.workflowName ? `${s.workflowName}${s.workflowRunRef ? ` (${s.workflowRunRef})` : ''}` : '—', s.validation?.result ? `${s.validation.result}${s.validation.fileName ? ` — ${s.validation.fileName}` : ''}` : '—', s.attestation?.by ?? '—', s.attestation?.note ?? '', s.attestation?.evidence.map(e => e.name).join('; ') ?? '', stepResult(s), s.override?.rationale ?? '']));
   const operating: IcfrSheet = {
     name: 'TOE', blocks: [{
       kind: 'table', title: 'TOE', note: `${opRows.length} attribute rows`,

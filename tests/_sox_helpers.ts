@@ -30,6 +30,10 @@ export async function createSoxEngagement(page: Page, name: string, opts?: { ski
   // answer for a single-company audit, and it is what makes Continue enabled.
   // Without it this helper clicked a disabled button until it timed out.
   await page.getByPlaceholder('e.g. P2P — SOX Q3 Testing').fill(name);
+  // Basics also gates on the description, which became required after this
+  // helper was written — without it Continue stays disabled and every caller
+  // times out on a button that is behaving correctly.
+  await page.getByPlaceholder('One-line description of scope and intent.').fill(`Created by ${name} spec`);
   await page.getByRole('checkbox', { name: /no separate entities/i }).click();
   await page.waitForTimeout(200);
   const basicsNext = page.getByRole('button', { name: 'Continue' });
