@@ -922,7 +922,12 @@ export type GeneratedReport = typeof GENERATED_REPORTS[number] & {
    *  note blocks around the query body; typed blocks — tables, repeating cards,
    *  fixed text, human slots — render as their block shape). */
   templateSections?: TemplateSection[];
+  /** Lifecycle: 'draft' (saved, not issued) · 'final' · 'frozen' (locked). */
+  status?: 'draft' | 'final' | 'frozen';
   description?: string;
+  /** The report-details fields entered in the New Report modal (classification,
+   *  cover facts, admin-added custom fields), by field key. */
+  coverDetails?: Record<string, string>;
   workflowResults?: WorkflowResult[];
   aestheticVariant?: BulkAuditAestheticVariant;
   /** Explicit override for read-only state (Shared with me, archived). */
