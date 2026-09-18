@@ -963,6 +963,14 @@ export interface Control {
    *  occurrence an annual control has. Read by the sample step: a full-population
    *  row has nothing to draw, and a test-of-one row has nothing to size. */
   testingStrategy?: TestingStrategy;
+  /** THE SOURCE FILE'S OWN COLUMNS WE HAVE NO FIELD FOR, by their header.
+   *
+   *  Every client's matrix carries something ours does not — a regulation
+   *  reference, an internal owner code, a column from the last auditor. Dropping
+   *  it on import is how a product ends up alongside the real RACM instead of
+   *  replacing it. Nothing here is read or reasoned over: these values are
+   *  carried, shown beside the row, and written back out. */
+  extras?: Record<string, string>;
   /** The programme the auditor actually walks — obtain X, check Y, verify Z.
    *  Distinct from the design considerations (what must be true) and the test
    *  attributes (what each sample proves): these are the field instructions. */

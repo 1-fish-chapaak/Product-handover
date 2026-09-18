@@ -389,6 +389,7 @@ export function racmRowOf(c: Control): Control {
     ...(c.effectiveDate ? { effectiveDate: c.effectiveDate } : {}),
     ...(c.country ? { country: c.country } : {}),
     ...(c.testingStrategy ? { testingStrategy: c.testingStrategy } : {}),
+    ...(c.extras ? { extras: { ...c.extras } } : {}),
     ...(c.accountIds ? { accountIds: [...c.accountIds] } : {}),
     assertions: [...c.assertions],
     design: {

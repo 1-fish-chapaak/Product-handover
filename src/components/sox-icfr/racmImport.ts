@@ -286,8 +286,20 @@ export function guessHeaderRow(rows: string[][]): number {
 
 /** One ColumnMatch per RACM_FIELDS entry, in that order. Each column is used by
  *  at most one field (best confidence wins). */
-export function matchColumns(headers: string[]): ColumnMatch[] {
+export function matchColumns(headers: string[], remembered: Record<string, RacmFieldKey | null> = {}): ColumnMatch[] {
   const norm = headers.map(h => normaliseHeader(h));
+  // What this header was taken to mean last time wins outright (B4). Matching
+  // headers is work, and doing it again for every monthly upload of the same
+  // workbook is work nobody should be asked to repeat. A header recorded as
+  // deliberately unmapped stays unmapped — the refusal is remembered too.
+  const pinned = new Map<RacmFieldKey, number>();
+  const spokenFor = new Set<number>();
+  norm.forEach((h, column) => {
+    const was = remembered[h];
+    if (was === undefined) return;
+    spokenFor.add(column);
+    if (was !== null && !pinned.has(was)) pinned.set(was, column);
+  });
   const pairs: { field: RacmFieldKey; order: number; column: number; confidence: number }[] = [];
   RACM_FIELDS.forEach((f, order) => {
     norm.forEach((h, column) => {
@@ -300,8 +312,11 @@ export function matchColumns(headers: string[]): ColumnMatch[] {
   pairs.sort((a, b) => b.confidence - a.confidence || a.order - b.order || a.column - b.column);
   const byField = new Map<RacmFieldKey, { column: number; confidence: number }>();
   const usedColumns = new Set<number>();
+  // 100 rather than 98: a remembered header is more certain than an exact
+  // wording match, because a person confirmed it on a real file.
+  pinned.forEach((column, field) => { byField.set(field, { column, confidence: 100 }); usedColumns.add(column); });
   for (const p of pairs) {
-    if (byField.has(p.field) || usedColumns.has(p.column)) continue;
+    if (byField.has(p.field) || usedColumns.has(p.column) || spokenFor.has(p.column)) continue;
     byField.set(p.field, { column: p.column, confidence: p.confidence });
     usedColumns.add(p.column);
   }
@@ -353,6 +368,13 @@ export interface ImportRow {
   sectionRef?: string;
   /** Cell text per mapped field, after any accepted fills. Blank cells are ''. */
   values: Partial<Record<RacmFieldKey, string>>;
+  /** THE FILE'S OWN COLUMNS WE HAVE NO FIELD FOR, by their header (B1).
+   *
+   *  These used to be dropped on the floor. A client put a column in their
+   *  matrix for a reason, and a product that silently discards it is asking them
+   *  to maintain their real RACM somewhere else. We do not understand these
+   *  values, so nothing reads them — they are carried, shown, and exported. */
+  extras: Record<string, string>;
   /** Attributes split one per line or per "|" (also ";" and bullets). */
   attributes: ImportAttribute[];
   /** Design checks split the same way, duplicates merged (R2). */
@@ -642,8 +664,21 @@ function findDuplicate(values: Partial<Record<RacmFieldKey, string>>, idWasGener
  *  rows. `existing` is every control on the engagement (for A8 duplicates) and
  *  `process` is the RACM being created — a row is checked against both, and
  *  against the rows read before it. */
-export function buildImportRows(rows: string[][], headerRow: number, matches: ColumnMatch[], existing: Control[], process: string, entity = ''): ImportRow[] {
+export function buildImportRows(rows: string[][], headerRow: number, matches: ColumnMatch[], existing: Control[], process: string, entity = '', keepExtras: string[] = []): ImportRow[] {
   const mapped = matches.filter((m): m is ColumnMatch & { column: number } => m.column != null);
+  // Columns no field claimed. The process column is skipped — it is chosen
+  // before the import and would otherwise ride along on every row as an extra
+  // saying what the RACM already says.
+  const spokenFor = new Set(mapped.map(m => m.column));
+  const headers = rows[headerRow] ?? [];
+  const wanted = new Set(keepExtras.map(h => normaliseHeader(h)));
+  const extraCols = headers
+    .map((h, column) => ({ header: String(h ?? '').trim(), column }))
+    .filter(h => h.header && !spokenFor.has(h.column) && !PROCESS_HEADERS.has(normaliseHeader(h.header)))
+    // An empty configuration means nothing has been set up yet, so every
+    // unclaimed column is kept; once a team has said which extras it wants, that
+    // list is honoured exactly.
+    .filter(h => !wanted.size || wanted.has(normaliseHeader(h.header)));
   const out: ImportRow[] = [];
   for (let r = headerRow + 1; r < rows.length; r++) {
     const cells = rows[r] ?? [];
@@ -652,18 +687,33 @@ export function buildImportRows(rows: string[][], headerRow: number, matches: Co
     // Blank across every mapped column is blank for import too — a section label
     // sitting only in an unmapped column (e.g. the process name) is not a control.
     if (!Object.values(values).some(v => v)) continue;
+    const extras: Record<string, string> = {};
+    for (const e of extraCols) {
+      const cell = String(cells[e.column] ?? '').trim();
+      if (cell) extras[e.header] = cell;
+    }
     const rowNo = r + 1;
     // `out` is the rows read before this one: the first of two identical lines is
     // the one that stands, the second is the one flagged.
-    out.push(rowFromValues(values, { key: `row-${rowNo}`, rowNo, origin: 'file' }, existing, process, out, entity));
+    out.push(rowFromValues(values, { key: `row-${rowNo}`, rowNo, origin: 'file', extras }, existing, process, out, entity));
   }
   return out;
+}
+
+/** The file's headers paired with what the matcher took each to mean — what the
+ *  Config tab sets up from, and what the mapping is remembered from. */
+export function headerMapping(rows: string[][], headerRow: number, matches: ColumnMatch[]): { header: string; field: RacmFieldKey | null }[] {
+  const byColumn = new Map<number, RacmFieldKey>();
+  matches.forEach(m => { if (m.column != null) byColumn.set(m.column, m.field); });
+  return (rows[headerRow] ?? [])
+    .map((h, column) => ({ header: String(h ?? '').trim(), field: byColumn.get(column) ?? null }))
+    .filter(h => h.header && !PROCESS_HEADERS.has(normaliseHeader(h.header)));
 }
 
 /** Rebuild one row from edited `values` (after fills, or a frequency picked in
  *  review), re-deriving everything else the same way buildImportRows does.
  *  `earlier` is the rows that come before it in the same import. */
-export function rowFromValues(values: Partial<Record<RacmFieldKey, string>>, base: Pick<ImportRow, 'key' | 'rowNo' | 'origin' | 'sectionRef'>, existing: Control[], process: string, earlier: ImportRow[] = [], entity = ''): ImportRow {
+export function rowFromValues(values: Partial<Record<RacmFieldKey, string>>, base: Pick<ImportRow, 'key' | 'rowNo' | 'origin' | 'sectionRef'> & { extras?: Record<string, string> }, existing: Control[], process: string, earlier: ImportRow[] = [], entity = ''): ImportRow {
   const v: Partial<Record<RacmFieldKey, string>> = { ...values };
   // A blank Control ID stays blank — the ID is built at import from the codes
   // and the row order (17 Sep: no "C-00n" that reads as if the file said it).
@@ -690,6 +740,7 @@ export function rowFromValues(values: Partial<Record<RacmFieldKey, string>>, bas
     rowNo: base.rowNo,
     origin: base.origin,
     values: v,
+    extras: base.extras ?? {},
     attributes,
     designChecks: checks,
     mergedDuplicateChecks: merged,
@@ -778,18 +829,27 @@ export type CoreBlank = 'riskDescription' | 'control' | 'nature' | 'type' | 'att
 export const CORE_BLANK_LABEL: Record<CoreBlank, string> = {
   riskDescription: 'a risk description', control: 'a control title or activity', nature: 'a nature', type: 'a type', attributes: 'attributes',
 };
-export function coreBlanks(row: ImportRow): CoreBlank[] {
+export function coreBlanks(row: ImportRow, core: RacmFieldKey[] = DEFAULT_CORE_FIELDS): CoreBlank[] {
   const val = (k: RacmFieldKey) => (row.values[k] ?? '').trim();
+  const on = (k: RacmFieldKey) => core.includes(k);
   const out: CoreBlank[] = [];
-  if (!val('riskDescription')) out.push('riskDescription');
-  if (!val('controlTitle') && !val('controlActivity')) out.push('control');
-  if (row.nature === null) out.push('nature');
-  if (row.type === null) out.push('type');
-  if (row.attributes.length === 0) out.push('attributes');
+  if (on('riskDescription') && !val('riskDescription')) out.push('riskDescription');
+  // The control's two wordings answer for each other — a row with a full
+  // narrative and no title is not a row missing its control.
+  if ((on('controlActivity') || on('controlTitle')) && !val('controlTitle') && !val('controlActivity')) out.push('control');
+  if (on('nature') && row.nature === null) out.push('nature');
+  if (on('type') && row.type === null) out.push('type');
+  if (on('attributes') && row.attributes.length === 0) out.push('attributes');
   return out;
 }
-/** Held back from import: no frequency, or a core value missing. */
-export const rowBlocked = (row: ImportRow) => row.frequency === null || coreBlanks(row).length > 0;
+/** The fields the module insisted on before any of this was the team's choice.
+ *  Kept here so `racmImport` stays pure — the configured list is passed in. */
+export const DEFAULT_CORE_FIELDS: RacmFieldKey[] = ['riskDescription', 'controlActivity', 'frequency', 'nature', 'type', 'attributes'];
+
+/** Held back from import: a core value missing, or no frequency where the team
+ *  counts frequency as core. */
+export const rowBlocked = (row: ImportRow, core: RacmFieldKey[] = DEFAULT_CORE_FIELDS) =>
+  (core.includes('frequency') && row.frequency === null) || coreBlanks(row, core).length > 0;
 
 /** A9: values for this row's empty fields, read off its other columns. Never
  *  proposes a value for a field that already has one, and never for isKey. */
@@ -1050,14 +1110,15 @@ function controlFromRow(row: ImportRow, process: string, n: number, frequency: F
   const country = val('country');
   if (country) control.country = country;
   if (row.testingStrategy) control.testingStrategy = row.testingStrategy;
+  if (Object.keys(row.extras).length) control.extras = { ...row.extras };
   return control;
 }
 
 /** Turn reviewed rows into engagement controls for createRacm. Every row must
  *  have a frequency by now. Attributes become operating steps with their
  *  `requiredFiles`; design checks become design points (merged, not doubled). */
-export function importRowsToControls(rows: ImportRow[], process: string): Control[] {
-  const missing = rows.filter(rowBlocked);
+export function importRowsToControls(rows: ImportRow[], process: string, core: RacmFieldKey[] = DEFAULT_CORE_FIELDS): Control[] {
+  const missing = rows.filter(r => rowBlocked(r, core));
   if (missing.length) {
     const ids = missing.map(r => (r.values.controlId ?? '').trim() || `row ${r.rowNo}`);
     throw new Error(`Fill the blanks before importing — ${missing.length === 1 ? `${ids[0]} has` : `${ids.join(', ')} have`} some.`);

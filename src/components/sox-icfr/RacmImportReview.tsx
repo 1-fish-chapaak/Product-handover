@@ -30,12 +30,13 @@ import { useToast } from '../shared/Toast';
 import { useAuditLog } from '../../context/AdminDataContext';
 import { Pill } from '../shared/StatusBadge';
 import { cn } from '../../lib/cn';
+import { configureFromSample, rememberMapping, useRacmConfig } from './racmConfig';
 import type { Control, ControlType, Frequency, Nature } from './types';
 import {
   RACM_FIELDS, DEFAULT_SOP_PROMPT, CORE_BLANK_LABEL,
   readRacmWorkbook, guessHeaderRow, matchColumns, needsAttention,
   buildImportRows, rowFromValues, proposeBlankFills, suggestForRow, importRowsToControls, draftRowsFromSop,
-  coreBlanks, rowBlocked, rowRepeats,
+  coreBlanks, rowBlocked, rowRepeats, headerMapping,
   type BlankFill, type ColumnMatch, type CoreBlank, type ImportRow, type RacmFieldKey, type SheetData,
 } from './racmImport';
 
@@ -283,6 +284,9 @@ function ConfidencePill({ match, missing }: { match: ColumnMatch; missing: boole
 export default function RacmImportReview({ mode, file, process, entity, existing, onClose, onImport }: RacmImportReviewProps) {
   const { addToast } = useToast();
   const logEvent = useAuditLog();
+  // The team's column set-up: which columns a row can't arrive without, which
+  // of the file's own columns to keep, and what its headers meant last time.
+  const cfg = useRacmConfig();
   const dialogRef = useRef<HTMLDivElement>(null);
   const bodyRef = useRef<HTMLDivElement>(null);
   const [step, setStep] = useState<Step>(mode === 'racm' ? 'columns' : 'prompt');
@@ -333,7 +337,7 @@ export default function RacmImportReview({ mode, file, process, entity, existing
       if (ix < 0) { setRead({ status: 'failed' }); return; }
       const sheetRows = sheets[ix]!.rows;
       const h = guessHeaderRow(sheetRows);
-      setSheetIx(ix); setHeaderRow(h); setMatches(matchColumns(sheetRows[h] ?? []));
+      setSheetIx(ix); setHeaderRow(h); setMatches(matchColumns(sheetRows[h] ?? [], cfg.mapping));
       setRead({ status: 'ready', sheets });
     }).catch(() => { if (alive) setRead({ status: 'failed' }); });
     return () => { alive = false; };
@@ -363,11 +367,11 @@ export default function RacmImportReview({ mode, file, process, entity, existing
     if (read.status !== 'ready') return;
     const sheetRows = read.sheets[ix]?.rows ?? [];
     const h = guessHeaderRow(sheetRows);
-    setSheetIx(ix); setHeaderRow(h); setMatches(matchColumns(sheetRows[h] ?? []));
+    setSheetIx(ix); setHeaderRow(h); setMatches(matchColumns(sheetRows[h] ?? [], cfg.mapping));
   };
   const pickHeaderRow = (h: number) => {
     setHeaderRow(h);
-    setMatches(matchColumns(sheet?.rows[h] ?? []));
+    setMatches(matchColumns(sheet?.rows[h] ?? [], cfg.mapping));
   };
   // A hand-picked column is certain, and a column feeds one field: taking it
   // here releases it from whichever field had it before.
@@ -395,7 +399,7 @@ export default function RacmImportReview({ mode, file, process, entity, existing
     if (!sheet) return;
     const sig = JSON.stringify([sheetIx, headerRow, matches]);
     if (builtFrom.current !== sig) {
-      const built = buildImportRows(sheet.rows, headerRow, matches, existing, process, entity);
+      const built = buildImportRows(sheet.rows, headerRow, matches, existing, process, entity, cfg.extras);
       setRows(built);
       resetReview(built);
       builtFrom.current = sig;
@@ -465,13 +469,13 @@ export default function RacmImportReview({ mode, file, process, entity, existing
   const requiredFileCount = included.reduce((n, r) => n + r.attributes.reduce((m, a) => m + a.requiredFiles.length, 0), 0);
   const mergedCount = included.reduce((n, r) => n + r.mergedDuplicateChecks, 0);
   /** Rows still held back — no frequency, or a core value blank. */
-  const needFix = included.filter(rowBlocked).length;
+  const needFix = included.filter(r => rowBlocked(r, cfg.core)).length;
   /** What those rows are missing, said once each, in a fixed order. */
   const missingLabels = useMemo(() => {
     const found = new Set<string>();
     included.forEach(r => {
       if (r.frequency === null) found.add('a frequency');
-      coreBlanks(r).forEach(b => found.add(CORE_BLANK_LABEL[b]));
+      coreBlanks(r, cfg.core).forEach(b => found.add(CORE_BLANK_LABEL[b]));
     });
     const order = ['a risk description', 'a control title or activity', 'a frequency', 'a nature', 'a type', 'attributes'];
     return order.filter(l => found.has(l));
@@ -573,7 +577,7 @@ export default function RacmImportReview({ mode, file, process, entity, existing
     if (!canImport) return;
     let controls: Control[];
     try {
-      controls = importRowsToControls(included, process);
+      controls = importRowsToControls(included, process, cfg.core);
     } catch {
       addToast({ type: 'error', title: "Couldn't import", message: 'Fill every blank, or leave the row out, before importing.' });
       return;
@@ -585,6 +589,18 @@ export default function RacmImportReview({ mode, file, process, entity, existing
       controls.map((c, i) => ({ ...c, ...(rowEntity(included[i]!) ? { entity: rowEntity(included[i]!) } : {}) })),
       { processCode, entityCodeOf: codeForEntity, useFileNumbers: true },
     );
+    // What the headers turned out to mean is only learned from an import that
+    // actually went ahead. A mapping saved while the reviewer was still changing
+    // their mind would teach the next upload a lesson nobody agreed to.
+    if (mode === 'racm' && sheet) {
+      const pairs = headerMapping(sheet.rows, headerRow, matches);
+      // The first matrix a team uploads is the one that says what their RACM
+      // looks like — which of our columns they carry, and which of theirs we
+      // have no field for. After that the set-up is theirs to change on the
+      // Config tab, so later uploads only add to what a header means.
+      if (!cfg.configured) configureFromSample(pairs, file.name);
+      else rememberMapping(pairs);
+    }
     // the SOP stays viewable from the RACM's row menu for this session
     const url = mode === 'sop' ? URL.createObjectURL(file) : undefined;
     onImport(controls, { source: mode, fileName: file.name, url });
@@ -936,7 +952,7 @@ export default function RacmImportReview({ mode, file, process, entity, existing
                         const addedAttrs = new Set((acceptedSugg[row.key]?.attributes ?? []).map(norm));
                         const addedChecks = new Set((acceptedSugg[row.key]?.designChecks ?? []).map(norm));
                         const isLeftOut = leftOut.has(row.key);
-                        const blanks = isCandidate(row) && !isLeftOut ? coreBlanks(row) : [];
+                        const blanks = isCandidate(row) && !isLeftOut ? coreBlanks(row, cfg.core) : [];
                         // A repeat put back by hand, or one that only became a repeat when the
                         // row above it was edited — either way it has to be dealt with here.
                         const heldAsRepeat = rowRepeats(row) && isCandidate(row) && !isLeftOut;
@@ -1074,7 +1090,7 @@ export default function RacmImportReview({ mode, file, process, entity, existing
                             {open && (
                               <tr className="def-detail" id={detailId}>
                                 <td colSpan={reviewCols}>
-                                  {(cell(row.values.riskTitle) || cell(row.values.riskDescription) || cell(row.values.controlActivity) || cell(row.values.effectiveDate) || cell(row.values.country) || row.testingStrategy) && (
+                                  {(cell(row.values.riskTitle) || cell(row.values.riskDescription) || cell(row.values.controlActivity) || cell(row.values.effectiveDate) || cell(row.values.country) || row.testingStrategy || Object.keys(row.extras).length > 0) && (
                                     <div className="pt-2.5 space-y-1 text-[0.71875rem] leading-relaxed">
                                       {cell(row.values.riskTitle) && (
                                         <p className="text-ink-600"><span className="font-semibold text-ink-500">Risk title:</span> {cell(row.values.riskTitle)}</p>
@@ -1088,6 +1104,15 @@ export default function RacmImportReview({ mode, file, process, entity, existing
                                       {/* The 17 Sep columns, shown only when the file
                                           carried them — three permanent dashes on every
                                           expanded row would say nothing. */}
+                                      {Object.keys(row.extras).length > 0 && (
+                                        // The file's own columns, said back to the
+                                        // reviewer so they can see nothing was
+                                        // thrown away on the way in.
+                                        <p className="text-ink-500">
+                                          <span className="font-semibold text-ink-500">Kept from the file:</span>{' '}
+                                          {Object.entries(row.extras).map(([k, v]) => `${k} — ${v}`).join(' · ')}
+                                        </p>
+                                      )}
                                       {(cell(row.values.effectiveDate) || cell(row.values.country) || row.testingStrategy) && (
                                         <p className="text-ink-600">{[
                                           cell(row.values.effectiveDate) && `Effective ${cell(row.values.effectiveDate)}`,

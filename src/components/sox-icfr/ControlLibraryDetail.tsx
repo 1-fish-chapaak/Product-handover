@@ -356,6 +356,10 @@ export default function ControlLibraryDetail() {
                       named one, and only then can it differ from its entity's. */}
                   {country.source !== 'none' && <Field label={country.source === 'file' ? 'Country (from the file)' : 'Country'} value={country.value} />}
                   {control.testingStrategy && <Field label="Testing strategy" value={control.testingStrategy} />}
+                  {/* The source file's own columns. We have no field for these and
+                      nothing reads them — they are shown because the client put
+                      them in their matrix for a reason. */}
+                  {Object.entries(control.extras ?? {}).map(([k, v]) => <Field key={k} label={k} value={v} />)}
                 </div>
               </motion.div>
             )}
