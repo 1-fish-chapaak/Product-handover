@@ -78,7 +78,7 @@ import ManageExceptionsView from './components/exceptions/ManageExceptionsView';
 import WorkingPaperPanel from './components/execution/WorkingPaperPanel';
 import WorkflowExecutionPanel from './components/execution/WorkflowExecutionPanel';
 import TraceabilityPanel from './components/execution/TraceabilityPanel';
-import NotificationCenter from './notifications/NotificationCenter';
+import NotificationPopover from './notifications/NotificationPopover';
 import NotificationEmailModal from './notifications/NotificationEmailModal';
 import NotificationPreferencesModal from './notifications/NotificationPreferencesModal';
 import { NotificationProvider, useNotifications } from './notifications/NotificationContext';
@@ -1428,7 +1428,7 @@ function AppInner() {
 
         {/* Notification centre + the email preview and preferences it opens. */}
         <AnimatePresence>
-          {notif.drawerOpen && <NotificationCenter onSelect={handleNotificationSelect} />}
+          <NotificationPopover onSelect={handleNotificationSelect} />
         </AnimatePresence>
         <AnimatePresence>
           {notif.viewingEmail && (

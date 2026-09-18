@@ -335,10 +335,6 @@ export function EscalationCadenceEditor({ value: draft, onChange }: {
                 <Toggle checked={draft.weekdaysOnly} onChange={v => patch({ weekdaysOnly: v })} label="Weekdays only" />
                 <span className="text-[12px] text-ink-700">Mailers on <b>weekdays only</b> — weekend dates roll to Monday.</span>
               </label>
-              <label className="flex items-center gap-3 cursor-pointer">
-                <Toggle checked={draft.activeEmployeesOnly} onChange={v => patch({ activeEmployeesOnly: v })} label="Active employees only" />
-                <span className="text-[12px] text-ink-700">Send only to <b>active employees</b> — skip deactivated recipients.</span>
-              </label>
             </div>
           </div>
         </div>

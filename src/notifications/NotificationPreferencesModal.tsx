@@ -1,11 +1,13 @@
 import { useMemo, useState } from 'react';
-import { Bell, Mail, Lock, Eye, RotateCcw, Moon, Zap, Info, ChevronDown, ChevronRight, AtSign } from 'lucide-react';
+import { Bell, Mail, Lock, Eye, RotateCcw, Moon, Zap, Info, ChevronDown, ChevronRight, AtSign, ArrowLeft } from 'lucide-react';
+import EmailDocument from './EmailDocument';
+import type { EmailMessage } from './types';
 import Modal from '../components/shared/Modal';
 import Toggle from '../components/shared/Toggle';
 import { useCurrentUser } from '../context/CurrentUserContext';
 import { NOTIFICATION_EVENTS, NOTIFICATION_MODULES, eventArea, type NotificationEventDef, type NotificationModule } from './catalogue';
 import { useNotifications } from './NotificationContext';
-import NotificationCard from './NotificationCard';
+import NotificationItem from './NotificationItem';
 import { MODULE_ICON, MODULE_TINT } from './tokens';
 import { sampleInput } from './samples';
 import { decide, wantsEmail, EMAIL_BATCH_HOURS } from './service';
@@ -25,7 +27,9 @@ const batchLabel = (h: number) => (h === 1 ? 'every hour' : h === 24 ? 'once a d
 const clockExamples = (h: number) => Array.from({ length: Math.min(3, 24 / h) }, (_, i) => `${String(i * h).padStart(2, '0')}:00`).join(', ') + (24 / h > 3 ? '…' : '');
 
 export default function NotificationPreferencesModal() {
-  const { prefs, setPrefs, resetPrefs, setPrefsOpen, viewEmail } = useNotifications();
+  const { prefs, setPrefs, resetPrefs, setPrefsOpen } = useNotifications();
+  // An email being previewed swaps in over the event list — no modal on a modal.
+  const [emailPreview, setEmailPreview] = useState<{ email: EmailMessage; eventId: string } | null>(null);
   const { currentUser } = useCurrentUser();
   const me = currentUser?.name ?? 'You';
   const [module, setModule] = useState<NotificationModule>('Exceptions Management');
@@ -122,7 +126,7 @@ export default function NotificationPreferencesModal() {
                 const Icon = MODULE_ICON[m]; const on = module === m;
                 return (
                   <li key={m}>
-                    <button onClick={() => { setModule(m); setPreviewId(null); setWhyId(null); }} aria-current={on ? 'true' : undefined} className={`w-full flex items-center gap-2.5 rounded-md px-2.5 py-2 text-left cursor-pointer transition-colors ${on ? 'bg-brand-50 text-brand-800' : 'text-ink-700 hover:bg-canvas'}`}>
+                    <button onClick={() => { setModule(m); setPreviewId(null); setWhyId(null); setEmailPreview(null); }} aria-current={on ? 'true' : undefined} className={`w-full flex items-center gap-2.5 rounded-md px-2.5 py-2 text-left cursor-pointer transition-colors ${on ? 'bg-brand-50 text-brand-800' : 'text-ink-700 hover:bg-canvas'}`}>
                       <span className={`w-6 h-6 rounded-sm flex items-center justify-center shrink-0 ${MODULE_TINT[m]}`}><Icon size={13} aria-hidden="true" /></span>
                       <span className="flex-1 text-[0.8125rem] font-medium truncate">{m}</span>
                       <span className="text-[0.6875rem] tabular-nums text-ink-400">{counts[m]}</span>
@@ -134,7 +138,23 @@ export default function NotificationPreferencesModal() {
           </nav>
         </aside>
 
-        {/* Events */}
+        {/* Events — or the email being previewed, swapped in place */}
+        {emailPreview ? (
+          <div className="flex-1 min-w-0 overflow-y-auto">
+            <div className="sticky top-0 z-10 bg-canvas-elevated/95 backdrop-blur-sm px-6 pt-4 pb-3 border-b border-canvas-border flex items-center gap-3">
+              <button type="button" onClick={() => setEmailPreview(null)} className="inline-flex items-center gap-1.5 h-8 px-2.5 -ml-2 rounded-md text-[0.75rem] font-medium text-ink-600 hover:text-ink-900 hover:bg-canvas cursor-pointer transition-colors">
+                <ArrowLeft size={14} aria-hidden="true" /> Back to events
+              </button>
+              <div className="min-w-0">
+                <h3 className="text-[0.875rem] font-semibold text-ink-900 tracking-tight truncate">Email preview</h3>
+                <p className="text-[0.6875rem] text-ink-500 inline-flex items-center gap-1.5"><Mail size={11} aria-hidden="true" /> {emailPreview.eventId} · exactly what would leave the platform</p>
+              </div>
+            </div>
+            <div className="px-6 py-5">
+              <EmailDocument email={emailPreview.email} />
+            </div>
+          </div>
+        ) : (
         <div className="flex-1 min-w-0 overflow-y-auto">
           <div className="px-6 pt-5 pb-3 border-b border-canvas-border">
             <h3 className="text-[1rem] font-semibold text-ink-900 tracking-tight">{module}</h3>
@@ -187,11 +207,11 @@ export default function NotificationPreferencesModal() {
                     </div>
 
                     {/* Channel controls — in-app is locked on; email is the user's call. */}
-                    <div className="shrink-0 flex flex-col items-end gap-2 pt-0.5">
+                    <div className="shrink-0 flex items-center gap-3 pt-0.5">
                       <span className="inline-flex items-center gap-1.5 h-7 px-2.5 rounded-md bg-paper-100 text-ink-600 text-[0.6875rem] font-semibold" title="Every event reaches you in the app">
                         <Bell size={12} aria-hidden="true" /> In-app <Lock size={10} className="text-ink-400" aria-hidden="true" />
                       </span>
-                      <label className="inline-flex items-center gap-2 text-[0.6875rem] font-semibold text-ink-600 cursor-pointer">
+                      <label className="inline-flex items-center gap-2 h-7 px-2.5 rounded-md border border-canvas-border text-[0.6875rem] font-semibold text-ink-600 cursor-pointer">
                         <Mail size={12} aria-hidden="true" /> Email
                         <Toggle checked={emailOn} onChange={v => setEmail(def, v)} ariaLabel={`Email me for ${def.id}`} />
                       </label>
@@ -203,10 +223,10 @@ export default function NotificationPreferencesModal() {
                       <div className="px-3 py-1.5 bg-canvas text-[0.625rem] font-semibold uppercase tracking-wide text-ink-400 flex items-center justify-between">
                         <span>In-app · exactly as it would appear</span>
                         {preview.email
-                          ? <button type="button" onClick={() => viewEmail(preview.email!)} className="inline-flex items-center gap-1 normal-case tracking-normal text-[0.6875rem] font-semibold text-brand-700 hover:underline cursor-pointer"><Mail size={11} aria-hidden="true" /> Preview the email</button>
+                          ? <button type="button" onClick={() => setEmailPreview({ email: preview.email!, eventId: def.id })} className="inline-flex items-center gap-1 normal-case tracking-normal text-[0.6875rem] font-semibold text-brand-700 hover:underline cursor-pointer"><Mail size={11} aria-hidden="true" /> Preview the email</button>
                           : <span className="normal-case tracking-normal text-ink-400">No email on the current channel choice</span>}
                       </div>
-                      <NotificationCard n={preview.n} currentUserName={me} preview />
+                      <ul className="py-1"><NotificationItem n={preview.n} preview /></ul>
                     </div>
                   )}
                 </li>
@@ -214,6 +234,7 @@ export default function NotificationPreferencesModal() {
             })}
           </ul>
         </div>
+        )}
       </div>
     </Modal>
   );

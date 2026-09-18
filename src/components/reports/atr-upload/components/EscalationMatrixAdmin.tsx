@@ -146,7 +146,6 @@ function HowItWorks({ cfg, severityLabel }: { cfg: EscalationMatrixConfig; sever
       <div className="mt-3 flex flex-wrap items-center gap-x-4 gap-y-1.5 text-[0.6875rem] text-ink-500">
         <span className="inline-flex items-center gap-1.5"><CircleDot size={11} className="text-brand-600" aria-hidden="true" /> Each item's schedule stops the moment its status is updated.</span>
         {cfg.weekdaysOnly && <span className="inline-flex items-center gap-1.5"><CircleDot size={11} className="text-brand-600" aria-hidden="true" /> Weekend dates roll forward to Monday.</span>}
-        {cfg.activeEmployeesOnly && <span className="inline-flex items-center gap-1.5"><CircleDot size={11} className="text-brand-600" aria-hidden="true" /> Deactivated employees are skipped.</span>}
         <span className="inline-flex items-center gap-1.5"><CircleDot size={11} className="text-brand-600" aria-hidden="true" /> The schedule preview on the right lists every mail with its date.</span>
       </div>
     </div>
