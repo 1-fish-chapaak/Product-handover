@@ -56,18 +56,20 @@ export interface NotificationContextValue {
   releaseNow: (id: string) => void;
   setPrefs: (updater: (p: NotificationPreferences) => NotificationPreferences) => void;
   resetPrefs: () => void;
-  /** Drawer + preferences visibility, shared so any surface can open them. */
+  /** Popover + preferences visibility, shared so any surface can open them. */
   drawerOpen: boolean;
-  openDrawer: (tab?: 'inbox' | 'action' | 'all' | 'emails') => void;
+  openDrawer: (tab?: NotificationTab) => void;
   closeDrawer: () => void;
-  drawerTab: 'inbox' | 'action' | 'all' | 'emails';
-  setDrawerTab: (t: 'inbox' | 'action' | 'all' | 'emails') => void;
+  drawerTab: NotificationTab;
+  setDrawerTab: (t: NotificationTab) => void;
   prefsOpen: boolean;
   setPrefsOpen: (open: boolean) => void;
   /** The email open in the preview modal. */
   viewingEmail: EmailMessage | null;
   viewEmail: (e: EmailMessage | null) => void;
 }
+
+export type NotificationTab = 'all' | 'unread';
 
 const Ctx = createContext<NotificationContextValue | null>(null);
 
@@ -92,7 +94,7 @@ export function NotificationProvider({ children }: { children: ReactNode }) {
   const { currentUser } = useCurrentUser();
   const { addToast } = useToast();
   const [drawerOpen, setDrawerOpen] = useState(false);
-  const [drawerTab, setDrawerTab] = useState<'inbox' | 'action' | 'all' | 'emails'>('inbox');
+  const [drawerTab, setDrawerTab] = useState<NotificationTab>('all');
   const [prefsOpen, setPrefsOpen] = useState(false);
   const [viewingEmail, viewEmail] = useState<EmailMessage | null>(null);
 
@@ -152,13 +154,10 @@ export function NotificationProvider({ children }: { children: ReactNode }) {
         : prev.emails;
       return { ...prev, notifications, emails };
     });
-    // Critical deliveries surface immediately while the app is open.
+    // Critical deliveries also surface as a transient toast while the app is
+    // open — a heads-up only; the bell is where you go to act on it.
     if (!next.scheduledFor && def.priority === 'P0' && s.prefs.toastCritical) {
-      addToast({
-        type: def.requiresAction ? 'warning' : 'info',
-        message: next.title,
-        action: { label: 'View', onClick: () => { setDrawerTab(def.requiresAction ? 'action' : 'inbox'); setDrawerOpen(true); } },
-      });
+      addToast({ type: def.requiresAction ? 'warning' : 'info', title: next.title, message: next.message });
     }
     return next.id;
   }, [currentUser, addToast]);
@@ -176,7 +175,7 @@ export function NotificationProvider({ children }: { children: ReactNode }) {
   })), []);
   const setPrefs = useCallback((updater: (p: NotificationPreferences) => NotificationPreferences) => setStore(s => ({ ...s, prefs: updater(s.prefs) })), []);
   const resetPrefs = useCallback(() => setStore(s => ({ ...s, prefs: DEFAULT_PREFERENCES })), []);
-  const openDrawer = useCallback((tab?: 'inbox' | 'action' | 'all' | 'emails') => { if (tab) setDrawerTab(tab); setDrawerOpen(true); }, []);
+  const openDrawer = useCallback((tab?: NotificationTab) => { if (tab) setDrawerTab(tab); setDrawerOpen(true); }, []);
   const closeDrawer = useCallback(() => setDrawerOpen(false), []);
 
   const unreadCount = useMemo(() => store.notifications.filter(n => !n.read && !n.scheduledFor).length, [store.notifications]);
