@@ -43,12 +43,21 @@ export interface CreateRacmFlowProps {
   fixedProcess?: string;
   /** Pre-selected company — e.g. the in-scope company carrying most of the process. */
   defaultEntity?: string;
+  /** Publish the rows as they are saved, instead of landing them as drafts.
+   *
+   *  Set only by the Scope step. Uploading a RACM *into* a scoping decision is
+   *  itself the decision to use it — the auditor is standing in the engagement
+   *  saying "this process is tested from this matrix". Landing it as a draft
+   *  would make it vanish from the list it was uploaded into and send them to
+   *  another tab to publish it. From the RACM tab, where the library is being
+   *  built rather than used, publishing stays the separate deliberate step. */
+  publishOnCreate?: boolean;
   onClose: () => void;
   /** The RACM was saved to the tab. */
   onCreated: (racm: LibraryRacm) => void;
 }
 
-export default function CreateRacmFlow({ fixedProcess, defaultEntity, onClose, onCreated }: CreateRacmFlowProps) {
+export default function CreateRacmFlow({ fixedProcess, defaultEntity, publishOnCreate, onClose, onCreated }: CreateRacmFlowProps) {
   const { currentUser } = useCurrentUser();
   const logEvent = useAuditLog();
   const groups = useMemo(() => knownCompanies(), []);
@@ -90,6 +99,9 @@ export default function CreateRacmFlow({ fixedProcess, defaultEntity, onClose, o
       ...(meta.url ? { sopUrl: meta.url } : {}),
       controls,
       createdBy: currentUser?.name ?? 'You',
+      ...(publishOnCreate
+        ? { published: controls.map(c => c.id), publishedAt: 'just now', publishedBy: currentUser?.name ?? 'You' }
+        : {}),
     });
     logEvent({
       action: meta.source === 'sop' ? 'Create' : 'Upload',

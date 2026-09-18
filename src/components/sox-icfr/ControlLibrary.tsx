@@ -440,7 +440,7 @@ export default function ControlLibrary() {
     const map = new Map<string, Control[]>();
     // A shared row files under every company it covers — see groupKeysOf.
     for (const c of filtered) for (const k of groupKeysOf(c, groupBy)) { if (!map.has(k)) map.set(k, []); map.get(k)!.push(c); }
-    return Array.from(map, ([key, rows]) => ({ key, rows: rows.sort((a, b) => controlCode(a).localeCompare(controlCode(b))) }));
+    return Array.from(map, ([key, rows]) => ({ key, rows: rows.sort((a, b) => a.process.localeCompare(b.process) || controlCode(a).localeCompare(controlCode(b))) }));
   }, [filtered, groupBy]);
 
   // PARKED (Aug 2026) — select-all went with the checkbox column. `toggle` stays:
@@ -659,7 +659,7 @@ export default function ControlLibrary() {
                           </div>
                           {/* process and owner have their own columns now — saying them
                               twice on the same row is noise. */}
-                          <div className="text-[0.6875rem] text-ink-400 mt-0.5">{controlCode(c)} · {c.subProcess}</div>
+                          <div className="text-[0.6875rem] text-ink-400 mt-0.5">{[controlCode(c), c.subProcess].filter(Boolean).join(' · ')}</div>
                         </td>
                         <td className="text-[0.71875rem] text-ink-700">
                           {entityCell(c)

@@ -6,7 +6,7 @@ import { createSoxEngagement, openFromLibrary } from './_sox_helpers';
  *
  * 1) A SOX engagement is created and lands in the library.
  * 2) The materiality worksheet reads as locked on the audit's Configuration tab.
- * 3) TOD: control completeness gates "Conclude effective" until every required
+ * 3) TOD: control completeness gates "Design effective" until every required
  *    element has evidence attached.
  *
  * Rewritten 12 Aug 2026. This file used to drive a creation SIDE DRAWER that
@@ -67,7 +67,7 @@ test('the worksheet reads as locked; control completeness gates the TOD conclusi
   await meter.click();
   await page.waitForTimeout(400);
   await expect(page.getByText(/2\/3 required elements evidenced/)).toBeVisible();
-  await expect(page.getByRole('button', { name: /Conclude effective/ }).first()).toBeDisabled();
+  await expect(page.getByRole('button', { name: /Design effective/ }).first()).toBeDisabled();
   // Attach the missing evidence → completeness reaches 100%. The conclusion does
   // NOT open on that alone: a second gate asks whether the design checks were
   // validated, and it is named separately. This used to assert the button went
@@ -75,6 +75,6 @@ test('the worksheet reads as locked; control completeness gates the TOD conclusi
   // is one of the preconditions, not the only one.
   await page.getByRole('button', { name: 'Attach evidence' }).first().click();
   await expect(page.getByText(/3\/3 required elements evidenced/)).toBeVisible({ timeout: 10_000 });
-  await expect(page.getByRole('button', { name: /Conclude effective/ }).first()).toBeDisabled();
+  await expect(page.getByRole('button', { name: /Design effective/ }).first()).toBeDisabled();
   await expect(page.getByText(/design checks? not validated yet/)).toBeVisible();
 });

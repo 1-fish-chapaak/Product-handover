@@ -343,7 +343,8 @@ export interface OperatingStep {
   id: string;
   code: string;
   description: string;
-  assertion: Assertion;
+  /** Absent when the RACM names none (17 Sep — imports no longer assume "Accuracy"). */
+  assertion?: Assertion;
   precision: string;
   procedures: TestProcedure[];
   evidenceMode?: EvidenceMode;
@@ -822,6 +823,17 @@ export interface RacmReview {
 // whose risk is Low is one occurrence a year, the same control rated High is every
 // quarter. See `sampleSizeGuide`.
 export type RiskRating = 'High' | 'Medium' | 'Low';
+
+/** HOW MUCH OF THE POPULATION A CONTROL IS TESTED OVER.
+ *
+ *  'Sampling' is the ordinary case and the only one the sample-size guide has
+ *  anything to say about. 'Full population' means every item is examined, so
+ *  there is no draw to make and no coverage gap to warn about. 'Test of one' is
+ *  what an annual control gets — it operated once, so one occurrence IS the
+ *  population, and asking for twenty-five would be asking for something that
+ *  does not exist. */
+export type TestingStrategy = 'Sampling' | 'Full population' | 'Test of one';
+export const TESTING_STRATEGIES: TestingStrategy[] = ['Sampling', 'Full population', 'Test of one'];
 export const RISK_RATINGS: RiskRating[] = ['High', 'Medium', 'Low'];
 
 // ─── Control classification ──────────────────────────────────────────────────────
@@ -842,7 +854,7 @@ export interface Control {
    *  entity. See `entity`. */
   code?: string;
   /** The id a seeded control was built under, before IDs moved to
-   *  PROCESS/ENTITY/R001/C001 (S11). Never shown. Every deterministic
+   *  ENTITY/PROCESS/R001/C001 (S11). Never shown. Every deterministic
    *  "real-looking" number (population values, due dates, draws, Ira's reads)
    *  hashes `seedKeyOf(c)`, so renaming the ID moves no demo number. Absent on
    *  controls imported after the rename — they hash their own id. */
@@ -923,6 +935,12 @@ export interface Control {
    *  why it is optional and every read falls back to `owner`. */
   processOwner?: string;
   riskId: string;
+  /** THE RISK'S SHORT NAME — three or four words a reader scans in a column,
+   *  where `riskDescription` is the sentence they read once they stop. Source
+   *  RACMs and SOPs that carry one are taken at their word; where they do not,
+   *  the import shortens the description and tags the result as Ira's, so the
+   *  register is never a wall of full sentences and nothing is invented. */
+  riskTitle?: string;
   riskDescription: string;
   /** WHY the risk exists — the condition underneath it. The source RACM carries
    *  this beside the risk, because a control aimed at the symptom rather than the
@@ -931,6 +949,28 @@ export interface Control {
   /** The risk's agreed rating. Drives how deep the sample goes — see
    *  `sampleSizeGuide` — and is argued with management, not derived. */
   riskRating?: RiskRating;
+  /** WHEN THE CONTROL STARTED OPERATING in its current form — a control put in
+   *  place in September cannot be tested over a year that began in April, and a
+   *  sample drawn across the whole period would be drawing from months the
+   *  control did not exist. Stored the way `formatDueDate` reads dates. */
+  effectiveDate?: string;
+  /** THE COUNTRY THIS ROW ANSWERS FOR, when the source file named one. Absent on
+   *  the ordinary row, which takes its entity's country — see `countryFor`. Kept
+   *  only as an override so the two can never silently disagree: a stored value
+   *  means a file said so, and the screens say where it came from. */
+  country?: string;
+  /** HOW MUCH OF THE POPULATION GETS TESTED — a sample, every item, or the single
+   *  occurrence an annual control has. Read by the sample step: a full-population
+   *  row has nothing to draw, and a test-of-one row has nothing to size. */
+  testingStrategy?: TestingStrategy;
+  /** THE SOURCE FILE'S OWN COLUMNS WE HAVE NO FIELD FOR, by their header.
+   *
+   *  Every client's matrix carries something ours does not — a regulation
+   *  reference, an internal owner code, a column from the last auditor. Dropping
+   *  it on import is how a product ends up alongside the real RACM instead of
+   *  replacing it. Nothing here is read or reasoned over: these values are
+   *  carried, shown beside the row, and written back out. */
+  extras?: Record<string, string>;
   /** The programme the auditor actually walks — obtain X, check Y, verify Z.
    *  Distinct from the design considerations (what must be true) and the test
    *  attributes (what each sample proves): these are the field instructions. */
@@ -1188,8 +1228,12 @@ export interface Deficiency {
    *  reason per field it filled, keyed by that field. A field's entry goes the
    *  moment anyone changes the field (updateDeficiency), so a tag on screen always
    *  means the value is still Ira's and not yet the auditor's. Absent on seeded
-   *  exceptions: a person sized those. */
-  iraSuggested?: Partial<Record<'likelihood' | 'magnitude' | 'compensatingControlId', string>>;
+   *  exceptions: a person sized those.
+   *
+   *  `rootCause` (17 Sep dev call) is different in one way: while its tag is on,
+   *  the root cause is Ira's draft and step 1 is not done — the auditor edits it
+   *  or takes it ("Use this"), and either removes the tag (rootCauseReady). */
+  iraSuggested?: Partial<Record<'likelihood' | 'magnitude' | 'compensatingControlId' | 'rootCause', string>>;
   aggregationGroup?: string;
   /** PARKED (13 Aug 2026) — the single "same root cause as" link. Superseded by
    *  `rootCauseGroupIds`: one exception can share a mechanism with several

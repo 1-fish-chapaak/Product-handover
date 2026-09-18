@@ -1,11 +1,12 @@
 /**
  * Risk and control IDs (S11).
  *
- *   Risk ID    = PROCESS/ENTITY/R001          e.g. TRY/AIH/R001
- *   Control ID = PROCESS/ENTITY/R001/C001     e.g. TRY/AIH/R001/C001
+ *   Risk ID    = ENTITY/PROCESS/R001          e.g. AIH/TRY/R001
+ *   Control ID = ENTITY/PROCESS/R001/C001     e.g. AIH/TRY/R001/C001
  *
- * PROCESS and ENTITY are short codes, made from the names and editable where a
- * RACM is imported. The entity is the company the row is tested at (the file's
+ * ENTITY and PROCESS are short codes of exactly three letters or digits (17 Sep
+ * dev call: entity first, then process), made from the names and editable where
+ * a RACM is imported. The entity is the company the row is tested at (the file's
  * entity column, else the one chosen at upload). R and C numbers come from the
  * file's own Risk ID / Control ID when those carry a number, else from the order
  * of the rows.
@@ -31,7 +32,7 @@ const KNOWN_PROCESS_CODES: Record<string, string> = {
   'hire to retire': 'PAY',
   'inventory': 'INV',
   'tax': 'TAX',
-  'it general controls': 'ITGC',
+  'it general controls': 'ITG',
   'financial close': 'FCL',
 };
 
@@ -46,42 +47,67 @@ function words(name: string, drop: Set<string>): string[] {
     .filter(w => w && !drop.has(w.toLowerCase()));
 }
 
-/** Initials of the words, topped up to three letters from the last word. */
-function initialsCode(ws: string[], max: number): string {
+/** Every code is exactly this long. */
+export const CODE_LENGTH = 3;
+
+/** Initials of the first three words, topped up to three characters from the
+ *  last of them — and from X when a name is too short to give three. */
+function initialsCode(ws: string[]): string {
   if (!ws.length) return '';
-  if (ws.length === 1) return ws[0]!.slice(0, 3).toUpperCase();
-  let code = ws.slice(0, max).map(w => w[0]!).join('');
-  const last = ws[Math.min(ws.length, max) - 1]!;
-  for (let i = 1; code.length < 3 && i < last.length; i++) code += last[i]!;
-  return code.toUpperCase();
+  let code = ws.length === 1 ? ws[0]!.slice(0, CODE_LENGTH) : ws.slice(0, CODE_LENGTH).map(w => w[0]!).join('');
+  const last = ws[Math.min(ws.length, CODE_LENGTH) - 1]!;
+  for (let i = code.length && ws.length === 1 ? code.length : 1; code.length < CODE_LENGTH && i < last.length; i++) code += last[i]!;
+  return code.toUpperCase().padEnd(CODE_LENGTH, 'X');
 }
 
 /** A process's short code — the standard one when it has one. */
 export function suggestProcessCode(process: string): string {
   const known = KNOWN_PROCESS_CODES[process.trim().toLowerCase()];
   if (known) return known;
-  return initialsCode(words(process, FILLER_WORDS), 4) || 'GEN';
+  return initialsCode(words(process, FILLER_WORDS)) || 'GEN';
 }
 
 /** A company's short code — "Altura Infra Holdings Ltd" → AIH, "Altura Solar Pvt Ltd" → ASO. */
 export function suggestEntityCode(entity: string): string {
-  return initialsCode(words(entity, LEGAL_WORDS), 3) || 'ENT';
+  return initialsCode(words(entity, LEGAL_WORDS)) || 'ENT';
 }
 
-/** What a typed code is allowed to be: letters and digits, 2–6 of them. */
-export function cleanCode(code: string): string {
-  return code.toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 6);
+/**
+ * The codes a name could take, best first — used when its first choice is
+ * already another name's. Still read off the name (user ask, 17 Sep): the
+ * capitals and word initials ("AirConnect Regional" → ACR), then the first
+ * word's own letters (AIR), then the first letter with any two later ones.
+ * Only when every one is taken does a digit take the last place (AR2).
+ */
+function codeCandidates(base: string, name: string, drop: Set<string>): string[] {
+  const ws = words(name, drop);
+  const letters = ws.join('').toUpperCase();
+  const first = (letters[0] ?? base[0] ?? 'X');
+  const out: string[] = [base];
+  const caps = ws.map(w => w[0]! + w.slice(1).replace(/[^A-Z0-9]/g, '')).join('').toUpperCase();
+  if (caps.length >= CODE_LENGTH) out.push(caps.slice(0, CODE_LENGTH));
+  if (ws[0] && ws[0].length >= CODE_LENGTH) out.push(ws[0].slice(0, CODE_LENGTH).toUpperCase());
+  for (let i = 1; i < letters.length; i++) {
+    for (let j = i + 1; j < letters.length; j++) out.push(first + letters[i] + letters[j]);
+  }
+  for (let d = 2; d <= 9; d++) out.push(base.slice(0, CODE_LENGTH - 1) + d);
+  return Array.from(new Set(out)).filter(CODE_OK);
 }
-export const CODE_OK = (code: string) => /^[A-Z0-9]{2,6}$/.test(code);
+
+/** What a typed code is allowed to be: letters and digits, exactly three. */
+export function cleanCode(code: string): string {
+  return code.toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, CODE_LENGTH);
+}
+export const CODE_OK = (code: string) => /^[A-Z0-9]{3}$/.test(code);
 
 // ─── Building IDs ───────────────────────────────────────────────────────────────
 
 const pad3 = (n: number) => String(n).padStart(3, '0');
-export const riskIdOf = (processCode: string, entityCode: string, r: number) => `${processCode}/${entityCode}/R${pad3(r)}`;
-export const controlIdOf = (processCode: string, entityCode: string, r: number, c: number) => `${riskIdOf(processCode, entityCode, r)}/C${pad3(c)}`;
+export const riskIdOf = (entityCode: string, processCode: string, r: number) => `${entityCode}/${processCode}/R${pad3(r)}`;
+export const controlIdOf = (entityCode: string, processCode: string, r: number, c: number) => `${riskIdOf(entityCode, processCode, r)}/C${pad3(c)}`;
 
-/** True when an ID is already in the PROCESS/ENTITY/R001/C001 shape. */
-export const isFormattedControlId = (id: string) => /^[A-Z0-9]{2,6}\/[A-Z0-9]{2,6}\/R\d{3,}\/C\d{3,}$/.test(id);
+/** True when an ID is already in the ENTITY/PROCESS/R001/C001 shape. */
+export const isFormattedControlId = (id: string) => /^[A-Z0-9]{3}\/[A-Z0-9]{3}\/R\d{3,}\/C\d{3,}$/.test(id);
 
 /** The last run of digits in a file's own ID — "R-07" → 7, "TRE-C-012" → 12. */
 function fileNumber(id: string | undefined): number | null {
@@ -137,7 +163,7 @@ export function assignRacmIds(controls: Control[], opts: AssignIdsOptions): Cont
     while (cTaken.has(n)) n++;
     cTaken.add(n);
 
-    return { ...c, id: controlIdOf(processCode, ec, r, n), riskId: riskIdOf(processCode, ec, r) };
+    return { ...c, id: controlIdOf(ec, processCode, r, n), riskId: riskIdOf(ec, processCode, r) };
   });
 }
 
@@ -217,14 +243,13 @@ const PROCESS_CODES = new Map<string, string>();
 const ENTITY_CODES = new Map<string, string>();
 const nameKey = (name: string) => name.trim().toLowerCase();
 
-function codeFor(register: Map<string, string>, name: string, suggest: (n: string) => string, keep = true): string {
+function codeFor(register: Map<string, string>, name: string, suggest: (n: string) => string, drop: Set<string>, keep = true): string {
   const key = nameKey(name);
   const had = register.get(key);
   if (had) return had;
   const base = suggest(name);
   const taken = new Set(register.values());
-  let code = base;
-  for (let n = 2; taken.has(code); n++) code = `${base.slice(0, 5)}${n}`;
+  const code = codeCandidates(base, name, drop).find(c => !taken.has(c)) ?? base;
   if (keep) register.set(key, code);
   return code;
 }
@@ -239,14 +264,14 @@ const PROCESS_ALIASES: Record<string, string> = { 'payroll (hire to retire)': 'p
 const processName = (process: string) => PROCESS_ALIASES[nameKey(process)] ?? process;
 
 /** The process's code — the one it already has, else a new unique one. */
-export const processCodeFor = (process: string) => codeFor(PROCESS_CODES, processName(process), suggestProcessCode);
+export const processCodeFor = (process: string) => codeFor(PROCESS_CODES, processName(process), suggestProcessCode, FILLER_WORDS);
 /** The company's code — the one it already has, else a new unique one. */
-export const entityCodeFor = (entity: string) => codeFor(ENTITY_CODES, entity, suggestEntityCode);
+export const entityCodeFor = (entity: string) => codeFor(ENTITY_CODES, entity, suggestEntityCode, LEGAL_WORDS);
 
 /** The code a name has or would get — without giving it one. For previews
  *  that change as someone types. */
-export const peekProcessCode = (process: string) => codeFor(PROCESS_CODES, processName(process), suggestProcessCode, false);
-export const peekEntityCode = (entity: string) => codeFor(ENTITY_CODES, entity, suggestEntityCode, false);
+export const peekProcessCode = (process: string) => codeFor(PROCESS_CODES, processName(process), suggestProcessCode, FILLER_WORDS, false);
+export const peekEntityCode = (entity: string) => codeFor(ENTITY_CODES, entity, suggestEntityCode, LEGAL_WORDS, false);
 
 /** Which other process already uses this code (lower-cased name), if any. */
 export const processCodeTakenBy = (code: string, process: string) => {

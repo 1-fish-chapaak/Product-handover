@@ -54,6 +54,6 @@ test('conclude gates: validated checks before design', async ({ page }) => {
   await expect(page.getByText(/\d+\/\d+ required elements evidenced/)).toBeVisible();
 
   // …and the conclusion is still held, by the checks rather than by the files.
-  await expect(page.getByRole('button', { name: 'Conclude effective' }).first()).toBeDisabled();
+  await expect(page.getByRole('button', { name: 'Design effective' }).first()).toBeDisabled();
   await expect(page.getByText(/\d+ design checks? not validated yet/)).toBeVisible();
 });

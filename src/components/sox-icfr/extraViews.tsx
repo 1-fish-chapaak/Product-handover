@@ -22,7 +22,7 @@ import type { ReactNode } from 'react';
 import { AnimatePresence } from 'motion/react';
 import { ListChecks, Loader2 } from 'lucide-react';
 import { QAResultsModal, VALIDATE_MS } from './ControlDossier';
-import { designRetestChecks } from './helpers';
+import { designRetestChecks, rootCauseReady } from './helpers';
 import type { RetestCheck } from './types';
 import { CHALLENGED_INPUT_LABEL, EXCEPTION_STEPS, gapNature, GRADE_RANK, MW_INDICATOR_CATALOGUE, SEVERITY_URGENCY, type Assertion, type ChallengedInput, type Court, type Deficiency, type DeficiencyGroup, type ExceptionGrade, type ExceptionStatus, type IcfrEngagement, type RetestRound, type Severity, type SignificantAccount, type TaskType } from './types';
 
@@ -1123,7 +1123,7 @@ const STATUS_TONE: Record<ExceptionStatus, Tone> = {
  *  ① and ②: it is still being raised until the root cause is written, and being
  *  sized once it is. */
 function currentStep(d: Deficiency): number {
-  if (d.status === 'Identified') return d.rootCause.trim() ? 2 : 1;
+  if (d.status === 'Identified') return rootCauseReady(d) ? 2 : 1;
   return EXCEPTION_STEPS.find(s => s.states.includes(d.status))?.n ?? 1;
 }
 const MW_INDICATORS = MW_INDICATOR_CATALOGUE as readonly string[];
@@ -1136,7 +1136,7 @@ const MW_INDICATORS = MW_INDICATOR_CATALOGUE as readonly string[];
  *  initial-and-surname under it); Stage is wide enough for "Awaiting reviewer",
  *  with its due date on a line of its own beneath. The first column carries the
  *  control ID under the finding's own, indented — 200 fits the S11 format
- *  (TRY/AIH/R001/C001, up to ~21 characters) on one line. */
+ *  (AIH/TRY/R001/C001, up to ~21 characters) on one line. */
 const DEF_COL_W = { id: 200, track: 104, exposure: 116, severity: 176, riskOwner: 124, defOwner: 164, status: 152, court: 158 };
 const DEF_COLS = 9;
 
@@ -1366,7 +1366,7 @@ function AggregationKeys({ d, eng }: { d: Deficiency; eng: IcfrEngagement }) {
   const keys = groupKeysFor(d, eng);
   const c = eng.controls.find(x => x.id === d.controlId);
   const assertions = d.track === 'operating'
-    ? Array.from(new Set(c?.operating.steps.filter(s => stepResult(s) === 'Fail').map(s => s.assertion) ?? []))
+    ? Array.from(new Set(c?.operating.steps.filter(s => stepResult(s) === 'Fail').map(s => s.assertion).filter((a): a is NonNullable<typeof a> => !!a) ?? []))
     : (c?.assertions ?? []);
   const derived = keys.filter(k => k.kind === 'account');
   const groups = groupsFor(d, eng);
@@ -1782,7 +1782,20 @@ export function DeficiencyCard({ d, defaultOpen = false, showControlLink = true,
               <textarea value={d.rootCause} onChange={e => updateDeficiency(d.id, { rootCause: e.target.value })} rows={2}
                 placeholder="The mechanism, not the count — “the system allows manual posting that bypasses approval”, not “3 of 25 lacked approval”"
                 className="w-full px-2.5 py-2 rounded-md border border-canvas-border bg-canvas-elevated text-[0.78125rem] text-ink-800 resize-none focus:outline-none focus:border-brand-300" />
-              {!d.rootCause.trim() && <p className="text-[0.65625rem] text-mitigated-700 mt-1">Needed before this can be sized — the grade and the plan both hang off it.</p>}
+              {/* Ira's draft (17 Sep dev call): kept until the auditor edits it
+                  or takes it as written — a draft nobody checked is not step 1. */}
+              {d.iraSuggested?.rootCause && d.rootCause.trim() ? (
+                <div className="mt-1 flex items-start gap-2 flex-wrap">
+                  <p className="text-[0.65625rem] leading-snug min-w-0 flex-1">
+                    <span className="font-semibold text-brand-700">✦ Ira suggested</span>
+                    <span className="text-ink-500"> — {d.iraSuggested.rootCause}. Edit it or use it as written before this can be sized.</span>
+                  </p>
+                  <button onClick={() => { const { rootCause: _drafted, ...rest } = d.iraSuggested!; updateDeficiency(d.id, { iraSuggested: Object.keys(rest).length ? rest : undefined }); }}
+                    className="h-6 px-2 rounded-md border border-brand-200 bg-brand-50 text-[0.6875rem] font-semibold text-brand-700 hover:bg-brand-100 transition-colors cursor-pointer shrink-0">
+                    Use this
+                  </button>
+                </div>
+              ) : !d.rootCause.trim() && <p className="text-[0.65625rem] text-mitigated-700 mt-1">Needed before this can be sized — the grade and the plan both hang off it.</p>}
             </>
           ) : (
             <p className="text-[0.78125rem] text-ink-700">{d.rootCause || <span className="text-ink-400">Not written yet.</span>}</p>
@@ -2122,11 +2135,11 @@ export function DeficiencyCard({ d, defaultOpen = false, showControlLink = true,
           {/* ② the auditor finishes sizing */}
           {!locked && d.status === 'Identified' && (
             isAuditor ? (
-              d.rootCause.trim()
+              rootCauseReady(d)
                 ? <button onClick={() => completeSizing(d.id)} className="h-8 px-3 rounded-lg bg-brand-600 text-white text-[0.75rem] font-semibold hover:bg-brand-700 cursor-pointer inline-flex items-center gap-1.5">
                     <Scale size={13} /> {!d.ratingConfirm ? `Rated ${grade} — send to the reviewer` : `Rated ${grade} — hand to ${d.remediation.owner}`}
                   </button>
-                : <span className="text-[0.75rem] text-ink-500 inline-flex items-center gap-1.5"><Info size={14} className="text-ink-400" /> Write the root cause first — the grade and the plan both hang off it.</span>
+                : <span className="text-[0.75rem] text-ink-500 inline-flex items-center gap-1.5"><Info size={14} className="text-ink-400" /> {d.rootCause.trim() ? 'Check Ira\'s root cause first — edit it or use it as written.' : 'Write the root cause first — the grade and the plan both hang off it.'}</span>
             ) : null
           )}
 

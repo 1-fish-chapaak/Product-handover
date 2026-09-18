@@ -66,7 +66,7 @@ function Block({ b }: { b: PaperBlock }) {
                       b.tickFrom != null && ci >= b.tickFrom && (b.tickTo == null || ci < b.tickTo)
                         ? cn('font-mono text-center whitespace-nowrap', tickCls(cell)) : undefined,
                       ci === 0 && 'font-mono text-ink-400 whitespace-nowrap',
-                      // a control ID (TRY/AIH/R001/C001) would otherwise wrap at its slashes
+                      // a control ID (AIH/TRY/R001/C001) would otherwise wrap at its slashes
                       ci > 0 && isFormattedControlId(cell) && 'whitespace-nowrap')}>{cell}</td>
                   ))}
                 </tr>

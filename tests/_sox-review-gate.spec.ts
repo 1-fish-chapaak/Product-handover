@@ -36,6 +36,7 @@ test('reviewer queue lists concluded papers; countersign makes them final', asyn
   // ReviewerGate's banner was replaced by step 5 Sign-off's right-rail state.
   await expect(page.getByText('Awaiting countersign').first()).toBeVisible();
   await expect(page.getByRole('button', { name: 'Conclude effective' })).toHaveCount(0);
+  await expect(page.getByRole('button', { name: 'Design effective' })).toHaveCount(0);
   // countersign — the paper turns final
   await page.getByRole('button', { name: 'Countersign', exact: true }).first().click();
   await page.waitForTimeout(500);
@@ -86,6 +87,7 @@ test('risk owner keeps the evidence lanes but loses the testing pen', async ({ p
   await page.waitForTimeout(700);
   // testing pens are absent — not disabled, absent
   await expect(page.getByRole('button', { name: 'Conclude effective' })).toHaveCount(0);
+  await expect(page.getByRole('button', { name: 'Design effective' })).toHaveCount(0);
   await expect(page.getByRole('button', { name: 'Test attributes' })).toHaveCount(0);
   await expect(page.getByRole('button', { name: /Validate all/ })).toHaveCount(0);
   // Self-attestation went with steps 2-5: those carry sample results and

@@ -71,7 +71,7 @@ test('ITGC cascade — the withdrawal is visible where it lands', async ({ page 
   await page.waitForTimeout(1600);
   await page.screenshot({ path: `${SHOTS}/02-itgc-control.png`, fullPage: true });
 
-  const concludeBad = page.getByRole('button', { name: 'Conclude ineffective' }).first();
+  const concludeBad = page.getByRole('button', { name: 'Design ineffective' }).first();
   await expect(concludeBad).toBeVisible({ timeout: 15_000 });
   await expect(concludeBad).toBeEnabled();
   await concludeBad.click();
