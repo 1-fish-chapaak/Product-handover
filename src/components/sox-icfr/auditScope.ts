@@ -62,6 +62,33 @@ export function countryOf(engagementId: string, entity: string): string | undefi
 }
 
 /**
+ * The country a single RACM row answers for, and where that answer came from.
+ *
+ * Two sources, never merged. A row carries `country` only when an uploaded file
+ * named one; every other row takes the country of the entity it is tested at.
+ * The distinction is worth keeping on screen — a country that disagrees with its
+ * entity is either a genuine cross-border arrangement or a bad column mapping,
+ * and the reader can only tell which if the screen says which side it came from.
+ *
+ * A shared control spanning entities in different countries reports all of them:
+ * one conclusion covering India and Singapore is a conclusion about both.
+ */
+export function countryFor(
+  engagementId: string,
+  c: { entity?: string; entities?: string[]; country?: string },
+): { value: string; source: 'file' | 'entity' | 'none'; from?: string } {
+  const own = c.country?.trim();
+  if (own) return { value: own, source: 'file' };
+  const names = c.entities?.length ? c.entities : c.entity ? [c.entity] : [];
+  const found = names
+    .map(n => ({ n, country: countryOf(engagementId, n) }))
+    .filter((r): r is { n: string; country: string } => !!r.country);
+  if (!found.length) return { value: '—', source: 'none' };
+  const unique = [...new Set(found.map(r => r.country))];
+  return { value: unique.join(', '), source: 'entity', from: found[0]!.n };
+}
+
+/**
  * Entities the audit's uploaded trial balance / GL turned out to contain.
  *
  * A SIMULATED parse — prototype uploads carry no bytes, so this stands in for

@@ -5,7 +5,7 @@ import type {
   Assertion, Attestation, AuditArchive, AuditFileRecord, AuditorProof, AuditRecord, Control, Deficiency, DesignDoc, DesignDocKind, DesignPoint, DiscussionAnchor, DocStatus, FileOrigin,
   DesignJudgements, DesignWaiverReason, EvidenceFile, EvidenceMode, ExceptionStatus, ExecKind, ExecutionEvent, Frequency, HandoffTask, IcfrEngagement,
   DesignBasis, DesignTrack, EvidenceType, ExceptionKind, IpeConclusion, PopulationChecks, IpeTest, MaterialityRules, Walkthrough, Nature, OperatingStep, Override, Population, PopulationDefinition, RacmReview, Role, RulesChangeEntry, RunControlOutcome, RunRecord, ScopeArchiveEntry,
-  PopulationSource, RequiredFile, Sample, Sampling, SignificantAccount, SourceRole, TestResult, ToeRound, TrackConclusion, RetestRound, UnableToTest, ChallengedInput, SeverityChallenge,
+  PopulationSource, RequiredFile, Sample, Sampling, SignificantAccount, SourceRole, TestingStrategy, TestResult, ToeRound, TrackConclusion, RetestRound, UnableToTest, ChallengedInput, SeverityChallenge,
 } from './types';
 
 let _uid = 0;
@@ -174,6 +174,10 @@ export interface NewControlDraft {
   process: string;
   subProcess: string;
   riskId: string;
+  /** The risk's short name, where the form was given one. Optional: a hand-raised
+   *  control may only have the sentence, and an empty title stays empty rather
+   *  than being shortened behind the auditor's back. */
+  riskTitle?: string;
   riskDescription: string;
   nature: Nature;
   frequency: Frequency;
@@ -184,6 +188,10 @@ export interface NewControlDraft {
   processOwner?: string;
   isKey: boolean;
   assertions: Assertion[];
+  /** When the control started operating in its current form. */
+  effectiveDate?: string;
+  /** How much of the population gets tested. Defaults to Sampling at creation. */
+  testingStrategy?: TestingStrategy;
 }
 
 interface IcfrCtx {
@@ -3805,6 +3813,9 @@ export function IcfrProvider({ children, initialRole = 'auditor', seedMeta }: { 
       // didn't name one, so a control created by hand still knows who to ask.
       processOwner: draft.processOwner?.trim() || peopleForProcess(draft.process)?.processOwner,
       riskId, riskDescription: draft.riskDescription,
+      ...(draft.riskTitle?.trim() ? { riskTitle: draft.riskTitle.trim() } : {}),
+      ...(draft.effectiveDate?.trim() ? { effectiveDate: draft.effectiveDate.trim() } : {}),
+      ...(draft.testingStrategy ? { testingStrategy: draft.testingStrategy } : {}),
       assertions: draft.assertions.length ? draft.assertions : ['Accuracy'],
       design: {
         documents: [

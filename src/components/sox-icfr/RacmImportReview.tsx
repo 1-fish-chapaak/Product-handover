@@ -1024,13 +1024,26 @@ export default function RacmImportReview({ mode, file, process, entity, existing
                             {open && (
                               <tr className="def-detail" id={detailId}>
                                 <td colSpan={reviewCols}>
-                                  {(cell(row.values.riskDescription) || cell(row.values.controlActivity)) && (
+                                  {(cell(row.values.riskTitle) || cell(row.values.riskDescription) || cell(row.values.controlActivity) || cell(row.values.effectiveDate) || cell(row.values.country) || row.testingStrategy) && (
                                     <div className="pt-2.5 space-y-1 text-[0.71875rem] leading-relaxed">
+                                      {cell(row.values.riskTitle) && (
+                                        <p className="text-ink-600"><span className="font-semibold text-ink-500">Risk title:</span> {cell(row.values.riskTitle)}</p>
+                                      )}
                                       {cell(row.values.riskDescription) && (
                                         <p className="text-ink-600"><span className="font-semibold text-ink-500">Risk{cell(row.values.riskId) ? ` ${cell(row.values.riskId)}` : ''}:</span> {cell(row.values.riskDescription)}</p>
                                       )}
                                       {cell(row.values.controlActivity) && (
-                                        <p className="text-ink-600 whitespace-pre-line"><span className="font-semibold text-ink-500">Activity:</span> {cell(row.values.controlActivity)}</p>
+                                        <p className="text-ink-600 whitespace-pre-line"><span className="font-semibold text-ink-500">Control description:</span> {cell(row.values.controlActivity)}</p>
+                                      )}
+                                      {/* The 17 Sep columns, shown only when the file
+                                          carried them — three permanent dashes on every
+                                          expanded row would say nothing. */}
+                                      {(cell(row.values.effectiveDate) || cell(row.values.country) || row.testingStrategy) && (
+                                        <p className="text-ink-600">{[
+                                          cell(row.values.effectiveDate) && `Effective ${cell(row.values.effectiveDate)}`,
+                                          cell(row.values.country),
+                                          row.testingStrategy,
+                                        ].filter(Boolean).join(' · ')}</p>
                                       )}
                                     </div>
                                   )}

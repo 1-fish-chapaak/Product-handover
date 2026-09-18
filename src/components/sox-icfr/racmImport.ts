@@ -19,18 +19,19 @@
  * each as read from the SOP (with a section reference) or suggested by Ira.
  */
 import * as XLSX from 'xlsx';
-import { requiredFilesOf, suggestedDesignChecks } from './helpers';
+import { requiredFilesOf, suggestedDesignChecks, titleFromRisk } from './helpers';
 import { racmTemplateForProcesses } from './mockData';
-import type { Assertion, Control, ControlClass, ControlType, DesignPoint, Frequency, Nature, OperatingStep, RiskRating } from './types';
+import type { Assertion, Control, ControlClass, ControlType, DesignPoint, Frequency, Nature, OperatingStep, RiskRating, TestingStrategy } from './types';
 
 // ─── Fields ──────────────────────────────────────────────────────────────────────
 
 export type RacmFieldKey =
-  | 'riskId' | 'riskDescription' | 'riskCategory' | 'riskRating'
+  | 'riskId' | 'riskTitle' | 'riskDescription' | 'riskCategory' | 'riskRating'
   | 'controlId' | 'controlTitle' | 'objective' | 'controlActivity'
   | 'subProcess' | 'type' | 'nature' | 'frequency' | 'isKey'
   | 'owner' | 'processOwner' | 'assertions' | 'attributes'
-  | 'controlEvidence' | 'designChecks' | 'sopSectionRef' | 'entity';
+  | 'controlEvidence' | 'designChecks' | 'sopSectionRef' | 'entity'
+  | 'effectiveDate' | 'country' | 'testingStrategy';
 
 export interface RacmField {
   key: RacmFieldKey;
@@ -45,13 +46,18 @@ export interface RacmField {
 
 export const RACM_FIELDS: RacmField[] = [
   { key: 'riskId', label: 'Risk ID', required: false, synonyms: ['risk id', 'risk ref', 'risk no', 'risk number', 'risk #'] },
+  { key: 'riskTitle', label: 'Risk title', required: false, synonyms: ['risk title', 'risk name', 'risk heading', 'risk short name'] },
   { key: 'riskDescription', label: 'Risk description', required: true, synonyms: ['risk description', 'risk', 'risk statement', 'what could go wrong'] },
   { key: 'riskCategory', label: 'Risk category', required: false, synonyms: ['risk category', 'risk type', 'category'] },
   { key: 'riskRating', label: 'Risk rating', required: false, synonyms: ['risk rating', 'inherent risk', 'risk level', 'rating'] },
   { key: 'controlId', label: 'Control ID', required: true, synonyms: ['control id', 'control ref', 'control no', 'control number', 'control #'] },
-  { key: 'controlTitle', label: 'Control title', required: false, synonyms: ['control title', 'control name', 'control description', 'control'] },
+  { key: 'controlTitle', label: 'Control title', required: false, synonyms: ['control title', 'control name', 'control'] },
   { key: 'objective', label: 'Control objective', required: false, synonyms: ['control objective', 'objective'] },
-  { key: 'controlActivity', label: 'Control activity', required: true, synonyms: ['control activity', 'control procedure', 'activity', 'how the control operates'] },
+  // Labelled "Control description" since the 17 Sep call: this is the narrative
+  // the auditor tests against. 'control description' moved here from
+  // controlTitle with the label, so a file using that header lands on the field
+  // the header now names.
+  { key: 'controlActivity', label: 'Control description', required: true, synonyms: ['control activity', 'control description', 'control procedure', 'activity', 'how the control operates'] },
   { key: 'subProcess', label: 'Sub-process', required: false, synonyms: ['sub-process', 'sub process', 'subprocess', 'process area'] },
   { key: 'type', label: 'Control type', required: false, synonyms: ['control type', 'type', 'preventive / detective'] },
   { key: 'nature', label: 'Control nature', required: false, synonyms: ['control nature', 'nature', 'manual / automated', 'automation'] },
@@ -67,6 +73,11 @@ export const RACM_FIELDS: RacmField[] = [
   // The company a row is tested at — the ENTITY part of its ID (S11). A file
   // without one takes the company chosen when the RACM was created.
   { key: 'entity', label: 'Entity', required: false, synonyms: ['entity', 'legal entity', 'entity name', 'subsidiary', 'company', 'company name'] },
+  // Added 17 Sep. None of the three blocks an import — a file that does not
+  // carry them still lands, and Ira offers a fill per row.
+  { key: 'effectiveDate', label: 'Effective date', required: false, synonyms: ['effective date', 'effective from', 'date effective', 'implementation date', 'in place from', 'go live date'] },
+  { key: 'country', label: 'Country', required: false, synonyms: ['country', 'location', 'geography', 'jurisdiction'] },
+  { key: 'testingStrategy', label: 'Testing strategy', required: false, synonyms: ['testing strategy', 'test strategy', 'testing approach', 'test approach', 'sampling approach', 'coverage'] },
 ];
 
 // ─── Text helpers (private) ──────────────────────────────────────────────────────
@@ -359,6 +370,9 @@ export interface ImportRow {
   typeFlag?: 'unreadable' | 'blank';
   assertions: Assertion[];
   riskRating?: RiskRating;
+  /** Undefined when the file leaves it blank or says something we can't read —
+   *  optional, so a blank one never blocks the import (17 Sep). */
+  testingStrategy?: TestingStrategy;
   /** A8: this looks like a control another RACM on the engagement already has. */
   duplicateOf?: { controlId: string; process: string; reason: string };
 }
@@ -443,6 +457,18 @@ function parseRiskRating(cell: string): RiskRating | undefined {
   if (/\b(?:high|critical)\b/.test(t)) return 'High';
   if (/\b(?:medium|moderate)\b/.test(t)) return 'Medium';
   if (/\blow\b/.test(t)) return 'Low';
+  return undefined;
+}
+
+/** Reads the coverage column. Deliberately narrow — a cell we cannot place
+ *  comes back undefined and the reviewer picks, rather than being rounded into
+ *  'Sampling' because that is the commonest answer. */
+function parseTestingStrategy(cell: string): TestingStrategy | undefined {
+  const t = normaliseHeader(cell);
+  if (!t) return undefined;
+  if (/\b(?:full population|whole population|entire population|100 ?%|census|all items|complete testing)\b/.test(t)) return 'Full population';
+  if (/\b(?:test of one|single instance|one instance|sample of one|one occurrence|1 item)\b/.test(t)) return 'Test of one';
+  if (/\b(?:sampl\w*|judgemental|judgmental|statistical|attribute testing|haphazard|random)\b/.test(t)) return 'Sampling';
   return undefined;
 }
 
@@ -555,6 +581,8 @@ export function rowFromValues(values: Partial<Record<RacmFieldKey, string>>, bas
   if (type.flag) row.typeFlag = type.flag;
   const rating = parseRiskRating(v.riskRating ?? '');
   if (rating) row.riskRating = rating;
+  const strategy = parseTestingStrategy(v.testingStrategy ?? '');
+  if (strategy) row.testingStrategy = strategy;
   const dup = findDuplicate(v, idWasGenerated, existing, process);
   if (dup) row.duplicateOf = dup;
   return row;
@@ -702,6 +730,22 @@ export function proposeBlankFills(row: ImportRow): BlankFill[] {
     const source = objective ? ['objective', objective] as const : title ? ['title', title] as const : activity ? ['activity', activity] as const : null;
     const text = source ? riskFromText(source[1]) : '';
     if (source && text) fills.push({ field: 'riskDescription', value: text, reason: `The control ${source[0]}, turned round into what could go wrong` });
+  }
+
+  // Risk title — the description, shortened. Only where the file had no title
+  // column of its own; a file that names its risks is taken at its word.
+  if (blank('riskTitle')) {
+    const from = risk || (blank('riskDescription') ? fills.find(f => f.field === 'riskDescription')?.value ?? '' : '');
+    const short = titleFromRisk(from);
+    if (short && short.length < from.length) fills.push({ field: 'riskTitle', value: short, reason: 'The risk description, shortened to its opening clause' });
+  }
+
+  // Testing strategy — an annual control operated once, so one occurrence is the
+  // whole population. Everything else is sampled unless someone says otherwise.
+  if (blank('testingStrategy')) {
+    const freq = row.frequency ?? parseFrequency(val('frequency')).frequency ?? fills.find(f => f.field === 'frequency')?.value;
+    if (freq === 'Annual') fills.push({ field: 'testingStrategy', value: 'Test of one', reason: 'An annual control operates once, so there is nothing to sample' });
+    else if (freq) fills.push({ field: 'testingStrategy', value: 'Sampling', reason: `A ${String(freq).toLowerCase()} control is tested on a sample` });
   }
 
   // Control title — the objective as a statement, else the activity's first clause.
@@ -867,6 +911,21 @@ function controlFromRow(row: ImportRow, process: string, n: number, frequency: F
   const processOwner = val('processOwner');
   if (processOwner) control.processOwner = processOwner;
   if (row.riskRating) control.riskRating = row.riskRating;
+  // The risk's short name, where the file carried one. A blank is filled by
+  // proposeBlankFills before import, so this is the file's wording or Ira's.
+  const riskTitle = val('riskTitle');
+  if (riskTitle) control.riskTitle = riskTitle;
+  // 17 Sep fields. Entity is read here rather than patched on afterwards, so a
+  // file's Entity column reaches the control the same way every other cell does.
+  const entity = val('entity');
+  if (entity) control.entity = entity;
+  const effectiveDate = val('effectiveDate');
+  if (effectiveDate) control.effectiveDate = effectiveDate;
+  // Stored only when the file named one — otherwise the row takes its entity's
+  // country and the two can never drift apart (see `countryFor`).
+  const country = val('country');
+  if (country) control.country = country;
+  if (row.testingStrategy) control.testingStrategy = row.testingStrategy;
   return control;
 }
 

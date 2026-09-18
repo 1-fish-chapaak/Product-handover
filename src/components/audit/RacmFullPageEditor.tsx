@@ -85,9 +85,11 @@ const DEFAULT_VISIBLE_COLS = new Set<keyof ProcurementRacmRow>(
 //   'flag'  → no value list; the column's own on/off filter (Key controls only)
 const COLUMN_FILTER_MODE: Record<string, 'multi' | 'text' | 'flag'> = {
   riskId: 'text', controlId: 'text', isKey: 'flag',
-  processArea: 'multi', subProcess: 'multi', riskCategory: 'multi',
+  processArea: 'multi', subProcess: 'multi', entity: 'multi', country: 'multi',
+  riskCategory: 'multi',
   riskRating: 'multi', likelihood: 'multi', impact: 'multi',
   controlType: 'multi', controlNature: 'multi', frequency: 'multi',
+  testingStrategy: 'multi',
   controlOwner: 'multi', segregationOfDuties: 'multi', confidence: 'multi',
 };
 
@@ -128,6 +130,7 @@ const BULK_VALUE_OPTIONS: Partial<Record<keyof ProcurementRacmRow, string[]>> = 
   controlType: ['Preventive', 'Detective'],
   controlNature: ['Manual', 'Automated', 'IT-dependent'],
   frequency: ['Annual', 'Quarterly', 'Monthly', 'Weekly', 'Daily', 'Recurring', 'Ad-hoc'],
+  testingStrategy: ['Sampling', 'Full population', 'Test of one'],
 };
 // Long-form columns get a textarea rather than a one-line input.
 const BULK_LONG_TEXT_KEYS = new Set<keyof ProcurementRacmRow>([
@@ -352,10 +355,12 @@ export default function RacmFullPageEditor({ onBack, backView, backLabel, racmNa
     const blank: ProcurementRacmRow = {
       riskId: `R${id}`, controlId: `C${id}`,
       processArea: processLabel || 'Procurement Lifecycle Management', subProcess: '(Add sub-process)',
-      riskCategory: '', riskDescription: '',
+      entity: '', country: '',
+      riskCategory: '', riskTitle: '', riskDescription: '',
       riskRating: 'Medium', likelihood: 'Medium', impact: 'Medium',
       controlObjective: '', controlActivity: '',
       controlType: 'Preventive', controlNature: 'Manual', frequency: 'Monthly',
+      effectiveDate: '', testingStrategy: '',
       controlOwner: '', controlEvidence: '',
       assertions: '', fsLineItem: '', regulatoryRef: '',
       keyReport: '', ipeIceDetails: '', segregationOfDuties: '', mgmtReviewControl: '',

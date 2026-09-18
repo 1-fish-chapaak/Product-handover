@@ -4,7 +4,7 @@ import { Check, ChevronDown, ChevronRight, Plus, Trash2, X } from 'lucide-react'
 import { useIcfr } from './store';
 import { useAuditLog } from '../../context/AdminDataContext';
 import { controlConclusion, requiredFilesOf } from './helpers';
-import { ownersOf } from './auditScope';
+import { countryFor, ownersOf } from './auditScope';
 import { ConclusionPill } from './parts';
 import { Pill } from '../shared/StatusBadge';
 import { Dropdown, KeyControlChip, menuItem } from './ControlDossier';
@@ -197,6 +197,7 @@ export default function ControlLibraryDetail() {
 
   const control = eng.controls.find(c => c.id === selectedControlId);
   if (!control) return <div className="text-ink-500">Control not found. <button onClick={back} className="text-brand-700 font-semibold cursor-pointer">Back to Control Library</button></div>;
+  const country = countryFor(eng.id, control);
 
   // Attributes are what the control gets tested against, so writing them is the
   // auditor's — matching the store's own guard. The owner reads them; a pen here
@@ -260,10 +261,12 @@ export default function ControlLibraryDetail() {
       <header className="relative pt-5 pb-5 mb-6">
         <div aria-hidden className="absolute inset-y-0 left-[-50vw] right-[-50vw] bg-canvas-elevated border-b border-canvas-border" />
         <div className="relative">
-        {/* The objective is the headline (user ask): what this control is FOR is
-            the thing worth reading first. Full width (feedback #27) — the old
-            64ch cap wrapped a long objective with half the header empty. */}
-        <h1 className="leadsheet-title text-[1.625rem] leading-[1.25] text-ink-900">{control.objective ?? control.description}</h1>
+        {/* The control TITLE is the headline (17 Sep): the RACM now names a
+            control as well as describing it, and its name is what belongs at the
+            top of its own page. The objective reads as one more fact below. Full
+            width (feedback #27) — the old 64ch cap wrapped a long heading with
+            half the header empty. */}
+        <h1 className="leadsheet-title text-[1.625rem] leading-[1.25] text-ink-900">{control.description}</h1>
 
         {/* One line, no labels. Judgements are chips because they are somebody's
             call; the rest is plain text because it is just what the control is. */}
@@ -308,7 +311,8 @@ export default function ControlLibraryDetail() {
           <p className={cn('min-w-0', !detailOpen && 'flex items-baseline')}>
             <span className="font-semibold text-ink-900 shrink-0 whitespace-nowrap">Risk {control.riskId}</span>
             <span className="text-ink-300 mx-1.5 shrink-0">·</span>
-            <span className={cn('min-w-0', !detailOpen && 'truncate')}>{control.riskDescription}</span>
+            {/* The risk's short name here, its sentence behind the disclosure. */}
+            <span className={cn('min-w-0', !detailOpen && 'truncate')}>{control.riskTitle ?? control.riskDescription}</span>
             <span className="shrink-0 ml-1.5"><MoreLink open={detailOpen} onClick={() => setDetailOpen(o => !o)} /></span>
           </p>
           <AnimatePresence initial={false}>
@@ -321,8 +325,15 @@ export default function ControlLibraryDetail() {
                 transition={{ duration: 0.24, ease: [0.22, 1, 0.36, 1] }}
                 className="overflow-hidden"
               >
+                {control.riskTitle && (
+                  <p className="mt-2">
+                    <span className="font-semibold text-ink-900">Risk description</span>
+                    <span className="text-ink-300 mx-1.5">·</span>
+                    {control.riskDescription}
+                  </p>
+                )}
                 <p className="mt-2">
-                  <span className="font-semibold text-ink-900">Control activity</span>
+                  <span className="font-semibold text-ink-900">Control description</span>
                   <span className="text-ink-300 mx-1.5">·</span>
                   {control.controlActivity}
                 </p>
@@ -338,6 +349,13 @@ export default function ControlLibraryDetail() {
                   <Field label="Frequency" value={control.frequency} />
                   <Field label="Assertions" value={control.assertions.join(', ')} />
                   {control.rootCause && <Field label="Root cause" value={control.rootCause} />}
+                  {control.objective && <Field label="Objective" value={control.objective} />}
+                  <Field label="Entity" value={control.entities?.length ? control.entities.join(', ') : control.entity} />
+                  {control.effectiveDate && <Field label="Effective date" value={control.effectiveDate} />}
+                  {/* The label carries the source: a stored country means a file
+                      named one, and only then can it differ from its entity's. */}
+                  {country.source !== 'none' && <Field label={country.source === 'file' ? 'Country (from the file)' : 'Country'} value={country.value} />}
+                  {control.testingStrategy && <Field label="Testing strategy" value={control.testingStrategy} />}
                 </div>
               </motion.div>
             )}

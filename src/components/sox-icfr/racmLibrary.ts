@@ -257,8 +257,12 @@ export function racmRowOf(c: Control): Control {
     owner: c.owner,
     ...(c.processOwner ? { processOwner: c.processOwner } : {}),
     riskId: c.riskId,
+    ...(c.riskTitle ? { riskTitle: c.riskTitle } : {}),
     riskDescription: c.riskDescription,
     ...(c.riskRating ? { riskRating: c.riskRating } : {}),
+    ...(c.effectiveDate ? { effectiveDate: c.effectiveDate } : {}),
+    ...(c.country ? { country: c.country } : {}),
+    ...(c.testingStrategy ? { testingStrategy: c.testingStrategy } : {}),
     ...(c.accountIds ? { accountIds: [...c.accountIds] } : {}),
     assertions: [...c.assertions],
     design: {

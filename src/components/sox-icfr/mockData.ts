@@ -1,7 +1,7 @@
 import { entityShort } from '../audit/sox-testing/soxTestingData';
 import { normaliseProcess, programmeFor } from './auditScope';
 import { NEW_FLOW_ENGAGEMENT_ID } from './flow';
-import { validationQA } from './helpers';
+import { titleFromRisk, validationQA } from './helpers';
 import { entityCodeFor, processCodeFor, renameEngagementIds } from './racmIds';
 import { FIVE_W_1H, ipeChecklist, ROUND_TAG, ROUND_WINDOW_LABEL } from './types';
 import type {
@@ -9,7 +9,7 @@ import type {
   // PARKED (Aug 2026) — `GapType` went with the Gap type field; see types.ts.
   // GapType,
   EvidenceFile, ExceptionStatus, ExecKind, ExecutionEvent, Frequency, HandoffTask, IcfrEngagement, IpeTest, Nature, OperatingStep, OperatingTrack,
-  ControlClass, ControlType, FiveWOneH, RacmReview, ReviewNote, RiskRating, Role, Sample, Severity, RunControlOutcome, RunRecord, Sampling, SignificantAccount, SourceRole, TestProcedure, TestResult, TrackConclusion,
+  ControlClass, ControlType, FiveWOneH, RacmReview, ReviewNote, RiskRating, Role, Sample, Severity, RunControlOutcome, RunRecord, Sampling, SignificantAccount, SourceRole, TestingStrategy, TestProcedure, TestResult, TrackConclusion,
 } from './types';
 
 // ── builders ─────────────────────────────────────────────────────────────────────
@@ -2066,8 +2066,34 @@ const PROC_LABEL: Record<string, string> = { P2P: 'Procure to Pay', O2C: 'Order 
  * engagement's own.
  */
 export function seedIcfrEngagement(meta?: SeedMeta): IcfrEngagement {
-  const eng = seedEngagementBody(meta);
+  const eng = withRacmFields(seedEngagementBody(meta));
   return renameEngagementIds(eng, processCodeFor, e => entityCodeFor(e || eng.entity));
+}
+
+/**
+ * The 17 Sep RACM fields, filled the way an upload would fill them.
+ *
+ * These registers were written before the matrix carried a risk title or a
+ * testing strategy, and a demo where every one of those columns reads "—" would
+ * be demonstrating the column rather than the field. So each row gets what the
+ * import pipeline would have given it: the risk's own sentence shortened into a
+ * name, and the coverage its frequency implies — an annual control operates once
+ * and has nothing to sample.
+ *
+ * Effective date is deliberately NOT invented. It is a fact about the client's
+ * business that nothing in the seed knows, and a made-up date is worse than an
+ * empty one; the two seeded below are controls the narrative already describes
+ * as having been put in mid-year.
+ */
+function withRacmFields(eng: IcfrEngagement): IcfrEngagement {
+  return {
+    ...eng,
+    controls: eng.controls.map(c => ({
+      ...c,
+      ...(c.riskTitle ? {} : { riskTitle: titleFromRisk(c.riskDescription) || undefined }),
+      ...(c.testingStrategy ? {} : { testingStrategy: (c.frequency === 'Annual' ? 'Test of one' : 'Sampling') as TestingStrategy }),
+    })),
+  };
 }
 
 function seedEngagementBody(meta?: SeedMeta): IcfrEngagement {

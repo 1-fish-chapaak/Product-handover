@@ -26,7 +26,7 @@ import {
   populationInstances, sampleAmount, seedKeyOf,
 } from './helpers';
 import { useAuditFiles, type AuditFile } from './useAuditFiles';
-import { auditCovers, countryOf, inScopeEntityNames, ownersOf, programmeFor, scopedForDraw } from './auditScope';
+import { auditCovers, countryFor, countryOf, inScopeEntityNames, ownersOf, programmeFor, scopedForDraw } from './auditScope';
 import { ConclusionPill, CourtBadge, NatureChip, OriginPicker, Toggle, TrackPill, Tickmark, Stamp, RagCard, type RagMeterDef } from './parts';
 import { Pill } from '../shared/StatusBadge';
 import { useToast } from '../shared/Toast';
@@ -5039,6 +5039,7 @@ export default function ControlDossier() {
   // gate is on the paper.
   const sampleLocked = toeLocked || (!control.operating.sampling && !popLocked);
   const def = eng.deficiencies.find(d => d.controlId === control.id);
+  const country = countryFor(eng.id, control);
 
   return (
     <motion.div initial="hidden" animate="show" variants={{ hidden: {}, show: { transition: { staggerChildren: 0.08, delayChildren: 0.03 } } }}>
@@ -5055,14 +5056,14 @@ export default function ControlDossier() {
         <div aria-hidden className="absolute inset-y-0 left-[-50vw] right-[-50vw] bg-canvas-elevated border-b border-canvas-border" />
         <div className="relative">
           <div className="flex items-start justify-between gap-4">
-            {/* Heading = the control OBJECTIVE where the RACM carries one: what
-                the control is for, which is what the reviewer reads first. The
-                control's own one-line statement used to sit under it prefixed
-                "Control —", directly beneath a title that could only be the
-                control's. It runs to the court badge (feedback #27): the old
-                64ch cap wrapped a long objective into a narrow column with half
-                the header empty beside it. */}
-            <h1 className="leadsheet-title text-[1.625rem] leading-[1.25] text-ink-900 flex-1 min-w-0">{control.objective ?? control.description}</h1>
+            {/* Heading = the CONTROL TITLE (17 Sep). The objective held this spot
+                while the one-line statement had no name of its own; now that the
+                RACM splits title from description, the title is what belongs at
+                the top of the control's own page, and the objective reads as one
+                more fact about it below. It runs to the court badge (feedback
+                #27): the old 64ch cap wrapped a long heading into a narrow
+                column with half the header empty beside it. */}
+            <h1 className="leadsheet-title text-[1.625rem] leading-[1.25] text-ink-900 flex-1 min-w-0">{control.description}</h1>
             {/* whose court it is, right-aligned. The W/P stamp that used to sit
                 beside it is gone: a working-paper reference is an audit output,
                 and the control page is where the work happens, not where the
@@ -5151,7 +5152,10 @@ export default function ControlDossier() {
             <p className={cn('min-w-0', !headDetailOpen && 'flex items-baseline')}>
               <span className="font-semibold text-ink-900 shrink-0 whitespace-nowrap">Risk {control.riskId}</span>
               <span className="text-ink-300 mx-1.5 shrink-0">·</span>
-              <span className={cn('min-w-0', !headDetailOpen && 'truncate')}>{control.riskDescription}</span>
+              {/* The short name on one line, the sentence behind the disclosure:
+                  a header that opened with the full risk statement pushed every
+                  other fact about the control below the fold. */}
+              <span className={cn('min-w-0', !headDetailOpen && 'truncate')}>{control.riskTitle ?? control.riskDescription}</span>
               <span className="shrink-0 ml-1.5"><MoreLink open={headDetailOpen} onClick={() => setHeadDetailOpen(o => !o)} /></span>
             </p>
             <AnimatePresence initial={false}>
@@ -5164,8 +5168,15 @@ export default function ControlDossier() {
                   transition={{ duration: 0.24, ease: [0.22, 1, 0.36, 1] }}
                   className="overflow-hidden"
                 >
+                  {control.riskTitle && (
+                    <p className="mt-2">
+                      <span className="font-semibold text-ink-900">Risk description</span>
+                      <span className="text-ink-300 mx-1.5">·</span>
+                      {control.riskDescription}
+                    </p>
+                  )}
                   <p className="mt-2">
-                    <span className="font-semibold text-ink-900">Control activity</span>
+                    <span className="font-semibold text-ink-900">Control description</span>
                     <span className="text-ink-300 mx-1.5">·</span>
                     {control.controlActivity}
                   </p>
@@ -5179,6 +5190,14 @@ export default function ControlDossier() {
                     {/* why the risk exists at all — a control aimed at the symptom
                         rather than the cause is the commonest design gap there is */}
                     <HeadField label="Root cause" value={control.rootCause} />
+                    <HeadField label="Objective" value={control.objective} />
+                    <HeadField label="Effective date" value={control.effectiveDate} />
+                    {/* Where the file named no country the row takes its entity's,
+                        and the label says which — a country that disagrees with
+                        its entity is either a real cross-border arrangement or a
+                        bad column mapping, and only the source tells you which. */}
+                    <HeadField label={country.source === 'file' ? 'Country (from the file)' : 'Country'} value={country.source === 'none' ? undefined : country.value} />
+                    <HeadField label="Testing strategy" value={control.testingStrategy} />
                   </div>
                 </motion.div>
               )}

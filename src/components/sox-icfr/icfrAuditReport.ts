@@ -3,6 +3,7 @@ import {
   conclusionOf, designStarted, formatDueDate, formatINR, gradeException,
   icfrConclusion, openMaterialWeaknesses, toeRounds, trackResult,
 } from './helpers';
+import { countryFor } from './auditScope';
 import { periodLine, type IcfrSheet, type PaperBlock } from './icfrWorkingPaper';
 import type { Control, Deficiency, IcfrEngagement } from './types';
 
@@ -179,12 +180,20 @@ export function buildAuditReport(eng: IcfrEngagement, controls: Control[] = eng.
       {
         kind: 'table', title: 'Control rollup',
         note: `${controls.length} control${controls.length === 1 ? '' : 's'} — one row per control, from readiness to conclusion`,
-        headers: ['Control ID', 'Control', 'Readiness', 'Test items', 'Testing', 'Failed checks', 'Review', 'Conclusion', 'Severity', 'Finalized by'],
+        // Header and row are written in the same order. Where and how a control
+        // was tested reads next to its name because the people acting on this
+        // report ask which company a finding lands in before anything else.
+        headers: ['Control ID', 'Control', 'Entity', 'Country', 'Testing strategy', 'Readiness', 'Test items', 'Testing', 'Failed checks', 'Review', 'Conclusion', 'Severity', 'Finalized by'],
         rows: controls.map((c, i) => {
           const k = counts[i];
           return [
             c.id,
             c.description,
+            // A shared control is tested at several entities, so all of them
+            // are named rather than the first one standing for the rest.
+            c.entities?.length ? c.entities.join(', ') : (c.entity ?? '—'),
+            countryFor(eng.id, c).value,
+            c.testingStrategy ?? '—',
             readiness(c),
             String(k.items),
             testingCell(k),

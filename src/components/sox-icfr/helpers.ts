@@ -3077,7 +3077,14 @@ export function racmEditorRows(controls: Control[], process: string): Procuremen
         isKey: c.isKey,
         processArea: c.process,
         subProcess: c.subProcess,
+        // A shared control is operated at several companies, so the grid lists
+        // them all rather than picking one.
+        entity: c.entities?.length ? c.entities.join(', ') : (c.entity ?? ''),
+        // Left blank when the control carries no country of its own — the row
+        // inherits its entity's, which is resolved where the row is read.
+        country: c.country ?? '',
         riskCategory: c.clazz ?? '',
+        riskTitle: c.riskTitle ?? '',
         riskDescription: c.riskDescription,
         riskRating: c.riskRating ?? '',
         likelihood: '',
@@ -3087,6 +3094,8 @@ export function racmEditorRows(controls: Control[], process: string): Procuremen
         controlType: c.type,
         controlNature: c.nature,
         frequency: c.frequency,
+        effectiveDate: c.effectiveDate ?? '',
+        testingStrategy: c.testingStrategy ?? '',
         controlOwner: c.owner,
         controlEvidence: evidence.join('; '),
         assertions: c.assertions.join(', '),
@@ -3101,4 +3110,39 @@ export function racmEditorRows(controls: Control[], process: string): Procuremen
         attributes: c.operating.steps.map(s => s.description).join(' | '),
       };
     });
+}
+
+/** "Risk that year-end accruals are understated because no review is performed"
+ *  → "Year-end accruals are understated". A TRIM, never a rewrite: the words a
+ *  risk sentence always opens with are dropped, and what explains WHY the risk
+ *  exists is cut, because the reason belongs to the description. Nothing is
+ *  added that the description did not already say.
+ *
+ *  What is deliberately NOT cut is a trailing qualifier — "granted WITHOUT
+ *  approval", "paid TWICE". Those carry the negative the whole risk turns on,
+ *  and a title that dropped them would state the opposite of the risk it names.
+ *  So the length cap is a last resort, applied at a word boundary, and a title
+ *  that needs every one of its words keeps them.
+ *
+ *  Used where an uploaded file carried no Risk title of its own, and by the seed
+ *  registers, which predate the column (17 Sep). */
+export function titleFromRisk(text: string): string {
+  const body = String(text ?? '')
+    .replace(/^\s*(?:the\s+)?risk\s+(?:that|of|is\s+that)\s+/i, '')
+    .replace(/^\s*there\s+is\s+a\s+risk\s+(?:that|of)\s+/i, '')
+    .replace(/^\s*(?:potential|possibility|chance)\s+(?:that|of)\s+/i, '')
+    .trim();
+  if (!body) return '';
+  // First the sentence's own punctuation, then the connector that introduces the
+  // cause — "because no review is performed" is the description's job, not the
+  // title's.
+  const firstClause = (body.split(/[,;:]\s|\s[—–-]\s|\.(?:\s|$)/)[0] ?? '').trim();
+  const reason = /\s\b(?:because|since|as|due\s+to|owing\s+to|resulting\s+in|leading\s+to|so\s+that|such\s+that|thereby|which\s+(?:could|may|might|would))\b\s/i.exec(firstClause);
+  const cut = (reason ? firstClause.slice(0, reason.index) : firstClause).replace(/[.;:,]+$/, '').trim();
+  if (!cut) return '';
+  // Only a genuinely unwieldy title is truncated, and then at a word boundary so
+  // it never ends mid-word.
+  const MAX = 72;
+  const out = cut.length <= MAX ? cut : `${cut.slice(0, cut.lastIndexOf(' ', MAX)).replace(/[.;:,]+$/, '')}…`;
+  return out[0]!.toUpperCase() + out.slice(1);
 }

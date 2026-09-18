@@ -15,8 +15,16 @@ export interface ProcurementRacmRow {
   processArea: string;
   /** Sub-Process */
   subProcess: string;
+  /** Entity — the company the control is operated at. Optional because the 124
+   *  generated seed rows predate the column. */
+  entity?: string;
+  /** Country — filled only when an uploaded file named one. A blank row takes the
+   *  country of its entity, so it is resolved for display rather than stored here. */
+  country?: string;
   /** Risk Category */
   riskCategory: string;
+  /** Risk Title — the risk's short name, read alongside the full description. */
+  riskTitle?: string;
   /** Risk Description */
   riskDescription: string;
   /** Risk Rating */
@@ -35,6 +43,12 @@ export interface ProcurementRacmRow {
   controlNature: string;
   /** Frequency */
   frequency: string;
+  /** Effective Date — when the control started operating. Display string ('1 Sep 2026')
+   *  or ISO; both are read back by formatDueDate. */
+  effectiveDate?: string;
+  /** Testing Strategy — 'Sampling' | 'Full population' | 'Test of one'. Held as a
+   *  plain string because every field in this row model is one. */
+  testingStrategy?: string;
   /** Control Owner */
   controlOwner: string;
   /** Control Evidence */
@@ -79,16 +93,21 @@ export const PROCUREMENT_RACM_COLUMNS: RacmColumnDef[] = [
   { key: 'isKey', label: "Key Control", group: 'identity', width: 132 },
   { key: 'processArea', label: "Process Area", group: 'context', width: 200 },
   { key: 'subProcess', label: "Sub-Process", group: 'context', width: 260 },
+  { key: 'entity', label: "Entity", group: 'context', width: 200 },
+  { key: 'country', label: "Country", group: 'context', width: 140 },
   { key: 'riskCategory', label: "Risk Category", group: 'risk', width: 130 },
+  { key: 'riskTitle', label: "Risk Title", group: 'risk', width: 220 },
   { key: 'riskDescription', label: "Risk Description", group: 'risk', width: 320 },
   { key: 'riskRating', label: "Risk Rating", group: 'risk', width: 100 },
   { key: 'likelihood', label: "Likelihood", group: 'risk', width: 100 },
   { key: 'impact', label: "Impact", group: 'risk', width: 100 },
   { key: 'controlObjective', label: "Control Objective", group: 'control', width: 280 },
-  { key: 'controlActivity', label: "Control Activity", group: 'control', width: 360 },
+  { key: 'controlActivity', label: "Control Description", group: 'control', width: 360 },
   { key: 'controlType', label: "Control Type", group: 'control', width: 110 },
   { key: 'controlNature', label: "Control Nature", group: 'control', width: 110 },
   { key: 'frequency', label: "Frequency", group: 'control', width: 110 },
+  { key: 'effectiveDate', label: "Effective Date", group: 'control', width: 140 },
+  { key: 'testingStrategy', label: "Testing Strategy", group: 'control', width: 150 },
   { key: 'controlOwner', label: "Control Owner", group: 'control', width: 160 },
   { key: 'controlEvidence', label: "Control Evidence", group: 'control', width: 280 },
   { key: 'attributes', label: "Attributes", group: 'control', width: 300 },

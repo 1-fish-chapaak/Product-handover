@@ -823,6 +823,17 @@ export interface RacmReview {
 // whose risk is Low is one occurrence a year, the same control rated High is every
 // quarter. See `sampleSizeGuide`.
 export type RiskRating = 'High' | 'Medium' | 'Low';
+
+/** HOW MUCH OF THE POPULATION A CONTROL IS TESTED OVER.
+ *
+ *  'Sampling' is the ordinary case and the only one the sample-size guide has
+ *  anything to say about. 'Full population' means every item is examined, so
+ *  there is no draw to make and no coverage gap to warn about. 'Test of one' is
+ *  what an annual control gets — it operated once, so one occurrence IS the
+ *  population, and asking for twenty-five would be asking for something that
+ *  does not exist. */
+export type TestingStrategy = 'Sampling' | 'Full population' | 'Test of one';
+export const TESTING_STRATEGIES: TestingStrategy[] = ['Sampling', 'Full population', 'Test of one'];
 export const RISK_RATINGS: RiskRating[] = ['High', 'Medium', 'Low'];
 
 // ─── Control classification ──────────────────────────────────────────────────────
@@ -924,6 +935,12 @@ export interface Control {
    *  why it is optional and every read falls back to `owner`. */
   processOwner?: string;
   riskId: string;
+  /** THE RISK'S SHORT NAME — three or four words a reader scans in a column,
+   *  where `riskDescription` is the sentence they read once they stop. Source
+   *  RACMs and SOPs that carry one are taken at their word; where they do not,
+   *  the import shortens the description and tags the result as Ira's, so the
+   *  register is never a wall of full sentences and nothing is invented. */
+  riskTitle?: string;
   riskDescription: string;
   /** WHY the risk exists — the condition underneath it. The source RACM carries
    *  this beside the risk, because a control aimed at the symptom rather than the
@@ -932,6 +949,20 @@ export interface Control {
   /** The risk's agreed rating. Drives how deep the sample goes — see
    *  `sampleSizeGuide` — and is argued with management, not derived. */
   riskRating?: RiskRating;
+  /** WHEN THE CONTROL STARTED OPERATING in its current form — a control put in
+   *  place in September cannot be tested over a year that began in April, and a
+   *  sample drawn across the whole period would be drawing from months the
+   *  control did not exist. Stored the way `formatDueDate` reads dates. */
+  effectiveDate?: string;
+  /** THE COUNTRY THIS ROW ANSWERS FOR, when the source file named one. Absent on
+   *  the ordinary row, which takes its entity's country — see `countryFor`. Kept
+   *  only as an override so the two can never silently disagree: a stored value
+   *  means a file said so, and the screens say where it came from. */
+  country?: string;
+  /** HOW MUCH OF THE POPULATION GETS TESTED — a sample, every item, or the single
+   *  occurrence an annual control has. Read by the sample step: a full-population
+   *  row has nothing to draw, and a test-of-one row has nothing to size. */
+  testingStrategy?: TestingStrategy;
   /** The programme the auditor actually walks — obtain X, check Y, verify Z.
    *  Distinct from the design considerations (what must be true) and the test
    *  attributes (what each sample proves): these are the field instructions. */

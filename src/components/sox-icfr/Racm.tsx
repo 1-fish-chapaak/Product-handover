@@ -18,6 +18,7 @@ import { FilterSelect } from '../shared/FilterSelect';
 import ColumnFilter from '../shared/ColumnFilter';
 import { cn } from '../../lib/cn';
 import { isEngagementLocked } from './helpers';
+import { rowEntities } from './registerColumns';
 import { CONTROL_CLASSES } from './types';
 import type { Control, IcfrEngagement } from './types';
 
@@ -604,7 +605,7 @@ export default function Racm() {
       if (natureF.length && !natureF.includes(c.nature)) return false;
       if (designF.length && !designF.includes(trackResult(c.design))) return false;
       if (operatingF.length && !operatingF.includes(trackResult(c.operating))) return false;
-      if (term && !(`${c.id} ${c.riskId} ${c.riskDescription} ${c.description} ${c.subProcess} ${c.owner}`.toLowerCase().includes(term))) return false;
+      if (term && !(`${c.id} ${c.riskId} ${c.riskTitle ?? ''} ${c.riskDescription} ${c.description} ${c.subProcess} ${c.owner} ${rowEntities(c).join(' ')}`.toLowerCase().includes(term))) return false;
       return true;
     }).sort((a, b) => a.process.localeCompare(b.process) || controlCode(a).localeCompare(controlCode(b)));
   }, [controls, q, review, classF, natureF, designF, operatingF]);
@@ -618,9 +619,9 @@ export default function Racm() {
   const saveRemark = () => { if (remarkFor && remarkText.trim()) { remarkRacmRow(remarkFor.id, remarkText.trim()); setRemarkFor(null); } };
 
   // the row-select column only renders for the auditor (only they have bulk actions)
-  // 12 columns: Risk · Root cause · Control · Class · Nature · TOD · TOE ·
+  // 13 columns: Risk · Entity · Root cause · Control · Class · Nature · TOD · TOE ·
   // Performed by · Evidence W/P · Report ref · Pre-testing review · actions (+ select)
-  const colSpan = isAuditor ? 13 : 12;
+  const colSpan = isAuditor ? 14 : 13;
 
   return (
     <div>
@@ -696,6 +697,11 @@ export default function Racm() {
             <tr>
               {isAuditor && <th style={{ width: 34 }}><input type="checkbox" checked={allSelected} onChange={toggleAll} className="cursor-pointer accent-brand-600" aria-label="Select all rows" /></th>}
               <th style={{ width: 200 }}>Risk</th>
+              {/* The company the row is tested at — the ENTITY half of its ID.
+                  It was readable from the ID and nowhere else, which made the
+                  matrix the one control surface that would not tell you which
+                  company a row answered for. */}
+              <th style={{ width: 150 }} title="The company this row is tested at">Entity</th>
               {/* why the risk exists — the source RACM carries it beside the risk,
                   because a control aimed at the symptom is the commonest design gap */}
               <th style={{ width: 200 }} title="The condition underneath the risk — what makes it possible">Root cause</th>
@@ -740,7 +746,15 @@ export default function Racm() {
                   {isAuditor && <td onClick={e => { e.stopPropagation(); if (e.target === e.currentTarget) toggle(c.id); }}><input type="checkbox" checked={sel.has(c.id)} onChange={() => toggle(c.id)} className="cursor-pointer accent-brand-600" aria-label={`Select ${c.id}`} /></td>}
                   <td className="tight">
                     <div className="font-mono text-[10.5px] font-bold text-ink-500">{c.riskId}</div>
-                    <div className="text-[11.5px] text-ink-600 leading-snug line-clamp-2" title={c.riskDescription}>{c.riskDescription}</div>
+                    {/* Name then sentence, where the RACM carries both: a column
+                        of full risk statements is a column nobody scans. */}
+                    {c.riskTitle && <div className="font-semibold text-ink-800 text-[11.5px] leading-snug line-clamp-2">{c.riskTitle}</div>}
+                    <div className={cn('text-[11.5px] text-ink-600 leading-snug', c.riskTitle ? 'line-clamp-1 text-ink-400' : 'line-clamp-2')} title={c.riskDescription}>{c.riskDescription}</div>
+                  </td>
+                  <td className="tight">
+                    {rowEntities(c).length
+                      ? <div className="text-[11.5px] text-ink-600 leading-snug line-clamp-2" title={rowEntities(c).join(', ')}>{rowEntities(c).join(', ')}</div>
+                      : <span className="text-ink-300">—</span>}
                   </td>
                   <td className="tight">
                     {c.rootCause
