@@ -1,4 +1,4 @@
-import { useMemo, useState, useEffect, type ElementType } from 'react';
+import { useMemo, useState, useEffect, useRef, type ElementType } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import {
   ArrowLeft,
@@ -23,8 +23,11 @@ import {
 import { GRC_EXCEPTIONS, GRC_CASE_DETAILS, GRC_BULK_ACTIONS, type GrcException, type GrcExceptionSeverity, type GrcActivityEntry, type GrcActivityAuthorRole, type GrcExceptionClassification, type GrcReviewStatus, type GrcDueDateRevision, type GrcActionStatus, type GrcCaseDetail } from '../../data/mockData';
 import { deriveStatus, requiresActionPlan, isMemberEligibleForDrawer, nextActionableId, auditorReviewStage, type ExceptionActionKind, type DrawerActionType } from './statusModel';
 import { REPORT_QUERIES_ATR } from '../../data/reportQueries';
+import { loadPersistedHandoff } from '../reports/atr-upload/handoff';
 import type { ExceptionRole } from '../../hooks/useAppState';
-import { useCan } from '../../context/CurrentUserContext';
+import { useCan, useCurrentUser } from '../../context/CurrentUserContext';
+import { loadHandoffLink } from '../reports/atr-upload/handoff';
+import { appendEvents, caseEvents, hasTimeline, type CaseAtrLink } from '../reports/atrTimeline';
 import { useAuditLog } from '../../context/AdminDataContext';
 import {
   ReviewClassificationDrawer,
@@ -149,6 +152,12 @@ interface ManageExceptionsViewProps {
    *  Positive verdict + sub-classification / Root Cause Analysis. Report-level keeps
    *  the single classification dropdown. */
   engagementMode?: boolean;
+  /** The saved Action Taken Report these cases belong to (report-level link, set
+   *  by the host when the view was opened from an ATR's Case Management button).
+   *  Every action taken here is then written to that report's Report Snapshot
+   *  timeline. An observation-level link from a `from=ATR-UPLOAD-…` hand-off
+   *  takes precedence when present. */
+  atrLink?: CaseAtrLink;
 }
 
 // ─── Editorial KPI bar ────────────────────────────────────────────────
@@ -306,7 +315,7 @@ function RoleToggle({ role, setRole }: { role: ExceptionRole; setRole: (r: Excep
   );
 }
 
-export default function ManageExceptionsView({ role, setRole, onBack, embedded = false, exceptions: propsExceptions, onExceptionsChange, contextLabel, onBulkAssign, showApprovalFlowAssign = false, engagementMode = false }: ManageExceptionsViewProps) {
+export default function ManageExceptionsView({ role, setRole, onBack, embedded = false, exceptions: propsExceptions, onExceptionsChange, contextLabel, onBulkAssign, showApprovalFlowAssign = false, engagementMode = false, atrLink: atrLinkProp }: ManageExceptionsViewProps) {
   // Unify with RBAC: the active role's permissions decide the exception persona.
   // Risk Owner roles resolve exceptions; everyone else operates as the auditor.
   const { can } = useCan();
@@ -364,7 +373,10 @@ export default function ManageExceptionsView({ role, setRole, onBack, embedded =
     if (typeof window === 'undefined') return null;
     const fromId = new URLSearchParams(window.location.search).get('from');
     if (!fromId) return null;
-    return REPORT_QUERIES_ATR[fromId] ? { id: fromId, ...REPORT_QUERIES_ATR[fromId] } : null;
+    // An ATR-upload hand-off arrives in a NEW tab, so its query only exists in
+    // the persisted store — never in this tab's REPORT_QUERIES_ATR.
+    const q = REPORT_QUERIES_ATR[fromId] ?? loadPersistedHandoff(fromId);
+    return q ? { id: fromId, ...q } : null;
   }, []);
 
   // Local exception state — always the canonical 10-case GRC_EXCEPTIONS set so the
@@ -382,6 +394,36 @@ export default function ManageExceptionsView({ role, setRole, onBack, embedded =
     if (propsExceptions) setLocalExceptions(propsExceptions);
   }
   const exceptions = localExceptions;
+
+  // ── Report Snapshot link back to the ATR ──
+  // Which report (and observation) these cases belong to: the observation-level
+  // hand-off in the URL wins, else the report-level link from the host.
+  const { currentUser } = useCurrentUser();
+  const atrLink = useMemo<CaseAtrLink | null>(() => {
+    const fromId = typeof window === 'undefined' ? null : new URLSearchParams(window.location.search).get('from');
+    return (fromId ? loadHandoffLink(fromId) : null) ?? atrLinkProp ?? null;
+  }, [atrLinkProp]);
+  const actorRef = useRef({ name: currentUser?.name ?? 'You', role });
+  useEffect(() => { actorRef.current = { name: currentUser?.name ?? 'You', role }; }, [currentUser, role]);
+  // Every change to a case lands in `localExceptions`, so diffing each committed
+  // state against the previous one is the single place to derive what happened
+  // and write it to the ATR's timeline. An effect (not the state updater) so it
+  // runs exactly once per change — React double-invokes updaters in dev — and
+  // after the caller's synchronous writes to the case's detail record (plan
+  // text, completion note, evidence) have landed.
+  const prevExceptionsRef = useRef<GrcException[]>(localExceptions);
+  useEffect(() => {
+    const prev = prevExceptionsRef.current;
+    prevExceptionsRef.current = localExceptions;
+    if (prev === localExceptions || !atrLink || !hasTimeline(atrLink.reportId)) return;
+    const { name, role: r } = actorRef.current;
+    const eventRole = r === 'auditor' ? 'Auditor' : 'Risk Owner';
+    const events = localExceptions.flatMap(n => {
+      const p = prev.find(x => x.id === n.id);
+      return p && p !== n ? caseEvents(p, n, GRC_CASE_DETAILS[n.id], name, eventRole, atrLink) : [];
+    });
+    if (events.length) appendEvents(atrLink.reportId, events);
+  }, [localExceptions, atrLink]);
 
   const updateExceptions = (updater: (prev: GrcException[]) => GrcException[]) => {
     setLocalExceptions(prev => {

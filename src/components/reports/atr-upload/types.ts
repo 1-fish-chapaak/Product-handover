@@ -7,8 +7,9 @@
 import type { AtrObservation, AtrReportData } from '../atrTypes';
 import type { EscalationMatrixConfig } from './escalationMatrix';
 
-/** The seven wizard stages, in order. Drives the stepper + screen router. */
+/** The wizard stages. Drives the tab bar + screen router. */
 export type WizardStage =
+  | 'dashboard'   // Dashboard — live visualisation (first tab)
   | 'method'      // Screen 1  — method selection
   | 'template'    // Screen 2A — IRAME template download + upload-filled
   | 'upload'      // Screen 2B — generic report upload
@@ -16,7 +17,8 @@ export type WizardStage =
   | 'summary'     // Screen 4  — extraction summary & selection
   | 'annexures'   // Screen 5  — annexure linking & confirmation
   | 'decision'    // Screen 6  — generate-only vs manage-exceptions
-  | 'preview';    // Screen 7  — ATR preview (reuses AtrDocument)
+  | 'preview'     // Screen 7  — ATR preview (reuses AtrDocument)
+  | 'admin';      // Admin     — LOV management, escalation matrix, …
 
 export type UploadMethod = 'template' | 'report';
 
@@ -27,8 +29,9 @@ export type MissingFieldState = 'missing' | 'filled-by-user' | 'skipped';
 /** The 10 ATR fields that extraction can flag as missing. Mirrors the keys in
  *  atrTemplate.ts REQUIRED_FIELDS so the resolver and the template stay aligned. */
 export type ExtractedFieldKey =
-  | 'title' | 'description' | 'riskSummary' | 'recommendation'
-  | 'actionTaken' | 'evidence' | 'verification'
+  | 'title' | 'description' | 'rootCause' | 'solutionType'
+  | 'riskSummary' | 'riskImplications' | 'riskImplicationsDetails'
+  | 'recommendation' | 'actionTaken' | 'evidence' | 'verification'
   | 'classification' | 'risk' | 'dueDate';
 
 export interface MissingField {
@@ -84,12 +87,29 @@ export interface ExtractedObservation extends AtrObservation {
 export interface ReportMeta {
   reportId: string;
   reportName?: string;
+  /** Unique per Section + Financial Year (see reportClassification.ts). */
+  reportNumber?: string;
   financialYear?: string;
+  /** Audit vs Assurance — governs Report-Number uniqueness namespace. */
+  section?: string;
+  reviewType?: string;
+  auditLocation?: string;
+  /** Region (North/South/East/West) — see REGION_OPTIONS. */
+  region?: string;
+  /** City / circle location — see LOCATION_OPTIONS. */
+  location?: string;
+  /** Business function the audit belongs to (see FUNCTION_OPTIONS). */
+  auditFunction?: string;
+  /** The person who created the ATR (the signed-in user) — never editable. */
+  auditSpoc?: string;
   auditTitle: string;
   auditPeriod: string;
   preparedBy: string;
   generatedOn: string;
   auditEntity: string;
+  /** Values of admin-added custom fields (Reports → Admin → Lists of Values →
+   *  Report details fields), keyed by the field's key. */
+  custom?: Record<string, string>;
 }
 
 export interface ExtractionSession {
@@ -113,6 +133,9 @@ export interface ExtractionSession {
   /** The editable ATR working copy on Screen 7 (persisted so inline edits survive
    *  refresh). Derived from the session on first render if absent. */
   atrDraft?: AtrReportData;
+  /** ISO timestamp set when the user clicks "Generate ATR" — the report's ATR is
+   *  then listed in the Action Taken Report tab, and its CTA flips to "View ATR". */
+  generatedAt?: string;
 }
 
 export type AtrVersionStatus = 'draft' | 'final';
@@ -127,11 +150,24 @@ export interface AtrVersion {
   label?: string;
 }
 
-/** The full wizard state — persisted to localStorage for refresh-resume. */
+/** The full wizard state — persisted to localStorage for refresh-resume.
+ *  The wizard accumulates every extracted report in `sessions`; `activeSessionId`
+ *  points at the one currently being viewed / worked on (detail, annexures,
+ *  preview all operate on it). */
 export interface AtrUploadState {
   stage: WizardStage;
   method: UploadMethod | null;
-  session: ExtractionSession | null;
+  /** Every report extracted this visit — listed in the "Reports Extracted" tab. */
+  sessions: ExtractionSession[];
+  /** Which extracted report is active (its detail / annexures / preview show). */
+  activeSessionId: string | null;
   versions: AtrVersion[];
   lastSavedAt: string | null;
+}
+
+/** The state as consumers see it — the stored state plus the derived active
+ *  `session` (the entry in `sessions` matching `activeSessionId`). Every screen
+ *  reads `state.session`; the provider computes it from `sessions`. */
+export interface AtrUploadView extends AtrUploadState {
+  session: ExtractionSession | null;
 }

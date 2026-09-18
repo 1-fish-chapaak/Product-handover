@@ -87,7 +87,7 @@ export default function AtrValidationStep({ observations, onChange }: {
 
   // Right-rail rollup (selected only).
   const sel = observations.filter(o => o.selected);
-  const byRisk = { Critical: 0, High: 0, Medium: 0, Low: 0 } as Record<AtrRisk, number>;
+  const byRisk = { Critical: 0, High: 0, Medium: 0, Low: 0, 'Not Applicable': 0 } as Record<AtrRisk, number>;
   const byClass = { 'Design Deficiency': 0, 'System Deficiency': 0, 'Procedural Non-Compliance': 0 } as Record<AtrClassification, number>;
   // Status is the most audit-critical dimension — how many findings are fully
   // remediated vs still open. 'Closed' surfaces as "Complete" for the reader.

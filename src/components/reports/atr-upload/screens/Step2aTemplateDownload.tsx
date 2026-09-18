@@ -1,178 +1,148 @@
 import { useState, useRef } from 'react';
-import { motion } from 'motion/react';
+import { AnimatePresence, motion } from 'motion/react';
 import {
-  FileSpreadsheet, FileText, Download, Check, Upload, Sparkles, ArrowDown, ArrowRight, X, Plus,
-  Heading, AlignLeft, ShieldAlert, Lightbulb, Wrench, Paperclip, UserCheck, Tag, Gauge, CalendarClock,
+  FileSpreadsheet, FileText, Download, Check, Upload, Sparkles, ArrowDown, ArrowRight, X, Plus, ChevronDown,
 } from 'lucide-react';
 import { Button } from '../../../shared/Button';
 import { WizardFooter } from '../footerSlot';
-import { downloadExcelTemplate, downloadWordTemplate, REQUIRED_FIELDS } from '../../atrTemplate';
+import { downloadExcelTemplate, downloadWordTemplate } from '../../atrTemplate';
 import { useToast } from '../../../shared/Toast';
-import EscalationMatrixCard from '../components/EscalationMatrixCard';
-import { type EscalationMatrixConfig, cloneDefaultMatrix } from '../escalationMatrix';
+import ReportDetailsForm, { type ReportDetailsValue } from '../components/ReportDetailsForm';
+import { stripExt } from '../reportFields';
+import type { ReportMeta } from '../types';
 
 // Smooth, gentle entrance for the picker cards.
 const EASE = [0.22, 1, 0.36, 1] as const;
 
-interface FormatCardProps {
-  icon: typeof FileSpreadsheet;
-  tint: string;
-  title: string;
-  ext: string;
-  blurb: string;
-  desc: string;
-  recommended?: boolean;
-  downloaded: boolean;
-  onDownload: () => void;
-  delay: number;
-  hint: string;
-}
+type TemplateFormat = 'excel' | 'word';
 
-function FormatCard({ icon: Icon, tint, title, ext, blurb, desc, recommended, downloaded, onDownload, delay, hint }: FormatCardProps) {
+// The two template formats offered by the Download dropdown.
+const FORMATS: { id: TemplateFormat; icon: typeof FileSpreadsheet; tint: string; title: string; ext: string; desc: string; recommended?: boolean }[] = [
+  { id: 'excel', icon: FileSpreadsheet, tint: 'bg-compliant-50 text-compliant-700', title: 'Excel template', ext: '.xlsx', desc: 'One row per observation. Best for clean, structured extraction.', recommended: true },
+  { id: 'word',  icon: FileText,        tint: 'bg-evidence-50 text-evidence-700',   title: 'Word template',  ext: '.doc',  desc: 'One table per observation. Best for findings written as narrative prose.' },
+];
+
+/** One "Download a template" CTA — opens a dropdown asking Excel or Word. */
+function DownloadTemplateMenu({ downloaded, onPick }: {
+  downloaded: TemplateFormat | null;
+  onPick: (f: TemplateFormat) => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const picked = FORMATS.find(f => f.id === downloaded);
   return (
-    <motion.div
-      initial={{ opacity: 0, y: 8 }}
-      animate={{ opacity: 1, y: 0 }}
-      transition={{ duration: 0.45, ease: EASE, delay }}
-      className={`relative flex flex-col rounded-lg border bg-canvas-elevated p-5 transition-colors ${downloaded ? 'border-compliant/40' : 'border-canvas-border hover:border-brand-300'}`}
-      title={hint}
-    >
-      {recommended && (
-        <span className="absolute top-4 right-4 inline-flex items-center gap-1 rounded-full bg-brand-50 text-brand-700 text-[0.625rem] font-semibold uppercase tracking-wide px-2 py-0.5">
-          <Sparkles size={10} aria-hidden="true" /> Recommended
-        </span>
-      )}
-      <div className="flex items-center gap-3 mb-3">
-        <span className={`w-11 h-11 rounded-lg flex items-center justify-center shrink-0 ${tint}`}><Icon size={21} aria-hidden="true" /></span>
-        <div className="min-w-0">
-          <h3 className="text-[0.90625rem] font-semibold text-ink-900 leading-tight">{title}</h3>
-          <p className="text-[0.71875rem] text-ink-400 mt-0.5">{blurb}</p>
-        </div>
-      </div>
-      <p className="text-[0.78125rem] text-ink-500 leading-relaxed mb-4 flex-1">{desc}</p>
+    <div className="relative inline-block">
       <Button
-        variant={downloaded || !recommended ? 'outline' : 'primary'}
+        variant={downloaded ? 'outline' : 'primary'}
         size="md"
         shape="md"
         leftIcon={downloaded ? <Check size={15} /> : <Download size={15} />}
-        onClick={onDownload}
-        className="w-full"
+        rightIcon={<ChevronDown size={15} className={`transition-transform ${open ? 'rotate-180' : ''}`} />}
+        onClick={() => setOpen(o => !o)}
+        aria-haspopup="menu"
+        aria-expanded={open}
       >
-        {downloaded ? 'Downloaded' : `Download ${ext}`}
+        {picked ? `${picked.title} downloaded` : 'Download a template'}
       </Button>
-    </motion.div>
-  );
-}
-
-// The 10 required columns grouped into the three phases of an observation.
-const FIELD_BY_KEY = Object.fromEntries(REQUIRED_FIELDS.map(f => [f.key, f.label]));
-const FIELD_ICON: Record<string, typeof Check> = {
-  title: Heading, description: AlignLeft, riskSummary: ShieldAlert,
-  recommendation: Lightbulb, actionTaken: Wrench, evidence: Paperclip, verification: UserCheck,
-  classification: Tag, risk: Gauge, dueDate: CalendarClock,
-};
-const GUIDE_GROUPS: { label: string; keys: string[] }[] = [
-  { label: 'What you found', keys: ['title', 'description', 'riskSummary'] },
-  { label: 'How it was handled', keys: ['recommendation', 'actionTaken', 'evidence', 'verification'] },
-  { label: 'Rating & timeline', keys: ['classification', 'risk', 'dueDate'] },
-];
-
-/** Always-visible "how to fill the template" guidance — required columns grouped
- *  by the phase of an observation. */
-function TemplateGuide() {
-  return (
-    <motion.aside
-      initial={{ opacity: 0, y: 8 }}
-      animate={{ opacity: 1, y: 0 }}
-      transition={{ duration: 0.45, ease: EASE }}
-      className="flex flex-col h-full min-h-0 overflow-hidden rounded-lg border border-canvas-border bg-canvas-elevated p-5"
-    >
-      <h3 className="text-[0.84375rem] font-semibold text-ink-900">How to fill it in</h3>
-      <p className="text-[0.71875rem] text-ink-500 leading-snug">One observation per row in Excel, or one table per observation in Word.</p>
-
-      <div className="flex items-center justify-between mt-5 mb-1">
-        <p className="text-[0.6875rem] font-semibold uppercase tracking-wide text-ink-500">Columns to complete</p>
-        <span className="text-[0.65625rem] font-semibold text-ink-400 tabular-nums">{REQUIRED_FIELDS.length}</span>
-      </div>
-
-      <div className="flex-1 flex flex-col justify-between gap-y-3 pt-1">
-        {GUIDE_GROUPS.map(g => (
-          <div key={g.label}>
-            <div className="text-[0.71875rem] font-semibold text-ink-500 mb-2">{g.label}</div>
-            <ul className="space-y-2">
-              {g.keys.map(k => {
-                const Icon = FIELD_ICON[k] ?? Check;
+      <AnimatePresence>
+        {open && (
+          <>
+            <div className="fixed inset-0 z-10" onClick={() => setOpen(false)} />
+            <motion.div
+              role="menu"
+              aria-label="Template format"
+              initial={{ opacity: 0, y: -6 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -6 }}
+              transition={{ duration: 0.16, ease: EASE }}
+              className="absolute right-0 top-full mt-2 w-[340px] z-20 rounded-lg border border-canvas-border bg-canvas-elevated shadow-xl overflow-hidden p-1.5"
+            >
+              {FORMATS.map(f => {
+                const Icon = f.icon;
+                const isPicked = downloaded === f.id;
                 return (
-                  <li key={k} className="flex items-start gap-3 text-[0.78125rem] text-ink-700 leading-relaxed">
-                    <Icon size={14} className="text-ink-400 shrink-0 mt-0.5" aria-hidden="true" />
-                    {FIELD_BY_KEY[k]}
-                  </li>
+                  <button
+                    key={f.id}
+                    type="button"
+                    role="menuitem"
+                    onClick={() => { onPick(f.id); setOpen(false); }}
+                    className="w-full flex items-start gap-3 rounded-md px-2.5 py-2.5 text-left hover:bg-canvas cursor-pointer transition-colors"
+                  >
+                    <span className={`w-9 h-9 rounded-md flex items-center justify-center shrink-0 ${f.tint}`}><Icon size={17} aria-hidden="true" /></span>
+                    <span className="min-w-0 flex-1">
+                      <span className="flex items-center gap-2">
+                        <span className="text-[0.8125rem] font-semibold text-ink-900">{f.title}</span>
+                        <span className="text-[0.6875rem] text-ink-400">{f.ext}</span>
+                        {f.recommended && (
+                          <span className="inline-flex items-center gap-1 rounded-full bg-brand-50 text-brand-700 text-[0.5625rem] font-semibold uppercase tracking-wide px-1.5 py-0.5">
+                            <Sparkles size={9} aria-hidden="true" /> Recommended
+                          </span>
+                        )}
+                      </span>
+                      <span className="block text-[0.71875rem] text-ink-500 leading-snug mt-0.5">{f.desc}</span>
+                    </span>
+                    {isPicked && <Check size={15} className="text-compliant-700 shrink-0 mt-2" aria-hidden="true" />}
+                  </button>
                 );
               })}
-            </ul>
-          </div>
-        ))}
-      </div>
-    </motion.aside>
+            </motion.div>
+          </>
+        )}
+      </AnimatePresence>
+    </div>
   );
 }
+
 
 /** Screen 2A — download the IRAME template, fill offline, upload it back
  *  (+ optional annexures, mirroring the existing-report path). */
 export default function Step2aTemplateDownload({ onUpload }: {
-  onUpload: (file: File, annexures: File[], escalation: EscalationMatrixConfig) => void;
+  onUpload: (file: File, annexures: File[], meta: Partial<ReportMeta>) => void;
 }) {
   const { addToast } = useToast();
-  const [downloaded, setDownloaded] = useState<'excel' | 'word' | null>(null);
+  const [downloaded, setDownloaded] = useState<TemplateFormat | null>(null);
   const [templateFile, setTemplateFile] = useState<File | null>(null);
   const [annexures, setAnnexures] = useState<File[]>([]);
-  // Escalation matrix for this report — same preset + editor as the upload path.
-  const [escalation, setEscalation] = useState<EscalationMatrixConfig>(cloneDefaultMatrix);
+  // Cover details + validity, tracked from the shared form (same as the report path).
+  const [details, setDetails] = useState<ReportDetailsValue>({ meta: {}, complete: false, duplicate: false, outstanding: [] });
   const templateInputRef = useRef<HTMLInputElement>(null);
   const annexInputRef = useRef<HTMLInputElement>(null);
 
-  const handleExcel = () => { downloadExcelTemplate(); setDownloaded('excel'); addToast({ type: 'success', message: 'Excel template downloaded. Fill one row per observation and upload it back.' }); };
-  const handleWord = () => { downloadWordTemplate(); setDownloaded('word'); addToast({ type: 'success', message: 'Word template downloaded. Fill one table per observation and upload it back.' }); };
+  const handleDownload = (f: TemplateFormat) => {
+    if (f === 'excel') { downloadExcelTemplate(); addToast({ type: 'success', message: 'Excel template downloaded. Fill one row per observation and upload it back.' }); }
+    else { downloadWordTemplate(); addToast({ type: 'success', message: 'Word template downloaded. Fill one table per observation and upload it back.' }); }
+    setDownloaded(f);
+  };
   const hasDownloaded = downloaded !== null;
 
+  const ready = !!templateFile && details.complete && !details.duplicate;
+
+  const outstanding = [templateFile ? null : 'the filled template', ...details.outstanding].filter((x): x is string => x !== null);
+  const outstandingLine = details.duplicate
+    ? `Report Number ${details.meta.reportNumber} is already used in ${details.meta.section} for ${details.meta.financialYear}. Enter a unique number.`
+    : outstanding.length === 1
+      ? `Add ${outstanding[0]} to continue.`
+      : `Still needed: ${outstanding.slice(0, -1).join(', ')} and ${outstanding[outstanding.length - 1]}.`;
+
   return (
-    <div className="grid lg:grid-cols-[320px_1fr] gap-5 lg:gap-6 items-stretch h-full min-h-0">
-      {/* Left — always-visible "how to fill" guidance */}
-      <TemplateGuide />
-
-      {/* Right — the download → upload flow */}
+    <div className="w-full">
+      {/* The download → upload flow */}
       <div className="w-full">
-        <h2 className="text-[1.0625rem] font-semibold text-ink-900 mb-0.5">Download a template</h2>
-        <p className="text-[0.8125rem] text-ink-500 mb-5">Pick a format, fill it offline with one observation per row, then upload it below.</p>
-
-        {/* Step 1 — pick a format */}
-        <div className="grid sm:grid-cols-2 gap-4">
-          <FormatCard
-            icon={FileSpreadsheet}
-            tint="bg-compliant-50 text-compliant-700"
-            title="Excel Template"
-            ext=".xlsx"
-            blurb=".xlsx · one row per observation"
-            desc="Spreadsheet with one row per observation. Best for clean, structured extraction."
-            recommended
-            downloaded={downloaded === 'excel'}
-            onDownload={handleExcel}
-            delay={0.04}
-            hint="Best for many observations and structured exception data — extracts most reliably."
-          />
-          <FormatCard
-            icon={FileText}
-            tint="bg-evidence-50 text-evidence-700"
-            title="Word Template"
-            ext=".doc"
-            blurb=".doc · one table per observation"
-            desc="One table per observation. Best when you write findings as narrative prose."
-            downloaded={downloaded === 'word'}
-            onDownload={handleWord}
-            delay={0.1}
-            hint="Best for narrative observations written as prose tables."
-          />
-        </div>
+        {/* Step 1 — download the template (the dropdown asks Excel or Word) */}
+        <motion.div
+          initial={{ opacity: 0, y: 8 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.45, ease: EASE, delay: 0.04 }}
+          className={`flex items-center gap-4 flex-wrap rounded-lg border bg-canvas-elevated p-4 transition-colors ${hasDownloaded ? 'border-compliant/40' : 'border-canvas-border'}`}
+        >
+          <span className="w-10 h-10 rounded-lg flex items-center justify-center shrink-0 bg-brand-50 text-brand-700"><Download size={19} aria-hidden="true" /></span>
+          <div className="min-w-0 flex-1">
+            <h3 className="text-[0.875rem] font-semibold text-ink-900 leading-tight">Download a template</h3>
+            <p className="text-[0.71875rem] text-ink-500 mt-0.5">
+              {hasDownloaded
+                ? `Fill the ${downloaded === 'excel' ? 'spreadsheet (one row per observation)' : 'document (one table per observation)'}, then upload it below.`
+                : 'Choose Excel (one row per observation) or Word (one table per observation).'}
+            </p>
+          </div>
+          <DownloadTemplateMenu downloaded={downloaded} onPick={handleDownload} />
+        </motion.div>
 
         {/* Connector — guides the eye from download to upload */}
         <div className="flex items-center gap-3 my-4" aria-hidden="true">
@@ -237,30 +207,30 @@ export default function Step2aTemplateDownload({ onUpload }: {
           </div>
         </motion.div>
 
-        {/* Escalation matrix — configured up front, same as the upload path. */}
+        {/* Report details — same shared form as the upload path. */}
         <motion.div
           initial={{ opacity: 0, y: 8 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.45, ease: EASE, delay: 0.22 }}
           className="mt-4"
         >
-          <EscalationMatrixCard config={escalation} onChange={setEscalation} />
+          <ReportDetailsForm onChange={setDetails} suggestedReportName={templateFile ? stripExt(templateFile.name) : undefined} intro="These print on the ATR cover. Confirm the classification and cover facts here." />
         </motion.div>
       </div>
 
       <WizardFooter>
         <div className="flex items-center justify-between gap-4 border-t border-canvas-border bg-canvas-elevated px-6 py-3">
           <p className="text-[0.75rem] text-ink-500">
-            {templateFile
+            {ready
               ? <span className="text-compliant-700 font-medium">Ready to extract.</span>
-              : 'Upload your filled template to continue.'}
+              : outstandingLine}
           </p>
           <Button
             variant="primary"
             rightIcon={<ArrowRight size={15} />}
-            disabled={!templateFile}
-            onClick={() => templateFile && onUpload(templateFile, annexures, escalation)}
-            title={templateFile ? undefined : 'Upload your filled template to continue.'}
+            disabled={!ready}
+            onClick={() => ready && templateFile && onUpload(templateFile, annexures, details.meta)}
+            title={ready ? undefined : outstandingLine}
           >
             Extract from template
           </Button>

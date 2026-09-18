@@ -38,6 +38,7 @@ const SEVERITY_PILL: Record<AtrRisk, string> = {
   High:     'bg-high-50 text-high-700',
   Medium:   'bg-mitigated-50 text-mitigated-700',
   Low:      'bg-compliant-50 text-compliant-700',
+  'Not Applicable': 'bg-paper-100 text-ink-500',
 };
 
 type Tone = 'brand' | 'risk' | 'mitigated' | 'compliant' | 'high' | 'ink';
@@ -124,7 +125,7 @@ export default function AtrDocument({
   meta, observations, headerActions, maxWidthClass = 'max-w-[840px]',
   editable, onMetaChange, onObservationsChange,
   sectionOrder = ATR_SECTION_ORDER, hiddenSections = [],
-  renderObservationActions, onDeleteSection,
+  renderObservationActions, renderObservationFooter, onDeleteSection,
   gradient, logo,
 }: {
   meta: AtrMeta;
@@ -151,6 +152,9 @@ export default function AtrDocument({
   /** Optional per-observation action slot (e.g. a "Manage Exceptions" CTA),
    *  rendered in each observation card header. Receives the 0-based index. */
   renderObservationActions?: (index: number) => React.ReactNode;
+  /** Optional per-observation footer strip (e.g. linked annexures), rendered at
+   *  the bottom of each observation card. Receives the 0-based index. */
+  renderObservationFooter?: (index: number) => React.ReactNode;
   /** Edit-mode: remove a section from the report. Enables the per-section
    *  delete control on each section heading. */
   onDeleteSection?: (key: AtrSectionKey) => void;
@@ -253,7 +257,7 @@ export default function AtrDocument({
         <ReportNumberedHeading n={n} title="Observation Details" subtitle="Issue, risk, action plan and verification" />
         <div className="space-y-5">
           {observations.map((o, i) => (
-            <ObservationCard key={i} index={i + 1} obs={o} editable={editable} onChange={next => setObs(i, next)} onDelete={() => confirmDelete('Delete observation?', `This removes “${o.title || `Observation ${i + 1}`}” and its action plans from the report. You can undo by cancelling before you save.`, () => removeObs(i))} actions={renderObservationActions?.(i)} />
+            <ObservationCard key={i} index={i + 1} obs={o} editable={editable} onChange={next => setObs(i, next)} onDelete={() => confirmDelete('Delete observation?', `This removes “${o.title || `Observation ${i + 1}`}” and its action plans from the report. You can undo by cancelling before you save.`, () => removeObs(i))} actions={renderObservationActions?.(i)} footer={renderObservationFooter?.(i)} />
           ))}
         </div>
       </>
@@ -343,7 +347,7 @@ export default function AtrDocument({
   );
 }
 
-function ObservationCard({ index, obs, editable, onChange, onDelete, actions }: { index: number; obs: AtrObservation; editable?: boolean; onChange?: (next: AtrObservation) => void; onDelete?: () => void; actions?: React.ReactNode }) {
+function ObservationCard({ index, obs, editable, onChange, onDelete, actions, footer }: { index: number; obs: AtrObservation; editable?: boolean; onChange?: (next: AtrObservation) => void; onDelete?: () => void; actions?: React.ReactNode; footer?: React.ReactNode }) {
   const setPlan = (i: number, next: AtrActionPlan) => onChange?.({ ...obs, actionPlans: obs.actionPlans.map((p, idx) => (idx === i ? next : p)) });
   return (
     <div className="border border-canvas-border rounded-lg overflow-hidden">
@@ -393,6 +397,7 @@ function ObservationCard({ index, obs, editable, onChange, onDelete, actions }: 
           ))}
         </div>
       </div>
+      {footer}
     </div>
   );
 }
