@@ -132,40 +132,6 @@ export function publishRacm(id: string, by: string): number {
   return draftIds.length;
 }
 
-/** Add rows to a RACM already on the tab. They arrive as drafts — a control that
- *  reached an engagement without anyone publishing it would make publishing
- *  mean nothing. */
-export function addRacmControls(id: string, controls: Control[]): number {
-  const r = findLibraryRacm(id);
-  if (!r || !controls.length) return 0;
-  const have = new Set(r.controls.map(c => c.id));
-  const fresh = controls.map(racmRowOf).filter(c => !have.has(c.id));
-  if (!fresh.length) return 0;
-  commit(all().map(x => (x.id === id
-    ? {
-        ...x,
-        controls: [...x.controls, ...fresh],
-        history: [...x.history, {
-          version: currentVersion(x), kind: 'controls-added' as const, at: 'just now', by: 'You',
-          what: `${fresh.length} control${fresh.length === 1 ? '' : 's'} added, not published yet`,
-        }],
-      }
-    : x)));
-  return fresh.length;
-}
-
-/** Replace a DRAFT row's content. Refused for a published row — that is the lock.
- *  Returns false when the row is missing or fixed. */
-export function updateDraftControl(id: string, controlId: string, patch: Partial<Control>): boolean {
-  const r = findLibraryRacm(id);
-  if (!r || isRowPublished(r, controlId)) return false;
-  if (!r.controls.some(c => c.id === controlId)) return false;
-  commit(all().map(x => (x.id === id
-    ? { ...x, controls: x.controls.map(c => (c.id === controlId ? { ...c, ...patch, id: c.id } : c)) }
-    : x)));
-  return true;
-}
-
 // ─── Store ──────────────────────────────────────────────────────────────────────
 
 let RACMS: LibraryRacm[] | null = null;

@@ -3061,8 +3061,10 @@ export function formatDueDate(date: string | null | undefined): string {
 // field for stay blank.
 export const RACM_ROWS_KEY = (racmId: string) => `sox-racm-rows:${racmId}`;
 /** The rows the editor must not let anyone change — published control IDs, in
- *  the editor's own spelling. Handed over beside the rows, read back by nobody:
- *  the lock is enforced in the editor and again in `updateDraftControl`. */
+ *  the editor's own spelling. Handed over beside the rows: the editor refuses to
+ *  edit them, and `applyEditorRows` refuses them again on the way back, because
+ *  the first lock lives in another browser tab and can be reached by other
+ *  means. */
 export const RACM_LOCKED_KEY = (racmId: string) => `sox-racm-locked:${racmId}`;
 export function racmEditorRows(controls: Control[], process: string): ProcurementRacmRow[] {
   const seen = new Set<string>();

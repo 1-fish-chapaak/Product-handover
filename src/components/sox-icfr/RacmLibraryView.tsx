@@ -160,7 +160,7 @@ export default function RacmLibraryView({ canManage }: {
 
   const confirmPublish = (r: LibraryRacm) => {
     setPublishing(null);
-    const { draftCount, status: was } = racmStatus(r);
+    const { status: was } = racmStatus(r);
     const moved = publishRacm(r.id, currentUser?.name ?? 'You');
     if (!moved) {
       addToast({ type: 'warning', title: 'Nothing to publish', message: `Every row in ${r.name} is already published.` });
@@ -172,7 +172,6 @@ export default function RacmLibraryView({ canManage }: {
       title: was === 'Draft' ? 'RACM published' : 'New controls published',
       message: `${moved} control${moved === 1 ? '' : 's'} in ${r.name} ${moved === 1 ? 'is' : 'are'} now fixed, and engagements can scope from ${moved === 1 ? 'it' : 'them'}.`,
     });
-    void draftCount;
   };
 
   const confirmDelete = (r: LibraryRacm) => {

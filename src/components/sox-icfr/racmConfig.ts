@@ -70,9 +70,6 @@ export function resetRacmConfig(): void {
   emit();
 }
 
-/** Is this field one the team has said a row cannot arrive without? */
-export const isCore = (key: RacmFieldKey): boolean => CONFIG.core.includes(key);
-
 /**
  * Remember what a header turned out to mean.
  *
@@ -88,11 +85,6 @@ export function rememberMapping(pairs: { header: string; field: RacmFieldKey | n
   });
   CONFIG = { ...CONFIG, mapping };
   emit();
-}
-
-/** What this header meant last time, or undefined if it has never been seen. */
-export function rememberedField(header: string): RacmFieldKey | null | undefined {
-  return CONFIG.mapping[normaliseHeader(header)];
 }
 
 /**
