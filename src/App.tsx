@@ -310,7 +310,7 @@ function AppInner() {
   const [engagementBackView, setEngagementBackView] = useState<'programs' | 'audit-planning' | 'business-processes'>('programs');
   const [workflowBackView, setWorkflowBackView] = useState<'workflow-library' | 'business-processes' | null>(null);
   // Local context for the full-page RACM editor: which RACM, what process, where to go back to.
-  type RacmEditorContext = { racmId: string; racmName: string; processLabel: string; backView: 'engagement-overview' | 'business-processes' | 'bp-detail' | 'engagement-final' | 'ai-concierge' | 'ai-concierge-racm'; backLabel?: string; sourceFiles?: string[]; initialRows?: ProcurementRacmRow[] };
+  type RacmEditorContext = { racmId: string; racmName: string; processLabel: string; backView: 'engagement-overview' | 'business-processes' | 'bp-detail' | 'engagement-final' | 'ai-concierge' | 'ai-concierge-racm'; backLabel?: string; sourceFiles?: string[]; initialRows?: ProcurementRacmRow[]; lockedRowIds?: string[] };
   // Deep-link support: when this tab is opened at ?view=racm-full-editor (the
   // "Open in editor" new tab), restore the editor context at init so there's no
   // mount-time setState / double render. getInitialView (useAppState) already
@@ -327,9 +327,18 @@ function AppInner() {
       const raw = racmId ? window.localStorage.getItem(`sox-racm-rows:${racmId}`) : null;
       if (raw) initialRows = JSON.parse(raw) as ProcurementRacmRow[];
     } catch { /* storage blocked or unreadable — the editor falls back to its sample */ }
+    // Alongside the rows, the RACM tab lists the controls it has already
+    // published. Those rows are fixed, so the editor needs the list to know
+    // which ones it must not let anyone change.
+    let lockedRowIds: string[] | undefined;
+    try {
+      const rawLocked = racmId ? window.localStorage.getItem(`sox-racm-locked:${racmId}`) : null;
+      if (rawLocked) lockedRowIds = JSON.parse(rawLocked) as string[];
+    } catch { /* storage blocked or unreadable — nothing counts as published */ }
     return {
       racmId,
       initialRows,
+      lockedRowIds,
       racmName: params.get('racmName') ?? 'RACM',
       processLabel: params.get('processLabel') ?? '',
       backView: (params.get('backView') as RacmEditorContext['backView']) ?? 'business-processes',
@@ -1168,6 +1177,7 @@ function AppInner() {
             processLabel={racmEditorContext?.processLabel}
             sourceFiles={racmEditorContext?.sourceFiles}
             initialRows={racmEditorContext?.initialRows}
+            lockedRowIds={racmEditorContext?.lockedRowIds}
           />
         );
 

@@ -34,6 +34,9 @@ export interface ProcurementRacmRow {
   /** Impact */
   impact: string;
   /** Control Objective */
+  /** The control's short name. Optional because the 124 generated rows below
+   *  predate the column (17 Sep); a blank one falls back to the description. */
+  controlTitle?: string;
   controlObjective: string;
   /** Control Activity */
   controlActivity: string;
@@ -101,6 +104,7 @@ export const PROCUREMENT_RACM_COLUMNS: RacmColumnDef[] = [
   { key: 'riskRating', label: "Risk Rating", group: 'risk', width: 100 },
   { key: 'likelihood', label: "Likelihood", group: 'risk', width: 100 },
   { key: 'impact', label: "Impact", group: 'risk', width: 100 },
+  { key: 'controlTitle', label: "Control Title", group: 'control', width: 260 },
   { key: 'controlObjective', label: "Control Objective", group: 'control', width: 280 },
   { key: 'controlActivity', label: "Control Description", group: 'control', width: 360 },
   { key: 'controlType', label: "Control Type", group: 'control', width: 110 },

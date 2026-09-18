@@ -9,7 +9,8 @@
  * until one is picked (A13), and so does a blank risk description, control,
  * nature, type or attribute list — filled in place, with Ira's suggestion, or
  * the row left out (17 Sep). Ira suggests missing attributes and design checks
- * per row (A7), a row that repeats another RACM's control is flagged (A8), blank
+ * per row (A7), a row that repeats a control this RACM already has is held back
+ * and a row that reads like another RACM's control is flagged (A8), blank
  * cells can be filled from the row's other columns — previewed, decided, then
  * applied (A9) — and merged duplicate design checks are counted (R2). The
  * reading and matching itself lives in racmImport.ts; this file only decides
@@ -34,7 +35,7 @@ import {
   RACM_FIELDS, DEFAULT_SOP_PROMPT, CORE_BLANK_LABEL,
   readRacmWorkbook, guessHeaderRow, matchColumns, needsAttention,
   buildImportRows, rowFromValues, proposeBlankFills, suggestForRow, importRowsToControls, draftRowsFromSop,
-  coreBlanks, rowBlocked,
+  coreBlanks, rowBlocked, rowRepeats,
   type BlankFill, type ColumnMatch, type CoreBlank, type ImportRow, type RacmFieldKey, type SheetData,
 } from './racmImport';
 
@@ -301,12 +302,18 @@ export default function RacmImportReview({ mode, file, process, entity, existing
   const [fillOpen, setFillOpen] = useState(false);
   /** Keyed `${row.key}|${field}`; absent = undecided. Nothing is written until Apply. */
   const [fillDecisions, setFillDecisions] = useState<Record<string, 'accept' | 'reject'>>({});
-  /** Rows the reviewer chose not to import rather than fix (17 Sep). */
+  /** Rows the reviewer chose not to import rather than fix (17 Sep), plus the
+   *  repeats that start there. */
   const [leftOut, setLeftOut] = useState<Set<string>>(new Set());
 
-  const resetReview = () => {
+  /** Start the review of a freshly built set of rows. A row that repeats a
+   *  control this RACM already has starts left out — the 17 Sep call asked for
+   *  repeats to be flagged and not created, so nobody has to notice one to avoid
+   *  writing the control twice. Putting it back is a deliberate act. */
+  const resetReview = (next: ImportRow[]) => {
     setAcceptedRows(new Set()); setAcceptedSugg({}); setDismissedSugg({});
-    setExpanded(new Set()); setFillOpen(false); setFillDecisions({}); setLeftOut(new Set());
+    setExpanded(new Set()); setFillOpen(false); setFillDecisions({});
+    setLeftOut(new Set(next.filter(rowRepeats).map(r => r.key)));
   };
 
   // ── Columns step (RACM) ───────────────────────────────────────────────────────
@@ -388,8 +395,9 @@ export default function RacmImportReview({ mode, file, process, entity, existing
     if (!sheet) return;
     const sig = JSON.stringify([sheetIx, headerRow, matches]);
     if (builtFrom.current !== sig) {
-      setRows(buildImportRows(sheet.rows, headerRow, matches, existing, process));
-      resetReview();
+      const built = buildImportRows(sheet.rows, headerRow, matches, existing, process, entity);
+      setRows(built);
+      resetReview(built);
       builtFrom.current = sig;
     }
     setStep('review');
@@ -417,8 +425,9 @@ export default function RacmImportReview({ mode, file, process, entity, existing
     // a beat after the last tick, so the finished list is seen before it goes
     timers.current.push(window.setTimeout(() => {
       try {
-        setRows(draftRowsFromSop(process, file.name, used, existing));
-        resetReview();
+        const drafted = draftRowsFromSop(process, file.name, used, existing);
+        setRows(drafted);
+        resetReview(drafted);
         builtFrom.current = used;
         setExtract({ phase: 'idle' });
         setStep('review');
@@ -468,7 +477,13 @@ export default function RacmImportReview({ mode, file, process, entity, existing
     return order.filter(l => found.has(l));
   }, [included]);
   const fillsByRow = useMemo(() => new Map(fills.map(g => [g.row.key, g.fills])), [fills]);
-  const duplicateCount = included.filter(r => r.duplicateOf).length;
+  /** Rows that read like a control in another RACM — a note, not a hold-up. */
+  const acrossCount = included.filter(r => r.duplicateOf?.kind === 'other-process').length;
+  /** Rows that repeat a control this RACM already has. Counted over every row
+   *  under review, left out or not, so the summary says why some are missing;
+   *  the gate below counts only the ones still going in. */
+  const repeatCount = effective.filter(r => isCandidate(r) && rowRepeats(r)).length;
+  const repeatsIncluded = included.filter(rowRepeats).length;
   const suggestedRowCount = rows.filter(r => r.origin === 'suggested').length;
   // ── IDs (S11) ─────────────────────────────────────────────────────────────────
   // ENTITY/PROCESS/R001/C001. The codes start from the register (or the names)
@@ -504,14 +519,28 @@ export default function RacmImportReview({ mode, file, process, entity, existing
     return new Map(included.map((r, i) => [r.key, out[i]!.id]));
   }, [included, processCode, entityCodeDrafts, entity]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  const canImport = included.length > 0 && needFix === 0 && codesOk;
+  // A repeat holds the import the same way a blank does: it is written twice or
+  // not at all, so it has to be left out (or edited until it isn't a repeat).
+  const canImport = included.length > 0 && needFix === 0 && repeatsIncluded === 0 && codesOk;
 
   const toggleExpanded = (key: string) => setExpanded(prev => { const n = new Set(prev); if (n.has(key)) n.delete(key); else n.add(key); return n; });
   const toggleRow = (key: string) => setAcceptedRows(prev => { const n = new Set(prev); if (n.has(key)) n.delete(key); else n.add(key); return n; });
   const pickFrequency = (rowKey: string, value: Frequency) => setValue(rowKey, 'frequency', value);
+  /** Re-derive the whole list in order, writing `patches` in on the way. Every
+   *  row is rebuilt, not just the edited one, because a row is also checked
+   *  against the rows above it — a word changed here can make the row below a
+   *  repeat of this one, or stop it being one. */
+  const rebuildRows = (prev: ImportRow[], patches: Map<string, Partial<Record<RacmFieldKey, string>>>): ImportRow[] => {
+    const next: ImportRow[] = [];
+    for (const r of prev) {
+      const patch = patches.get(r.key);
+      next.push(rowFromValues(patch ? { ...r.values, ...patch } : r.values, r, existing, process, next, entity));
+    }
+    return next;
+  };
   /** Write one value into a row and rebuild it — a blank filled in review. */
   const setValue = (rowKey: string, field: RacmFieldKey, value: string) =>
-    setRows(prev => prev.map(r => (r.key === rowKey ? rowFromValues({ ...r.values, [field]: value }, r, existing, process) : r)));
+    setRows(prev => rebuildRows(prev, new Map([[rowKey, { [field]: value }]])));
   const toggleLeftOut = (rowKey: string) => setLeftOut(prev => { const n = new Set(prev); if (n.has(rowKey)) n.delete(rowKey); else n.add(rowKey); return n; });
   const acceptSuggestion = (rowKey: string, s: Suggestion) => setAcceptedSugg(prev => {
     const cur = prev[rowKey] ?? { attributes: [], designChecks: [] };
@@ -535,7 +564,7 @@ export default function RacmImportReview({ mode, file, process, entity, existing
       n++;
     }));
     if (!n) return;
-    setRows(prev => prev.map(r => { const patch = byRow.get(r.key); return patch ? rowFromValues({ ...r.values, ...patch }, r, existing, process) : r; }));
+    setRows(prev => rebuildRows(prev, byRow));
     cancelFills();
     addToast({ type: 'success', title: `Filled ${n} blank${n === 1 ? '' : 's'}`, message: 'The values are in the review rows — nothing is saved until you import.' });
   };
@@ -771,8 +800,9 @@ export default function RacmImportReview({ mode, file, process, entity, existing
                 </p>
                 {mergedCount > 0 && <span className="text-[0.71875rem] text-ink-500 tabular-nums">{plural(mergedCount, 'duplicate design check')} merged</span>}
                 {needFix > 0 && <Pill tone="mitigated">{needFix} {needFix === 1 ? 'row needs' : 'rows need'} a value</Pill>}
+                {repeatCount > 0 && <Pill tone="mitigated">{plural(repeatCount, 'row')} already in this RACM</Pill>}
                 {leftOut.size > 0 && <span className="text-[0.71875rem] text-ink-500 tabular-nums">{leftOut.size} left out</span>}
-                {duplicateCount > 0 && <Pill tone="mitigated">{plural(duplicateCount, 'possible duplicate')}</Pill>}
+                {acrossCount > 0 && <Pill tone="mitigated">{plural(acrossCount, 'possible duplicate')}</Pill>}
                 {mode === 'sop' && suggestedRowCount > 0 && (
                   <span className="text-[0.71875rem] text-ink-500 tabular-nums">{suggestedRowCount} suggested by Ira · {acceptedRows.size} accepted</span>
                 )}
@@ -907,6 +937,9 @@ export default function RacmImportReview({ mode, file, process, entity, existing
                         const addedChecks = new Set((acceptedSugg[row.key]?.designChecks ?? []).map(norm));
                         const isLeftOut = leftOut.has(row.key);
                         const blanks = isCandidate(row) && !isLeftOut ? coreBlanks(row) : [];
+                        // A repeat put back by hand, or one that only became a repeat when the
+                        // row above it was edited — either way it has to be dealt with here.
+                        const heldAsRepeat = rowRepeats(row) && isCandidate(row) && !isLeftOut;
                         const rowFills = fillsByRow.get(row.key) ?? [];
                         const freqIdea = row.frequency ? undefined : rowFills.find(f => f.field === 'frequency');
                         return (
@@ -942,7 +975,9 @@ export default function RacmImportReview({ mode, file, process, entity, existing
                                   {row.origin === 'suggested' && <Pill tone="info">Suggested by Ira</Pill>}
                                   {row.origin === 'file' && <span className="font-mono text-[0.65625rem] text-ink-400">Row {row.rowNo}</span>}
                                 </div>
-                                {/* A8 — a warning, not a block: the same control can legitimately sit in two processes */}
+                                {/* A8 — why the row is flagged. A match in another process is only a
+                                    note: the same control can legitimately sit in two processes. A
+                                    match in this one is a repeat, and the box below holds it back. */}
                                 {row.duplicateOf && (
                                   <p className="mt-1 text-[0.6875rem] leading-snug text-mitigated-700 flex items-start gap-1 whitespace-normal">
                                     <AlertTriangle size={11} className="mt-0.5 shrink-0" /> <span>{row.duplicateOf.reason}</span>
@@ -1010,6 +1045,21 @@ export default function RacmImportReview({ mode, file, process, entity, existing
                               <BlankFixRow key={`fix-${row.key}`} row={row} blanks={blanks} fills={rowFills}
                                 attributeIdeas={sugg.filter(x => x.kind === 'attribute').map(x => x.text)}
                                 colSpan={reviewCols} onSet={(field, value) => setValue(row.key, field, value)} onLeaveOut={() => toggleLeftOut(row.key)} />
+                            )}
+                            {/* Held the same way a blank row is, and worded the same way — the
+                                fix box already offers Leave out, so a row with blanks gets one
+                                box, not two. */}
+                            {heldAsRepeat && blanks.length === 0 && (
+                              <tr className="def-detail">
+                                <td colSpan={reviewCols}>
+                                  <div className="my-2 flex items-center gap-2 rounded-lg border border-canvas-border bg-paper-50/60 px-3.5 py-3">
+                                    <AlertTriangle size={12} className="text-mitigated-700 shrink-0" />
+                                    <p className="text-[0.71875rem] font-semibold text-mitigated-700">Already in this RACM — leave this row out to import the rest</p>
+                                    <div className="flex-1" />
+                                    <button type="button" onClick={() => toggleLeftOut(row.key)} className={quietBtn}>Leave out</button>
+                                  </div>
+                                </td>
+                              </tr>
                             )}
                             {isLeftOut && (
                               <tr className="def-detail">
@@ -1169,7 +1219,12 @@ export default function RacmImportReview({ mode, file, process, entity, existing
                   {needFix} {needFix === 1 ? 'row still needs' : 'rows still need'} {missingLabels.length > 1 ? `${missingLabels.slice(0, -1).join(', ')} or ${missingLabels[missingLabels.length - 1]}` : missingLabels[0]}
                 </span>
               )}
-              {needFix === 0 && !codesOk && (
+              {needFix === 0 && repeatsIncluded > 0 && (
+                <span className="text-[0.71875rem] text-mitigated-700">
+                  {repeatsIncluded} {repeatsIncluded === 1 ? 'row repeats a control' : 'rows repeat a control'} already in this RACM — leave {repeatsIncluded === 1 ? 'it' : 'them'} out to import the rest
+                </span>
+              )}
+              {needFix === 0 && repeatsIncluded === 0 && !codesOk && (
                 <span className="text-[0.71875rem] text-risk-700">Fix the ID codes to import</span>
               )}
               <button type="button" onClick={doImport} disabled={!canImport} className={primaryBtn}>Import {plural(included.length, 'control')}</button>

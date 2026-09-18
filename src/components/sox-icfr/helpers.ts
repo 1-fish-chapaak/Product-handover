@@ -1,8 +1,9 @@
-import { isInquiryOnly, ipeReliable, GRADE_RANK, AUDIT_SAMPLE_SPREADS, DEFAULT_AUDIT_SAMPLING } from './types';
+import { isInquiryOnly, ipeReliable, GRADE_RANK, AUDIT_SAMPLE_SPREADS, DEFAULT_AUDIT_SAMPLING, TESTING_STRATEGIES } from './types';
 import type {
   AuditorProofKind, AuditSampleSpread, AuditSampling, Conclusion, Control, Court, Deficiency, DesignDoc, DesignTrack, ExceptionGrade, HandoffTask, IcfrEngagement,
   FileOrigin, IpeCheck, Likelihood, MaterialityRules, OperatingTrack, Population, PopulationBasis, PopulationSource, ReviewNote, RiskRating, Role,
-  Sample, Severity, ToeRound, TrackConclusion, DeficiencyGroup, ExceptionStatus,
+  Sample, Severity, TestingStrategy, ToeRound, TrackConclusion, DeficiencyGroup, ExceptionStatus,
+  ControlType, Nature,
 } from './types';
 
 // ─── Severity (handbook §9.5) ────────────────────────────────────────────────────
@@ -3059,6 +3060,10 @@ export function formatDueDate(date: string | null | undefined): string {
 // Racm.tsx uses), and openEditorTab hands them over. Columns a control has no
 // field for stay blank.
 export const RACM_ROWS_KEY = (racmId: string) => `sox-racm-rows:${racmId}`;
+/** The rows the editor must not let anyone change — published control IDs, in
+ *  the editor's own spelling. Handed over beside the rows, read back by nobody:
+ *  the lock is enforced in the editor and again in `updateDraftControl`. */
+export const RACM_LOCKED_KEY = (racmId: string) => `sox-racm-locked:${racmId}`;
 export function racmEditorRows(controls: Control[], process: string): ProcurementRacmRow[] {
   const seen = new Set<string>();
   return controls
@@ -3089,6 +3094,7 @@ export function racmEditorRows(controls: Control[], process: string): Procuremen
         riskRating: c.riskRating ?? '',
         likelihood: '',
         impact: '',
+        controlTitle: c.description,
         controlObjective: c.objective ?? '',
         controlActivity: c.controlActivity ?? c.description,
         controlType: c.type,
@@ -3110,6 +3116,138 @@ export function racmEditorRows(controls: Control[], process: string): Procuremen
         attributes: c.operating.steps.map(s => s.description).join(' | '),
       };
     });
+}
+
+/** The editor's key for a row — the same pair `racmEditorRows` writes out, so a
+ *  row that came from a control can be matched back to it. */
+const editorKey = (riskId: string, controlId: string) => `${riskId}|${controlId}`;
+
+/** The published rows, named the way the EDITOR names them.
+ *
+ *  A control's id and the id the grid shows are not always the same string —
+ *  the grid shows the client-facing number (`code`) where there is one. The
+ *  editor can only match on what it can see, so the lock list is translated on
+ *  the way out; a row whose control has since gone is dropped rather than
+ *  locking a row that no longer answers to anything. */
+export function lockedEditorIds(controls: Control[], process: string, published: string[]): string[] {
+  const inProcess = controls.filter(c => c.process === process);
+  const live = new Set(published);
+  return racmEditorRows(controls, process)
+    .filter((_, i) => { const c = inProcess[i]; return !!c && live.has(c.id); })
+    .map(r => r.controlId);
+}
+
+const NATURES: Nature[] = ['Manual', 'Automated', 'IT-dependent'];
+const TYPES: ControlType[] = ['Preventive', 'Detective'];
+const RATINGS: RiskRating[] = ['High', 'Medium', 'Low'];
+const FREQS: Frequency[] = ['Daily', 'Weekly', 'Monthly', 'Quarterly', 'Annual', 'Recurring', 'Ad-hoc'];
+const oneOf = <T extends string>(allowed: T[], cell: string): T | undefined =>
+  allowed.find(a => a.toLowerCase() === cell.trim().toLowerCase());
+
+/**
+ * The spreadsheet editor's rows, written back onto the controls they came from.
+ *
+ * The editor is a grid of strings in a separate browser tab; a control is a
+ * record with test results hanging off it. So this maps back only the columns a
+ * person can meaningfully type into, and refuses anything it cannot read: a
+ * frequency cell saying "fortnightly" leaves the frequency alone rather than
+ * guessing, because a wrong frequency silently changes how big a sample has to
+ * be. Test results, populations, samples and sign-offs are never touched — they
+ * are not in the grid and nothing in the grid should be able to move them.
+ *
+ * Rows the editor added have no control to match and become new ones. Rows that
+ * disappeared are NOT deleted here: a row vanishing from a grid is as likely to
+ * be a bad round-trip as a deliberate removal, and deleting a tested control on
+ * that evidence is not a risk worth taking.
+ *
+ * `locked` names the control ids that must not move — the published ones. The
+ * editor already refuses to edit them; this is the second lock, because the
+ * first one lives in another browser tab and can be reached by other means.
+ */
+export function applyEditorRows(
+  controls: Control[], process: string, rows: ProcurementRacmRow[], locked: Set<string>,
+): { controls: Control[]; changed: number; added: number } {
+  const byKey = new Map<string, string>();
+  racmEditorRows(controls, process).forEach((r, i) => {
+    const c = controls.filter(x => x.process === process)[i];
+    if (c) byKey.set(editorKey(r.riskId, r.controlId), c.id);
+  });
+
+  let changed = 0;
+  const seen = new Set<string>();
+  const next = controls.map(c => {
+    const id = [...byKey.entries()].find(([, v]) => v === c.id)?.[0];
+    const row = id ? rows.find(r => editorKey(r.riskId, r.controlId) === id) : undefined;
+    if (!row || locked.has(c.id)) return c;
+    seen.add(editorKey(row.riskId, row.controlId));
+    const text = (v: string | undefined) => (v ?? '').trim();
+    const patch: Partial<Control> = {};
+    if (text(row.controlTitle) && text(row.controlTitle) !== c.description) patch.description = text(row.controlTitle);
+    if (text(row.riskDescription) && text(row.riskDescription) !== c.riskDescription) patch.riskDescription = text(row.riskDescription);
+    if (text(row.riskTitle) !== (c.riskTitle ?? '')) patch.riskTitle = text(row.riskTitle) || undefined;
+    if (text(row.controlObjective) !== (c.objective ?? '')) patch.objective = text(row.controlObjective) || undefined;
+    if (text(row.controlActivity) !== (c.controlActivity ?? '')) patch.controlActivity = text(row.controlActivity) || undefined;
+    if (text(row.subProcess) !== c.subProcess) patch.subProcess = text(row.subProcess);
+    if (text(row.controlOwner) && text(row.controlOwner) !== c.owner) patch.owner = text(row.controlOwner);
+    if (text(row.effectiveDate) !== (c.effectiveDate ?? '')) patch.effectiveDate = text(row.effectiveDate) || undefined;
+    if (text(row.country) !== (c.country ?? '')) patch.country = text(row.country) || undefined;
+    const nature = oneOf(NATURES, text(row.controlNature));
+    if (nature && nature !== c.nature) patch.nature = nature;
+    const type = oneOf(TYPES, text(row.controlType));
+    if (type && type !== c.type) patch.type = type;
+    const freq = oneOf(FREQS, text(row.frequency));
+    if (freq && freq !== c.frequency) patch.frequency = freq;
+    const rating = oneOf(RATINGS, text(row.riskRating));
+    if (rating && rating !== c.riskRating) patch.riskRating = rating;
+    const strategy = oneOf(TESTING_STRATEGIES, text(row.testingStrategy));
+    if (strategy && strategy !== c.testingStrategy) patch.testingStrategy = strategy;
+    if (typeof row.isKey === 'boolean' && row.isKey !== c.isKey) patch.isKey = row.isKey;
+    if (!Object.keys(patch).length) return c;
+    changed++;
+    return { ...c, ...patch };
+  });
+
+  // Anything the grid has that no control answers to is new work, and lands as
+  // a draft row — publishing it is a separate, deliberate act.
+  const fresh: Control[] = [];
+  const taken = new Set(next.map(c => c.id));
+  rows.forEach(row => {
+    const key = editorKey(row.riskId, row.controlId);
+    if (byKey.has(key) || seen.has(key)) return;
+    const title = (row.controlTitle ?? '').trim() || (row.controlActivity ?? '').trim();
+    if (!title || !(row.riskDescription ?? '').trim()) return;
+    let id = (row.controlId ?? '').trim() || `${row.riskId}/C${String(fresh.length + 1).padStart(3, '0')}`;
+    while (taken.has(id)) id = `${id}-2`;
+    taken.add(id);
+    fresh.push({
+      id,
+      wpRef: id,
+      description: title,
+      process,
+      subProcess: (row.subProcess ?? '').trim(),
+      nature: oneOf(NATURES, row.controlNature ?? '') ?? 'Manual',
+      type: oneOf(TYPES, row.controlType ?? '') ?? 'Preventive',
+      frequency: oneOf(FREQS, row.frequency ?? '') ?? 'Monthly',
+      isKey: row.isKey === true,
+      precision: title,
+      owner: (row.controlOwner ?? '').trim(),
+      riskId: (row.riskId ?? '').trim() || id,
+      riskDescription: (row.riskDescription ?? '').trim(),
+      assertions: [],
+      ...((row.riskTitle ?? '').trim() ? { riskTitle: row.riskTitle!.trim() } : {}),
+      ...((row.controlObjective ?? '').trim() ? { objective: row.controlObjective!.trim() } : {}),
+      ...((row.controlActivity ?? '').trim() ? { controlActivity: row.controlActivity!.trim() } : {}),
+      ...((row.entity ?? '').trim() ? { entity: row.entity!.trim() } : {}),
+      ...((row.effectiveDate ?? '').trim() ? { effectiveDate: row.effectiveDate!.trim() } : {}),
+      ...((row.country ?? '').trim() ? { country: row.country!.trim() } : {}),
+      ...(oneOf(TESTING_STRATEGIES, row.testingStrategy ?? '') ? { testingStrategy: oneOf(TESTING_STRATEGIES, row.testingStrategy ?? '')! } : {}),
+      ...(oneOf(RATINGS, row.riskRating ?? '') ? { riskRating: oneOf(RATINGS, row.riskRating ?? '')! } : {}),
+      design: { documents: [], points: [], conclusion: 'Not tested', testedBy: null, testedAt: null },
+      operating: { method: 'Manual', steps: [], conclusion: 'Not tested', testedBy: null, testedAt: null },
+    });
+  });
+
+  return { controls: [...next, ...fresh], changed, added: fresh.length };
 }
 
 /** "Risk that year-end accruals are understated because no review is performed"

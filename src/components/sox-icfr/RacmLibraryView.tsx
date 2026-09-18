@@ -11,20 +11,21 @@
  * Internal Audit and Compliance keep their own RACM screens; this tab is SOX only.
  */
 import { useLayoutEffect, useMemo, useRef, useState } from 'react';
-import { ExternalLink, FileSpreadsheet, FileText, MoreHorizontal, Plus, Search, Table2, Trash2, X } from 'lucide-react';
+import { CheckCircle2, ExternalLink, FileSpreadsheet, FileText, Lock, MoreHorizontal, Plus, Search, Table2, Trash2, X } from 'lucide-react';
 import './register.css';
 import { useAuditLog } from '../../context/AdminDataContext';
+import { useCurrentUser } from '../../context/CurrentUserContext';
 import { useToast } from '../shared/Toast';
 import { FilterSelect } from '../shared/FilterSelect';
+import { Pill } from '../shared/StatusBadge';
 import { Dropdown, menuItem } from './ControlDossier';
 import CreateRacmFlow from './CreateRacmFlow';
-import { RACM_ROWS_KEY, racmEditorRows } from './helpers';
-import { deleteLibraryRacm, racmInUse, useRacmLibrary, type LibraryRacm } from './racmLibrary';
+import { deleteLibraryRacm, publishRacm, racmInUse, racmStatus, useRacmLibrary, writeEditorHandoff, type LibraryRacm } from './racmLibrary';
 
 /** The spreadsheet editor opens in its own tab, handed this RACM's rows first —
  *  the new tab has none of this page's state. */
 function openEditorTab(r: LibraryRacm): void {
-  try { window.localStorage.setItem(RACM_ROWS_KEY(r.id), JSON.stringify(racmEditorRows(r.controls, r.process))); } catch { /* storage blocked — the editor shows its sample */ }
+  writeEditorHandoff(r);
   const params = new URLSearchParams({ view: 'racm-full-editor', racmId: r.id, racmName: r.name, processLabel: r.process });
   window.open(`${window.location.origin}${window.location.pathname}?${params.toString()}`, '_blank', 'noopener');
 }
@@ -41,13 +42,31 @@ function sourceLine(r: LibraryRacm): string {
 const menuRowCls = `${menuItem.replace('hover:bg-paper-50', 'enabled:hover:bg-paper-50').replace('items-center', 'items-start')} disabled:text-ink-400 disabled:cursor-not-allowed`;
 const menuDangerCls = menuRowCls.replace('text-ink-700', 'text-risk-700').replace('enabled:hover:bg-paper-50', 'enabled:hover:bg-risk-50');
 
-function RowActions({ racm, canManage, onDelete }: { racm: LibraryRacm; canManage: boolean; onDelete: () => void }) {
+/** The one place the list says whether a RACM can be scoped from. Draft is the
+ *  loud one: it reads as unfinished because that is exactly what it is, and a
+ *  matrix nobody can pick up yet is the single most useful thing to see here. */
+function StatusCell({ racm }: { racm: LibraryRacm }) {
+  const { status, draftCount, publishedCount } = racmStatus(racm);
+  if (status === 'Draft') return <Pill tone="draft">Draft</Pill>;
+  if (status === 'Published') return <Pill tone="compliant">Published</Pill>;
+  return (
+    <span className="inline-flex flex-col gap-0.5 items-start">
+      <Pill tone="compliant">Published</Pill>
+      <span className="text-[11px] text-ink-500" title={`${publishedCount} published, ${draftCount} still draft`}>
+        +{draftCount} draft
+      </span>
+    </span>
+  );
+}
+
+function RowActions({ racm, canManage, onDelete, onPublish }: { racm: LibraryRacm; canManage: boolean; onDelete: () => void; onPublish: () => void }) {
   const wrap = useRef<HTMLSpanElement>(null);
   // Dropdown draws its own trigger and takes no props for its name
   useLayoutEffect(() => {
     wrap.current?.querySelector('button')?.setAttribute('aria-label', `Actions for ${racm.name}`);
   }, [racm.name]);
   const blocker = racmInUse(racm);
+  const { draftCount } = racmStatus(racm);
   const logEvent = useAuditLog();
   return (
     <span ref={wrap} className="inline-flex" onClick={e => e.stopPropagation()} onKeyDown={e => e.stopPropagation()}>
@@ -70,6 +89,15 @@ function RowActions({ racm, canManage, onDelete }: { racm: LibraryRacm; canManag
                   logEvent({ action: 'Export', description: `Opened "${racm.fileName}", the SOP behind ${racm.name}`, module: 'SOX ICFR', entity: 'RACM' });
                 }}>
                 <FileText size={13} className="text-ink-400 mt-0.5 shrink-0" /> View SOP
+              </button>
+            )}
+            {canManage && draftCount > 0 && (
+              <button type="button" className={menuRowCls} onClick={() => { close(); onPublish(); }}>
+                <CheckCircle2 size={13} className="text-ink-400 mt-0.5 shrink-0" />
+                <span className="min-w-0">
+                  <span className="block">Publish {draftCount === racm.controls.length ? 'this RACM' : `${draftCount} new control${draftCount === 1 ? '' : 's'}`}</span>
+                  <span className="block text-[0.6875rem] text-ink-500 whitespace-normal leading-snug">Fixes {draftCount === 1 ? 'the row' : 'those rows'} and lets engagements scope from {draftCount === 1 ? 'it' : 'them'}</span>
+                </span>
               </button>
             )}
             {canManage && (
@@ -99,10 +127,13 @@ export default function RacmLibraryView({ canManage }: {
   const racms = useRacmLibrary();
   const { addToast } = useToast();
   const logEvent = useAuditLog();
+  const { currentUser } = useCurrentUser();
   const [search, setSearch] = useState('');
   const [process, setProcess] = useState('All');
   const [creating, setCreating] = useState(false);
   const [deleting, setDeleting] = useState<LibraryRacm | null>(null);
+  const [publishing, setPublishing] = useState<LibraryRacm | null>(null);
+  const [status, setStatus] = useState('All');
 
   const processes = useMemo(() => Array.from(new Set(racms.map(r => r.process))).sort((a, b) => a.localeCompare(b)), [racms]);
   /** The rows on screen — newest first, as the tab keeps them, so a RACM just
@@ -110,8 +141,28 @@ export default function RacmLibraryView({ canManage }: {
   const shown = useMemo(() => {
     const q = search.trim().toLowerCase();
     return racms.filter(r => (process === 'All' || r.process === process)
+      // "Draft" means nothing here has been published yet; a matrix with
+      // additions still counts as published, because scoping can use it.
+      && (status === 'All' || (status === 'Draft' ? racmStatus(r).status === 'Draft' : racmStatus(r).status !== 'Draft'))
       && (!q || `${r.name} ${r.process} ${r.entity} ${r.fileName ?? ''} ${r.usedBy.map(u => u.name).join(' ')}`.toLowerCase().includes(q)));
-  }, [racms, process, search]);
+  }, [racms, process, search, status]);
+
+  const confirmPublish = (r: LibraryRacm) => {
+    setPublishing(null);
+    const { draftCount, status: was } = racmStatus(r);
+    const moved = publishRacm(r.id, currentUser?.name ?? 'You');
+    if (!moved) {
+      addToast({ type: 'warning', title: 'Nothing to publish', message: `Every row in ${r.name} is already published.` });
+      return;
+    }
+    logEvent({ action: 'Update', description: `Published ${moved} control${moved === 1 ? '' : 's'} in ${r.name}`, module: 'SOX ICFR', entity: 'RACM' });
+    addToast({
+      type: 'success',
+      title: was === 'Draft' ? 'RACM published' : 'New controls published',
+      message: `${moved} control${moved === 1 ? '' : 's'} in ${r.name} ${moved === 1 ? 'is' : 'are'} now fixed, and engagements can scope from ${moved === 1 ? 'it' : 'them'}.`,
+    });
+    void draftCount;
+  };
 
   const confirmDelete = (r: LibraryRacm) => {
     setDeleting(null);
@@ -138,8 +189,9 @@ export default function RacmLibraryView({ canManage }: {
           />
         </div>
         <FilterSelect value={process} options={['All', ...processes]} allLabel="All processes" onChange={setProcess} ariaLabel="Filter by process" />
-        {(search || process !== 'All') && (
-          <button onClick={() => { setSearch(''); setProcess('All'); }}
+        <FilterSelect value={status} options={['All', 'Draft', 'Published']} allLabel="Any status" onChange={setStatus} ariaLabel="Filter by status" />
+        {(search || process !== 'All' || status !== 'All') && (
+          <button onClick={() => { setSearch(''); setProcess('All'); setStatus('All'); }}
             className="inline-flex items-center gap-1 text-[0.75rem] font-semibold text-text-muted hover:text-primary px-2 py-1.5 rounded-md hover:bg-primary/5 transition-colors cursor-pointer">
             <X size={12} /> Clear
           </button>
@@ -167,6 +219,7 @@ export default function RacmLibraryView({ canManage }: {
               <thead className="reg-head">
                 <tr>
                   <th>RACM</th>
+                  <th style={{ width: 132 }} title="Only published rows can be scoped into an engagement">Status</th>
                   <th style={{ width: 170 }}>Process</th>
                   <th style={{ width: 200 }}>Company</th>
                   <th style={{ width: 64 }}>Risks</th>
@@ -191,6 +244,7 @@ export default function RacmLibraryView({ canManage }: {
                           </span>
                         </span>
                       </td>
+                      <td><StatusCell racm={r} /></td>
                       <td><span className="text-[12.5px] text-ink-700">{r.process}</span></td>
                       <td><span className="text-[12.5px] text-ink-700">{r.entity || '—'}</span></td>
                       <td><span className="tabular-nums font-medium text-ink-600">{risks}</span></td>
@@ -207,7 +261,7 @@ export default function RacmLibraryView({ canManage }: {
                           <span className="flex items-center gap-1.5 text-[12px] font-semibold text-ink-500">
                             <FileSpreadsheet size={13} className="text-ink-400" /> Spreadsheet editor <ExternalLink size={12} className="text-ink-400" />
                           </span>
-                          <RowActions racm={r} canManage={canManage} onDelete={() => setDeleting(r)} />
+                          <RowActions racm={r} canManage={canManage} onDelete={() => setDeleting(r)} onPublish={() => setPublishing(r)} />
                         </span>
                       </td>
                     </tr>
@@ -224,6 +278,48 @@ export default function RacmLibraryView({ canManage }: {
         <CreateRacmFlow onClose={() => setCreating(false)}
           onCreated={r => { setCreating(false); setProcess('All'); setSearch(''); addToast({ type: 'success', title: 'Saved to the RACM tab', message: `${r.name} — ${r.controls.length} control${r.controls.length === 1 ? '' : 's'}` }); }} />
       )}
+
+      {/* Publishing is the moment a matrix stops being editable, so it is asked
+          for once, plainly, with the count it will fix. The Process Hub's Freeze
+          dialog is the house pattern this follows. */}
+      {publishing && (() => {
+        const { draftCount, status: was } = racmStatus(publishing);
+        const all = draftCount === publishing.controls.length;
+        return (
+          <div className="modal-backdrop" onClick={() => setPublishing(null)}>
+            <div className="modal" onClick={e => e.stopPropagation()} role="dialog" aria-modal="true" aria-labelledby="publish-library-racm-title"
+              onKeyDown={e => { if (e.key === 'Escape') setPublishing(null); }}>
+              <div className="px-5 pt-4 pb-3 border-b border-canvas-border">
+                <div className="flex items-center justify-between gap-3">
+                  <h2 id="publish-library-racm-title" className="text-[0.9375rem] font-semibold text-ink-900">
+                    {all ? `Publish ${publishing.name}?` : `Publish ${draftCount} new control${draftCount === 1 ? '' : 's'}?`}
+                  </h2>
+                  <button onClick={() => setPublishing(null)} className="h-7 w-7 inline-flex items-center justify-center rounded-md text-ink-400 hover:text-ink-700 cursor-pointer" aria-label="Close"><X size={15} /></button>
+                </div>
+              </div>
+              <div className="p-5">
+                <p className="text-[0.78125rem] text-ink-600 leading-relaxed">
+                  {draftCount === 1 ? 'This row' : `These ${draftCount} rows`} can be scoped into an engagement once published.
+                </p>
+                <div className="mt-3 flex items-start gap-2.5 rounded-lg border border-canvas-border bg-paper-50 px-3.5 py-3">
+                  <Lock size={14} className="text-ink-400 mt-0.5 shrink-0" />
+                  <p className="text-[0.75rem] text-ink-600 leading-relaxed">
+                    A published row can't be edited again. Anything still to change{was === 'Draft' ? '' : ' in these rows'} should be changed first —
+                    afterwards the only way to alter this matrix is to add a control to it.
+                  </p>
+                </div>
+                <div className="mt-4 flex items-center justify-end gap-2">
+                  <button onClick={() => setPublishing(null)} autoFocus className="h-9 px-3.5 rounded-lg border border-canvas-border text-[0.78125rem] font-semibold text-ink-600 hover:text-ink-900 cursor-pointer">Cancel</button>
+                  <button onClick={() => confirmPublish(publishing)}
+                    className="h-9 px-3.5 inline-flex items-center gap-1.5 rounded-lg bg-brand-600 text-white text-[0.78125rem] font-semibold hover:bg-brand-700 transition-colors cursor-pointer">
+                    <CheckCircle2 size={13} /> {all ? 'Publish RACM' : `Publish ${draftCount}`}
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+        );
+      })()}
 
       {deleting && (
         <div className="modal-backdrop" onClick={() => setDeleting(null)}>

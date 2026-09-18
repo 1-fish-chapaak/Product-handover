@@ -9,7 +9,8 @@
  *     ─ matchColumns ─▶ one ColumnMatch per RACM field (confidence, needs attention)
  *     ─ buildImportRows ─▶ ImportRow[]  (split attributes, evidence per attribute,
  *                                         merged duplicate checks, frequency flags,
- *                                         duplicates against the engagement)
+ *                                         duplicates — against the engagement and
+ *                                         against the rows already read)
  *     ─ proposeBlankFills / applyFills  (A9: previewed, accepted, then applied)
  *     ─ suggestForRow                   (A7: Ira's missing attributes / design checks)
  *     ─ importRowsToControls ─▶ Control[] for createRacm
@@ -19,6 +20,7 @@
  * each as read from the SOP (with a section reference) or suggested by Ira.
  */
 import * as XLSX from 'xlsx';
+import { sameCompany } from './auditScope';
 import { requiredFilesOf, suggestedDesignChecks, titleFromRisk } from './helpers';
 import { racmTemplateForProcesses } from './mockData';
 import type { Assertion, Control, ControlClass, ControlType, DesignPoint, Frequency, Nature, OperatingStep, RiskRating, TestingStrategy } from './types';
@@ -373,9 +375,18 @@ export interface ImportRow {
   /** Undefined when the file leaves it blank or says something we can't read —
    *  optional, so a blank one never blocks the import (17 Sep). */
   testingStrategy?: TestingStrategy;
-  /** A8: this looks like a control another RACM on the engagement already has. */
-  duplicateOf?: { controlId: string; process: string; reason: string };
+  /** A8: this looks like a control the engagement already has, or one an earlier
+   *  row of this same file already wrote. `kind` says what that means, because
+   *  the two are not the same thing: 'same-process' is the same control twice in
+   *  one matrix — a repeat, held back from import — while 'other-process' is a
+   *  control that also answers for another process, which is legitimate and is
+   *  only pointed out. */
+  duplicateOf?: { kind: 'same-process' | 'other-process'; controlId: string; process: string; reason: string };
 }
+
+/** Held back from import: the row repeats a control this RACM already has
+ *  (17 Sep — flag and don't create). A match in another process is not one. */
+export const rowRepeats = (row: ImportRow) => row.duplicateOf?.kind === 'same-process';
 
 // ── cell readers ─────────────────────────────────────────────────────────────────
 
@@ -495,33 +506,143 @@ function sopFilesFor(text: string, values: Partial<Record<RacmFieldKey, string>>
   return labels.filter(l => inEvidence.has(sameText(l)));
 }
 
-function findDuplicate(values: Partial<Record<RacmFieldKey, string>>, idWasGenerated: boolean, existing: Control[], process: string): ImportRow['duplicateOf'] {
-  const others = existing.filter(c => c.process !== process);
-  if (!others.length) return undefined;
+/** How alike two wordings have to read before a row is called a duplicate. */
+const DUPLICATE_MATCH = 0.75;
+
+/** Something a row is compared against: a control already on the engagement, or
+ *  a row earlier in the same import. */
+interface DuplicateCandidate {
+  /** What `duplicateOf` carries — a control's id, or an earlier row's key. */
+  id: string;
+  process: string;
+  /** The same process means the same matrix, so a match is a repeat. */
+  sameProcess: boolean;
+  /** How the reason names it, and where it says that thing sits. */
+  name: string;
+  where: string;
+  /** The control ID a person would recognise. '' when there is none to compare. */
+  controlId: string;
+  /** Every wording of the control, and of the risk, worth comparing against. */
+  controlTexts: string[];
+  riskTexts: string[];
+}
+
+/** The same matrix means the same process AT THE SAME COMPANY.
+ *
+ *  A RACM is named for both — the IDs read ENTITY/PROCESS/R001/C001 — and the
+ *  library holds one Treasury matrix per company on purpose. Comparing on the
+ *  process alone would call the second company's Treasury upload a repeat of
+ *  the first's, row for row, and block an import that is entirely correct.
+ *
+ *  A blank company on either side is treated as a match rather than a mismatch:
+ *  it means nobody said, and a silent "different company" would let a real
+ *  repeat through. */
+const sameMatrix = (aProcess: string, aEntity: string, bProcess: string, bEntity: string): boolean =>
+  aProcess === bProcess && (!aEntity.trim() || !bEntity.trim() || sameCompany(aEntity, bEntity));
+
+function candidateFromControl(c: Control, process: string, entity: string): DuplicateCandidate {
+  const shown = c.code ?? c.id;
+  const sameProcess = sameMatrix(c.process, c.entity ?? '', process, entity);
+  return {
+    id: c.id,
+    process: c.process,
+    sameProcess,
+    name: shown,
+    where: sameProcess ? ', already in this RACM' : ` in the ${c.process} RACM${c.entity && !sameCompany(c.entity, entity) ? ` for ${c.entity}` : ''}`,
+    controlId: shown,
+    controlTexts: [c.description, c.controlActivity ?? ''],
+    riskTexts: [c.riskDescription, c.riskTitle ?? ''],
+  };
+}
+
+/** A row read earlier in this same file. Every row of one import lands in the
+ *  RACM being created, so the process always matches — but a file can name a
+ *  company per row, and the same control tested at two companies is two rows,
+ *  not a repeat. */
+function candidateFromRow(row: ImportRow, process: string, entity: string): DuplicateCandidate {
+  const v = row.values;
+  const rowEntity = (v.entity ?? '').trim() || entity;
+  return {
+    id: row.key,
+    process,
+    sameProcess: sameMatrix(process, rowEntity, process, entity),
+    name: `row ${row.rowNo} above`,
+    where: '',
+    controlId: (v.controlId ?? '').trim(),
+    controlTexts: [(v.controlTitle ?? '').trim(), (v.controlActivity ?? '').trim()],
+    riskTexts: [(v.riskDescription ?? '').trim(), (v.riskTitle ?? '').trim()],
+  };
+}
+
+/** The closest of every pair of wordings. */
+function bestMatch(mine: string[], theirs: string[]): number {
+  let best = 0;
+  for (const a of mine) {
+    if (!a) continue;
+    for (const b of theirs) if (b) best = Math.max(best, keywordJaccard(a, b));
+  }
+  return best;
+}
+
+/** Does this row say what something else already says? Both directions are
+ *  looked for and they mean different things (17 Sep): the same control twice in
+ *  THIS matrix is a repeat nobody meant to create, while the same control in
+ *  another process is usually right — one control can genuinely answer for two
+ *  processes — so that one is only pointed out. `earlier` is the rows already
+ *  read from this file, since two identical lines in one upload are the
+ *  commonest repeat of all. */
+function findDuplicate(values: Partial<Record<RacmFieldKey, string>>, idWasGenerated: boolean, existing: Control[], process: string, earlier: ImportRow[], entity: string): ImportRow['duplicateOf'] {
+  // The row's own company wins over the RACM's, the same way it does everywhere
+  // else a row carries one.
+  const mine = (values.entity ?? '').trim() || entity;
+  const candidates = [
+    ...existing.map(c => candidateFromControl(c, process, mine)),
+    ...earlier.map(r => candidateFromRow(r, process, mine)),
+  ];
+  if (!candidates.length) return undefined;
+  // The risk is only said out loud on a repeat, where the reviewer is being
+  // asked to hold a row back and deserves to know how sure this is. A control
+  // that also answers for another process reads exactly as it always has.
+  const flag = (c: DuplicateCandidate, lead: string, riskToo: boolean): ImportRow['duplicateOf'] => ({
+    kind: c.sameProcess ? 'same-process' : 'other-process',
+    controlId: c.id,
+    process: c.process,
+    reason: `${lead} ${c.name}${c.where}${riskToo && c.sameProcess ? ' — same risk too' : ''}`,
+  });
+
   const id = (values.controlId ?? '').trim().toLowerCase();
   if (id && !idWasGenerated) {
-    const same = others.find(c => (c.code ?? c.id).toLowerCase() === id);
-    if (same) {
-      const shown = same.code ?? same.id;
-      return { controlId: same.id, process: same.process, reason: `Same control ID as ${shown} in the ${same.process} RACM` };
-    }
+    const byId = candidates.filter(c => c.controlId && c.controlId.toLowerCase() === id);
+    // A repeat in this matrix outranks the same ID elsewhere: one is a mistake to
+    // hold back, the other is a cross-reference worth reading.
+    const hit = byId.find(c => c.sameProcess) ?? byId[0];
+    if (hit) return flag(hit, 'Same control ID as', false);
   }
-  const text = (values.controlTitle ?? '').trim() || (values.controlActivity ?? '').trim();
-  if (!text) return undefined;
-  let best: { c: Control; score: number } | null = null;
-  for (const c of others) {
-    const score = Math.max(keywordJaccard(text, c.description), c.controlActivity ? keywordJaccard(text, c.controlActivity) : 0);
-    if (score >= 0.75 && (!best || score > best.score)) best = { c, score };
+
+  const controlTexts = [(values.controlTitle ?? '').trim(), (values.controlActivity ?? '').trim()];
+  if (!controlTexts.some(Boolean)) return undefined;
+  const riskTexts = [(values.riskDescription ?? '').trim(), (values.riskTitle ?? '').trim()];
+  let best: { c: DuplicateCandidate; rank: number; riskToo: boolean } | null = null;
+  for (const c of candidates) {
+    const score = bestMatch(controlTexts, c.controlTexts);
+    if (score < DUPLICATE_MATCH) continue;
+    // The risk is read too, but only to say how sure this is. Two controls in one
+    // process often answer the same risk, so a risk that matches on its own means
+    // nothing — a row that matches on both is the one to look hardest at, and it
+    // is ranked above a row that matches on its control alone.
+    const riskToo = bestMatch(riskTexts, c.riskTexts) >= DUPLICATE_MATCH;
+    const rank = (c.sameProcess ? 4 : 0) + (riskToo ? 2 : 0) + score;
+    if (!best || rank > best.rank) best = { c, rank, riskToo };
   }
   if (!best) return undefined;
-  return { controlId: best.c.id, process: best.c.process, reason: `Reads like ${best.c.code ?? best.c.id} in the ${best.c.process} RACM` };
+  return flag(best.c, 'Reads like', best.riskToo);
 }
 
 /** Build review rows from the data rows below `headerRow`, skipping fully blank
- *  rows. `existing` is every control on the engagement (for A8 duplicates);
- *  `process` is the RACM being created (duplicates are only looked for in OTHER
- *  processes). */
-export function buildImportRows(rows: string[][], headerRow: number, matches: ColumnMatch[], existing: Control[], process: string): ImportRow[] {
+ *  rows. `existing` is every control on the engagement (for A8 duplicates) and
+ *  `process` is the RACM being created — a row is checked against both, and
+ *  against the rows read before it. */
+export function buildImportRows(rows: string[][], headerRow: number, matches: ColumnMatch[], existing: Control[], process: string, entity = ''): ImportRow[] {
   const mapped = matches.filter((m): m is ColumnMatch & { column: number } => m.column != null);
   const out: ImportRow[] = [];
   for (let r = headerRow + 1; r < rows.length; r++) {
@@ -532,14 +653,17 @@ export function buildImportRows(rows: string[][], headerRow: number, matches: Co
     // sitting only in an unmapped column (e.g. the process name) is not a control.
     if (!Object.values(values).some(v => v)) continue;
     const rowNo = r + 1;
-    out.push(rowFromValues(values, { key: `row-${rowNo}`, rowNo, origin: 'file' }, existing, process));
+    // `out` is the rows read before this one: the first of two identical lines is
+    // the one that stands, the second is the one flagged.
+    out.push(rowFromValues(values, { key: `row-${rowNo}`, rowNo, origin: 'file' }, existing, process, out, entity));
   }
   return out;
 }
 
 /** Rebuild one row from edited `values` (after fills, or a frequency picked in
- *  review), re-deriving everything else the same way buildImportRows does. */
-export function rowFromValues(values: Partial<Record<RacmFieldKey, string>>, base: Pick<ImportRow, 'key' | 'rowNo' | 'origin' | 'sectionRef'>, existing: Control[], process: string): ImportRow {
+ *  review), re-deriving everything else the same way buildImportRows does.
+ *  `earlier` is the rows that come before it in the same import. */
+export function rowFromValues(values: Partial<Record<RacmFieldKey, string>>, base: Pick<ImportRow, 'key' | 'rowNo' | 'origin' | 'sectionRef'>, existing: Control[], process: string, earlier: ImportRow[] = [], entity = ''): ImportRow {
   const v: Partial<Record<RacmFieldKey, string>> = { ...values };
   // A blank Control ID stays blank — the ID is built at import from the codes
   // and the row order (17 Sep: no "C-00n" that reads as if the file said it).
@@ -583,7 +707,7 @@ export function rowFromValues(values: Partial<Record<RacmFieldKey, string>>, bas
   if (rating) row.riskRating = rating;
   const strategy = parseTestingStrategy(v.testingStrategy ?? '');
   if (strategy) row.testingStrategy = strategy;
-  const dup = findDuplicate(v, idWasGenerated, existing, process);
+  const dup = findDuplicate(v, idWasGenerated, existing, process, earlier, entity);
   if (dup) row.duplicateOf = dup;
   return row;
 }
@@ -786,14 +910,14 @@ export function proposeBlankFills(row: ImportRow): BlankFill[] {
 }
 
 /** Apply accepted fills to a row — only into fields that are still blank — and
- *  re-derive it. */
-export function applyFills(row: ImportRow, fills: BlankFill[], existing: Control[], process: string): ImportRow {
+ *  re-derive it against the rows that come before it. */
+export function applyFills(row: ImportRow, fills: BlankFill[], existing: Control[], process: string, earlier: ImportRow[] = [], entity = ''): ImportRow {
   const values = { ...row.values };
   for (const f of fills) {
     if (f.field === 'isKey' || (values[f.field] ?? '').trim()) continue;
     values[f.field] = f.value;
   }
-  return rowFromValues(values, row, existing, process);
+  return rowFromValues(values, row, existing, process, earlier, entity);
 }
 
 // ── A7 suggestions ───────────────────────────────────────────────────────────────
@@ -967,8 +1091,9 @@ export function draftRowsFromSop(process: string, fileName: string, prompt: stri
   const firstSection = 2 + ((seed >>> 3) % 3);
   const subProcesses = Array.from(new Set(template.map(c => c.subProcess)));
   const perSection = new Map<string, number>();
+  const out: ImportRow[] = [];
 
-  return template.map((c, i) => {
+  template.forEach((c, i) => {
     const suggested = (i + offset) % 4 === 3;
     let sectionRef: string | undefined;
     if (!suggested) {
@@ -1001,6 +1126,7 @@ export function draftRowsFromSop(process: string, fileName: string, prompt: stri
       designChecks: c.design.points.filter(p => !p.stepId).map(p => p.text).join('\n'),
       sopSectionRef: sectionRef ?? '',
     };
-    return rowFromValues(values, { key: `sop-${i + 1}`, rowNo: i + 1, origin: suggested ? 'suggested' : 'sop', sectionRef }, existing, process);
+    out.push(rowFromValues(values, { key: `sop-${i + 1}`, rowNo: i + 1, origin: suggested ? 'suggested' : 'sop', sectionRef }, existing, process, out));
   });
+  return out;
 }

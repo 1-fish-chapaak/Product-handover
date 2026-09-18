@@ -21,6 +21,7 @@
 import { useSyncExternalStore } from 'react';
 import { libraryEngagements, type Engagement } from '../../data/engagements';
 import { programmeFor } from './auditScope';
+import { applyEditorRows, lockedEditorIds, RACM_LOCKED_KEY, RACM_ROWS_KEY, racmEditorRows } from './helpers';
 import { seedIcfrEngagement, type SeedMeta } from './mockData';
 import type { Control } from './types';
 
@@ -43,6 +44,81 @@ export interface LibraryRacm {
   createdAt: string;
   /** Engagements that copied this RACM. Delete is blocked while any. */
   usedBy: { id: string; name: string }[];
+  /** THE CONTROL IDS THAT HAVE BEEN PUBLISHED (17 Sep call).
+   *
+   *  Published row by row rather than matrix by matrix, because a RACM outlives
+   *  its first publish: a control found later is added to a matrix engagements
+   *  are already testing from. Freezing the whole record on first publish would
+   *  make that impossible, and republishing the whole record would quietly
+   *  reopen rows somebody has already tested against.
+   *
+   *  So: a published row is fixed and a new one is a draft until it is published
+   *  too. Scoping only ever sees the published ones. Empty on a new RACM — the
+   *  status is derived from this list, never stored (house convention, see
+   *  `racmStateEngine.ts`). */
+  published: string[];
+  /** When the matrix was last published, and by whom — for the list's Status column. */
+  publishedAt?: string;
+  publishedBy?: string;
+}
+
+/** Draft until a row is published; Published once every row is. In between it is
+ *  a published matrix with additions still being written — which the list has to
+ *  say out loud, because the difference decides what scoping can pick up. */
+export type RacmStatus = 'Draft' | 'Published' | 'Published · additions';
+
+export function racmStatus(r: LibraryRacm): {
+  status: RacmStatus; publishedCount: number; draftCount: number; draftIds: string[];
+} {
+  const live = new Set(r.published);
+  const draftIds = r.controls.filter(c => !live.has(c.id)).map(c => c.id);
+  const publishedCount = r.controls.length - draftIds.length;
+  const status: RacmStatus = publishedCount === 0 ? 'Draft'
+    : draftIds.length === 0 ? 'Published'
+    : 'Published · additions';
+  return { status, publishedCount, draftCount: draftIds.length, draftIds };
+}
+
+/** A published row is fixed: it may be read, copied and tested, never rewritten.
+ *  What an engagement already concluded against cannot change underneath it. */
+export const isRowPublished = (r: LibraryRacm, controlId: string): boolean => r.published.includes(controlId);
+
+/** Publish every row not yet published, and stamp who did it. Returns how many
+ *  rows moved — 0 when there was nothing to publish. */
+export function publishRacm(id: string, by: string): number {
+  const r = findLibraryRacm(id);
+  if (!r) return 0;
+  const { draftIds } = racmStatus(r);
+  if (!draftIds.length) return 0;
+  commit(all().map(x => (x.id === id
+    ? { ...x, published: [...x.published, ...draftIds], publishedAt: 'just now', publishedBy: by }
+    : x)));
+  return draftIds.length;
+}
+
+/** Add rows to a RACM already on the tab. They arrive as drafts — a control that
+ *  reached an engagement without anyone publishing it would make publishing
+ *  mean nothing. */
+export function addRacmControls(id: string, controls: Control[]): number {
+  const r = findLibraryRacm(id);
+  if (!r || !controls.length) return 0;
+  const have = new Set(r.controls.map(c => c.id));
+  const fresh = controls.map(racmRowOf).filter(c => !have.has(c.id));
+  if (!fresh.length) return 0;
+  commit(all().map(x => (x.id === id ? { ...x, controls: [...x.controls, ...fresh] } : x)));
+  return fresh.length;
+}
+
+/** Replace a DRAFT row's content. Refused for a published row — that is the lock.
+ *  Returns false when the row is missing or fixed. */
+export function updateDraftControl(id: string, controlId: string, patch: Partial<Control>): boolean {
+  const r = findLibraryRacm(id);
+  if (!r || isRowPublished(r, controlId)) return false;
+  if (!r.controls.some(c => c.id === controlId)) return false;
+  commit(all().map(x => (x.id === id
+    ? { ...x, controls: x.controls.map(c => (c.id === controlId ? { ...c, ...patch, id: c.id } : c)) }
+    : x)));
+  return true;
 }
 
 // ─── Store ──────────────────────────────────────────────────────────────────────
@@ -71,16 +147,57 @@ export const findLibraryRacm = (id: string): LibraryRacm | undefined => all().fi
 
 let seq = 0;
 /** Put a new RACM on the tab. Its rows are stripped to RACM rows on the way in. */
-export function addLibraryRacm(input: Omit<LibraryRacm, 'id' | 'usedBy' | 'createdAt'> & { createdAt?: string }): LibraryRacm {
+export function addLibraryRacm(input: Omit<LibraryRacm, 'id' | 'usedBy' | 'createdAt' | 'published'> & { createdAt?: string; published?: string[] }): LibraryRacm {
   const racm: LibraryRacm = {
     ...input,
     id: `racm-${Date.now().toString(36)}-${(++seq).toString(36)}`,
     controls: input.controls.map(racmRowOf),
     createdAt: input.createdAt ?? 'just now',
     usedBy: [],
+    published: input.published ?? [],
   };
   commit([racm, ...all()]);
   return racm;
+}
+
+/**
+ * Edits made in the spreadsheet editor, coming back.
+ *
+ * The editor runs in its own browser tab — it was opened with `window.open`, and
+ * the rows were handed to it through localStorage. So its edits arrive the same
+ * way: it writes the rows back under the key it read them from, and the browser
+ * raises a `storage` event in every OTHER tab, which is this one.
+ *
+ * That event is the only thing this listens to, and only for keys that name a
+ * RACM the tab actually has. Anything unreadable is ignored in silence: a RACM
+ * disappearing because a JSON parse failed would be far worse than an edit that
+ * did not arrive, and the editor still holds the rows either way.
+ */
+function applyEditorWrite(key: string, raw: string | null): void {
+  if (!raw || !key.startsWith('sox-racm-rows:')) return;
+  const racm = findLibraryRacm(key.slice('sox-racm-rows:'.length));
+  if (!racm) return;
+  let rows;
+  try { rows = JSON.parse(raw); } catch { return; }
+  if (!Array.isArray(rows)) return;
+  const { controls, changed, added } = applyEditorRows(racm.controls, racm.process, rows, new Set(racm.published));
+  if (!changed && !added) return;
+  commit(all().map(r => (r.id === racm.id ? { ...r, controls } : r)));
+}
+
+if (typeof window !== 'undefined') {
+  window.addEventListener('storage', e => { if (e.key) applyEditorWrite(e.key, e.newValue); });
+}
+
+/** Hand a RACM's rows to the spreadsheet editor, with the list of rows it must
+ *  not let anyone change. Both go into storage under the RACM's own keys; the
+ *  editor reads them when its tab opens, and writes the rows back to the first
+ *  of them as they change. */
+export function writeEditorHandoff(r: LibraryRacm): void {
+  try {
+    window.localStorage.setItem(RACM_ROWS_KEY(r.id), JSON.stringify(racmEditorRows(r.controls, r.process)));
+    window.localStorage.setItem(RACM_LOCKED_KEY(r.id), JSON.stringify(lockedEditorIds(r.controls, r.process, r.published)));
+  } catch { /* storage blocked — the editor falls back to its own sample */ }
 }
 
 /** Why a RACM can't be deleted, or null when it can. */
@@ -106,9 +223,11 @@ export function markRacmsUsed(racmIds: string[], eng: { id: string; name: string
     : r)));
 }
 
-/** The rows an engagement takes when it picks a RACM — its own copy. */
+/** The rows an engagement takes when it picks a RACM — its own copy, and only
+ *  the published ones. A draft row is work in progress; scoping an engagement
+ *  from it would be testing against something nobody has agreed to yet. */
 export function copyRacmControls(r: LibraryRacm): Control[] {
-  return structuredClone(r.controls);
+  return structuredClone(r.controls.filter(c => isRowPublished(r, c.id)));
 }
 
 // ─── Clashes ────────────────────────────────────────────────────────────────────
@@ -209,16 +328,23 @@ function seedFromEngagements(): LibraryRacm[] {
       const base = `${process} — ${entity || e.name}`;
       let name = base;
       for (let n = 2; out.some(r => r.name === name); n++) name = `${base} (${n})`;
+      const controls = rows.map(racmRowOf);
       out.push({
         id: `racm-seed-${e.id}-${process.toLowerCase().replace(/[^a-z0-9]+/g, '-')}`,
         name,
         process,
         entity,
         source: 'engagement',
-        controls: rows.map(racmRowOf),
+        controls,
         createdBy: e.owner,
         createdAt: e.periodStart ? `with ${e.code}` : 'earlier',
         usedBy: [{ id: e.id, name: e.name }],
+        // Published from birth: these rows were read back OUT of an engagement
+        // that is already testing them. Landing them as drafts would be telling
+        // the auditor that work already under way had never been agreed.
+        published: controls.map(c => c.id),
+        publishedAt: e.periodStart ? `with ${e.code}` : 'earlier',
+        publishedBy: e.owner,
       });
     });
   });

@@ -27,7 +27,7 @@ import {
   sameCompany, type ScopeEntityRow, SOX_MAPPING_PROCESSES,
 } from '../../sox-icfr/auditScope';
 import {
-  clashSummary, controlIdClashes, copyRacmControls, markRacmsUsed, useRacmLibrary, type LibraryRacm,
+  clashSummary, controlIdClashes, copyRacmControls, markRacmsUsed, racmStatus, useRacmLibrary, type LibraryRacm,
 } from '../../sox-icfr/racmLibrary';
 import CreateRacmFlow from '../../sox-icfr/CreateRacmFlow';
 // Upload RACM opens the RACM tab's own dialog, which is styled by the SOX
@@ -562,8 +562,11 @@ export default function ScopingWizard({ onCancel, onCreated, typePreselected, on
    *  here, so this is also the list the Scope step picks from. */
   const libraryRacms = useRacmLibrary();
   /** Every process the RACM tab holds a RACM for, by its normalised name. */
+  // Published only: a process whose only matrix is still a draft has nothing
+  // this engagement can test, and saying it has a RACM would be a promise the
+  // Scope step then breaks.
   const racmProcessNames = useMemo(
-    () => Array.from(new Set(libraryRacms.map(r => normaliseProcess(r.process)))),
+    () => Array.from(new Set(libraryRacms.filter(r => racmStatus(r).status !== 'Draft').map(r => normaliseProcess(r.process)))),
     [libraryRacms],
   );
   /** The standard SOX list, then any other process the tab keeps a RACM for.
@@ -784,8 +787,19 @@ export default function ScopingWizard({ onCancel, onCreated, typePreselected, on
   // Picked from the RACM tab — any number, any mix of companies (S11 decision
   // 7). Every control of a ticked RACM is copied at creation; narrowing to key
   // controls stays New audit's job (decision 13).
+  // Only what has been published (17 Sep). A draft matrix is still being
+  // written; scoping an engagement from it would commit the audit to rows
+  // nobody has agreed yet. A matrix with published rows AND later additions
+  // still appears — its published half is scopable, and `copyRacmControls`
+  // takes only that half.
   const racmsFor = useCallback(
-    (process: string) => libraryRacms.filter(r => normaliseProcess(r.process) === process),
+    (process: string) => libraryRacms.filter(r => normaliseProcess(r.process) === process && racmStatus(r).status !== 'Draft'),
+    [libraryRacms],
+  );
+  /** Drafts for a process, named as the reason this list looks emptier than the
+   *  RACM tab does — hiding them silently would read as a RACM gone missing. */
+  const draftRacmsFor = useCallback(
+    (process: string) => libraryRacms.filter(r => normaliseProcess(r.process) === process && racmStatus(r).status === 'Draft'),
     [libraryRacms],
   );
   /** The user's ticks, by process. Absent means "the default": every RACM
@@ -2668,7 +2682,11 @@ export default function ScopingWizard({ onCancel, onCreated, typePreselected, on
                                         {nothingOnTab ? (
                                           <div className="flex items-center gap-3">
                                             <p className="flex-1 min-w-0 text-[0.71875rem] text-ink-500 leading-relaxed">
-                                              Upload one, or untick {r.process} and say why.
+                                              {draftRacmsFor(r.process).length > 0
+                                                // The RACM exists — it just isn't publishable work yet, and
+                                                // "upload one" would send the reader to build a second copy.
+                                                ? <>{draftRacmsFor(r.process).length === 1 ? 'There is a RACM for this process, but it is still a draft' : `There are ${draftRacmsFor(r.process).length} RACMs for this process, but all of them are still drafts`}. Publish {draftRacmsFor(r.process).length === 1 ? 'it' : 'one'} on the RACM tab, upload another, or untick {r.process} and say why.</>
+                                                : <>Upload one, or untick {r.process} and say why.</>}
                                             </p>
                                             <button
                                               type="button"
@@ -3408,6 +3426,7 @@ export default function ScopingWizard({ onCancel, onCreated, typePreselected, on
         <CreateRacmFlow
           fixedProcess={racmUploadFor.process}
           defaultEntity={racmUploadFor.entity || undefined}
+          publishOnCreate
           onClose={() => setRacmUploadFor(null)}
           onCreated={racm => onRacmUploaded(racmUploadFor.process, racm)}
         />,
