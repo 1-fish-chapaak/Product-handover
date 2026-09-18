@@ -1,6 +1,42 @@
 # Plan — SOX feedback sheets vs the current flow (revision 3)
 
-## 17 Sep dev call — Stage 1 quick fixes (built 17 Sep, not committed; build passes)
+## 17 Sep dev call — stages 2 to 7 (built 18 Sep; build passes)
+Decisions were asked one at a time, as before.
+
+### Stage 2 — RACM fields
+- **Risk title** beside the risk description; where an uploaded file carries no title column, Ira shortens the description into one. It is a trim, not a rewrite, and it keeps the negative the risk turns on ("granted without approval" never becomes "granted"). The seeded registers get the same treatment, since they predate the column.
+- **Control title / Control description**: the one-line statement is now labelled *Control title* and the narrative *Control description*; **Objective survives as its own field** (user's call). Both control pages lead with the title instead of the objective.
+- **Effective date, Country, Testing strategy** (Sampling / Full population / Test of one) on every row. **None of them blocks an import** — a file without them still lands, and Ira offers a fill per row. Effective date gets no suggestion: nothing in the row can be read for it, and a made-up date is worse than an empty one.
+- **Country is resolved, not duplicated**: a row stores one only when a file named one, otherwise it takes its entity's, and the screens say which.
+- **Entity** is read on import like any other cell instead of being patched on afterwards, and now shows on the control detail page, the RACM matrix, the spreadsheet editor and both exports.
+
+### Stage 3 — Draft → Publish, locks, the editor that saves
+- **Rows publish individually, not matrix by matrix** (user's call: *"user can add a control, but the already added controls cannot be changed"*). A published row is fixed; a control added later is a draft until it is published too.
+- **Status, a filter and Publish** on the RACM tab, with a confirm that says what publishing fixes. Seeded RACMs arrive published — they were read back out of engagements already testing them.
+- **Only published work can be scoped.** A process whose only matrix is a draft says so rather than reading as a process with no RACM. The exception is the Scope step's own upload, which publishes as it saves: uploading a RACM into a scoping decision *is* the decision to use it.
+- **The spreadsheet editor saves back.** It runs in its own browser tab, so edits return the way the rows went out — through storage — and are mapped onto the controls they came from. Only columns a person can type into are written back; a cell that can't be read leaves the value alone rather than guessing. Published rows show a padlock and refuse every edit path.
+- **Duplicate check** now looks inside the matrix being built and across the file's own rows, and blocks what it finds. *The same matrix* means the same process **at the same company** — one process has a matrix per company on purpose, and comparing on process alone would reject a second company's upload row for row. A control that also answers for another process stays a note.
+
+### Stage 4 — configurable columns
+- A **Config tab** beside RACM: which columns a row can't be imported without, which of the client's own columns to keep, and what a file heading meant last time.
+- **Core columns come from that set-up**, so a client whose file never carries a column can switch it off rather than fail every upload.
+- **Columns we have no field for are kept**, not dropped: they ride along on the row, show in the import review and on the control page, and survive into the library. Nothing reads them.
+- **The first upload sets the team up**; after that later uploads only add to what a heading means. A heading matched once is matched the same way next time, including one deliberately left out.
+- **Parked:** one library *per team*. Workspaces here are decorative, so this waits until they are real; the store is shaped to take a team key in front of it.
+
+### Stage 5 — closed with nothing to build
+- **RACM ticks stay** on the Scope step (user's call, overriding the call's "controls follow automatically"): when a process has two RACMs at different companies, someone has to say which apply.
+- The **published guard** was built in stage 3.
+- **Links instead of copies** waits for the architecture meeting — it reshapes the same relationship "engagement = one audit" reshapes.
+
+### Stage 6 — waits for the architecture meeting
+Engagement = one audit, workflow engagements without a RACM, workflow ↔ process, annual controls at year end.
+
+### Stage 7 — version history only
+- Each matrix keeps a history of the events a person caused, with who and when. **Versions count from the first publish**, so a draft shows none. The RACM tab shows the current version beside the status and opens the history from the row menu.
+- **Not built** (the call itself put these in a later phase): chat-style import, per-attribute populations with a database source, the testing copilot, PDF annotation.
+
+## 17 Sep dev call — Stage 1 quick fixes (built 17 Sep; build passes)
 Decisions were asked one at a time: TOD labels only; exactly 3-character codes (IT General Controls = ITG); risk category and the "RACM" wording unchanged; "engagement = audit" waits for the architecture meeting.
 - **TOD buttons** read **Design effective / Design ineffective** (TOE keeps Conclude effective / ineffective); TOD guidance copy and the toast follow.
 - **IDs are entity first:** `ENTITY/PROCESS/R001/C001` (e.g. `AIH/TRY/R001/C001`). Codes are exactly 3 letters or digits, suggested from the name and editable on upload; a clash takes other letters from the name (AirConnect Regional → ACR) before a digit (AR2). Lists still group by process.
