@@ -21,6 +21,7 @@ import WorkflowDetail from './components/workflow/WorkflowDetail';
 import WorkflowLibraryView from './components/workflow/WorkflowLibraryView';
 import BusinessProcesses, { ControlDetailStandalone } from './components/audit/BusinessProcesses';
 import RiskRegister from './components/audit/RiskRegister';
+import RacmPage from './components/sox-icfr/RacmPage';
 import AuditExecution from './components/audit/AuditExecution';
 import DashboardView from './components/dashboard/DashboardView';
 import DashboardListPage from './components/dashboard/DashboardListPage';
@@ -942,6 +943,13 @@ function AppInner() {
             }}
           />
         );
+
+      // RACM — the team's matrices and the shape they arrive in. A sidebar
+      // page since 18 Sep: a RACM outlives the engagements scoped from it, so
+      // it belongs with Risk Register and Control Library rather than inside
+      // the engagement portfolio.
+      case 'racm-library':
+        return <RacmPage canManage={can('eng_create')} />;
 
       case 'audit-risk-register':
         return (

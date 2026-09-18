@@ -3,7 +3,7 @@ import { motion, AnimatePresence } from 'motion/react';
 import {
   ClipboardCheck, Calendar, ArrowUpRight, Search, Plus,
   Trash2, AlertTriangle, X, LayoutDashboard, List,
-  Pencil, UserPlus, CheckCircle2, GitBranch, Sparkles, Table2, SlidersHorizontal,
+  Pencil, UserPlus, CheckCircle2, GitBranch, Sparkles,
 } from 'lucide-react';
 import Orb from '../shared/Orb';
 import { findEngagement, libraryEngagements, registerEngagement, type AutomationSubtype, type Engagement, type EngStatus, type EngType, type ProcessCode } from '../../data/engagements';
@@ -28,10 +28,8 @@ import { getActionsForTarget, getReflectionsFor, useInsightCacheVersion, type Ta
 import { makePortfolioBuilder, portfolioInsightSubjects, portfolioStackSteps, PORTFOLIO_SUBJECT_ID } from '../../data/portfolioInsights';
 import WorkflowConfigurator from '../exceptions/workflow/WorkflowConfigurator';
 import type { Persona } from '../exceptions/workflow/workflowTypes';
-import RacmLibraryView from '../sox-icfr/RacmLibraryView';
-import RacmConfigView from '../sox-icfr/RacmConfigView';
 
-type EngViewMode = 'overview' | 'list' | 'racm' | 'config' | 'approval-flow';
+type EngViewMode = 'overview' | 'list' | 'approval-flow';
 
 interface Props {
   onOpenEngagement: (engagementId: string) => void;
@@ -615,14 +613,6 @@ export default function EngagementsView({ onOpenEngagement, onOpenAuditPlanning,
         </>)}
 
 
-        {/* RACM (S11) — every SOX RACM, beside Approval Flow. SOX engagements
-            pick theirs at creation and no longer carry a RACM tab of their own. */}
-        {mode === 'racm' && <RacmLibraryView canManage={can('eng_create')} />}
-
-        {/* Config — what shape this team's RACM is, beside the RACMs themselves
-            so the answer sits next to the thing it decides the shape of. */}
-        {mode === 'config' && <RacmConfigView canManage={can('eng_create')} />}
-
         {mode === 'approval-flow' && (
           <div>
             <p className="text-[0.78125rem] text-text-secondary mb-4 max-w-[620px]">
@@ -747,8 +737,6 @@ function ViewToggle({
   const tabs: { id: EngViewMode; label: string; Icon: typeof List; badge?: number }[] = [
     { id: 'overview', label: 'Overview', Icon: LayoutDashboard },
     { id: 'list', label: 'All Engagements', Icon: List, badge: count },
-    { id: 'racm', label: 'RACM', Icon: Table2 },
-    { id: 'config', label: 'Config', Icon: SlidersHorizontal },
     { id: 'approval-flow', label: 'Approval Flow', Icon: GitBranch },
   ];
   return (
