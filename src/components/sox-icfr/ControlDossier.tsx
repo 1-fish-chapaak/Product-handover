@@ -73,7 +73,10 @@ function RationaleForm({ title, onCancel, buttons }: { title: string; onCancel: 
   );
 }
 
-function EmptyState({ icon, title, hint, children }: { icon: React.ReactNode; title: string; hint: string; children?: React.ReactNode }) {
+/** The dossier's framed nothing-here panel. Exported because the library's own
+ *  control page (ControlLibraryDetail) says the same kind of thing in the same
+ *  places, and two empty states that disagree read as two products. */
+export function EmptyState({ icon, title, hint, children }: { icon: React.ReactNode; title: string; hint: string; children?: React.ReactNode }) {
   return (
     <div className="rounded-xl border border-dashed border-canvas-border bg-paper-50/30 px-5 py-7 text-center">
       <div className="w-10 h-10 rounded-xl bg-canvas-elevated border border-canvas-border flex items-center justify-center mx-auto mb-2.5 text-ink-400">{icon}</div>
@@ -799,7 +802,12 @@ function PointRow({ control, point, canEdit, checking = false }: { control: Cont
                 to contradict again. It opens the rationale form below; an existing
                 override opens Remove override instead. */}
             <button onClick={() => setOver(o => !o)} title={point.override ? 'Remove the override' : 'Override this check — record why'} aria-label={point.override ? 'Remove the override' : 'Override this check'} className={cn('h-7 w-7 inline-flex items-center justify-center rounded-md border cursor-pointer', point.override ? 'bg-high-50 border-high-300 text-high-700' : 'border-canvas-border bg-canvas-elevated text-ink-600 hover:border-high-300 hover:text-high-700')}><Pencil size={12} /></button>
-            <button onClick={() => removeDesignPoint(control.id, point.id)} title="Remove" className="h-7 w-7 inline-flex items-center justify-center rounded-md border border-canvas-border bg-canvas-elevated text-ink-400 hover:border-risk-300 hover:text-risk-600 cursor-pointer"><Trash2 size={12} /></button>
+            {/* PARKED (18 Sep, user ask) — the bin. A design check comes from the
+                RACM and is part of what the control was tested against; deleting
+                one mid-test rewrites the question after the answer. Failing it,
+                or overriding it with a reason, is the way to disagree.
+                `removeDesignPoint` is left on the store, so restoring it is:
+                <button onClick={() => removeDesignPoint(control.id, point.id)} title="Remove" className="h-7 w-7 inline-flex items-center justify-center rounded-md border border-canvas-border bg-canvas-elevated text-ink-400 hover:border-risk-300 hover:text-risk-600 cursor-pointer"><Trash2 size={12} /></button> */}
           </div>
         )}
         {validating && <span className="text-[0.6875rem] font-semibold text-evidence-600 shrink-0">{checking ? 'Checking…' : 'Validating…'}</span>}
@@ -1383,7 +1391,9 @@ function DesignSection({ control, canEdit }: { control: Control; canEdit: boolea
   // It says why it can't run rather than hiding: no checks, nothing on file, or a
   // concluded TOD. A file coming or going after a run turns it into Re-run.
   const elementsOnFile = d.documents.filter(doc => designFilesOf(doc).length > 0).length;
-  const iraBlocked = d.points.length === 0 ? 'Add a design check first'
+  // Checks arrive with the RACM and can no longer be written here (18 Sep), so
+  // "add one first" would name a door that was taken off its hinges.
+  const iraBlocked = d.points.length === 0 ? 'This control’s RACM lists no design checks — there is nothing to assess'
     : elementsOnFile === 0 ? 'Upload evidence to a design element first'
     : d.conclusion !== 'Not tested' ? 'TOD is concluded — it has to be reopened or returned before Ira runs again'
     : null;
@@ -1467,11 +1477,8 @@ function DesignSection({ control, canEdit }: { control: Control; canEdit: boolea
   return (
     <div className="p-5">
       {empty && !addingCustom ? (
-        <EmptyState icon={<FileText size={18} />} title="TOD isn’t set up yet" hint="Add the design elements to evidence (process narrative, flowchart, walkthrough, precision & thresholds) and the design checks to assess. You can request the documents from the control owner by email.">
-          {canEdit && <>
-            {addElementMenu}
-            <button onClick={() => setModal(true)} className="h-8 px-3 inline-flex items-center gap-1.5 rounded-lg border border-canvas-border bg-canvas-elevated text-[0.75rem] font-semibold text-ink-700 hover:border-ink-300 cursor-pointer"><Mail size={13} /> Request data</button>
-          </>}
+        <EmptyState icon={<FileText size={18} />} title="TOD isn’t set up yet" hint="Add the design elements this control is evidenced by — process narrative, flowchart, walkthrough, precision &amp; thresholds. The design checks come from its RACM.">
+          {canEdit && addElementMenu}
         </EmptyState>
       ) : (
         <>
@@ -1479,12 +1486,16 @@ function DesignSection({ control, canEdit }: { control: Control; canEdit: boolea
           <div className="flex items-center justify-between mb-2.5">
             <h4 className="text-[0.78125rem] font-bold text-ink-700 inline-flex items-center gap-1.5"><FileText size={14} /> Design elements &amp; evidence</h4>
             <div className="flex items-center gap-2">
-              {canEdit && <button onClick={() => setModal(true)} className="h-7 px-2.5 inline-flex items-center gap-1.5 rounded-md border border-canvas-border bg-canvas-elevated text-[0.71875rem] font-semibold text-ink-700 hover:border-brand-300 hover:text-brand-700 cursor-pointer"><Mail size={12} /> Request data</button>}
+              {/* PARKED (18 Sep, user ask) — Request data. The email request lives
+                  on the TOE population step, where the file that is actually
+                  chased is asked for; `setModal` and `RequestDataModal` are left
+                  in place, so restoring it is:
+                  <button onClick={() => setModal(true)} className="h-7 px-2.5 inline-flex items-center gap-1.5 rounded-md border border-canvas-border bg-canvas-elevated text-[0.71875rem] font-semibold text-ink-700 hover:border-brand-300 hover:text-brand-700 cursor-pointer"><Mail size={12} /> Request data</button> */}
               {canEdit && addElementMenu}
             </div>
           </div>
           {customForm}
-          {d.documents.length === 0 ? <p className="text-[0.75rem] text-ink-400 mb-5">{addingCustom ? '' : 'No elements yet — add one or request data.'}</p> : (
+          {d.documents.length === 0 ? <p className="text-[0.75rem] text-ink-400 mb-5">{addingCustom ? '' : 'No elements yet — add one.'}</p> : (
             <div className="mb-5 space-y-1.5">
               {d.documents.map(doc => {
                 const files = designFilesOf(doc);
@@ -1618,12 +1629,13 @@ function DesignSection({ control, canEdit }: { control: Control; canEdit: boolea
                       ? 'A design element’s files changed since Ira last ran — run it again to check against what is on file now'
                       : 'Ira reads every design check against the evidence on file and marks each one Pass or Fail')}
                     className="h-7 px-2.5 inline-flex items-center gap-1.5 rounded-md bg-brand-600 text-white text-[0.71875rem] font-semibold enabled:hover:bg-brand-700 disabled:opacity-40 disabled:cursor-not-allowed transition-colors cursor-pointer">
-                    <Sparkles size={12} /> {iraStale ? 'Re-run Ira' : 'Run Ira on design checks'}
+                    <Sparkles size={12} /> {iraStale ? 'Re-run AI validation' : 'Run AI validation'}
                   </button>)}
-              {/* Named, because "Add" is not unique on this screen — the element
-                  menu and every Ira suggestion carry one too, and three buttons
-                  reading the same word is three buttons nobody can tell apart. */}
-              {canEdit && <button onClick={() => setAddingPoint(a => !a)} aria-label="Add a design check" className="h-7 px-2.5 inline-flex items-center gap-1.5 rounded-md border border-canvas-border bg-canvas-elevated text-[0.71875rem] font-semibold text-ink-700 hover:border-brand-300 hover:text-brand-700 cursor-pointer"><Plus size={12} /> Add</button>}
+              {/* PARKED (18 Sep, user ask) — Add a design check. The checks come
+                  from the RACM, and writing a new one here put the question and
+                  the answer in the same hand. `addingPoint` and the form below
+                  are left in place, so restoring it is:
+                  <button onClick={() => setAddingPoint(a => !a)} aria-label="Add a design check" className="h-7 px-2.5 inline-flex items-center gap-1.5 rounded-md border border-canvas-border bg-canvas-elevated text-[0.71875rem] font-semibold text-ink-700 hover:border-brand-300 hover:text-brand-700 cursor-pointer"><Plus size={12} /> Add</button> */}
             </div>
           </div>
           {addingPoint && (() => {
