@@ -336,6 +336,66 @@ export function RagCard({ m }: { m: RagMeterDef; /** @deprecated the card no lon
   );
 }
 
+/** The same three scores, shrunk to a KPI strip for a 400px rail.
+ *
+ *  Three cards stacked down a side rail cost most of a screen to say three
+ *  numbers, and on the control page they were pushing the conversation below
+ *  the fold. Here they are one panel and three columns: the number first
+ *  because the number is the point, its name under it, and a hairline bar
+ *  carrying the colour.
+ *
+ *  Nothing is lost — a column opens the same arithmetic the card did, one at a
+ *  time, underneath the row where there is width to read it.
+ *
+ *  Colour is spent on exceptions only, and at KPI size that means the NUMBER is
+ *  coloured rather than the whole tile: three tinted boxes in a strip this small
+ *  read as an error state rather than as a score. */
+export function RagKpiRow({ meters }: { meters: RagMeterDef[] }) {
+  const [openLabel, setOpenLabel] = useState<string | null>(null);
+  const open = meters.find(m => m.label === openLabel) ?? null;
+  if (!meters.length) return null;
+  return (
+    <div className="panel overflow-hidden">
+      <div className="grid" style={{ gridTemplateColumns: `repeat(${meters.length}, minmax(0, 1fr))` }}>
+        {meters.map((m, i) => {
+          const state = ragWord(m);
+          const on = openLabel === m.label;
+          const numCls = m.empty ? 'text-ink-300'
+            : state === 'red' ? 'text-risk-700' : state === 'amber' ? 'text-high-700' : 'text-ink-900';
+          return (
+            <button key={m.label} type="button" onClick={() => setOpenLabel(on ? null : m.label)}
+              aria-expanded={on} aria-label={m.empty ? `${m.label} — not set up` : `${m.label} ${m.pct}% — ${state}`}
+              className={cn('px-3 pt-3 pb-2.5 text-left cursor-pointer transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-200',
+                i > 0 && 'border-l border-canvas-border', on ? 'bg-paper-50' : 'hover:bg-paper-50/60')}>
+              <div className={cn('text-[1.0625rem] font-bold tabular-nums leading-none', numCls)}>{m.empty ? '—' : `${m.pct}%`}</div>
+              <div className="mt-1.5 text-[0.65625rem] font-semibold text-ink-500 leading-tight">{m.label}</div>
+              <div className="mt-2 h-[3px] rounded-full bg-paper-200 overflow-hidden">
+                <div className="h-full rounded-full transition-[width] duration-300" style={{ width: `${m.empty ? 0 : m.pct}%`, background: ragColor(m) }} />
+              </div>
+            </button>
+          );
+        })}
+      </div>
+      <AnimatePresence initial={false}>
+        {open && (
+          <motion.div key={open.label} initial={{ opacity: 0, y: -4 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }}
+            transition={{ duration: 0.15, ease: 'easeOut' }}>
+            <div className="px-3.5 py-3 border-t border-canvas-border">
+              <div className="text-[0.75rem] font-semibold text-ink-700">{open.detail}</div>
+              {open.formula && (
+                <div className="mt-2 rounded-lg border border-canvas-border bg-paper-50/70 px-3 py-2.5">
+                  <div className="text-[0.625rem] font-bold uppercase tracking-wider text-ink-400">How this is counted</div>
+                  <div className="mt-1 font-mono text-[0.6875rem] leading-relaxed text-ink-800">{open.formula}</div>
+                </div>
+              )}
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+    </div>
+  );
+}
+
 /** The scores side by side, one column each — the same height as each other shut,
  *  and the same height as each other open. Four of them break to two rows of two
  *  rather than squeezing a fourth column onto a laptop. */

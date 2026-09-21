@@ -27,7 +27,7 @@ import {
 } from './helpers';
 import { useAuditFiles, type AuditFile } from './useAuditFiles';
 import { auditCovers, countryFor, countryOf, inScopeEntityNames, ownersOf, programmeFor, scopedForDraw } from './auditScope';
-import { ConclusionPill, CourtBadge, NatureChip, OriginPicker, Toggle, TrackPill, Tickmark, Stamp, RagCard, type RagMeterDef } from './parts';
+import { ConclusionPill, CourtBadge, NatureChip, OriginPicker, Toggle, TrackPill, Tickmark, Stamp, RagKpiRow, type RagMeterDef } from './parts';
 import { Pill } from '../shared/StatusBadge';
 import { useToast } from '../shared/Toast';
 import { Sparkles, FileSpreadsheet } from 'lucide-react';
@@ -5557,7 +5557,11 @@ export default function ControlDossier() {
             already cards, and a box around cards drew a group boundary the
             rail didn't need. */}
         <motion.div className="space-y-2.5" variants={{ hidden: { opacity: 0, y: 12 }, show: { opacity: 1, y: 0 } }}>
-          {designRagMeters(control).map(m => <RagCard key={m.label} m={m} />)}
+          {/* Three KPIs in one strip, not three cards down the rail (21 Sep):
+              the scores were costing most of the rail's height to say three
+              numbers, and pushing the conversation below the fold. Each one
+              still opens its own arithmetic. */}
+          <RagKpiRow meters={designRagMeters(control)} />
           <ActivityRail control={control} />
         </motion.div>
       </div>
