@@ -4859,14 +4859,18 @@ function DiscussionPane({ control }: { control: Control }) {
 // a rail that opened on History put the past where the next move should be.
 // Nothing was lost to make room — both old panes are one click away, and the
 // rail is 40px wider to carry three tabs without cramping them.
-function ActivityRail({ control }: { control: Control }) {
+function ActivityRail({ control, meters }: { control: Control; meters: RagMeterDef[] }) {
   const { eng } = useIcfr();
   const [pane, setPane] = useState<'chat' | 'history' | 'discussion'>('chat');
   const execCount = eng.executions.filter(e => e.controlId === control.id).length;
   const openDisc = discussionsFor(eng, control.id).filter(d => !d.resolved).length;
   const tabCls = (on: boolean) => cn('flex-1 min-w-0 h-8 rounded-lg text-[0.75rem] font-semibold inline-flex items-center justify-center gap-1.5 transition-colors cursor-pointer', on ? 'bg-canvas-elevated text-brand-700 shadow-[0_1px_4px_-1px_rgba(15,8,30,0.18)] ring-1 ring-canvas-border' : 'text-ink-500 hover:text-ink-800');
   return (
-    <aside className="panel sticky top-20 self-start max-h-[calc(100vh-7rem)] flex flex-col">
+    <aside className="panel overflow-hidden sticky top-20 self-start max-h-[calc(100vh-7rem)] flex flex-col">
+      {/* The scores first, because they are the reading on the control, and the
+          conversation underneath is what to do about it. One panel, one rule
+          between them. */}
+      <RagKpiRow meters={meters} flush />
       <div className="flex items-center gap-1 p-1 m-3 mb-2 rounded-xl bg-paper-50 border border-canvas-border">
         <button onClick={() => setPane('chat')} className={tabCls(pane === 'chat')}><Sparkles size={13} /> Ira</button>
         <button onClick={() => setPane('history')} className={tabCls(pane === 'history')}><History size={13} /> History{execCount > 0 && <span className="text-[0.625rem] tabular-nums opacity-70">{execCount}</span>}</button>
@@ -5550,19 +5554,14 @@ export default function ControlDossier() {
             </motion.div>
           )}
         </motion.div>
-        {/* right rail — the three confidence scores, then the collaboration
-            surfaces. They read on the work rather than being part of it, so
-            they sit with what was done and what was said; the stepper gets the
-            full width of the page it earns. No wrapper card: the meters are
-            already cards, and a box around cards drew a group boundary the
-            rail didn't need. */}
-        <motion.div className="space-y-2.5" variants={{ hidden: { opacity: 0, y: 12 }, show: { opacity: 1, y: 0 } }}>
-          {/* Three KPIs in one strip, not three cards down the rail (21 Sep):
-              the scores were costing most of the rail's height to say three
-              numbers, and pushing the conversation below the fold. Each one
-              still opens its own arithmetic. */}
-          <RagKpiRow meters={designRagMeters(control)} />
-          <ActivityRail control={control} />
+        {/* right rail — ONE section (user ask, 21 Sep): the three scores sit
+            inside the same panel as the conversation rather than in a card of
+            their own above it. They read on the work rather than being part of
+            it, and two stacked boxes drew a boundary that said they were two
+            different things. The stepper gets the full width of the page it
+            earns. */}
+        <motion.div variants={{ hidden: { opacity: 0, y: 12 }, show: { opacity: 1, y: 0 } }}>
+          <ActivityRail control={control} meters={designRagMeters(control)} />
         </motion.div>
       </div>
 

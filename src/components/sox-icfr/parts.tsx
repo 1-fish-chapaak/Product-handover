@@ -350,12 +350,12 @@ export function RagCard({ m }: { m: RagMeterDef; /** @deprecated the card no lon
  *  Colour is spent on exceptions only, and at KPI size that means the NUMBER is
  *  coloured rather than the whole tile: three tinted boxes in a strip this small
  *  read as an error state rather than as a score. */
-export function RagKpiRow({ meters }: { meters: RagMeterDef[] }) {
+export function RagKpiRow({ meters, flush }: { meters: RagMeterDef[]; /** Sitting inside another panel — no border of its own, just a rule under it. */ flush?: boolean }) {
   const [openLabel, setOpenLabel] = useState<string | null>(null);
   const open = meters.find(m => m.label === openLabel) ?? null;
   if (!meters.length) return null;
   return (
-    <div className="panel overflow-hidden">
+    <div className={cn(flush ? 'border-b border-canvas-border' : 'panel overflow-hidden')}>
       <div className="grid" style={{ gridTemplateColumns: `repeat(${meters.length}, minmax(0, 1fr))` }}>
         {meters.map((m, i) => {
           const state = ragWord(m);
