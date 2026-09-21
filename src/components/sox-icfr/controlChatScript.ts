@@ -58,6 +58,8 @@ export interface Situation {
   iraStale: boolean;
   iraBlocked: string | null;
   designReturn?: { note: string; by: string; at: string };
+  /** The design conclusion went against what the evidence suggested. */
+  designOverride: boolean;
   preparedBy?: { by: string; at: string };
   approvedBy?: { by: string; at: string };
   /** Every required element is evidenced or accounted for — the page's own
@@ -168,7 +170,7 @@ export function situationOf({ eng, control, role, me, audit }: ChatCtx): Situati
     ownPaper: samePerson(control.wpSignoff?.preparer, me),
     checksTotal, checksUnmarked, checksPassed, checksFailed,
     iraRun: !!d.ira, iraStale: !!d.ira?.evidenceChanged, iraBlocked,
-    designReturn: d.designReturn, preparedBy, approvedBy: d.approval?.approvedBy,
+    designReturn: d.designReturn, designOverride: !!d.override, preparedBy, approvedBy: d.approval?.approvedBy,
     popStarted, popLocked, popCount: o.population?.count ?? 0, popBlock,
     sampleDrawn: !!o.sampling, drawsOwed, toe, operatingResult,
     preparerSigned: control.wpSignoff?.preparer, reviewerSigned: control.wpSignoff?.reviewer,
@@ -292,3 +294,73 @@ export function nextPrompt(ctx: ChatCtx): ChatPrompt {
 
 /** The control's own handle, for the greeting's first line. */
 export const controlHandle = (control: Control): string => control.code ?? control.id;
+
+/**
+ * What changed, said once, in the past tense.
+ *
+ * The prompt above says what to do NEXT; this says what just happened. Keeping
+ * them apart is what stops the rail repeating itself — "five checks came back"
+ * then "conclude the design" reads like somebody keeping up, while two lines
+ * both describing the same state reads like a bug.
+ *
+ * It does not care WHERE the change came from. A tick on the left-hand page
+ * and a button in the chat produce the same diff, which is the whole reason
+ * the copilot can be left alone while the auditor works the page.
+ *
+ * Only one line per change, and only for changes worth remarking on — a
+ * running commentary on every keystroke would be noise wearing a helpful face.
+ */
+export function acknowledge(prev: Situation, next: Situation): string | null {
+  // ── ① design ──────────────────────────────────────────────────────────────
+  if (next.designReturn && !prev.designReturn) {
+    return `${next.designReturn.by} sent the design back. The conclusion is cleared, so it is open again.`;
+  }
+  if (prev.missing.length > next.missing.length) {
+    const settled = prev.missing.filter(d => !next.missing.some(m => m.id === d.id));
+    const what = listOf(settled.map(docLabel));
+    return next.missing.length === 0
+      ? `${what} is accounted for — that was the last one the design was waiting on.`
+      : `${what} is accounted for. ${plural(next.missing.length, 'element')} still outstanding.`;
+  }
+  if (prev.elementsOnFile < next.elementsOnFile && next.missing.length > 0) {
+    return 'New evidence is attached.';
+  }
+  if (!prev.iraRun && next.iraRun) {
+    // The counts belong to the prompt underneath; saying them twice in two
+    // adjacent bubbles reads like a stutter rather than a summary.
+    return `Done — I read the evidence against all ${next.checksTotal} design ${next.checksTotal === 1 ? 'check' : 'checks'}.`;
+  }
+  if (prev.checksUnmarked > next.checksUnmarked) {
+    return next.checksUnmarked === 0
+      ? 'That is every design check marked.'
+      : `${plural(prev.checksUnmarked - next.checksUnmarked, 'check')} marked.`;
+  }
+  if (!prev.iraStale && next.iraStale) {
+    return 'The evidence has changed since I last read it, so that validation is stale now.';
+  }
+  if (prev.designResult === 'Not tested' && next.designResult !== 'Not tested') {
+    return next.designOverride
+      ? `Design concluded ${next.designResult.toLowerCase()}, against what the evidence suggested. Your rationale is on the paper as the reason.`
+      : `Design concluded ${next.designResult.toLowerCase()}.`;
+  }
+  if (!prev.todApproved && next.todApproved) {
+    return `${next.approvedBy?.by ?? 'The reviewer'} approved the design. Population is open.`;
+  }
+
+  // ── ② → ⑤, which have the rail but not the script yet ─────────────────────
+  if (!prev.popLocked && next.popLocked) return `Population locked at ${next.popCount.toLocaleString('en-IN')} items.`;
+  if (!prev.sampleDrawn && next.sampleDrawn) return 'Sample drawn.';
+  if (prev.drawsOwed > next.drawsOwed && next.drawsOwed === 0) return 'Every source file has its draw.';
+  if (prev.toe.tested < next.toe.tested) {
+    return next.toe.tested === next.toe.total
+      ? `That is all ${next.toe.total} attributes tested — ${next.toe.passed} pass, ${next.toe.failed} fail.`
+      : `${next.toe.tested} of ${next.toe.total} attributes tested.`;
+  }
+  if (prev.operatingResult === 'Not tested' && next.operatingResult !== 'Not tested') {
+    return `Operating effectiveness concluded ${next.operatingResult.toLowerCase()}.`;
+  }
+  if (!prev.preparerSigned && next.preparerSigned) return `${next.ownPaper ? 'You signed' : `${next.preparerSigned.by} signed`} the paper.`;
+  if (!prev.reviewerSigned && next.reviewerSigned) return `${next.reviewerSigned.by} countersigned it. This control is done.`;
+  if (prev.locked && !next.locked) return 'This control is open again.';
+  return null;
+}

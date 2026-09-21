@@ -4,8 +4,8 @@ import { Sparkles, Send } from 'lucide-react';
 import { useIcfr } from './store';
 import { useAuditLog } from '../../context/AdminDataContext';
 import { concludeRationale, designSuggestion } from './helpers';
-import { say, useControlThread } from './controlChat';
-import { nextPrompt, type ChatStepId } from './controlChatScript';
+import { say, sayOnce, useControlThread } from './controlChat';
+import { acknowledge, nextPrompt, type ChatStepId, type Situation } from './controlChatScript';
 import { actionsFor, type ChatAction } from './controlChatActions';
 import { cn } from '../../lib/cn';
 import type { Control } from './types';
@@ -17,8 +17,8 @@ import type { Control } from './types';
  * is `nextPrompt(...)` computed fresh on every render, so it always describes
  * the control as it stands right now — attach a document on the left and the
  * line rewrites itself, because it was never a stored message in the first
- * place. Step 4 gives that change a voice ("got it, that's the last one");
- * until then it simply keeps up quietly.
+ * place, and the effect below gives the change a voice: what just happened in
+ * the past tense, then what to do next.
  *
  * Every button below calls the store function the page's own button calls.
  * Nothing is reimplemented here, so nothing can drift — and the heavy actions
@@ -82,6 +82,27 @@ export default function ControlChatPane({ control }: { control: Control }) {
   const timer = useRef<number | null>(null);
   useEffect(() => () => { if (timer.current) window.clearTimeout(timer.current); }, []);
 
+  // ── Ira keeps up ──────────────────────────────────────────────────────────
+  // The whole of decision 4, in one effect. Something moved on this control —
+  // a tick on the left, a button in here, the reviewer's approval landing —
+  // and the situation is no longer the one Ira last spoke about. Say what
+  // changed, once, and let the prompt below carry what happens next.
+  //
+  // It cannot tell the two sides apart and does not need to: both write to the
+  // same control, so both arrive here as the same diff. Keyed on the situation
+  // itself, so a re-render cannot say it twice and a change cannot be missed.
+  const seen = useRef<{ id: string; s: Situation } | null>(null);
+  useEffect(() => {
+    const prev = seen.current;
+    seen.current = { id: control.id, s: prompt.situation };
+    // First look at this control — the greeting is the opening line, not a
+    // report of changes made while the reader was elsewhere.
+    if (!prev || prev.id !== control.id || prev.s.key === prompt.situation.key) return;
+    const note = acknowledge(prev.s, prompt.situation);
+    if (note) sayOnce(control.id, `ack:${prompt.situation.key}`, note);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [control.id, prompt.key]);
+
   const run = (a: ChatAction) => {
     if (working) return;
     say(control.id, 'user', a.said);
@@ -113,12 +134,11 @@ export default function ControlChatPane({ control }: { control: Control }) {
       const suggestion = designSuggestion(control);
       concludeDesign(control.id, target, rationale);
       logEvent({ action: 'Update', description: `Concluded TOD ${target.toLowerCase()} for ${control.id} from the chat`, module: 'SOX ICFR', entity: 'Control' });
-      if (suggestion !== 'Not tested' && target !== suggestion) {
-        overrideDesign(control.id, { result: target, by: me, at: 'just now', rationale });
-        say(control.id, 'ira', `Recorded ${target.toLowerCase()} against the evidence, which pointed to ${suggestion.toLowerCase()}. Your rationale is on the paper as the reason.`);
-      } else {
-        overrideDesign(control.id, null);
-      }
+      // Going against the evidence is recorded as an override, and the
+      // acknowledgement says so — the diff effect below owns that line, so it
+      // reads the same whether the conclusion came from here or from the page.
+      if (suggestion !== 'Not tested' && target !== suggestion) overrideDesign(control.id, { result: target, by: me, at: 'just now', rationale });
+      else overrideDesign(control.id, null);
       return;
     }
 
