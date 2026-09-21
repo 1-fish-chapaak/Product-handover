@@ -8,6 +8,7 @@ import { say, sayOnce, useControlThread } from './controlChat';
 import { acknowledge, nextPrompt, type ChatStepId, type Situation } from './controlChatScript';
 import { actionsFor, type ChatAction } from './controlChatActions';
 import { readIntent } from './controlChatIntents';
+import { Button } from '../shared/Button';
 import { cn } from '../../lib/cn';
 import type { Control } from './types';
 
@@ -285,12 +286,18 @@ export default function ControlChatPane({ control }: { control: Control }) {
             placeholder={working ? 'One moment…' : 'Ask Ira, or tell it what to do…'}
             className="flex-1 text-[0.75rem] rounded-lg border border-canvas-border bg-canvas-elevated px-2.5 py-2 text-ink-800 placeholder:text-ink-400 focus:outline-none focus:ring-2 focus:ring-brand-200 resize-none disabled:bg-paper-50 disabled:cursor-not-allowed"
           />
-          <button
-            disabled={!draft.trim() || !!working} onClick={send}
-            className="h-9 w-9 shrink-0 inline-flex items-center justify-center rounded-lg bg-brand-600 text-white disabled:opacity-40 enabled:hover:bg-brand-700 transition-colors cursor-pointer disabled:cursor-not-allowed"
+          {/* The shared Button, not a hand-rolled one: it brings the pressed
+              state and the focus ring this rail had no way to grow on its own,
+              and forces the accessible name an icon-only button was missing.
+              The platform convention for a faded-rather-than-grey disabled
+              primary is the `disabled:!` block — see ShareModal. */}
+          <Button
+            variant="primary" size="md" iconOnly shape="lg"
+            disabled={!draft.trim() || !!working} onClick={send} aria-label="Send to Ira"
+            className="shrink-0 hover:!bg-brand-700 !shadow-none disabled:!bg-primary disabled:!text-white disabled:!opacity-40"
           >
             <Send size={15} />
-          </button>
+          </Button>
         </div>
       </div>
     </>

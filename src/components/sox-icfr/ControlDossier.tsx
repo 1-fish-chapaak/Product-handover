@@ -1271,7 +1271,7 @@ function designRagMeters(c: Control): RagMeterDef[] {
       // the answer. Not-yet-tested drags this down exactly as hard as failed: an
       // untested check gives no confidence either way. The only QUALITY measure
       // of the three, which is why it gates nothing on its own.
-      label: 'TOD coverage confidence', pct: points.length ? Math.round((passed / points.length) * 100) : 0, detail: `${passed}/${points.length} considerations pass`,
+      label: 'Design coverage confidence', pct: points.length ? Math.round((passed / points.length) * 100) : 0, detail: `${passed}/${points.length} considerations pass`,
       empty: points.length === 0,
       formula: 'design considerations passing ÷ all design considerations × 100',
     },

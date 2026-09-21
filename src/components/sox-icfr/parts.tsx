@@ -256,6 +256,17 @@ export const ragColor = (m: RagMeterDef): string =>
     : m.forceRed || m.pct < 40 ? 'var(--color-risk-500)' : m.pct < (m.gate ? 100 : 80) ? 'var(--color-high-400)' : 'var(--color-compliant-500)';
 const ragWord = (m: RagMeterDef): string => (m.empty ? 'none' : ragColor(m).includes('risk') ? 'red' : ragColor(m).includes('high') ? 'amber' : 'green');
 
+/** The state as a NOUN. Shipping "red" / "amber" / "green" to a screen reader
+ *  is the No-RAG violation in the one channel where colour really is the only
+ *  signal, so both the card and the row say this instead. */
+export function statusWordOf(m: RagMeterDef): string {
+  const state = ragWord(m);
+  return state === 'none' ? 'Not set up'
+    : state === 'red' ? 'Needs attention'
+    : state === 'amber' ? 'In progress'
+    : m.pct === 100 ? 'Complete' : 'On track';
+}
+
 /** One confidence score as a card that opens.
  *
  *  SHUT it is the reading: a ring carrying the percentage and the score's name,
@@ -279,8 +290,7 @@ export function RagCard({ m }: { m: RagMeterDef; /** @deprecated the card no lon
     : 'border-canvas-border bg-canvas-elevated';
   const statusCls = state === 'none' ? 'text-ink-400' : state === 'red' ? 'text-risk-700' : state === 'amber' ? 'text-high-700' : 'text-compliant-700';
   const StatusIcon = state === 'none' ? MinusCircle : state === 'red' ? AlertTriangle : state === 'amber' ? AlertCircle : CheckCircle2;
-  const statusWord = state === 'none' ? 'Not set up'
-    : state === 'red' ? 'Needs attention' : state === 'amber' ? 'In progress' : m.pct === 100 ? 'Complete' : 'On track';
+  const statusWord = statusWordOf(m);
   // r=16 → circumference 100.5, so the dash length is all but the percentage
   // itself. A round cap on a zero-length arc draws a floating dot, so a score
   // of nothing draws no arc at all.
@@ -293,7 +303,7 @@ export function RagCard({ m }: { m: RagMeterDef; /** @deprecated the card no lon
   return (
     <div className={cn('rounded-xl border transition-colors', open ? 'h-full' : 'self-start', tint)}>
       <button type="button" onClick={() => setOpen(o => !o)} aria-expanded={open} aria-controls={bodyId}
-        aria-label={m.empty ? `${m.label} — not set up` : `${m.label} ${m.pct}% — ${state}`}
+        aria-label={m.empty ? `${m.label} — not set up` : `${m.label} ${m.pct}% — ${statusWordOf(m)}`}
         className="w-full min-h-[4.75rem] text-left p-3.5 flex items-center gap-3 cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-200 rounded-xl">
         <div className="relative w-12 h-12 shrink-0">
           <svg viewBox="0 0 40 40" className="w-12 h-12 -rotate-90">
@@ -353,6 +363,22 @@ export function RagCard({ m }: { m: RagMeterDef; /** @deprecated the card no lon
 export function RagKpiRow({ meters, flush }: { meters: RagMeterDef[]; /** Sitting inside another panel — no border of its own, just a rule under it. */ flush?: boolean }) {
   const [openLabel, setOpenLabel] = useState<string | null>(null);
   const open = meters.find(m => m.label === openLabel) ?? null;
+  // ONE score may wear a colour, and only if it is the one that needs reading
+  // (21 Sep). Three ramped columns side by side was the heat strip DESIGN.md
+  // forbids by name — and the strip is the worse offender of the two shapes,
+  // because a ramp read left to right invites the eye to compare scores that
+  // measure completely different things. Red outranks amber; a tie goes to the
+  // lower score. Everything else is ink, and the bar is a quantity, not a verdict.
+  const worst = meters.reduce<RagMeterDef | null>((acc, m) => {
+    if (m.empty) return acc;
+    const w = ragWord(m);
+    if (w !== 'red' && w !== 'amber') return acc;
+    if (!acc) return m;
+    const a = ragWord(acc);
+    if (a === 'red' && w === 'amber') return acc;
+    if (w === 'red' && a === 'amber') return m;
+    return m.pct < acc.pct ? m : acc;
+  }, null);
   if (!meters.length) return null;
   return (
     <div className={cn(flush ? 'border-b border-canvas-border' : 'panel overflow-hidden')}>
@@ -360,17 +386,26 @@ export function RagKpiRow({ meters, flush }: { meters: RagMeterDef[]; /** Sittin
         {meters.map((m, i) => {
           const state = ragWord(m);
           const on = openLabel === m.label;
+          const flagged = worst === m;
+          const StateIcon = state === 'red' ? AlertTriangle : AlertCircle;
           const numCls = m.empty ? 'text-ink-300'
-            : state === 'red' ? 'text-risk-700' : state === 'amber' ? 'text-high-700' : 'text-ink-900';
+            : flagged && state === 'red' ? 'text-risk-700'
+            : flagged && state === 'amber' ? 'text-high-700'
+            : 'text-ink-900';
           return (
             <button key={m.label} type="button" onClick={() => setOpenLabel(on ? null : m.label)}
-              aria-expanded={on} aria-label={m.empty ? `${m.label} — not set up` : `${m.label} ${m.pct}% — ${state}`}
+              aria-expanded={on} aria-label={m.empty ? `${m.label} — not set up` : `${m.label} ${m.pct}% — ${statusWordOf(m)}`}
               className={cn('px-3 pt-3 pb-2.5 text-left cursor-pointer transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-200',
                 i > 0 && 'border-l border-canvas-border', on ? 'bg-paper-50' : 'hover:bg-paper-50/60')}>
               <div className={cn('text-[1.0625rem] font-bold tabular-nums leading-none', numCls)}>{m.empty ? '—' : `${m.pct}%`}</div>
-              <div className="mt-1.5 text-[0.65625rem] font-semibold text-ink-500 leading-tight">{m.label}</div>
+              {/* The icon is why the colour is allowed at all: colour is never
+                  the only signal (DESIGN.md §6). */}
+              <div className="mt-1.5 flex items-start gap-1 text-[0.65625rem] font-semibold text-ink-500 leading-tight">
+                {flagged && <StateIcon size={11} className={cn('shrink-0 mt-px', state === 'red' ? 'text-risk-700' : 'text-high-700')} />}
+                <span className="min-w-0">{m.label}</span>
+              </div>
               <div className="mt-2 h-[3px] rounded-full bg-paper-200 overflow-hidden">
-                <div className="h-full rounded-full transition-[width] duration-300" style={{ width: `${m.empty ? 0 : m.pct}%`, background: ragColor(m) }} />
+                <div className="h-full rounded-full bg-ink-300 transition-[width] duration-300" style={{ width: `${m.empty ? 0 : m.pct}%` }} />
               </div>
             </button>
           );
