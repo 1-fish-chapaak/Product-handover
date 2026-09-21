@@ -1,5 +1,5 @@
 import {
-  designApproved, designCompleteness, designFilesOf, designOutstanding, isControlLocked, isEngagementLocked,
+  designApproved, designCompleteness, designFilesOf, designOutstanding, designSuggestion, isControlLocked, isEngagementLocked,
   operatingApplies, operatingProgress, pendingReviewNoteCount, pointResult, populationLocked, populationSources,
   sampledSources, samePerson, trackResult, yearEndPending,
 } from './helpers';
@@ -60,6 +60,15 @@ export interface Situation {
   designReturn?: { note: string; by: string; at: string };
   /** The design conclusion went against what the evidence suggested. */
   designOverride: boolean;
+  /** What the evidence itself pointed to — the reviewer's first question when
+   *  the auditor has departed from it. */
+  evidenceSuggested: TrackConclusion;
+  designRationale?: string;
+  /** Elements the auditor has formally asked the owner for, as against ones
+   *  simply not on file yet. The owner is owed the difference. */
+  requested: DesignDoc[];
+  /** Testing stopped because something cannot be produced. */
+  blocked?: { reason: string; needed: string; raisedBy: string; converted?: string };
   preparedBy?: { by: string; at: string };
   approvedBy?: { by: string; at: string };
   /** Every required element is evidenced or accounted for — the page's own
@@ -115,6 +124,7 @@ export function situationOf({ eng, control, role, me, audit }: ChatCtx): Situati
   // designOutstanding ignores `required` on purpose (it feeds the conclude
   // suggestion); Ira talks about obligations, so it is filtered here.
   const missing = designOutstanding(control).filter(doc => doc.required !== false);
+  const requested = missing.filter(doc => doc.status === 'Requested');
   const elementsOnFile = d.documents.filter(doc => designFilesOf(doc).length > 0).length;
 
   const checksTotal = d.points.length;
@@ -170,7 +180,13 @@ export function situationOf({ eng, control, role, me, audit }: ChatCtx): Situati
     ownPaper: samePerson(control.wpSignoff?.preparer, me),
     checksTotal, checksUnmarked, checksPassed, checksFailed,
     iraRun: !!d.ira, iraStale: !!d.ira?.evidenceChanged, iraBlocked,
-    designReturn: d.designReturn, designOverride: !!d.override, preparedBy, approvedBy: d.approval?.approvedBy,
+    designReturn: d.designReturn, designOverride: !!d.override, evidenceSuggested: designSuggestion(control),
+    designRationale: d.rationale, requested,
+    blocked: control.unableToTest && {
+      reason: control.unableToTest.reason, needed: control.unableToTest.needed,
+      raisedBy: control.unableToTest.raisedBy, converted: control.unableToTest.convertedTo,
+    },
+    preparedBy, approvedBy: d.approval?.approvedBy,
     popStarted, popLocked, popCount: o.population?.count ?? 0, popBlock,
     sampleDrawn: !!o.sampling, drawsOwed, toe, operatingResult,
     preparerSigned: control.wpSignoff?.preparer, reviewerSigned: control.wpSignoff?.reviewer,
@@ -211,24 +227,60 @@ export function nextPrompt(ctx: ChatCtx): ChatPrompt {
 
   // ── the risk owner: their lane is the documents ───────────────────────────
   if (role === 'risk-owner') {
+    // Testing has stopped on something only they can produce — that outranks
+    // every ordinary document request, because nothing moves until it lands.
+    if (s.blocked && !s.blocked.converted) {
+      return line(`Testing is stopped here until you produce ${s.blocked.needed}. ${s.blocked.raisedBy} recorded why: “${s.blocked.reason}” — it is not a finding, and testing picks up where it left off.`);
+    }
+    if (s.blocked?.converted) {
+      return line(`This one was never evidenced, so it was raised as ${s.blocked.converted}. What was asked for: ${s.blocked.needed}.`);
+    }
     if (s.missing.length > 0) {
-      return line(`${plural(s.missing.length, 'document')} still outstanding on this control — ${listOf(s.missing.map(docLabel))}. Attach them and the auditor can test the design.`);
+      // Asked-for and not-yet-on-file are different obligations, and an owner
+      // reading "outstanding" about something nobody has asked them for has
+      // been made to feel late for no reason.
+      const asked = s.requested.length;
+      const opening = asked === s.missing.length
+        ? `${controlHandle(control)}: the auditor has asked you for ${listOf(s.requested.map(docLabel))}`
+        : asked > 0
+          ? `${controlHandle(control)}: the auditor has asked you for ${listOf(s.requested.map(docLabel))}, and ${plural(s.missing.length - asked, 'other document')} ${s.missing.length - asked === 1 ? 'is' : 'are'} not on file either`
+          : `${plural(s.missing.length, 'document')} is not on file yet — ${listOf(s.missing.map(docLabel))}`;
+      return line(`${opening}. Attach ${s.missing.length === 1 ? 'it' : 'them'} and the design can be tested.`);
+    }
+    if (s.designResult === 'Ineffective') {
+      return line('Everything asked for is on file. The design came out ineffective, so the fix is yours — the remediation brief on the left says what was found and what it needs.');
     }
     if (s.designResult === 'Not tested') return line('Everything asked for is on file. The auditor is testing the design — nothing is waiting on you.');
-    return line(`Everything asked for is on file and the design came out ${s.designResult.toLowerCase()}. Nothing is waiting on you.`);
+    if (s.toe.failed > 0) return line(`Everything asked for is on file. The design held, but ${plural(s.toe.failed, 'attribute')} failed in testing — the exceptions are yours to remediate.`);
+    return line('Everything asked for is on file and the design held. Nothing is waiting on you here.');
   }
 
   // ── the reviewer: approve, return, countersign ────────────────────────────
   if (role === 'reviewer') {
+    if (s.designReturn) {
+      return line(`You sent this design back: “${s.designReturn.note}”. It comes back to you once the auditor has answered it and concluded again.`);
+    }
     if (s.designResult !== 'Not tested' && !s.approvedBy) {
-      return s.ownConclusion
-        ? line(`You concluded this design yourself, so somebody else has to approve it. Four eyes — the person who did the work cannot be the one who signs it off.`)
-        : line(`${s.preparedBy?.by ?? 'The auditor'} concluded the design ${s.designResult.toLowerCase()}${s.checksFailed > 0 ? ` on ${plural(s.checksFailed, 'failed check')}` : ''}. Approve it, or send it back with a note.`);
+      if (s.ownConclusion) {
+        return line('You concluded this design yourself, so somebody else has to approve it. Four eyes — the person who did the work cannot be the one who signs it off.');
+      }
+      // A departure from the evidence is the one thing a reviewer must not
+      // have to discover for themselves.
+      if (s.designOverride) {
+        return line(`${s.preparedBy?.by ?? 'The auditor'} concluded the design ${s.designResult.toLowerCase()} against the evidence, which pointed to ${s.evidenceSuggested.toLowerCase()}.${s.designRationale ? ` Their reason: “${s.designRationale}”` : ''} That is the thing to weigh before you approve it.`);
+      }
+      return line(`${s.preparedBy?.by ?? 'The auditor'} concluded the design ${s.designResult.toLowerCase()}${s.checksFailed > 0 ? ` on ${plural(s.checksFailed, 'failed check')}` : `, with all ${s.checksTotal} checks passed`}. Approve it, or send it back with a note.`);
     }
     if (s.preparerSigned && !s.reviewerSigned) {
       if (s.notesPending > 0) return line(`The paper is signed and waiting on you, but ${plural(s.notesPending, 'review note')} ${s.notesPending === 1 ? 'is' : 'are'} still open. Those close before you can countersign.`);
       if (s.ownPaper) return line('You prepared this paper, so it needs a different reviewer to countersign. Nothing for you here.');
-      return line('The paper is prepared and waiting for your countersignature. Read it through — the working paper button up top has the whole thing.');
+      const outcome = s.operatingResult === 'Ineffective' ? ' It concludes ineffective, so the exception and its grading are part of what you are signing.'
+        : s.opApplies ? ` Design and operating both held — ${s.toe.passed} of ${s.toe.total} attributes passed.`
+        : ' Operating testing does not apply to this control, so the design conclusion is the whole of it.';
+      return line(`The paper is prepared and waiting for your countersignature.${outcome} The working paper button up top has the whole thing.`);
+    }
+    if (s.notesPending > 0) {
+      return line(`${plural(s.notesPending, 'review note')} of yours ${s.notesPending === 1 ? 'is' : 'are'} still open on this control. Nothing else is waiting on you until ${s.notesPending === 1 ? 'it is' : 'they are'} answered.`);
     }
     return line(`Nothing is waiting on you yet. The design is ${s.designResult === 'Not tested' ? 'still being tested' : `${s.designResult.toLowerCase()} and approved`}, and I will tell you the moment there is something to review.`);
   }
