@@ -35,6 +35,10 @@ interface ModalProps {
   onClose: () => void;
   /** Sticky footer action row (usually Cancel + a primary button). */
   footer?: ReactNode;
+  /** Extra pinned header content under the title/subtitle — a segmented
+   *  control, a description of the active segment. Block-level, so it is
+   *  rendered outside the subtitle's <p>. */
+  headerExtra?: ReactNode;
   children: ReactNode;
   ariaLabel?: string;
 }
@@ -46,6 +50,7 @@ export default function Modal({
   height,
   onClose,
   footer,
+  headerExtra,
   children,
   ariaLabel,
 }: ModalProps) {
@@ -83,12 +88,13 @@ export default function Modal({
           aria-modal="true"
           aria-label={ariaLabel ?? title}
         >
-          <header className={`shrink-0 px-7 ${subtitle ? 'py-3.5' : 'py-3'} flex items-center justify-between gap-4 border-b border-canvas-border`}>
+          <header className={`shrink-0 px-7 ${subtitle ? 'py-3.5' : 'py-3'} flex ${headerExtra ? 'items-start' : 'items-center'} justify-between gap-4 border-b border-canvas-border`}>
             <div className="min-w-0">
               <h2 className="text-[1.25rem] leading-tight font-semibold text-ink-900 tracking-tight">
                 {title}
               </h2>
               {subtitle && <p className="text-[0.8125rem] text-ink-500 mt-0.5 leading-snug">{subtitle}</p>}
+              {headerExtra && <div className="mt-3">{headerExtra}</div>}
             </div>
             <button
               type="button"

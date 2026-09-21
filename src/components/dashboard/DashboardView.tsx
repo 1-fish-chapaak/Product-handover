@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useRef } from 'react';
+import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import {
   AlertTriangle, Shield, Activity, TrendingUp, TrendingDown,
@@ -40,6 +40,11 @@ import DashboardAssistant from './assistant/DashboardAssistant';
 import { runAssistant, type AssistantResult, type UserWidget as AssistantWidget } from './assistant/assistantEngine';
 import DashboardSyncScheduler from './sync/DashboardSyncScheduler';
 import { type SyncSchedule, DEFAULT_SYNC_SCHEDULE, cloneSchedule, summarizeSchedule, toDemoIntervalMs } from './sync/syncSchedule';
+import UpdateDashboardButton from './update/UpdateDashboardButton';
+import UpdateDashboardModal from './update/UpdateDashboardModal';
+import { useDashboardUpdateState } from './update/useDashboardUpdateState';
+import { useUpdateDashboardDialog } from './update/useUpdateDashboardDialog';
+import { updateSeedFor } from '../../data/dashboardUpdate';
 import LegendSection from './add-widget/imports/LegendSection';
 import TypographySection from './add-widget/imports/TypographySection-1760-98';
 import ConditionalFormattingSection from './add-widget/imports/ConditionalFormattingSection';
@@ -4162,7 +4167,7 @@ export default function DashboardView({ initialDashboardId, initialDashboardName
     setExpandedWidget({ title: widgetTitle, subtitle });
   };
 
-  const handleRefresh = () => {
+  const handleRefresh = (opts?: { silent?: boolean }) => {
     // Guard against overlap — if a refresh is already mid-flight (manual or
     // auto-refresh-driven), skip this call. Without this, rapid clicks or an
     // auto-refresh tick landing during a manual refresh produce overlapping
@@ -4191,7 +4196,7 @@ export default function DashboardView({ initialDashboardId, initialDashboardName
       setIsRefreshing(false);
       setHasLoadedOnce(true);
       setLastRefreshTime('Just now');
-      addToast({ message: 'Dashboard refreshed', type: 'success' });
+      if (!opts?.silent) addToast({ message: 'Dashboard refreshed', type: 'success' });
       setTimeout(() => setLastRefreshTime('1 min ago'), 60000);
     }, 3000);
   };
@@ -4203,6 +4208,29 @@ export default function DashboardView({ initialDashboardId, initialDashboardName
   handleRefreshRef.current = handleRefresh;
   const isRefreshingRef = useRef(isRefreshing);
   isRefreshingRef.current = isRefreshing;
+
+  // Update Dashboard Data — the dialog behind the header's "Update Dashboard"
+  // button (files behind manual widgets, file-based workflow runs, live syncs,
+  // previous runs). Its state is owned here so an in-flight batch survives
+  // closing the dialog; every landed update re-renders the tiles silently.
+  const updateDashboardId = initialDashboardId ?? activeId;
+  const updateSeed = useMemo(
+    () => updateSeedFor(updateDashboardId, { dataSource: dashboardSourceType, dataSourceNames, widgetCount: 4 + userWidgets.length }),
+    [updateDashboardId, dashboardSourceType, dataSourceNames, userWidgets.length],
+  );
+  const updateState = useDashboardUpdateState(updateDashboardId, updateSeed);
+  const updateDialog = useUpdateDashboardDialog({
+    state: updateState,
+    dashboardName: dashName || DASHBOARDS.find(d => d.id === activeId)?.name || 'Dashboard',
+    onDashboardScheduleChange: setSyncSchedule,
+    onSynced: () => handleRefreshRef.current({ silent: true }),
+    onFilesReplaced: (renames) => {
+      const next = dataSourceNames.map(n => renames[n] ?? n);
+      setDataSourceNames(next);
+      onUpdateDashboardSource?.({ dataSourceNames: next });
+    },
+    onEvent: (description, entity) => logEvent({ action: 'Update', description, module: 'Dashboards', entity }),
+  });
 
   // Scheduled-sync ticker. The cadence maps to a demo-compressed interval (see
   // toDemoIntervalMs) so an enabled schedule visibly refreshes within a session;
@@ -4333,7 +4361,7 @@ export default function DashboardView({ initialDashboardId, initialDashboardName
                   {/* Refreshed indicator — hidden for static file dashboards */}
                   {!isStaticFileDashboard && (
                   <button
-                    onClick={handleRefresh}
+                    onClick={() => handleRefresh()}
                     disabled={isRefreshing}
                     aria-busy={isRefreshing}
                     className={`flex items-center gap-1.5 px-4 h-9 border border-canvas-border bg-white rounded-full text-[0.75rem] text-ink-500 shadow-sm transition-colors ${
@@ -4367,6 +4395,13 @@ export default function DashboardView({ initialDashboardId, initialDashboardName
 
                   {/* Divider */}
                   <div className="w-px h-5 bg-canvas-border" />
+
+                  {/* Update Dashboard — bring the dashboard onto new data (files,
+                      workflow runs, live syncs, previous runs). Hidden when nothing
+                      behind this dashboard can be updated. */}
+                  {(updateState.hasFiles || updateState.hasFileWorkflows || updateState.hasLive) && (
+                    <UpdateDashboardButton onClick={updateDialog.open} />
+                  )}
 
                   {/* + Add Widget — primary CTA */}
                   <Gated permission="db_add" mode="disable" title="You don't have permission to add widgets">
@@ -5332,6 +5367,14 @@ export default function DashboardView({ initialDashboardId, initialDashboardName
           onUpdateDashboardSource?.({ dataSource: nextType, sourceId: src.id, dataSourceNames });
           addToast({ message: `Primary source set to ${src.name}`, type: 'success' });
         }}
+      />
+
+      {/* Update Dashboard Data */}
+      <UpdateDashboardModal
+        dialog={updateDialog}
+        state={updateState}
+        dashboardSchedule={syncSchedule}
+        lastSyncedLabel={lastRefreshTime}
       />
 
       {/* Scheduled data sync (live/SQL dashboards) */}
