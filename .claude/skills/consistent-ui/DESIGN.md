@@ -47,6 +47,9 @@
 | MemberSearch | src/components/admin/AdminPrimitives.tsx | Search-left input | h-10 rounded-lg | toolbar search (glyph-left, clear-on-X) |
 | StatLedger | src/components/admin/AdminPrimitives.tsx | Inline `label · value` stat strip | clickable (filter) | dense alternative to the KPI band |
 | adminTokens | src/components/admin/adminTokens.ts | Shared admin form / button / row classes | FIELD_INPUT/LABEL · BTN_CANCEL/PRIMARY/CTA_*/ROW · presetChip | the single class source `AdminView` + `RolesWorkspace` consume — extend here, don't re-inline |
+| SyncScheduleFields | src/components/dashboard/sync/SyncScheduleFields.tsx | The cadence editor's fields (switch, frequency grid, per-frequency detail, notify, next-sync preview) | `draft` + `onPatch` | Extracted from `DashboardSyncScheduler` so the Update-dashboard dialog's inline "Bulk schedule runs" / per-workflow Schedule view renders the identical editor. Compose it; don't re-inline the grid |
+| Modal `headerExtra` | src/components/shared/Modal.tsx | Pinned block under the modal title (a segmented control, an active-segment description) | `headerExtra?: ReactNode` | Block-level, rendered outside the subtitle `<p>`; header switches to `items-start` when present. Use instead of putting a stepper in the scrolling body |
+| UpdateDashboardModal + tabs | src/components/dashboard/update/ | "Update Dashboard Data" dialog: Upload Data / Run Workflows / Sync Live Data / Previous Runs | segments per dashboard source (`data/dashboardUpdate.ts`) | Composes `shared/Modal`, `ui/Select`, `shared/Checkbox`, `shared/Button`. Reusable bits: `UpdateDashboardStepper` (segmented control w/ busy + done states), `FilePoolSection` + `SheetPickerModal` (multi-file pool with sheet fan-out), `SchemaDiffPanel`, `RunStatusPanel`/`RunStatusPill` (batch progress rows). Class tokens in `update/theme.ts` |
 
 ---
 
@@ -80,6 +83,13 @@
   re-inlining. Root `/DESIGN.md` gained §2 token coverage (now 72/72) and §7.11–§7.18
   surface specs (Admin, Auth, Recents, Engagements, Workflow Builder, Exceptions,
   Intelligence, Notifications). Admin avatars are monochrome by rule — never per-person colour.
+- 2026-09-21 — Ported the product's "Update Dashboard Data" dialog (header → Update Dashboard).
+  One segmented control over four modes offered per dashboard source; everything mocked on timers
+  (`src/data/dashboardUpdate.ts` seeds files / linked workflows / run history per catalog dashboard,
+  derived for in-session ones). Reused `shared/Modal` (new `headerExtra` slot instead of a hand-rolled
+  shell), native `ui/Select` for pool dropdowns (inside a scroll container an absolute menu clips),
+  `shared/Checkbox`. Extracted `SyncScheduleFields` from the Automatic-data-sync modal so the inline
+  schedule editor is the same component; the dashboard-wide cadence stays the header chip's state.
 
 ---
 
