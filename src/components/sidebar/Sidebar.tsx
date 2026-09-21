@@ -7,7 +7,7 @@ import {
   Shield, Search as SearchIcon, Settings, Clock, Check,
   Wand2, MoreHorizontal, LogOut, HelpCircle, ExternalLink,
   ClipboardCheck, FlaskConical, Layers, Inbox, BarChart3,
-  Brain,
+  Brain, Table2,
 } from 'lucide-react';
 import PersonalMemoryDrawer from './PersonalMemoryDrawer';
 import NotificationBell from '../../notifications/NotificationBell';
@@ -375,6 +375,10 @@ export default function Sidebar({ view, setView, expanded, toggleSidebar, unread
 
           {can('db_view') && <NavItem icon={LayoutDashboard} label="Dashboard" active={view === 'dashboards'} expanded={isExpanded} onClick={() => setView('dashboards')} />}
           {can('rp_view') && <NavItem icon={FileBarChart} label="Report" active={view === 'reports' || view === 'report-history' || view === 'report-builder'} expanded={isExpanded} onClick={() => setView('reports')} />}
+          {/* RACM sits above the register and the library because it is where
+              the other two come from: risks and controls are written into a
+              matrix first, and published from there. */}
+          {can('racm_view') && <NavItem icon={Table2} label="RACM" active={view === 'racm-library'} expanded={isExpanded} onClick={() => setView('racm-library')} />}
           {can('risk_view') && <NavItem icon={AlertTriangle} label="Risk Register" active={view === 'audit-risk-register'} expanded={isExpanded} onClick={() => setView('audit-risk-register')} />}
           {can('ctrl_view') && <NavItem icon={Shield} label="Control Library" active={view === 'governance-controls' || view === 'governance-control-detail'} expanded={isExpanded} onClick={() => setView('governance-controls')} />}
           {can('wf_view') && <NavItem icon={Workflow} label="Workflow Library" active={workflowViews.includes(view)} expanded={isExpanded} onClick={() => setView('workflow-library')} />}
