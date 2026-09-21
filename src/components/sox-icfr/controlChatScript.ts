@@ -412,7 +412,7 @@ export function acknowledge(prev: Situation, next: Situation): string | null {
   }
   if (prev.designResult === 'Not tested' && next.designResult !== 'Not tested') {
     return next.designOverride
-      ? `Design concluded ${next.designResult.toLowerCase()}, against what the evidence suggested. Your rationale is on the paper as the reason.`
+      ? `Design concluded ${next.designResult.toLowerCase()}, against what the evidence suggested. The rationale on the paper is what records why.`
       : `Design concluded ${next.designResult.toLowerCase()}.`;
   }
   if (!prev.todApproved && next.todApproved) {

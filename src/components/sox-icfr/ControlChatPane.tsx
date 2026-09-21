@@ -83,8 +83,23 @@ export default function ControlChatPane({ control }: { control: Control }) {
 
   // A validation left running when the reader walks away must not come back
   // and write to a control they are no longer looking at.
+  /** The control as it stands now, for anything that resolves on a timer. */
+  const latest = useRef(control);
+  latest.current = control;
+  const controlId = useRef(control.id);
+  controlId.current = control.id;
+
   const timer = useRef<number | null>(null);
-  useEffect(() => () => { if (timer.current) window.clearTimeout(timer.current); }, []);
+  // The pane unmounts when the rail's tab changes, which used to cancel a
+  // running validation in silence — the reader came back to their own request
+  // sitting there with no answer and no error. It still cancels (the work is
+  // the reader's to re-ask for), but it says so, and the thread outlives the
+  // pane so the line is there when they come back.
+  useEffect(() => () => {
+    if (!timer.current) return;
+    window.clearTimeout(timer.current);
+    say(controlId.current, 'ira', 'I stopped reading when you moved away — ask again and I will pick it up.');
+  }, []);
 
   // ── Ira keeps up ──────────────────────────────────────────────────────────
   // The whole of decision 4, in one effect. Something moved on this control —
@@ -125,8 +140,19 @@ export default function ControlChatPane({ control }: { control: Control }) {
     if (a.id === 'ira-run') {
       setWorking('Reading the evidence against each check');
       timer.current = window.setTimeout(() => {
-        runDesignIra(control.id);
-        logEvent({ action: 'Update', description: `Ran AI validation on design checks for ${control.id} from the chat`, module: 'SOX ICFR', entity: 'Control' });
+        // Six seconds is long enough for the left-hand side to move. The store
+        // refuses to run once the design is concluded, and logging regardless
+        // would have written a validation into the SOX audit trail that never
+        // happened — so the CURRENT control is read here, not the one captured
+        // when the button was pressed.
+        const now = latest.current;
+        if (now.design.conclusion !== 'Not tested' || now.design.points.length === 0) {
+          setWorking(null);
+          say(now.id, 'ira', 'The design was concluded while I was reading, so I stopped — there is nothing left for me to assess.');
+          return;
+        }
+        runDesignIra(now.id);
+        logEvent({ action: 'Update', description: `Ran AI validation on design checks for ${now.id} from the chat`, module: 'SOX ICFR', entity: 'Control' });
         setWorking(null);
       }, IRA_MS);
       return;
@@ -147,6 +173,14 @@ export default function ControlChatPane({ control }: { control: Control }) {
       // reads the same whether the conclusion came from here or from the page.
       if (suggestion !== 'Not tested' && target !== suggestion) overrideDesign(control.id, { result: target, by: me, at: 'just now', rationale });
       else overrideDesign(control.id, null);
+      // Say whose words went on the paper. Concluding from here cannot see the
+      // rationale box on the left — it is local to that form until it is filed
+      // — so what gets recorded is the drafted sentence. Calling that "your
+      // rationale" would put words in an auditor's mouth on a working paper,
+      // which is the one thing this rail must never do.
+      if (!control.design.rationale) {
+        say(control.id, 'ira', `The rationale on the paper is the drafted one — “${rationale}” — because the box on the left was not filled in. Edit it there if it should read differently.`);
+      }
       return;
     }
 

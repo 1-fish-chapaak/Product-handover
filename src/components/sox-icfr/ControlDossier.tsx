@@ -15,7 +15,7 @@ import {
   // the deficiency banner below. Both go back together.
   // formatINR,
   concludeRationale, controlCode, controlConclusion, courtFor, operatingApplies, designCompleteness, designOutstanding, discussionsFor, extractionCriteria,
-  isControlLocked, itgcHolds, failedItgcs, isItgcDependent, operatingProgress, TOE_MAX_ROUNDS, toeRoundFailed, toeRoundNo, toeRounds, toeSpent, canRedrawToe, canExtendToe, populationLocked, sampleSizeGuide, trackResult, pointResult, stepResult, attestationOverruled, inquiryOnlyAttributes, restsOnStatementAlone,
+  isControlLocked, isControlLockedIn, itgcHolds, failedItgcs, isItgcDependent, operatingProgress, TOE_MAX_ROUNDS, toeRoundFailed, toeRoundNo, toeRounds, toeSpent, canRedrawToe, canExtendToe, populationLocked, sampleSizeGuide, trackResult, pointResult, stepResult, attestationOverruled, inquiryOnlyAttributes, restsOnStatementAlone,
   countVerdict, coverageVerdict, derivedRunCount, populationReady, designBasis, designSuggestion, auditorProvenChecks, suggestedDesignChecks, suggestPopulationFile, fmtDay, parseDay,
   monthlyBreakdown, spikeMonths, priorRoundCount, fileUsable, originLabel, guessFileKind, populationSources, ipeChecksFor, samplesFor,
   expectedInputsFor, hasRowCount, isAssisting, sampledSources, reviewNotesFor, isShared, entityCoverage, uncoveredEntities, hasPaths, pathCoverage, untouchedPaths, type PopVerdict,
@@ -345,7 +345,16 @@ function ConcludeFooter({ control, which, suggestion, canEdit, disabled, disable
   const drafted = concludeRationale(control, which);
   const [note, setNote] = useState(track.rationale ?? drafted);
   const [seed, setSeed] = useState(track.rationale ?? drafted);
-  if (seed !== (track.rationale ?? drafted)) { setSeed(track.rationale ?? drafted); setNote(track.rationale ?? drafted); }
+  // Typed words are never overwritten (21 Sep). The draft is derived from the
+  // check and attribute counts, so it changes every time one is marked — and
+  // the re-seed below was wiping a rationale mid-sentence for anyone who wrote
+  // the reason before finishing the marking, which is the order most auditors
+  // work in. Re-drafting is still right for a box nobody has touched.
+  const [touched, setTouched] = useState(false);
+  if (seed !== (track.rationale ?? drafted)) {
+    setSeed(track.rationale ?? drafted);
+    if (!touched) setNote(track.rationale ?? drafted);
+  }
   // Runs recorded over a draw that has since changed — the store refuses to
   // conclude on them, so the buttons say why instead of failing silently.
   const staleRuns = which === 'operating' ? control.operating.steps.filter(s => s.staleRun).length : 0;
@@ -361,6 +370,7 @@ function ConcludeFooter({ control, which, suggestion, canEdit, disabled, disable
   if (!canEdit) return null;
   const apply = (target: TrackConclusion) => {
     const rationale = note.trim();
+    setTouched(false);   // filed — the box belongs to the paper again
     conclude(control.id, target, rationale);                       // conclusion and its words, together
     logEvent({ action: 'Update', description: `Concluded ${which === 'design' ? 'TOD' : 'TOE'} ${target.toLowerCase()} for ${control.id}`, module: 'SOX ICFR', entity: 'Control' });
     // Going against the evidence is still its own record — the same words, filed
@@ -378,7 +388,7 @@ function ConcludeFooter({ control, which, suggestion, canEdit, disabled, disable
           still carries a sentence saying what was tested and what it showed. */}
       <label className="block">
         <span className="text-[0.71875rem] font-semibold text-ink-500">Rationale</span>
-        <textarea value={note} onChange={e => setNote(e.target.value)} rows={2}
+        <textarea value={note} onChange={e => { setNote(e.target.value); setTouched(true); }} rows={2}
           placeholder="Record your rationale — retained in the working paper."
           className="mt-1 w-full text-[0.75rem] rounded-lg border border-canvas-border bg-canvas-elevated px-2.5 py-2 text-ink-800 placeholder:text-ink-400 focus:outline-none focus:ring-2 focus:ring-brand-200 resize-none" />
       </label>
@@ -833,9 +843,9 @@ function PointRow({ control, point, canEdit, checking = false }: { control: Cont
 // and a concluded control refuses the patch — so the switch shows itself shut
 // rather than accepting a click that changes nothing.
 export function KeyControlChip({ control, canEdit }: { control: Control; canEdit: boolean }) {
-  const { role, updateControlMeta } = useIcfr();
+  const { eng, role, updateControlMeta } = useIcfr();
   const logEvent = useAuditLog();
-  const locked = isControlLocked(control);
+  const locked = isControlLockedIn(eng, control);
   const settable = canEdit && role === 'auditor';
   if (!settable) return control.isKey ? <Pill tone="mitigated">Key control</Pill> : null;
   return (
@@ -1233,7 +1243,9 @@ function designRagMeters(c: Control): RagMeterDef[] {
   const toeTotal = samples.length ? samples.length * steps.length : steps.length;
   const toeDone = samples.length
     ? steps.reduce((n, s) => n + samples.filter(smp => { const r = s.sampleResults?.[smp.id]; return r && r !== 'Not tested'; }).length, 0)
-    : steps.filter(s => s.result !== 'Not tested').length;
+    // stepResult, not the raw result: an attribute settled by override IS
+    // settled, and a meter that says otherwise contradicts the row above it.
+    : steps.filter(s => stepResult(s) !== 'Not tested').length;
   return [
     {
       // Optional elements are out of the denominator entirely, and a WAIVED
@@ -2827,7 +2839,7 @@ function PopulationSection({ control, canEdit, locked: gated = false }: { contro
   const pop = control.operating.population;
   const audit = eng.audits.find(a => a.id === openAuditId);
   const version = `POP-${audit ? ROUND_TAG[audit.round] : 'v1'}`;
-  const canWrite = canEdit && !isControlLocked(control);
+  const canWrite = canEdit && !isControlLockedIn(eng, control);
   const isAuditor = role === 'auditor' && canWrite;
   // The first line stops at the extract. Everything past it — proving the
   // report, locking, and every step the lock opens — is the audit's own work,
@@ -3762,7 +3774,7 @@ function SampleExtractSection({ control, canEdit, locked }: { control: Control; 
   const { eng, role, openAuditId } = useIcfr();
   // Drawing a sample is the auditor's act — the store refuses it from anyone
   // else, so the journey is not offered to anyone else either.
-  const canDraw = canEdit && role === 'auditor' && !isControlLocked(control);
+  const canDraw = canEdit && role === 'auditor' && !isControlLockedIn(eng, control);
   const o = control.operating;
   // Only the files the control is tested ON. An assisting table is joined onto
   // the population by the workflow and never drawn from, so offering it a Draw
@@ -4087,7 +4099,7 @@ function ReviewNotesBlock({ control }: { control: Control }) {
   const [respondingTo, setRespondingTo] = useState<string | null>(null);
   const [response, setResponse] = useState('');
   const so = control.wpSignoff;
-  const canRaise = isReviewer && isControlLocked(control) && !so?.reviewer;
+  const canRaise = isReviewer && isControlLockedIn(eng, control) && !so?.reviewer;
 
   if (!notes.length && !canRaise) return null;
 
@@ -4274,7 +4286,7 @@ function SignOffSection({ control }: { control: Control }) {
   const { eng, role, me, signOffControlWp, returnControl } = useIcfr();
   const logEvent = useAuditLog();
   const so = control.wpSignoff;
-  const concluded = isControlLocked(control);
+  const concluded = isControlLockedIn(eng, control);
   const notesPending = eng.reviewNotes.filter(n => n.controlId === control.id && n.status !== 'Closed').length;
   const canSign = role === 'auditor' && concluded && !so?.preparer;
   const canCounter = role === 'reviewer' && !!so?.preparer && !so?.reviewer && notesPending === 0 && so.preparer.by !== me;
@@ -4459,13 +4471,13 @@ function PriorRound({ control, round }: { control: Control; round: ToeRound }) {
  * unsettle what a second sample has now shown twice.
  */
 function RoundActions({ control, canEdit }: { control: Control; canEdit: boolean }) {
-  const { extendSample, startToeRound } = useIcfr();
+  const { eng, extendSample, startToeRound } = useIcfr();
   const logEvent = useAuditLog();
   const { addToast } = useToast();
   const [asking, setAsking] = useState(false);
   const [why, setWhy] = useState('');
   const samp = control.operating.sampling;
-  if (!canEdit || !toeRoundFailed(control) || isControlLocked(control)) return null;
+  if (!canEdit || !toeRoundFailed(control) || isControlLockedIn(eng, control)) return null;
   const spent = toeSpent(control);
   const canRedraw = canRedrawToe(control);
   const canExtend = canExtendToe(control) && !!samp;
@@ -4638,7 +4650,7 @@ function OperatingSection({ control, canEdit, locked }: { control: Control; canE
             <span>{o.sampling.method} · {o.sampling.basis}</span>
             {o.population && <span className="text-ink-400">Population {o.population.count.toLocaleString()} · {o.population.tieOut}</span>}
           </div>
-        ) : !isControlLocked(control) && (
+        ) : !isControlLockedIn(eng, control) && (
           <div className="rounded-xl border border-dashed border-canvas-border p-3 text-[0.71875rem] text-ink-500 inline-flex items-center gap-1.5">
             <FlaskConical size={12} className="text-ink-400" /> No sample yet — draw one in step ③ to test against sampled items.
           </div>
@@ -4876,7 +4888,7 @@ function ActivityRail({ control, meters }: { control: Control; meters: RagMeterD
         <button onClick={() => setPane('history')} className={tabCls(pane === 'history')}><History size={13} /> History{execCount > 0 && <span className="text-[0.625rem] tabular-nums opacity-70">{execCount}</span>}</button>
         <button onClick={() => setPane('discussion')} className={tabCls(pane === 'discussion')}><MessageSquare size={13} /> Discussion{openDisc > 0 && <span className="text-[0.625rem] tabular-nums opacity-70">{openDisc}</span>}</button>
       </div>
-      {pane === 'chat' ? <ControlChatPane control={control} />
+      {pane === 'chat' ? <ControlChatPane key={control.id} control={control} />
         : pane === 'history' ? <ExecutionTrail control={control} />
         : <DiscussionPane control={control} />}
     </aside>
@@ -4896,7 +4908,7 @@ function ActivityRail({ control, meters }: { control: Control; meters: RagMeterD
  *  concludes ineffective and runs the ordinary ladder, carrying this reason across
  *  so the paper says why rather than merely that. */
 function UnableToTestBanner({ control }: { control: Control }) {
-  const { role, markUnableToTest, resolveUnableToTest, escalateUnableToTest } = useIcfr();
+  const { eng, role, markUnableToTest, resolveUnableToTest, escalateUnableToTest } = useIcfr();
   const [asking, setAsking] = useState(false);
   const [reason, setReason] = useState('');
   const [needed, setNeeded] = useState('');
@@ -4904,7 +4916,7 @@ function UnableToTestBanner({ control }: { control: Control }) {
   const isAuditor = role === 'auditor';
 
   if (!block) {
-    if (!isAuditor || isControlLocked(control)) return null;
+    if (!isAuditor || isControlLockedIn(eng, control)) return null;
     return asking ? (
       <div className="rounded-xl border border-mitigated-200 bg-mitigated-50/40 p-4 space-y-2">
         <h3 className="text-[0.8125rem] font-bold text-mitigated-800 inline-flex items-center gap-1.5"><FileWarning size={15} /> Record that you can't test this</h3>
@@ -4938,7 +4950,7 @@ function UnableToTestBanner({ control }: { control: Control }) {
           <p className="text-[0.75rem] text-ink-600 mt-0.5"><span className="text-ink-400">Needed</span> · {block.needed}</p>
           <p className="text-[0.6875rem] text-ink-400 mt-1">Recorded by {block.raisedBy} · {block.raisedAt}. No severity applies — nothing has been shown to have failed.</p>
         </div>
-        {isAuditor && !block.convertedTo && (
+        {isAuditor && !block.convertedTo && !isControlLockedIn(eng, control) && (
           <div className="flex items-center gap-2 shrink-0">
             <button onClick={() => resolveUnableToTest(control.id)} className="h-8 px-3 rounded-lg bg-brand-600 text-white text-[0.75rem] font-semibold hover:bg-brand-700 cursor-pointer">Received — resume testing</button>
             <button onClick={() => escalateUnableToTest(control.id)} title="The period is closing and it never arrived — the control could not be evidenced, so it becomes an ordinary exception"
@@ -5260,7 +5272,7 @@ export default function ControlDossier() {
                 <button onClick={() => { setWpPreview(true); logEvent({ action: 'Export', description: `Opened the working paper for ${control.id} — ${ROLE_LABEL[role]}`, module: 'SOX ICFR', entity: 'Evidence' }); }}
                   className="h-8 px-3 inline-flex items-center gap-1.5 rounded-lg bg-brand-50 text-[0.75rem] font-semibold text-brand-700 hover:bg-brand-100 transition-colors cursor-pointer"><FileSpreadsheet size={13} /> Working paper</button>
               )}
-              {isAuditor && isControlLocked(control) && (
+              {isAuditor && controlLocked && (
                 <button onClick={() => setReopening(true)} className="h-8 px-3 inline-flex items-center gap-1.5 rounded-lg bg-brand-50 text-[0.75rem] font-semibold text-brand-700 hover:bg-brand-100 transition-colors cursor-pointer"><RotateCcw size={13} /> Reopen</button>
               )}
             </div>

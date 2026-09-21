@@ -1,6 +1,7 @@
 import type { ChatAction, ChatActionId } from './controlChatActions';
 import type { Situation } from './controlChatScript';
 import { listOf } from './controlChatScript';
+import { pointResult } from './helpers';
 import type { Control, DesignPoint, Role, TestResult } from './types';
 
 /**
@@ -177,6 +178,13 @@ export function readIntent(raw: string, ctx: IntentCtx): Intent {
     }
     if (ctx.role !== 'auditor' || s.locked || s.designResult !== 'Not tested') {
       return { kind: 'reply', text: refusal('conclude-effective', ctx) };
+    }
+    // Already that answer: say so rather than writing the same value again.
+    // A no-op write also left the situation unchanged, which stranded the
+    // acknowledgement that was standing down for it — so this is a correctness
+    // fix as much as a courtesy.
+    if (pointResult(point) === result) {
+      return { kind: 'reply', text: `${labelOf(control, point)} is already marked ${result === 'Pass' ? 'passed' : 'failed'}.` };
     }
     return { kind: 'mark', pointId: point.id, label: labelOf(control, point), result };
   }

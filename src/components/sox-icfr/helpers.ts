@@ -2617,7 +2617,12 @@ export function operatingProgress(c: Control) {
   // an override, or a validation that stands over a contradicting attestation,
   // has to move both or neither.
   return {
-    tested: s.filter(x => x.result !== 'Not tested').length,
+    // Through stepResult like the other two (21 Sep). Reading raw `.result`
+    // here meant an attribute settled by override counted as passed or failed
+    // but never as tested, so "N of M tested" could never reach M — and the
+    // chat rail read it and told the auditor to keep going on work that was
+    // finished. The comment above had claimed this for a while; now it is true.
+    tested: s.filter(x => stepResult(x) !== 'Not tested').length,
     passed: s.filter(x => stepResult(x) === 'Pass').length,
     failed: s.filter(x => stepResult(x) === 'Fail').length,
     total: s.length,
