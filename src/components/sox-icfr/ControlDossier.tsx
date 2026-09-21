@@ -33,6 +33,7 @@ import { useToast } from '../shared/Toast';
 import { Sparkles, FileSpreadsheet } from 'lucide-react';
 import WorkingPaperModal from './WorkingPaperModal';
 import RemediationBriefModal from './RemediationBriefModal';
+import ControlChatPane from './ControlChatPane';
 import { DeficiencyCard } from './extraViews';
 import DatePicker from '../shared/DatePicker';
 import { cn } from '../../lib/cn';
@@ -4851,20 +4852,30 @@ function DiscussionPane({ control }: { control: Control }) {
   );
 }
 
-// right rail — the collaboration surfaces: what was done (History) and what was said (Discussion)
+// right rail — Ira, then the collaboration surfaces: what was done (History)
+// and what was said (Discussion).
+//
+// Ira leads and opens by default (user ask, 21 Sep). The other two panes are
+// records of work already finished; Ira is about the work in front of you, so
+// a rail that opened on History put the past where the next move should be.
+// Nothing was lost to make room — both old panes are one click away, and the
+// rail is 40px wider to carry three tabs without cramping them.
 function ActivityRail({ control }: { control: Control }) {
   const { eng } = useIcfr();
-  const [pane, setPane] = useState<'history' | 'discussion'>('history');
+  const [pane, setPane] = useState<'chat' | 'history' | 'discussion'>('chat');
   const execCount = eng.executions.filter(e => e.controlId === control.id).length;
   const openDisc = discussionsFor(eng, control.id).filter(d => !d.resolved).length;
-  const tabCls = (on: boolean) => cn('flex-1 h-8 rounded-lg text-[0.75rem] font-semibold inline-flex items-center justify-center gap-1.5 transition-colors cursor-pointer', on ? 'bg-canvas-elevated text-brand-700 shadow-[0_1px_4px_-1px_rgba(15,8,30,0.18)] ring-1 ring-canvas-border' : 'text-ink-500 hover:text-ink-800');
+  const tabCls = (on: boolean) => cn('flex-1 min-w-0 h-8 rounded-lg text-[0.75rem] font-semibold inline-flex items-center justify-center gap-1.5 transition-colors cursor-pointer', on ? 'bg-canvas-elevated text-brand-700 shadow-[0_1px_4px_-1px_rgba(15,8,30,0.18)] ring-1 ring-canvas-border' : 'text-ink-500 hover:text-ink-800');
   return (
     <aside className="panel sticky top-20 self-start max-h-[calc(100vh-7rem)] flex flex-col">
       <div className="flex items-center gap-1 p-1 m-3 mb-2 rounded-xl bg-paper-50 border border-canvas-border">
+        <button onClick={() => setPane('chat')} className={tabCls(pane === 'chat')}><Sparkles size={13} /> Ira</button>
         <button onClick={() => setPane('history')} className={tabCls(pane === 'history')}><History size={13} /> History{execCount > 0 && <span className="text-[0.625rem] tabular-nums opacity-70">{execCount}</span>}</button>
         <button onClick={() => setPane('discussion')} className={tabCls(pane === 'discussion')}><MessageSquare size={13} /> Discussion{openDisc > 0 && <span className="text-[0.625rem] tabular-nums opacity-70">{openDisc}</span>}</button>
       </div>
-      {pane === 'history' ? <ExecutionTrail control={control} /> : <DiscussionPane control={control} />}
+      {pane === 'chat' ? <ControlChatPane control={control} />
+        : pane === 'history' ? <ExecutionTrail control={control} />
+        : <DiscussionPane control={control} />}
     </aside>
   );
 }
@@ -5331,7 +5342,10 @@ export default function ControlDossier() {
       <UnableToTestBanner control={control} />
 
       {/* stepper + discussion */}
-      <div className="grid grid-cols-[minmax(0,1fr)_360px] gap-5 items-start">
+      {/* 400px, not 360: the rail now carries a conversation, and a bubble
+          with a quick reply under it reads badly at 360. The stepper gives up
+          40px it was not using for anything the eye notices. */}
+      <div className="grid grid-cols-[minmax(0,1fr)_400px] gap-5 items-start">
         <motion.div className="vstepper" variants={{ hidden: {}, show: { transition: { staggerChildren: 0.1, delayChildren: 0.08 } } }}>
           {/* Design leads (user ask). It is also the order the work happens in:
               design gates operating, so a control whose design fails never needs
