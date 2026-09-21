@@ -21,6 +21,7 @@ import WorkflowDetail from './components/workflow/WorkflowDetail';
 import WorkflowLibraryView from './components/workflow/WorkflowLibraryView';
 import BusinessProcesses, { ControlDetailStandalone } from './components/audit/BusinessProcesses';
 import RiskRegister from './components/audit/RiskRegister';
+import RacmPage from './components/sox-icfr/RacmPage';
 import AuditExecution from './components/audit/AuditExecution';
 import DashboardView from './components/dashboard/DashboardView';
 import DashboardListPage from './components/dashboard/DashboardListPage';
@@ -52,6 +53,7 @@ import ProgramsView from './components/audit/ProgramsView';
 // New pages
 import RACMView from './components/governance/RACMView';
 import RacmFullPageEditor from './components/audit/RacmFullPageEditor';
+import type { ProcurementRacmRow } from './data/procurement-racm';
 import ControlLibraryView from './components/governance/ControlLibraryView';
 import ControlTestingView from './components/execution/ControlTestingView';
 import EvidenceView from './components/execution/EvidenceView';
@@ -77,8 +79,11 @@ import ManageExceptionsView from './components/exceptions/ManageExceptionsView';
 import WorkingPaperPanel from './components/execution/WorkingPaperPanel';
 import WorkflowExecutionPanel from './components/execution/WorkflowExecutionPanel';
 import TraceabilityPanel from './components/execution/TraceabilityPanel';
-import NotificationDrawer from './components/notifications/NotificationDrawer';
-import { createNotification, type PlatformNotification } from './data/notifications';
+import NotificationPopover from './notifications/NotificationPopover';
+import NotificationEmailModal from './notifications/NotificationEmailModal';
+import NotificationPreferencesModal from './notifications/NotificationPreferencesModal';
+import { NotificationProvider, useNotifications } from './notifications/NotificationContext';
+import type { PlatformNotification } from './data/notifications';
 import CommandPalette from './components/shared/CommandPalette';
 // V3 Configurable Engagement — dev-only preview (not wired to main flow)
 import ConfigurableEngagementWizard from './components/engagement-configurable/ConfigurableEngagementWizard';
@@ -185,17 +190,12 @@ function AppInner() {
     launchWorkflowBuilderWithPrompt,
     launchWorkflowBuilderInChat,
     setWorkflowBuilderSeedPrompt,
-    openNotificationDrawer,
-    closeNotificationDrawer,
-    markNotificationRead,
-    markAllNotificationsRead,
-    setNotificationActionState,
-    restoreNotification,
+    // Notifications now live in NotificationProvider (src/notifications) —
+    // the useAppState copies below are superseded and intentionally unused.
     setFocusedNotificationRefId,
-    addNotification,
   } = useAppState();
 
-  const { can, canAny } = useCurrentUser();
+  const { can, canAny, currentUser } = useCurrentUser();
   const logEvent = useAuditLog();
 
   // Knowledge Hub deep-link state — which tab to land on and (optionally)
@@ -239,14 +239,21 @@ function AppInner() {
     logEvent({ action: 'Login', description: 'User signed in', module: 'Admin', entity: 'Session' });
   }, [logEvent]);
 
-  const unreadNotifications = state.notifications.filter(n => !n.read).length;
+  const notif = useNotifications();
+  const unreadNotifications = notif.unreadCount;
 
   const handleNotificationSelect = (n: PlatformNotification) => {
-    markNotificationRead(n.id);
-    closeNotificationDrawer();
+    notif.markRead(n.id);
+    notif.closeDrawer();
+    notif.viewEmail(null);
     // Tell the target view which item to focus. Set BEFORE setView so the
     // view's first render can read it.
     setFocusedNotificationRefId(n.link?.ref?.id ?? null);
+    const ref = n.link?.ref;
+    // Deep links: reports open in the reader, engagements route by type, the
+    // rest land on the view.
+    if (ref?.kind === 'report') { setView('reports'); window.dispatchEvent(new CustomEvent('irame:open-report', { detail: { id: ref.id } })); return; }
+    if (ref?.kind === 'engagement') { openEngagement(ref.id); return; }
     if (n.link?.view) setView(n.link.view);
   };
 
@@ -309,7 +316,7 @@ function AppInner() {
   const [engagementBackView, setEngagementBackView] = useState<'programs' | 'audit-planning' | 'business-processes'>('programs');
   const [workflowBackView, setWorkflowBackView] = useState<'workflow-library' | 'business-processes' | null>(null);
   // Local context for the full-page RACM editor: which RACM, what process, where to go back to.
-  type RacmEditorContext = { racmId: string; racmName: string; processLabel: string; backView: 'engagement-overview' | 'business-processes' | 'bp-detail' | 'engagement-final' | 'ai-concierge' | 'ai-concierge-racm'; backLabel?: string; sourceFiles?: string[] };
+  type RacmEditorContext = { racmId: string; racmName: string; processLabel: string; backView: 'engagement-overview' | 'business-processes' | 'bp-detail' | 'engagement-final' | 'ai-concierge' | 'ai-concierge-racm'; backLabel?: string; sourceFiles?: string[]; initialRows?: ProcurementRacmRow[]; lockedRowIds?: string[] };
   // Deep-link support: when this tab is opened at ?view=racm-full-editor (the
   // "Open in editor" new tab), restore the editor context at init so there's no
   // mount-time setState / double render. getInitialView (useAppState) already
@@ -318,8 +325,26 @@ function AppInner() {
     if (typeof window === 'undefined') return null;
     const params = new URLSearchParams(window.location.search);
     if (params.get('view') !== 'racm-full-editor') return null;
+    const racmId = params.get('racmId') ?? '';
+    // A SOX RACM hands its own rows over before opening this tab (Racm.tsx) —
+    // this tab has none of the engagement's state to read them from.
+    let initialRows: ProcurementRacmRow[] | undefined;
+    try {
+      const raw = racmId ? window.localStorage.getItem(`sox-racm-rows:${racmId}`) : null;
+      if (raw) initialRows = JSON.parse(raw) as ProcurementRacmRow[];
+    } catch { /* storage blocked or unreadable — the editor falls back to its sample */ }
+    // Alongside the rows, the RACM tab lists the controls it has already
+    // published. Those rows are fixed, so the editor needs the list to know
+    // which ones it must not let anyone change.
+    let lockedRowIds: string[] | undefined;
+    try {
+      const rawLocked = racmId ? window.localStorage.getItem(`sox-racm-locked:${racmId}`) : null;
+      if (rawLocked) lockedRowIds = JSON.parse(rawLocked) as string[];
+    } catch { /* storage blocked or unreadable — nothing counts as published */ }
     return {
-      racmId: params.get('racmId') ?? '',
+      racmId,
+      initialRows,
+      lockedRowIds,
       racmName: params.get('racmName') ?? 'RACM',
       processLabel: params.get('processLabel') ?? '',
       backView: (params.get('backView') as RacmEditorContext['backView']) ?? 'business-processes',
@@ -614,9 +639,9 @@ function AppInner() {
         return (
           <HomeView
             setView={setView}
-            notifications={state.notifications}
+            notifications={notif.notifications}
             onSelectNotification={handleNotificationSelect}
-            onOpenNotificationDrawer={openNotificationDrawer}
+            onOpenNotificationDrawer={() => notif.openDrawer()}
             setChatInitialQuery={setChatInitialQuery}
             setSelectedWorkflow={setSelectedWorkflow}
             openAuditExecution={openAuditExecution}
@@ -853,16 +878,17 @@ function AppInner() {
             }}
             onFollowUp={(query, seed) => openChatWithWorkflowRun(query, seed)}
             onRunComplete={(workflowId) => {
-              // Phase 3 producer: push a notification when a workflow run
-              // finishes. Same pattern as ShareModal.
-              addNotification(createNotification({
-                category: 'workflow',
-                severity: 'info',
+              // WFL-01 — run completed, to the configured recipient list.
+              notif.notify({
+                eventId: 'WFL-01',
                 title: 'Workflow run completed',
-                message: `Run finished successfully. Review the output for any flagged exceptions.`,
+                message: 'Run finished successfully. Review the output for any flagged exceptions.',
                 actor: 'Ira (AI)',
+                facts: [{ label: 'Workflow', value: workflowId }, { label: 'Status', value: 'Success' }],
+                recipients: [{ name: currentUser?.name ?? 'You', role: 'Configured recipient' }],
                 link: { view: 'workflow-detail', ref: { kind: 'workflow', id: workflowId } },
-              }));
+                linkLabel: 'Open run',
+              });
             }}
             // Right-workspace actions — same destinations as the QnA workspace.
             onShareResults={() => setShowShareModal(true, { type: 'workflow-output', id: 'result-1' })}
@@ -923,6 +949,13 @@ function AppInner() {
             }}
           />
         );
+
+      // RACM — the team's matrices and the shape they arrive in. A sidebar
+      // page since 18 Sep: a RACM outlives the engagements scoped from it, so
+      // it belongs with Risk Register and Control Library rather than inside
+      // the engagement portfolio.
+      case 'racm-library':
+        return <RacmPage canManage={can('eng_create')} />;
 
       case 'audit-risk-register':
         return (
@@ -1025,6 +1058,9 @@ function AppInner() {
             }}
             embedded={LAUNCHED_FROM_REPORT}
             showApprovalFlowAssign
+            // Opened from an ATR's Case Management button → actions taken here
+            // are recorded on that report's Report Snapshot timeline.
+            atrLink={mexReturnReportId ? { reportId: mexReturnReportId } : undefined}
           />
         );
 
@@ -1157,6 +1193,8 @@ function AppInner() {
             racmId={racmEditorContext?.racmId}
             processLabel={racmEditorContext?.processLabel}
             sourceFiles={racmEditorContext?.sourceFiles}
+            initialRows={racmEditorContext?.initialRows}
+            lockedRowIds={racmEditorContext?.lockedRowIds}
           />
         );
 
@@ -1275,7 +1313,7 @@ function AppInner() {
   };
 
   return (
-    <ToastProvider>
+    <>
       <BulkRunProgressProvider>
       <ShareProvider openShare={({ type, id, name, anchor }) => setShowShareModal(true, { type, id: id ?? type, name }, anchor)}>
       <div className="flex h-screen w-full bg-canvas overflow-hidden">
@@ -1287,8 +1325,8 @@ function AppInner() {
             toggleSidebar={toggleSidebar}
             setSidebarExpanded={setSidebarExpanded}
             unreadNotifications={unreadNotifications}
-            notificationDrawerOpen={state.notificationDrawerOpen}
-            onOpenNotifications={openNotificationDrawer}
+            notificationDrawerOpen={notif.drawerOpen}
+            onOpenNotifications={() => notif.openDrawer()}
           />
         )}
         <main ref={mainScrollRef} className="flex-1 flex flex-col overflow-hidden">
@@ -1330,24 +1368,32 @@ function AppInner() {
               anchor={state.shareAnchor}
               onClose={() => setShowShareModal(false)}
               onShare={(recipients) => {
-                // Phase 3 producer: push a notification when reports or
-                // dashboards are shared. Single hook, both surfaces.
+                // ATR-05 (report) / DSH-01 (dashboard): one message per
+                // recipient per share operation, owner gets a confirmation copy.
                 const ctx = state.shareContext;
                 if (!ctx) return;
                 const isReport    = ctx.type === 'report';
                 const isDashboard = ctx.type === 'dashboard';
                 if (!isReport && !isDashboard) return;
-                addNotification(createNotification({
-                  category: 'report',
-                  severity: 'info',
-                  title: isReport ? 'Report shared' : 'Dashboard shared',
-                  message: `Shared with ${recipients.length === 1 ? recipients[0] : `${recipients.length} people`}.`,
-                  actor: 'You',
-                  link: {
-                    view: isReport ? 'reports' : 'dashboards',
-                    ref: { kind: isReport ? 'report' : 'dashboard', id: ctx.id },
-                  },
-                }));
+                const sharer = currentUser?.name ?? 'You';
+                const name = ctx.name ?? (isReport ? 'a report' : 'a dashboard');
+                const opKey = `share-${ctx.id}-${Date.now()}`;
+                recipients.forEach(r => {
+                  const person = r.includes('@') ? { name: r.split('@')[0].split('.').map(x => x[0]?.toUpperCase() + x.slice(1)).join(' '), email: r, role: 'Recipient' } : { name: r, role: 'Recipient' };
+                  notif.notify({
+                    eventId: isReport ? 'ATR-05' : 'DSH-01',
+                    title: `${sharer} shared ${isReport ? 'the report' : 'the dashboard'} “${name}” with you`,
+                    message: isReport ? 'Open it from Shared Reports or straight from this notification.' : 'Open it from Dashboards or straight from this notification.',
+                    actor: sharer,
+                    facts: [{ label: isReport ? 'Report' : 'Dashboard', value: name }, { label: 'Shared by', value: sharer }],
+                    recipients: [person],
+                    watchers: [{ name: sharer, role: isReport ? 'Report owner' : 'Dashboard owner' }],
+                    link: { view: isReport ? 'reports' : 'dashboards', ref: { kind: isReport ? 'report' : 'dashboard', id: ctx.id } },
+                    linkLabel: isReport ? 'Open report' : 'Open dashboard',
+                    operationKey: opKey,
+                    itemLabel: person.name,
+                  });
+                });
               }}
             />
           )}
@@ -1395,18 +1441,21 @@ function AppInner() {
           )}
         </AnimatePresence>
 
-        {/* Notification Drawer */}
+        {/* Notification centre + the email preview and preferences it opens. */}
         <AnimatePresence>
-          {state.notificationDrawerOpen && (
-            <NotificationDrawer
-              notifications={state.notifications}
-              onClose={closeNotificationDrawer}
-              onSelect={handleNotificationSelect}
-              onMarkAllRead={markAllNotificationsRead}
-              onSetActionState={setNotificationActionState}
-              onRestore={restoreNotification}
+          <NotificationPopover onSelect={handleNotificationSelect} />
+        </AnimatePresence>
+        <AnimatePresence>
+          {notif.viewingEmail && (
+            <NotificationEmailModal
+              email={notif.viewingEmail}
+              onClose={() => notif.viewEmail(null)}
+              onOpenLink={e => { const n = notif.notifications.find(x => x.id === e.notificationId); if (n) handleNotificationSelect(n); else notif.viewEmail(null); }}
             />
           )}
+        </AnimatePresence>
+        <AnimatePresence>
+          {notif.prefsOpen && <NotificationPreferencesModal />}
         </AnimatePresence>
 
         {/* Global Cmd+K command palette */}
@@ -1414,7 +1463,7 @@ function AppInner() {
       </div>
       </ShareProvider>
       </BulkRunProgressProvider>
-    </ToastProvider>
+    </>
   );
 }
 
@@ -1430,7 +1479,11 @@ export default function App() {
     <ErrorBoundary>
       <CurrentUserProvider startSignedOut>
         <AdminDataProvider>
-          <AppGate />
+          <ToastProvider>
+            <NotificationProvider>
+              <AppGate />
+            </NotificationProvider>
+          </ToastProvider>
         </AdminDataProvider>
       </CurrentUserProvider>
     </ErrorBoundary>

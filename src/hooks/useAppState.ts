@@ -27,6 +27,7 @@ export type View =
   | 'governance-racm-generate'
   | 'governance-controls'
   | 'governance-control-detail'
+  | 'racm-library'
   | 'audit-risk-register'
   | 'audit-planning'
   | 'programs'
@@ -218,6 +219,7 @@ const getInitialView = (): View => {
   if (v === 'manage-exceptions') return 'manage-exceptions';
   if (v === 'racm-full-editor') return 'racm-full-editor';
   if (v === 'audit-risk-register') return 'audit-risk-register';
+  if (v === 'racm-library') return 'racm-library';
   if (v === 'control-detail' && params.get('controlId')) return 'control-detail';
   if (v === 'chat') return 'chat';
   if (v === 'bp-detail' && params.get('bp')) return 'bp-detail';

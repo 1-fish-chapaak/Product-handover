@@ -1,0 +1,1193 @@
+/**
+ * RACM import — reading an uploaded matrix (A5) or an SOP extraction (A6) into
+ * rows the RACM tab reviews before anything is written.
+ *
+ * Everything here is pure: the RACM tab's review screens call it, and only the
+ * final Import hands `importRowsToControls` output to the store's createRacm.
+ *
+ *   workbook ─ readRacmWorkbook ─▶ sheets ─ guessHeaderRow ─▶ header row
+ *     ─ matchColumns ─▶ one ColumnMatch per RACM field (confidence, needs attention)
+ *     ─ buildImportRows ─▶ ImportRow[]  (split attributes, evidence per attribute,
+ *                                         merged duplicate checks, frequency flags,
+ *                                         duplicates — against the engagement and
+ *                                         against the rows already read)
+ *     ─ proposeBlankFills / applyFills  (A9: previewed, accepted, then applied)
+ *     ─ suggestForRow                   (A7: Ira's missing attributes / design checks)
+ *     ─ importRowsToControls ─▶ Control[] for createRacm
+ *
+ * An SOP has no rows to read in this prototype, so `draftRowsFromSop` drafts
+ * them from the process template once the prompt has been validated, tagging
+ * each as read from the SOP (with a section reference) or suggested by Ira.
+ */
+import * as XLSX from 'xlsx';
+import { sameCompany } from './auditScope';
+import { requiredFilesOf, suggestedDesignChecks, titleFromRisk } from './helpers';
+import { racmTemplateForProcesses } from './mockData';
+import type { Assertion, Control, ControlClass, ControlType, DesignPoint, Frequency, Nature, OperatingStep, RiskRating, TestingStrategy } from './types';
+
+// ─── Fields ──────────────────────────────────────────────────────────────────────
+
+export type RacmFieldKey =
+  | 'riskId' | 'riskTitle' | 'riskDescription' | 'riskCategory' | 'riskRating'
+  | 'controlId' | 'controlTitle' | 'objective' | 'controlActivity'
+  | 'subProcess' | 'type' | 'nature' | 'frequency' | 'isKey'
+  | 'owner' | 'processOwner' | 'assertions' | 'attributes'
+  | 'controlEvidence' | 'designChecks' | 'sopSectionRef' | 'entity'
+  | 'effectiveDate' | 'country' | 'testingStrategy';
+
+export interface RacmField {
+  key: RacmFieldKey;
+  /** What the review screen calls the field. */
+  label: string;
+  /** Import can't go ahead until a required field has a column (or, for
+   *  controlTitle / controlActivity, at least one of the two does). */
+  required: boolean;
+  /** Header spellings that mean this field, lower-case. */
+  synonyms: string[];
+}
+
+export const RACM_FIELDS: RacmField[] = [
+  { key: 'riskId', label: 'Risk ID', required: false, synonyms: ['risk id', 'risk ref', 'risk no', 'risk number', 'risk #'] },
+  { key: 'riskTitle', label: 'Risk title', required: false, synonyms: ['risk title', 'risk name', 'risk heading', 'risk short name'] },
+  { key: 'riskDescription', label: 'Risk description', required: true, synonyms: ['risk description', 'risk', 'risk statement', 'what could go wrong'] },
+  { key: 'riskCategory', label: 'Risk category', required: false, synonyms: ['risk category', 'risk type', 'category'] },
+  { key: 'riskRating', label: 'Risk rating', required: false, synonyms: ['risk rating', 'inherent risk', 'risk level', 'rating'] },
+  { key: 'controlId', label: 'Control ID', required: true, synonyms: ['control id', 'control ref', 'control no', 'control number', 'control #'] },
+  { key: 'controlTitle', label: 'Control title', required: false, synonyms: ['control title', 'control name', 'control'] },
+  { key: 'objective', label: 'Control objective', required: false, synonyms: ['control objective', 'objective'] },
+  // Labelled "Control description" since the 17 Sep call: this is the narrative
+  // the auditor tests against. 'control description' moved here from
+  // controlTitle with the label, so a file using that header lands on the field
+  // the header now names.
+  { key: 'controlActivity', label: 'Control description', required: true, synonyms: ['control activity', 'control description', 'control procedure', 'activity', 'how the control operates'] },
+  { key: 'subProcess', label: 'Sub-process', required: false, synonyms: ['sub-process', 'sub process', 'subprocess', 'process area'] },
+  { key: 'type', label: 'Control type', required: false, synonyms: ['control type', 'type', 'preventive / detective'] },
+  { key: 'nature', label: 'Control nature', required: false, synonyms: ['control nature', 'nature', 'manual / automated', 'automation'] },
+  { key: 'frequency', label: 'Frequency', required: true, synonyms: ['frequency', 'control frequency', 'how often'] },
+  { key: 'isKey', label: 'Key control', required: false, synonyms: ['key control', 'key', 'key / non-key', 'is key'] },
+  { key: 'owner', label: 'Control owner', required: false, synonyms: ['control owner', 'owner', 'performed by', 'control performer'] },
+  { key: 'processOwner', label: 'Process owner', required: false, synonyms: ['process owner'] },
+  { key: 'assertions', label: 'Assertions', required: false, synonyms: ['assertions', 'assertion', 'financial statement assertions', 'ceavop'] },
+  { key: 'attributes', label: 'Attributes', required: false, synonyms: ['attributes', 'test attributes', 'attribute', 'testing attributes'] },
+  { key: 'controlEvidence', label: 'Control evidence', required: false, synonyms: ['control evidence', 'evidence', 'supporting evidence', 'documents'] },
+  { key: 'designChecks', label: 'Design checks (TOD)', required: false, synonyms: ['tod checks performed', 'tod checks', 'design checks', 'test of design', 'tod'] },
+  { key: 'sopSectionRef', label: 'SOP section', required: false, synonyms: ['sop section ref', 'sop section', 'sop reference', 'sop ref'] },
+  // The company a row is tested at — the ENTITY part of its ID (S11). A file
+  // without one takes the company chosen when the RACM was created.
+  { key: 'entity', label: 'Entity', required: false, synonyms: ['entity', 'legal entity', 'entity name', 'subsidiary', 'company', 'company name'] },
+  // Added 17 Sep. None of the three blocks an import — a file that does not
+  // carry them still lands, and Ira offers a fill per row.
+  { key: 'effectiveDate', label: 'Effective date', required: false, synonyms: ['effective date', 'effective from', 'date effective', 'implementation date', 'in place from', 'go live date'] },
+  { key: 'country', label: 'Country', required: false, synonyms: ['country', 'location', 'geography', 'jurisdiction'] },
+  { key: 'testingStrategy', label: 'Testing strategy', required: false, synonyms: ['testing strategy', 'test strategy', 'testing approach', 'test approach', 'sampling approach', 'coverage'] },
+];
+
+// ─── Text helpers (private) ──────────────────────────────────────────────────────
+
+/** Header / synonym comparison form: lower-case, "&" → "and", "#" → "no" (so
+ *  "Risk #" reads as "risk no" rather than colliding with plain "risk"),
+ *  punctuation → space, spaces collapsed. */
+export function normaliseHeader(text: string): string {
+  return String(text ?? '')
+    .toLowerCase()
+    .replace(/&/g, ' and ')
+    .replace(/#/g, ' no ')
+    .replace(/[^\p{L}\p{N}]+/gu, ' ')
+    .trim();
+}
+
+/** The RACM's own process column. The process is chosen before import, so these
+ *  headers are never read as a field — above all not as Sub-process or Process
+ *  owner, which share the word. */
+const PROCESS_HEADERS = new Set(['process', 'business process', 'process name', 'business cycle', 'cycle', 'mega process', 'major process']);
+
+const NORMALISED_SYNONYMS: Record<RacmFieldKey, string[]> = Object.fromEntries(
+  RACM_FIELDS.map(f => [f.key, f.synonyms.map(normaliseHeader).filter(Boolean)]),
+) as Record<RacmFieldKey, string[]>;
+
+const FIELD_BY_KEY: Record<RacmFieldKey, RacmField> = Object.fromEntries(RACM_FIELDS.map(f => [f.key, f])) as Record<RacmFieldKey, RacmField>;
+
+/** 98 exact multi-word · 90 exact single word · 85 one contains the other ·
+ *  60–80 token overlap (Jaccard ≥ 0.5) · 0 otherwise. Both sides normalised. */
+function synonymScore(header: string, synonym: string): number {
+  if (!header || !synonym) return 0;
+  const multi = synonym.includes(' ');
+  if (header === synonym) return multi ? 98 : 90;
+  if (multi && (` ${header} `.includes(` ${synonym} `) || (header.length >= 4 && ` ${synonym} `.includes(` ${header} `)))) return 85;
+  const a = new Set(header.split(' '));
+  const b = new Set(synonym.split(' '));
+  let shared = 0;
+  a.forEach(w => { if (b.has(w)) shared++; });
+  const jaccard = shared / (a.size + b.size - shared);
+  return jaccard >= 0.5 ? Math.round(60 + 20 * jaccard) : 0;
+}
+
+function bestScore(header: string, field: RacmFieldKey): number {
+  if (!header || PROCESS_HEADERS.has(header)) return 0;
+  let best = 0;
+  for (const s of NORMALISED_SYNONYMS[field]) best = Math.max(best, synonymScore(header, s));
+  return best;
+}
+
+/** The (WHO) (WHERE) (WHEN) (HOW) (WHY) markers a RACM activity is written with. */
+function stripMarkers(text: string): string {
+  return text
+    .replace(/\s*\(\s*(?:who|what|where|when|how|why)\s*\)/gi, '')
+    .replace(/\s+([,.;:])/g, '$1')
+    .replace(/\s{2,}/g, ' ')
+    .trim();
+}
+
+function firstSentence(text: string): string {
+  const t = stripMarkers(text);
+  return (t.split(/(?<=[.!?])\s+/)[0] ?? '').trim();
+}
+
+function firstClause(text: string): string {
+  const t = stripMarkers(text);
+  return (t.split(/[,;:]\s|\s[—–-]\s|\.(?:\s|$)/)[0] ?? '').trim().replace(/[.,;:]+$/, '');
+}
+
+function sentenceCase(text: string): string {
+  const t = text === text.toUpperCase() && /[A-Z]{4}/.test(text) ? text.toLowerCase() : text;
+  return t.charAt(0).toUpperCase() + t.slice(1);
+}
+
+/** Up to seven words from `index`, stopping at the first punctuation or a
+ *  (WHO)-style marker — the phrase a fill's reason quotes. */
+function phraseAt(text: string, index: number): string {
+  const rest = text.slice(index);
+  const stop = rest.search(/[,.;:()]/);
+  const phrase = (stop === -1 ? rest : rest.slice(0, stop)).trim();
+  const words = phrase.split(/\s+/);
+  return words.length > 7 ? `${words.slice(0, 7).join(' ')}…` : phrase;
+}
+
+/** Same check twice is one check — compared on its words, ignoring case, spacing
+ *  and trailing punctuation. */
+function sameText(text: string): string {
+  return normaliseHeader(text);
+}
+
+const STOPWORDS = new Set([
+  'with', 'from', 'into', 'onto', 'that', 'this', 'these', 'those', 'than', 'then', 'there', 'their', 'them', 'they',
+  'before', 'after', 'where', 'when', 'whenever', 'what', 'which', 'whom', 'whose', 'while', 'will', 'shall', 'must',
+  'should', 'would', 'could', 'been', 'being', 'have', 'having', 'were', 'each', 'every', 'only', 'also', 'such',
+  'more', 'most', 'other', 'over', 'under', 'upon', 'within', 'without', 'against', 'between', 'through', 'using',
+  'based', 'control', 'controls', 'perform', 'performs', 'performed', 'ensure', 'ensures', 'attribute', 'attributes',
+  'tested', 'test', 'primary', 'item', 'items',
+]);
+
+function stem(word: string): string {
+  for (const suffix of ['ing', 'ed', 's']) {
+    if (word.endsWith(suffix) && word.length - suffix.length >= 4) return word.slice(0, -suffix.length);
+  }
+  return word;
+}
+
+/** Meaningful words (4+ letters, no stopwords), lightly stemmed. */
+function meaningfulWords(text: string): string[] {
+  const words = stripMarkers(String(text ?? '')).toLowerCase().split(/[^a-z]+/)
+    .filter(w => w.length >= 4 && !STOPWORDS.has(w))
+    .map(stem);
+  return Array.from(new Set(words));
+}
+
+/** "approver" ~ "approval", "invoice" ~ "invoices", "change" ~ "changes". */
+function sameWord(a: string, b: string): boolean {
+  if (a === b) return true;
+  const [short, long] = a.length <= b.length ? [a, b] : [b, a];
+  if (short.length >= 5 && long.startsWith(short) && long.length - short.length <= 4) return true;
+  return short.length >= 6 && short.slice(0, 6) === long.slice(0, 6);
+}
+
+function sharesWord(a: string[], b: string[]): boolean {
+  return a.some(x => b.some(y => sameWord(x, y)));
+}
+
+function keywordJaccard(a: string, b: string): number {
+  const wa = meaningfulWords(a);
+  const wb = meaningfulWords(b);
+  if (!wa.length || !wb.length) return 0;
+  const shared = wa.filter(x => wb.some(y => sameWord(x, y))).length;
+  return shared / (wa.length + wb.length - shared);
+}
+
+/** Share of the candidate's words already said by some line in `have`. */
+function alreadySaid(have: string[], candidate: string): boolean {
+  const cand = meaningfulWords(candidate);
+  if (!cand.length) return false;
+  return have.some(h => {
+    const hw = meaningfulWords(h);
+    return cand.filter(w => hw.some(x => sameWord(w, x))).length / cand.length >= 0.5;
+  });
+}
+
+
+function hashString(text: string): number {
+  let h = 2166136261;
+  for (let i = 0; i < text.length; i++) h = Math.imul(h ^ text.charCodeAt(i), 16777619) >>> 0;
+  return h >>> 0;
+}
+
+let idSeq = 0;
+/** Locally unique ids — the store makes them unique across the engagement. */
+function nid(prefix: string): string { return `${prefix}-imp${(++idSeq).toString(36)}`; }
+
+// ─── Reading and matching ────────────────────────────────────────────────────────
+
+export interface SheetData { name: string; rows: string[][] }
+
+export interface ColumnMatch {
+  field: RacmFieldKey;
+  /** 0-based column index in the sheet, or null when nothing matched. */
+  column: number | null;
+  /** 0–100. Below 70, or null column on a required field, is "needs attention". */
+  confidence: number;
+}
+
+/** Read every sheet of an .xlsx / .xls / .csv into trimmed string cells. Rejects
+ *  when the file can't be parsed. */
+export async function readRacmWorkbook(file: File): Promise<SheetData[]> {
+  let wb: XLSX.WorkBook;
+  try {
+    const buf = await file.arrayBuffer();
+    wb = XLSX.read(buf, { type: 'array' });
+  } catch {
+    throw new Error(`${file.name} couldn't be read as a spreadsheet. Save it as .xlsx, .xls or .csv and upload it again.`);
+  }
+  if (!wb.SheetNames.length) throw new Error(`${file.name} has no sheets to read.`);
+  return wb.SheetNames.map(name => {
+    const ws = wb.Sheets[name];
+    const raw = ws ? XLSX.utils.sheet_to_json<unknown[]>(ws, { header: 1, defval: '', raw: false, blankrows: true }) : [];
+    return { name, rows: raw.map(r => (Array.isArray(r) ? r : []).map(v => String(v ?? '').trim())) };
+  });
+}
+
+/** Index of the row that holds the headers — the first row whose cells match at
+ *  least three field synonyms; 0 when none does. */
+export function guessHeaderRow(rows: string[][]): number {
+  const limit = Math.min(rows.length, 30);
+  for (let r = 0; r < limit; r++) {
+    const fields = new Set<RacmFieldKey>();
+    for (const cell of rows[r] ?? []) {
+      const text = String(cell ?? '');
+      // a header is a label, not a paragraph — long data cells can quote field names
+      if (!text || text.length > 60) continue;
+      const h = normaliseHeader(text);
+      for (const f of RACM_FIELDS) {
+        if (bestScore(h, f.key) >= 85) { fields.add(f.key); break; }
+      }
+    }
+    if (fields.size >= 3) return r;
+  }
+  return 0;
+}
+
+/** One ColumnMatch per RACM_FIELDS entry, in that order. Each column is used by
+ *  at most one field (best confidence wins). */
+export function matchColumns(headers: string[], remembered: Record<string, RacmFieldKey | null> = {}): ColumnMatch[] {
+  const norm = headers.map(h => normaliseHeader(h));
+  // What this header was taken to mean last time wins outright (B4). Matching
+  // headers is work, and doing it again for every monthly upload of the same
+  // workbook is work nobody should be asked to repeat. A header recorded as
+  // deliberately unmapped stays unmapped — the refusal is remembered too.
+  const pinned = new Map<RacmFieldKey, number>();
+  const spokenFor = new Set<number>();
+  norm.forEach((h, column) => {
+    const was = remembered[h];
+    if (was === undefined) return;
+    spokenFor.add(column);
+    if (was !== null && !pinned.has(was)) pinned.set(was, column);
+  });
+  const pairs: { field: RacmFieldKey; order: number; column: number; confidence: number }[] = [];
+  RACM_FIELDS.forEach((f, order) => {
+    norm.forEach((h, column) => {
+      const confidence = bestScore(h, f.key);
+      if (confidence > 0) pairs.push({ field: f.key, order, column, confidence });
+    });
+  });
+  // Greedy on confidence across every (field, column) pair; ties go to the field
+  // listed first, then the leftmost column.
+  pairs.sort((a, b) => b.confidence - a.confidence || a.order - b.order || a.column - b.column);
+  const byField = new Map<RacmFieldKey, { column: number; confidence: number }>();
+  const usedColumns = new Set<number>();
+  // 100 rather than 98: a remembered header is more certain than an exact
+  // wording match, because a person confirmed it on a real file.
+  pinned.forEach((column, field) => { byField.set(field, { column, confidence: 100 }); usedColumns.add(column); });
+  for (const p of pairs) {
+    if (byField.has(p.field) || usedColumns.has(p.column) || spokenFor.has(p.column)) continue;
+    byField.set(p.field, { column: p.column, confidence: p.confidence });
+    usedColumns.add(p.column);
+  }
+  return RACM_FIELDS.map(f => {
+    const hit = byField.get(f.key);
+    return { field: f.key, column: hit ? hit.column : null, confidence: hit ? hit.confidence : 0 };
+  });
+}
+
+/** Needs attention = a required field with no column (controlTitle and
+ *  controlActivity count as satisfied if either has one), or any matched field
+ *  below 70% confidence. */
+export function needsAttention(matches: ColumnMatch[]): ColumnMatch[] {
+  const hasColumn = (k: RacmFieldKey) => matches.some(m => m.field === k && m.column != null);
+  const titleOrActivity = hasColumn('controlTitle') || hasColumn('controlActivity');
+  return matches.filter(m => {
+    if (m.column != null) return m.confidence < 70;
+    if (!FIELD_BY_KEY[m.field]?.required) return false;
+    if (m.field === 'controlTitle' || m.field === 'controlActivity') return !titleOrActivity;
+    return true;
+  });
+}
+
+// ─── Rows ────────────────────────────────────────────────────────────────────────
+
+export type ImportOrigin = 'file' | 'sop' | 'suggested';
+
+export interface ImportAttribute {
+  text: string;
+  /** Required files for this attribute — the Control evidence split per attribute. */
+  requiredFiles: string[];
+}
+
+/** One proposed value for an empty field (A9) — shown before → after, applied only once accepted. */
+export interface BlankFill {
+  field: RacmFieldKey;
+  value: string;
+  /** Plain-English reason, e.g. "Activity says 'on receipt of every invoice'". */
+  reason: string;
+}
+
+export interface ImportRow {
+  /** Stable React key. */
+  key: string;
+  /** 1-based row number in the sheet, or order in the SOP draft. */
+  rowNo: number;
+  origin: ImportOrigin;
+  /** SOP section the row was read from, e.g. "§ 4.2". SOP rows only. */
+  sectionRef?: string;
+  /** Cell text per mapped field, after any accepted fills. Blank cells are ''. */
+  values: Partial<Record<RacmFieldKey, string>>;
+  /** THE FILE'S OWN COLUMNS WE HAVE NO FIELD FOR, by their header (B1).
+   *
+   *  These used to be dropped on the floor. A client put a column in their
+   *  matrix for a reason, and a product that silently discards it is asking them
+   *  to maintain their real RACM somewhere else. We do not understand these
+   *  values, so nothing reads them — they are carried, shown, and exported. */
+  extras: Record<string, string>;
+  /** Attributes split one per line or per "|" (also ";" and bullets). */
+  attributes: ImportAttribute[];
+  /** Design checks split the same way, duplicates merged (R2). */
+  designChecks: string[];
+  /** How many duplicate design checks were merged on this row. */
+  mergedDuplicateChecks: number;
+  /** Parsed frequency. null when blank, unreadable, or "Continuous" — the user must pick one. */
+  frequency: Frequency | null;
+  frequencyFlag?: 'continuous' | 'unreadable' | 'blank';
+  isKey: boolean;
+  /** null when the file leaves it blank or says something we can't read — the
+   *  reviewer picks it (17 Sep: no silent "Manual"). */
+  nature: Nature | null;
+  natureFlag?: 'unreadable' | 'blank';
+  /** null the same way — no silent "Preventive". */
+  type: ControlType | null;
+  typeFlag?: 'unreadable' | 'blank';
+  assertions: Assertion[];
+  riskRating?: RiskRating;
+  /** Undefined when the file leaves it blank or says something we can't read —
+   *  optional, so a blank one never blocks the import (17 Sep). */
+  testingStrategy?: TestingStrategy;
+  /** A8: this looks like a control the engagement already has, or one an earlier
+   *  row of this same file already wrote. `kind` says what that means, because
+   *  the two are not the same thing: 'same-process' is the same control twice in
+   *  one matrix — a repeat, held back from import — while 'other-process' is a
+   *  control that also answers for another process, which is legitimate and is
+   *  only pointed out. */
+  duplicateOf?: { kind: 'same-process' | 'other-process'; controlId: string; process: string; reason: string };
+}
+
+/** Held back from import: the row repeats a control this RACM already has
+ *  (17 Sep — flag and don't create). A match in another process is not one. */
+export const rowRepeats = (row: ImportRow) => row.duplicateOf?.kind === 'same-process';
+
+// ── cell readers ─────────────────────────────────────────────────────────────────
+
+const FREQUENCY_CELL: [RegExp, Frequency][] = [
+  [/\b(?:annual|annually|yearly|once a year)\b/, 'Annual'],
+  [/\bquarterly\b/, 'Quarterly'],
+  [/\bmonthly\b/, 'Monthly'],
+  [/\bweekly\b/, 'Weekly'],
+  [/\bdaily\b/, 'Daily'],
+  [/\b(?:recurring|per transaction|each transaction|every transaction|transactional|as and when|on occurrence|event driven|event based|multiple times a day)\b/, 'Recurring'],
+  [/\b(?:ad hoc|adhoc|as needed|as required)\b/, 'Ad-hoc'],
+];
+
+/** Frequencies the prototype has no word for — read as unreadable rather than
+ *  rounded to the nearest one ("semi-annual" is not Annual). */
+const FREQUENCY_UNSUPPORTED = /\b(?:semi annual|semiannual|bi annual|biannual|half yearly|bi weekly|biweekly|fortnightly|bi monthly|bimonthly)\b/;
+
+export function parseFrequency(cell: string): { frequency: Frequency | null; flag?: 'continuous' | 'unreadable' | 'blank' } {
+  const t = normaliseHeader(cell);
+  if (!t) return { frequency: null, flag: 'blank' };
+  if (/\bcontinuous(?:ly)?\b/.test(t)) return { frequency: null, flag: 'continuous' };
+  if (FREQUENCY_UNSUPPORTED.test(t)) return { frequency: null, flag: 'unreadable' };
+  const found = new Set<Frequency>();
+  for (const [re, f] of FREQUENCY_CELL) if (re.test(t)) found.add(f);
+  // "Quarterly / annual" names two — the user picks, nothing is guessed
+  return found.size === 1 ? { frequency: [...found][0] } : { frequency: null, flag: 'unreadable' };
+}
+
+function parseIsKey(cell: string): boolean {
+  return ['yes', 'y', 'true', 'key', '1', '✓', '✔'].includes(String(cell ?? '').trim().toLowerCase());
+}
+
+function parseNature(cell: string): { nature: Nature | null; flag?: 'unreadable' | 'blank' } {
+  const t = normaliseHeader(cell);
+  if (!t) return { nature: null, flag: 'blank' };
+  if (/\bit dependent\b|\bsemi automated\b|\bitdm\b/.test(t)) return { nature: 'IT-dependent' };
+  if (/\bautomat(?:ed|ic|ically)\b/.test(t)) return { nature: 'Automated' };
+  if (/\bmanual(?:ly)?\b/.test(t)) return { nature: 'Manual' };
+  return { nature: null, flag: 'unreadable' };
+}
+
+function parseType(cell: string): { type: ControlType | null; flag?: 'unreadable' | 'blank' } {
+  const t = normaliseHeader(cell);
+  if (!t) return { type: null, flag: 'blank' };
+  const detect = /\bdetect/.test(t);
+  const prevent = /\bprevent/.test(t);
+  if (detect !== prevent) return { type: detect ? 'Detective' : 'Preventive' };
+  return { type: null, flag: 'unreadable' };
+}
+
+const ASSERTION_ORDER: Assertion[] = ['Completeness', 'Accuracy', 'Existence / Occurrence', 'Cut-off', 'Valuation', 'Rights & Obligations', 'Presentation'];
+const ASSERTION_CELL: [RegExp, Assertion][] = [
+  [/\bcompleteness\b|\bcomplete\b/, 'Completeness'],
+  [/\baccuracy\b|\baccurate\b/, 'Accuracy'],
+  [/\bexistence\b|\boccurrence\b/, 'Existence / Occurrence'],
+  [/\bcut off\b|\bcutoff\b/, 'Cut-off'],
+  [/\bvaluation\b/, 'Valuation'],
+  [/\brights\b|\bobligations?\b/, 'Rights & Obligations'],
+  [/\bpresentation\b|\bdisclosures?\b/, 'Presentation'],
+];
+const CEAVOP_LETTER: Record<string, Assertion> = {
+  c: 'Completeness', e: 'Existence / Occurrence', a: 'Accuracy', v: 'Valuation', o: 'Rights & Obligations', p: 'Presentation',
+};
+
+export function parseAssertions(cell: string): Assertion[] {
+  const t = normaliseHeader(cell);
+  if (!t) return [];
+  const tokens = t.split(' ');
+  // "C, A, V" — the CEAVOP letters on their own
+  const found = new Set<Assertion>();
+  if (tokens.every(w => w.length === 1 && CEAVOP_LETTER[w])) tokens.forEach(w => found.add(CEAVOP_LETTER[w]));
+  else for (const [re, a] of ASSERTION_CELL) if (re.test(t)) found.add(a);
+  return ASSERTION_ORDER.filter(a => found.has(a));
+}
+
+function parseRiskRating(cell: string): RiskRating | undefined {
+  const t = normaliseHeader(cell);
+  if (!t) return undefined;
+  if (/\b(?:high|critical)\b/.test(t)) return 'High';
+  if (/\b(?:medium|moderate)\b/.test(t)) return 'Medium';
+  if (/\blow\b/.test(t)) return 'Low';
+  return undefined;
+}
+
+/** Reads the coverage column. Deliberately narrow — a cell we cannot place
+ *  comes back undefined and the reviewer picks, rather than being rounded into
+ *  'Sampling' because that is the commonest answer. */
+function parseTestingStrategy(cell: string): TestingStrategy | undefined {
+  const t = normaliseHeader(cell);
+  if (!t) return undefined;
+  if (/\b(?:full population|whole population|entire population|100 ?%|census|all items|complete testing)\b/.test(t)) return 'Full population';
+  if (/\b(?:test of one|single instance|one instance|sample of one|one occurrence|1 item)\b/.test(t)) return 'Test of one';
+  if (/\b(?:sampl\w*|judgemental|judgmental|statistical|attribute testing|haphazard|random)\b/.test(t)) return 'Sampling';
+  return undefined;
+}
+
+function mergeChecks(items: string[]): { checks: string[]; merged: number } {
+  const seen = new Set<string>();
+  const checks: string[] = [];
+  for (const item of items) {
+    const k = sameText(item);
+    if (!k || seen.has(k)) continue;
+    seen.add(k);
+    checks.push(item);
+  }
+  return { checks, merged: items.length - checks.length };
+}
+
+/** Required files an SOP row's attribute needs, read the same way the control
+ *  page reads an unedited attribute (its wording, then the activity) — kept to the
+ *  items still in the row's evidence, so an SOP draft re-derives to itself. */
+function sopFilesFor(text: string, values: Partial<Record<RacmFieldKey, string>>, evidence: string[]): string[] {
+  const step: OperatingStep = { id: 'sop', code: '', description: text, assertion: 'Accuracy', precision: '', procedures: [], result: 'Not tested' };
+  const activity = (values.controlActivity ?? '').trim();
+  const labels = requiredFilesOf(step, { description: (values.controlTitle ?? '').trim(), controlActivity: activity || undefined }).map(f => f.label);
+  const inEvidence = new Set(evidence.map(sameText));
+  return labels.filter(l => inEvidence.has(sameText(l)));
+}
+
+/** How alike two wordings have to read before a row is called a duplicate. */
+const DUPLICATE_MATCH = 0.75;
+
+/** Something a row is compared against: a control already on the engagement, or
+ *  a row earlier in the same import. */
+interface DuplicateCandidate {
+  /** What `duplicateOf` carries — a control's id, or an earlier row's key. */
+  id: string;
+  process: string;
+  /** The same process means the same matrix, so a match is a repeat. */
+  sameProcess: boolean;
+  /** How the reason names it, and where it says that thing sits. */
+  name: string;
+  where: string;
+  /** The control ID a person would recognise. '' when there is none to compare. */
+  controlId: string;
+  /** Every wording of the control, and of the risk, worth comparing against. */
+  controlTexts: string[];
+  riskTexts: string[];
+}
+
+/** The same matrix means the same process AT THE SAME COMPANY.
+ *
+ *  A RACM is named for both — the IDs read ENTITY/PROCESS/R001/C001 — and the
+ *  library holds one Treasury matrix per company on purpose. Comparing on the
+ *  process alone would call the second company's Treasury upload a repeat of
+ *  the first's, row for row, and block an import that is entirely correct.
+ *
+ *  A blank company on either side is treated as a match rather than a mismatch:
+ *  it means nobody said, and a silent "different company" would let a real
+ *  repeat through. */
+const sameMatrix = (aProcess: string, aEntity: string, bProcess: string, bEntity: string): boolean =>
+  aProcess === bProcess && (!aEntity.trim() || !bEntity.trim() || sameCompany(aEntity, bEntity));
+
+function candidateFromControl(c: Control, process: string, entity: string): DuplicateCandidate {
+  const shown = c.code ?? c.id;
+  const sameProcess = sameMatrix(c.process, c.entity ?? '', process, entity);
+  return {
+    id: c.id,
+    process: c.process,
+    sameProcess,
+    name: shown,
+    where: sameProcess ? ', already in this RACM' : ` in the ${c.process} RACM${c.entity && !sameCompany(c.entity, entity) ? ` for ${c.entity}` : ''}`,
+    controlId: shown,
+    controlTexts: [c.description, c.controlActivity ?? ''],
+    riskTexts: [c.riskDescription, c.riskTitle ?? ''],
+  };
+}
+
+/** A row read earlier in this same file. Every row of one import lands in the
+ *  RACM being created, so the process always matches — but a file can name a
+ *  company per row, and the same control tested at two companies is two rows,
+ *  not a repeat. */
+function candidateFromRow(row: ImportRow, process: string, entity: string): DuplicateCandidate {
+  const v = row.values;
+  const rowEntity = (v.entity ?? '').trim() || entity;
+  return {
+    id: row.key,
+    process,
+    sameProcess: sameMatrix(process, rowEntity, process, entity),
+    name: `row ${row.rowNo} above`,
+    where: '',
+    controlId: (v.controlId ?? '').trim(),
+    controlTexts: [(v.controlTitle ?? '').trim(), (v.controlActivity ?? '').trim()],
+    riskTexts: [(v.riskDescription ?? '').trim(), (v.riskTitle ?? '').trim()],
+  };
+}
+
+/** The closest of every pair of wordings. */
+function bestMatch(mine: string[], theirs: string[]): number {
+  let best = 0;
+  for (const a of mine) {
+    if (!a) continue;
+    for (const b of theirs) if (b) best = Math.max(best, keywordJaccard(a, b));
+  }
+  return best;
+}
+
+/** Does this row say what something else already says? Both directions are
+ *  looked for and they mean different things (17 Sep): the same control twice in
+ *  THIS matrix is a repeat nobody meant to create, while the same control in
+ *  another process is usually right — one control can genuinely answer for two
+ *  processes — so that one is only pointed out. `earlier` is the rows already
+ *  read from this file, since two identical lines in one upload are the
+ *  commonest repeat of all. */
+function findDuplicate(values: Partial<Record<RacmFieldKey, string>>, idWasGenerated: boolean, existing: Control[], process: string, earlier: ImportRow[], entity: string): ImportRow['duplicateOf'] {
+  // The row's own company wins over the RACM's, the same way it does everywhere
+  // else a row carries one.
+  const mine = (values.entity ?? '').trim() || entity;
+  const candidates = [
+    ...existing.map(c => candidateFromControl(c, process, mine)),
+    ...earlier.map(r => candidateFromRow(r, process, mine)),
+  ];
+  if (!candidates.length) return undefined;
+  // The risk is only said out loud on a repeat, where the reviewer is being
+  // asked to hold a row back and deserves to know how sure this is. A control
+  // that also answers for another process reads exactly as it always has.
+  const flag = (c: DuplicateCandidate, lead: string, riskToo: boolean): ImportRow['duplicateOf'] => ({
+    kind: c.sameProcess ? 'same-process' : 'other-process',
+    controlId: c.id,
+    process: c.process,
+    reason: `${lead} ${c.name}${c.where}${riskToo && c.sameProcess ? ' — same risk too' : ''}`,
+  });
+
+  const id = (values.controlId ?? '').trim().toLowerCase();
+  if (id && !idWasGenerated) {
+    const byId = candidates.filter(c => c.controlId && c.controlId.toLowerCase() === id);
+    // A repeat in this matrix outranks the same ID elsewhere: one is a mistake to
+    // hold back, the other is a cross-reference worth reading.
+    const hit = byId.find(c => c.sameProcess) ?? byId[0];
+    if (hit) return flag(hit, 'Same control ID as', false);
+  }
+
+  const controlTexts = [(values.controlTitle ?? '').trim(), (values.controlActivity ?? '').trim()];
+  if (!controlTexts.some(Boolean)) return undefined;
+  const riskTexts = [(values.riskDescription ?? '').trim(), (values.riskTitle ?? '').trim()];
+  let best: { c: DuplicateCandidate; rank: number; riskToo: boolean } | null = null;
+  for (const c of candidates) {
+    const score = bestMatch(controlTexts, c.controlTexts);
+    if (score < DUPLICATE_MATCH) continue;
+    // The risk is read too, but only to say how sure this is. Two controls in one
+    // process often answer the same risk, so a risk that matches on its own means
+    // nothing — a row that matches on both is the one to look hardest at, and it
+    // is ranked above a row that matches on its control alone.
+    const riskToo = bestMatch(riskTexts, c.riskTexts) >= DUPLICATE_MATCH;
+    const rank = (c.sameProcess ? 4 : 0) + (riskToo ? 2 : 0) + score;
+    if (!best || rank > best.rank) best = { c, rank, riskToo };
+  }
+  if (!best) return undefined;
+  return flag(best.c, 'Reads like', best.riskToo);
+}
+
+/** Build review rows from the data rows below `headerRow`, skipping fully blank
+ *  rows. `existing` is every control on the engagement (for A8 duplicates) and
+ *  `process` is the RACM being created — a row is checked against both, and
+ *  against the rows read before it. */
+export function buildImportRows(rows: string[][], headerRow: number, matches: ColumnMatch[], existing: Control[], process: string, entity = '', keepExtras: string[] = []): ImportRow[] {
+  const mapped = matches.filter((m): m is ColumnMatch & { column: number } => m.column != null);
+  // Columns no field claimed. The process column is skipped — it is chosen
+  // before the import and would otherwise ride along on every row as an extra
+  // saying what the RACM already says.
+  const spokenFor = new Set(mapped.map(m => m.column));
+  const headers = rows[headerRow] ?? [];
+  const wanted = new Set(keepExtras.map(h => normaliseHeader(h)));
+  const extraCols = headers
+    .map((h, column) => ({ header: String(h ?? '').trim(), column }))
+    .filter(h => h.header && !spokenFor.has(h.column) && !PROCESS_HEADERS.has(normaliseHeader(h.header)))
+    // An empty configuration means nothing has been set up yet, so every
+    // unclaimed column is kept; once a team has said which extras it wants, that
+    // list is honoured exactly.
+    .filter(h => !wanted.size || wanted.has(normaliseHeader(h.header)));
+  const out: ImportRow[] = [];
+  for (let r = headerRow + 1; r < rows.length; r++) {
+    const cells = rows[r] ?? [];
+    const values: Partial<Record<RacmFieldKey, string>> = {};
+    for (const m of mapped) values[m.field] = String(cells[m.column] ?? '').trim();
+    // Blank across every mapped column is blank for import too — a section label
+    // sitting only in an unmapped column (e.g. the process name) is not a control.
+    if (!Object.values(values).some(v => v)) continue;
+    const extras: Record<string, string> = {};
+    for (const e of extraCols) {
+      const cell = String(cells[e.column] ?? '').trim();
+      if (cell) extras[e.header] = cell;
+    }
+    const rowNo = r + 1;
+    // `out` is the rows read before this one: the first of two identical lines is
+    // the one that stands, the second is the one flagged.
+    out.push(rowFromValues(values, { key: `row-${rowNo}`, rowNo, origin: 'file', extras }, existing, process, out, entity));
+  }
+  return out;
+}
+
+/** The file's headers paired with what the matcher took each to mean — what the
+ *  Config tab sets up from, and what the mapping is remembered from. */
+export function headerMapping(rows: string[][], headerRow: number, matches: ColumnMatch[]): { header: string; field: RacmFieldKey | null }[] {
+  const byColumn = new Map<number, RacmFieldKey>();
+  matches.forEach(m => { if (m.column != null) byColumn.set(m.column, m.field); });
+  return (rows[headerRow] ?? [])
+    .map((h, column) => ({ header: String(h ?? '').trim(), field: byColumn.get(column) ?? null }))
+    .filter(h => h.header && !PROCESS_HEADERS.has(normaliseHeader(h.header)));
+}
+
+/** Rebuild one row from edited `values` (after fills, or a frequency picked in
+ *  review), re-deriving everything else the same way buildImportRows does.
+ *  `earlier` is the rows that come before it in the same import. */
+export function rowFromValues(values: Partial<Record<RacmFieldKey, string>>, base: Pick<ImportRow, 'key' | 'rowNo' | 'origin' | 'sectionRef'> & { extras?: Record<string, string> }, existing: Control[], process: string, earlier: ImportRow[] = [], entity = ''): ImportRow {
+  const v: Partial<Record<RacmFieldKey, string>> = { ...values };
+  // A blank Control ID stays blank — the ID is built at import from the codes
+  // and the row order (17 Sep: no "C-00n" that reads as if the file said it).
+  const idWasGenerated = !(v.controlId ?? '').trim();
+
+  const attributeTexts = splitList(v.attributes ?? '');
+  const evidence = splitList(v.controlEvidence ?? '');
+  const splitFiles = splitEvidencePerAttribute(evidence, attributeTexts);
+  const attributes: ImportAttribute[] = attributeTexts.map((text, i) => {
+    if (base.origin !== 'file') {
+      const files = sopFilesFor(text, v, evidence);
+      if (files.length) return { text, requiredFiles: files };
+    }
+    return { text, requiredFiles: splitFiles[i] ?? [] };
+  });
+
+  const { checks, merged } = mergeChecks(splitList(v.designChecks ?? ''));
+  const freq = parseFrequency(v.frequency ?? '');
+  const nature = parseNature(v.nature ?? '');
+  const type = parseType(v.type ?? '');
+
+  const row: ImportRow = {
+    key: base.key,
+    rowNo: base.rowNo,
+    origin: base.origin,
+    values: v,
+    extras: base.extras ?? {},
+    attributes,
+    designChecks: checks,
+    mergedDuplicateChecks: merged,
+    frequency: freq.frequency,
+    isKey: parseIsKey(v.isKey ?? ''),
+    nature: nature.nature,
+    type: type.type,
+    assertions: parseAssertions(v.assertions ?? ''),
+  };
+  if (base.sectionRef) row.sectionRef = base.sectionRef;
+  if (freq.flag) row.frequencyFlag = freq.flag;
+  if (nature.flag) row.natureFlag = nature.flag;
+  if (type.flag) row.typeFlag = type.flag;
+  const rating = parseRiskRating(v.riskRating ?? '');
+  if (rating) row.riskRating = rating;
+  const strategy = parseTestingStrategy(v.testingStrategy ?? '');
+  if (strategy) row.testingStrategy = strategy;
+  const dup = findDuplicate(v, idWasGenerated, existing, process, earlier, entity);
+  if (dup) row.duplicateOf = dup;
+  return row;
+}
+
+const LEADING_BULLET = /^\s*(?:[-–—•*·▪◦]+|\(?\d{1,3}[.)](?!\d)|\(?[a-z]\))\s*/i;
+
+/** Split a cell into items: new lines, "|", ";", and leading bullets / numbering. Trimmed, empties dropped. */
+export function splitList(text: string): string[] {
+  return String(text ?? '')
+    .split(/\r\n|\r|\n|[|;•]/)
+    .map(s => s.replace(LEADING_BULLET, '').trim())
+    .filter(s => /[\p{L}\p{N}]/u.test(s));
+}
+
+/** Give each attribute the evidence items that share words with it; an
+ *  attribute nothing matches gets the first item. Returns one list per attribute. */
+export function splitEvidencePerAttribute(evidence: string[], attributes: string[]): string[][] {
+  if (!evidence.length) return attributes.map(() => []);
+  const evidenceWords = evidence.map(meaningfulWords);
+  return attributes.map(a => {
+    const words = meaningfulWords(a);
+    const hits = evidence.filter((_, i) => sharesWord(words, evidenceWords[i]));
+    return hits.length ? hits : [evidence[0]];
+  });
+}
+
+// ── A9 blank fills ───────────────────────────────────────────────────────────────
+
+const FREQUENCY_TEXT: [RegExp, Frequency][] = [
+  [/\bdaily\b|\b(?:every|each) (?:working |business )?day\b/i, 'Daily'],
+  [/\bweekly\b|\b(?:every|each) week\b/i, 'Weekly'],
+  [/\bmonthly\b|\b(?:every|each) month\b|\bmonth[- ]end\b/i, 'Monthly'],
+  [/\bquarterly\b|\b(?:every|each) quarter\b|\bquarter[- ]end\b/i, 'Quarterly'],
+  [/\bannual(?:ly)?\b|\byearly\b|\b(?:every|each) year\b|\byear[- ]end\b/i, 'Annual'],
+  [/\bwhenever\b|\bon receipt of\b|\bper transaction\b|\bas and when\b|\bin real[- ]time\b|\bas it is raised\b|\bon occurrence\b|\b(?:every|each) (?:transaction|invoice|payment|order|request|entry|journal|change|receipt)\b/i, 'Recurring'],
+  [/\bad[- ]hoc\b|\bas needed\b|\bas required\b/i, 'Ad-hoc'],
+];
+
+const ASSERTION_RISK_WORDS: [RegExp, Assertion][] = [
+  [/\bcomplete(?:ness)?\b|\bunrecorded\b|\bnot recorded\b|\bomitted\b|\bmissing\b|\bunderstat\w*/i, 'Completeness'],
+  [/\baccura\w*|\binaccura\w*|\bincorrect\w*|\berrors?\b|\bmiscalculat\w*/i, 'Accuracy'],
+  [/\bexist\w*|\boccurr\w*|\binvalid\b|\bfictitious\b|\bunauthori[sz]ed\b|\bwithout (?:dual )?authori[sz]ation\b|\bfraudulent\b|\boverstat\w*/i, 'Existence / Occurrence'],
+  [/\bcut[- ]?off\b|\bwrong period\b|\bincorrect period\b/i, 'Cut-off'],
+  [/\bvaluation\b|\bvalued\b|\bimpair\w*|\bprovision\w*/i, 'Valuation'],
+  [/\brights\b|\bobligations?\b|\bownership\b/i, 'Rights & Obligations'],
+  [/\bpresentation\b|\bdisclos\w*|\bclassif\w*/i, 'Presentation'],
+];
+
+/** "To ensure vendor invoices are approved" → "Risk that vendor invoices are
+ *  not approved." Only the words the row already has — when there is no verb to
+ *  turn round, the control's own words are quoted. */
+function riskFromText(text: string): string {
+  const clause = firstClause(text.replace(/^\s*to\s+ensure\s+(?:that\s+)?/i, '')).replace(/[.;:]+$/, '').trim();
+  if (clause.length < 3) return '';
+  const aux = /\b(is|are|was|were|will)\b/i.exec(clause);
+  const lower = clause[0]!.toLowerCase() + clause.slice(1);
+  if (aux) {
+    const at = aux.index + aux[0].length;
+    const turned = lower.slice(0, at) + ' not' + lower.slice(at);
+    return `Risk that ${turned}.`;
+  }
+  return `Risk that "${lower}" does not happen, so errors go unnoticed.`;
+}
+
+/** The core values a row can't be imported without (17 Sep dev call). A blank
+ *  Risk or Control ID is not one — the ID is built at import. */
+export type CoreBlank = 'riskDescription' | 'control' | 'nature' | 'type' | 'attributes';
+export const CORE_BLANK_LABEL: Record<CoreBlank, string> = {
+  riskDescription: 'a risk description', control: 'a control title or activity', nature: 'a nature', type: 'a type', attributes: 'attributes',
+};
+export function coreBlanks(row: ImportRow, core: RacmFieldKey[] = DEFAULT_CORE_FIELDS): CoreBlank[] {
+  const val = (k: RacmFieldKey) => (row.values[k] ?? '').trim();
+  const on = (k: RacmFieldKey) => core.includes(k);
+  const out: CoreBlank[] = [];
+  if (on('riskDescription') && !val('riskDescription')) out.push('riskDescription');
+  // The control's two wordings answer for each other — a row with a full
+  // narrative and no title is not a row missing its control.
+  if ((on('controlActivity') || on('controlTitle')) && !val('controlTitle') && !val('controlActivity')) out.push('control');
+  if (on('nature') && row.nature === null) out.push('nature');
+  if (on('type') && row.type === null) out.push('type');
+  if (on('attributes') && row.attributes.length === 0) out.push('attributes');
+  return out;
+}
+/** The fields the module insisted on before any of this was the team's choice.
+ *  Kept here so `racmImport` stays pure — the configured list is passed in. */
+export const DEFAULT_CORE_FIELDS: RacmFieldKey[] = ['riskDescription', 'controlActivity', 'frequency', 'nature', 'type', 'attributes'];
+
+/** Held back from import: a core value missing, or no frequency where the team
+ *  counts frequency as core. */
+export const rowBlocked = (row: ImportRow, core: RacmFieldKey[] = DEFAULT_CORE_FIELDS) =>
+  (core.includes('frequency') && row.frequency === null) || coreBlanks(row, core).length > 0;
+
+/** A9: values for this row's empty fields, read off its other columns. Never
+ *  proposes a value for a field that already has one, and never for isKey. */
+export function proposeBlankFills(row: ImportRow): BlankFill[] {
+  const val = (k: RacmFieldKey) => (row.values[k] ?? '').trim();
+  const blank = (k: RacmFieldKey) => !val(k);
+  const activity = val('controlActivity');
+  const title = val('controlTitle');
+  const objective = val('objective');
+  const risk = val('riskDescription');
+  const fills: BlankFill[] = [];
+
+  // Frequency — the earliest timing words in the activity, then the title.
+  if (blank('frequency')) {
+    for (const [label, text] of [['Activity', activity], ['Title', title]] as const) {
+      if (!text) continue;
+      let hit: { index: number; f: Frequency } | null = null;
+      for (const [re, f] of FREQUENCY_TEXT) {
+        const m = re.exec(text);
+        if (m && (!hit || m.index < hit.index)) hit = { index: m.index, f };
+      }
+      if (hit) {
+        fills.push({ field: 'frequency', value: hit.f, reason: `${label} says '${phraseAt(text, hit.index)}'` });
+        break;
+      }
+    }
+  }
+
+  // Nature — who or what does the work.
+  if (blank('nature') && (activity || title)) {
+    const text = activity || title;
+    const source = activity ? 'Activity' : 'Title';
+    const auto = /\bautomatically\b|\bconfigured\b|\bsystem blocks\b/i.exec(text);
+    const it = /\b(?:SAP|ERP|systems?|reports?)\b/i.exec(text);
+    const manual = /\bmanually\b|\breviews?\b|\bapproves?\b|\bsigns?\b|\bchecks?\b/i.exec(text);
+    if (auto) fills.push({ field: 'nature', value: 'Automated', reason: `${source} says '${phraseAt(text, auto.index)}'` });
+    else if (it) fills.push({ field: 'nature', value: 'IT-dependent', reason: `${source} mentions '${it[0]}' — a person working off system output` });
+    else if (manual) fills.push({ field: 'nature', value: 'Manual', reason: `${source} says '${phraseAt(text, manual.index)}' — a person does the work` });
+    // Nothing in the text says either way: no proposal (17 Sep — no bare defaults).
+  }
+
+  // Type — does it stop the error, or find it afterwards?
+  if (blank('type') && (activity || title || objective)) {
+    const text = [activity, title, objective].filter(Boolean).join(' ');
+    const m = /\breview\w*|\breconcil\w*|\bmonitor\w*|\binvestigat\w*/i.exec(text);
+    const stop = /\bapprov\w*|\bauthori[sz]\w*|\bblocks?\b|\bprevents?\b|\bbefore\b/i.exec(text);
+    if (m) fills.push({ field: 'type', value: 'Detective', reason: `Says '${phraseAt(text, m.index)}' — it finds errors after the fact` });
+    else if (stop) fills.push({ field: 'type', value: 'Preventive', reason: `Says '${phraseAt(text, stop.index)}' — it stops the error up front` });
+  }
+
+  // Owner — the (WHO) of the activity.
+  if (blank('owner') && activity) {
+    const m = /^([\s\S]*?)\(\s*who\s*\)/i.exec(activity);
+    if (m) {
+      const who = (m[1].split(/[.;:,]/).pop() ?? '').trim().replace(/^the\s+/i, '').trim();
+      if (who) fills.push({ field: 'owner', value: who, reason: `Activity names '${who}' as the WHO` });
+    }
+  }
+
+  // Risk description — what goes wrong if the control's aim isn't met.
+  if (blank('riskDescription')) {
+    const source = objective ? ['objective', objective] as const : title ? ['title', title] as const : activity ? ['activity', activity] as const : null;
+    const text = source ? riskFromText(source[1]) : '';
+    if (source && text) fills.push({ field: 'riskDescription', value: text, reason: `The control ${source[0]}, turned round into what could go wrong` });
+  }
+
+  // Risk title — the description, shortened. Only where the file had no title
+  // column of its own; a file that names its risks is taken at its word.
+  if (blank('riskTitle')) {
+    const from = risk || (blank('riskDescription') ? fills.find(f => f.field === 'riskDescription')?.value ?? '' : '');
+    const short = titleFromRisk(from);
+    if (short && short.length < from.length) fills.push({ field: 'riskTitle', value: short, reason: 'The risk description, shortened to its opening clause' });
+  }
+
+  // Testing strategy — an annual control operated once, so one occurrence is the
+  // whole population. Everything else is sampled unless someone says otherwise.
+  if (blank('testingStrategy')) {
+    const freq = row.frequency ?? parseFrequency(val('frequency')).frequency ?? fills.find(f => f.field === 'frequency')?.value;
+    if (freq === 'Annual') fills.push({ field: 'testingStrategy', value: 'Test of one', reason: 'An annual control operates once, so there is nothing to sample' });
+    else if (freq) fills.push({ field: 'testingStrategy', value: 'Sampling', reason: `A ${String(freq).toLowerCase()} control is tested on a sample` });
+  }
+
+  // Control title — the objective as a statement, else the activity's first clause.
+  if (blank('controlTitle')) {
+    const fromObjective = objective ? firstClause(objective.replace(/^\s*to\s+ensure\s+(?:that\s+)?/i, '')) : '';
+    if (fromObjective.length >= 3) {
+      fills.push({ field: 'controlTitle', value: sentenceCase(fromObjective), reason: 'The control objective, written as a statement' });
+    } else if (activity) {
+      const clause = firstClause(activity);
+      if (clause.length >= 3) fills.push({ field: 'controlTitle', value: sentenceCase(clause), reason: 'The first clause of the control activity' });
+    }
+  }
+
+  // Risk rating — only a starting point; the rating is agreed with management.
+  if (blank('riskRating') && risk) {
+    const m = /\bfraud\w*|\bmaterial\w*|\bmisstat\w*/i.exec(risk);
+    if (m) fills.push({ field: 'riskRating', value: 'High', reason: `Risk mentions '${m[0].toLowerCase()}'` });
+  }
+
+  // Assertions — what the risk says could go wrong.
+  if (blank('assertions') && risk) {
+    const words: string[] = [];
+    const found = new Set<Assertion>();
+    for (const [re, a] of ASSERTION_RISK_WORDS) {
+      const m = re.exec(risk);
+      if (m) { found.add(a); words.push(`'${m[0].toLowerCase()}'`); }
+    }
+    if (found.size) {
+      fills.push({
+        field: 'assertions',
+        value: ASSERTION_ORDER.filter(a => found.has(a)).join(', '),
+        reason: `Risk mentions ${words.join(', ')}`,
+      });
+    }
+  }
+
+  return fills;
+}
+
+/** Apply accepted fills to a row — only into fields that are still blank — and
+ *  re-derive it against the rows that come before it. */
+export function applyFills(row: ImportRow, fills: BlankFill[], existing: Control[], process: string, earlier: ImportRow[] = [], entity = ''): ImportRow {
+  const values = { ...row.values };
+  for (const f of fills) {
+    if (f.field === 'isKey' || (values[f.field] ?? '').trim()) continue;
+    values[f.field] = f.value;
+  }
+  return rowFromValues(values, row, existing, process, earlier, entity);
+}
+
+// ── A7 suggestions ───────────────────────────────────────────────────────────────
+
+const SUGGESTED_ATTRIBUTES: Record<ControlType, string[]> = {
+  Preventive: ['Approval is evidenced before the transaction is processed', 'Approver is independent of the preparer'],
+  Detective: ['Review is performed within the required timeframe', 'Exceptions are investigated and resolved'],
+};
+
+/** A7: attributes and design checks Ira would add to this row — only ones the
+ *  row doesn't already have. */
+export function suggestForRow(row: ImportRow, process: string): { attributes: string[]; designChecks: string[] } {
+  const control = controlFromRow(row, process, 1, row.frequency ?? 'Recurring');
+  const have = new Set(row.designChecks.map(sameText));
+  const designChecks = suggestedDesignChecks(control).filter(t => !have.has(sameText(t)));
+  const present = row.attributes.map(a => a.text);
+  // Attributes follow the control's type — none are offered until it is known.
+  const attributes = row.attributes.length < 2 && row.type
+    ? SUGGESTED_ATTRIBUTES[row.type].filter(t => !alreadySaid(present, t))
+    : [];
+  return { attributes, designChecks };
+}
+
+// ── Rows → controls ──────────────────────────────────────────────────────────────
+
+const SMALL_WORDS = new Set(['to', 'and', 'of', 'the', 'for', 'in', 'on', 'a', 'an']);
+
+/** "Procure to Pay" → "PP", "Order to Cash" → "OC", "Treasury" → "TR". */
+function processInitials(process: string): string {
+  const words = process.split(/[^A-Za-z0-9]+/).filter(Boolean);
+  const significant = words.filter(w => !SMALL_WORDS.has(w.toLowerCase()));
+  const use = significant.length ? significant : words;
+  if (!use.length) return 'C';
+  if (use.length === 1) return use[0].slice(0, 2).toUpperCase();
+  return use.map(w => w[0].toUpperCase()).join('').slice(0, 3);
+}
+
+function clazzOf(category: string): ControlClass {
+  if (/complian|regulat/i.test(category)) return 'Compliance';
+  if (/operation/i.test(category)) return 'Operational';
+  return 'Financial';
+}
+
+/** Placeholder keys for rows the file gave no ID — digit-free, so the ID
+ *  builder numbers them by row order instead of reading a number out of them. */
+const noDigits = (s: string) => s.replace(/\d/g, d => 'abcdefghij'[Number(d)]!);
+
+/** One row as an engagement control. `n` is the row's 1-based place in the import.
+ *  Nature and type are read as given — callers that import make sure both are
+ *  set (rowBlocked); suggestions read the row before they are. */
+function controlFromRow(row: ImportRow, process: string, n: number, frequency: Frequency, wpPrefix = processInitials(process)): Control {
+  const val = (k: RacmFieldKey) => (row.values[k] ?? '').trim();
+  const id = val('controlId') || `~row-${noDigits(row.key)}`;
+  const wpRef = `${wpPrefix}-${String(n).padStart(2, '0')}`;
+  const activity = val('controlActivity');
+  const objective = val('objective');
+  const description = val('controlTitle') || (activity ? firstSentence(activity) : '') || objective;
+  // No assertion in the file stays no assertion (17 Sep — no silent "Accuracy").
+  const assertions: Assertion[] = row.assertions;
+
+  const steps: OperatingStep[] = row.attributes.map((a, k) => {
+    const stepId = nid('st');
+    // the attribute's own assertion when its wording names one the control carries
+    const named = parseAssertions(a.text).find(x => assertions.includes(x));
+    const step: OperatingStep = {
+      id: stepId,
+      code: `${wpRef}.${k + 1}`,
+      description: a.text,
+      assertion: named ?? assertions[0],
+      precision: 'Per item',
+      procedures: ['Inspection'],
+      result: 'Not tested',
+    };
+    // No evidence named: leave requiredFiles unset so the control page reads them
+    // off the attribute's wording instead of showing an empty checklist.
+    if (a.requiredFiles.length) step.requiredFiles = a.requiredFiles.map((label, j) => ({ id: `${stepId}-rf${j + 1}`, label }));
+    return step;
+  });
+
+  const points: DesignPoint[] = mergeChecks(row.designChecks).checks.map(text => ({
+    id: nid('dp'), text, result: 'Not tested', workflowId: nid('wf-tod'), workflowName: 'Design walkthrough check',
+  }));
+
+  const control: Control = {
+    id,
+    wpRef,
+    description,
+    process,
+    subProcess: val('subProcess'),
+    nature: row.nature as Nature,
+    type: row.type as ControlType,
+    frequency,
+    isKey: row.isKey,
+    clazz: clazzOf(val('riskCategory')),
+    precision: description,
+    owner: val('owner'),
+    // Rows with no Risk ID and the same risk description are one risk.
+    riskId: val('riskId') || `~risk-${noDigits(sameText(val('riskDescription')) || row.key)}`,
+    riskDescription: val('riskDescription'),
+    assertions,
+    design: {
+      documents: [
+        { id: nid('dd'), kind: 'Process narrative', name: 'Process narrative — to provide', status: 'Missing' },
+        { id: nid('dd'), kind: 'Control description', name: 'Control description — to provide', status: 'Missing' },
+      ],
+      points,
+      conclusion: 'Not tested',
+      testedBy: null,
+      testedAt: null,
+    },
+    operating: { method: 'Manual', steps, conclusion: 'Not tested', testedBy: null, testedAt: null },
+  };
+  if (objective) control.objective = objective;
+  if (activity) control.controlActivity = activity;
+  const processOwner = val('processOwner');
+  if (processOwner) control.processOwner = processOwner;
+  if (row.riskRating) control.riskRating = row.riskRating;
+  // The risk's short name, where the file carried one. A blank is filled by
+  // proposeBlankFills before import, so this is the file's wording or Ira's.
+  const riskTitle = val('riskTitle');
+  if (riskTitle) control.riskTitle = riskTitle;
+  // 17 Sep fields. Entity is read here rather than patched on afterwards, so a
+  // file's Entity column reaches the control the same way every other cell does.
+  const entity = val('entity');
+  if (entity) control.entity = entity;
+  const effectiveDate = val('effectiveDate');
+  if (effectiveDate) control.effectiveDate = effectiveDate;
+  // Stored only when the file named one — otherwise the row takes its entity's
+  // country and the two can never drift apart (see `countryFor`).
+  const country = val('country');
+  if (country) control.country = country;
+  if (row.testingStrategy) control.testingStrategy = row.testingStrategy;
+  if (Object.keys(row.extras).length) control.extras = { ...row.extras };
+  return control;
+}
+
+/** Turn reviewed rows into engagement controls for createRacm. Every row must
+ *  have a frequency by now. Attributes become operating steps with their
+ *  `requiredFiles`; design checks become design points (merged, not doubled). */
+export function importRowsToControls(rows: ImportRow[], process: string, core: RacmFieldKey[] = DEFAULT_CORE_FIELDS): Control[] {
+  const missing = rows.filter(r => rowBlocked(r, core));
+  if (missing.length) {
+    const ids = missing.map(r => (r.values.controlId ?? '').trim() || `row ${r.rowNo}`);
+    throw new Error(`Fill the blanks before importing — ${missing.length === 1 ? `${ids[0]} has` : `${ids.join(', ')} have`} some.`);
+  }
+  const prefix = processInitials(process);
+  return rows.map((row, i) => controlFromRow(row, process, i + 1, row.frequency as Frequency, prefix));
+}
+
+// ─── SOP extraction (A6) ─────────────────────────────────────────────────────────
+
+/** The instruction Ira extracts a RACM from an SOP with. Shown in full and
+ *  editable before extraction; nothing is extracted until it is validated. */
+export const DEFAULT_SOP_PROMPT = `You are extracting a SOX / ICFR risk and control matrix (RACM) from the attached standard operating procedure.
+
+1. Read the whole SOP. Work only from what it says; do not invent controls it does not describe.
+2. For every risk the SOP addresses, record: Risk ID, risk description, risk category and risk rating.
+3. For every control that mitigates a risk, record: Control ID, control title, control objective, control activity (who does what, where, when, how and why), control type (Preventive / Detective), control nature (Manual / Automated / IT-dependent), frequency (Annual, Quarterly, Monthly, Weekly, Daily, Recurring or Ad-hoc — never "Continuous"), key control (Yes / No), control owner and process owner.
+4. Keep the SOP's own risk and control IDs exactly as written. Only create an ID when the SOP has none, and say so.
+5. For each control, list its test attributes one per line, and the control evidence each attribute needs.
+6. Cite the SOP section every row came from (for example "§ 4.2").
+7. Where the SOP is silent but a control is clearly expected for the risk, add it separately and mark it "Suggested", so a reviewer can accept or reject it.`;
+
+/** Draft review rows for `process` from its template once the prompt is
+ *  validated: most rows `origin: 'sop'` with a section ref, roughly one in four
+ *  `origin: 'suggested'`. Deterministic for the same process + file name. */
+export function draftRowsFromSop(process: string, fileName: string, prompt: string, existing: Control[]): ImportRow[] {
+  void prompt; // validated upstream; the draft reads the same whatever it says
+  const template = racmTemplateForProcesses([process], 'fresh');
+  const seed = hashString(`${process}|${fileName}`);
+  const offset = seed % 4;
+  const firstSection = 2 + ((seed >>> 3) % 3);
+  const subProcesses = Array.from(new Set(template.map(c => c.subProcess)));
+  const perSection = new Map<string, number>();
+  const out: ImportRow[] = [];
+
+  template.forEach((c, i) => {
+    const suggested = (i + offset) % 4 === 3;
+    let sectionRef: string | undefined;
+    if (!suggested) {
+      const minor = (perSection.get(c.subProcess) ?? 0) + 1;
+      perSection.set(c.subProcess, minor);
+      sectionRef = `§ ${firstSection + subProcesses.indexOf(c.subProcess)}.${minor}`;
+    }
+    const steps = c.operating.steps;
+    const evidence = Array.from(new Set(steps.flatMap(s => requiredFilesOf(s, c).map(f => f.label))));
+    const values: Partial<Record<RacmFieldKey, string>> = {
+      riskId: c.riskId,
+      riskDescription: c.riskDescription,
+      riskCategory: c.clazz ?? '',
+      riskRating: c.riskRating ?? '',
+      controlId: c.code ?? c.id,
+      controlTitle: c.description.replace(/\.$/, ''),
+      objective: c.objective ?? '',
+      controlActivity: c.controlActivity ?? '',
+      subProcess: c.subProcess,
+      type: c.type,
+      nature: c.nature,
+      frequency: c.frequency,
+      isKey: c.isKey ? 'Yes' : 'No',
+      owner: c.owner,
+      processOwner: c.processOwner ?? '',
+      assertions: c.assertions.join(', '),
+      attributes: steps.map(s => s.description).join('\n'),
+      controlEvidence: evidence.join('; '),
+      // control-level checks only — attribute-level ones belong to their attribute
+      designChecks: c.design.points.filter(p => !p.stepId).map(p => p.text).join('\n'),
+      sopSectionRef: sectionRef ?? '',
+    };
+    out.push(rowFromValues(values, { key: `sop-${i + 1}`, rowNo: i + 1, origin: suggested ? 'suggested' : 'sop', sectionRef }, existing, process, out));
+  });
+  return out;
+}

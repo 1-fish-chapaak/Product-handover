@@ -38,6 +38,7 @@ const SEVERITY_PILL: Record<AtrRisk, string> = {
   High:     'bg-high-50 text-high-700',
   Medium:   'bg-mitigated-50 text-mitigated-700',
   Low:      'bg-compliant-50 text-compliant-700',
+  'Not Applicable': 'bg-paper-100 text-ink-500',
 };
 
 type Tone = 'brand' | 'risk' | 'mitigated' | 'compliant' | 'high' | 'ink';
@@ -84,6 +85,27 @@ function EditableText({ value, onCommit, editable, className = '', placeholder, 
 
 /** Read-only key-fact: uppercase label over a bold value, left-aligned (no accent
  *  bar), wrapping long values instead of truncating. */
+/** The report-details fields, in the order the New Report form asks for them.
+ *  Report Name leads; identity, classification, geography, reference, period,
+ *  people, then the auto stamps. */
+const META_FACTS: { key: keyof AtrMeta; label: string }[] = [
+  { key: 'reportName', label: 'Report Name' },
+  { key: 'auditTitle', label: 'Audit Title' },
+  { key: 'auditEntity', label: 'Audit Entity' },
+  { key: 'auditFunction', label: 'Function' },
+  { key: 'section', label: 'Section' },
+  { key: 'reviewType', label: 'Review type' },
+  { key: 'auditLocation', label: 'Audit location' },
+  { key: 'region', label: 'Region' },
+  { key: 'location', label: 'Location (City)' },
+  { key: 'reportNumber', label: 'Report Number' },
+  { key: 'auditPeriod', label: 'Audit Period' },
+  { key: 'financialYear', label: 'Financial Year' },
+  { key: 'preparedBy', label: 'Prepared By' },
+  { key: 'auditSpoc', label: 'Audit SPOC' },
+  { key: 'generatedOn', label: 'Generated On' },
+];
+
 function MetaFact({ label, value }: { label: string; value?: string }) {
   if (!value) return null;
   return (
@@ -124,7 +146,7 @@ export default function AtrDocument({
   meta, observations, headerActions, maxWidthClass = 'max-w-[840px]',
   editable, onMetaChange, onObservationsChange,
   sectionOrder = ATR_SECTION_ORDER, hiddenSections = [],
-  renderObservationActions, onDeleteSection,
+  renderObservationActions, renderObservationFooter, onDeleteSection,
   gradient, logo,
 }: {
   meta: AtrMeta;
@@ -151,6 +173,9 @@ export default function AtrDocument({
   /** Optional per-observation action slot (e.g. a "Manage Exceptions" CTA),
    *  rendered in each observation card header. Receives the 0-based index. */
   renderObservationActions?: (index: number) => React.ReactNode;
+  /** Optional per-observation footer strip (e.g. linked annexures), rendered at
+   *  the bottom of each observation card. Receives the 0-based index. */
+  renderObservationFooter?: (index: number) => React.ReactNode;
   /** Edit-mode: remove a section from the report. Enables the per-section
    *  delete control on each section heading. */
   onDeleteSection?: (key: AtrSectionKey) => void;
@@ -158,6 +183,10 @@ export default function AtrDocument({
   const ex = computeExecSummary(observations);
 
   const setMeta = (key: keyof AtrMeta, v: string) => onMetaChange?.({ ...meta, [key]: v || undefined });
+  // Admin-added custom fields the user filled in: [key, label, value].
+  const customFacts: [string, string, string][] = Object.entries(meta.custom ?? {})
+    .filter(([, v]) => !!v)
+    .map(([k, v]) => [k, meta.customLabels?.[k] ?? k.replace(/^cf-/, '').replace(/-/g, ' ').replace(/\b\w/g, c => c.toUpperCase()), v]);
   const setObs = (i: number, next: AtrObservation) => onObservationsChange?.(observations.map((o, idx) => (idx === i ? next : o)));
   const removeObs = (i: number) => onObservationsChange?.(observations.filter((_, idx) => idx !== i));
 
@@ -253,7 +282,7 @@ export default function AtrDocument({
         <ReportNumberedHeading n={n} title="Observation Details" subtitle="Issue, risk, action plan and verification" />
         <div className="space-y-5">
           {observations.map((o, i) => (
-            <ObservationCard key={i} index={i + 1} obs={o} editable={editable} onChange={next => setObs(i, next)} onDelete={() => confirmDelete('Delete observation?', `This removes “${o.title || `Observation ${i + 1}`}” and its action plans from the report. You can undo by cancelling before you save.`, () => removeObs(i))} actions={renderObservationActions?.(i)} />
+            <ObservationCard key={i} index={i + 1} obs={o} editable={editable} onChange={next => setObs(i, next)} onDelete={() => confirmDelete('Delete observation?', `This removes “${o.title || `Observation ${i + 1}`}” and its action plans from the report. You can undo by cancelling before you save.`, () => removeObs(i))} actions={renderObservationActions?.(i)} footer={renderObservationFooter?.(i)} />
           ))}
         </div>
       </>
@@ -285,23 +314,24 @@ export default function AtrDocument({
       {editable ? (
         <div className="px-9 py-6 border-b border-canvas-border">
           <div className="grid grid-cols-2 md:grid-cols-3 gap-x-8 gap-y-5">
-            <MetaCell label="Report Name" value={meta.reportName} onCommit={v => setMeta('reportName', v)} />
-            <MetaCell label="Audit Entity" value={meta.auditEntity} onCommit={v => setMeta('auditEntity', v)} />
-            <MetaCell label="Audit Title" value={meta.auditTitle} onCommit={v => setMeta('auditTitle', v)} />
-            <MetaCell label="Audit Period" value={meta.auditPeriod} onCommit={v => setMeta('auditPeriod', v)} />
-            <MetaCell label="Financial Year" value={meta.financialYear} onCommit={v => setMeta('financialYear', v)} />
-            <MetaCell label="Prepared By" value={meta.preparedBy} onCommit={v => setMeta('preparedBy', v)} />
+            {META_FACTS.map(f => (
+              <MetaCell key={f.key} label={f.label} value={meta[f.key] as string | undefined} onCommit={v => setMeta(f.key, v)} />
+            ))}
+            {customFacts.map(([key, label, value]) => (
+              <MetaCell key={key} label={label} value={value} onCommit={v => onMetaChange?.({ ...meta, custom: { ...(meta.custom ?? {}), [key]: v } })} />
+            ))}
           </div>
         </div>
-      ) : (meta.reportName || meta.reportId || meta.auditTitle || meta.auditPeriod || meta.preparedBy || meta.generatedOn || meta.auditEntity) && (
+      ) : (META_FACTS.some(f => meta[f.key]) || meta.reportId || customFacts.length > 0) && (
         <div className="px-9 py-6 border-b border-canvas-border">
+          {/* Every report-details field the user filled in prints here; the
+              empty ones are left out. */}
           <div className="grid grid-cols-2 md:grid-cols-3 gap-x-8 gap-y-5">
             <MetaFact label="Report Name" value={meta.reportName ?? meta.reportId} />
-            <MetaFact label="Audit Entity" value={meta.auditEntity} />
-            <MetaFact label="Audit Title" value={meta.auditTitle} />
-            <MetaFact label="Audit Period" value={meta.auditPeriod} />
-            <MetaFact label="Financial Year" value={meta.financialYear} />
-            <MetaFact label="Prepared By" value={meta.preparedBy} />
+            {META_FACTS.filter(f => f.key !== 'reportName').map(f => (
+              <MetaFact key={f.key} label={f.label} value={meta[f.key] as string | undefined} />
+            ))}
+            {customFacts.map(([key, label, value]) => <MetaFact key={key} label={label} value={value} />)}
           </div>
         </div>
       )}
@@ -343,7 +373,7 @@ export default function AtrDocument({
   );
 }
 
-function ObservationCard({ index, obs, editable, onChange, onDelete, actions }: { index: number; obs: AtrObservation; editable?: boolean; onChange?: (next: AtrObservation) => void; onDelete?: () => void; actions?: React.ReactNode }) {
+function ObservationCard({ index, obs, editable, onChange, onDelete, actions, footer }: { index: number; obs: AtrObservation; editable?: boolean; onChange?: (next: AtrObservation) => void; onDelete?: () => void; actions?: React.ReactNode; footer?: React.ReactNode }) {
   const setPlan = (i: number, next: AtrActionPlan) => onChange?.({ ...obs, actionPlans: obs.actionPlans.map((p, idx) => (idx === i ? next : p)) });
   return (
     <div className="border border-canvas-border rounded-lg overflow-hidden">
@@ -393,6 +423,7 @@ function ObservationCard({ index, obs, editable, onChange, onDelete, actions }: 
           ))}
         </div>
       </div>
+      {footer}
     </div>
   );
 }

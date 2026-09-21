@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef, useMemo, useCallback } from 'react';
+import { createPortal } from 'react-dom';
 import { motion, AnimatePresence } from 'motion/react';
 import FloatingLines from '../shared/FloatingLines';
 import ListToolbar, { ToolbarViewToggle } from '../shared/ListToolbar';
@@ -9,7 +10,7 @@ import InfiniteCardGrid from '../shared/InfiniteCardGrid';
 import {
   FileText, Shield, AlertTriangle, Download, Share2, ArrowRight, ArrowLeft,
   X, BookOpen, Trash2, Plus, Search, Layers,
-  WifiOff, FileCheck2, FolderArchive, CloudUpload,
+  WifiOff, FileCheck2, FolderArchive, Settings2,
 } from 'lucide-react';
 import TemplatePreview from './TemplatePreview';
 import EmptyState from '../shared/EmptyState';
@@ -18,7 +19,16 @@ import UploadReportModal from './UploadReportModal';
 import ConfirmDialog from './ConfirmDialog';
 import AtrReportView from './AtrReportView';
 import AtrUploadTab from './atr-upload/AtrUploadTab';
+import NewReportModal, { type NewReportDraft } from './NewReportModal';
+import type { ReportMeta } from './atr-upload/types';
+import AdminTab from './atr-upload/screens/AdminTab';
+import { AdminSettingsProvider } from './atr-upload/adminStore';
+import ObservationExceptionsAction from './atr-upload/components/ObservationExceptionsAction';
+import { UPLOAD_REPORT_ID_PREFIX, loadUploadSession } from './atr-upload/uploadedReport';
+import { useNotify } from '../../notifications/NotificationContext';
+import { ROSTER } from '../../notifications/triggers/caseTriggers';
 import { consumeAtrResume, clearAtrDraft } from './atrDraft';
+import { loadTimeline, hasTimeline, appendEvents, replay, regeneratedEvent, carryCaseState } from './atrTimeline';
 import type { AtrMeta, AtrObservation, AtrInsight, AtrReportData } from './atrTypes';
 import { REPORT_TEMPLATES, GENERATED_REPORTS, SHARED_REPORTS, GENERATED_REPORTS_KEY } from '../../data/mockData';
 import { ATR_LIBRARY, EVIDENCE_LIBRARY, type AtrLibraryReport } from '../../data/atrLibrary';
@@ -176,7 +186,18 @@ function ReportOpenSkeleton({ onBack }: { onBack: () => void }) {
 
 // Source chip — where a report came from. Bordered + semibold (the platform's
 // ─── Main Reports View ───
-export default function ReportsView({
+/** Admin settings (LOVs, escalation matrix, transaction logs) are shared by the
+ *  Admin tab and the Create Report wizard, so one provider wraps both — two
+ *  providers on the same localStorage key would overwrite each other's writes. */
+export default function ReportsView(props: ReportsViewProps = {}) {
+  return (
+    <AdminSettingsProvider>
+      <ReportsViewInner {...props} />
+    </AdminSettingsProvider>
+  );
+}
+
+function ReportsViewInner({
   onShare,
   onManageExceptions,
   onOpenQuery,
@@ -192,10 +213,11 @@ export default function ReportsView({
   const logEvent = useAuditLog();
   const { openShare } = useShare();
   const { can } = useCan();
-  const [activeTab, setActiveTab] = useState<'templates' | 'my-reports' | 'shared-reports'>(() => {
+  const notify = useNotify();
+  const [activeTab, setActiveTab] = useState<'templates' | 'my-reports' | 'shared-reports' | 'admin'>(() => {
     if (typeof window === 'undefined') return 'my-reports';
     const t = new URLSearchParams(window.location.search).get('tab');
-    if (t === 'shared-reports' || t === 'templates' || t === 'my-reports') return t;
+    if (t === 'shared-reports' || t === 'templates' || t === 'my-reports' || t === 'admin') return t;
     // Legacy deep-links to the old top-level ATR / Evidence tabs land in My Reports.
     if (t === 'atr-reports' || t === 'evidence') return 'my-reports';
     return 'my-reports';
@@ -224,12 +246,21 @@ export default function ReportsView({
   // cross-cutting Bulk Audit engagement style.
   const [allTypeFilter, setAllTypeFilter] = useState<string[]>([]);
   const [atrUploadOpen, setAtrUploadOpen] = useState(false);
+  // Create Report opens the New Report modal first (the report details,
+  // template, visibility). An Action Taken Report then continues into the upload wizard
+  // with those details; the visibility waits in a ref until the ATR is
+  // generated and its card is saved.
+  const [newReportOpen, setNewReportOpen] = useState(false);
+  const [atrInitialMeta, setAtrInitialMeta] = useState<Partial<ReportMeta> | undefined>(undefined);
+  // The draft behind an open wizard, so Back reopens New Report where it was.
+  const [lastDraft, setLastDraft] = useState<NewReportDraft | null>(null);
+  // "Edit observations" on a generated ATR opens the wizard straight on that
+  // extracted report's observations.
+  const [atrOpenSessionId, setAtrOpenSessionId] = useState<string | null>(null);
+  const newReportExtrasRef = useRef<{ audience: NewReportDraft['audience'] } | null>(null);
   // When the wizard minimizes during extraction, present it as a small floating
-  // toast (no backdrop) so the rest of the app stays usable.
+  // toast so the rest of the app stays usable; otherwise it fills the screen.
   const [atrMinimized, setAtrMinimized] = useState(false);
-  // True while the wizard's close-confirm is up — hides this host backdrop so the
-  // confirm's own full-screen scrim is the only dim (no double-dim / vignette).
-  const [atrConfirmOpen, setAtrConfirmOpen] = useState(false);
   // Returning from "Manage exceptions first": the Manage-Exceptions view sets the
   // resume flag via its "Return to ATR & generate" button. On landing back here we
   // reopen the upload wizard, which resumes its persisted ATR-Preview stage, and
@@ -239,7 +270,10 @@ export default function ReportsView({
     const hasSession = (() => {
       try {
         const raw = localStorage.getItem('irame.atr-upload.v1');
-        return raw ? !!JSON.parse(raw)?.session : false;
+        if (!raw) return false;
+        const parsed = JSON.parse(raw);
+        // New shape: sessions[]; legacy shape: a single session.
+        return !!(parsed?.sessions?.length || parsed?.session);
       } catch { return false; }
     })();
     if (hasSession) { setAtrUploadOpen(true); clearAtrDraft(); }
@@ -375,7 +409,10 @@ export default function ReportsView({
       const raw = localStorage.getItem(GENERATED_REPORTS_KEY);
       if (raw) {
         const parsed = JSON.parse(raw);
-        if (Array.isArray(parsed)) return (parsed as GeneratedReport[]).filter(r => !(r as { isEmpty?: boolean }).isEmpty);
+        // ATRs generated from the Create Report wizard are saved here too
+        // (`gr-atr-upload-<sessionId>` cards) — they are reports like any other.
+        if (Array.isArray(parsed)) return (parsed as GeneratedReport[])
+          .filter(r => !(r as { isEmpty?: boolean }).isEmpty);
       }
     } catch {
       // Defer to an effect so the toast call can happen after mount.
@@ -456,7 +493,7 @@ export default function ReportsView({
         tag: 'Internal Audit',
         generatedBy: r.generatedBy,
         generatedAt: r.generatedAt,
-        status: 'final',
+        status: r.status === 'draft' ? 'draft' : 'final',
         pages: r.pages ?? 1,
         queries: r.queries ?? 0,
         area: r.atrData!.meta.auditTitle ?? 'Custom ATR',
@@ -533,7 +570,7 @@ export default function ReportsView({
       reviewedBy: a.atrData.meta.reviewedBy,
       observations: a.atrData.observations.map(o => o.title),
     });
-    return [`v${version}`, `${a.atrData.observations.length} observations`, `${plans} action plans`];
+    return [...(a.status === 'draft' ? ['Draft'] : []), `v${version}`, `${a.atrData.observations.length} observations`, `${plans} action plans`];
   };
   const allReportsUnified = useMemo<UnifiedRow[]>(() => {
     const ts = (d?: string) => { const t = d ? Date.parse(d) : NaN; return Number.isNaN(t) ? 0 : t; };
@@ -714,53 +751,137 @@ export default function ReportsView({
     setViewingReport(null);
     setActiveTab('my-reports');
     addToast({ type: 'success', message: `Saved “${label}” to My Reports.` });
+    notify({
+      eventId: 'ATR-01', title: `Report created — “${newReport.name}”`, actor: 'Karan Mehta',
+      message: 'Created from the Action Taken Report template as a saved version.',
+      facts: [{ label: 'Report', value: newReport.name }, { label: 'Type', value: 'Action Taken Report' }, { label: 'Template', value: 'Action Taken Report' }],
+      recipients: [ROSTER.engagementOwner], link: { view: 'reports', ref: { kind: 'report', id: newReport.id } }, linkLabel: 'Open report',
+    });
   }, [addToast, uniqueReportName]);
 
-  // Save Version from the Generate-by-upload wizard → upsert a card in My
-  // Reports keyed by the wizard session id (re-saving updates the same card).
-  const saveUploadedAtr = useCallback((sessionId: string, label: string | undefined, data: AtrReportData): string => {
+  // Generate ATR in the Create Report wizard → save the ATR as a card in My
+  // Reports, close the wizard and open the saved report. Keyed by the wizard
+  // session id so one extracted report is one card: a later "View report" on
+  // the same session reopens the card (with any edits made in the reader)
+  // rather than saving a duplicate or overwriting those edits.
+  const saveUploadedAtr = useCallback((sessionId: string, data: AtrReportData, opts?: { regenerate?: boolean; draft?: boolean }) => {
+    const id = `${UPLOAD_REPORT_ID_PREFIX}${sessionId}`;
+    const existing = generatedReports.find(r => r.id === id);
     const now = new Date();
     const stamp = `${now.toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' })}, ${now.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' })}`;
-    const base = data.meta.auditTitle ?? 'Action Taken Report';
-    const id = `gr-atr-upload-${sessionId}`;
-    // Build the card synchronously (re-using the existing name on re-save) so we
-    // have it in hand to open — don't rely on the setState updater running now.
-    // The version counter lives on the saved card, so re-saving increments it
-    // (v1 → v2 → …) even though the wizard unmounts on each save.
-    const existing = generatedReports.find(r => r.id === id);
-    const nextVersion = (existing?.atrVersion ?? 0) + 1;
-    const versionNumber = `v${nextVersion}`;
-    const card = {
-      id,
-      templateId: 'rt-007',
-      kind: 'atr' as const,
-      name: existing?.name ?? uniqueReportName(label ? `${base} — ${label}` : base),
-      tag: 'Internal Audit' as const,
-      generatedBy: 'You',
-      generatedAt: stamp,
-      status: 'final' as const,
-      pages: Math.max(1, data.observations.length * 2),
-      queries: data.observations.length,
-      atrData: data,
-      atrVersion: nextVersion,
-      riskOwner: 'Tushar Goel',
-      sourceReport: base,
-    } as unknown as GeneratedReport;
-    setGeneratedReports(prev =>
-      prev.some(r => r.id === id) ? prev.map(r => (r.id === id ? card : r)) : [card, ...prev],
-    );
-    // Saving just opens the saved ATR — close the wizard and land full-page on
-    // the report (viewingReport → AtrReportView).
+    const actor = 'You';
+    // ATR-02 — an ATR entered from outside the workflow; ATR-03 when it is
+    // issued over unfinished remediation (any plan still Pending / Overdue).
+    const notifyIssued = (saved: GeneratedReport, d: AtrReportData) => {
+      const plans = d.observations.flatMap(o => o.actionPlans ?? []);
+      const openPlans = plans.filter(pl => pl.status === 'Pending' || pl.status === 'Overdue' || pl.status === 'Not Due').length;
+      notify({
+        eventId: 'ATR-02', title: `ATR generated by upload — “${saved.name}”`, actor,
+        message: `${d.observations.length} observation${d.observations.length === 1 ? '' : 's'} · ${plans.length} action plan${plans.length === 1 ? '' : 's'}${d.meta.auditPeriod ? ` · audit period ${d.meta.auditPeriod}` : ''}. Saved to My Reports.`,
+        facts: [{ label: 'Report', value: saved.name }, { label: 'Observations', value: String(d.observations.length) }, { label: 'Action plans', value: String(plans.length) }, ...(d.meta.auditPeriod ? [{ label: 'Audit period', value: d.meta.auditPeriod }] : [])],
+        recipients: [ROSTER.engagementOwner, ROSTER.engagementAuditor], link: { view: 'reports', ref: { kind: 'report', id } }, linkLabel: 'Open report',
+      });
+      if (openPlans > 0) {
+        notify({
+          eventId: 'ATR-03', title: `“${saved.name}” issued with readiness incomplete`, actor,
+          message: `Issued with ${openPlans} of ${plans.length} action plan${plans.length === 1 ? '' : 's'} not yet implemented. Gates: Classified ✓ · Plan ✓ · Action Taken ${openPlans ? '✗' : '✓'} · Auditor Review ✗.`,
+          facts: [{ label: 'Report', value: saved.name }, { label: 'Gates', value: `Classified ✓ · Plan ✓ · Action Taken ✗ · Auditor Review ✗` }, { label: 'Open cases', value: String(openPlans) }, { label: 'Issued by', value: actor }],
+          recipients: [ROSTER.engagementOwner, ROSTER.engagementAuditor], watchers: [ROSTER.compliance], link: { view: 'reports', ref: { kind: 'report', id } }, linkLabel: 'Open report',
+        });
+      }
+    };
+
+    let card = existing;
+    const wasDraft = existing?.status === 'draft';
+    if (card && card.atrData && (opts?.regenerate || opts?.draft || wasDraft)) {
+      // Refresh the saved card in place — a regenerate, a draft being updated,
+      // or a draft being issued. Whatever case management has attached to the
+      // saved report is carried over, and the change goes on the Report
+      // Snapshot trail (when the report has one) so it replays like any action.
+      const trail = hasTimeline(id) ? loadTimeline(id, card.atrData, { seedHistory: false }) : null;
+      const merged = trail ? carryCaseState(replay(trail), data) : data;
+      const base = merged.meta.reportName?.trim() || card.name;
+      const renamed = base !== card.name && !reportNameTaken(base);
+      const issuing = !opts?.draft;
+      const next = {
+        ...card,
+        atrData: merged,
+        name: renamed ? base : card.name,
+        pages: Math.max(1, merged.observations.length * 2),
+        queries: merged.observations.length,
+        status: issuing ? 'final' : 'draft',
+        // Issuing a draft stamps the generation; a regenerate keeps the original.
+        generatedAt: wasDraft && issuing ? stamp : card.generatedAt,
+      } as GeneratedReport;
+      const n = merged.observations.length;
+      if (trail) {
+        appendEvents(id, [regeneratedEvent(merged, actor,
+          `${n} observation${n === 1 ? '' : 's'} rebuilt from Create Report → Observations Extracted; case links and status carried over.`,
+          opts?.draft ? 'Draft updated from the extracted observations' : wasDraft ? 'Action Taken Report generated from the draft' : undefined)]);
+      }
+      setGeneratedReports(prev => prev.map(r => (r.id === id ? next : r)));
+      card = next;
+      if (opts?.draft) {
+        addToast({ type: 'success', message: `Draft “${next.name}” updated in Reports.` });
+      } else if (wasDraft) {
+        addToast({ type: 'success', message: `“${next.name}” has been generated and saved in Reports.` });
+        notifyIssued(next, merged);
+      } else {
+        addToast({ type: 'success', message: `“${next.name}” regenerated with the latest observations.` });
+        notify({
+          eventId: 'ATR-01', title: `Report regenerated — “${next.name}”`, actor,
+          message: `Rebuilt from its edited observations · ${n} observation${n === 1 ? '' : 's'}. Case links and status were carried over.`,
+          facts: [{ label: 'Report', value: next.name }, { label: 'Observations', value: String(n) }],
+          recipients: [ROSTER.engagementOwner], link: { view: 'reports', ref: { kind: 'report', id } }, linkLabel: 'Open report',
+        });
+      }
+    }
+    if (!card) {
+      // The ATR is named after the report it came from (the Report Name the
+      // user confirmed on upload), not the Audit Title.
+      const base = data.meta.reportName?.trim() || data.meta.auditTitle?.trim() || 'Action Taken Report';
+      card = {
+        id,
+        templateId: 'rt-007',
+        kind: 'atr' as const,
+        name: uniqueReportName(base),
+        tag: 'Internal Audit' as const,
+        generatedBy: 'You',
+        generatedAt: stamp,
+        // Save as Draft keeps the report in Reports without issuing it.
+        status: opts?.draft ? ('draft' as const) : ('final' as const),
+        pages: Math.max(1, data.observations.length * 2),
+        queries: data.observations.length,
+        atrData: data,
+        riskOwner: 'Tushar Goel',
+        sourceReport: base,
+        // Visibility from the New Report modal that started this.
+        shareAudience: newReportExtrasRef.current?.audience,
+      } as unknown as GeneratedReport;
+      newReportExtrasRef.current = null;
+      const saved = card;
+      setGeneratedReports(prev => (prev.some(r => r.id === id) ? prev : [saved, ...prev]));
+      if (opts?.draft) {
+        addToast({ type: 'success', message: `“${saved.name}” saved as a draft in Reports.` });
+      } else {
+        addToast({ type: 'success', message: `“${saved.name}” has been generated and saved in Reports.` });
+        notifyIssued(saved, data);
+      }
+    }
+    // Close the wizard, land on My Reports, and open the report directly.
     setAtrUploadOpen(false);
+    setAtrMinimized(false);
+    setAtrOpenSessionId(null);
     clearAtrDraft();
+    setActiveTab('my-reports');
+    setReportType('all');
     openReport(card);
-    return versionNumber;
-  }, [generatedReports, uniqueReportName, openReport]);
+  }, [generatedReports, uniqueReportName, reportNameTaken, addToast, openReport, notify]);
 
   // Inline edits saved from the library ATR view. Updating a generated card
   // patches it in place; editing a curated library ATR persists an override card
   // (same id) into the generated store so the change survives a reload.
-  const saveAtrEdits = useCallback((id: string, data: AtrReportData) => {
+  const saveAtrEdits = useCallback((id: string, data: AtrReportData, opts?: { quiet?: boolean }) => {
     setGeneratedReports(prev => {
       if (prev.some(r => r.id === id)) return prev.map(r => (r.id === id ? { ...r, atrData: data } : r));
       const lib = ATR_LIBRARY.find(a => a.id === id);
@@ -769,8 +890,63 @@ export default function ReportsView({
     });
     // Reflect the save in the open view so the editor's `dirty` flag clears.
     setViewingReport(v => (v && v.id === id ? ({ ...v, atrData: data } as GeneratedReport) : v));
-    addToast({ type: 'success', message: 'Changes saved.' });
+    if (!opts?.quiet) addToast({ type: 'success', message: 'Changes saved.' });
   }, [addToast]);
+
+  // New Report → Create Report. An Action Taken Report continues into the upload wizard
+  // (Upload → Observations Extracted → Generate ATR) carrying the details just
+  // entered; an Internal Audit Report is created from its template right away,
+  // saved to My Reports and opened.
+  const createFromDraft = useCallback((draft: NewReportDraft) => {
+    setNewReportOpen(false);
+    if (draft.templateId === 'rt-007') {
+      setLastDraft(draft);
+      newReportExtrasRef.current = { audience: draft.audience };
+      setAtrInitialMeta(draft.meta);
+      setAtrMinimized(false);
+      setAtrUploadOpen(true);
+      return;
+    }
+    const template = REPORT_TEMPLATES.find(t => t.id === draft.templateId);
+    const now = new Date();
+    const stamp = `${now.toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' })}, ${now.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' })}`;
+    const sections = template?.sections ?? [];
+    const coverDetails = Object.fromEntries(
+      Object.entries({ ...draft.meta, ...(draft.meta.custom ?? {}) })
+        .filter(([k, v]) => k !== 'custom' && typeof v === 'string' && v.trim())
+        .map(([k, v]) => [k, (v as string).trim()]),
+    );
+    const newReport = {
+      id: `gr-new-${now.getTime()}`,
+      templateId: draft.templateId,
+      kind: 'ia' as const,
+      name: draft.name,
+      tag: 'Internal Audit' as const,
+      generatedBy: 'You',
+      generatedAt: stamp,
+      status: 'draft' as const,
+      pages: Math.max(1, sections.length),
+      queries: 0,
+      // An explicitly empty query set: the report starts as the template's
+      // sections, not the demo queries.
+      generatedQueries: [],
+      templateSections: sections,
+      shareAudience: draft.audience,
+      reportPeriod: draft.meta.auditPeriod || undefined,
+      coverDetails: Object.keys(coverDetails).length ? coverDetails : undefined,
+    } as unknown as GeneratedReport;
+    setGeneratedReports(prev => [newReport, ...prev]);
+    addToast({ type: 'success', message: `“${newReport.name}” has been created and saved in Reports.` });
+    notify({
+      eventId: 'ATR-01', title: `Report created — “${newReport.name}”`, actor: 'You',
+      message: `Created from the ${draft.templateName} template.`,
+      facts: [{ label: 'Report', value: newReport.name }, { label: 'Template', value: draft.templateName }, { label: 'Visibility', value: draft.audience === 'Only invited users' ? 'Private' : 'Public' }],
+      recipients: [ROSTER.engagementOwner], link: { view: 'reports', ref: { kind: 'report', id: newReport.id } }, linkLabel: 'Open report',
+    });
+    setActiveTab('my-reports');
+    setReportType('all');
+    openReport(newReport);
+  }, [addToast, notify, openReport]);
 
   // Offline banner — listens to online/offline events.
   const [isOffline, setIsOffline] = useState(() =>
@@ -846,8 +1022,19 @@ export default function ReportsView({
   // visibility control and the share dialog are the same answer, and so the
   // choice survives closing the reader.
   const updateReportAudience = (reportId: string, audience: Audience) => {
+    const before = generatedReports.find(r => r.id === reportId)?.shareAudience ?? DEFAULT_REPORT_AUDIENCE;
     setGeneratedReports(prev => prev.map(r => (r.id === reportId ? { ...r, shareAudience: audience } : r)));
     setViewingReport(prev => (prev && prev.id === reportId ? { ...prev, shareAudience: audience } : prev));
+    // ATR-04 — a findings document opening up to the team.
+    if (audience !== DEFAULT_REPORT_AUDIENCE && before === DEFAULT_REPORT_AUDIENCE) {
+      const name = generatedReports.find(r => r.id === reportId)?.name ?? reportId;
+      notify({
+        eventId: 'ATR-04', title: `“${name}” is now ${audience}`, actor: 'You',
+        message: `Visibility changed from ${before} to ${audience}.`,
+        facts: [{ label: 'Report', value: name }, { label: 'Was', value: before }, { label: 'Now', value: audience }],
+        recipients: [{ name: 'You', role: 'Report owner' }], watchers: [{ name: 'Team', role: 'The team' }], link: { view: 'reports', ref: { kind: 'report', id: reportId } }, linkLabel: 'Open report',
+      });
+    }
   };
 
   const filteredReports = (() => {
@@ -881,16 +1068,35 @@ export default function ReportsView({
     // Generated Action Taken Reports render in their dedicated view (the same
     // content shown in the preview, with Manage Exceptions + Generate ATR).
     if (viewingReport.atrData) {
+      // An ATR generated by Create Report keeps its per-observation Manage
+      // Exceptions CTA: each observation hands off only the exception rows in
+      // the annexures linked to it in the wizard session it came from.
+      const uploadSession = loadUploadSession(viewingReport.id);
       return (
         <AtrReportView
-          report={{ ...viewingReport, atrData: viewingReport.atrData, status: 'final' }}
+          report={{ ...viewingReport, atrData: viewingReport.atrData, status: viewingReport.status === 'draft' ? 'draft' : 'final' }}
           onBack={() => setViewingReport(null)}
           onShare={onShare ? () => onShare(viewingReport.id, viewingReport.name, viewingReport.shareAudience ?? DEFAULT_REPORT_AUDIENCE, a => updateReportAudience(viewingReport.id, a)) : undefined}
-          onSave={data => saveAtrEdits(viewingReport.id, data)}
-          onManageExceptions={onManageExceptions ? () => onManageExceptions(viewingReport.id) : undefined}
+          onSave={(data, opts) => saveAtrEdits(viewingReport.id, data, opts)}
+          onEditObservations={uploadSession ? () => {
+            // Into the wizard, straight onto this report's extracted observations.
+            setLastDraft(null);
+            setAtrInitialMeta(uploadSession.meta);
+            setAtrOpenSessionId(uploadSession.id);
+            setViewingReport(null);
+            setAtrMinimized(false);
+            setAtrUploadOpen(true);
+          } : undefined}
+          renderObservationActions={uploadSession ? (i, obs) => <ObservationExceptionsAction session={uploadSession} index={i} obs={obs} /> : undefined}
+          // Report Snapshot: curated library ATRs get a believable remediation
+          // history to explore; ATRs the user generated start from their real
+          // generated snapshot and grow only with real actions.
+          timelineSeed={{
+            seedHistory: ATR_LIBRARY.some(a => a.id === viewingReport.id),
+            riskOwner: (viewingReport as unknown as { riskOwner?: string }).riskOwner,
+            auditor: viewingReport.atrData.meta.reviewedBy ?? viewingReport.atrData.meta.preparedBy,
+          }}
           templates={mergeTemplateOptions(REPORT_TEMPLATES, customTemplates)}
-          onApplyTemplate={updateReportAppliedTemplate}
-          onChangeAudience={updateReportAudience}
         />
       );
     }
@@ -1026,6 +1232,8 @@ export default function ReportsView({
                 ? <>Reports your team shared with you. Open, review, or download any of them.</>
                 : activeTab === 'templates'
                 ? <>Query-driven templates <span className="font-medium text-brand-700">IRA</span> uses to turn engagement data into a finished report.</>
+                : activeTab === 'admin'
+                ? <>Which report details are mandatory, custom fields and dropdown options, the default escalation matrix, and the transaction log behind every report you create.</>
                 : <>Every report <span className="font-medium text-brand-700">IRA</span> has generated, newest first. Filter by type to narrow it down.</>}
             </p>
           </motion.div>
@@ -1042,6 +1250,7 @@ export default function ReportsView({
             { id: 'my-reports', label: 'My Reports', icon: BookOpen, count: generatedReports.length },
             { id: 'shared-reports', label: 'Shared Reports', icon: Share2, count: SHARED_REPORTS.length },
             { id: 'templates', label: 'Templates', icon: FileText, count: REPORT_TEMPLATES.length + customTemplates.length },
+            { id: 'admin', label: 'Admin', icon: Settings2, count: 0 },
           ] as const).map(tab => {
             const TabIcon = tab.icon;
             const isActive = activeTab === tab.id;
@@ -1123,10 +1332,10 @@ export default function ReportsView({
                 )}
                 <ToolbarViewToggle mode={viewMode} onChange={setViewMode} />
                 <button
-                  onClick={() => setAtrUploadOpen(true)}
+                  onClick={() => { setLastDraft(null); setNewReportOpen(true); }}
                   className="inline-flex items-center gap-2 h-10 px-4 text-[0.8125rem] font-semibold text-white bg-primary hover:bg-primary-hover rounded-lg transition-colors cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600/40 focus-visible:ring-offset-1 whitespace-nowrap"
                 >
-                  <CloudUpload size={15} /> Generate ATR by Upload
+                  <FileText size={15} /> Create Report
                 </button>
               </>
             }
@@ -1412,6 +1621,16 @@ export default function ReportsView({
           );
         })()}
 
+        {/* Admin — the settings behind Create Report (lists of values, the
+            default escalation matrix, transaction logs). The feature rail +
+            active feature own their own scrolling, so the frame gets a fixed
+            height inside this scroll region. */}
+        {activeTab === 'admin' && (
+          <div className="h-[calc(100dvh-17rem)] min-h-[520px] rounded-xl border border-canvas-border bg-canvas-elevated overflow-hidden">
+            <AdminTab />
+          </div>
+        )}
+
         {activeTab === 'templates' && (() => {
           // Custom templates open straight into the editor (edit in place).
           const editCustomTemplate = (rt: typeof REPORT_TEMPLATES[number]) => {
@@ -1661,31 +1880,62 @@ export default function ReportsView({
       </div>
 
 
-      {/* Generate ATR by Upload — the upload-to-ATR wizard, hosted in a modal. */}
-      <AnimatePresence>
-        {atrUploadOpen && (
-          <>
-            {/* Backdrop is inert — the wizard owns its own close so an outside
-                click can't discard in-progress work without confirmation. Hidden
-                while minimized, so the app behind stays interactive. */}
-            {!atrMinimized && (
-              <motion.div
-                initial={{ opacity: 0 }} animate={{ opacity: atrConfirmOpen ? 0 : 1 }} exit={{ opacity: 0 }} transition={{ duration: 0.15 }}
-                className="fixed inset-0 bg-[rgba(15,8,30,0.78)] backdrop-blur-[6px] z-50" />
-            )}
+      {/* Create Report — the upload-to-ATR wizard opens as a centered modal
+          over a dimmed backdrop. Minimizing during extraction drops it to a
+          floating toast (no backdrop) so the reports list stays usable in the
+          background. Portalled to the body for the same stacking reasons as the
+          shared Modal shell. */}
+      {typeof document !== 'undefined' && createPortal(
+        <AnimatePresence>
+          {atrUploadOpen && !atrMinimized && (
             <motion.div
-              initial={{ opacity: 0, scale: 0.98, y: 8 }} animate={{ opacity: 1, scale: 1, y: 0 }} exit={{ opacity: 0, scale: 0.98, y: 8 }}
+              key="atr-backdrop"
+              initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+              transition={{ duration: 0.15 }}
+              className="fixed inset-0 bg-ink-900/40 backdrop-blur-[2px] z-[60]"
+              onClick={() => { setAtrUploadOpen(false); clearAtrDraft(); }}
+            />
+          )}
+          {atrUploadOpen && (
+            <motion.div
+              key="atr-panel"
+              initial={{ opacity: 0, y: 10, scale: atrMinimized ? 1 : 0.98 }} animate={{ opacity: 1, y: 0, scale: 1 }} exit={{ opacity: 0, y: 10, scale: atrMinimized ? 1 : 0.98 }}
               transition={{ duration: 0.18, ease: [0.2, 0, 0, 1] }}
               className={atrMinimized
                 ? 'fixed bottom-4 right-4 w-[400px] max-w-[92vw] bg-canvas-elevated rounded-lg shadow-xl border border-canvas-border z-[60] overflow-hidden'
-                : 'fixed left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 w-[1040px] max-w-[95vw] h-[680px] max-h-[92vh] bg-canvas-elevated rounded-xl shadow-xl border border-canvas-border z-[60] flex flex-col overflow-hidden'}
-              role="dialog" aria-modal={!atrMinimized} aria-label="Generate ATR by Upload"
+                : 'fixed inset-0 z-[60] flex items-center justify-center p-4 sm:p-6 pointer-events-none'}
             >
-              <AtrUploadTab onClose={() => { setAtrUploadOpen(false); setAtrConfirmOpen(false); setAtrMinimized(false); clearAtrDraft(); }} onManageExceptions={onManageExceptions} onSaveAtr={saveUploadedAtr} onConfirmOpenChange={setAtrConfirmOpen} onMinimizedChange={setAtrMinimized} />
+              <div
+                className={atrMinimized
+                  ? 'contents'
+                  : 'pointer-events-auto w-full max-w-[1200px] h-[90vh] bg-canvas-elevated rounded-2xl border border-canvas-border shadow-xl flex flex-col overflow-hidden'}
+                role={atrMinimized ? undefined : 'dialog'}
+                aria-modal={atrMinimized ? undefined : true}
+                aria-label="Create Report"
+              >
+                <AtrUploadTab
+                  onClose={() => { setAtrUploadOpen(false); setAtrMinimized(false); setAtrOpenSessionId(null); clearAtrDraft(); }}
+                  onMinimizedChange={setAtrMinimized}
+                  onGenerated={saveUploadedAtr}
+                  initialMeta={atrInitialMeta}
+                  initialSessionId={atrOpenSessionId ?? undefined}
+                  onBack={lastDraft ? () => { setAtrUploadOpen(false); setAtrMinimized(false); setNewReportOpen(true); } : undefined}
+                />
+              </div>
             </motion.div>
-          </>
-        )}
-      </AnimatePresence>
+          )}
+        </AnimatePresence>,
+        document.body,
+      )}
+
+      {/* New Report — the first step of Create Report. */}
+      <NewReportModal
+        open={newReportOpen}
+        onClose={() => setNewReportOpen(false)}
+        onCreate={createFromDraft}
+        nameTaken={reportNameTaken}
+        initialDraft={lastDraft}
+      />
 
       {/* Template Editor Modal */}
       <AnimatePresence>

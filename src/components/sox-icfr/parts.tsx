@@ -9,8 +9,10 @@ import type { Conclusion, Court, ExceptionGrade, FileOrigin, Nature, Role, TestR
 
 const CONCLUSION_TONE: Record<Conclusion, Tone> = { Effective: 'compliant', Ineffective: 'risk', 'In progress': 'evidence', 'Not started': 'draft' };
 // one word for one state: the 'Not started' conclusion WEARS "Not tested" — the
-// same label the tracks, the RACM roll-up and the Risk Register use
-export function ConclusionPill({ c }: { c: Conclusion }) { return <Pill tone={CONCLUSION_TONE[c]}>{c === 'Not started' ? 'Not tested' : c}</Pill>; }
+// same label the tracks, the RACM roll-up and the Risk Register use. The two
+// verdicts say they are the CONTROL's (C9), so neither reads as a track result.
+const CONCLUSION_LABEL: Record<Conclusion, string> = { Effective: 'Control effective', Ineffective: 'Control ineffective', 'In progress': 'In progress', 'Not started': 'Not tested' };
+export function ConclusionPill({ c }: { c: Conclusion }) { return <Pill tone={CONCLUSION_TONE[c]}>{CONCLUSION_LABEL[c]}</Pill>; }
 
 const TRACK_TONE: Record<TrackConclusion, Tone> = { Effective: 'compliant', Ineffective: 'risk', 'Not tested': 'draft' };
 export function TrackPill({ c }: { c: TrackConclusion }) { return <Pill tone={TRACK_TONE[c]}>{c}</Pill>; }

@@ -62,17 +62,13 @@ test('TOD groups its checks by what they are about', async ({ page }) => {
   const codes = page.locator('span.font-mono').filter({ hasText: /^\d+\.\d+$/ });
   expect(await codes.count()).toBeGreaterThanOrEqual(attrChecks);
 
-  // ── adding a check asks what it is about ──────────────────────────────────
-  const add = page.getByRole('button', { name: 'Add a design check' }).first();
-  await add.scrollIntoViewIfNeeded();
-  await add.click();
-  await page.waitForTimeout(600);
-  const target = page.getByLabel('What this check is about');
-  await expect(target).toBeVisible();
-  // The control as a whole is the default — a check filed under an attribute it
-  // is not about reads as a test of something that never happened.
-  await expect(target).toHaveValue('');
-  await page.screenshot({ path: `${SHOTS}/02-add-asks-target.png`, fullPage: true });
+  // ── a check cannot be written here (18 Sep, user ask) ─────────────────────
+  // Design checks arrive with the RACM. The Add button that used to open the
+  // "what is this check about" form is parked, and so is the assertion that
+  // followed it — the grouping above is what that form existed to get right,
+  // and it is still proved.
+  await expect(page.getByRole('button', { name: 'Add a design check' })).toHaveCount(0);
+  await page.screenshot({ path: `${SHOTS}/02-no-add.png`, fullPage: true });
 });
 
 test('the suggestion library still offers control-level checks', async ({ page }) => {

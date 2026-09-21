@@ -1,10 +1,11 @@
 import { useEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
-import { CheckCircle2, Circle, Download, Eye, FileSpreadsheet, FileText, PenLine, X } from 'lucide-react';
-import { controlConclusion, icfrConclusion, isControlFinal, isControlLocked, isEngagementLocked, openMaterialWeaknesses, trackResult } from './helpers';
+import { CheckCircle2, Circle, Download, Eye, FileSpreadsheet, FileText, Hourglass, PenLine, X } from 'lucide-react';
+import { controlConclusion, icfrConclusion, isControlFinal, isControlLocked, isEngagementLocked, openMaterialWeaknesses, signoffControls, trackResult } from './helpers';
 import { buildIcfrPaper, controlPaperSections, downloadControlWorkingPaper, downloadIcfrWorkingPaper, ENG_SIGNOFF_TITLE, SIGNOFF_TITLE, type PaperBlock } from './icfrWorkingPaper';
 import { buildAuditReport, downloadAuditReport } from './icfrAuditReport';
 import { downloadAuditReportPdf } from './icfrReportPdf';
+import { isFormattedControlId } from './racmIds';
 import { useIcfr } from './store';
 import { useToast } from '../shared/Toast';
 import { cn } from '../../lib/cn';
@@ -64,7 +65,9 @@ function Block({ b }: { b: PaperBlock }) {
                     <td key={ci} className={cn('px-2.5 py-1.5 align-top text-ink-700',
                       b.tickFrom != null && ci >= b.tickFrom && (b.tickTo == null || ci < b.tickTo)
                         ? cn('font-mono text-center whitespace-nowrap', tickCls(cell)) : undefined,
-                      ci === 0 && 'font-mono text-ink-400 whitespace-nowrap')}>{cell}</td>
+                      ci === 0 && 'font-mono text-ink-400 whitespace-nowrap',
+                      // a control ID (AIH/TRY/R001/C001) would otherwise wrap at its slashes
+                      ci > 0 && isFormattedControlId(cell) && 'whitespace-nowrap')}>{cell}</td>
                   ))}
                 </tr>
               ))}
@@ -144,9 +147,12 @@ function EngagementSignoff({ eng, onAttest }: { eng: IcfrEngagement; onAttest: (
   const stamped = !!so.icfrConclusion;
   const effective = conclusion !== 'Not effective';
   const mwOpen = openMaterialWeaknesses(eng).length;
-  // same gate as Overview: every paper concluded AND countersigned by the reviewer
-  const reviewed = eng.controls.filter(isControlFinal).length;
-  const ready = eng.controls.length > 0 && reviewed === eng.controls.length;
+  // same gate as Overview: every paper concluded AND countersigned by the reviewer —
+  // bar the year-end controls an interim or roll-forward holds back, which can't
+  // finish in it and are listed instead of waited on (signoffControls)
+  const { gating, pending, until } = signoffControls(eng.controls, audit);
+  const reviewed = gating.filter(isControlFinal).length;
+  const ready = eng.controls.length > 0 && reviewed === gating.length;
   const canSign = role === 'auditor' && ready && !so.preparer && !!audit && !audit.archive;
   const canCounter = role === 'reviewer' && !!so.preparer && !so.reviewer && !!audit && !audit.archive;
   return (
@@ -161,7 +167,7 @@ function EngagementSignoff({ eng, onAttest }: { eng: IcfrEngagement; onAttest: (
             className="ml-auto h-7 px-2.5 shrink-0 rounded-lg bg-brand-600 text-white text-[11.5px] font-semibold hover:bg-brand-700 cursor-pointer inline-flex items-center gap-1"><PenLine size={11} /> Sign off as preparer</button>
         )}
         {role === 'auditor' && !ready && !so.preparer && (
-          <span className="ml-auto shrink-0 text-[10.5px] text-ink-400">{reviewed}/{eng.controls.length} papers countersigned — sign-off unlocks when every paper is reviewed</span>
+          <span className="ml-auto shrink-0 text-[10.5px] text-ink-400">{reviewed}/{gating.length} papers countersigned — sign-off unlocks when every paper is reviewed</span>
         )}
       </div>
       <div className="flex items-center gap-2 text-[12.5px]">
@@ -173,6 +179,13 @@ function EngagementSignoff({ eng, onAttest }: { eng: IcfrEngagement; onAttest: (
             className="ml-auto h-7 px-2.5 shrink-0 rounded-lg bg-brand-600 text-white text-[11.5px] font-semibold hover:bg-brand-700 cursor-pointer inline-flex items-center gap-1"><PenLine size={11} /> Countersign</button>
         )}
       </div>
+      {/* what the gate above leaves out — the year-end controls this round can't finish */}
+      {pending.length > 0 && (
+        <div className="flex items-center gap-2 text-[11px] text-ink-400">
+          <Hourglass size={12} className="shrink-0" />
+          <span>{pending.length} control{pending.length === 1 ? '' : 's'} pending until {until} — tested in the year-end audit</span>
+        </div>
+      )}
       <div className="flex items-center gap-2 text-[12.5px] pt-1.5 border-t border-canvas-border">
         <span className="text-ink-500 w-[140px] shrink-0">ICFR conclusion</span>
         {/* An interim never concludes the year — its window stops short of the

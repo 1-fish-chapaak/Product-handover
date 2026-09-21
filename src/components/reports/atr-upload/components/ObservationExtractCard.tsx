@@ -1,12 +1,20 @@
-import { useState } from 'react';
+import { useState, type ReactNode } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { ChevronDown, Pencil, Check, X, ClipboardList, Paperclip, UserCheck, RotateCcw } from 'lucide-react';
 import Checkbox from '../../../shared/Checkbox';
 import MissingFieldResolver from './MissingFieldResolver';
-import {
-  OBSERVATION_FIELDS, CLASSIFICATION_OPTIONS, RISK_OPTIONS, getFieldValue, type FieldDef,
-} from '../observationFields';
+import { OBSERVATION_FIELDS, getFieldValue, type FieldDef } from '../observationFields';
+import { useAdminSettings } from '../adminStore';
 import type { ExtractedObservation, ExtractedFieldKey } from '../types';
+
+// Fields whose dropdown values are admin-managed (Lists of Values).
+const LOV_KEY: Partial<Record<ExtractedFieldKey, string>> = {
+  classification: 'classification',
+  risk: 'risk',
+  rootCause: 'rootCause',
+  solutionType: 'solutionType',
+  riskImplications: 'riskImplications',
+};
 
 type ResolveMode = 'fill' | 'skip' | 'reset';
 
@@ -17,7 +25,7 @@ const RISK_DOT: Record<string, string> = { High: 'bg-risk-500', Medium: 'bg-miti
 const COMPLETENESS_DOT: Record<string, string> = { Complete: 'bg-compliant-500', Partial: 'bg-mitigated-500', Incomplete: 'bg-risk-500' };
 
 export default function ObservationExtractCard({
-  obs, linkedAnnexures, linkedRows, onToggleSelect, onEditField, onResolve,
+  obs, linkedAnnexures, linkedRows, onToggleSelect, onEditField, onResolve, annexureSlot,
 }: {
   obs: ExtractedObservation;
   linkedAnnexures: number;
@@ -25,11 +33,21 @@ export default function ObservationExtractCard({
   onToggleSelect: () => void;
   onEditField: (key: ExtractedFieldKey, value: string) => void;
   onResolve: (key: ExtractedFieldKey, mode: ResolveMode, value?: string) => void;
+  /** Optional inline annexure-linking strip, rendered under the header row so
+   *  each annexure is managed on the observation it belongs to. */
+  annexureSlot?: ReactNode;
 }) {
   // Default-open observations that still need attention so the demo path is obvious.
   const [open, setOpen] = useState(obs.missingFields.some(f => f.state === 'missing'));
   const [editing, setEditing] = useState<ExtractedFieldKey | null>(null);
   const [draft, setDraft] = useState('');
+
+  // Dropdown options for a field — admin-managed lists where applicable.
+  const { lov } = useAdminSettings();
+  const optionsFor = (field: FieldDef): string[] | undefined => {
+    const k = LOV_KEY[field.key];
+    return k ? lov(k) : field.options;
+  };
 
   const missingMap = new Map(obs.missingFields.map(f => [f.key, f]));
   const title = obs.title?.trim() || 'Untitled observation';
@@ -85,6 +103,10 @@ export default function ObservationExtractCard({
         </div>
       </div>
 
+      {/* Inline annexure strip — always visible so the observation→annexure link
+          is managed right here (provided by the report detail view). */}
+      {annexureSlot}
+
       {/* Expanded body */}
       <AnimatePresence initial={false}>
         {open && (
@@ -95,26 +117,29 @@ export default function ObservationExtractCard({
                 const isEditing = editing === field.key;
                 const value = getFieldValue(obs, field.key);
                 const isWide = field.kind === 'textarea';
+                const isSkipped = mf?.state === 'skipped';
+                // Any field with no extracted value is "missing" → offer Fill in / Skip.
+                const isMissing = !value.trim() && !isSkipped;
                 return (
                   <div key={field.key} className={isWide ? 'sm:col-span-2 lg:col-span-3' : ''}>
                     <div className="flex items-center gap-2 mb-1">
                       <span className="text-[0.65625rem] font-semibold uppercase tracking-wide text-ink-400">{field.label}</span>
-                      {mf?.state === 'missing' && <span className="inline-flex items-center gap-1 text-[0.59375rem] font-semibold uppercase tracking-wide text-risk-600 bg-risk-50 px-1.5 py-0.5 rounded-sm"><span className="w-1 h-1 rounded-full bg-risk-500" aria-hidden="true" />Missing</span>}
-                      {mf?.state === 'filled-by-user' && <span className="inline-flex items-center gap-1 text-[0.59375rem] font-semibold uppercase tracking-wide text-evidence bg-evidence-50 px-1.5 py-0.5 rounded-sm"><UserCheck size={10} aria-hidden="true" />Filled by you</span>}
-                      {mf?.state === 'skipped' && <span className="text-[0.59375rem] font-semibold uppercase tracking-wide text-ink-500 bg-canvas-border/60 px-1.5 py-0.5 rounded-sm">Skipped · N/A</span>}
+                      {isMissing && <span className="inline-flex items-center gap-1 text-[0.59375rem] font-semibold uppercase tracking-wide text-risk-600 bg-risk-50 px-1.5 py-0.5 rounded-sm"><span className="w-1 h-1 rounded-full bg-risk-500" aria-hidden="true" />Missing</span>}
+                      {!isMissing && mf?.state === 'filled-by-user' && <span className="inline-flex items-center gap-1 text-[0.59375rem] font-semibold uppercase tracking-wide text-evidence bg-evidence-50 px-1.5 py-0.5 rounded-sm"><UserCheck size={10} aria-hidden="true" />Filled by you</span>}
+                      {isSkipped && <span className="text-[0.59375rem] font-semibold uppercase tracking-wide text-ink-500 bg-canvas-border/60 px-1.5 py-0.5 rounded-sm">Skipped · N/A</span>}
                     </div>
 
                     {isEditing ? (
-                      <FieldEditor kind={field.kind} value={draft} onChange={setDraft} onSave={() => commit(field)} onCancel={() => setEditing(null)} />
-                    ) : mf?.state === 'missing' ? (
-                      <MissingFieldResolver onFill={() => startEdit(field.key)} onSkip={() => onResolve(field.key, 'skip')} />
-                    ) : mf?.state === 'skipped' ? (
+                      <FieldEditor kind={field.kind} options={optionsFor(field)} value={draft} onChange={setDraft} onSave={() => commit(field)} onCancel={() => setEditing(null)} />
+                    ) : isSkipped ? (
                       <button onClick={() => onResolve(field.key, 'reset')} className="inline-flex items-center gap-1.5 text-[0.71875rem] font-medium text-brand-700 hover:underline cursor-pointer">
                         <RotateCcw size={12} aria-hidden="true" /> Undo skip
                       </button>
+                    ) : isMissing ? (
+                      <MissingFieldResolver onFill={() => startEdit(field.key)} onSkip={() => onResolve(field.key, 'skip')} />
                     ) : (
                       <div className="group flex items-start gap-2">
-                        <span className="text-[0.78125rem] text-ink-800 leading-relaxed flex-1">{value || <span className="text-ink-400">—</span>}</span>
+                        <span className="text-[0.78125rem] text-ink-800 leading-relaxed flex-1">{value}</span>
                         <button onClick={() => startEdit(field.key)} aria-label={`Edit ${field.label}`} className="opacity-0 group-hover:opacity-100 text-ink-400 hover:text-brand-700 cursor-pointer transition-opacity shrink-0 mt-0.5">
                           <Pencil size={12.5} aria-hidden="true" />
                         </button>
@@ -131,23 +156,18 @@ export default function ObservationExtractCard({
   );
 }
 
-function FieldEditor({ kind, value, onChange, onSave, onCancel }: {
-  kind: FieldDef['kind']; value: string; onChange: (v: string) => void; onSave: () => void; onCancel: () => void;
+function FieldEditor({ kind, options, value, onChange, onSave, onCancel }: {
+  kind: FieldDef['kind']; options?: string[]; value: string; onChange: (v: string) => void; onSave: () => void; onCancel: () => void;
 }) {
   const base = 'w-full text-[0.78125rem] text-ink-800 bg-canvas-elevated border border-brand-400 rounded-sm px-2.5 py-1.5 focus:outline-none focus:ring-4 focus:ring-brand-600/15';
   return (
     <div className="space-y-2">
       {kind === 'textarea' ? (
         <textarea autoFocus value={value} onChange={e => onChange(e.target.value)} rows={3} className={`${base} resize-none`} />
-      ) : kind === 'classification' ? (
+      ) : kind === 'classification' || kind === 'risk' || kind === 'select' ? (
         <select autoFocus value={value} onChange={e => onChange(e.target.value)} className={base}>
-          <option value="">Select classification…</option>
-          {CLASSIFICATION_OPTIONS.map(o => <option key={o} value={o}>{o}</option>)}
-        </select>
-      ) : kind === 'risk' ? (
-        <select autoFocus value={value} onChange={e => onChange(e.target.value)} className={base}>
-          <option value="">Select risk…</option>
-          {RISK_OPTIONS.map(o => <option key={o} value={o}>{o}</option>)}
+          <option value="">Select…</option>
+          {(options ?? []).map(o => <option key={o} value={o}>{o}</option>)}
         </select>
       ) : (
         <input autoFocus value={value} onChange={e => onChange(e.target.value)} placeholder={kind === 'date' ? 'e.g. 30 Jun 2026' : ''} className={base} />

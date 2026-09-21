@@ -13,7 +13,8 @@ import type {
   ExtractedObservation, ExtractedAnnexure, ExceptionRow, ExtractionSession,
   MissingField, ReportMeta, UploadedFile, CompletenessStatus,
 } from './types';
-import { type EscalationMatrixConfig, cloneDefaultMatrix } from './escalationMatrix';
+import { OBSERVATION_FIELDS, getFieldValue } from './observationFields';
+import { type EscalationMatrixSet, cloneDefaultMatrixSet } from './escalationMatrix';
 
 // Status stages shown on Screen 3's in-modal waiting screen. Paced across the
 // full mock duration (~15s) so each stage is visible for a couple of seconds
@@ -28,13 +29,17 @@ export const PROCESSING_MESSAGES = [
   'Mapping annexures…',
   'Finalizing the extraction…',
 ];
-export const PROCESSING_DURATION_MS = 15000;
+export const PROCESSING_DURATION_MS = 6000;
 
 // Report metadata — matches the IRAME.AI brand sample in the brief.
 const SEED_META: ReportMeta = {
   reportId: 'ATR-2025-Q3-001',
   reportName: 'Q3 FY24-25 — Procurement, Inventory & Dispatch ATR',
   financialYear: 'FY 2024-25',
+  region: 'North',
+  location: 'Delhi',
+  auditFunction: 'SCM',
+  auditSpoc: 'Karan Mehta',
   auditTitle: 'Procurement, Inventory & Dispatch Process A',
   auditPeriod: 'Q3 FY 2024-25',
   preparedBy: 'Internal Audit Team (HT Consulting Ltd)',
@@ -45,7 +50,11 @@ const SEED_META: ReportMeta = {
 const FIELD_LABEL: Record<MissingField['key'], string> = {
   title: 'Observation Title',
   description: 'Observation Description',
+  rootCause: 'Root Cause',
+  solutionType: 'Solution Type',
   riskSummary: 'Risk Summary',
+  riskImplications: 'Risk Implications',
+  riskImplicationsDetails: 'Risk Implication Details',
   recommendation: 'Recommendation / Action Plan',
   actionTaken: 'Action Taken',
   evidence: 'Evidence',
@@ -58,42 +67,65 @@ const FIELD_LABEL: Record<MissingField['key'], string> = {
 const missing = (key: MissingField['key']): MissingField => ({ key, label: FIELD_LABEL[key], state: 'missing' });
 
 function completenessFrom(fields: MissingField[], hasTitle: boolean): CompletenessStatus {
-  if (!hasTitle || fields.some(f => f.key === 'title' || f.key === 'actionTaken')) return 'Incomplete';
+  if (!hasTitle || fields.some(f => f.key === 'title')) return 'Incomplete';
   return fields.length === 0 ? 'Complete' : 'Partial';
 }
 
-// Per-observation overrides keyed by index into SAMPLE_OBSERVATIONS. This is
-// where we inject the missing-field demos without mutating the shared seed.
-const OBS_OVERRIDES: Array<{ confidence: number; missing: MissingField['key'][]; stripRiskSummary?: boolean }> = [
-  { confidence: 0.97, missing: [] },                            // 1 Vendor Master — Complete
-  { confidence: 0.94, missing: [] },                            // 2 Three-Way Match — Complete
-  { confidence: 0.81, missing: ['riskSummary'], stripRiskSummary: true }, // 3 Freight Rate — Partial
-  { confidence: 0.88, missing: ['evidence'] },                  // 4 Stock Variance — Partial
-  { confidence: 0.96, missing: [] },                            // 5 Scrap Sale — Complete
+// Any extractable field that came back empty is treated as "not extracted" and
+// flagged Missing, so the card offers the Fill in / Skip resolver for it.
+function computeMissing(o: ExtractedObservation): MissingField[] {
+  return OBSERVATION_FIELDS.filter(f => !getFieldValue(o, f.key).trim()).map(f => missing(f.key));
+}
+
+// Per-observation overrides keyed by index into SAMPLE_OBSERVATIONS — confidence,
+// plus which values to strip so they read as "not extracted" (Missing).
+const OBS_OVERRIDES: Array<{ confidence: number; stripRiskSummary?: boolean }> = [
+  { confidence: 0.97 },                                 // 1 Vendor Master — Complete
+  { confidence: 0.94 },                                 // 2 Three-Way Match — Complete
+  { confidence: 0.81, stripRiskSummary: true },         // 3 Freight Rate — Risk Summary not extracted
+  { confidence: 0.88 },                                 // 4 Stock Variance — Risk Implication Details not extracted (below)
+  { confidence: 0.96 },                                 // 5 Scrap Sale — Complete
+];
+
+// Seeded audit-analysis values for the new observation fields, so they read as
+// "extracted" (the user can still change them via the dropdowns).
+const ROOT_CAUSES = ['Operating Design', 'Technology', 'People Effectiveness', 'Organization Design', 'Operating Design'];
+const SOLUTION_TYPES = ['Systemic', 'Systemic', 'Incident', 'Systemic', 'Incident'];
+const RISK_IMPLICATIONS = ['Financial', 'Operational', 'Financial', 'Operational', 'Potential of Fraud'];
+const RISK_IMPL_DETAILS = [
+  'Vendors were activated without complete statutory documents, exposing the company to non-compliant spend and blocked input-tax credit.',
+  'Tolerance overrides bypassed the three-way match, allowing over-billing to pass unchecked.',
+  'Freight rates applied outside the approved matrix inflated logistics cost against budget.',
+  '', // 4 Stock Variance — not extracted, so the card offers an "add details" text box
+  'Scrap sold below the approved floor rate suggests possible collusion / value leakage.',
 ];
 
 function buildObservations(): ExtractedObservation[] {
   const obs: ExtractedObservation[] = SAMPLE_OBSERVATIONS.map((o, i) => {
     const ov = OBS_OVERRIDES[i];
-    const missingFields = ov.missing.map(missing);
-    return {
+    const base: ExtractedObservation = {
       ...o,
-      // Demonstrate the missing-field flow: strip the value the resolver fills.
+      // Strip a value here and there so it reads as "not extracted" (Missing).
       riskSummary: ov.stripRiskSummary ? undefined : o.riskSummary,
+      rootCause: ROOT_CAUSES[i % ROOT_CAUSES.length],
+      solutionType: SOLUTION_TYPES[i % SOLUTION_TYPES.length],
+      riskImplications: RISK_IMPLICATIONS[i % RISK_IMPLICATIONS.length],
+      riskImplicationsDetails: RISK_IMPL_DETAILS[i % RISK_IMPL_DETAILS.length],
       id: `obs-${i + 1}`,
       number: i + 1,
       confidence: ov.confidence,
-      missingFields,
-      completeness: completenessFrom(missingFields, true),
+      missingFields: [],
+      completeness: 'Complete',
       selected: true,
       dueDate: o.actionPlans[0]?.dueDate,
     };
+    const missingFields = computeMissing(base);
+    return { ...base, missingFields, completeness: completenessFrom(missingFields, !!base.title?.trim()) };
   });
 
-  // 6th observation — deliberately incomplete (missing Title + Action Taken) to
-  // exercise the "Incomplete" badge and the Fill / Skip resolution flow.
-  const incompleteMissing = [missing('title'), missing('actionTaken')];
-  obs.push({
+  // 6th observation — deliberately incomplete (Title + Risk Summary not
+  // extracted) to exercise the "Incomplete" badge and the Fill / Skip flow.
+  const obs6: ExtractedObservation = {
     id: 'obs-6',
     number: 6,
     title: '',
@@ -101,12 +133,16 @@ function buildObservations(): ExtractedObservation[] {
     risk: 'Medium',
     status: 'Open',
     classification: 'Procedural Non-Compliance',
-    description: 'Purchase orders were raised in three instances after the goods receipt date, suggesting back-dated PO creation. Extraction could not confidently recover the observation title or the action taken.',
+    rootCause: 'Operating Design',
+    solutionType: 'Systemic',
+    riskImplications: 'Potential of Fraud',
+    riskImplicationsDetails: 'Back-dated PO creation can conceal unauthorised or after-the-fact purchases.',
+    description: 'Purchase orders were raised in three instances after the goods receipt date, suggesting back-dated PO creation. Extraction could not confidently recover the observation title.',
     querySummary: 'Review of PO creation timestamps against goods-receipt postings.',
     exceptions: 3,
     confidence: 0.52,
-    missingFields: incompleteMissing,
-    completeness: completenessFrom(incompleteMissing, false),
+    missingFields: [],
+    completeness: 'Complete',
     selected: true,
     actionPlans: [
       {
@@ -118,7 +154,9 @@ function buildObservations(): ExtractedObservation[] {
         verification: 'Open — implementation not yet started.',
       },
     ],
-  });
+  };
+  const obs6Missing = computeMissing(obs6);
+  obs.push({ ...obs6, missingFields: obs6Missing, completeness: completenessFrom(obs6Missing, false) });
 
   return obs;
 }
@@ -222,7 +260,7 @@ export const SEED_INSIGHTS = SAMPLE_INSIGHTS;
 /** Build a fresh extraction session for a just-uploaded file. The user-entered
  *  report details (audit title, entity, period, prepared-by, generated-on) come
  *  in as `metaOverrides` and replace the seed values; Report ID stays seeded. */
-export function seedSession(file: UploadedFile | null, method: ExtractionSession['method'], annexureFiles: UploadedFile[] = [], metaOverrides?: Partial<ReportMeta>, escalationMatrix?: EscalationMatrixConfig): ExtractionSession {
+export function seedSession(file: UploadedFile | null, method: ExtractionSession['method'], annexureFiles: UploadedFile[] = [], metaOverrides?: Partial<ReportMeta>, escalationMatrix?: EscalationMatrixSet): ExtractionSession {
   return {
     id: `xs-${Date.now()}`,
     method,
@@ -234,12 +272,12 @@ export function seedSession(file: UploadedFile | null, method: ExtractionSession
     observations: buildObservations(),
     annexures: buildAnnexures(),
     meta: { ...SEED_META, ...metaOverrides },
-    escalationMatrix: escalationMatrix ?? cloneDefaultMatrix(),
+    escalationMatrix: escalationMatrix ?? cloneDefaultMatrixSet(),
   };
 }
 
 /** The zero-observations edge case (Screen 4 empty state). */
-export function seedEmptySession(file: UploadedFile | null, method: ExtractionSession['method'], metaOverrides?: Partial<ReportMeta>, escalationMatrix?: EscalationMatrixConfig): ExtractionSession {
+export function seedEmptySession(file: UploadedFile | null, method: ExtractionSession['method'], metaOverrides?: Partial<ReportMeta>, escalationMatrix?: EscalationMatrixSet): ExtractionSession {
   return {
     id: `xs-${Date.now()}`,
     method,
@@ -251,6 +289,6 @@ export function seedEmptySession(file: UploadedFile | null, method: ExtractionSe
     observations: [],
     annexures: [],
     meta: { ...SEED_META, ...metaOverrides },
-    escalationMatrix: escalationMatrix ?? cloneDefaultMatrix(),
+    escalationMatrix: escalationMatrix ?? cloneDefaultMatrixSet(),
   };
 }

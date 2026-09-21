@@ -1,7 +1,7 @@
 import { useMemo } from 'react';
 import { useIcfr } from './store';
 import { programmeFor } from './auditScope';
-import { controlsUsingFile, defaultFileOrigin, fileOriginOf, guessFileKind, populationSources } from './helpers';
+import { controlsUsingFile, defaultFileOrigin, fileOriginOf, guessFileKind, populationSources, requiredFilesOf } from './helpers';
 import type { AuditFileRecord, Control } from './types';
 
 /** A file record as everything downstream reads it: the file's own facts, its
@@ -56,8 +56,12 @@ export function useAuditFiles(): AuditFile[] {
     /** Names that arrived FOR this audit rather than being inherited — see
      *  `ofAudit`. Collected by name because that is what dedupe keys on. */
     const auditOwn = new Set<string>();
+    // The source picked for each file on New engagement's Materiality step. An
+    // audit copies the engagement's files by name, so the answer follows them
+    // there too; only a file nobody was asked about takes its kind's default.
+    const scopingOrigin = new Map((prog?.scoping?.files ?? []).filter(f => f.origin).map(f => [f.name, f.origin!]));
     const add = (name: string, kind: string, rows: number, from: string, by: string) => {
-      derived.push({ name, kind, rows, from, uploadedBy: by, uploadedAt: 'at scoping', origin: defaultFileOrigin(kind) });
+      derived.push({ name, kind, rows, from, uploadedBy: by, uploadedAt: 'at scoping', origin: scopingOrigin.get(name) ?? defaultFileOrigin(kind) });
     };
     audit?.files.forEach(f => {
       add(
@@ -69,6 +73,9 @@ export function useAuditFiles(): AuditFile[] {
     prog?.entities.forEach((en: { name: string; tbFile?: string; tbLines?: number }) => {
       if (en.tbFile) add(en.tbFile, 'Trial balance', en.tbLines ?? 1240, `${en.name} · engagement scoping`, eng.preparer);
     });
+    // Every file uploaded at engagement creation, the general ledgers included —
+    // a company's TB above already carries its own name, and dedupe drops repeats.
+    prog?.scoping?.files.forEach(f => add(f.name, f.kind === 'tb' ? 'Trial balance' : 'General ledger', f.kind === 'tb' ? 1240 : 18432, 'Engagement creation', eng.preparer));
     if (prog) add(`general_ledger_${prog.fy}.csv`, 'General ledger', 18432, 'Engagement scoping', eng.preparer);
     racmDocs.forEach(d => add(d.name, 'RACM / SOP', 480, d.process ? `${d.process} RACM` : 'RACM page', eng.preparer));
     // Files a population already names as its source. A registry that leaves out
@@ -97,9 +104,9 @@ export function useAuditFiles(): AuditFile[] {
     // very files the call says it should ("वर्कफ्लो लिंकिंग में जो इनपुट फाइल्स
     // हैं, वो सारी फाइल्स की लिस्ट").
     eng.controls.forEach(c => {
-      c.operating.steps.forEach(s => {
-        if (!s.inputFile?.name) return;
-        const name = s.inputFile.name;
+      c.operating.steps.forEach(s => requiredFilesOf(s, c).forEach(({ file }) => {
+        if (!file?.name) return;
+        const name = file.name;
         // A PDF has no rows to count, so it is given none — the row count is
         // suppressed downstream by name, and a fabricated number here would be
         // a number somebody has to explain. Structured files get a stable one.
@@ -108,11 +115,11 @@ export function useAuditFiles(): AuditFile[] {
           : 400 + (name.split('').reduce((a, ch) => (a * 31 + ch.charCodeAt(0)) >>> 0, 7) % 4200);
         derived.push({
           name, kind: guessFileKind(name), rows,
-          from: `${s.workflowName ?? 'Workflow'} · ${c.id}`,
-          uploadedBy: s.inputFile.uploadedBy || eng.preparer, uploadedAt: s.inputFile.uploadedAt || 'at scoping',
+          from: `${s.code} required file · ${c.id}`,
+          uploadedBy: file.uploadedBy || eng.preparer, uploadedAt: file.uploadedAt || 'at scoping',
           origin: fileOriginOf(eng, name).origin,
         });
-      });
+      }));
     });
 
     const registry = eng.fileRegistry ?? [];

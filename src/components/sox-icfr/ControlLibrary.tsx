@@ -2,7 +2,8 @@ import { useEffect, useMemo, useState } from 'react';
 import { AnimatePresence } from 'motion/react';
 import {
   Search, Plus, Building2, Rows3, Star, FileText, X, Send, LayoutGrid, List,
-  FlaskConical, ListChecks, Sparkles, Workflow, History, ArrowRight, Clock,
+  FlaskConical, ListChecks, Sparkles, Workflow, History, ArrowRight, Clock, Table2,
+  Check, Circle, ClipboardCheck, MessageSquareWarning, RotateCcw, CheckCircle2,
 } from 'lucide-react';
 import { FilterSelect, HeaderFilter, triggerCls } from '../shared/FilterSelect';
 import Drawer from '../shared/Drawer';
@@ -11,10 +12,12 @@ import { useAuditControls } from './useAuditControls';
 import { useIcfr } from './store';
 import { auditCovers, isOwnerOf, ownersOf } from './auditScope';
 import {
-  conclusionOf, controlCode, courtFor, entityCell, failedItgcs, isAwaitingReview, isControlFinal, isEngagementLocked, isItgcDependent, isTestDueNow,
+  conclusionOf, controlCode, courtFor, entityCell, failedItgcs, isAwaitingReview, isControlFinal, isControlLocked, isEngagementLocked, isItgcDependent, isTestDueNow,
+  requiredFilesOf,
 } from './helpers';
 import { ItgcCascadeBanner, NatureChip, Th, Tickmark } from './parts';
 import NewControlPanel from './NewControlPanel';
+import AddRacmModal from './AddRacmModal';
 import WorkingPaperModal from './WorkingPaperModal';
 import { useToast } from '../shared/Toast';
 import { cn } from '../../lib/cn';
@@ -25,7 +28,7 @@ import type { AuditRecord, Control, IcfrEngagement, RunKind, RunRecord } from '.
  *
  * What the engagement-level Control Library answers here is "what is this
  * control made of and what has happened to it": how many attributes it is
- * tested against, how many of those a workflow evidences, what has been run on
+ * tested against, how many files those attributes ask for, what has been run on
  * it and when, and which audit cycles it sits in. Four facts, all of them
  * already in the store — nothing here is invented.
  *
@@ -57,15 +60,15 @@ export const KIND_META: Record<RunKind, { label: string; Icon: typeof FlaskConic
 
 // ── the four facts ───────────────────────────────────────────────────────────────
 
-/** Attributes, and how many of them a workflow evidences.
+/** Attributes, and how many files they are proven against in total.
  *
- *  Attribute-level only, deliberately: every seeded design consideration also
- *  carries a workflow, so counting those would add the same constant to every
- *  control and say nothing. Attributes are where mapping is a choice — it is
- *  what `mapStepWorkflow` writes — so that is the number worth showing. */
-export function attributeStats(c: Control): { attrs: number; mapped: number } {
+ *  Attribute-level only: each attribute names its own required files (the
+ *  RACM's Control Evidence, split per attribute), read through `requiredFilesOf`
+ *  so an attribute nobody has edited still counts its derived list. Uploads are
+ *  per audit, so this counts what is asked for, never what has arrived. */
+export function attributeStats(c: Control): { attrs: number; files: number } {
   const attrs = c.operating.steps.length;
-  return { attrs, mapped: c.operating.steps.filter(s => s.workflowId).length };
+  return { attrs, files: c.operating.steps.reduce((n, s) => n + requiredFilesOf(s, c).length, 0) };
 }
 
 /** Every run this control appears in, newest first (the registry is stored that
@@ -80,12 +83,9 @@ export const outcomeIn = (r: RunRecord, controlId: string) => r.controls.find(rc
 export const auditsForControl = (eng: IcfrEngagement, c: Control): AuditRecord[] =>
   eng.audits.filter(a => auditCovers(a, c, eng.id));
 
-// ── filters ─────────────────────────────────────────────────────────────────────
-
-type Coverage = 'All' | 'full' | 'partial' | 'none' | 'run' | 'never';
 // ── Columns ─────────────────────────────────────────────────────────────────────
 //
-// The library's own lens (attributes, workflow coverage, where it has been used)
+// The library's own lens (attributes, where it has been used)
 // with the RACM columns the audit register grew. Widths and drag behaviour come
 // from the shared hook, so the two registers can never diverge on how they feel.
 const LIB_COLS = [
@@ -98,20 +98,38 @@ const LIB_COLS = [
   { key: 'objective', w: 250 },
   { key: 'nature', w: 108 },
   { key: 'attributes', w: 92 },
-  { key: 'workflows', w: 150 },
   { key: 'runs', w: 120 },
   { key: 'last', w: 180 },
+  { key: 'review', w: 210 },
 ] as const;
-const COLW_KEY = 'sox-library-colw';
 
-const COVERAGE_OPTIONS: { value: Coverage; label: string }[] = [
-  { value: 'All', label: 'All controls' },
-  { value: 'full', label: 'Every attribute mapped' },
-  { value: 'partial', label: 'Some attributes mapped' },
-  { value: 'none', label: 'No workflows mapped' },
-  { value: 'run', label: 'Has been run' },
-  { value: 'never', label: 'Never run' },
-];
+/** Pre-testing review (S11 follow-up) — the auditor approves each control, or
+ *  leaves a remark for its owner, before testing starts. It lived on the RACM
+ *  matrix page; with the engagement's RACM tab gone it lives on these rows. */
+type ReviewFilter = 'All' | 'Pending' | 'Approved' | 'Remark';
+const reviewStatusOf = (c: Control): Exclude<ReviewFilter, 'All'> => c.racmReview?.status ?? 'Pending';
+
+/** The review status on a row — pending, ready to test, or the remark itself. */
+function ReviewStatus({ c }: { c: Control }) {
+  const r = c.racmReview;
+  if (!r) return <span className="inline-flex items-center gap-1.5 text-[0.71875rem] text-ink-400"><Circle size={11} /> Pending review</span>;
+  if (r.status === 'Approved') {
+    // "ready to test", never a tested result — its own icon keeps it clear of the ✓ tickmarks
+    return (
+      <span className="flex flex-col gap-0.5 min-w-0">
+        <span className="inline-flex items-center gap-1 text-[0.71875rem] font-semibold text-compliant-700"><ClipboardCheck size={13} /> Ready to test</span>
+        <span className="text-[0.65625rem] text-ink-400 truncate" title={`Approved · ${r.by} · ${r.at}`}>{r.by} · {r.at}</span>
+      </span>
+    );
+  }
+  return (
+    <span className="flex flex-col gap-0.5 min-w-0">
+      <span className="inline-flex items-center gap-1 text-[0.71875rem] font-semibold text-high-700"><MessageSquareWarning size={13} /> Remark</span>
+      <span className="text-[0.65625rem] text-ink-500 truncate" title={r.remark}>{r.remark}</span>
+    </span>
+  );
+}
+const COLW_KEY = 'sox-library-colw';
 
 /** The Overview's counts still deep-link in. They are testing questions, so the
  *  lens has no dropdown for them — it honours the preset once and says so. */
@@ -163,7 +181,7 @@ function LibraryCard({ c, runs, audits, onOpen, selectable, selected, onToggle }
   onOpen: () => void;
   selectable?: boolean; selected?: boolean; onToggle?: () => void;
 }) {
-  const { attrs, mapped } = attributeStats(c);
+  const { attrs, files } = attributeStats(c);
 
   return (
     <div role="button" tabIndex={0} className={cn('ac-card text-left', selected && 'ring-2 ring-brand-200 border-brand-300')}
@@ -201,8 +219,8 @@ function LibraryCard({ c, runs, audits, onOpen, selectable, selected, onToggle }
           <div className="text-[0.65625rem] text-ink-500 font-medium mt-1.5">Attributes</div>
         </div>
         <div>
-          <div className={cn('text-[1.0625rem] font-bold tabular-nums leading-none', mapped === 0 ? 'text-ink-400' : 'text-ink-900')}>{mapped}</div>
-          <div className="text-[0.65625rem] text-ink-500 font-medium mt-1.5">Mapped</div>
+          <div className={cn('text-[1.0625rem] font-bold tabular-nums leading-none', files === 0 ? 'text-ink-400' : 'text-ink-900')}>{files}</div>
+          <div className="text-[0.65625rem] text-ink-500 font-medium mt-1.5">Required files</div>
         </div>
         <div>
           <div className={cn('text-[1.0625rem] font-bold tabular-nums leading-none', audits.length === 0 ? 'text-ink-400' : 'text-ink-900')}>{audits.length}</div>
@@ -297,15 +315,16 @@ export function RunHistoryDrawer({ c, runs, onClose, onOpenControl }: {
 // ── the tab ─────────────────────────────────────────────────────────────────────
 
 export default function ControlLibrary() {
-  const { eng, role, meOwner, openControl, requestDesignDocs, registerPreset, clearRegisterPreset } = useIcfr();
+  const { eng, role, meOwner, openControl, requestDesignDocs, registerPreset, clearRegisterPreset, openAuditId, approveRacmRows, remarkRacmRow, clearRacmReview } = useIcfr();
   const { addToast } = useToast();
   const [creating, setCreating] = useState(false);
+  // Add RACM (S11) — copy RACMs in from the Engagements page's RACM tab.
+  const [addingRacm, setAddingRacm] = useState(false);
   const [historyFor, setHistoryFor] = useState<string | null>(null);
   const [reportPreview, setReportPreview] = useState(false);
   const [q, setQ] = useState('');
   const [process, setProcess] = useState('All');
   const [nature, setNature] = useState('All');
-  const [coverage, setCoverage] = useState<Coverage>('All');
   // Parity with the audit register: stacked by process or by company, opening on
   // the table because the library is a working list, not a browse surface.
   const [groupBy, setGroupBy] = useState<GroupBy>('process');
@@ -315,6 +334,12 @@ export default function ControlLibrary() {
   const [ctype, setCtype] = useState('All');
   const [frequency, setFrequency] = useState('All');
   const [owner, setOwner] = useState('All');
+  const [review, setReview] = useState<ReviewFilter>('All');
+  /** The control the remark box is open for, and what's typed in it. */
+  const [remarkFor, setRemarkFor] = useState<Control | null>(null);
+  const [remarkText, setRemarkText] = useState('');
+  /** Approving over open remarks waits on this confirmation. */
+  const [bulkApproveIds, setBulkApproveIds] = useState<string[] | null>(null);
   const { widthOf, totalWidth, th } = useColumnWidths(COLW_KEY, LIB_COLS);
   const [sel, setSel] = useState<Set<string>>(new Set());
   // An Overview count arrives with intent. The lens honours it once as a chip
@@ -325,7 +350,10 @@ export default function ControlLibrary() {
   useEffect(() => {
     if (!registerPreset) return;
     if (registerPreset.process) setProcess(registerPreset.process);
-    if (registerPreset.view && registerPreset.view !== 'all') setPreset(registerPreset.view);
+    // "N controls awaiting your review" lands on the pending rows — a filter the
+    // Review column owns, not a one-off preset chip
+    if (registerPreset.view === 'pending-review') setReview('Pending');
+    else if (registerPreset.view && registerPreset.view !== 'all') setPreset(registerPreset.view);
     clearRegisterPreset();
   }, [registerPreset, clearRegisterPreset]);
 
@@ -361,25 +389,17 @@ export default function ControlLibrary() {
 
   const rail = useMemo(() => {
     const attrs = scoped.reduce((n, c) => n + attributeStats(c).attrs, 0);
-    const mapped = scoped.reduce((n, c) => n + attributeStats(c).mapped, 0);
+    const files = scoped.reduce((n, c) => n + attributeStats(c).files, 0);
     const runIds = new Set<string>();
     scoped.forEach(c => (runsBy.get(c.id) ?? []).forEach(r => runIds.add(r.id)));
-    return { attrs, mapped, runs: runIds.size };
+    return { attrs, files, runs: runIds.size };
   }, [scoped, runsBy]);
 
-  const matchesCoverage = (c: Control): boolean => {
-    if (coverage === 'All') return true;
-    const { attrs, mapped } = attributeStats(c);
-    if (coverage === 'full') return attrs > 0 && mapped === attrs;
-    if (coverage === 'partial') return mapped > 0 && mapped < attrs;
-    if (coverage === 'none') return mapped === 0;
-    const n = (runsBy.get(c.id) ?? []).length;
-    return coverage === 'run' ? n > 0 : n === 0;
-  };
   // The parked testing lens owned these predicates; the preset chip borrows them.
   const matchesPreset = (c: Control): boolean => {
     switch (preset) {
-      case 'due': return isTestDueNow(c);
+      // a year-end control the open audit holds back (A29) is pending, not due
+      case 'due': return isTestDueNow(c, eng.audits.find(a => a.id === openAuditId));
       case 'court': return courtFor(c, eng.tasks, eng.reviewNotes) === role;
       case 'design': return c.design.conclusion === 'Not tested';
       case 'design-done': return c.design.conclusion !== 'Not tested';
@@ -408,19 +428,19 @@ export default function ControlLibrary() {
       if (ctype !== 'All' && c.type !== ctype) return false;
       if (frequency !== 'All' && c.frequency !== frequency) return false;
       if (owner !== 'All' && !isOwnerOf(c, owner)) return false;
-      if (!matchesCoverage(c)) return false;
+      if (review !== 'All' && reviewStatusOf(c) !== review) return false;
       if (preset && !matchesPreset(c)) return false;
       if (term && !(`${controlCode(c)} ${c.description} ${rowEntities(c).join(' ')} ${c.process} ${c.subProcess} ${c.owner}`.toLowerCase().includes(term))) return false;
       return true;
     });
-  }, [scoped, q, process, nature, entity, ctype, frequency, owner, coverage, preset, runsBy, eng.tasks, eng.reviewNotes, role]);
+  }, [scoped, q, process, nature, entity, ctype, frequency, owner, review, preset, eng.tasks, eng.reviewNotes, role, openAuditId]);
 
   const groups = useMemo(() => {
     if (groupBy === 'none') return [{ key: '', rows: filtered }];
     const map = new Map<string, Control[]>();
     // A shared row files under every company it covers — see groupKeysOf.
     for (const c of filtered) for (const k of groupKeysOf(c, groupBy)) { if (!map.has(k)) map.set(k, []); map.get(k)!.push(c); }
-    return Array.from(map, ([key, rows]) => ({ key, rows: rows.sort((a, b) => controlCode(a).localeCompare(controlCode(b))) }));
+    return Array.from(map, ([key, rows]) => ({ key, rows: rows.sort((a, b) => a.process.localeCompare(b.process) || controlCode(a).localeCompare(controlCode(b))) }));
   }, [filtered, groupBy]);
 
   // PARKED (Aug 2026) — select-all went with the checkbox column. `toggle` stays:
@@ -429,7 +449,27 @@ export default function ControlLibrary() {
   //   const allSelected = allVisible.length > 0 && allVisible.every(id => sel.has(id));
   //   const toggleAll = () => setSel(allSelected ? new Set() : new Set(allVisible));
   const toggle = (id: string) => setSel(prev => { const n = new Set(prev); if (n.has(id)) n.delete(id); else n.add(id); return n; });
-  const clearFilters = () => { setQ(''); setProcess('All'); setNature('All'); setCoverage('All'); setEntity('All'); setCtype('All'); setFrequency('All'); setOwner('All'); setPreset(null); };
+  const clearFilters = () => { setQ(''); setProcess('All'); setNature('All'); setEntity('All'); setCtype('All'); setFrequency('All'); setOwner('All'); setReview('All'); setPreset(null); };
+
+  // Pre-testing review is the auditor's, on an open engagement, on a control that
+  // hasn't concluded — the store checks the same three.
+  const canReview = (c: Control) => role === 'auditor' && !isEngagementLocked(eng) && !isControlLocked(c);
+  const openRemark = (c: Control) => { setRemarkFor(c); setRemarkText(c.racmReview?.status === 'Remark' ? (c.racmReview.remark ?? '') : ''); };
+  const saveRemark = () => {
+    if (!remarkFor || !remarkText.trim()) return;
+    remarkRacmRow(remarkFor.id, remarkText.trim());
+    addToast({ type: 'success', title: 'Remark saved', message: `${controlCode(remarkFor)} — the owner sees it in their notifications.` });
+    setRemarkFor(null);
+  };
+  const approvable = Array.from(sel).filter(id => { const c = scoped.find(x => x.id === id); return !!c && canReview(c); });
+  const approveSelected = () => {
+    // approving over an open remark erases it — never silently
+    const remarked = approvable.filter(id => scoped.find(c => c.id === id)?.racmReview?.status === 'Remark').length;
+    if (remarked > 0) { setBulkApproveIds(approvable); return; }
+    approveRacmRows(approvable);
+    addToast({ type: 'success', title: `${approvable.length} control${approvable.length === 1 ? '' : 's'} ready to test`, message: 'Approved in pre-testing review.' });
+    setSel(new Set());
+  };
 
   const historyControl = historyFor ? scoped.find(c => c.id === historyFor) : undefined;
   const colSpan = LIB_COLS.length;
@@ -464,6 +504,11 @@ export default function ControlLibrary() {
         </div>
         <span className="w-px h-6 bg-canvas-border mx-0.5" aria-hidden />
         {role !== 'risk-owner' && <button onClick={() => setReportPreview(true)} title="Audit report — observations and the management action plan" className="h-9 px-3 inline-flex items-center gap-1.5 rounded-lg border border-canvas-border text-[0.78125rem] font-semibold text-ink-600 hover:text-ink-900 hover:border-ink-300 transition-colors cursor-pointer"><FileText size={14} /> Audit report</button>}
+        {/* Add RACM (S11) — the engagement's RACM tab is parked, so this is where
+            its controls come in from: RACMs picked off the Engagements page's
+            RACM tab and copied. Same gate as New control, kept left of it so
+            the primary action stays last. */}
+        {role === 'auditor' && !isEngagementLocked(eng) && <button onClick={() => setAddingRacm(true)} title="Copy controls in from RACMs on the Engagements page's RACM tab" className="h-9 px-3 inline-flex items-center gap-1.5 rounded-lg border border-canvas-border text-[0.78125rem] font-semibold text-ink-600 hover:text-ink-900 hover:border-ink-300 transition-colors cursor-pointer"><Table2 size={14} /> Add RACM</button>}
         {role === 'auditor' && !isEngagementLocked(eng) && <button onClick={() => setCreating(true)} className="h-9 px-3.5 inline-flex items-center gap-1.5 rounded-lg bg-brand-600 text-white text-[0.78125rem] font-semibold hover:bg-brand-700 transition-colors cursor-pointer"><Plus size={15} /> New control</button>}
       </div>
 
@@ -472,7 +517,7 @@ export default function ControlLibrary() {
         {[
           { k: role === 'risk-owner' ? 'Controls in your name' : 'Controls', v: String(scoped.length), t: 'text-ink-900' },
           { k: 'Attributes', v: String(rail.attrs), t: 'text-ink-900' },
-          { k: 'Workflows mapped', v: `${rail.mapped} of ${rail.attrs}`, t: rail.mapped === rail.attrs && rail.attrs > 0 ? 'text-compliant-700' : 'text-evidence-700' },
+          { k: 'Required files', v: String(rail.files), t: 'text-ink-900' },
           { k: 'Runs logged', v: String(rail.runs), t: 'text-brand-700' },
           { k: 'Audit runs', v: String(eng.audits.length), t: 'text-mitigated-700' },
         ].map(s => (
@@ -529,7 +574,7 @@ export default function ControlLibrary() {
         <div>
           {groups.map(g => {
             const attrs = g.rows.reduce((n, c) => n + attributeStats(c).attrs, 0);
-            const mapped = g.rows.reduce((n, c) => n + attributeStats(c).mapped, 0);
+            const files = g.rows.reduce((n, c) => n + attributeStats(c).files, 0);
             return (
               <div key={g.key || 'flat'} className="shelf">
                 {g.key && (
@@ -537,7 +582,7 @@ export default function ControlLibrary() {
                     <span className="shelf-swatch" style={{ background: spineColor(g.key) }} />
                     <span className="shelf-title">{g.key}</span>
                     <span className="text-[0.71875rem] text-ink-400 font-medium">· {g.rows.length}</span>
-                    <span className="text-[0.65625rem] font-semibold text-ink-400 hidden md:inline">{attrs} attributes · {mapped} mapped to workflows</span>
+                    <span className="text-[0.65625rem] font-semibold text-ink-400 hidden md:inline">{attrs} attributes · {files} required files</span>
                     <span className="shelf-board" />
                   </div>
                 )}
@@ -574,12 +619,11 @@ export default function ControlLibrary() {
                 <Th {...th('objective')} title="What the control is for — the outcome it secures">Objective</Th>
                 <Th {...th('nature')}><HeaderFilter label="Nature" value={nature} options={['All', 'Manual', 'Automated', 'IT-dependent']} allLabel="All natures" onChange={setNature} ariaLabel="Filter by nature" /></Th>
                 <Th {...th('attributes')} title="Test attributes this control is proven against">Attributes</Th>
-                <Th {...th('workflows')}>
-                  <HeaderFilter label="Workflows" value={coverage} engaged={coverage !== 'All'}
-                    options={COVERAGE_OPTIONS} onChange={v => setCoverage(v as Coverage)} ariaLabel="Filter by workflow coverage" />
-                </Th>
                 <Th {...th('runs')} title="Audit cycles whose scope covers this control">Audit runs</Th>
                 <Th {...th('last')}>Last run</Th>
+                <Th {...th('review')} title="Pre-testing review — approve each control, or leave a remark for its owner, before testing starts">
+                  <HeaderFilter label="Review" value={review} options={['All', 'Pending', 'Approved', 'Remark']} allLabel="All reviews" onChange={v => setReview(v as ReviewFilter)} ariaLabel="Filter by pre-testing review" />
+                </Th>
               </tr>
             </thead>
             <tbody>
@@ -589,14 +633,13 @@ export default function ControlLibrary() {
                     <tr className="reg-group-row"><td colSpan={colSpan}>
                       <span className="inline-flex items-center gap-2">{g.key}<span className="text-ink-400 font-medium">· {g.rows.length}</span>
                         <span className="ml-2 text-[0.65625rem] font-semibold text-ink-400">
-                          {g.rows.reduce((n, c) => n + attributeStats(c).attrs, 0)} attributes · {g.rows.reduce((n, c) => n + attributeStats(c).mapped, 0)} mapped to workflows
+                          {g.rows.reduce((n, c) => n + attributeStats(c).attrs, 0)} attributes · {g.rows.reduce((n, c) => n + attributeStats(c).files, 0)} required files
                         </span>
                       </span>
                     </td></tr>
                   )}
                   {g.rows.map(c => {
-                    const { attrs, mapped } = attributeStats(c);
-                    const pct = attrs === 0 ? 0 : Math.round((mapped / attrs) * 100);
+                    const { attrs } = attributeStats(c);
                     const rs = runsBy.get(c.id) ?? [];
                     const as = auditsBy.get(c.id) ?? [];
                     const last = rs[0];
@@ -616,7 +659,7 @@ export default function ControlLibrary() {
                           </div>
                           {/* process and owner have their own columns now — saying them
                               twice on the same row is noise. */}
-                          <div className="text-[0.6875rem] text-ink-400 mt-0.5">{controlCode(c)} · {c.subProcess}</div>
+                          <div className="text-[0.6875rem] text-ink-400 mt-0.5">{[controlCode(c), c.subProcess].filter(Boolean).join(' · ')}</div>
                         </td>
                         <td className="text-[0.71875rem] text-ink-700">
                           {entityCell(c)
@@ -631,12 +674,6 @@ export default function ControlLibrary() {
                         </td>
                         <td><NatureChip nature={c.nature} small /></td>
                         <td className="tabular-nums font-semibold text-ink-800">{attrs}</td>
-                        <td>
-                          <span className="cell-track">
-                            <span className={cn('text-[0.6875rem] font-semibold tabular-nums', mapped === 0 ? 'text-ink-400' : 'text-ink-700')}>{mapped} of {attrs}</span>
-                            <span className="meter" aria-hidden><span style={{ width: `${pct}%`, background: mapped === attrs && attrs > 0 ? 'var(--color-compliant-500)' : mapped === 0 ? 'var(--color-ink-300)' : 'var(--color-evidence-500)' }} /></span>
-                          </span>
-                        </td>
                         <td>
                           {as.length === 0
                             ? <span className="text-ink-400 text-[0.6875rem]">None yet</span>
@@ -660,6 +697,30 @@ export default function ControlLibrary() {
                             </button>
                           ) : <span className="text-ink-400 text-[0.6875rem]">Never run</span>}
                         </td>
+                        {/* Pre-testing review — the tick feeds the bulk bar's Approve; the
+                            buttons act on this row alone. Nothing here opens the control. */}
+                        <td onClick={e => e.stopPropagation()} onKeyDown={e => e.stopPropagation()}>
+                          <div className="flex items-start gap-2 min-w-0">
+                            {canReview(c) && (
+                              <input type="checkbox" checked={sel.has(c.id)} onChange={() => toggle(c.id)}
+                                className="mt-0.5 shrink-0 cursor-pointer accent-brand-600" aria-label={`Select ${controlCode(c)} for review`} />
+                            )}
+                            <div className="min-w-0 flex-1"><ReviewStatus c={c} /></div>
+                            {canReview(c) && (
+                              <div className="flex items-center gap-1 shrink-0">
+                                {c.racmReview?.status === 'Approved' ? (
+                                  <button onClick={() => clearRacmReview(c.id)} title="Withdraw approval" aria-label={`Withdraw approval on ${controlCode(c)}`}
+                                    className="h-7 w-7 inline-flex items-center justify-center rounded-md border border-canvas-border text-ink-400 hover:text-ink-700 hover:border-ink-300 transition-colors cursor-pointer"><RotateCcw size={12} /></button>
+                                ) : (
+                                  <button onClick={() => approveRacmRows([c.id])} title={c.racmReview?.status === 'Remark' ? 'Approve — clears the remark' : 'Approve — ready to test'} aria-label={`Approve ${controlCode(c)}`}
+                                    className="h-7 w-7 inline-flex items-center justify-center rounded-md border border-canvas-border text-compliant-700 hover:bg-compliant-50 hover:border-compliant-300 transition-colors cursor-pointer"><Check size={13} /></button>
+                                )}
+                                <button onClick={() => openRemark(c)} title={c.racmReview?.status === 'Remark' ? 'Edit the remark' : 'Leave a remark for the owner'} aria-label={`Remark on ${controlCode(c)}`}
+                                  className="h-7 w-7 inline-flex items-center justify-center rounded-md border border-canvas-border text-high-700 hover:bg-high-50 hover:border-high-200 transition-colors cursor-pointer"><MessageSquareWarning size={12} /></button>
+                              </div>
+                            )}
+                          </div>
+                        </td>
                       </tr>
                     );
                   })}
@@ -680,6 +741,7 @@ export default function ControlLibrary() {
         <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-30 flex items-center gap-3 bg-ink-900 text-white rounded-2xl pl-4 pr-2.5 py-2.5 shadow-[0_12px_40px_-12px_rgba(15,8,30,0.6)]">
           <span className="text-[0.78125rem] font-semibold">{sel.size} selected</span>
           <span className="w-px h-5 bg-white/20" />
+          {approvable.length > 0 && <button onClick={approveSelected} className="h-8 px-3 inline-flex items-center gap-1.5 rounded-lg bg-white/10 hover:bg-white/20 text-[0.78125rem] font-semibold transition-colors cursor-pointer"><CheckCircle2 size={14} /> Approve {approvable.length}</button>}
           {role === 'auditor' && <button onClick={() => { requestDesignDocs(Array.from(sel)); addToast({ type: 'success', title: 'Requests sent', message: `Document requests raised on ${sel.size} control${sel.size === 1 ? '' : 's'} — the owners see them as tasks.` }); setSel(new Set()); }} className="h-8 px-3 inline-flex items-center gap-1.5 rounded-lg bg-white/10 hover:bg-white/20 text-[0.78125rem] font-semibold transition-colors cursor-pointer"><FileText size={14} /> Request design documents</button>}
           <button onClick={() => { openControl(Array.from(sel)[0]); setSel(new Set()); }} className="h-8 px-3 inline-flex items-center gap-1.5 rounded-lg bg-white/10 hover:bg-white/20 text-[0.78125rem] font-semibold transition-colors cursor-pointer"><Send size={14} /> Open first</button>
           <button onClick={() => setSel(new Set())} className="h-8 w-8 inline-flex items-center justify-center rounded-lg hover:bg-white/15 transition-colors cursor-pointer" aria-label="Clear selection"><X size={15} /></button>
@@ -697,7 +759,63 @@ export default function ControlLibrary() {
         )}
       </AnimatePresence>
 
+      {/* approving over open remarks — say what gets erased before it is */}
+      {bulkApproveIds && (() => {
+        const remarked = bulkApproveIds.filter(id => scoped.find(c => c.id === id)?.racmReview?.status === 'Remark').length;
+        return (
+          <div className="modal-backdrop" onClick={() => setBulkApproveIds(null)}>
+            <div className="modal" onClick={e => e.stopPropagation()} role="dialog" aria-modal="true" aria-labelledby="bulk-approve-title"
+              onKeyDown={e => { if (e.key === 'Escape') setBulkApproveIds(null); }}>
+              <div className="px-5 pt-4 pb-3 border-b border-canvas-border">
+                <div className="flex items-center justify-between gap-3">
+                  <h2 id="bulk-approve-title" className="text-[0.9375rem] font-semibold text-ink-900">Approve {bulkApproveIds.length} control{bulkApproveIds.length === 1 ? '' : 's'}?</h2>
+                  <button onClick={() => setBulkApproveIds(null)} className="h-7 w-7 inline-flex items-center justify-center rounded-md text-ink-400 hover:text-ink-700 cursor-pointer" aria-label="Close"><X size={15} /></button>
+                </div>
+              </div>
+              <div className="p-5">
+                <p className="text-[0.78125rem] text-ink-600 leading-relaxed">{remarked} of them {remarked === 1 ? 'has an open remark' : 'have open remarks'} — approving clears {remarked === 1 ? 'it' : 'them'} from the record.</p>
+                <div className="mt-4 flex items-center justify-end gap-2">
+                  <button onClick={() => setBulkApproveIds(null)} autoFocus className="h-9 px-3.5 rounded-lg border border-canvas-border text-[0.78125rem] font-semibold text-ink-600 hover:text-ink-900 cursor-pointer">Cancel</button>
+                  <button onClick={() => { approveRacmRows(bulkApproveIds); addToast({ type: 'success', title: `${bulkApproveIds.length} control${bulkApproveIds.length === 1 ? '' : 's'} ready to test`, message: 'Approved in pre-testing review.' }); setSel(new Set()); setBulkApproveIds(null); }}
+                    className="h-9 px-3.5 rounded-lg bg-compliant-600 text-white text-[0.78125rem] font-semibold hover:bg-compliant-700 transition-colors cursor-pointer inline-flex items-center gap-1.5"><CheckCircle2 size={13} /> Approve anyway</button>
+                </div>
+              </div>
+            </div>
+          </div>
+        );
+      })()}
+
+      {/* remark box — what must change before the control can be approved */}
+      {remarkFor && (
+        <div className="modal-backdrop" onClick={() => setRemarkFor(null)}>
+          <div className="modal" onClick={e => e.stopPropagation()} role="dialog" aria-modal="true" aria-labelledby="remark-title"
+            onKeyDown={e => { if (e.key === 'Escape') setRemarkFor(null); }}>
+            <div className="px-5 pt-4 pb-3 border-b border-canvas-border">
+              <div className="flex items-center justify-between gap-3">
+                <h2 id="remark-title" className="text-[0.9375rem] font-semibold text-ink-900">Remark — <span className="wp-ref">{controlCode(remarkFor)}</span></h2>
+                <button onClick={() => setRemarkFor(null)} className="h-7 w-7 inline-flex items-center justify-center rounded-md text-ink-400 hover:text-ink-700 cursor-pointer" aria-label="Close"><X size={15} /></button>
+              </div>
+              <p className="text-[0.75rem] text-ink-500 mt-1 line-clamp-2">{remarkFor.description}</p>
+            </div>
+            <div className="p-5">
+              <label htmlFor="remark-text" className="sr-only">Remark</label>
+              <textarea id="remark-text" value={remarkText} onChange={e => setRemarkText(e.target.value)} rows={4} autoFocus
+                placeholder="What must change before this control can be approved?"
+                className="w-full rounded-lg border border-canvas-border bg-canvas-elevated p-3 text-[0.78125rem] text-ink-800 placeholder:text-ink-400 focus:outline-none focus:ring-2 focus:ring-brand-200 resize-none" />
+              <div className="mt-3 flex items-center justify-end gap-2">
+                {remarkFor.racmReview && (
+                  <button onClick={() => { clearRacmReview(remarkFor.id); setRemarkFor(null); }} className="h-9 px-3 mr-auto text-[0.78125rem] font-semibold text-ink-500 hover:text-ink-800 cursor-pointer">Clear review</button>
+                )}
+                <button onClick={() => setRemarkFor(null)} className="h-9 px-3.5 rounded-lg border border-canvas-border text-[0.78125rem] font-semibold text-ink-600 hover:text-ink-900 cursor-pointer">Cancel</button>
+                <button onClick={saveRemark} disabled={!remarkText.trim()} className="h-9 px-3.5 rounded-lg bg-brand-600 text-white text-[0.78125rem] font-semibold hover:bg-brand-700 disabled:opacity-40 transition-colors cursor-pointer">Save remark</button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
       {creating && <NewControlPanel onClose={() => setCreating(false)} />}
+      {addingRacm && <AddRacmModal onClose={() => setAddingRacm(false)} />}
       {/* the paper and the report follow the filters — only the visible controls go in */}
       {reportPreview && <WorkingPaperModal eng={eng} controls={filtered} report onClose={() => setReportPreview(false)} />}
     </div>

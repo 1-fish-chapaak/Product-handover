@@ -1,22 +1,39 @@
-import { useEffect, useMemo, useRef, useState, type JSX } from 'react';
-import { motion } from 'motion/react';
+import { useCallback, useEffect, useMemo, useRef, useState, type JSX } from 'react';
+import { createPortal } from 'react-dom';
+import { AnimatePresence, motion } from 'motion/react';
 import {
   Building2, Landmark, Upload, FileText, Check, Circle, Plus, Trash2, X,
   ArrowRight, ArrowLeft, Loader2, Info, Sparkles,
   ShieldCheck, ClipboardList, Zap, AlertCircle, AlertTriangle,
+  FileSpreadsheet, Grid3x3, Paperclip, Pencil, Minus, ChevronDown,
 } from 'lucide-react';
 import { SourceChips } from './ProgrammeView';
 import { FormSelect } from '../../shared/FilterSelect';
 import { OWNER_NAMES } from '../../../data/grc-domain';
-import { registerEngagement, type EngType, type ProcessCode } from '../../../data/engagements';
+import { registerEngagement, uniqueEngagementName, type EngType, type ProcessCode } from '../../../data/engagements';
 import { useAuditLog } from '../../../context/AdminDataContext';
+import type { FileOrigin } from '../../sox-icfr/types';
+import { cn } from '../../../lib/cn';
 import {
-  BASIS_OPTIONS, BEYOND_TB, QUAL_REASONS, SEED_ENTITIES,
+  BASIS_OPTIONS, BEYOND_TB, ENTITY_TYPES, QUAL_REASONS, SEED_ENTITIES,
   SEED_GROUP_NAME, SEED_QUAL_PICKS, SEED_TB_FILES, captionsForEntities,
   currentFyEnd, cycleYears, deriveRacms, entityShort, fmtCr, genCode,
-  type GroupEntity, type MaterialityBasis, type ProcessName, type QualPick,
+  type DerivedRacm, type GroupEntity, type MaterialityBasis, type ProcessName, type QualPick,
   type SoxProgramme, type TbCaption,
 } from './soxTestingData';
+import {
+  chainDepth, COVERAGE_TARGET, type DerivedScopeRow, deriveEntityScope, entityTotalsOf,
+  materialAccountsOf, normaliseProcess, type ProcessScopeRow, recommendProcesses,
+  sameCompany, type ScopeEntityRow, SOX_MAPPING_PROCESSES,
+} from '../../sox-icfr/auditScope';
+import {
+  clashSummary, controlIdClashes, copyRacmControls, markRacmsUsed, racmStatus, useRacmLibrary, type LibraryRacm,
+} from '../../sox-icfr/racmLibrary';
+import CreateRacmFlow from '../../sox-icfr/CreateRacmFlow';
+// Upload RACM opens the RACM tab's own dialog, which is styled by the SOX
+// register sheet (.modal-backdrop / .modal). Imported here as well so the
+// dialog is dressed whichever screen opened this sheet.
+import '../../sox-icfr/register.css';
 
 /** Scoping step — PARKED (user ask). SOX creation is now identity + entities +
  *  a RACM attached to each entity; the trial balance and general ledger are
@@ -26,14 +43,43 @@ import {
  *  returns to STEPS at index 2, the `step === 2` block renders again, its gate
  *  re-enters `canContinue`, and the Skip-for-now footer button comes back with
  *  it. Entity RACMs register as `racm` attachments precisely so the step would
- *  return already satisfied instead of asking for the same file twice. */
+ *  return already satisfied instead of asking for the same file twice.
+ *
+ *  PARKED for good since S11: New engagement scopes on its own two steps now
+ *  (Materiality & TB, then Scope — below), and they occupy the indices this
+ *  step used to. Flipping the flag alone no longer restores it: STEPS, its
+ *  `step === 2` checks and its canContinue gate
+ *  (`entities named && allReqsSatisfied && inScope.length > 0`) would all need
+ *  re-keying first. */
 const SCOPING_STEP = false;
 
-const STEPS: readonly string[] = SCOPING_STEP
-  ? ['Type', 'Basics', 'Scoping', 'Review']
-  : ['Type', 'Basics', 'Review'];
-/** Review is always last — the index shifts when Scoping is parked. */
+/** S11 — materiality, the trial balance and process scope moved here from New
+ *  audit's first pass at it: the engagement is scoped once, when it is created,
+ *  and picks its RACMs from the RACM tab on the Engagements page. */
+const STEPS: readonly string[] = ['Type', 'Basics', 'Materiality', 'Scope', 'Review'];
+const MAT_TB_STEP = 2;
+const SCOPE_STEP = 3;
+/** Review is always last. */
 const REVIEW_STEP = STEPS.length - 1;
+
+/** The Review content from before S11 — PARKED. It described an engagement
+ *  created with no RACM and no scope (a "no RACM yet" banner, a Documents card,
+ *  a RACMs grid derived from captions). Kept behind this flag rather than
+ *  deleted; Review now shows what Materiality & TB and Scope decided. */
+const PRE_S11_REVIEW = false;
+
+/** Where a significant deficiency starts, as a share of overall materiality.
+ *  Not asked at creation — it is the engagement's ground rule, set on
+ *  Materiality & scope afterwards — so the ladder on Materiality & TB shows the
+ *  band the engagement is created with (soxConfig.sdBandPct below). */
+const SD_BAND_PCT = 20;
+
+/** ₹ Cr in, readable money out — under a crore reads as lakhs. The New audit
+ *  wizard's formatter, so the two scoping screens write money the same way. */
+const money = (cr: number) => (cr >= 1 ? `₹${cr.toFixed(2)} Cr` : `₹${(cr * 100).toFixed(1)} L`);
+
+/** "A, B and C" — for the footer lines that name what Continue waits on. */
+const andList = (names: string[]) => names.join(', ').replace(/, ([^,]*)$/, ' and $1');
 
 /** Single entity standing in for the company itself (the "no separate
  *  entities" checkbox). Kept off `ent-new-` so it never reads as hand-added. */
@@ -49,6 +95,9 @@ const basicsLabelCls = 'text-[0.6875rem] font-bold text-ink-500 uppercase tracki
 /** The same label without its own spacing — for a header row that carries the
  *  margin itself, so the label and the control beside it sit on one baseline. */
 const basicsLabelInlineCls = 'text-[0.6875rem] font-bold text-ink-500 uppercase tracking-wider';
+/** The New audit wizard's field, for the Materiality & TB step brought over
+ *  from it — the two scoping screens set the same rule with the same fields. */
+const matInputCls = 'w-full px-3 py-2 text-[0.8125rem] border border-canvas-border rounded-lg bg-white text-ink-900 outline-none focus:border-brand-400 focus:ring-2 focus:ring-brand-500/10 transition-all';
 
 /** ── The groups the sample org charts describe ─────────────────────────────
  *  One per document in docs/samples/. Upload a chart and its rows are what
@@ -62,7 +111,10 @@ const basicsLabelInlineCls = 'text-[0.6875rem] font-bold text-ink-500 uppercase 
  *  chart tells you that a list of names cannot, so each sample carries both.
  *
  *  Entities are authored in the order the chart reads — parent, then everything
- *  held beneath it — because the table indents rather than sorts. */
+ *  held beneath it — because the table indents rather than sorts.
+ *
+ *  Country is the jurisdiction the document gives each company, so it lands
+ *  with the row instead of being typed again. */
 interface SampleChart {
   /** Recognised off the uploaded file's NAME. A prototype stand-in for reading
    *  the document: uploads here carry no bytes, so the filename is the only
@@ -77,18 +129,20 @@ const MERIDIAN_CHART: SampleChart = {
   match: /meridian/i,
   groupName: 'Meridian Global Holdings, Inc. (NYSE: MGH)',
   entities: [
-    { id: 'ent-mgh', name: 'Meridian Global Holdings, Inc.', type: 'Holding', ownership: 100 },
-    { id: 'ent-mfs', name: 'Meridian Freight Systems LLC', type: 'Subsidiary', ownership: 100, parentId: 'ent-mgh' },
-    { id: 'ent-mtm', name: 'Meridian Trucking Midwest LLC', type: 'Subsidiary', ownership: 100, parentId: 'ent-mfs' },
-    { id: 'ent-mlm', name: 'Meridian Last Mile LLC', type: 'Subsidiary', ownership: 80, parentId: 'ent-mfs' },
-    { id: 'ent-mac', name: 'Meridian Air Cargo, Inc.', type: 'Subsidiary', ownership: 100, parentId: 'ent-mgh' },
-    { id: 'ent-macc', name: 'Meridian Air Cargo Canada ULC', type: 'Subsidiary', ownership: 100, parentId: 'ent-mac' },
-    { id: 'ent-mcs', name: 'Meridian Charter Services LLC', type: 'Subsidiary', ownership: 100, parentId: 'ent-mac' },
-    { id: 'ent-mle', name: 'Meridian Logistics Europe B.V.', type: 'Subsidiary', ownership: 100, parentId: 'ent-mgh' },
-    { id: 'ent-mld', name: 'Meridian Logistics Deutschland GmbH', type: 'Subsidiary', ownership: 100, parentId: 'ent-mle' },
-    { id: 'ent-mlf', name: 'Meridian Logistics France SAS', type: 'Subsidiary', ownership: 95, parentId: 'ent-mle' },
-    { id: 'ent-mps', name: 'Meridian Port Services LLC', type: 'Subsidiary', ownership: 74, parentId: 'ent-mgh' },
-    { id: 'ent-gto', name: 'Gulf Terminal Operations LLC', type: 'Subsidiary', ownership: 100, parentId: 'ent-mps' },
+    { id: 'ent-mgh', name: 'Meridian Global Holdings, Inc.', type: 'Holding', ownership: 100, country: 'United States' },
+    { id: 'ent-mfs', name: 'Meridian Freight Systems LLC', type: 'Subsidiary', ownership: 100, parentId: 'ent-mgh', country: 'United States' },
+    { id: 'ent-mtm', name: 'Meridian Trucking Midwest LLC', type: 'Subsidiary', ownership: 100, parentId: 'ent-mfs', country: 'United States' },
+    { id: 'ent-mlm', name: 'Meridian Last Mile LLC', type: 'Subsidiary', ownership: 80, parentId: 'ent-mfs', country: 'United States' },
+    { id: 'ent-mac', name: 'Meridian Air Cargo, Inc.', type: 'Subsidiary', ownership: 100, parentId: 'ent-mgh', country: 'United States' },
+    { id: 'ent-macc', name: 'Meridian Air Cargo Canada ULC', type: 'Subsidiary', ownership: 100, parentId: 'ent-mac', country: 'Canada' },
+    { id: 'ent-mcs', name: 'Meridian Charter Services LLC', type: 'Subsidiary', ownership: 100, parentId: 'ent-mac', country: 'United States' },
+    { id: 'ent-mle', name: 'Meridian Logistics Europe B.V.', type: 'Subsidiary', ownership: 100, parentId: 'ent-mgh', country: 'Netherlands' },
+    { id: 'ent-mld', name: 'Meridian Logistics Deutschland GmbH', type: 'Subsidiary', ownership: 100, parentId: 'ent-mle', country: 'Germany' },
+    { id: 'ent-mlf', name: 'Meridian Logistics France SAS', type: 'Subsidiary', ownership: 95, parentId: 'ent-mle', country: 'France' },
+    { id: 'ent-mps', name: 'Meridian Port Services LLC', type: 'Subsidiary', ownership: 74, parentId: 'ent-mgh', country: 'United States' },
+    // Not the Gulf states the name suggests — the chart puts it in Texas, USA,
+    // beside the port operation that holds it.
+    { id: 'ent-gto', name: 'Gulf Terminal Operations LLC', type: 'Subsidiary', ownership: 100, parentId: 'ent-mps', country: 'United States' },
   ],
 };
 
@@ -103,14 +157,14 @@ const ALTURA_CHART: SampleChart = {
   match: /altura/i,
   groupName: 'Altura Infra Holdings Ltd (Listed)',
   entities: [
-    { id: 'ent-aih', name: 'Altura Infra Holdings Limited', type: 'Holding', ownership: 100 },
-    { id: 'ent-aso', name: 'Altura Solar One Pvt Ltd', type: 'Subsidiary', ownership: 100, parentId: 'ent-aih' },
-    { id: 'ent-awt', name: 'Altura Wind Two Pvt Ltd', type: 'Subsidiary', ownership: 100, parentId: 'ent-aih' },
-    { id: 'ent-aro', name: 'Altura Roadways Pvt Ltd', type: 'Subsidiary', ownership: 100, parentId: 'ent-aih' },
-    { id: 'ent-atr', name: 'Altura Transmission Pvt Ltd', type: 'Subsidiary', ownership: 74, parentId: 'ent-aih' },
-    { id: 'ent-asm', name: 'Altura Smart Metering Pvt Ltd', type: 'Subsidiary', ownership: 100, parentId: 'ent-atr' },
-    { id: 'ent-awu', name: 'Altura Water Utilities Pvt Ltd', type: 'Subsidiary', ownership: 51, parentId: 'ent-aih' },
-    { id: 'ent-alp', name: 'Altura Logistics Parks Pvt Ltd', type: 'Subsidiary', ownership: 100, parentId: 'ent-aih' },
+    { id: 'ent-aih', name: 'Altura Infra Holdings Limited', type: 'Holding', ownership: 100, country: 'India' },
+    { id: 'ent-aso', name: 'Altura Solar One Pvt Ltd', type: 'Subsidiary', ownership: 100, parentId: 'ent-aih', country: 'India' },
+    { id: 'ent-awt', name: 'Altura Wind Two Pvt Ltd', type: 'Subsidiary', ownership: 100, parentId: 'ent-aih', country: 'India' },
+    { id: 'ent-aro', name: 'Altura Roadways Pvt Ltd', type: 'Subsidiary', ownership: 100, parentId: 'ent-aih', country: 'India' },
+    { id: 'ent-atr', name: 'Altura Transmission Pvt Ltd', type: 'Subsidiary', ownership: 74, parentId: 'ent-aih', country: 'India' },
+    { id: 'ent-asm', name: 'Altura Smart Metering Pvt Ltd', type: 'Subsidiary', ownership: 100, parentId: 'ent-atr', country: 'India' },
+    { id: 'ent-awu', name: 'Altura Water Utilities Pvt Ltd', type: 'Subsidiary', ownership: 51, parentId: 'ent-aih', country: 'India' },
+    { id: 'ent-alp', name: 'Altura Logistics Parks Pvt Ltd', type: 'Subsidiary', ownership: 100, parentId: 'ent-aih', country: 'India' },
   ],
 };
 
@@ -200,8 +254,9 @@ const yearLabel = (basis: 'fy' | 'cy', end: number) =>
   basis === 'fy' ? `FY ${end - 1}-${String(end).slice(-2)}` : `CY ${end}`;
 
 /** Formats an org chart is realistically kept in. Deliberately wide: whatever
- *  the client has is what we take. */
-const ORG_CHART_ACCEPT = '.pdf,.png,.jpg,.jpeg,.webp,.gif,.svg,.vsd,.vsdx,.vsdm,.ppt,.pptx,.drawio,image/*,application/pdf';
+ *  the client has is what we take — a spreadsheet of companies (Excel / CSV)
+ *  as much as a drawn chart (image, Visio, PDF, PowerPoint, draw.io). */
+const ORG_CHART_ACCEPT = '.xlsx,.xls,.csv,.pdf,.png,.jpg,.jpeg,.webp,.gif,.svg,.vsd,.vsdx,.vsdm,.ppt,.pptx,.drawio,image/*,application/pdf,text/csv';
 
 const TYPE_TILES: { type: EngType; icon: JSX.Element; tagline: string; tint: string; ring: string; iconWrap: string }[] = [
   { type: 'SOX / ICFR',     icon: <ShieldCheck size={22} />,    tagline: 'SOX 404 / ICFR — scoping, materiality rules, design + operating effectiveness, deficiency evaluation', tint: 'bg-brand-50/70 hover:bg-brand-50 text-brand-700 border-brand-200',          ring: 'ring-brand-600 ring-offset-2 ring-offset-canvas-elevated',     iconWrap: 'bg-brand-600 text-white' },
@@ -220,7 +275,11 @@ const BEYOND_TB_CARD = false;
  *  add 'Qualitative' back after 'Materiality' in STEPS, give the step its
  *  canContinue entry back (inScope.length > 0) and re-key the step checks
  *  (qual block → step === 3, review → step === 4). The seeded qualitative
- *  picks still scope in silently, so the derivation numbers stay unchanged. */
+ *  picks still scope in silently, so the derivation numbers stay unchanged.
+ *
+ *  S11: qualitative picks are made per PROCESS now, on the Scope step's
+ *  Processes panel (reason from QUAL_REASONS + a note). This caption-level
+ *  overlay stays parked and feeds nothing the engagement is created with. */
 const QUAL_STEP = false;
 
 /** Trial-balance upload on the Scoping step — was briefly parked, then the
@@ -234,7 +293,11 @@ const TB_UPLOAD = true;
  *  benchmark/pct + empty-scope gate back to its own canContinue entry.
  *  The seeded basis defaults (PBT, 75/5) still set the thresholds, so the
  *  derivation and the created programme's materiality are unchanged — the
- *  review step keeps showing the resulting ladder. */
+ *  review step keeps showing the resulting ladder.
+ *
+ *  S11: superseded rather than restored — the rule is asked again on the
+ *  Materiality & TB step, in New audit's layout, and reads the same state
+ *  (basis / benchmark / pct / pmPct / cttPct). */
 const MATERIALITY_STEP = false;
 
 /** Year type (Financial / Calendar) picker — PARKED from the creation flow.
@@ -249,6 +312,14 @@ const YEAR_TYPE_PICKER = false;
  *  store on the programme, and Review keeps showing the cycle. Flip to bring
  *  the field (and its annual-cycle explainer) back. */
 const AUDIT_PERIOD_FIELD = false;
+
+/** "Map material accounts to processes" table on Materiality & TB — PARKED
+ *  (user ask, 17 Sep: scoping happens on the Scope step, by entity and by
+ *  process). The mapping still runs on Ira's suggestion from each account's
+ *  caption, so the Scope step's process recommendation and the saved
+ *  accountProcesses are unchanged. Flip to bring the table back; the Scope
+ *  step's "you mapped" wording follows this flag. */
+const ACCOUNT_MAPPING = false;
 
 const yeSegActive = 'border-brand-500 bg-brand-50 text-brand-700 ring-2 ring-brand-500/20';
 const yeSegIdle = 'border-border bg-white text-text-secondary hover:bg-surface-2';
@@ -276,6 +347,10 @@ const PROCESS_NAMES: ProcessName[] = [
   'Order to Cash', 'Procure to Pay', 'Inventory', 'Fixed Assets',
   'Payroll (Hire to Retire)', 'Treasury', 'Tax',
 ];
+
+/** Longest engagement name Basics accepts (trimmed). Checked, never cut — a
+ *  maxLength would silently clip a pasted name and the user would never see why. */
+const NAME_MAX = 200;
 
 interface Props {
   onCancel: () => void;
@@ -367,6 +442,9 @@ export default function ScopingWizard({ onCancel, onCreated, typePreselected, on
   // The GL / TBs are no longer asked for here — they arrive on the audit that
   // tests them, captured by the New audit wizard (the audit's Configuration tab
   // is parked; see SOX_TABS in SoxIcfrApp).
+  // PARKED since S11: nothing sets this — Materiality & TB and Scope have no
+  // skip, and create() records scopingSkipped as undefined. Kept for the parked
+  // Scoping step's "Skip for now" button.
   const [scopingSkipped, setScopingSkipped] = useState(false);
   const skipScoping = () => { setScopingSkipped(true); setStep(3); };
 
@@ -415,6 +493,421 @@ export default function ScopingWizard({ onCancel, onCreated, typePreselected, on
     // eslint-disable-next-line react-hooks/exhaustive-deps
     [inScope]);
 
+  // ══ S11 · Materiality & TB ═══════════════════════════════════════════════
+  // New audit's "Materiality & files" step, adapted to creation. There is no
+  // engagement yet, so nothing can be looked up by id: the companies are the
+  // Basics table, and their trial-balance captions are `captions` above.
+
+  /** Picking a basis restarts its benchmark and % from that basis's defaults. */
+  const changeBasis = (id: MaterialityBasis) => {
+    const opt = BASIS_OPTIONS.find(b => b.id === id)!;
+    setBasis(id);
+    setBenchmark(opt.defaultBenchmark);
+    setPct(opt.defaultPct);
+  };
+  /** Performance materiality — what material accounts are listed against, and
+   *  what the company derivation on Scope weighs every company against. */
+  const perf = overallCr * pmPct / 100;
+  const trivial = overallCr * cttPct / 100;
+  const sd = overallCr * SD_BAND_PCT / 100;
+  const LADDER = [
+    { label: 'Clearly trivial', band: `≤ ${money(trivial)}`, tone: 'text-ink-500 bg-paper-50 border-canvas-border' },
+    { label: 'Deficiency', band: `> ${money(trivial)} and < ${money(sd)}`, tone: 'text-mitigated-700 bg-mitigated-50/50 border-mitigated-200' },
+    { label: 'Significant deficiency', band: `≥ ${money(sd)} · ${SD_BAND_PCT}% of overall`, tone: 'text-high-700 bg-high-50/50 border-high-200' },
+    { label: 'Material weakness', band: `≥ ${money(overallCr)} or any MW indicator`, tone: 'text-risk-700 bg-risk-50/50 border-risk-200' },
+  ];
+
+  /** Files attached on Materiality & TB. Kept apart from the parked Basics
+   *  `attached` list on purpose: that list drives the Basics table's "No TB"
+   *  flags and the seeded-company merge, and neither belongs to this upload —
+   *  the companies are the ones the user put on Basics.
+   *
+   *  Each file's source is asked as it lands (user ask, 15 Sep) — System
+   *  generated or Client prepared — and Continue waits on every answer. It is
+   *  saved on the programme's scoping record, which is where the engagement's
+   *  file list reads it back (useAuditFiles), so no control asks it again. */
+  const [scopeFiles, setScopeFiles] = useState<{ name: string; kind: 'tb' | 'gl'; origin?: FileOrigin }[]>([]);
+  /** Files still waiting on their source. */
+  const unsourcedFiles = scopeFiles.filter(f => !f.origin).length;
+  /** Required before Materiality & TB will pass — the account mapping and Ira's
+   *  process recommendation both read it. The general ledger never is. */
+  const hasTb = scopeFiles.some(f => f.kind === 'tb');
+  const addScopeFile = (kind: 'tb' | 'gl') => {
+    const input = document.createElement('input');
+    input.type = 'file';
+    input.accept = '.xlsx,.xls,.csv';
+    // A group can file one trial balance per company, so several at once is
+    // normal — same as New audit.
+    input.multiple = true;
+    input.onchange = () => {
+      const picked = Array.from(input.files ?? []);
+      if (picked.length) setScopeFiles(prev => [...prev, ...picked.map(f => ({ name: f.name, kind }))]);
+    };
+    input.click();
+  };
+
+  // ── Material accounts → processes ────────────────────────────────────────
+  // Only the accounts at or above performance materiality, so the list redraws
+  // as the rule changes. Ira pre-fills each with the process its caption
+  // suggests; the user corrects any that landed wrong.
+  /** The user's picks, by caption id. Absent means "Ira's suggestion". Kept for
+   *  an account that drops below the threshold, so it comes back as left. */
+  const [accountMap, setAccountMap] = useState<Record<string, string>>({});
+  const materialRows = useMemo(() => (hasTb ? materialAccountsOf(captions, perf) : []), [captions, perf, hasTb]);
+  const processOf = useCallback(
+    (c: TbCaption) => accountMap[c.id] ?? normaliseProcess(c.process),
+    [accountMap],
+  );
+  /** Every RACM on the Engagements page's RACM tab. The engagement copies from
+   *  here, so this is also the list the Scope step picks from. */
+  const libraryRacms = useRacmLibrary();
+  /** Every process the RACM tab holds a RACM for, by its normalised name. */
+  // Published only: a process whose only matrix is still a draft has nothing
+  // this engagement can test, and saying it has a RACM would be a promise the
+  // Scope step then breaks.
+  const racmProcessNames = useMemo(
+    () => Array.from(new Set(libraryRacms.filter(r => racmStatus(r).status !== 'Draft').map(r => normaliseProcess(r.process)))),
+    [libraryRacms],
+  );
+  /** The standard SOX list, then any other process the tab keeps a RACM for.
+   *  One with no RACM on the tab says so — mapping there is allowed, but the
+   *  Scope step will need one uploaded before it can be tested. */
+  const mappingOptions = useMemo(() => {
+    const names = [...SOX_MAPPING_PROCESSES, ...racmProcessNames.filter(p => !(SOX_MAPPING_PROCESSES as readonly string[]).includes(p))];
+    return names.map(p => ({ value: p, label: racmProcessNames.includes(p) ? p : `${p} · no RACM yet` }));
+  }, [racmProcessNames]);
+
+  // ══ S11 · Scope ══════════════════════════════════════════════════════════
+  // New audit's Scope step without its entity / RACM either-or: processes at
+  // the top (Ira's call, overruled with a note), the companies beneath (the
+  // numbers' call, overruled with a note), and then — the part only creation
+  // has — the RACMs each in-scope process is tested with, picked off the tab.
+
+  // ── Processes ────────────────────────────────────────────────────────────
+  const processRows = useMemo(
+    () => recommendProcesses(materialRows.map(c => ({ balance: c.balance, process: processOf(c) })), racmProcessNames),
+    [materialRows, processOf, racmProcessNames],
+  );
+  /** Where the user overruled Ira, by process. Absent means "as recommended" —
+   *  `true` is a qualitative pick, `false` a recommended process taken out. */
+  const [procOverrides, setProcOverrides] = useState<Record<string, boolean>>({});
+  /** Saved reasons and the ones being typed — only a SAVED note releases
+   *  Continue, which is what gives Save and Cancel their meaning. */
+  const [procNotes, setProcNotes] = useState<Record<string, string>>({});
+  const [procNoteDrafts, setProcNoteDrafts] = useState<Record<string, string>>({});
+  /** The qualitative reason, saved and draft. '' in a draft = not picked yet. */
+  const [procReasons, setProcReasons] = useState<Record<string, string>>({});
+  const [procReasonDrafts, setProcReasonDrafts] = useState<Record<string, string>>({});
+  /** The one process whose RACM list is open (user ask, 17 Sep: RACMs are
+   *  picked inside the process row). One at a time keeps the step short.
+   *  `undefined` until Scope first shows — then it opens the first in-scope
+   *  process still waiting on a RACM, and the user drives it from there. */
+  const [openProc, setOpenProc] = useState<string | null | undefined>(undefined);
+  /** Processes with no material accounts sit behind "Show more" unless one is
+   *  in scope or was moved — they are the long, quiet tail of the list. */
+  const [showAllProcs, setShowAllProcs] = useState(false);
+  /** Each Scope section folds from its header (user ask, 17 Sep). Open on
+   *  arrival; the header's count still reads while folded. */
+  const [entitiesOpen, setEntitiesOpen] = useState(true);
+  const [processesOpen, setProcessesOpen] = useState(true);
+  const procInScope = (r: ProcessScopeRow) => procOverrides[r.process] ?? r.recommended;
+
+  /** Drop every trace of a move — the process is back where Ira had it. */
+  const clearProcMove = (process: string) => {
+    const strip = <T,>(prev: Record<string, T>): Record<string, T> => {
+      if (!(process in prev)) return prev;
+      const out = { ...prev }; delete out[process]; return out;
+    };
+    setProcOverrides(strip);
+    setProcNotes(strip);
+    setProcNoteDrafts(strip);
+    setProcReasons(strip);
+    setProcReasonDrafts(strip);
+  };
+  /** Flip one process and open its note box. Landing back on Ira's call clears
+   *  the move and its note — there is nothing left to explain. */
+  const flipProcess = (r: ProcessScopeRow) => {
+    const next = !procInScope(r);
+    // Switching a process in opens its RACM list — picking them comes next.
+    if (next) setOpenProc(r.process);
+    if (next === r.recommended) { clearProcMove(r.process); return; }
+    setProcOverrides(prev => ({ ...prev, [r.process]: next }));
+    setProcNoteDrafts(prev => ({ ...prev, [r.process]: procNotes[r.process] ?? '' }));
+    if (next) setProcReasonDrafts(prev => ({ ...prev, [r.process]: procReasons[r.process] ?? '' }));
+  };
+  const saveProcNote = (process: string) => {
+    const text = (procNoteDrafts[process] ?? '').trim();
+    const qualitative = procOverrides[process] === true;
+    const reason = procReasonDrafts[process] ?? '';
+    if (!text || (qualitative && !reason)) return;
+    setProcNotes(prev => ({ ...prev, [process]: text }));
+    if (qualitative) setProcReasons(prev => ({ ...prev, [process]: reason }));
+    setProcNoteDrafts(prev => { const out = { ...prev }; delete out[process]; return out; });
+    setProcReasonDrafts(prev => { const out = { ...prev }; delete out[process]; return out; });
+  };
+  /** Re-editing a saved note: throw the edit away. Backing out of a fresh flip:
+   *  no move without a reason, so the process goes back where Ira had it. */
+  const cancelProcNote = (process: string) => {
+    if (!procNotes[process]) { clearProcMove(process); return; }
+    setProcNoteDrafts(prev => { const out = { ...prev }; delete out[process]; return out; });
+    setProcReasonDrafts(prev => { const out = { ...prev }; delete out[process]; return out; });
+  };
+  // Remapping an account, moving the rule or changing the companies on Basics
+  // re-draws the rows. A move that no longer argues with anything goes, with its
+  // note — or it would hold Continue for a decision nobody is making.
+  useEffect(() => {
+    const rec = new Map(processRows.map(r => [r.process, r.recommended]));
+    Object.entries(procOverrides).forEach(([p, v]) => {
+      if (!rec.has(p) || rec.get(p) === v) clearProcMove(p);
+    });
+    // Keyed on the rows alone — a flip never changes the rows.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [processRows]);
+
+  /** Every process the user moved, with its reason — the note gate, Review and
+   *  the programme record. */
+  const procChanges = processRows
+    .filter(r => procOverrides[r.process] !== undefined)
+    .map(r => ({
+      ...r,
+      inScope: procOverrides[r.process]!,
+      qualitative: procOverrides[r.process] === true,
+      reason: procReasons[r.process] ?? '',
+      note: (procNotes[r.process] ?? '').trim(),
+    }));
+  const procNotesOutstanding = procChanges.filter(c => !c.note || (c.qualitative && !c.reason)).length;
+  const scopedProcesses = processRows.filter(procInScope);
+  const recommendedCount = processRows.filter(r => r.recommended).length;
+  /** Never recommended, not in scope, not moved — shown only on "Show more". */
+  const isQuietProc = (r: ProcessScopeRow) => !r.recommended && !procInScope(r) && procOverrides[r.process] === undefined;
+  const quietProcCount = processRows.filter(isQuietProc).length;
+  const visibleProcs = showAllProcs ? processRows : processRows.filter(r => !isQuietProc(r));
+
+  // ── Companies ────────────────────────────────────────────────────────────
+  // The Basics table, weighed against performance materiality. Built straight
+  // off the table rather than through mergeScopeEntities: that merges by NAME,
+  // and two rows typed with one name would collapse into one company here.
+  // `inData` asks the captions — a company the trial balance has nothing for
+  // can't be weighed, so it is shown excluded rather than judged too small.
+  const entityRows = useMemo<ScopeEntityRow[]>(
+    () => entities.map(e => ({
+      id: e.id, name: e.name, type: e.type, parentId: e.parentId,
+      inRegister: true, inData: captions.some(c => c.entityId === e.id),
+    })),
+    [entities, captions],
+  );
+  const totals = useMemo(() => entityTotalsOf(captions), [captions]);
+  const scope = useMemo(
+    () => deriveEntityScope(entityRows, totals, perf, money, hasTb),
+    [entityRows, totals, perf, hasTb],
+  );
+  /** Where the user overruled the derivation, by entity id. */
+  const [overrides, setOverrides] = useState<Record<string, boolean>>({});
+  /** Why, by entity id — required before Continue. Saved vs being typed, with
+   *  the same Save / Cancel meaning as the process notes. */
+  const [scopeNotes, setScopeNotes] = useState<Record<string, string>>({});
+  const [noteDrafts, setNoteDrafts] = useState<Record<string, string>>({});
+  /** In scope after the user has had their say. A company the trial balance
+   *  never mentioned can't be overruled in — there is nothing to test it on. */
+  const companyInScope = (r: DerivedScopeRow) =>
+    r.status === 'absent' ? false : overrides[r.id] ?? (r.status === 'tb' || r.status === 'coverage');
+  const scopedEntities = scope.rows.filter(companyInScope);
+  /** What the numbers said before anyone touched it. */
+  const derivedIn = (r: DerivedScopeRow) => r.status === 'tb' || r.status === 'coverage';
+
+  /** Companies left out while the company holding them is in — from the third
+   *  level down, where it is news rather than ordinary scoping (see New audit). */
+  const splitFromParent = useMemo(
+    () => scope.rows.filter(r => {
+      if (companyInScope(r) || r.status === 'absent' || !r.parentId) return false;
+      if (chainDepth(r, scope.rows) < 2) return false;
+      const parent = scope.rows.find(x => x.id === r.parentId);
+      return !!parent && companyInScope(parent);
+    }),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [scope.rows, overrides],
+  );
+
+  /** Flip one company and open its note box. Back on the derivation drops the
+   *  override and its note. */
+  const flipEntity = (r: DerivedScopeRow) => {
+    const next = !companyInScope(r);
+    const backToDerived = next === derivedIn(r);
+    setOverrides(prev => {
+      const out = { ...prev };
+      if (backToDerived) delete out[r.id]; else out[r.id] = next;
+      return out;
+    });
+    if (backToDerived) {
+      setScopeNotes(prev => { const out = { ...prev }; delete out[r.id]; return out; });
+      setNoteDrafts(prev => { const out = { ...prev }; delete out[r.id]; return out; });
+    } else {
+      setNoteDrafts(prev => ({ ...prev, [r.id]: scopeNotes[r.id] ?? '' }));
+    }
+  };
+  const saveNote = (id: string) => {
+    const text = (noteDrafts[id] ?? '').trim();
+    if (!text) return;
+    setScopeNotes(prev => ({ ...prev, [id]: text }));
+    setNoteDrafts(prev => { const out = { ...prev }; delete out[id]; return out; });
+  };
+  /** Re-editing: drop the edit. Backing out of a fresh flip: no change without
+   *  a reason, so the company goes back where the trial balance had it. */
+  const cancelNote = (r: DerivedScopeRow) => {
+    setNoteDrafts(prev => { const out = { ...prev }; delete out[r.id]; return out; });
+    if (scopeNotes[r.id]) return;
+    setOverrides(prev => { const out = { ...prev }; delete out[r.id]; return out; });
+  };
+  const scopeChanges = useMemo(
+    () => scope.rows
+      .filter(r => r.status !== 'absent' && overrides[r.id] !== undefined)
+      .map(r => ({ entityId: r.id, name: r.name, inScope: !!overrides[r.id], note: (scopeNotes[r.id] ?? '').trim() })),
+    [scope.rows, overrides, scopeNotes],
+  );
+  const notesOutstanding = scopeChanges.filter(c => !c.note).length;
+  /** Coverage after overrides — the bar follows what is actually in. */
+  const coveragePct = scope.groupTotal
+    ? Math.round((scopedEntities.reduce((s, r) => s + r.total, 0) / scope.groupTotal) * 1000) / 10
+    : 0;
+  const coverageMet = coveragePct >= COVERAGE_TARGET;
+  // A company deleted on Basics takes its override and note with it — a reason
+  // for a row that no longer exists would hold Continue hostage.
+  useEffect(() => {
+    const live = new Set(entityRows.map(r => r.id));
+    const keep = <T,>(prev: Record<string, T>): Record<string, T> => {
+      const next = Object.fromEntries(Object.entries(prev).filter(([id]) => live.has(id)));
+      return Object.keys(next).length === Object.keys(prev).length ? prev : next;
+    };
+    setOverrides(keep);
+    setScopeNotes(keep);
+    setNoteDrafts(keep);
+  }, [entityRows]);
+
+  // ── RACMs per in-scope process ───────────────────────────────────────────
+  // Picked from the RACM tab — any number, any mix of companies (S11 decision
+  // 7). Every control of a ticked RACM is copied at creation; narrowing to key
+  // controls stays New audit's job (decision 13).
+  // Only what has been published (17 Sep). A draft matrix is still being
+  // written; scoping an engagement from it would commit the audit to rows
+  // nobody has agreed yet. A matrix with published rows AND later additions
+  // still appears — its published half is scopable, and `copyRacmControls`
+  // takes only that half.
+  const racmsFor = useCallback(
+    (process: string) => libraryRacms.filter(r => normaliseProcess(r.process) === process && racmStatus(r).status !== 'Draft'),
+    [libraryRacms],
+  );
+  /** Drafts for a process, named as the reason this list looks emptier than the
+   *  RACM tab does — hiding them silently would read as a RACM gone missing. */
+  const draftRacmsFor = useCallback(
+    (process: string) => libraryRacms.filter(r => normaliseProcess(r.process) === process && racmStatus(r).status === 'Draft'),
+    [libraryRacms],
+  );
+  /** The user's ticks, by process. Absent means "the default": every RACM
+   *  written for a company in scope. Once a process's list is touched it is the
+   *  user's, and moving a company in or out no longer re-ticks it. */
+  const [racmPicks, setRacmPicks] = useState<Record<string, string[]>>({});
+  const defaultPicksFor = (process: string) =>
+    racmsFor(process).filter(r => scopedEntities.some(e => sameCompany(e.name, r.entity))).map(r => r.id);
+  /** Ticked ids for one process, minus any RACM since deleted off the tab. */
+  const picksFor = (process: string) => {
+    const ids = racmPicks[process] ?? defaultPicksFor(process);
+    return racmsFor(process).filter(r => ids.includes(r.id)).map(r => r.id);
+  };
+  const toggleRacm = (process: string, id: string) => {
+    setRacmPicks(prev => {
+      const cur = prev[process] ?? defaultPicksFor(process);
+      return { ...prev, [process]: cur.includes(id) ? cur.filter(x => x !== id) : [...cur, id] };
+    });
+  };
+  /** The process's own tick (user ask, 15 Sep): every RACM the tab holds for
+   *  it, or none. Ticks all even where two share control IDs — the clash note
+   *  shows and Continue holds, as for ticks made one by one. */
+  const setAllRacms = (process: string, on: boolean) => {
+    setRacmPicks(prev => ({ ...prev, [process]: on ? racmsFor(process).map(r => r.id) : [] }));
+  };
+  /** What each in-scope process takes, in the order the processes are listed
+   *  (biggest material balance first) — which is also the order their controls
+   *  are copied in. */
+  const pickedByProcess = scopedProcesses.map(r => {
+    const ids = picksFor(r.process);
+    return { process: r.process, racms: racmsFor(r.process).filter(x => ids.includes(x.id)) };
+  });
+  const tickedRacms: LibraryRacm[] = pickedByProcess.flatMap(g => g.racms);
+  const tickedControlCount = tickedRacms.reduce((s, r) => s + r.controls.length, 0);
+  /** In scope with nothing to test it with. Continue holds until each has a
+   *  RACM ticked (or uploaded), or is moved out with a note. */
+  const noRacmInScope = pickedByProcess.filter(g => g.racms.length === 0).map(g => g.process);
+  // First look at Scope: open the first in-scope process still waiting on a
+  // RACM (else the first in scope). After that the user opens and folds.
+  useEffect(() => {
+    if (step !== SCOPE_STEP || openProc !== undefined) return;
+    setOpenProc((pickedByProcess.find(g => g.racms.length === 0) ?? pickedByProcess[0])?.process ?? null);
+    // Only the arrival matters — later ticks must not move the open list.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [step, openProc]);
+  /** Two ticked RACMs holding one control ID — two matrices written for one
+   *  process at one company, both numbering from R001/C001. Flag and block
+   *  (decision 9): copying both would put two controls under one ID. */
+  const clashes = controlIdClashes(tickedRacms.map(r => ({ name: r.name, controls: r.controls })));
+  /** The clash lines for one process's RACMs — shown inside that process, next
+   *  to the ticks that caused them. IDs carry the process code, so a clash is
+   *  almost always between two RACMs of one process; any that isn't is shown
+   *  above all the processes instead (`crossClashLines`). */
+  const clashLinesFor = (racms: LibraryRacm[]) => {
+    const names = new Set(racms.map(r => r.name));
+    return clashSummary(clashes.filter(c => c.holders.every(h => names.has(h))));
+  };
+  const crossClashLines = clashSummary(clashes.filter(c =>
+    !pickedByProcess.some(g => c.holders.every(h => g.racms.some(r => r.name === h)))));
+
+  /** Upload RACM from a process with nothing to pick — the RACM tab's own
+   *  Create RACM, process fixed. The RACM lands on the tab and is ticked here. */
+  const [racmUploadFor, setRacmUploadFor] = useState<{ process: string; entity: string } | null>(null);
+  const openRacmUpload = (process: string) => {
+    // The matrix is tested at one company: the in-scope company carrying most
+    // of this process's material balance, or the first company in scope.
+    const inIds = new Set(scopedEntities.map(e => e.id));
+    const byCompany = new Map<string, number>();
+    materialRows.forEach(c => {
+      if (processOf(c) === process && inIds.has(c.entityId)) byCompany.set(c.entityId, (byCompany.get(c.entityId) ?? 0) + c.balance);
+    });
+    const topId = Array.from(byCompany).sort((a, b) => b[1] - a[1])[0]?.[0];
+    const entity = scopedEntities.find(e => e.id === topId)?.name ?? scopedEntities[0]?.name ?? '';
+    setRacmUploadFor({ process, entity });
+  };
+  const onRacmUploaded = (process: string, racm: LibraryRacm) => {
+    setRacmPicks(prev => {
+      const cur = prev[process] ?? defaultPicksFor(process);
+      return { ...prev, [process]: cur.includes(racm.id) ? cur : [...cur, racm.id] };
+    });
+    setRacmUploadFor(null);
+  };
+  // FlowModal closes this whole sheet on Escape (a window listener). While the
+  // Create RACM dialog is up, Escape belongs to it — its listeners sit on the
+  // document, so stopping the key there keeps one Escape from throwing the
+  // engagement away along with the dialog.
+  useEffect(() => {
+    if (!racmUploadFor) return;
+    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') e.stopPropagation(); };
+    document.addEventListener('keydown', onKey);
+    return () => document.removeEventListener('keydown', onKey);
+  }, [racmUploadFor]);
+
+  // ── Gates ────────────────────────────────────────────────────────────────
+  const matTbReady = hasTb && unsourcedFiles === 0 && benchmark > 0 && (basis === 'custom' || pct > 0);
+  /** Moved companies and moved processes still owed a note — one count for the
+   *  footer. */
+  const notesDue = notesOutstanding + procNotesOutstanding;
+  const scopeReady = scopedProcesses.length > 0 && scopedEntities.length > 0
+    && notesDue === 0 && noRacmInScope.length === 0 && clashes.length === 0;
+
+  // Name checks. Too long blocks Continue; a name already in the library does
+  // not — it saves as the next free "(2)", and Basics says so before it does.
+  // The suggested name counts too: it can collide before anyone types.
+  const nameTooLong = name.trim().length > NAME_MAX;
+  const finalName = uniqueEngagementName(name);
+  const nameTaken = finalName !== name.trim();
+
   const canContinue = [
     // Type — this journey only continues for SOX / ICFR.
     type === 'SOX / ICFR',
@@ -422,17 +915,34 @@ export default function ScopingWizard({ onCancel, onCreated, typePreselected, on
     // Scoping parked this is the only step that collects entities, so it gates
     // on them: at least one named row, or the company itself via the checkbox.
     // RACMs stay optional — an entity can be listed before its matrix exists.
-    name.trim().length > 0 && code.trim().length > 0 && groupName.trim().length > 0
+    // Code and Owner are parked from the step (user ask) — the code is always the
+    // auto-generated one, so it no longer gates. Description is required, as on staging.
+    name.trim().length > 0 && !nameTooLong && description.trim().length > 0 && groupName.trim().length > 0
       && entities.length > 0 && entities.every(e => e.name.trim()),
-    // Scoping (parked) — every required document needs at least one attached
-    // file (RACM / TB attachments trigger the parses that fill the table). With
-    // the Materiality and Qualitative steps parked, the empty-scope gate
-    // rides here too — an empty scope derives zero RACMs.
-    ...(SCOPING_STEP
-      ? [entities.length > 0 && entities.every(e => e.name.trim()) && allReqsSatisfied && inScope.length > 0]
-      : []),
+    // Materiality & TB — the rule answered and a trial balance attached (the
+    // general ledger never holds Continue). The parked Scoping step's gate that
+    // used to sit at this index is quoted on SCOPING_STEP.
+    matTbReady,
+    // Scope — at least one process and one company in, every move explained,
+    // every in-scope process with a RACM ticked, and no control ID held twice.
+    scopeReady,
     true,
   ][step];
+
+  /** Says what a greyed Continue is waiting for — the boxes that explain it are
+   *  usually further up the scroll. A clash outranks a missing RACM (it names
+   *  the thing to untick), which outranks a missing note. */
+  const footerHint = step === MAT_TB_STEP
+    ? (!hasTb ? 'Upload a trial balance to continue'
+      : unsourcedFiles > 0 ? 'Answer the source of every file to continue' : null)
+    : step === SCOPE_STEP
+      ? (clashes.length > 0 ? 'Untick one of the RACMs whose control IDs clash'
+        : noRacmInScope.length > 0 ? `Choose RACMs for ${andList(noRacmInScope)}`
+        : notesDue > 0 ? `${notesDue} change${notesDue === 1 ? '' : 's'} need${notesDue === 1 ? 's' : ''} a note`
+        : scopedProcesses.length === 0 ? 'Tick at least one process'
+        : scopedEntities.length === 0 ? 'Tick at least one entity'
+        : null)
+      : null;
 
   const goNext = () => {
     if (!canContinue) return;
@@ -510,7 +1020,15 @@ export default function ScopingWizard({ onCancel, onCreated, typePreselected, on
       const kept = existing
         .filter(e => !swap.has(e.id))
         .map(e => (e.parentId && swap.has(e.parentId) ? { ...e, parentId: swap.get(e.parentId) } : e));
-      return [...src.entities.map(e => ({ ...e })), ...kept];
+      // The chart's row wins — except for a country the user typed on theirs.
+      // An extraction fills a blank; it does not overwrite an answer.
+      return [
+        ...src.entities.map(e => {
+          const mine = byName.get(e.name.toLowerCase());
+          return mine?.country?.trim() ? { ...e, country: mine.country } : { ...e };
+        }),
+        ...kept,
+      ];
     }
     const adopted = new Map<string, string>(); // the chart's row id → the user's
     src.entities.forEach(e => {
@@ -520,7 +1038,14 @@ export default function ScopingWizard({ onCancel, onCreated, typePreselected, on
     const fresh = src.entities
       .filter(e => !byName.has(e.name.toLowerCase()))
       .map(e => ({ ...e, parentId: e.parentId ? adopted.get(e.parentId) ?? e.parentId : undefined }));
-    return [...existing, ...fresh];
+    // The user's row stays as typed; only a country it was left without is
+    // taken from the chart.
+    const filled = existing.map(mine => {
+      if (mine.country?.trim()) return mine;
+      const theirs = src.entities.find(e => e.name.toLowerCase() === mine.name.trim().toLowerCase());
+      return theirs?.country ? { ...mine, country: theirs.country } : mine;
+    });
+    return [...filled, ...fresh];
   };
 
   const resolveClash = (mode: 'adopt' | 'replace') => {
@@ -753,35 +1278,52 @@ export default function ScopingWizard({ onCancel, onCreated, typePreselected, on
     }, 800);
   };
 
+  /** Everything Review stands on — reachable only through both gates, but
+   *  Back can undo either on the way, so Create checks again. */
+  const readyToCreate = matTbReady && scopeReady;
+
   const create = () => {
+    if (!readyToCreate) return;
     const id = `sox-prog-${Date.now()}`;
     // Register a real runtime engagement so the programme card opens the
     // classic SOX workspace (tabs, control testing) exactly like any other
     // SOX engagement — seeded with this scoping's materiality.
     const CR = 10_000_000;
+    /** The engagement's own copy of every RACM it ticked, process by process in
+     *  the order Scope listed them. Copied now, at pick time: later edits on the
+     *  RACM tab only reach engagements created afterwards (S11 decision 4). */
+    const copied = tickedRacms.flatMap(copyRacmControls);
+    const tbNames = scopeFiles.filter(f => f.kind === 'tb').map(f => f.name);
+    const companies = `${scopedEntities.length} of ${entities.length} ${entities.length === 1 ? 'company' : 'companies'}`;
+    const processes = `${scopedProcesses.length} process${scopedProcesses.length === 1 ? '' : 'es'}`;
+    const racmsCopied = `${tickedRacms.length} RACM${tickedRacms.length === 1 ? '' : 's'}`;
     registerEngagement({
       id,
       code: code.trim().toUpperCase(),
-      name: name.trim(),
-      description: description.trim() || `SOX 404 / ICFR programme — ${entities.length} ${entities.length === 1 ? 'company' : 'companies'} in scope; RACMs added from the RACM tab.`,
+      // the suffixed name when the typed one is taken — the same one Basics promised
+      name: finalName,
+      description: description.trim()
+        || `SOX 404 / ICFR programme — ${companies} and ${processes} in scope; ${racmsCopied} copied from the RACM tab (${copied.length} control${copied.length === 1 ? '' : 's'}).`,
       type: 'SOX / ICFR',
       soxConfig: {
         overallMateriality: Math.round(overallCr * CR),
         performanceMateriality: Math.round(overallCr * pmPct / 100 * CR),
         clearlyTrivial: Math.round(overallCr * cttPct / 100 * CR),
-        sdBandPct: 20,
+        sdBandPct: SD_BAND_PCT,
         aggregate: true,
         keyOnly: true,
       },
-      // NO seeded RACM (user ask). Creation never asks for one — no matrix is
-      // uploaded, no process is picked — so seeding two off the trial-balance
-      // captions put work in the engagement the user never authored and could
-      // not account for. The RACM tab opens empty and Create RACM fills it.
+      // The controls are the RACMs ticked on Scope, copied — the workspace seeds
+      // exactly these (soxControls wins over soxProcesses), so no template is
+      // generated for any process.
       soxProcesses: [],
       soxSeedMode: 'fresh',
-      // No process was asked for — the anchor is the biggest scoping-derived
-      // process (falls back to P2P).
-      process: ({ 'Procure to Pay': 'P2P', 'Order to Cash': 'O2C' } as Partial<Record<ProcessName, ProcessCode>>)[derived[0]?.process] ?? 'P2P',
+      soxRacms: tickedRacms.map(r => ({ racmId: r.id, name: r.name })),
+      soxControls: copied,
+      // The anchor is the biggest process in scope (falls back to P2P).
+      process: ({
+        'Procure to Pay': 'P2P', 'Order to Cash': 'O2C', 'Record to Report': 'R2R', 'IT General Controls': 'ITGC',
+      } as Record<string, ProcessCode>)[scopedProcesses[0]?.process ?? ''] ?? 'P2P',
       framework: 'COSO 2013 / SOX 404',
       owner,
       status: 'Active',
@@ -790,35 +1332,37 @@ export default function ScopingWizard({ onCancel, onCreated, typePreselected, on
       startDate: yearBasis === 'fy' ? `${fyEnd - 1}-04-01` : `${fyEnd}-01-01`,
       endDate: yearBasis === 'fy' ? `${fyEnd}-03-31` : `${fyEnd}-12-31`,
       entity: groupName.trim(),
-      controls: 0,
+      controls: copied.length,
       health: 0,
       openIssues: 0,
       lastActivity: 'Just created',
       nextScheduled: `Scoping — opinion as of ${asOf}`,
     });
+    // The tab records the engagement as a user of each RACM — which is what
+    // blocks deleting a RACM this engagement still names as its source.
+    markRacmsUsed(tickedRacms.map(r => r.id), { id, name: finalName });
     logEvent({
       action: 'Create',
-      description: `Created SOX ICFR engagement "${name.trim()}" — ${entities.length} companies in scope, no RACM yet, materiality ${fmtCr(overallCr)}`,
+      description: `Created SOX ICFR engagement "${finalName}" — ${companies} and ${processes} in scope (${andList(scopedProcesses.map(r => r.process))}); ${racmsCopied} copied from the RACM tab (${copied.length} controls); materiality ${money(overallCr)}, performance ${money(perf)}; trial balance ${tbNames.join(', ')}`,
       module: 'SOX ICFR',
       entity: 'Engagement',
     });
+    const inIds = new Set(scopedEntities.map(e => e.id));
     const programme: SoxProgramme = {
       id,
       engagementId: id,
-      name: name.trim(),
+      name: finalName,
       code: code.trim().toUpperCase(),
       owner,
       fy,
       asOf,
       phase: 'Scoping',
       groupName: groupName.trim(),
-      entities: entities.map(e => {
-        const up = uploads[e.id];
-        if (typeof up === 'object') return { ...e, tbFile: up.file, tbLines: up.lines };
-        // One consolidated group TB covers every entity under it.
-        const groupTb = attached.find(a => a.req === 'tb');
-        return groupTb ? { ...e, tbFile: groupTb.name } : { ...e };
-      }),
+      // Every company on Basics stays on the register, in scope or not — the
+      // next audit may bring one back. The trial balance rides on each row, which
+      // is how the workspace's file list finds it. Several TBs: the first stands
+      // for the group here; every file is kept on `scoping.files`.
+      entities: entities.map(e => (tbNames[0] ? { ...e, tbFile: tbNames[0] } : { ...e })),
       materiality: {
         basis,
         benchmarkLabel: basisOpt.benchmarkLabel,
@@ -829,17 +1373,50 @@ export default function ScopingWizard({ onCancel, onCreated, typePreselected, on
         cttPct,
       },
       totalCaptions: captions.length,
-      quantCount: quantScope.length,
-      qualCount: qualScope.length,
-      // Empty for the same reason as soxProcesses above — the programme must not
-      // claim matrices the workspace does not have, or "By RACM" scoping on the
-      // New audit wizard would offer rows that lead nowhere.
-      racms: [],
+      // Above PERFORMANCE materiality now — the threshold Materiality & TB lists
+      // accounts against — and qualitative picks are processes, not captions.
+      quantCount: materialRows.length,
+      qualCount: procChanges.filter(c => c.qualitative).length,
+      // One entry per process in scope, with the controls copied for it. Read
+      // by processesFor (the processes an engagement names) and by
+      // processesForAudit, which maps an audit scoped BY COMPANY to processes
+      // through `entities` — so they are the in-scope companies whose material
+      // accounts map here, as short names like every other programme. New
+      // audit's own "By RACM" list is built from the engagement's controls, not
+      // from this, so it offers exactly the processes that were copied.
+      racms: pickedByProcess.map((g): DerivedRacm => {
+        const feeding = materialRows.filter(c => processOf(c) === g.process && inIds.has(c.entityId));
+        const shorts = Array.from(new Set(feeding.map(c => entityShort(c.entityId, entities))));
+        return {
+          process: g.process as ProcessName,
+          sources: feeding.map(c => ({ caption: c.caption, entity: entityShort(c.entityId, entities) })),
+          // A process brought in on judgement has no material account, so no
+          // company feeds it. Every company in scope stands in: left empty, an
+          // audit scoped by company would silently drop a process this
+          // engagement deliberately brought in.
+          entities: shorts.length ? shorts : scopedEntities.map(e => entityShort(e.id, entities)),
+          controls: g.racms.reduce((s, r) => s + r.controls.length, 0),
+        };
+      }),
       beyondTb: BEYOND_TB.filter(b => beyond[b.id]).map(b => b.id),
-      // The workspace banner nags for a missing RACM, so flag only when one
-      // was genuinely never attached — the group TB / GL are asked for on
-      // Basics now, so arriving without them is no longer the default.
-      scopingSkipped: (scopingSkipped || racmCount === 0) || undefined,
+      // Scoped, not skipped: every process in scope has its RACMs, so the
+      // workspace has nothing missing to nag about.
+      scopingSkipped: undefined,
+      scoping: {
+        files: scopeFiles.map(f => ({ name: f.name, kind: f.kind, ...(f.origin ? { origin: f.origin } : {}) })),
+        accountProcesses: Object.fromEntries(materialRows.map(c => [c.id, processOf(c)])),
+        processScope: processRows.map(r => {
+          const move = procChanges.find(c => c.process === r.process);
+          return {
+            process: r.process, total: r.total, accounts: r.accounts, recommended: r.recommended,
+            inScope: procInScope(r),
+            ...(move?.qualitative ? { qualitativeReason: move.reason } : {}),
+            ...(move ? { note: move.note } : {}),
+          };
+        }),
+        entityIds: scopedEntities.map(e => e.id),
+        scopeNotes: scopeChanges,
+      },
     };
     onCreated(programme);
   };
@@ -945,7 +1522,16 @@ export default function ScopingWizard({ onCancel, onCreated, typePreselected, on
                   <p className="text-[0.6875rem] text-ink-500 mt-1">Suggested from the group — edit if your team names them differently.</p>
                 )}
                 {name.trim().length === 0 && <Hint text="Name is required" />}
+                {nameTooLong && <Hint text={`Name must be ${NAME_MAX} characters or fewer — this one is ${name.trim().length}.`} />}
+                {/* Informational, not an error — a taken name still continues. */}
+                {nameTaken && !nameTooLong && (
+                  <p className="text-[0.6875rem] text-ink-500 mt-1">An engagement called “{name.trim()}” already exists — this one will be saved as “{finalName}”.</p>
+                )}
               </div>
+              {/* PARKED (user ask, 15 Sep): Code and Owner — Basics matches staging's
+                  (name, description, company / group, entities). The engagement
+                  is still saved with the auto-generated code and the default
+                  owner, so nothing downstream changes. To restore, uncomment.
               <div className="grid grid-cols-2 gap-3">
                 <div>
                   <label className={basicsLabelCls}>Code <span className="text-risk-700">*</span></label>
@@ -958,6 +1544,7 @@ export default function ScopingWizard({ onCancel, onCreated, typePreselected, on
                   <FormSelect value={owner} options={OWNER_NAMES} onChange={setOwner} className={selectCls} ariaLabel="Owner" menuCls="w-full" />
                 </div>
               </div>
+              */}
               {AUDIT_PERIOD_FIELD && (<>
               <div className="grid grid-cols-2 gap-3">
                 {YEAR_TYPE_PICKER && (
@@ -993,8 +1580,9 @@ export default function ScopingWizard({ onCancel, onCreated, typePreselected, on
               </p>
               </>)}
               <div>
-                <label className={basicsLabelCls}>Description <span className="normal-case font-medium text-ink-400">(optional)</span></label>
+                <label className={basicsLabelCls}>Description <span className="text-risk-700">*</span></label>
                 <textarea rows={2} value={description} onChange={e => setDescription(e.target.value)} placeholder="One-line description of scope and intent." className={inputCls + ' resize-none'} />
+                {description.trim().length === 0 && <Hint text="Description is required" />}
               </div>
 
               {/* Group & entities — moved up from Scoping (user ask): who the
@@ -1003,9 +1591,34 @@ export default function ScopingWizard({ onCancel, onCreated, typePreselected, on
                   and trial-balance uploads on the Scoping step map entities in
                   by name, so anything typed here is merged, never duplicated. */}
               <div>
-                <label className={basicsLabelCls}>Group (listed / holding) <span className="text-risk-700">*</span></label>
-                <input value={groupName} onChange={e => setGroupName(e.target.value)} className={inputCls} />
-                {groupName.trim().length === 0 && <Hint text="Group name is required" />}
+                {/* Staging's label (user ask, 15 Sep) — still required: the group
+                    names the company list on the RACM tab, and the company itself
+                    when there are no separate entities. */}
+                <label className={basicsLabelCls}>Company / group name</label>
+                <input value={groupName} onChange={e => setGroupName(e.target.value)} placeholder="e.g. Altura Infra Group" className={inputCls} />
+                {groupName.trim().length === 0 && <Hint text="Company / group name is required" />}
+                {/* No subsidiaries is a real answer, not an empty table — asked
+                    right under the company, as staging does (user ask, 15 Sep). */}
+                <button
+                  role="checkbox"
+                  aria-checked={soloEntity}
+                  onClick={toggleSoloEntity}
+                  className={`mt-2 w-full text-left flex items-start gap-2.5 p-2.5 rounded-lg border transition-colors cursor-pointer ${
+                    soloEntity ? 'border-primary/30 bg-primary/5' : 'border-transparent bg-surface-2/50 hover:bg-surface-2'
+                  }`}
+                >
+                  <span className={`w-4 h-4 rounded inline-flex items-center justify-center shrink-0 mt-0.5 border ${
+                    soloEntity ? 'bg-primary border-primary text-white' : 'border-border bg-white'
+                  }`}>
+                    {soloEntity && <Check size={10} />}
+                  </span>
+                  <span>
+                    <span className="block text-[12px] font-semibold text-text">There are no separate entities</span>
+                    <span className="block text-[11px] text-text-muted leading-relaxed mt-0.5">
+                      This company is audited as the single entity in scope — no subsidiaries to list.
+                    </span>
+                  </span>
+                </button>
               </div>
 
               {/* PARKED (user ask): the group trial balance / general ledger
@@ -1095,7 +1708,7 @@ export default function ScopingWizard({ onCancel, onCreated, typePreselected, on
                     {(
                     orgChart === null ? (
                       <label
-                        title="PDF, image, Visio — the structure is read off the chart"
+                        title="Excel, CSV, image, Visio or PDF — the structure is read off the chart"
                         className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md border border-border-light bg-white hover:bg-surface-2 text-[11px] font-semibold text-text-secondary cursor-pointer transition-colors shrink-0"
                       >
                         <Upload size={11} /> Org Chart
@@ -1167,8 +1780,8 @@ export default function ScopingWizard({ onCancel, onCreated, typePreselected, on
                   <p className="flex items-start gap-1.5 text-[11px] text-compliant-700 mb-1.5">
                     <Sparkles size={11} className="shrink-0 mt-0.5" />
                     <span>
-                      Read {chart.entities.length} companies off the chart — check the names and types before
-                      you continue.
+                      Read {chart.entities.length} companies off the chart — check the names, types and
+                      countries before you continue.
                     </span>
                   </p>
                 )}
@@ -1192,17 +1805,26 @@ export default function ScopingWizard({ onCancel, onCreated, typePreselected, on
                     the 1px border) so nothing squares off without the clip. */}
                 <div className="border border-border-light rounded-xl bg-white">
                   {/* PARKED (user ask): the "Processes — extracted" column.
-                      Grid was [2.6fr_0.95fr_1.05fr_34px] with a
-                      <div>Processes — extracted</div> header cell here and the
-                      per-row cell below; both are commented out in place, and
-                      `entityProcesses` / `manualProcs` / `applyManualProcs` stay
-                      wired so restoring is uncommenting three blocks and putting
-                      the third column back in the two grids.
+                      With it, the grid was [2.6fr_0.95fr_1.05fr_34px] —
+                      Entity | Type | Processes | remove, before Country
+                      existed. A <div>Processes — extracted</div> header cell
+                      sits commented out here and the per-row cell below;
+                      `entityProcesses` / `manualProcs` / `applyManualProcs`
+                      stay wired, so restoring is uncommenting three blocks and
+                      adding a fifth track to both grids (after Country, before
+                      the 34px remove column) — take its width from the entity
+                      track, or the Type labels start to clip.
 
-                      Its width goes to the entity name, which is the row's
-                      identity and was clipping the longest ones. */}
-                  <div className="grid grid-cols-[2.8fr_0.95fr_34px] gap-2.5 px-4 py-2 rounded-t-[11px] text-[10.5px] uppercase tracking-wider font-semibold text-text-muted/80 border-b border-border-light bg-surface-2/50">
-                    <div>Entity</div><div>Type</div>{/* <div>Processes — extracted</div> */}<div />
+                      Its width went to the entity name, which is the row's
+                      identity and was clipping the longest ones.
+
+                      Country (user ask) took some of it back. The tracks are
+                      sized off the sheet's ~414px of usable row width: Type
+                      ≈114px is the least that shows "Joint venture" whole in
+                      the compact dropdown, Country ≈83px fits "United States",
+                      and everything else stays with the entity name. */}
+                  <div className="grid grid-cols-[2.1fr_1.1fr_0.8fr_34px] gap-2.5 px-4 py-2 rounded-t-[11px] text-[10.5px] uppercase tracking-wider font-semibold text-text-muted/80 border-b border-border-light bg-surface-2/50">
+                    <div>Entity</div><div>Type</div><div>Country</div>{/* <div>Processes — extracted</div> */}<div />
                   </div>
                   {entities.length === 0 && (
                     <div className="px-4 py-6 text-center text-[12px] text-text-muted border-b border-border-light">
@@ -1239,7 +1861,7 @@ export default function ScopingWizard({ onCancel, onCreated, typePreselected, on
                     <div key={ent.id} className="border-b border-border-light last:border-b-0">
                       {/* py, not pt: the RACM line under each row used to supply
                           the bottom padding and is parked. */}
-                      <div className="grid grid-cols-[2.8fr_0.95fr_34px] gap-2.5 px-4 py-2.5 items-center">
+                      <div className="grid grid-cols-[2.1fr_1.1fr_0.8fr_34px] gap-2.5 px-4 py-2.5 items-center">
                       {/* Indented by its depth in the chain, so the table keeps
                           the shape the chart had instead of flattening twelve
                           companies into twelve peers. */}
@@ -1274,16 +1896,29 @@ export default function ScopingWizard({ onCancel, onCreated, typePreselected, on
                       ) : (
                         <FormSelect
                           value={ent.type}
-                          options={['Holding', 'Subsidiary']}
+                          options={ENTITY_TYPES}
                           onChange={v => setEntities(prev => prev.map((x, j) => j === i ? { ...x, type: v as GroupEntity['type'] } : x))}
                           className={rowSelectCls}
                           ariaLabel={`Type for ${ent.name || `entity ${i + 1}`}`}
                           menuCls="w-full min-w-[150px]"
                         />
                       )}
+                      {/* Editable on every row — imported, hand-added and the
+                          company's own — since a chart can be wrong about it
+                          and a typed row starts without one. min-w-0: an input
+                          otherwise holds its column at its default width. */}
+                      <input
+                        value={ent.country ?? ''}
+                        onChange={e => setEntities(prev => prev.map((x, j) => j === i ? { ...x, country: e.target.value } : x))}
+                        placeholder="Country"
+                        aria-label={`Country for ${ent.name.trim() || `entity ${i + 1}`}`}
+                        title={ent.country}
+                        className="w-full min-w-0 text-[12px] text-text-secondary bg-transparent outline-none border-b border-transparent focus:border-primary/40 transition-colors py-0.5"
+                      />
                       {/* PARKED (user ask): the per-row "Processes — extracted"
-                          cell. Uncomment with its header cell and the third
-                          column in both grids to bring it back.
+                          cell. Uncomment with its header cell and a fifth
+                          track in both grids to bring it back (see the header
+                          note). It sits after Country, matching the header.
 
                       {(() => {
                         // A parsed RACM speaks for its own entity, whoever added it.
@@ -1441,29 +2076,727 @@ export default function ScopingWizard({ onCancel, onCreated, typePreselected, on
                       the point of deciding you needed another company. */}
                 </div>
 
-                {/* No subsidiaries is a real answer, not an empty table. */}
-                <button
-                  role="checkbox"
-                  aria-checked={soloEntity}
-                  onClick={toggleSoloEntity}
-                  className={`mt-2 w-full text-left flex items-start gap-2.5 p-2.5 rounded-lg border transition-colors cursor-pointer ${
-                    soloEntity ? 'border-primary/30 bg-primary/5' : 'border-transparent bg-surface-2/50 hover:bg-surface-2'
-                  }`}
-                >
-                  <span className={`w-4 h-4 rounded inline-flex items-center justify-center shrink-0 mt-0.5 border ${
-                    soloEntity ? 'bg-primary border-primary text-white' : 'border-border bg-white'
-                  }`}>
-                    {soloEntity && <Check size={10} />}
-                  </span>
-                  <span>
-                    <span className="block text-[12px] font-semibold text-text">There are no separate entities</span>
-                    <span className="block text-[11px] text-text-muted leading-relaxed mt-0.5">
-                      {groupShort(groupName) || 'The company'} is audited as the single entity in scope — no subsidiaries to list.
-                    </span>
-                  </span>
-                </button>
+                {/* Staging's check, under the table (user ask, 15 Sep). */}
+                {!soloEntity && entities.length === 0 && <Hint text="Add at least one entity, or tick 'There are no separate entities'." />}
               </div>
             </div>
+          </StepShell>
+        )}
+
+        {/* ── S11 · Materiality & TB ────────────────────────────────────────
+            New audit's "Materiality & files" step, brought over for creation.
+            No StepShell strapline — each half carries its own heading, as it
+            does there. Files lead: the trial balance is what the rule below is
+            applied TO, and it is required. */}
+        {step === MAT_TB_STEP && (
+          <div>
+            <div className="flex items-baseline gap-2 mb-0.5">
+              <h4 className="text-[0.8125rem] font-semibold text-ink-900">Trial balance &amp; general ledger</h4>
+              <span className="text-[0.625rem] font-semibold uppercase tracking-wider text-ink-400">Trial balance required</span>
+            </div>
+            <p className="text-[0.75rem] text-ink-500 mb-4 leading-relaxed">
+              Upload the trial balance to continue — its material accounts decide which processes this engagement covers. The general ledger can be added later.
+            </p>
+
+            {/* Each kind owns its uploads: empty, the box is a dashed prompt
+                with a labelled Upload; once it holds a file it becomes a solid
+                card whose header carries an icon-only upload for another. */}
+            <div className="space-y-2 mb-4">
+              {([['tb', 'Trial balance'], ['gl', 'General ledger']] as const).map(([kind, title]) => {
+                // Indices carried along — `scopeFiles` stays one flat list, so
+                // remove addresses the real row, not the position in this box.
+                const mine = scopeFiles.map((f, i) => ({ f, i })).filter(x => x.f.kind === kind);
+                return (
+                  <div key={kind} className={cn('rounded-lg border bg-white', mine.length ? 'border-canvas-border' : 'border-dashed border-canvas-border')}>
+                    {mine.length === 0 ? (
+                      <div className="flex items-center gap-2.5 px-3 py-2.5">
+                        <FileSpreadsheet size={16} className="text-brand-600 shrink-0" />
+                        <span className="min-w-0 flex-1">
+                          <span className="block text-[0.75rem] font-semibold text-ink-800 truncate">{title}</span>
+                          <span className="block text-[0.65625rem] text-ink-400">XLSX · CSV</span>
+                        </span>
+                        <button
+                          onClick={() => addScopeFile(kind)}
+                          className="h-7 px-3 inline-flex items-center gap-1.5 rounded-lg bg-brand-600 text-white text-[0.71875rem] font-semibold hover:bg-brand-700 transition-colors cursor-pointer shrink-0"
+                        >
+                          <Upload size={12} /> Upload
+                        </button>
+                      </div>
+                    ) : (
+                      <>
+                        <div className="flex items-center gap-2 px-3 py-2 border-b border-canvas-border">
+                          <FileSpreadsheet size={14} className="text-brand-600 shrink-0" />
+                          <span className="text-[0.75rem] font-semibold text-ink-800 flex-1 min-w-0 truncate">{title}</span>
+                          <button
+                            onClick={() => addScopeFile(kind)}
+                            title={`Upload another ${title.toLowerCase()}`}
+                            aria-label={`Upload another ${title.toLowerCase()}`}
+                            className="w-7 h-7 rounded-lg bg-brand-600 text-white flex items-center justify-center hover:bg-brand-700 transition-colors cursor-pointer shrink-0"
+                          >
+                            <Upload size={13} />
+                          </button>
+                        </div>
+                        {mine.map(({ f, i }) => (
+                          <div key={`${f.name}-${i}`} className="px-3 py-2.5 border-b border-canvas-border last:border-b-0">
+                            <div className="flex items-center gap-2">
+                              <Paperclip size={12} className="text-ink-400 shrink-0" />
+                              <span className="text-[0.75rem] text-ink-900 flex-1 min-w-0 truncate" title={f.name}>{f.name}</span>
+                              <button
+                                onClick={() => setScopeFiles(prev => prev.filter((_, x) => x !== i))}
+                                className="text-ink-400 hover:text-risk-700 transition-colors cursor-pointer shrink-0"
+                                aria-label={`Remove ${f.name}`}
+                                title="Remove"
+                              >
+                                <Trash2 size={13} />
+                              </button>
+                            </div>
+                            {/* The source, asked as the file enters (user ask) —
+                                this step's wording; the rest of SOX keeps System
+                                export / Client-prepared for the same two answers. */}
+                            <div className="mt-2">
+                              <span className="block text-[0.65625rem] font-bold uppercase tracking-wider text-ink-400 mb-1">Source of the document</span>
+                              <div className="grid grid-cols-2 gap-1.5" role="group" aria-label={`Source of ${f.name}`}>
+                                {([['System export', 'System generated'], ['Client-prepared', 'Client prepared']] as const).map(([o, label]) => (
+                                  <button key={o} type="button" aria-pressed={f.origin === o}
+                                    onClick={() => setScopeFiles(prev => prev.map((x, n) => (n === i ? { ...x, origin: o } : x)))}
+                                    className={cn('h-7 px-2 rounded-md border text-[0.6875rem] font-semibold transition-colors cursor-pointer inline-flex items-center justify-center gap-1',
+                                      f.origin === o ? 'border-brand-300 bg-brand-50 text-brand-700' : 'border-canvas-border bg-white text-ink-600 hover:border-ink-300')}>
+                                    {f.origin === o && <Check size={11} className="shrink-0" />}{label}
+                                  </button>
+                                ))}
+                              </div>
+                              {!f.origin && <p className="text-[0.65625rem] text-high-700 font-semibold mt-1">Pick the source to continue</p>}
+                            </div>
+                          </div>
+                        ))}
+                      </>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+
+            <div className="mt-6 pt-5 border-t border-canvas-border">
+              <h4 className="text-[0.8125rem] font-semibold text-ink-900 mb-0.5">Materiality rule</h4>
+              <p className="text-[0.75rem] text-ink-500 mb-4 leading-relaxed">
+                Set before testing starts — exceptions are measured against it.
+              </p>
+
+              <label className="block text-[0.6875rem] font-semibold text-ink-500 mb-1.5">Basis</label>
+              <FormSelect
+                value={basis}
+                options={BASIS_OPTIONS.map(b => ({ value: b.id, label: b.label }))}
+                onChange={v => changeBasis(v as MaterialityBasis)}
+                className={`${matInputCls} cursor-pointer appearance-none mb-1.5`}
+                ariaLabel="Materiality basis"
+                menuCls="w-full"
+              />
+              <p className="text-[0.6875rem] text-ink-400 mb-4">{basisOpt.hint}</p>
+
+              <div className="flex gap-3 mb-4">
+                <div className="flex-1 min-w-0">
+                  <label className="block text-[0.6875rem] font-semibold text-ink-500 mb-1.5">{basis === 'custom' ? 'Overall materiality (₹ Cr)' : `${basisOpt.benchmarkLabel} (₹ Cr)`}</label>
+                  <input type="number" min={0} value={benchmark} onChange={e => setBenchmark(Number(e.target.value))} className={`${matInputCls} tabular-nums`} />
+                </div>
+                {basis !== 'custom' && (
+                  <div className="w-24 shrink-0">
+                    <label className="block text-[0.6875rem] font-semibold text-ink-500 mb-1.5">Basis %</label>
+                    <input type="number" min={0.1} max={100} step={0.1} value={pct} onChange={e => setPct(Number(e.target.value))} className={`${matInputCls} tabular-nums`} />
+                  </div>
+                )}
+              </div>
+
+              {/* The two thresholds testing runs against — asked as a share of
+                  overall with the rupee figure shown back, so the two can't
+                  drift apart. */}
+              <div className="mt-4 space-y-3">
+                {([
+                  ['Performance materiality', pmPct, setPmPct, perf, 50, 75, 5, '% of overall — auditors typically set 50–75%'],
+                  ['Clearly-trivial threshold', cttPct, setCttPct, trivial, 1, 10, 1, '% of overall — below this, differences are passed'],
+                ] as const).map(([label, value, set, amount, lo, hi, stepBy, hint]) => (
+                  <div key={label}>
+                    <label className="block text-[0.6875rem] font-semibold text-ink-500 mb-1.5">{label}</label>
+                    <div className="flex items-center gap-2">
+                      <input
+                        type="number" min={lo} max={hi} step={stepBy} value={value}
+                        onChange={e => set(Math.min(hi, Math.max(lo, Number(e.target.value))))}
+                        className={`${matInputCls} tabular-nums w-20`}
+                        aria-label={`${label} as a percentage of overall`}
+                      />
+                      <span className="text-[0.71875rem] text-ink-500 shrink-0">% of overall</span>
+                      <span className="ml-auto text-[0.8125rem] font-semibold text-ink-900 tabular-nums shrink-0">{money(amount)}</span>
+                    </div>
+                    <p className="text-[0.6875rem] text-ink-400 leading-relaxed mt-1">{hint}</p>
+                  </div>
+                ))}
+              </div>
+
+              <div className="mt-4 rounded-xl border border-canvas-border bg-white p-3.5">
+                <div className="text-[0.625rem] font-bold text-ink-400 uppercase tracking-wider mb-2">Computed thresholds</div>
+                {([
+                  ['Overall materiality', money(overallCr), basis === 'custom' ? 'Set directly' : `${pct}% × ₹${benchmark} Cr`, true],
+                  ['Performance materiality', money(perf), `${pmPct}% of overall — the working threshold for testing`, false],
+                  ['Clearly trivial', money(trivial), `${cttPct}% of overall — below this, differences are passed`, false],
+                ] as const).map(([label, value, note, strong], i) => (
+                  <div key={label} className={cn('py-2', i < 2 && 'border-b border-canvas-border')}>
+                    <div className="flex items-baseline justify-between gap-3">
+                      <span className={cn('text-[0.75rem]', strong ? 'font-semibold text-ink-900' : 'text-ink-600')}>{label}</span>
+                      <span className={cn('tabular-nums', strong ? 'text-[0.875rem] font-bold text-ink-900' : 'text-[0.78125rem] text-ink-800')}>{value}</span>
+                    </div>
+                    <div className="text-[0.65625rem] text-ink-400 mt-0.5">{note}</div>
+                  </div>
+                ))}
+              </div>
+
+              {/* Read-only — where these numbers land, not another place to set
+                  them. The significant-deficiency band is the one the
+                  engagement is created with. */}
+              {overallCr > 0 && (
+                <div className="mt-5">
+                  <h5 className="text-[0.75rem] font-semibold text-ink-900 mb-2">Where an exception would land</h5>
+                  <div className="space-y-1">
+                    {LADDER.map((r, i) => (
+                      <div key={r.label} className={cn('flex items-center justify-between gap-3 px-3 py-2 rounded-lg border', r.tone)}>
+                        <span className="text-[0.71875rem] font-semibold">
+                          <span className="text-ink-300 tabular-nums mr-1.5">{i + 1}</span>{r.label}
+                        </span>
+                        <span className="text-[0.6875rem] tabular-nums text-right">{r.band}</span>
+                      </div>
+                    ))}
+                  </div>
+                  <p className="text-[0.6875rem] text-ink-400 mt-1.5 leading-relaxed">
+                    The significant-deficiency band starts at {SD_BAND_PCT}% of overall — change it on Materiality &amp; scope once the engagement exists.
+                  </p>
+                </div>
+              )}
+            </div>
+
+            {/* ── Map material accounts to processes ─────────────────────────
+                After the rule, because it reads it: only accounts at or above
+                performance materiality, redrawn as the rule changes. Appears
+                once a trial balance is attached. Parked — ACCOUNT_MAPPING. */}
+            {ACCOUNT_MAPPING && hasTb && (
+              <div className="mt-6 pt-5 border-t border-canvas-border">
+                <h4 className="text-[0.8125rem] font-semibold text-ink-900 mb-0.5">
+                  Map material accounts to processes
+                  <span className="font-normal text-ink-500"> · {materialRows.length} account{materialRows.length === 1 ? '' : 's'} ≥ {money(perf)} (PM)</span>
+                </h4>
+                <p className="text-[0.75rem] text-ink-500 mb-3 leading-relaxed">
+                  Ira suggested a process for each account — change any that landed on the wrong one.
+                </p>
+                {materialRows.length === 0 ? (
+                  <p className="rounded-xl border border-dashed border-canvas-border bg-white text-[0.71875rem] text-ink-400 px-4 py-5 text-center">
+                    No account in the trial balance reaches {money(perf)} — nothing to map at this threshold.
+                  </p>
+                ) : (
+                  /* No overflow-hidden: the process menus open downward out of
+                     the last rows, and clipping them would hide the options. */
+                  <div className="rounded-xl border border-canvas-border bg-white">
+                    <div className="grid grid-cols-[minmax(0,1.5fr)_minmax(0,0.7fr)_minmax(0,0.75fr)_minmax(0,1.45fr)] gap-2.5 px-3.5 py-2 border-b border-canvas-border text-[0.625rem] font-bold text-ink-400 uppercase tracking-wider">
+                      <span>Account</span><span>Entity</span><span className="text-right">Balance</span><span>Process</span>
+                    </div>
+                    {materialRows.map(c => (
+                      <div key={c.id} className="grid grid-cols-[minmax(0,1.5fr)_minmax(0,0.7fr)_minmax(0,0.75fr)_minmax(0,1.45fr)] gap-2.5 items-center px-3.5 py-2 border-b border-canvas-border last:border-b-0">
+                        <span className="text-[0.75rem] text-ink-900 truncate" title={c.caption}>{c.caption}</span>
+                        <span className="text-[0.71875rem] text-ink-500 truncate" title={entities.find(e => e.id === c.entityId)?.name}>{entityShort(c.entityId, entities)}</span>
+                        <span className="text-[0.75rem] text-ink-800 tabular-nums text-right">{money(c.balance)}</span>
+                        <FormSelect
+                          value={processOf(c)}
+                          options={mappingOptions}
+                          onChange={v => setAccountMap(prev => ({ ...prev, [c.id]: v }))}
+                          className="w-full h-8 px-2.5 text-[0.75rem] border border-canvas-border rounded-lg bg-white text-ink-900 outline-none focus:border-brand-400 transition-all"
+                          ariaLabel={`Process for ${c.caption}`}
+                          align="right"
+                          menuCls="w-[220px]"
+                        />
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* ── S11 · Scope ────────────────────────────────────────────────────
+            Two sections (entities first — user ask, 17 Sep): which entities
+            (the numbers' call), then which processes (Ira's call from the
+            mapping), each opening onto the RACMs it is tested with.
+            Simplified the same day ("so much is happening here"): one tick on
+            the left for every choice, each section's count said once in its
+            header, a reason line only where it is news, one RACM list open at
+            a time, and the processes with no material accounts behind
+            "Show more". */}
+        {step === SCOPE_STEP && (
+          <StepShell>
+            {/* ── 1 · Entities ── derived, not picked. The coverage line is the
+                headline: the one number that says whether the engagement
+                reaches far enough across the group. */}
+            <section aria-labelledby="scope-entities">
+              <div className="flex items-baseline justify-between gap-3 mb-0.5">
+                <h4 id="scope-entities" className="text-[0.875rem] font-semibold text-ink-900">
+                  <button
+                    type="button"
+                    onClick={() => setEntitiesOpen(v => !v)}
+                    aria-expanded={entitiesOpen}
+                    aria-controls="scope-entities-body"
+                    className="inline-flex items-center gap-1.5 rounded-md cursor-pointer hover:text-brand-700 transition-colors"
+                  >
+                    Entities
+                    <ChevronDown size={14} className={cn('shrink-0 text-ink-400 transition-transform', entitiesOpen && 'rotate-180')} />
+                  </button>
+                </h4>
+                {scope.rows.length > 0 && (
+                  <span className="shrink-0 text-[0.75rem] text-ink-500 tabular-nums">
+                    {scopedEntities.length} of {scope.rows.length} in scope
+                  </span>
+                )}
+              </div>
+              <AnimatePresence initial={false}>
+                {entitiesOpen && (
+                  <motion.div
+                    id="scope-entities-body"
+                    initial={{ opacity: 0, height: 0 }}
+                    animate={{ opacity: 1, height: 'auto' }}
+                    exit={{ opacity: 0, height: 0 }}
+                    transition={{ duration: 0.2, ease: [0.2, 0, 0, 1] }}
+                    className="overflow-hidden"
+                  >
+                    <p className="text-[0.75rem] text-ink-500 mb-3 leading-relaxed">
+                      Ticked from the trial balance against performance materiality ({money(perf)}).
+                    </p>
+
+                    {scope.rows.length > 0 && (
+                      <div className="mb-3">
+                        <div className="flex items-baseline justify-between gap-3 text-[0.75rem]">
+                          <span className="text-ink-600">
+                            <span className="font-semibold text-ink-900 tabular-nums">{coveragePct}%</span> of the group covered
+                          </span>
+                          <span className="shrink-0 text-ink-400 tabular-nums">Target {COVERAGE_TARGET}%</span>
+                        </div>
+                        <span className="relative mt-1.5 block h-1 rounded-full bg-paper-100">
+                          <span
+                            className={cn('absolute inset-y-0 left-0 rounded-full transition-all', coverageMet ? 'bg-compliant-600' : 'bg-mitigated-500')}
+                            style={{ width: `${Math.min(100, coveragePct)}%` }}
+                          />
+                          {/* The target, drawn where it falls. */}
+                          <span className="absolute -top-0.5 h-2 w-px bg-ink-400" style={{ left: `${COVERAGE_TARGET}%` }} aria-hidden />
+                        </span>
+                        {!coverageMet && (
+                          <p className="flex items-start gap-1.5 mt-1.5 text-[0.6875rem] text-mitigated-700">
+                            <AlertTriangle size={11} className="shrink-0 mt-0.5" />
+                            <span>Below target — tick more entities until {COVERAGE_TARGET}% of the group is covered.</span>
+                          </p>
+                        )}
+                      </div>
+                    )}
+
+                    {splitFromParent.length > 0 && (
+                      <p className="flex items-start gap-1.5 mb-2 text-[0.6875rem] text-high-700">
+                        <AlertTriangle size={11} className="shrink-0 mt-0.5" />
+                        <span>
+                          {splitFromParent.length} entit{splitFromParent.length === 1 ? 'y is' : 'ies are'} held by an
+                          entity that is in scope, but left out{': '}
+                          <b className="font-semibold">{splitFromParent.map(r => r.name).join(', ')}</b>.
+                        </span>
+                      </p>
+                    )}
+
+                    <div className="rounded-lg border border-canvas-border bg-white overflow-hidden">
+                      {scope.rows.length === 0 ? (
+                        <p className="text-[0.75rem] text-ink-400 px-4 py-6 text-center">No entities yet — add them on Basics.</p>
+                      ) : scope.rows.map(row => {
+                        const on = companyInScope(row);
+                        const absent = row.status === 'absent';
+                        const depth = chainDepth(row, scope.rows);
+                        const changed = !absent && overrides[row.id] !== undefined;
+                        const editing = noteDrafts[row.id] !== undefined;
+                        /** Only the exceptions get a line — "clears performance
+                         *  materiality" is what the tick already says. */
+                        const exception = absent ? 'Not in the trial balance'
+                          : row.status === 'coverage' ? `Added to reach ${COVERAGE_TARGET}% coverage`
+                          : row.status === 'out' ? 'Below performance materiality'
+                          : null;
+                        return (
+                          <div key={row.id} className="border-b border-canvas-border last:border-b-0">
+                            <button
+                              type="button"
+                              role="checkbox"
+                              aria-checked={on}
+                              aria-label={absent ? `${row.name} — not in the trial balance` : row.name}
+                              disabled={absent}
+                              onClick={() => flipEntity(row)}
+                              className={cn(
+                                'group w-full flex items-center gap-3 px-4 py-2 text-left transition-colors',
+                                absent ? 'cursor-not-allowed' : 'cursor-pointer hover:bg-brand-50/40',
+                              )}
+                            >
+                              <TickBox state={on} disabled={absent} />
+                              {/* Only the name indents — the ticks stay one straight
+                                  column however deep an entity sits. */}
+                              {depth > 0 && <span aria-hidden className="shrink-0" style={{ width: `${depth * 0.75}rem` }} />}
+                              {depth >= 2 && (
+                                <span aria-hidden className="text-[0.6875rem] text-ink-300 leading-none shrink-0 -mr-1.5">↳</span>
+                              )}
+                              <span className="flex-1 min-w-0">
+                                <span className={cn('block text-[0.8125rem] truncate', absent ? 'text-ink-400' : 'text-ink-900')} title={row.name}>
+                                  {row.name}
+                                </span>
+                                {exception && <span className="block text-[0.6875rem] text-ink-500 mt-0.5">{exception}</span>}
+                              </span>
+                              {!absent && (
+                                <span className="shrink-0 text-[0.71875rem] text-ink-400 tabular-nums">
+                                  {money(row.total)} · {row.sharePct}%
+                                </span>
+                              )}
+                            </button>
+
+                            <AnimatePresence initial={false}>
+                              {changed && (
+                                <motion.div
+                                  initial={{ opacity: 0, height: 0 }}
+                                  animate={{ opacity: 1, height: 'auto' }}
+                                  exit={{ opacity: 0, height: 0 }}
+                                  transition={{ duration: 0.18, ease: [0.2, 0, 0, 1] }}
+                                  className="overflow-hidden"
+                                >
+                                  <ScopeNote
+                                    question={on ? 'Why is this entity in scope?' : 'Why is this entity out of scope?'}
+                                    ariaLabel={on ? `Why ${row.name} is in scope` : `Why ${row.name} is out of scope`}
+                                    editing={editing}
+                                    draft={noteDrafts[row.id] ?? ''}
+                                    onDraft={v => setNoteDrafts(prev => ({ ...prev, [row.id]: v }))}
+                                    canSave={!!(noteDrafts[row.id] ?? '').trim()}
+                                    onSave={() => saveNote(row.id)}
+                                    onCancel={() => cancelNote(row)}
+                                    onEdit={() => setNoteDrafts(prev => ({ ...prev, [row.id]: scopeNotes[row.id] ?? '' }))}
+                                    saved={scopeNotes[row.id]}
+                                  />
+                                </motion.div>
+                              )}
+                            </AnimatePresence>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </motion.div>
+                )}
+              </AnimatePresence>
+            </section>
+
+            {/* ── 2 · Processes and their RACMs ── overruled row by row with a
+                note; bringing one IN against Ira is a qualitative pick and
+                takes a reason from the list too. An in-scope row opens onto
+                its RACM ticks (user ask, 17 Sep — no separate RACM section). */}
+            <section aria-labelledby="scope-processes" className="mt-8 pt-6 border-t border-canvas-border">
+              <div className="flex items-baseline justify-between gap-3 mb-0.5">
+                <h4 id="scope-processes" className="text-[0.875rem] font-semibold text-ink-900">
+                  <button
+                    type="button"
+                    onClick={() => setProcessesOpen(v => !v)}
+                    aria-expanded={processesOpen}
+                    aria-controls="scope-processes-body"
+                    className="inline-flex items-center gap-1.5 rounded-md cursor-pointer hover:text-brand-700 transition-colors"
+                  >
+                    Processes and RACMs
+                    <ChevronDown size={14} className={cn('shrink-0 text-ink-400 transition-transform', processesOpen && 'rotate-180')} />
+                  </button>
+                </h4>
+                {processRows.length > 0 && (
+                  <span className="shrink-0 text-[0.75rem] text-ink-500 tabular-nums">
+                    {scopedProcesses.length} in scope · {tickedRacms.length} RACM{tickedRacms.length === 1 ? '' : 's'} · {tickedControlCount} control{tickedControlCount === 1 ? '' : 's'}
+                  </span>
+                )}
+              </div>
+              <AnimatePresence initial={false}>
+                {processesOpen && (
+                  <motion.div
+                    id="scope-processes-body"
+                    initial={{ opacity: 0, height: 0 }}
+                    animate={{ opacity: 1, height: 'auto' }}
+                    exit={{ opacity: 0, height: 0 }}
+                    transition={{ duration: 0.2, ease: [0.2, 0, 0, 1] }}
+                    className="overflow-hidden"
+                  >
+                    <p className="text-[0.75rem] text-ink-500 mb-3 leading-relaxed">
+                      {recommendedCount > 0
+                        ? `Ira ticked the ${recommendedCount === 1 ? 'process' : `${recommendedCount} processes`} with material accounts. Choose the RACMs each one is tested with — their controls are copied in.`
+                        : 'No process has material accounts in the trial balance. Tick the ones to test and choose their RACMs.'}
+                    </p>
+                    {crossClashLines.length > 0 && (
+                      <ClashNote lines={crossClashLines} />
+                    )}
+
+                    <div className="rounded-lg border border-canvas-border bg-white overflow-hidden">
+                      {processRows.length === 0 ? (
+                        <p className="text-[0.75rem] text-ink-400 px-4 py-6 text-center">
+                          {ACCOUNT_MAPPING
+                            ? 'No material accounts mapped and no RACMs on the RACM tab yet.'
+                            : 'No material accounts in the trial balance and no RACMs on the RACM tab yet.'}
+                        </p>
+                      ) : (
+                        <>
+                          {visibleProcs.map(r => {
+                            const on = procInScope(r);
+                            const picks = on ? pickedByProcess.find(g => g.process === r.process)?.racms ?? [] : [];
+                            const pickedControls = picks.reduce((s, x) => s + x.controls.length, 0);
+                            const move = procOverrides[r.process];
+                            const qualitative = move === true;
+                            const editing = procNoteDrafts[r.process] !== undefined;
+                            const reasonDraft = procReasonDrafts[r.process] ?? '';
+                            const onTab = on ? racmsFor(r.process) : [];
+                            /** Nothing on the tab to tick — uploading is the only way on. */
+                            const nothingOnTab = onTab.length === 0;
+                            const allTicked = !nothingOnTab && picks.length === onTab.length;
+                            const someTicked = picks.length > 0 && !allTicked;
+                            const groupLines = on ? clashLinesFor(picks) : [];
+                            const listOpen = on && openProc === r.process;
+                            const listId = `scope-racms-${r.process.replace(/\W+/g, '-').toLowerCase()}`;
+                            /** What the RACM handle says while folded. Short: it now
+                             *  shares the name row with the process and its numbers,
+                             *  and the list it opens repeats the detail anyway. */
+                            const racmHandleLabel = groupLines.length > 0
+                              ? 'Control IDs clash — untick one'
+                              : picks.length > 0
+                                ? `${picks.length} of ${onTab.length} RACM${onTab.length === 1 ? '' : 's'} · ${pickedControls} control${pickedControls === 1 ? '' : 's'}`
+                                : nothingOnTab
+                                  ? 'No RACM yet'
+                                  : `Choose from ${onTab.length} RACM${onTab.length === 1 ? '' : 's'}`;
+                            return (
+                              <div key={r.process} className="border-b border-canvas-border last:border-b-0">
+                                {/* ── The name row ── tick, name, and (once the process
+                                    is in scope) the handle that opens its RACMs, so a
+                                    folded process says everything on one line. Two
+                                    buttons side by side rather than one: ticking the
+                                    process and opening its RACMs are different acts,
+                                    and a button cannot live inside a button. */}
+                                {/* The whole row still flips the process — it did when
+                                    it was one button, and shrinking the target to the
+                                    width of the name would make a tick a small thing
+                                    to hit while the row still lights up under the
+                                    cursor. The RACM chip stops the click at itself. */}
+                                <div
+                                  onClick={() => flipProcess(r)}
+                                  className="group flex items-center gap-2 px-4 py-2 cursor-pointer hover:bg-brand-50/40 transition-colors"
+                                >
+                                  <button
+                                    type="button"
+                                    role="checkbox"
+                                    aria-checked={on}
+                                    aria-label={r.process}
+                                    onClick={e => { e.stopPropagation(); flipProcess(r); }}
+                                    className="min-w-0 flex items-center gap-3 py-0.5 text-left cursor-pointer"
+                                  >
+                                    <TickBox state={on} />
+                                    <span className="min-w-0 flex items-center gap-2">
+                                      <span title={r.process} className="text-[0.8125rem] font-medium text-ink-900 truncate">{r.process}</span>
+                                      {qualitative && (
+                                        <span className="shrink-0 px-1.5 rounded border border-brand-200 bg-brand-50 text-[0.625rem] font-semibold text-brand-700 leading-4">Qualitative</span>
+                                      )}
+                                    </span>
+                                  </button>
+
+                                  {on && (
+                                    <button
+                                      type="button"
+                                      onClick={e => { e.stopPropagation(); setOpenProc(listOpen ? null : r.process); }}
+                                      aria-expanded={listOpen}
+                                      aria-controls={listId}
+                                      title={racmHandleLabel}
+                                      className={cn(
+                                        'shrink min-w-0 h-6 pl-1.5 pr-1 inline-flex items-center gap-1 rounded-md border text-[0.6875rem] font-semibold transition-colors cursor-pointer',
+                                        groupLines.length > 0 ? 'border-risk-200 bg-risk-50 text-risk-700 hover:border-risk-300'
+                                          : picks.length > 0 ? 'border-canvas-border bg-white text-ink-700 hover:border-ink-300'
+                                          : nothingOnTab ? 'border-canvas-border bg-paper-50 text-ink-500 hover:border-ink-300'
+                                          : 'border-brand-200 bg-brand-50 text-brand-700 hover:bg-brand-100',
+                                      )}
+                                    >
+                                      {groupLines.length > 0
+                                        ? <AlertTriangle size={11} className="shrink-0" />
+                                        : picks.length > 0 && <Check size={11} className="shrink-0 text-compliant-600" />}
+                                      <span className="truncate tabular-nums">{racmHandleLabel}</span>
+                                      <ChevronDown size={12} className={cn('shrink-0 transition-transform', listOpen && 'rotate-180')} />
+                                    </button>
+                                  )}
+
+                                  {r.accounts > 0 && (
+                                    <span className="ml-auto shrink-0 text-[0.71875rem] text-ink-400 tabular-nums">
+                                      {money(r.total)} · {r.accounts} account{r.accounts === 1 ? '' : 's'}
+                                    </span>
+                                  )}
+                                </div>
+
+                                {/* ── Why ── a qualitative pick asks for its reason
+                                    from the list first, then the note. */}
+                                <AnimatePresence initial={false}>
+                                  {move !== undefined && (
+                                    <motion.div
+                                      initial={{ opacity: 0, height: 0 }}
+                                      animate={{ opacity: 1, height: 'auto' }}
+                                      exit={{ opacity: 0, height: 0 }}
+                                      transition={{ duration: 0.18, ease: [0.2, 0, 0, 1] }}
+                                      className="overflow-hidden"
+                                    >
+                                      <ScopeNote
+                                        question={on ? 'Why is this process in scope?' : 'Why is this process out of scope?'}
+                                        ariaLabel={on ? `Why ${r.process} is in scope` : `Why ${r.process} is out of scope`}
+                                        editing={editing}
+                                        draft={procNoteDrafts[r.process] ?? ''}
+                                        onDraft={v => setProcNoteDrafts(prev => ({ ...prev, [r.process]: v }))}
+                                        canSave={!!(procNoteDrafts[r.process] ?? '').trim() && (!qualitative || !!reasonDraft)}
+                                        onSave={() => saveProcNote(r.process)}
+                                        onCancel={() => cancelProcNote(r.process)}
+                                        onEdit={() => {
+                                          setProcNoteDrafts(prev => ({ ...prev, [r.process]: procNotes[r.process] ?? '' }));
+                                          if (qualitative) setProcReasonDrafts(prev => ({ ...prev, [r.process]: procReasons[r.process] ?? '' }));
+                                        }}
+                                        saved={<>
+                                          {qualitative && procReasons[r.process] && <span className="font-semibold text-ink-900">{procReasons[r.process]} — </span>}
+                                          {procNotes[r.process]}
+                                        </>}
+                                      >
+                                        {qualitative && (
+                                          <div className="flex flex-wrap gap-1.5 mb-2" role="group" aria-label={`Reason ${r.process} is in scope`}>
+                                            {QUAL_REASONS.map(q => (
+                                              <button
+                                                key={q}
+                                                type="button"
+                                                onClick={() => setProcReasonDrafts(prev => ({ ...prev, [r.process]: q }))}
+                                                aria-pressed={reasonDraft === q}
+                                                className={cn('h-7 px-2 rounded-md border text-[0.6875rem] font-semibold transition-colors cursor-pointer inline-flex items-center gap-1',
+                                                  reasonDraft === q ? 'border-brand-300 bg-brand-50 text-brand-700' : 'border-canvas-border bg-white text-ink-600 hover:border-ink-300')}
+                                              >
+                                                {reasonDraft === q && <Check size={11} className="shrink-0" />}{q}
+                                              </button>
+                                            ))}
+                                          </div>
+                                        )}
+                                      </ScopeNote>
+                                    </motion.div>
+                                  )}
+                                </AnimatePresence>
+
+                                {/* ── RACMs ── the tab's RACMs for this process, hung
+                                    under its name. Ticks default to the ones written
+                                    for an entity in scope; any number, from any
+                                    entity, can be ticked. */}
+                                <AnimatePresence initial={false}>
+                                  {listOpen && (
+                                    <motion.div
+                                      id={listId}
+                                      initial={{ opacity: 0, height: 0 }}
+                                      animate={{ opacity: 1, height: 'auto' }}
+                                      exit={{ opacity: 0, height: 0 }}
+                                      transition={{ duration: 0.18, ease: [0.2, 0, 0, 1] }}
+                                      className="overflow-hidden"
+                                    >
+                                      <div className="ml-[2.75rem] mr-4 pb-3">
+                                        {groupLines.length > 0 && <ClashNote lines={groupLines} />}
+                                        {nothingOnTab ? (
+                                          <div className="flex items-center gap-3">
+                                            <p className="flex-1 min-w-0 text-[0.71875rem] text-ink-500 leading-relaxed">
+                                              {draftRacmsFor(r.process).length > 0
+                                                // The RACM exists — it just isn't publishable work yet, and
+                                                // "upload one" would send the reader to build a second copy.
+                                                ? <>{draftRacmsFor(r.process).length === 1 ? 'There is a RACM for this process, but it is still a draft' : `There are ${draftRacmsFor(r.process).length} RACMs for this process, but all of them are still drafts`}. Publish {draftRacmsFor(r.process).length === 1 ? 'it' : 'one'} on the RACM tab, upload another, or untick {r.process} and say why.</>
+                                                : <>Upload one, or untick {r.process} and say why.</>}
+                                            </p>
+                                            <button
+                                              type="button"
+                                              onClick={() => openRacmUpload(r.process)}
+                                              title={`Upload a RACM for ${r.process} — it's saved to the RACM tab and ticked here`}
+                                              className="shrink-0 h-7 px-3 inline-flex items-center gap-1.5 rounded-lg bg-brand-600 text-white text-[0.71875rem] font-semibold hover:bg-brand-700 transition-colors cursor-pointer"
+                                            >
+                                              <Upload size={12} /> Upload RACM
+                                            </button>
+                                          </div>
+                                        ) : (
+                                          <>
+                                            <div className="border-t border-canvas-border">
+                                              {onTab.length > 1 && (
+                                                <button
+                                                  type="button"
+                                                  role="checkbox"
+                                                  aria-checked={allTicked ? true : someTicked ? 'mixed' : false}
+                                                  aria-label={`${allTicked ? 'Untick' : 'Tick'} every ${r.process} RACM`}
+                                                  onClick={() => setAllRacms(r.process, !allTicked)}
+                                                  className="group w-full flex items-center gap-3 py-2 border-b border-canvas-border text-left cursor-pointer"
+                                                >
+                                                  <TickBox state={allTicked ? true : someTicked ? 'mixed' : false} />
+                                                  <span className="text-[0.75rem] font-semibold text-ink-700">Select all</span>
+                                                </button>
+                                              )}
+                                              {onTab.map(x => {
+                                                const ticked = picks.some(p => p.id === x.id);
+                                                // The name usually carries its entity
+                                                // ("Order to Cash — Airline Group Ltd");
+                                                // say it only when it doesn't.
+                                                const showEntity = !!x.entity && !x.name.toLowerCase().includes(x.entity.toLowerCase());
+                                                return (
+                                                  <button
+                                                    key={x.id}
+                                                    type="button"
+                                                    role="checkbox"
+                                                    aria-checked={ticked}
+                                                    aria-label={`${x.name} — ${x.controls.length} controls`}
+                                                    onClick={() => toggleRacm(r.process, x.id)}
+                                                    title={x.usedBy.length > 0 ? `Used by ${x.usedBy.map(u => u.name).join(', ')}` : undefined}
+                                                    className="group w-full flex items-center gap-3 py-2 border-b border-canvas-border text-left cursor-pointer"
+                                                  >
+                                                    <TickBox state={ticked} />
+                                                    <span className="flex-1 min-w-0 truncate text-[0.78125rem] text-ink-900">
+                                                      {x.name}
+                                                      {showEntity && <span className="text-ink-400"> · {x.entity}</span>}
+                                                    </span>
+                                                    <span className="shrink-0 text-[0.71875rem] text-ink-400 tabular-nums">
+                                                      {x.controls.length} control{x.controls.length === 1 ? '' : 's'}
+                                                    </span>
+                                                  </button>
+                                                );
+                                              })}
+                                            </div>
+                                            {/* Quiet while there are RACMs to tick, so it
+                                                doesn't invite a duplicate of one already
+                                                there. */}
+                                            <button
+                                              type="button"
+                                              onClick={() => openRacmUpload(r.process)}
+                                              title={`Upload a RACM for ${r.process} — it's saved to the RACM tab and ticked here`}
+                                              className="mt-1.5 -ml-2 h-7 px-2 inline-flex items-center gap-1.5 rounded-lg text-[0.71875rem] font-semibold text-brand-700 hover:bg-brand-50 transition-colors cursor-pointer"
+                                            >
+                                              <Upload size={12} /> Upload a RACM
+                                            </button>
+                                          </>
+                                        )}
+                                      </div>
+                                    </motion.div>
+                                  )}
+                                </AnimatePresence>
+                              </div>
+                            );
+                          })}
+                          {quietProcCount > 0 && (
+                            <button
+                              type="button"
+                              onClick={() => setShowAllProcs(v => !v)}
+                              aria-expanded={showAllProcs}
+                              className="w-full flex items-center gap-3 px-4 py-2.5 text-left text-[0.75rem] font-semibold text-ink-600 hover:text-ink-900 hover:bg-brand-50/40 transition-colors cursor-pointer"
+                            >
+                              <span className="w-4 flex justify-center shrink-0">
+                                <ChevronDown size={14} className={cn('transition-transform', showAllProcs && 'rotate-180')} />
+                              </span>
+                              {showAllProcs
+                                ? 'Hide processes with no material accounts'
+                                : <span>Show {quietProcCount} more process{quietProcCount === 1 ? '' : 'es'} <span className="font-normal text-ink-400">— no material accounts</span></span>}
+                            </button>
+                          )}
+                        </>
+                      )}
+                    </div>
+                  </motion.div>
+                )}
+              </AnimatePresence>
+            </section>
           </StepShell>
         )}
 
@@ -1810,103 +3143,242 @@ export default function ScopingWizard({ onCancel, onCreated, typePreselected, on
         {step === REVIEW_STEP && (
           <StepShell
             title="Review"
-            sub={SCOPING_STEP
-              ? 'Confirm the derivation before the FY27 programme is created. Nothing below was picked by hand — it all flows from materiality and the trial balances.'
-              : `Confirm who is in scope, and what came in with them, before the ${fy} programme is created.`}
+            sub={`Confirm the scope, and the RACMs it copies in, before the ${fy} programme is created.`}
           >
-            {(scopingSkipped || racmCount === 0) && (
-              <div className="mb-4 flex items-start gap-2 p-3 rounded-lg bg-high-50 border border-high-100">
-                <AlertCircle size={13} className="text-high-700 shrink-0 mt-0.5" />
-                <p className="text-[0.75rem] text-text-secondary leading-relaxed">
-                  {/* One arm now, not two: the RACM and the TB / GL are no
-                      longer asked for here, so arriving without them is the
-                      normal path rather than something the user skipped. */}
-                  The engagement is created without a RACM — add or generate one from the RACM tab, and the workspace
-                  Overview will flag it until you do. The trial balance and general ledger are attached later, on the
-                  audit that tests them.
-                </p>
-              </div>
-            )}
+            {/* S11 — the steps' answers in the order they were given: who,
+                the rule and its trial balance, the processes, then the RACMs
+                those processes copy in. */}
             <div className="grid grid-cols-1 gap-3 mb-4">
+              <ReviewCard title="Engagement">
+                <ReviewRow label="Name" value={finalName} />
+                <ReviewRow label="Code" value={code.trim().toUpperCase()} />
+                <ReviewRow label="Owner" value={owner} />
+                <ReviewRow label="Cycle" value={<>{fyLabel} <span className="font-normal text-ink-400">· opinion as of {asOf}</span></>} />
+              </ReviewCard>
+
               <ReviewCard title={soloEntity ? 'Company in scope' : 'Group & entities'}>
                 <div className="text-[13px] font-semibold text-text mb-1.5">{groupName}</div>
-                {entities.map(e => (
-                  <div key={e.id} className="flex items-center gap-1.5 text-[11.5px] text-text-secondary py-0.5 min-w-0">
-                    {e.type === 'Holding' ? <Landmark size={11} className="text-brand-700 shrink-0" /> : <Building2 size={11} className="text-text-muted shrink-0" />}
-                    <span className="truncate">{e.name}</span>
-                    {/* Say plainly whether the matrix is in — a missing RACM is
-                        the thing that stalls the engagement later. */}
-                    {entityRacm[e.id]
-                      ? <span className="inline-flex items-center gap-1 text-text-muted shrink-0"><FileText size={10} /> <span className="max-w-[140px] truncate">{entityRacm[e.id].name}</span></span>
-                      : <span className="text-text-muted shrink-0">· no RACM yet</span>}
-                  </div>
-                ))}
-              </ReviewCard>
-              {SCOPING_STEP && (<>
-              <ReviewCard title="Materiality">
-                <LadderRow label="Overall" value={fmtCr(overallCr)} strong note={basis === 'custom' ? 'Set directly' : `${pct}% of ${basisOpt.benchmarkLabel.toLowerCase()}`} />
-                <LadderRow label="Performance" value={fmtCr(overallCr * pmPct / 100)} note={`${pmPct}% of overall`} />
-                <LadderRow label="Clearly trivial" value={fmtCr(overallCr * cttPct / 100)} note={`${cttPct}% of overall`} last />
-              </ReviewCard>
-              <ReviewCard title="Scope funnel">
-                <FunnelRow label="TB captions parsed" value={captions.length} />
-                <FunnelRow label="Flagged above materiality" value={quantScope.length} />
-                <FunnelRow label="Scoped in qualitatively" value={qualScope.length} />
-                <FunnelRow label="Processes derived" value={derived.length} />
-                <FunnelRow label="Group-level workstreams" value={BEYOND_TB.filter(b => beyond[b.id]).length} last />
-              </ReviewCard>
-              </>)}
-              {!SCOPING_STEP && (
-                <ReviewCard title="Documents">
-                  {GROUP_DOCS.map(d => {
-                    const doc = attached.find(a => a.req === d.id);
-                    return (
-                      <div key={d.id} className="flex items-center gap-1.5 text-[11.5px] py-0.5 min-w-0">
-                        {doc
-                          ? <Check size={11} className="text-compliant-600 shrink-0" />
-                          : <Circle size={9} className="text-text-muted shrink-0" />}
-                        <span className="text-text-secondary shrink-0">{d.name}</span>
-                        <span className="text-text-muted truncate">{doc ? doc.name : '— not attached'}</span>
+                {scope.rows.map(r => {
+                  const e = entities.find(x => x.id === r.id);
+                  const on = companyInScope(r);
+                  const change = scopeChanges.find(c => c.entityId === r.id);
+                  return (
+                    <div key={r.id} className="py-0.5">
+                      <div className="flex items-center gap-1.5 text-[0.71875rem] text-text-secondary min-w-0">
+                        {r.type === 'Holding' ? <Landmark size={11} className="text-brand-700 shrink-0" /> : <Building2 size={11} className="text-text-muted shrink-0" />}
+                        <span className="truncate">{r.name}</span>
+                        {/* Its own span so a long name truncates before the country does. */}
+                        {e?.country?.trim() && <span className="shrink-0">· {e.country.trim()}</span>}
+                        <span className={cn('shrink-0 ml-auto pl-2 font-semibold', on ? 'text-ink-700' : 'text-ink-400')}>
+                          {on ? 'In scope' : 'Out'}
+                        </span>
                       </div>
-                    );
-                  })}
-                  <div className="flex items-center gap-1.5 text-[11.5px] py-0.5">
-                    {racmCount > 0
-                      ? <Check size={11} className="text-compliant-600 shrink-0" />
-                      : <Circle size={9} className="text-text-muted shrink-0" />}
-                    <span className="text-text-secondary shrink-0">RACM</span>
-                    <span className="text-text-muted">
-                      {racmCount > 0
-                        ? `${racmCount} of ${entities.length} ${entities.length === 1 ? 'entity' : 'entities'}`
-                        : '— add one from the RACM tab later'}
+                      {/* A company moved against the trial balance says why —
+                          the part of the scope the numbers don't explain. */}
+                      {change?.note && (
+                        <p className="pl-[17px] text-[0.6875rem] text-ink-500 leading-relaxed">
+                          {change.inScope ? 'Brought in' : 'Taken out'} — {change.note}
+                        </p>
+                      )}
+                    </div>
+                  );
+                })}
+                <p className="mt-2 text-[0.6875rem] text-text-muted tabular-nums">
+                  {coveragePct}% of the group covered · target {COVERAGE_TARGET}%
+                </p>
+              </ReviewCard>
+
+              <ReviewCard title="Materiality">
+                <LadderRow label="Overall" value={money(overallCr)} strong note={basis === 'custom' ? 'Set directly' : `${pct}% of ${basisOpt.benchmarkLabel.toLowerCase()}`} />
+                <LadderRow label="Performance" value={money(perf)} note={`${pmPct}% of overall`} />
+                <LadderRow label="Clearly trivial" value={money(trivial)} note={`${cttPct}% of overall`} last />
+              </ReviewCard>
+
+              <ReviewCard title="Trial balance & accounts">
+                <ReviewRow
+                  label="Trial balance"
+                  value={scopeFiles.filter(f => f.kind === 'tb').map(f => f.name).join(', ') || <span className="font-normal text-ink-400">Not attached</span>}
+                />
+                <ReviewRow
+                  label="General ledger"
+                  value={scopeFiles.filter(f => f.kind === 'gl').map(f => f.name).join(', ') || <span className="font-normal text-ink-400">Not attached</span>}
+                />
+                <ReviewRow
+                  label="Account mapping"
+                  value={<>{materialRows.length} material account{materialRows.length === 1 ? '' : 's'} mapped <span className="font-normal text-ink-400">· ≥ {money(perf)}</span></>}
+                />
+              </ReviewCard>
+
+              {/* Which processes are in on Ira's word, which on the user's (with
+                  the reason), and which were taken out and why. */}
+              <ReviewCard title="Processes">
+                <ReviewRow
+                  label="In scope"
+                  value={scopedProcesses.length === 0 ? <span className="font-normal text-ink-400">None</span> : (
+                    <span className="block space-y-1.5">
+                      {scopedProcesses.map(r => {
+                        const move = procChanges.find(c => c.process === r.process);
+                        return (
+                          <span key={r.process} className="block">
+                            {r.process}
+                            <span className="font-normal text-ink-400"> · {move?.qualitative ? 'qualitative' : 'recommended by Ira'}</span>
+                            {move?.qualitative && (
+                              <span className="block text-[0.6875rem] font-normal text-ink-500 leading-relaxed">{move.reason} — {move.note}</span>
+                            )}
+                          </span>
+                        );
+                      })}
                     </span>
-                  </div>
-                </ReviewCard>
-              )}
+                  )}
+                />
+                {procChanges.some(c => !c.inScope) && (
+                  <ReviewRow
+                    label="Moved out"
+                    value={(
+                      <span className="block space-y-1.5">
+                        {procChanges.filter(c => !c.inScope).map(c => (
+                          <span key={c.process} className="block">
+                            {c.process}
+                            <span className="block text-[0.6875rem] font-normal text-ink-500 leading-relaxed">{c.note}</span>
+                          </span>
+                        ))}
+                      </span>
+                    )}
+                  />
+                )}
+              </ReviewCard>
+
+              {/* What the engagement will actually test — copied now, so this is
+                  the last place to see it before the copies are taken. */}
+              <ReviewCard title="RACMs from the RACM tab">
+                {pickedByProcess.map(g => {
+                  const count = g.racms.reduce((s, r) => s + r.controls.length, 0);
+                  return (
+                    <div key={g.process} className="py-2 border-b border-canvas-border">
+                      <div className="flex items-baseline justify-between gap-3">
+                        <span className="text-[0.75rem] font-semibold text-ink-900 min-w-0 truncate">{g.process}</span>
+                        <span className="text-[0.6875rem] text-ink-500 tabular-nums shrink-0">{count} control{count === 1 ? '' : 's'}</span>
+                      </div>
+                      {g.racms.map(r => (
+                        <div key={r.id} className="flex items-baseline justify-between gap-3 mt-1 text-[0.71875rem]">
+                          <span className="min-w-0 truncate text-ink-600" title={r.name}>{r.name}</span>
+                          <span className="shrink-0 text-ink-400 tabular-nums">{r.controls.length}</span>
+                        </div>
+                      ))}
+                    </div>
+                  );
+                })}
+                <div className="flex items-baseline justify-between gap-3 pt-2">
+                  <span className="text-[0.75rem] font-semibold text-ink-900">Total</span>
+                  <span className="text-[0.8125rem] font-bold tabular-nums text-ink-900">
+                    {tickedRacms.length} RACM{tickedRacms.length === 1 ? '' : 's'} · {tickedControlCount} control{tickedControlCount === 1 ? '' : 's'}
+                  </span>
+                </div>
+              </ReviewCard>
             </div>
 
-            <div className="border border-border-light rounded-xl bg-white p-4">
-              <div className="text-[11px] font-bold text-text-muted uppercase tracking-wider mb-3">
-                RACMs — added from the RACM tab once the engagement exists
-              </div>
-              <div className="grid grid-cols-2 gap-2.5">
-                {derived.map(r => (
-                  <div key={r.process} className="rounded-lg p-3 bg-surface-2/50">
-                    <div className="text-[12.5px] font-semibold text-text">{r.process}</div>
-                    <div className="text-[10.5px] text-text-muted mt-0.5 mb-2 tabular-nums">
-                      {r.sources.length} source caption{r.sources.length === 1 ? '' : 's'} · {r.entities.join(', ')}
+            {/* PARKED (S11) — the Review this step showed before creation
+                scoped anything: the "created without a RACM" banner, the
+                per-entity RACM line, the Documents card and the RACMs grid
+                derived from captions. None of it is true of an engagement that
+                arrives with its RACMs picked. Flip PRE_S11_REVIEW to see it. */}
+            {PRE_S11_REVIEW && (<>
+              {(scopingSkipped || racmCount === 0) && (
+                <div className="mb-4 flex items-start gap-2 p-3 rounded-lg bg-high-50 border border-high-100">
+                  <AlertCircle size={13} className="text-high-700 shrink-0 mt-0.5" />
+                  <p className="text-[0.75rem] text-text-secondary leading-relaxed">
+                    {/* One arm now, not two: the RACM and the TB / GL are no
+                        longer asked for here, so arriving without them is the
+                        normal path rather than something the user skipped. */}
+                    The engagement is created without a RACM — add or generate one from the RACM tab, and the workspace
+                    Overview will flag it until you do. The trial balance and general ledger are attached later, on the
+                    audit that tests them.
+                  </p>
+                </div>
+              )}
+              <div className="grid grid-cols-1 gap-3 mb-4">
+                <ReviewCard title={soloEntity ? 'Company in scope' : 'Group & entities'}>
+                  <div className="text-[13px] font-semibold text-text mb-1.5">{groupName}</div>
+                  {entities.map(e => (
+                    <div key={e.id} className="flex items-center gap-1.5 text-[11.5px] text-text-secondary py-0.5 min-w-0">
+                      {e.type === 'Holding' ? <Landmark size={11} className="text-brand-700 shrink-0" /> : <Building2 size={11} className="text-text-muted shrink-0" />}
+                      <span className="truncate">{e.name}</span>
+                      {/* Its own span so a long name truncates before the country does. */}
+                      {e.country?.trim() && <span className="shrink-0">· {e.country.trim()}</span>}
+                      {/* Say plainly whether the matrix is in — a missing RACM is
+                          the thing that stalls the engagement later. */}
+                      {entityRacm[e.id]
+                        ? <span className="inline-flex items-center gap-1 text-text-muted shrink-0"><FileText size={10} /> <span className="max-w-[140px] truncate">{entityRacm[e.id].name}</span></span>
+                        : <span className="text-text-muted shrink-0">· no RACM yet</span>}
                     </div>
-                    <SourceChips sources={r.sources} max={3} />
-                  </div>
-                ))}
-                {BEYOND_TB.filter(b => beyond[b.id]).map(b => (
-                  <div key={b.id} className="rounded-lg p-3 bg-surface-2/60">
-                    <div className="text-[12.5px] font-semibold text-text-secondary">{b.name}</div>
-                    <div className="text-[10.5px] text-text-muted mt-0.5">Group-level workstream — scoped without a TB caption</div>
-                  </div>
-                ))}
+                  ))}
+                </ReviewCard>
+                {SCOPING_STEP && (<>
+                <ReviewCard title="Materiality">
+                  <LadderRow label="Overall" value={fmtCr(overallCr)} strong note={basis === 'custom' ? 'Set directly' : `${pct}% of ${basisOpt.benchmarkLabel.toLowerCase()}`} />
+                  <LadderRow label="Performance" value={fmtCr(overallCr * pmPct / 100)} note={`${pmPct}% of overall`} />
+                  <LadderRow label="Clearly trivial" value={fmtCr(overallCr * cttPct / 100)} note={`${cttPct}% of overall`} last />
+                </ReviewCard>
+                <ReviewCard title="Scope funnel">
+                  <FunnelRow label="TB captions parsed" value={captions.length} />
+                  <FunnelRow label="Flagged above materiality" value={quantScope.length} />
+                  <FunnelRow label="Scoped in qualitatively" value={qualScope.length} />
+                  <FunnelRow label="Processes derived" value={derived.length} />
+                  <FunnelRow label="Group-level workstreams" value={BEYOND_TB.filter(b => beyond[b.id]).length} last />
+                </ReviewCard>
+                </>)}
+                {!SCOPING_STEP && (
+                  <ReviewCard title="Documents">
+                    {GROUP_DOCS.map(d => {
+                      const doc = attached.find(a => a.req === d.id);
+                      return (
+                        <div key={d.id} className="flex items-center gap-1.5 text-[11.5px] py-0.5 min-w-0">
+                          {doc
+                            ? <Check size={11} className="text-compliant-600 shrink-0" />
+                            : <Circle size={9} className="text-text-muted shrink-0" />}
+                          <span className="text-text-secondary shrink-0">{d.name}</span>
+                          <span className="text-text-muted truncate">{doc ? doc.name : '— not attached'}</span>
+                        </div>
+                      );
+                    })}
+                    <div className="flex items-center gap-1.5 text-[11.5px] py-0.5">
+                      {racmCount > 0
+                        ? <Check size={11} className="text-compliant-600 shrink-0" />
+                        : <Circle size={9} className="text-text-muted shrink-0" />}
+                      <span className="text-text-secondary shrink-0">RACM</span>
+                      <span className="text-text-muted">
+                        {racmCount > 0
+                          ? `${racmCount} of ${entities.length} ${entities.length === 1 ? 'entity' : 'entities'}`
+                          : '— add one from the RACM tab later'}
+                      </span>
+                    </div>
+                  </ReviewCard>
+                )}
               </div>
-            </div>
+
+              <div className="border border-border-light rounded-xl bg-white p-4">
+                <div className="text-[11px] font-bold text-text-muted uppercase tracking-wider mb-3">
+                  RACMs — added from the RACM tab once the engagement exists
+                </div>
+                <div className="grid grid-cols-2 gap-2.5">
+                  {derived.map(r => (
+                    <div key={r.process} className="rounded-lg p-3 bg-surface-2/50">
+                      <div className="text-[12.5px] font-semibold text-text">{r.process}</div>
+                      <div className="text-[10.5px] text-text-muted mt-0.5 mb-2 tabular-nums">
+                        {r.sources.length} source caption{r.sources.length === 1 ? '' : 's'} · {r.entities.join(', ')}
+                      </div>
+                      <SourceChips sources={r.sources} max={3} />
+                    </div>
+                  ))}
+                  {BEYOND_TB.filter(b => beyond[b.id]).map(b => (
+                    <div key={b.id} className="rounded-lg p-3 bg-surface-2/60">
+                      <div className="text-[12.5px] font-semibold text-text-secondary">{b.name}</div>
+                      <div className="text-[10.5px] text-text-muted mt-0.5">Group-level workstream — scoped without a TB caption</div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            </>)}
           </StepShell>
         )}
       </motion.div>
@@ -1924,7 +3396,11 @@ export default function ScopingWizard({ onCancel, onCreated, typePreselected, on
           <ArrowLeft size={13} /> {step === firstStep && !(typePreselected && onBackToType) ? 'Cancel' : 'Back'}
         </button>
         {step < STEPS.length - 1 ? (
-          <span className="flex items-center gap-2">
+          <span className="flex items-center gap-2 min-w-0 pl-3">
+            {/* What the greyed Continue is waiting for — see footerHint. */}
+            {!canContinue && footerHint && (
+              <span className="text-[0.71875rem] text-high-700 font-medium text-right leading-snug">{footerHint}</span>
+            )}
             {SCOPING_STEP && step === 2 && (
               <button
                 onClick={skipScoping}
@@ -1937,7 +3413,7 @@ export default function ScopingWizard({ onCancel, onCreated, typePreselected, on
             <button
               onClick={goNext}
               disabled={!canContinue}
-              className="flex items-center gap-1.5 px-4 py-2 bg-primary hover:bg-primary-hover text-white rounded-lg text-[13px] font-semibold transition-colors cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed"
+              className="flex items-center gap-1.5 px-4 py-2 bg-primary hover:bg-primary-hover text-white rounded-lg text-[0.8125rem] font-semibold transition-colors cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed shrink-0"
             >
               Continue <ArrowRight size={13} />
             </button>
@@ -1945,13 +3421,30 @@ export default function ScopingWizard({ onCancel, onCreated, typePreselected, on
         ) : (
           <button
             onClick={create}
-            disabled={!scopingSkipped && derived.length === 0}
+            disabled={!readyToCreate}
             className="flex items-center gap-1.5 px-4 py-2 bg-primary hover:bg-primary-hover text-white rounded-lg text-[13px] font-semibold transition-colors cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed"
           >
             <Check size={13} /> Create {fy} programme
           </button>
         )}
       </div>
+
+      {/* Upload RACM, from a process on Scope — the RACM tab's own Create RACM
+          with the process settled by the row it was pressed on. Portalled to
+          the body: this sheet is a transformed, fixed panel, and a fixed
+          dialog inside it would be positioned against the sheet rather than
+          the window. The RACM is saved to the tab by the dialog; it is only
+          ticked here. */}
+      {racmUploadFor && createPortal(
+        <CreateRacmFlow
+          fixedProcess={racmUploadFor.process}
+          defaultEntity={racmUploadFor.entity || undefined}
+          publishOnCreate
+          onClose={() => setRacmUploadFor(null)}
+          onCreated={racm => onRacmUploaded(racmUploadFor.process, racm)}
+        />,
+        document.body,
+      )}
     </div>
   );
 }
@@ -1997,6 +3490,117 @@ export function StepRail({ steps, step, onStepClick }: {
           <span key={label} className={i === step ? 'text-brand-700' : ''}>{label}</span>
         ))}
       </div>
+    </div>
+  );
+}
+
+/** Control IDs held by two ticked RACMs. Blocks Continue, so it reads as the
+ *  same warning box Basics uses when an org chart clashes with the table. */
+/** The one tick on the Scope step — entities, processes and RACMs all use it,
+ *  so a single control means "in". Sits inside a `group` row button, which
+ *  carries the role, the state and the focus ring. */
+function TickBox({ state, disabled }: { state: boolean | 'mixed'; disabled?: boolean }) {
+  const filled = state === true || state === 'mixed';
+  return (
+    <span
+      aria-hidden
+      className={cn(
+        'w-4 h-4 rounded border flex items-center justify-center shrink-0 transition-colors',
+        disabled ? 'border-canvas-border bg-paper-50'
+          : filled ? 'bg-brand-600 border-brand-600 text-white'
+          : 'border-ink-300 bg-white group-hover:border-ink-400',
+      )}
+    >
+      {state === 'mixed' ? <Minus size={11} strokeWidth={3} /> : state ? <Check size={11} strokeWidth={3} /> : null}
+    </span>
+  );
+}
+
+/** The "why" under a Scope row moved against the numbers or against Ira. Set
+ *  on workpaper tones — the note is retained in the working paper — and hung
+ *  under the row's name like the RACM list. `children` sits above the text
+ *  box (a qualitative pick's reason chips). */
+function ScopeNote({ question, ariaLabel, editing, draft, onDraft, canSave, onSave, onCancel, onEdit, saved, children }: {
+  question: string;
+  ariaLabel: string;
+  editing: boolean;
+  draft: string;
+  onDraft: (v: string) => void;
+  canSave: boolean;
+  onSave: () => void;
+  onCancel: () => void;
+  onEdit: () => void;
+  saved: React.ReactNode;
+  children?: React.ReactNode;
+}) {
+  return (
+    <div className="ml-[2.75rem] mr-4 mb-3 p-3 rounded-lg border border-paper-300/70 bg-paper-50">
+      <p className="text-[0.71875rem] font-semibold text-ink-800 mb-1.5">{question}</p>
+      {editing ? (
+        <>
+          {children}
+          <textarea
+            aria-label={ariaLabel}
+            autoFocus
+            rows={2}
+            value={draft}
+            onChange={e => onDraft(e.target.value)}
+            placeholder="Record your rationale — retained in the working paper."
+            className="w-full text-[0.75rem] rounded-lg border border-canvas-border bg-white px-2.5 py-2 text-ink-800 placeholder:text-ink-400 outline-none focus:border-brand-400 resize-none transition-colors"
+          />
+          <div className="flex items-center justify-end gap-1.5 mt-2">
+            <button
+              type="button"
+              onClick={onCancel}
+              className="h-7 px-2.5 rounded-lg text-[0.71875rem] font-semibold text-ink-500 hover:text-ink-800 hover:bg-white transition-colors cursor-pointer"
+            >
+              Cancel
+            </button>
+            <button
+              type="button"
+              onClick={onSave}
+              disabled={!canSave}
+              className="h-7 px-3 rounded-lg text-[0.71875rem] font-semibold bg-brand-600 text-white disabled:opacity-40 disabled:cursor-not-allowed enabled:hover:bg-brand-700 transition-colors cursor-pointer"
+            >
+              Save
+            </button>
+          </div>
+        </>
+      ) : (
+        <div className="flex items-start justify-between gap-3">
+          <p className="text-[0.75rem] text-ink-700 leading-relaxed min-w-0 whitespace-pre-wrap">{saved}</p>
+          <button
+            type="button"
+            onClick={onEdit}
+            className="shrink-0 h-6 px-2 rounded-md text-[0.71875rem] font-semibold text-brand-700 hover:bg-brand-50 transition-colors cursor-pointer"
+          >
+            Edit
+          </button>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function ClashNote({ lines }: { lines: string[] }) {
+  return (
+    <div className="mb-2.5 rounded-md border border-high-100 bg-high-50 px-2.5 py-2">
+      {lines.map(line => (
+        <p key={line} className="flex items-start gap-1.5 text-[0.6875rem] text-high-700">
+          <AlertCircle size={11} className="shrink-0 mt-0.5" />
+          <span>{line} — untick one to continue.</span>
+        </p>
+      ))}
+    </div>
+  );
+}
+
+/** Review rows — label left, value right, as on the New audit review. */
+function ReviewRow({ label, value }: { label: string; value: React.ReactNode }) {
+  return (
+    <div className="flex items-start justify-between gap-4 py-1.5 border-b border-canvas-border last:border-b-0">
+      <span className="text-[0.71875rem] text-ink-500 shrink-0">{label}</span>
+      <span className="text-[0.75rem] font-semibold text-ink-900 text-right min-w-0">{value}</span>
     </div>
   );
 }

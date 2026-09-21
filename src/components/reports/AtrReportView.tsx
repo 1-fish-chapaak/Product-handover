@@ -1,8 +1,10 @@
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useMemo, useCallback } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
-import { ArrowLeft, Share2, Download, List, Pencil, Check, X, History, ShieldAlert } from 'lucide-react';
+import { createPortal } from 'react-dom';
+import { ArrowLeft, Share2, Download, List, Pencil, Check, X, History, CalendarClock, Clock3, Link2, Paperclip, FileSpreadsheet, ListChecks, ChevronDown } from 'lucide-react';
+import DataPickerModal, { type AttachmentSelection } from '../chat/DataPickerModal';
 import AtrDocument from './AtrDocument';
-import type { AtrReportData, AtrMeta, AtrObservation } from './atrTypes';
+import type { AtrReportData, AtrMeta, AtrObservation, AtrLinkedAnnexure } from './atrTypes';
 import type { AtrSectionKey } from './atrSections';
 import { computeExecSummary, exportAtrExcel } from './atrTemplate';
 import ReportDownloadModal, { type DownloadPreviewSection } from './ReportDownloadModal';
@@ -11,8 +13,9 @@ import ConfirmationModal from '../shared/ConfirmationModal';
 import { useToast } from '../shared/Toast';
 import AtrReviewDrawer from './AtrReviewDrawer';
 import { loadVersions, appendVersion, currentVersion, nowStamp } from './atrReview';
-import { ApplyTemplateChip, ReportVisibilityChip } from './ReportBarControls';
-import { DEFAULT_REPORT_AUDIENCE, type Audience } from '../shared/audience';
+import { loadTimeline, appendEvents, editEvent, annexureLinkedEvent, annexureUnlinkedEvent, replay, splitEvents, atrTimelineKey, fmtEventTime, type AtrTimeline, type TimelineSeed } from './atrTimeline';
+import AtrReportSnapshotPanel from './AtrReportSnapshotPanel';
+import type { Audience } from '../shared/audience';
 import { REPORT_TEMPLATES } from '../../data/mockData';
 import { reportGradient, type EditableTemplate } from './reportShared';
 
@@ -95,8 +98,9 @@ interface AtrReport {
   generatedBy?: string;
   generatedAt?: string;
   tag?: string;
-  /** Reports have no draft state — an ATR is issued, or frozen from edits. */
-  status?: 'final' | 'frozen';
+  /** 'draft' = saved from Create Report but not yet generated; 'final' =
+   *  issued; 'frozen' = locked from edits. */
+  status?: 'draft' | 'final' | 'frozen';
   atrData: AtrReportData;
   /** Format last applied from the command bar — restored when it reopens. */
   appliedTemplateId?: string;
@@ -106,53 +110,129 @@ interface AtrReport {
 /** Saved-ATR report page. Renders the generated Action Taken Report inside the
  *  shared reader workspace: plain page-level actions (no header bar), a persistent
  *  scroll-spy outline rail, and a constrained document column. */
-export default function AtrReportView({ report, onBack, onShare, onSave, onManageExceptions, templates = REPORT_TEMPLATES, onApplyTemplate, onChangeAudience }: {
+export default function AtrReportView({ report, onBack, onShare, onSave, onEditObservations, renderObservationActions, templates = REPORT_TEMPLATES, timelineSeed }: {
   report: AtrReport;
   onBack: () => void;
+  /** Share — also where who-can-open lives, so the bar carries no visibility chip. */
   onShare?: () => void;
-  /** Formats listed in the command bar's Apply Template control. */
+  /** Formats, to resolve the one applied to this ATR (branding on the banner). */
   templates?: (typeof REPORT_TEMPLATES[number] | EditableTemplate)[];
-  /** Persist the applied format on the ATR so it survives a reopen. */
-  onApplyTemplate?: (reportId: string, templateId: string) => void;
-  /** Persist who can open this ATR. */
-  onChangeAudience?: (reportId: string, audience: Audience) => void;
   /** Persist inline edits to the saved ATR. Absent → the report is read-only. */
-  onSave?: (data: AtrReportData) => void;
+  onSave?: (data: AtrReportData, opts?: { quiet?: boolean }) => void;
   /** Opens the case-management (Manage Exceptions) view. Absent → button hidden. */
-  onManageExceptions?: () => void;
+  /** Open the extracted observations this ATR was generated from (Create
+   *  Report → Observations Extracted) to edit them and regenerate the ATR. */
+  onEditObservations?: () => void;
+  /** Optional per-observation action slot, rendered in each observation card's
+   *  header (e.g. the Manage Exceptions CTA on ATRs generated from an upload).
+   *  Receives the 0-based index and the observation as currently rendered. */
+  renderObservationActions?: (index: number, obs: AtrObservation) => React.ReactNode;
+  /** Report Snapshot seed: who prepared / audits / owns the risk, and whether to
+   *  lay down the curated demo history (library ATRs) or start truthfully from
+   *  the generated snapshot (user-generated ATRs). */
+  timelineSeed?: TimelineSeed;
 }) {
   // Inline editing — a working draft over the saved report. `dirty` drives the
   // discard guard so leaving (or cancelling) only prompts when edits are unsaved.
   const editable = !!onSave;
   const [editing, setEditing] = useState(false);
-  // The format and the audience are saved properties of the ATR, the same two
-  // the standard reader carries, so an ATR opens on what was last chosen.
-  const [appliedTemplate, setAppliedTemplate] = useState<(typeof REPORT_TEMPLATES[number] | EditableTemplate) | null>(
+  const [editMenuOpen, setEditMenuOpen] = useState(false);
+  // The template was chosen when the report was created; it only brands the
+  // banner here (no Apply Template control on an ATR).
+  const appliedTemplate = useMemo<(typeof REPORT_TEMPLATES[number] | EditableTemplate) | null>(
     () => (report.appliedTemplateId ? templates.find(t => t.id === report.appliedTemplateId) ?? null : null),
+    [report.appliedTemplateId, templates],
   );
-  const [applyingTemplate, setApplyingTemplate] = useState(false);
-  const [audience, setAudience] = useState<Audience>(report.shareAudience ?? DEFAULT_REPORT_AUDIENCE);
   const { addToast } = useToast();
-  const handleApplyTemplate = (t: typeof REPORT_TEMPLATES[number] | EditableTemplate) => {
-    setApplyingTemplate(true);
-    window.setTimeout(() => {
-      setAppliedTemplate(t);
-      setApplyingTemplate(false);
-      onApplyTemplate?.(report.id, t.id);
-      addToast({ type: 'success', message: `Format "${t.name}" applied.` });
-    }, 700);
-  };
-  const handleAudienceChange = (next: Audience) => {
-    setAudience(next);
-    onChangeAudience?.(report.id, next);
-    addToast({ type: 'success', message: `Who can open this: ${next}` });
-  };
   // Save runs only after the user confirms.
   const [confirmingSave, setConfirmingSave] = useState(false);
-  // The view remounts per report (navigating away passes through the list), so
-  // the initializer is enough — no prop→state resync effect needed.
-  const [draft, setDraft] = useState<AtrReportData>(report.atrData);
-  const dirty = editing && JSON.stringify(draft) !== JSON.stringify(report.atrData);
+  // ── Report Snapshot ──
+  // The report's timeline (atrTimeline.ts) is the source of truth for what the
+  // reader shows: the generated baseline plus every recorded action — edits
+  // saved here, and case-management actions by the Auditor / Risk Owner, which
+  // arrive from the Manage Exceptions tab via localStorage.
+  const [timeline, setTimeline] = useState<AtrTimeline>(() => loadTimeline(report.id, report.atrData, {
+    generatedAt: report.generatedAt ?? report.atrData.meta.generatedOn,
+    preparedBy: report.generatedBy ?? report.atrData.meta.preparedBy,
+    ...(timelineSeed ?? {}),
+  }));
+  const latest = useMemo(() => replay(timeline), [timeline]);
+  // `asOf` (ISO) = the moment being viewed; null = latest. The panel toggles
+  // independently so the trail can stay open while reading the latest state.
+  const [asOf, setAsOf] = useState<string | null>(null);
+  const [snapshotOpen, setSnapshotOpen] = useState(false);
+  const timeTravelling = asOf !== null;
+  // Other tabs (Manage Exceptions) append to the same timeline — pick it up live.
+  useEffect(() => {
+    const key = atrTimelineKey(report.id);
+    const onStorage = (e: StorageEvent) => {
+      if (e.key !== key || !e.newValue) return;
+      try { setTimeline(JSON.parse(e.newValue) as AtrTimeline); } catch { /* half-written — keep what we have */ }
+    };
+    window.addEventListener('storage', onStorage);
+    return () => window.removeEventListener('storage', onStorage);
+  }, [report.id]);
+
+  // `edits` is the working copy while the user is editing (null otherwise), so
+  // the draft the document shows is the latest timeline state until they type —
+  // and follows the timeline again the moment they save or discard.
+  const [edits, setEdits] = useState<AtrReportData | null>(null);
+  const draft = edits ?? latest;
+  const setDraft = (u: AtrReportData | ((d: AtrReportData) => AtrReportData)) =>
+    setEdits(prev => (typeof u === 'function' ? u(prev ?? latest) : u));
+  const dirty = editing && edits !== null && JSON.stringify(edits) !== JSON.stringify(latest);
+  // What the document renders: the reconstruction for the chosen moment, else
+  // the (possibly being-edited) latest.
+  const asOfData = useMemo(() => (asOf ? replay(timeline, asOf) : null), [timeline, asOf]);
+  const view = asOfData ?? draft;
+  const appliedByObs = useMemo(() => {
+    if (!asOf) return null;
+    const { applied } = splitEvents(timeline, asOf);
+    const m = new Map<number, { n: number; last: string }>();
+    applied.forEach(e => { if (e.observationIndex == null) return; const cur = m.get(e.observationIndex); m.set(e.observationIndex, { n: (cur?.n ?? 0) + 1, last: e.ts }); });
+    return m;
+  }, [timeline, asOf]);
+  const openSnapshot = useCallback(() => { setSnapshotOpen(true); if (editing) setEditing(false); }, [editing]);
+  const closeSnapshot = () => { setSnapshotOpen(false); setAsOf(null); };
+
+  // ── Annexures per observation ──
+  // The link icon on each observation opens the platform's Add-data picker; every
+  // chosen file / source becomes a linked annexure on that observation. Links are
+  // recorded on the Report Snapshot trail (so they replay) and persisted on the
+  // saved report through onSave.
+  const [linkingObs, setLinkingObs] = useState<number | null>(null);
+  const me = report.generatedBy ?? latest.meta.preparedBy ?? 'You';
+  const linkAnnexures = (index: number, selections: AttachmentSelection[]) => {
+    const obs = latest.observations[index];
+    if (!obs || selections.length === 0) { setLinkingObs(null); return; }
+    const now = new Date().toISOString();
+    const added: AtrLinkedAnnexure[] = selections.map((sel, i) => ({
+      id: `anx-${Date.now()}-${i}-${Math.random().toString(36).slice(2, 6)}`,
+      name: sel.kind === 'connect-db' ? `${sel.name} (${sel.database})` : sel.name,
+      sizeBytes: sel.kind === 'upload' ? sel.sizeBytes : undefined,
+      source: sel.kind,
+      linkedAt: now,
+      linkedBy: me,
+    }));
+    const next = appendEvents(report.id, [annexureLinkedEvent(index, obs.title, added, me)]);
+    if (next) {
+      setTimeline(next);
+      onSave?.(replay(next), { quiet: true });
+    }
+    addToast({ type: 'success', message: added.length === 1 ? `“${added[0].name}” linked to ${obs.title}.` : `${added.length} annexures linked to ${obs.title}.` });
+    setLinkingObs(null);
+  };
+  const unlinkAnnexure = (index: number, anx: AtrLinkedAnnexure) => {
+    const obs = latest.observations[index];
+    if (!obs) return;
+    const next = appendEvents(report.id, [annexureUnlinkedEvent(index, obs.title, anx, me)]);
+    if (next) {
+      setTimeline(next);
+      onSave?.(replay(next), { quiet: true });
+    }
+    addToast({ type: 'success', message: `“${anx.name}” unlinked.` });
+  };
+  const fmtSize = (n?: number) => (n == null ? '' : n < 1024 ? `${n} B` : n < 1024 * 1024 ? `${(n / 1024).toFixed(0)} KB` : `${(n / 1024 / 1024).toFixed(1)} MB`);
   // `null` = no prompt; otherwise the action the discard would complete.
   const [pendingDiscard, setPendingDiscard] = useState<null | 'leave' | 'cancel'>(null);
   // Review drawer (comments + version history) — `null` = closed.
@@ -163,7 +243,7 @@ export default function AtrReportView({ report, onBack, onShare, onSave, onManag
   const confirmDiscard = () => {
     const action = pendingDiscard;
     setPendingDiscard(null);
-    setDraft(report.atrData);
+    setEdits(null);
     setEditing(false);
     if (action === 'leave') onBack();
   };
@@ -178,13 +258,18 @@ export default function AtrReportView({ report, onBack, onShare, onSave, onManag
         reviewedBy: draft.meta.reviewedBy,
         observations: draft.observations.map(o => o.title),
       });
-      appendVersion(report.id, current, describeEdits(report.atrData, draft), 'draft', draft.meta.preparedBy ?? 'You', diffAtr(report.atrData, draft));
+      const changes = diffAtr(latest, draft);
+      appendVersion(report.id, current, describeEdits(latest, draft), 'draft', draft.meta.preparedBy ?? 'You', changes);
+      // …and onto the Report Snapshot trail, as a full snapshot so it replays exactly.
+      const next = appendEvents(report.id, [editEvent(draft, draft.meta.preparedBy ?? 'You', changes)]);
+      if (next) setTimeline(next);
     }
     onSave?.(draft);
+    setEdits(null);
     setEditing(false);
   };
 
-  const { meta, observations, insights } = draft;
+  const { meta, observations, insights } = view;
 
   // Current version number for the banner byline — reads the same trail the
   // review drawer shows. Re-reads each render, so it updates after a save.
@@ -284,10 +369,10 @@ export default function AtrReportView({ report, onBack, onShare, onSave, onManag
     >
       {/* Report actions — pinned to the top of the scroll area (page-coloured,
           borderless — no header-bar chrome) so they stay reachable on scroll. */}
-      <div className="sticky top-0 z-30 bg-canvas px-6 lg:px-12 xl:px-[124px] h-16 flex items-center justify-between gap-4 print:hidden">
+      <div className="sticky top-0 z-30 bg-canvas px-6 lg:px-12 xl:px-[124px] h-16 flex items-center justify-between gap-3 print:hidden">
         <button
           onClick={requestBack}
-          className="inline-flex items-center gap-1.5 h-9 px-3 text-[0.75rem] font-semibold text-ink-600 bg-canvas-elevated border border-canvas-border rounded-md hover:bg-canvas hover:text-ink-900 transition-colors cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600/30"
+          className="inline-flex items-center gap-1.5 h-9 px-3 text-[0.75rem] font-semibold whitespace-nowrap shrink-0 text-ink-600 bg-canvas-elevated border border-canvas-border rounded-md hover:bg-canvas hover:text-ink-900 transition-colors cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600/30"
         >
           <ArrowLeft size={14} /> Back to Reports
         </button>
@@ -297,63 +382,86 @@ export default function AtrReportView({ report, onBack, onShare, onSave, onManag
               {dirty && <span className="text-[0.6875rem] font-semibold uppercase tracking-[0.1em] text-mitigated-600 mr-1">Unsaved changes</span>}
               <button
                 onClick={requestCancel}
-                className="inline-flex items-center gap-1.5 h-9 px-3.5 text-[0.75rem] font-semibold text-ink-700 bg-canvas-elevated border border-canvas-border rounded-md hover:bg-canvas hover:border-ink-300/70 transition-colors cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600/30"
+                className="inline-flex items-center gap-1.5 h-9 px-3 text-[0.75rem] font-semibold whitespace-nowrap text-ink-700 bg-canvas-elevated border border-canvas-border rounded-md hover:bg-canvas hover:border-ink-300/70 transition-colors cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600/30"
               >
                 <X size={14} /> Cancel
               </button>
               <button
                 onClick={() => setConfirmingSave(true)}
                 disabled={!dirty}
-                className="inline-flex items-center gap-1.5 h-9 px-3.5 text-[0.75rem] font-semibold text-white bg-brand-600 rounded-md hover:bg-brand-700 transition-colors cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600/40 disabled:opacity-50 disabled:cursor-not-allowed"
+                className="inline-flex items-center gap-1.5 h-9 px-3 text-[0.75rem] font-semibold whitespace-nowrap text-white bg-brand-600 rounded-md hover:bg-brand-700 transition-colors cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600/40 disabled:opacity-50 disabled:cursor-not-allowed"
               >
                 <Check size={14} /> Save changes
               </button>
             </>
           ) : (
             <>
-              {/* The same format and visibility controls every other open
-                  report carries. */}
-              <ApplyTemplateChip
-                templates={templates as typeof REPORT_TEMPLATES[number][]}
-                activeId={appliedTemplate?.id ?? null}
-                activeName={appliedTemplate?.name ?? null}
-                onSelect={handleApplyTemplate}
-                busy={applyingTemplate}
-              />
-              <ReportVisibilityChip audience={audience} onChange={handleAudienceChange} disabled={!onChangeAudience} />
+              {/* A short bar: the template was chosen when the report was
+                  created, visibility lives in Share, and case work happens in
+                  Manage Exceptions — so none of those need a button here. */}
+              <button
+                onClick={() => (snapshotOpen ? closeSnapshot() : openSnapshot())}
+                aria-pressed={snapshotOpen}
+                title="See the report, and every action taken on it, as of any moment"
+                className={`inline-flex items-center gap-1.5 h-9 px-3 text-[0.75rem] font-semibold whitespace-nowrap border rounded-md transition-colors cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600/30 ${snapshotOpen ? 'text-brand-700 bg-brand-50 border-brand-200 hover:bg-brand-100' : 'text-ink-700 bg-canvas-elevated border-canvas-border hover:bg-canvas hover:border-ink-300/70'}`}
+              >
+                <Clock3 size={14} /> Report Snapshot
+              </button>
               <button
                 onClick={() => setReviewTab('comments')}
-                className="inline-flex items-center gap-1.5 h-9 px-3.5 text-[0.75rem] font-semibold text-ink-700 bg-canvas-elevated border border-canvas-border rounded-md hover:bg-canvas hover:border-ink-300/70 transition-colors cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600/30"
+                className="inline-flex items-center gap-1.5 h-9 px-3 text-[0.75rem] font-semibold whitespace-nowrap text-ink-700 bg-canvas-elevated border border-canvas-border rounded-md hover:bg-canvas hover:border-ink-300/70 transition-colors cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600/30"
               >
                 <History size={14} /> Activity
               </button>
-              {onManageExceptions && (
-                <button
-                  onClick={onManageExceptions}
-                  className="inline-flex items-center gap-1.5 h-9 px-3.5 text-[0.75rem] font-semibold text-ink-700 bg-canvas-elevated border border-canvas-border rounded-md hover:bg-canvas hover:border-ink-300/70 transition-colors cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600/30"
-                >
-                  <ShieldAlert size={14} /> Case Management
-                </button>
-              )}
-              {editable && (
-                <button
-                  onClick={() => setEditing(true)}
-                  className="inline-flex items-center gap-1.5 h-9 px-3.5 text-[0.75rem] font-semibold text-ink-700 bg-canvas-elevated border border-canvas-border rounded-md hover:bg-canvas hover:border-ink-300/70 transition-colors cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600/30"
-                >
-                  <Pencil size={14} /> Edit
-                </button>
+              {/* Edit — one control: the report itself (inline), or the
+                  observations it was generated from (Create Report → step 2). */}
+              {(editable || onEditObservations) && !timeTravelling && (
+                onEditObservations && editable ? (
+                  <div className="relative">
+                    <button
+                      onClick={() => setEditMenuOpen(o => !o)}
+                      aria-haspopup="menu"
+                      aria-expanded={editMenuOpen}
+                      className="inline-flex items-center gap-1.5 h-9 px-3 text-[0.75rem] font-semibold whitespace-nowrap text-ink-700 bg-canvas-elevated border border-canvas-border rounded-md hover:bg-canvas hover:border-ink-300/70 transition-colors cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600/30"
+                    >
+                      <Pencil size={14} /> Edit <ChevronDown size={13} className={`transition-transform ${editMenuOpen ? 'rotate-180' : ''}`} aria-hidden="true" />
+                    </button>
+                    {editMenuOpen && (
+                      <>
+                        <div className="fixed inset-0 z-30" onClick={() => setEditMenuOpen(false)} />
+                        <div role="menu" className="absolute right-0 top-full mt-1.5 w-[260px] z-40 rounded-lg bg-canvas-elevated border border-canvas-border shadow-xl overflow-hidden py-1">
+                          <button role="menuitem" onClick={() => { setEditMenuOpen(false); setEditing(true); }} className="w-full flex items-start gap-2.5 px-3 py-2 text-left hover:bg-canvas cursor-pointer">
+                            <Pencil size={14} className="mt-0.5 shrink-0 text-ink-400" aria-hidden="true" />
+                            <span><span className="block text-[0.75rem] font-semibold text-ink-800">Report</span><span className="block text-[0.6875rem] text-ink-500">Edit the text of this report inline</span></span>
+                          </button>
+                          <button role="menuitem" onClick={() => { setEditMenuOpen(false); onEditObservations(); }} className="w-full flex items-start gap-2.5 px-3 py-2 text-left hover:bg-canvas cursor-pointer">
+                            <ListChecks size={14} className="mt-0.5 shrink-0 text-ink-400" aria-hidden="true" />
+                            <span><span className="block text-[0.75rem] font-semibold text-ink-800">Observations</span><span className="block text-[0.6875rem] text-ink-500">Reopen the extracted observations and regenerate</span></span>
+                          </button>
+                        </div>
+                      </>
+                    )}
+                  </div>
+                ) : (
+                  <button
+                    onClick={() => (editable ? setEditing(true) : onEditObservations?.())}
+                    className="inline-flex items-center gap-1.5 h-9 px-3 text-[0.75rem] font-semibold whitespace-nowrap text-ink-700 bg-canvas-elevated border border-canvas-border rounded-md hover:bg-canvas hover:border-ink-300/70 transition-colors cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600/30"
+                  >
+                    <Pencil size={14} /> Edit
+                  </button>
+                )
               )}
               {onShare && (
                 <button
                   onClick={onShare}
-                  className="inline-flex items-center gap-1.5 h-9 px-3.5 text-[0.75rem] font-semibold text-ink-700 bg-canvas-elevated border border-canvas-border rounded-md hover:bg-canvas hover:border-ink-300/70 transition-colors cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600/30"
+                  className="inline-flex items-center gap-1.5 h-9 px-3 text-[0.75rem] font-semibold whitespace-nowrap text-ink-700 bg-canvas-elevated border border-canvas-border rounded-md hover:bg-canvas hover:border-ink-300/70 transition-colors cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600/30"
                 >
                   <Share2 size={14} /> Share
                 </button>
               )}
               <button
                 onClick={() => setShowDownloadModal(true)}
-                className="inline-flex items-center gap-1.5 h-9 px-3.5 text-[0.75rem] font-semibold text-brand-700 bg-brand-50 border border-brand-200 rounded-md hover:bg-brand-100 hover:border-brand-300 transition-colors cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600/40"
+                className="inline-flex items-center gap-1.5 h-9 px-3 text-[0.75rem] font-semibold whitespace-nowrap text-brand-700 bg-brand-50 border border-brand-200 rounded-md hover:bg-brand-100 hover:border-brand-300 transition-colors cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600/40"
               >
                 <Download size={14} /> Download
               </button>
@@ -391,6 +499,37 @@ export default function AtrReportView({ report, onBack, onShare, onSave, onManag
           </div>
         </aside>
         <div className="min-w-0 flex-1 pb-10">
+          {/* Draft banner — saved from Create Report, not yet generated. */}
+          {report.status === 'draft' && !timeTravelling && (
+            <div role="status" className="mb-4 flex items-center justify-between gap-3 flex-wrap rounded-lg border border-high-200 bg-high-50/60 px-4 py-2.5 print:hidden">
+              <p className="text-[0.75rem] text-ink-700">
+                <span className="inline-flex items-center h-5 px-2 mr-2 rounded-full bg-high-100 text-high-800 text-[0.625rem] font-bold uppercase tracking-wide align-middle">Draft</span>
+                Saved from Create Report and not yet generated — review the observations and generate the ATR to issue it.
+              </p>
+              {onEditObservations && (
+                <button onClick={onEditObservations} className="inline-flex items-center gap-1.5 h-8 px-3 text-[0.75rem] font-semibold text-high-800 bg-canvas-elevated border border-high-200 rounded-md hover:bg-high-50 transition-colors cursor-pointer whitespace-nowrap">
+                  <ListChecks size={13} /> Review &amp; generate
+                </button>
+              )}
+            </div>
+          )}
+
+          {/* Time-travel banner — the document below is a reconstruction. */}
+          {timeTravelling && asOf && (() => {
+            const { applied, later } = splitEvents(timeline, asOf);
+            return (
+              <div role="status" className="mb-4 flex items-center justify-between gap-3 flex-wrap rounded-lg border border-brand-200 bg-brand-50/60 px-4 py-2.5 print:hidden">
+                <div className="flex items-center gap-2.5 min-w-0">
+                  <span className="w-7 h-7 rounded-md bg-brand-100 text-brand-700 flex items-center justify-center shrink-0"><CalendarClock size={14} aria-hidden="true" /></span>
+                  <p className="text-[0.8125rem] text-ink-800 leading-snug">
+                    <span className="font-semibold">Report Snapshot</span> · showing the report as it stood on <span className="font-semibold tabular-nums">{fmtEventTime(asOf)}</span>
+                    <span className="text-ink-500"> — {applied.length} action{applied.length === 1 ? '' : 's'} applied{later.length ? `, ${later.length} still to come` : ''}. Read-only.</span>
+                  </p>
+                </div>
+                <button onClick={() => setAsOf(null)} className="inline-flex items-center gap-1.5 h-8 px-3 text-[0.75rem] font-semibold text-brand-700 bg-canvas-elevated border border-brand-200 rounded-md hover:bg-brand-100 cursor-pointer transition-colors shrink-0">Back to latest</button>
+              </div>
+            );
+          })()}
           <AtrDocument
             meta={meta}
             observations={observations}
@@ -399,10 +538,71 @@ export default function AtrReportView({ report, onBack, onShare, onSave, onManag
             hiddenSections={hiddenSections}
             onDeleteSection={deleteSection}
             maxWidthClass="max-w-none"
-            editable={editing}
+            editable={editing && !timeTravelling}
             onMetaChange={m => setDraft(d => ({ ...d, meta: m }))}
             onObservationsChange={o => setDraft(d => ({ ...d, observations: o }))}
             onInsightsChange={i => setDraft(d => ({ ...d, insights: i }))}
+            renderObservationActions={i => {
+              const obs = observations[i];
+              if (!obs) return null;
+              const hit = appliedByObs?.get(i);
+              return (
+                <span className="inline-flex items-center gap-2 flex-wrap">
+                  {!timeTravelling && !editing && (
+                    <span className="relative group/anx inline-flex">
+                      <button
+                        type="button"
+                        onClick={() => setLinkingObs(i)}
+                        aria-label={`Link annexures to ${obs.title}`}
+                        className="relative inline-flex items-center justify-center w-7 h-7 rounded-sm text-brand-700 bg-brand-50 hover:bg-brand-100 cursor-pointer transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600/30"
+                      >
+                        <Link2 size={13} aria-hidden="true" />
+                        {!!obs.linkedAnnexures?.length && (
+                          <span className="absolute -top-1 -right-1 min-w-[15px] h-[15px] px-0.5 rounded-full bg-brand-600 text-white text-[0.5625rem] font-bold tabular-nums flex items-center justify-center ring-2 ring-canvas-elevated">{obs.linkedAnnexures.length}</span>
+                        )}
+                      </button>
+                      {/* Hover message — opens downward, right-aligned, so the
+                          card's overflow-hidden header can't clip it. */}
+                      <span role="tooltip" className="pointer-events-none absolute top-[calc(100%+6px)] right-0 px-2 py-1 bg-ink-900 text-white text-[0.625rem] font-medium rounded-md whitespace-nowrap opacity-0 group-hover/anx:opacity-100 group-focus-within/anx:opacity-100 transition-opacity z-50">
+                        {obs.linkedAnnexures?.length ? `Link more annexures · ${obs.linkedAnnexures.length} linked` : 'Link annexures to this observation'}
+                      </span>
+                    </span>
+                  )}
+                  {hit && (
+                    <span title={`${hit.n} action${hit.n === 1 ? '' : 's'} on this observation by ${fmtEventTime(hit.last)}`} className="inline-flex items-center gap-1 h-7 px-2 rounded-sm text-[0.6875rem] font-semibold text-brand-700 bg-brand-50">
+                      <Clock3 size={12} aria-hidden="true" /> {hit.n} action{hit.n === 1 ? '' : 's'} · {fmtEventTime(hit.last)}
+                    </span>
+                  )}
+                  {!timeTravelling && renderObservationActions?.(i, obs)}
+                </span>
+              );
+            }}
+            // Linked-annexure strip at the foot of each observation — the same
+            // chips as the Create Report wizard's, with unlink. Linking happens
+            // from the link icon in the header, so the strip only shows once
+            // something is linked.
+            renderObservationFooter={i => {
+              const obs = observations[i];
+              const list = obs?.linkedAnnexures ?? [];
+              if (!obs || list.length === 0) return null;
+              return (
+                <div className="flex items-center gap-2 flex-wrap px-5 py-2.5 border-t border-canvas-border bg-canvas/40 print:hidden">
+                  <span className="inline-flex items-center gap-1.5 text-[0.65625rem] font-semibold uppercase tracking-wide text-ink-400 mr-0.5">
+                    <Paperclip size={12} aria-hidden="true" /> Annexures
+                  </span>
+                  {list.map(a => (
+                    <span key={a.id} title={`${a.name}${a.sizeBytes ? ` · ${fmtSize(a.sizeBytes)}` : ''} · linked ${fmtEventTime(a.linkedAt)} by ${a.linkedBy}`} className="inline-flex items-center gap-1 h-6 pl-1.5 pr-0.5 rounded-sm bg-canvas-elevated border border-canvas-border text-[0.71875rem] text-ink-700 max-w-full">
+                      <FileSpreadsheet size={11} className="text-compliant-700 shrink-0" aria-hidden="true" />
+                      <span className="truncate max-w-[220px]">{a.name}</span>
+                      {a.sizeBytes != null && <span className="text-ink-300 tabular-nums text-[0.625rem]">{fmtSize(a.sizeBytes)}</span>}
+                      {!timeTravelling && !editing
+                        ? <button type="button" onClick={() => unlinkAnnexure(i, a)} className="w-4 h-4 rounded-full hover:bg-risk-50 text-ink-400 hover:text-risk-700 flex items-center justify-center cursor-pointer shrink-0" aria-label={`Unlink ${a.name}`}><X size={10} aria-hidden="true" /></button>
+                        : <span className="w-1" />}
+                    </span>
+                  ))}
+                </div>
+              );
+            }}
             gradient={reportGradient(
               (appliedTemplate as EditableTemplate | null)?.theme,
               (appliedTemplate as EditableTemplate | null)?.brandColor,
@@ -410,7 +610,26 @@ export default function AtrReportView({ report, onBack, onShare, onSave, onManag
             logo={(appliedTemplate as EditableTemplate | null)?.logoDataUrl}
           />
         </div>
+        {snapshotOpen && (
+          <AtrReportSnapshotPanel timeline={timeline} asOf={asOf} onChange={setAsOf} onClose={closeSnapshot} />
+        )}
       </div>
+
+      {/* Link annexure → the platform's Add-data picker, portalled to the body. */}
+      {createPortal(
+        <div className="relative z-[80]">
+          <DataPickerModal
+            open={linkingObs !== null}
+            onClose={() => setLinkingObs(null)}
+            onConfirm={sel => { if (linkingObs !== null) linkAnnexures(linkingObs, sel); }}
+            title="Link annexure"
+            confirmLabel="Link"
+            defaultTab="upload"
+            attachHint={linkingObs !== null ? <>Pick the annexure file(s) to link to <span className="font-medium text-ink-700">{latest.observations[linkingObs]?.title}</span>.</> : undefined}
+          />
+        </div>,
+        document.body,
+      )}
 
       <AnimatePresence>
         {showDownloadModal && (

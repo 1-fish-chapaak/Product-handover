@@ -30,6 +30,65 @@ export function entitiesFor(engagementId: string): GroupEntity[] {
 }
 
 /**
+ * Where a company is incorporated — what a draw spread by country splits on (A28).
+ *
+ * The entity table on New engagement asks for a country on every row, and those
+ * rows are the programme's register, so an engagement created there answers from
+ * its own register. A control names its company by display name, so the match is
+ * by name, listing suffix aside ("Altura Infra Holdings Ltd (Listed)"). A name the
+ * register doesn't hold — usually the group itself, which is what every control
+ * on an engagement never scoped by entity names — takes the top company's country.
+ *
+ * Registers built before the table asked have no country on any row, so the
+ * seeded SOX engagements carry one here. Each is a single-country group: Altura
+ * and its renewables arm, and the Airline group behind ENG-001, O2C and R2R, are
+ * all Indian companies reporting in rupees.
+ */
+const SEEDED_COUNTRY: Record<string, string> = {
+  'sox-v2-fy26': 'India',
+  'eng-sox-rf': 'India',
+  'sox-prog-fy26': 'India',
+  'eng-1': 'India',
+  'eng-2': 'India',
+  'eng-sox-3': 'India',
+};
+const bareName = (n: string) => n.replace(/\s*\((listed|unlisted|nyse|nasdaq|bse|nse)[^)]*\)\s*$/i, '').trim().toLowerCase();
+export function countryOf(engagementId: string, entity: string): string | undefined {
+  const rows = programmeFor(engagementId)?.entities ?? [];
+  const own = rows.find(e => bareName(e.name) === bareName(entity))?.country?.trim();
+  if (own) return own;
+  const top = rows.find(e => e.type === 'Holding' && !e.parentId) ?? rows.find(e => !e.parentId);
+  return top?.country?.trim() || SEEDED_COUNTRY[engagementId];
+}
+
+/**
+ * The country a single RACM row answers for, and where that answer came from.
+ *
+ * Two sources, never merged. A row carries `country` only when an uploaded file
+ * named one; every other row takes the country of the entity it is tested at.
+ * The distinction is worth keeping on screen — a country that disagrees with its
+ * entity is either a genuine cross-border arrangement or a bad column mapping,
+ * and the reader can only tell which if the screen says which side it came from.
+ *
+ * A shared control spanning entities in different countries reports all of them:
+ * one conclusion covering India and Singapore is a conclusion about both.
+ */
+export function countryFor(
+  engagementId: string,
+  c: { entity?: string; entities?: string[]; country?: string },
+): { value: string; source: 'file' | 'entity' | 'none'; from?: string } {
+  const own = c.country?.trim();
+  if (own) return { value: own, source: 'file' };
+  const names = c.entities?.length ? c.entities : c.entity ? [c.entity] : [];
+  const found = names
+    .map(n => ({ n, country: countryOf(engagementId, n) }))
+    .filter((r): r is { n: string; country: string } => !!r.country);
+  if (!found.length) return { value: '—', source: 'none' };
+  const unique = [...new Set(found.map(r => r.country))];
+  return { value: unique.join(', '), source: 'entity', from: found[0]!.n };
+}
+
+/**
  * Entities the audit's uploaded trial balance / GL turned out to contain.
  *
  * A SIMULATED parse — prototype uploads carry no bytes, so this stands in for
@@ -131,6 +190,53 @@ export function entityTotals(engagementId: string): Record<string, number> {
   return out;
 }
 
+/** The same totals, from a caption list rather than an engagement. New
+ *  engagement (S11) scopes before any engagement id exists — its companies are
+ *  the ones typed or read off the org chart on Basics, and their captions come
+ *  with them, so there is nothing to look an id up in yet. */
+export function entityTotalsOf(captions: TbCaption[]): Record<string, number> {
+  const out: Record<string, number> = {};
+  captions.forEach(c => { out[c.entityId] = (out[c.entityId] ?? 0) + c.balance; });
+  return out;
+}
+
+/** Same company, however the listing tag and capitals were typed —
+ *  "Altura Infra Holdings Ltd (Listed)" and "altura infra holdings ltd" are one
+ *  company. New engagement reads it to pre-tick the RACMs written for the
+ *  companies in scope. */
+export function sameCompany(a: string, b: string): boolean {
+  // "Limited" and "Ltd", "Private" and "Pvt" are one spelling — an org chart
+  // and a RACM file rarely agree on which.
+  const legal = (n: string) => bareName(n).replace(/\blimited\b/g, 'ltd').replace(/\bprivate\b/g, 'pvt').replace(/[.,]/g, '').replace(/\s+/g, ' ');
+  return legal(a) === legal(b);
+}
+
+/**
+ * The companies a draw may reach (17 Sep dev call: sample only what is in
+ * scope). The audit's own entity scope when it has one, else the companies the
+ * engagement was created with. undefined means no filter — an audit scoped by
+ * RACM on an engagement never scoped by company.
+ */
+export function inScopeEntityNames(
+  engagementId: string, audit: Pick<AuditRecord, 'scopeKind' | 'scopeNames' | 'scopeIds'> | undefined,
+): string[] | undefined {
+  if (audit?.scopeKind === 'entity' && audit.scopeIds.length) return audit.scopeNames;
+  const prog = programmeFor(engagementId);
+  const ids = prog?.scoping?.entityIds;
+  if (!prog || !ids?.length) return undefined;
+  return prog.entities.filter(e => ids.includes(e.id)).map(e => e.name);
+}
+
+/** A shared control as a draw sees it — its companies narrowed to the ones in
+ *  scope. One none of whose companies match keeps them all: dealing to nobody
+ *  would lose the items, and a control like that is a scoping question, not a
+ *  sampling one. */
+export function scopedForDraw(c: Control, inScope: string[] | undefined): Control {
+  if (!inScope?.length || (c.entities?.length ?? 0) < 2) return c;
+  const kept = c.entities!.filter(e => inScope.some(n => sameCompany(n, e)));
+  return kept.length && kept.length < c.entities!.length ? { ...c, entities: kept } : c;
+}
+
 export type ScopeStatus = 'tb' | 'coverage' | 'out' | 'absent';
 
 export interface DerivedScopeRow extends ScopeEntityRow {
@@ -218,13 +324,85 @@ export function deriveEntityScope(
   };
 }
 
+// ─── Material accounts → processes → recommended scope (S10, A34) ───────────
+//
+// The New audit wizard maps the trial balance's MATERIAL accounts to processes
+// on Materiality & files, and the Scope step turns that mapping into Ira's
+// recommendation: a process is in when a material account maps to it. Same
+// "the numbers decide, the auditor overrules" shape as the entity derivation
+// above, one level down.
+
+/** The standard SOX processes the account mapping offers, before any process the
+ *  engagement adds a RACM for. Control-register spellings ("Payroll", not
+ *  "Payroll (Hire to Retire)") so a mapped process matches its RACM by name. */
+export const SOX_MAPPING_PROCESSES = [
+  'Order to Cash', 'Procure to Pay', 'Record to Report', 'Inventory',
+  'Fixed Assets', 'Payroll', 'Treasury', 'Tax',
+] as const;
+
+/** The trial-balance accounts at or above performance materiality (₹ Cr) — the
+ *  only ones worth mapping. Nothing is material against a threshold of zero:
+ *  that is an unanswered rule, not a rule that takes everything. */
+export function materialAccounts(engagementId: string, pm: number): TbCaption[] {
+  if (!(pm > 0)) return [];
+  return captionsFor(engagementId).filter(c => c.balance >= pm);
+}
+
+/** materialAccounts for a caption list — the New engagement variant, for the
+ *  same reason as entityTotalsOf: no engagement id to read captions off yet. */
+export function materialAccountsOf(captions: TbCaption[], pm: number): TbCaption[] {
+  if (!(pm > 0)) return [];
+  return captions.filter(c => c.balance >= pm);
+}
+
+/** One row of the Scope step's Processes panel. */
+export interface ProcessScopeRow {
+  process: string;
+  /** ₹ Cr across the material accounts mapped to this process. */
+  total: number;
+  /** How many material accounts map here. Zero on a process that is listed only
+   *  because the engagement already has a RACM for it. */
+  accounts: number;
+  /** Ira's call — in whenever a material account maps here, out otherwise. */
+  recommended: boolean;
+}
+
+/**
+ * Ira's process recommendation.
+ *
+ * `accounts` carry the process they were MAPPED to (the auditor's pick, already
+ * normalised), not the caption's suggestion. Processes with material accounts
+ * come first, biggest first; then every other process the engagement has a RACM
+ * for, alphabetically, so a RACM nobody's numbers reached still has a row to be
+ * brought in from.
+ */
+export function recommendProcesses(
+  accounts: { balance: number; process: string }[],
+  racmProcesses: string[],
+): ProcessScopeRow[] {
+  const byProcess = new Map<string, ProcessScopeRow>();
+  accounts.forEach(a => {
+    const row = byProcess.get(a.process) ?? { process: a.process, total: 0, accounts: 0, recommended: true };
+    row.total += a.balance;
+    row.accounts += 1;
+    byProcess.set(a.process, row);
+  });
+  const material = Array.from(byProcess.values()).sort((a, b) => b.total - a.total);
+  const rest = Array.from(new Set(racmProcesses.map(normaliseProcess)))
+    .filter(p => !byProcess.has(p))
+    .sort((a, b) => a.localeCompare(b))
+    .map(process => ({ process, total: 0, accounts: 0, recommended: false }));
+  return [...material, ...rest];
+}
+
 /**
  * The RACMs a set of companies feeds.
  *
  * The programme's RACMs carry entity SHORT names ('Holdings', 'Solar') because
  * that is what the trial-balance derivation wrote; audits carry ids. Same
- * translation processesForAudit does — factored out so the New audit wizard can
- * pre-tick the RACM side from whatever entities are in scope.
+ * translation processesForAudit does — factored out so the New audit wizard could
+ * pre-tick the RACM side from whatever entities are in scope. Unused since A34b:
+ * the wizard pre-ticks from its Processes panel now. Kept for the translation.
  */
 export function racmsForEntities(engagementId: string, entityIds: string[]): string[] {
   const prog = programmeFor(engagementId);
@@ -248,6 +426,19 @@ export function auditCovers(a: AuditRecord, c: Control, engagementId: string): b
   if (a.controlIds?.length) return a.controlIds.includes(c.id);
   const procs = processesForAudit(a, engagementId);
   return !procs || procs.includes(normaliseProcess(c.process));
+}
+
+/**
+ * Which audits a process's RACM is already in, and how many of its controls
+ * they cover. A RACM an audit has picked up carries testing, findings and
+ * sign-offs on its controls, so it cannot simply be deleted — the RACM tab
+ * reads this to say why, and the store reads it to refuse.
+ */
+export function racmAuditUse(eng: { id: string; audits: AuditRecord[]; controls: Control[] }, process: string): { audits: AuditRecord[]; controls: number } {
+  const rows = eng.controls.filter(c => c.process === process);
+  const audits = eng.audits.filter(a => rows.some(c => auditCovers(a, c, eng.id)));
+  const controls = rows.filter(c => audits.some(a => auditCovers(a, c, eng.id))).length;
+  return { audits, controls };
 }
 
 /**

@@ -1,13 +1,16 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import {
-  CheckCircle2, Circle, ClipboardCheck, ExternalLink, FileSpreadsheet, FileUp, Loader2, MessageSquareWarning,
-  Paperclip, Plus, Search, Sparkles, Star, Table2, UploadCloud, X, Check, MessageSquarePlus, RotateCcw,
+  CheckCircle2, Circle, ClipboardCheck, ExternalLink, FileSpreadsheet, FileText, FileUp, Loader2, MessageSquareWarning,
+  MoreHorizontal, Paperclip, Plus, Search, Sparkles, Star, Table2, Trash2, UploadCloud, X, Check, MessageSquarePlus, RotateCcw,
 } from 'lucide-react';
 import { useAuditControls } from './useAuditControls';
-import { entitiesFor } from './auditScope';
+import { entitiesFor, racmAuditUse } from './auditScope';
 import { defWord } from './flow';
 import { useIcfr } from './store';
-import { conclusionOf, controlCode, trackResult } from './helpers';
+import { conclusionOf, controlCode, RACM_ROWS_KEY, racmEditorRows, trackResult } from './helpers';
+import { Dropdown, menuItem } from './ControlDossier';
+import RacmImportReview from './RacmImportReview';
+import { useAuditLog } from '../../context/AdminDataContext';
 import { useToast } from '../shared/Toast';
 import { Pill } from '../shared/StatusBadge';
 import { NatureChip, Tickmark } from './parts';
@@ -15,6 +18,7 @@ import { FilterSelect } from '../shared/FilterSelect';
 import ColumnFilter from '../shared/ColumnFilter';
 import { cn } from '../../lib/cn';
 import { isEngagementLocked } from './helpers';
+import { rowEntities } from './registerColumns';
 import { CONTROL_CLASSES } from './types';
 import type { Control, IcfrEngagement } from './types';
 
@@ -31,6 +35,7 @@ const SOX_PROCESSES = [
  *  control form's "＋ Add new process…". */
 const NEW_PROCESS = '__new__';
 
+// PARKED (S3): named the file in the old SOP-extraction toast; the import review's toast names the process
 /** Reads a RACM name out of an uploaded file name — drops the extension and the
  *  RACM/SOP/version noise, then title-cases what's left (the Process Hub rule). */
 function racmNameFromFilename(filename: string): string {
@@ -47,10 +52,14 @@ function spineColor(p: string): string { let h = 0; for (let i = 0; i < p.length
 
 // The spreadsheet editor opens in its own tab (the Process Hub pattern) — same
 // racmId the in-app editor used, so persisted edits stay attached to the sheet.
-function openEditorTab(engId: string, process: string): void {
+// The new tab has none of this engagement's state, so the RACM's own controls are
+// handed over first (C1); without them it showed the procurement sample.
+function openEditorTab(engId: string, process: string, controls: Control[]): void {
+  const racmId = `sox-racm-${engId}-${process.replace(/\s+/g, '-').toLowerCase()}`;
+  try { window.localStorage.setItem(RACM_ROWS_KEY(racmId), JSON.stringify(racmEditorRows(controls, process))); } catch { /* storage blocked — the editor shows its sample */ }
   const params = new URLSearchParams({
     view: 'racm-full-editor',
-    racmId: `sox-racm-${engId}-${process.replace(/\s+/g, '-').toLowerCase()}`,
+    racmId,
     racmName: `${process} — RACM`,
     processLabel: process,
   });
@@ -166,6 +175,7 @@ function NewRacmModal({ available, inScope, entities, onClose, onPick }: {
   );
 }
 
+// PARKED (S3): the SOP review's prompt step shows extraction progress now
 /** SOP → RACM extraction: a docked progress card, not a blocking modal, so the
  *  rest of the tab stays usable while IRA reads the procedure. */
 function RacmExtractionOverlay({ filename, onCancel }: { filename: string; onCancel: () => void }) {
@@ -201,6 +211,86 @@ function RacmExtractionOverlay({ filename, onCancel }: { filename: string; onCan
   );
 }
 
+/** Why a RACM can't be deleted — its controls are in an audit — or null when it
+ *  can. Short enough for a menu line: "3 controls are in the CY 2026 audit". */
+function racmDeleteBlocker(eng: IcfrEngagement, process: string): string | null {
+  const use = racmAuditUse(eng, process);
+  const first = use.audits[0];
+  if (!first) return null;
+  const where = use.audits.length === 1 ? `the ${first.period} audit` : `the ${first.period} audit and ${use.audits.length - 1} more`;
+  return `${use.controls} control${use.controls === 1 ? ' is' : 's are'} in ${where}`;
+}
+
+// Menu rows that can be disabled: no hover wash on a disabled one, greyed text
+// rather than faded opacity (so a reason line under it stays readable), and the
+// destructive row in risk tones. Derived from the shared menuItem so they stay in step.
+const menuRowCls = `${menuItem.replace('hover:bg-paper-50', 'enabled:hover:bg-paper-50').replace('items-center', 'items-start')} disabled:text-ink-400 disabled:cursor-not-allowed`;
+const menuDangerCls = menuRowCls.replace('text-ink-700', 'text-risk-700').replace('enabled:hover:bg-paper-50', 'enabled:hover:bg-risk-50');
+
+/**
+ * A4 — the "⋯" on a RACM row. Opening the editor is also what the row does; the
+ * menu adds what the row can't: the SOP it was extracted from, and deleting it.
+ * Every click and key inside is kept off the row, so using the menu never also
+ * opens the editor (the menu itself is portalled, but React events still bubble
+ * through the component tree).
+ */
+function RacmRowActions({ name, sopName, sopUrl, canDelete, deleteBlocker, onOpen, onViewSop, onDelete }: {
+  name: string;
+  /** the SOP this RACM was extracted from, when it was */
+  sopName?: string;
+  sopUrl?: string;
+  canDelete: boolean;
+  deleteBlocker: string | null;
+  onOpen: () => void;
+  onViewSop: () => void;
+  onDelete: () => void;
+}) {
+  // Dropdown draws its own trigger button and takes no props for it, so the
+  // button's accessible name is set on it here once it exists.
+  const wrap = useRef<HTMLSpanElement>(null);
+  useLayoutEffect(() => {
+    wrap.current?.querySelector('button')?.setAttribute('aria-label', `Actions for the ${name} RACM`);
+  }, [name]);
+  return (
+    <span ref={wrap} className="inline-flex" onClick={e => e.stopPropagation()} onKeyDown={e => e.stopPropagation()}>
+      <Dropdown
+        // the trailing chevron Dropdown adds reads wrong on a "⋯" button — hidden
+        triggerClass="h-7 w-7 inline-flex items-center justify-center rounded-md text-ink-400 hover:text-ink-800 hover:bg-paper-50 transition-colors cursor-pointer [&>svg:last-child]:hidden"
+        trigger={<MoreHorizontal size={15} />}
+      >
+        {close => (
+          <>
+            <button type="button" className={menuRowCls} onClick={() => { close(); onOpen(); }}>
+              <FileSpreadsheet size={13} className="text-ink-400 mt-0.5 shrink-0" /> Open in spreadsheet editor
+            </button>
+            {sopName && (
+              <button type="button" className={menuRowCls} disabled={!sopUrl}
+                title={sopUrl ? `Opens ${sopName} in a new tab` : "The SOP file isn't available in this session"}
+                onClick={() => { close(); onViewSop(); }}>
+                <FileText size={13} className="text-ink-400 mt-0.5 shrink-0" /> View SOP
+              </button>
+            )}
+            {canDelete && (
+              <>
+                <div className="my-1 h-px bg-canvas-border" role="separator" />
+                <button type="button" className={menuDangerCls} disabled={!!deleteBlocker} title={deleteBlocker ?? undefined}
+                  onClick={() => { close(); onDelete(); }}>
+                  <Trash2 size={13} className="mt-0.5 shrink-0" />
+                  <span className="min-w-0">
+                    <span className="block">Delete RACM</span>
+                    {/* the reason stays visible — a title alone is lost on touch and keyboard */}
+                    {deleteBlocker && <span className="block text-[0.6875rem] text-ink-500 whitespace-normal leading-snug">{deleteBlocker}</span>}
+                  </span>
+                </button>
+              </>
+            )}
+          </>
+        )}
+      </Dropdown>
+    </span>
+  );
+}
+
 /**
  * RACM tab landing — one RACM per business process, one row per RACM in the
  * module's register-table language. Every fact the old document cards carried
@@ -213,8 +303,9 @@ export function RacmLanding() {
   // openRacmMatrix is deliberately not read here any more — the row opens the
   // spreadsheet editor. The action stays on the store (parked, house
   // convention), and with it the drilled matrix page it used to reach.
-  const { eng, role, createRacm, racmCreateOpen, clearRacmCreate } = useIcfr();
+  const { eng, role, deleteRacm, createRacm, racmDocs, racmCreateOpen, clearRacmCreate } = useIcfr();
   const { addToast } = useToast();
+  const logEvent = useAuditLog();
 
   // The matrix shows what the OPEN audit covers — its entities' processes.
   // Falls back to every control when no audit is open or its scope is empty.
@@ -225,18 +316,24 @@ export function RacmLanding() {
     return Array.from(map, ([name, rows]) => ({ name, rows }));
   }, [scoped]);
 
-  // Create RACM — chooser → file picker → (SOP only) extraction → new row.
+  // Create RACM — chooser → file picker → import review (columns, or the SOP
+  // prompt) → Import → new row.
   const [creating, setCreating] = useState(false);
-  const [extracting, setExtracting] = useState<string | null>(null);
+  /** The file waiting in the import review, with the process and company the
+   *  chooser picked for it. Nothing is created until the review imports. */
+  const [importing, setImporting] = useState<{ mode: 'racm' | 'sop'; file: File; process: string; entity: string } | null>(null);
+  const closeImport = useCallback(() => setImporting(null), []);
   const racmFileRef = useRef<HTMLInputElement>(null);
   const sopFileRef = useRef<HTMLInputElement>(null);
   const pendingProcess = useRef<string>('');
   /** The company chosen in the chooser, held across the file picker. */
   const pendingEntity = useRef<string>('');
-  const extractTimer = useRef<number | null>(null);
-  useEffect(() => () => { if (extractTimer.current != null) window.clearTimeout(extractTimer.current); }, []);
+  /** The RACM whose delete is waiting on its confirmation. */
+  const [deleting, setDeleting] = useState<string | null>(null);
 
   const canCreate = role === 'auditor' && !isEngagementLocked(eng);
+  // same gate as creating — the store refuses anyone else, so the menu doesn't offer it
+  const canDelete = canCreate;
 
   // Arriving from the Overview's "Upload RACM": open the chooser on landing,
   // then consume the flag so a later visit to this tab is not ambushed by it.
@@ -263,36 +360,35 @@ export function RacmLanding() {
     (source === 'racm' ? racmFileRef : sopFileRef).current?.click();
   };
 
-  // an imported matrix lands straight away — there is nothing to read out of it
-  const onRacmFile = (e: React.ChangeEvent<HTMLInputElement>) => {
+  // Neither file lands straight away any more. A matrix has its columns matched
+  // and its rows reviewed first (A5); an SOP waits on its extraction prompt
+  // being validated, then on the same review (A6). The review creates the RACM.
+  const reviewFile = (mode: 'racm' | 'sop') => (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     const process = pendingProcess.current;
     e.target.value = '';
     if (!file || !process) return;
-    createRacm(process, file.name, pendingEntity.current);
-    addToast({ type: 'success', title: 'RACM created', message: `Imported "${file.name}" — the ${process} RACM is now in the list.` });
+    setImporting({ mode, file, process, entity: pendingEntity.current });
+  };
+  const onRacmFile = reviewFile('racm');
+  const onSopFile = reviewFile('sop');
+
+  const viewSop = (process: string) => {
+    const doc = racmDocs.find(d => d.process === process && d.source === 'sop');
+    if (!doc?.url) return;
+    window.open(doc.url, '_blank', 'noopener');
+    logEvent({ action: 'Export', description: `Opened "${doc.name}", the SOP behind the ${process} RACM`, module: 'SOX ICFR', entity: 'RACM' });
   };
 
-  // an SOP has to be read first — same staged extraction the Process Hub runs
-  const onSopFile = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    const process = pendingProcess.current;
-    e.target.value = '';
-    if (!file || !process) return;
-    setExtracting(file.name);
-    extractTimer.current = window.setTimeout(() => {
-      extractTimer.current = null;
-      setExtracting(null);
-      createRacm(process, file.name, pendingEntity.current);
-      const label = racmNameFromFilename(file.name);
-      addToast({ type: 'success', title: 'RACM extracted', message: `Drafted the ${process} RACM from "${label || file.name}" — review its rows before testing.` });
-    }, 1600);
-  };
-
-  const cancelExtraction = () => {
-    if (extractTimer.current != null) { window.clearTimeout(extractTimer.current); extractTimer.current = null; }
-    setExtracting(null);
-    addToast({ type: 'info', title: 'Extraction cancelled', message: 'No RACM was created.' });
+  const confirmDelete = (process: string) => {
+    const count = eng.controls.filter(c => c.process === process).length;
+    setDeleting(null);
+    // the store refuses this too — say so rather than toast a delete that didn't happen
+    const blocker = racmDeleteBlocker(eng, process);
+    if (blocker) { addToast({ type: 'warning', title: "Can't delete this RACM", message: `${blocker}.` }); return; }
+    deleteRacm(process);
+    logEvent({ action: 'Delete', description: `Deleted the ${process} RACM and its ${count} control${count === 1 ? '' : 's'}`, module: 'SOX ICFR', entity: 'RACM' });
+    addToast({ type: 'success', title: 'RACM deleted', message: `The ${process} RACM and its ${count} control${count === 1 ? '' : 's'} were removed.` });
   };
 
   return (
@@ -313,7 +409,38 @@ export function RacmLanding() {
     <input ref={racmFileRef} type="file" accept=".xlsx,.xls,.csv" className="hidden" onChange={onRacmFile} aria-label="Upload a RACM workbook" />
     <input ref={sopFileRef} type="file" accept=".pdf,.doc,.docx" className="hidden" onChange={onSopFile} aria-label="Upload an SOP to extract a RACM from" />
     {creating && <NewRacmModal available={available} inScope={inScope} entities={racmEntities} onClose={() => setCreating(false)} onPick={onPick} />}
-    {extracting && <RacmExtractionOverlay filename={extracting} onCancel={cancelExtraction} />}
+    {importing && (
+      <RacmImportReview mode={importing.mode} file={importing.file} process={importing.process} entity={importing.entity}
+        existing={eng.controls} onClose={closeImport}
+        onImport={(controls, meta) => { createRacm(importing.process, meta.fileName, importing.entity, { controls, source: meta.source, url: meta.url }); closeImport(); }} />
+    )}
+    {/* delete confirmation — only reached when no audit covers the RACM */}
+    {deleting && (() => {
+      const count = eng.controls.filter(c => c.process === deleting).length;
+      return (
+        <div className="modal-backdrop" onClick={() => setDeleting(null)}>
+          <div className="modal" onClick={e => e.stopPropagation()} role="dialog" aria-modal="true" aria-labelledby="delete-racm-title"
+            onKeyDown={e => { if (e.key === 'Escape') setDeleting(null); }}>
+            <div className="px-5 pt-4 pb-3 border-b border-canvas-border">
+              <div className="flex items-center justify-between gap-3">
+                <h2 id="delete-racm-title" className="text-[0.9375rem] font-semibold text-ink-900">Delete the {deleting} RACM?</h2>
+                <button onClick={() => setDeleting(null)} className="h-7 w-7 inline-flex items-center justify-center rounded-md text-ink-400 hover:text-ink-700 cursor-pointer" aria-label="Close"><X size={15} /></button>
+              </div>
+            </div>
+            <div className="p-5">
+              <p className="text-[0.78125rem] text-ink-600 leading-relaxed">Its {count} control{count === 1 ? '' : 's'} go with it. This can't be undone.</p>
+              <div className="mt-4 flex items-center justify-end gap-2">
+                <button onClick={() => setDeleting(null)} autoFocus className="h-9 px-3.5 rounded-lg border border-canvas-border text-[0.78125rem] font-semibold text-ink-600 hover:text-ink-900 cursor-pointer">Cancel</button>
+                <button onClick={() => confirmDelete(deleting)}
+                  className="h-9 px-3.5 inline-flex items-center gap-1.5 rounded-lg bg-risk-600 text-white text-[0.78125rem] font-semibold hover:bg-risk-700 transition-colors cursor-pointer">
+                  <Trash2 size={13} /> Delete RACM
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      );
+    })()}
     <div className="reg-wrap">
       <table className="w-full border-collapse">
         <thead className="reg-head">
@@ -323,7 +450,7 @@ export function RacmLanding() {
             <th style={{ width: 64 }}>Risks</th>
             <th style={{ width: 82 }}>Controls</th>
             <th style={{ width: 236 }}>Pre-testing review</th>
-            <th style={{ width: 230 }} aria-label="Actions" />
+            <th style={{ width: 268 }} aria-label="Actions" />
           </tr>
         </thead>
         <tbody>
@@ -339,7 +466,7 @@ export function RacmLanding() {
                  the one you could not edit in. Engagement-level RACM only: the
                  Process Hub and Concierge matrices keep their own journeys. */
               <tr key={name} className="reg-row" role="button" tabIndex={0} aria-label={`Open the ${name} RACM in the spreadsheet editor — opens in a new tab`}
-                onClick={() => openEditorTab(eng.id, name)} onKeyDown={e => { if (e.key === 'Enter') openEditorTab(eng.id, name); }}>
+                onClick={() => openEditorTab(eng.id, name, eng.controls)} onKeyDown={e => { if (e.key === 'Enter') openEditorTab(eng.id, name, eng.controls); }}>
                 <td>
                   <span className="flex items-center gap-2.5 min-w-0">
                     <span className="w-8 h-8 rounded-lg bg-brand-50 text-brand-700 flex items-center justify-center shrink-0"><Table2 size={15} /></span>
@@ -363,10 +490,23 @@ export function RacmLanding() {
                 {/* Where the row goes, said out loud rather than left to be
                     discovered. Not a button any more: it would be a second
                     control doing exactly what clicking the row does, and the
-                    whole row is the target. */}
+                    whole row is the target. The "⋯" beside it (A4) carries what
+                    the row can't: the source SOP, and deleting the RACM. */}
                 <td>
-                  <span className="flex items-center justify-end gap-1.5 text-[12px] font-semibold text-ink-500 whitespace-nowrap">
-                    <FileSpreadsheet size={13} className="text-ink-400" /> Spreadsheet editor <ExternalLink size={12} className="text-ink-400" />
+                  <span className="flex items-center justify-end gap-2 whitespace-nowrap">
+                    <span className="flex items-center gap-1.5 text-[12px] font-semibold text-ink-500">
+                      <FileSpreadsheet size={13} className="text-ink-400" /> Spreadsheet editor <ExternalLink size={12} className="text-ink-400" />
+                    </span>
+                    {(() => {
+                      const sop = racmDocs.find(d => d.process === name && d.source === 'sop');
+                      return (
+                        <RacmRowActions name={name} sopName={sop?.name} sopUrl={sop?.url}
+                          canDelete={canDelete} deleteBlocker={canDelete ? racmDeleteBlocker(eng, name) : null}
+                          onOpen={() => openEditorTab(eng.id, name, eng.controls)}
+                          onViewSop={() => viewSop(name)}
+                          onDelete={() => setDeleting(name)} />
+                      );
+                    })()}
                   </span>
                 </td>
               </tr>
@@ -465,9 +605,9 @@ export default function Racm() {
       if (natureF.length && !natureF.includes(c.nature)) return false;
       if (designF.length && !designF.includes(trackResult(c.design))) return false;
       if (operatingF.length && !operatingF.includes(trackResult(c.operating))) return false;
-      if (term && !(`${c.id} ${c.riskId} ${c.riskDescription} ${c.description} ${c.subProcess} ${c.owner}`.toLowerCase().includes(term))) return false;
+      if (term && !(`${c.id} ${c.riskId} ${c.riskTitle ?? ''} ${c.riskDescription} ${c.description} ${c.subProcess} ${c.owner} ${rowEntities(c).join(' ')}`.toLowerCase().includes(term))) return false;
       return true;
-    }).sort((a, b) => controlCode(a).localeCompare(controlCode(b)));
+    }).sort((a, b) => a.process.localeCompare(b.process) || controlCode(a).localeCompare(controlCode(b)));
   }, [controls, q, review, classF, natureF, designF, operatingF]);
 
   const allVisible = filtered.map(c => c.id);
@@ -479,9 +619,9 @@ export default function Racm() {
   const saveRemark = () => { if (remarkFor && remarkText.trim()) { remarkRacmRow(remarkFor.id, remarkText.trim()); setRemarkFor(null); } };
 
   // the row-select column only renders for the auditor (only they have bulk actions)
-  // 12 columns: Risk · Root cause · Control · Class · Nature · TOD · TOE ·
+  // 13 columns: Risk · Entity · Root cause · Control · Class · Nature · TOD · TOE ·
   // Performed by · Evidence W/P · Report ref · Pre-testing review · actions (+ select)
-  const colSpan = isAuditor ? 13 : 12;
+  const colSpan = isAuditor ? 14 : 13;
 
   return (
     <div>
@@ -519,7 +659,7 @@ export default function Racm() {
           className="h-9 px-3.5 inline-flex items-center gap-1.5 rounded-lg border border-canvas-border bg-canvas-elevated text-[12.5px] font-semibold text-ink-700 hover:text-brand-700 hover:border-brand-300 disabled:opacity-60 transition-colors cursor-pointer">
           {importing ? <Loader2 size={14} className="animate-spin" /> : <UploadCloud size={14} />} {importing ? 'Importing…' : 'Upload RACM / SOP'}
         </button>
-        <button onClick={() => openEditorTab(eng.id, proc)}
+        <button onClick={() => openEditorTab(eng.id, proc, eng.controls)}
           title="Opens in a new tab" aria-label="Open spreadsheet editor in a new tab"
           className="h-9 px-3.5 inline-flex items-center gap-1.5 rounded-lg bg-brand-600 text-white text-[12.5px] font-semibold hover:bg-brand-700 transition-colors cursor-pointer">
           <FileSpreadsheet size={15} /> Open spreadsheet editor <ExternalLink size={13} className="opacity-80" />
@@ -557,6 +697,11 @@ export default function Racm() {
             <tr>
               {isAuditor && <th style={{ width: 34 }}><input type="checkbox" checked={allSelected} onChange={toggleAll} className="cursor-pointer accent-brand-600" aria-label="Select all rows" /></th>}
               <th style={{ width: 200 }}>Risk</th>
+              {/* The company the row is tested at — the ENTITY half of its ID.
+                  It was readable from the ID and nowhere else, which made the
+                  matrix the one control surface that would not tell you which
+                  company a row answered for. */}
+              <th style={{ width: 150 }} title="The company this row is tested at">Entity</th>
               {/* why the risk exists — the source RACM carries it beside the risk,
                   because a control aimed at the symptom is the commonest design gap */}
               <th style={{ width: 200 }} title="The condition underneath the risk — what makes it possible">Root cause</th>
@@ -601,7 +746,15 @@ export default function Racm() {
                   {isAuditor && <td onClick={e => { e.stopPropagation(); if (e.target === e.currentTarget) toggle(c.id); }}><input type="checkbox" checked={sel.has(c.id)} onChange={() => toggle(c.id)} className="cursor-pointer accent-brand-600" aria-label={`Select ${c.id}`} /></td>}
                   <td className="tight">
                     <div className="font-mono text-[10.5px] font-bold text-ink-500">{c.riskId}</div>
-                    <div className="text-[11.5px] text-ink-600 leading-snug line-clamp-2" title={c.riskDescription}>{c.riskDescription}</div>
+                    {/* Name then sentence, where the RACM carries both: a column
+                        of full risk statements is a column nobody scans. */}
+                    {c.riskTitle && <div className="font-semibold text-ink-800 text-[11.5px] leading-snug line-clamp-2">{c.riskTitle}</div>}
+                    <div className={cn('text-[11.5px] text-ink-600 leading-snug', c.riskTitle ? 'line-clamp-1 text-ink-400' : 'line-clamp-2')} title={c.riskDescription}>{c.riskDescription}</div>
+                  </td>
+                  <td className="tight">
+                    {rowEntities(c).length
+                      ? <div className="text-[11.5px] text-ink-600 leading-snug line-clamp-2" title={rowEntities(c).join(', ')}>{rowEntities(c).join(', ')}</div>
+                      : <span className="text-ink-300">—</span>}
                   </td>
                   <td className="tight">
                     {c.rootCause

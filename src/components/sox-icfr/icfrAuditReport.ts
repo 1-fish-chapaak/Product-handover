@@ -3,6 +3,7 @@ import {
   conclusionOf, designStarted, formatDueDate, formatINR, gradeException,
   icfrConclusion, openMaterialWeaknesses, toeRounds, trackResult,
 } from './helpers';
+import { countryFor } from './auditScope';
 import { periodLine, type IcfrSheet, type PaperBlock } from './icfrWorkingPaper';
 import type { Control, Deficiency, IcfrEngagement } from './types';
 
@@ -179,12 +180,20 @@ export function buildAuditReport(eng: IcfrEngagement, controls: Control[] = eng.
       {
         kind: 'table', title: 'Control rollup',
         note: `${controls.length} control${controls.length === 1 ? '' : 's'} — one row per control, from readiness to conclusion`,
-        headers: ['Control ID', 'Control', 'Readiness', 'Test items', 'Testing', 'Failed checks', 'Review', 'Conclusion', 'Severity', 'Finalized by'],
+        // Header and row are written in the same order. Where and how a control
+        // was tested reads next to its name because the people acting on this
+        // report ask which company a finding lands in before anything else.
+        headers: ['Control ID', 'Control', 'Entity', 'Country', 'Testing strategy', 'Readiness', 'Test items', 'Testing', 'Failed checks', 'Review', 'Conclusion', 'Severity', 'Finalized by'],
         rows: controls.map((c, i) => {
           const k = counts[i];
           return [
             c.id,
             c.description,
+            // A shared control is tested at several entities, so all of them
+            // are named rather than the first one standing for the rest.
+            c.entities?.length ? c.entities.join(', ') : (c.entity ?? '—'),
+            countryFor(eng.id, c).value,
+            c.testingStrategy ?? '—',
             readiness(c),
             String(k.items),
             testingCell(k),
@@ -212,7 +221,7 @@ export function buildAuditReport(eng: IcfrEngagement, controls: Control[] = eng.
         smp.ref,
         s.code,
         s.description,
-        s.assertion,
+        s.assertion ?? '—',
         s.aiValidation ? 'AI validation' : 'Manual testing',
         defs.find(d => d.controlId === c.id && d.failedSamples?.includes(smp.ref))?.description
           ?? defs.find(d => d.controlId === c.id && d.track === 'operating')?.description
@@ -298,7 +307,7 @@ export function buildAuditReport(eng: IcfrEngagement, controls: Control[] = eng.
     name: MAP_TITLE, blocks: [
       {
         kind: 'note', label: MAP_TITLE, tone: 'neutral',
-        text: 'The actions below are management’s, not the audit team’s: each is the fix the control owner has committed to, with the date they committed to. The audit team retests the fix and states the outcome in the last column — a fix is not closed because it was delivered, it is closed because a fresh sample proved it.',
+        text: 'The actions below are management’s, not the audit team’s: each is the fix the control owner has committed to, with the date they committed to. The audit team retests the fix and states the outcome in the last column — a fix is not closed because it was delivered, it is closed because a retest proved it: a fresh sample for an operating failure, the failed design checks re-checked against the fix for a design one.',
       },
       {
         kind: 'table', title: 'Agreed actions',

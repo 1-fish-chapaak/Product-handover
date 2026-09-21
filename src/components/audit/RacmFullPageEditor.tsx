@@ -14,10 +14,11 @@ import { AnimatePresence, motion } from 'motion/react';
 import {
   ArrowLeft, Search, Filter, Plus, Download, Upload, Columns3, Layers,
   X, ChevronRight, ChevronDown, Save, Lock, Share2,
-  AlertTriangle, Star, Trash2, Check,
+  AlertTriangle, Star, Trash2, Check, PencilLine,
 } from 'lucide-react';
 import { useShare, rectFromEvent } from '../../context/ShareContext';
 import { useAuditLog } from '../../context/AdminDataContext';
+import { useToast } from '../shared/Toast';
 import {
   PROCUREMENT_RACM_ROWS, PROCUREMENT_RACM_COLUMNS, COLUMN_GROUP_LABELS, COLUMN_GROUP_ORDER,
   groupRowsBySubProcess, deriveRiskRatingClass, deriveControlTypeClass, deriveControlNatureClass,
@@ -49,7 +50,24 @@ interface Props {
    * trailing "Ref" column is shown.
    */
   sourceFiles?: string[];
+  /**
+   * The RACM's own rows. The SOX RACM tab hands over the controls of the RACM
+   * that was clicked, so the grid shows that matrix rather than the procurement
+   * sample every other caller seeds from. Omitted → the procurement sample.
+   */
+  initialRows?: ProcurementRacmRow[];
+  /**
+   * Control ids the RACM has already published. A published risk-control is
+   * settled, so those rows are shown but can't be changed or removed here —
+   * the way to move on is to add a new control. Anything not on the list stays
+   * fully editable, and so does every row added in this editor.
+   */
+  lockedRowIds?: string[];
 }
+
+// One wording for the rule, so the grid cells and the detail panel explain a
+// published row the same way wherever the user meets it.
+const LOCKED_ROW_TITLE = 'Published — this row is fixed. Add a new control instead.';
 
 // Trailing "Ref" column — shown only when a RACM was consolidated from 2+ files.
 const REF_COLUMN: RacmColumnDef = { key: 'ref', label: 'Ref', group: 'meta', width: 220 };
@@ -79,9 +97,11 @@ const DEFAULT_VISIBLE_COLS = new Set<keyof ProcurementRacmRow>(
 //   'flag'  → no value list; the column's own on/off filter (Key controls only)
 const COLUMN_FILTER_MODE: Record<string, 'multi' | 'text' | 'flag'> = {
   riskId: 'text', controlId: 'text', isKey: 'flag',
-  processArea: 'multi', subProcess: 'multi', riskCategory: 'multi',
+  processArea: 'multi', subProcess: 'multi', entity: 'multi', country: 'multi',
+  riskCategory: 'multi',
   riskRating: 'multi', likelihood: 'multi', impact: 'multi',
   controlType: 'multi', controlNature: 'multi', frequency: 'multi',
+  testingStrategy: 'multi',
   controlOwner: 'multi', segregationOfDuties: 'multi', confidence: 'multi',
 };
 
@@ -109,17 +129,41 @@ const GROUP_BY_OPTIONS: { value: GroupByMode; label: string }[] = [
   { value: 'riskRating', label: 'Risk Rating' },
 ];
 
-export default function RacmFullPageEditor({ onBack, backView, backLabel, racmName, racmId, processLabel, sourceFiles }: Props) {
+// Bulk "Update column" — the columns a reviewer can set across many rows at once.
+// Identity (Risk/Control ID) must stay unique per row, Key Control is a flag with
+// its own toggle, and Ref is the source file — none of those take one shared value.
+const BULK_EDIT_EXCLUDED = new Set<keyof ProcurementRacmRow>(['riskId', 'controlId', 'isKey', 'ref']);
+const BULK_EDIT_COLUMNS = PROCUREMENT_RACM_COLUMNS.filter(c => !BULK_EDIT_EXCLUDED.has(c.key));
+// Columns with a closed vocabulary get a picker, so a bulk edit can't mint a new
+// spelling ("high", "Adhoc") that would split the header filters and chips.
+const RATING_VALUES = ['High', 'Medium', 'Low'];
+const BULK_VALUE_OPTIONS: Partial<Record<keyof ProcurementRacmRow, string[]>> = {
+  riskRating: RATING_VALUES, likelihood: RATING_VALUES, impact: RATING_VALUES,
+  controlType: ['Preventive', 'Detective'],
+  controlNature: ['Manual', 'Automated', 'IT-dependent'],
+  frequency: ['Annual', 'Quarterly', 'Monthly', 'Weekly', 'Daily', 'Recurring', 'Ad-hoc'],
+  testingStrategy: ['Sampling', 'Full population', 'Test of one'],
+};
+// Long-form columns get a textarea rather than a one-line input.
+const BULK_LONG_TEXT_KEYS = new Set<keyof ProcurementRacmRow>([
+  'riskDescription', 'controlObjective', 'controlActivity', 'controlEvidence',
+  'attributes', 'ipeIceDetails', 'mgmtReviewControl',
+]);
+
+export default function RacmFullPageEditor({ onBack, backView, backLabel, racmName, racmId, processLabel, sourceFiles, initialRows, lockedRowIds }: Props) {
   const { openShare } = useShare();
   const logEvent = useAuditLog();
+  const { addToast } = useToast();
   // When generated from 2+ files, show a trailing "Ref" column and tag each row
   // with its source file (round-robin across the uploaded files for this mock).
   const showRef = (sourceFiles?.length ?? 0) > 1;
   // ─── State ───────────────────────────────────────────────────────────
   const [rows, setRows] = useState<ProcurementRacmRow[]>(() =>
-    PROCUREMENT_RACM_ROWS.map((r, i) => ({
+    (initialRows ?? PROCUREMENT_RACM_ROWS).map((r, i) => ({
       ...r,
-      isKey: isKeyControl(r.controlId),
+      // A real RACM says which of its controls are key; only the procurement
+      // sample, which carries no such column, falls back to the stable hash.
+      isKey: r.isKey ?? isKeyControl(r.controlId),
       ...(showRef ? { ref: sourceFiles![i % sourceFiles!.length] } : {}),
     })));
   const [search, setSearch] = useState('');
@@ -140,6 +184,15 @@ export default function RacmFullPageEditor({ onBack, backView, backLabel, racmNa
   useEffect(() => {
     try { localStorage.setItem(`racm-colw-${racmId ?? 'x'}`, JSON.stringify(colWidths)); } catch { /* ignore */ }
   }, [colWidths, racmId]);
+  // This editor opens in its own browser tab, so the RACM it was handed lives in
+  // storage rather than in this tab's memory. Write every change straight back to
+  // the key the rows arrived on, otherwise closing the tab would throw the work
+  // away. Only a handed-over RACM is written back: the built-in procurement
+  // sample belongs to no RACM, and saving it would invent one.
+  useEffect(() => {
+    if (!racmId || !initialRows) return;
+    try { localStorage.setItem(`sox-racm-rows:${racmId}`, JSON.stringify(rows)); } catch { /* storage blocked — the edits stay in this tab */ }
+  }, [rows, racmId, initialRows]);
   const [showColumnPanel, setShowColumnPanel] = useState(false);
   const [selectedRowIds, setSelectedRowIds] = useState<Set<string>>(new Set());
   const [detailRowId, setDetailRowId] = useState<string | null>(null);
@@ -156,8 +209,23 @@ export default function RacmFullPageEditor({ onBack, backView, backLabel, racmNa
   const [editingTitle, setEditingTitle] = useState(false);
   const [status] = useState<'Draft' | 'In Review' | 'Final'>('Draft');
   const [groupByOpen, setGroupByOpen] = useState(false);
+  // Bulk "Update column" popover — which column, and the value to write into it.
+  const [updateColOpen, setUpdateColOpen] = useState(false);
+  const [bulkCol, setBulkCol] = useState<keyof ProcurementRacmRow | ''>('');
+  const [bulkValue, setBulkValue] = useState('');
 
   // ─── Derived ─────────────────────────────────────────────────────────
+  // Published controls, resolved to the row keys the rest of the file works in,
+  // so every handler and the grid itself ask one question — "is this row fixed?"
+  // — of one set. Rows added here mint their own ids and never appear on the
+  // published list, which is the point of the rule: you add a new control rather
+  // than rewrite one that has already been signed off.
+  const lockedControlIds = useMemo(() => new Set(lockedRowIds ?? []), [lockedRowIds]);
+  const lockedRowKeys = useMemo(
+    () => new Set(rows.filter(r => lockedControlIds.has(r.controlId)).map(r => `${r.riskId}-${r.controlId}`)),
+    [rows, lockedControlIds],
+  );
+
   // Distinct values per multi-select column, sorted, for the header filter menus.
   const columnFilterOptions = useMemo(() => {
     const opts: Record<string, string[]> = {};
@@ -206,6 +274,17 @@ export default function RacmFullPageEditor({ onBack, backView, backLabel, racmNa
     document.addEventListener('keydown', onKey);
     return () => document.removeEventListener('keydown', onKey);
   }, [groupByOpen]);
+
+  // The Update-column popover lives in the selection bar, so it closes on Escape
+  // and whenever the selection empties (e.g. after Delete) — otherwise it would
+  // spring back open the next time a row is ticked.
+  useEffect(() => {
+    if (!updateColOpen) return;
+    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') setUpdateColOpen(false); };
+    document.addEventListener('keydown', onKey);
+    return () => document.removeEventListener('keydown', onKey);
+  }, [updateColOpen]);
+  useEffect(() => { if (selectedRowIds.size === 0) setUpdateColOpen(false); }, [selectedRowIds]);
 
   const grouped = useMemo(() => {
     if (groupBy === 'none') return [{ label: 'All Controls', rows: pagedRows, count: pagedRows.length }];
@@ -278,6 +357,7 @@ export default function RacmFullPageEditor({ onBack, backView, backLabel, racmNa
 
   // ─── Mutations ───────────────────────────────────────────────────────
   const updateCell = (rowKey: string, colKey: keyof ProcurementRacmRow, value: string) => {
+    if (lockedRowKeys.has(rowKey)) return;
     setSaveStatus('saving');
     setRows(prev => prev.map(r => (`${r.riskId}-${r.controlId}`) === rowKey ? { ...r, [colKey]: value } : r));
     window.setTimeout(() => { setSaveStatus('saved'); setSavedToast(true); }, 600);
@@ -286,6 +366,7 @@ export default function RacmFullPageEditor({ onBack, backView, backLabel, racmNa
   // Key control is a boolean, so it can't ride updateCell (which writes strings —
   // 'false' would read as truthy). Its own handler keeps the flag a flag.
   const toggleKey = (rowKey: string) => {
+    if (lockedRowKeys.has(rowKey)) return;
     setSaveStatus('saving');
     let marked = false;
     let controlId = '';
@@ -308,11 +389,13 @@ export default function RacmFullPageEditor({ onBack, backView, backLabel, racmNa
     const id = String(nextNum).padStart(3, '0');
     const blank: ProcurementRacmRow = {
       riskId: `R${id}`, controlId: `C${id}`,
-      processArea: 'Procurement Lifecycle Management', subProcess: '(Add sub-process)',
-      riskCategory: '', riskDescription: '',
+      processArea: processLabel || 'Procurement Lifecycle Management', subProcess: '(Add sub-process)',
+      entity: '', country: '',
+      riskCategory: '', riskTitle: '', riskDescription: '',
       riskRating: 'Medium', likelihood: 'Medium', impact: 'Medium',
       controlObjective: '', controlActivity: '',
       controlType: 'Preventive', controlNature: 'Manual', frequency: 'Monthly',
+      effectiveDate: '', testingStrategy: '',
       controlOwner: '', controlEvidence: '',
       assertions: '', fsLineItem: '', regulatoryRef: '',
       keyReport: '', ipeIceDetails: '', segregationOfDuties: '', mgmtReviewControl: '',
@@ -325,9 +408,70 @@ export default function RacmFullPageEditor({ onBack, backView, backLabel, racmNa
 
   const deleteSelected = () => {
     if (selectedRowIds.size === 0) return;
-    setRows(prev => prev.filter(r => !selectedRowIds.has(`${r.riskId}-${r.controlId}`)));
+    // A published row can't be removed, so a mixed selection deletes what it can
+    // and names what it left behind — silently dropping part of the request would
+    // leave the user counting rows to work out what happened.
+    const removable = new Set([...selectedRowIds].filter(k => !lockedRowKeys.has(k)));
+    const kept = selectedRowIds.size - removable.size;
+    if (removable.size > 0) setRows(prev => prev.filter(r => !removable.has(`${r.riskId}-${r.controlId}`)));
     setSelectedRowIds(new Set());
     setSaveStatus('saved');
+    if (kept > 0) {
+      addToast({
+        type: 'info',
+        message: kept === 1
+          ? '1 published row was left in place. Published rows are fixed — add a new control instead.'
+          : `${kept} published rows were left in place. Published rows are fixed — add a new control instead.`,
+      });
+    }
+  };
+
+  // Bulk "Update column": write one value into one column on every selected row
+  // in a single pass. Same save feedback as a cell commit; selection is kept so
+  // the reviewer can set the next column on the same rows.
+  const openUpdateColumn = () => {
+    if (!updateColOpen) { setBulkCol(''); setBulkValue(''); }
+    setUpdateColOpen(o => !o);
+  };
+  const bulkOptions = bulkCol ? BULK_VALUE_OPTIONS[bulkCol] : undefined;
+  const canApplyBulk = !!bulkCol && (!bulkOptions || bulkValue !== '');
+  const applyBulkUpdate = () => {
+    if (!bulkCol || !canApplyBulk || selectedRowIds.size === 0) return;
+    const col = bulkCol;
+    const value = bulkOptions ? bulkValue : bulkValue.trim();
+    const label = BULK_EDIT_COLUMNS.find(c => c.key === col)?.label ?? col;
+    // Published rows keep the values they were signed off with, so the edit runs
+    // over the rest of the selection and reports what it left alone. The audit
+    // trail counts only the rows that actually changed.
+    const targets = new Set([...selectedRowIds].filter(k => !lockedRowKeys.has(k)));
+    const skipped = selectedRowIds.size - targets.size;
+    const n = targets.size;
+    if (n === 0) {
+      addToast({
+        type: 'info',
+        message: 'Every row you picked is published, so nothing changed. Published rows are fixed — add a new control instead.',
+      });
+      setUpdateColOpen(false);
+      return;
+    }
+    setSaveStatus('saving');
+    setRows(prev => prev.map(r => targets.has(`${r.riskId}-${r.controlId}`) ? { ...r, [col]: value } : r));
+    window.setTimeout(() => { setSaveStatus('saved'); setSavedToast(true); }, 600);
+    const target = `${n} ${n === 1 ? 'row' : 'rows'} in ${racmName ?? 'the RACM'}`;
+    logEvent({
+      action: 'Update',
+      description: value ? `Set ${label} to "${value}" on ${target}` : `Cleared ${label} on ${target}`,
+      module: 'Audit', entity: 'Control',
+    });
+    if (skipped > 0) {
+      addToast({
+        type: 'info',
+        message: skipped === 1
+          ? '1 published row was left unchanged. Published rows are fixed — add a new control instead.'
+          : `${skipped} published rows were left unchanged. Published rows are fixed — add a new control instead.`,
+      });
+    }
+    setUpdateColOpen(false);
   };
 
   const toggleGroup = (label: string) =>
@@ -471,6 +615,64 @@ export default function RacmFullPageEditor({ onBack, backView, backLabel, racmNa
           {selectedRowIds.size > 0 && (
             <>
               <span className="text-xs text-text-muted">{selectedRowIds.size} selected</span>
+              {/* Update column — set one field on every selected row at once, so
+                  re-rating or re-owning a batch of controls isn't a cell-by-cell job.
+                  Popover styled like Group-by beside it. */}
+              <div className="relative">
+                <Button variant="outline" size="sm" leftIcon={<PencilLine size={12} />}
+                  aria-haspopup="dialog" aria-expanded={updateColOpen} onClick={openUpdateColumn}>
+                  Update column
+                </Button>
+                {updateColOpen && (
+                  <>
+                    <div className="fixed inset-0 z-10" onClick={() => setUpdateColOpen(false)} />
+                    <form role="dialog" aria-labelledby="racm-bulk-update-title"
+                      onSubmit={(e) => { e.preventDefault(); applyBulkUpdate(); }}
+                      className="absolute right-0 top-full mt-1 w-72 bg-white border border-border rounded-xl shadow-xl z-30 overflow-hidden">
+                      <div className="px-3 py-2 border-b border-border-light bg-surface-2/40">
+                        <h6 id="racm-bulk-update-title" className="text-[0.625rem] font-bold text-text uppercase tracking-wider">Update column</h6>
+                      </div>
+                      <div className="p-3 space-y-3">
+                        <div>
+                          <label htmlFor="racm-bulk-column" className="text-[0.5625rem] font-semibold text-text-muted uppercase tracking-wider block mb-1">Column</label>
+                          <select id="racm-bulk-column" autoFocus value={bulkCol}
+                            onChange={e => { setBulkCol(e.target.value as keyof ProcurementRacmRow | ''); setBulkValue(''); }}
+                            className="w-full h-7 px-2 border border-border rounded-lg text-xs text-text bg-white outline-none focus:border-primary/40 focus-visible:ring-2 focus-visible:ring-primary/20 cursor-pointer">
+                            <option value="">Choose a column…</option>
+                            {BULK_EDIT_COLUMNS.map(c => <option key={c.key} value={c.key}>{c.label}</option>)}
+                          </select>
+                        </div>
+                        {bulkCol && (
+                          <div>
+                            <label htmlFor="racm-bulk-value" className="text-[0.5625rem] font-semibold text-text-muted uppercase tracking-wider block mb-1">Value</label>
+                            {bulkOptions ? (
+                              <select id="racm-bulk-value" value={bulkValue} onChange={e => setBulkValue(e.target.value)}
+                                className="w-full h-7 px-2 border border-border rounded-lg text-xs text-text bg-white outline-none focus:border-primary/40 focus-visible:ring-2 focus-visible:ring-primary/20 cursor-pointer">
+                                <option value="">Choose a value…</option>
+                                {bulkOptions.map(v => <option key={v} value={v}>{v}</option>)}
+                              </select>
+                            ) : BULK_LONG_TEXT_KEYS.has(bulkCol) ? (
+                              <textarea id="racm-bulk-value" rows={3} value={bulkValue} onChange={e => setBulkValue(e.target.value)}
+                                className="w-full px-2.5 py-1.5 border border-border rounded-lg text-xs text-text bg-white outline-none focus:border-primary/40 focus-visible:ring-2 focus-visible:ring-primary/20 resize-none" />
+                            ) : (
+                              <input id="racm-bulk-value" value={bulkValue} onChange={e => setBulkValue(e.target.value)}
+                                className="w-full h-7 px-2.5 border border-border rounded-lg text-xs text-text bg-white outline-none focus:border-primary/40 focus-visible:ring-2 focus-visible:ring-primary/20" />
+                            )}
+                            {!bulkOptions && (
+                              <p className="mt-1 text-[0.625rem] text-text-muted">Leave blank to clear this column on the selected rows</p>
+                            )}
+                          </div>
+                        )}
+                      </div>
+                      <div className="px-3 py-2 border-t border-border-light bg-surface-2/20 flex items-center justify-end">
+                        <Button type="submit" variant="primary" size="sm" disabled={!canApplyBulk}>
+                          Apply to {selectedRowIds.size} {selectedRowIds.size === 1 ? 'row' : 'rows'}
+                        </Button>
+                      </div>
+                    </form>
+                  </>
+                )}
+              </div>
               <Button variant="destructive" size="sm" leftIcon={<Trash2 size={12} />} onClick={deleteSelected}>
                 Delete
               </Button>
@@ -573,6 +775,7 @@ export default function RacmFullPageEditor({ onBack, backView, backLabel, racmNa
             pinnedKeys={PINNED_KEYS}
             stickyOffsets={stickyOffsets}
             selectedRowIds={selectedRowIds}
+            lockedRowKeys={lockedRowKeys}
             onToggleRowSelected={toggleRowSelected}
             onOpenDetail={setDetailRowId}
             onUpdateCell={updateCell}
@@ -618,6 +821,7 @@ export default function RacmFullPageEditor({ onBack, backView, backLabel, racmNa
         {detailRow && (
           <DetailPanel
             row={detailRow}
+            readOnly={lockedRowKeys.has(`${detailRow.riskId}-${detailRow.controlId}`)}
             onClose={() => setDetailRowId(null)}
             onImport={() => fileInputRef.current?.click()}
             onUpdate={(k, v) => updateCell(`${detailRow.riskId}-${detailRow.controlId}`, k, v)}
@@ -801,7 +1005,7 @@ function ColumnVisibilityPanel({
 // ─── Grid ─────────────────────────────────────────────────────────────────
 function RacmGrid({
   grouped, collapsedGroups, onToggleGroup, visibleColumns, onResize, pinnedKeys, stickyOffsets,
-  selectedRowIds, onToggleRowSelected, onOpenDetail, onUpdateCell, onToggleKey, showGroupHeaders,
+  selectedRowIds, lockedRowKeys, onToggleRowSelected, onOpenDetail, onUpdateCell, onToggleKey, showGroupHeaders,
   columnFilters, columnFilterOptions, onColumnFilterChange, keyOnly, onKeyOnlyChange,
 }: {
   grouped: { label: string; rows: ProcurementRacmRow[]; count: number }[];
@@ -812,6 +1016,8 @@ function RacmGrid({
   pinnedKeys: Set<keyof ProcurementRacmRow>;
   stickyOffsets: { offsets: Map<string, number>; total: number };
   selectedRowIds: Set<string>;
+  /** Row keys of controls the RACM has published — shown, but not editable. */
+  lockedRowKeys: Set<string>;
   onToggleRowSelected: (id: string) => void;
   onOpenDetail: (id: string) => void;
   onUpdateCell: (rowKey: string, col: keyof ProcurementRacmRow, value: string) => void;
@@ -885,6 +1091,7 @@ function RacmGrid({
                   row={r}
                   rowIdx={idx}
                   isSelected={isSelected}
+                  locked={lockedRowKeys.has(rowKey)}
                   visibleColumns={visibleColumns}
                   pinnedKeys={pinnedKeys}
                   stickyOffsets={stickyOffsets}
@@ -904,13 +1111,15 @@ function RacmGrid({
 
 // ─── Grid row ─────────────────────────────────────────────────────────────
 function RacmGridRow({
-  rowKey, row, rowIdx, isSelected, visibleColumns, pinnedKeys, stickyOffsets,
+  rowKey, row, rowIdx, isSelected, locked, visibleColumns, pinnedKeys, stickyOffsets,
   onToggleSelected, onOpenDetail, onUpdateCell, onToggleKey,
 }: {
   rowKey: string;
   row: ProcurementRacmRow;
   rowIdx: number;
   isSelected: boolean;
+  /** This control has been published, so the row reads but never edits. */
+  locked: boolean;
   visibleColumns: RacmColumnDef[];
   pinnedKeys: Set<keyof ProcurementRacmRow>;
   stickyOffsets: { offsets: Map<string, number>; total: number };
@@ -921,6 +1130,9 @@ function RacmGridRow({
 }) {
   const [editingKey, setEditingKey] = useState<keyof ProcurementRacmRow | null>(null);
   const bg = isSelected ? 'bg-primary/8' : (rowIdx % 2 === 0 ? 'bg-white' : 'bg-surface-2/30');
+  // A published row never opens an editor — including the attributes modal,
+  // which would otherwise look like it saved and then quietly discard the work.
+  const beginEdit = (key: keyof ProcurementRacmRow) => { if (!locked) setEditingKey(key); };
 
   return (
     <div className={`group flex border-b border-border-light/70 hover:bg-primary/5 ${bg} transition-colors`}>
@@ -943,7 +1155,7 @@ function RacmGridRow({
             className={`h-10 px-3 py-1.5 text-[0.6875rem] text-text border-r border-border-light/70 ${pinned ? `sticky z-10 ${bg}` : ''} ${isLastPinned ? 'shadow-[2px_0_3px_-2px_rgba(0,0,0,0.08)]' : ''} ${isEditing && !isAttrEditing ? 'p-0' : ''}`}>
             {isAttrEditing ? (
               <>
-                <CellContent row={row} col={c} onEdit={() => {}} onOpenDetail={onOpenDetail} onToggleKey={() => onToggleKey(rowKey)} />
+                <CellContent row={row} col={c} locked={locked} onEdit={() => {}} onOpenDetail={onOpenDetail} onToggleKey={() => onToggleKey(rowKey)} />
                 <AttributeEditModal
                   value={String(row[c.key] ?? '')}
                   onSave={(v) => { onUpdateCell(rowKey, c.key, v); setEditingKey(null); }}
@@ -962,7 +1174,8 @@ function RacmGridRow({
               <CellContent
                 row={row}
                 col={c}
-                onEdit={() => setEditingKey(c.key)}
+                locked={locked}
+                onEdit={() => beginEdit(c.key)}
                 onOpenDetail={onOpenDetail}
                 onToggleKey={() => onToggleKey(rowKey)}
               />
@@ -1062,10 +1275,11 @@ function AttributeEditModal({ value, onSave, onClose }: { value: string; onSave:
 
 // ─── Cell rendering (chip styles, truncation) ─────────────────────────────
 function CellContent({
-  row, col, onEdit, onOpenDetail, onToggleKey,
+  row, col, locked, onEdit, onOpenDetail, onToggleKey,
 }: {
   row: ProcurementRacmRow;
   col: RacmColumnDef;
+  locked: boolean;
   onEdit: () => void;
   onOpenDetail: () => void;
   onToggleKey: () => void;
@@ -1085,9 +1299,10 @@ function CellContent({
         onClick={onToggleKey}
         role="switch"
         aria-checked={on}
+        disabled={locked}
         aria-label={`Key control — ${row.controlId}`}
-        title={on ? 'Key control — click to unmark' : 'Not a key control — click to mark'}
-        className={`group/key h-6 px-2 inline-flex items-center gap-1.5 rounded-full border text-[0.5625rem] font-bold uppercase tracking-wider cursor-pointer transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40 focus-visible:ring-inset ${
+        title={locked ? LOCKED_ROW_TITLE : on ? 'Key control — click to unmark' : 'Not a key control — click to mark'}
+        className={`group/key h-6 px-2 inline-flex items-center gap-1.5 rounded-full border text-[0.5625rem] font-bold uppercase tracking-wider ${locked ? 'cursor-default' : 'cursor-pointer'} transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40 focus-visible:ring-inset ${
           on
             ? 'bg-mitigated-50 text-mitigated-700 border-mitigated-700/15 hover:bg-mitigated-100'
             : 'border-transparent text-ink-400 hover:text-mitigated-700 hover:bg-mitigated-50/60'
@@ -1099,10 +1314,16 @@ function CellContent({
   }
 
   if (isId) {
+    // The padlock rides on the Control ID because that is what was published,
+    // and that column is frozen — so the row still says it is fixed however far
+    // the user has scrolled sideways.
+    const showLock = locked && col.key === 'controlId';
     return (
       <button onClick={onOpenDetail}
+        title={showLock ? LOCKED_ROW_TITLE : undefined}
         className="font-mono text-[0.6875rem] text-primary hover:underline cursor-pointer inline-flex items-center gap-1 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40 focus-visible:ring-inset">
         {val || '—'}
+        {showLock && <Lock size={10} className="text-ink-400 shrink-0" aria-hidden />}
       </button>
     );
   }
@@ -1117,9 +1338,9 @@ function CellContent({
             ? deriveControlNatureClass(val)
             : 'bg-paper-100 text-ink-600 border-border-light';
     return (
-      <button onDoubleClick={onEdit}
+      <button onDoubleClick={onEdit} disabled={locked} title={locked ? LOCKED_ROW_TITLE : undefined}
         onKeyDown={(e) => { if (e.key === 'Enter' || e.key === 'F2') { e.preventDefault(); onEdit(); } }}
-        className={`px-2 h-5 rounded-full text-[0.5625rem] font-bold inline-flex items-center border ${cls} cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40 focus-visible:ring-inset`}>
+        className={`px-2 h-5 rounded-full text-[0.5625rem] font-bold inline-flex items-center border ${cls} ${locked ? 'cursor-default' : 'cursor-pointer'} focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40 focus-visible:ring-inset`}>
         {val || '—'}
       </button>
     );
@@ -1127,10 +1348,15 @@ function CellContent({
 
   // Attributes — render comma-separated values as individual chips, click to edit via modal
   if (col.key === 'attributes') {
-    if (!val) return <button onClick={onEdit} className="text-[0.625rem] text-primary hover:underline cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40 focus-visible:ring-inset rounded">+ Add attributes</button>;
+    // A published row with no attributes shows a dash rather than the invitation
+    // to add some, which it would never be able to honour.
+    if (!val) return locked
+      ? <span className="text-ink-300">—</span>
+      : <button onClick={onEdit} className="text-[0.625rem] text-primary hover:underline cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40 focus-visible:ring-inset rounded">+ Add attributes</button>;
     const items = val.split(',').map(s => s.trim()).filter(Boolean);
     return (
-      <button onClick={onEdit} className="flex flex-wrap gap-1 py-0.5 -mx-1 px-1 cursor-pointer hover:bg-white/60 rounded transition-colors w-full text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40 focus-visible:ring-inset">
+      <button onClick={onEdit} disabled={locked} title={locked ? LOCKED_ROW_TITLE : undefined}
+        className={`flex flex-wrap gap-1 py-0.5 -mx-1 px-1 ${locked ? 'cursor-default' : 'cursor-pointer hover:bg-white/60'} rounded transition-colors w-full text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40 focus-visible:ring-inset`}>
         {items.map((attr, idx) => (
           <span key={idx} className="inline-flex items-center px-1.5 py-0.5 rounded text-[0.5625rem] font-medium bg-purple-50 text-purple-700 border border-purple-100 whitespace-nowrap">
             {attr}
@@ -1142,8 +1368,8 @@ function CellContent({
 
   // Plain text — single line truncated, double click to edit
   return (
-    <button onDoubleClick={onEdit} onClick={onEdit}
-      className="w-full h-full text-left text-[0.6875rem] text-text truncate cursor-text hover:bg-white/60 -mx-3 px-3 rounded transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40 focus-visible:ring-inset">
+    <button onDoubleClick={onEdit} onClick={onEdit} disabled={locked} title={locked ? LOCKED_ROW_TITLE : undefined}
+      className={`w-full h-full text-left text-[0.6875rem] text-text truncate ${locked ? 'cursor-default' : 'cursor-text hover:bg-white/60'} -mx-3 px-3 rounded transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40 focus-visible:ring-inset`}>
       {val || <span className="text-ink-300">—</span>}
     </button>
   );
@@ -1151,9 +1377,11 @@ function CellContent({
 
 // ─── Detail Panel ─────────────────────────────────────────────────────────
 function DetailPanel({
-  row, onClose, onUpdate, onImport,
+  row, readOnly, onClose, onUpdate, onImport,
 }: {
   row: ProcurementRacmRow;
+  /** The control has been published: every field reads, none of them edit. */
+  readOnly: boolean;
   onClose: () => void;
   onUpdate: (k: keyof ProcurementRacmRow, v: string) => void;
   onImport?: () => void;
@@ -1197,7 +1425,7 @@ function DetailPanel({
           return (
             <DetailSection key={s.group} label={s.label}>
               {cols.map(c => (
-                <DetailField key={c.key} label={c.label} value={String(row[c.key] ?? '')} onChange={v => onUpdate(c.key, v)} multiLine={['riskDescription', 'controlObjective', 'controlActivity', 'controlEvidence', 'ipeIceDetails', 'mgmtReviewControl'].includes(c.key)} />
+                <DetailField key={c.key} label={c.label} value={String(row[c.key] ?? '')} readOnly={readOnly} onChange={v => onUpdate(c.key, v)} multiLine={['riskDescription', 'controlObjective', 'controlActivity', 'controlEvidence', 'ipeIceDetails', 'mgmtReviewControl'].includes(c.key)} />
               ))}
             </DetailSection>
           );
@@ -1205,8 +1433,11 @@ function DetailPanel({
       </div>
 
       <div className="px-5 py-3 border-t border-border-light flex items-center justify-between bg-surface-2/30">
+        {/* The footer line is the one place the published rule is spelled out:
+            it sits outside the scrolling body, so it is on screen next to the
+            greyed fields however far down the panel the reader is. */}
         <div className="flex items-center gap-1.5 text-[0.625rem] text-text-muted">
-          <Save size={10} />Changes auto-save
+          {readOnly ? <><Lock size={10} />{LOCKED_ROW_TITLE}</> : <><Save size={10} />Changes auto-save</>}
         </div>
         <div className="flex items-center gap-2">
           {onImport && (
@@ -1237,17 +1468,20 @@ function DetailSection({ label, children }: { label: string; children: React.Rea
   );
 }
 
-function DetailField({ label, value, onChange, multiLine }: { label: string; value: string; onChange: (v: string) => void; multiLine?: boolean }) {
+function DetailField({ label, value, onChange, multiLine, readOnly }: { label: string; value: string; onChange: (v: string) => void; multiLine?: boolean; readOnly?: boolean }) {
+  // Read-only keeps the field selectable and scrollable — a published control is
+  // still something people come here to read and copy out of.
+  const tone = readOnly ? 'bg-surface-2/50 text-text-muted' : 'bg-white text-text focus:border-primary/40';
   return (
     <div>
       <label className="text-[0.5625rem] font-semibold text-text-muted uppercase tracking-wider block mb-1">{label}</label>
       {multiLine ? (
-        <textarea defaultValue={value} onBlur={e => onChange(e.target.value)}
+        <textarea defaultValue={value} readOnly={readOnly} onBlur={readOnly ? undefined : e => onChange(e.target.value)}
           rows={Math.min(6, Math.max(2, Math.ceil((value || '').length / 50)))}
-          className="w-full px-2.5 py-1.5 border border-border rounded-lg text-[0.6875rem] text-text bg-white outline-none focus:border-primary/40 transition-all resize-none" />
+          className={`w-full px-2.5 py-1.5 border border-border rounded-lg text-[0.6875rem] outline-none transition-all resize-none ${tone}`} />
       ) : (
-        <input defaultValue={value} onBlur={e => onChange(e.target.value)}
-          className="w-full px-2.5 py-1.5 border border-border rounded-lg text-[0.6875rem] text-text bg-white outline-none focus:border-primary/40 transition-all" />
+        <input defaultValue={value} readOnly={readOnly} onBlur={readOnly ? undefined : e => onChange(e.target.value)}
+          className={`w-full px-2.5 py-1.5 border border-border rounded-lg text-[0.6875rem] outline-none transition-all ${tone}`} />
       )}
     </div>
   );

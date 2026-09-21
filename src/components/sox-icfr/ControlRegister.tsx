@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from 'react';
 import {
   FileSpreadsheet,
   Search, Plus, Building2, Rows3, MessageSquare,
-  Star, FileText, X, Send, LayoutGrid, List, StickyNote,
+  Star, FileText, X, Send, LayoutGrid, List, StickyNote, Table2,
 } from 'lucide-react';
 import { FilterSelect, HeaderFilter, triggerCls } from '../shared/FilterSelect';
 import { useAuditControls } from './useAuditControls';
@@ -14,12 +14,13 @@ import {
 } from './helpers';
 import { ConclusionPill, ItgcCascadeBanner, NatureChip, Th, Tickmark } from './parts';
 import NewControlPanel from './NewControlPanel';
+import AddRacmModal from './AddRacmModal';
 import WorkingPaperModal from './WorkingPaperModal';
 import { useToast } from '../shared/Toast';
 import { cn } from '../../lib/cn';
 import { GROUP_OPTIONS, groupKeyOf, groupKeysOf, rowCovers, rowEntities, useColumnWidths, type GroupBy } from './registerColumns';
 import { isOwnerOf, ownersOf } from './auditScope';
-import type { Conclusion, Control } from './types';
+import type { AuditRecord, Conclusion, Control } from './types';
 
 type SavedView = 'all' | 'due' | 'court' | 'design' | 'design-done' | 'operating' | 'operating-done'
   | 'effective' | 'exceptions' | 'review' | 'owner' | 'open' | 'papers' | 'key' | 'itgc';
@@ -66,7 +67,9 @@ const REG_COLS = [
   { key: 'nature', w: 108 },
   { key: 'design', w: 150 },
   { key: 'operating', w: 168 },
-  { key: 'conclusion', w: 126 },
+  // 160, not 126: the pill says "Control ineffective" now, and fixed layout
+  // clips what the column can't hold rather than letting it widen.
+  { key: 'conclusion', w: 160 },
   // Court removed Aug 2026 (Step-2 action item 3). Whose move it is still drives
   // the 'My court' saved view and the badge in the control-page header — only the
   // register column went.
@@ -86,7 +89,7 @@ function CardTrack({ label, res, started }: { label: string; res: ReturnType<typ
   );
 }
 
-function ControlCard({ c, concl, discN, noteN, onOpen, selectable, selected, onToggle }: { c: Control; concl: Conclusion; discN: number; noteN: number; onOpen: () => void; selectable?: boolean; selected?: boolean; onToggle?: () => void }) {
+function ControlCard({ c, concl, discN, noteN, onOpen, selectable, selected, onToggle, audit }: { c: Control; concl: Conclusion; discN: number; noteN: number; onOpen: () => void; selectable?: boolean; selected?: boolean; onToggle?: () => void; audit?: AuditRecord }) {
   return (
     <div role="button" tabIndex={0} className={cn('ac-card text-left', selected && 'ring-2 ring-brand-200 border-brand-300')}
       onClick={onOpen} onKeyDown={e => { if (e.key === 'Enter') onOpen(); }} aria-label={`Open ${c.id} — ${c.description}`}>
@@ -105,7 +108,7 @@ function ControlCard({ c, concl, discN, noteN, onOpen, selectable, selected, onT
       <h3 className="ac-title mt-2">{c.description}</h3>
       <div className="ac-meta">
         {controlCode(c)} · {c.nature} ·{' '}
-        {(() => { const dd = testDueDisplay(c); return <span className={dd.cls}>{dd.label}</span>; })()}
+        {(() => { const dd = testDueDisplay(c, true, audit); return <span className={dd.cls}>{dd.label}</span>; })()}
       </div>
       {/* Where this control is performed, on its own line — a company name and a
           process name side by side in the eyebrow left neither of them readable.
@@ -149,11 +152,16 @@ function TrackCell({ result, a, b, label }: { result: ReturnType<typeof trackRes
 }
 
 export default function ControlRegister() {
-  const { eng, role, meOwner, openControl, requestDesignDocs, registerPreset, clearRegisterPreset } = useIcfr();
+  const { eng, role, meOwner, openControl, requestDesignDocs, registerPreset, clearRegisterPreset, openAuditId } = useIcfr();
   const { addToast } = useToast();
   const [creating, setCreating] = useState(false);
+  // Add RACM (S11) — copy RACMs in from the Engagements page's RACM tab.
+  const [addingRacm, setAddingRacm] = useState(false);
   // The register shows what the OPEN audit covers — its entities' processes.
   const auditScoped = useAuditControls(eng.controls);
+  // …and reads due dates against it: a year-end control the audit holds back
+  // (A29) is pending, not due. No audit open, nothing is held back.
+  const openAudit = eng.audits.find(a => a.id === openAuditId);
   // Classic engagements still say Exceptions; the rework renamed them.
   // The ITGC cascade — computed once here because three things read it: the
   // banner, the conditional saved view, and the view's own count.
@@ -219,7 +227,7 @@ export default function ControlRegister() {
   const ctypes = useMemo(() => ['All', ...Array.from(new Set(scoped.map(c => c.type))).sort()], [scoped]);
 
   const matchesView = (c: Control, v: SavedView): boolean => {
-    if (v === 'due') return isTestDueNow(c);
+    if (v === 'due') return isTestDueNow(c, openAudit);
     if (v === 'court') return courtFor(c, eng.tasks, eng.reviewNotes) === role;
     if (v === 'design') return trackResult(c.design) === 'Not tested';
     if (v === 'design-done') return trackResult(c.design) !== 'Not tested';
@@ -252,10 +260,10 @@ export default function ControlRegister() {
       return true;
     });
   }, [scoped, q, process, nature, entity, ctype, frequency, owner]);
-  const filtered = useMemo(() => base.filter(c => matchesView(c, savedView)), [base, savedView, eng.tasks, eng.reviewNotes, role]);
+  const filtered = useMemo(() => base.filter(c => matchesView(c, savedView)), [base, savedView, eng.tasks, eng.reviewNotes, role, openAudit]);
   const viewCounts = useMemo(
     () => Object.fromEntries(VIEWS.map(v => [v.id, base.filter(c => matchesView(c, v.id)).length])) as Record<SavedView, number>,
-    [base, eng.tasks, eng.reviewNotes, role],
+    [base, eng.tasks, eng.reviewNotes, role, openAudit],
   );
 
   const groups = useMemo(() => {
@@ -268,7 +276,7 @@ export default function ControlRegister() {
         map.get(k)!.push(c);
       }
     }
-    return Array.from(map, ([key, rows]) => ({ key, rows: rows.sort((a, b) => controlCode(a).localeCompare(controlCode(b))) }));
+    return Array.from(map, ([key, rows]) => ({ key, rows: rows.sort((a, b) => a.process.localeCompare(b.process) || controlCode(a).localeCompare(controlCode(b))) }));
   }, [filtered, groupBy]);
 
   // PARKED (Aug 2026) — select-all went with the checkbox column. `toggle` stays:
@@ -339,6 +347,12 @@ export default function ControlRegister() {
           {/* the audit report — what management and the board actually read: the
               observations, what they are worth, and who has committed to the fix */}
           {role !== 'risk-owner' && <button onClick={() => setReportPreview(true)} title="Audit report — observations and the management action plan" className="h-9 px-3 inline-flex items-center gap-1.5 rounded-lg border border-canvas-border text-[12.5px] font-semibold text-ink-600 hover:text-ink-900 hover:border-ink-300 transition-colors cursor-pointer"><FileText size={14} /> Audit report</button>}
+          {/* Add RACM (S11) — copies controls in from RACMs on the Engagements
+              page's RACM tab, into the ENGAGEMENT. Engagement level only: inside
+              an audit this register is that cycle's scope, which was fixed when
+              the audit was created, so controls added from here would either not
+              show in the list or quietly widen a scope already being tested. */}
+          {role === 'auditor' && !isEngagementLocked(eng) && !openAuditId && <button onClick={() => setAddingRacm(true)} title="Copy controls in from RACMs on the Engagements page's RACM tab" className="h-9 px-3 inline-flex items-center gap-1.5 rounded-lg border border-canvas-border text-[12.5px] font-semibold text-ink-600 hover:text-ink-900 hover:border-ink-300 transition-colors cursor-pointer"><Table2 size={14} /> Add RACM</button>}
           {role === 'auditor' && !isEngagementLocked(eng) && <button onClick={() => setCreating(true)} className="h-9 px-3.5 inline-flex items-center gap-1.5 rounded-lg bg-brand-600 text-white text-[12.5px] font-semibold hover:bg-brand-700 transition-colors cursor-pointer"><Plus size={15} /> New control</button>}
       </div>
 
@@ -346,7 +360,7 @@ export default function ControlRegister() {
       <div className="flex items-stretch gap-3 mb-4 flex-wrap">
         {[
           { k: role === 'risk-owner' ? 'Controls in your name' : 'Controls', v: scoped.length, t: 'text-ink-900' },
-          { k: 'Tests due now', v: testsDueNow(scoped).length, t: 'text-mitigated-700' },
+          { k: 'Tests due now', v: testsDueNow(scoped, openAudit).length, t: 'text-mitigated-700' },
           { k: 'Effective', v: stats.effective, t: 'text-compliant-700' },
           { k: 'Awaiting review', v: stats.awaitingReview, t: 'text-evidence-700' },
           { k: role === 'risk-owner' ? 'Waiting on you' : 'Waiting on owner', v: stats.waitingOnOwner, t: 'text-mitigated-700' },
@@ -404,7 +418,7 @@ export default function ControlRegister() {
               <div className="card-grid">
                 {g.rows.map(c => (
                   <ControlCard key={c.id} c={c} concl={conclusionOf(eng, c)} discN={openDiscussionCount(eng, c.id)} noteN={pendingReviewNoteCount(eng, c.id)} onOpen={() => openControl(c.id)}
-                    selectable={role === 'auditor'} selected={sel.has(c.id)} onToggle={() => toggle(c.id)} />
+                    selectable={role === 'auditor'} selected={sel.has(c.id)} onToggle={() => toggle(c.id)} audit={openAudit} />
                 ))}
               </div>
             </div>
@@ -480,8 +494,8 @@ export default function ControlRegister() {
                         {/* process and owner have their own columns now — saying
                             them twice on the same row is noise. */}
                         <div className="text-[11px] text-ink-400 mt-0.5">
-                          {controlCode(c)} · {c.subProcess} ·{' '}
-                          {(() => { const dd = testDueDisplay(c); return <span className={dd.cls}>{dd.label}</span>; })()}
+                          {controlCode(c)}{c.subProcess ? ` · ${c.subProcess}` : ''} ·{' '}
+                          {(() => { const dd = testDueDisplay(c, true, openAudit); return <span className={dd.cls}>{dd.label}</span>; })()}
                         </div>
                       </td>
                       <td className="text-[0.71875rem] text-ink-700">
@@ -532,6 +546,7 @@ export default function ControlRegister() {
 
       {/* create control — the focused form */}
       {creating && <NewControlPanel onClose={() => setCreating(false)} />}
+      {addingRacm && <AddRacmModal onClose={() => setAddingRacm(false)} />}
       {/* the paper follows the filters — only the visible controls' data goes in */}
       {wpPreview && <WorkingPaperModal eng={eng} controls={filtered} onClose={() => setWpPreview(false)} />}
       {reportPreview && <WorkingPaperModal eng={eng} controls={filtered} report onClose={() => setReportPreview(false)} />}

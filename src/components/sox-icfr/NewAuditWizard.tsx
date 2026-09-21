@@ -10,30 +10,46 @@ import { StepRail } from '../audit/sox-testing/ScopingWizard';
 import { FormSelect } from '../shared/FilterSelect';
 import { CustomDatePicker } from '../shared/CustomDatePicker';
 import {
-  BASIS_OPTIONS, currentFyEnd, ruleOverall,
-  type GroupEntity, type MaterialityBasis,
+  BASIS_OPTIONS, currentFyEnd, entityShort, QUAL_REASONS, ruleOverall,
+  type GroupEntity, type MaterialityBasis, type TbCaption,
 } from '../audit/sox-testing/soxTestingData';
 import { auditStatus } from './auditPortfolio';
 import {
-  auditCovers, chainDepth, COVERAGE_TARGET, type DerivedScopeRow, deriveEntityScope,
-  entitiesFor, entitiesInFiles, entityTotals, mergeScopeEntities, racmsForEntities,
+  auditCovers, chainDepth, COVERAGE_TARGET, programmeFor, type DerivedScopeRow, deriveEntityScope,
+  entitiesFor, entitiesInFiles, entityTotals, materialAccounts, mergeScopeEntities, normaliseProcess,
+  type ProcessScopeRow, recommendProcesses, SOX_MAPPING_PROCESSES,
 } from './auditScope';
-import { conclusionOf, trackResult } from './helpers';
+import { conclusionOf, isEngagementLocked, spreadPhrase, trackResult } from './helpers';
+import RacmImportReview from './RacmImportReview';
 import { useIcfr } from './store';
 import { useAuditLog } from '../../context/AdminDataContext';
 import { useToast } from '../shared/Toast';
-import { AUDIT_ROUNDS, type AuditRecord, type AuditRound, type AuditScopeKind, type Control, type FileOrigin } from './types';
+import {
+  AUDIT_ROUNDS, AUDIT_SAMPLE_METHODS, AUDIT_SAMPLE_SPREADS, DEFAULT_AUDIT_SAMPLING,
+  type AuditRecord, type AuditRound, type AuditSampleMethod, type AuditSampleSpread, type AuditScopeKind, type Control, type FileOrigin,
+} from './types';
 import { cn } from '../../lib/cn';
 
 /**
  * New audit — the wizard behind the New audit button on the Overview and the
  * SOX audit tab.
  *
+ * Audit period → Review (S11 follow-up, user ask). Materiality, the trial
+ * balance and scoping are done once, when the engagement is created, so an audit
+ * no longer asks for them: it tests every control in the engagement's Control
+ * Library (the ones scoped at creation plus any added since with Add RACM) and
+ * takes its materiality and TB / GL from the engagement. The two steps that used
+ * to sit in between are PARKED behind SCOPING_STEPS below; what follows
+ * describes them as they were.
+ *
  * Period → Materiality & files → Scope → Review (user ask). Materiality leads
  * because that is the order the work happens in: you set the threshold, load the
  * trial balance it is applied to, and what comes back is what should be in
- * scope — so scope is the answer, not the opening question. The files half stays
- * optional — Continue gates on the materiality half alone.
+ * scope — so scope is the answer, not the opening question. The trial balance is
+ * required now (user ask) for every audit but a roll-forward: its material
+ * accounts are mapped to processes on that step, and Scope opens on Ira's
+ * process recommendation built from that mapping. A roll-forward's files stay
+ * optional — its scope is its parent's conclusions, not the numbers.
  *
  * Scope is a hard either/or by design: you pick entities OR RACMs, and
  * switching sides clears the other selection rather than quietly keeping both.
@@ -47,7 +63,14 @@ import { cn } from '../../lib/cn';
  * controls, the same equivalence Racm.tsx and createRacm() work from.
  */
 
-const STEPS = ['Audit period', 'Materiality & files', 'Scope', 'Review'] as const;
+/** PARKED (S11 follow-up): Materiality & files and Scope. Scoping moved to
+ *  engagement creation. Flip back to true to restore both steps — their blocks,
+ *  gates and footer hints are all behind this flag, and create() goes back to
+ *  building the scope from them. */
+const SCOPING_STEPS = false;
+const STEPS: readonly string[] = SCOPING_STEPS
+  ? ['Audit period', 'Materiality & files', 'Scope', 'Review']
+  : ['Audit period', 'Review'];
 const REVIEW = STEPS.length - 1;
 
 const inputCls = 'w-full px-3 py-2 text-[13px] border border-canvas-border rounded-lg bg-white text-ink-900 outline-none focus:border-brand-400 focus:ring-2 focus:ring-brand-500/10 transition-all';
@@ -86,7 +109,7 @@ export default function NewAuditWizard({ onClose, prefillFrom }: {
    *  with its reason showing, rather than being forced through. */
   prefillFrom?: AuditRecord;
 }) {
-  const { eng, role, createAudit, registerFile, addControl, addDesignPoint, setControlKey, me } = useIcfr();
+  const { eng, role, createAudit, createRacm, registerFile, addControl, addDesignPoint, setControlKey, me } = useIcfr();
   const logEvent = useAuditLog();
   const { addToast } = useToast();
   const [step, setStep] = useState(0);
@@ -277,10 +300,29 @@ export default function NewAuditWizard({ onClose, prefillFrom }: {
     : round === 'yearend' ? !!fromDate && fromDate <= yearEnd
     : false;
 
-  // ── Files (optional) ─────────────────────────────────────────────────────
+  // ── Sampling methodology (A28) ───────────────────────────────────────────
+  // Agreed once for the whole audit — how items are selected and what every
+  // control's draw has to be spread across — so no control picks its own. A new
+  // audit starts on a plain random draw with no spread asked for.
+  const [sampMethod, setSampMethod] = useState<AuditSampleMethod>(DEFAULT_AUDIT_SAMPLING.method);
+  const [sampSpread, setSampSpread] = useState<AuditSampleSpread[]>(DEFAULT_AUDIT_SAMPLING.spread);
+  const toggleSpread = (id: AuditSampleSpread) =>
+    setSampSpread(prev => (prev.includes(id) ? prev.filter(x => x !== id) : [...prev, id]));
+  /** What the audit is created with. A roll-forward reads its interim's, the way
+   *  it reads the year and the materiality rule — two halves of one year are
+   *  sampled one way. */
+  const sampFinal = round === 'rollforward' && parent
+    ? (parent.sampling ?? DEFAULT_AUDIT_SAMPLING)
+    : { method: sampMethod, spread: AUDIT_SAMPLE_SPREADS.map(x => x.id).filter(id => sampSpread.includes(id)) };
+
+  // ── Files ────────────────────────────────────────────────────────────────
   // Provenance rides with the file from the moment it is picked — it is a
   // property of the FILE, and this is where the file enters the audit.
   const [files, setFiles] = useState<{ name: string; kind: 'tb' | 'gl'; origin?: FileOrigin }[]>([]);
+  /** A trial balance is attached. Required before Materiality & files will pass
+   *  on anything but a roll-forward (user ask) — the account mapping and Ira's
+   *  process recommendation both read it. The general ledger never is. */
+  const hasTb = files.some(f => f.kind === 'tb');
   const addFile = (kind: 'tb' | 'gl') => {
     const input = document.createElement('input');
     input.type = 'file';
@@ -346,6 +388,34 @@ export default function NewAuditWizard({ onClose, prefillFrom }: {
   const matPerf = matFinal.overall * matFinal.pmPct / 100;
   const matTrivial = matFinal.overall * matFinal.ctPct / 100;
 
+  // ── From the engagement (S11 follow-up) ──────────────────────────────────
+  // What the audit is created with now the wizard no longer asks: the rule and
+  // files set when the engagement was created. The programme record holds them
+  // (every SOX engagement has one, created or back-filled); an engagement
+  // without one falls back to its own thresholds, stored in rupees.
+  const programme = useMemo(() => programmeFor(eng.id), [eng.id]);
+  const engMat = useMemo(() => {
+    const m = programme?.materiality;
+    if (m) return { basisLabel: m.benchmarkLabel, benchmark: m.benchmark, pct: m.pct, pmPct: m.pmPct, ctPct: m.cttPct, overall: m.overall };
+    const overallCr = eng.materiality / 10_000_000;
+    return {
+      basisLabel: 'Overall materiality', benchmark: overallCr, pct: 100, overall: overallCr,
+      pmPct: eng.materiality ? Math.round(eng.performanceMateriality / eng.materiality * 100) : 75,
+      ctPct: eng.materiality ? Math.round(eng.rules.clearlyTrivial / eng.materiality * 100) : 5,
+    };
+  }, [programme, eng.materiality, eng.performanceMateriality, eng.rules.clearlyTrivial]);
+  const engFiles = useMemo<{ name: string; kind: 'tb' | 'gl' }[]>(() => {
+    if (programme?.scoping?.files.length) return programme.scoping.files;
+    const tbs = Array.from(new Set((programme?.entities ?? []).map(e => e.tbFile).filter((f): f is string => !!f)));
+    return tbs.map(name => ({ name, kind: 'tb' as const }));
+  }, [programme]);
+  /** Every control the audit will test — the whole Control Library, by process. */
+  const libraryByProcess = useMemo(() => {
+    const map = new Map<string, number>();
+    eng.controls.forEach(c => map.set(c.process, (map.get(c.process) ?? 0) + 1));
+    return Array.from(map, ([process, count]) => ({ process, count })).sort((a, b) => a.process.localeCompare(b.process));
+  }, [eng.controls]);
+
   // ── Scope ────────────────────────────────────────────────────────────────
   const [scopeKind, setScopeKind] = useState<AuditScopeKind>('entity');
   const [picked, setPicked] = useState<string[]>([]);
@@ -374,6 +444,9 @@ export default function NewAuditWizard({ onClose, prefillFrom }: {
    *  the RACM is settled by the row the button was pressed on, so the form
    *  never has to ask which matrix this belongs to. */
   const [addCtrlRacm, setAddCtrlRacm] = useState<string | null>(null);
+  /** Controls created on this wizard's add-control screen. Handed to
+   *  createAudit so they aren't reset along with the rest of the scope. */
+  const [addedControlIds, setAddedControlIds] = useState<string[]>([]);
   /** Controls chosen inside the RACMs, by id. A RACM ticked whole puts all of
    *  its ids in; unticking one row leaves the RACM partly selected. */
   const [pickedControls, setPickedControls] = useState<string[]>([]);
@@ -428,6 +501,171 @@ export default function NewAuditWizard({ onClose, prefillFrom }: {
     setPickedControls(keyIds);
     setPicked(Array.from(new Set(eng.controls.filter(c => c.isKey).map(c => c.process))));
   }, [keyOnly, eng.controls]);
+
+  // ── Material accounts → processes (A34a) ─────────────────────────────────
+  // Asked on Materiality & files once a trial balance is attached, and only of
+  // the accounts that clear performance materiality — so it re-lists itself as
+  // the rule on that step changes. Ira pre-fills each account with the process
+  // its caption suggests; the auditor corrects any that landed wrong.
+  /** The auditor's picks, by caption id. Absent means "Ira's suggestion". Kept
+   *  for an account that drops below the threshold, so it comes back as it was
+   *  left if the rule moves back. */
+  const [accountMap, setAccountMap] = useState<Record<string, string>>({});
+  const materialRows = useMemo(() => (hasTb ? materialAccounts(eng.id, perf) : []), [eng.id, perf, hasTb]);
+  const processOf = useCallback(
+    (c: TbCaption) => accountMap[c.id] ?? normaliseProcess(c.process),
+    [accountMap],
+  );
+  /** Every process the engagement already has a RACM for, by its normalised name. */
+  const racmProcessNames = useMemo(() => racms.map(r => normaliseProcess(r.name)), [racms]);
+  const racmFor = (process: string) => racms.find(r => normaliseProcess(r.name) === process);
+  /** The standard SOX list, then any other process the engagement keeps a RACM
+   *  for (IT General Controls, say). A process with no RACM yet says so in its
+   *  label — mapping an account there is allowed, but it is a process nothing
+   *  can be tested in until one is uploaded. */
+  const mappingOptions = useMemo(() => {
+    const names = [...SOX_MAPPING_PROCESSES, ...racmProcessNames.filter(p => !(SOX_MAPPING_PROCESSES as readonly string[]).includes(p))];
+    return names.map(p => ({ value: p, label: racmProcessNames.includes(p) ? p : `${p} · no RACM yet` }));
+  }, [racmProcessNames]);
+
+  // ── Processes in scope (A34b / A34c) ─────────────────────────────────────
+  // Ira's recommendation, from the mapping: a process is in when a material
+  // account maps to it. The auditor moves any process against that with a note,
+  // the same way a company is overruled — and bringing one IN against it is a
+  // qualitative pick, which takes a reason from the list as well.
+  const processRows = useMemo(
+    () => recommendProcesses(materialRows.map(c => ({ balance: c.balance, process: processOf(c) })), racmProcessNames),
+    [materialRows, processOf, racmProcessNames],
+  );
+  /** Where the auditor overruled Ira, by process. Absent means "as recommended",
+   *  so an entry always argues with the recommendation — `true` is a
+   *  qualitative pick, `false` a recommended process taken out. */
+  const [procOverrides, setProcOverrides] = useState<Record<string, boolean>>({});
+  /** Saved reasons and the ones being typed — same split, and the same Cancel
+   *  semantics, as the companies' `scopeNotes` / `noteDrafts`. */
+  const [procNotes, setProcNotes] = useState<Record<string, string>>({});
+  const [procNoteDrafts, setProcNoteDrafts] = useState<Record<string, string>>({});
+  /** The qualitative reason, saved and draft. '' in a draft = not picked yet. */
+  const [procReasons, setProcReasons] = useState<Record<string, string>>({});
+  const [procReasonDrafts, setProcReasonDrafts] = useState<Record<string, string>>({});
+  const procInScope = (r: ProcessScopeRow) => procOverrides[r.process] ?? r.recommended;
+
+  /** Drop every trace of a move — the process is back where Ira had it. */
+  const clearProcMove = (process: string) => {
+    const strip = <T,>(prev: Record<string, T>): Record<string, T> => {
+      if (!(process in prev)) return prev;
+      const out = { ...prev }; delete out[process]; return out;
+    };
+    setProcOverrides(strip);
+    setProcNotes(strip);
+    setProcNoteDrafts(strip);
+    setProcReasons(strip);
+    setProcReasonDrafts(strip);
+  };
+  /** Flip one process, and open its note box. Landing back on the
+   *  recommendation clears the move and its note, as with a company. */
+  const flipProcess = (r: ProcessScopeRow) => {
+    const next = !procInScope(r);
+    if (next === r.recommended) { clearProcMove(r.process); return; }
+    setProcOverrides(prev => ({ ...prev, [r.process]: next }));
+    setProcNoteDrafts(prev => ({ ...prev, [r.process]: procNotes[r.process] ?? '' }));
+    if (next) setProcReasonDrafts(prev => ({ ...prev, [r.process]: procReasons[r.process] ?? '' }));
+  };
+  const saveProcNote = (process: string) => {
+    const text = (procNoteDrafts[process] ?? '').trim();
+    const qualitative = procOverrides[process] === true;
+    const reason = procReasonDrafts[process] ?? '';
+    if (!text || (qualitative && !reason)) return;
+    setProcNotes(prev => ({ ...prev, [process]: text }));
+    if (qualitative) setProcReasons(prev => ({ ...prev, [process]: reason }));
+    setProcNoteDrafts(prev => { const out = { ...prev }; delete out[process]; return out; });
+    setProcReasonDrafts(prev => { const out = { ...prev }; delete out[process]; return out; });
+  };
+  /** Re-editing a saved note: throw the edit away. Backing out of a fresh flip:
+   *  no move without a reason, so the process goes back where Ira had it. */
+  const cancelProcNote = (process: string) => {
+    if (!procNotes[process]) { clearProcMove(process); return; }
+    setProcNoteDrafts(prev => { const out = { ...prev }; delete out[process]; return out; });
+    setProcReasonDrafts(prev => { const out = { ...prev }; delete out[process]; return out; });
+  };
+
+  // Remapping an account or moving the rule re-draws the rows: a process can
+  // lose its row, or Ira can come round to the auditor's view. Either way the
+  // move no longer argues with anything, so it goes — along with its note, or
+  // it would sit there holding Continue for a decision nobody is making.
+  useEffect(() => {
+    const rec = new Map(processRows.map(r => [r.process, r.recommended]));
+    Object.entries(procOverrides).forEach(([p, v]) => {
+      if (!rec.has(p) || rec.get(p) === v) clearProcMove(p);
+    });
+    // Keyed on the rows alone — the overrides are read, not watched; a flip
+    // never changes the rows, so there is nothing to catch there.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [processRows]);
+
+  /** Every process the auditor moved, with its reason. Drives the note gate,
+   *  Review and the audit record. */
+  const procChanges = processRows
+    .filter(r => procOverrides[r.process] !== undefined)
+    .map(r => ({
+      ...r,
+      inScope: procOverrides[r.process]!,
+      qualitative: procOverrides[r.process] === true,
+      reason: procReasons[r.process] ?? '',
+      note: (procNotes[r.process] ?? '').trim(),
+    }));
+  const procNotesOutstanding = procChanges.filter(c => !c.note || (c.qualitative && !c.reason)).length;
+  const scopedProcesses = processRows.filter(procInScope);
+  const recommendedCount = processRows.filter(r => r.recommended).length;
+  /** In scope with nothing to test it with. Continue holds until each has a
+   *  RACM uploaded, or is moved out with a note. */
+  const noRacmInScope = scopedProcesses.filter(r => !racmFor(r.process)).map(r => r.process);
+
+  // ── Upload RACM, from the Processes panel ────────────────────────────────
+  // The RACM tab's own import review, with the process already settled by the
+  // row the button was pressed on. Nothing reaches the engagement until it
+  // imports, and it imports through the same store path the tab uses.
+  const canUploadRacm = role === 'auditor' && !isEngagementLocked(eng);
+  const [racmUpload, setRacmUpload] = useState<{ file: File; process: string; entity: string } | null>(null);
+  /** The process whose RACM is on its way in. The store adds the controls a
+   *  render later, so they are picked up off `eng.controls` below rather than
+   *  out of the import callback — which also catches the review's "use the
+   *  template instead", a path that creates the RACM without calling it. */
+  const [awaitingRacm, setAwaitingRacm] = useState<string | null>(null);
+  const uploadRacm = (process: string) => {
+    const input = document.createElement('input');
+    input.type = 'file';
+    input.accept = '.xlsx,.xls,.csv';
+    input.onchange = () => {
+      const file = input.files?.[0];
+      if (!file) return;
+      // The matrix belongs to one company (createRacm stamps it on every row) —
+      // the one carrying most of this process's material balance.
+      const top = [...materialRows].filter(c => processOf(c) === process).sort((a, b) => b.balance - a.balance)[0];
+      setRacmUpload({ file, process, entity: (top && entities.find(e => e.id === top.entityId)?.name) ?? '' });
+      setAwaitingRacm(process);
+    };
+    input.click();
+  };
+  useEffect(() => {
+    if (!awaitingRacm) return;
+    const rows = eng.controls.filter(c => normaliseProcess(c.process) === awaitingRacm);
+    if (!rows.length) return;
+    const ids = rows.map(c => c.id);
+    // Born for this audit, like a control added on the RACM side — creating the
+    // audit must not reset away the attributes and design checks just imported.
+    setAddedControlIds(prev => Array.from(new Set([...prev, ...ids])));
+    // Onto the RACM side, ticked. An untouched RACM side is left alone: its
+    // first open pre-ticks every in-scope process's RACM, this one included.
+    if (scopeKind === 'racm' || picked.length || pickedControls.length) {
+      const name = rows[0]!.process;
+      if (keyOnly && rows.some(c => !c.isKey)) setKeyOnly(false);
+      setPicked(prev => (prev.includes(name) ? prev : [...prev, name]));
+      setPickedControls(prev => Array.from(new Set([...prev, ...ids])));
+    }
+    setAwaitingRacm(null);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [eng.controls, awaitingRacm]);
 
   // ── The scope step's two sources ─────────────────────────────────────────
   // The engagement's entity register, and the entities the uploaded TB / GL
@@ -583,8 +821,9 @@ export default function NewAuditWizard({ onClose, prefillFrom }: {
    * sides are two views of one scope now, not a hard either/or.
    *
    * Opening the RACM side for the first time arrives pre-ticked with the RACMs
-   * the in-scope companies feed: the trial balance already decided which
-   * processes are in play, so making you re-derive that by hand was busywork.
+   * of the processes in scope on the Processes panel above (A34b) — that panel
+   * is where the processes in play were decided, so making you re-derive it by
+   * hand was busywork. It used to pre-tick from the in-scope companies instead.
    * It only ever pre-ticks an untouched list — once you have picked, going back
    * and forth leaves your selection exactly as you left it.
    */
@@ -594,10 +833,10 @@ export default function NewAuditWizard({ onClose, prefillFrom }: {
     setOpenRacm(null);
     if (kind !== 'racm' || picked.length || pickedControls.length) return;
 
-    const fromEntities = racmsForEntities(eng.id, scopedEntities.map(r => r.id));
-    // The programme names the processes; this list is built from the controls,
-    // so only the RACMs that actually exist here can be ticked.
-    const live = racms.filter(r => fromEntities.includes(r.name));
+    const fromProcesses = scopedProcesses.map(r => r.process);
+    // Only a process that actually has a RACM here can be ticked — one still
+    // waiting on its upload has nothing under it yet.
+    const live = racms.filter(r => fromProcesses.includes(normaliseProcess(r.name)));
     if (!live.length) return;
     setPicked(live.map(r => r.name));
     setPickedControls(live.flatMap(r => r.rows.map(c => c.id)));
@@ -631,24 +870,31 @@ export default function NewAuditWizard({ onClose, prefillFrom }: {
     : picked.map(id => options.find(o => o.id === id)?.primary ?? id);
 
   // ── Gates ────────────────────────────────────────────────────────────────
-  // Files is skippable on purpose — everything else must be answered.
-  // Materiality & files gates on the materiality half only: the TB / GL half is
-  // optional, so an empty file list must never block Continue.
+  // Materiality & files waits on a trial balance as well as the rule (user ask)
+  // — the account mapping and the Scope step's recommendation both read it. The
+  // general ledger never holds Continue.
   const canContinue = step === 0 ? periodValid
+    : !SCOPING_STEPS ? true
     // Roll-forward inherits the rule read-only, so its materiality half has
     // nothing to answer — the step is only its (optional) files.
-    : step === 1 ? (round === 'rollforward' || (benchmark > 0 && (basis === 'custom' || pct > 0)))
+    : step === 1 ? (round === 'rollforward' || (hasTb && benchmark > 0 && (basis === 'custom' || pct > 0)))
     // Scoping by RACM means picking controls: a RACM ticked with nothing
     // under it covers nothing, so Continue waits for at least one row.
     // Every company the auditor moved owes a reason before the step will pass
     // (user ask) — the scope is the audit's defence, so it can't leave here
-    // with an unexplained change in it.
+    // with an unexplained change in it. The Processes panel sits over both
+    // sides, so its notes and its no-RACM gate hold either way.
     : step === 2 ? (round === 'rollforward'
       // The mandatory full-retest group counts — a roll-forward that carries
       // only failed controls is still a real audit.
       ? rfPicked.length + rfFailed.length > 0
-      : scopeKind === 'entity' ? scopedEntities.length > 0 && notesOutstanding === 0 : pickedControls.length > 0)
+      : procNotesOutstanding === 0 && noRacmInScope.length === 0
+        && (scopeKind === 'entity' ? scopedEntities.length > 0 && notesOutstanding === 0 : pickedControls.length > 0))
     : true;
+
+  /** Moved companies and moved processes still owed a note — one count for the
+   *  footer, which says what the greyed Continue is waiting for. */
+  const notesDue = notesOutstanding + (round !== 'rollforward' ? procNotesOutstanding : 0);
 
   const create = () => {
     if (!round) return;
@@ -658,6 +904,36 @@ export default function NewAuditWizard({ onClose, prefillFrom }: {
      *  stored as hand-picked controlIds so the covers() precedence does the rest. */
     const rfIds = [...rfPicked, ...rfFailed.map(v => v.id)];
     const rfNames = Array.from(new Set(parentVerdicts.filter(v => rfIds.includes(v.id)).map(v => v.process)));
+    if (!SCOPING_STEPS) {
+      // S11 follow-up: every control in the Control Library, whatever the round —
+      // a roll-forward too. createAudit still carries an effective interim design
+      // forward and resets the rest; it just carries it across the whole library.
+      createAudit({
+        period: periodLabel,
+        yearBasis,
+        fiscalYear: year,
+        periodSpan,
+        round,
+        windowFrom,
+        windowTo,
+        rolledFromId: isRf ? parent!.id : undefined,
+        scopeKind: 'racm',
+        scopeNames: libraryByProcess.map(p => p.process),
+        scopeIds: [],
+        controlIds: eng.controls.map(c => c.id),
+        files: engFiles,
+        materiality: { basisLabel: engMat.basisLabel, benchmark: engMat.benchmark, pct: engMat.pct, pmPct: engMat.pmPct, ctPct: engMat.ctPct },
+        overall: engMat.overall,
+        sampling: sampFinal,
+      });
+      addToast({
+        type: 'success',
+        title: 'Audit created',
+        message: `${periodLabel}${isRf ? ` roll-forward from the ${parent!.period} interim` : ''} — ${eng.controls.length} control${eng.controls.length === 1 ? '' : 's'} across ${libraryByProcess.length} process${libraryByProcess.length === 1 ? '' : 'es'}.`,
+      });
+      onClose();
+      return;
+    }
     createAudit({
       period: periodLabel,
       // A real fy/cy again — the 'custom' this used to stamp kept every audit
@@ -682,12 +958,26 @@ export default function NewAuditWizard({ onClose, prefillFrom }: {
       // The overrules travel with the audit — the reason a company is in or out
       // is only worth asking for if it survives past the wizard.
       scopeNotes: !isRf && scopeKind === 'entity' && scopeChanges.length ? scopeChanges : undefined,
+      // A34a–c — the mapping the recommendation was built from, and the
+      // Processes panel as it stood. A roll-forward answers neither: its scope
+      // is its parent's conclusions.
+      accountProcesses: isRf ? undefined : Object.fromEntries(materialRows.map(c => [c.id, processOf(c)])),
+      processScope: isRf ? undefined : processRows.map(r => {
+        const move = procChanges.find(c => c.process === r.process);
+        return {
+          process: r.process, total: r.total, accounts: r.accounts, recommended: r.recommended,
+          inScope: procInScope(r),
+          ...(move?.qualitative ? { qualitativeReason: move.reason } : {}),
+          ...(move ? { note: move.note } : {}),
+        };
+      }),
       files: files.map(f => ({ name: f.name, kind: f.kind })),
       // matFinal already resolved the roll-forward question: the parent's rule
       // verbatim, or the step's own inputs.
       materiality: { basisLabel: matFinal.basisLabel, benchmark: matFinal.benchmark, pct: matFinal.pct, pmPct: matFinal.pmPct, ctPct: matFinal.ctPct },
       overall: matFinal.overall,
-    });
+      sampling: sampFinal,
+    }, { freshControlIds: addedControlIds });
     // The answers given upstairs become the files' records, so every control on
     // this audit inherits them and none is asked again.
     files.forEach(f => {
@@ -737,6 +1027,8 @@ export default function NewAuditWizard({ onClose, prefillFrom }: {
     // considerations — the SOX equivalent of "what this control has to achieve",
     // and the list its walkthrough is tested against.
     input.attributes.map(a => a.trim()).filter(Boolean).forEach(a => addDesignPoint(id, a));
+    // Remembered so creating the audit doesn't reset it and wipe those checks.
+    setAddedControlIds(prev => [...prev, id]);
     // A non-key control added while "key controls only" is on would be ticked
     // into scope and then filtered out of sight — selected but invisible, which
     // is exactly what that switch was written to avoid. Turning it off costs
@@ -751,7 +1043,11 @@ export default function NewAuditWizard({ onClose, prefillFrom }: {
 
   return (
     <>
-    <FlowModal label="New audit" widthCls="w-full max-w-[560px]" variant="sheet" hideClose onClose={onClose}>
+    {/* With hideClose, FlowModal only calls onClose for Escape. The RACM import
+        review decides for itself what Escape means (it won't close on Review),
+        so while it is open the sheet under it must not also hear the key and
+        throw the whole wizard away. */}
+    <FlowModal label="New audit" widthCls="w-full max-w-[560px]" variant="sheet" hideClose onClose={racmUpload ? () => {} : onClose}>
       {/* FlowModal's sheet is one scroll container (flex-1 overflow-y-auto p-6
           pb-0), so a plain footer just flows after the content and floats
           mid-sheet on short steps. min-h-full + flex-col makes this fill the
@@ -946,24 +1242,128 @@ export default function NewAuditWizard({ onClose, prefillFrom }: {
                       : 'Pick the concluded interim this roll-forward continues from.'}
               </p>
             </div>
+
+            {/* Sampling methodology (A28) — after the dates, once the round is
+                known, because a roll-forward doesn't get to answer it. Agreed
+                here for every control in the audit: each control's Sample step
+                reads it and asks only how many items. A roll-forward still
+                waiting on its parent has no answer to show yet. */}
+            {round && (round !== 'rollforward' || parent) && (
+              <div className="mt-6 pt-5 border-t border-canvas-border">
+                <div className="flex items-center gap-2 mb-0.5">
+                  <h4 className="text-[0.8125rem] font-semibold text-ink-900">Sampling methodology</h4>
+                  {round === 'rollforward' && parent && (
+                    <span className="inline-flex items-center gap-1 text-[0.625rem] font-bold uppercase tracking-wider text-ink-400">
+                      <Lock size={10} /> Inherited
+                    </span>
+                  )}
+                </div>
+                <p className="text-[0.75rem] text-ink-500 mb-4 leading-relaxed">
+                  How every control in this audit picks its samples. Each control then sets only how many items.
+                </p>
+                {round === 'rollforward' && parent ? (
+                  /* Read-only, like the year above: the interim answered it, and
+                     one year is sampled one way. */
+                  <>
+                    <div className="grid grid-cols-2 gap-3">
+                      <div>
+                        <label className={labelCls}>Selection</label>
+                        <div className="w-full px-3 py-2 text-[0.8125rem] border border-canvas-border rounded-lg bg-canvas text-ink-600 flex items-center justify-between gap-2">
+                          <span>{sampFinal.method}</span>
+                          <Lock size={12} className="text-ink-400 shrink-0" />
+                        </div>
+                      </div>
+                      <div>
+                        <label className={labelCls}>Spread by</label>
+                        <div className="w-full px-3 py-2 text-[0.8125rem] border border-canvas-border rounded-lg bg-canvas text-ink-600 flex items-center justify-between gap-2">
+                          <span className="truncate">
+                            {sampFinal.spread.length
+                              ? AUDIT_SAMPLE_SPREADS.filter(x => sampFinal.spread.includes(x.id)).map(x => x.label).join(', ')
+                              : 'Not spread'}
+                          </span>
+                          <Lock size={12} className="text-ink-400 shrink-0" />
+                        </div>
+                      </div>
+                    </div>
+                    <p className="text-[0.6875rem] text-ink-400 mt-1.5">From the {parent.period} interim — can't be changed here.</p>
+                  </>
+                ) : (
+                  <>
+                    <label className={labelCls}>Selection</label>
+                    <div className="grid grid-cols-3 gap-1.5">
+                      {AUDIT_SAMPLE_METHODS.map(m => (
+                        <button
+                          key={m.id}
+                          onClick={() => setSampMethod(m.id)}
+                          aria-pressed={sampMethod === m.id}
+                          className={cn(
+                            'px-2 py-2 rounded-lg border text-[0.75rem] font-bold transition-all cursor-pointer',
+                            sampMethod === m.id
+                              ? 'border-brand-500 bg-brand-50 text-brand-700 ring-2 ring-brand-500/15'
+                              : 'border-canvas-border bg-white text-ink-500 hover:bg-brand-50/40',
+                          )}
+                        >
+                          {m.id}
+                        </button>
+                      ))}
+                    </div>
+                    <p className="text-[0.6875rem] text-ink-400 mt-1.5">{AUDIT_SAMPLE_METHODS.find(m => m.id === sampMethod)!.hint}</p>
+
+                    {/* Any, all or none — each one ticked gets items of its own
+                        in every control's draw. */}
+                    <label className={`${labelCls} mt-4`}>Spread by</label>
+                    <div className="grid grid-cols-3 gap-1.5">
+                      {AUDIT_SAMPLE_SPREADS.map(x => {
+                        const on = sampSpread.includes(x.id);
+                        return (
+                          <button
+                            key={x.id}
+                            onClick={() => toggleSpread(x.id)}
+                            aria-pressed={on}
+                            className={cn(
+                              'px-2 py-2 rounded-lg border text-[0.75rem] font-bold transition-all cursor-pointer inline-flex items-center justify-center gap-1.5',
+                              on
+                                ? 'border-brand-500 bg-brand-50 text-brand-700 ring-2 ring-brand-500/15'
+                                : 'border-canvas-border bg-white text-ink-500 hover:bg-brand-50/40',
+                            )}
+                          >
+                            {on && <Check size={12} className="shrink-0" />}{x.label}
+                          </button>
+                        );
+                      })}
+                    </div>
+                    <p className="text-[0.6875rem] text-ink-400 mt-1.5">
+                      {sampSpread.length
+                        ? `Every control's draw is split across ${AUDIT_SAMPLE_SPREADS.filter(x => sampSpread.includes(x.id)).map(x => x.label.toLowerCase()).join(', ').replace(/, ([^,]*)$/, ' and $1')}, with at least one item in each.`
+                        : 'Not spread — items fall wherever the selection puts them. Pick any that every draw has to reach.'}
+                    </p>
+                  </>
+                )}
+              </div>
+            )}
           </StepShell>
         )}
 
         {/* No StepShell here (user ask): the step title and strapline were removed.
             The rail above already names the step, and each half carries its own
             heading, so a third layer of titling was just noise. */}
-        {step === 1 && (
+        {SCOPING_STEPS && step === 1 && (
           <div>
             {/* Files lead (user ask): the trial balance is what the threshold
-                below gets applied TO, so it is loaded first. Optional all the
-                same — Continue waits on the materiality half alone, never on
-                this one. */}
+                below gets applied TO, so it is loaded first. Required now for
+                everything but a roll-forward (user ask) — its material accounts
+                are mapped below and decide the processes in scope. The general
+                ledger stays optional throughout. */}
             <div className="flex items-baseline gap-2 mb-0.5">
               <h4 className="text-[13px] font-semibold text-ink-900">Trial balance &amp; general ledger</h4>
-              <span className="text-[10px] font-semibold uppercase tracking-wider text-ink-400">Optional</span>
+              <span className="text-[10px] font-semibold uppercase tracking-wider text-ink-400">
+                {round === 'rollforward' ? 'Optional' : 'Trial balance required'}
+              </span>
             </div>
             <p className="text-[0.75rem] text-ink-500 mb-4 leading-relaxed">
-              Attach them if this audit needs them — you can add them later instead.
+              {round === 'rollforward'
+                ? 'Attach them if this audit needs them — you can add them later instead.'
+                : 'Upload the trial balance to continue — its material accounts decide which processes this audit covers. The general ledger can be added later.'}
             </p>
 
             {/* Each kind owns its uploads (user ask): a file lands INSIDE the box
@@ -1195,6 +1595,52 @@ export default function NewAuditWizard({ onClose, prefillFrom }: {
               )}
             </div>
             )}
+
+            {/* ── Map material accounts to processes (A34a) ──────────────────
+                After the rule, because it reads it: only accounts at or above
+                performance materiality are listed, so the list redraws as the
+                rule above changes. Appears once a trial balance is attached.
+                Not on a roll-forward — its scope isn't built from processes. */}
+            {round !== 'rollforward' && hasTb && (
+              <div className="mt-6 pt-5 border-t border-canvas-border">
+                <h4 className="text-[0.8125rem] font-semibold text-ink-900 mb-0.5">
+                  Map material accounts to processes
+                  <span className="font-normal text-ink-500"> · {materialRows.length} account{materialRows.length === 1 ? '' : 's'} ≥ {money(perf)} (PM)</span>
+                </h4>
+                <p className="text-[0.75rem] text-ink-500 mb-3 leading-relaxed">
+                  Ira suggested a process for each account — change any that landed on the wrong one.
+                </p>
+                {materialRows.length === 0 ? (
+                  <p className="rounded-xl border border-dashed border-canvas-border bg-white text-[0.71875rem] text-ink-400 px-4 py-5 text-center">
+                    No account in the trial balance reaches {money(perf)} — nothing to map at this threshold.
+                  </p>
+                ) : (
+                  /* No overflow-hidden: the process menus open downward out of
+                     the last rows, and clipping them would hide the options. */
+                  <div className="rounded-xl border border-canvas-border bg-white">
+                    <div className="grid grid-cols-[minmax(0,1.5fr)_minmax(0,0.7fr)_minmax(0,0.75fr)_minmax(0,1.45fr)] gap-2.5 px-3.5 py-2 border-b border-canvas-border text-[0.625rem] font-bold text-ink-400 uppercase tracking-wider">
+                      <span>Account</span><span>Entity</span><span className="text-right">Balance</span><span>Process</span>
+                    </div>
+                    {materialRows.map(c => (
+                      <div key={c.id} className="grid grid-cols-[minmax(0,1.5fr)_minmax(0,0.7fr)_minmax(0,0.75fr)_minmax(0,1.45fr)] gap-2.5 items-center px-3.5 py-2 border-b border-canvas-border last:border-b-0">
+                        <span className="text-[0.75rem] text-ink-900 truncate" title={c.caption}>{c.caption}</span>
+                        <span className="text-[0.71875rem] text-ink-500 truncate">{entityShort(c.entityId, entities)}</span>
+                        <span className="text-[0.75rem] text-ink-800 tabular-nums text-right">{money(c.balance)}</span>
+                        <FormSelect
+                          value={processOf(c)}
+                          options={mappingOptions}
+                          onChange={v => setAccountMap(prev => ({ ...prev, [c.id]: v }))}
+                          className="w-full h-8 px-2.5 text-[0.75rem] border border-canvas-border rounded-lg bg-white text-ink-900 outline-none focus:border-brand-400 transition-all"
+                          ariaLabel={`Process for ${c.caption}`}
+                          align="right"
+                          menuCls="w-[220px]"
+                        />
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            )}
           </div>
         )}
 
@@ -1203,7 +1649,7 @@ export default function NewAuditWizard({ onClose, prefillFrom }: {
             carry controls the parent interim tested and concluded effective.
             The list is narrowable, never widenable: what failed or went
             untested is shown excluded, each with its reason. */}
-        {step === 2 && round === 'rollforward' && parent && (
+        {SCOPING_STEPS && step === 2 && round === 'rollforward' && parent && (
           <StepShell title="What this audit covers" sub={`What the ${parent.period} interim proved carries forward, and what it failed comes along for a full retest — with its open findings.`}>
             <p className="mb-2 px-1 text-[11px] text-ink-500">
               <span className="font-semibold text-ink-900 tabular-nums">{rfPicked.length}</span> of {rfEffective.length} effective control{rfEffective.length === 1 ? '' : 's'} carried forward
@@ -1304,8 +1750,182 @@ export default function NewAuditWizard({ onClose, prefillFrom }: {
           </StepShell>
         )}
 
-        {step === 2 && !(round === 'rollforward' && parent) && (
+        {SCOPING_STEPS && step === 2 && !(round === 'rollforward' && parent) && (
           <StepShell title="What this audit covers" sub="Scope by entity or by RACM — one or the other, then pick as many as the audit covers.">
+            {/* ── Processes (A34b / A34c) ─────────────────────────────────────
+                Above the entity / RACM choice, because it holds for both: Ira's
+                recommendation from the accounts mapped on the previous step,
+                overruled row by row with a note — the companies' interaction,
+                one level down. Bringing a process in against Ira is a
+                qualitative pick and takes a reason from the list too. An
+                in-scope process with no RACM can't be tested, so the row offers
+                the RACM tab's import right there, and Continue waits on it. */}
+            <div className="mb-5">
+              <h4 className="text-[0.8125rem] font-semibold text-ink-900 mb-0.5 flex items-center gap-1.5">
+                <Sparkles size={13} className="text-brand-600 shrink-0" />
+                <span>
+                  Ira recommends {recommendedCount} process{recommendedCount === 1 ? '' : 'es'}
+                  <span className="font-normal text-ink-500"> — from the material accounts you mapped</span>
+                </span>
+              </h4>
+              <p className="text-[0.75rem] text-ink-500 mb-2 leading-relaxed">
+                Move any process against the recommendation and say why.
+              </p>
+              <div className="border border-canvas-border rounded-xl overflow-hidden">
+                {processRows.length === 0 ? (
+                  <p className="text-[0.71875rem] text-ink-400 px-4 py-6 text-center">
+                    No material accounts mapped and no RACMs on this engagement yet.
+                  </p>
+                ) : processRows.map(r => {
+                  const on = procInScope(r);
+                  const racm = racmFor(r.process);
+                  const move = procOverrides[r.process];
+                  const qualitative = move === true;
+                  const editing = procNoteDrafts[r.process] !== undefined;
+                  const reasonDraft = procReasonDrafts[r.process] ?? '';
+                  return (
+                    <div key={r.process} className="bg-white border-b border-canvas-border last:border-b-0 hover:bg-brand-50/40 transition-colors">
+                      <div className="flex items-start gap-3 px-4 py-2.5">
+                        <Grid3x3 size={14} className="text-ink-400 shrink-0 mt-0.5" />
+                        <span className="flex-1 min-w-0">
+                          <span className="flex items-center gap-2">
+                            <span className="text-[0.8125rem] text-ink-900 truncate">{r.process}</span>
+                            {qualitative && (
+                              <span className="shrink-0 px-1.5 rounded border border-brand-200 bg-brand-50 text-[0.625rem] font-semibold text-brand-700 leading-4">Qualitative</span>
+                            )}
+                          </span>
+                          <span className="block text-[0.65625rem] text-ink-500 mt-0.5 leading-relaxed tabular-nums">
+                            {r.accounts > 0
+                              ? `${money(r.total)} · ${r.accounts} material account${r.accounts === 1 ? '' : 's'}`
+                              : 'No material accounts'}
+                          </span>
+                          {/* Can it be tested — asked only of a process that is
+                              in, because that is the only time it matters. */}
+                          {on && (racm ? (
+                            <span className="flex items-center gap-1 mt-1 text-[0.65625rem] font-semibold text-compliant-700">
+                              <Check size={11} className="shrink-0" /> {r.process} · {racm.count} control{racm.count === 1 ? '' : 's'}
+                            </span>
+                          ) : (
+                            <span className="block mt-1">
+                              <span className="flex items-center gap-1 text-[0.65625rem] font-semibold text-risk-700">
+                                <X size={11} className="shrink-0" /> No RACM — can't be tested.
+                              </span>
+                              <span className="flex flex-wrap items-center gap-x-2 gap-y-1 mt-1.5">
+                                <button
+                                  onClick={() => uploadRacm(r.process)}
+                                  disabled={!canUploadRacm}
+                                  title={canUploadRacm ? `Upload the ${r.process} RACM` : 'Only an auditor can upload a RACM, and not on a locked engagement'}
+                                  className="h-7 px-3 inline-flex items-center gap-1.5 rounded-lg bg-brand-600 text-white text-[0.71875rem] font-semibold enabled:hover:bg-brand-700 disabled:opacity-40 disabled:cursor-not-allowed transition-colors cursor-pointer"
+                                >
+                                  <Upload size={12} /> Upload RACM
+                                </button>
+                                <span className="text-[0.65625rem] text-ink-500">or move it out with a note</span>
+                              </span>
+                            </span>
+                          ))}
+                        </span>
+                        <span className={cn('shrink-0 mt-1 text-[0.6875rem] font-semibold', on ? 'text-ink-700' : 'text-ink-400')}>
+                          {on ? 'In scope' : 'Out'}
+                        </span>
+                        <button
+                          role="switch"
+                          aria-checked={on}
+                          aria-label={`${on ? 'Take' : 'Bring'} ${r.process} ${on ? 'out of' : 'into'} scope`}
+                          onClick={() => flipProcess(r)}
+                          className="shrink-0 mt-1 cursor-pointer"
+                        >
+                          <span className={cn('block w-8 h-[18px] rounded-full relative transition-colors', on ? 'bg-brand-600' : 'bg-canvas-border')}>
+                            <span className={cn('absolute top-[2px] w-3.5 h-3.5 rounded-full bg-white transition-all', on ? 'left-[16px]' : 'left-[2px]')} />
+                          </span>
+                        </button>
+                      </div>
+
+                      {/* ── Why ── same box, same tint and same Save / Edit /
+                          Cancel as a moved company. A qualitative pick asks for
+                          its reason from the list first, then the note. */}
+                      <AnimatePresence initial={false}>
+                        {move !== undefined && (
+                          <motion.div
+                            initial={{ opacity: 0, height: 0 }}
+                            animate={{ opacity: 1, height: 'auto' }}
+                            exit={{ opacity: 0, height: 0 }}
+                            transition={{ duration: 0.18 }}
+                            className="overflow-hidden"
+                          >
+                            <div className="mx-4 mb-3 p-3 rounded-xl border border-high-200 bg-high-50/40">
+                              <span className="text-[0.6875rem] font-semibold text-high-700 mb-1.5 flex items-center gap-1.5">
+                                <Pencil size={11} className="shrink-0" />
+                                {on ? 'Why is this process in scope?' : 'Why is this process out of scope?'}
+                              </span>
+                              {editing ? (
+                                <>
+                                  {qualitative && (
+                                    <div className="flex flex-wrap gap-1.5 mb-2" role="group" aria-label={`Reason ${r.process} is in scope`}>
+                                      {QUAL_REASONS.map(q => (
+                                        <button
+                                          key={q}
+                                          onClick={() => setProcReasonDrafts(prev => ({ ...prev, [r.process]: q }))}
+                                          aria-pressed={reasonDraft === q}
+                                          className={cn('h-7 px-2 rounded-md border text-[0.6875rem] font-semibold transition-colors cursor-pointer inline-flex items-center gap-1',
+                                            reasonDraft === q ? 'border-brand-300 bg-brand-50 text-brand-700' : 'border-canvas-border bg-white text-ink-600 hover:border-ink-300')}
+                                        >
+                                          {reasonDraft === q && <Check size={11} className="shrink-0" />}{q}
+                                        </button>
+                                      ))}
+                                    </div>
+                                  )}
+                                  <textarea
+                                    aria-label={on ? `Why ${r.process} is in scope` : `Why ${r.process} is out of scope`}
+                                    autoFocus
+                                    rows={2}
+                                    value={procNoteDrafts[r.process] ?? ''}
+                                    onChange={e => setProcNoteDrafts(prev => ({ ...prev, [r.process]: e.target.value }))}
+                                    placeholder="Record your rationale — retained in the working paper."
+                                    className="w-full text-[0.75rem] rounded-lg border border-canvas-border bg-white px-2.5 py-2 text-ink-800 placeholder:text-ink-400 outline-none focus:border-high-300 focus:ring-2 focus:ring-high-200/60 resize-none transition-all"
+                                  />
+                                  <div className="flex items-center justify-end gap-2 mt-2">
+                                    <button
+                                      onClick={() => cancelProcNote(r.process)}
+                                      className="h-7 px-2.5 text-[0.71875rem] font-semibold text-ink-500 hover:text-ink-800 transition-colors cursor-pointer"
+                                    >
+                                      Cancel
+                                    </button>
+                                    <button
+                                      onClick={() => saveProcNote(r.process)}
+                                      disabled={!(procNoteDrafts[r.process] ?? '').trim() || (qualitative && !reasonDraft)}
+                                      className="h-7 px-3 text-[0.71875rem] font-semibold rounded-lg bg-high-600 text-white disabled:opacity-40 enabled:hover:bg-high-700 transition-colors cursor-pointer"
+                                    >
+                                      Save
+                                    </button>
+                                  </div>
+                                </>
+                              ) : (
+                                <div className="flex items-start justify-between gap-3">
+                                  <p className="text-[0.75rem] text-ink-700 leading-relaxed min-w-0 whitespace-pre-wrap">
+                                    {qualitative && procReasons[r.process] && <span className="font-semibold text-ink-900">{procReasons[r.process]} — </span>}
+                                    {procNotes[r.process]}
+                                  </p>
+                                  <button
+                                    onClick={() => {
+                                      setProcNoteDrafts(prev => ({ ...prev, [r.process]: procNotes[r.process] ?? '' }));
+                                      if (qualitative) setProcReasonDrafts(prev => ({ ...prev, [r.process]: procReasons[r.process] ?? '' }));
+                                    }}
+                                    className="shrink-0 h-6 px-2 text-[0.71875rem] font-semibold text-high-700 hover:bg-high-100/60 rounded-md transition-colors cursor-pointer"
+                                  >
+                                    Edit
+                                  </button>
+                                </div>
+                              )}
+                            </div>
+                          </motion.div>
+                        )}
+                      </AnimatePresence>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+
             <div className="grid grid-cols-2 gap-1.5 mb-4">
               {([['entity', 'By entity', Building2], ['racm', 'By RACM', Grid3x3]] as const).map(([id, title, Icon]) => (
                 <button
@@ -1708,6 +2328,31 @@ export default function NewAuditWizard({ onClose, prefillFrom }: {
                 <ReviewRow label="Continues from" value={`${parent.period} interim`} />
               )}
               <ReviewRow label="Window" value={windowFrom && windowTo ? `${fmtDate(windowFrom)} – ${fmtDate(windowTo)}` : '—'} />
+              <ReviewRow label="Sampling" value={<>{sampFinal.method} <span className="font-normal text-ink-400">· {spreadPhrase(sampFinal.spread)}{round === 'rollforward' ? ' · from parent' : ''}</span></>} />
+              {/* S11 follow-up — what the engagement already settled, read-only:
+                  the rule and files set when it was created, and the whole
+                  Control Library as the scope. */}
+              {!SCOPING_STEPS && (
+                <>
+                  <ReviewRow label="Materiality" value={<>{money(engMat.overall)} <span className="font-normal text-ink-400">· {engMat.basisLabel}</span></>} />
+                  <ReviewRow label="Performance materiality" value={<>{money(engMat.overall * engMat.pmPct / 100)} <span className="font-normal text-ink-400">· {engMat.pmPct}% of overall</span></>} />
+                  <ReviewRow label="Clearly trivial" value={<>{money(engMat.overall * engMat.ctPct / 100)} <span className="font-normal text-ink-400">· {engMat.ctPct}% of overall</span></>} />
+                  <ReviewRow label="TB / GL" value={engFiles.length === 0 ? <span className="font-normal text-ink-400">None on the engagement</span> : engFiles.map(f => f.name).join(', ')} />
+                  <p className="text-[0.6875rem] text-ink-400 -mt-1 mb-2">Materiality and the trial balance were set when the engagement was created.</p>
+                  <ReviewRow
+                    label="Controls"
+                    value={<>
+                      {eng.controls.length} <span className="font-normal text-ink-400">· every control in the Control Library</span>
+                      <span className="block space-y-0.5 mt-1">
+                        {libraryByProcess.map(p => (
+                          <span key={p.process} className="block text-[0.6875rem] font-normal text-ink-500">{p.process} · {p.count}</span>
+                        ))}
+                      </span>
+                    </>}
+                  />
+                </>
+              )}
+              {SCOPING_STEPS && <>
               {/* matFinal, not the step's inputs — a roll-forward reviews the
                   rule it will actually be created with: its parent's. */}
               <ReviewRow label="Materiality" value={<>₹{matFinal.overall} Cr <span className="font-normal text-ink-400">· {matFinal.basisLabel}{round === 'rollforward' ? ' · from parent' : ''}</span></>} />
@@ -1717,6 +2362,51 @@ export default function NewAuditWizard({ onClose, prefillFrom }: {
                 label="TB / GL"
                 value={files.length === 0 ? <span className="font-normal text-ink-400">Not attached</span> : files.map(f => f.name).join(', ')}
               />
+              {/* A34a–c — the mapping, then the processes it led to: which are
+                  in on Ira's word, which on the auditor's (with the reason),
+                  and which were taken out and why. Same order the steps ran. */}
+              {round !== 'rollforward' && (
+                <>
+                  <ReviewRow
+                    label="Account mapping"
+                    value={<>{materialRows.length} material account{materialRows.length === 1 ? '' : 's'} mapped <span className="font-normal text-ink-400">· ≥ {money(perf)}</span></>}
+                  />
+                  <ReviewRow
+                    label="Processes in scope"
+                    value={scopedProcesses.length === 0 ? <span className="font-normal text-ink-400">None</span> : (
+                      <span className="block space-y-1.5">
+                        {scopedProcesses.map(r => {
+                          const move = procChanges.find(c => c.process === r.process);
+                          return (
+                            <span key={r.process} className="block">
+                              {r.process}
+                              <span className="font-normal text-ink-400"> · {move?.qualitative ? 'qualitative' : 'recommended'}</span>
+                              {move?.qualitative && (
+                                <span className="block text-[0.6875rem] font-normal text-ink-500 leading-relaxed">{move.reason} — {move.note}</span>
+                              )}
+                            </span>
+                          );
+                        })}
+                      </span>
+                    )}
+                  />
+                  {procChanges.some(c => !c.inScope) && (
+                    <ReviewRow
+                      label="Processes moved out"
+                      value={(
+                        <span className="block space-y-1.5">
+                          {procChanges.filter(c => !c.inScope).map(c => (
+                            <span key={c.process} className="block">
+                              {c.process}
+                              <span className="block text-[0.6875rem] font-normal text-ink-500 leading-relaxed">{c.note}</span>
+                            </span>
+                          ))}
+                        </span>
+                      )}
+                    />
+                  )}
+                </>
+              )}
               {round === 'rollforward' ? (
                 <ReviewRow
                   label="Carried forward"
@@ -1758,6 +2448,7 @@ export default function NewAuditWizard({ onClose, prefillFrom }: {
                   )}
                 />
               )}
+              </>}
             </div>
           </StepShell>
         )}
@@ -1777,9 +2468,18 @@ export default function NewAuditWizard({ onClose, prefillFrom }: {
         <div className="flex items-center gap-2">
           {/* Says what the greyed button is waiting for. Without it a disabled
               Continue is a dead end — the boxes are further up the scroll. */}
-          {step === 2 && notesOutstanding > 0 && (
-            <span className="text-[11.5px] text-high-700 font-medium">
-              {notesOutstanding} change{notesOutstanding === 1 ? '' : 's'} need{notesOutstanding === 1 ? 's' : ''} a note
+          {SCOPING_STEPS && step === 1 && round !== 'rollforward' && !hasTb && (
+            <span className="text-[0.71875rem] text-high-700 font-medium">Upload a trial balance to continue</span>
+          )}
+          {/* A process that can't be tested outranks a missing note — it names
+              what to upload, which the boxes further up don't. */}
+          {SCOPING_STEPS && step === 2 && round !== 'rollforward' && noRacmInScope.length > 0 ? (
+            <span className="text-[0.71875rem] text-high-700 font-medium text-right">
+              {noRacmInScope.join(', ').replace(/, ([^,]*)$/, ' and $1')} {noRacmInScope.length === 1 ? 'has' : 'have'} no RACM
+            </span>
+          ) : SCOPING_STEPS && step === 2 && notesDue > 0 && (
+            <span className="text-[0.71875rem] text-high-700 font-medium">
+              {notesDue} change{notesDue === 1 ? '' : 's'} need{notesDue === 1 ? 's' : ''} a note
             </span>
           )}
           {step < REVIEW ? (
@@ -1819,6 +2519,22 @@ export default function NewAuditWizard({ onClose, prefillFrom }: {
         />
       )}
     </AnimatePresence>
+
+    {/* Upload RACM, from a process row that can't be tested yet — the RACM
+        tab's import review itself, same Columns → Review → Import, beside the
+        sheet for the same stacking reason as the add-control screen. Its
+        controls are picked up off the engagement by the awaitingRacm effect. */}
+    {racmUpload && (
+      <RacmImportReview
+        mode="racm"
+        file={racmUpload.file}
+        process={racmUpload.process}
+        entity={racmUpload.entity}
+        existing={eng.controls}
+        onClose={() => setRacmUpload(null)}
+        onImport={(controls, meta) => { createRacm(racmUpload.process, meta.fileName, racmUpload.entity, { controls, source: meta.source, url: meta.url }); setRacmUpload(null); }}
+      />
+    )}
     </>
   );
 }

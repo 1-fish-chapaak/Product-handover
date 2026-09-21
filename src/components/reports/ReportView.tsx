@@ -2543,10 +2543,12 @@ export default function ReportView({ report, onBack, backLabel, onShare, onOpenQ
 
   // Wizard-generated reports carry their own query blocks; demo reports keep
   // the seeded defaults. A wizard report built from workflows only (no queries)
-  // has an empty query set — don't fall back to the demo queries for it.
+  // and a report created blank from a template (an explicitly empty
+  // `generatedQueries`) have an empty query set — don't fall back to the demo
+  // queries for them.
   const seededQueries: typeof DEFAULT_QUERIES = report.generatedQueries?.length
     ? report.generatedQueries
-    : reportWorkflows.length
+    : reportWorkflows.length || report.generatedQueries
       ? []
       : DEFAULT_QUERIES;
   const [sections, setSections] = useState<SectionItem[]>(() => buildInitialSections(seededQueries));

@@ -142,7 +142,7 @@ export const REPORT_TEMPLATES = [
     { name: 'Recommendations', icon: 'trending-up' },
     { name: 'Appendix', icon: 'file-text' },
   ]},
-  { id: "rt-007", name: "ATR Report", desc: "Action Taken Report with query-wise summary, closure status, key insights, auditor comments, and sign-off", category: "Audit", icon: "clipboard-check", sections: [
+  { id: "rt-007", name: "Action Taken Report", desc: "Query-wise summary, closure status, key insights, auditor comments, and sign-off", category: "Audit", icon: "clipboard-check", sections: [
     { name: 'Report Information', icon: 'file-text' },
     { name: 'Query-wise Summary', icon: 'check-circle' },
     { name: 'Summary of Closure Status', icon: 'bar-chart' },
