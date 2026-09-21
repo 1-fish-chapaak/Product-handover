@@ -2508,6 +2508,22 @@ export function designCompleteness(c: Control): { done: number; total: number; p
 export function designOutstanding(c: Control): DesignDoc[] {
   return c.design.documents.filter(d => d.status !== 'Received' && !d.waiver);
 }
+/** What the evidence says the design conclusion should be.
+ *
+ *  Lifted out of DesignSection (21 Sep) when the chat rail started concluding
+ *  too: the page shows "Evidence suggests X" and files an override when the
+ *  auditor goes against it, so a second copy of this rule in the chat would
+ *  have been two products disagreeing about the same paper.
+ *
+ *  A failed walkthrough attribute counts as a design failure — the control as
+ *  built did not do what it claims on a real transaction. */
+export function designSuggestion(c: Control): TrackConclusion {
+  const d = c.design;
+  const walkFailed = d.walkthrough ? c.operating.steps.some(s => d.walkthrough!.attributeResults[s.id] === 'Fail') : false;
+  return d.documents.length === 0 && d.points.length === 0 ? 'Not tested'
+    : designOutstanding(c).length > 0 || walkFailed || d.points.some(p => pointResult(p) === 'Fail') ? 'Ineffective'
+    : d.points.length > 0 && d.points.every(p => pointResult(p) === 'Pass') ? 'Effective' : 'Not tested';
+}
 /** The files on a design element. An older seeded element can read Received with
  *  no file list at all — its one file is the element itself — so that case is
  *  read as a single file with a stable id, and the page, the trail and a removal

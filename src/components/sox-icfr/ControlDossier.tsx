@@ -16,7 +16,7 @@ import {
   // formatINR,
   concludeRationale, controlCode, controlConclusion, courtFor, operatingApplies, designCompleteness, designOutstanding, discussionsFor, extractionCriteria,
   isControlLocked, itgcHolds, failedItgcs, isItgcDependent, operatingProgress, TOE_MAX_ROUNDS, toeRoundFailed, toeRoundNo, toeRounds, toeSpent, canRedrawToe, canExtendToe, populationLocked, sampleSizeGuide, trackResult, pointResult, stepResult, attestationOverruled, inquiryOnlyAttributes, restsOnStatementAlone,
-  countVerdict, coverageVerdict, derivedRunCount, populationReady, designBasis, auditorProvenChecks, suggestedDesignChecks, suggestPopulationFile, fmtDay, parseDay,
+  countVerdict, coverageVerdict, derivedRunCount, populationReady, designBasis, designSuggestion, auditorProvenChecks, suggestedDesignChecks, suggestPopulationFile, fmtDay, parseDay,
   monthlyBreakdown, spikeMonths, priorRoundCount, fileUsable, originLabel, guessFileKind, populationSources, ipeChecksFor, samplesFor,
   expectedInputsFor, hasRowCount, isAssisting, sampledSources, reviewNotesFor, isShared, entityCoverage, uncoveredEntities, hasPaths, pathCoverage, untouchedPaths, type PopVerdict,
   requiredFilesOf, requiredFilesCount, requiredFilesReady, passedWithoutFiles, designFilesOf,
@@ -1453,11 +1453,10 @@ function DesignSection({ control, canEdit }: { control: Control; canEdit: boolea
   // Parked with the walkthrough card — nothing reads it while that card is hidden.
   // const walkPending = walkthroughUntested(control);   // helpers.ts
   // A failed walkthrough attribute is a design failure in the reviewer's model —
-  // the control as built didn't do what it claims on a real transaction.
-  const walkFailed = d.walkthrough ? control.operating.steps.some(s => d.walkthrough!.attributeResults[s.id] === 'Fail') : false;
-  const suggestion: TrackConclusion = d.documents.length === 0 && d.points.length === 0 ? 'Not tested'
-    : missing.length > 0 || walkFailed || d.points.some(p => pointResult(p) === 'Fail') ? 'Ineffective'
-    : d.points.length > 0 && d.points.every(p => pointResult(p) === 'Pass') ? 'Effective' : 'Not tested';
+  // the control as built didn't do what it claims on a real transaction. The
+  // rule itself now lives in helpers.ts: the chat rail concludes too, and two
+  // copies of it would be two products disagreeing about one paper.
+  const suggestion: TrackConclusion = designSuggestion(control);
   const empty = d.documents.length === 0 && d.points.length === 0;
 
   // ── the checks, filed under what they are about (dev call, Aug 2026) ────────

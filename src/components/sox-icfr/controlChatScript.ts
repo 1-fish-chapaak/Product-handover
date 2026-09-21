@@ -60,6 +60,13 @@ export interface Situation {
   designReturn?: { note: string; by: string; at: string };
   preparedBy?: { by: string; at: string };
   approvedBy?: { by: string; at: string };
+  /** Every required element is evidenced or accounted for — the page's own
+   *  gate on concluding the design effective. */
+  complete: boolean;
+  /** The reader concluded this design themselves, so they cannot approve it. */
+  ownConclusion: boolean;
+  /** …and the same rule one step later, on the paper itself. */
+  ownPaper: boolean;
 
   // ② population ③ sample ④ operating ⑤ sign-off
   popStarted: boolean;
@@ -91,7 +98,7 @@ export function listOf(items: string[], cap = 3): string {
 
 const plural = (n: number, one: string, many = `${one}s`) => `${n} ${n === 1 ? one : many}`;
 
-export function situationOf({ eng, control, role, audit }: ChatCtx): Situation {
+export function situationOf({ eng, control, role, me, audit }: ChatCtx): Situation {
   const d = control.design;
   const o = control.operating;
 
@@ -156,6 +163,9 @@ export function situationOf({ eng, control, role, audit }: ChatCtx): Situation {
     step, key: '', locked, sealed, opApplies, yePending,
     designResult, todApproved,
     elementsTotal: completeness.total, elementsOnFile, missing,
+    complete: completeness.total > 0 && completeness.pct === 100,
+    ownConclusion: samePerson(preparedBy, me),
+    ownPaper: samePerson(control.wpSignoff?.preparer, me),
     checksTotal, checksUnmarked, checksPassed, checksFailed,
     iraRun: !!d.ira, iraStale: !!d.ira?.evidenceChanged, iraBlocked,
     designReturn: d.designReturn, preparedBy, approvedBy: d.approval?.approvedBy,
@@ -178,6 +188,9 @@ export interface ChatPrompt {
   key: string;
   step: ChatStepId;
   text: string;
+  /** The facts the line was made of, so the buttons under it are guarded by
+   *  the same reading rather than a second one. */
+  situation: Situation;
 }
 
 /**
@@ -188,7 +201,7 @@ export interface ChatPrompt {
 export function nextPrompt(ctx: ChatCtx): ChatPrompt {
   const s = situationOf(ctx);
   const { role, control } = ctx;
-  const line = (text: string) => ({ key: s.key, step: s.step, text });
+  const line = (text: string): ChatPrompt => ({ key: s.key, step: s.step, text, situation: s });
 
   // ── the paper is shut ─────────────────────────────────────────────────────
   if (s.sealed) return line('This engagement is signed off, so nothing on this control can move. I can still walk you through what was done and why.');
@@ -206,14 +219,13 @@ export function nextPrompt(ctx: ChatCtx): ChatPrompt {
   // ── the reviewer: approve, return, countersign ────────────────────────────
   if (role === 'reviewer') {
     if (s.designResult !== 'Not tested' && !s.approvedBy) {
-      const mine = samePerson(s.preparedBy, ctx.me);
-      return mine
+      return s.ownConclusion
         ? line(`You concluded this design yourself, so somebody else has to approve it. Four eyes — the person who did the work cannot be the one who signs it off.`)
         : line(`${s.preparedBy?.by ?? 'The auditor'} concluded the design ${s.designResult.toLowerCase()}${s.checksFailed > 0 ? ` on ${plural(s.checksFailed, 'failed check')}` : ''}. Approve it, or send it back with a note.`);
     }
     if (s.preparerSigned && !s.reviewerSigned) {
       if (s.notesPending > 0) return line(`The paper is signed and waiting on you, but ${plural(s.notesPending, 'review note')} ${s.notesPending === 1 ? 'is' : 'are'} still open. Those close before you can countersign.`);
-      if (samePerson(s.preparerSigned, ctx.me)) return line('You prepared this paper, so it needs a different reviewer to countersign. Nothing for you here.');
+      if (s.ownPaper) return line('You prepared this paper, so it needs a different reviewer to countersign. Nothing for you here.');
       return line('The paper is prepared and waiting for your countersignature. Read it through — the working paper button up top has the whole thing.');
     }
     return line(`Nothing is waiting on you yet. The design is ${s.designResult === 'Not tested' ? 'still being tested' : `${s.designResult.toLowerCase()} and approved`}, and I will tell you the moment there is something to review.`);
@@ -274,7 +286,7 @@ export function nextPrompt(ctx: ChatCtx): ChatPrompt {
   }
   // Who actually signed it matters: an auditor reading "you signed this" about
   // somebody else's signature learns the wrong thing about their own paper.
-  const signer = samePerson(s.preparerSigned, ctx.me) ? 'You' : s.preparerSigned.by;
+  const signer = s.ownPaper ? 'You' : s.preparerSigned.by;
   return line(`${signer} signed this paper${s.preparerSigned.at ? ` ${s.preparerSigned.at}` : ''}. It is with the reviewer now${s.notesPending > 0 ? `, and ${plural(s.notesPending, 'review note')} ${s.notesPending === 1 ? 'is' : 'are'} open against it` : ''}.`);
 }
 
