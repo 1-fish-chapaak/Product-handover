@@ -1,16 +1,16 @@
 import { useState } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
-import { Check, ChevronDown, ChevronRight, Plus, Trash2, X } from 'lucide-react';
+import { CalendarRange, Check, ChevronDown, ChevronRight, FileText, History, ListChecks, Plus, Trash2, X } from 'lucide-react';
 import { useIcfr } from './store';
 import { useAuditLog } from '../../context/AdminDataContext';
 import { controlConclusion, requiredFilesOf } from './helpers';
 import { countryFor, ownersOf } from './auditScope';
 import { ConclusionPill } from './parts';
 import { Pill } from '../shared/StatusBadge';
-import { Dropdown, KeyControlChip, menuItem } from './ControlDossier';
+import { Dropdown, EmptyState, KeyControlChip, menuItem } from './ControlDossier';
 import { attributeStats, auditsForControl, LastRunFact, runsForControl, RunHistoryList } from './ControlLibrary';
 import { cn } from '../../lib/cn';
-import type { AuditRound, Control, OperatingStep, RequiredFile } from './types';
+import type { AuditRecord, AuditRound, Control, OperatingStep, RequiredFile } from './types';
 
 /**
  * The engagement-root control page — the LIBRARY lens's own detail view (user
@@ -24,6 +24,17 @@ import type { AuditRound, Control, OperatingStep, RequiredFile } from './types';
  */
 
 const ROUND_LABEL: Record<AuditRound, string> = { interim: 'Interim', rollforward: 'Roll-forward', yearend: 'Year-end' };
+
+/** The months a round actually covers, from its ISO window. `periodSpan` beside
+ *  it is the CYCLE's label, which every round of a cycle shares — an interim and
+ *  a roll-forward of FY26 both read "Jan 2026 – Dec 2026" and the two rows come
+ *  out identical. The window is the thing that differs, and it is what the
+ *  reader is asking when they look at three runs of the same control. */
+const MONTH = (iso: string) => {
+  const d = new Date(iso);
+  return Number.isNaN(d.getTime()) ? iso : d.toLocaleDateString('en-US', { month: 'short', year: 'numeric' });
+};
+const windowOf = (a: AuditRecord) => (a.windowFrom && a.windowTo ? `${MONTH(a.windowFrom)} – ${MONTH(a.windowTo)}` : a.periodSpan);
 
 /** The files one attribute is proven against — the RACM's Control Evidence,
  *  split per attribute. Edited in place here; uploads are an audit's business
@@ -55,40 +66,46 @@ function RequiredFilesCell({ control, step, canEdit }: { control: Control; step:
     setNewLabel(''); setAdding(false);
   };
 
+  // Each file is a token, not a line of prose: it is a NAME of a document, one
+  // of several, sitting in a cell beside other cells. Set as lines they read as
+  // a paragraph with stray crosses in it; set as chips the cell says how many
+  // there are at a glance, and the remove sits on the thing it removes.
   return (
-    <div className="flex flex-col gap-0.5">
-      {files.length === 0 && <span className="text-[0.75rem] text-ink-400">None listed</span>}
+    <div className="flex flex-wrap items-center gap-1.5">
+      {files.length === 0 && !adding && <span className="text-[0.75rem] text-ink-400">None listed</span>}
       {files.map(f => (
-        <div key={f.id} className="flex items-center gap-1 min-h-6">
-          {canEdit && editingId === f.id ? (
-            <input autoFocus value={draft} onChange={e => setDraft(e.target.value)}
-              onKeyDown={e => { if (e.key === 'Enter') saveRename(f); if (e.key === 'Escape') setEditingId(null); }}
-              onBlur={() => setEditingId(null)}
-              aria-label={`Rename required file ${f.label}`}
-              className={inputCls} />
-          ) : canEdit ? (
-            <>
+        canEdit && editingId === f.id ? (
+          <input key={f.id} autoFocus value={draft} onChange={e => setDraft(e.target.value)}
+            onKeyDown={e => { if (e.key === 'Enter') saveRename(f); if (e.key === 'Escape') setEditingId(null); }}
+            onBlur={() => setEditingId(null)}
+            aria-label={`Rename required file ${f.label}`}
+            className={cn(inputCls, 'w-48')} />
+        ) : (
+          <span key={f.id} className="inline-flex items-center gap-1.5 h-[1.625rem] pl-2 pr-1.5 rounded-md border border-canvas-border bg-canvas text-[0.71875rem] text-ink-700">
+            <FileText size={11} className="shrink-0 text-ink-400" />
+            {canEdit ? (
               <button type="button" onClick={() => { setDraft(f.label); setEditingId(f.id); }} title="Rename"
-                className="min-w-0 text-left text-[0.75rem] text-ink-700 hover:text-brand-700 cursor-pointer break-words">{f.label}</button>
+                className="text-left hover:text-brand-700 cursor-pointer">{f.label}</button>
+            ) : <span>{f.label}</span>}
+            {canEdit && (
               <button type="button"
                 onClick={() => { removeRequiredFile(control.id, step.id, f.id); logEvent({ action: 'Delete', description: `Removed required file "${f.label}" from attribute ${step.code} (${control.id})`, module: 'SOX ICFR', entity: 'Control' }); }}
                 aria-label={`Remove required file ${f.label}`} title="Remove"
-                className="h-5 w-5 shrink-0 inline-flex items-center justify-center rounded text-ink-300 hover:text-risk-600 cursor-pointer"
-              ><X size={11} /></button>
-            </>
-          ) : (
-            <span className="min-w-0 text-[0.75rem] text-ink-700 break-words">{f.label}</span>
-          )}
-        </div>
+                className="h-4 w-4 shrink-0 inline-flex items-center justify-center rounded text-ink-300 hover:text-risk-600 cursor-pointer"
+              ><X size={10} /></button>
+            )}
+          </span>
+        )
       ))}
       {canEdit && (adding ? (
         <input autoFocus value={newLabel} onChange={e => setNewLabel(e.target.value)}
           onKeyDown={e => { if (e.key === 'Enter') submitNew(); if (e.key === 'Escape') { setAdding(false); setNewLabel(''); } }}
+          onBlur={() => { if (!newLabel.trim()) setAdding(false); }}
           placeholder="e.g. Signed approval record" aria-label={`Add a required file to ${step.code}`}
-          className={cn(inputCls, 'mt-0.5')} />
+          className={cn(inputCls, 'w-56')} />
       ) : (
         <button type="button" onClick={() => setAdding(true)}
-          className="self-start mt-0.5 inline-flex items-center gap-1 text-[0.71875rem] font-semibold text-ink-500 hover:text-brand-700 cursor-pointer">
+          className="inline-flex items-center gap-1 h-[1.625rem] px-2 rounded-md border border-dashed border-canvas-border text-[0.6875rem] font-semibold text-ink-500 hover:border-brand-300 hover:text-brand-700 hover:bg-brand-50/40 transition-colors cursor-pointer">
           <Plus size={11} /> Add file
         </button>
       ))}
@@ -96,25 +113,37 @@ function RequiredFilesCell({ control, step, canEdit }: { control: Control; step:
   );
 }
 
+/** Rows here are records, not doors — nothing opens, so they take the static
+ *  variant rather than the register's pointer and hover tint. The cells sit at
+ *  the top of the row because a two-line attribute beside three chips has no
+ *  shared middle to centre on. */
+const attrCell = { paddingTop: 13, paddingBottom: 13, verticalAlign: 'top' as const };
+
 function AttributeTableRow({ control, step, canEdit }: { control: Control; step: OperatingStep; canEdit: boolean }) {
   const { removeAttribute } = useIcfr();
   const logEvent = useAuditLog();
   return (
-    <tr className="reg-row">
-      <td className="tight"><span className="wp-ref">{step.code}</span></td>
-      <td className="tight">
-        <div className="font-medium text-ink-800">{step.description}</div>
-        <div className="text-[0.6875rem] text-ink-400 mt-0.5">{[step.assertion, step.precision].filter(Boolean).join(' · ')}</div>
+    <tr className="reg-row reg-static">
+      <td style={{ ...attrCell, paddingTop: 15 }}><span className="wp-ref">{step.code}</span></td>
+      <td style={attrCell}>
+        <div className="text-[0.8125rem] font-medium text-ink-800 leading-snug">{step.description}</div>
       </td>
-      <td className="tight">
+      {/* Its own column now. Run under the attribute it read as a caption of the
+          sentence above it; in a column it reads as what it is — the assertion
+          this attribute proves, and how finely. */}
+      <td style={attrCell}>
+        <div className="text-[0.75rem] text-ink-600">{step.assertion ?? '—'}</div>
+        {step.precision && <div className="text-[0.6875rem] text-ink-400 mt-0.5">{step.precision}</div>}
+      </td>
+      <td style={{ ...attrCell, paddingTop: 11 }}>
         <RequiredFilesCell control={control} step={step} canEdit={canEdit} />
       </td>
-      <td className="tight" style={{ textAlign: 'right' }}>
+      <td style={{ ...attrCell, textAlign: 'right' }}>
         {canEdit && (
           <button
             onClick={() => { removeAttribute(control.id, step.id); logEvent({ action: 'Delete', description: `Removed attribute ${step.code} from ${control.id}`, module: 'SOX ICFR', entity: 'Control' }); }}
             title="Remove attribute" aria-label={`Remove attribute ${step.code}`}
-            className="h-8 w-8 inline-flex items-center justify-center rounded-lg border border-canvas-border bg-canvas-elevated text-ink-400 hover:border-risk-300 hover:text-risk-600 cursor-pointer"
+            className="h-7 w-7 inline-flex items-center justify-center rounded-md text-ink-300 hover:bg-risk-50 hover:text-risk-600 transition-colors cursor-pointer"
           ><Trash2 size={13} /></button>
         )}
       </td>
@@ -170,6 +199,29 @@ function MoreLink({ open, onClick }: { open: boolean; onClick: () => void }) {
       <span className="underline underline-offset-2 decoration-brand-300 group-hover:decoration-brand-500 transition-colors">{open ? 'less' : 'more'}</span>
       <ChevronDown size={13} className={cn('text-brand-500 transition-transform duration-200 ease-out', open && 'rotate-180')} />
     </button>
+  );
+}
+
+/**
+ * A section opener on this page.
+ *
+ * The three sections below the header used to be three 13px bold lines — the
+ * same weight as half the text under them, so nothing opened and the whole page
+ * sat at one tonal value (the same failure the header's own comment records).
+ * They open in the serif instead: the page title is already Source Serif, and
+ * DESIGN.md gives the serif to heroes and section openers. One line of plain
+ * English says what the section is for; the count and any action sit on the
+ * right, where they don't compete with the name.
+ */
+function SectionHead({ title, note, right }: { title: string; note?: React.ReactNode; right?: React.ReactNode }) {
+  return (
+    <div className="flex items-start justify-between gap-6 mb-3.5">
+      <div className="min-w-0">
+        <h2 className="font-display text-[1.0625rem] leading-tight text-ink-900">{title}</h2>
+        {note && <p className="mt-1 text-[0.75rem] text-ink-500 leading-relaxed max-w-[74ch]">{note}</p>}
+      </div>
+      {right && <div className="shrink-0 flex items-center gap-3">{right}</div>}
+    </div>
   );
 }
 
@@ -368,74 +420,91 @@ export default function ControlLibraryDetail() {
         </div>
       </header>
 
+      {/* Three sections, well apart. The gap between them is what tells a
+          reader they have finished one thing and started another — at the 20px
+          they used to sit at, the page read as one long column of small bold
+          lines. */}
+      <div className="space-y-9 pb-16">
+
       {/* audit runs — shown upfront, not behind a tab or a drawer: each audit
           this control sits in, and what THAT audit concluded (a frozen
-          snapshot once superseded, live otherwise) */}
-      <div className="mb-5">
-        <h3 className="text-[0.8125rem] font-bold text-ink-900 mb-3">Audit runs <span className="font-normal text-ink-400">· {audits.length}</span></h3>
+          snapshot once superseded, live otherwise). A divided list rather than
+          a grid of thin tiles: there are rarely more than three, a tile that
+          holds a period and a pill is mostly empty, and a list can carry the
+          window each round actually covers. */}
+      <section>
+        <SectionHead
+          title="Audit runs"
+          note="Where this control has been picked up for testing. Each audit concludes on its own evidence."
+          right={audits.length > 0 && <span className="text-[0.75rem] text-ink-400 tabular-nums">{audits.length} audit{audits.length === 1 ? '' : 's'}</span>}
+        />
         {audits.length === 0 ? (
-          <p className="text-[0.75rem] text-ink-400 leading-relaxed">Not in any audit yet — attributes and their required files can still be edited here; testing starts once an audit picks this control up.</p>
+          <EmptyState
+            icon={<CalendarRange size={18} />}
+            title="Not in any audit yet"
+            hint="Attributes and their required files can still be edited here — testing starts once an audit picks this control up."
+          />
         ) : (
-          <div className="grid grid-cols-2 sm:grid-cols-3 gap-2.5">
+          <div className="rounded-xl border border-canvas-border bg-canvas-elevated divide-y divide-canvas-border overflow-hidden">
             {audits.map(a => {
               const row = a.archive?.conclusions.find(r => r.controlId === control.id);
               const concl = row ? row.conclusion : controlConclusion(control);
               return (
                 <button key={a.id} onClick={() => { openAudit(a.id); openControl(control.id); }}
-                  className="flex items-center justify-between gap-2 rounded-lg border border-canvas-border bg-canvas-elevated px-3 py-2 hover:border-brand-300 transition-colors cursor-pointer text-left">
-                  <span className="min-w-0">
-                    <span className="block text-[0.78125rem] font-semibold text-ink-800">{a.period}</span>
-                    <span className="block text-[0.65625rem] text-ink-400">{ROUND_LABEL[a.round]} · {a.archive ? 'closed' : 'live'}</span>
+                  className="group w-full flex items-center gap-4 px-4 py-3 text-left hover:bg-brand-50/40 transition-colors cursor-pointer">
+                  <span className="min-w-0 flex-1">
+                    <span className="block text-[0.8125rem] font-semibold text-ink-900 group-hover:text-brand-700 transition-colors tabular-nums">{a.period}</span>
+                    <span className="block text-[0.75rem] text-ink-500 tabular-nums mt-0.5">
+                      {ROUND_LABEL[a.round]} · {windowOf(a)} · {a.archive ? 'closed' : 'live'}
+                    </span>
                   </span>
-                  <span className="shrink-0 flex items-center gap-1.5">
-                    <ConclusionPill c={concl} />
-                    <ChevronRight size={13} className="text-ink-300" />
-                  </span>
+                  <ConclusionPill c={concl} />
+                  <ChevronRight size={15} className="shrink-0 text-ink-300 group-hover:text-brand-600 transition-colors" />
                 </button>
               );
             })}
           </div>
         )}
-      </div>
+      </section>
 
       {/* attributes — as a table. Structure, not testing: always editable
           here regardless of any audit's progress */}
-      <div className="mb-5">
-        <div className="flex items-center gap-2 mb-1">
-          <h3 className="text-[0.8125rem] font-bold text-ink-900">Attributes</h3>
-          <span className={cn('text-[0.75rem] font-semibold tabular-nums', attrs === 0 ? 'text-ink-400' : 'text-ink-900')}>{attrs}</span>
-          <span className="text-[0.75rem] text-ink-500">attribute{attrs === 1 ? '' : 's'} ·</span>
-          <span className={cn('text-[0.75rem] font-semibold tabular-nums', files === 0 ? 'text-ink-400' : 'text-ink-900')}>{files}</span>
-          <span className="text-[0.75rem] text-ink-500">required file{files === 1 ? '' : 's'}</span>
-          {canEdit && (
-            <div className="ml-auto flex items-center gap-2">
-              {addingAttr ? (
-                <>
-                  <input autoFocus value={newAttr} onChange={e => setNewAttr(e.target.value)}
-                    onKeyDown={e => { if (e.key === 'Enter') submitAttr(); if (e.key === 'Escape') { setAddingAttr(false); setNewAttr(''); } }}
-                    placeholder="e.g. Approval evidenced before the transaction posts"
-                    className="w-72 h-9 px-3 rounded-lg border border-canvas-border bg-canvas-elevated text-[0.78125rem] focus:outline-none focus:ring-2 focus:ring-brand-200" />
-                  <button disabled={!newAttr.trim()} onClick={submitAttr} className="h-9 px-3 rounded-lg bg-brand-600 text-white text-[0.75rem] font-semibold disabled:opacity-40 cursor-pointer">Add</button>
-                </>
-              ) : (
-                <button onClick={() => setAddingAttr(true)} className="h-8 px-3 inline-flex items-center gap-1.5 rounded-lg border border-canvas-border bg-canvas-elevated text-[0.71875rem] font-semibold text-ink-700 hover:border-brand-300 hover:text-brand-700 cursor-pointer">
-                  <Plus size={12} /> Add attribute
-                </button>
-              )}
-            </div>
-          )}
-        </div>
-        {/* where the list comes from, said once — the cell itself stays a plain list */}
-        <p className="text-[0.71875rem] text-ink-500 mb-3">Required files come from the RACM's Control Evidence column, split per attribute by Ira. Edit them here — every audit's TOE asks for these uploads.</p>
-        {control.operating.steps.length > 0 && (
+      <section>
+        <SectionHead
+          title="Attributes"
+          note="What the control is tested against. Required files come from the RACM's Control Evidence column, split per attribute by Ira — every audit's TOE asks for these uploads."
+          right={<>
+            <span className="text-[0.75rem] text-ink-400 tabular-nums whitespace-nowrap">
+              {attrs} attribute{attrs === 1 ? '' : 's'} · {files} file{files === 1 ? '' : 's'}
+            </span>
+            {canEdit && (addingAttr ? (
+              <span className="flex items-center gap-2">
+                <input autoFocus value={newAttr} onChange={e => setNewAttr(e.target.value)}
+                  onKeyDown={e => { if (e.key === 'Enter') submitAttr(); if (e.key === 'Escape') { setAddingAttr(false); setNewAttr(''); } }}
+                  placeholder="e.g. Approval evidenced before the transaction posts"
+                  className="w-80 h-9 px-3 rounded-lg border border-canvas-border bg-canvas-elevated text-[0.78125rem] focus:outline-none focus:ring-2 focus:ring-brand-200" />
+                <button disabled={!newAttr.trim()} onClick={submitAttr} className="h-9 px-3 rounded-lg bg-brand-600 text-white text-[0.75rem] font-semibold disabled:opacity-40 enabled:hover:bg-brand-700 transition-colors cursor-pointer">Add</button>
+              </span>
+            ) : (
+              <button onClick={() => setAddingAttr(true)} className="h-8 px-3 inline-flex items-center gap-1.5 rounded-lg border border-canvas-border bg-canvas-elevated text-[0.71875rem] font-semibold text-ink-700 hover:border-brand-300 hover:text-brand-700 transition-colors cursor-pointer">
+                <Plus size={12} /> Add attribute
+              </button>
+            ))}
+          </>}
+        />
+        {control.operating.steps.length > 0 ? (
           <div className="reg-wrap">
             <table className="w-full border-collapse">
               <thead className="reg-head">
                 <tr>
-                  <th style={{ width: 64 }}>Code</th>
-                  <th>Attribute</th>
-                  <th style={{ width: 320 }}>Required files</th>
-                  <th style={{ width: 56 }} />
+                  <th style={{ width: 68 }}>Code</th>
+                  {/* Fixed, so the sentence stops where a sentence should rather
+                      than stretching a short attribute across half the screen;
+                      the slack goes to the files, which can use it. */}
+                  <th style={{ width: 430 }}>Attribute</th>
+                  <th style={{ width: 190 }}>Assertion</th>
+                  <th>Required files</th>
+                  <th style={{ width: 52 }} />
                 </tr>
               </thead>
               <tbody>
@@ -443,19 +512,31 @@ export default function ControlLibraryDetail() {
               </tbody>
             </table>
           </div>
+        ) : (
+          <EmptyState
+            icon={<ListChecks size={18} />}
+            title="No attributes yet"
+            hint="An attribute is one thing a tester checks on every sampled item. They arrive with the RACM, or you can write them here."
+          />
         )}
-        {control.operating.steps.length === 0 && (
-          <div className="text-center py-6 text-ink-400 text-[0.75rem] rounded-xl border border-dashed border-canvas-border">No attributes yet.</div>
-        )}
-      </div>
+      </section>
 
       {/* testing activity — the full run history, on the page itself, not
           behind a side sheet (user ask, 30 Jul) */}
-      <div>
-        <h3 className="text-[0.8125rem] font-bold text-ink-900 mb-3">Testing activity</h3>
-        <LastRunFact c={control} runs={runs} />
-        <div className="ac-div my-3" />
-        <RunHistoryList c={control} runs={runs} />
+      <section>
+        <SectionHead
+          title="Testing activity"
+          note="Every control test, workflow run and AI validation that has touched this control, newest first."
+          right={runs.length > 0 && <LastRunFact c={control} runs={runs} />}
+        />
+        {runs.length === 0 ? (
+          <EmptyState
+            icon={<History size={18} />}
+            title="Nothing has been run on this control yet"
+            hint="A control test, a workflow run or an AI validation all land here."
+          />
+        ) : <RunHistoryList c={control} runs={runs} />}
+      </section>
       </div>
     </div>
   );
