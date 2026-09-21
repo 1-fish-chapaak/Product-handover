@@ -122,13 +122,13 @@ export default function PlatformUsageTabs() {
     // Value sits after Cost and reads the same rows. Same gate, because the
     // Cost lens on it prints the workspace's bill.
     //
-    // The label is "Platform Value" and not "Usages". It sat as "Usages" for an
-    // afternoon and read as a near-duplicate of "Usage and cost" beside it: two
-    // tabs a letter apart, with the new one having dropped the word that says
-    // it answers a different question. Value is the question this tab asks.
+    // The label is "Value". SETTLED, do not rename it. It has been "Usages" and
+    // "Platform Value" before now; "Usages" read as a near-duplicate of "Usage
+    // and cost" beside it, and "Platform" is already said by the page title
+    // above the tab strip. Value is the question this tab asks, in one word.
     {
       id: 'value',
-      label: 'Platform Value',
+      label: 'Value',
       icon: TrendingUp,
       visible: readsUsage,
       body: () => <PlatformValueSection />,

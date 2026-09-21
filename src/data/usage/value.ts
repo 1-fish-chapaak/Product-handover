@@ -217,8 +217,8 @@ export function valueTurn(turn: UsageTurn): TurnValue {
   if (turn.status !== 'ok') {
     return unvalued(
       turn.status === 'stopped'
-        ? 'Someone stopped the activity before it finished, so there is no time to count.'
-        : 'The activity failed, so there is no time to count.',
+        ? 'Stopped before it finished, so there is no time to count.'
+        : 'Failed, so there is no time to count.',
       'did-not-finish',
     );
   }
@@ -243,8 +243,8 @@ export function valueTurn(turn: UsageTurn): TurnValue {
   if (manual_minutes == null) {
     return unvalued(
       turn.workflow_name
-        ? `${turn.workflow_name} has no by hand figure at all, so its runs are unpriced rather than covered by another workflow's timing.`
-        : `${workNoun(turn.surface).replace(/^./, c => c.toUpperCase())} have no by hand figure at all.`,
+        ? `${turn.workflow_name} has no timing, so its runs are unpriced rather than borrowing another workflow's.`
+        : `${workNoun(turn.surface).replace(/^./, c => c.toUpperCase())} have no timing yet.`,
       'no-timing',
     );
   }

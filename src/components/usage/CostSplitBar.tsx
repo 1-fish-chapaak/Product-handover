@@ -42,6 +42,8 @@ const MIN_PCT = 2.5;
 function Bar({
   name,
   amount,
+  sub,
+  note,
   pct,
   color,
   format,
@@ -50,6 +52,10 @@ function Bar({
 }: {
   name: string;
   amount: number;
+  /** The same quantity in its other unit, under the figure. The auditor side is
+   *  hours before it is rupees, and the hours are what a reader recognises. */
+  sub?: string;
+  note?: React.ReactNode;
   pct: number;
   color: string;
   format: (n: number) => string;
@@ -61,17 +67,23 @@ function Bar({
   return (
     <div role="listitem">
       <div className="flex items-baseline justify-between gap-4">
-        <p className="flex min-w-0 items-center gap-2 text-[0.75rem] text-ink-500">
+        <div className="flex min-w-0 items-center gap-2 text-[0.75rem] text-ink-500">
           <span
             aria-hidden
             className="h-2 w-2 shrink-0 rounded-xs"
             style={{ backgroundColor: color }}
           />
           <span className="truncate">{name}</span>
-        </p>
-        <p className="shrink-0 text-[0.875rem] font-semibold tabular-nums text-ink-900">
-          {format(amount)}
-        </p>
+          {note}
+        </div>
+        <div className="shrink-0 text-right">
+          <span className="block text-[0.875rem] font-semibold tabular-nums text-ink-900">
+            {format(amount)}
+          </span>
+          {sub ? (
+            <span className="block text-[0.75rem] tabular-nums text-ink-500">{sub}</span>
+          ) : null}
+        </div>
       </div>
       <div className="mt-1.5 h-3.5 w-full overflow-hidden rounded-xs bg-canvas-border/40">
         <motion.span
@@ -94,6 +106,8 @@ function Bar({
 
 export default function CostSplitBar({
   gaveBack,
+  gaveBackSub,
+  gaveBackNote,
   total,
   perRupee,
   leftOver,
@@ -104,6 +118,12 @@ export default function CostSplitBar({
   gaveBack: number;
   /** What the platform cost to do the same work. One number, never split. */
   total: number;
+  /** The hours behind the auditor figure, said under it. */
+  gaveBackSub?: string;
+  /** The panel for the auditor side: where the hours come from and how they
+   *  were priced. It rides on the bar because the two headline tiles that used
+   *  to carry it are now this bar. */
+  gaveBackNote?: React.ReactNode;
   /** What each rupee spent gave back. */
   perRupee: number | null;
   /** What was left after the bill. Passed in rather than subtracted here, so
@@ -149,6 +169,8 @@ export default function CostSplitBar({
         <Bar
           name="Auditor time it gave back"
           amount={gaveBack}
+          sub={gaveBackSub}
+          note={gaveBackNote}
           pct={width(gaveBack)}
           color={AUDITOR_COLOR}
           format={format}

@@ -87,17 +87,14 @@ export const AUDITOR_HOUR_RATE: Dated<number>[] = [
 export const USD_TO_INR: Dated<number>[] = [
   {
     from: '2024-04-01',
-    value: 83.1,
+    // FIXED AT 100. Not a market rate and not pretending to be one: a flat
+    // hundred is a figure a reader can do in their head, and the AI bill is a
+    // floor off published list prices either way. It stays effective-dated so
+    // a real rate can replace it from a date without rewriting a quoted period.
+    value: 100,
     setBy: null,
     setOn: null,
-    source: 'Closing rate, RBI reference',
-  },
-  {
-    from: '2026-01-01',
-    value: 88.5,
-    setBy: null,
-    setOn: null,
-    source: 'Closing rate, RBI reference',
+    source: 'Fixed conversion rate for this workspace, not a market rate',
   },
 ];
 
@@ -178,7 +175,7 @@ export const MANUAL_TIMINGS: ManualTiming[] = [
     sample: 5,
     measuredBy: null,
     measuredOn: null,
-    note: 'A full vendor sweep: pull the population, look every row up in the registries, compare, write up what came out. Portal lookups included, so lookup minutes are never added on top.',
+    note: 'A full sweep: pull the population, look every row up, write up what came out.',
   },
   {
     surface: 'workflow',
@@ -187,7 +184,7 @@ export const MANUAL_TIMINGS: ManualTiming[] = [
     sample: 5,
     measuredBy: null,
     measuredOn: null,
-    note: 'Screening the population against the related party list and chasing the matches down.',
+    note: 'Screening the whole population against the related party list.',
   },
   {
     surface: 'workflow',
@@ -196,7 +193,7 @@ export const MANUAL_TIMINGS: ManualTiming[] = [
     sample: 5,
     measuredBy: null,
     measuredOn: null,
-    note: 'Reconciling registrations against the return, one list against the other.',
+    note: 'Reconciling every registration against the return.',
   },
   {
     surface: 'workflow',
@@ -205,7 +202,7 @@ export const MANUAL_TIMINGS: ManualTiming[] = [
     sample: 5,
     measuredBy: null,
     measuredOn: null,
-    note: 'Sorting the ledger and reading down it for the same amount paid twice.',
+    note: 'Reading down the ledger for the same amount paid twice.',
   },
   {
     surface: 'workflow',
@@ -232,7 +229,7 @@ export const MANUAL_TIMINGS: ManualTiming[] = [
     sample: 5,
     measuredBy: null,
     measuredOn: null,
-    note: 'MINUTES PER VENDOR, not per run. Looking one vendor up in the registries, comparing it and noting what came out. Portal lookups included, so lookup minutes are never added on top.',
+    note: 'Per vendor. Look one up in the registries and note what came out.',
   },
   {
     surface: 'bulk',
@@ -242,7 +239,7 @@ export const MANUAL_TIMINGS: ManualTiming[] = [
     sample: 5,
     measuredBy: null,
     measuredOn: null,
-    note: 'MINUTES PER PARTY, not per run. Screening one name against the related party list and chasing a match down.',
+    note: 'Per party. Screen one name against the list and chase a match down.',
   },
   {
     surface: 'bulk',
@@ -252,7 +249,7 @@ export const MANUAL_TIMINGS: ManualTiming[] = [
     sample: 5,
     measuredBy: null,
     measuredOn: null,
-    note: 'MINUTES PER REGISTRATION, not per run. Reconciling one registration against the return, one list against the other.',
+    note: 'Per registration. Reconcile one against the return.',
   },
   {
     surface: 'bulk',
@@ -262,7 +259,7 @@ export const MANUAL_TIMINGS: ManualTiming[] = [
     sample: 5,
     measuredBy: null,
     measuredOn: null,
-    note: 'MINUTES PER PAYMENT, not per run. Reading one payment against the rest of the ledger for the same amount paid twice.',
+    note: 'Per payment. Read one against the rest of the ledger.',
   },
   {
     surface: 'bulk',
@@ -274,7 +271,7 @@ export const MANUAL_TIMINGS: ManualTiming[] = [
     sample: null,
     measuredBy: null,
     measuredOn: null,
-    note: 'Not timed yet. Checking one leaver off against the payroll run.',
+    note: 'Not timed yet. Check one leaver off against the payroll run.',
   },
 
   /* ── Reports, one per named report ─────────────────────────────────────── */
@@ -286,7 +283,7 @@ export const MANUAL_TIMINGS: ManualTiming[] = [
     sample: 5,
     measuredBy: null,
     measuredOn: null,
-    note: 'Writing the entity pack from work already done. WRITING only: the review that follows is still a person\u2019s time. A bulk pack is written once per entity by hand, which is why each entity counts on its own.',
+    note: 'Per entity. Writing the pack from work already done. Writing only.',
   },
   {
     surface: 'report',
@@ -296,7 +293,7 @@ export const MANUAL_TIMINGS: ManualTiming[] = [
     sample: 5,
     measuredBy: null,
     measuredOn: null,
-    note: 'Writing the quarterly control report from work already done. Writing only, not reviewing.',
+    note: 'Per entity. Writing the report from work already done. Writing only.',
   },
   {
     surface: 'report',
@@ -306,7 +303,7 @@ export const MANUAL_TIMINGS: ManualTiming[] = [
     sample: 5,
     measuredBy: null,
     measuredOn: null,
-    note: 'Writing up the exceptions that came out of a run as a short summary. Writing only, not reviewing.',
+    note: 'Per entity. Writing up a run\u2019s exceptions as a short summary.',
   },
 
   /* ── One job in them, so one figure each ───────────────────────────────── */
@@ -318,7 +315,7 @@ export const MANUAL_TIMINGS: ManualTiming[] = [
     sample: 5,
     measuredBy: null,
     measuredOn: null,
-    note: 'MINUTES PER CONTROL DRAFTED, not per run. An auditor reads the SOP and writes the matrix control by control, so a run\u2019s by-hand time is this times the controls it produced. The DRAFT only: the review and correction that follows is still their time.',
+    note: 'Per control drafted. Reading the SOP and writing the matrix. The draft only.',
   },
   {
     surface: 'exception',
@@ -327,7 +324,7 @@ export const MANUAL_TIMINGS: ManualTiming[] = [
     sample: 5,
     measuredBy: null,
     measuredOn: null,
-    note: 'Compiling one exception with its evidence, routing it to an owner and tracking it to closure. NOT finding it, which the run that raised it already counts, and not the judgement, which a person still makes. One figure for all: the platform\u2019s part is the same shape whatever was found.',
+    note: 'Compiling one exception, routing it to an owner, tracking it to closure. Not finding it.',
   },
   {
     surface: 'chat',
@@ -336,7 +333,7 @@ export const MANUAL_TIMINGS: ManualTiming[] = [
     sample: 5,
     measuredBy: null,
     measuredOn: null,
-    note: 'Finding one fact in the source files: who owns a control, what a policy says, when something was last run.',
+    note: 'Finding one fact in the source files.',
   },
   {
     surface: 'chat',
@@ -345,7 +342,7 @@ export const MANUAL_TIMINGS: ManualTiming[] = [
     sample: 5,
     measuredBy: null,
     measuredOn: null,
-    note: 'Working out why a row came back the way it did, and reading enough around it to say so.',
+    note: 'Working out why a row came back the way it did.',
   },
   {
     surface: 'chat',
@@ -354,7 +351,7 @@ export const MANUAL_TIMINGS: ManualTiming[] = [
     sample: 5,
     measuredBy: null,
     measuredOn: null,
-    note: 'Gathering everything held on one subject across the source files and putting it in one place.',
+    note: 'Gathering everything held on one subject into one place.',
   },
   {
     surface: 'chat',
@@ -363,7 +360,7 @@ export const MANUAL_TIMINGS: ManualTiming[] = [
     sample: 5,
     measuredBy: null,
     measuredOn: null,
-    note: 'Writing up an observation or a note from what the files hold. The DRAFT only: the review that follows is still a person\u2019s time.',
+    note: 'Writing up an observation from what the files hold. The draft only.',
   },
 ];
 

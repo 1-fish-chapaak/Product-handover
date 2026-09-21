@@ -10,11 +10,9 @@
  *   substituted, not a formula with letters in it.
  * · **The inputs** — each one with who set it and when, because a rate whose
  *   author cannot be named is a rate a CFO is right to throw out.
- * · **What it leaves out** — named. A floor that does not say what is missing
- *   is just a total that happens to be wrong.
  *
- * A tile without all four is not shippable, so the note type makes all four
- * required fields rather than optional ones.
+ * A panel shows one calculation and the inputs that calculation used, and
+ * nothing else.
  */
 
 import { useEffect, useRef, useState } from 'react';
@@ -33,6 +31,9 @@ export interface NoteInput {
   setBy?: string | null;
   setOn?: string | null;
   source?: string;
+  /** A figure that is the sum of several rows says so as a table, not as a
+   *  sentence adding them up. The last row is the total, drawn apart. */
+  table?: { head: string[]; rows: string[][]; total?: string[] };
 }
 
 /** A line of working. `{ heading }` groups the lines under it, for a note whose
@@ -44,9 +45,6 @@ export interface Note {
   /** One line per step, in the order the arithmetic runs. */
   working: WorkingLine[];
   inputs: NoteInput[];
-  /** Everything the figure does not include. Never empty: if a figure truly
-   *  leaves nothing out, say that in a line. */
-  omits: string[];
 }
 
 /** Kept in step with the `w-[23rem]` on the panel below. */
@@ -228,6 +226,50 @@ export default function ValueNote({ title, note }: { title: string; note: Note }
               <dl className="mt-1.5 space-y-2">
                 {note.inputs.map(i => (
                   <div key={i.label}>
+                    {/* The rows first, then the figure they add to. A total
+                        printed above its own parts is a total nobody checks. */}
+                    {i.table ? (
+                      <table className="mb-1.5 w-full border-collapse text-[0.625rem] tabular-nums">
+                        <thead>
+                          <tr className="border-b border-canvas-border text-ink-400">
+                            {i.table.head.map((h, hi) => (
+                              <th
+                                key={h}
+                                className={`py-1 pr-1.5 font-semibold ${hi === 0 ? 'text-left' : 'text-right'}`}
+                              >
+                                {h}
+                              </th>
+                            ))}
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {i.table.rows.map(row => (
+                            <tr key={row[0]} className="border-b border-canvas-border/50">
+                              {row.map((cell, ci) => (
+                                <td
+                                  key={`${row[0]}-${ci}`}
+                                  className={`py-1 pr-1.5 ${ci === 0 ? 'text-ink-700' : 'text-right text-ink-500'}`}
+                                >
+                                  {cell}
+                                </td>
+                              ))}
+                            </tr>
+                          ))}
+                          {i.table.total ? (
+                            <tr className="font-semibold text-ink-900">
+                              {i.table.total.map((cell, ci) => (
+                                <td
+                                  key={`total-${ci}`}
+                                  className={`py-1 pr-1.5 ${ci === 0 ? '' : 'text-right'}`}
+                                >
+                                  {cell}
+                                </td>
+                              ))}
+                            </tr>
+                          ) : null}
+                        </tbody>
+                      </table>
+                    ) : null}
                     <div className="flex items-baseline justify-between gap-3">
                       <dt className="text-[0.75rem] text-ink-600">{i.label}</dt>
                       <dd className="text-[0.75rem] font-medium text-ink-900 tabular-nums">
@@ -249,15 +291,6 @@ export default function ValueNote({ title, note }: { title: string; note: Note }
                   </div>
                 ))}
               </dl>
-
-              <p className={`${SECTION} mt-4`}>What it leaves out</p>
-              <ul className="mt-1.5 space-y-1">
-                {note.omits.map((o, i) => (
-                  <li key={`${i}-${o}`} className="text-[0.75rem] leading-relaxed text-ink-600">
-                    {o}
-                  </li>
-                ))}
-              </ul>
             </motion.div>
           )}
         </AnimatePresence>,
