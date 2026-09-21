@@ -7,6 +7,7 @@ import { concludeRationale, designSuggestion } from './helpers';
 import { say, sayOnce, useControlThread } from './controlChat';
 import { acknowledge, nextPrompt, type ChatStepId, type Situation } from './controlChatScript';
 import { actionsFor, type ChatAction } from './controlChatActions';
+import { readIntent } from './controlChatIntents';
 import { cn } from '../../lib/cn';
 import type { Control } from './types';
 
@@ -25,7 +26,9 @@ import type { Control } from './types';
  * (attaching a file, waiving an element, writing the reviewer's note) do not
  * even try: they scroll the real thing into view on the left.
  *
- * The composer is deliberately inert until the typed intents land (step 5).
+ * The composer carries the same actions in words. A sentence is matched to
+ * one of the buttons on offer and then runs the identical call — typing is
+ * another way to press what is there, never a way round a gate.
  */
 
 /** The step names as the page prints them, so Ira and the left-hand stepper
@@ -62,13 +65,14 @@ function TypingDots() {
 }
 
 export default function ControlChatPane({ control }: { control: Control }) {
-  const { eng, role, me, openAuditId, runDesignIra, concludeDesign, overrideDesign, approveDesign } = useIcfr();
+  const { eng, role, me, openAuditId, runDesignIra, concludeDesign, overrideDesign, approveDesign, setDesignPoint } = useIcfr();
   const logEvent = useAuditLog();
   const audit = useMemo(() => eng.audits.find(a => a.id === openAuditId) ?? null, [eng.audits, openAuditId]);
   const prompt = useMemo(() => nextPrompt({ eng, control, role, me, audit }), [eng, control, role, me, audit]);
   const actions = useMemo(() => actionsFor(prompt.situation, role), [prompt.situation, role]);
   const thread = useControlThread(control.id);
   const [working, setWorking] = useState<string | null>(null);
+  const [draft, setDraft] = useState('');
 
   const scrollRef = useRef<HTMLDivElement>(null);
   useEffect(() => {
@@ -92,21 +96,25 @@ export default function ControlChatPane({ control }: { control: Control }) {
   // same control, so both arrive here as the same diff. Keyed on the situation
   // itself, so a re-render cannot say it twice and a change cannot be missed.
   const seen = useRef<{ id: string; s: Situation } | null>(null);
+  /** Set when the chat has already said what changed in better words. */
+  const skipAck = useRef(false);
   useEffect(() => {
     const prev = seen.current;
     seen.current = { id: control.id, s: prompt.situation };
     // First look at this control — the greeting is the opening line, not a
     // report of changes made while the reader was elsewhere.
     if (!prev || prev.id !== control.id || prev.s.key === prompt.situation.key) return;
+    if (skipAck.current) { skipAck.current = false; return; }
     const note = acknowledge(prev.s, prompt.situation);
     if (note) sayOnce(control.id, `ack:${prompt.situation.key}`, note);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [control.id, prompt.key]);
 
-  const run = (a: ChatAction) => {
-    if (working) return;
-    say(control.id, 'user', a.said);
-
+  /** Do the thing. Called by a button press and by a typed sentence alike —
+   *  which is the point: typing is another way to press what is on offer, not
+   *  a second set of rules. The reader's own line is posted by the caller,
+   *  because a button says `a.said` and a typed sentence says itself. */
+  const perform = (a: ChatAction) => {
     if (a.id === 'show-step') {
       const step = a.focus ?? prompt.step;
       document.getElementById(STEP_ANCHOR[step])?.scrollIntoView({ behavior: 'smooth', block: 'center' });
@@ -147,6 +155,37 @@ export default function ControlChatPane({ control }: { control: Control }) {
       logEvent({ action: 'Update', description: `Approved the design conclusion for ${control.id} from the chat`, module: 'SOX ICFR', entity: 'Control' });
       return;
     }
+  };
+
+  const run = (a: ChatAction) => {
+    if (working) return;
+    say(control.id, 'user', a.said);
+    perform(a);
+  };
+
+  // ── typed, and understood as far as it honestly can be ────────────────────
+  const send = () => {
+    const text = draft.trim();
+    if (!text || working) return;
+    say(control.id, 'user', text);
+    setDraft('');
+    const intent = readIntent(text, { control, s: prompt.situation, role, actions, promptText: prompt.text });
+    if (intent.kind === 'action') {
+      if (intent.note) say(control.id, 'ira', intent.note);
+      perform(intent.action);
+      return;
+    }
+    if (intent.kind === 'mark') {
+      setDesignPoint(control.id, intent.pointId, intent.result);
+      logEvent({ action: 'Update', description: `Marked a design check ${intent.result.toLowerCase()} on ${control.id} from the chat`, module: 'SOX ICFR', entity: 'Control' });
+      // This names WHICH check moved, because the reader named it and deserves
+      // to see the right one answered. The diff effect's generic "1 check
+      // marked" would only repeat it, so it stands down for this one change.
+      skipAck.current = true;
+      say(control.id, 'ira', `Marked ${intent.label} ${intent.result === 'Pass' ? 'passed' : 'failed'}.`);
+      return;
+    }
+    say(control.id, 'ira', intent.text);
   };
 
   // The owner does not test the design, so their step ① is called Documents —
@@ -206,13 +245,15 @@ export default function ControlChatPane({ control }: { control: Control }) {
       <div className="p-3 border-t border-canvas-border">
         <div className="flex items-end gap-2">
           <textarea
-            disabled rows={2}
-            placeholder="Ask Ira what to do next…"
-            className="flex-1 text-[0.75rem] rounded-lg border border-canvas-border bg-paper-50 px-2.5 py-2 text-ink-800 placeholder:text-ink-400 resize-none disabled:cursor-not-allowed"
+            value={draft} onChange={e => setDraft(e.target.value)} rows={2}
+            onKeyDown={e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); send(); } }}
+            disabled={!!working}
+            placeholder={working ? 'One moment…' : 'Ask Ira, or tell it what to do…'}
+            className="flex-1 text-[0.75rem] rounded-lg border border-canvas-border bg-canvas-elevated px-2.5 py-2 text-ink-800 placeholder:text-ink-400 focus:outline-none focus:ring-2 focus:ring-brand-200 resize-none disabled:bg-paper-50 disabled:cursor-not-allowed"
           />
           <button
-            disabled
-            className="h-9 w-9 shrink-0 inline-flex items-center justify-center rounded-lg bg-brand-600 text-white disabled:opacity-40 disabled:cursor-not-allowed"
+            disabled={!draft.trim() || !!working} onClick={send}
+            className="h-9 w-9 shrink-0 inline-flex items-center justify-center rounded-lg bg-brand-600 text-white disabled:opacity-40 enabled:hover:bg-brand-700 transition-colors cursor-pointer disabled:cursor-not-allowed"
           >
             <Send size={15} />
           </button>

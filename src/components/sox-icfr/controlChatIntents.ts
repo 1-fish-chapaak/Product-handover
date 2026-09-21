@@ -1,0 +1,189 @@
+import type { ChatAction, ChatActionId } from './controlChatActions';
+import type { Situation } from './controlChatScript';
+import { listOf } from './controlChatScript';
+import type { Control, DesignPoint, Role, TestResult } from './types';
+
+/**
+ * Typing, understood as far as it honestly can be.
+ *
+ * The buttons lead — they are the contract. This reads a sentence and tries to
+ * land it on one of those same actions, so a typed "run the validation" and
+ * the button beside it are the identical call. Three rules:
+ *
+ *  · An intent is carried out only if the PAGE would carry it out. Usually
+ *    that means the button was on offer; the one exception is the validation,
+ *    which the rail hides while a document is outstanding but the page would
+ *    still run — a typed instruction means it, so it runs, with a warning
+ *    about what it will cost. Nothing here gets round a gate the store holds.
+ *  · A request Ira understands but cannot do gets the reason, not a shrug:
+ *    "I can't run it — the design is already concluded."
+ *  · Anything else gets an honest fallback that names what it CAN do on this
+ *    step. A copilot that says "I didn't understand" and stops has made the
+ *    reader's problem their own again.
+ *
+ * No natural-language model sits behind this and none is pretended: it is a
+ * short list of phrasings an auditor actually types, matched in order.
+ */
+
+export type Intent =
+  | { kind: 'action'; action: ChatAction; note?: string }
+  | { kind: 'mark'; pointId: string; label: string; result: TestResult }
+  | { kind: 'reply'; text: string };
+
+export interface IntentCtx {
+  control: Control;
+  s: Situation;
+  role: Role;
+  /** Exactly what the buttons offer right now — the one guard. */
+  actions: ChatAction[];
+  /** The live prompt, so "what now?" is answered with the same words. */
+  promptText: string;
+}
+
+const has = (t: string, ...words: string[]) => words.some(w => t.includes(w));
+
+/** The code an attribute-level check inherits from its attribute — 5.1 and
+ *  the like. Control-level checks have none; they are matched on their words. */
+function codeOf(control: Control, p: DesignPoint): string | null {
+  if (!p.stepId) return null;
+  return control.operating.steps.find(s => s.id === p.stepId)?.code ?? null;
+}
+
+function findPoint(control: Control, ref: string): DesignPoint | undefined {
+  const needle = ref.trim().toLowerCase();
+  if (!needle) return undefined;
+  const byCode = control.design.points.find(p => (codeOf(control, p) ?? '').toLowerCase() === needle);
+  if (byCode) return byCode;
+  return control.design.points.find(p => p.text.toLowerCase().includes(needle));
+}
+
+const labelOf = (control: Control, p: DesignPoint): string => {
+  const code = codeOf(control, p);
+  return code ? `check ${code}` : `“${p.text.replace(/\.$/, '')}”`;
+};
+
+/** Why an action the reader asked for is not on offer. Read off the same
+ *  situation the buttons are, so the two can never disagree. */
+function refusal(id: ChatActionId, { s, role }: IntentCtx): string {
+  if (s.sealed) return 'This engagement is signed off — nothing on this control can move now.';
+  if (role !== 'auditor' && (id === 'ira-run' || id === 'conclude-effective' || id === 'conclude-ineffective')) {
+    return `That one is the auditor’s. You are viewing as ${role === 'reviewer' ? 'the reviewer' : 'the risk owner'}, so I can’t do it from here.`;
+  }
+  if (id === 'approve-design') {
+    if (role !== 'reviewer') return 'Only the reviewer approves a design conclusion. Switch hats and I can do it.';
+    if (s.ownConclusion) return 'You concluded this design yourself, so somebody else has to approve it — four eyes.';
+    if (s.approvedBy) return `${s.approvedBy.by} has already approved it.`;
+    return 'There is no concluded design to approve yet.';
+  }
+  if (id === 'ira-run') {
+    return s.iraBlocked ? `I can’t run it — ${s.iraBlocked}.` : 'There is nothing to assess just now.';
+  }
+  if (id === 'conclude-effective') {
+    if (s.designResult !== 'Not tested') return `The design is already concluded ${s.designResult.toLowerCase()}. It has to be reopened or returned before it changes.`;
+    if (!s.complete) return `Effective is held until every required element is accounted for — ${plural(s.missing.length, 'element')} still outstanding.`;
+    if (s.checksUnmarked > 0) return `Effective is held until every check is marked — ${plural(s.checksUnmarked, 'check')} to go.`;
+    return 'Not yet — the design is not ready to conclude.';
+  }
+  if (id === 'conclude-ineffective') {
+    if (s.designResult !== 'Not tested') return `The design is already concluded ${s.designResult.toLowerCase()}.`;
+    return 'Not yet — the design is not ready to conclude.';
+  }
+  return 'I can’t do that from here.';
+}
+
+const plural = (n: number, one: string, many = `${one}s`) => `${n} ${n === 1 ? one : many}`;
+
+/** What Ira can do right now, said as a list — the fallback's whole value. */
+function capabilities(ctx: IntentCtx): string {
+  const { actions, s, role } = ctx;
+  const can = actions.map(a => a.does ?? a.label.toLowerCase());
+  if (role === 'auditor' && s.step === 'design' && s.checksTotal > 0 && s.designResult === 'Not tested' && !s.locked) {
+    can.push('mark one check — try “pass 5.1” or “fail 5.2”');
+  }
+  can.push('tell you where this control stands');
+  return listOf(can, 4);
+}
+
+export function readIntent(raw: string, ctx: IntentCtx): Intent {
+  const t = raw.trim().toLowerCase();
+  const { control, s, actions } = ctx;
+  const offered = (id: ChatActionId) => actions.find(a => a.id === id);
+  const take = (id: ChatActionId): Intent => {
+    const a = offered(id);
+    if (a) return { kind: 'action', action: a };
+    // Not offered is not the same as not allowed. The rail leads with one thing
+    // at a time, so the validation is not shown while a document is still
+    // outstanding — but the page would run it, and somebody who types the
+    // instruction means it. Carry it out, and say what it will cost.
+    if (id === 'ira-run' && !s.iraBlocked && ctx.role === 'auditor' && !s.locked && !s.sealed) {
+      return {
+        kind: 'action',
+        action: { id: 'ira-run', label: 'Run the AI validation', said: raw.trim(), does: 'assess the design checks' },
+        note: s.missing.length > 0
+          ? `I can, but with ${listOf(s.missing.map(d => (d.kind === 'Custom' ? d.name : d.kind)))} still outstanding every check comes back failed — the evidence it would be read against is not there.`
+          : undefined,
+      };
+    }
+    return { kind: 'reply', text: refusal(id, ctx) };
+  };
+
+  if (!t) return { kind: 'reply', text: 'Say what you want done and I will do it, or press one of the buttons above.' };
+
+  // ── questions first: a question that contains "pass" is still a question ──
+  if (has(t, 'what can you', 'what do you do', 'help', 'options')) {
+    return { kind: 'reply', text: `On this step I can ${capabilities(ctx)}.` };
+  }
+  if (has(t, "what's next", 'what next', 'what now', 'where are we', 'where am i', 'status', 'what should i')) {
+    return { kind: 'reply', text: ctx.promptText };
+  }
+  if (t.startsWith('why') || has(t, 'why is', 'why can')) {
+    if (s.step === 'design' && s.designResult !== 'Not tested' && !s.todApproved) {
+      return { kind: 'reply', text: 'Population, sample and testing all wait on the design being approved — a second pair of eyes on the conclusion before any of the work rests on it.' };
+    }
+    if (s.step === 'population' && s.yePending) {
+      return { kind: 'reply', text: `It is an annual control: it only operates once, at the year end, so there is nothing to test until ${s.yePending.until}.` };
+    }
+    if (s.step === 'population' && s.popBlock) return { kind: 'reply', text: s.popBlock };
+    if (s.step === 'design' && s.missing.length > 0) {
+      return { kind: 'reply', text: `Because the design cannot be tested against documents that are not there — ${listOf(s.missing.map(d => (d.kind === 'Custom' ? d.name : d.kind)))} still outstanding.` };
+    }
+    return { kind: 'reply', text: ctx.promptText };
+  }
+
+  // ── mark one check ────────────────────────────────────────────────────────
+  const mark = /\b(pass|fail)\b/.exec(t);
+  if (mark && !has(t, 'all')) {
+    const result: TestResult = mark[1] === 'pass' ? 'Pass' : 'Fail';
+    const ref = t.replace(/\b(pass|fail|mark|the|check|as|it|please)\b/g, ' ').trim();
+    const point = findPoint(control, ref);
+    if (!point) {
+      const codes = control.design.points.map(p => codeOf(control, p)).filter(Boolean) as string[];
+      return { kind: 'reply', text: codes.length
+        ? `I could not tell which check you mean. This control has ${listOf(codes, 5)} — try “${result.toLowerCase()} ${codes[0]}”.`
+        : 'I could not tell which check you mean — name a few words from it and I will find it.' };
+    }
+    if (ctx.role !== 'auditor' || s.locked || s.designResult !== 'Not tested') {
+      return { kind: 'reply', text: refusal('conclude-effective', ctx) };
+    }
+    return { kind: 'mark', pointId: point.id, label: labelOf(control, point), result };
+  }
+  if (mark && has(t, 'all')) {
+    return { kind: 'reply', text: 'I don’t mark every check in one go — that button came off the page on purpose, because a design check is a judgement each time. I can read the evidence and assess them, or you can mark them one by one.' };
+  }
+
+  // ── the real actions ──────────────────────────────────────────────────────
+  if (has(t, 'run', 'validate', 'validation', 'assess', 'check the evidence', 'ira')) return take('ira-run');
+  if (has(t, 'ineffective', 'not effective', 'fails design')) return take('conclude-ineffective');
+  if (has(t, 'effective', 'conclude', 'sign off the design')) return take('conclude-effective');
+  if (has(t, 'approve', 'sign it off', 'countersign')) return take('approve-design');
+  if (has(t, 'send it back', 'send back', 'return it', 'reject')) {
+    const a = offered('show-step');
+    return a ? { kind: 'action', action: a } : { kind: 'reply', text: 'There is nothing to send back just now.' };
+  }
+  if (has(t, 'show', 'take me', 'open', 'go to', 'where is', 'scroll')) {
+    const a = offered('show-step');
+    return a ? { kind: 'action', action: a } : { kind: 'reply', text: ctx.promptText };
+  }
+
+  return { kind: 'reply', text: `I couldn’t place that. On this step I can ${capabilities(ctx)}.` };
+}

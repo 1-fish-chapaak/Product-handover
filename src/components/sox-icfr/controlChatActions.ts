@@ -37,10 +37,14 @@ export interface ChatAction {
   primary?: boolean;
   /** For the actions that only move the page: which step to land on. */
   focus?: ChatStepId;
+  /** The same offer as a verb phrase, for when Ira lists what it can do in a
+   *  sentence. Button labels address the reader ("Show me…"), which reads
+   *  backwards inside "I can …". */
+  does?: string;
 }
 
-const show = (label: string, said: string, focus: ChatStepId): ChatAction =>
-  ({ id: 'show-step', label, said, focus });
+const show = (label: string, said: string, focus: ChatStepId, does = 'show you where it is on the page'): ChatAction =>
+  ({ id: 'show-step', label, said, focus, does });
 
 export function actionsFor(s: Situation, role: Role): ChatAction[] {
   // A sealed engagement or a countersigned paper is a record, not a workspace.
@@ -57,7 +61,7 @@ export function actionsFor(s: Situation, role: Role): ChatAction[] {
     if (s.designResult !== 'Not tested' && !s.approvedBy) {
       // Four eyes: the store refuses an approval from whoever concluded it, so
       // Ira does not offer one either — it offers the honest way out instead.
-      if (!s.ownConclusion) out.push({ id: 'approve-design', label: 'Approve the design', said: 'Approve the design.', primary: true });
+      if (!s.ownConclusion) out.push({ id: 'approve-design', label: 'Approve the design', said: 'Approve the design.', primary: true, does: 'approve the design conclusion' });
       out.push(show('Send it back with a note', 'I want to send it back.', 'design'));
     }
     if (s.preparerSigned && !s.reviewerSigned && !s.ownPaper) out.push(show('Take me to the sign-off', 'Take me to the sign-off.', 'signoff'));
@@ -77,13 +81,13 @@ export function actionsFor(s: Situation, role: Role): ChatAction[] {
     }
     if (s.checksUnmarked > 0) {
       const out: ChatAction[] = [];
-      if (!s.iraBlocked) out.push({ id: 'ira-run', label: `Assess all ${s.checksTotal} checks for me`, said: 'Run the AI validation over the design checks.', primary: true });
+      if (!s.iraBlocked) out.push({ id: 'ira-run', label: `Assess all ${s.checksTotal} checks for me`, said: 'Run the AI validation over the design checks.', primary: true, does: 'read the evidence and assess every design check' });
       out.push(show('I’ll mark them myself', 'I’ll mark them myself.', 'design'));
       return out;
     }
     if (s.checksTotal > 0 && s.iraStale) {
       return [
-        { id: 'ira-run', label: 'Re-run the AI validation', said: 'Re-run the validation against the new evidence.', primary: true },
+        { id: 'ira-run', label: 'Re-run the AI validation', said: 'Re-run the validation against the new evidence.', primary: true, does: 'read the new evidence and assess the checks again' },
         show('Conclude anyway', 'Take me to the conclusion.', 'design'),
       ];
     }
@@ -91,9 +95,9 @@ export function actionsFor(s: Situation, role: Role): ChatAction[] {
     // element is accounted for and no check is unmarked; the same gate here.
     const out: ChatAction[] = [];
     if (s.complete && s.checksUnmarked === 0) {
-      out.push({ id: 'conclude-effective', label: 'Design effective', said: 'Conclude the design effective.', primary: s.checksFailed === 0 });
+      out.push({ id: 'conclude-effective', label: 'Design effective', said: 'Conclude the design effective.', primary: s.checksFailed === 0, does: 'conclude the design effective' });
     }
-    out.push({ id: 'conclude-ineffective', label: 'Design ineffective', said: 'Conclude the design ineffective.', primary: s.checksFailed > 0 });
+    out.push({ id: 'conclude-ineffective', label: 'Design ineffective', said: 'Conclude the design ineffective.', primary: s.checksFailed > 0, does: 'conclude the design ineffective' });
     return out;
   }
 
