@@ -28,6 +28,8 @@ import type { ExceptionRole } from '../../hooks/useAppState';
 import { useCan, useCurrentUser } from '../../context/CurrentUserContext';
 import { loadHandoffLink } from '../reports/atr-upload/handoff';
 import { appendEvents, caseEvents, hasTimeline, type CaseAtrLink } from '../reports/atrTimeline';
+import { useNotify } from '../../notifications/NotificationContext';
+import { caseNotifications, commentNotification, reportNameFor, ROSTER } from '../../notifications/triggers/caseTriggers';
 import { useAuditLog } from '../../context/AdminDataContext';
 import {
   ReviewClassificationDrawer,
@@ -411,19 +413,48 @@ export default function ManageExceptionsView({ role, setRole, onBack, embedded =
   // runs exactly once per change — React double-invokes updaters in dev — and
   // after the caller's synchronous writes to the case's detail record (plan
   // text, completion note, evidence) have landed.
+  // The same committed diff also drives the notification map: every case that
+  // changed in this commit produces its Exceptions / Action Hub events, sharing
+  // one operation key so bulk operations collapse into rollups.
+  const notify = useNotify();
   const prevExceptionsRef = useRef<GrcException[]>(localExceptions);
   useEffect(() => {
     const prev = prevExceptionsRef.current;
     prevExceptionsRef.current = localExceptions;
-    if (prev === localExceptions || !atrLink || !hasTimeline(atrLink.reportId)) return;
+    if (prev === localExceptions) return;
     const { name, role: r } = actorRef.current;
-    const eventRole = r === 'auditor' ? 'Auditor' : 'Risk Owner';
-    const events = localExceptions.flatMap(n => {
-      const p = prev.find(x => x.id === n.id);
-      return p && p !== n ? caseEvents(p, n, GRC_CASE_DETAILS[n.id], name, eventRole, atrLink) : [];
+    const changed = localExceptions.filter(n => { const p = prev.find(x => x.id === n.id); return p && p !== n; });
+    if (changed.length === 0) return;
+    const operationKey = `op-${Date.now()}`;
+    changed.forEach(n => {
+      const p = prev.find(x => x.id === n.id)!;
+      caseNotifications(p, n, GRC_CASE_DETAILS[n.id], { actor: name, role: r, operationKey, bulkSize: changed.length }).forEach(input => notify(input));
     });
-    if (events.length) appendEvents(atrLink.reportId, events);
-  }, [localExceptions, atrLink]);
+    // Linked ATR: record the actions on its Report Snapshot trail and, since a
+    // saved ATR is an issued document, tell its owner and auditor it drifted.
+    if (!atrLink || !hasTimeline(atrLink.reportId)) return;
+    const eventRole = r === 'auditor' ? 'Auditor' : 'Risk Owner';
+    const events = changed.flatMap(n => caseEvents(prev.find(x => x.id === n.id)!, n, GRC_CASE_DETAILS[n.id], name, eventRole, atrLink));
+    if (events.length) {
+      appendEvents(atrLink.reportId, events);
+      // Report-level links record without rewriting an observation; the report
+      // has still drifted from what was issued, so its owner and auditor hear.
+      const patched = events;
+      if (patched.length) {
+        const reportName = reportNameFor(atrLink.reportId);
+        notify({
+          eventId: 'ATR-07',
+          title: `“${reportName}” changed after issue — ${patched.length} amendment${patched.length === 1 ? '' : 's'}`,
+          message: `${name} (${eventRole}) acted on ${changed.length === 1 ? changed[0].id : `${changed.length} cases`} linked to ${atrLink.observationTitle ? `“${atrLink.observationTitle}”` : 'this report'}: ${patched.map(e => e.summary).join('; ')}. Review whether a re-issue is needed.`,
+          actor: name,
+          facts: [{ label: 'Report', value: reportName }, ...(atrLink.observationTitle ? [{ label: 'Observation', value: atrLink.observationTitle }] : []), { label: 'Changed', value: patched.map(e => e.summary).join(' · ') }, { label: 'By', value: `${name} · ${eventRole}` }, { label: 'Re-issue', value: 'Review recommended' }],
+          recipients: [ROSTER.engagementOwner, ROSTER.engagementAuditor],
+          watchers: [{ name: 'Report recipients', role: 'Shared with' }],
+          link: { view: 'reports', ref: { kind: 'report', id: atrLink.reportId } }, linkLabel: 'Open Report Snapshot',
+        });
+      }
+    }
+  }, [localExceptions, atrLink, notify]);
 
   const updateExceptions = (updater: (prev: GrcException[]) => GrcException[]) => {
     setLocalExceptions(prev => {
@@ -485,6 +516,8 @@ export default function ManageExceptionsView({ role, setRole, onBack, embedded =
     });
     markCommentUnread(ids, recipient);
     setCommentTick(t => t + 1);
+    // EXC-15 — other participants (and anyone @mentioned, always).
+    ids.forEach(id => { const ex = exceptions.find(e => e.id === id); if (ex) notify(commentNotification(ex, body, actorRef.current.name, persona === 'auditor' ? 'auditor' : 'risk-owner', attachment)); });
     logEvent({
       action: 'Update',
       description: ids.length > 1

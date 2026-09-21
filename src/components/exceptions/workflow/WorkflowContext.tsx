@@ -1,4 +1,6 @@
-import { createContext, useContext, useEffect, useState, useCallback } from 'react';
+import { createContext, useContext, useEffect, useState, useCallback, useRef } from 'react';
+import { useNotify } from '../../../notifications/NotificationContext';
+import { approvalNotifications } from '../../../notifications/triggers/approvalTriggers';
 import { GRC_CASE_DETAILS, type GrcActivityEntry } from '../../../data/mockData';
 import type {
   Persona, WorkflowTemplate, Assignment, ColumnPermission, WorkflowLevel, LevelState,
@@ -197,6 +199,23 @@ export function WorkflowProvider({
     }
     return base;
   });
+
+  // Approval-chain notifications (APR-01…05, APR-07) from each committed change
+  // to the assignments — an effect, so bulk decisions share one operation and
+  // React's double-invoked updaters can't double-send.
+  const notify = useNotify();
+  const prevAssignmentsRef = useRef<Assignment[]>(assignments);
+  useEffect(() => {
+    const prev = prevAssignmentsRef.current;
+    prevAssignmentsRef.current = assignments;
+    if (prev === assignments) return;
+    const operationKey = `apr-${Date.now()}`;
+    assignments.forEach(a => {
+      const p = prev.find(x => x.id === a.id);
+      if (p === a) return;
+      approvalNotifications(p, a, operationKey).forEach(input => notify(input));
+    });
+  }, [assignments, notify]);
   // Auditor routes are a SEPARATE config keyed by exception id — never an
   // assignment, so they don't touch the Risk Owner lifecycle/CTAs.
   const [auditorRoutes, setAuditorRoutes] = useState<Record<string, { levels: WorkflowLevel[]; name: string }>>(() => {

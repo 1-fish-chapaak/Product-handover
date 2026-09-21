@@ -5,7 +5,7 @@
 // renderer can draw Screen 7 unchanged.
 
 import type { AtrObservation, AtrReportData } from '../atrTypes';
-import type { EscalationMatrixConfig } from './escalationMatrix';
+import type { EscalationMatrixSet } from './escalationMatrix';
 
 /** The wizard stages. Drives the tab bar + screen router. */
 export type WizardStage =
@@ -110,6 +110,8 @@ export interface ReportMeta {
   /** Values of admin-added custom fields (Reports → Admin → Lists of Values →
    *  Report details fields), keyed by the field's key. */
   custom?: Record<string, string>;
+  /** The label each custom field was shown under, by key. */
+  customLabels?: Record<string, string>;
 }
 
 export interface ExtractionSession {
@@ -126,13 +128,16 @@ export interface ExtractionSession {
   /** Set when the user chooses "Skip Annexures & Proceed" — disables the
    *  Manage-Exceptions path on the decision screen. */
   annexuresSkipped?: boolean;
-  /** Escalation matrix configured on the Upload step — governs the reminder /
-   *  escalation mailer cadence for every open exception in this report. Defaults
-   *  to the standard preset when the user leaves it untouched. */
-  escalationMatrix?: EscalationMatrixConfig;
+  /** The escalation matrix in force when this report was extracted (Reports →
+   *  Admin) — the reminder / escalation cadence per observation severity that
+   *  chases every open exception in this report. */
+  escalationMatrix?: EscalationMatrixSet;
   /** The editable ATR working copy on Screen 7 (persisted so inline edits survive
    *  refresh). Derived from the session on first render if absent. */
   atrDraft?: AtrReportData;
+  /** ISO timestamp of the last "Save as Draft" — the report sits in Reports as
+   *  a draft ATR until Generate ATR issues it. */
+  draftSavedAt?: string;
   /** ISO timestamp set when the user clicks "Generate ATR" — the report's ATR is
    *  then listed in the Action Taken Report tab, and its CTA flips to "View ATR". */
   generatedAt?: string;

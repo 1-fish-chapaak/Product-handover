@@ -19,11 +19,16 @@ import UploadReportModal from './UploadReportModal';
 import ConfirmDialog from './ConfirmDialog';
 import AtrReportView from './AtrReportView';
 import AtrUploadTab from './atr-upload/AtrUploadTab';
+import NewReportModal, { type NewReportDraft } from './NewReportModal';
+import type { ReportMeta } from './atr-upload/types';
 import AdminTab from './atr-upload/screens/AdminTab';
 import { AdminSettingsProvider } from './atr-upload/adminStore';
 import ObservationExceptionsAction from './atr-upload/components/ObservationExceptionsAction';
 import { UPLOAD_REPORT_ID_PREFIX, loadUploadSession } from './atr-upload/uploadedReport';
+import { useNotify } from '../../notifications/NotificationContext';
+import { ROSTER } from '../../notifications/triggers/caseTriggers';
 import { consumeAtrResume, clearAtrDraft } from './atrDraft';
+import { loadTimeline, hasTimeline, appendEvents, replay, regeneratedEvent, carryCaseState } from './atrTimeline';
 import type { AtrMeta, AtrObservation, AtrInsight, AtrReportData } from './atrTypes';
 import { REPORT_TEMPLATES, GENERATED_REPORTS, SHARED_REPORTS, GENERATED_REPORTS_KEY } from '../../data/mockData';
 import { ATR_LIBRARY, EVIDENCE_LIBRARY, type AtrLibraryReport } from '../../data/atrLibrary';
@@ -208,6 +213,7 @@ function ReportsViewInner({
   const logEvent = useAuditLog();
   const { openShare } = useShare();
   const { can } = useCan();
+  const notify = useNotify();
   const [activeTab, setActiveTab] = useState<'templates' | 'my-reports' | 'shared-reports' | 'admin'>(() => {
     if (typeof window === 'undefined') return 'my-reports';
     const t = new URLSearchParams(window.location.search).get('tab');
@@ -240,6 +246,18 @@ function ReportsViewInner({
   // cross-cutting Bulk Audit engagement style.
   const [allTypeFilter, setAllTypeFilter] = useState<string[]>([]);
   const [atrUploadOpen, setAtrUploadOpen] = useState(false);
+  // Create Report opens the New Report modal first (the report details,
+  // template, visibility). An Action Taken Report then continues into the upload wizard
+  // with those details; the visibility waits in a ref until the ATR is
+  // generated and its card is saved.
+  const [newReportOpen, setNewReportOpen] = useState(false);
+  const [atrInitialMeta, setAtrInitialMeta] = useState<Partial<ReportMeta> | undefined>(undefined);
+  // The draft behind an open wizard, so Back reopens New Report where it was.
+  const [lastDraft, setLastDraft] = useState<NewReportDraft | null>(null);
+  // "Edit observations" on a generated ATR opens the wizard straight on that
+  // extracted report's observations.
+  const [atrOpenSessionId, setAtrOpenSessionId] = useState<string | null>(null);
+  const newReportExtrasRef = useRef<{ audience: NewReportDraft['audience'] } | null>(null);
   // When the wizard minimizes during extraction, present it as a small floating
   // toast so the rest of the app stays usable; otherwise it fills the screen.
   const [atrMinimized, setAtrMinimized] = useState(false);
@@ -475,7 +493,7 @@ function ReportsViewInner({
         tag: 'Internal Audit',
         generatedBy: r.generatedBy,
         generatedAt: r.generatedAt,
-        status: 'final',
+        status: r.status === 'draft' ? 'draft' : 'final',
         pages: r.pages ?? 1,
         queries: r.queries ?? 0,
         area: r.atrData!.meta.auditTitle ?? 'Custom ATR',
@@ -552,7 +570,7 @@ function ReportsViewInner({
       reviewedBy: a.atrData.meta.reviewedBy,
       observations: a.atrData.observations.map(o => o.title),
     });
-    return [`v${version}`, `${a.atrData.observations.length} observations`, `${plans} action plans`];
+    return [...(a.status === 'draft' ? ['Draft'] : []), `v${version}`, `${a.atrData.observations.length} observations`, `${plans} action plans`];
   };
   const allReportsUnified = useMemo<UnifiedRow[]>(() => {
     const ts = (d?: string) => { const t = d ? Date.parse(d) : NaN; return Number.isNaN(t) ? 0 : t; };
@@ -733,6 +751,12 @@ function ReportsViewInner({
     setViewingReport(null);
     setActiveTab('my-reports');
     addToast({ type: 'success', message: `Saved “${label}” to My Reports.` });
+    notify({
+      eventId: 'ATR-01', title: `Report created — “${newReport.name}”`, actor: 'Karan Mehta',
+      message: 'Created from the Action Taken Report template as a saved version.',
+      facts: [{ label: 'Report', value: newReport.name }, { label: 'Type', value: 'Action Taken Report' }, { label: 'Template', value: 'Action Taken Report' }],
+      recipients: [ROSTER.engagementOwner], link: { view: 'reports', ref: { kind: 'report', id: newReport.id } }, linkLabel: 'Open report',
+    });
   }, [addToast, uniqueReportName]);
 
   // Generate ATR in the Create Report wizard → save the ATR as a card in My
@@ -740,13 +764,79 @@ function ReportsViewInner({
   // session id so one extracted report is one card: a later "View report" on
   // the same session reopens the card (with any edits made in the reader)
   // rather than saving a duplicate or overwriting those edits.
-  const saveUploadedAtr = useCallback((sessionId: string, data: AtrReportData) => {
+  const saveUploadedAtr = useCallback((sessionId: string, data: AtrReportData, opts?: { regenerate?: boolean; draft?: boolean }) => {
     const id = `${UPLOAD_REPORT_ID_PREFIX}${sessionId}`;
     const existing = generatedReports.find(r => r.id === id);
+    const now = new Date();
+    const stamp = `${now.toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' })}, ${now.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' })}`;
+    const actor = 'You';
+    // ATR-02 — an ATR entered from outside the workflow; ATR-03 when it is
+    // issued over unfinished remediation (any plan still Pending / Overdue).
+    const notifyIssued = (saved: GeneratedReport, d: AtrReportData) => {
+      const plans = d.observations.flatMap(o => o.actionPlans ?? []);
+      const openPlans = plans.filter(pl => pl.status === 'Pending' || pl.status === 'Overdue' || pl.status === 'Not Due').length;
+      notify({
+        eventId: 'ATR-02', title: `ATR generated by upload — “${saved.name}”`, actor,
+        message: `${d.observations.length} observation${d.observations.length === 1 ? '' : 's'} · ${plans.length} action plan${plans.length === 1 ? '' : 's'}${d.meta.auditPeriod ? ` · audit period ${d.meta.auditPeriod}` : ''}. Saved to My Reports.`,
+        facts: [{ label: 'Report', value: saved.name }, { label: 'Observations', value: String(d.observations.length) }, { label: 'Action plans', value: String(plans.length) }, ...(d.meta.auditPeriod ? [{ label: 'Audit period', value: d.meta.auditPeriod }] : [])],
+        recipients: [ROSTER.engagementOwner, ROSTER.engagementAuditor], link: { view: 'reports', ref: { kind: 'report', id } }, linkLabel: 'Open report',
+      });
+      if (openPlans > 0) {
+        notify({
+          eventId: 'ATR-03', title: `“${saved.name}” issued with readiness incomplete`, actor,
+          message: `Issued with ${openPlans} of ${plans.length} action plan${plans.length === 1 ? '' : 's'} not yet implemented. Gates: Classified ✓ · Plan ✓ · Action Taken ${openPlans ? '✗' : '✓'} · Auditor Review ✗.`,
+          facts: [{ label: 'Report', value: saved.name }, { label: 'Gates', value: `Classified ✓ · Plan ✓ · Action Taken ✗ · Auditor Review ✗` }, { label: 'Open cases', value: String(openPlans) }, { label: 'Issued by', value: actor }],
+          recipients: [ROSTER.engagementOwner, ROSTER.engagementAuditor], watchers: [ROSTER.compliance], link: { view: 'reports', ref: { kind: 'report', id } }, linkLabel: 'Open report',
+        });
+      }
+    };
+
     let card = existing;
+    const wasDraft = existing?.status === 'draft';
+    if (card && card.atrData && (opts?.regenerate || opts?.draft || wasDraft)) {
+      // Refresh the saved card in place — a regenerate, a draft being updated,
+      // or a draft being issued. Whatever case management has attached to the
+      // saved report is carried over, and the change goes on the Report
+      // Snapshot trail (when the report has one) so it replays like any action.
+      const trail = hasTimeline(id) ? loadTimeline(id, card.atrData, { seedHistory: false }) : null;
+      const merged = trail ? carryCaseState(replay(trail), data) : data;
+      const base = merged.meta.reportName?.trim() || card.name;
+      const renamed = base !== card.name && !reportNameTaken(base);
+      const issuing = !opts?.draft;
+      const next = {
+        ...card,
+        atrData: merged,
+        name: renamed ? base : card.name,
+        pages: Math.max(1, merged.observations.length * 2),
+        queries: merged.observations.length,
+        status: issuing ? 'final' : 'draft',
+        // Issuing a draft stamps the generation; a regenerate keeps the original.
+        generatedAt: wasDraft && issuing ? stamp : card.generatedAt,
+      } as GeneratedReport;
+      const n = merged.observations.length;
+      if (trail) {
+        appendEvents(id, [regeneratedEvent(merged, actor,
+          `${n} observation${n === 1 ? '' : 's'} rebuilt from Create Report → Observations Extracted; case links and status carried over.`,
+          opts?.draft ? 'Draft updated from the extracted observations' : wasDraft ? 'Action Taken Report generated from the draft' : undefined)]);
+      }
+      setGeneratedReports(prev => prev.map(r => (r.id === id ? next : r)));
+      card = next;
+      if (opts?.draft) {
+        addToast({ type: 'success', message: `Draft “${next.name}” updated in Reports.` });
+      } else if (wasDraft) {
+        addToast({ type: 'success', message: `“${next.name}” has been generated and saved in Reports.` });
+        notifyIssued(next, merged);
+      } else {
+        addToast({ type: 'success', message: `“${next.name}” regenerated with the latest observations.` });
+        notify({
+          eventId: 'ATR-01', title: `Report regenerated — “${next.name}”`, actor,
+          message: `Rebuilt from its edited observations · ${n} observation${n === 1 ? '' : 's'}. Case links and status were carried over.`,
+          facts: [{ label: 'Report', value: next.name }, { label: 'Observations', value: String(n) }],
+          recipients: [ROSTER.engagementOwner], link: { view: 'reports', ref: { kind: 'report', id } }, linkLabel: 'Open report',
+        });
+      }
+    }
     if (!card) {
-      const now = new Date();
-      const stamp = `${now.toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' })}, ${now.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' })}`;
       // The ATR is named after the report it came from (the Report Name the
       // user confirmed on upload), not the Audit Title.
       const base = data.meta.reportName?.trim() || data.meta.auditTitle?.trim() || 'Action Taken Report';
@@ -758,25 +848,35 @@ function ReportsViewInner({
         tag: 'Internal Audit' as const,
         generatedBy: 'You',
         generatedAt: stamp,
-        status: 'final' as const,
+        // Save as Draft keeps the report in Reports without issuing it.
+        status: opts?.draft ? ('draft' as const) : ('final' as const),
         pages: Math.max(1, data.observations.length * 2),
         queries: data.observations.length,
         atrData: data,
         riskOwner: 'Tushar Goel',
         sourceReport: base,
+        // Visibility from the New Report modal that started this.
+        shareAudience: newReportExtrasRef.current?.audience,
       } as unknown as GeneratedReport;
+      newReportExtrasRef.current = null;
       const saved = card;
       setGeneratedReports(prev => (prev.some(r => r.id === id) ? prev : [saved, ...prev]));
-      addToast({ type: 'success', message: `“${saved.name}” has been generated and saved in Reports.` });
+      if (opts?.draft) {
+        addToast({ type: 'success', message: `“${saved.name}” saved as a draft in Reports.` });
+      } else {
+        addToast({ type: 'success', message: `“${saved.name}” has been generated and saved in Reports.` });
+        notifyIssued(saved, data);
+      }
     }
     // Close the wizard, land on My Reports, and open the report directly.
     setAtrUploadOpen(false);
     setAtrMinimized(false);
+    setAtrOpenSessionId(null);
     clearAtrDraft();
     setActiveTab('my-reports');
     setReportType('all');
     openReport(card);
-  }, [generatedReports, uniqueReportName, addToast, openReport]);
+  }, [generatedReports, uniqueReportName, reportNameTaken, addToast, openReport, notify]);
 
   // Inline edits saved from the library ATR view. Updating a generated card
   // patches it in place; editing a curated library ATR persists an override card
@@ -792,6 +892,61 @@ function ReportsViewInner({
     setViewingReport(v => (v && v.id === id ? ({ ...v, atrData: data } as GeneratedReport) : v));
     if (!opts?.quiet) addToast({ type: 'success', message: 'Changes saved.' });
   }, [addToast]);
+
+  // New Report → Create Report. An Action Taken Report continues into the upload wizard
+  // (Upload → Observations Extracted → Generate ATR) carrying the details just
+  // entered; an Internal Audit Report is created from its template right away,
+  // saved to My Reports and opened.
+  const createFromDraft = useCallback((draft: NewReportDraft) => {
+    setNewReportOpen(false);
+    if (draft.templateId === 'rt-007') {
+      setLastDraft(draft);
+      newReportExtrasRef.current = { audience: draft.audience };
+      setAtrInitialMeta(draft.meta);
+      setAtrMinimized(false);
+      setAtrUploadOpen(true);
+      return;
+    }
+    const template = REPORT_TEMPLATES.find(t => t.id === draft.templateId);
+    const now = new Date();
+    const stamp = `${now.toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' })}, ${now.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' })}`;
+    const sections = template?.sections ?? [];
+    const coverDetails = Object.fromEntries(
+      Object.entries({ ...draft.meta, ...(draft.meta.custom ?? {}) })
+        .filter(([k, v]) => k !== 'custom' && typeof v === 'string' && v.trim())
+        .map(([k, v]) => [k, (v as string).trim()]),
+    );
+    const newReport = {
+      id: `gr-new-${now.getTime()}`,
+      templateId: draft.templateId,
+      kind: 'ia' as const,
+      name: draft.name,
+      tag: 'Internal Audit' as const,
+      generatedBy: 'You',
+      generatedAt: stamp,
+      status: 'draft' as const,
+      pages: Math.max(1, sections.length),
+      queries: 0,
+      // An explicitly empty query set: the report starts as the template's
+      // sections, not the demo queries.
+      generatedQueries: [],
+      templateSections: sections,
+      shareAudience: draft.audience,
+      reportPeriod: draft.meta.auditPeriod || undefined,
+      coverDetails: Object.keys(coverDetails).length ? coverDetails : undefined,
+    } as unknown as GeneratedReport;
+    setGeneratedReports(prev => [newReport, ...prev]);
+    addToast({ type: 'success', message: `“${newReport.name}” has been created and saved in Reports.` });
+    notify({
+      eventId: 'ATR-01', title: `Report created — “${newReport.name}”`, actor: 'You',
+      message: `Created from the ${draft.templateName} template.`,
+      facts: [{ label: 'Report', value: newReport.name }, { label: 'Template', value: draft.templateName }, { label: 'Visibility', value: draft.audience === 'Only invited users' ? 'Private' : 'Public' }],
+      recipients: [ROSTER.engagementOwner], link: { view: 'reports', ref: { kind: 'report', id: newReport.id } }, linkLabel: 'Open report',
+    });
+    setActiveTab('my-reports');
+    setReportType('all');
+    openReport(newReport);
+  }, [addToast, notify, openReport]);
 
   // Offline banner — listens to online/offline events.
   const [isOffline, setIsOffline] = useState(() =>
@@ -867,8 +1022,19 @@ function ReportsViewInner({
   // visibility control and the share dialog are the same answer, and so the
   // choice survives closing the reader.
   const updateReportAudience = (reportId: string, audience: Audience) => {
+    const before = generatedReports.find(r => r.id === reportId)?.shareAudience ?? DEFAULT_REPORT_AUDIENCE;
     setGeneratedReports(prev => prev.map(r => (r.id === reportId ? { ...r, shareAudience: audience } : r)));
     setViewingReport(prev => (prev && prev.id === reportId ? { ...prev, shareAudience: audience } : prev));
+    // ATR-04 — a findings document opening up to the team.
+    if (audience !== DEFAULT_REPORT_AUDIENCE && before === DEFAULT_REPORT_AUDIENCE) {
+      const name = generatedReports.find(r => r.id === reportId)?.name ?? reportId;
+      notify({
+        eventId: 'ATR-04', title: `“${name}” is now ${audience}`, actor: 'You',
+        message: `Visibility changed from ${before} to ${audience}.`,
+        facts: [{ label: 'Report', value: name }, { label: 'Was', value: before }, { label: 'Now', value: audience }],
+        recipients: [{ name: 'You', role: 'Report owner' }], watchers: [{ name: 'Team', role: 'The team' }], link: { view: 'reports', ref: { kind: 'report', id: reportId } }, linkLabel: 'Open report',
+      });
+    }
   };
 
   const filteredReports = (() => {
@@ -908,11 +1074,19 @@ function ReportsViewInner({
       const uploadSession = loadUploadSession(viewingReport.id);
       return (
         <AtrReportView
-          report={{ ...viewingReport, atrData: viewingReport.atrData, status: 'final' }}
+          report={{ ...viewingReport, atrData: viewingReport.atrData, status: viewingReport.status === 'draft' ? 'draft' : 'final' }}
           onBack={() => setViewingReport(null)}
           onShare={onShare ? () => onShare(viewingReport.id, viewingReport.name, viewingReport.shareAudience ?? DEFAULT_REPORT_AUDIENCE, a => updateReportAudience(viewingReport.id, a)) : undefined}
           onSave={(data, opts) => saveAtrEdits(viewingReport.id, data, opts)}
-          onManageExceptions={onManageExceptions ? () => onManageExceptions(viewingReport.id) : undefined}
+          onEditObservations={uploadSession ? () => {
+            // Into the wizard, straight onto this report's extracted observations.
+            setLastDraft(null);
+            setAtrInitialMeta(uploadSession.meta);
+            setAtrOpenSessionId(uploadSession.id);
+            setViewingReport(null);
+            setAtrMinimized(false);
+            setAtrUploadOpen(true);
+          } : undefined}
           renderObservationActions={uploadSession ? (i, obs) => <ObservationExceptionsAction session={uploadSession} index={i} obs={obs} /> : undefined}
           // Report Snapshot: curated library ATRs get a believable remediation
           // history to explore; ATRs the user generated start from their real
@@ -923,8 +1097,6 @@ function ReportsViewInner({
             auditor: viewingReport.atrData.meta.reviewedBy ?? viewingReport.atrData.meta.preparedBy,
           }}
           templates={mergeTemplateOptions(REPORT_TEMPLATES, customTemplates)}
-          onApplyTemplate={updateReportAppliedTemplate}
-          onChangeAudience={updateReportAudience}
         />
       );
     }
@@ -1160,10 +1332,10 @@ function ReportsViewInner({
                 )}
                 <ToolbarViewToggle mode={viewMode} onChange={setViewMode} />
                 <button
-                  onClick={() => setAtrUploadOpen(true)}
+                  onClick={() => { setLastDraft(null); setNewReportOpen(true); }}
                   className="inline-flex items-center gap-2 h-10 px-4 text-[0.8125rem] font-semibold text-white bg-primary hover:bg-primary-hover rounded-lg transition-colors cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600/40 focus-visible:ring-offset-1 whitespace-nowrap"
                 >
-                  <Plus size={15} /> Create Report
+                  <FileText size={15} /> Create Report
                 </button>
               </>
             }
@@ -1742,9 +1914,12 @@ function ReportsViewInner({
                 aria-label="Create Report"
               >
                 <AtrUploadTab
-                  onClose={() => { setAtrUploadOpen(false); setAtrMinimized(false); clearAtrDraft(); }}
+                  onClose={() => { setAtrUploadOpen(false); setAtrMinimized(false); setAtrOpenSessionId(null); clearAtrDraft(); }}
                   onMinimizedChange={setAtrMinimized}
                   onGenerated={saveUploadedAtr}
+                  initialMeta={atrInitialMeta}
+                  initialSessionId={atrOpenSessionId ?? undefined}
+                  onBack={lastDraft ? () => { setAtrUploadOpen(false); setAtrMinimized(false); setNewReportOpen(true); } : undefined}
                 />
               </div>
             </motion.div>
@@ -1752,6 +1927,15 @@ function ReportsViewInner({
         </AnimatePresence>,
         document.body,
       )}
+
+      {/* New Report — the first step of Create Report. */}
+      <NewReportModal
+        open={newReportOpen}
+        onClose={() => setNewReportOpen(false)}
+        onCreate={createFromDraft}
+        nameTaken={reportNameTaken}
+        initialDraft={lastDraft}
+      />
 
       {/* Template Editor Modal */}
       <AnimatePresence>

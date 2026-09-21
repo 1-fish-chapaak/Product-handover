@@ -3,7 +3,7 @@ import { createPortal } from 'react-dom';
 import { AnimatePresence } from 'motion/react';
 import {
   ArrowLeft, ArrowRight, FileSpreadsheet, Plus, X, CheckCheck,
-  FileSearch, Paperclip, FileText, Eye, Link2,
+  FileSearch, Paperclip, FileText, Eye, Link2, RefreshCw, Save,
 } from 'lucide-react';
 import DataPickerModal, { type AttachmentSelection } from '../../../chat/DataPickerModal';
 import Checkbox from '../../../shared/Checkbox';
@@ -16,6 +16,7 @@ import { WizardFooter } from '../footerSlot';
 import ObservationExtractCard from '../components/ObservationExtractCard';
 import EditableReportHeader from '../components/EditableReportHeader';
 import { setFieldValue, recomputeCompleteness, hasUnresolved, OBSERVATION_FIELDS } from '../observationFields';
+import { toAtrReportData } from '../toAtrReportData';
 import type { ExtractedObservation, ExtractedFieldKey, ExtractedAnnexure, ReportMeta } from '../types';
 
 type Filter = 'all' | 'issues';
@@ -24,12 +25,17 @@ type Filter = 'all' | 'issues';
  *  editable cover-details header, its observations (select + fix fields), and
  *  each observation's annexures linked inline. Replaces the old separate
  *  extraction-summary and annexures steps. */
-export default function ReportDetailView({ onBack, onGenerate, onViewAtr }: {
-  onBack: () => void;
+export default function ReportDetailView({ onBack, onGenerate, onViewAtr, onRegenerate, onSaveDraft }: {
+  /** Back to a list of extracted reports — absent in the single-report journey. */
+  onBack?: () => void;
+  /** Save the report into Reports as a draft ATR without issuing it. */
+  onSaveDraft?: () => void;
   /** Generate the ATR for the first time — saves it into Reports (My Reports) and opens it. */
   onGenerate: () => void;
   /** Open the already-generated report, saved in Reports (shown once generated). */
   onViewAtr: () => void;
+  /** Regenerate the saved ATR from the observations as edited here. */
+  onRegenerate: () => void;
 }) {
   const { state, updateSession } = useAtrUpload();
   const { addToast } = useToast();
@@ -136,6 +142,11 @@ export default function ReportDetailView({ onBack, onGenerate, onViewAtr }: {
   const visible = observations.filter(o => (filter === 'all' ? true : hasUnresolved(o)));
   const viewing = annexures.find(a => a.id === viewId) ?? null;
   const generated = !!session.generatedAt;
+  // Edits made here since the ATR was generated — the saved report only picks
+  // them up on Regenerate.
+  const staleAtr = generated && !!session.atrDraft && JSON.stringify(toAtrReportData(session)) !== JSON.stringify(session.atrDraft);
+  const draftSaved = !generated && !!session.draftSavedAt;
+  const draftStale = draftSaved && !!session.atrDraft && JSON.stringify(toAtrReportData(session)) !== JSON.stringify(session.atrDraft);
 
   const footerNote = selected.length === 0
     ? 'Nothing selected — pick observations, or generate an empty ATR.'
@@ -175,10 +186,12 @@ export default function ReportDetailView({ onBack, onGenerate, onViewAtr }: {
   return (
     <div className="h-full flex flex-col min-h-0">
       <div className="flex-1 min-h-0 overflow-y-auto px-6 py-5">
-        {/* Back to the extracted-reports list */}
-        <button onClick={onBack} className="inline-flex items-center gap-1.5 h-7 -ml-1.5 mb-3 pl-1.5 pr-2.5 rounded-md text-[0.75rem] font-medium text-ink-500 hover:text-ink-900 hover:bg-draft-50 cursor-pointer transition-colors">
-          <ArrowLeft size={14} aria-hidden="true" /> Observations Extracted
-        </button>
+        {/* Back to the extracted-reports list (legacy hosts only) */}
+        {onBack && (
+          <button onClick={onBack} className="inline-flex items-center gap-1.5 h-7 -ml-1.5 mb-3 pl-1.5 pr-2.5 rounded-md text-[0.75rem] font-medium text-ink-500 hover:text-ink-900 hover:bg-draft-50 cursor-pointer transition-colors">
+            <ArrowLeft size={14} aria-hidden="true" /> Observations Extracted
+          </button>
+        )}
 
         {/* Editable report details header */}
         <EditableReportHeader meta={session.meta} onChange={patchMeta} />
@@ -251,22 +264,41 @@ export default function ReportDetailView({ onBack, onGenerate, onViewAtr }: {
         )}
       </div>
 
-      {/* Footer — generate the ATR (first time), or view the one already generated. */}
+      {/* Footer — generate the ATR (first time); afterwards view it, or
+          regenerate it from the observations as edited here. */}
       <WizardFooter>
         <div className="flex items-center justify-between gap-3 flex-wrap border-t border-canvas-border bg-canvas-elevated px-6 py-3">
           <p className="text-[0.75rem] text-ink-500">
             {generated
-              ? <span className="text-compliant-700 font-medium">Action Taken Report generated · saved in Reports.</span>
-              : footerNote}
+              ? staleAtr
+                ? <span className="text-high-700 font-medium">Observations edited since the ATR was generated — regenerate to update the saved report.</span>
+                : <span className="text-compliant-700 font-medium">Action Taken Report generated · saved in Reports and up to date with these observations.</span>
+              : draftSaved
+                ? draftStale
+                  ? <span className="text-high-700 font-medium">Draft saved in Reports · edited since — save again to update it, or generate the ATR.</span>
+                  : <span className="text-ink-600"><span className="text-compliant-700 font-medium">Draft saved in Reports.</span> Generate the ATR when the observations are ready.</span>
+                : footerNote}
           </p>
           {generated ? (
-            <Button variant="primary" size="md" leftIcon={<Eye size={15} />} onClick={onViewAtr}>
-              View report
-            </Button>
+            <div className="flex items-center gap-2">
+              <Button variant={staleAtr ? 'outline' : 'primary'} size="md" leftIcon={<Eye size={15} />} onClick={onViewAtr}>
+                View report
+              </Button>
+              <Button variant={staleAtr ? 'primary' : 'outline'} size="md" leftIcon={<RefreshCw size={15} />} onClick={onRegenerate} title="Rebuild the saved ATR from these observations — case links and status are kept">
+                Regenerate ATR
+              </Button>
+            </div>
           ) : (
-            <Button variant="primary" size="md" leftIcon={<FileText size={15} />} rightIcon={<ArrowRight size={15} />} onClick={onGenerate}>
-              Generate ATR
-            </Button>
+            <div className="flex items-center gap-2">
+              {onSaveDraft && (
+                <Button variant="outline" size="md" leftIcon={<Save size={15} />} onClick={onSaveDraft} title="Keep this report in Reports as a draft — nothing is issued yet">
+                  {draftSaved ? 'Update draft' : 'Save as Draft'}
+                </Button>
+              )}
+              <Button variant="primary" size="md" leftIcon={<FileText size={15} />} rightIcon={<ArrowRight size={15} />} onClick={onGenerate}>
+                Generate ATR
+              </Button>
+            </div>
           )}
         </div>
       </WizardFooter>

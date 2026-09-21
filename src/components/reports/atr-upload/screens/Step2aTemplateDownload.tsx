@@ -7,9 +7,6 @@ import { Button } from '../../../shared/Button';
 import { WizardFooter } from '../footerSlot';
 import { downloadExcelTemplate, downloadWordTemplate } from '../../atrTemplate';
 import { useToast } from '../../../shared/Toast';
-import ReportDetailsForm, { type ReportDetailsValue } from '../components/ReportDetailsForm';
-import { stripExt } from '../reportFields';
-import type { ReportMeta } from '../types';
 
 // Smooth, gentle entrance for the picker cards.
 const EASE = [0.22, 1, 0.36, 1] as const;
@@ -94,14 +91,12 @@ function DownloadTemplateMenu({ downloaded, onPick }: {
 /** Screen 2A — download the IRAME template, fill offline, upload it back
  *  (+ optional annexures, mirroring the existing-report path). */
 export default function Step2aTemplateDownload({ onUpload }: {
-  onUpload: (file: File, annexures: File[], meta: Partial<ReportMeta>) => void;
+  onUpload: (file: File, annexures: File[]) => void;
 }) {
   const { addToast } = useToast();
   const [downloaded, setDownloaded] = useState<TemplateFormat | null>(null);
   const [templateFile, setTemplateFile] = useState<File | null>(null);
   const [annexures, setAnnexures] = useState<File[]>([]);
-  // Cover details + validity, tracked from the shared form (same as the report path).
-  const [details, setDetails] = useState<ReportDetailsValue>({ meta: {}, complete: false, duplicate: false, outstanding: [] });
   const templateInputRef = useRef<HTMLInputElement>(null);
   const annexInputRef = useRef<HTMLInputElement>(null);
 
@@ -112,14 +107,10 @@ export default function Step2aTemplateDownload({ onUpload }: {
   };
   const hasDownloaded = downloaded !== null;
 
-  const ready = !!templateFile && details.complete && !details.duplicate;
-
-  const outstanding = [templateFile ? null : 'the filled template', ...details.outstanding].filter((x): x is string => x !== null);
-  const outstandingLine = details.duplicate
-    ? `Report Number ${details.meta.reportNumber} is already used in ${details.meta.section} for ${details.meta.financialYear}. Enter a unique number.`
-    : outstanding.length === 1
-      ? `Add ${outstanding[0]} to continue.`
-      : `Still needed: ${outstanding.slice(0, -1).join(', ')} and ${outstanding[outstanding.length - 1]}.`;
+  // The report details were captured in the New Report modal; only the
+  // filled template gates extraction here.
+  const ready = !!templateFile;
+  const outstandingLine = 'Add the filled template to continue.';
 
   return (
     <div className="w-full">
@@ -207,15 +198,6 @@ export default function Step2aTemplateDownload({ onUpload }: {
           </div>
         </motion.div>
 
-        {/* Report details — same shared form as the upload path. */}
-        <motion.div
-          initial={{ opacity: 0, y: 8 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.45, ease: EASE, delay: 0.22 }}
-          className="mt-4"
-        >
-          <ReportDetailsForm onChange={setDetails} suggestedReportName={templateFile ? stripExt(templateFile.name) : undefined} intro="These print on the ATR cover. Confirm the classification and cover facts here." />
-        </motion.div>
       </div>
 
       <WizardFooter>
@@ -229,7 +211,7 @@ export default function Step2aTemplateDownload({ onUpload }: {
             variant="primary"
             rightIcon={<ArrowRight size={15} />}
             disabled={!ready}
-            onClick={() => ready && templateFile && onUpload(templateFile, annexures, details.meta)}
+            onClick={() => ready && templateFile && onUpload(templateFile, annexures)}
             title={ready ? undefined : outstandingLine}
           >
             Extract from template

@@ -283,3 +283,112 @@ export function summarizeMatrix(cfg: EscalationMatrixConfig): string {
   if (cfg.recurring.enabled) parts.push(`then every ${cfg.recurring.everyDays}d`);
   return parts.join(' · ');
 }
+
+// ─── Severity-aware matrix set ───
+// The admin configures the cadence per observation severity (Critical · High ·
+// Medium · Low). It can be one shared cadence for all four, or a different one
+// for each — the user decides with `mode`. Every consumer resolves the cadence
+// for an item through `matrixForSeverity`, so the engine above never needs to
+// know which mode is on.
+
+export type EscalationSeverity = 'Critical' | 'High' | 'Medium' | 'Low';
+export const ESCALATION_SEVERITIES: EscalationSeverity[] = ['Critical', 'High', 'Medium', 'Low'];
+
+export interface EscalationMatrixSet {
+  /** 'same' — one cadence chases every severity; 'per-severity' — each has its own. */
+  mode: 'same' | 'per-severity';
+  /** The shared cadence (used in 'same' mode, and as the fallback for an
+   *  observation whose severity is unknown / Not Applicable). */
+  all: EscalationMatrixConfig;
+  bySeverity: Record<EscalationSeverity, EscalationMatrixConfig>;
+}
+
+/** Severity presets — tighter the more severe. Each is a full, editable cadence. */
+const SEVERITY_PRESETS: Record<EscalationSeverity, Partial<EscalationMatrixConfig>> = {
+  Critical: {
+    initialTriggers: [3, 1],
+    reminders: [1, 1, 1],
+    escalations: [
+      { offsetDays: 1, cc: ['emp-rm'] },
+      { offsetDays: 1, cc: ['emp-mgr', 'emp-fh'] },
+      { offsetDays: 1, cc: ['emp-hia', 'emp-cro'] },
+    ],
+    recurring: { enabled: true, everyDays: 1, cc: ['emp-hia', 'emp-cro', 'emp-cfo'], untilStatusUpdated: true },
+  },
+  High: {},                                                   // the standard preset
+  Medium: {
+    initialTriggers: [3],
+    reminders: [3, 3],
+    escalations: [
+      { offsetDays: 3, cc: ['emp-rm'] },
+      { offsetDays: 3, cc: ['emp-mgr'] },
+    ],
+    recurring: { enabled: true, everyDays: 5, cc: ['emp-mgr'], untilStatusUpdated: true },
+  },
+  Low: {
+    initialTriggers: [7],
+    reminders: [7, 7],
+    escalations: [{ offsetDays: 7, cc: ['emp-rm'] }],
+    recurring: { enabled: false, everyDays: 7, cc: ['emp-rm'], untilStatusUpdated: true },
+  },
+};
+
+/** A fresh cadence for one severity (deep-cloned, safe to edit). */
+export function defaultMatrixForSeverity(severity: EscalationSeverity, enabled = DEFAULT_ESCALATION_MATRIX.enabled): EscalationMatrixConfig {
+  return JSON.parse(JSON.stringify({ ...DEFAULT_ESCALATION_MATRIX, ...SEVERITY_PRESETS[severity], enabled }));
+}
+
+export function cloneDefaultMatrixSet(): EscalationMatrixSet {
+  return {
+    mode: 'same',
+    all: cloneDefaultMatrix(),
+    bySeverity: Object.fromEntries(ESCALATION_SEVERITIES.map(s => [s, defaultMatrixForSeverity(s)])) as Record<EscalationSeverity, EscalationMatrixConfig>,
+  };
+}
+
+/** Coerce a severity-ish string ("High", "high", "Not Applicable") to one of the four. */
+export function toEscalationSeverity(v?: string | null): EscalationSeverity | null {
+  const s = (v ?? '').trim().toLowerCase();
+  return (ESCALATION_SEVERITIES.find(x => x.toLowerCase() === s) ?? null);
+}
+
+/** The cadence that governs an item of the given severity. */
+export function matrixForSeverity(set: EscalationMatrixSet, severity?: string | null): EscalationMatrixConfig {
+  if (set.mode === 'same') return set.all;
+  const sev = toEscalationSeverity(severity);
+  return sev ? set.bySeverity[sev] : set.all;
+}
+
+/** Read whatever was persisted — a legacy single cadence or a set — into a set.
+ *  A legacy cadence becomes the shared cadence, with the severity presets ready
+ *  behind it (sharing its on/off state). */
+export function normalizeEscalationSet(raw: unknown): EscalationMatrixSet {
+  const base = cloneDefaultMatrixSet();
+  if (!raw || typeof raw !== 'object') return base;
+  const r = raw as Partial<EscalationMatrixSet> & Partial<EscalationMatrixConfig>;
+  if (Array.isArray(r.initialTriggers)) {
+    // Legacy: one EscalationMatrixConfig.
+    const legacy = { ...DEFAULT_ESCALATION_MATRIX, ...(r as EscalationMatrixConfig) };
+    return {
+      mode: 'same',
+      all: legacy,
+      bySeverity: Object.fromEntries(ESCALATION_SEVERITIES.map(s => [s, defaultMatrixForSeverity(s, legacy.enabled)])) as Record<EscalationSeverity, EscalationMatrixConfig>,
+    };
+  }
+  return {
+    mode: r.mode === 'per-severity' ? 'per-severity' : 'same',
+    all: { ...base.all, ...(r.all ?? {}) },
+    bySeverity: Object.fromEntries(ESCALATION_SEVERITIES.map(s => [s, { ...base.bySeverity[s], ...(r.bySeverity?.[s] ?? {}) }])) as Record<EscalationSeverity, EscalationMatrixConfig>,
+  };
+}
+
+/** Whether any cadence in the set is switched on. */
+export const setEnabled = (set: EscalationMatrixSet): boolean =>
+  set.mode === 'same' ? set.all.enabled : ESCALATION_SEVERITIES.some(s => set.bySeverity[s].enabled);
+
+/** One-line recap of the whole set for cards and logs. */
+export function summarizeMatrixSet(set: EscalationMatrixSet): string {
+  if (set.mode === 'same') return `Same for all severities · ${summarizeMatrix(set.all)}`;
+  const on = ESCALATION_SEVERITIES.filter(s => set.bySeverity[s].enabled);
+  return on.length === 0 ? 'Escalation mailers off' : `Per severity · on for ${on.join(', ')}`;
+}

@@ -9,6 +9,7 @@ import {
 } from 'lucide-react';
 import { useToast } from '../shared/Toast';
 import { useAuditLog } from '../../context/AdminDataContext';
+import { useNotify } from '../../notifications/NotificationContext';
 import { useCan } from '../../context/CurrentUserContext';
 import { Button } from '../shared/Button';
 import {
@@ -820,6 +821,7 @@ interface DataSourcesViewProps {
 const DataSourcesView = forwardRef<DataSourcesViewHandle, DataSourcesViewProps>(function DataSourcesView({ onStatsChange, displayMode = 'loaded', onDetailChange }, ref) {
   const { addToast } = useToast();
   const logEvent = useAuditLog();
+  const notify = useNotify();
   const { can } = useCan();
   const prefersReducedMotion = useReducedMotion();
   const [tab, setTab] = useState<TabId>('all');
@@ -1062,6 +1064,14 @@ const DataSourcesView = forwardRef<DataSourcesViewHandle, DataSourcesViewProps>(
     if (!pendingRemove) return;
     const snapshots = pendingRemove;
     knowledge.removeMany(snapshots.map(s => s.id));
+    // DSH-03 — a source disappearing from under any dashboard built on it.
+    snapshots.forEach(src => notify({
+      eventId: 'DSH-03', title: `A source behind your dashboards was removed — ${src.name}`, actor: 'You',
+      message: `${src.name} (${src.type}) was ${INTEGRATED_TYPES.includes(src.type) ? 'disconnected' : 'deleted'} from Data Sources. Widgets built on it will stop refreshing.`,
+      facts: [{ label: 'Source', value: src.name }, { label: 'Type', value: src.type }, { label: 'Change', value: INTEGRATED_TYPES.includes(src.type) ? 'Disconnected' : 'Deleted' }, { label: 'By', value: 'You' }],
+      recipients: [{ name: 'Karan Mehta', role: 'Dashboard owner' }], watchers: [{ name: 'Priya Singh', role: 'Viewer' }],
+      link: { view: 'dashboards' }, linkLabel: 'Open dashboards', operationKey: `src-rm-${Date.now()}`, itemLabel: src.name,
+    }));
     const allIntegrated = snapshots.every(s => INTEGRATED_TYPES.includes(s.type));
     const verb = allIntegrated ? 'Disconnected' : 'Removed';
     const target = snapshots.length === 1

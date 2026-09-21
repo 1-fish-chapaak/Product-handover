@@ -15,6 +15,20 @@ const fmtDate = (iso: string) => {
   const d = new Date(iso + 'T00:00:00');
   return Number.isNaN(d.getTime()) ? iso : d.toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' });
 };
+// "DD Mon YYYY" → ISO "yyyy-mm-dd" (the reverse, for re-opening a saved draft).
+const MONTHS = ['jan', 'feb', 'mar', 'apr', 'may', 'jun', 'jul', 'aug', 'sep', 'oct', 'nov', 'dec'];
+const toIso = (label: string) => {
+  // en-GB prints "Sept", which Date() will not parse — match on the prefix.
+  const m = label.trim().match(/^(\d{1,2})\s+([A-Za-z]+)\s+(\d{4})$/);
+  const month = m ? MONTHS.indexOf(m[2].slice(0, 3).toLowerCase()) : -1;
+  if (!m || month < 0) return '';
+  return `${m[3]}-${String(month + 1).padStart(2, '0')}-${m[1].padStart(2, '0')}`;
+};
+// The stored "start – end" period back into its two ISO dates.
+const splitPeriod = (period?: string): [string, string] => {
+  const [a, b] = (period ?? '').split(/\s+[–-]\s+/);
+  return [a ? toIso(a) : '', b ? toIso(b) : ''];
+};
 
 function Field({ label, required, hint, children, className = '' }: { label: string; required?: boolean; hint?: string; children: ReactNode; className?: string }) {
   return (
@@ -67,12 +81,21 @@ const EMPTY_VALUES: Values = {
  * template) so they capture the same details. Reports validity + built meta up
  * via `onChange`.
  */
-export default function ReportDetailsForm({ onChange, intro, suggestedReportName }: {
+export default function ReportDetailsForm({ onChange, intro, suggestedReportName, omit = [], reportNameError, initial, showHeader = true }: {
   onChange: (v: ReportDetailsValue) => void;
   intro?: ReactNode;
+  /** Hide the "Report details" heading + intro when the host provides its own. */
+  showHeader?: boolean;
+  /** Values to start from — a draft the user is coming back to. */
+  initial?: Partial<ReportMeta>;
   /** The uploaded file's name (sans extension) — auto-fills Report Name until
    *  the user types their own. */
   suggestedReportName?: string;
+  /** Built-in fields the host already asks for elsewhere — left off the form
+   *  and off the completeness check. */
+  omit?: BuiltinReportField['key'][];
+  /** Shown under Report Name when the host rejects it (names are unique). */
+  reportNameError?: string;
 }) {
   const { currentUser } = useCurrentUser();
   // Audit SPOC is the signed-in user who's creating the ATR — never editable.
@@ -82,20 +105,24 @@ export default function ReportDetailsForm({ onChange, intro, suggestedReportName
   const { lov, isFieldRequired, isFieldHidden, reportFields } = useAdminSettings();
   const opts = (key: string) => lov(key).map(v => ({ value: v, label: v }));
   // Hidden fields (Reports → Admin) are left off the form entirely.
-  const builtinFields = BUILTIN_REPORT_FIELDS.filter(f => !isFieldHidden(f.key));
+  const builtinFields = BUILTIN_REPORT_FIELDS.filter(f => !isFieldHidden(f.key) && !omit.includes(f.key));
   const customFields = reportFields.custom.filter(f => !isFieldHidden(f.key));
 
-  // Everything starts empty so the user consciously fills each detail.
-  const [values, setValues] = useState<Values>(EMPTY_VALUES);
-  const [periodStart, setPeriodStart] = useState('');
-  const [periodEnd, setPeriodEnd] = useState('');
-  const [custom, setCustom] = useState<Record<string, string>>({});
+  // Everything starts empty so the user consciously fills each detail — unless
+  // they are coming back to a draft, which starts where they left it.
+  const [values, setValues] = useState<Values>(() => ({
+    ...EMPTY_VALUES,
+    ...(initial ? Object.fromEntries((Object.keys(EMPTY_VALUES) as BuiltinReportField['key'][]).filter(k => k !== 'auditPeriod' && initial[k]).map(k => [k, initial[k] as string])) : {}),
+  }));
+  const [periodStart, setPeriodStart] = useState(() => splitPeriod(initial?.auditPeriod)[0]);
+  const [periodEnd, setPeriodEnd] = useState(() => splitPeriod(initial?.auditPeriod)[1]);
+  const [custom, setCustom] = useState<Record<string, string>>(() => ({ ...(initial?.custom ?? {}) }));
   const [generatedOn] = useState(() => new Date().toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' }));
   const set = (key: BuiltinReportField['key'], v: string) => setValues(prev => ({ ...prev, [key]: v }));
 
   // Report Name follows the uploaded file's name until the user renames it —
   // then their name sticks, even if they swap the file.
-  const [reportNameTouched, setReportNameTouched] = useState(false);
+  const [reportNameTouched, setReportNameTouched] = useState(() => !!initial?.reportName?.trim());
   useEffect(() => {
     if (reportNameTouched) return;
     setValues(prev => (prev.reportName === (suggestedReportName ?? '') ? prev : { ...prev, reportName: suggestedReportName ?? '' }));
@@ -130,6 +157,7 @@ export default function ReportDetailsForm({ onChange, intro, suggestedReportName
         preparedBy: values.preparedBy.trim(),
         generatedOn,
         custom: Object.keys(trimmedCustom).length ? trimmedCustom : undefined,
+        customLabels: Object.keys(trimmedCustom).length ? Object.fromEntries(customFields.filter(f => trimmedCustom[f.key]).map(f => [f.key, f.label])) : undefined,
       },
       complete, duplicate, outstanding,
     });
@@ -152,13 +180,20 @@ export default function ReportDetailsForm({ onChange, intro, suggestedReportName
     }
     if (f.key === 'reportName') {
       return (
-        <Field key={f.key} label={f.label} required={required} hint={suggestedReportName && !reportNameTouched ? 'from the uploaded file · rename anytime' : 'names the report and its ATR'}>
+        <Field key={f.key} label={f.label} required={required} hint={suggestedReportName && !reportNameTouched ? 'from the uploaded file · rename anytime' : undefined}>
           <input
             value={values.reportName}
             onChange={e => { setReportNameTouched(true); set('reportName', e.target.value); }}
-            placeholder={suggestedReportName ? undefined : 'Upload a file to auto-fill, or type a name'}
-            className={INPUT_CLS}
+            placeholder={suggestedReportName ? undefined : 'e.g. Q3 Treasury Controls Review'}
+            aria-invalid={!!reportNameError}
+            className={`${INPUT_CLS} ${reportNameError ? 'border-risk-400 focus:border-risk-500 focus:ring-risk-500/10' : ''}`}
           />
+          {reportNameError && (
+            <p className="mt-1 flex items-start gap-1 text-[0.6875rem] text-risk-700 leading-snug">
+              <AlertCircle size={12} className="mt-px shrink-0" aria-hidden="true" />
+              {reportNameError}
+            </p>
+          )}
         </Field>
       );
     }
@@ -210,10 +245,12 @@ export default function ReportDetailsForm({ onChange, intro, suggestedReportName
 
   return (
     <div className="text-left">
-      <div className="mb-3.5">
-        <h3 className="text-[0.8125rem] font-semibold text-ink-900">Report details</h3>
-        <p className="text-[0.75rem] text-ink-500 mt-0.5">{intro ?? 'These print on the ATR cover. Confirm the classification and cover facts here.'}</p>
-      </div>
+      {showHeader && (
+        <div className="mb-3.5">
+          <h3 className="text-[0.8125rem] font-semibold text-ink-900">Report details</h3>
+          <p className="text-[0.75rem] text-ink-500 mt-0.5">{intro ?? 'These print on the ATR cover. Confirm the classification and cover facts here.'}</p>
+        </div>
+      )}
 
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-x-4 gap-y-3">
         {/* Built-in fields, in catalogue order: identity · classification ·
