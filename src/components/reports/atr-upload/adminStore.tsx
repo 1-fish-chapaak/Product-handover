@@ -7,7 +7,7 @@ import {
 import {
   CLASSIFICATION_OPTIONS, RISK_OPTIONS, ROOT_CAUSE_OPTIONS, SOLUTION_TYPE_OPTIONS, RISK_IMPLICATIONS_OPTIONS,
 } from './observationFields';
-import { type EscalationMatrixConfig, cloneDefaultMatrix } from './escalationMatrix';
+import { type EscalationMatrixSet, cloneDefaultMatrixSet, normalizeEscalationSet } from './escalationMatrix';
 import {
   BUILTIN_REPORT_FIELDS, DEFAULT_REPORT_FIELDS_CONFIG, builtinRequired, customFieldKey,
   type ReportFieldsConfig, type CustomReportField,
@@ -79,14 +79,15 @@ const STORAGE_KEY = 'irame.atr-admin.v1';
 
 interface AdminState {
   lovs: Record<string, string[]>;
-  escalation: EscalationMatrixConfig;
+  /** The escalation cadence per observation severity (or one shared cadence). */
+  escalation: EscalationMatrixSet;
   logs: TransactionLog[];
   /** Which report-details fields are mandatory + the admin-added custom fields. */
   reportFields: ReportFieldsConfig;
 }
 
 function loadState(): AdminState {
-  const base: AdminState = { lovs: cloneLovs(DEFAULT_LOVS), escalation: cloneDefaultMatrix(), logs: [], reportFields: { required: {}, hidden: {}, custom: [] } };
+  const base: AdminState = { lovs: cloneLovs(DEFAULT_LOVS), escalation: cloneDefaultMatrixSet(), logs: [], reportFields: { required: {}, hidden: {}, custom: [] } };
   try {
     const raw = localStorage.getItem(STORAGE_KEY);
     if (!raw) return base;
@@ -94,7 +95,8 @@ function loadState(): AdminState {
     return {
       // Merge so any newly-added LOV key falls back to its default.
       lovs: { ...base.lovs, ...(parsed.lovs ?? {}) },
-      escalation: parsed.escalation ?? base.escalation,
+      // A legacy single cadence (before severities) becomes the shared cadence.
+      escalation: parsed.escalation ? normalizeEscalationSet(parsed.escalation) : base.escalation,
       logs: Array.isArray(parsed.logs) ? parsed.logs : [],
       reportFields: {
         required: { ...(parsed.reportFields?.required ?? {}) },
@@ -117,8 +119,8 @@ export interface AdminSettingsValue {
   setLov: (key: string, values: string[]) => void;
   /** Restore a list to its shipped defaults. */
   resetLov: (key: string) => void;
-  escalation: EscalationMatrixConfig;
-  setEscalation: (next: EscalationMatrixConfig) => void;
+  escalation: EscalationMatrixSet;
+  setEscalation: (next: EscalationMatrixSet) => void;
   /** The action-level transaction log (newest first). */
   logs: TransactionLog[];
   /** Record one change made in Create Report. */
@@ -182,7 +184,7 @@ export function AdminSettingsProvider({ children }: { children: React.ReactNode 
   const resetLov = useCallback((key: string) => {
     setState(s => ({ ...s, lovs: { ...s.lovs, [key]: [...(DEFAULT_LOVS[key] ?? [])] } }));
   }, []);
-  const setEscalation = useCallback((next: EscalationMatrixConfig) => {
+  const setEscalation = useCallback((next: EscalationMatrixSet) => {
     setState(s => ({ ...s, escalation: next }));
   }, []);
 

@@ -112,12 +112,14 @@ test('a validation that contradicts an attestation stands over it', async ({ pag
   await failBtn.click();
   await page.waitForTimeout(500);
 
-  const aiTab = page.getByRole('button', { name: 'AI validation' }).first();
-  if (await aiTab.count()) { await aiTab.click(); await page.waitForTimeout(400); }
   const upload = page.getByRole('button', { name: /^(Upload file|Replace)$/ }).first();
   if (await upload.count()) { await upload.click(); await page.waitForTimeout(500); }
 
-  const run = page.getByRole('button', { name: /Run AI validation|Re-run/ }).first();
+  // Enabled only. Since 18 Sep the design-checks header carries a button of the
+  // same name, and it renders BEFORE this one — on a control whose TOD is
+  // already concluded that button is disabled, so `.first()` on the name alone
+  // waits forever on something this test never meant to click.
+  const run = page.locator('button:not([disabled])').filter({ hasText: /^(Run AI validation|Re-run)$/ }).first();
   await run.scrollIntoViewIfNeeded();
   await run.click();
   // the mocked validation takes four seconds on purpose

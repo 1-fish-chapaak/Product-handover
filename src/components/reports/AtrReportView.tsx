@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef, useMemo, useCallback } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { createPortal } from 'react-dom';
-import { ArrowLeft, Share2, Download, List, Pencil, Check, X, History, ShieldAlert, CalendarClock, Clock3, Link2, Paperclip, FileSpreadsheet } from 'lucide-react';
+import { ArrowLeft, Share2, Download, List, Pencil, Check, X, History, CalendarClock, Clock3, Link2, Paperclip, FileSpreadsheet, ListChecks, ChevronDown } from 'lucide-react';
 import DataPickerModal, { type AttachmentSelection } from '../chat/DataPickerModal';
 import AtrDocument from './AtrDocument';
 import type { AtrReportData, AtrMeta, AtrObservation, AtrLinkedAnnexure } from './atrTypes';
@@ -15,8 +15,7 @@ import AtrReviewDrawer from './AtrReviewDrawer';
 import { loadVersions, appendVersion, currentVersion, nowStamp } from './atrReview';
 import { loadTimeline, appendEvents, editEvent, annexureLinkedEvent, annexureUnlinkedEvent, replay, splitEvents, atrTimelineKey, fmtEventTime, type AtrTimeline, type TimelineSeed } from './atrTimeline';
 import AtrReportSnapshotPanel from './AtrReportSnapshotPanel';
-import { ApplyTemplateChip, ReportVisibilityChip } from './ReportBarControls';
-import { DEFAULT_REPORT_AUDIENCE, type Audience } from '../shared/audience';
+import type { Audience } from '../shared/audience';
 import { REPORT_TEMPLATES } from '../../data/mockData';
 import { reportGradient, type EditableTemplate } from './reportShared';
 
@@ -99,8 +98,9 @@ interface AtrReport {
   generatedBy?: string;
   generatedAt?: string;
   tag?: string;
-  /** Reports have no draft state — an ATR is issued, or frozen from edits. */
-  status?: 'final' | 'frozen';
+  /** 'draft' = saved from Create Report but not yet generated; 'final' =
+   *  issued; 'frozen' = locked from edits. */
+  status?: 'draft' | 'final' | 'frozen';
   atrData: AtrReportData;
   /** Format last applied from the command bar — restored when it reopens. */
   appliedTemplateId?: string;
@@ -110,20 +110,19 @@ interface AtrReport {
 /** Saved-ATR report page. Renders the generated Action Taken Report inside the
  *  shared reader workspace: plain page-level actions (no header bar), a persistent
  *  scroll-spy outline rail, and a constrained document column. */
-export default function AtrReportView({ report, onBack, onShare, onSave, onManageExceptions, renderObservationActions, templates = REPORT_TEMPLATES, onApplyTemplate, onChangeAudience, timelineSeed }: {
+export default function AtrReportView({ report, onBack, onShare, onSave, onEditObservations, renderObservationActions, templates = REPORT_TEMPLATES, timelineSeed }: {
   report: AtrReport;
   onBack: () => void;
+  /** Share — also where who-can-open lives, so the bar carries no visibility chip. */
   onShare?: () => void;
-  /** Formats listed in the command bar's Apply Template control. */
+  /** Formats, to resolve the one applied to this ATR (branding on the banner). */
   templates?: (typeof REPORT_TEMPLATES[number] | EditableTemplate)[];
-  /** Persist the applied format on the ATR so it survives a reopen. */
-  onApplyTemplate?: (reportId: string, templateId: string) => void;
-  /** Persist who can open this ATR. */
-  onChangeAudience?: (reportId: string, audience: Audience) => void;
   /** Persist inline edits to the saved ATR. Absent → the report is read-only. */
   onSave?: (data: AtrReportData, opts?: { quiet?: boolean }) => void;
   /** Opens the case-management (Manage Exceptions) view. Absent → button hidden. */
-  onManageExceptions?: () => void;
+  /** Open the extracted observations this ATR was generated from (Create
+   *  Report → Observations Extracted) to edit them and regenerate the ATR. */
+  onEditObservations?: () => void;
   /** Optional per-observation action slot, rendered in each observation card's
    *  header (e.g. the Manage Exceptions CTA on ATRs generated from an upload).
    *  Receives the 0-based index and the observation as currently rendered. */
@@ -137,28 +136,14 @@ export default function AtrReportView({ report, onBack, onShare, onSave, onManag
   // discard guard so leaving (or cancelling) only prompts when edits are unsaved.
   const editable = !!onSave;
   const [editing, setEditing] = useState(false);
-  // The format and the audience are saved properties of the ATR, the same two
-  // the standard reader carries, so an ATR opens on what was last chosen.
-  const [appliedTemplate, setAppliedTemplate] = useState<(typeof REPORT_TEMPLATES[number] | EditableTemplate) | null>(
+  const [editMenuOpen, setEditMenuOpen] = useState(false);
+  // The template was chosen when the report was created; it only brands the
+  // banner here (no Apply Template control on an ATR).
+  const appliedTemplate = useMemo<(typeof REPORT_TEMPLATES[number] | EditableTemplate) | null>(
     () => (report.appliedTemplateId ? templates.find(t => t.id === report.appliedTemplateId) ?? null : null),
+    [report.appliedTemplateId, templates],
   );
-  const [applyingTemplate, setApplyingTemplate] = useState(false);
-  const [audience, setAudience] = useState<Audience>(report.shareAudience ?? DEFAULT_REPORT_AUDIENCE);
   const { addToast } = useToast();
-  const handleApplyTemplate = (t: typeof REPORT_TEMPLATES[number] | EditableTemplate) => {
-    setApplyingTemplate(true);
-    window.setTimeout(() => {
-      setAppliedTemplate(t);
-      setApplyingTemplate(false);
-      onApplyTemplate?.(report.id, t.id);
-      addToast({ type: 'success', message: `Format "${t.name}" applied.` });
-    }, 700);
-  };
-  const handleAudienceChange = (next: Audience) => {
-    setAudience(next);
-    onChangeAudience?.(report.id, next);
-    addToast({ type: 'success', message: `Who can open this: ${next}` });
-  };
   // Save runs only after the user confirms.
   const [confirmingSave, setConfirmingSave] = useState(false);
   // ── Report Snapshot ──
@@ -384,10 +369,10 @@ export default function AtrReportView({ report, onBack, onShare, onSave, onManag
     >
       {/* Report actions — pinned to the top of the scroll area (page-coloured,
           borderless — no header-bar chrome) so they stay reachable on scroll. */}
-      <div className="sticky top-0 z-30 bg-canvas px-6 lg:px-12 xl:px-[124px] h-16 flex items-center justify-between gap-4 print:hidden">
+      <div className="sticky top-0 z-30 bg-canvas px-6 lg:px-12 xl:px-[124px] h-16 flex items-center justify-between gap-3 print:hidden">
         <button
           onClick={requestBack}
-          className="inline-flex items-center gap-1.5 h-9 px-3 text-[0.75rem] font-semibold text-ink-600 bg-canvas-elevated border border-canvas-border rounded-md hover:bg-canvas hover:text-ink-900 transition-colors cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600/30"
+          className="inline-flex items-center gap-1.5 h-9 px-3 text-[0.75rem] font-semibold whitespace-nowrap shrink-0 text-ink-600 bg-canvas-elevated border border-canvas-border rounded-md hover:bg-canvas hover:text-ink-900 transition-colors cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600/30"
         >
           <ArrowLeft size={14} /> Back to Reports
         </button>
@@ -397,71 +382,86 @@ export default function AtrReportView({ report, onBack, onShare, onSave, onManag
               {dirty && <span className="text-[0.6875rem] font-semibold uppercase tracking-[0.1em] text-mitigated-600 mr-1">Unsaved changes</span>}
               <button
                 onClick={requestCancel}
-                className="inline-flex items-center gap-1.5 h-9 px-3.5 text-[0.75rem] font-semibold text-ink-700 bg-canvas-elevated border border-canvas-border rounded-md hover:bg-canvas hover:border-ink-300/70 transition-colors cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600/30"
+                className="inline-flex items-center gap-1.5 h-9 px-3 text-[0.75rem] font-semibold whitespace-nowrap text-ink-700 bg-canvas-elevated border border-canvas-border rounded-md hover:bg-canvas hover:border-ink-300/70 transition-colors cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600/30"
               >
                 <X size={14} /> Cancel
               </button>
               <button
                 onClick={() => setConfirmingSave(true)}
                 disabled={!dirty}
-                className="inline-flex items-center gap-1.5 h-9 px-3.5 text-[0.75rem] font-semibold text-white bg-brand-600 rounded-md hover:bg-brand-700 transition-colors cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600/40 disabled:opacity-50 disabled:cursor-not-allowed"
+                className="inline-flex items-center gap-1.5 h-9 px-3 text-[0.75rem] font-semibold whitespace-nowrap text-white bg-brand-600 rounded-md hover:bg-brand-700 transition-colors cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600/40 disabled:opacity-50 disabled:cursor-not-allowed"
               >
                 <Check size={14} /> Save changes
               </button>
             </>
           ) : (
             <>
-              {/* The same format and visibility controls every other open
-                  report carries. */}
-              <ApplyTemplateChip
-                templates={templates as typeof REPORT_TEMPLATES[number][]}
-                activeId={appliedTemplate?.id ?? null}
-                activeName={appliedTemplate?.name ?? null}
-                onSelect={handleApplyTemplate}
-                busy={applyingTemplate}
-              />
-              <ReportVisibilityChip audience={audience} onChange={handleAudienceChange} disabled={!onChangeAudience} />
+              {/* A short bar: the template was chosen when the report was
+                  created, visibility lives in Share, and case work happens in
+                  Manage Exceptions — so none of those need a button here. */}
               <button
                 onClick={() => (snapshotOpen ? closeSnapshot() : openSnapshot())}
                 aria-pressed={snapshotOpen}
                 title="See the report, and every action taken on it, as of any moment"
-                className={`inline-flex items-center gap-1.5 h-9 px-3.5 text-[0.75rem] font-semibold border rounded-md transition-colors cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600/30 ${snapshotOpen ? 'text-brand-700 bg-brand-50 border-brand-200 hover:bg-brand-100' : 'text-ink-700 bg-canvas-elevated border-canvas-border hover:bg-canvas hover:border-ink-300/70'}`}
+                className={`inline-flex items-center gap-1.5 h-9 px-3 text-[0.75rem] font-semibold whitespace-nowrap border rounded-md transition-colors cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600/30 ${snapshotOpen ? 'text-brand-700 bg-brand-50 border-brand-200 hover:bg-brand-100' : 'text-ink-700 bg-canvas-elevated border-canvas-border hover:bg-canvas hover:border-ink-300/70'}`}
               >
                 <Clock3 size={14} /> Report Snapshot
               </button>
               <button
                 onClick={() => setReviewTab('comments')}
-                className="inline-flex items-center gap-1.5 h-9 px-3.5 text-[0.75rem] font-semibold text-ink-700 bg-canvas-elevated border border-canvas-border rounded-md hover:bg-canvas hover:border-ink-300/70 transition-colors cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600/30"
+                className="inline-flex items-center gap-1.5 h-9 px-3 text-[0.75rem] font-semibold whitespace-nowrap text-ink-700 bg-canvas-elevated border border-canvas-border rounded-md hover:bg-canvas hover:border-ink-300/70 transition-colors cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600/30"
               >
                 <History size={14} /> Activity
               </button>
-              {onManageExceptions && (
-                <button
-                  onClick={onManageExceptions}
-                  className="inline-flex items-center gap-1.5 h-9 px-3.5 text-[0.75rem] font-semibold text-ink-700 bg-canvas-elevated border border-canvas-border rounded-md hover:bg-canvas hover:border-ink-300/70 transition-colors cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600/30"
-                >
-                  <ShieldAlert size={14} /> Case Management
-                </button>
-              )}
-              {editable && !timeTravelling && (
-                <button
-                  onClick={() => setEditing(true)}
-                  className="inline-flex items-center gap-1.5 h-9 px-3.5 text-[0.75rem] font-semibold text-ink-700 bg-canvas-elevated border border-canvas-border rounded-md hover:bg-canvas hover:border-ink-300/70 transition-colors cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600/30"
-                >
-                  <Pencil size={14} /> Edit
-                </button>
+              {/* Edit — one control: the report itself (inline), or the
+                  observations it was generated from (Create Report → step 2). */}
+              {(editable || onEditObservations) && !timeTravelling && (
+                onEditObservations && editable ? (
+                  <div className="relative">
+                    <button
+                      onClick={() => setEditMenuOpen(o => !o)}
+                      aria-haspopup="menu"
+                      aria-expanded={editMenuOpen}
+                      className="inline-flex items-center gap-1.5 h-9 px-3 text-[0.75rem] font-semibold whitespace-nowrap text-ink-700 bg-canvas-elevated border border-canvas-border rounded-md hover:bg-canvas hover:border-ink-300/70 transition-colors cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600/30"
+                    >
+                      <Pencil size={14} /> Edit <ChevronDown size={13} className={`transition-transform ${editMenuOpen ? 'rotate-180' : ''}`} aria-hidden="true" />
+                    </button>
+                    {editMenuOpen && (
+                      <>
+                        <div className="fixed inset-0 z-30" onClick={() => setEditMenuOpen(false)} />
+                        <div role="menu" className="absolute right-0 top-full mt-1.5 w-[260px] z-40 rounded-lg bg-canvas-elevated border border-canvas-border shadow-xl overflow-hidden py-1">
+                          <button role="menuitem" onClick={() => { setEditMenuOpen(false); setEditing(true); }} className="w-full flex items-start gap-2.5 px-3 py-2 text-left hover:bg-canvas cursor-pointer">
+                            <Pencil size={14} className="mt-0.5 shrink-0 text-ink-400" aria-hidden="true" />
+                            <span><span className="block text-[0.75rem] font-semibold text-ink-800">Report</span><span className="block text-[0.6875rem] text-ink-500">Edit the text of this report inline</span></span>
+                          </button>
+                          <button role="menuitem" onClick={() => { setEditMenuOpen(false); onEditObservations(); }} className="w-full flex items-start gap-2.5 px-3 py-2 text-left hover:bg-canvas cursor-pointer">
+                            <ListChecks size={14} className="mt-0.5 shrink-0 text-ink-400" aria-hidden="true" />
+                            <span><span className="block text-[0.75rem] font-semibold text-ink-800">Observations</span><span className="block text-[0.6875rem] text-ink-500">Reopen the extracted observations and regenerate</span></span>
+                          </button>
+                        </div>
+                      </>
+                    )}
+                  </div>
+                ) : (
+                  <button
+                    onClick={() => (editable ? setEditing(true) : onEditObservations?.())}
+                    className="inline-flex items-center gap-1.5 h-9 px-3 text-[0.75rem] font-semibold whitespace-nowrap text-ink-700 bg-canvas-elevated border border-canvas-border rounded-md hover:bg-canvas hover:border-ink-300/70 transition-colors cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600/30"
+                  >
+                    <Pencil size={14} /> Edit
+                  </button>
+                )
               )}
               {onShare && (
                 <button
                   onClick={onShare}
-                  className="inline-flex items-center gap-1.5 h-9 px-3.5 text-[0.75rem] font-semibold text-ink-700 bg-canvas-elevated border border-canvas-border rounded-md hover:bg-canvas hover:border-ink-300/70 transition-colors cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600/30"
+                  className="inline-flex items-center gap-1.5 h-9 px-3 text-[0.75rem] font-semibold whitespace-nowrap text-ink-700 bg-canvas-elevated border border-canvas-border rounded-md hover:bg-canvas hover:border-ink-300/70 transition-colors cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600/30"
                 >
                   <Share2 size={14} /> Share
                 </button>
               )}
               <button
                 onClick={() => setShowDownloadModal(true)}
-                className="inline-flex items-center gap-1.5 h-9 px-3.5 text-[0.75rem] font-semibold text-brand-700 bg-brand-50 border border-brand-200 rounded-md hover:bg-brand-100 hover:border-brand-300 transition-colors cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600/40"
+                className="inline-flex items-center gap-1.5 h-9 px-3 text-[0.75rem] font-semibold whitespace-nowrap text-brand-700 bg-brand-50 border border-brand-200 rounded-md hover:bg-brand-100 hover:border-brand-300 transition-colors cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600/40"
               >
                 <Download size={14} /> Download
               </button>
@@ -499,6 +499,21 @@ export default function AtrReportView({ report, onBack, onShare, onSave, onManag
           </div>
         </aside>
         <div className="min-w-0 flex-1 pb-10">
+          {/* Draft banner — saved from Create Report, not yet generated. */}
+          {report.status === 'draft' && !timeTravelling && (
+            <div role="status" className="mb-4 flex items-center justify-between gap-3 flex-wrap rounded-lg border border-high-200 bg-high-50/60 px-4 py-2.5 print:hidden">
+              <p className="text-[0.75rem] text-ink-700">
+                <span className="inline-flex items-center h-5 px-2 mr-2 rounded-full bg-high-100 text-high-800 text-[0.625rem] font-bold uppercase tracking-wide align-middle">Draft</span>
+                Saved from Create Report and not yet generated — review the observations and generate the ATR to issue it.
+              </p>
+              {onEditObservations && (
+                <button onClick={onEditObservations} className="inline-flex items-center gap-1.5 h-8 px-3 text-[0.75rem] font-semibold text-high-800 bg-canvas-elevated border border-high-200 rounded-md hover:bg-high-50 transition-colors cursor-pointer whitespace-nowrap">
+                  <ListChecks size={13} /> Review &amp; generate
+                </button>
+              )}
+            </div>
+          )}
+
           {/* Time-travel banner — the document below is a reconstruction. */}
           {timeTravelling && asOf && (() => {
             const { applied, later } = splitEvents(timeline, asOf);

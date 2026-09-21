@@ -6,10 +6,11 @@ import {
   AlertTriangle, Sparkles, Building2, Home, Calendar,
   Shield, Search as SearchIcon, Settings, Clock, Check,
   Wand2, MoreHorizontal, LogOut, HelpCircle, ExternalLink,
-  ClipboardCheck, FlaskConical, Layers, Bell, Inbox, BarChart3,
-  Brain,
+  ClipboardCheck, FlaskConical, Layers, Inbox, BarChart3,
+  Brain, Table2,
 } from 'lucide-react';
 import PersonalMemoryDrawer from './PersonalMemoryDrawer';
+import NotificationBell from '../../notifications/NotificationBell';
 import type { View } from '../../hooks/useAppState';
 import { useCurrentUser } from '../../context/CurrentUserContext';
 import type { PermissionKey } from '../../data/rbac';
@@ -247,49 +248,30 @@ export default function Sidebar({ view, setView, expanded, toggleSidebar, unread
             position between collapsed (centered, 64px) and expanded (right
             edge, 256px). The `layout` system measures the DOM before/after
             and animates the transform — no slide-in-from-the-right glitch. */}
-        <motion.button
-          layout
-          transition={{ duration: 0.28, ease: [0.22, 0.68, 0, 1] }}
-          onMouseEnter={() => {
-            // Hovering the bell should not auto-expand the sidebar.
-            // Cancelling the pending expand timer keeps the bell stationary
-            // under the user's cursor so the click target doesn't slide away.
-            if (hoverTimerRef.current) clearTimeout(hoverTimerRef.current);
-          }}
-          onMouseDown={(e) => { e.stopPropagation(); }}
-          onClick={(e) => {
-            e.stopPropagation();
-            // Cancel any pending hover-expand and clear the hover state so
-            // clicking the bell doesn't drag the sidebar open under the user.
-            if (hoverTimerRef.current) clearTimeout(hoverTimerRef.current);
-            setHoverExpanded(false);
-            onOpenNotifications();
-          }}
-          title="Notifications"
-          aria-label="Notifications"
-          className={`relative shrink-0 w-8 h-8 rounded-lg flex items-center justify-center cursor-pointer transition-colors
-            ${notificationDrawerOpen
+        <motion.div layout transition={{ duration: 0.28, ease: [0.22, 0.68, 0, 1] }} className="shrink-0">
+          <NotificationBell
+            unreadCount={unreadNotifications}
+            open={notificationDrawerOpen}
+            onMouseEnter={() => {
+              // Hovering the bell should not auto-expand the sidebar.
+              // Cancelling the pending expand timer keeps the bell stationary
+              // under the user's cursor so the click target doesn't slide away.
+              if (hoverTimerRef.current) clearTimeout(hoverTimerRef.current);
+            }}
+            onMouseDown={(e) => { e.stopPropagation(); }}
+            onClick={() => {
+              // Cancel any pending hover-expand and clear the hover state so
+              // clicking the bell doesn't drag the sidebar open under the user.
+              if (hoverTimerRef.current) clearTimeout(hoverTimerRef.current);
+              setHoverExpanded(false);
+              onOpenNotifications();
+            }}
+            className={notificationDrawerOpen
               ? 'bg-sidebar-surface-active text-sidebar-accent'
               : 'text-white hover:bg-sidebar-surface-hover hover:text-sidebar-accent'}
-          `}
-        >
-          <Bell size={17} />
-          <AnimatePresence>
-            {unreadNotifications > 0 && (
-              <motion.span
-                key={unreadNotifications}
-                initial={{ scale: 0.6, opacity: 0 }}
-                animate={{ scale: 1, opacity: 1 }}
-                exit={{ scale: 0.6, opacity: 0 }}
-                transition={{ duration: 0.2, ease: [0.34, 1.56, 0.64, 1] }}
-                className="absolute -top-1 -right-1 min-w-[16px] h-[16px] px-[4px] rounded-full bg-sidebar-accent text-brand-600 text-[0.625rem] font-semibold leading-none flex items-center justify-center tabular-nums"
-                aria-hidden="true"
-              >
-                {unreadNotifications > 99 ? '99+' : unreadNotifications}
-              </motion.span>
-            )}
-          </AnimatePresence>
-        </motion.button>
+            badgeClassName="bg-sidebar-accent text-brand-600"
+          />
+        </motion.div>
 
         {/* Team switcher dropdown */}
         <AnimatePresence>
@@ -393,6 +375,10 @@ export default function Sidebar({ view, setView, expanded, toggleSidebar, unread
 
           {can('db_view') && <NavItem icon={LayoutDashboard} label="Dashboard" active={view === 'dashboards'} expanded={isExpanded} onClick={() => setView('dashboards')} />}
           {can('rp_view') && <NavItem icon={FileBarChart} label="Report" active={view === 'reports' || view === 'report-history' || view === 'report-builder'} expanded={isExpanded} onClick={() => setView('reports')} />}
+          {/* RACM sits above the register and the library because it is where
+              the other two come from: risks and controls are written into a
+              matrix first, and published from there. */}
+          {can('racm_view') && <NavItem icon={Table2} label="RACM" active={view === 'racm-library'} expanded={isExpanded} onClick={() => setView('racm-library')} />}
           {can('risk_view') && <NavItem icon={AlertTriangle} label="Risk Register" active={view === 'audit-risk-register'} expanded={isExpanded} onClick={() => setView('audit-risk-register')} />}
           {can('ctrl_view') && <NavItem icon={Shield} label="Control Library" active={view === 'governance-controls' || view === 'governance-control-detail'} expanded={isExpanded} onClick={() => setView('governance-controls')} />}
           {can('wf_view') && <NavItem icon={Workflow} label="Workflow Library" active={workflowViews.includes(view)} expanded={isExpanded} onClick={() => setView('workflow-library')} />}

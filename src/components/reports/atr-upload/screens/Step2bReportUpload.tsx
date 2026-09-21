@@ -3,9 +3,6 @@ import { motion } from 'motion/react';
 import { ArrowRight, Upload, FileText, FileSpreadsheet, X, Plus } from 'lucide-react';
 import { Button } from '../../../shared/Button';
 import { WizardFooter } from '../footerSlot';
-import ReportDetailsForm, { type ReportDetailsValue } from '../components/ReportDetailsForm';
-import { stripExt } from '../reportFields';
-import type { ReportMeta } from '../types';
 
 // Match Step 2a's entrance + tokens so the two upload screens read as one family.
 const EASE = [0.22, 1, 0.36, 1] as const;
@@ -77,32 +74,23 @@ function UploadCard({ icon: Icon, tint, title, blurb, cta, badge, badgeCls, file
   );
 }
 
-/** Screen 2B — upload an existing audit report (+ optional annexures) and fill
- *  the mandatory report details (shared ReportDetailsForm) that flow into the
- *  ATR's top section. */
+/** Screen 2B — upload an existing audit report (+ optional annexures). The
+ *  report details that flow into the ATR's top section were captured in the
+ *  New Report modal, so this screen only asks for the files. */
 export default function Step2bReportUpload({ onExtract }: {
-  onExtract: (report: File, annexures: File[], meta: Partial<ReportMeta>) => void;
+  onExtract: (report: File, annexures: File[]) => void;
 }) {
   const [report, setReport] = useState<File[]>([]);
   const [annexures, setAnnexures] = useState<File[]>([]);
   const reportInputRef = useRef<HTMLInputElement>(null);
   const annexInputRef = useRef<HTMLInputElement>(null);
 
-  // Cover details + validity, tracked from the shared form.
-  const [details, setDetails] = useState<ReportDetailsValue>({ meta: {}, complete: false, duplicate: false, outstanding: [] });
-
-  const ready = report.length > 0 && details.complete && !details.duplicate;
-
-  const outstanding = [report.length === 0 ? 'the audit report' : null, ...details.outstanding].filter((x): x is string => x !== null);
-  const outstandingLine = details.duplicate
-    ? `Report Number ${details.meta.reportNumber} is already used in ${details.meta.section} for ${details.meta.financialYear}. Enter a unique number.`
-    : outstanding.length === 1
-      ? `Add ${outstanding[0]} to continue.`
-      : `Still needed: ${outstanding.slice(0, -1).join(', ')} and ${outstanding[outstanding.length - 1]}.`;
+  const ready = report.length > 0;
+  const outstandingLine = 'Add the audit report to continue.';
 
   const submit = () => {
     if (!report[0] || !ready) return;
-    onExtract(report[0], annexures, details.meta);
+    onExtract(report[0], annexures);
   };
 
   return (
@@ -138,16 +126,6 @@ export default function Step2bReportUpload({ onExtract }: {
           delay={0.08}
         />
       </div>
-
-      {/* Report details — the shared classification + cover-facts form. */}
-      <motion.div
-        initial={{ opacity: 0, y: 8 }}
-        animate={{ opacity: 1, y: 0 }}
-        transition={{ duration: 0.4, ease: EASE, delay: 0.2 }}
-        className="mt-4"
-      >
-        <ReportDetailsForm onChange={setDetails} suggestedReportName={report[0] ? stripExt(report[0].name) : undefined} intro="These print on the ATR cover. We cannot read them off the file reliably, so confirm them here." />
-      </motion.div>
 
       <WizardFooter>
         <div className="flex items-center justify-between gap-4 border-t border-canvas-border bg-canvas-elevated px-6 py-3">

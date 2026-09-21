@@ -2552,32 +2552,79 @@ export default function ScopingWizard({ onCancel, onCreated, typePreselected, on
                             const groupLines = on ? clashLinesFor(picks) : [];
                             const listOpen = on && openProc === r.process;
                             const listId = `scope-racms-${r.process.replace(/\W+/g, '-').toLowerCase()}`;
+                            /** What the RACM handle says while folded. Short: it now
+                             *  shares the name row with the process and its numbers,
+                             *  and the list it opens repeats the detail anyway. */
+                            const racmHandleLabel = groupLines.length > 0
+                              ? 'Control IDs clash — untick one'
+                              : picks.length > 0
+                                ? `${picks.length} of ${onTab.length} RACM${onTab.length === 1 ? '' : 's'} · ${pickedControls} control${pickedControls === 1 ? '' : 's'}`
+                                : nothingOnTab
+                                  ? 'No RACM yet'
+                                  : `Choose from ${onTab.length} RACM${onTab.length === 1 ? '' : 's'}`;
                             return (
                               <div key={r.process} className="border-b border-canvas-border last:border-b-0">
-                                <button
-                                  type="button"
-                                  role="checkbox"
-                                  aria-checked={on}
-                                  aria-label={r.process}
+                                {/* ── The name row ── tick, name, and (once the process
+                                    is in scope) the handle that opens its RACMs, so a
+                                    folded process says everything on one line. Two
+                                    buttons side by side rather than one: ticking the
+                                    process and opening its RACMs are different acts,
+                                    and a button cannot live inside a button. */}
+                                {/* The whole row still flips the process — it did when
+                                    it was one button, and shrinking the target to the
+                                    width of the name would make a tick a small thing
+                                    to hit while the row still lights up under the
+                                    cursor. The RACM chip stops the click at itself. */}
+                                <div
                                   onClick={() => flipProcess(r)}
-                                  className={cn(
-                                    'group w-full flex items-center gap-3 px-4 text-left cursor-pointer hover:bg-brand-50/40 transition-colors',
-                                    on ? 'pt-2.5 pb-1.5' : 'py-2.5',
-                                  )}
+                                  className="group flex items-center gap-2 px-4 py-2 cursor-pointer hover:bg-brand-50/40 transition-colors"
                                 >
-                                  <TickBox state={on} />
-                                  <span className="flex-1 min-w-0 flex items-center gap-2">
-                                    <span className="text-[0.8125rem] font-medium text-ink-900 truncate">{r.process}</span>
-                                    {qualitative && (
-                                      <span className="shrink-0 px-1.5 rounded border border-brand-200 bg-brand-50 text-[0.625rem] font-semibold text-brand-700 leading-4">Qualitative</span>
-                                    )}
-                                  </span>
+                                  <button
+                                    type="button"
+                                    role="checkbox"
+                                    aria-checked={on}
+                                    aria-label={r.process}
+                                    onClick={e => { e.stopPropagation(); flipProcess(r); }}
+                                    className="min-w-0 flex items-center gap-3 py-0.5 text-left cursor-pointer"
+                                  >
+                                    <TickBox state={on} />
+                                    <span className="min-w-0 flex items-center gap-2">
+                                      <span title={r.process} className="text-[0.8125rem] font-medium text-ink-900 truncate">{r.process}</span>
+                                      {qualitative && (
+                                        <span className="shrink-0 px-1.5 rounded border border-brand-200 bg-brand-50 text-[0.625rem] font-semibold text-brand-700 leading-4">Qualitative</span>
+                                      )}
+                                    </span>
+                                  </button>
+
+                                  {on && (
+                                    <button
+                                      type="button"
+                                      onClick={e => { e.stopPropagation(); setOpenProc(listOpen ? null : r.process); }}
+                                      aria-expanded={listOpen}
+                                      aria-controls={listId}
+                                      title={racmHandleLabel}
+                                      className={cn(
+                                        'shrink min-w-0 h-6 pl-1.5 pr-1 inline-flex items-center gap-1 rounded-md border text-[0.6875rem] font-semibold transition-colors cursor-pointer',
+                                        groupLines.length > 0 ? 'border-risk-200 bg-risk-50 text-risk-700 hover:border-risk-300'
+                                          : picks.length > 0 ? 'border-canvas-border bg-white text-ink-700 hover:border-ink-300'
+                                          : nothingOnTab ? 'border-canvas-border bg-paper-50 text-ink-500 hover:border-ink-300'
+                                          : 'border-brand-200 bg-brand-50 text-brand-700 hover:bg-brand-100',
+                                      )}
+                                    >
+                                      {groupLines.length > 0
+                                        ? <AlertTriangle size={11} className="shrink-0" />
+                                        : picks.length > 0 && <Check size={11} className="shrink-0 text-compliant-600" />}
+                                      <span className="truncate tabular-nums">{racmHandleLabel}</span>
+                                      <ChevronDown size={12} className={cn('shrink-0 transition-transform', listOpen && 'rotate-180')} />
+                                    </button>
+                                  )}
+
                                   {r.accounts > 0 && (
-                                    <span className="shrink-0 text-[0.71875rem] text-ink-400 tabular-nums">
+                                    <span className="ml-auto shrink-0 text-[0.71875rem] text-ink-400 tabular-nums">
                                       {money(r.total)} · {r.accounts} account{r.accounts === 1 ? '' : 's'}
                                     </span>
                                   )}
-                                </button>
+                                </div>
 
                                 {/* ── Why ── a qualitative pick asks for its reason
                                     from the list first, then the note. */}
@@ -2628,40 +2675,6 @@ export default function ScopingWizard({ onCancel, onCreated, typePreselected, on
                                     </motion.div>
                                   )}
                                 </AnimatePresence>
-
-                                {/* Where its RACMs stand — and the handle that opens
-                                    and folds them, so a folded row still says it. */}
-                                {on && (
-                                  <div className="pl-[2.75rem] pr-4 pb-2.5">
-                                    <button
-                                      type="button"
-                                      onClick={() => setOpenProc(listOpen ? null : r.process)}
-                                      aria-expanded={listOpen}
-                                      aria-controls={listId}
-                                      className={cn(
-                                        'inline-flex items-center gap-1.5 text-left text-[0.71875rem] font-semibold cursor-pointer hover:underline underline-offset-2',
-                                        groupLines.length > 0 ? 'text-risk-700'
-                                          : picks.length > 0 ? 'text-ink-700'
-                                          : nothingOnTab ? 'text-ink-500'
-                                          : 'text-brand-700',
-                                      )}
-                                    >
-                                      {groupLines.length > 0
-                                        ? <AlertTriangle size={12} className="shrink-0" />
-                                        : picks.length > 0 && <Check size={12} className="shrink-0 text-compliant-600" />}
-                                      <span className="tabular-nums">
-                                        {groupLines.length > 0
-                                          ? 'Control IDs clash — untick one RACM'
-                                          : picks.length > 0
-                                            ? `${picks.length} of ${onTab.length} RACM${onTab.length === 1 ? '' : 's'} · ${pickedControls} control${pickedControls === 1 ? '' : 's'}`
-                                            : nothingOnTab
-                                              ? 'No RACM for this process on the RACM tab'
-                                              : `Choose RACMs · ${onTab.length} on the RACM tab`}
-                                      </span>
-                                      <ChevronDown size={12} className={cn('shrink-0 transition-transform', listOpen && 'rotate-180')} />
-                                    </button>
-                                  </div>
-                                )}
 
                                 {/* ── RACMs ── the tab's RACMs for this process, hung
                                     under its name. Ticks default to the ones written

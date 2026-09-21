@@ -152,6 +152,27 @@
   --z-toast:   300;
 }
 
+/* ── Notification centre tokens ──
+   Every value derives from the platform palette above so the popover reads as
+   native chrome: the unread tint is the faintest brand wash, hover is the
+   canvas ground, depth is one diffuse shadow (DESIGN.md §4 "lifted"). */
+:root {
+  --notification-width: 400px;
+  --notification-radius: var(--radius-lg, 12px);
+  --notification-item-padding-x: 16px;
+  --notification-item-padding-y: 11px;
+  --notification-gap: 12px;
+  --notification-unread-background: color-mix(in srgb, var(--color-brand-50) 55%, var(--color-canvas-elevated));
+  --notification-hover-background: var(--color-canvas);
+  --notification-muted-text: var(--color-ink-500);
+  --notification-unread-dot: var(--color-brand-600);
+  --notification-animation-duration: 160ms;
+  --notification-shadow: 0 12px 32px rgba(15, 8, 30, 0.10), 0 1px 2px rgba(15, 8, 30, 0.06);
+}
+@media (prefers-reduced-motion: reduce) {
+  :root { --notification-animation-duration: 0ms; }
+}
+
 /* ── Scrollbars (subtle, brand-tinted) ──
    Chrome ignores every ::-webkit-scrollbar rule on an element that also sets
    scrollbar-width/scrollbar-color, and falls back to its own ~11px `thin` bar.
