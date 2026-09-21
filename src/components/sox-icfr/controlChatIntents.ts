@@ -144,6 +144,19 @@ export function readIntent(raw: string, ctx: IntentCtx): Intent {
       return { kind: 'reply', text: `It is an annual control: it only operates once, at the year end, so there is nothing to test until ${s.yePending.until}.` };
     }
     if (s.step === 'population' && s.popBlock) return { kind: 'reply', text: s.popBlock };
+    if (s.step === 'sample' && !s.sampleDrawn) {
+      return { kind: 'reply', text: 'Because a sample drawn off an unlocked population proves nothing — the population could change underneath it. Lock it and the draw becomes reproducible: same method, same seed, same items.' };
+    }
+    if (s.step === 'sample' && s.drawsOwed > 0) {
+      return { kind: 'reply', text: `Each source file is drawn from in its own right, and ${plural(s.drawsOwed, 'file')} ${s.drawsOwed === 1 ? 'has' : 'have'} not been. Testing starts once every one of them has its items.` };
+    }
+    if (s.step === 'operating' && s.toeHolds) return { kind: 'reply', text: `The conclusion is held because ${s.toeHolds}.` };
+    if (s.step === 'signoff' && s.notesPending > 0) {
+      return { kind: 'reply', text: `${plural(s.notesPending, 'review note')} ${s.notesPending === 1 ? 'is' : 'are'} still open on this control, and a paper is not countersigned over an open note.` };
+    }
+    if (s.step === 'signoff' && s.ownPaper) {
+      return { kind: 'reply', text: 'Because the person who prepared a paper cannot be the one who countersigns it — that is what the second signature is for.' };
+    }
     if (s.step === 'design' && s.missing.length > 0) {
       return { kind: 'reply', text: `Because the design cannot be tested against documents that are not there — ${listOf(s.missing.map(d => (d.kind === 'Custom' ? d.name : d.kind)))} still outstanding.` };
     }

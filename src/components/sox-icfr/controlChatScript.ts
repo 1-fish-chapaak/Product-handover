@@ -1,7 +1,7 @@
 import {
   designApproved, designCompleteness, designFilesOf, designOutstanding, designSuggestion, isControlLocked, isEngagementLocked,
-  operatingApplies, operatingProgress, pendingReviewNoteCount, pointResult, populationLocked, populationSources,
-  sampledSources, samePerson, trackResult, yearEndPending,
+  inquiryOnlyAttributes, operatingApplies, operatingProgress, passedWithoutFiles, pendingReviewNoteCount, pointResult,
+  populationLocked, populationSources, sampledSources, samePerson, stepResult, toeRoundFailed, trackResult, yearEndPending,
 } from './helpers';
 import type { AuditRecord, Control, DesignDoc, IcfrEngagement, Role, TrackConclusion } from './types';
 
@@ -87,6 +87,9 @@ export interface Situation {
   sampleDrawn: boolean;
   drawsOwed: number;
   toe: { tested: number; passed: number; failed: number; total: number };
+  /** Why the operating conclusion is held, in the page's own terms — the
+   *  ConcludeFooter's reasons, read once rather than guessed at twice. */
+  toeHolds: string | null;
   operatingResult: TrackConclusion;
   preparerSigned?: { by: string; at: string };
   reviewerSigned?: { by: string; at: string };
@@ -152,6 +155,20 @@ export function situationOf({ eng, control, role, me, audit }: ChatCtx): Situati
   const drawsOwed = drawn.filter(s => !s.approvedSample).length;
   const toe = operatingProgress(control);
   const operatingResult = trackResult(o);
+  // The same five things the page's conclude footer refuses on, in the order
+  // it refuses on them. An auditor who is told "not yet" deserves the reason
+  // that is actually holding it.
+  const untested = o.steps.filter(x => stepResult(x) === 'Not tested').length;
+  const unbacked = passedWithoutFiles(control).length;
+  const onWordAlone = inquiryOnlyAttributes(control).length;
+  const staleRuns = o.steps.filter(x => x.staleRun).length;
+  const toeHolds = !o.sampling ? 'the sample has not been drawn yet'
+    : untested > 0 ? `${plural(untested, 'attribute')} still to test`
+    : unbacked > 0 ? `${plural(unbacked, 'attribute')} passed without the files the test asks for`
+    : onWordAlone > 0 ? `${plural(onWordAlone, 'attribute')} rests on a statement with nothing behind it`
+    : staleRuns > 0 ? `${plural(staleRuns, 'run')} sits against a draw that has since changed`
+    : toeRoundFailed(control) ? 'this round failed, so effective is not available on it'
+    : null;
 
   const preparedBy = d.approval?.preparedBy ?? (d.testedBy ? { by: d.testedBy, at: d.testedAt ?? '' } : undefined);
 
@@ -188,7 +205,7 @@ export function situationOf({ eng, control, role, me, audit }: ChatCtx): Situati
     },
     preparedBy, approvedBy: d.approval?.approvedBy,
     popStarted, popLocked, popCount: o.population?.count ?? 0, popBlock,
-    sampleDrawn: !!o.sampling, drawsOwed, toe, operatingResult,
+    sampleDrawn: !!o.sampling, drawsOwed, toe, toeHolds, operatingResult,
     preparerSigned: control.wpSignoff?.preparer, reviewerSigned: control.wpSignoff?.reviewer,
     notesPending: pendingReviewNoteCount(eng, control.id),
   };
@@ -322,7 +339,7 @@ export function nextPrompt(ctx: ChatCtx): ChatPrompt {
 
   if (s.step === 'sample') {
     if (!s.sampleDrawn) return line(`Population is locked at ${s.popCount.toLocaleString('en-IN')} items. Next is the sample — the size follows how often the control runs, and the method and seed are stored so anyone can reproduce the same items.`);
-    return line(`${plural(s.drawsOwed, 'source file')} still ${s.drawsOwed === 1 ? 'owes' : 'owe'} a draw. Once every file is drawn, testing can start on the sample.`);
+    return line(`${plural(s.drawsOwed, 'source file')} still ${s.drawsOwed === 1 ? 'owes' : 'owe'} a draw${s.popCount ? ` off the ${s.popCount.toLocaleString('en-IN')} locked items` : ''}. Once every file is drawn, testing can start on the sample.`);
   }
 
   if (s.step === 'operating') {
@@ -330,6 +347,9 @@ export function nextPrompt(ctx: ChatCtx): ChatPrompt {
     if (s.toe.tested === 0) return line(`Sample is drawn and ${plural(s.toe.total, 'attribute')} are waiting. Each sampled item gets a pass or fail against each attribute, with the evidence attached.`);
     if (s.toe.tested < s.toe.total) {
       return line(`${s.toe.tested} of ${s.toe.total} attributes tested${s.toe.failed > 0 ? `, ${s.toe.failed} failed so far` : ''}. Keep going — the conclusion unlocks when every attribute has a result.`);
+    }
+    if (s.toeHolds) {
+      return line(`All ${s.toe.total} attributes are tested — ${s.toe.passed} pass, ${s.toe.failed} fail — but the conclusion is held: ${s.toeHolds}.`);
     }
     return line(`All ${s.toe.total} attributes are tested — ${s.toe.passed} pass, ${s.toe.failed} fail. Conclude the operating effectiveness and the control is ready to sign.`);
   }
