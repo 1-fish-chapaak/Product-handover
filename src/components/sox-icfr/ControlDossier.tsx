@@ -5324,10 +5324,15 @@ export default function ControlDossier() {
           {/* Design leads (user ask). It is also the order the work happens in:
               design gates operating, so a control whose design fails never needs
               a population at all — building one first was work done on spec. */}
-          <VStep n={1} title={isOwner ? 'Documents' : 'TOD'}
+          {/* The steps are named in full (user ask, 21 Sep): a reader who has
+              to expand "TOD" before they know what it is has been made to work
+              for nothing. The owner keeps "Documents" — they supply evidence
+              rather than test design, and naming the step after a test they
+              cannot run would describe somebody else's job. */}
+          <VStep n={1} id="vstep-design" title={isOwner ? 'Documents' : 'Test of design'}
             subtitle={isOwner
               ? 'The documents this control needs on file. Attach what you hold — the auditor tests them.'
-              : 'Test of design — the documents on file, one transaction traced end-to-end, and a design check for each thing that has to be true. Ends with the design marked effective or ineffective.'}
+              : 'The documents on file, one transaction traced end-to-end, and a design check for each thing that has to be true. Ends with the design marked effective or ineffective.'}
             status={designResult} hideStatus={isOwner}
             right={!isOwner && control.design.carriedFrom
               // A roll-forward carried this conclusion from its parent interim —
@@ -5400,7 +5405,7 @@ export default function ControlDossier() {
                 : <span className="text-[0.6875rem] font-semibold text-ink-400">Nothing extracted yet</span>}>
             <PopulationSection control={control} canEdit={canEdit} locked={popGated} />
           </VStep>
-          <VStep n={3} title="Sample" subtitle="Drawn off the locked population, sized by how often the control runs, with the selection method and its seed stored so anyone can reproduce the same items." hideStatus
+          <VStep n={3} id="vstep-sample" title="Sample drawing" subtitle="Drawn off the locked population, sized by how often the control runs, with the selection method and its seed stored so anyone can reproduce the same items." hideStatus
             status={sampleLocked ? 'Not tested' : control.operating.sampling ? 'Effective' : 'Not tested'} locked={sampleLocked}
             right={toeLocked
               ? <span className="text-[0.6875rem] font-semibold text-ink-400 inline-flex items-center gap-1"><Lock size={11} /> {gateNote}</span>
@@ -5411,13 +5416,13 @@ export default function ControlDossier() {
                   : <span className="text-[0.6875rem] font-semibold text-ink-400">Awaiting the draw</span>}>
             <SampleExtractSection control={control} canEdit={canEdit} locked={sampleLocked} />
           </VStep>
-          <VStep n={4} id="vstep-toe" title="TOE" subtitle="Test of operating effectiveness — each sampled item against each attribute, pass or fail, with the evidence attached. Concludes effective or ineffective." status={toeLocked ? 'Not tested' : opResult} locked={toeLocked}
+          <VStep n={4} id="vstep-toe" title="Test of effectiveness" subtitle="Each sampled item against each attribute, pass or fail, with the evidence attached. Concludes effective or ineffective." status={toeLocked ? 'Not tested' : opResult} locked={toeLocked}
             right={toeLocked ? <span className="text-[0.6875rem] font-semibold text-ink-400 inline-flex items-center gap-1"><Lock size={11} /> {gateNote}</span> : undefined}>
             <OperatingSection control={control} canEdit={canEdit} locked={toeLocked} />
           </VStep>
           </>
           )}
-          {!isOwner && <VStep n={5} title="Sign-off" subtitle="The auditor signs the paper, the reviewer countersigns it, and the control is done. Nobody countersigns work they prepared." hideStatus
+          {!isOwner && <VStep n={5} id="vstep-signoff" title="Final" subtitle="The auditor signs the paper, the reviewer countersigns it, and the control is done. Nobody countersigns work they prepared." hideStatus
             status={control.wpSignoff?.reviewer ? 'Effective' : 'Not tested'} locked={!controlLocked}
             right={control.wpSignoff?.reviewer
               ? <span className="text-[0.6875rem] font-bold text-compliant-700 inline-flex items-center gap-1"><BadgeCheck size={12} /> Control done</span>

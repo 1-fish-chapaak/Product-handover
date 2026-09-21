@@ -38,7 +38,7 @@ test('control-level upload registers the file and selects it', async ({ page }) 
   await expect(runCard.first()).toBeVisible({ timeout: 15_000 });
   await runCard.first().click();
   await page.waitForTimeout(1400);
-  await expect(page.getByText('TOD', { exact: true }).first()).toBeVisible({ timeout: 15_000 });
+  await expect(page.getByText('Test of design', { exact: true }).first()).toBeVisible({ timeout: 15_000 });
 
   // Step ① — if this control already has a population, withdraw it so the
   // source picker (and its upload) is on screen.
