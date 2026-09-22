@@ -222,6 +222,11 @@ function Inner({ onBack, backLabel = 'Back to Engagements' }: { onBack?: () => v
   // stands alone under a breadcrumb outside one.
   const isDeficiencies = view === 'deficiencies' && !inAudit;
   const isDrillIn = isRacmMatrix || isScope || isHandoffs || isDeficiencies;
+  // The audit's control page runs two panes — a scrolling stepper and a rail
+  // beside it that has to stay put — so it takes the height rather than the
+  // scroll. Everything else here keeps the ordinary one-scroll page, including
+  // the library's control page, which is deliberately one column.
+  const dossierPanes = view === 'dossier' && inAudit;
   const isRoot = view === 'overview' || view === 'racm' || view === 'risks' || view === 'register'
     || view === 'runs' || view === 'config' || (inAudit && view === 'deficiencies');
   // A CONCLUDED audit is read from its archive, not from the live controls —
@@ -260,14 +265,16 @@ function Inner({ onBack, backLabel = 'Back to Engagements' }: { onBack?: () => v
     : <ControlRegister />;
 
   return (
-    <div className="sox-book-ui h-full overflow-y-auto overflow-x-hidden bg-canvas">
-      {/* overflow-x-hidden above lets the control page's full-bleed header band
-          overshoot the centred container without opening a sideways scrollbar. */}
+    <div className={cn('sox-book-ui h-full bg-canvas',
+      // overflow-x-hidden lets the control page's full-bleed header band
+      // overshoot the centred container without opening a sideways scrollbar.
+      dossierPanes ? 'overflow-hidden flex flex-col' : 'overflow-y-auto overflow-x-hidden')}>
       {/* The control detail page and the RACM matrix stand alone — no engagement
           header, no role switcher; the persona is fixed until you go back to the
           engagement. */}
       {view !== 'dossier' && !isDrillIn && !inAudit && topBar}
-      <div className="max-w-[1320px] mx-auto px-6 pt-4 pb-6">
+      <div className={cn('max-w-[1320px] mx-auto px-6 pt-4 w-full',
+        dossierPanes ? 'flex-1 min-h-0 flex flex-col' : 'pb-6')}>
         {/* Inside an audit the engagement header gives way to a breadcrumb, but
             the persona switcher comes WITH it: every testing, review and
             sign-off action lives inside an audit, so this is where switching
@@ -374,7 +381,8 @@ function Inner({ onBack, backLabel = 'Back to Engagements' }: { onBack?: () => v
           </div>
         )}
         <AnimatePresence mode="wait">
-          <motion.div key={`${role}-${openAuditId ?? 'eng'}-${tab}-${view}`} initial={{ opacity: 0, y: 6 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -4 }} transition={{ duration: 0.16 }}>
+          <motion.div key={`${role}-${openAuditId ?? 'eng'}-${tab}-${view}`} className={cn(dossierPanes && 'flex-1 min-h-0 flex flex-col')}
+            initial={{ opacity: 0, y: 6 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -4 }} transition={{ duration: 0.16 }}>
             {body}
           </motion.div>
         </AnimatePresence>

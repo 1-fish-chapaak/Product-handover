@@ -4877,8 +4877,11 @@ function ActivityRail({ control, meters }: { control: Control; meters: RagMeterD
   const execCount = eng.executions.filter(e => e.controlId === control.id).length;
   const openDisc = discussionsFor(eng, control.id).filter(d => !d.resolved).length;
   const tabCls = (on: boolean) => cn('flex-1 min-w-0 h-8 rounded-lg text-[0.75rem] font-semibold inline-flex items-center justify-center gap-1.5 transition-colors cursor-pointer', on ? 'bg-canvas-elevated text-brand-700 shadow-[0_1px_4px_-1px_rgba(15,8,30,0.18)] ring-1 ring-canvas-border' : 'text-ink-500 hover:text-ink-800');
+  // No `sticky` any more — the rail is a pane, not a card that tries to keep
+  // up. It is as tall as the row it sits in and its own body scrolls, so there
+  // is nothing left for the page to carry it away from.
   return (
-    <aside className="panel overflow-hidden sticky top-20 self-start max-h-[calc(100vh-7rem)] flex flex-col">
+    <aside className="panel overflow-hidden h-full min-h-0 flex flex-col">
       {/* The scores first, because they are the reading on the control, and the
           conversation underneath is what to do about it. One panel, one rule
           between them. */}
@@ -5080,9 +5083,27 @@ export default function ControlDossier() {
   const country = countryFor(eng.id, control);
 
   return (
-    <motion.div initial="hidden" animate="show" variants={{ hidden: {}, show: { transition: { staggerChildren: 0.08, delayChildren: 0.03 } } }}>
+    <motion.div className="h-full min-h-0 flex flex-col" initial="hidden" animate="show" variants={{ hidden: {}, show: { transition: { staggerChildren: 0.08, delayChildren: 0.03 } } }}>
       {/* no local Back button — the breadcrumb above (always rendered by
           SoxIcfrApp for the dossier view) already carries ← and the trail */}
+
+      {/* ── Two panes, the way the workflow executor does it ─────────────────
+          The page used to be one long scroll with the rail marked `sticky`,
+          which never worked: the rail's parent was a grid item exactly as tall
+          as the rail, so it had nowhere to travel and simply left with the
+          page. Rather than repair the stick, the page stops scrolling. This
+          row owns the height it was given, the left column is the only
+          scroller, and the rail is a sibling that cannot move because nothing
+          around it does. `min-h-0` is what lets the column scroll instead of
+          growing; `min-w-0` is what stops a wide table pushing the rail off
+          the screen. */}
+      <div className="flex-1 min-h-0 grid grid-cols-[minmax(0,1fr)_400px] gap-5">
+        {/* The header travels with the work rather than being frozen above it:
+            it is a third of the screen, and the steps are what the auditor
+            came for. The white band inside it now ends at this column, which
+            is what it should have said all along — the rail beside it is not
+            part of the leadsheet. */}
+        <div className="min-w-0 overflow-y-auto overflow-x-hidden pb-6">
 
       {/* Leadsheet header — the same shape the library's control page carries
           (ControlLibraryDetail): a white band running to both screen edges, the
@@ -5356,12 +5377,8 @@ export default function ControlDossier() {
           them can run — not a finding underneath them. */}
       <UnableToTestBanner control={control} />
 
-      {/* stepper + discussion */}
-      {/* 400px, not 360: the rail now carries a conversation, and a bubble
-          with a quick reply under it reads badly at 360. The stepper gives up
-          40px it was not using for anything the eye notices. */}
-      <div className="grid grid-cols-[minmax(0,1fr)_400px] gap-5 items-start">
-        <motion.div className="vstepper" variants={{ hidden: {}, show: { transition: { staggerChildren: 0.1, delayChildren: 0.08 } } }}>
+      {/* the stepper — the whole of the left column below the header */}
+      <motion.div className="vstepper" variants={{ hidden: {}, show: { transition: { staggerChildren: 0.1, delayChildren: 0.08 } } }}>
           {/* Design leads (user ask). It is also the order the work happens in:
               design gates operating, so a control whose design fails never needs
               a population at all — building one first was work done on spec. */}
@@ -5566,13 +5583,17 @@ export default function ControlDossier() {
             </motion.div>
           )}
         </motion.div>
+        </div>
         {/* right rail — ONE section (user ask, 21 Sep): the three scores sit
             inside the same panel as the conversation rather than in a card of
             their own above it. They read on the work rather than being part of
             it, and two stacked boxes drew a boundary that said they were two
             different things. The stepper gets the full width of the page it
-            earns. */}
-        <motion.div variants={{ hidden: { opacity: 0, y: 12 }, show: { opacity: 1, y: 0 } }}>
+            earns.
+
+            400px, not 360: the rail carries a conversation, and a bubble with
+            a quick reply under it reads badly at 360. */}
+        <motion.div className="h-full min-h-0 pb-6" variants={{ hidden: { opacity: 0, y: 12 }, show: { opacity: 1, y: 0 } }}>
           <ActivityRail control={control} meters={designRagMeters(control)} />
         </motion.div>
       </div>

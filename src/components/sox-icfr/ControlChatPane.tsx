@@ -243,8 +243,13 @@ export default function ControlChatPane({ control }: { control: Control }) {
   return (
     <>
       {/* 20px between turns, where the 840px thread uses 40 — prose needs the
-          room to read as prose, and the rail has half the column to give. */}
-      <div ref={scrollRef} className="flex-1 min-h-0 overflow-y-auto px-3 pt-3 pb-4 space-y-5">
+          room to read as prose, and the rail has half the column to give.
+          `mt-auto` sits a short conversation on the floor rather than leaving
+          it adrift at the top of a full-height rail: the live prompt lands
+          where the hands already are. A long one fills upward and scrolls as
+          usual, because auto margins give up the moment there is no slack. */}
+      <div ref={scrollRef} className="flex-1 min-h-0 overflow-y-auto px-3 pt-3 pb-4 flex flex-col">
+       <div className="mt-auto space-y-5">
         {thread.map(m => (
           m.who === 'user' ? (
             <div key={m.id} className="flex justify-end">
@@ -291,6 +296,7 @@ export default function ControlChatPane({ control }: { control: Control }) {
             )}
           </div>
         )}
+       </div>
       </div>
 
       {/* The chat composer floats on a tinted canvas; this panel is flat white,
