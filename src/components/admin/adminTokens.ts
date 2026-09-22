@@ -53,4 +53,11 @@ export interface Stat {
   icon?: LucideIcon;
   /** 'attention' tints the KPI card amber (mitigated) to flag an actionable gap. */
   tone?: 'attention';
+  /** Print the settled figure straight away instead of counting up to it.
+   *  For a band whose numbers ARE the page, and for one sitting beside a
+   *  caption that quotes the same figures without animating: for the second
+   *  and a half the counter is ramping, the tiles and the line under them
+   *  disagree, and a reader who glances or screenshots in that window carries
+   *  away a number that was never true. */
+  instant?: boolean;
 }
