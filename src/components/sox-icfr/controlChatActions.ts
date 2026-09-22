@@ -152,8 +152,13 @@ export function actionsFor(s: Situation, role: Role): ChatAction[] {
     }
     if (s.checksUnmarked > 0) {
       const out: ChatAction[] = [];
-      if (!s.iraBlocked) out.push({ id: 'ira-run', label: `Assess all ${s.checksTotal} checks for me`, said: 'Run the AI validation over the design checks.', primary: true, does: 'read the evidence and assess every design check' });
-      out.push(show('I’ll mark them myself', 'I’ll mark them myself.', 'design'));
+      // Nothing left but the ones Ira already read and could not answer. The
+      // run is not offered again: it would produce the same sentence, and a
+      // button that costs six seconds to tell you what it told you last time
+      // is a button that teaches the reader to stop pressing them.
+      const allBlocked = s.checksBlocked.length > 0 && s.checksBlocked.length === s.checksUnmarked;
+      if (!s.iraBlocked && !allBlocked) out.push({ id: 'ira-run', label: `Assess all ${s.checksTotal} checks for me`, said: 'Run the AI validation over the design checks.', primary: true, does: 'read the evidence and assess every design check' });
+      out.push(show(allBlocked ? 'Show me the ones you couldn’t test' : 'I’ll mark them myself', 'Take me to the design checks.', 'design'));
       return out;
     }
     if (s.checksTotal > 0 && s.iraStale) {

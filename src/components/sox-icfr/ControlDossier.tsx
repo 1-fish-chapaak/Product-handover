@@ -17,6 +17,7 @@ import {
   concludeRationale, controlCode, controlConclusion, courtFor, operatingApplies, designCompleteness, designOutstanding, discussionsFor, extractionCriteria,
   isControlLocked, isControlLockedIn, itgcHolds, failedItgcs, isItgcDependent, operatingProgress, operatingSuggestion, TOE_MAX_ROUNDS, toeRoundFailed, toeRoundNo, toeRounds, toeSpent, canRedrawToe, canExtendToe, populationLocked, sampleSizeGuide, trackResult, pointResult, stepResult, attestationOverruled, inquiryOnlyAttributes, restsOnStatementAlone,
   countVerdict, coverageVerdict, derivedRunCount, populationReady, designBasis, designSuggestion, auditorProvenChecks, suggestedDesignChecks, suggestPopulationFile, fmtDay, parseDay,
+  iraCannotTest, designBlocked,
   monthlyBreakdown, spikeMonths, priorRoundCount, fileUsable, originLabel, guessFileKind, populationSources, ipeChecksFor, samplesFor,
   expectedInputsFor, hasRowCount, isAssisting, sampledSources, reviewNotesFor, isShared, entityCoverage, uncoveredEntities, hasPaths, pathCoverage, untouchedPaths, type PopVerdict,
   requiredFilesOf, requiredFilesCount, requiredFilesReady, passedWithoutFiles, designFilesOf,
@@ -498,7 +499,7 @@ function SampleResultsTable({ control, step }: { control: Control; step: Operati
 // Exported for the design-track retest (extraViews), whose checks carry the same
 // validation shape and read out the same way.
 export function QAResultsModal({ title, validation, control, step, onClose }: { title: string; validation: ValidationResult; control?: Control; step?: OperatingStep; onClose: () => void }) {
-  const { qa, summary, table, result, fileName } = validation;
+  const { qa, summary, table, result, fileName, blocked } = validation;
   const passed = qa.filter(x => x.pass).length;
   // An operating attribute is tested against the drawn sample, so its real
   // item-level answer is the sample table. The generated evidence table is the
@@ -511,7 +512,11 @@ export function QAResultsModal({ title, validation, control, step, onClose }: { 
         <div className="flex items-center justify-between px-5 py-3.5 border-b border-canvas-border">
           <div className="flex items-center gap-2"><Sparkles size={16} className="text-brand-600" /><h3 className="text-[0.875rem] font-bold text-ink-900">Ask IRA — validation results</h3></div>
           <div className="flex items-center gap-2">
-            {result && <span className={cn('inline-flex items-center gap-1 text-[0.75rem] font-bold px-2 h-6 rounded-full', result === 'Pass' ? 'bg-compliant-50 text-compliant-700' : 'bg-risk-50 text-risk-700')}><Tickmark result={result} size={13} /> {result}</span>}
+            {result
+              ? <span className={cn('inline-flex items-center gap-1 text-[0.75rem] font-bold px-2 h-6 rounded-full', result === 'Pass' ? 'bg-compliant-50 text-compliant-700' : 'bg-risk-50 text-risk-700')}><Tickmark result={result} size={13} /> {result}</span>
+              /* No verdict, and the pill says which kind of no: amber, because
+                 the evidence fell short, not the control. */
+              : blocked && <span className="inline-flex items-center gap-1 text-[0.75rem] font-bold px-2 h-6 rounded-full bg-mitigated-50 text-mitigated-800"><AlertTriangle size={11} /> Could not test</span>}
             <button onClick={onClose} className="h-8 w-8 inline-flex items-center justify-center rounded-lg text-ink-400 hover:text-ink-800 hover:bg-paper-50 cursor-pointer"><X size={16} /></button>
           </div>
         </div>
@@ -648,6 +653,12 @@ function PointRow({ control, point, canEdit, checking = false }: { control: Cont
   // this fails, and the auditor passed it" without saying why is a paper that
   // cannot be reviewed.
   const iraSaid = point.validation?.result;
+  // What Ira said it could not do, and which of the two problems it is. Only
+  // while the check is still unmarked: once the auditor has answered it by
+  // hand, the assistant's inability to is history and the row should not keep
+  // apologising for it.
+  const blocked = eff === 'Not tested' ? point.validation?.blocked : undefined;
+  const blockKind = blocked ? iraCannotTest(point, control)?.kind ?? 'insufficient' : undefined;
 
   // The elements this check points at. Resolved by id every render rather than
   // cached — an element that was removed must stop being cited, not linger as a
@@ -671,6 +682,24 @@ function PointRow({ control, point, canEdit, checking = false }: { control: Cont
         <div className="min-w-0 flex-1">
           <div className="flex items-center gap-2"><span className="text-[0.78125rem] font-medium text-ink-800">{point.text}</span>{point.override && <span className="override-tag"><Pencil size={9} /> Overridden</span>}</div>
           <div className="text-[0.6875rem] text-ink-400 mt-1 inline-flex items-center gap-1.5"><WorkflowIcon size={11} /> {point.workflowName ?? 'Design walkthrough check'} · {checking ? 'checking…' : validating ? 'validating…' : (point.workflowRunRef ?? 'not validated')}</div>
+
+          {/* ── Ira read it and could not answer it (user ask, 22 Sep) ────────
+              Amber, not red: red is a finding about the control, and this is a
+              finding about the evidence. The check is still Not tested — the
+              tick on the left says so and the conclusion is still held — so
+              this line's whole job is to say WHY the assistant left it alone
+              and what would let it try again. It clears itself the moment the
+              check is marked or the missing element lands, because it is read
+              off the validation the next run overwrites. */}
+          {blocked && !validating && (
+            <div className="mt-1.5 rounded-md border border-mitigated-200 bg-mitigated-50/70 px-2.5 py-1.5 flex items-start gap-1.5">
+              <AlertTriangle size={11} className="text-mitigated-600 shrink-0 mt-[3px]" />
+              <p className="text-[0.6875rem] leading-snug text-mitigated-800 min-w-0">
+                <span className="font-semibold">Ira could not test this — {blockKind === 'missing' ? 'missing files' : 'not enough to go on'}.</span>{' '}
+                {blocked}
+              </p>
+            </div>
+          )}
           {/* The override stands when a file comes or goes after it — it is still
               the auditor's recorded judgement — but it says the evidence under it
               moved, so the reader knows to look again. */}
@@ -1550,7 +1579,10 @@ function DesignSection({ control, canEdit }: { control: Control; canEdit: boolea
     : d.conclusion !== 'Not tested' ? 'TOD is concluded — it has to be reopened or returned before Ira runs again'
     : null;
   const iraStale = !!d.ira?.evidenceChanged;
-  // The button is here; the narration is in the rail (user ask, 22 Sep). The
+  // Checks the last run read and could not answer. Still Not tested, still
+  // holding the conclusion — the count is here so that is visible without
+  // opening every row.
+  const iraCouldNot = designBlocked(control);  // The button is here; the narration is in the rail (user ask, 22 Sep). The
   // row of checks below already shows each one turning over, so a second
   // progress bar on this side would be the same fact twice — what the rail
   // adds is the sentence that says what is being read and, when it lands, what
@@ -1778,7 +1810,18 @@ function DesignSection({ control, canEdit }: { control: Control; canEdit: boolea
           )}
           */}
           <div className="flex items-center justify-between mb-2.5 gap-2 flex-wrap">
-            <h4 className="text-[0.78125rem] font-bold text-ink-700 inline-flex items-center gap-1.5"><ClipboardCheck size={14} /> Design checks <span className="font-normal text-ink-400">· assessed against the evidence</span></h4>
+            <h4 className="text-[0.78125rem] font-bold text-ink-700 inline-flex items-center gap-1.5 flex-wrap"><ClipboardCheck size={14} /> Design checks <span className="font-normal text-ink-400">· assessed against the evidence</span>
+              {/* What the run left behind, said once at the top so it does not
+                  have to be found by scrolling. Amber, and a count rather than
+                  a warning: these are checks waiting for a person, which is an
+                  ordinary state, not an alarm. */}
+              {iraCouldNot.length > 0 && !iraRunning && (
+                <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-md bg-mitigated-50 text-mitigated-800 text-[0.65625rem] font-bold whitespace-nowrap"
+                  title={`Ira read the evidence and could not reach a verdict on ${iraCouldNot.length === 1 ? 'this one' : 'these'} — mark ${iraCouldNot.length === 1 ? 'it' : 'them'} yourself, or attach what ${iraCouldNot.length === 1 ? 'it needs' : 'they need'}`}>
+                  <AlertTriangle size={9} /> {iraCouldNot.length} Ira couldn’t test
+                </span>
+              )}
+            </h4>
             <div className="flex items-center gap-2">
               {/* PARKED (Aug 2026, user ask) — the Validate all button. `runValidateAll`
                   and `validatingAll` are left above so restoring it is one line:

@@ -1,5 +1,5 @@
 import {
-  designApproved, designCompleteness, designFilesOf, designOutstanding, designSuggestion, isControlLocked, isEngagementLocked,
+  designApproved, designBlocked, designCompleteness, designFilesOf, designOutstanding, designSuggestion, isControlLocked, isEngagementLocked,
   inquiryOnlyAttributes, operatingApplies, operatingProgress, passedWithoutFiles, pendingReviewNoteCount, pointResult,
   populationLocked, populationSources, requiredFilesCount, requiredFilesReady, sampledSources, samePerson, stepResult, toeRoundFailed, trackResult, yearEndPending,
 } from './helpers';
@@ -83,7 +83,13 @@ export interface Situation {
   checksFailed: number;
   iraRun: boolean;
   iraStale: boolean;
+  /** Why the whole run cannot start. */
   iraBlocked: string | null;
+  /** Checks the run DID reach and could not answer — still unmarked, still
+   *  holding the conclusion, and re-running changes nothing about them until
+   *  the evidence does. Different from `iraBlocked`, which is the run itself
+   *  never starting. */
+  checksBlocked: { text: string; reason: string }[];
   designReturn?: { note: string; by: string; at: string };
   /** The design conclusion went against what the evidence suggested. */
   designOverride: boolean;
@@ -260,6 +266,7 @@ export function situationOf({ eng, control, role, me, audit, files }: ChatCtx): 
     ownPaper: samePerson(control.wpSignoff?.preparer, me),
     checksTotal, checksUnmarked, checksPassed, checksFailed,
     iraRun: !!d.ira, iraStale: !!d.ira?.evidenceChanged, iraBlocked,
+    checksBlocked: designBlocked(control).map(p => ({ text: p.text, reason: p.validation!.blocked! })),
     designReturn: d.designReturn, designOverride: !!d.override, evidenceSuggested: designSuggestion(control),
     designRationale: d.rationale, requested,
     blocked: control.unableToTest && {
@@ -285,7 +292,7 @@ export function situationOf({ eng, control, role, me, audit, files }: ChatCtx): 
   };
   s.key = [
     role, step, designResult, todApproved, missing.length, elementsOnFile, d.documents.length,
-    checksUnmarked, checksFailed, s.iraRun, s.iraStale, !!d.designReturn,
+    checksUnmarked, checksFailed, s.iraRun, s.iraStale, s.checksBlocked.length, !!d.designReturn,
     // The extract itself, which the key used to miss entirely: locking was in
     // here but the population landing was not, so a reader who extracted on the
     // left left Ira holding the sentence it had already typed.
@@ -411,8 +418,19 @@ export function nextPrompt(ctx: ChatCtx): ChatPrompt {
       return line('Every document is on file, but this control’s RACM lists no design checks, so there is nothing to assess. The conclusion is a judgement call on the documents alone.');
     }
     if (s.checksUnmarked > 0) {
+      // ── the ones I read and could not answer (user ask, 22 Sep) ───────────
+      // Re-running changes nothing about these until the evidence does, so
+      // offering the run again would be the rail asking for a click it knows
+      // will produce the same sentence. It says what is missing instead.
+      const cant = s.checksBlocked;
+      if (cant.length > 0 && cant.length === s.checksUnmarked) {
+        return line(cant.length === 1
+          ? `I read the evidence and could not answer the last one: “${cant[0].text}” — ${cant[0].reason} Mark it yourself if you know the answer, or attach what it needs and I will look again.`
+          : `I read the evidence and could not answer ${plural(cant.length, 'of the checks', 'of the checks')}:\n\n${cant.map(x => `· ${x.text}\n  ${x.reason}`).join('\n')}\n\nMark them yourself if you know the answers, or attach what they need and I will look again.`);
+      }
       const ready = !s.iraBlocked;
-      return line(`Everything asked for is on file. ${plural(s.checksUnmarked, 'design check')} of ${s.checksTotal} not marked yet${ready ? ' — I can read the evidence and assess them all in one go, or you can mark them by hand.' : `, and I cannot run the validation because ${s.iraBlocked}.`}`);
+      const also = cant.length > 0 ? ` ${plural(cant.length, 'of them is', 'of them are')} waiting on me — I read ${cant.length === 1 ? 'it' : 'them'} and could not answer, so ${cant.length === 1 ? 'that one is' : 'those are'} yours or the evidence's.` : '';
+      return line(`Everything asked for is on file. ${plural(s.checksUnmarked, 'design check')} of ${s.checksTotal} not marked yet${ready ? ' — I can read the evidence and assess them all in one go, or you can mark them by hand.' : `, and I cannot run the validation because ${s.iraBlocked}.`}${also}`);
     }
     if (s.iraStale) {
       return line(`All ${s.checksTotal} checks are marked, but the evidence has changed since I last read it. Worth a re-run before you conclude.`);
@@ -550,8 +568,13 @@ export function acknowledge(prev: Situation, next: Situation): string | null {
   }
   if (!prev.iraRun && next.iraRun) {
     // The counts belong to the prompt underneath; saying them twice in two
-    // adjacent bubbles reads like a stutter rather than a summary.
-    return `Done — I read the evidence against all ${next.checksTotal} design ${next.checksTotal === 1 ? 'check' : 'checks'}.`;
+    // adjacent bubbles reads like a stutter rather than a summary. The ones it
+    // could NOT answer are the exception: that is not a count, it is the
+    // difference between what was asked of me and what I did.
+    const cant = next.checksBlocked.length;
+    return cant > 0
+      ? `Done — I read the evidence against all ${next.checksTotal} design ${next.checksTotal === 1 ? 'check' : 'checks'}, and there ${cant === 1 ? 'is one' : `are ${cant}`} I could not answer.`
+      : `Done — I read the evidence against all ${next.checksTotal} design ${next.checksTotal === 1 ? 'check' : 'checks'}.`;
   }
   if (prev.checksUnmarked > next.checksUnmarked) {
     return next.checksUnmarked === 0

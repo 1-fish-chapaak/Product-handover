@@ -1,6 +1,6 @@
 import { isInquiryOnly, ipeReliable, GRADE_RANK, AUDIT_SAMPLE_SPREADS, DEFAULT_AUDIT_SAMPLING, TESTING_STRATEGIES } from './types';
 import type {
-  AuditorProofKind, AuditSampleSpread, AuditSampling, Conclusion, Control, Court, Deficiency, DesignDoc, DesignTrack, ExceptionGrade, HandoffTask, IcfrEngagement,
+  AuditorProofKind, AuditSampleSpread, AuditSampling, Conclusion, Control, Court, Deficiency, DesignDoc, DesignDocKind, DesignTrack, ExceptionGrade, HandoffTask, IcfrEngagement,
   FileOrigin, IpeCheck, Likelihood, MaterialityRules, OperatingTrack, Population, PopulationBasis, PopulationSource, ReviewNote, RiskRating, Role,
   Sample, Severity, TestingStrategy, ToeRound, TrackConclusion, DeficiencyGroup, ExceptionStatus,
   ControlType, Nature,
@@ -2374,6 +2374,86 @@ export function requiredFilesReady(s: OperatingStep, c: EvidenceSource): boolean
  *  Pass button, an override, an attestation). They can't carry an effective TOE. */
 export function passedWithoutFiles(c: Control): OperatingStep[] {
   return c.operating.steps.filter(s => stepResult(s) === 'Pass' && !requiredFilesReady(s, c));
+}
+
+/**
+ * Why Ira cannot answer one design check, or null if it can.
+ *
+ * A real assistant reads the evidence it was given and sometimes finds that
+ * nothing in it speaks to the question. Saying so is the honest outcome; the
+ * dishonest one is a Pass, because a check nobody could assess and a check that
+ * held look identical on a working paper once a tick is on it.
+ *
+ * Two ways it happens, and they are different problems with different fixes:
+ *
+ *  · MISSING — the element that answers this check is on the control, and
+ *    nobody has attached its file. One upload away.
+ *  · INSUFFICIENT — the element that answers it is not on the control at all.
+ *    A process narrative does not say who holds which SAP role, and reading one
+ *    harder will not make it. Somebody has to add the element.
+ *
+ * Nothing here is invented: the check's own words say what it is asking about,
+ * and the control's own elements say whether that question has anything behind
+ * it. Run twice on the same control it gives the same answer, because it is a
+ * reading of the control rather than a roll of the dice.
+ */
+export interface IraBlock {
+  kind: 'missing' | 'insufficient';
+  /** The element that would have answered it. */
+  needs: DesignDocKind;
+  /** The sentence the row prints, in amber. */
+  reason: string;
+}
+
+/** What a check is asking about, and the element that answers it. Only the two
+ *  specialised kinds are here: the general ones (narrative, flowchart,
+ *  walkthrough, control description) describe the control as a whole, so any of
+ *  them can speak to an ordinary check. These two cannot be substituted —
+ *  neither who-holds-which-role nor where-the-threshold-sits is in a narrative. */
+const ANSWERED_BY: { kind: DesignDocKind; asks: RegExp }[] = [
+  { kind: 'Segregation of duties', asks: /\b(segregat\w*|independent of|distinct|four[- ]eyes|same person|different person|requester|preparer|authoriser|second authoriser)\b/i },
+  { kind: 'Precision & thresholds', asks: /\b(threshold\w*|toleran\w*|signing limits?|precision|materiality|tiers?|de minimis)\b/i },
+];
+
+export function iraCannotTest(p: DesignPoint, c: Control): IraBlock | null {
+  const onFile = c.design.documents.filter(d => designFilesOf(d).length > 0);
+  const label = (k: string) => k.toLowerCase();
+
+  // The check names its own evidence and none of what it names has arrived.
+  // This outranks the reading below: a check told where to look and finding an
+  // empty shelf is the plainest case there is.
+  const cited = p.evidencedBy?.length ? c.design.documents.filter(d => p.evidencedBy!.includes(d.id)) : [];
+  if (cited.length > 0 && cited.every(d => designFilesOf(d).length === 0)) {
+    const names = cited.map(d => (d.kind === 'Custom' ? d.name : d.kind));
+    return {
+      kind: 'missing', needs: cited[0].kind,
+      reason: `Nothing is attached to ${listPhrase(names.map(n => n.toLowerCase()))} yet, and that is what this check points at.`,
+    };
+  }
+
+  // What it is asking about, and whether anything on file can answer it.
+  const needs = ANSWERED_BY.find(x => x.asks.test(p.text));
+  if (!needs) return null;
+  if (onFile.some(d => d.kind === needs.kind)) return null;
+  const onControl = c.design.documents.some(d => d.kind === needs.kind);
+  return onControl
+    ? {
+      kind: 'missing', needs: needs.kind,
+      reason: `${needs.kind} is on this control but has no file, so there is nothing to read this one against.`,
+    }
+    : {
+      kind: 'insufficient', needs: needs.kind,
+      reason: onFile.length === 0
+        ? 'Nothing is attached to any element yet, so there is nothing to read.'
+        : `${cap(listPhrase(onFile.map(d => label(d.kind === 'Custom' ? d.name : d.kind))))} ${onFile.length === 1 ? 'is' : 'are'} all that is on file, and ${onFile.length === 1 ? 'it does' : 'they do'} not say enough to answer this. A ${label(needs.kind)} element would.`,
+    };
+}
+
+const cap = (s: string): string => (s ? s.charAt(0).toUpperCase() + s.slice(1) : s);
+
+/** Checks Ira ran and could not reach a verdict on — what the header counts. */
+export function designBlocked(c: Control): DesignPoint[] {
+  return c.design.points.filter(p => !!p.validation?.blocked && pointResult(p) === 'Not tested');
 }
 
 /** Deterministic Q&A a design-validation workflow returns for a consideration. */

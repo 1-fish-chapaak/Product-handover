@@ -1,6 +1,6 @@
 import { createContext, useCallback, useContext, useMemo, useState, type ReactNode } from 'react';
 import { racmTemplateForProcesses, requiredDatasetsFor, sampleRefs, seedIcfrEngagement, type SeedMeta } from './mockData';
-import { assessSeverity, attestationOverruled, designApproved, designFilesOf, designRetestChecks, designOutstanding, fmtDateTime, requiredFilesOf, requiredFilesReady, canExtendToe, canRedrawToe, controlConclusion, reconcileConfirmations, formatINR, gradeException, icfrConclusion, inquiryOnlyAttributes, passedWithoutFiles, isControlLocked, isControlLockedIn, isEngagementLocked, itgcHolds, parseLooseDate, samePerson, populationSources, previewRegrades, sampleSizeGuide, samplesFor, sourceTotals, staleSteps, stepResult, TOE_MAX_ROUNDS, toeRoundFailed, toeRoundNo, toeRounds, trackResult, validationQA, validationSummary, validationTable, wfRunRef, auditSampling, dealSample, samplesTestedCount, sampleHome, spreadPhrase, workingAudit, yearEndPending, LEGACY_SOURCE_ID, type RulesPatch } from './helpers';
+import { assessSeverity, attestationOverruled, designApproved, designFilesOf, iraCannotTest, designRetestChecks, designOutstanding, fmtDateTime, requiredFilesOf, requiredFilesReady, canExtendToe, canRedrawToe, controlConclusion, reconcileConfirmations, formatINR, gradeException, icfrConclusion, inquiryOnlyAttributes, passedWithoutFiles, isControlLocked, isControlLockedIn, isEngagementLocked, itgcHolds, parseLooseDate, samePerson, populationSources, previewRegrades, sampleSizeGuide, samplesFor, sourceTotals, staleSteps, stepResult, TOE_MAX_ROUNDS, toeRoundFailed, toeRoundNo, toeRounds, trackResult, validationQA, validationSummary, validationTable, wfRunRef, auditSampling, dealSample, samplesTestedCount, sampleHome, spreadPhrase, workingAudit, yearEndPending, LEGACY_SOURCE_ID, type RulesPatch } from './helpers';
 import type {
   Assertion, Attestation, AuditArchive, AuditFileRecord, AuditorProof, AuditRecord, Control, Deficiency, DesignDoc, DesignDocKind, DesignPoint, DiscussionAnchor, DocStatus, FileOrigin,
   DesignJudgements, DesignWaiverReason, EvidenceFile, EvidenceMode, ExceptionStatus, ExecKind, ExecutionEvent, Frequency, HandoffTask, IcfrEngagement,
@@ -92,6 +92,7 @@ const short = (s: string, n = 40) => (s.length > n ? `${s.slice(0, n - 1)}…` :
 // already been marked failed before that.
 const IRA_ON_FILE_Q = 'Is every required design element on file?';
 const IRA_STOOD_FAILED_Q = 'Was this check already marked failed?';
+const IRA_COULD_TEST_Q = 'Is there anything on file that answers this check?';
 // The retest's version of the first question: a TOD retest reads the fix, so what
 // has to be on file is the owner's evidence of it, not the design elements.
 const RETEST_FIX_ON_FILE_Q = 'Is the evidence of the fix on file?';
@@ -2246,7 +2247,7 @@ export function IcfrProvider({ children, initialRole = 'auditor', seedMeta }: { 
   const runDesignIra = useCallback<IcfrCtx['runDesignIra']>((controlId) => {
     if (role !== 'auditor') return;
     const at = fmtDateTime();
-    let tally: { checks: number; failed: number; files: string[] } | null = null;
+    let tally: { checks: number; failed: number; blocked: number; files: string[] } | null = null;
     patchControl(controlId, c => {
       const d = c.design;
       const onFile = d.documents.filter(doc => designFilesOf(doc).length > 0);
@@ -2267,7 +2268,35 @@ export function IcfrProvider({ children, initialRole = 'auditor', seedMeta }: { 
       const the = (xs: string[]) => list(xs.map(x => `the ${x}`));
       const cap = (x: string) => x.charAt(0).toUpperCase() + x.slice(1);
       let failed = 0;
+      let blocked = 0;
       const points = d.points.map(p => {
+        // ── the check Ira cannot answer (user ask, 22 Sep) ──────────────────
+        // It read what was there and nothing in it speaks to this question —
+        // the element that would answer it has no file, or is not on the
+        // control at all. The honest outcome is to say so and leave the check
+        // where it was: NOT TESTED, still the auditor's to mark by hand, still
+        // holding Effective back. Writing a Pass here would make a check
+        // nobody could assess indistinguishable on the paper from one that
+        // held, which is the failure mode this whole guard exists to prevent.
+        const cannot = iraCannotTest(p, c);
+        if (cannot) {
+          blocked += 1;
+          return {
+            ...p,
+            // `result` untouched, and no `result` on the validation either —
+            // there is no verdict, and an absent one is the only honest shape.
+            workflowRunRef: `Ask IRA · could not test · ${at}`,
+            validation: {
+              qa: [{ q: IRA_COULD_TEST_Q, a: cannot.reason, pass: false }],
+              blocked: cannot.reason,
+              summary: cannot.kind === 'missing'
+                ? `Ira could not test this one — the evidence it points at has not been attached yet.`
+                : `Ira could not test this one — what is on file does not answer it.`,
+              fileName: files.join(', ') || undefined,
+              at,
+            },
+          };
+        }
         // What the check stood at before this run. A failure that was only Ira's
         // own "not on file yet" is not a failure to carry into the next run —
         // otherwise uploading the missing element could never clear it — so that
@@ -2295,13 +2324,17 @@ export function IcfrProvider({ children, initialRole = 'auditor', seedMeta }: { 
           validation: { result: res, qa, summary, fileName: files.join(', ') || undefined, at },
         };
       });
-      tally = { checks: points.length, failed, files };
+      tally = { checks: points.length, failed, blocked, files };
       return { ...c, design: { ...d, points, ira: { by: me, at, evidenceChanged: false } } };
     });
     pushExec(() => {
       if (!tally) return null;
-      const passed = tally.checks - tally.failed;
-      return { controlId, track: 'design', kind: 'ai-review', verb: `ran Ira on ${tally.checks} design check${tally.checks === 1 ? '' : 's'} — ${passed} passed, ${tally.failed} failed`, result: tally.failed > 0 ? 'Fail' : 'Pass' };
+      const passed = tally.checks - tally.failed - tally.blocked;
+      // The blocked ones are named in the log, not folded into the pass count.
+      // "5 passed" on a run that could only read three is the sentence a
+      // reviewer would later find was not true.
+      const could = tally.blocked > 0 ? `, ${tally.blocked} it could not test` : '';
+      return { controlId, track: 'design', kind: 'ai-review', verb: `ran Ira on ${tally.checks} design check${tally.checks === 1 ? '' : 's'} — ${passed} passed, ${tally.failed} failed${could}`, result: tally.failed > 0 ? 'Fail' : 'Pass' };
     });
     pushRun(prev => {
       const c = prev.controls.find(cc => cc.id === controlId);

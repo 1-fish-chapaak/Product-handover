@@ -123,6 +123,16 @@ export interface ValidationResult {
   summary?: string;          // plain-language summary of what the AI found
   table?: ValidationTable;   // optional supporting table
   fileName?: string;         // the required file the validation ran against
+  /** Ira read what there was and could NOT reach a verdict on this one — this
+   *  is why, in the auditor's terms (user ask, 22 Sep).
+   *
+   *  Deliberately not a third TestResult. "Could not test" is not a finding
+   *  about the control, it is a finding about the evidence, and widening
+   *  TestResult would have let it flow into every place that counts passes and
+   *  failures — the conclusion, the deficiency ladder, the working paper. A
+   *  blocked check stays exactly what it was: not tested, and still the
+   *  auditor's to mark by hand. Set together with `result` left undefined. */
+  blocked?: string;
   at: string;
 }
 
