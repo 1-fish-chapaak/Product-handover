@@ -5116,39 +5116,44 @@ function RailSpine({ control, meters, running, onOpen }: { control: Control; met
         </div>
       )}
 
-      <div className="border-t border-canvas-border" />
+      {/* PARKED (22 Sep, user ask) — the five-dot spine stood between the
+          scores and the footer. It said which step the control was on, which
+          the stepper down the left-hand side of the page already says at full
+          size and in words: the folded rail sat directly beside it repeating
+          the same five numbers in 20px circles. The scores and the way back to
+          Ira are what this column is for, and the chat itself names the step
+          in words the moment it is opened. */}
 
-      {/* ── the agent ───────────────────────────────────────────────────────
-          Under the reading, because that is the order the open rail reads in:
-          here is the score, here is what to do about it. The mark is the
-          product's AI signature (brand → fuchsia, Ask IRA's own avatar); a run
-          in flight rings it, so a validation started on the left is visible
-          from a column 80px wide. */}
-      <button onClick={() => onOpen('chat')} title="Ask Ira about this control" aria-label="Open the Ira chat"
-        className="group shrink-0 mx-1.5 mt-2 rounded-xl py-2 flex flex-col items-center gap-1.5 hover:bg-brand-50 transition-colors cursor-pointer">
-        <span className="relative inline-flex size-9">
-          {running && !still && (
-            <motion.span aria-hidden className="absolute inset-0 rounded-xl bg-brand-400"
-              animate={{ scale: [1, 1.5], opacity: [0.5, 0] }}
-              transition={{ duration: 1.6, repeat: Infinity, ease: 'easeOut' }} />
-          )}
-          <span className="relative inline-flex items-center justify-center w-full h-full rounded-xl bg-gradient-to-br from-brand-500 to-fuchsia-500 text-white shadow-[0_4px_16px_-4px_rgba(106,18,205,0.5)]">
-            <Sparkles size={17} strokeWidth={2.25} />
-          </span>
-        </span>
-        <span className="text-[0.5625rem] font-bold uppercase tracking-[0.12em] text-brand-700">Ira</span>
-      </button>
+      {/* ── the three ways back in ──────────────────────────────────────────
+          One group at the floor (user ask, 22 Sep). Ira used to sit directly
+          under the scores with History and Discussion pinned at the bottom,
+          which read correctly while the spine filled the gap between them and
+          as a stranded button once it went. They are the same KIND of thing —
+          each one unfolds the rail, and the only difference is which pane you
+          land on — so they belong in one stack rather than at opposite ends of
+          an empty column.
 
-      {/* PARKED (22 Sep, user ask) — the five-dot spine stood here. It said
-          which step the control was on, which the stepper down the left-hand
-          side of the page already says at full size and in words: the folded
-          rail sat directly beside it repeating the same five numbers in 20px
-          circles. The scores and the way back to Ira are what this column is
-          for, and the chat itself names the step in words the moment it is
-          opened. */}
-
+          Ira leads it and keeps its mark: the product's AI signature (brand →
+          fuchsia, Ask IRA's own avatar), ringed while a run is in flight so a
+          validation started on the left is visible from a column 80px wide.
+          The other two stay flat icons, which is the hierarchy — one thing
+          here does the work. */}
       <div className="mt-auto border-t border-canvas-border" />
       <div className="shrink-0 px-1.5 py-2 space-y-1">
+        <button onClick={() => onOpen('chat')} title="Ask Ira about this control" aria-label="Open the Ira chat"
+          className="group w-full rounded-xl py-2 flex flex-col items-center gap-1.5 hover:bg-brand-50 transition-colors cursor-pointer">
+          <span className="relative inline-flex size-9">
+            {running && !still && (
+              <motion.span aria-hidden className="absolute inset-0 rounded-xl bg-brand-400"
+                animate={{ scale: [1, 1.5], opacity: [0.5, 0] }}
+                transition={{ duration: 1.6, repeat: Infinity, ease: 'easeOut' }} />
+            )}
+            <span className="relative inline-flex items-center justify-center w-full h-full rounded-xl bg-gradient-to-br from-brand-500 to-fuchsia-500 text-white shadow-[0_4px_16px_-4px_rgba(106,18,205,0.5)]">
+              <Sparkles size={17} strokeWidth={2.25} />
+            </span>
+          </span>
+          <span className="text-[0.5625rem] font-bold uppercase tracking-[0.12em] text-brand-700">Ira</span>
+        </button>
         <button onClick={() => onOpen('history')} title={`History — ${execCount} run${execCount === 1 ? '' : 's'}`} aria-label="Open the run history" className={iconBtn}>
           <History size={15} />{execCount > 0 && <span className="text-[0.625rem] font-semibold tabular-nums">{execCount}</span>}
         </button>
