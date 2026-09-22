@@ -2,7 +2,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { motion, AnimatePresence } from 'motion/react';
 import {
-  FileText, Upload, MessageSquare, Workflow as WorkflowIcon, Hand, AlertTriangle,
+  FileText, Upload, MessageSquare, PanelRightClose, Workflow as WorkflowIcon, Hand, AlertTriangle,
   Send, Lock, ClipboardCheck, FileCheck2, FlaskConical, CheckCircle2, XCircle,
   CornerDownRight, Pencil, RotateCcw, Cpu, ChevronRight, Scale, Paperclip, Plus, Trash2,
   Mail, X, Loader2, ChevronDown, Check, PlayCircle, Link2, ListChecks, Gavel, UserCheck, History, FileUp, ArrowLeft, Footprints, BadgeCheck, Star,
@@ -4871,7 +4871,7 @@ function DiscussionPane({ control }: { control: Control }) {
 // a rail that opened on History put the past where the next move should be.
 // Nothing was lost to make room — both old panes are one click away, and the
 // rail is 40px wider to carry three tabs without cramping them.
-function ActivityRail({ control, meters }: { control: Control; meters: RagMeterDef[] }) {
+function ActivityRail({ control, meters, onCollapse }: { control: Control; meters: RagMeterDef[]; onCollapse: () => void }) {
   const { eng } = useIcfr();
   const [pane, setPane] = useState<'chat' | 'history' | 'discussion'>('chat');
   const execCount = eng.executions.filter(e => e.controlId === control.id).length;
@@ -4886,10 +4886,18 @@ function ActivityRail({ control, meters }: { control: Control; meters: RagMeterD
           conversation underneath is what to do about it. One panel, one rule
           between them. */}
       <RagKpiRow meters={meters} flush />
-      <div className="flex items-center gap-1 p-1 m-3 mb-2 rounded-xl bg-paper-50 border border-canvas-border">
-        <button onClick={() => setPane('chat')} className={tabCls(pane === 'chat')}><Sparkles size={13} /> Ira</button>
-        <button onClick={() => setPane('history')} className={tabCls(pane === 'history')}><History size={13} /> History{execCount > 0 && <span className="text-[0.625rem] tabular-nums opacity-70">{execCount}</span>}</button>
-        <button onClick={() => setPane('discussion')} className={tabCls(pane === 'discussion')}><MessageSquare size={13} /> Discussion{openDisc > 0 && <span className="text-[0.625rem] tabular-nums opacity-70">{openDisc}</span>}</button>
+      <div className="flex items-center gap-2 m-3 mb-2">
+        <div className="flex-1 min-w-0 flex items-center gap-1 p-1 rounded-xl bg-paper-50 border border-canvas-border">
+          <button onClick={() => setPane('chat')} className={tabCls(pane === 'chat')}><Sparkles size={13} /> Ira</button>
+          <button onClick={() => setPane('history')} className={tabCls(pane === 'history')}><History size={13} /> History{execCount > 0 && <span className="text-[0.625rem] tabular-nums opacity-70">{execCount}</span>}</button>
+          <button onClick={() => setPane('discussion')} className={tabCls(pane === 'discussion')}><MessageSquare size={13} /> Discussion{openDisc > 0 && <span className="text-[0.625rem] tabular-nums opacity-70">{openDisc}</span>}</button>
+        </div>
+        {/* Folding the rail away is a reading decision, so the control sits
+            with the reading — beside the tabs, not buried in a menu. */}
+        <button onClick={onCollapse} title="Hide this rail" aria-label="Hide the Ira rail"
+          className="shrink-0 w-8 h-8 rounded-lg text-ink-400 hover:text-ink-700 hover:bg-paper-50 inline-flex items-center justify-center transition-colors cursor-pointer">
+          <PanelRightClose size={16} />
+        </button>
       </div>
       {pane === 'chat' ? <ControlChatPane key={control.id} control={control} />
         : pane === 'history' ? <ExecutionTrail control={control} />
@@ -4966,6 +4974,23 @@ function UnableToTestBanner({ control }: { control: Control }) {
 }
 
 // ── the dossier ──────────────────────────────────────────────────────────────────
+/** A yes/no that outlives the visit. Storage throws in a private window and
+ *  comes back empty when site data is cleared, so every touch is guarded and
+ *  the default simply stands — the worst case is a preference that lasts the
+ *  session instead of the week. */
+const RAIL_OPEN_KEY = 'sox-control-rail-open';
+function useRemembered(key: string, fallback: boolean) {
+  const [on, setOn] = useState(() => {
+    try { const v = window.localStorage.getItem(key); return v === null ? fallback : v === '1'; }
+    catch { return fallback; }
+  });
+  const set = (next: boolean) => {
+    setOn(next);
+    try { window.localStorage.setItem(key, next ? '1' : '0'); } catch { /* storage blocked */ }
+  };
+  return [on, set] as const;
+}
+
 export default function ControlDossier() {
   const { eng, role, selectedControlId, back, setView, reopenControl, focusStep, clearFocusStep, openAuditId } = useIcfr();
   const logEvent = useAuditLog();
@@ -4981,6 +5006,11 @@ export default function ControlDossier() {
   const [reopenWhy, setReopenWhy] = useState('');
   // The deficiency this paper raised, graded here rather than somewhere else.
   const [defOpen, setDefOpen] = useState(false);
+  // Whether the rail is out. It outlives the visit the way the tab order does
+  // — an auditor who folds it away to read a wide sample table has said
+  // something about how they work, not about this one control, and being made
+  // to say it again on the next control would be the tool forgetting.
+  const [railOpen, setRailOpen] = useRemembered(RAIL_OPEN_KEY, true);
   const control = eng.controls.find(c => c.id === selectedControlId);
   // ── landing where the click was about ──────────────────────────────────────
   // Above the early return on purpose: hooks have to run on every render, and
@@ -5097,7 +5127,8 @@ export default function ControlDossier() {
           around it does. `min-h-0` is what lets the column scroll instead of
           growing; `min-w-0` is what stops a wide table pushing the rail off
           the screen. */}
-      <div className="flex-1 min-h-0 grid grid-cols-[minmax(0,1fr)_400px] gap-5">
+      <div className="flex-1 min-h-0 grid gap-5 transition-[grid-template-columns] duration-300 ease-[cubic-bezier(0.22,1,0.36,1)]"
+        style={{ gridTemplateColumns: railOpen ? 'minmax(0,1fr) 400px' : 'minmax(0,1fr) 2.75rem' }}>
         {/* The header travels with the work rather than being frozen above it:
             it is a third of the screen, and the steps are what the auditor
             came for. The white band inside it now ends at this column, which
@@ -5593,8 +5624,27 @@ export default function ControlDossier() {
 
             400px, not 360: the rail carries a conversation, and a bubble with
             a quick reply under it reads badly at 360. */}
-        <motion.div className="h-full min-h-0 pb-6" variants={{ hidden: { opacity: 0, y: 12 }, show: { opacity: 1, y: 0 } }}>
-          <ActivityRail control={control} meters={designRagMeters(control)} />
+        {/* The rail stays MOUNTED when folded away, clipped rather than
+            unmounted. Pulling it out from under a running validation would
+            fire the pane's goodbye — "I stopped reading when you moved away"
+            — at a reader who did no such thing, and would throw away work
+            they asked for. So the panel keeps its full 400px and the track
+            slides over it. */}
+        <motion.div className="h-full min-h-0 pb-6 relative overflow-hidden" variants={{ hidden: { opacity: 0, y: 12 }, show: { opacity: 1, y: 0 } }}>
+          {/* `inert` so a folded rail cannot be tabbed into — it is clipped
+              out of sight, not merely out of the way. */}
+          <div className="h-full w-[400px]" inert={!railOpen}>
+            <ActivityRail control={control} meters={designRagMeters(control)} onCollapse={() => setRailOpen(false)} />
+          </div>
+          {!railOpen && (
+            <button onClick={() => setRailOpen(true)} title="Show the Ira rail" aria-label="Show the Ira rail"
+              className="panel absolute inset-0 bottom-6 flex flex-col items-center pt-3 gap-2 text-ink-400 hover:text-brand-700 hover:border-brand-200 transition-colors cursor-pointer">
+              <PanelRightClose size={16} className="rotate-180 shrink-0" />
+              {/* Bottom-to-top, the way a spine reads — an icon alone leaves
+                  the reader to guess what they folded away. */}
+              <span className="text-[0.625rem] font-semibold uppercase tracking-[0.14em] [writing-mode:vertical-rl] rotate-180">Ira</span>
+            </button>
+          )}
         </motion.div>
       </div>
 
