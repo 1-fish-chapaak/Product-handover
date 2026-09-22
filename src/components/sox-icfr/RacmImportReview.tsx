@@ -16,7 +16,8 @@
  * reading and matching itself lives in racmImport.ts; this file only decides
  * what the reviewer sees and when a value is written.
  */
-import { Fragment, useEffect, useMemo, useRef, useState } from 'react';
+import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { createPortal } from 'react-dom';
 import {
   AlertTriangle, ArrowLeft, Check, CheckCircle2, ChevronDown, ChevronRight, Circle, FileSpreadsheet, FileText, FileWarning,
   Loader2, Paperclip, RotateCcw, Search, Sparkles, Star, Wand2, X,
@@ -105,8 +106,14 @@ const quietBtn = 'h-7 px-2 inline-flex items-center gap-1 rounded-md border bord
  * the forty around it (user ask, 22 Sep).
  *
  * So it is a combobox: type a few letters, press Enter. Deliberately small —
- * no portal, no virtualisation, no fuzzy matching. It is one substring test
- * against the headers of one spreadsheet, and a menu that can be read.
+ * no virtualisation, no fuzzy matching. It is one substring test against the
+ * headers of one spreadsheet, and a menu that can be read.
+ *
+ * The menu is portalled to the body and positioned fixed, which is not
+ * decoration: the picker sits in a cell of `.reg-wrap`, and that wrapper is
+ * `overflow-x: auto; overflow-y: hidden` (register.css) — enough to clip an
+ * absolutely-positioned menu down to a sliver. Anything drawn inside the table
+ * is at the mercy of that clip, so the menu leaves the table.
  */
 function ColumnPicker({ id, label, value, options, onPick }: {
   id: string;
@@ -118,15 +125,56 @@ function ColumnPicker({ id, label, value, options, onPick }: {
 }) {
   const [open, setOpen] = useState(false);
   const [q, setQ] = useState('');
+  /** Where the menu sits this frame, in viewport coordinates. */
+  const [at, setAt] = useState<{ left: number; width: number; y: number; up: boolean; listMax: number } | null>(null);
   const box = useRef<HTMLDivElement>(null);
+  const pop = useRef<HTMLDivElement>(null);
   const search = useRef<HTMLInputElement>(null);
+  /** Focus on mount, not from the open effect: the menu is portalled, so it has
+   *  not rendered yet when that effect runs and the ref is still null there. */
+  const mountSearch = useCallback((el: HTMLInputElement | null) => { search.current = el; el?.focus(); }, []);
 
   useEffect(() => {
-    if (!open) return;
-    search.current?.focus();
-    const away = (e: MouseEvent) => { if (!box.current?.contains(e.target as Node)) setOpen(false); };
+    if (!open) { setAt(null); return; }
+    // The pane the trigger scrolls inside — the modal's body, since `.reg-wrap`
+    // is `overflow-y: hidden` and so is not a scroller.
+    let pane: HTMLElement | null = null;
+    for (let n = box.current?.parentElement ?? null; n; n = n.parentElement) {
+      const o = getComputedStyle(n).overflowY;
+      if (o === 'auto' || o === 'scroll') { pane = n; break; }
+    }
+    const place = () => {
+      const r = box.current?.getBoundingClientRect();
+      if (!r) return;
+      // Scroll the trigger out of its pane and the menu would hang there
+      // anchored to nothing. Close it instead.
+      const clip = pane?.getBoundingClientRect();
+      if (clip && (r.bottom < clip.top || r.top > clip.bottom)) { setOpen(false); return; }
+      const below = window.innerHeight - r.bottom - 12;
+      const above = r.top - 12;
+      // Flip up only when below genuinely can't hold a usable menu and above can.
+      const up = below < 160 && above > below;
+      const room = (up ? above : below) - 32 /* the search row */ - 8;
+      setAt({
+        left: r.left, width: r.width, up,
+        y: up ? window.innerHeight - r.top + 4 : r.bottom + 4,
+        listMax: Math.max(96, Math.min(224, room)),
+      });
+    };
+    place();
+    const away = (e: MouseEvent) => {
+      const t = e.target as Node;
+      if (!box.current?.contains(t) && !pop.current?.contains(t)) setOpen(false);
+    };
     document.addEventListener('mousedown', away);
-    return () => document.removeEventListener('mousedown', away);
+    // Capture, so the modal's own scroller carries the menu along with its trigger.
+    window.addEventListener('scroll', place, true);
+    window.addEventListener('resize', place);
+    return () => {
+      document.removeEventListener('mousedown', away);
+      window.removeEventListener('scroll', place, true);
+      window.removeEventListener('resize', place);
+    };
   }, [open]);
 
   const shown = useMemo(() => {
@@ -141,27 +189,28 @@ function ColumnPicker({ id, label, value, options, onPick }: {
     <div ref={box} className="relative">
       <button id={id} type="button" aria-label={label} aria-expanded={open} aria-haspopup="listbox"
         onClick={() => setOpen(o => !o)}
-        className={cn(selectCls, 'w-full h-8 text-[0.75rem] flex items-center justify-between gap-1.5 text-left')}>
+        className={cn(selectCls, 'w-full h-8 text-[0.75rem] flex items-center justify-between gap-1.5 text-left', open && 'border-brand-400')}>
         <span className={cn('truncate', chosen ? 'text-ink-800' : 'text-ink-400')}>{chosen ? chosen.label : '— Not in file —'}</span>
-        <ChevronDown size={13} className="shrink-0 text-ink-400" />
+        <ChevronDown size={13} className={cn('shrink-0 transition-transform', open ? 'text-brand-600 rotate-180' : 'text-ink-400')} />
       </button>
-      {open && (
-        <div className="absolute z-30 left-0 right-0 mt-1 rounded-lg border border-canvas-border bg-canvas-elevated shadow-[0_12px_32px_-12px_rgba(15,8,30,0.28)] overflow-hidden">
+      {open && at && createPortal(
+        <div ref={pop} style={{ left: at.left, width: at.width, [at.up ? 'bottom' : 'top']: at.y }}
+          className="fixed z-[120] rounded-lg border border-canvas-border bg-canvas-elevated shadow-[0_12px_32px_-12px_rgba(15,8,30,0.28)] overflow-hidden">
           <div className="flex items-center gap-1.5 px-2 h-8 border-b border-canvas-border">
             <Search size={12} className="shrink-0 text-ink-400" />
-            <input ref={search} value={q} onChange={e => setQ(e.target.value)}
+            <input ref={mountSearch} value={q} onChange={e => setQ(e.target.value)}
               onKeyDown={e => {
                 if (e.key === 'Escape') { e.preventDefault(); setOpen(false); setQ(''); }
                 // Enter takes the only thing left, which is what typing three
                 // letters into a list of forty is for.
                 if (e.key === 'Enter' && shown.length === 1) { e.preventDefault(); take(String(shown[0].i)); }
               }}
-              placeholder="Search the file\u2019s columns\u2026" aria-label={`Search columns for ${label}`}
+              placeholder="Search the file’s columns…" aria-label={`Search columns for ${label}`}
               className="min-w-0 flex-1 bg-transparent border-none outline-none text-[0.75rem] text-ink-800 placeholder:text-ink-400" />
             {q && <button type="button" onClick={() => { setQ(''); search.current?.focus(); }} aria-label="Clear the search"
               className="shrink-0 text-ink-400 hover:text-ink-700 cursor-pointer"><X size={11} /></button>}
           </div>
-          <div role="listbox" className="max-h-[14rem] overflow-y-auto py-1">
+          <div role="listbox" style={{ maxHeight: at.listMax }} className="overflow-y-auto py-1">
             {/* Always offered, and never filtered away: "not in this file" is an
                 answer, not a column, so searching for one must not hide it. */}
             <button type="button" role="option" aria-selected={value === null} onClick={() => take('')}
@@ -178,7 +227,8 @@ function ColumnPicker({ id, label, value, options, onPick }: {
             ))}
             {shown.length === 0 && <p className="px-2.5 py-2 text-[0.71875rem] text-ink-400">No column in this file matches that.</p>}
           </div>
-        </div>
+        </div>,
+        document.body,
       )}
     </div>
   );
