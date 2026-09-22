@@ -2524,6 +2524,18 @@ export function designSuggestion(c: Control): TrackConclusion {
     : designOutstanding(c).length > 0 || walkFailed || d.points.some(p => pointResult(p) === 'Fail') ? 'Ineffective'
     : d.points.length > 0 && d.points.every(p => pointResult(p) === 'Pass') ? 'Effective' : 'Not tested';
 }
+/** What the attribute results point to, before anybody concludes anything.
+ *
+ *  Lifted out of OperatingSection (22 Sep) for the same reason designSuggestion
+ *  was: the chat has to know what the evidence suggested in order to file the
+ *  conclusion as an override when the auditor departs from it, and two copies
+ *  of this expression would eventually disagree about whether they had. */
+export function operatingSuggestion(c: Control): TrackConclusion {
+  const steps = c.operating.steps;
+  if (steps.some(s => stepResult(s) === 'Fail')) return 'Ineffective';
+  return steps.length > 0 && steps.every(s => stepResult(s) !== 'Not tested') ? 'Effective' : 'Not tested';
+}
+
 /** The files on a design element. An older seeded element can read Received with
  *  no file list at all — its one file is the element itself — so that case is
  *  read as a single file with a stable id, and the page, the trail and a removal

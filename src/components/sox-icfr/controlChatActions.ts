@@ -26,6 +26,11 @@ export type ChatActionId =
   | 'conclude-effective'
   | 'conclude-ineffective'
   | 'approve-design'
+  | 'lock-population'
+  | 'conclude-op-effective'
+  | 'conclude-op-ineffective'
+  | 'sign-paper'
+  | 'countersign'
   | 'show-step';
 
 export interface ChatAction {
@@ -64,12 +69,28 @@ export function actionsFor(s: Situation, role: Role): ChatAction[] {
       if (!s.ownConclusion) out.push({ id: 'approve-design', label: 'Approve the design', said: 'Approve the design.', primary: true, does: 'approve the design conclusion' });
       out.push(show('Send it back with a note', 'I want to send it back.', 'design'));
     }
-    if (s.preparerSigned && !s.reviewerSigned && !s.ownPaper) out.push(show('Take me to the sign-off', 'Take me to the sign-off.', 'signoff'));
+    // The page's own gate, to the letter: a paper prepared by somebody else,
+    // not yet countersigned, with every review note closed.
+    if (s.preparerSigned && !s.reviewerSigned && !s.ownPaper) {
+      if (s.notesPending === 0) out.push({ id: 'countersign', label: 'Countersign the paper', said: 'Countersign the paper.', primary: true, does: 'countersign the working paper' });
+      out.push(show('Take me to the sign-off', 'Take me to the sign-off.', 'signoff'));
+    }
     return out;
   }
 
   // ── the auditor ───────────────────────────────────────────────────────────
-  if (s.locked) return [show('Take me to the sign-off', 'Take me to the sign-off.', 'signoff')];
+  // Both tracks concluded: the paper is ready to sign, and signing it is a
+  // single store call with a single guard, so it is offered rather than
+  // pointed at. Once signed it belongs to the reviewer and there is nothing
+  // here but the way to look at it.
+  if (s.locked) {
+    return s.preparerSigned
+      ? [show('Take me to the sign-off', 'Take me to the sign-off.', 'signoff')]
+      : [
+        { id: 'sign-paper', label: 'Sign off this paper', said: 'Sign off this paper.', primary: true, does: 'sign the working paper and send it to the reviewer' },
+        show('Show me what I am signing', 'Show me what I am signing.', 'signoff'),
+      ];
+  }
 
   if (s.step === 'design') {
     if (s.designReturn) return [show('Read the reviewer’s note', 'Show me what the reviewer said.', 'design')];
@@ -101,6 +122,38 @@ export function actionsFor(s: Situation, role: Role): ChatAction[] {
     return out;
   }
 
-  // The other four steps get the rail and the read, and the page for the work.
+  // ── ② population ──────────────────────────────────────────────────────────
+  // Locking is one store call behind one gate the situation already carries,
+  // so it is done from here. Extracting is not: the form picks a file and
+  // computes the count itself, and a second implementation of that would give
+  // a different population than the page does for the same criteria.
+  if (s.step === 'population') {
+    if (s.yePending) return [];
+    if (s.popStarted && !s.popLocked && !s.popBlock) {
+      return [
+        { id: 'lock-population', label: `Lock the population at ${s.popCount.toLocaleString('en-IN')} items`, said: 'Lock the population.', primary: true, does: 'lock the population so the sample can be drawn off it' },
+        show('Let me look at it first', 'Take me to the population.', 'population'),
+      ];
+    }
+    return [show(s.popStarted ? 'Take me to the population' : 'Take me to the extraction', 'Take me to this step.', 'population')];
+  }
+
+  // ── ④ test of effectiveness ───────────────────────────────────────────────
+  // The conclusion, both ways, on the page's own gates. A stale run blocks
+  // both; everything else in `toeHolds` blocks only Effective.
+  if (s.step === 'operating') {
+    const out: ChatAction[] = [];
+    if (s.toe.total > 0 && s.toe.tested === s.toe.total && !s.toeStale) {
+      if (!s.toeHolds) out.push({ id: 'conclude-op-effective', label: 'Operating effective', said: 'Conclude the operating effectiveness effective.', primary: s.toe.failed === 0, does: 'conclude the operating effectiveness effective' });
+      out.push({ id: 'conclude-op-ineffective', label: 'Operating ineffective', said: 'Conclude the operating effectiveness ineffective.', primary: s.toe.failed > 0, does: 'conclude the operating effectiveness ineffective' });
+    }
+    out.push(show(out.length ? 'Show me the attributes' : 'Take me to the testing', 'Take me to this step.', 'operating'));
+    return out;
+  }
+
+  // ③ sample, and ⑤ before both tracks are in: the page does the work. Drawing
+  // is a two-stage thing the page holds between a draw and an approval, and
+  // half a draw done from here would leave a control whose step ③ shows
+  // nothing.
   return [show('Take me to this step', 'Take me to this step.', s.step)];
 }

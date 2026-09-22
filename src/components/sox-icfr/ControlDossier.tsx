@@ -15,7 +15,7 @@ import {
   // the deficiency banner below. Both go back together.
   // formatINR,
   concludeRationale, controlCode, controlConclusion, courtFor, operatingApplies, designCompleteness, designOutstanding, discussionsFor, extractionCriteria,
-  isControlLocked, isControlLockedIn, itgcHolds, failedItgcs, isItgcDependent, operatingProgress, TOE_MAX_ROUNDS, toeRoundFailed, toeRoundNo, toeRounds, toeSpent, canRedrawToe, canExtendToe, populationLocked, sampleSizeGuide, trackResult, pointResult, stepResult, attestationOverruled, inquiryOnlyAttributes, restsOnStatementAlone,
+  isControlLocked, isControlLockedIn, itgcHolds, failedItgcs, isItgcDependent, operatingProgress, operatingSuggestion, TOE_MAX_ROUNDS, toeRoundFailed, toeRoundNo, toeRounds, toeSpent, canRedrawToe, canExtendToe, populationLocked, sampleSizeGuide, trackResult, pointResult, stepResult, attestationOverruled, inquiryOnlyAttributes, restsOnStatementAlone,
   countVerdict, coverageVerdict, derivedRunCount, populationReady, designBasis, designSuggestion, auditorProvenChecks, suggestedDesignChecks, suggestPopulationFile, fmtDay, parseDay,
   monthlyBreakdown, spikeMonths, priorRoundCount, fileUsable, originLabel, guessFileKind, populationSources, ipeChecksFor, samplesFor,
   expectedInputsFor, hasRowCount, isAssisting, sampledSources, reviewNotesFor, isShared, entityCoverage, uncoveredEntities, hasPaths, pathCoverage, untouchedPaths, type PopVerdict,
@@ -34,6 +34,7 @@ import { Sparkles, FileSpreadsheet } from 'lucide-react';
 import WorkingPaperModal from './WorkingPaperModal';
 import RemediationBriefModal from './RemediationBriefModal';
 import ControlChatPane from './ControlChatPane';
+import { endRun, startRun, railShown, useControlRun } from './controlChat';
 import { DeficiencyCard } from './extraViews';
 import DatePicker from '../shared/DatePicker';
 import { cn } from '../../lib/cn';
@@ -624,6 +625,14 @@ function PointRow({ control, point, canEdit, checking = false }: { control: Cont
   const eff = pointResult(point);
   const runValidate = () => { setValidating(true); window.setTimeout(() => { validateDesignPoint(control.id, point.id); setValidating(false); }, VALIDATE_MS); };
 
+  // ── disagreeing with a recorded result costs a sentence (user, 22 Sep) ─────
+  // There is no quiet way to change an answer on this row any more: once a
+  // check has a result the ticks are gone and Override is the only door, and
+  // Override always writes a rationale. A working paper that says "Ira found
+  // this fails, and the auditor passed it" without saying why is a paper that
+  // cannot be reviewed.
+  const iraSaid = point.validation?.result;
+
   // The elements this check points at. Resolved by id every render rather than
   // cached — an element that was removed must stop being cited, not linger as a
   // reference to a document nobody can open.
@@ -799,20 +808,34 @@ function PointRow({ control, point, canEdit, checking = false }: { control: Cont
                 `runValidate` and the `validating` machinery are left in place
                 above, so putting this back is one line:
                 <button onClick={runValidate} title="Validate via workflow" className="h-7 px-2.5 inline-flex items-center gap-1 rounded-md border border-canvas-border bg-canvas-elevated text-[0.71875rem] font-semibold text-ink-600 hover:border-evidence-300 hover:text-evidence-700 cursor-pointer"><PlayCircle size={12} /> {point.validation ? 'Re-run' : 'Validate'}</button> */}
-            <button onClick={() => setDesignPoint(control.id, point.id, 'Pass')} title="Mark this check passed" aria-label="Mark this check passed"
-              className={cn('h-7 w-7 inline-flex items-center justify-center rounded-md border transition-colors cursor-pointer',
-                eff === 'Pass' ? 'bg-compliant-50 border-compliant-300 text-compliant-700' : 'border-canvas-border bg-canvas-elevated text-ink-500 hover:border-compliant-300 hover:text-compliant-700')}>
-              <Check size={13} />
-            </button>
-            <button onClick={() => setDesignPoint(control.id, point.id, 'Fail')} title="Mark this check failed" aria-label="Mark this check failed"
-              className={cn('h-7 w-7 inline-flex items-center justify-center rounded-md border transition-colors cursor-pointer',
-                eff === 'Fail' ? 'bg-risk-50 border-risk-300 text-risk-700' : 'border-canvas-border bg-canvas-elevated text-ink-500 hover:border-risk-300 hover:text-risk-700')}>
-              <X size={13} />
-            </button>
-            {/* The override pencil — back (S6, A17) now that Ira gives a verdict
-                to contradict again. It opens the rationale form below; an existing
-                override opens Remove override instead. */}
-            <button onClick={() => setOver(o => !o)} title={point.override ? 'Remove the override' : 'Override this check — record why'} aria-label={point.override ? 'Remove the override' : 'Override this check'} className={cn('h-7 w-7 inline-flex items-center justify-center rounded-md border cursor-pointer', point.override ? 'bg-high-50 border-high-300 text-high-700' : 'border-canvas-border bg-canvas-elevated text-ink-600 hover:border-high-300 hover:text-high-700')}><Pencil size={12} /></button>
+            {/* ── one door at a time (user ask, 22 Sep) ──────────────────────
+                Before there is a result, the ticks: somebody has to be able to
+                say what this check did. After there is one, they go, and the
+                only way to move it is Override — because the mark on the left
+                IS the answer, and a pair of live ticks beside a recorded
+                verdict invites it to be changed without anyone saying why. The
+                pencil went with them: an icon for the one action that writes a
+                sentence onto a working paper was the quietest thing in the row
+                and should have been the loudest. */}
+            {eff === 'Not tested' ? (
+              <>
+                <button onClick={() => setDesignPoint(control.id, point.id, 'Pass')} title="Mark this check passed" aria-label="Mark this check passed"
+                  className="h-7 w-7 inline-flex items-center justify-center rounded-md border border-canvas-border bg-canvas-elevated text-ink-500 hover:border-compliant-300 hover:text-compliant-700 transition-colors cursor-pointer">
+                  <Check size={13} />
+                </button>
+                <button onClick={() => setDesignPoint(control.id, point.id, 'Fail')} title="Mark this check failed" aria-label="Mark this check failed"
+                  className="h-7 w-7 inline-flex items-center justify-center rounded-md border border-canvas-border bg-canvas-elevated text-ink-500 hover:border-risk-300 hover:text-risk-700 transition-colors cursor-pointer">
+                  <X size={13} />
+                </button>
+              </>
+            ) : (
+              <button onClick={() => setOver(o => !o)}
+                title={point.override ? 'Take the override off and go back to what was found' : `Record why this check ${eff === 'Pass' ? 'fails' : 'passes'} after all`}
+                className={cn('h-7 px-2.5 inline-flex items-center rounded-md border text-[0.71875rem] font-semibold transition-colors cursor-pointer',
+                  point.override ? 'bg-high-50 border-high-300 text-high-700 hover:bg-high-100' : 'border-canvas-border bg-canvas-elevated text-ink-600 hover:border-high-300 hover:text-high-700')}>
+                {point.override ? 'Remove override' : 'Override'}
+              </button>
+            )}
             {/* PARKED (18 Sep, user ask) — the bin. A design check comes from the
                 RACM and is part of what the control was tested against; deleting
                 one mid-test rewrites the question after the answer. Failing it,
@@ -826,12 +849,18 @@ function PointRow({ control, point, canEdit, checking = false }: { control: Cont
       {validating && <div className="mt-2.5 ml-8 h-1.5 rounded-full bg-paper-100 overflow-hidden"><motion.div className="h-full bg-evidence-500" initial={{ width: 0 }} animate={{ width: '100%' }} transition={{ duration: VALIDATE_MS / 1000, ease: 'linear' }} /></div>}
       {over && (point.override
         ? <div className="mt-2 flex justify-end"><button onClick={() => { overrideDesignPoint(control.id, point.id, null); setOver(false); }} className="h-7 px-3 text-[0.75rem] font-semibold rounded-lg border border-canvas-border text-ink-600 hover:text-ink-900 inline-flex items-center gap-1.5 cursor-pointer"><RotateCcw size={12} /> Remove override</button></div>
-        : <RationaleForm title="Override this consideration — record why" onCancel={() => setOver(false)} buttons={[
-            { label: 'Override · Pass', onClick: n => { overrideDesignPoint(control.id, point.id, { result: 'Pass', by: me, at: 'just now', rationale: n }); setOver(false); } },
-            // The override sits on top of the result — Ira's answer stays on the
-            // check underneath it, so a failed override no longer rewrites it.
-            { label: 'Override · Fail', onClick: n => { overrideDesignPoint(control.id, point.id, { result: 'Fail', by: me, at: 'just now', rationale: n }); setOver(false); } },
-          ]} />)}
+        // The title names what is being contradicted, because that is the
+        // question the reviewer will ask first.
+        : <RationaleForm
+            title={iraSaid ? `Ira found this ${iraSaid === 'Pass' ? 'passes' : 'fails'} — record why you disagree` : 'Override this consideration — record why'}
+            onCancel={() => setOver(false)}
+            buttons={(['Pass', 'Fail'] as TestResult[]).map(r => ({
+              // The override sits on top of the result — Ira's answer stays on
+              // the check underneath it, so a failed override no longer
+              // rewrites it.
+              label: `Override · ${r}`,
+              onClick: (n: string) => { overrideDesignPoint(control.id, point.id, { result: r, by: me, at: 'just now', rationale: n }); setOver(false); },
+            }))} />)}
       <AnimatePresence>{showQA && point.validation && <QAResultsModal title={point.text} validation={point.validation} onClose={() => setShowQA(false)} />}</AnimatePresence>
     </div>
   );
@@ -1406,15 +1435,31 @@ function DesignSection({ control, canEdit }: { control: Control; canEdit: boolea
   const elementsOnFile = d.documents.filter(doc => designFilesOf(doc).length > 0).length;
   // Checks arrive with the RACM and can no longer be written here (18 Sep), so
   // "add one first" would name a door that was taken off its hinges.
+  // A required element that is not on file stops the test (user ask, 22 Sep).
+  // Ira used to run anyway and fail every check for the same reason — an
+  // assessment of the file room, filed as an assessment of the control. The
+  // store refuses it now, so this names the reason rather than offering a
+  // button that would do nothing. Worded as the thing to do, with the elements
+  // named, because "cannot start" without a list sends the reader hunting.
+  const iraMissing = designOutstanding(control).filter(doc => doc.required !== false)
+    .map(doc => (doc.kind === 'Custom' ? doc.name : doc.kind));
   const iraBlocked = d.points.length === 0 ? 'This control’s RACM lists no design checks — there is nothing to assess'
+    : iraMissing.length > 0 ? `Attach ${iraMissing.join(', ')} first — the design checks are read against the evidence, and that is not on file yet`
     : elementsOnFile === 0 ? 'Upload evidence to a design element first'
     : d.conclusion !== 'Not tested' ? 'TOD is concluded — it has to be reopened or returned before Ira runs again'
     : null;
   const iraStale = !!d.ira?.evidenceChanged;
+  // The button is here; the narration is in the rail (user ask, 22 Sep). The
+  // row of checks below already shows each one turning over, so a second
+  // progress bar on this side would be the same fact twice — what the rail
+  // adds is the sentence that says what is being read and, when it lands, what
+  // it found. `true` asks the rail to come forward, since the reader pressed
+  // this on the left and would otherwise be watching the wrong column.
   const runIra = () => {
     setIraRunning(true);
+    startRun(control.id, 'Reading the evidence against each check', true);
     logEvent({ action: 'Run', description: `Ran Ira on the design checks for ${control.id}`, module: 'SOX ICFR', entity: 'Test Result' });
-    window.setTimeout(() => { runDesignIra(control.id); setIraRunning(false); }, VALIDATE_MS);
+    window.setTimeout(() => { endRun(control.id); runDesignIra(control.id); setIraRunning(false); }, VALIDATE_MS);
   };
   const addStandard = (k: DesignDocKind) => { addDesignDoc(control.id, k); logEvent({ action: 'Create', description: `Added design element to ${control.id}`, module: 'SOX ICFR', entity: 'Control' }); };
   const saveCustom = () => {
@@ -4577,7 +4622,7 @@ function OperatingSection({ control, canEdit, locked }: { control: Control; canE
   const o = control.operating; const prog = operatingProgress(control);
   const anyFail = o.steps.some(s => stepResult(s) === 'Fail');
   const allTested = o.steps.length > 0 && o.steps.every(s => stepResult(s) !== 'Not tested');
-  const suggestion: TrackConclusion = anyFail ? 'Ineffective' : allTested ? 'Effective' : 'Not tested';
+  const suggestion: TrackConclusion = operatingSuggestion(control);
   const [testing, setTesting] = useState(false);
   const [newAttr, setNewAttr] = useState('');
   const [addingAttr, setAddingAttr] = useState(false);
@@ -4874,6 +4919,16 @@ function DiscussionPane({ control }: { control: Control }) {
 function ActivityRail({ control, meters, onCollapse }: { control: Control; meters: RagMeterDef[]; onCollapse: () => void }) {
   const { eng } = useIcfr();
   const [pane, setPane] = useState<'chat' | 'history' | 'discussion'>('chat');
+  // A run started from the page narrates in here, so the rail comes forward to
+  // be read rather than letting the answer arrive on a tab nobody is looking
+  // at. It asks once: `railShown` lowers the flag so a reader who then chooses
+  // History is not dragged back by the next render.
+  const run = useControlRun(control.id);
+  useEffect(() => {
+    if (!run?.wantsRail) return;
+    setPane('chat');
+    railShown(control.id);
+  }, [run?.wantsRail, control.id]);
   const execCount = eng.executions.filter(e => e.controlId === control.id).length;
   const openDisc = discussionsFor(eng, control.id).filter(d => !d.resolved).length;
   const tabCls = (on: boolean) => cn('flex-1 min-w-0 h-8 rounded-lg text-[0.75rem] font-semibold inline-flex items-center justify-center gap-1.5 transition-colors cursor-pointer', on ? 'bg-canvas-elevated text-brand-700 shadow-[0_1px_4px_-1px_rgba(15,8,30,0.18)] ring-1 ring-canvas-border' : 'text-ink-500 hover:text-ink-800');
@@ -5134,7 +5189,12 @@ export default function ControlDossier() {
             came for. The white band inside it now ends at this column, which
             is what it should have said all along — the rail beside it is not
             part of the leadsheet. */}
-        <div className="min-w-0 overflow-y-auto overflow-x-hidden pb-6">
+        {/* `clip`, not `hidden`: hidden still lets the browser scroll the box
+            sideways to reveal something it has just focused — a modal closing,
+            a form opening — and with no sideways scrollbar to put it back, the
+            column stays shunted with its left edge cut off. `clip` refuses the
+            scroll as well as the scrollbar. */}
+        <div className="min-w-0 overflow-y-auto overflow-x-clip pb-6">
 
       {/* Leadsheet header — the same shape the library's control page carries
           (ControlLibraryDetail): a white band running to both screen edges, the

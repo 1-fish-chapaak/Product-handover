@@ -90,6 +90,9 @@ export interface Situation {
   /** Why the operating conclusion is held, in the page's own terms — the
    *  ConcludeFooter's reasons, read once rather than guessed at twice. */
   toeHolds: string | null;
+  /** A run sits against a draw that has since changed. The page refuses BOTH
+   *  conclusions on this, where every other hold only blocks Effective. */
+  toeStale: boolean;
   operatingResult: TrackConclusion;
   preparerSigned?: { by: string; at: string };
   reviewerSigned?: { by: string; at: string };
@@ -137,7 +140,13 @@ export function situationOf({ eng, control, role, me, audit }: ChatCtx): Situati
 
   // The page's own reason the validation cannot run — quoted rather than
   // re-derived, so Ira never offers a button the page would refuse.
+  // The same order, the same reasons, the same words the page uses — a rail
+  // that gave a second opinion about whether the test can start would be the
+  // one thing worse than no rail. `missing` first: a required element that is
+  // not on file stops the test outright (user ask, 22 Sep), because reading
+  // checks against evidence that has not arrived assesses the file room.
   const iraBlocked = checksTotal === 0 ? 'this control’s RACM lists no design checks'
+    : missing.length > 0 ? `${listOf(missing.map(docLabel))} ${missing.length === 1 ? 'is' : 'are'} not on file yet, and the checks are read against the evidence`
     : elementsOnFile === 0 ? 'nothing is attached to a design element yet'
     : d.conclusion !== 'Not tested' ? 'the design is already concluded'
     : null;
@@ -205,7 +214,7 @@ export function situationOf({ eng, control, role, me, audit }: ChatCtx): Situati
     },
     preparedBy, approvedBy: d.approval?.approvedBy,
     popStarted, popLocked, popCount: o.population?.count ?? 0, popBlock,
-    sampleDrawn: !!o.sampling, drawsOwed, toe, toeHolds, operatingResult,
+    sampleDrawn: !!o.sampling, drawsOwed, toe, toeHolds, toeStale: staleRuns > 0, operatingResult,
     preparerSigned: control.wpSignoff?.preparer, reviewerSigned: control.wpSignoff?.reviewer,
     notesPending: pendingReviewNoteCount(eng, control.id),
   };

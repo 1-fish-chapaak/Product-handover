@@ -67,7 +67,8 @@ const labelOf = (control: Control, p: DesignPoint): string => {
  *  situation the buttons are, so the two can never disagree. */
 function refusal(id: ChatActionId, { s, role }: IntentCtx): string {
   if (s.sealed) return 'This engagement is signed off — nothing on this control can move now.';
-  if (role !== 'auditor' && (id === 'ira-run' || id === 'conclude-effective' || id === 'conclude-ineffective')) {
+  const auditorsOwn: ChatActionId[] = ['ira-run', 'conclude-effective', 'conclude-ineffective', 'lock-population', 'conclude-op-effective', 'conclude-op-ineffective'];
+  if (role !== 'auditor' && auditorsOwn.includes(id)) {
     return `That one is the auditor’s. You are viewing as ${role === 'reviewer' ? 'the reviewer' : 'the risk owner'}, so I can’t do it from here.`;
   }
   if (id === 'approve-design') {
@@ -88,6 +89,32 @@ function refusal(id: ChatActionId, { s, role }: IntentCtx): string {
   if (id === 'conclude-ineffective') {
     if (s.designResult !== 'Not tested') return `The design is already concluded ${s.designResult.toLowerCase()}.`;
     return 'Not yet — the design is not ready to conclude.';
+  }
+  if (id === 'lock-population') {
+    if (s.popLocked) return 'The population is already locked.';
+    if (!s.popStarted) return 'There is no population yet — point the extraction at a report and say what to pull, and then it can be locked.';
+    return s.popBlock ?? 'Not yet — the population is not ready to lock.';
+  }
+  if (id === 'conclude-op-effective' || id === 'conclude-op-ineffective') {
+    if (s.operatingResult !== 'Not tested') return `Operating effectiveness is already concluded ${s.operatingResult.toLowerCase()}.`;
+    if (s.toeStale) return 'A run sits against a draw that has since changed. Re-run it and the conclusion opens up again.';
+    if (s.toe.total === 0) return 'This control has no attributes to test against, so there is nothing to conclude on.';
+    if (s.toe.tested < s.toe.total) return `${plural(s.toe.total - s.toe.tested, 'attribute')} still to test.`;
+    if (id === 'conclude-op-effective' && s.toeHolds) return `Effective is held: ${s.toeHolds}.`;
+    return 'Not yet — the testing is not ready to conclude.';
+  }
+  if (id === 'sign-paper') {
+    if (s.preparerSigned) return s.ownPaper ? 'You have already signed this paper.' : `${s.preparerSigned.by} has already signed it.`;
+    if (role !== 'auditor') return 'The auditor signs the paper first. You are viewing as somebody else, so I can’t do it from here.';
+    return 'Not yet — both tracks have to be concluded before the paper can be signed.';
+  }
+  if (id === 'countersign') {
+    if (role !== 'reviewer') return 'Only the reviewer countersigns. Switch hats and I can do it.';
+    if (!s.preparerSigned) return 'Nobody has signed it yet, so there is nothing to countersign.';
+    if (s.reviewerSigned) return `${s.reviewerSigned.by} has already countersigned it.`;
+    if (s.ownPaper) return 'You prepared this paper, so it needs a different reviewer to countersign — four eyes.';
+    if (s.notesPending > 0) return `${plural(s.notesPending, 'review note')} ${s.notesPending === 1 ? 'is' : 'are'} still open, and a paper is not countersigned over an open note.`;
+    return 'I can’t countersign it from here just now.';
   }
   return 'I can’t do that from here.';
 }
@@ -112,18 +139,14 @@ export function readIntent(raw: string, ctx: IntentCtx): Intent {
   const take = (id: ChatActionId): Intent => {
     const a = offered(id);
     if (a) return { kind: 'action', action: a };
-    // Not offered is not the same as not allowed. The rail leads with one thing
-    // at a time, so the validation is not shown while a document is still
-    // outstanding — but the page would run it, and somebody who types the
-    // instruction means it. Carry it out, and say what it will cost.
+    // Not offered is not the same as not allowed: the rail leads with one thing
+    // at a time, so the run is not always on the buttons even when the page
+    // would do it. Somebody who types the instruction means it, so it runs —
+    // but only where the page would run it too. The old version here made an
+    // exception for a missing element and warned about the cost; there is no
+    // exception to make any more, because the store refuses that one outright.
     if (id === 'ira-run' && !s.iraBlocked && ctx.role === 'auditor' && !s.locked && !s.sealed) {
-      return {
-        kind: 'action',
-        action: { id: 'ira-run', label: 'Run the AI validation', said: raw.trim(), does: 'assess the design checks' },
-        note: s.missing.length > 0
-          ? `I can, but with ${listOf(s.missing.map(d => (d.kind === 'Custom' ? d.name : d.kind)))} still outstanding every check comes back failed — the evidence it would be read against is not there.`
-          : undefined,
-      };
+      return { kind: 'action', action: { id: 'ira-run', label: 'Run the AI validation', said: raw.trim(), does: 'assess the design checks' } };
     }
     return { kind: 'reply', text: refusal(id, ctx) };
   };
@@ -193,10 +216,19 @@ export function readIntent(raw: string, ctx: IntentCtx): Intent {
   }
 
   // ── the real actions ──────────────────────────────────────────────────────
+  // Order matters more than it looks: "sign off the design" is a conclusion,
+  // not a signature, so the conclusions are read before the paper is.
+  if (has(t, 'lock the population', 'lock population', 'lock the pop')) return take('lock-population');
+  if (has(t, 'countersign')) return take('countersign');
   if (has(t, 'run', 'validate', 'validation', 'assess', 'check the evidence', 'ira')) return take('ira-run');
-  if (has(t, 'ineffective', 'not effective', 'fails design')) return take('conclude-ineffective');
-  if (has(t, 'effective', 'conclude', 'sign off the design')) return take('conclude-effective');
-  if (has(t, 'approve', 'sign it off', 'countersign')) return take('approve-design');
+  // Which track a conclusion lands on is decided by where the work is, not by
+  // the reader having to say "TOE" — on step ④ "conclude it effective" can
+  // only mean one thing.
+  const onOperating = s.step === 'operating';
+  if (has(t, 'ineffective', 'not effective', 'fails design', 'fails')) return take(onOperating ? 'conclude-op-ineffective' : 'conclude-ineffective');
+  if (has(t, 'effective', 'conclude', 'sign off the design')) return take(onOperating ? 'conclude-op-effective' : 'conclude-effective');
+  if (has(t, 'approve')) return take('approve-design');
+  if (has(t, 'sign off', 'sign the paper', 'sign this', 'sign it off')) return take('sign-paper');
   if (has(t, 'send it back', 'send back', 'return it', 'reject')) {
     const a = offered('show-step');
     return a ? { kind: 'action', action: a } : { kind: 'reply', text: 'There is nothing to send back just now.' };

@@ -78,3 +78,60 @@ export function clearThread(controlId: string): void {
   THREADS = next;
   emit();
 }
+
+// ─── What is running, and where it says so ──────────────────────────────────────
+
+/**
+ * A long-running assessment on a control, and the one place it narrates.
+ *
+ * It lives out here rather than inside the chat pane because the button that
+ * starts it is not always in the chat: the page has its own "Run AI validation"
+ * on the design checks, and the user's rule (22 Sep) is that pressing it
+ * streams in the rail. One run, one narration — whichever door it came in by.
+ *
+ * `wantsRail` is how the page asks the rail to come to the front, so a reader
+ * who pressed the button on the left is not left reading an empty column while
+ * the answer arrives on a tab they cannot see.
+ */
+export interface ControlRun {
+  /** What is being done, in the present participle, for the rail to say. */
+  label: string;
+  /** Raised once by whoever started the run; the rail lowers it on arrival. */
+  wantsRail: boolean;
+}
+
+let RUNS: Record<string, ControlRun> = {};
+const runListeners = new Set<() => void>();
+const emitRuns = () => runListeners.forEach(l => l());
+const subscribeRuns = (l: () => void) => { runListeners.add(l); return () => { runListeners.delete(l); }; };
+const allRuns = (): Record<string, ControlRun> => RUNS;
+
+/** What is running on this control, or null. */
+export function useControlRun(controlId: string): ControlRun | null {
+  const runs = useSyncExternalStore(subscribeRuns, allRuns, allRuns);
+  return runs[controlId] ?? null;
+}
+
+export const controlRun = (controlId: string): ControlRun | null => RUNS[controlId] ?? null;
+
+/** `focusRail` — the caller is not the rail, so bring the rail forward. */
+export function startRun(controlId: string, label: string, focusRail = false): void {
+  RUNS = { ...RUNS, [controlId]: { label, wantsRail: focusRail } };
+  emitRuns();
+}
+
+export function endRun(controlId: string): void {
+  if (!RUNS[controlId]) return;
+  const next = { ...RUNS };
+  delete next[controlId];
+  RUNS = next;
+  emitRuns();
+}
+
+/** The rail has come forward; it does not need asking twice. */
+export function railShown(controlId: string): void {
+  const run = RUNS[controlId];
+  if (!run?.wantsRail) return;
+  RUNS = { ...RUNS, [controlId]: { ...run, wantsRail: false } };
+  emitRuns();
+}

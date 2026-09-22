@@ -3,13 +3,13 @@ import { motion, useReducedMotion } from 'motion/react';
 import { ArrowRight, ArrowUp } from 'lucide-react';
 import { useIcfr } from './store';
 import { useAuditLog } from '../../context/AdminDataContext';
-import { concludeRationale, designSuggestion } from './helpers';
-import { say, sayOnce, useControlThread } from './controlChat';
-import { acknowledge, nextPrompt, type ChatStepId, type Situation } from './controlChatScript';
+import { concludeRationale, designOutstanding, designSuggestion, operatingSuggestion } from './helpers';
+import { endRun, say, sayOnce, startRun, useControlRun, useControlThread } from './controlChat';
+import { acknowledge, listOf, nextPrompt, type ChatStepId, type Situation } from './controlChatScript';
 import { actionsFor, type ChatAction } from './controlChatActions';
 import { readIntent } from './controlChatIntents';
 import { cn } from '../../lib/cn';
-import type { Control } from './types';
+import type { Control, TestResult } from './types';
 
 /**
  * Ira, sitting beside the control rather than inside it.
@@ -78,14 +78,23 @@ function WorkingStep({ text }: { text: string }) {
 }
 
 export default function ControlChatPane({ control }: { control: Control }) {
-  const { eng, role, me, openAuditId, runDesignIra, concludeDesign, overrideDesign, approveDesign, setDesignPoint } = useIcfr();
+  const { eng, role, me, openAuditId, runDesignIra, concludeDesign, overrideDesign, approveDesign, setDesignPoint, overrideDesignPoint,
+    lockPopulation, concludeOperating, overrideOperating, signOffControlWp } = useIcfr();
   const logEvent = useAuditLog();
   const audit = useMemo(() => eng.audits.find(a => a.id === openAuditId) ?? null, [eng.audits, openAuditId]);
   const prompt = useMemo(() => nextPrompt({ eng, control, role, me, audit }), [eng, control, role, me, audit]);
   const actions = useMemo(() => actionsFor(prompt.situation, role), [prompt.situation, role]);
   const thread = useControlThread(control.id);
-  const [working, setWorking] = useState<string | null>(null);
+  // Not local state: the page's own "Run AI validation" starts the same run,
+  // and the reader's rule is that it narrates here (22 Sep). One run, one
+  // place it is spoken about, whichever button started it.
+  const working = useControlRun(control.id)?.label ?? null;
   const [draft, setDraft] = useState('');
+  // A check Ira has already answered cannot be flipped from here without a
+  // reason either (user ask, 22 Sep) — the page asks for it in a form, so the
+  // chat asks for it in the only way a chat can: it holds the mark, asks, and
+  // takes the next thing typed as the rationale.
+  const [awaitingWhy, setAwaitingWhy] = useState<{ pointId: string; label: string; result: TestResult } | null>(null);
   const still = useReducedMotion();
 
   const scrollRef = useRef<HTMLDivElement>(null);
@@ -112,6 +121,9 @@ export default function ControlChatPane({ control }: { control: Control }) {
   useEffect(() => () => {
     if (!timer.current) return;
     window.clearTimeout(timer.current);
+    // Only a run THIS pane started is cancelled here — `timer` is the proof of
+    // ownership. One the page started keeps its own clock and its own ending.
+    endRun(controlId.current);
     say(controlId.current, 'ira', 'I stopped reading when you moved away — ask again and I will pick it up.');
   }, []);
 
@@ -152,7 +164,7 @@ export default function ControlChatPane({ control }: { control: Control }) {
     }
 
     if (a.id === 'ira-run') {
-      setWorking('Reading the evidence against each check');
+      startRun(control.id, 'Reading the evidence against each check');
       timer.current = window.setTimeout(() => {
         // Six seconds is long enough for the left-hand side to move. The store
         // refuses to run once the design is concluded, and logging regardless
@@ -160,14 +172,22 @@ export default function ControlChatPane({ control }: { control: Control }) {
         // happened — so the CURRENT control is read here, not the one captured
         // when the button was pressed.
         const now = latest.current;
+        endRun(now.id);
+        // The store's own refusals, re-read at the moment of writing rather
+        // than at the moment of asking — including the required element that
+        // may have been removed while I was reading, which now stops the run
+        // outright instead of failing every check on its absence.
+        const gone = designOutstanding(now).filter(doc => doc.required !== false);
         if (now.design.conclusion !== 'Not tested' || now.design.points.length === 0) {
-          setWorking(null);
           say(now.id, 'ira', 'The design was concluded while I was reading, so I stopped — there is nothing left for me to assess.');
+          return;
+        }
+        if (gone.length > 0) {
+          say(now.id, 'ira', `${listOf(gone.map(d => (d.kind === 'Custom' ? d.name : d.kind)))} came off the control while I was reading, so I stopped — the checks are read against the evidence, and that is no longer on file.`);
           return;
         }
         runDesignIra(now.id);
         logEvent({ action: 'Update', description: `Ran AI validation on design checks for ${now.id} from the chat`, module: 'SOX ICFR', entity: 'Control' });
-        setWorking(null);
       }, IRA_MS);
       return;
     }
@@ -203,6 +223,37 @@ export default function ControlChatPane({ control }: { control: Control }) {
       logEvent({ action: 'Update', description: `Approved the design conclusion for ${control.id} from the chat`, module: 'SOX ICFR', entity: 'Control' });
       return;
     }
+
+    if (a.id === 'lock-population') {
+      lockPopulation(control.id);
+      logEvent({ action: 'Update', description: `Locked the population for ${control.id} from the chat`, module: 'SOX ICFR', entity: 'Evidence' });
+      return;
+    }
+
+    if (a.id === 'conclude-op-effective' || a.id === 'conclude-op-ineffective') {
+      // The operating footer fires two calls exactly as the design one does —
+      // the conclusion, then either an override recording that it went against
+      // the evidence or a null clearing a stale one. Missing the second leaves
+      // the override banner on the page telling the reviewer a lie.
+      const target = a.id === 'conclude-op-effective' ? 'Effective' : 'Ineffective';
+      const rationale = control.operating.rationale ?? concludeRationale(control, 'operating');
+      const suggestion = operatingSuggestion(control);
+      concludeOperating(control.id, target, rationale);
+      logEvent({ action: 'Update', description: `Concluded TOE ${target.toLowerCase()} for ${control.id} from the chat`, module: 'SOX ICFR', entity: 'Control' });
+      if (suggestion !== 'Not tested' && target !== suggestion) overrideOperating(control.id, { result: target, by: me, at: 'just now', rationale });
+      else overrideOperating(control.id, null);
+      if (!control.operating.rationale) {
+        say(control.id, 'ira', `The rationale on the paper is the drafted one — “${rationale}” — because the box on the left was not filled in. Edit it there if it should read differently.`);
+      }
+      return;
+    }
+
+    if (a.id === 'sign-paper' || a.id === 'countersign') {
+      const step = a.id === 'sign-paper' ? 'preparer' : 'reviewer';
+      signOffControlWp(control.id, step);
+      logEvent({ action: 'Update', description: `${step === 'preparer' ? 'Signed off' : 'Countersigned'} the working paper for ${control.id} from the chat`, module: 'SOX ICFR', entity: 'Control' });
+      return;
+    }
   };
 
   const run = (a: ChatAction) => {
@@ -217,6 +268,21 @@ export default function ControlChatPane({ control }: { control: Control }) {
     if (!text || working) return;
     say(control.id, 'user', text);
     setDraft('');
+
+    // Mid-sentence: the last thing said was "tell me why", so this is the why.
+    // Not parsed, not matched against anything — a rationale is whatever the
+    // auditor wrote, and second-guessing it would be the one place this rail
+    // must not have an opinion.
+    if (awaitingWhy) {
+      const { pointId, label, result } = awaitingWhy;
+      setAwaitingWhy(null);
+      overrideDesignPoint(control.id, pointId, { result, by: me, at: 'just now', rationale: text });
+      logEvent({ action: 'Update', description: `Overrode ${label} to ${result.toLowerCase()} on ${control.id} from the chat — ${text}`, module: 'SOX ICFR', entity: 'Test Result' });
+      skipAck.current = true;
+      say(control.id, 'ira', `Recorded. ${label.charAt(0).toUpperCase()}${label.slice(1)} now reads ${result === 'Pass' ? 'passed' : 'failed'}, with your reason on the paper beside it.`);
+      return;
+    }
+
     const intent = readIntent(text, { control, s: prompt.situation, role, actions, promptText: prompt.text });
     if (intent.kind === 'action') {
       if (intent.note) say(control.id, 'ira', intent.note);
@@ -224,6 +290,17 @@ export default function ControlChatPane({ control }: { control: Control }) {
       return;
     }
     if (intent.kind === 'mark') {
+      // The page makes the same demand at the tick: contradicting Ira is a
+      // judgement, and a judgement on a working paper carries a reason. Asking
+      // for it here rather than writing silently is what keeps the two sides
+      // telling the reviewer the same story.
+      const point = control.design.points.find(p => p.id === intent.pointId);
+      const iraSaid = point?.validation?.result;
+      if (iraSaid && iraSaid !== intent.result) {
+        setAwaitingWhy({ pointId: intent.pointId, label: intent.label, result: intent.result });
+        say(control.id, 'ira', `I read that one as ${iraSaid === 'Pass' ? 'a pass' : 'a fail'}. Marking it ${intent.result === 'Pass' ? 'passed' : 'failed'} goes against what I found, so tell me why and I will record both — your answer on the paper, mine underneath it.`);
+        return;
+      }
       setDesignPoint(control.id, intent.pointId, intent.result);
       logEvent({ action: 'Update', description: `Marked a design check ${intent.result.toLowerCase()} on ${control.id} from the chat`, module: 'SOX ICFR', entity: 'Control' });
       // This names WHICH check moved, because the reader named it and deserves
@@ -278,8 +355,13 @@ export default function ControlChatPane({ control }: { control: Control }) {
               <div className="mt-3 space-y-1.5">
                 {actions.map((a, i) => (
                   <motion.button key={a.id + a.label} onClick={() => run(a)}
-                    initial={still ? false : { opacity: 0, y: 6 }}
-                    animate={{ opacity: 1, y: 0 }}
+                    // The reveal moves the button, it does not fade it in. An
+                    // entrance that starts at zero opacity leaves the one thing
+                    // on this rail worth pressing invisible if the animation
+                    // never gets to run — a background tab freezes rAF, and a
+                    // button you cannot see is worse than one that just appears.
+                    initial={still ? false : { y: 6 }}
+                    animate={{ y: 0 }}
                     transition={{ delay: 0.05 + i * 0.06, duration: 0.3, ease: [0.22, 1, 0.36, 1] }}
                     // The chat's own follow-up card (ChatView `FollowUpCard`),
                     // at rail width. The arrow is the click-scent: it is the
@@ -309,7 +391,9 @@ export default function ControlChatPane({ control }: { control: Control }) {
             value={draft} onChange={e => setDraft(e.target.value)} rows={2}
             onKeyDown={e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); send(); } }}
             disabled={!!working} aria-label="Message Ira"
-            placeholder={working ? 'One moment…' : 'Ask Ira, or tell it what to do…'}
+            placeholder={working ? 'One moment…'
+              : awaitingWhy ? `Why does ${awaitingWhy.label} ${awaitingWhy.result === 'Pass' ? 'pass' : 'fail'}? — this goes on the paper`
+              : 'Ask Ira, or tell it what to do…'}
             className="no-focus-ring w-full bg-transparent border-none outline-none resize-none px-3.5 pt-3 pb-1.5 text-[0.8125rem] leading-[1.5] text-ink-800 placeholder:text-ink-400 disabled:cursor-not-allowed"
           />
           {/* Send is mounted only when there is something to send, as it is in

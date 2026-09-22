@@ -2253,6 +2253,14 @@ export function IcfrProvider({ children, initialRole = 'auditor', seedMeta }: { 
       if (d.conclusion !== 'Not tested' || d.points.length === 0 || onFile.length === 0) return c;
       const label = (doc: DesignDoc) => (doc.kind === 'Custom' ? doc.name : doc.kind);
       const missing = designOutstanding(c).filter(doc => doc.required !== false).map(label);
+      // A required element that is not on file stops the test, rather than
+      // failing every check on its absence (user ask, 22 Sep). The old
+      // behaviour wrote a run into the paper whose only finding was that the
+      // evidence had not arrived — a verdict on the file room, recorded as a
+      // verdict on the control. Refusing here shuts every door at once: the
+      // page's button, the chat's, and a typed instruction all read the same
+      // reason off `iraBlocked` and none of them can get round it.
+      if (missing.length > 0) return c;
       const read = onFile.map(label);
       const files = onFile.flatMap(doc => designFilesOf(doc).map(f => f.name));
       const list = (xs: string[]) => (xs.length < 2 ? xs.join('') : `${xs.slice(0, -1).join(', ')} and ${xs[xs.length - 1]}`);
