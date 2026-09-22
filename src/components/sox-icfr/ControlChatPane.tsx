@@ -164,7 +164,8 @@ export default function ControlChatPane({ control }: { control: Control }) {
   // Two shapes, one list: next steps are stacked rows, a set to choose from is
   // a wrap of chips. Split here rather than in the action map, because it is a
   // fact about how the rail draws them, not about what they do.
-  const rows = useMemo(() => actions.filter(a => a.group !== 'pick'), [actions]);
+  const rows = useMemo(() => actions.filter(a => !a.group), [actions]);
+  const pairs = useMemo(() => actions.filter(a => a.group === 'pair'), [actions]);
   const picks = useMemo(() => actions.filter(a => a.group === 'pick'), [actions]);
   const thread = useControlThread(control.id);
   // Not local state: the page's own "Run AI validation" starts the same run,
@@ -515,6 +516,29 @@ export default function ControlChatPane({ control }: { control: Control }) {
               </span>
             </div>
             <IraText key={prompt.key} text={prompt.text} stream onDone={setSaidIt} />
+            {/* The verdict, both faces on one line (user ask, 22 Sep). Stacked,
+                "Design ineffective" under "Design effective" read as a second,
+                lesser button; side by side they read as the two answers to one
+                question — which is what concluding a track is. Centred, and
+                without the row arrow: neither is a "next", they are the choice
+                itself. */}
+            {saidIt && pairs.length > 0 && (
+              <div className={cn('mt-3 grid gap-1.5', pairs.length === 2 ? 'grid-cols-2' : 'grid-cols-1')}>
+                {pairs.map((a, i) => (
+                  <motion.button key={a.id + a.label} onClick={() => run(a)}
+                    initial={still ? false : { y: 6 }}
+                    animate={{ y: 0 }}
+                    transition={{ delay: i * 0.09, duration: 0.48, ease: [0.22, 1, 0.36, 1] }}
+                    className={cn('min-w-0 px-2.5 py-2.5 rounded-xl text-[0.8125rem] leading-snug text-center truncate transition-all duration-150 cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/30',
+                      a.primary
+                        ? 'bg-gradient-to-r from-brand-600 to-fuchsia-600 hover:from-brand-500 hover:to-fuchsia-500 text-white font-semibold border border-transparent shadow-[0_6px_20px_-8px_rgba(106,18,205,0.55)] hover:shadow-[0_8px_24px_-8px_rgba(106,18,205,0.65)]'
+                        : 'border border-canvas-border bg-canvas-elevated text-ink-700 hover:bg-brand-50 hover:text-brand-700 hover:border-brand-200')}>
+                    {a.label}
+                  </motion.button>
+                ))}
+              </div>
+            )}
+
             {saidIt && rows.length > 0 && (
               <div className="mt-3 space-y-1.5">
                 {rows.map((a, i) => (

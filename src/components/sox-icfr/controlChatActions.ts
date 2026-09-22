@@ -44,10 +44,14 @@ export interface ChatAction {
   primary?: boolean;
   /** Which of the thing — the element kind, for `add-element`. */
   arg?: string;
-  /** A set to choose from rather than a next step, so the rail draws it as a
-   *  wrap of small chips under one caption instead of seven stacked rows. The
-   *  shape is the message: these are parallel and you may take more than one. */
-  group?: 'pick';
+  /** How the rail should DRAW this offer, as against what it does.
+   *
+   *  `pick` — a set to choose from rather than a next step, so it becomes a
+   *  wrap of small chips under one caption instead of seven stacked rows.
+   *  `pair` — one verdict with two faces. Stacked, the second reads as a
+   *  lesser afterthought of the first; side by side they read as the two
+   *  answers to one question, which is what a conclusion actually is. */
+  group?: 'pick' | 'pair';
   /** For the actions that only move the page: which step to land on. */
   focus?: ChatStepId;
   /** The same offer as a verb phrase, for when Ira lists what it can do in a
@@ -151,9 +155,9 @@ export function actionsFor(s: Situation, role: Role): ChatAction[] {
     // element is accounted for and no check is unmarked; the same gate here.
     const out: ChatAction[] = [];
     if (s.complete && s.checksUnmarked === 0) {
-      out.push({ id: 'conclude-effective', label: 'Design effective', said: 'Conclude the design effective.', primary: s.checksFailed === 0, does: 'conclude the design effective' });
+      out.push({ id: 'conclude-effective', label: 'Design effective', said: 'Conclude the design effective.', primary: s.checksFailed === 0, group: 'pair', does: 'conclude the design effective' });
     }
-    out.push({ id: 'conclude-ineffective', label: 'Design ineffective', said: 'Conclude the design ineffective.', primary: s.checksFailed > 0, does: 'conclude the design ineffective' });
+    out.push({ id: 'conclude-ineffective', label: 'Design ineffective', said: 'Conclude the design ineffective.', primary: s.checksFailed > 0, group: 'pair', does: 'conclude the design ineffective' });
     return [...out, ...picks];
   }
 
@@ -194,8 +198,8 @@ export function actionsFor(s: Situation, role: Role): ChatAction[] {
       });
     }
     if (s.toe.total > 0 && s.toe.tested === s.toe.total && !s.toeStale) {
-      if (!s.toeHolds) out.push({ id: 'conclude-op-effective', label: 'Operating effective', said: 'Conclude the operating effectiveness effective.', primary: s.toe.failed === 0, does: 'conclude the operating effectiveness effective' });
-      out.push({ id: 'conclude-op-ineffective', label: 'Operating ineffective', said: 'Conclude the operating effectiveness ineffective.', primary: s.toe.failed > 0, does: 'conclude the operating effectiveness ineffective' });
+      if (!s.toeHolds) out.push({ id: 'conclude-op-effective', label: 'Operating effective', said: 'Conclude the operating effectiveness effective.', primary: s.toe.failed === 0, group: 'pair', does: 'conclude the operating effectiveness effective' });
+      out.push({ id: 'conclude-op-ineffective', label: 'Operating ineffective', said: 'Conclude the operating effectiveness ineffective.', primary: s.toe.failed > 0, group: 'pair', does: 'conclude the operating effectiveness ineffective' });
     }
     out.push(show(out.length ? 'Show me the attributes' : 'Take me to the testing', 'Take me to this step.', 'operating'));
     return out;
