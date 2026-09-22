@@ -1,5 +1,5 @@
 import type { ChatStepId, Situation } from './controlChatScript';
-import type { Role } from './types';
+import { DESIGN_DOC_KINDS, type Role } from './types';
 
 /**
  * What Ira may offer, and when.
@@ -22,6 +22,7 @@ import type { Role } from './types';
  */
 
 export type ChatActionId =
+  | 'add-element'
   | 'ira-run'
   | 'conclude-effective'
   | 'conclude-ineffective'
@@ -41,6 +42,12 @@ export interface ChatAction {
   said: string;
   /** The one action worth leading with, if there is one. */
   primary?: boolean;
+  /** Which of the thing — the element kind, for `add-element`. */
+  arg?: string;
+  /** A set to choose from rather than a next step, so the rail draws it as a
+   *  wrap of small chips under one caption instead of seven stacked rows. The
+   *  shape is the message: these are parallel and you may take more than one. */
+  group?: 'pick';
   /** For the actions that only move the page: which step to land on. */
   focus?: ChatStepId;
   /** The same offer as a verb phrase, for when Ira lists what it can do in a
@@ -97,8 +104,33 @@ export function actionsFor(s: Situation, role: Role): ChatAction[] {
 
   if (s.step === 'design') {
     if (s.designReturn) return [show('Read the reviewer’s note', 'Show me what the reviewer said.', 'design')];
+
+    // ── setting up, before there is anything to test ────────────────────────
+    // The page's Add-element menu, minus what is already on the control. It is
+    // the one part of setting up TOD that is a single store call, so Ira does
+    // it rather than pointing at it (user ask, 22 Sep).
+    //
+    // It clears itself the moment one file lands: past that, adding elements
+    // is housekeeping and the page's own menu owns it. Anything else would
+    // leave a seven-chip cloud sitting under every line Ira says for the rest
+    // of the step.
+    const picks: ChatAction[] = s.elementsOnFile === 0 && s.designResult === 'Not tested' && !s.locked
+      ? DESIGN_DOC_KINDS.filter(k => !s.elementKinds.includes(k)).map(k => ({
+        id: 'add-element' as const, arg: k, label: k, group: 'pick' as const,
+        said: `Add ${k.charAt(0).toLowerCase()}${k.slice(1)}.`,
+        does: `add ${k.charAt(0).toLowerCase()}${k.slice(1)} to the design step`,
+      }))
+      : [];
+
+    // Nothing on the control at all. The page hides its conclude footer in
+    // exactly this state, so the rail does not offer one either — the old
+    // version's only button here was "Design ineffective", on a control whose
+    // testing had not begun.
+    if (s.elementsTotal === 0) {
+      return picks.length > 0 ? picks : [show('Take me to the design step', 'Take me to the design step.', 'design')];
+    }
     if (s.missing.length > 0) {
-      return [show(s.missing.length === 1 ? 'Show me the missing element' : 'Show me the missing elements', 'Show me what is missing.', 'design')];
+      return [show(s.missing.length === 1 ? 'Show me the missing element' : 'Show me the missing elements', 'Show me what is missing.', 'design'), ...picks];
     }
     if (s.designResult !== 'Not tested' && !s.todApproved) {
       return [show('Show me what I concluded', 'Show me what I concluded.', 'design')];
@@ -122,7 +154,7 @@ export function actionsFor(s: Situation, role: Role): ChatAction[] {
       out.push({ id: 'conclude-effective', label: 'Design effective', said: 'Conclude the design effective.', primary: s.checksFailed === 0, does: 'conclude the design effective' });
     }
     out.push({ id: 'conclude-ineffective', label: 'Design ineffective', said: 'Conclude the design ineffective.', primary: s.checksFailed > 0, does: 'conclude the design ineffective' });
-    return out;
+    return [...out, ...picks];
   }
 
   // ── ② population ──────────────────────────────────────────────────────────

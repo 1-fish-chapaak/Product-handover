@@ -3,7 +3,7 @@ import {
   inquiryOnlyAttributes, operatingApplies, operatingProgress, passedWithoutFiles, pendingReviewNoteCount, pointResult,
   populationLocked, populationSources, requiredFilesReady, sampledSources, samePerson, stepResult, toeRoundFailed, trackResult, yearEndPending,
 } from './helpers';
-import type { AuditRecord, Control, DesignDoc, IcfrEngagement, Role, TrackConclusion } from './types';
+import type { AuditRecord, Control, DesignDoc, DesignDocKind, IcfrEngagement, Role, TrackConclusion } from './types';
 
 /**
  * What Ira knows, and what Ira therefore says.
@@ -49,6 +49,9 @@ export interface Situation {
   todApproved: boolean;
   elementsTotal: number;
   elementsOnFile: number;
+  /** The element kinds already on this control, so Ira's Add-element offer is
+   *  the page's own menu minus what is there — never a duplicate. */
+  elementKinds: DesignDocKind[];
   missing: DesignDoc[];
   checksTotal: number;
   checksUnmarked: number;
@@ -204,6 +207,7 @@ export function situationOf({ eng, control, role, me, audit }: ChatCtx): Situati
     step, key: '', locked, sealed, opApplies, yePending,
     designResult, todApproved,
     elementsTotal: completeness.total, elementsOnFile, missing,
+    elementKinds: d.documents.map(doc => doc.kind),
     complete: completeness.total > 0 && completeness.pct === 100,
     ownConclusion: samePerson(preparedBy, me),
     ownPaper: samePerson(control.wpSignoff?.preparer, me),
@@ -224,7 +228,7 @@ export function situationOf({ eng, control, role, me, audit }: ChatCtx): Situati
     notesPending: pendingReviewNoteCount(eng, control.id),
   };
   s.key = [
-    role, step, designResult, todApproved, missing.length, elementsOnFile,
+    role, step, designResult, todApproved, missing.length, elementsOnFile, d.documents.length,
     checksUnmarked, checksFailed, s.iraRun, s.iraStale, !!d.designReturn,
     popLocked, s.sampleDrawn, drawsOwed, toe.tested, toe.failed, operatingResult,
     !!s.preparerSigned, !!s.reviewerSigned, s.notesPending, locked,
@@ -321,8 +325,16 @@ export function nextPrompt(ctx: ChatCtx): ChatPrompt {
     if (s.designReturn) {
       return line(`The reviewer sent the design back: “${s.designReturn.note}” — the conclusion is cleared, so this is open again. Fix what they raised and conclude afresh.`);
     }
-    if (s.elementsTotal === 0 && s.checksTotal === 0) {
-      return line('Nothing has been set up for this control’s design yet — no documents asked for, no checks to assess. The RACM is where both come from.');
+    // Setting up comes before testing, and the page's own empty state says as
+    // much — "TOD isn't set up yet · Add the design elements this control is
+    // evidenced by". Ira used to read that state and offer the ONE thing it
+    // could still technically do, which was to conclude the design ineffective
+    // on a control nobody had started testing (user ask, 22 Sep). The first
+    // move is the elements, so the first move is what it offers.
+    if (s.elementsTotal === 0) {
+      return line(s.checksTotal === 0
+        ? 'Nothing is set up for this control’s design yet. It starts with the elements the control is evidenced by — pick the ones it has and I’ll add them, then attach the file against each. The checks themselves arrive with the RACM.'
+        : `The RACM gives this control ${plural(s.checksTotal, 'design check')}, but there is nothing to read ${s.checksTotal === 1 ? 'it' : 'them'} against yet. Pick the elements this control is evidenced by and I’ll add them.`);
     }
     if (s.missing.length > 0) {
       return line(`${plural(s.missing.length, 'required document')} missing before the design can be tested — ${listOf(s.missing.map(docLabel))}. Ask the owner for ${s.missing.length === 1 ? 'it' : 'them'}, or attach ${s.missing.length === 1 ? 'it' : 'them'} yourself if you have ${s.missing.length === 1 ? 'it' : 'them'}.`);
@@ -414,6 +426,11 @@ export function acknowledge(prev: Situation, next: Situation): string | null {
     return next.missing.length === 0
       ? `${what} is accounted for — that was the last one the design was waiting on.`
       : `${what} is accounted for. ${plural(next.missing.length, 'element')} still outstanding.`;
+  }
+  if (next.elementsTotal > prev.elementsTotal) {
+    const added = next.missing.filter(d => !prev.missing.some(m => m.id === d.id));
+    const what = added.length ? listOf(added.map(docLabel)) : 'That';
+    return `${what} added — it is on the design step, waiting for its file.`;
   }
   if (prev.elementsOnFile < next.elementsOnFile && next.missing.length > 0) {
     return 'New evidence is attached.';

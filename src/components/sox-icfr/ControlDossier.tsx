@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { motion, AnimatePresence } from 'motion/react';
 import {
@@ -27,7 +27,7 @@ import {
 } from './helpers';
 import { useAuditFiles, type AuditFile } from './useAuditFiles';
 import { auditCovers, countryFor, countryOf, inScopeEntityNames, ownersOf, programmeFor, scopedForDraw } from './auditScope';
-import { ConclusionPill, CourtBadge, NatureChip, OriginPicker, Toggle, TrackPill, Tickmark, Stamp, RagKpiRow, type RagMeterDef } from './parts';
+import { ConclusionPill, CourtBadge, NatureChip, OriginPicker, Toggle, TrackPill, Tickmark, Stamp, RagKpiRow, ragState, statusWordOf, worstMeter, type RagMeterDef } from './parts';
 import { Pill } from '../shared/StatusBadge';
 import { useToast } from '../shared/Toast';
 import { Sparkles, FileSpreadsheet } from 'lucide-react';
@@ -1301,7 +1301,7 @@ function designRagMeters(c: Control): RagMeterDef[] {
       // element counts as done — a recorded judgement with a mandatory reason is
       // not a missing file. This one gates: below 100% the TOD conclusion is
       // locked, and the lock names how many are still outstanding.
-      label: 'Control completeness', pct: comp.pct, detail: `${comp.done}/${comp.total} required elements evidenced`, gate: true,
+      label: 'Control completeness', short: 'Elements', pct: comp.pct, detail: `${comp.done}/${comp.total} required elements evidenced`, gate: true,
       empty: comp.total === 0,
       formula: 'required elements evidenced or waived ÷ required elements × 100',
     },
@@ -1311,7 +1311,7 @@ function designRagMeters(c: Control): RagMeterDef[] {
       // attribute level so the denominator is never zero mid-testing, and any
       // result other than "not tested" counts as run. Held to 100%: part-tested
       // is not tested.
-      label: 'Evidence validated', pct: toeTotal ? Math.round((toeDone / toeTotal) * 100) : 0, detail: `${toeDone}/${toeTotal} operating checks run`, gate: true,
+      label: 'Evidence validated', short: 'Evidence', pct: toeTotal ? Math.round((toeDone / toeTotal) * 100) : 0, detail: `${toeDone}/${toeTotal} operating checks run`, gate: true,
       empty: toeTotal === 0,
       formula: 'operating checks run ÷ operating checks total × 100',
     },
@@ -1320,7 +1320,7 @@ function designRagMeters(c: Control): RagMeterDef[] {
       // the answer. Not-yet-tested drags this down exactly as hard as failed: an
       // untested check gives no confidence either way. The only QUALITY measure
       // of the three, which is why it gates nothing on its own.
-      label: 'Design coverage confidence', pct: points.length ? Math.round((passed / points.length) * 100) : 0, detail: `${passed}/${points.length} considerations pass`,
+      label: 'Design coverage confidence', short: 'Coverage', pct: points.length ? Math.round((passed / points.length) * 100) : 0, detail: `${passed}/${points.length} considerations pass`,
       empty: points.length === 0,
       formula: 'design considerations passing ÷ all design considerations × 100',
     },
@@ -4941,19 +4941,16 @@ function DiscussionPane({ control }: { control: Control }) {
 // a rail that opened on History put the past where the next move should be.
 // Nothing was lost to make room — both old panes are one click away, and the
 // rail is 40px wider to carry three tabs without cramping them.
-function ActivityRail({ control, meters, onCollapse }: { control: Control; meters: RagMeterDef[]; onCollapse: () => void }) {
+/** Which of the rail's three panes is showing. Held by the page so the folded
+ *  spine and the open rail agree about it. */
+type RailPane = 'chat' | 'history' | 'discussion';
+
+function ActivityRail({ control, meters, pane, onPane, onCollapse }: { control: Control; meters: RagMeterDef[]; pane: RailPane; onPane: (p: RailPane) => void; onCollapse: () => void }) {
   const { eng } = useIcfr();
-  const [pane, setPane] = useState<'chat' | 'history' | 'discussion'>('chat');
-  // A run started from the page narrates in here, so the rail comes forward to
-  // be read rather than letting the answer arrive on a tab nobody is looking
-  // at. It asks once: `railShown` lowers the flag so a reader who then chooses
-  // History is not dragged back by the next render.
-  const run = useControlRun(control.id);
-  useEffect(() => {
-    if (!run?.wantsRail) return;
-    setPane('chat');
-    railShown(control.id);
-  }, [run?.wantsRail, control.id]);
+  // The pane belongs to the page, not to this component: the folded spine
+  // picks one too, and a rail that forgot which tab was chosen the moment it
+  // was folded would make folding it destructive.
+  const setPane = onPane;
   const execCount = eng.executions.filter(e => e.controlId === control.id).length;
   const openDisc = discussionsFor(eng, control.id).filter(d => !d.resolved).length;
   const tabCls = (on: boolean) => cn('flex-1 min-w-0 h-8 rounded-lg text-[0.75rem] font-semibold inline-flex items-center justify-center gap-1.5 transition-colors cursor-pointer', on ? 'bg-canvas-elevated text-brand-700 shadow-[0_1px_4px_-1px_rgba(15,8,30,0.18)] ring-1 ring-canvas-border' : 'text-ink-500 hover:text-ink-800');
@@ -4983,6 +4980,88 @@ function ActivityRail({ control, meters, onCollapse }: { control: Control; meter
         : pane === 'history' ? <ExecutionTrail control={control} />
         : <DiscussionPane control={control} />}
     </aside>
+  );
+}
+
+/** The rail folded away — a spine, not a shut door (user ask, 22 Sep).
+ *
+ *  The first version of this was a 44px strip carrying the word "Ira" and
+ *  nothing else, which made folding the rail a choice between the scores and
+ *  the page. It is 80px now and keeps the two things worth glancing at: the
+ *  three scores, still ranked and still coloured by the same rule, and the way
+ *  back in. Every button here unfolds — the difference between them is WHICH
+ *  pane you land on, so a reader who wants the history does not have to open
+ *  the chat first and then leave it.
+ *
+ *  Deliberately not a summary of its own: the numbers are the same numbers,
+ *  read from the same meters, so the spine can never quietly disagree with the
+ *  rail it replaces. */
+function RailSpine({ control, meters, running, onOpen }: { control: Control; meters: RagMeterDef[]; running: boolean; onOpen: (p: RailPane) => void }) {
+  const { eng } = useIcfr();
+  const execCount = eng.executions.filter(e => e.controlId === control.id).length;
+  const openDisc = discussionsFor(eng, control.id).filter(d => !d.resolved).length;
+  const worst = worstMeter(meters);
+  const iconBtn = 'w-full h-8 rounded-lg inline-flex items-center justify-center gap-1 text-ink-400 hover:text-brand-700 hover:bg-brand-50 transition-colors cursor-pointer';
+  return (
+    <div className="panel absolute inset-0 bottom-6 flex flex-col overflow-hidden">
+      {/* The fold control sits where it sits in the open rail — top right of
+          the head — so it is in the same place in both states. */}
+      <button onClick={() => onOpen('chat')} title="Open the Ira rail" aria-label="Open the Ira rail"
+        className="shrink-0 h-8 mt-1 mx-1 rounded-lg text-ink-400 hover:text-ink-700 hover:bg-paper-50 inline-flex items-center justify-center transition-colors cursor-pointer">
+        <PanelRightClose size={16} className="rotate-180" />
+      </button>
+      <div className="border-t border-canvas-border mt-1" />
+      {/* The scores, in the rail's own order. Each opens the rail on the chat,
+          where the full row is — the number is the glance, the row is the read.
+          Colour follows the open row to the letter: ONE score may wear it, and
+          the bar never does. Three coloured bars stacked in an 80px column is
+          the heat strip DESIGN.md forbids, only worse for being vertical. */}
+      <div className="px-1.5 py-2 space-y-2">
+        {meters.map(m => {
+          const flagged = worst === m;
+          const state = ragState(m);
+          const StateIcon = state === 'red' ? AlertTriangle : AlertCircle;
+          return (
+            <button key={m.label} onClick={() => onOpen('chat')} title={`${m.label} — ${m.empty ? 'not set up' : `${m.pct}%, ${m.detail}`}`}
+              aria-label={m.empty ? `${m.label} — not set up` : `${m.label} ${m.pct}% — ${statusWordOf(m)}`}
+              className="w-full text-left rounded-lg px-1 py-1 hover:bg-paper-50 transition-colors cursor-pointer">
+              <div className="text-[0.5625rem] font-bold uppercase text-ink-400 truncate">{m.short ?? m.label}</div>
+              <div className="flex items-center gap-1">
+                <span className={cn('text-[0.875rem] font-bold tabular-nums leading-tight',
+                  m.empty ? 'text-ink-300' : flagged && state === 'red' ? 'text-risk-700' : flagged && state === 'amber' ? 'text-high-700' : 'text-ink-900')}>
+                  {m.empty ? '—' : `${m.pct}%`}
+                </span>
+                {/* Colour is never the only signal — DESIGN.md §6. */}
+                {flagged && <StateIcon size={10} className={cn('shrink-0', state === 'red' ? 'text-risk-700' : 'text-high-700')} />}
+              </div>
+              <div className="mt-1 h-[3px] rounded-full bg-paper-200 overflow-hidden">
+                <div className="h-full rounded-full bg-ink-300 transition-[width] duration-300" style={{ width: `${m.empty ? 0 : m.pct}%` }} />
+              </div>
+            </button>
+          );
+        })}
+      </div>
+      <div className="border-t border-canvas-border" />
+      {/* Ira is the one thing here that is a doing rather than a reading, so it
+          is the only thing wearing the brand. A run in flight pulses on it —
+          that is the whole reason the scores could not simply have replaced
+          the old strip. */}
+      <div className="px-1.5 pt-2 space-y-1">
+        <button onClick={() => onOpen('chat')} title="Ask Ira about this control" aria-label="Open the Ira chat"
+          className="relative w-full h-14 rounded-lg bg-brand-50 border border-brand-200 text-brand-700 hover:bg-brand-100 transition-colors cursor-pointer flex flex-col items-center justify-center gap-0.5">
+          <Sparkles size={16} />
+          <span className="text-[0.625rem] font-bold uppercase tracking-[0.08em]">Ira</span>
+          {running && <motion.span className="absolute top-1.5 right-1.5 w-1.5 h-1.5 rounded-full bg-primary"
+            animate={{ scale: [1, 1.4, 1], opacity: [0.4, 1, 0.4] }} transition={{ duration: 1.2, repeat: Infinity, ease: 'easeInOut' }} />}
+        </button>
+        <button onClick={() => onOpen('history')} title={`History — ${execCount} run${execCount === 1 ? '' : 's'}`} aria-label="Open the run history" className={iconBtn}>
+          <History size={15} />{execCount > 0 && <span className="text-[0.625rem] font-semibold tabular-nums">{execCount}</span>}
+        </button>
+        <button onClick={() => onOpen('discussion')} title={openDisc > 0 ? `Discussion — ${openDisc} open` : 'Discussion'} aria-label="Open the discussion" className={iconBtn}>
+          <MessageSquare size={15} />{openDisc > 0 && <span className="text-[0.625rem] font-semibold tabular-nums text-high-700">{openDisc}</span>}
+        </button>
+      </div>
+    </div>
   );
 }
 
@@ -5064,10 +5143,11 @@ function useRemembered(key: string, fallback: boolean) {
     try { const v = window.localStorage.getItem(key); return v === null ? fallback : v === '1'; }
     catch { return fallback; }
   });
-  const set = (next: boolean) => {
+  // Stable across renders so an effect can depend on it without re-firing.
+  const set = useCallback((next: boolean) => {
     setOn(next);
     try { window.localStorage.setItem(key, next ? '1' : '0'); } catch { /* storage blocked */ }
-  };
+  }, [key]);
   return [on, set] as const;
 }
 
@@ -5091,6 +5171,10 @@ export default function ControlDossier() {
   // something about how they work, not about this one control, and being made
   // to say it again on the next control would be the tool forgetting.
   const [railOpen, setRailOpen] = useRemembered(RAIL_OPEN_KEY, true);
+  // Which pane is showing, held here rather than inside the rail: the folded
+  // spine picks one too, and unfolding on the chat when the reader pressed
+  // History would be the tool overruling them.
+  const [railPane, setRailPane] = useState<RailPane>('chat');
   const control = eng.controls.find(c => c.id === selectedControlId);
   // ── landing where the click was about ──────────────────────────────────────
   // Above the early return on purpose: hooks have to run on every render, and
@@ -5120,6 +5204,21 @@ export default function ControlDossier() {
     const t = window.setTimeout(() => setArrivedAt(null), 2600);
     return () => window.clearTimeout(t);
   }, [arrivedAt]);
+
+  // A run started from the page narrates in the chat, so the rail comes forward
+  // to be read — including UNFOLDING it, which the earlier version did not do:
+  // pressing "Run AI validation" with the rail folded sent the narration to a
+  // pane that was not on the screen, and the reader watched nothing happen.
+  // It asks once. `railShown` lowers the flag so a reader who then chooses
+  // History, or folds the rail back up, is not dragged around by the next
+  // render.
+  const run = useControlRun(selectedControlId ?? '');
+  useEffect(() => {
+    if (!run?.wantsRail || !selectedControlId) return;
+    setRailPane('chat');
+    setRailOpen(true);
+    railShown(selectedControlId);
+  }, [run?.wantsRail, selectedControlId, setRailOpen]);
 
   if (!control) return <div className="text-ink-500">Control not found. <button onClick={back} className="text-brand-700 font-semibold">Back to register</button></div>;
   // ── who is standing here, and what that permits ─────────────────────────────
@@ -5208,7 +5307,7 @@ export default function ControlDossier() {
           growing; `min-w-0` is what stops a wide table pushing the rail off
           the screen. */}
       <div className="flex-1 min-h-0 grid gap-5 transition-[grid-template-columns] duration-300 ease-[cubic-bezier(0.22,1,0.36,1)]"
-        style={{ gridTemplateColumns: railOpen ? 'minmax(0,1fr) 400px' : 'minmax(0,1fr) 2.75rem' }}>
+        style={{ gridTemplateColumns: railOpen ? 'minmax(0,1fr) 400px' : 'minmax(0,1fr) 5rem' }}>
         {/* The header travels with the work rather than being frozen above it:
             it is a third of the screen, and the steps are what the auditor
             came for. The white band inside it now ends at this column, which
@@ -5696,16 +5795,11 @@ export default function ControlDossier() {
           {/* `inert` so a folded rail cannot be tabbed into — it is clipped
               out of sight, not merely out of the way. */}
           <div className="h-full w-[400px]" inert={!railOpen}>
-            <ActivityRail control={control} meters={designRagMeters(control)} onCollapse={() => setRailOpen(false)} />
+            <ActivityRail control={control} meters={designRagMeters(control)} pane={railPane} onPane={setRailPane} onCollapse={() => setRailOpen(false)} />
           </div>
           {!railOpen && (
-            <button onClick={() => setRailOpen(true)} title="Show the Ira rail" aria-label="Show the Ira rail"
-              className="panel absolute inset-0 bottom-6 flex flex-col items-center pt-3 gap-2 text-ink-400 hover:text-brand-700 hover:border-brand-200 transition-colors cursor-pointer">
-              <PanelRightClose size={16} className="rotate-180 shrink-0" />
-              {/* Bottom-to-top, the way a spine reads — an icon alone leaves
-                  the reader to guess what they folded away. */}
-              <span className="text-[0.625rem] font-semibold uppercase tracking-[0.14em] [writing-mode:vertical-rl] rotate-180">Ira</span>
-            </button>
+            <RailSpine control={control} meters={designRagMeters(control)} running={!!run}
+              onOpen={p => { setRailPane(p); setRailOpen(true); }} />
           )}
         </motion.div>
       </div>

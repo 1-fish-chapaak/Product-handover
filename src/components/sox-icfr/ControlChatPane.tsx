@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { motion, useReducedMotion } from 'motion/react';
-import { ArrowRight, ArrowUp } from 'lucide-react';
+import { ArrowRight, ArrowUp, Plus } from 'lucide-react';
 import { useIcfr } from './store';
 import { useAuditLog } from '../../context/AdminDataContext';
 import { concludeRationale, designOutstanding, designSuggestion, operatingSuggestion, trackResult } from './helpers';
@@ -9,7 +9,7 @@ import { acknowledge, listOf, nextPrompt, type ChatStepId, type Situation } from
 import { actionsFor, type ChatAction } from './controlChatActions';
 import { readIntent } from './controlChatIntents';
 import { cn } from '../../lib/cn';
-import type { Control, TestResult } from './types';
+import type { Control, DesignDocKind, TestResult } from './types';
 
 /**
  * Ira, sitting beside the control rather than inside it.
@@ -80,13 +80,18 @@ function WorkingStep({ text }: { text: string }) {
 }
 
 export default function ControlChatPane({ control }: { control: Control }) {
-  const { eng, role, me, openAuditId, runDesignIra, concludeDesign, overrideDesign, approveDesign, setDesignPoint, overrideDesignPoint,
+  const { eng, role, me, openAuditId, addDesignDoc, runDesignIra, concludeDesign, overrideDesign, approveDesign, setDesignPoint, overrideDesignPoint,
     lockPopulation, concludeOperating, overrideOperating, signOffControlWp,
     setStepResult, overrideStep, validateReadyAttributes } = useIcfr();
   const logEvent = useAuditLog();
   const audit = useMemo(() => eng.audits.find(a => a.id === openAuditId) ?? null, [eng.audits, openAuditId]);
   const prompt = useMemo(() => nextPrompt({ eng, control, role, me, audit }), [eng, control, role, me, audit]);
   const actions = useMemo(() => actionsFor(prompt.situation, role), [prompt.situation, role]);
+  // Two shapes, one list: next steps are stacked rows, a set to choose from is
+  // a wrap of chips. Split here rather than in the action map, because it is a
+  // fact about how the rail draws them, not about what they do.
+  const rows = useMemo(() => actions.filter(a => a.group !== 'pick'), [actions]);
+  const picks = useMemo(() => actions.filter(a => a.group === 'pick'), [actions]);
   const thread = useControlThread(control.id);
   // Not local state: the page's own "Run AI validation" starts the same run,
   // and the reader's rule is that it narrates here (22 Sep). One run, one
@@ -163,6 +168,15 @@ export default function ControlChatPane({ control }: { control: Control }) {
       const step = a.focus ?? prompt.step;
       document.getElementById(STEP_ANCHOR[step])?.scrollIntoView({ behavior: 'smooth', block: 'center' });
       say(control.id, 'ira', `It’s on the left — ${STEP_NUM[step]} ${STEP_LABEL[step]}.`);
+      return;
+    }
+
+    // Setting up the design step. The page's own Add-element menu calls this
+    // with the same argument, so an element added from here is indistinguishable
+    // from one added on the left — which is the point of doing it at all.
+    if (a.id === 'add-element' && a.arg) {
+      addDesignDoc(control.id, a.arg as DesignDocKind);
+      logEvent({ action: 'Create', description: `Added the ${a.arg} design element to ${control.id} from the chat`, module: 'SOX ICFR', entity: 'Control' });
       return;
     }
 
@@ -390,9 +404,9 @@ export default function ControlChatPane({ control }: { control: Control }) {
               {STEP_NUM[prompt.step]} {stepLabel}
             </div>
             <div className="text-[0.8125rem] leading-[1.65] text-ink-800">{prompt.text}</div>
-            {actions.length > 0 && (
+            {rows.length > 0 && (
               <div className="mt-3 space-y-1.5">
-                {actions.map((a, i) => (
+                {rows.map((a, i) => (
                   <motion.button key={a.id + a.label} onClick={() => run(a)}
                     // The reveal moves the button, it does not fade it in. An
                     // entrance that starts at zero opacity leaves the one thing
@@ -413,6 +427,28 @@ export default function ControlChatPane({ control }: { control: Control }) {
                     <ArrowRight size={14} className="shrink-0 -translate-x-1 opacity-0 transition-all duration-150 group-hover/row:translate-x-0 group-hover/row:opacity-100" />
                   </motion.button>
                 ))}
+              </div>
+            )}
+
+            {/* A SET to choose from, not a next step — so it wraps into small
+                chips under one caption rather than becoming seven full-width
+                rows that each claim to be the thing to do. The shape says
+                "pick any, more than one is fine", which is exactly what
+                setting up a design step is. */}
+            {picks.length > 0 && (
+              <div className="mt-3.5">
+                <div className="mb-1.5 text-[0.6875rem] font-semibold text-ink-400">Add an element</div>
+                <div className="flex flex-wrap gap-1.5">
+                  {picks.map((a, i) => (
+                    <motion.button key={a.id + a.label} onClick={() => run(a)}
+                      initial={still ? false : { y: 6 }}
+                      animate={{ y: 0 }}
+                      transition={{ delay: 0.05 + i * 0.04, duration: 0.3, ease: [0.22, 1, 0.36, 1] }}
+                      className="inline-flex items-center gap-1 h-7 pl-2 pr-2.5 rounded-lg border border-canvas-border bg-canvas-elevated text-[0.75rem] font-medium text-ink-700 hover:bg-brand-50 hover:text-brand-700 hover:border-brand-200 transition-colors duration-150 cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/30">
+                      <Plus size={12} className="shrink-0 text-ink-400" />{a.label}
+                    </motion.button>
+                  ))}
+                </div>
               </div>
             )}
           </div>

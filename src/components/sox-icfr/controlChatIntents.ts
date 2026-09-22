@@ -81,7 +81,7 @@ const stepLabelOf = (s: OperatingStep): string => `attribute ${s.code}`;
  *  situation the buttons are, so the two can never disagree. */
 function refusal(id: ChatActionId, { s, role }: IntentCtx): string {
   if (s.sealed) return 'This engagement is signed off — nothing on this control can move now.';
-  const auditorsOwn: ChatActionId[] = ['ira-run', 'toe-run', 'conclude-effective', 'conclude-ineffective', 'lock-population', 'conclude-op-effective', 'conclude-op-ineffective'];
+  const auditorsOwn: ChatActionId[] = ['add-element', 'ira-run', 'toe-run', 'conclude-effective', 'conclude-ineffective', 'lock-population', 'conclude-op-effective', 'conclude-op-ineffective'];
   if (role !== 'auditor' && auditorsOwn.includes(id)) {
     return `That one is the auditor’s. You are viewing as ${role === 'reviewer' ? 'the reviewer' : 'the risk owner'}, so I can’t do it from here.`;
   }
@@ -90,6 +90,11 @@ function refusal(id: ChatActionId, { s, role }: IntentCtx): string {
     if (s.ownConclusion) return 'You concluded this design yourself, so somebody else has to approve it — four eyes.';
     if (s.approvedBy) return `${s.approvedBy.by} has already approved it.`;
     return 'There is no concluded design to approve yet.';
+  }
+  if (id === 'add-element') {
+    if (s.designResult !== 'Not tested') return `The design is already concluded ${s.designResult.toLowerCase()} — it has to be reopened before what it is evidenced by can change.`;
+    if (s.elementsOnFile > 0) return 'Evidence is already attached on this step, so I leave the element list to the page — Add element at the top of the design step has the whole menu, custom ones included.';
+    return 'Every element I can add is already on this control. The page’s Add element menu has a Custom… option for anything else.';
   }
   if (id === 'ira-run') {
     return s.iraBlocked ? `I can’t run it — ${s.iraBlocked}.` : 'There is nothing to assess just now.';
@@ -144,7 +149,11 @@ const plural = (n: number, one: string, many = `${one}s`) => `${n} ${n === 1 ? o
 /** What Ira can do right now, said as a list — the fallback's whole value. */
 function capabilities(ctx: IntentCtx): string {
   const { actions, s, role } = ctx;
-  const can = actions.map(a => a.does ?? a.label.toLowerCase());
+  const adds = actions.filter(a => a.id === 'add-element');
+  const can = actions.filter(a => a.id !== 'add-element').map(a => a.does ?? a.label.toLowerCase());
+  // Seven "add X" offers would fill the whole list and crowd out the one thing
+  // that is actually the next step, so they are named as one capability.
+  if (adds.length > 0) can.unshift(`add a design element — ${listOf(adds.map(a => a.label.toLowerCase()), 3)}`);
   if (role === 'auditor' && s.step === 'design' && s.checksTotal > 0 && s.designResult === 'Not tested' && !s.locked) {
     can.push('mark one check — try “pass 5.1” or “fail 5.2”');
   }
@@ -288,6 +297,23 @@ export function readIntent(raw: string, ctx: IntentCtx): Intent {
   if (has(t, 'send it back', 'send back', 'return it', 'reject')) {
     const a = offered('show-step');
     return a ? { kind: 'action', action: a } : { kind: 'reply', text: 'There is nothing to send back just now.' };
+  }
+  // ── setting up the design step ────────────────────────────────────────────
+  // "add a walkthrough", "add the process narrative". Matched against the SAME
+  // chips the rail is offering, so typing can never add a kind that is already
+  // on the control or touch a design that has been concluded.
+  if (/\badd\b/.test(t)) {
+    const adds = actions.filter(a => a.id === 'add-element');
+    const words = (a: ChatAction) => a.label.toLowerCase().split(/[^a-z]+/).filter(w => w.length >= 3);
+    const best = adds.reduce<{ a: ChatAction; n: number } | null>((acc, a) => {
+      const n = words(a).reduce((k, w) => k + (t.includes(w) ? 1 : 0), 0);
+      return n > 0 && (!acc || n > acc.n) ? { a, n } : acc;
+    }, null);
+    if (best) return { kind: 'action', action: best.a };
+    if (adds.length > 0) {
+      return { kind: 'reply', text: `I can add ${listOf(adds.map(a => a.label.toLowerCase()), 4)}. Say which one, or press it above.` };
+    }
+    return { kind: 'reply', text: refusal('add-element', ctx) };
   }
   if (has(t, 'show', 'take me', 'open', 'go to', 'where is', 'scroll')) {
     const a = offered('show-step');

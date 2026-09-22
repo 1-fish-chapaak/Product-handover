@@ -235,6 +235,10 @@ export function Bar({ value, total, tone = 'bg-brand-500' }: { value: number; to
 // ineffective conclusion is red no matter the percentage).
 export type RagMeterDef = {
   label: string;
+  /** The same score in one word, for the folded rail — a 5rem spine has no
+   *  room for "Design coverage confidence" and an abbreviation guessed at the
+   *  call site would drift from the name the open rail prints. */
+  short?: string;
   pct: number;
   detail: string;
   gate?: boolean;
@@ -360,16 +364,17 @@ export function RagCard({ m }: { m: RagMeterDef; /** @deprecated the card no lon
  *  Colour is spent on exceptions only, and at KPI size that means the NUMBER is
  *  coloured rather than the whole tile: three tinted boxes in a strip this small
  *  read as an error state rather than as a score. */
-export function RagKpiRow({ meters, flush }: { meters: RagMeterDef[]; /** Sitting inside another panel — no border of its own, just a rule under it. */ flush?: boolean }) {
-  const [openLabel, setOpenLabel] = useState<string | null>(null);
-  const open = meters.find(m => m.label === openLabel) ?? null;
-  // ONE score may wear a colour, and only if it is the one that needs reading
-  // (21 Sep). Three ramped columns side by side was the heat strip DESIGN.md
-  // forbids by name — and the strip is the worse offender of the two shapes,
-  // because a ramp read left to right invites the eye to compare scores that
-  // measure completely different things. Red outranks amber; a tie goes to the
-  // lower score. Everything else is ink, and the bar is a quantity, not a verdict.
-  const worst = meters.reduce<RagMeterDef | null>((acc, m) => {
+/** ONE score may wear a colour, and only if it is the one that needs reading
+ *  (21 Sep). Three ramped columns side by side was the heat strip DESIGN.md
+ *  forbids by name — and the strip is the worse offender of the two shapes,
+ *  because a ramp read left to right invites the eye to compare scores that
+ *  measure completely different things. Red outranks amber; a tie goes to the
+ *  lower score. Everything else is ink, and the bar is a quantity, not a verdict.
+ *
+ *  Exported because the folded rail draws the same three scores in a column,
+ *  and a second copy of this rule would eventually pick a different one. */
+export function worstMeter(meters: RagMeterDef[]): RagMeterDef | null {
+  return meters.reduce<RagMeterDef | null>((acc, m) => {
     if (m.empty) return acc;
     const w = ragWord(m);
     if (w !== 'red' && w !== 'amber') return acc;
@@ -379,6 +384,14 @@ export function RagKpiRow({ meters, flush }: { meters: RagMeterDef[]; /** Sittin
     if (w === 'red' && a === 'amber') return m;
     return m.pct < acc.pct ? m : acc;
   }, null);
+}
+/** Red, amber, green or none — as a word, for whoever needs to branch on it. */
+export const ragState = ragWord;
+
+export function RagKpiRow({ meters, flush }: { meters: RagMeterDef[]; /** Sitting inside another panel — no border of its own, just a rule under it. */ flush?: boolean }) {
+  const [openLabel, setOpenLabel] = useState<string | null>(null);
+  const open = meters.find(m => m.label === openLabel) ?? null;
+  const worst = worstMeter(meters);
   if (!meters.length) return null;
   return (
     <div className={cn(flush ? 'border-b border-canvas-border' : 'panel overflow-hidden')}>
