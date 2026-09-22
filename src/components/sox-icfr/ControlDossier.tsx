@@ -28,7 +28,7 @@ import {
   narrowedCount, populationFrom, readRowCount,
 } from './helpers';
 import { useAuditFiles, type AuditFile } from './useAuditFiles';
-import { mapEvidence, type EvidenceMatch } from './controlChatEvidence';
+import { evidenceSlots, mapEvidence, type EvidenceMatch } from './controlChatEvidence';
 import { auditCovers, countryFor, countryOf, inScopeEntityNames, ownersOf, programmeFor, scopedForDraw } from './auditScope';
 import { ConclusionPill, CourtBadge, NatureChip, OriginPicker, Toggle, TrackPill, Tickmark, Stamp, RagKpiRow, ragState, statusWordOf, worstMeter, type RagMeterDef } from './parts';
 import { Pill } from '../shared/StatusBadge';
@@ -1137,6 +1137,28 @@ function AttributeRow({ control, step, canEdit, testing }: { control: Control; s
     if (!list || list.length === 0) return;
     setPile(mapEvidence(control, Array.from(list).map(f => f.name), step.id));
   };
+  /** How many of the pile have a line, and which have none. */
+  const mapped = pile?.filter(m => m.slot).length ?? 0;
+  const spare = pile?.filter(m => !m.slot) ?? [];
+  /** Move a file onto a line, or clear the line.
+   *
+   *  One file, one line, both ways: taking a file that was sitting on another
+   *  line moves it rather than copying it, and the line it left goes back to
+   *  Not mapped. Anything else would let the same document prove two different
+   *  attributes on the same paper. */
+  const assignFile = (name: string | null, fileId: string) => {
+    setPile(prev => {
+      if (!prev) return prev;
+      const slot = evidenceSlots(control, step.id).find(x => x.fileId === fileId);
+      if (!slot) return prev;
+      return prev.map(m => {
+        if (m.slot?.fileId === fileId) return { ...m, slot: null, score: 0, chosen: undefined };
+        if (name && m.name === name) return { ...m, slot, score: 0, chosen: true };
+        return m;
+      });
+    });
+  };
+
   const filePile = () => {
     if (!pile) return;
     const placed = pile.filter(m => m.slot);
@@ -1228,40 +1250,6 @@ function AttributeRow({ control, step, canEdit, testing }: { control: Control; s
                 )}
               </div>
 
-              {/* What the mapper decided, before anything is written. Every file
-                  says where it landed and how sure the match was; the ones it
-                  could not place are named rather than dropped, because the
-                  reader has to be told what did not land. */}
-              {pile && (
-                <div className="mt-2 rounded-md border border-brand-200 bg-canvas-elevated px-2.5 py-2">
-                  <div className="text-[0.625rem] font-bold uppercase tracking-wide text-ink-400">Where each one goes</div>
-                  <ul className="mt-1.5 space-y-1">
-                    {pile.map((m, i) => (
-                      <li key={`${m.name}-${i}`} className="flex items-start gap-1.5 text-[0.6875rem] leading-snug">
-                        {m.slot
-                          ? <CheckCircle2 size={11} className="text-compliant-600 shrink-0 mt-[3px]" />
-                          : <AlertTriangle size={11} className="text-mitigated-600 shrink-0 mt-[3px]" />}
-                        <span className="min-w-0">
-                          <span className="font-medium text-ink-800 break-all">{m.name}</span>
-                          {m.slot
-                            ? <> <span className="text-ink-400">→</span> <span className="text-ink-700">{m.slot.label}</span>
-                                {m.score < 30 && <span className="text-ink-400"> · a guess</span>}
-                                {m.slot.taken && <span className="text-mitigated-700"> · replaces what is there</span>}</>
-                            : <span className="text-ink-400"> — I could not place this one</span>}
-                        </span>
-                      </li>
-                    ))}
-                  </ul>
-                  <div className="mt-2 flex items-center gap-1.5">
-                    <button onClick={filePile} disabled={!pile.some(m => m.slot)}
-                      className="h-7 px-2.5 rounded-md bg-brand-600 text-white text-[0.6875rem] font-semibold enabled:hover:bg-brand-700 disabled:opacity-40 disabled:cursor-not-allowed inline-flex items-center gap-1 cursor-pointer">
-                      <Upload size={11} /> File {pile.filter(m => m.slot).length} {pile.filter(m => m.slot).length === 1 ? 'file' : 'files'}
-                    </button>
-                    <button onClick={() => setPile(null)}
-                      className="h-7 px-2.5 rounded-md border border-canvas-border bg-canvas-elevated text-ink-600 text-[0.6875rem] font-semibold hover:text-ink-900 hover:border-ink-300 cursor-pointer">Cancel</button>
-                  </div>
-                </div>
-              )}
               {total === 0 ? (
                 <p className="mt-1.5 text-[0.6875rem] text-ink-400">No required files listed — add them on the engagement control page.</p>
               ) : (
@@ -1278,7 +1266,47 @@ function AttributeRow({ control, step, canEdit, testing }: { control: Control; s
                         </div>
                         {f.file && <div className="text-[0.65625rem] text-ink-400 mt-0.5">Uploaded by {f.file.uploadedBy} · {f.file.uploadedAt}</div>}
                       </div>
-                      {canEdit && !busy && (
+                      {/* ── while a pile is being mapped ────────────────────
+                          The per-slot uploader goes (user ask, 22 Sep): three
+                          Upload buttons beside a list of three files already
+                          chosen is the same job offered twice, and pressing one
+                          would have quietly dropped the mapping. What stands in
+                          its place is the workflow executor's own shape — the
+                          SLOT leads the row, the file it was matched to sits on
+                          it as a chip, and a dropdown moves it. */}
+                      {canEdit && !busy && pile && (() => {
+                        const m = pile.find(x => x.slot?.fileId === f.id);
+                        const tier = !m ? null : m.chosen ? 'chosen' : m.score >= 70 ? 'sure' : m.score >= 30 ? 'review' : 'guess';
+                        return (
+                          <div className="flex items-center gap-1.5 shrink-0">
+                            {m ? (
+                              <span className={cn('inline-flex items-center gap-1 h-6 pl-1.5 pr-1 rounded-md border text-[0.65625rem] font-semibold max-w-[180px]',
+                                tier === 'sure' || tier === 'chosen' ? 'border-compliant-200 bg-compliant-50 text-compliant-700' : 'border-mitigated-200 bg-mitigated-50 text-mitigated-800')}>
+                                <Paperclip size={9} className="shrink-0" />
+                                <span className="truncate" title={m.name}>{m.name}</span>
+                                <button onClick={() => assignFile(null, f.id)} aria-label={`Unmap ${m.name}`} title="Not this one"
+                                  className="shrink-0 text-ink-400 hover:text-risk-600 cursor-pointer"><X size={11} /></button>
+                              </span>
+                            ) : (
+                              <span className="inline-flex items-center gap-1 h-6 px-2 rounded-md border border-dashed border-canvas-border text-[0.65625rem] text-ink-400 italic"><Link2 size={10} /> Not mapped</span>
+                            )}
+                            {/* Which file goes here. Every file in the pile is
+                                offered, including one mapped elsewhere — picking
+                                it moves it, rather than making the reader unmap
+                                the other row first. */}
+                            <select value={m?.name ?? ''} onChange={e => assignFile(e.target.value || null, f.id)}
+                              aria-label={`Which file proves ${f.label}`}
+                              className="h-6 max-w-[7.5rem] rounded-md border border-canvas-border bg-canvas-elevated px-1 text-[0.65625rem] text-ink-600 cursor-pointer focus:outline-none focus:ring-2 focus:ring-brand-200">
+                              <option value="">Not mapped</option>
+                              {pile.map(x => <option key={x.name} value={x.name}>{x.name}</option>)}
+                            </select>
+                            <span className={cn('text-[0.625rem] font-bold whitespace-nowrap', tier === 'sure' || tier === 'chosen' ? 'text-compliant-700' : tier ? 'text-mitigated-700' : 'text-ink-300')}>
+                              {tier === 'chosen' ? 'You mapped it' : tier === 'sure' ? 'Auto-mapped' : tier === 'review' ? 'Auto · review' : tier === 'guess' ? 'A guess' : '—'}
+                            </span>
+                          </div>
+                        );
+                      })()}
+                      {canEdit && !busy && !pile && (
                         <div className="flex items-center gap-1 shrink-0">
                           <label className="h-6 px-2 rounded-md border border-canvas-border bg-canvas-elevated text-ink-600 text-[0.6875rem] font-semibold hover:border-brand-300 hover:text-brand-700 focus-within:ring-2 focus-within:ring-brand-200 inline-flex items-center gap-1 cursor-pointer">
                             <input type="file" className="sr-only" aria-label={`Upload ${f.label} for ${step.code}`}
@@ -1300,6 +1328,34 @@ function AttributeRow({ control, step, canEdit, testing }: { control: Control; s
                     </li>
                   ))}
                 </ul>
+              )}
+
+              {/* ── the pile's own footer ──────────────────────────────────
+                  Nothing is written until this is pressed: the mapper is
+                  confident, not certain, and what it decides ends up on a
+                  working paper under the auditor's name. The files that found
+                  no line are named here rather than dropped — a file the reader
+                  handed over and never heard of again is a file they will
+                  assume went somewhere. */}
+              {pile && (
+                <div className="mt-2.5 pt-2 border-t border-brand-100/70">
+                  {spare.length > 0 && (
+                    <p className="mb-1.5 text-[0.65625rem] text-mitigated-700 flex items-start gap-1">
+                      <AlertTriangle size={10} className="shrink-0 mt-[2px]" />
+                      <span className="min-w-0">{spare.length === 1 ? 'This one has no line to go on' : `${spare.length} have no line to go on`} — {spare.map(m => m.name).join(', ')}. Put {spare.length === 1 ? 'it' : 'them'} on a line above, or file the rest without {spare.length === 1 ? 'it' : 'them'}.</span>
+                    </p>
+                  )}
+                  <div className="flex items-center gap-1.5 flex-wrap">
+                    <button onClick={filePile} disabled={mapped === 0}
+                      title={mapped === 0 ? 'Map at least one file to a line first' : undefined}
+                      className="h-7 px-2.5 rounded-md bg-brand-600 text-white text-[0.6875rem] font-semibold enabled:hover:bg-brand-700 disabled:opacity-40 disabled:cursor-not-allowed inline-flex items-center gap-1 cursor-pointer">
+                      <Upload size={11} /> File {mapped} {mapped === 1 ? 'file' : 'files'}
+                    </button>
+                    <button onClick={() => setPile(null)}
+                      className="h-7 px-2.5 rounded-md border border-canvas-border bg-canvas-elevated text-ink-600 text-[0.6875rem] font-semibold hover:text-ink-900 hover:border-ink-300 cursor-pointer">Cancel</button>
+                    <span className="text-[0.625rem] text-ink-400">Nothing is written until you file it.</span>
+                  </div>
+                </div>
               )}
             </div>
             {/* run + result */}
