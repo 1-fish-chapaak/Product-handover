@@ -20,7 +20,7 @@ import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from 'rea
 import { createPortal } from 'react-dom';
 import {
   AlertTriangle, ArrowLeft, Check, CheckCircle2, ChevronDown, ChevronRight, Circle, FileSpreadsheet, FileText, FileWarning,
-  Loader2, Paperclip, RotateCcw, Search, Sparkles, Star, Wand2, X,
+  Loader2, Paperclip, RotateCcw, Search, Sparkles, Star, Undo2, X,
 } from 'lucide-react';
 import { racmTemplateForProcesses } from './mockData';
 import {
@@ -443,8 +443,14 @@ export default function RacmImportReview({ mode, file, process, entity, existing
   const [dismissedSugg, setDismissedSugg] = useState<Record<string, string[]>>({});
   const [expanded, setExpanded] = useState<Set<string>>(new Set());
   const [fillOpen, setFillOpen] = useState(false);
-  /** Keyed `${row.key}|${field}`; absent = undecided. Nothing is written until Apply. */
-  const [fillDecisions, setFillDecisions] = useState<Record<string, 'accept' | 'reject'>>({});
+  /** What Ira has already written into the rows, per row — the value and the
+   *  reason it was read from. This is a record of work done, not a queue of
+   *  proposals: the values are in the rows from the moment Review opens. */
+  const [iraFilled, setIraFilled] = useState<Record<string, BlankFill[]>>({});
+  /** `${row.key}|${field}` Ira has already had a go at. She never has a second
+   *  one: an undone value that filled itself back in would be a loop, and a
+   *  reviewer who blanked a field meant it. */
+  const filledOnce = useRef<Set<string>>(new Set());
   /** Rows the reviewer chose not to import rather than fix (17 Sep), plus the
    *  repeats that start there. */
   const [leftOut, setLeftOut] = useState<Set<string>>(new Set());
@@ -454,9 +460,22 @@ export default function RacmImportReview({ mode, file, process, entity, existing
    *  repeats to be flagged and not created, so nobody has to notice one to avoid
    *  writing the control twice. Putting it back is a deliberate act. */
   const resetReview = (next: ImportRow[]) => {
-    setAcceptedRows(new Set()); setAcceptedSugg({}); setDismissedSugg({});
-    setExpanded(new Set()); setFillOpen(false); setFillDecisions({});
+    setAcceptedRows(new Set()); setAcceptedSugg(iraChecksFor(next)); setDismissedSugg({});
+    setExpanded(new Set()); setFillOpen(false); setIraFilled({}); filledOnce.current = new Set();
     setLeftOut(new Set(next.filter(rowRepeats).map(r => r.key)));
+  };
+
+  /** Design checks for the rows whose file carried none (22 Sep ask). A row that
+   *  brought its own checks keeps them untouched — Ira adds where the file was
+   *  silent, and never speaks over it. */
+  const iraChecksFor = (next: ImportRow[]): Record<string, Accepted> => {
+    const out: Record<string, Accepted> = {};
+    next.forEach(r => {
+      if (r.designChecks.length > 0) return;
+      const { designChecks } = suggestForRow(r, process);
+      if (designChecks.length) out[r.key] = { attributes: [], designChecks };
+    });
+    return out;
   };
 
   // ── Columns step (RACM) ───────────────────────────────────────────────────────
@@ -605,13 +624,20 @@ export default function RacmImportReview({ mode, file, process, entity, existing
     });
     return out;
   }, [effective, dismissedSugg, process]);
+  /** Anything Ira could still read but hasn't — normally empty, since the effect
+   *  above writes them. It is what `BlankFixRow` offers beside a core blank she
+   *  could not fill on her own. */
   const fills = useMemo(() => effective.map(row => ({ row, fills: proposeBlankFills(row) })).filter(g => g.fills.length > 0), [effective]);
-  const fillCount = fills.reduce((n, g) => n + g.fills.length, 0);
-  const fillKey = (rowKey: string, field: RacmFieldKey) => `${rowKey}|${field}`;
-  const fillTally = fills.reduce((t, g) => {
-    g.fills.forEach(f => { const d = fillDecisions[fillKey(g.row.key, f.field)]; if (d === 'accept') t.accepted++; else if (d === 'reject') t.rejected++; });
-    return t;
-  }, { accepted: 0, rejected: 0 });
+  /** Ira's values, in row order, for the panel that lists what she did. */
+  const filledList = useMemo(
+    () => effective.map(row => ({ row, fills: iraFilled[row.key] ?? [] })).filter(g => g.fills.length > 0),
+    [effective, iraFilled],
+  );
+  const filledCount = filledList.reduce((n, g) => n + g.fills.length, 0);
+  const iraCheckCount = useMemo(
+    () => Object.values(acceptedSugg).reduce((n, a) => n + a.designChecks.length, 0),
+    [acceptedSugg],
+  );
 
   const attributeCount = included.reduce((n, r) => n + r.attributes.length, 0);
   const requiredFileCount = included.reduce((n, r) => n + r.attributes.reduce((m, a) => m + a.requiredFiles.length, 0), 0);
@@ -693,6 +719,54 @@ export default function RacmImportReview({ mode, file, process, entity, existing
   /** Write one value into a row and rebuild it — a blank filled in review. */
   const setValue = (rowKey: string, field: RacmFieldKey, value: string) =>
     setRows(prev => rebuildRows(prev, new Map([[rowKey, { [field]: value }]])));
+
+  /**
+   * Ira fills what she can read off each row's other columns, as soon as the
+   * rows exist (22 Sep: "jo bhi column ka data nahi hoga apne paas, wo required
+   * column ka data AI suggest karega").
+   *
+   * This used to wait behind a collapsed panel that had to be opened, accepted
+   * and applied, so a file with no Risk title column imported with no risk
+   * titles — the proposal was computed and then sat there. The values now land
+   * in the rows, marked and listed with their reasons, and Import is still the
+   * only thing that writes anything.
+   *
+   * It settles: a filled field is no longer blank, so `proposeBlankFills` stops
+   * proposing it, and `filledOnce` makes that guarantee independent of whether
+   * the value survives the rebuild. Later edits still get their turn — typing a
+   * frequency makes a testing strategy derivable, and that lands too.
+   */
+  useEffect(() => {
+    if (step !== 'review' || rows.length === 0) return;
+    const patches = new Map<string, Partial<Record<RacmFieldKey, string>>>();
+    const done: Record<string, BlankFill[]> = {};
+    rows.forEach(r => {
+      const fresh = proposeBlankFills(r).filter(f => !filledOnce.current.has(`${r.key}|${f.field}`));
+      if (!fresh.length) return;
+      done[r.key] = fresh;
+      patches.set(r.key, Object.fromEntries(fresh.map(f => [f.field, String(f.value)])));
+    });
+    if (patches.size === 0) return;
+    Object.entries(done).forEach(([k, fs]) => fs.forEach(f => filledOnce.current.add(`${k}|${f.field}`)));
+    setRows(prev => rebuildRows(prev, patches));
+    setIraFilled(prev => {
+      const next = { ...prev };
+      Object.entries(done).forEach(([k, fs]) => { next[k] = [...(next[k] ?? []), ...fs]; });
+      return next;
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [rows, step]);
+
+  /** Put one of Ira's values back to blank. She does not fill it again. */
+  const undoFill = (rowKey: string, field: RacmFieldKey) => {
+    setRows(prev => rebuildRows(prev, new Map([[rowKey, { [field]: '' }]])));
+    setIraFilled(prev => {
+      const left = (prev[rowKey] ?? []).filter(f => f.field !== field);
+      const next = { ...prev };
+      if (left.length) next[rowKey] = left; else delete next[rowKey];
+      return next;
+    });
+  };
   const toggleLeftOut = (rowKey: string) => setLeftOut(prev => { const n = new Set(prev); if (n.has(rowKey)) n.delete(rowKey); else n.add(rowKey); return n; });
   const acceptSuggestion = (rowKey: string, s: Suggestion) => setAcceptedSugg(prev => {
     const cur = prev[rowKey] ?? { attributes: [], designChecks: [] };
@@ -700,25 +774,13 @@ export default function RacmImportReview({ mode, file, process, entity, existing
   });
   const dismissSuggestion = (rowKey: string, s: Suggestion) => setDismissedSugg(prev => ({ ...prev, [rowKey]: [...(prev[rowKey] ?? []), s.id] }));
 
-  const decideFill = (key: string, d: 'accept' | 'reject') => setFillDecisions(prev => {
-    const n = { ...prev };
-    if (n[key] === d) delete n[key]; else n[key] = d;   // pressing the chosen one again undecides it
-    return n;
-  });
-  const decideAllFills = (d: 'accept' | 'reject') => setFillDecisions(Object.fromEntries(fills.flatMap(g => g.fills.map(f => [fillKey(g.row.key, f.field), d]))));
-  const cancelFills = () => { setFillOpen(false); setFillDecisions({}); };
-  const applyFills = () => {
+  const undoAllFills = () => {
     const byRow = new Map<string, Partial<Record<RacmFieldKey, string>>>();
-    let n = 0;
-    fills.forEach(({ row, fills: fs }) => fs.forEach(f => {
-      if (fillDecisions[fillKey(row.key, f.field)] !== 'accept') return;
-      byRow.set(row.key, { ...(byRow.get(row.key) ?? {}), [f.field]: f.value });
-      n++;
-    }));
-    if (!n) return;
+    filledList.forEach(({ row, fills: fs }) => byRow.set(row.key, Object.fromEntries(fs.map(f => [f.field, '']))));
+    if (!byRow.size) return;
     setRows(prev => rebuildRows(prev, byRow));
-    cancelFills();
-    addToast({ type: 'success', title: `Filled ${n} blank${n === 1 ? '' : 's'}`, message: 'The values are in the review rows — nothing is saved until you import.' });
+    setIraFilled({});
+    addToast({ type: 'info', title: `Put back ${filledCount} value${filledCount === 1 ? '' : 's'}`, message: 'The rows read as the file wrote them. Nothing has been saved either way.' });
   };
 
   const doImport = () => {
@@ -768,7 +830,7 @@ export default function RacmImportReview({ mode, file, process, entity, existing
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       if (e.key !== 'Escape') return;
-      if (fillOpen) { cancelFills(); return; }
+      if (fillOpen) { setFillOpen(false); return; }
       if (step !== 'review' && !extracting) onClose();
     };
     document.addEventListener('keydown', onKey);
@@ -989,69 +1051,53 @@ export default function RacmImportReview({ mode, file, process, entity, existing
                 {mode === 'sop' && suggestedRowCount > 0 && (
                   <span className="text-[0.71875rem] text-ink-500 tabular-nums">{suggestedRowCount} suggested by Ira · {acceptedRows.size} accepted</span>
                 )}
+                {iraCheckCount > 0 && (
+                  <span className="text-[0.71875rem] text-ink-500 tabular-nums">{plural(iraCheckCount, 'design check')} written by Ira</span>
+                )}
                 <div className="flex-1" />
-                <button type="button" onClick={() => (fillOpen ? cancelFills() : setFillOpen(true))} disabled={fillCount === 0} aria-expanded={fillOpen}
-                  className="h-8 px-3 inline-flex items-center gap-1.5 rounded-lg border border-canvas-border bg-canvas-elevated text-[0.75rem] font-semibold text-ink-700 enabled:hover:text-brand-700 enabled:hover:border-brand-300 disabled:opacity-50 disabled:cursor-not-allowed transition-colors cursor-pointer">
-                  <Wand2 size={13} /> Fill blanks from other columns
-                  <span className="min-w-5 h-5 px-1 rounded-full bg-paper-100 text-ink-600 text-[0.6875rem] tabular-nums inline-flex items-center justify-center">{fillCount}</span>
+                <button type="button" onClick={() => setFillOpen(o => !o)} disabled={filledCount === 0} aria-expanded={fillOpen}
+                  className="h-8 px-3 inline-flex items-center gap-1.5 rounded-lg border border-mitigated-200 bg-mitigated-50 text-[0.75rem] font-semibold text-mitigated-800 enabled:hover:border-mitigated-400 disabled:opacity-50 disabled:cursor-not-allowed transition-colors cursor-pointer">
+                  <Sparkles size={13} /> Ira filled {filledCount} {filledCount === 1 ? 'blank' : 'blanks'}
+                  <ChevronDown size={12} className={cn('transition-transform', fillOpen && 'rotate-180')} />
                 </button>
               </div>
 
-              {/* A9 — every proposal shown before → after. Decisions are held here and
-                  only Apply writes them into the rows below. */}
+              {/* A9 — what Ira read off each row's other cells, already in the
+                  rows below, with the reason and a way back to blank. Nothing
+                  is saved until Import either way. */}
               {fillOpen && (
-                <section aria-label="Fill blanks from other columns" className="rounded-xl border border-canvas-border bg-canvas-elevated mb-3">
+                <section aria-label="Values Ira filled" className="rounded-xl border border-mitigated-200 bg-canvas-elevated mb-3">
                   <div className="flex flex-wrap items-center gap-3 px-4 py-2.5 border-b border-canvas-border">
                     <div className="min-w-0">
-                      <h3 className="text-[0.8125rem] font-semibold text-ink-900">Fill blanks from other columns</h3>
-                      <p className="text-[0.71875rem] text-ink-500">Values read off each row's other cells. Nothing changes until you apply.</p>
+                      <h3 className="text-[0.8125rem] font-semibold text-ink-900">Values Ira filled</h3>
+                      <p className="text-[0.71875rem] text-ink-500">Read off each row's other cells where the file left the field blank. Put any of them back before you import.</p>
                     </div>
                     <div className="flex-1" />
-                    <button type="button" onClick={() => decideAllFills('accept')} className={quietBtn}><Check size={12} /> Accept all</button>
-                    <button type="button" onClick={() => decideAllFills('reject')} className={quietBtn}><X size={12} /> Reject all</button>
+                    <button type="button" onClick={undoAllFills} className={quietBtn}><Undo2 size={12} /> Put all back</button>
                   </div>
                   <div className="max-h-[18rem] overflow-y-auto">
-                    {fills.map(({ row, fills: fs }) => (
+                    {filledList.map(({ row, fills: fs }) => (
                       <div key={row.key} className="px-4 py-2.5 border-b border-canvas-border last:border-b-0">
                         <p className="text-[0.6875rem] font-semibold text-ink-500 mb-1.5">Row {row.rowNo} · <span className="font-mono">{idOf(row)}</span></p>
                         <ul className="space-y-2">
-                          {fs.map(f => {
-                            const k = fillKey(row.key, f.field);
-                            const d = fillDecisions[k];
-                            return (
-                              <li key={f.field} className="flex items-start gap-3">
-                                <div className="min-w-0 flex-1">
-                                  <p className="text-[0.75rem] text-ink-700">
-                                    <span className="font-semibold text-ink-800">{fieldLabel(f.field)}:</span>{' '}
-                                    <span className="text-ink-400" aria-hidden>—</span><span className="sr-only">blank</span>{' '}
-                                    <span className="text-ink-400" aria-hidden>→</span><span className="sr-only">becomes</span>{' '}
-                                    <span className="font-medium text-ink-900">{f.value}</span>
-                                  </p>
-                                  <p className="text-[0.6875rem] text-ink-400 leading-snug">{f.reason}</p>
-                                </div>
-                                <div className="flex items-center gap-1 shrink-0" role="group" aria-label={`${fieldLabel(f.field)} on row ${row.rowNo}`}>
-                                  <button type="button" aria-pressed={d === 'accept'} onClick={() => decideFill(k, 'accept')}
-                                    className={cn(quietBtn, d === 'accept' && 'bg-compliant-50 border-compliant-300 text-compliant-700 hover:text-compliant-700 hover:border-compliant-300')}>
-                                    <Check size={12} /> Accept
-                                  </button>
-                                  <button type="button" aria-pressed={d === 'reject'} onClick={() => decideFill(k, 'reject')}
-                                    className={cn(quietBtn, d === 'reject' && 'bg-paper-100 border-ink-300 text-ink-800')}>
-                                    <X size={12} /> Reject
-                                  </button>
-                                </div>
-                              </li>
-                            );
-                          })}
+                          {fs.map(f => (
+                            <li key={f.field} className="flex items-start gap-3">
+                              <div className="min-w-0 flex-1">
+                                <p className="text-[0.75rem] text-ink-700">
+                                  <span className="font-semibold text-ink-800">{fieldLabel(f.field)}:</span>{' '}
+                                  <span className="font-medium text-ink-900">{f.value}</span>
+                                </p>
+                                <p className="text-[0.6875rem] text-ink-400 leading-snug">{f.reason}</p>
+                              </div>
+                              <button type="button" onClick={() => undoFill(row.key, f.field)} className={cn(quietBtn, 'shrink-0')}
+                                aria-label={`Put ${fieldLabel(f.field)} on row ${row.rowNo} back to blank`}>
+                                <Undo2 size={12} /> Put back
+                              </button>
+                            </li>
+                          ))}
                         </ul>
                       </div>
                     ))}
-                  </div>
-                  <div className="flex items-center gap-2 px-4 py-2.5 border-t border-canvas-border">
-                    <span className="mr-auto text-[0.71875rem] text-ink-400 tabular-nums">
-                      {fillTally.accepted} accepted · {fillTally.rejected} rejected · {fillCount - fillTally.accepted - fillTally.rejected} undecided
-                    </span>
-                    <button type="button" onClick={cancelFills} className={cn(secondaryBtn, 'h-8')}>Cancel</button>
-                    <button type="button" onClick={applyFills} disabled={fillTally.accepted === 0} className={cn(primaryBtn, 'h-8')}>Apply {fillTally.accepted} accepted</button>
                   </div>
                 </section>
               )}
@@ -1376,7 +1422,7 @@ export default function RacmImportReview({ mode, file, process, entity, existing
         {/* footer — always in view: the way back, and the one thing this step is for */}
         <div className="shrink-0 border-t border-canvas-border px-5 py-3 flex items-center gap-3">
           {step === 'review' ? (
-            <button type="button" onClick={() => { cancelFills(); setStep(mode === 'racm' ? 'columns' : 'prompt'); }} className={secondaryBtn}><ArrowLeft size={13} /> Back</button>
+            <button type="button" onClick={() => { setFillOpen(false); setStep(mode === 'racm' ? 'columns' : 'prompt'); }} className={secondaryBtn}><ArrowLeft size={13} /> Back</button>
           ) : (
             <button type="button" onClick={onClose} disabled={extracting} className={cn(secondaryBtn, 'disabled:opacity-40 disabled:cursor-not-allowed')}>Cancel</button>
           )}
