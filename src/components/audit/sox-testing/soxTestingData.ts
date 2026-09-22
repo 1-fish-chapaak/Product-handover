@@ -391,6 +391,13 @@ export interface EngagementScoping {
   entityIds: string[];
   /** Where the user overruled the derived company scope, and why. */
   scopeNotes: { entityId: string; name: string; inScope: boolean; note: string }[];
+  /** RACMs that started ticked on Scope (written for a company in scope) and
+   *  were taken out, and why (22 Sep). Absent when none were. */
+  racmNotes?: { process: string; racmId: string; racm: string; note: string }[];
+  /** Controls taken out of a ticked RACM on Scope, and why (22 Sep). A ticked
+   *  RACM brings every control in; each one taken out carries a note. Absent
+   *  when every control of every ticked RACM went in. */
+  controlNotes?: { racmId: string; racm: string; controlId: string; code: string; control: string; note: string }[];
 }
 
 const ENTITY_SHORT: Record<string, string> = {
