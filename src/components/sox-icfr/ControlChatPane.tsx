@@ -1,10 +1,11 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { motion, useReducedMotion } from 'motion/react';
-import { ArrowRight, ArrowUp, Plus } from 'lucide-react';
+import { ArrowRight, ArrowUp, Plus, Sparkles, Square } from 'lucide-react';
 import { useIcfr } from './store';
 import { useAuditLog } from '../../context/AdminDataContext';
 import { concludeRationale, designOutstanding, designSuggestion, operatingSuggestion, trackResult } from './helpers';
-import { endRun, say, sayOnce, startRun, useControlRun, useControlThread } from './controlChat';
+import { DESIGN_RUN_STEPS, TOE_RUN_STEPS, endRun, say, sayOnce, startRun, useControlRun, useControlThread, type RunStep } from './controlChat';
+import { useTypewriter } from '../chat/reveal/useTypewriter';
 import { acknowledge, listOf, nextPrompt, type ChatStepId, type Situation } from './controlChatScript';
 import { actionsFor, type ChatAction } from './controlChatActions';
 import { readIntent } from './controlChatIntents';
@@ -61,20 +62,93 @@ const IRA_MS = 6000;
 /** And the attribute run's own beat — the page's `runAll` takes 2400ms. */
 const TOE_MS = 2400;
 
-/** The chat's thinking state, which is a named step and not three dots: the
- *  page's own validation says what it is doing, and so does this. Ask IRA
- *  shows reasoning steps OR pulsing dots, never both — there is one step here,
- *  so the step is what shows, and the dot beside it carries the pulse. */
-function WorkingStep({ text }: { text: string }) {
+/** Ira's mark — the house AI gradient, at rail scale.
+ *
+ *  brand-500 → fuchsia-500 on the diagonal with a soft purple cast under it,
+ *  which is the one gradient this product spends on "a machine did this": the
+ *  Ask IRA header avatar, the One-Click Audit chip, the smart-queries card.
+ *  DESIGN.md forbids decorative gradient everywhere else, and that prohibition
+ *  is what makes this one legible as a signature rather than as decoration. */
+function IraMark({ size = 20, running = false }: { size?: number; running?: boolean }) {
   const still = useReducedMotion();
   return (
-    <div className="pl-3 border-l border-canvas-border">
-      <div className="flex items-center gap-1.5 text-[0.75rem] text-ink-500">
-        <motion.span className="w-1.5 h-1.5 rounded-full bg-primary shrink-0"
-          animate={still ? undefined : { scale: [1, 1.3, 1], opacity: [0.4, 1, 0.4] }}
-          transition={{ duration: 1.2, repeat: Infinity, ease: 'easeInOut' }} />
-        {text}
+    <span className="relative inline-flex shrink-0" style={{ width: size, height: size }}>
+      {running && !still && (
+        <motion.span aria-hidden className="absolute inset-0 rounded-md bg-brand-400"
+          animate={{ scale: [1, 1.45], opacity: [0.45, 0] }}
+          transition={{ duration: 1.6, repeat: Infinity, ease: 'easeOut' }} />
+      )}
+      <span className="relative inline-flex items-center justify-center w-full h-full rounded-md bg-gradient-to-br from-brand-500 to-fuchsia-500 text-white shadow-[0_0_10px_rgba(163,102,240,0.45)]">
+        <Sparkles size={Math.round(size * 0.58)} strokeWidth={2.25} />
+      </span>
+    </span>
+  );
+}
+
+/**
+ * The working trail — what Ira is doing, one step at a time.
+ *
+ * Lifted from the flagship chat's live trail (`ChatView.tsx:7526-7567`): a
+ * left rule, one row per step, and the ONLY running/done signal is the dot —
+ * `bg-primary` on the live step, `bg-brand-200` on the ones behind it, with a
+ * trailing ellipsis on the live one. No ticks, no strikes; a checklist that
+ * ticks itself would promise a precision this read does not have.
+ *
+ * It replaces a single static line. One line said "something is happening";
+ * four say what is being read and in what order, which is the difference
+ * between a spinner and an agent showing its work.
+ */
+function WorkingTrail({ label, steps }: { label: string; steps: RunStep[] }) {
+  const still = useReducedMotion();
+  return (
+    <div>
+      <div className="flex items-center gap-2 mb-2">
+        <IraMark size={18} running />
+        <span className="text-[0.75rem] font-semibold text-ink-700">{label}</span>
       </div>
+      <div className="pl-3 border-l border-canvas-border space-y-1" aria-live="polite" aria-label="Working">
+        {steps.map((s, i) => {
+          const live = i === steps.length - 1;
+          return (
+            <motion.div key={s.id}
+              initial={still ? false : { opacity: 0, x: -8 }}
+              animate={{ opacity: 1, x: 0 }}
+              transition={{ duration: 0.25, ease: [0.22, 1, 0.36, 1] }}
+              className="text-[0.75rem] text-ink-500 flex items-start gap-1.5">
+              <span className={cn('w-1.5 h-1.5 rounded-full shrink-0 mt-[5px]', live ? 'bg-primary' : 'bg-brand-200')} aria-hidden />
+              <span className="min-w-0">{s.label}{live ? '…' : ''}</span>
+            </motion.div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
+/**
+ * Ira's words, typed rather than posted.
+ *
+ * The house typewriter (`chat/reveal/useTypewriter`) — the same per-character
+ * pace, the same beat after a full stop, the same caret the flagship chat
+ * blinks. Only the NEWEST line types; everything above it is history and
+ * history does not re-perform itself every time the reader opens the tab.
+ *
+ * The caret is `.ai-caret` — the 2px brand-600 bar DESIGN.md specifies by the
+ * millimetre ("blinks once per 1.2s with steps(1) — square, not sine"). The
+ * flagship renders a `▌` glyph instead because its prose goes through markdown;
+ * this rail prints plain text, so it can use the real thing.
+ */
+function IraText({ text, stream, onDone }: { text: string; stream: boolean; onDone?: (done: boolean) => void }) {
+  // Half the flagship's 9ms. Its column is 66ch of prose the reader is meant
+  // to sit and watch; this one is a 400px rail where the reader is waiting to
+  // press something, and the buttons below wait for the sentence to land.
+  const { shown, done } = useTypewriter(text, { enabled: stream, baseDelay: 4 });
+  // Whoever owns the turn decides what may appear once Ira has finished
+  // speaking — offering the buttons mid-sentence reads as a form, not a reply.
+  useEffect(() => { onDone?.(done); }, [done, onDone]);
+  return (
+    <div className="text-[0.8125rem] leading-[1.65] text-ink-800 whitespace-pre-wrap break-words">
+      {shown}{!done && <span className="ai-caret" aria-hidden />}
     </div>
   );
 }
@@ -96,7 +170,8 @@ export default function ControlChatPane({ control }: { control: Control }) {
   // Not local state: the page's own "Run AI validation" starts the same run,
   // and the reader's rule is that it narrates here (22 Sep). One run, one
   // place it is spoken about, whichever button started it.
-  const working = useControlRun(control.id)?.label ?? null;
+  const liveRun = useControlRun(control.id);
+  const working = liveRun?.label ?? null;
   const [draft, setDraft] = useState('');
   // A check Ira has already answered cannot be flipped from here without a
   // reason either (user ask, 22 Sep) — the page asks for it in a form, so the
@@ -105,12 +180,25 @@ export default function ControlChatPane({ control }: { control: Control }) {
   const [awaitingWhy, setAwaitingWhy] = useState<{ kind: 'point' | 'attribute'; id: string; label: string; result: TestResult } | null>(null);
   const still = useReducedMotion();
 
+  // The id of the newest Ira line AS OF the render that first saw it. A message
+  // that was already on screen when the pane re-rendered must not start typing
+  // again, so this is set once per new id and never recomputed from the array.
+  const latestIra = useRef<string | null>(null);
+  const lastMsg = thread[thread.length - 1];
+  if (lastMsg?.who === 'ira' && lastMsg.id !== latestIra.current) latestIra.current = lastMsg.id;
+
+  // Has Ira finished saying the live line? The buttons under it wait on this,
+  // so a turn reads as "it speaks, then it offers" rather than a sentence
+  // being typed beneath a row of controls that were already there.
+  const [saidIt, setSaidIt] = useState(false);
+  useEffect(() => { setSaidIt(false); }, [prompt.key]);
+
   const scrollRef = useRef<HTMLDivElement>(null);
   useEffect(() => {
     const el = scrollRef.current;
     if (!el) return;
     requestAnimationFrame(() => el.scrollTo({ top: el.scrollHeight, behavior: 'smooth' }));
-  }, [thread, prompt.key, working]);
+  }, [thread, prompt.key, working, saidIt]);
 
   // A validation left running when the reader walks away must not come back
   // and write to a control they are no longer looking at.
@@ -181,7 +269,7 @@ export default function ControlChatPane({ control }: { control: Control }) {
     }
 
     if (a.id === 'ira-run') {
-      startRun(control.id, 'Reading the evidence against each check');
+      startRun(control.id, 'Reading the evidence against each check', DESIGN_RUN_STEPS, IRA_MS);
       timer.current = window.setTimeout(() => {
         // Six seconds is long enough for the left-hand side to move. The store
         // refuses to run once the design is concluded, and logging regardless
@@ -245,7 +333,7 @@ export default function ControlChatPane({ control }: { control: Control }) {
       // The page's own beat for this run (runAll, 2400ms) — shorter than the
       // design one because it reads uploaded files rather than the whole
       // evidence set, and Ira is not faster than the button beside it.
-      startRun(control.id, 'Reading the uploaded files against each attribute');
+      startRun(control.id, 'Reading the uploaded files against each attribute', TOE_RUN_STEPS, TOE_MS);
       timer.current = window.setTimeout(() => {
         const now = latest.current;
         endRun(now.id);
@@ -295,6 +383,17 @@ export default function ControlChatPane({ control }: { control: Control }) {
     if (working) return;
     say(control.id, 'user', a.said);
     perform(a);
+  };
+
+  /** Interrupt. Only a run THIS pane started has a timer to clear — one the
+   *  page started owns its own clock, so stopping it here would end the
+   *  narration while the work carried on writing to the control. */
+  const stop = () => {
+    if (!timer.current) return;
+    window.clearTimeout(timer.current);
+    timer.current = null;
+    endRun(control.id);
+    say(control.id, 'ira', 'Stopped. Nothing was written — ask again and I will read it from the top.');
   };
 
   // ── typed, and understood as far as it honestly can be ────────────────────
@@ -378,21 +477,25 @@ export default function ControlChatPane({ control }: { control: Control }) {
           it adrift at the top of a full-height rail: the live prompt lands
           where the hands already are. A long one fills upward and scrolls as
           usual, because auto margins give up the moment there is no slack. */}
-      <div ref={scrollRef} className="flex-1 min-h-0 overflow-y-auto px-3 pt-3 pb-4 flex flex-col">
+      <div ref={scrollRef} className="chat-canvas-mesh flex-1 min-h-0 overflow-y-auto px-3 pt-3 pb-4 flex flex-col">
        <div className="mt-auto space-y-5">
-        {thread.map(m => (
+        {thread.map((m, i) => (
           m.who === 'user' ? (
-            <div key={m.id} className="flex justify-end">
+            <motion.div key={m.id} className="flex justify-end"
+              initial={still ? false : { opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }}
+              transition={{ duration: 0.25, ease: [0.22, 1, 0.36, 1] }}>
               <div className="w-fit max-w-[85%] px-3 py-2 rounded-2xl bg-brand-50 text-ink-800 text-[0.8125rem] leading-[1.6] whitespace-pre-wrap break-words">
                 {m.text}
               </div>
-            </div>
+            </motion.div>
           ) : (
-            <div key={m.id} className="text-[0.8125rem] leading-[1.65] text-ink-800">{m.text}</div>
+            // Only the newest line types itself out. An older one re-performing
+            // every time the reader comes back from History would be theatre.
+            <IraText key={m.id} text={m.text} stream={i === thread.length - 1 && m.id === latestIra.current} />
           )
         ))}
 
-        {working && <WorkingStep text={working} />}
+        {liveRun && <WorkingTrail label={liveRun.label} steps={liveRun.steps} />}
 
         {/* Not a message — the live read on where this control stands. The
             eyebrow names the step rather than the speaker: which step Ira is
@@ -400,11 +503,19 @@ export default function ControlChatPane({ control }: { control: Control }) {
             already carried by the alignment. */}
         {!working && (
           <div>
-            <div className="mb-1.5 text-[0.6875rem] font-semibold uppercase tracking-[0.08em] text-ink-500">
-              {STEP_NUM[prompt.step]} {stepLabel}
+            {/* Ira's mark sits on the LIVE line only. The thread above stays
+                unmarked prose (DESIGN.md §7.1.7 — no avatar, identity carried
+                by alignment); what the mark distinguishes is not "who said
+                this" but "this is the agent reading the control right now",
+                which is the one thing in the rail that is not history. */}
+            <div className="flex items-center gap-2 mb-2">
+              <IraMark size={18} />
+              <span className="text-[0.6875rem] font-semibold uppercase tracking-[0.08em] text-ink-500">
+                {STEP_NUM[prompt.step]} {stepLabel}
+              </span>
             </div>
-            <div className="text-[0.8125rem] leading-[1.65] text-ink-800">{prompt.text}</div>
-            {rows.length > 0 && (
+            <IraText key={prompt.key} text={prompt.text} stream onDone={setSaidIt} />
+            {saidIt && rows.length > 0 && (
               <div className="mt-3 space-y-1.5">
                 {rows.map((a, i) => (
                   <motion.button key={a.id + a.label} onClick={() => run(a)}
@@ -413,16 +524,24 @@ export default function ControlChatPane({ control }: { control: Control }) {
                     // on this rail worth pressing invisible if the animation
                     // never gets to run — a background tab freezes rAF, and a
                     // button you cannot see is worse than one that just appears.
+                    // The house follow-up cascade (DESIGN.md §7.1.10) — it can
+                    // run its full 0.13s-per-chip stagger now that the chips
+                    // wait for Ira to stop speaking rather than racing it.
                     initial={still ? false : { y: 6 }}
                     animate={{ y: 0 }}
-                    transition={{ delay: 0.05 + i * 0.06, duration: 0.3, ease: [0.22, 1, 0.36, 1] }}
+                    transition={{ delay: i * 0.13, duration: 0.48, ease: [0.22, 1, 0.36, 1] }}
                     // The chat's own follow-up card (ChatView `FollowUpCard`),
                     // at rail width. The arrow is the click-scent: it is the
                     // one thing a line of Ira's prose above can never grow.
-                    className={cn('group/row w-full flex items-center gap-2.5 text-left px-3.5 py-2.5 rounded-xl border text-[0.8125rem] leading-snug transition-colors duration-150 cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/30',
+                    // The PRIMARY action is what Ira recommends, so it wears
+                    // the house AI CTA — the same brand→fuchsia sweep and soft
+                    // purple cast as the One-Click Audit start button. One
+                    // gradient per turn: everything else stays a flat outline,
+                    // or the recommendation stops being findable.
+                    className={cn('group/row w-full flex items-center gap-2.5 text-left px-3.5 py-2.5 rounded-xl text-[0.8125rem] leading-snug transition-all duration-150 cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/30',
                       a.primary
-                        ? 'bg-brand-50 text-brand-700 border-brand-200 font-semibold hover:bg-brand-100'
-                        : 'bg-canvas-elevated text-ink-700 border-canvas-border hover:bg-brand-50 hover:text-brand-700 hover:border-brand-200')}>
+                        ? 'bg-gradient-to-r from-brand-600 to-fuchsia-600 hover:from-brand-500 hover:to-fuchsia-500 text-white font-semibold border border-transparent shadow-[0_6px_20px_-8px_rgba(106,18,205,0.55)] hover:shadow-[0_8px_24px_-8px_rgba(106,18,205,0.65)]'
+                        : 'border border-canvas-border bg-canvas-elevated text-ink-700 hover:bg-brand-50 hover:text-brand-700 hover:border-brand-200')}>
                     <span className="flex-1 min-w-0">{a.label}</span>
                     <ArrowRight size={14} className="shrink-0 -translate-x-1 opacity-0 transition-all duration-150 group-hover/row:translate-x-0 group-hover/row:opacity-100" />
                   </motion.button>
@@ -435,7 +554,7 @@ export default function ControlChatPane({ control }: { control: Control }) {
                 rows that each claim to be the thing to do. The shape says
                 "pick any, more than one is fine", which is exactly what
                 setting up a design step is. */}
-            {picks.length > 0 && (
+            {saidIt && picks.length > 0 && (
               <div className="mt-3.5">
                 <div className="mb-1.5 text-[0.6875rem] font-semibold text-ink-400">Add an element</div>
                 <div className="flex flex-wrap gap-1.5">
@@ -443,7 +562,7 @@ export default function ControlChatPane({ control }: { control: Control }) {
                     <motion.button key={a.id + a.label} onClick={() => run(a)}
                       initial={still ? false : { y: 6 }}
                       animate={{ y: 0 }}
-                      transition={{ delay: 0.05 + i * 0.04, duration: 0.3, ease: [0.22, 1, 0.36, 1] }}
+                      transition={{ delay: i * 0.05, duration: 0.48, ease: [0.22, 1, 0.36, 1] }}
                       className="inline-flex items-center gap-1 h-7 pl-2 pr-2.5 rounded-lg border border-canvas-border bg-canvas-elevated text-[0.75rem] font-medium text-ink-700 hover:bg-brand-50 hover:text-brand-700 hover:border-brand-200 transition-colors duration-150 cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/30">
                       <Plus size={12} className="shrink-0 text-ink-400" />{a.label}
                     </motion.button>
@@ -464,7 +583,10 @@ export default function ControlChatPane({ control }: { control: Control }) {
         <div className="ai-border">
           <textarea
             value={draft} onChange={e => setDraft(e.target.value)} rows={2}
-            onKeyDown={e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); send(); } }}
+            onKeyDown={e => {
+              if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); send(); }
+              if (e.key === 'Escape' && working) { e.preventDefault(); stop(); }
+            }}
             disabled={!!working} aria-label="Message Ira"
             placeholder={working ? 'One moment…'
               : awaitingWhy ? `Why does ${awaitingWhy.label} ${awaitingWhy.result === 'Pass' ? 'pass' : 'fail'}? — this goes on the paper`
@@ -475,10 +597,19 @@ export default function ControlChatPane({ control }: { control: Control }) {
               the chat. The hint holds the row's height so the composer does
               not grow by 32px under the reader's hands as they start typing. */}
           <div className="flex items-center justify-between gap-2 px-2.5 pb-2.5">
-            <span className="text-[0.6875rem] text-ink-400 select-none">Enter to send</span>
-            {!!draft.trim() && !working && (
+            <span className="text-[0.6875rem] text-ink-400 select-none">{working ? 'Working…' : 'Enter to send'}</span>
+            {/* Stop, exactly as the flagship composer does it: the send button
+                becomes an ink-900 square while something is in flight, and it
+                genuinely interrupts — the run ends and the timer is cleared,
+                rather than the affordance merely being hidden. */}
+            {working ? (
+              <button onClick={stop} aria-label="Stop Ira" title="Stop reading (Esc)"
+                className="inline-flex items-center justify-center size-8 rounded-lg bg-ink-900 text-white hover:bg-ink-800 transition-colors cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/30">
+                <Square size={11} fill="currentColor" />
+              </button>
+            ) : !!draft.trim() && (
               <button onClick={send} aria-label="Send to Ira" title="Send · Enter to send, Shift+Enter for new line"
-                className="inline-flex items-center justify-center size-8 rounded-lg bg-primary text-white hover:bg-primary-hover active:bg-brand-800 transition-colors cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/30">
+                className="inline-flex items-center justify-center size-8 rounded-lg bg-gradient-to-br from-brand-600 to-fuchsia-600 text-white hover:from-brand-500 hover:to-fuchsia-500 shadow-[0_4px_14px_-6px_rgba(106,18,205,0.55)] transition-all cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/30">
                 <ArrowUp size={16} strokeWidth={2.25} />
               </button>
             )}

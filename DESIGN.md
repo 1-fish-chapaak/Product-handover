@@ -347,6 +347,12 @@ Single source of truth: `src/components/shared/Button.tsx`. Six variants, two si
 
 **The Single Gradient Rule.** Two sanctioned gradients exist in the system: the body radial mesh, and the AI response border-image. Every other gradient — text, button, card, decoration — is prohibited.
 
+> **The Ira Mark — a third sanctioned gradient (22 Sep 2026, product decision).** `bg-gradient-to-br from-brand-500 to-fuchsia-500` with `shadow-[0_4px_16px_-4px_rgba(106,18,205,0.5)]` is the product's signature for **"an agent did this"**, and its `to-r from-brand-600 to-fuchsia-600` sibling is the agent's recommended action. It was already shipping — the Ask IRA header avatar, the One-Click Audit chip and Start button, the smart-queries card, the SOX control rail's folded spine — so the rule above described a codebase that no longer existed. It is now written down rather than quietly broken.
+>
+> The rule that replaces it: **one Ira mark per surface, and one gradient CTA per turn.** The mark identifies the agent; the CTA is what the agent recommends. Everything else stays flat — outlined chips, ink prose, `bg-ink-300` meter bars. A second gradient on the same surface is still prohibited, and this carve-out does **not** reopen gradient text, gradient cards, glow borders, or shimmer-while-streaming. Sparkle iconography is permitted **only inside the Ira mark**, never loose in a thread or on a heading.
+>
+> Surfaces: `chat/ChatView.tsx`, `chat/SmartQueriesModal.tsx`, `one-click-audit/OneClickAuditModal.tsx`, `sox-icfr/ControlChatPane.tsx` (`IraMark`), `sox-icfr/ControlDossier.tsx` (`RailSpine`).
+
 **The Sidebar Noise Texture Rule.** The sidebar carries a 1.8% opacity noise texture as its only decoration. Cards, modals, and other surfaces never wear noise. Reaching for noise elsewhere is the symptom; the disease is "this surface feels too flat" — fix it with hierarchy, not texture.
 
 ## 6. Do's and Don'ts
@@ -369,13 +375,13 @@ Single source of truth: `src/components/shared/Button.tsx`. Six variants, two si
 - **Don't** use the hero-metric template (big number / small label / gradient accent / supporting stats). Prohibited.
 - **Don't** use gradient text (`background-clip: text` with a gradient background). The `.ai-gradient-text` utility exists for legacy; prefer solid `brand-700`.
 - **Don't** use glassmorphism (`backdrop-filter: blur` on cards) as a default. Forbidden.
-- **Don't** reintroduce decorative AI chrome — no glowing borders, no shimmer-while-streaming, no sparkle iconography. The codebase has actively removed these (`ai-glow`, `ai-shimmer`, `ai-pulse-ring`).
+- **Don't** reintroduce decorative AI chrome — no glowing borders, no shimmer-while-streaming, no loose sparkle iconography. The codebase has actively removed these (`ai-glow`, `ai-shimmer`, `ai-pulse-ring`). The one exception is the **Ira mark** (§5 Named Rules): a sparkle inside the agent's gradient badge, one per surface.
 - **Don't** use side-stripe borders greater than 1px anywhere except the three Alert Card variants. That is the only sanctioned exception.
 - **Don't** use identical card grids with icon + heading + text repeated endlessly. Vary spacing, vary affordance, vary hierarchy.
 - **Don't** use a literal double-hyphen (`--`) as punctuation. (The em dash `—` **is allowed** in product copy where it reads well — an earlier rule banned it, and that was reversed.)
 - **Don't** add bounce, elastic, or overshoot to motion. Exponential ease-out only.
 - **Don't** introduce a second dark surface. If something feels like it wants to be dark, give it more whitespace.
-- **Don't** add a second gradient. The body radial mesh and the AI response border-image are the only two.
+- **Don't** add a second gradient. The body radial mesh, the AI response border-image and the Ira mark (§5 Named Rules) are the only three, and the Ira mark is one per surface.
 - **Don't** use mascots, illustrative blobs, pastel gradients, or rounded-everything friendliness. Auditors are paid to be skeptical.
 - **Don't** use pure red, amber, or green (`#FF0000`, `#FFA500`, `#00FF00`-family). The semantic palette is deliberately tinted away from RAG.
 - **Don't** use Material-style elevation tiers (elevation-1, elevation-2…). This system is flat with a few specific lifted states; not a tiered Z-axis.

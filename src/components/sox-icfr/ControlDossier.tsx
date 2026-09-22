@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
-import { motion, AnimatePresence } from 'motion/react';
+import { motion, AnimatePresence, useReducedMotion } from 'motion/react';
 import {
   FileText, Upload, MessageSquare, PanelRightClose, Workflow as WorkflowIcon, Hand, AlertTriangle,
   Send, Lock, ClipboardCheck, FileCheck2, FlaskConical, CheckCircle2, XCircle,
@@ -34,7 +34,8 @@ import { Sparkles, FileSpreadsheet } from 'lucide-react';
 import WorkingPaperModal from './WorkingPaperModal';
 import RemediationBriefModal from './RemediationBriefModal';
 import ControlChatPane from './ControlChatPane';
-import { endRun, startRun, railShown, useControlRun } from './controlChat';
+import { DESIGN_RUN_STEPS, TOE_RUN_STEPS, endRun, startRun, railShown, useControlRun } from './controlChat';
+import { situationOf, type ChatStepId } from './controlChatScript';
 import { DeficiencyCard } from './extraViews';
 import DatePicker from '../shared/DatePicker';
 import { cn } from '../../lib/cn';
@@ -1088,7 +1089,7 @@ function AttributeRow({ control, step, canEdit, testing }: { control: Control; s
   // so the reader can tell it from the one that reads them all.
   const runAI = () => {
     setValidatingWf(true);
-    startRun(control.id, `Reading the files behind attribute ${step.code}`, true);
+    startRun(control.id, `Reading the files behind attribute ${step.code}`, TOE_RUN_STEPS, 4000, true);
     window.setTimeout(() => { endRun(control.id); runStepValidation(control.id, step.id); setValidatingWf(false); }, 4000);
   };
 
@@ -1477,7 +1478,7 @@ function DesignSection({ control, canEdit }: { control: Control; canEdit: boolea
   // this on the left and would otherwise be watching the wrong column.
   const runIra = () => {
     setIraRunning(true);
-    startRun(control.id, 'Reading the evidence against each check', true);
+    startRun(control.id, 'Reading the evidence against each check', DESIGN_RUN_STEPS, VALIDATE_MS, true);
     logEvent({ action: 'Run', description: `Ran Ira on the design checks for ${control.id}`, module: 'SOX ICFR', entity: 'Test Result' });
     window.setTimeout(() => { endRun(control.id); runDesignIra(control.id); setIraRunning(false); }, VALIDATE_MS);
   };
@@ -4659,7 +4660,7 @@ function OperatingSection({ control, canEdit, locked }: { control: Control; canE
     // Same rule as the design run: the button is here, the narration is in the
     // rail, and the rail comes forward because the reader pressed this on the
     // left and would otherwise be watching the wrong column.
-    startRun(control.id, 'Reading the uploaded files against each attribute', true);
+    startRun(control.id, 'Reading the uploaded files against each attribute', TOE_RUN_STEPS, 2400, true);
     logEvent({ action: 'Run', description: `Ran AI validation on ${ready} ready attribute(s) for ${control.id}`, module: 'SOX ICFR', entity: 'Test Result' });
     const skipped = o.steps.filter(s => !requiredFilesReady(s, control)).map(s => {
       const { uploaded, total } = requiredFilesCount(s, control);
@@ -4983,6 +4984,17 @@ function ActivityRail({ control, meters, pane, onPane, onCollapse }: { control: 
   );
 }
 
+/** The paper's five steps, for the folded rail's spine. Same numbers and same
+ *  order as the stepper on the left and the eyebrow in the chat — three places
+ *  that must never disagree about which step is which. */
+const SPINE_STEPS: { id: ChatStepId; n: string; label: string }[] = [
+  { id: 'design', n: '①', label: 'Test of design' },
+  { id: 'population', n: '②', label: 'Population' },
+  { id: 'sample', n: '③', label: 'Sample drawing' },
+  { id: 'operating', n: '④', label: 'Test of effectiveness' },
+  { id: 'signoff', n: '⑤', label: 'Final' },
+];
+
 /** The rail folded away — a spine, not a shut door (user ask, 22 Sep).
  *
  *  The first version of this was a 44px strip carrying the word "Ira" and
@@ -4997,63 +5009,116 @@ function ActivityRail({ control, meters, pane, onPane, onCollapse }: { control: 
  *  read from the same meters, so the spine can never quietly disagree with the
  *  rail it replaces. */
 function RailSpine({ control, meters, running, onOpen }: { control: Control; meters: RagMeterDef[]; running: boolean; onOpen: (p: RailPane) => void }) {
-  const { eng } = useIcfr();
+  const { eng, role, me, openAuditId } = useIcfr();
+  const still = useReducedMotion();
   const execCount = eng.executions.filter(e => e.controlId === control.id).length;
   const openDisc = discussionsFor(eng, control.id).filter(d => !d.resolved).length;
   const worst = worstMeter(meters);
+  const audit = eng.audits.find(a => a.id === openAuditId) ?? null;
+  const here = situationOf({ eng, control, role, me, audit }).step;
+  const at = SPINE_STEPS.findIndex(x => x.id === here);
+  // Three dashes in a column was the whole of the folded rail on a control
+  // nobody had set up — honest, and useless. When nothing is measurable yet,
+  // it says so once instead of three times.
+  const noScores = meters.every(m => m.empty);
   const iconBtn = 'w-full h-8 rounded-lg inline-flex items-center justify-center gap-1 text-ink-400 hover:text-brand-700 hover:bg-brand-50 transition-colors cursor-pointer';
   return (
     <div className="panel absolute inset-0 bottom-6 flex flex-col overflow-hidden">
       {/* The fold control sits where it sits in the open rail — top right of
           the head — so it is in the same place in both states. */}
       <button onClick={() => onOpen('chat')} title="Open the Ira rail" aria-label="Open the Ira rail"
-        className="shrink-0 h-8 mt-1 mx-1 rounded-lg text-ink-400 hover:text-ink-700 hover:bg-paper-50 inline-flex items-center justify-center transition-colors cursor-pointer">
-        <PanelRightClose size={16} className="rotate-180" />
+        className="shrink-0 h-7 mt-1 mx-1 rounded-lg text-ink-400 hover:text-ink-700 hover:bg-paper-50 inline-flex items-center justify-center transition-colors cursor-pointer">
+        <PanelRightClose size={15} className="rotate-180" />
       </button>
-      <div className="border-t border-canvas-border mt-1" />
-      {/* The scores, in the rail's own order. Each opens the rail on the chat,
-          where the full row is — the number is the glance, the row is the read.
-          Colour follows the open row to the letter: ONE score may wear it, and
-          the bar never does. Three coloured bars stacked in an 80px column is
-          the heat strip DESIGN.md forbids, only worse for being vertical. */}
-      <div className="px-1.5 py-2 space-y-2">
-        {meters.map(m => {
-          const flagged = worst === m;
-          const state = ragState(m);
-          const StateIcon = state === 'red' ? AlertTriangle : AlertCircle;
-          return (
-            <button key={m.label} onClick={() => onOpen('chat')} title={`${m.label} — ${m.empty ? 'not set up' : `${m.pct}%, ${m.detail}`}`}
-              aria-label={m.empty ? `${m.label} — not set up` : `${m.label} ${m.pct}% — ${statusWordOf(m)}`}
-              className="w-full text-left rounded-lg px-1 py-1 hover:bg-paper-50 transition-colors cursor-pointer">
-              <div className="text-[0.5625rem] font-bold uppercase text-ink-400 truncate">{m.short ?? m.label}</div>
-              <div className="flex items-center gap-1">
-                <span className={cn('text-[0.875rem] font-bold tabular-nums leading-tight',
-                  m.empty ? 'text-ink-300' : flagged && state === 'red' ? 'text-risk-700' : flagged && state === 'amber' ? 'text-high-700' : 'text-ink-900')}>
-                  {m.empty ? '—' : `${m.pct}%`}
-                </span>
-                {/* Colour is never the only signal — DESIGN.md §6. */}
-                {flagged && <StateIcon size={10} className={cn('shrink-0', state === 'red' ? 'text-risk-700' : 'text-high-700')} />}
+
+      {/* ── the agent ───────────────────────────────────────────────────────
+          Ira leads, because folding the rail away is exactly when the reader
+          most needs to know it is still there. The mark is the product's AI
+          signature (brand → fuchsia, Ask IRA's own avatar); a run in flight
+          rings it, so a validation started on the left is visible from a
+          column 80px wide. */}
+      <button onClick={() => onOpen('chat')} title="Ask Ira about this control" aria-label="Open the Ira chat"
+        className="group shrink-0 mx-1.5 rounded-xl py-2.5 flex flex-col items-center gap-1.5 hover:bg-brand-50 transition-colors cursor-pointer">
+        <span className="relative inline-flex size-9">
+          {running && !still && (
+            <motion.span aria-hidden className="absolute inset-0 rounded-xl bg-brand-400"
+              animate={{ scale: [1, 1.5], opacity: [0.5, 0] }}
+              transition={{ duration: 1.6, repeat: Infinity, ease: 'easeOut' }} />
+          )}
+          <span className="relative inline-flex items-center justify-center w-full h-full rounded-xl bg-gradient-to-br from-brand-500 to-fuchsia-500 text-white shadow-[0_4px_16px_-4px_rgba(106,18,205,0.5)]">
+            <Sparkles size={17} strokeWidth={2.25} />
+          </span>
+        </span>
+        <span className="text-[0.5625rem] font-bold uppercase tracking-[0.12em] text-brand-700">Ira</span>
+      </button>
+
+      {/* ── where the work actually is ──────────────────────────────────────
+          The one reading that is never empty. A control with nothing on it is
+          still ON a step, so this is what makes the folded rail worth looking
+          at before any evidence exists. Same five steps, same numbers, same
+          order as the stepper on the left. */}
+      <div className="shrink-0 px-2 pt-1.5 pb-2">
+        <div className="flex flex-col items-center gap-0.5">
+          {SPINE_STEPS.map((st, i) => {
+            const done = at > i;
+            const now = at === i;
+            return (
+              <div key={st.id} className="flex flex-col items-center gap-0.5">
+                <button onClick={() => onOpen('chat')} title={`${st.n} ${st.label}${now ? ' — where this control is' : done ? ' — done' : ''}`}
+                  aria-label={`${st.label}${now ? ', current step' : done ? ', done' : ''}`}
+                  aria-current={now ? 'step' : undefined}
+                  className={cn('size-5 rounded-full text-[0.5625rem] font-bold inline-flex items-center justify-center transition-colors cursor-pointer',
+                    now ? 'bg-brand-600 text-white ring-2 ring-brand-200'
+                      : done ? 'bg-brand-100 text-brand-700 hover:bg-brand-200'
+                      : 'bg-paper-100 text-ink-300 hover:text-ink-500')}>
+                  {i + 1}
+                </button>
+                {i < SPINE_STEPS.length - 1 && <span className={cn('w-px h-2', done ? 'bg-brand-200' : 'bg-canvas-border')} />}
               </div>
-              <div className="mt-1 h-[3px] rounded-full bg-paper-200 overflow-hidden">
-                <div className="h-full rounded-full bg-ink-300 transition-[width] duration-300" style={{ width: `${m.empty ? 0 : m.pct}%` }} />
-              </div>
-            </button>
-          );
-        })}
+            );
+          })}
+        </div>
       </div>
+
       <div className="border-t border-canvas-border" />
-      {/* Ira is the one thing here that is a doing rather than a reading, so it
-          is the only thing wearing the brand. A run in flight pulses on it —
-          that is the whole reason the scores could not simply have replaced
-          the old strip. */}
-      <div className="px-1.5 pt-2 space-y-1">
-        <button onClick={() => onOpen('chat')} title="Ask Ira about this control" aria-label="Open the Ira chat"
-          className="relative w-full h-14 rounded-lg bg-brand-50 border border-brand-200 text-brand-700 hover:bg-brand-100 transition-colors cursor-pointer flex flex-col items-center justify-center gap-0.5">
-          <Sparkles size={16} />
-          <span className="text-[0.625rem] font-bold uppercase tracking-[0.08em]">Ira</span>
-          {running && <motion.span className="absolute top-1.5 right-1.5 w-1.5 h-1.5 rounded-full bg-primary"
-            animate={{ scale: [1, 1.4, 1], opacity: [0.4, 1, 0.4] }} transition={{ duration: 1.2, repeat: Infinity, ease: 'easeInOut' }} />}
-        </button>
+      {/* The scores. Colour follows the open row to the letter: ONE score may
+          wear it, and the bar never does. Three coloured bars stacked in an
+          80px column is the heat strip DESIGN.md forbids, only worse for
+          being vertical. */}
+      {noScores ? (
+        <div className="px-2 py-2.5 text-[0.5625rem] font-semibold uppercase tracking-[0.06em] text-ink-300 text-center leading-snug">
+          Nothing<br />scored yet
+        </div>
+      ) : (
+        <div className="px-1.5 py-2 space-y-2 overflow-y-auto">
+          {meters.map(m => {
+            const flagged = worst === m;
+            const state = ragState(m);
+            const StateIcon = state === 'red' ? AlertTriangle : AlertCircle;
+            return (
+              <button key={m.label} onClick={() => onOpen('chat')} title={`${m.label} — ${m.empty ? 'not set up' : `${m.pct}%, ${m.detail}`}`}
+                aria-label={m.empty ? `${m.label} — not set up` : `${m.label} ${m.pct}% — ${statusWordOf(m)}`}
+                className="w-full text-left rounded-lg px-1 py-1 hover:bg-paper-50 transition-colors cursor-pointer">
+                <div className="text-[0.5625rem] font-bold uppercase text-ink-400 truncate">{m.short ?? m.label}</div>
+                <div className="flex items-center gap-1">
+                  <span className={cn('text-[0.875rem] font-bold tabular-nums leading-tight',
+                    m.empty ? 'text-ink-300' : flagged && state === 'red' ? 'text-risk-700' : flagged && state === 'amber' ? 'text-high-700' : 'text-ink-900')}>
+                    {m.empty ? '—' : `${m.pct}%`}
+                  </span>
+                  {/* Colour is never the only signal — DESIGN.md §6. */}
+                  {flagged && <StateIcon size={10} className={cn('shrink-0', state === 'red' ? 'text-risk-700' : 'text-high-700')} />}
+                </div>
+                <div className="mt-1 h-[3px] rounded-full bg-paper-200 overflow-hidden">
+                  <div className="h-full rounded-full bg-ink-300 transition-[width] duration-300" style={{ width: `${m.empty ? 0 : m.pct}%` }} />
+                </div>
+              </button>
+            );
+          })}
+        </div>
+      )}
+
+      <div className="mt-auto border-t border-canvas-border" />
+      <div className="shrink-0 px-1.5 py-2 space-y-1">
         <button onClick={() => onOpen('history')} title={`History — ${execCount} run${execCount === 1 ? '' : 's'}`} aria-label="Open the run history" className={iconBtn}>
           <History size={15} />{execCount > 0 && <span className="text-[0.625rem] font-semibold tabular-nums">{execCount}</span>}
         </button>
