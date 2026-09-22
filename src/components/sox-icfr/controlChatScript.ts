@@ -1,8 +1,9 @@
 import {
   designApproved, designCompleteness, designFilesOf, designOutstanding, designSuggestion, isControlLocked, isEngagementLocked,
   inquiryOnlyAttributes, operatingApplies, operatingProgress, passedWithoutFiles, pendingReviewNoteCount, pointResult,
-  populationLocked, populationSources, requiredFilesReady, sampledSources, samePerson, stepResult, toeRoundFailed, trackResult, yearEndPending,
+  populationLocked, populationSources, requiredFilesCount, requiredFilesReady, sampledSources, samePerson, stepResult, toeRoundFailed, trackResult, yearEndPending,
 } from './helpers';
+import { evidenceOwed } from './controlChatEvidence';
 import type { AuditRecord, Control, DesignDoc, DesignDocKind, IcfrEngagement, IpeConclusion, Role, TestResult, TrackConclusion } from './types';
 
 /**
@@ -100,6 +101,10 @@ export interface Situation {
   } | null;
   sampleDrawn: boolean;
   drawsOwed: number;
+  /** The files a draw comes off — one draw each, and a tick each when the
+   *  auditor is done with it. Assisting tables are not in here: they join onto
+   *  the population, they are not sampled. */
+  sources: { id: string; file: string; count: number; drawn: boolean; approved: boolean }[];
   toe: { tested: number; passed: number; failed: number; total: number };
   /** Why the operating conclusion is held, in the page's own terms — the
    *  ConcludeFooter's reasons, read once rather than guessed at twice. */
@@ -110,6 +115,9 @@ export interface Situation {
   /** Attributes with every required file uploaded — what a validation run can
    *  actually read, and the page's own count on its Run button. */
   toeReady: number;
+  /** Attributes still short of the files their test asks for — the pile the
+   *  reader is about to hand over, per attribute. */
+  evidenceOwed: { stepId: string; code: string; missing: number; total: number }[];
   operatingResult: TrackConclusion;
   preparerSigned?: { by: string; at: string };
   reviewerSigned?: { by: string; at: string };
@@ -240,7 +248,9 @@ export function situationOf({ eng, control, role, me, audit }: ChatCtx): Situati
       failed: ipe.checks.filter(k => k.result === 'Fail').length,
     } : null,
     sampleDrawn: !!o.sampling, drawsOwed, toe, toeHolds, toeStale: staleRuns > 0,
+    sources: drawn.map(x => ({ id: x.id, file: x.file, count: x.count, drawn: !!x.draw, approved: !!x.approvedSample })),
     toeReady: o.steps.filter(x => stepResult(x) === 'Not tested' && requiredFilesReady(x, control)).length,
+    evidenceOwed: evidenceOwed(control),
     operatingResult,
     preparerSigned: control.wpSignoff?.preparer, reviewerSigned: control.wpSignoff?.reviewer,
     notesPending: pendingReviewNoteCount(eng, control.id),
@@ -248,7 +258,8 @@ export function situationOf({ eng, control, role, me, audit }: ChatCtx): Situati
   s.key = [
     role, step, designResult, todApproved, missing.length, elementsOnFile, d.documents.length,
     checksUnmarked, checksFailed, s.iraRun, s.iraStale, !!d.designReturn,
-    popLocked, s.sampleDrawn, drawsOwed, toe.tested, toe.failed, operatingResult,
+    popLocked, s.sampleDrawn, drawsOwed, drawn.map(x => `${x.draw ? 'd' : '-'}${x.approvedSample ? 'a' : '-'}`).join(''),
+    toe.tested, toe.failed, operatingResult, o.steps.map(x => requiredFilesCount(x, control).uploaded).join(','),
     ipe?.conclusion ?? '-', ipe?.checks.map(k => k.result).join('') ?? '-',
     !!s.preparerSigned, !!s.reviewerSigned, s.notesPending, locked,
   ].join('|');
@@ -399,8 +410,18 @@ export function nextPrompt(ctx: ChatCtx): ChatPrompt {
   }
 
   if (s.step === 'sample') {
-    if (!s.sampleDrawn) return line(`Population is locked at ${s.popCount.toLocaleString('en-IN')} items. Next is the sample — the size follows how often the control runs, and the method and seed are stored so anyone can reproduce the same items.`);
-    return line(`${plural(s.drawsOwed, 'source file')} still ${s.drawsOwed === 1 ? 'owes' : 'owe'} a draw${s.popCount ? ` off the ${s.popCount.toLocaleString('en-IN')} locked items` : ''}. Once every file is drawn, testing can start on the sample.`);
+    const owed = s.sources.filter(x => !x.drawn);
+    const drawnNotTicked = s.sources.filter(x => x.drawn && !x.approved);
+    if (owed.length > 0) {
+      const one = owed.length === 1 ? owed[0] : null;
+      return line(`Population is locked at ${s.popCount.toLocaleString('en-IN')} items. ${one
+        ? `The sample comes off ${one.file} — ${one.count.toLocaleString('en-IN')} instances in it.`
+        : `${plural(owed.length, 'source file')} still ${owed.length === 1 ? 'owes' : 'owe'} a draw — ${listOf(owed.map(x => x.file))}.`} The size follows how often the control runs, and the method and seed are stored so anyone can reproduce the same items. Say what to take and I will draw it.`);
+    }
+    if (drawnNotTicked.length > 0) {
+      return line(`${plural(drawnNotTicked.length, 'file')} ${drawnNotTicked.length === 1 ? 'is' : 'are'} drawn but not ticked off — ${listOf(drawnNotTicked.map(x => x.file))}. Mark ${drawnNotTicked.length === 1 ? 'it' : 'them'} done and testing can start on the sample.`);
+    }
+    return line('Every source file has its draw. Testing can start on the sample.');
   }
 
   if (s.step === 'operating') {
@@ -409,10 +430,13 @@ export function nextPrompt(ctx: ChatCtx): ChatPrompt {
     // and "12 to go, none of which have their files" are different problems.
     const waiting = s.toe.total - s.toe.tested;
     const filesNote = s.toeReady === 0
-      ? ` None of ${waiting === 1 ? 'it' : 'them'} ${waiting === 1 ? 'has' : 'have'} all the files the test asks for yet, so there is nothing I can read.`
+      ? waiting === 1
+        ? ' It does not have all the files the test asks for yet, so there is nothing I can read.'
+        : ' None of them have all the files the test asks for yet, so there is nothing I can read.'
       : s.toeReady < waiting ? ` ${plural(s.toeReady, 'of them has', 'of them have')} all its files — I can read those.`
+      : waiting === 1 ? ' It has its files, so I can read it.'
       : ' Every one of them has its files, so I can read them all in one go.';
-    if (s.toe.tested === 0) return line(`Sample is drawn and ${plural(s.toe.total, 'attribute')} are waiting.${filesNote}`);
+    if (s.toe.tested === 0) return line(`Sample is drawn and ${plural(s.toe.total, 'attribute')} ${s.toe.total === 1 ? 'is' : 'are'} waiting.${filesNote}`);
     if (s.toe.tested < s.toe.total) {
       return line(`${s.toe.tested} of ${s.toe.total} attributes tested${s.toe.failed > 0 ? `, ${s.toe.failed} failed so far` : ''}.${filesNote}`);
     }

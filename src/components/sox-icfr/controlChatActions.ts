@@ -23,6 +23,10 @@ import { DESIGN_DOC_KINDS, type Role } from './types';
 
 export type ChatActionId =
   | 'add-element'
+  | 'upload-evidence'
+  | 'draw-sample'
+  | 'file-sample'
+  | 'tick-sample'
   | 'ipe-check'
   | 'ipe-reliable'
   | 'ipe-unreliable'
@@ -46,7 +50,8 @@ export interface ChatAction {
   /** The one action worth leading with, if there is one. */
   primary?: boolean;
   /** Which of the thing — the element kind for `add-element`, the check id for
-   *  `ipe-check`. */
+   *  `ipe-check`, the attribute id for `upload-evidence` (absent = all of them),
+   *  the source-file id for the draw. */
   arg?: string;
   /** How the rail should DRAW this offer, as against what it does.
    *
@@ -216,6 +221,37 @@ export function actionsFor(s: Situation, role: Role): ChatAction[] {
     // ready ones on its own button, so this counts them the same way — an
     // attribute whose files are not all in cannot be assessed and is not
     // included in the promise.
+    // ── the evidence itself ─────────────────────────────────────────────────
+    // The rail's old rule was that attaching a file is a heavy action and the
+    // page owns the uploader. That held while an upload was one file into one
+    // named slot — a chat adds nothing to a file picker. It stops holding for
+    // SIX files across THREE attributes, which is the actual shape of TOE
+    // evidence: on the page that is six separate pickers and six separate
+    // decisions about which slot each file belongs in. Sorting a pile into
+    // slots is the one thing a copilot is better at than a form, so it is
+    // offered here (user ask, 22 Sep) — and it still calls the page's own
+    // `uploadRequiredFile`, so there is one uploader in the product, not two.
+    if (s.evidenceOwed.length > 0) {
+      const totalMissing = s.evidenceOwed.reduce((n, x) => n + x.missing, 0);
+      out.push({
+        id: 'upload-evidence', primary: s.toeReady === 0,
+        label: s.evidenceOwed.length === 1
+          ? `Upload the ${plural(totalMissing, 'file')} attribute ${s.evidenceOwed[0].code} needs`
+          : `Upload evidence — ${plural(totalMissing, 'file')} across ${plural(s.evidenceOwed.length, 'attribute')}`,
+        said: 'I have the evidence — take it.',
+        does: 'take a pile of files and put each one against the attribute it proves',
+      });
+      // …and one door per attribute when there are several, so a reader who
+      // has this attribute's files in hand is not made to scope by filename.
+      if (s.evidenceOwed.length > 1) {
+        s.evidenceOwed.forEach(x => out.push({
+          id: 'upload-evidence', arg: x.stepId, group: 'pick',
+          label: `${x.code} · ${x.missing} of ${x.total}`,
+          said: `Evidence for ${x.code}.`,
+          does: `take the files for attribute ${x.code}`,
+        }));
+      }
+    }
     if (s.toe.tested < s.toe.total && s.toeReady > 0) {
       out.push({
         id: 'toe-run', primary: true,
@@ -234,9 +270,33 @@ export function actionsFor(s: Situation, role: Role): ChatAction[] {
     return out;
   }
 
-  // ③ sample, and ⑤ before both tracks are in: the page does the work. Drawing
-  // is a two-stage thing the page holds between a draw and an approval, and
-  // half a draw done from here would leave a control whose step ③ shows
-  // nothing.
+  // ── ③ the draw ────────────────────────────────────────────────────────────
+  // This used to be the page's alone, on the grounds that a draw is two stages
+  // and half of one done from here would leave step ③ showing nothing. The
+  // answer to that was never "don't offer it" — it was "carry both stages",
+  // which is what happens now (user ask, 22 Sep): the ask, the draw, the items
+  // to look at, and only then the filing. Nothing is written until the reader
+  // has seen what came out, exactly as on the left.
+  if (s.step === 'sample') {
+    const out: ChatAction[] = [];
+    const owed = s.sources.filter(x => !x.drawn);
+    const ticks = s.sources.filter(x => x.drawn && !x.approved);
+    if (owed.length > 0) {
+      const one = owed.length === 1 ? owed[0] : null;
+      if (one) {
+        out.push({ id: 'draw-sample', arg: one.id, label: `Draw the sample off ${one.file}`, said: 'Draw the sample.', primary: true, does: 'draw the sample off the locked population' });
+      } else {
+        owed.forEach(x => out.push({ id: 'draw-sample', arg: x.id, label: x.file, group: 'pick', said: `Draw off ${x.file}.`, does: `draw the sample off ${x.file}` }));
+      }
+    }
+    // Filing a draw does not tick the file done — that is its own act on the
+    // page and its own act here, because it is the thing that says "I am
+    // finished with this file" rather than "the items are on the paper".
+    ticks.forEach(x => out.push({ id: 'tick-sample', arg: x.id, label: owed.length ? `Mark ${x.file} done` : `Mark ${x.file} done`, said: `${x.file} is done.`, primary: owed.length === 0, does: `tick ${x.file} off as drawn` }));
+    out.push(show('Take me to this step', 'Take me to this step.', s.step));
+    return out;
+  }
+
+  // ⑤ before both tracks are in: the page does the work.
   return [show('Take me to this step', 'Take me to this step.', s.step)];
 }

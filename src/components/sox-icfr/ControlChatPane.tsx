@@ -1,14 +1,20 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { motion, useReducedMotion } from 'motion/react';
-import { ArrowRight, ArrowUp, Plus, Sparkles, Square } from 'lucide-react';
+import { ArrowRight, ArrowUp, Paperclip, Plus, Sparkles, Square } from 'lucide-react';
 import { useIcfr } from './store';
 import { useAuditLog } from '../../context/AdminDataContext';
-import { concludeRationale, designOutstanding, designSuggestion, operatingSuggestion, trackResult } from './helpers';
+import {
+  auditSampling, concludeRationale, designOutstanding, designSuggestion, draftSamplePrompt, itgcHolds,
+  operatingSuggestion, populationSources, readSamplePrompt, sampleSizeGuide, sampledSources, seedKeyOf,
+  trackResult, workingAudit,
+} from './helpers';
+import { sampleRefs } from './mockData';
 import { DESIGN_RUN_STEPS, TOE_RUN_STEPS, endRun, say, sayOnce, startRun, useControlRun, useControlThread, type RunStep } from './controlChat';
 import { useTypewriter } from '../chat/reveal/useTypewriter';
 import { acknowledge, listOf, nextPrompt, type ChatStepId, type Situation } from './controlChatScript';
 import { actionsFor, type ChatAction } from './controlChatActions';
 import { readIntent } from './controlChatIntents';
+import { mapEvidence, type EvidenceMatch } from './controlChatEvidence';
 import { cn } from '../../lib/cn';
 import type { Control, DesignDocKind, TestResult } from './types';
 
@@ -58,6 +64,8 @@ const STEP_ANCHOR: Record<ChatStepId, string> = {
 };
 /** What to ask for each IPE dimension — the page's own textarea placeholders,
  *  so the chat asks for exactly what the working paper will print. */
+const plural = (n: number, one: string, many = `${one}s`) => `${n} ${n === 1 ? one : many}`;
+
 const IPE_ASK: Record<string, string> = {
   'Source & parameters': 'What did the parameter screen show, and how does it agree to the test scope?',
   'Period coverage': 'What span does the extract hold, and what accounts for any empty month inside the period?',
@@ -70,6 +78,13 @@ const IPE_ASK: Record<string, string> = {
 const IRA_MS = 6000;
 /** And the attribute run's own beat — the page's `runAll` takes 2400ms. */
 const TOE_MS = 2400;
+/** The draw's own, straight off the card: `setTimeout(…, 1800)`. */
+const DRAW_MS = 1800;
+const DRAW_RUN_STEPS = [
+  'Reading the ask against the locked population',
+  'Selecting the items on this file’s seed',
+  'Dealing them across the audit window',
+];
 
 /** Ira's mark — the house AI gradient, at rail scale.
  *
@@ -164,7 +179,7 @@ function IraText({ text, stream, onDone }: { text: string; stream: boolean; onDo
 
 export default function ControlChatPane({ control }: { control: Control }) {
   const { eng, role, me, openAuditId, addDesignDoc, runDesignIra, concludeDesign, overrideDesign, approveDesign, setDesignPoint, overrideDesignPoint,
-    setIpeCheck, concludeIpe, lockPopulation, concludeOperating, overrideOperating, signOffControlWp,
+    setIpeCheck, concludeIpe, uploadRequiredFile, drawSourceSample, approveSource, lockPopulation, concludeOperating, overrideOperating, signOffControlWp,
     setStepResult, overrideStep, validateReadyAttributes } = useIcfr();
   const logEvent = useAuditLog();
   const audit = useMemo(() => eng.audits.find(a => a.id === openAuditId) ?? null, [eng.audits, openAuditId]);
@@ -193,6 +208,16 @@ export default function ControlChatPane({ control }: { control: Control }) {
   // chat asks in the same order: the finding first, the verdict after. `note`
   // null means Ira is still waiting to be told what was found.
   const [ipeDraft, setIpeDraft] = useState<{ checkId: string; dimension: string; note: string | null } | null>(null);
+  // A pile of files, mapped but not yet filed. Shown before anything is
+  // written: the auditor signs a paper saying this evidence proves that
+  // attribute, so they see what went where first.
+  const [pile, setPile] = useState<EvidenceMatch[] | null>(null);
+  const picker = useRef<HTMLInputElement>(null);
+  const pickFor = useRef<string | undefined>(undefined);
+  // A draw in progress. `refs` null while the ask is still being settled; set
+  // once the items are out and waiting to be looked at. The page holds exactly
+  // the same two things between its own two stages.
+  const [draw, setDraw] = useState<{ sourceId: string; file: string; ask: string; refs: string[] | null } | null>(null);
   const still = useReducedMotion();
 
   // The id of the newest Ira line AS OF the render that first saw it. A message
@@ -207,6 +232,7 @@ export default function ControlChatPane({ control }: { control: Control }) {
   // control every render and dropped the moment they are stale. Render-phase
   // setState on purpose: it is derived state, and waiting for an effect would
   // paint one frame of the wrong question.
+  if (draw && populationSources(control).find(x => x.id === draw.sourceId)?.draw) setDraw(null);
   const liveIpeCheck = ipeDraft ? control.operating.ipe?.checks.find(k => k.id === ipeDraft.checkId) : undefined;
   if (ipeDraft && (!liveIpeCheck || liveIpeCheck.result !== 'Not tested')) setIpeDraft(null);
   if (awaitingWhy) {
@@ -305,6 +331,31 @@ export default function ControlChatPane({ control }: { control: Control }) {
     // and how, because the assertion and the method are what the finding has
     // to answer — asking "what did you find?" without them is asking a
     // question the reader has to go and look up on the left.
+    // Open the picker. `arg` scopes it to one attribute; without it the pile is
+    // mapped across every attribute that is short of something.
+    if (a.id === 'upload-evidence') {
+      pickFor.current = a.arg;
+      picker.current?.click();
+      return;
+    }
+
+    // ── the draw, stage one ────────────────────────────────────────────────
+    if (a.id === 'draw-sample' && a.arg) {
+      const src = sampledSources(populationSources(control)).find(x => x.id === a.arg);
+      if (!src) return;
+      const guide = sampleSizeGuide(control, itgcHolds(eng, control));
+      const ask = draftSamplePrompt(src, guide.suggested, workingAudit(eng, openAuditId));
+      setDraw({ sourceId: src.id, file: src.file, ask, refs: null });
+      say(control.id, 'ira', `I have drafted the ask:\n\n“${ask}”\n\nThe sizing table says ${guide.suggested} for this one — band ${guide.range}. Send it as it stands, or type a different ask and I will read that instead.`);
+      return;
+    }
+
+    if (a.id === 'tick-sample' && a.arg) {
+      approveSource(control.id, a.arg, 'sample', true);
+      logEvent({ action: 'Update', description: `Marked the sample done for a source file on ${control.id} from the chat`, module: 'SOX ICFR', entity: 'Test Result' });
+      return;
+    }
+
     if (a.id === 'ipe-check' && a.arg) {
       const k = control.operating.ipe?.checks.find(x => x.id === a.arg);
       if (!k) return;
@@ -439,6 +490,73 @@ export default function ControlChatPane({ control }: { control: Control }) {
   /** Interrupt. Only a run THIS pane started has a timer to clear — one the
    *  page started owns its own clock, so stopping it here would end the
    *  narration while the work carried on writing to the control. */
+  /** Stage one → two. The same 1800ms the page takes, the same `sampleRefs` on
+   *  the same plan — the rail is not a faster way to draw a sample, it is
+   *  another door onto the one that exists. */
+  const runDraw = (ask: string) => {
+    if (!draw) return;
+    const src = sampledSources(populationSources(control)).find(x => x.id === draw.sourceId);
+    if (!src) { setDraw(null); return; }
+    const audit = workingAudit(eng, openAuditId);
+    const plan = readSamplePrompt(ask, src, sampleSizeGuide(control, itgcHolds(eng, control)).suggested, audit, auditSampling(audit));
+    setDraw({ ...draw, ask });
+    startRun(control.id, `Drawing ${plan.size} of ${src.count.toLocaleString('en-IN')} from ${src.file}`, DRAW_RUN_STEPS, DRAW_MS);
+    timer.current = window.setTimeout(() => {
+      const now = latest.current;
+      endRun(now.id);
+      const refs = sampleRefs(now.process, plan.size);
+      setDraw(d => (d ? { ...d, refs } : d));
+      say(now.id, 'ira', `${plan.reading}. Here they are — look them over before I file them.`);
+    }, DRAW_MS);
+  };
+
+  /** Stage two → filed. Both calls the page makes, in the page's order. */
+  const fileDraw = () => {
+    if (!draw?.refs) return;
+    const src = sampledSources(populationSources(control)).find(x => x.id === draw.sourceId);
+    if (!src) { setDraw(null); return; }
+    const audit = workingAudit(eng, openAuditId);
+    const agreed = auditSampling(audit);
+    const plan = readSamplePrompt(draw.ask, src, sampleSizeGuide(control, itgcHolds(eng, control)).suggested, audit, agreed);
+    // The same five-digit reperformance number the card computes, off the same
+    // string — a reviewer walking the paper has to land on these items.
+    const seed = 10000 + (`${seedKeyOf(control)}·${src.id}·${openAuditId ?? ''}`.split('').reduce((acc, ch) => (acc * 31 + ch.charCodeAt(0)) >>> 0, 17) % 89999);
+    const refs = draw.refs;
+    setDraw(null);
+    drawSourceSample(control.id, src.id, { size: refs.length, method: agreed.method, seed, prompt: draw.ask.trim() || undefined, ...(plan.months ? { months: plan.months } : {}) }, refs);
+    logEvent({ action: 'Update', description: `Approved the sample from ${src.file} for ${control.id} from the chat — ${refs.length} items, ${agreed.method.toLowerCase()}, seed ${seed}`, module: 'SOX ICFR', entity: 'Test Result' });
+  };
+
+  /** Files chosen. Map them, say what landed where, and wait to be told to file
+   *  — the mapper is confident, not certain, and it is not its paper. */
+  const picked = (list: FileList | null) => {
+    const scope = pickFor.current;
+    pickFor.current = undefined;
+    if (!list || list.length === 0) return;
+    const names = Array.from(list).map(f => f.name);
+    const matches = mapEvidence(control, names, scope);
+    setPile(matches);
+    const placed = matches.filter(m => m.slot);
+    const lost = matches.filter(m => !m.slot);
+    const lines = placed.map(m => `· ${m.name} → ${m.slot!.code} ${m.slot!.label}${m.score < 30 ? ' (a guess — say so if it is wrong)' : ''}${m.slot!.taken ? ' — replaces what is there' : ''}`);
+    say(control.id, 'ira', placed.length === 0
+      ? `${plural(names.length, 'file')}, and I could not place ${names.length === 1 ? 'it' : 'any of them'} against what these attributes ask for. Name the attribute and I will put ${names.length === 1 ? 'it' : 'them'} there.`
+      : `${plural(names.length, 'file')}. Here is where each one goes:\n${lines.join('\n')}${lost.length ? `\n\nI could not place ${listOf(lost.map(m => m.name))}.` : ''}`);
+  };
+
+  /** File the pile. One `uploadRequiredFile` per match — the same call the
+   *  page's own per-slot picker makes, so a file landed from here is
+   *  indistinguishable from one landed on the left. */
+  const fileThePile = () => {
+    if (!pile) return;
+    const placed = pile.filter(m => m.slot);
+    setPile(null);
+    placed.forEach(m => {
+      uploadRequiredFile(control.id, m.slot!.stepId, m.slot!.fileId, m.name);
+      logEvent({ action: 'Upload', description: `Uploaded ${m.name} as "${m.slot!.label}" for attribute ${m.slot!.code} (${control.id}) from the chat`, module: 'SOX ICFR', entity: 'Evidence' });
+    });
+  };
+
   /** The verdict on the dimension whose finding is already recorded. */
   const settleIpe = (result: TestResult) => {
     if (!ipeDraft?.note) return;
@@ -471,6 +589,17 @@ export default function ControlChatPane({ control }: { control: Control }) {
     // Mid-test on one IPE dimension: this is the finding. Like a rationale it
     // is not parsed and not second-guessed — it is what the auditor wrote, and
     // it goes on the working paper in their words.
+    // Mid-draw and the items are not out yet: this is the ask.
+    if (draw && draw.refs === null) {
+      if (/^(no|not now|later|skip|cancel|stop|never ?mind|leave it)\b/i.test(text) && text.length < 40) {
+        setDraw(null);
+        say(control.id, 'ira', 'Left the draw alone.');
+        return;
+      }
+      runDraw(text);
+      return;
+    }
+
     if (ipeDraft && ipeDraft.note === null) {
       // …unless they are plainly backing out. Everything typed here goes on a
       // working paper, and "not now, next step" filed as an audit finding is
@@ -581,12 +710,69 @@ export default function ControlChatPane({ control }: { control: Control }) {
             eyebrow names the step rather than the speaker: which step Ira is
             talking about is information, and "Ira" is not, since the voice is
             already carried by the alignment. */}
+        {/* The drawn items, before anything is filed. The same three columns
+            the page shows in its review stage, at rail width — the reader is
+            being asked to look at what came out, so what came out has to be
+            on screen. */}
+        {!working && draw?.refs && (
+          <div>
+            <div className="rounded-lg border border-canvas-border overflow-hidden mb-2">
+              <div className="grid grid-cols-[1.1fr_1fr] gap-2 px-2.5 py-1.5 bg-paper-50/70 border-b border-canvas-border text-[0.5625rem] font-bold uppercase tracking-wide text-ink-400">
+                <span>Reference</span><span className="text-right">Drawn from</span>
+              </div>
+              <div className="max-h-[11rem] overflow-y-auto">
+                {draw.refs.map((ref, i) => (
+                  <div key={`${ref}-${i}`} className="grid grid-cols-[1.1fr_1fr] gap-2 px-2.5 py-1.5 border-b border-canvas-border last:border-b-0 text-[0.6875rem]">
+                    <span className="font-mono text-ink-700 truncate">{ref}</span>
+                    <span className="text-right text-ink-400 truncate">{draw.file}</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+            <div className="grid grid-cols-2 gap-1.5">
+              <button onClick={fileDraw}
+                className="min-w-0 px-2.5 py-2.5 rounded-xl text-[0.8125rem] font-semibold text-center bg-gradient-to-r from-brand-600 to-fuchsia-600 text-white hover:from-brand-500 hover:to-fuchsia-500 border border-transparent shadow-[0_6px_20px_-8px_rgba(106,18,205,0.55)] transition-all cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/30">
+                File {plural(draw.refs.length, 'item')}
+              </button>
+              <button onClick={() => { setDraw(d => (d ? { ...d, refs: null } : d)); say(control.id, 'ira', 'Dropped that draw. Say what to take and I will run it again — the ask is still yours to change.'); }}
+                className="min-w-0 px-2.5 py-2.5 rounded-xl text-[0.8125rem] text-center border border-canvas-border bg-canvas-elevated text-ink-700 hover:bg-brand-50 hover:text-brand-700 hover:border-brand-200 transition-colors cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/30">
+                Reject and retry
+              </button>
+            </div>
+          </div>
+        )}
+
+        {/* Mid-ask on a draw: the composer is the input, so there is nothing to
+            put here but the way out. */}
+        {!working && draw && draw.refs === null && (
+          <button onClick={() => { setDraw(null); say(control.id, 'ira', 'Left the draw alone.'); }}
+            className="text-[0.6875rem] text-ink-400 hover:text-ink-700 transition-colors cursor-pointer">Leave it for now</button>
+        )}
+
+        {/* A mapped pile, waiting to be filed. Nothing is written until this is
+            pressed: the mapper is confident, not certain, and what it decides
+            ends up on a working paper under the auditor's name. */}
+        {!working && !draw && pile && (
+          <div className="grid grid-cols-2 gap-1.5">
+            <button onClick={fileThePile} disabled={!pile.some(m => m.slot)}
+              className="min-w-0 px-2.5 py-2.5 rounded-xl text-[0.8125rem] font-semibold text-center bg-gradient-to-r from-brand-600 to-fuchsia-600 text-white enabled:hover:from-brand-500 enabled:hover:to-fuchsia-500 border border-transparent shadow-[0_6px_20px_-8px_rgba(106,18,205,0.55)] disabled:opacity-40 disabled:cursor-not-allowed transition-all cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/30">
+              File {plural(pile.filter(m => m.slot).length, 'file')}
+            </button>
+            <button onClick={() => { pickFor.current = undefined; picker.current?.click(); }}
+              className="min-w-0 px-2.5 py-2.5 rounded-xl text-[0.8125rem] text-center border border-canvas-border bg-canvas-elevated text-ink-700 hover:bg-brand-50 hover:text-brand-700 hover:border-brand-200 transition-colors cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/30">
+              Choose again
+            </button>
+            <button onClick={() => { setPile(null); say(control.id, 'ira', 'Dropped — nothing was filed.'); }}
+              className="col-span-2 text-[0.6875rem] text-ink-400 hover:text-ink-700 transition-colors cursor-pointer">Cancel</button>
+          </div>
+        )}
+
         {/* Mid-test on one IPE dimension. The derived prompt is not the live
             question here — the one Ira just asked is, and it is already in the
             thread above. All this adds is the verdict, once the finding is
             written: the page will not take a Pass or a Fail before that and
             neither will this. */}
-        {!working && ipeDraft && (
+        {!working && !pile && !draw && ipeDraft && (
           <div>
             {ipeDraft.note === null ? (
               <div className="text-[0.75rem] text-ink-400">Type what you found — it prints on the working paper.</div>
@@ -603,7 +789,7 @@ export default function ControlChatPane({ control }: { control: Control }) {
           </div>
         )}
 
-        {!working && !ipeDraft && (
+        {!working && !ipeDraft && !pile && !draw && (
           <div>
             {/* Ira's mark sits on the LIVE line only. The thread above stays
                 unmarked prose (DESIGN.md §7.1.7 — no avatar, identity carried
@@ -704,6 +890,13 @@ export default function ControlChatPane({ control }: { control: Control }) {
           so the hairline stays — it is what stops the thread sliding under the
           input. The rest is §7.1.3: `.ai-border`, and the global focus ring
           suppressed because the border tone is the focus signal. */}
+      {/* The one picker behind every upload offer in this rail — the same accept
+          list the page's design picker carries. `multiple` is the whole point:
+          the reader hands over the pile and Ira sorts it. */}
+      <input ref={picker} type="file" multiple accept=".pdf,.png,.jpg,.jpeg,.xlsx,.xls,.csv,.doc,.docx"
+        className="sr-only" tabIndex={-1} aria-hidden="true"
+        onChange={e => { picked(e.target.files); e.target.value = ''; }} />
+
       <div className="p-3 border-t border-canvas-border">
         <div className="ai-border">
           <textarea
@@ -714,6 +907,8 @@ export default function ControlChatPane({ control }: { control: Control }) {
             }}
             disabled={!!working} aria-label="Message Ira"
             placeholder={working ? 'One moment…'
+              : draw?.refs === null ? 'Say what to take — or send the drafted ask back as it is'
+              : draw ? 'Look the items over — File or Reject above'
               : ipeDraft?.note === null ? `${IPE_ASK[ipeDraft.dimension] ?? 'What did you find?'} — this prints on the working paper`
               : ipeDraft ? 'Pass or fail — the buttons above'
               : awaitingWhy ? `Why does ${awaitingWhy.label} ${awaitingWhy.result === 'Pass' ? 'pass' : 'fail'}? — this goes on the paper`
@@ -724,7 +919,19 @@ export default function ControlChatPane({ control }: { control: Control }) {
               the chat. The hint holds the row's height so the composer does
               not grow by 32px under the reader's hands as they start typing. */}
           <div className="flex items-center justify-between gap-2 px-2.5 pb-2.5">
-            <span className="text-[0.6875rem] text-ink-400 select-none">{working ? 'Working…' : 'Enter to send'}</span>
+            <div className="flex items-center gap-1.5 min-w-0">
+              {/* Attach, where the chat puts it. Only on the step where a file
+                  has somewhere to go — an attach button that leads to "nothing
+                  here takes a file" is a button that lies. */}
+              {prompt.step === 'operating' && prompt.situation.evidenceOwed.length > 0 && !working && (
+                <button onClick={() => { pickFor.current = undefined; picker.current?.click(); }}
+                  aria-label="Attach evidence" title="Attach evidence — I will put each file against the attribute it proves"
+                  className="inline-flex items-center justify-center size-7 rounded-lg text-ink-400 hover:text-brand-700 hover:bg-brand-50 transition-colors cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/30">
+                  <Paperclip size={14} />
+                </button>
+              )}
+              <span className="text-[0.6875rem] text-ink-400 select-none truncate">{working ? 'Working…' : 'Enter to send'}</span>
+            </div>
             {/* Stop, exactly as the flagship composer does it: the send button
                 becomes an ink-900 square while something is in flight, and it
                 genuinely interrupts — the run ends and the timer is cleared,

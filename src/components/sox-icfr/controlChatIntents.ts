@@ -81,7 +81,7 @@ const stepLabelOf = (s: OperatingStep): string => `attribute ${s.code}`;
  *  situation the buttons are, so the two can never disagree. */
 function refusal(id: ChatActionId, { s, role }: IntentCtx): string {
   if (s.sealed) return 'This engagement is signed off — nothing on this control can move now.';
-  const auditorsOwn: ChatActionId[] = ['add-element', 'ipe-check', 'ipe-reliable', 'ipe-unreliable', 'ira-run', 'toe-run', 'conclude-effective', 'conclude-ineffective', 'lock-population', 'conclude-op-effective', 'conclude-op-ineffective'];
+  const auditorsOwn: ChatActionId[] = ['add-element', 'upload-evidence', 'draw-sample', 'file-sample', 'tick-sample', 'ipe-check', 'ipe-reliable', 'ipe-unreliable', 'ira-run', 'toe-run', 'conclude-effective', 'conclude-ineffective', 'lock-population', 'conclude-op-effective', 'conclude-op-ineffective'];
   if (role !== 'auditor' && auditorsOwn.includes(id)) {
     return `That one is the auditor’s. You are viewing as ${role === 'reviewer' ? 'the reviewer' : 'the risk owner'}, so I can’t do it from here.`;
   }
@@ -95,6 +95,15 @@ function refusal(id: ChatActionId, { s, role }: IntentCtx): string {
     if (s.designResult !== 'Not tested') return `The design is already concluded ${s.designResult.toLowerCase()} — it has to be reopened before what it is evidenced by can change.`;
     if (s.elementsOnFile > 0) return 'Evidence is already attached on this step, so I leave the element list to the page — Add element at the top of the design step has the whole menu, custom ones included.';
     return 'Every element I can add is already on this control. The page’s Add element menu has a Custom… option for anything else.';
+  }
+  if (id === 'upload-evidence') {
+    if (s.step !== 'operating') return 'Evidence goes against the attributes, and this control is not at the testing step yet.';
+    if (s.evidenceOwed.length === 0) return 'Every attribute already has the files its test asks for.';
+    return 'I can’t take files from here just now.';
+  }
+  if (id === 'draw-sample' || id === 'tick-sample') {
+    if (s.step !== 'sample') return s.popLocked ? 'The draw is not the step this control is on.' : 'The population has to be locked before anything can be drawn off it.';
+    return s.sources.every(x => x.drawn) ? 'Every source file already has its draw.' : 'I can’t draw it from here just now.';
   }
   if (id === 'ipe-check' || id === 'ipe-reliable' || id === 'ipe-unreliable') {
     if (!s.ipe) return 'No report is registered against this population yet — register it on the left, and then its four checks are mine to work through with you.';
@@ -303,6 +312,14 @@ export function readIntent(raw: string, ctx: IntentCtx): Intent {
   // Order matters more than it looks: "sign off the design" is a conclusion,
   // not a signature, so the conclusions are read before the paper is.
   if (has(t, 'lock the population', 'lock population', 'lock the pop')) return take('lock-population');
+  if (has(t, 'draw the sample', 'draw sample', 'draw it', 'pull the sample')) {
+    const a = actions.find(x => x.id === 'draw-sample');
+    return a ? { kind: 'action', action: a } : { kind: 'reply', text: refusal('draw-sample', ctx) };
+  }
+  if (has(t, 'upload', 'attach', 'here are the files', 'evidence for')) {
+    const a = actions.find(x => x.id === 'upload-evidence' && !x.arg);
+    return a ? { kind: 'action', action: a } : { kind: 'reply', text: refusal('upload-evidence', ctx) };
+  }
   // The report itself, by name or by dimension.
   if (has(t, 'ipe', 'the report', 'reliab')) {
     if (has(t, 'not reliable', 'unreliable')) return take('ipe-unreliable');
