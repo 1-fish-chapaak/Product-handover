@@ -35,7 +35,7 @@ import type { Control, ControlType, Frequency, Nature } from './types';
 import {
   RACM_FIELDS, DEFAULT_SOP_PROMPT, CORE_BLANK_LABEL,
   readRacmWorkbook, guessHeaderRow, matchColumns, needsAttention,
-  buildImportRows, rowFromValues, proposeBlankFills, suggestForRow, importRowsToControls, draftRowsFromSop,
+  buildImportRows, rowFromValues, proposeBlankFills, iraCanFill, suggestForRow, importRowsToControls, draftRowsFromSop,
   coreBlanks, rowBlocked, rowRepeats, headerMapping,
   type BlankFill, type ColumnMatch, type CoreBlank, type ImportRow, type RacmFieldKey, type SheetData,
 } from './racmImport';
@@ -445,6 +445,15 @@ export default function RacmImportReview({ mode, file, process, entity, existing
       return TITLE_PAIR.includes(m.field) ? !pairMapped : true;
     });
   }, [matches]);
+  // ── what actually stops the import ────────────────────────────────────────
+  // Every column comes across either way (see "Also imported" below), so the
+  // only question this step asks is whether the REQUIRED ones have a column —
+  // and even then, only the ones Ira cannot work out for itself (user ask,
+  // 22 Sep). A RACM that never wrote a Frequency column is an ordinary RACM:
+  // the activity says "monthly" and `proposeBlankFills` reads it, per row, at
+  // Review. One with no control description is not a RACM at all.
+  const fillable = useMemo(() => missingRequired.filter(m => iraCanFill(m.field)), [missingRequired]);
+  const blocking = useMemo(() => missingRequired.filter(m => !iraCanFill(m.field)), [missingRequired]);
   const columnCount = Math.max(headers.length, sample?.length ?? 0);
   const columnOptions = Array.from({ length: columnCount }, (_, i) => ({ i, label: cell(headers[i]) || `Column ${colLetter(i)} (no header)` }));
   const unusedColumns = columnOptions.filter(o => cell(headers[o.i]) && !matches.some(m => m.column === o.i));
@@ -827,7 +836,17 @@ export default function RacmImportReview({ mode, file, process, entity, existing
                             <ColumnPicker id={`racm-import-col-${m.field}`} label={`Column in your file for ${f?.label ?? m.field}`}
                               value={m.column} options={columnOptions} onPick={v => setColumn(m.field, v)} />
                           </td>
-                          <td><ConfidencePill match={m} missing={missingRequired.some(x => x.field === m.field)} /></td>
+                          <td>
+                            {/* A required field with no column, which Ira will
+                                work out per row, is not a failure — it is the
+                                assistant's job showing up. Amber and named,
+                                rather than the red "missing" that means stop. */}
+                            {fillable.some(x => x.field === m.field)
+                              ? <span className="inline-flex items-center gap-1 h-[22px] px-2 rounded-md bg-mitigated-50 text-mitigated-800 text-[0.65625rem] font-bold whitespace-nowrap" title="Not a column in this file — Ira reads it off the row's other columns at the next step, and shows you what it read it from">
+                                  <Sparkles size={9} /> Ira will fill this
+                                </span>
+                              : <ConfidencePill match={m} missing={blocking.some(x => x.field === m.field)} />}
+                          </td>
                           <td><span className="block truncate text-ink-500" title={sampleValue || undefined}>{sampleValue || <span className="text-ink-300">—</span>}</span></td>
                         </tr>
                       );
@@ -1315,16 +1334,21 @@ export default function RacmImportReview({ mode, file, process, entity, existing
 
           {step === 'columns' && read.status === 'ready' && (
             <>
-              {(missingRequired.length > 0 || dataRowCount === 0) && (
-                <span className="text-[0.71875rem] text-ink-500">
+              {(blocking.length > 0 || fillable.length > 0 || dataRowCount === 0) && (
+                <span className={cn('text-[0.71875rem]', blocking.length > 0 || dataRowCount === 0 ? 'text-ink-500' : 'text-ink-400 inline-flex items-center gap-1')}>
                   {dataRowCount === 0
                     ? 'No rows below the header row'
-                    : missingRequired.length === 1
-                      ? `Pick a column for ${fieldLabel(missingRequired[0]!.field)} to continue`
-                      : `${missingRequired.length} required fields still need a column`}
+                    : blocking.length === 1
+                      ? `Pick a column for ${fieldLabel(blocking[0]!.field)} to continue`
+                      : blocking.length > 1
+                        ? `${blocking.length} required fields still need a column`
+                        /* Nothing is holding the import — this is Ira saying what
+                           it is about to do, and every fill is previewed with its
+                           reason at Review before anything is written. */
+                        : <><Sparkles size={11} className="text-brand-500 shrink-0" /> Ira will fill {plural(fillable.length, 'required field')} from the rows themselves</>}
                 </span>
               )}
-              <button type="button" onClick={columnsToReview} disabled={missingRequired.length > 0 || dataRowCount === 0} className={primaryBtn}>Continue</button>
+              <button type="button" onClick={columnsToReview} disabled={blocking.length > 0 || dataRowCount === 0} className={primaryBtn}>Continue</button>
             </>
           )}
 

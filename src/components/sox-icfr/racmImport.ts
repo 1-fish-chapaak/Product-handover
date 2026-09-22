@@ -853,6 +853,24 @@ export const rowBlocked = (row: ImportRow, core: RacmFieldKey[] = DEFAULT_CORE_F
 
 /** A9: values for this row's empty fields, read off its other columns. Never
  *  proposes a value for a field that already has one, and never for isKey. */
+/**
+ * Required fields Ira can fill from the row's other columns when the file has
+ * no column for them at all.
+ *
+ * Read it as the answer to "does the import have to stop here?". A RACM that
+ * never wrote a Frequency column is an ordinary RACM — the activity says
+ * "monthly" and `proposeBlankFills` reads it. One with no control description
+ * is not a RACM at all: there is nothing to derive a control FROM, and a
+ * suggestion built on nothing would be the import inventing controls.
+ *
+ * Kept beside `proposeBlankFills` on purpose. The two are one statement about
+ * the same thing, and in two files they would drift the first time a field
+ * was added to either.
+ */
+export const IRA_FILLS: RacmFieldKey[] = ['frequency', 'riskDescription', 'riskTitle', 'controlTitle', 'nature', 'type', 'owner', 'testingStrategy', 'riskRating', 'assertions'];
+
+export const iraCanFill = (field: RacmFieldKey): boolean => IRA_FILLS.includes(field);
+
 export function proposeBlankFills(row: ImportRow): BlankFill[] {
   const val = (k: RacmFieldKey) => (row.values[k] ?? '').trim();
   const blank = (k: RacmFieldKey) => !val(k);
