@@ -23,6 +23,9 @@ import { DESIGN_DOC_KINDS, type Role } from './types';
 
 export type ChatActionId =
   | 'add-element'
+  | 'ipe-check'
+  | 'ipe-reliable'
+  | 'ipe-unreliable'
   | 'ira-run'
   | 'conclude-effective'
   | 'conclude-ineffective'
@@ -42,7 +45,8 @@ export interface ChatAction {
   said: string;
   /** The one action worth leading with, if there is one. */
   primary?: boolean;
-  /** Which of the thing — the element kind, for `add-element`. */
+  /** Which of the thing — the element kind for `add-element`, the check id for
+   *  `ipe-check`. */
   arg?: string;
   /** How the rail should DRAW this offer, as against what it does.
    *
@@ -168,6 +172,31 @@ export function actionsFor(s: Situation, role: Role): ChatAction[] {
   // a different population than the page does for the same criteria.
   if (s.step === 'population') {
     if (s.yePending) return [];
+    // ── the IPE test, done from here ────────────────────────────────────────
+    // Each dimension is a judgement with a written finding, so it is offered
+    // as a set to pick from rather than a next step. Registering the report is
+    // NOT offered: that form asks for the system, the t-code, the parameters,
+    // who ran it and the control total, and half a registration from here
+    // would be a population standing on a report nobody can re-run.
+    const ipe = s.ipe;
+    if (ipe && ipe.conclusion === 'Not tested') {
+      if (ipe.untested.length > 0) {
+        return [
+          ...ipe.untested.map<ChatAction>(k => ({
+            id: 'ipe-check', arg: k.id, label: k.dimension, group: 'pick',
+            said: `Let’s do ${k.dimension.toLowerCase()}.`,
+            does: `test the report’s ${k.dimension.toLowerCase()}`,
+          })),
+          show('Take me to the report', 'Take me to the report.', 'population'),
+        ];
+      }
+      // Every dimension answered. A single failure sinks the report, so the
+      // page's own suggestion is what leads.
+      return [
+        { id: 'ipe-reliable', label: 'Report reliable', said: 'Conclude the report reliable.', primary: ipe.failed === 0, group: 'pair', does: 'conclude the report reliable' },
+        { id: 'ipe-unreliable', label: 'Report not reliable', said: 'Conclude the report not reliable.', primary: ipe.failed > 0, group: 'pair', does: 'conclude the report not reliable' },
+      ];
+    }
     if (s.popStarted && !s.popLocked && !s.popBlock) {
       return [
         { id: 'lock-population', label: `Lock the population at ${s.popCount.toLocaleString('en-IN')} items`, said: 'Lock the population.', primary: true, does: 'lock the population so the sample can be drawn off it' },

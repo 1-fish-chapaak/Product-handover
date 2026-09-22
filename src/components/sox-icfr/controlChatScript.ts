@@ -3,7 +3,7 @@ import {
   inquiryOnlyAttributes, operatingApplies, operatingProgress, passedWithoutFiles, pendingReviewNoteCount, pointResult,
   populationLocked, populationSources, requiredFilesReady, sampledSources, samePerson, stepResult, toeRoundFailed, trackResult, yearEndPending,
 } from './helpers';
-import type { AuditRecord, Control, DesignDoc, DesignDocKind, IcfrEngagement, Role, TrackConclusion } from './types';
+import type { AuditRecord, Control, DesignDoc, DesignDocKind, IcfrEngagement, IpeConclusion, Role, TestResult, TrackConclusion } from './types';
 
 /**
  * What Ira knows, and what Ira therefore says.
@@ -87,6 +87,17 @@ export interface Situation {
   popLocked: boolean;
   popCount: number;
   popBlock: string | null;
+  /** The report the population came out of, and how far its proof has got.
+   *  Four dimensions, each one a person's judgement with a written finding —
+   *  see `ipeChecklist`. Null until a report is registered, which is a form
+   *  the page owns (system, t-code, parameters, who ran it, control total). */
+  ipe: {
+    reportName: string;
+    conclusion: IpeConclusion;
+    checks: { id: string; dimension: string; result: TestResult; note?: string }[];
+    untested: { id: string; dimension: string }[];
+    failed: number;
+  } | null;
   sampleDrawn: boolean;
   drawsOwed: number;
   toe: { tested: number; passed: number; failed: number; total: number };
@@ -221,6 +232,13 @@ export function situationOf({ eng, control, role, me, audit }: ChatCtx): Situati
     },
     preparedBy, approvedBy: d.approval?.approvedBy,
     popStarted, popLocked, popCount: o.population?.count ?? 0, popBlock,
+    ipe: ipe ? {
+      reportName: ipe.reportName,
+      conclusion: ipe.conclusion,
+      checks: ipe.checks.map(k => ({ id: k.id, dimension: k.dimension, result: k.result, note: k.note })),
+      untested: ipe.checks.filter(k => k.result === 'Not tested').map(k => ({ id: k.id, dimension: k.dimension })),
+      failed: ipe.checks.filter(k => k.result === 'Fail').length,
+    } : null,
     sampleDrawn: !!o.sampling, drawsOwed, toe, toeHolds, toeStale: staleRuns > 0,
     toeReady: o.steps.filter(x => stepResult(x) === 'Not tested' && requiredFilesReady(x, control)).length,
     operatingResult,
@@ -231,6 +249,7 @@ export function situationOf({ eng, control, role, me, audit }: ChatCtx): Situati
     role, step, designResult, todApproved, missing.length, elementsOnFile, d.documents.length,
     checksUnmarked, checksFailed, s.iraRun, s.iraStale, !!d.designReturn,
     popLocked, s.sampleDrawn, drawsOwed, toe.tested, toe.failed, operatingResult,
+    ipe?.conclusion ?? '-', ipe?.checks.map(k => k.result).join('') ?? '-',
     !!s.preparerSigned, !!s.reviewerSigned, s.notesPending, locked,
   ].join('|');
   return s;
@@ -359,7 +378,23 @@ export function nextPrompt(ctx: ChatCtx): ChatPrompt {
   if (s.step === 'population') {
     if (s.yePending) return line(`This is an annual control, so it is tested in the year-end audit — ${s.yePending.until}. Nothing to draw here.`);
     if (!s.popStarted) return line('Design is approved, so the population is next: point me at the report it comes out of and say what to pull, and I will extract it.');
-    if (s.popBlock) return line(`${s.popCount ? `${s.popCount.toLocaleString('en-IN')} items extracted. ` : ''}${s.popBlock}`);
+    const had = s.popCount ? `${s.popCount.toLocaleString('en-IN')} items extracted. ` : '';
+    // ── the IPE test, said as work rather than as a blocker ──────────────────
+    // This used to read "Finish the IPE test on the report before locking" and
+    // offer one button, which pointed at the page. Ira can do the test WITH
+    // the reader now (user ask, 22 Sep), so it says what the test is and where
+    // it has got to. The four dimensions are a person's judgement each, and
+    // each needs a written finding before it can be answered — that is the
+    // page's rule and it is the rule here.
+    const ipe = s.ipe;
+    if (ipe && ipe.conclusion === 'Not tested') {
+      if (ipe.untested.length === 0) {
+        return line(`${had}Every one of the ${plural(ipe.checks.length, 'IPE check')} is answered${ipe.failed > 0 ? ` and ${plural(ipe.failed, 'one')} failed` : ''}. ${ipe.failed > 0 ? 'A single failure sinks the report — an incomplete population is the wrong population, not a slightly worse one.' : 'The report holds up.'} Call it, and the population can be locked.`);
+      }
+      const done = ipe.checks.length - ipe.untested.length;
+      return line(`${had}Before it can be locked, ${ipe.reportName} itself has to hold up — ${plural(ipe.checks.length, 'check')} on the report, ${done === 0 ? 'none answered yet' : `${done} answered`}. Pick one and I will put what you found on the paper: ${listOf(ipe.untested.map(k => k.dimension.toLowerCase()), 4)}.`);
+    }
+    if (s.popBlock) return line(`${had}${s.popBlock}`);
     return line(`${s.popCount.toLocaleString('en-IN')} items extracted and the report behind them is proved. Lock the population and the sample can be drawn off it.`);
   }
 
@@ -458,6 +493,16 @@ export function acknowledge(prev: Situation, next: Situation): string | null {
   }
 
   // ── ② → ⑤, which have the rail but not the script yet ─────────────────────
+  if (prev.ipe && next.ipe && prev.ipe.untested.length > next.ipe.untested.length) {
+    const settled = prev.ipe.untested.filter(k => !next.ipe!.untested.some(u => u.id === k.id));
+    const left = next.ipe.untested.length;
+    return `${listOf(settled.map(k => k.dimension))} recorded.${left === 0 ? ' That is every check on the report answered.' : ` ${plural(left, 'check')} to go.`}`;
+  }
+  if (prev.ipe?.conclusion === 'Not tested' && next.ipe && next.ipe.conclusion !== 'Not tested') {
+    return next.ipe.conclusion === 'Reliable'
+      ? 'Report concluded reliable. The population can be locked off it now.'
+      : 'Report concluded not reliable — nothing can be locked off it until the extract is put right.';
+  }
   if (!prev.popLocked && next.popLocked) return `Population locked at ${next.popCount.toLocaleString('en-IN')} items.`;
   if (!prev.sampleDrawn && next.sampleDrawn) return 'Sample drawn.';
   if (prev.drawsOwed > next.drawsOwed && next.drawsOwed === 0) return 'Every source file has its draw.';

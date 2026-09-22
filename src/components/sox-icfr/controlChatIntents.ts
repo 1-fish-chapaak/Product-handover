@@ -81,7 +81,7 @@ const stepLabelOf = (s: OperatingStep): string => `attribute ${s.code}`;
  *  situation the buttons are, so the two can never disagree. */
 function refusal(id: ChatActionId, { s, role }: IntentCtx): string {
   if (s.sealed) return 'This engagement is signed off — nothing on this control can move now.';
-  const auditorsOwn: ChatActionId[] = ['add-element', 'ira-run', 'toe-run', 'conclude-effective', 'conclude-ineffective', 'lock-population', 'conclude-op-effective', 'conclude-op-ineffective'];
+  const auditorsOwn: ChatActionId[] = ['add-element', 'ipe-check', 'ipe-reliable', 'ipe-unreliable', 'ira-run', 'toe-run', 'conclude-effective', 'conclude-ineffective', 'lock-population', 'conclude-op-effective', 'conclude-op-ineffective'];
   if (role !== 'auditor' && auditorsOwn.includes(id)) {
     return `That one is the auditor’s. You are viewing as ${role === 'reviewer' ? 'the reviewer' : 'the risk owner'}, so I can’t do it from here.`;
   }
@@ -95,6 +95,12 @@ function refusal(id: ChatActionId, { s, role }: IntentCtx): string {
     if (s.designResult !== 'Not tested') return `The design is already concluded ${s.designResult.toLowerCase()} — it has to be reopened before what it is evidenced by can change.`;
     if (s.elementsOnFile > 0) return 'Evidence is already attached on this step, so I leave the element list to the page — Add element at the top of the design step has the whole menu, custom ones included.';
     return 'Every element I can add is already on this control. The page’s Add element menu has a Custom… option for anything else.';
+  }
+  if (id === 'ipe-check' || id === 'ipe-reliable' || id === 'ipe-unreliable') {
+    if (!s.ipe) return 'No report is registered against this population yet — register it on the left, and then its four checks are mine to work through with you.';
+    if (s.ipe.conclusion !== 'Not tested') return `The report is already concluded ${s.ipe.conclusion.toLowerCase()}. Re-test a check on the left and it opens up again.`;
+    if (id === 'ipe-check') return 'Every check on that report is answered already.';
+    return `${plural(s.ipe.untested.length, 'check')} still to answer before the report can be called either way.`;
   }
   if (id === 'ira-run') {
     return s.iraBlocked ? `I can’t run it — ${s.iraBlocked}.` : 'There is nothing to assess just now.';
@@ -222,6 +228,23 @@ export function readIntent(raw: string, ctx: IntentCtx): Intent {
     const result: TestResult = mark[1] === 'pass' ? 'Pass' : 'Fail';
     const ref = t.replace(/\b(pass|fail|mark|the|check|attribute|as|it|please)\b/g, ' ').trim();
 
+    // On step ② the same words mean one of the report's four dimensions. The
+    // reader is looking at the IPE test; nothing else on this step takes a
+    // pass or a fail. It cannot be done in one line, though — the page will
+    // not take a verdict without a written finding, so this opens the check
+    // and Ira asks for the finding first.
+    if (s.step === 'population' && s.ipe && s.ipe.conclusion === 'Not tested') {
+      const hit = s.ipe.untested.find(k => t.includes(k.dimension.toLowerCase()))
+        ?? s.ipe.untested.find(k => k.dimension.toLowerCase().split(/[^a-z]+/).some(w => w.length >= 4 && t.includes(w)));
+      if (hit) {
+        const a = actions.find(x => x.id === 'ipe-check' && x.arg === hit.id);
+        if (a) return { kind: 'action', action: a, note: `${hit.dimension} can’t be marked ${result.toLowerCase()} until what you found is on the paper — that is the page’s rule and I keep it too.` };
+      }
+      if (s.ipe.untested.length > 0) {
+        return { kind: 'reply', text: `Which one? ${listOf(s.ipe.untested.map(k => k.dimension.toLowerCase()), 4)}.` };
+      }
+    }
+
     // On step ④ the same words mean the attribute, not the design check that
     // happens to hang off it. Whichever one the reader is looking at is the
     // one they mean.
@@ -280,6 +303,16 @@ export function readIntent(raw: string, ctx: IntentCtx): Intent {
   // Order matters more than it looks: "sign off the design" is a conclusion,
   // not a signature, so the conclusions are read before the paper is.
   if (has(t, 'lock the population', 'lock population', 'lock the pop')) return take('lock-population');
+  // The report itself, by name or by dimension.
+  if (has(t, 'ipe', 'the report', 'reliab')) {
+    if (has(t, 'not reliable', 'unreliable')) return take('ipe-unreliable');
+    if (has(t, 'reliable')) return take('ipe-reliable');
+    const open = s.ipe?.untested ?? [];
+    const named = open.find(k => t.includes(k.dimension.toLowerCase()));
+    const a = actions.find(x => x.id === 'ipe-check' && (named ? x.arg === named.id : true));
+    if (a) return { kind: 'action', action: a };
+    return { kind: 'reply', text: refusal('ipe-check', ctx) };
+  }
   if (has(t, 'countersign')) return take('countersign');
   // Which validation is meant is decided by where the work is, the same way a
   // conclusion is: on ④ there is only one thing left to run.

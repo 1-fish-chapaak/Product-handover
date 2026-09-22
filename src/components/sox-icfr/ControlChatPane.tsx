@@ -56,6 +56,15 @@ const STEP_ANCHOR: Record<ChatStepId, string> = {
   design: 'vstep-design', population: 'vstep-population', sample: 'vstep-sample',
   operating: 'vstep-toe', signoff: 'vstep-signoff',
 };
+/** What to ask for each IPE dimension — the page's own textarea placeholders,
+ *  so the chat asks for exactly what the working paper will print. */
+const IPE_ASK: Record<string, string> = {
+  'Source & parameters': 'What did the parameter screen show, and how does it agree to the test scope?',
+  'Period coverage': 'What span does the extract hold, and what accounts for any empty month inside the period?',
+  Completeness: 'What did the tie-out show — the numbers, and the variance if there is one?',
+  Accuracy: 'Which records did you vouch, to what, and what did you find?',
+};
+
 /** The same beat the page's own validation takes (VALIDATE_MS). Ira is not
  *  faster than the button beside it — the wait is part of what it means. */
 const IRA_MS = 6000;
@@ -155,7 +164,7 @@ function IraText({ text, stream, onDone }: { text: string; stream: boolean; onDo
 
 export default function ControlChatPane({ control }: { control: Control }) {
   const { eng, role, me, openAuditId, addDesignDoc, runDesignIra, concludeDesign, overrideDesign, approveDesign, setDesignPoint, overrideDesignPoint,
-    lockPopulation, concludeOperating, overrideOperating, signOffControlWp,
+    setIpeCheck, concludeIpe, lockPopulation, concludeOperating, overrideOperating, signOffControlWp,
     setStepResult, overrideStep, validateReadyAttributes } = useIcfr();
   const logEvent = useAuditLog();
   const audit = useMemo(() => eng.audits.find(a => a.id === openAuditId) ?? null, [eng.audits, openAuditId]);
@@ -179,11 +188,34 @@ export default function ControlChatPane({ control }: { control: Control }) {
   // chat asks for it in the only way a chat can: it holds the mark, asks, and
   // takes the next thing typed as the rationale.
   const [awaitingWhy, setAwaitingWhy] = useState<{ kind: 'point' | 'attribute'; id: string; label: string; result: TestResult } | null>(null);
+  // One IPE dimension, mid-test. The page will not take a Pass or a Fail until
+  // the finding is written — "a failure nobody wrote down is not one" — so the
+  // chat asks in the same order: the finding first, the verdict after. `note`
+  // null means Ira is still waiting to be told what was found.
+  const [ipeDraft, setIpeDraft] = useState<{ checkId: string; dimension: string; note: string | null } | null>(null);
   const still = useReducedMotion();
 
   // The id of the newest Ira line AS OF the render that first saw it. A message
   // that was already on screen when the pane re-rendered must not start typing
   // again, so this is set once per new id and never recomputed from the array.
+  // ── local state answers to the control, not the other way round ──────────
+  // The two mid-question states below are the only things in this pane that
+  // are not derived, and that is exactly where it broke (user report, 22 Sep):
+  // the reader answered an IPE dimension ON THE PAGE and Ira carried on asking
+  // them for it in here. A question whose answer has already been given is not
+  // a question, wherever it was answered — so both are reconciled against the
+  // control every render and dropped the moment they are stale. Render-phase
+  // setState on purpose: it is derived state, and waiting for an effect would
+  // paint one frame of the wrong question.
+  const liveIpeCheck = ipeDraft ? control.operating.ipe?.checks.find(k => k.id === ipeDraft.checkId) : undefined;
+  if (ipeDraft && (!liveIpeCheck || liveIpeCheck.result !== 'Not tested')) setIpeDraft(null);
+  if (awaitingWhy) {
+    const settled = awaitingWhy.kind === 'point'
+      ? control.design.points.find(p => p.id === awaitingWhy.id)
+      : control.operating.steps.find(x => x.id === awaitingWhy.id);
+    if (!settled) setAwaitingWhy(null);
+  }
+
   const latestIra = useRef<string | null>(null);
   const lastMsg = thread[thread.length - 1];
   if (lastMsg?.who === 'ira' && lastMsg.id !== latestIra.current) latestIra.current = lastMsg.id;
@@ -266,6 +298,24 @@ export default function ControlChatPane({ control }: { control: Control }) {
     if (a.id === 'add-element' && a.arg) {
       addDesignDoc(control.id, a.arg as DesignDocKind);
       logEvent({ action: 'Create', description: `Added the ${a.arg} design element to ${control.id} from the chat`, module: 'SOX ICFR', entity: 'Control' });
+      return;
+    }
+
+    // Start one dimension of the IPE test. Ira restates what is being proven
+    // and how, because the assertion and the method are what the finding has
+    // to answer — asking "what did you find?" without them is asking a
+    // question the reader has to go and look up on the left.
+    if (a.id === 'ipe-check' && a.arg) {
+      const k = control.operating.ipe?.checks.find(x => x.id === a.arg);
+      if (!k) return;
+      setIpeDraft({ checkId: k.id, dimension: k.dimension, note: null });
+      say(control.id, 'ira', `${k.dimension} — ${k.description}\n\nHow to prove it: ${k.method}\n\n${IPE_ASK[k.dimension] ?? 'What did you find?'}`);
+      return;
+    }
+
+    if (a.id === 'ipe-reliable' || a.id === 'ipe-unreliable') {
+      concludeIpe(control.id, a.id === 'ipe-reliable' ? 'Reliable' : 'Not reliable');
+      logEvent({ action: 'Update', description: `Concluded the report ${a.id === 'ipe-reliable' ? 'reliable' : 'not reliable'} for ${control.id} from the chat`, module: 'SOX ICFR', entity: 'Evidence' });
       return;
     }
 
@@ -389,6 +439,16 @@ export default function ControlChatPane({ control }: { control: Control }) {
   /** Interrupt. Only a run THIS pane started has a timer to clear — one the
    *  page started owns its own clock, so stopping it here would end the
    *  narration while the work carried on writing to the control. */
+  /** The verdict on the dimension whose finding is already recorded. */
+  const settleIpe = (result: TestResult) => {
+    if (!ipeDraft?.note) return;
+    const { checkId, dimension, note } = ipeDraft;
+    setIpeDraft(null);
+    say(control.id, 'user', `${dimension} ${result === 'Pass' ? 'passes' : 'fails'}.`);
+    setIpeCheck(control.id, checkId, { result, note });
+    logEvent({ action: 'Update', description: `Marked the report's ${dimension.toLowerCase()} ${result.toLowerCase()} on ${control.id} from the chat — ${note}`, module: 'SOX ICFR', entity: 'Evidence' });
+  };
+
   const stop = () => {
     if (!timer.current) return;
     window.clearTimeout(timer.current);
@@ -408,6 +468,25 @@ export default function ControlChatPane({ control }: { control: Control }) {
     // Not parsed, not matched against anything — a rationale is whatever the
     // auditor wrote, and second-guessing it would be the one place this rail
     // must not have an opinion.
+    // Mid-test on one IPE dimension: this is the finding. Like a rationale it
+    // is not parsed and not second-guessed — it is what the auditor wrote, and
+    // it goes on the working paper in their words.
+    if (ipeDraft && ipeDraft.note === null) {
+      // …unless they are plainly backing out. Everything typed here goes on a
+      // working paper, and "not now, next step" filed as an audit finding is
+      // the one outcome that would make this whole flow untrustworthy. A short
+      // line that reads as a retreat drops the question instead of answering it.
+      if (/^(no|not now|later|skip|cancel|stop|never ?mind|leave it|not needed|next step|start next|move on)\b/i.test(text) && text.length < 40) {
+        setIpeDraft(null);
+        say(control.id, 'ira', `Left ${ipeDraft.dimension.toLowerCase()} open — nothing recorded against it.`);
+        return;
+      }
+      setIpeCheck(control.id, ipeDraft.checkId, { note: text });
+      setIpeDraft({ ...ipeDraft, note: text });
+      say(control.id, 'ira', `On the paper. Does ${ipeDraft.dimension.toLowerCase()} pass or fail on that?`);
+      return;
+    }
+
     if (awaitingWhy) {
       const { kind, id, label, result } = awaitingWhy;
       setAwaitingWhy(null);
@@ -502,7 +581,29 @@ export default function ControlChatPane({ control }: { control: Control }) {
             eyebrow names the step rather than the speaker: which step Ira is
             talking about is information, and "Ira" is not, since the voice is
             already carried by the alignment. */}
-        {!working && (
+        {/* Mid-test on one IPE dimension. The derived prompt is not the live
+            question here — the one Ira just asked is, and it is already in the
+            thread above. All this adds is the verdict, once the finding is
+            written: the page will not take a Pass or a Fail before that and
+            neither will this. */}
+        {!working && ipeDraft && (
+          <div>
+            {ipeDraft.note === null ? (
+              <div className="text-[0.75rem] text-ink-400">Type what you found — it prints on the working paper.</div>
+            ) : (
+              <div className="grid grid-cols-2 gap-1.5">
+                <button onClick={() => settleIpe('Pass')}
+                  className="min-w-0 px-2.5 py-2.5 rounded-xl text-[0.8125rem] font-semibold text-center bg-compliant-600 text-white hover:bg-compliant-700 border border-transparent transition-colors cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/30">Pass</button>
+                <button onClick={() => settleIpe('Fail')}
+                  className="min-w-0 px-2.5 py-2.5 rounded-xl text-[0.8125rem] font-semibold text-center border border-risk-300 text-risk-700 bg-canvas-elevated hover:bg-risk-50 transition-colors cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/30">Fail</button>
+                <button onClick={() => { setIpeDraft(null); say(control.id, 'ira', 'Left it open — the finding is saved, so pick it up whenever.'); }}
+                  className="col-span-2 text-[0.6875rem] text-ink-400 hover:text-ink-700 transition-colors cursor-pointer">Leave it for now</button>
+              </div>
+            )}
+          </div>
+        )}
+
+        {!working && !ipeDraft && (
           <div>
             {/* Ira's mark sits on the LIVE line only. The thread above stays
                 unmarked prose (DESIGN.md §7.1.7 — no avatar, identity carried
@@ -613,6 +714,8 @@ export default function ControlChatPane({ control }: { control: Control }) {
             }}
             disabled={!!working} aria-label="Message Ira"
             placeholder={working ? 'One moment…'
+              : ipeDraft?.note === null ? `${IPE_ASK[ipeDraft.dimension] ?? 'What did you find?'} — this prints on the working paper`
+              : ipeDraft ? 'Pass or fail — the buttons above'
               : awaitingWhy ? `Why does ${awaitingWhy.label} ${awaitingWhy.result === 'Pass' ? 'pass' : 'fail'}? — this goes on the paper`
               : 'Ask Ira, or tell it what to do…'}
             className="no-focus-ring w-full bg-transparent border-none outline-none resize-none px-3.5 pt-3 pb-1.5 text-[0.8125rem] leading-[1.5] text-ink-800 placeholder:text-ink-400 disabled:cursor-not-allowed"

@@ -5031,14 +5031,51 @@ function RailSpine({ control, meters, running, onOpen }: { control: Control; met
         <PanelRightClose size={15} className="rotate-180" />
       </button>
 
+      {/* ── the scores ──────────────────────────────────────────────────────
+          At the top, the way they are at the top of the open rail — folding
+          the rail away should change the size of the reading, not its order.
+          No bar under each number: at 80px a 3px rule reads as decoration
+          rather than as a quantity, and the number already says it. Colour
+          follows the open row to the letter — ONE score may wear it. */}
+      {noScores ? (
+        <div className="px-2 pt-1 pb-2.5 text-[0.5625rem] font-semibold uppercase tracking-[0.06em] text-ink-300 text-center leading-snug">
+          Nothing<br />scored yet
+        </div>
+      ) : (
+        <div className="px-1.5 pt-1 pb-2 space-y-1.5">
+          {meters.map(m => {
+            const flagged = worst === m;
+            const state = ragState(m);
+            const StateIcon = state === 'red' ? AlertTriangle : AlertCircle;
+            return (
+              <button key={m.label} onClick={() => onOpen('chat')} title={`${m.label} — ${m.empty ? 'not set up' : `${m.pct}%, ${m.detail}`}`}
+                aria-label={m.empty ? `${m.label} — not set up` : `${m.label} ${m.pct}% — ${statusWordOf(m)}`}
+                className="w-full text-left rounded-lg px-1 py-0.5 hover:bg-paper-50 transition-colors cursor-pointer">
+                <div className="text-[0.5625rem] font-bold uppercase text-ink-400 truncate">{m.short ?? m.label}</div>
+                <div className="flex items-center gap-1">
+                  <span className={cn('text-[0.9375rem] font-bold tabular-nums leading-tight',
+                    m.empty ? 'text-ink-300' : flagged && state === 'red' ? 'text-risk-700' : flagged && state === 'amber' ? 'text-high-700' : 'text-ink-900')}>
+                    {m.empty ? '—' : `${m.pct}%`}
+                  </span>
+                  {/* Colour is never the only signal — DESIGN.md §6. */}
+                  {flagged && <StateIcon size={10} className={cn('shrink-0', state === 'red' ? 'text-risk-700' : 'text-high-700')} />}
+                </div>
+              </button>
+            );
+          })}
+        </div>
+      )}
+
+      <div className="border-t border-canvas-border" />
+
       {/* ── the agent ───────────────────────────────────────────────────────
-          Ira leads, because folding the rail away is exactly when the reader
-          most needs to know it is still there. The mark is the product's AI
-          signature (brand → fuchsia, Ask IRA's own avatar); a run in flight
-          rings it, so a validation started on the left is visible from a
-          column 80px wide. */}
+          Under the reading, because that is the order the open rail reads in:
+          here is the score, here is what to do about it. The mark is the
+          product's AI signature (brand → fuchsia, Ask IRA's own avatar); a run
+          in flight rings it, so a validation started on the left is visible
+          from a column 80px wide. */}
       <button onClick={() => onOpen('chat')} title="Ask Ira about this control" aria-label="Open the Ira chat"
-        className="group shrink-0 mx-1.5 rounded-xl py-2.5 flex flex-col items-center gap-1.5 hover:bg-brand-50 transition-colors cursor-pointer">
+        className="group shrink-0 mx-1.5 mt-2 rounded-xl py-2 flex flex-col items-center gap-1.5 hover:bg-brand-50 transition-colors cursor-pointer">
         <span className="relative inline-flex size-9">
           {running && !still && (
             <motion.span aria-hidden className="absolute inset-0 rounded-xl bg-brand-400"
@@ -5057,7 +5094,7 @@ function RailSpine({ control, meters, running, onOpen }: { control: Control; met
           still ON a step, so this is what makes the folded rail worth looking
           at before any evidence exists. Same five steps, same numbers, same
           order as the stepper on the left. */}
-      <div className="shrink-0 px-2 pt-1.5 pb-2">
+      <div className="shrink-0 px-2 pt-1 pb-2">
         <div className="flex flex-col items-center gap-0.5">
           {SPINE_STEPS.map((st, i) => {
             const done = at > i;
@@ -5079,43 +5116,6 @@ function RailSpine({ control, meters, running, onOpen }: { control: Control; met
           })}
         </div>
       </div>
-
-      <div className="border-t border-canvas-border" />
-      {/* The scores. Colour follows the open row to the letter: ONE score may
-          wear it, and the bar never does. Three coloured bars stacked in an
-          80px column is the heat strip DESIGN.md forbids, only worse for
-          being vertical. */}
-      {noScores ? (
-        <div className="px-2 py-2.5 text-[0.5625rem] font-semibold uppercase tracking-[0.06em] text-ink-300 text-center leading-snug">
-          Nothing<br />scored yet
-        </div>
-      ) : (
-        <div className="px-1.5 py-2 space-y-2 overflow-y-auto">
-          {meters.map(m => {
-            const flagged = worst === m;
-            const state = ragState(m);
-            const StateIcon = state === 'red' ? AlertTriangle : AlertCircle;
-            return (
-              <button key={m.label} onClick={() => onOpen('chat')} title={`${m.label} — ${m.empty ? 'not set up' : `${m.pct}%, ${m.detail}`}`}
-                aria-label={m.empty ? `${m.label} — not set up` : `${m.label} ${m.pct}% — ${statusWordOf(m)}`}
-                className="w-full text-left rounded-lg px-1 py-1 hover:bg-paper-50 transition-colors cursor-pointer">
-                <div className="text-[0.5625rem] font-bold uppercase text-ink-400 truncate">{m.short ?? m.label}</div>
-                <div className="flex items-center gap-1">
-                  <span className={cn('text-[0.875rem] font-bold tabular-nums leading-tight',
-                    m.empty ? 'text-ink-300' : flagged && state === 'red' ? 'text-risk-700' : flagged && state === 'amber' ? 'text-high-700' : 'text-ink-900')}>
-                    {m.empty ? '—' : `${m.pct}%`}
-                  </span>
-                  {/* Colour is never the only signal — DESIGN.md §6. */}
-                  {flagged && <StateIcon size={10} className={cn('shrink-0', state === 'red' ? 'text-risk-700' : 'text-high-700')} />}
-                </div>
-                <div className="mt-1 h-[3px] rounded-full bg-paper-200 overflow-hidden">
-                  <div className="h-full rounded-full bg-ink-300 transition-[width] duration-300" style={{ width: `${m.empty ? 0 : m.pct}%` }} />
-                </div>
-              </button>
-            );
-          })}
-        </div>
-      )}
 
       <div className="mt-auto border-t border-canvas-border" />
       <div className="shrink-0 px-1.5 py-2 space-y-1">
