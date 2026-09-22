@@ -346,16 +346,10 @@ function Inner({ onBack, backLabel = 'Back to Engagements' }: { onBack?: () => v
               { label: wpRef },
             ]} />
           );
-          // The library's control page carries a white header band that runs to
-          // both screen edges; the trail sits on the same white, so the two read
-          // as one region rather than a strip floating on the canvas. Inside an
-          // Both control pages carry that band now, so both trails sit on it.
-          return (
-            <div className="relative flow-root -mt-4 pt-4">
-              <div aria-hidden className="absolute inset-y-0 left-[-50vw] right-[-50vw] bg-canvas-elevated" />
-              <div className="relative">{trail}</div>
-            </div>
-          );
+          // The white band behind this went with the header's own (22 Sep):
+          // the header is a card on the canvas now, and a full-bleed strip
+          // above a card reads as a seam rather than a region.
+          return trail;
         })()}
         {isHandoffs && (
           <SoxBreadcrumb onBack={back} items={[

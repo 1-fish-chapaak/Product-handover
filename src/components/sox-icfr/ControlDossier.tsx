@@ -116,6 +116,20 @@ function MoreLink({ open, onClick }: { open: boolean; onClick: () => void }) {
 
 /** One named field in the leadsheet header, read as "name: value". Mirrors the
  *  library control page so the two control screens read the same. */
+/** One of the header's classification chips — Financial, Manual, Preventive,
+ *  Monthly. Quiet on purpose: six of these run across the top of the card and a
+ *  toned pill each would turn a classification into a traffic light. The one
+ *  chip that IS a judgement (the risk rating) keeps its tone, and is the only
+ *  colour in the row. */
+function HeadChip({ icon, children }: { icon?: React.ReactNode; children: React.ReactNode }) {
+  return (
+    <span className="inline-flex items-center gap-1 h-6 px-2.5 rounded-full border border-canvas-border bg-paper-50/70 text-[0.71875rem] font-medium text-ink-700 whitespace-nowrap">
+      {icon && <span className="text-ink-400 shrink-0">{icon}</span>}
+      {children}
+    </span>
+  );
+}
+
 function HeadField({ label, value }: { label: string; value?: string }) {
   if (!value) return null;
   return (
@@ -5213,95 +5227,44 @@ export default function ControlDossier() {
           a disclosure. What it keeps on top of that is the audit's own: whose
           court the control is in, the overall status with both track verdicts,
           and the working paper. */}
-      <motion.div className="relative pt-1 pb-5 mb-5" variants={{ hidden: { opacity: 0, y: 14 }, show: { opacity: 1, y: 0, transition: { duration: 0.32, ease: [0.22, 1, 0.36, 1] } } }}>
-        <div aria-hidden className="absolute inset-y-0 left-[-50vw] right-[-50vw] bg-canvas-elevated border-b border-canvas-border" />
+      <motion.div className="rounded-xl border border-canvas-border bg-canvas-elevated px-5 pt-4 pb-0 mb-5" variants={{ hidden: { opacity: 0, y: 14 }, show: { opacity: 1, y: 0, transition: { duration: 0.32, ease: [0.22, 1, 0.36, 1] } } }}>
         <div className="relative">
+          {/* ── the facts, above the name (22 Sep) ─────────────────────────────
+              What kind of control this is reads before what it says it does,
+              because a reader scanning a register full of these recognises the
+              shape before they read the sentence. The schema words are back as
+              chips rather than named fields: in a row of six they read as a
+              classification, which is what they are, and the ones that need a
+              label keep it in the detail below. */}
           <div className="flex items-start justify-between gap-4">
-            {/* Heading = the CONTROL TITLE (17 Sep). The objective held this spot
-                while the one-line statement had no name of its own; now that the
-                RACM splits title from description, the title is what belongs at
-                the top of the control's own page, and the objective reads as one
-                more fact about it below. It runs to the court badge (feedback
-                #27): the old 64ch cap wrapped a long heading into a narrow
-                column with half the header empty beside it. */}
-            <h1 className="leadsheet-title text-[1.625rem] leading-[1.25] text-ink-900 flex-1 min-w-0">{control.description}</h1>
+            <div className="flex items-center gap-1.5 flex-wrap min-w-0">
+              {/* Key/non-key is agreed with management — it can never be read off
+                  an SOP — so the auditor sets it here rather than reading it. */}
+              <KeyControlChip control={control} canEdit={canEdit} />
+              {control.clazz && <HeadChip>{control.clazz}</HeadChip>}
+              {control.nature && <HeadChip icon={control.nature === 'Automated' ? <WorkflowIcon size={11} /> : <Hand size={11} />}>{control.nature}</HeadChip>}
+              {control.type && <HeadChip>{control.type}</HeadChip>}
+              {control.frequency && <HeadChip>{control.frequency}</HeadChip>}
+              {control.riskRating && <Pill tone={control.riskRating === 'High' ? 'risk' : control.riskRating === 'Medium' ? 'mitigated' : 'draft'}>{control.riskRating} risk</Pill>}
+              {/* The control's own number, plain — it is a reference, not a
+                  judgement, so it does not wear a chip like one. */}
+              <span className="font-mono text-[0.71875rem] text-ink-400 ml-1">{control.wpRef ?? control.id}</span>
+            </div>
             {/* whose court it is, right-aligned. The W/P stamp that used to sit
                 beside it is gone: a working-paper reference is an audit output,
                 and the control page is where the work happens, not where the
                 paper is cited. It survives in the exported paper and report. */}
-            <div className="shrink-0 flex items-center justify-end gap-2 mt-1">
+            <div className="shrink-0 flex items-center justify-end gap-2">
               <CourtBadge court={courtFor(control, eng.tasks)} fromRole={role} />
             </div>
           </div>
 
-          {/* One line of identity. Judgements are chips because they are
-              somebody's call; the rest is named, because a bare run of
-              "Financial · Manual · Preventive · Monthly" asks the reader to
-              know the schema by heart — those moved into the detail below. */}
-          <div className="mt-3 flex items-center gap-2.5 flex-wrap text-[0.78125rem] text-ink-500">
-            {/* Key/non-key is agreed with management — it can never be read off
-                an SOP — so the auditor sets it here rather than reading it. */}
-            <KeyControlChip control={control} canEdit={canEdit} />
-            {control.riskRating && <Pill tone={control.riskRating === 'High' ? 'risk' : control.riskRating === 'Medium' ? 'mitigated' : 'draft'}>{control.riskRating} risk</Pill>}
-            <span aria-hidden className="w-px h-3.5 bg-canvas-border" />
-            {/* Which matrix this control answers to — a RACM is named by its
-                process (Racm.tsx keys them `sox-racm-{eng}-{process}`). */}
-            <span className="inline-flex items-center gap-1.5">
-              <span className="text-ink-400">RACM</span>
-              <span className="font-medium text-ink-800">{control.process}</span>
-            </span>
-            <span aria-hidden className="w-px h-3.5 bg-canvas-border" />
-            {/* Which company's copy this is. The same control number is tested
-                separately at each entity in scope, and this page is one of them.
-                A SHARED control is the other arrangement: performed at one
-                place, answering for several — so it says both, because "who runs
-                it" and "who it covers" stop being the same answer. */}
-            {isShared(control) ? (
-              <span className="inline-flex items-center gap-1.5 flex-wrap">
-                <span className="text-ink-400">Performed at</span>
-                <span className="font-medium text-ink-800">{control.entity}</span>
-                <span className="text-ink-400 ml-2">Covers</span>
-                {control.entities!.map(e => (
-                  <span key={e} className="inline-flex items-center h-[18px] px-1.5 rounded border border-canvas-border bg-paper-50/70 text-[0.6875rem] font-semibold text-ink-700">{e}</span>
-                ))}
-              </span>
-            ) : control.entity && (
-              <span className="inline-flex items-center gap-1.5">
-                <span className="text-ink-400">Entity</span>
-                <span className="font-medium text-ink-800">{control.entity}</span>
-              </span>
-            )}
-            <span aria-hidden className="w-px h-3.5 bg-canvas-border" />
-            {/* Both names, because they are two different people doing two
-                different jobs — and this page is where you find out who to ask.
-                The register shows only the accountable one. */}
-            <span className="inline-flex items-center gap-1.5">
-              <span className="text-ink-400">Control owner</span>
-              <span className="font-medium text-ink-800">{headOwners.controlOwner}</span>
-            </span>
-            {!headOwners.single && (
-              <span className="inline-flex items-center gap-1.5">
-                <span className="text-ink-400">Process owner</span>
-                <span className="font-medium text-ink-800">{headOwners.processOwner}</span>
-              </span>
-            )}
-            {/* The verdict, on the identity line (user ask). It used to sit in
-                the bar under the header, below the activity — the one answer
-                every reader of this page arrives for, three lines down. The
-                owner does not get it: watching a conclusion move teaches them
-                what is being tested and how it is going, and their job is the
-                evidence, not the grade. */}
-            {!isOwner && (
-              <>
-                <span aria-hidden className="w-px h-3.5 bg-canvas-border" />
-                {/* The pill, not the rubber stamp: the stamp is the ceremony at
-                    the end of a track, and one sitting in a row of chips reads
-                    as decoration. Here it is a fact among the other facts, said
-                    the way the audit-run cards say it. */}
-                <ConclusionPill c={concl} />
-              </>
-            )}
-          </div>
+          {/* Heading = the CONTROL TITLE (17 Sep). The objective held this spot
+              while the one-line statement had no name of its own; now that the
+              RACM splits title from description, the title is what belongs at
+              the top of the control's own page, and the objective reads as one
+              more fact about it below. */}
+          <h1 className="leadsheet-title text-[1.625rem] leading-[1.25] text-ink-900 mt-2.5">{control.description}</h1>
 
           {/* The detail half, read in the order the work happens: the risk the
               control answers, then how it is performed. Closed it is one line
@@ -5342,6 +5305,20 @@ export default function ControlDossier() {
                     {control.controlActivity}
                   </p>
                   <div className="mt-3.5 flex flex-wrap items-baseline gap-x-6 gap-y-2">
+                    {/* Who and where, moved off the header line (22 Sep): the
+                        chips above say what kind of control this is, and six
+                        named facts beside them made a strip nobody read. They
+                        are still one click away, which is where the reader who
+                        wants to know who to ask will look. */}
+                    <HeadField label="RACM" value={control.process} />
+                    {isShared(control) ? (
+                      <>
+                        <HeadField label="Performed at" value={control.entity} />
+                        <HeadField label="Covers" value={control.entities!.join(', ')} />
+                      </>
+                    ) : <HeadField label="Entity" value={control.entity} />}
+                    <HeadField label="Control owner" value={headOwners.controlOwner} />
+                    {!headOwners.single && <HeadField label="Process owner" value={headOwners.processOwner} />}
                     <HeadField label="Sub-process" value={control.subProcess} />
                     <HeadField label="Class" value={control.clazz} />
                     <HeadField label="Nature" value={control.nature} />
@@ -5365,7 +5342,13 @@ export default function ControlDossier() {
             </AnimatePresence>
           </div>
 
-          <div className="flex items-center gap-3 mt-4 pt-3 border-t border-canvas-border flex-wrap">
+          {/* ── the status bar ─────────────────────────────────────────────────
+              Full-bleed inside the card, so it reads as the card's own footer
+              rather than one more paragraph in it. The verdict is named here
+              rather than sitting anonymously in the row of chips above: this is
+              the line a reader arrives for, and "Not tested" needs to say what
+              it is not tested ABOUT. */}
+          <div className="flex items-center gap-3 mt-4 -mx-5 px-5 py-3 border-t border-canvas-border flex-wrap">
             {/* The conclusion and the two track verdicts are the auditor's read,
                 and an owner watching it move learns what is being tested and how
                 it is going. They see what is asked of them instead. */}
@@ -5373,6 +5356,9 @@ export default function ControlDossier() {
               <span className="text-[0.71875rem] font-semibold text-ink-400 uppercase tracking-wide">Your control</span>
             ) : (
               <>
+                <span className="text-[0.6875rem] font-semibold uppercase tracking-[0.08em] text-ink-400">Overall status</span>
+                <ConclusionPill c={concl} />
+                <span aria-hidden className="w-px h-4 bg-canvas-border" />
                 <span className="text-[0.71875rem] text-ink-400 inline-flex items-center gap-1.5"><Tickmark result={designResult === 'Effective' ? 'Pass' : designResult === 'Ineffective' ? 'Fail' : 'Not tested'} size={14} /> TOD {designResult.toLowerCase()}</span>
                 <ChevronRight size={13} className="text-ink-300" />
                 <span className="text-[0.71875rem] text-ink-400 inline-flex items-center gap-1.5"><Tickmark result={opResult === 'Effective' ? 'Pass' : opResult === 'Ineffective' ? 'Fail' : 'Not tested'} size={14} /> TOE {toeLocked ? 'locked' : opResult.toLowerCase()}</span>
@@ -5398,6 +5384,11 @@ export default function ControlDossier() {
               {isAuditor && controlLocked && (
                 <button onClick={() => setReopening(true)} className="h-8 px-3 inline-flex items-center gap-1.5 rounded-lg bg-brand-50 text-[0.75rem] font-semibold text-brand-700 hover:bg-brand-100 transition-colors cursor-pointer"><RotateCcw size={13} /> Reopen</button>
               )}
+              {/* Where the trail lives, beside the paper that summarises it.
+                  Short because the rail takes 400px off this row: the longer
+                  version wrapped the status line onto two, and a status line
+                  that wraps stops being a status line. */}
+              {!isOwner && <span className="hidden xl:inline text-[0.6875rem] text-ink-400">Every run is logged in History</span>}
             </div>
           </div>
         </div>
