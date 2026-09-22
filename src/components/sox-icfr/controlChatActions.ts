@@ -23,6 +23,8 @@ import { DESIGN_DOC_KINDS, type Role } from './types';
 
 export type ChatActionId =
   | 'add-element'
+  | 'upload-source'
+  | 'pick-source'
   | 'upload-evidence'
   | 'draw-sample'
   | 'file-sample'
@@ -51,7 +53,7 @@ export interface ChatAction {
   primary?: boolean;
   /** Which of the thing — the element kind for `add-element`, the check id for
    *  `ipe-check`, the attribute id for `upload-evidence` (absent = all of them),
-   *  the source-file id for the draw. */
+   *  the source-file id for the draw, the file NAME for `pick-source`. */
   arg?: string;
   /** How the rail should DRAW this offer, as against what it does.
    *
@@ -171,12 +173,50 @@ export function actionsFor(s: Situation, role: Role): ChatAction[] {
   }
 
   // ── ② population ──────────────────────────────────────────────────────────
-  // Locking is one store call behind one gate the situation already carries,
-  // so it is done from here. Extracting is not: the form picks a file and
-  // computes the count itself, and a second implementation of that would give
-  // a different population than the page does for the same criteria.
+  // Locking is one store call behind one gate the situation already carries.
+  // The extract is three acts — the file, the filter, the run — and it used to
+  // be refused here on the grounds that the form computes the count itself and
+  // a second implementation would hand the reviewer a different population for
+  // the same sentence. That was a reason to SHARE the computation, not to keep
+  // the door shut: `narrowedCount` and `populationFrom` now live in helpers and
+  // both sides call them, so there is one extract with two doors (user ask,
+  // 22 Sep). Registering the REPORT is still the page's — that form asks for
+  // the system, the t-code, the parameters, who ran it and the control total.
   if (s.step === 'population') {
     if (s.yePending) return [];
+
+    // ── before there is a population at all ─────────────────────────────────
+    // Which of the three states the audit is in decides what is on offer. The
+    // old single button pointed at an empty picker; these point at the thing
+    // that is actually missing.
+    if (!s.popStarted) {
+      const out: ChatAction[] = [];
+      const usable = s.popFiles.filter(f => f.usable);
+      if (usable.length === 1) {
+        out.push({
+          id: 'pick-source', arg: usable[0].name, primary: true,
+          label: `Draw it off ${usable[0].name}`, said: `Draw it off ${usable[0].name}.`,
+          does: `filter ${usable[0].name} down to this control’s instances`,
+        });
+      } else {
+        usable.forEach(f => out.push({
+          id: 'pick-source', arg: f.name, group: 'pick',
+          label: f.name, said: `Draw it off ${f.name}.`,
+          does: `filter ${f.name} down to this control’s instances`,
+        }));
+      }
+      // The upload leads while there is nothing to pick, and stays available
+      // afterwards: the file this control operated on is very often not the one
+      // the audit was created with.
+      out.push({
+        id: 'upload-source', primary: usable.length === 0,
+        label: usable.length === 0 ? 'Upload the source file' : 'Upload a different file',
+        said: 'I have the file — take it.',
+        does: 'take the source file, ask where it came from, and add it to the audit',
+      });
+      out.push(show('Take me to the extraction', 'Take me to this step.', 'population'));
+      return out;
+    }
     // ── the IPE test, done from here ────────────────────────────────────────
     // Each dimension is a judgement with a written finding, so it is offered
     // as a set to pick from rather than a next step. Registering the report is
@@ -202,13 +242,13 @@ export function actionsFor(s: Situation, role: Role): ChatAction[] {
         { id: 'ipe-unreliable', label: 'Report not reliable', said: 'Conclude the report not reliable.', primary: ipe.failed > 0, group: 'pair', does: 'conclude the report not reliable' },
       ];
     }
-    if (s.popStarted && !s.popLocked && !s.popBlock) {
+    if (!s.popLocked && !s.popBlock) {
       return [
         { id: 'lock-population', label: `Lock the population at ${s.popCount.toLocaleString('en-IN')} items`, said: 'Lock the population.', primary: true, does: 'lock the population so the sample can be drawn off it' },
         show('Let me look at it first', 'Take me to the population.', 'population'),
       ];
     }
-    return [show(s.popStarted ? 'Take me to the population' : 'Take me to the extraction', 'Take me to this step.', 'population')];
+    return [show('Take me to the population', 'Take me to this step.', 'population')];
   }
 
   // ── ④ test of effectiveness ───────────────────────────────────────────────

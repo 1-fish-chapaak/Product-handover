@@ -81,7 +81,7 @@ const stepLabelOf = (s: OperatingStep): string => `attribute ${s.code}`;
  *  situation the buttons are, so the two can never disagree. */
 function refusal(id: ChatActionId, { s, role }: IntentCtx): string {
   if (s.sealed) return 'This engagement is signed off — nothing on this control can move now.';
-  const auditorsOwn: ChatActionId[] = ['add-element', 'upload-evidence', 'draw-sample', 'file-sample', 'tick-sample', 'ipe-check', 'ipe-reliable', 'ipe-unreliable', 'ira-run', 'toe-run', 'conclude-effective', 'conclude-ineffective', 'lock-population', 'conclude-op-effective', 'conclude-op-ineffective'];
+  const auditorsOwn: ChatActionId[] = ['add-element', 'upload-source', 'pick-source', 'upload-evidence', 'draw-sample', 'file-sample', 'tick-sample', 'ipe-check', 'ipe-reliable', 'ipe-unreliable', 'ira-run', 'toe-run', 'conclude-effective', 'conclude-ineffective', 'lock-population', 'conclude-op-effective', 'conclude-op-ineffective'];
   if (role !== 'auditor' && auditorsOwn.includes(id)) {
     return `That one is the auditor’s. You are viewing as ${role === 'reviewer' ? 'the reviewer' : 'the risk owner'}, so I can’t do it from here.`;
   }
@@ -95,6 +95,20 @@ function refusal(id: ChatActionId, { s, role }: IntentCtx): string {
     if (s.designResult !== 'Not tested') return `The design is already concluded ${s.designResult.toLowerCase()} — it has to be reopened before what it is evidenced by can change.`;
     if (s.elementsOnFile > 0) return 'Evidence is already attached on this step, so I leave the element list to the page — Add element at the top of the design step has the whole menu, custom ones included.';
     return 'Every element I can add is already on this control. The page’s Add element menu has a Custom… option for anything else.';
+  }
+  if (id === 'upload-source' || id === 'pick-source') {
+    if (s.step !== 'population') {
+      return s.popStarted
+        ? 'The population is already extracted — the source files are listed on step ② if one of them needs changing.'
+        : 'The source data is step ②’s, and this control is not there yet.';
+    }
+    if (s.popStarted) return 'This control already has its population. Adding a second file to it is done on the left, because a joined-on table is not the same thing as the one being sampled.';
+    if (id === 'pick-source') {
+      return s.popFiles.length === 0
+        ? 'There is no source data on this audit yet — hand me the file and I will add it.'
+        : 'None of this audit’s files can be drawn off until somebody says where they came from.';
+    }
+    return 'I can’t take a file from here just now.';
   }
   if (id === 'upload-evidence') {
     if (s.step !== 'operating') return 'Evidence goes against the attributes, and this control is not at the testing step yet.';
@@ -165,10 +179,18 @@ const plural = (n: number, one: string, many = `${one}s`) => `${n} ${n === 1 ? o
 function capabilities(ctx: IntentCtx): string {
   const { actions, s, role } = ctx;
   const adds = actions.filter(a => a.id === 'add-element');
-  const can = actions.filter(a => a.id !== 'add-element').map(a => a.does ?? a.label.toLowerCase());
+  // A cloud of file names is the same problem one step later, so it folds the
+  // same way — but only when there IS a cloud; a single file reads better by
+  // name than as "one of this audit's files".
+  const srcs = actions.filter(a => a.id === 'pick-source');
+  const folded = srcs.length > 1;
+  const can = actions
+    .filter(a => a.id !== 'add-element' && !(folded && a.id === 'pick-source'))
+    .map(a => a.does ?? a.label.toLowerCase());
   // Seven "add X" offers would fill the whole list and crowd out the one thing
   // that is actually the next step, so they are named as one capability.
   if (adds.length > 0) can.unshift(`add a design element — ${listOf(adds.map(a => a.label.toLowerCase()), 3)}`);
+  if (folded) can.unshift(`draw the population off one of this audit’s files — ${listOf(srcs.map(a => a.arg ?? a.label), 3)}`);
   if (role === 'auditor' && s.step === 'design' && s.checksTotal > 0 && s.designResult === 'Not tested' && !s.locked) {
     can.push('mark one check — try “pass 5.1” or “fail 5.2”');
   }
@@ -316,9 +338,25 @@ export function readIntent(raw: string, ctx: IntentCtx): Intent {
     const a = actions.find(x => x.id === 'draw-sample');
     return a ? { kind: 'action', action: a } : { kind: 'reply', text: refusal('draw-sample', ctx) };
   }
-  if (has(t, 'upload', 'attach', 'here are the files', 'evidence for')) {
-    const a = actions.find(x => x.id === 'upload-evidence' && !x.arg);
-    return a ? { kind: 'action', action: a } : { kind: 'reply', text: refusal('upload-evidence', ctx) };
+  // What an upload MEANS depends on the step: on ② it is the source data the
+  // population comes out of, on ④ it is the evidence behind an attribute. The
+  // reader types the same sentence for both and means whichever one they are
+  // looking at.
+  if (has(t, 'upload', 'attach', 'here are the files', 'here is the file', 'take the file', 'evidence for')) {
+    const wanted: ChatActionId = s.step === 'population' ? 'upload-source' : 'upload-evidence';
+    const a = actions.find(x => x.id === wanted && !x.arg);
+    return a ? { kind: 'action', action: a } : { kind: 'reply', text: refusal(wanted, ctx) };
+  }
+  // The extraction itself, by name or by the file it should run against.
+  if (has(t, 'extract', 'pull the population', 'filter it down', 'source file', 'source data')) {
+    const picks = actions.filter(x => x.id === 'pick-source');
+    const named = picks.find(x => x.arg && t.includes(x.arg.toLowerCase()));
+    const a = named ?? (picks.length === 1 ? picks[0] : undefined);
+    if (a) return { kind: 'action', action: a };
+    if (picks.length > 1) {
+      return { kind: 'reply', text: `Which file? ${listOf(picks.map(x => x.arg ?? x.label), 4)}.` };
+    }
+    return { kind: 'reply', text: refusal('pick-source', ctx) };
   }
   // The report itself, by name or by dimension.
   if (has(t, 'ipe', 'the report', 'reliab')) {

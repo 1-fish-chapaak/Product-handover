@@ -27,12 +27,35 @@ import type { AuditRecord, Control, DesignDoc, DesignDocKind, IcfrEngagement, Ip
 
 export type ChatStepId = 'design' | 'population' | 'sample' | 'operating' | 'signoff';
 
+/**
+ * One file this audit holds, as the rail needs to talk about it.
+ *
+ * It comes in from the pane rather than off the control, because the audit's
+ * files are the ENGAGEMENT's (`useAuditFiles`), not this control's — the whole
+ * point of registering one is that every other control can draw on it without
+ * being asked where it came from again.
+ */
+export interface PopFile {
+  name: string;
+  rows: number;
+  /** The system of record it was pulled out of, where there was one. */
+  system?: string;
+  /** Where it entered from — what the population's source line will read. */
+  from: string;
+  /** Provenance is answered, so a population may stand on it (`fileUsable`).
+   *  A file nobody can place is a source you cannot build a test on. */
+  usable: boolean;
+}
+
 export interface ChatCtx {
   eng: IcfrEngagement;
   control: Control;
   role: Role;
   me: string;
   audit?: AuditRecord | null;
+  /** Everything the source picker on the left would offer. Absent where the
+   *  caller only wants to know which step the work is on. */
+  files?: PopFile[];
 }
 
 export interface Situation {
@@ -88,6 +111,11 @@ export interface Situation {
   popLocked: boolean;
   popCount: number;
   popBlock: string | null;
+  /** The files this audit offers to draw a population off. Empty is a real and
+   *  common state — an audit created without a trial balance or a ledger — and
+   *  it is the difference between "point me at the report" and "there is
+   *  nothing here to point at yet". */
+  popFiles: PopFile[];
   /** The report the population came out of, and how far its proof has got.
    *  Four dimensions, each one a person's judgement with a written finding —
    *  see `ipeChecklist`. Null until a report is registered, which is a form
@@ -140,7 +168,7 @@ export function listOf(items: string[], cap = 3): string {
 
 const plural = (n: number, one: string, many = `${one}s`) => `${n} ${n === 1 ? one : many}`;
 
-export function situationOf({ eng, control, role, me, audit }: ChatCtx): Situation {
+export function situationOf({ eng, control, role, me, audit, files }: ChatCtx): Situation {
   const d = control.design;
   const o = control.operating;
 
@@ -239,7 +267,7 @@ export function situationOf({ eng, control, role, me, audit }: ChatCtx): Situati
       raisedBy: control.unableToTest.raisedBy, converted: control.unableToTest.convertedTo,
     },
     preparedBy, approvedBy: d.approval?.approvedBy,
-    popStarted, popLocked, popCount: o.population?.count ?? 0, popBlock,
+    popStarted, popLocked, popCount: o.population?.count ?? 0, popBlock, popFiles: files ?? [],
     ipe: ipe ? {
       reportName: ipe.reportName,
       conclusion: ipe.conclusion,
@@ -258,7 +286,14 @@ export function situationOf({ eng, control, role, me, audit }: ChatCtx): Situati
   s.key = [
     role, step, designResult, todApproved, missing.length, elementsOnFile, d.documents.length,
     checksUnmarked, checksFailed, s.iraRun, s.iraStale, !!d.designReturn,
+    // The extract itself, which the key used to miss entirely: locking was in
+    // here but the population landing was not, so a reader who extracted on the
+    // left left Ira holding the sentence it had already typed.
+    popStarted, s.popCount,
     popLocked, s.sampleDrawn, drawsOwed, drawn.map(x => `${x.draw ? 'd' : '-'}${x.approvedSample ? 'a' : '-'}`).join(''),
+    // A file landing on the audit, or its provenance being answered, changes
+    // what Ira can offer at the extraction — so it changes the line too.
+    (files ?? []).map(f => (f.usable ? 'u' : '-')).join(''),
     toe.tested, toe.failed, operatingResult, o.steps.map(x => requiredFilesCount(x, control).uploaded).join(','),
     ipe?.conclusion ?? '-', ipe?.checks.map(k => k.result).join('') ?? '-',
     !!s.preparerSigned, !!s.reviewerSigned, s.notesPending, locked,
@@ -388,7 +423,26 @@ export function nextPrompt(ctx: ChatCtx): ChatPrompt {
 
   if (s.step === 'population') {
     if (s.yePending) return line(`This is an annual control, so it is tested in the year-end audit — ${s.yePending.until}. Nothing to draw here.`);
-    if (!s.popStarted) return line('Design is approved, so the population is next: point me at the report it comes out of and say what to pull, and I will extract it.');
+    // ── the extraction, done from here ──────────────────────────────────────
+    // This used to be one sentence — "point me at the report it comes out of"
+    // — under a button that only scrolled the page. On an audit with no source
+    // data on it there was nothing to point AT, which is the state the reader
+    // found it in (22 Sep): an offer to extract, over an empty picker. So the
+    // line now says which of the three it actually is, and the upload itself
+    // happens in here.
+    if (!s.popStarted) {
+      const usable = s.popFiles.filter(f => f.usable);
+      if (s.popFiles.length === 0) {
+        return line('Design is approved, so the population is next — but there is no source data on this audit yet. Hand me the file this control operates on and I will take it from there. It joins the audit’s files, so every other control can draw on it without being asked where it came from again.');
+      }
+      if (usable.length === 0) {
+        return line(`${plural(s.popFiles.length, 'file')} on this audit, and ${s.popFiles.length === 1 ? 'nobody has said where it came from' : 'nobody has said where any of them came from'}. A population cannot stand on a file nobody can place, so that is answered first — on the file itself, under Configuration — or hand me another file and I will ask you as it lands.`);
+      }
+      const one = usable.length === 1 ? usable[0] : null;
+      return line(one
+        ? `Design is approved, so the population is next. This audit has one file to draw on — ${one.name}, ${one.rows.toLocaleString('en-IN')} rows. If that is what this control operated on I will draft the filter off it; if it is not, hand me the file that is.`
+        : `Design is approved, so the population is next. This audit has ${plural(usable.length, 'file')} to draw on. Pick the one this control operated on and I will draft the filter, or hand me a file that is not here yet.`);
+    }
     const had = s.popCount ? `${s.popCount.toLocaleString('en-IN')} items extracted. ` : '';
     // ── the IPE test, said as work rather than as a blocker ──────────────────
     // This used to read "Finish the IPE test on the report before locking" and
@@ -516,7 +570,10 @@ export function acknowledge(prev: Situation, next: Situation): string | null {
     return `${next.approvedBy?.by ?? 'The reviewer'} approved the design. Population is open.`;
   }
 
-  // ── ② → ⑤, which have the rail but not the script yet ─────────────────────
+  // ── ② → ⑤ ─────────────────────────────────────────────────────────────────
+  if (!prev.popStarted && next.popStarted) {
+    return `Population extracted — ${next.popCount.toLocaleString('en-IN')} instances.`;
+  }
   if (prev.ipe && next.ipe && prev.ipe.untested.length > next.ipe.untested.length) {
     const settled = prev.ipe.untested.filter(k => !next.ipe!.untested.some(u => u.id === k.id));
     const left = next.ipe.untested.length;

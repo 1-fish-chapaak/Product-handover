@@ -2705,6 +2705,65 @@ export function extractionCriteria(c: Control, from: string, to: string, source?
   return `All ${what} records${where}${window}${entity}, excluding reversals and test postings.`;
 }
 
+/** The row count a file is read as holding.
+ *
+ *  This prototype holds no file bytes, so the number is derived from the name —
+ *  which means it is stated once and never moves, however many times the same
+ *  file is read. It lives here because two doors now put a file on an audit
+ *  (the page's Add-source modal and the chat), and a file that counted 4,102
+ *  rows through one and 11,890 through the other would be two files. */
+export function readRowCount(name: string): number {
+  return 400 + (name.split('').reduce((a, ch) => (a * 31 + ch.charCodeAt(0)) >>> 0, 5) % 19000);
+}
+
+/**
+ * How far a filter narrows its source — the one answer, wherever it was run.
+ *
+ * Always a fraction of the file: a population the same size as the thing it
+ * came out of is a file somebody copied rather than a population somebody
+ * defined. Deterministic from the control AND the file, so two files under one
+ * control narrow to different numbers, and the same extract run twice does not
+ * move.
+ *
+ * Shared with the chat (user ask, 22 Sep), which runs the same extract. Two
+ * implementations of this would hand the reviewer two different populations for
+ * the same sentence, which is the one thing a second door must never do.
+ */
+export function narrowedCount(c: Control, file: { name: string; rows: number }): number {
+  const seed = `${seedKeyOf(c)}·${file.name}`.split('').reduce((a, ch) => (a * 31 + ch.charCodeAt(0)) >>> 0, 11);
+  const share = 0.2 + (seed % 30) / 100;
+  return Math.max(1, Math.min(file.rows - 1, Math.round(file.rows * share)));
+}
+
+/** The population one extract produces, built in one place so the form on the
+ *  left and the chat on the right file the identical record. */
+export function populationFrom(
+  c: Control,
+  chosen: { name: string; rows: number; from: string; system?: string },
+  criteria: string,
+  count: number,
+  ctx: { version: string; me: string; from?: string; to?: string },
+): Population {
+  return {
+    version: ctx.version,
+    source: `${chosen.name} · ${chosen.from}`,
+    sources: [{ id: 'src-1', file: chosen.name, rows: chosen.rows, count, criteria }],
+    sourceFile: chosen.name, sourceCount: chosen.rows,
+    criteria,
+    filterFrom: ctx.from || undefined, filterTo: ctx.to || undefined,
+    // The criteria are prose, but the over-extraction breakdown still needs a
+    // dimension to name ("type Banking 1,180 · type Other 238"). The sub-process
+    // is what the old Transaction-type box defaulted to.
+    filterType: c.subProcess && c.subProcess !== 'General' ? c.subProcess : undefined,
+    count,
+    // The person signed in is the person who just ran the extract, and the
+    // system fills itself in when the pull came from one.
+    provenance: { system: chosen.system ?? '', extractedBy: ctx.me, extractedOn: '' },
+    tieOut: `Filtered from ${chosen.rows.toLocaleString()} rows`,
+    evidence: [{ id: 'pop-ev', name: chosen.name, kind: chosen.name.endsWith('.csv') ? 'CSV' : 'XLSX', uploadedBy: ctx.me, uploadedAt: 'just now' }],
+  };
+}
+
 /** "a, b and c" — the Oxford-less join the rest of the copy uses. */
 function listPhrase(items: string[]): string {
   if (items.length <= 1) return items[0] ?? '';

@@ -24,6 +24,7 @@ import {
   auditSampling, dealSample, NO_COUNTRY, sampleDate, sampleHome, sampleSplit, spreadPhrase, workingAudit, yearSampleRounds, LEGACY_SOURCE_ID, type SampleSplit, type YearRound, yearEndPending,
   draftSamplePrompt, readSamplePrompt,
   populationInstances, sampleAmount, seedKeyOf,
+  narrowedCount, populationFrom, readRowCount,
 } from './helpers';
 import { useAuditFiles, type AuditFile } from './useAuditFiles';
 import { auditCovers, countryFor, countryOf, inScopeEntityNames, ownersOf, programmeFor, scopedForDraw } from './auditScope';
@@ -2504,7 +2505,7 @@ function ControlUploadModal({ onClose, onAdd }: { onClose: () => void; onAdd: (n
       // of the file, deterministic from its name so it never moves.
       window.setTimeout(() => {
         setName(f.name);
-        setRows(400 + (f.name.split('').reduce((a, ch) => (a * 31 + ch.charCodeAt(0)) >>> 0, 5) % 19000));
+        setRows(readRowCount(f.name));
         setReading(false);
       }, 900);
     };
@@ -2697,14 +2698,9 @@ function SourcePickerForm({ control, exclude, submitLabel, onSubmit, seedFile, s
     if (!chosen) return;
     setBusy(true);
     window.setTimeout(() => {
-      // A filtered subset, never the whole file — a population the same size as
-      // its source is a file that was copied rather than filtered. Deterministic
-      // from the control AND the file, so two files under one control narrow to
-      // different numbers and the same extract run twice does not.
-      const seed = `${seedKeyOf(control)}·${chosen.name}`.split('').reduce((a, ch) => (a * 31 + ch.charCodeAt(0)) >>> 0, 11);
-      const share = 0.2 + (seed % 30) / 100;
-      const narrowed = Math.max(1, Math.min(chosen.rows - 1, Math.round(chosen.rows * share)));
-      onSubmit(chosen, criteria.trim() || 'No filter applied', narrowed);
+      // A filtered subset, never the whole file — see narrowedCount, which the
+      // chat's own extract reads too so both doors produce one population.
+      onSubmit(chosen, criteria.trim() || 'No filter applied', narrowedCount(control, chosen));
       setBusy(false);
       setPicked(null);
     }, 1500);
@@ -2943,27 +2939,9 @@ function PopulationSection({ control, canEdit, locked: gated = false }: { contro
   // The extract itself lives in SourcePickerForm — the first file and every file
   // after it ask the same two questions, so they are asked in one place.
   const extract = (chosen: AuditFile, criteria: string, narrowed: number) => {
-    setPopulation(control.id, {
-      version,
-      source: `${chosen.name} · ${chosen.from}`,
-      sources: [{ id: 'src-1', file: chosen.name, rows: chosen.rows, count: narrowed, criteria }],
-      sourceFile: chosen.name, sourceCount: chosen.rows,
-      criteria,
-      filterFrom: winFrom || undefined, filterTo: winTo || undefined,
-      // The criteria are prose now, but the over-extraction breakdown still
-      // needs a dimension to name ("type Banking 1,180 · type Other 238"). The
-      // sub-process is what the old Transaction-type box defaulted to, so this
-      // is the same answer it always gave — just no longer typed by hand.
-      filterType: control.subProcess && control.subProcess !== 'General' ? control.subProcess : undefined,
-      count: narrowed,
-      // The person signed in is the person who just ran the extract, so that
-      // one fact is filled in rather than asked for. The system fills itself in
-      // too when the pull came from one — that is the whole point of fetching
-      // rather than being handed a file. It stays editable either way.
-      provenance: { system: chosen.system ?? '', extractedBy: me, extractedOn: '' },
-      tieOut: `Filtered from ${chosen.rows.toLocaleString()} rows`,
-      evidence: [{ id: 'pop-ev', name: chosen.name, kind: chosen.name.endsWith('.csv') ? 'CSV' : 'XLSX', uploadedBy: me, uploadedAt: 'just now' }],
-    });
+    // The record itself is built by `populationFrom`, which the chat's extract
+    // calls too — one population, whichever door it was run from.
+    setPopulation(control.id, populationFrom(control, chosen, criteria, narrowed, { version, me, from: winFrom, to: winTo }));
     setRefilterSeed(null);
     logEvent({ action: 'Run', description: `Extracted the population for ${control.id} — ${narrowed.toLocaleString()} instances from ${chosen.rows.toLocaleString()} rows in ${chosen.name}`, module: 'SOX ICFR', entity: 'Evidence' });
   };

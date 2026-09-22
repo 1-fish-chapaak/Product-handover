@@ -4,19 +4,22 @@ import { ArrowRight, ArrowUp, Paperclip, Plus, Sparkles, Square } from 'lucide-r
 import { useIcfr } from './store';
 import { useAuditLog } from '../../context/AdminDataContext';
 import {
-  auditSampling, concludeRationale, designOutstanding, designSuggestion, draftSamplePrompt, itgcHolds,
-  operatingSuggestion, populationSources, readSamplePrompt, sampleSizeGuide, sampledSources, seedKeyOf,
-  trackResult, workingAudit,
+  auditSampling, concludeRationale, designOutstanding, designSuggestion, draftSamplePrompt, extractionCriteria,
+  fileUsable, guessFileKind, itgcHolds, narrowedCount, operatingSuggestion, populationFrom, populationSources,
+  readRowCount, readSamplePrompt, sampleSizeGuide, sampledSources, seedKeyOf, trackResult, workingAudit,
 } from './helpers';
+import { useAuditFiles } from './useAuditFiles';
+import { OriginPicker } from './parts';
+import { ROUND_TAG } from './types';
 import { sampleRefs } from './mockData';
 import { DESIGN_RUN_STEPS, TOE_RUN_STEPS, endRun, say, sayOnce, startRun, useControlRun, useControlThread, type RunStep } from './controlChat';
 import { useTypewriter } from '../chat/reveal/useTypewriter';
-import { acknowledge, listOf, nextPrompt, type ChatStepId, type Situation } from './controlChatScript';
-import { actionsFor, type ChatAction } from './controlChatActions';
+import { acknowledge, listOf, nextPrompt, type ChatStepId, type PopFile, type Situation } from './controlChatScript';
+import { actionsFor, type ChatAction, type ChatActionId } from './controlChatActions';
 import { readIntent } from './controlChatIntents';
 import { mapEvidence, type EvidenceMatch } from './controlChatEvidence';
 import { cn } from '../../lib/cn';
-import type { Control, DesignDocKind, TestResult } from './types';
+import type { Control, DesignDocKind, FileOrigin, TestResult } from './types';
 
 /**
  * Ira, sitting beside the control rather than inside it.
@@ -73,6 +76,18 @@ const IPE_ASK: Record<string, string> = {
   Accuracy: 'Which records did you vouch, to what, and what did you find?',
 };
 
+/** What a wrap of chips is a set OF. Every `pick` group used to sit under
+ *  "Add an element", which was true of the first one built and of none of the
+ *  four added since — a column of filenames captioned "Add an element" reads
+ *  as a bug, because it is one. */
+const PICK_CAPTION: Partial<Record<ChatActionId, string>> = {
+  'add-element': 'Add an element',
+  'pick-source': 'Draw it off',
+  'upload-evidence': 'Or one attribute at a time',
+  'ipe-check': 'Pick a check',
+  'draw-sample': 'Draw off',
+};
+
 /** The same beat the page's own validation takes (VALIDATE_MS). Ira is not
  *  faster than the button beside it — the wait is part of what it means. */
 const IRA_MS = 6000;
@@ -84,6 +99,13 @@ const DRAW_RUN_STEPS = [
   'Reading the ask against the locked population',
   'Selecting the items on this file’s seed',
   'Dealing them across the audit window',
+];
+/** And the extract's, off the form's own `setTimeout(…, 1500)`. */
+const EXTRACT_MS = 1500;
+const EXTRACT_RUN_STEPS = [
+  'Opening the file and reading what is in it',
+  'Applying the filter you agreed',
+  'Counting what this control actually operated on',
 ];
 
 /** Ira's mark — the house AI gradient, at rail scale.
@@ -180,10 +202,19 @@ function IraText({ text, stream, onDone }: { text: string; stream: boolean; onDo
 export default function ControlChatPane({ control }: { control: Control }) {
   const { eng, role, me, openAuditId, addDesignDoc, runDesignIra, concludeDesign, overrideDesign, approveDesign, setDesignPoint, overrideDesignPoint,
     setIpeCheck, concludeIpe, uploadRequiredFile, drawSourceSample, approveSource, lockPopulation, concludeOperating, overrideOperating, signOffControlWp,
-    setStepResult, overrideStep, validateReadyAttributes } = useIcfr();
+    setStepResult, overrideStep, validateReadyAttributes, registerFile, setPopulation } = useIcfr();
   const logEvent = useAuditLog();
   const audit = useMemo(() => eng.audits.find(a => a.id === openAuditId) ?? null, [eng.audits, openAuditId]);
-  const prompt = useMemo(() => nextPrompt({ eng, control, role, me, audit }), [eng, control, role, me, audit]);
+  // The audit's own files, read exactly as the source picker on the left reads
+  // them: `ofAudit` only — everything the engagement merely holds is not
+  // evidence somebody put here, and a rail offering it would be a second
+  // opinion about what this audit is allowed to draw on.
+  const auditFiles = useAuditFiles();
+  const popFiles = useMemo<PopFile[]>(
+    () => auditFiles.filter(f => f.ofAudit).map(f => ({ name: f.name, rows: f.rows, system: f.system, from: f.from, usable: fileUsable(f) })),
+    [auditFiles],
+  );
+  const prompt = useMemo(() => nextPrompt({ eng, control, role, me, audit, files: popFiles }), [eng, control, role, me, audit, popFiles]);
   const actions = useMemo(() => actionsFor(prompt.situation, role), [prompt.situation, role]);
   // Two shapes, one list: next steps are stacked rows, a set to choose from is
   // a wrap of chips. Split here rather than in the action map, because it is a
@@ -218,6 +249,18 @@ export default function ControlChatPane({ control }: { control: Control }) {
   // once the items are out and waiting to be looked at. The page holds exactly
   // the same two things between its own two stages.
   const [draw, setDraw] = useState<{ sourceId: string; file: string; ask: string; refs: string[] | null } | null>(null);
+  // The extract, mid-flight, in the order the page asks its questions.
+  //  `origin`   — a file has been handed over and Ira is waiting to be told
+  //               where it came from. It is not registered until that is
+  //               answered: provenance is asked once, at the door, and a file
+  //               nobody can place is not a source you can build a test on.
+  //  `criteria` — the file is settled and the filter is being agreed.
+  const [extract, setExtract] = useState<
+    | { stage: 'origin'; name: string; rows: number }
+    | { stage: 'criteria'; file: PopFile; ask: string }
+    | null
+  >(null);
+  const srcPicker = useRef<HTMLInputElement>(null);
   const still = useReducedMotion();
 
   // The id of the newest Ira line AS OF the render that first saw it. A message
@@ -233,6 +276,10 @@ export default function ControlChatPane({ control }: { control: Control }) {
   // setState on purpose: it is derived state, and waiting for an effect would
   // paint one frame of the wrong question.
   if (draw && populationSources(control).find(x => x.id === draw.sourceId)?.draw) setDraw(null);
+  // The same rule for the extract: a population that landed — from here, or
+  // from the form on the left while this was half-answered — settles the
+  // question, so the question goes.
+  if (extract && control.operating.population) setExtract(null);
   const liveIpeCheck = ipeDraft ? control.operating.ipe?.checks.find(k => k.id === ipeDraft.checkId) : undefined;
   if (ipeDraft && (!liveIpeCheck || liveIpeCheck.result !== 'Not tested')) setIpeDraft(null);
   if (awaitingWhy) {
@@ -306,6 +353,83 @@ export default function ControlChatPane({ control }: { control: Control }) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [control.id, prompt.key]);
 
+  // ── ② the extract, in three acts ──────────────────────────────────────────
+  // The page asks the same three questions in the same order: which file, where
+  // did it come from (once, at the door), and what to take out of it. None of
+  // it is reimplemented — `readRowCount`, `narrowedCount` and `populationFrom`
+  // are the form's own, moved into helpers so both doors read from one.
+
+  /** Act three's opening: the filter, drafted exactly as the box on the left
+   *  drafts it, and then the reader's to change. */
+  const beginCriteria = (file: PopFile) => {
+    const ask = extractionCriteria(control, audit?.windowFrom ?? '', audit?.windowTo ?? '', { system: file.system, name: file.name });
+    setExtract({ stage: 'criteria', file, ask });
+    say(control.id, 'ira', `${file.name} — ${file.rows.toLocaleString('en-IN')} rows. Here is the filter I would run:\n\n“${ask}”\n\nSend it as it stands, or type what to take instead. The population is what this control actually operated on, not the whole file.`);
+  };
+
+  /** A file handed over. Nothing is registered yet — provenance comes first. */
+  const pickedSource = (list: FileList | null) => {
+    const f = list?.[0];
+    if (!f) return;
+    // Already here. Registering it again would overwrite the record — and with
+    // it somebody's answer about where it came from — so it does not.
+    const known = popFiles.find(x => x.name === f.name);
+    if (known) {
+      if (known.usable) {
+        say(control.id, 'ira', `${f.name} is already on this audit, so I have not added it twice.`);
+        beginCriteria(known);
+      } else {
+        say(control.id, 'ira', `${f.name} is already on this audit, but nobody has said where it came from — and a population cannot stand on a file nobody can place. That is answered on the file itself, under Configuration, and then this one is ready to draw off.`);
+      }
+      return;
+    }
+    const rows = readRowCount(f.name);
+    setExtract({ stage: 'origin', name: f.name, rows });
+    say(control.id, 'ira', `${f.name} — I read ${rows.toLocaleString('en-IN')} rows in it.\n\nBefore it can be a population, where did this file come from? It is asked once and recorded on the file, so nothing that reads it later has to ask again.`);
+  };
+
+  /** Provenance answered: the file joins the audit, and the filter is next. */
+  const landFile = (origin: FileOrigin) => {
+    if (extract?.stage !== 'origin') return;
+    const { name, rows } = extract;
+    // The page's own call, argument for argument — a file landed from here is
+    // indistinguishable from one landed through the modal on the left.
+    registerFile({ name, kind: guessFileKind(name), rows, from: `Uploaded on ${control.id}`, uploadedBy: me, uploadedAt: 'just now', origin, originBy: me, originAt: 'just now' });
+    logEvent({ action: 'Upload', description: `Added "${name}" to the audit's files from ${control.id} from the chat — ${origin.toLowerCase()}, ${rows.toLocaleString()} rows`, module: 'SOX ICFR', entity: 'Evidence' });
+    say(control.id, 'user', origin);
+    say(control.id, 'ira', `On the audit’s files — ${origin.toLowerCase()}. Every other control can draw on it now without being asked again.`);
+    beginCriteria({ name, rows, from: `Uploaded on ${control.id}`, usable: true });
+  };
+
+  /** Act three: run it. The form's own beat, the form's own arithmetic. */
+  const runExtract = (ask: string) => {
+    if (extract?.stage !== 'criteria') return;
+    const file = extract.file;
+    const criteria = ask.trim() || 'No filter applied';
+    setExtract({ stage: 'criteria', file, ask: criteria });
+    startRun(control.id, `Filtering ${file.rows.toLocaleString('en-IN')} rows in ${file.name}`, EXTRACT_RUN_STEPS, EXTRACT_MS);
+    timer.current = window.setTimeout(() => {
+      const now = latest.current;
+      endRun(now.id);
+      // Six seconds is long enough for the left to move, and so is one and a
+      // half: the form may have extracted while this was running, and a second
+      // population written over the first would be a filter nobody agreed to.
+      if (now.operating.population) {
+        say(now.id, 'ira', 'A population landed on the left while I was filtering, so I stopped — yours is the one on the paper.');
+        return;
+      }
+      const count = narrowedCount(now, file);
+      setExtract(null);
+      setPopulation(now.id, populationFrom(now, file, criteria, count, {
+        version: `POP-${audit ? ROUND_TAG[audit.round] : 'v1'}`, me,
+        from: audit?.windowFrom ?? '', to: audit?.windowTo ?? '',
+      }));
+      logEvent({ action: 'Run', description: `Extracted the population for ${now.id} from the chat — ${count.toLocaleString()} instances from ${file.rows.toLocaleString()} rows in ${file.name}`, module: 'SOX ICFR', entity: 'Evidence' });
+      skipAck.current = true;
+      say(now.id, 'ira', `${count.toLocaleString('en-IN')} instances, filtered out of ${file.rows.toLocaleString('en-IN')} rows in ${file.name}. The filter is on the paper in the words you agreed.`);
+    }, EXTRACT_MS);
+  };
+
   /** Do the thing. Called by a button press and by a typed sentence alike —
    *  which is the point: typing is another way to press what is on offer, not
    *  a second set of rules. The reader's own line is posted by the caller,
@@ -336,6 +460,18 @@ export default function ControlChatPane({ control }: { control: Control }) {
     if (a.id === 'upload-evidence') {
       pickFor.current = a.arg;
       picker.current?.click();
+      return;
+    }
+
+    // ── ② the source data ───────────────────────────────────────────────────
+    // A separate picker from the evidence one, with the page's own accept list
+    // — a population is filtered out of rows, and a PDF has none.
+    if (a.id === 'upload-source') { srcPicker.current?.click(); return; }
+
+    if (a.id === 'pick-source' && a.arg) {
+      const file = popFiles.find(f => f.name === a.arg);
+      if (!file) return;
+      beginCriteria(file);
       return;
     }
 
@@ -600,6 +736,38 @@ export default function ControlChatPane({ control }: { control: Control }) {
       return;
     }
 
+    // Mid-extract. Where it came from is a closed question with two answers, so
+    // it is matched rather than taken as prose — writing "probably the client"
+    // onto a file record as its provenance would be a fact nobody stated.
+    if (extract?.stage === 'origin') {
+      if (/^(no|not now|later|skip|cancel|stop|never ?mind|leave it)\b/i.test(text) && text.length < 40) {
+        setExtract(null);
+        say(control.id, 'ira', `Left ${extract.name} alone — it is not on the audit, so nothing reads it.`);
+        return;
+      }
+      const o: FileOrigin | null = /system|export|sap|pulled|extract(ed)? from/i.test(text) ? 'System export'
+        : /client|prepared|sent|they (gave|sent)|manual|spreadsheet/i.test(text) ? 'Client-prepared'
+        : null;
+      if (!o) {
+        say(control.id, 'ira', 'One of the two, and it matters: a system export is the system’s own record of itself, a client-prepared file has been through somebody’s hands. Press one above, or say which.');
+        return;
+      }
+      landFile(o);
+      return;
+    }
+
+    // Mid-extract, on the filter: this is the filter. Not parsed — it is the
+    // sentence the reviewer will read, in the auditor's words.
+    if (extract?.stage === 'criteria') {
+      if (/^(no|not now|later|skip|cancel|stop|never ?mind|leave it)\b/i.test(text) && text.length < 40) {
+        setExtract(null);
+        say(control.id, 'ira', 'Left the extraction alone. The file is still on the audit whenever you want it.');
+        return;
+      }
+      runExtract(text);
+      return;
+    }
+
     if (ipeDraft && ipeDraft.note === null) {
       // …unless they are plainly backing out. Everything typed here goes on a
       // working paper, and "not now, next step" filed as an audit finding is
@@ -749,6 +917,32 @@ export default function ControlChatPane({ control }: { control: Control }) {
             className="text-[0.6875rem] text-ink-400 hover:text-ink-700 transition-colors cursor-pointer">Leave it for now</button>
         )}
 
+        {/* Where the file came from — the page's own picker, not a lookalike.
+            One tap files it: the modal on the left needs a second click because
+            it is also collecting the file, and here the file is already in. */}
+        {!working && !draw && extract?.stage === 'origin' && (
+          <div>
+            <OriginPicker onPick={landFile} />
+            <button onClick={() => { const name = extract.name; setExtract(null); say(control.id, 'ira', `Left ${name} alone — it is not on the audit, so nothing reads it.`); }}
+              className="mt-1.5 text-[0.6875rem] text-ink-400 hover:text-ink-700 transition-colors cursor-pointer">Leave it for now</button>
+          </div>
+        )}
+
+        {/* The filter, agreed before it runs. The composer is where a different
+            one is typed, so this is the yes and the way out. */}
+        {!working && !draw && extract?.stage === 'criteria' && (
+          <div className="grid grid-cols-2 gap-1.5">
+            <button onClick={() => runExtract(extract.ask)}
+              className="min-w-0 px-2.5 py-2.5 rounded-xl text-[0.8125rem] font-semibold text-center bg-gradient-to-r from-brand-600 to-fuchsia-600 text-white hover:from-brand-500 hover:to-fuchsia-500 border border-transparent shadow-[0_6px_20px_-8px_rgba(106,18,205,0.55)] transition-all cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/30">
+              Extract population
+            </button>
+            <button onClick={() => { setExtract(null); say(control.id, 'ira', 'Left the extraction alone. The file is still on the audit whenever you want it.'); }}
+              className="min-w-0 px-2.5 py-2.5 rounded-xl text-[0.8125rem] text-center border border-canvas-border bg-canvas-elevated text-ink-700 hover:bg-brand-50 hover:text-brand-700 hover:border-brand-200 transition-colors cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/30">
+              Not this one
+            </button>
+          </div>
+        )}
+
         {/* A mapped pile, waiting to be filed. Nothing is written until this is
             pressed: the mapper is confident, not certain, and what it decides
             ends up on a working paper under the auditor's name. */}
@@ -772,7 +966,7 @@ export default function ControlChatPane({ control }: { control: Control }) {
             thread above. All this adds is the verdict, once the finding is
             written: the page will not take a Pass or a Fail before that and
             neither will this. */}
-        {!working && !pile && !draw && ipeDraft && (
+        {!working && !pile && !draw && !extract && ipeDraft && (
           <div>
             {ipeDraft.note === null ? (
               <div className="text-[0.75rem] text-ink-400">Type what you found — it prints on the working paper.</div>
@@ -789,7 +983,7 @@ export default function ControlChatPane({ control }: { control: Control }) {
           </div>
         )}
 
-        {!working && !ipeDraft && !pile && !draw && (
+        {!working && !ipeDraft && !pile && !draw && !extract && (
           <div>
             {/* Ira's mark sits on the LIVE line only. The thread above stays
                 unmarked prose (DESIGN.md §7.1.7 — no avatar, identity carried
@@ -867,7 +1061,7 @@ export default function ControlChatPane({ control }: { control: Control }) {
                 setting up a design step is. */}
             {saidIt && picks.length > 0 && (
               <div className="mt-3.5">
-                <div className="mb-1.5 text-[0.6875rem] font-semibold text-ink-400">Add an element</div>
+                <div className="mb-1.5 text-[0.6875rem] font-semibold text-ink-400">{PICK_CAPTION[picks[0].id] ?? 'Pick one'}</div>
                 <div className="flex flex-wrap gap-1.5">
                   {picks.map((a, i) => (
                     <motion.button key={a.id + a.label} onClick={() => run(a)}
@@ -896,6 +1090,13 @@ export default function ControlChatPane({ control }: { control: Control }) {
       <input ref={picker} type="file" multiple accept=".pdf,.png,.jpg,.jpeg,.xlsx,.xls,.csv,.doc,.docx"
         className="sr-only" tabIndex={-1} aria-hidden="true"
         onChange={e => { picked(e.target.files); e.target.value = ''; }} />
+      {/* And the source data's own, with the page's accept list rather than the
+          evidence one: a population is filtered out of rows, and a PDF has
+          none. One file, because the first source is what makes a population —
+          joining a second onto it is the page's, and a different question. */}
+      <input ref={srcPicker} type="file" accept=".xlsx,.xls,.csv"
+        className="sr-only" tabIndex={-1} aria-hidden="true"
+        onChange={e => { pickedSource(e.target.files); e.target.value = ''; }} />
 
       <div className="p-3 border-t border-canvas-border">
         <div className="ai-border">
@@ -907,6 +1108,8 @@ export default function ControlChatPane({ control }: { control: Control }) {
             }}
             disabled={!!working} aria-label="Message Ira"
             placeholder={working ? 'One moment…'
+              : extract?.stage === 'origin' ? 'System export, or client-prepared? — recorded on the file'
+              : extract?.stage === 'criteria' ? 'Say what to take out of it — or send the drafted filter as it is'
               : draw?.refs === null ? 'Say what to take — or send the drafted ask back as it is'
               : draw ? 'Look the items over — File or Reject above'
               : ipeDraft?.note === null ? `${IPE_ASK[ipeDraft.dimension] ?? 'What did you find?'} — this prints on the working paper`
@@ -926,6 +1129,15 @@ export default function ControlChatPane({ control }: { control: Control }) {
               {prompt.step === 'operating' && prompt.situation.evidenceOwed.length > 0 && !working && (
                 <button onClick={() => { pickFor.current = undefined; picker.current?.click(); }}
                   aria-label="Attach evidence" title="Attach evidence — I will put each file against the attribute it proves"
+                  className="inline-flex items-center justify-center size-7 rounded-lg text-ink-400 hover:text-brand-700 hover:bg-brand-50 transition-colors cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/30">
+                  <Paperclip size={14} />
+                </button>
+              )}
+              {/* The same affordance one step earlier, where what a file is FOR
+                  is different: this is the data the population comes out of. */}
+              {prompt.step === 'population' && !prompt.situation.popStarted && !prompt.situation.yePending && role === 'auditor' && !working && !extract && (
+                <button onClick={() => srcPicker.current?.click()}
+                  aria-label="Attach the source file" title="Attach the source file — the data this control's population comes out of"
                   className="inline-flex items-center justify-center size-7 rounded-lg text-ink-400 hover:text-brand-700 hover:bg-brand-50 transition-colors cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/30">
                   <Paperclip size={14} />
                 </button>
