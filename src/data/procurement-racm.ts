@@ -1,8 +1,14 @@
 // Auto-generated from RACM_Procurement_SOP_Budget_to_Payment_RACM_2026-05-16.xlsx
 // 124 risk-control rows x 25 columns. Single process area: Procurement Lifecycle Management.
 // DO NOT EDIT MANUALLY - regenerate from the Excel if the source changes.
+// One exception: Risk Category is held in the six the product recognises, not the
+// Excel's own wording, so the seed rows read the same as an imported one. A
+// regeneration has to map them again — "Financial Reporting" is Financial,
+// "IT General Control" is IT general control, and "Strategic" is Operational.
 
-export type ColumnGroup = 'identity' | 'context' | 'risk' | 'control' | 'assertions' | 'aux' | 'meta';
+import { extraLabel, type ExtraColumn } from '../components/sox-icfr/racmImport';
+
+export type ColumnGroup = 'identity' | 'context' | 'risk' | 'control' | 'assertions' | 'aux' | 'meta' | 'client';
 
 export interface ProcurementRacmRow {
   /** Risk ID */
@@ -54,6 +60,10 @@ export interface ProcurementRacmRow {
   testingStrategy?: string;
   /** Control Owner */
   controlOwner: string;
+  /** Risk Owner — the person accountable for the risk. A record only: it routes
+   *  no work. Optional because the 124 generated rows below predate the column;
+   *  a SOX RACM's rows are filled from `ownersOf().riskOwner`. */
+  riskOwner?: string;
   /** Control Evidence */
   controlEvidence: string;
   /** Assertions (CEAVOP) */
@@ -78,10 +88,24 @@ export interface ProcurementRacmRow {
   attributes: string;
   /** Ref — source file this row was extracted from. Set only for multi-file consolidation (RACM Generator). */
   ref?: string;
+  /** The client's own columns, under the header their own file spells.
+   *
+   *  Which columns a client's matrix carries is their set-up, read at runtime,
+   *  so they ride in one bag rather than as fields of this row — this shape is
+   *  fixed and theirs is not. Mirrors `Control.extras`, which is where a value
+   *  edited in the grid lands. */
+  extras?: Record<string, string>;
 }
 
+/** One of the client's own columns. Prefixed so it can never collide with one
+ *  of ours: no field above is spelled with a colon. */
+export type ExtraColumnKey = `x:${string}`;
+/** What a column descriptor points at — a field of ours, or one of the client's
+ *  own columns. `extras` is the bag itself, never a column. */
+export type RacmColumnKey = Exclude<keyof ProcurementRacmRow, 'extras'> | ExtraColumnKey;
+
 export interface RacmColumnDef {
-  key: keyof ProcurementRacmRow;
+  key: RacmColumnKey;
   label: string;
   group: ColumnGroup;
   width: number;
@@ -113,6 +137,7 @@ export const PROCUREMENT_RACM_COLUMNS: RacmColumnDef[] = [
   { key: 'effectiveDate', label: "Effective Date", group: 'control', width: 140 },
   { key: 'testingStrategy', label: "Testing Strategy", group: 'control', width: 150 },
   { key: 'controlOwner', label: "Control Owner", group: 'control', width: 160 },
+  { key: 'riskOwner', label: "Risk Owner", group: 'control', width: 160 },
   { key: 'controlEvidence', label: "Control Evidence", group: 'control', width: 280 },
   { key: 'attributes', label: "Attributes", group: 'control', width: 300 },
   { key: 'assertions', label: "Assertions (CEAVOP)", group: 'assertions', width: 200 },
@@ -134,9 +159,46 @@ export const COLUMN_GROUP_LABELS: Record<ColumnGroup, string> = {
   assertions: 'Assertions & FS',
   aux: 'IPE / SoD / Mgmt Review',
   meta: 'References',
+  client: "The client's own",
 };
 
-export const COLUMN_GROUP_ORDER: ColumnGroup[] = ['identity', 'context', 'risk', 'control', 'assertions', 'aux', 'meta'];
+export const COLUMN_GROUP_ORDER: ColumnGroup[] = ['identity', 'context', 'risk', 'control', 'assertions', 'aux', 'meta', 'client'];
+
+// ─── The client's own columns ─────────────────────────────────────────────
+const EXTRA_PREFIX = 'x:';
+const isExtraColumnKey = (key: RacmColumnKey): key is ExtraColumnKey => key.startsWith(EXTRA_PREFIX);
+
+/** The grid's key for one of the client's columns. Built from the header their
+ *  file spells, which is also the key their values are held under, so renaming
+ *  a column on the Config tab never parts it from what it holds. */
+export const extraColumnKey = (e: ExtraColumn): ExtraColumnKey => `${EXTRA_PREFIX}${e.header}`;
+
+/**
+ * The client's own columns as descriptors the grid uses exactly like ours.
+ *
+ * They come last and in a group of their own because that is what they are —
+ * the client's columns, carried beside the product's matrix rather than part of
+ * it. Nothing here records what kind of value a column holds: typing in a grid
+ * cell is free text for every column, ours included, and the kind is honoured
+ * where the product already offers a closed list.
+ */
+export function extraRacmColumns(extras: ExtraColumn[]): RacmColumnDef[] {
+  return extras.map(e => ({ key: extraColumnKey(e), label: extraLabel(e), group: 'client' as const, width: 160 }));
+}
+
+/** What a cell shows — one of the client's columns reads out of the row's bag,
+ *  under the header their file spells it with. */
+export function racmCellText(row: ProcurementRacmRow, key: RacmColumnKey): string {
+  if (isExtraColumnKey(key)) return String(row.extras?.[key.slice(EXTRA_PREFIX.length)] ?? '');
+  return String(row[key] ?? '');
+}
+
+/** The row with one cell changed. A client's column is written into the bag and
+ *  not onto the row, which is where `Control.extras` reads it back. */
+export function racmRowWithCell(row: ProcurementRacmRow, key: RacmColumnKey, value: string): ProcurementRacmRow {
+  if (!isExtraColumnKey(key)) return { ...row, [key]: value };
+  return { ...row, extras: { ...row.extras, [key.slice(EXTRA_PREFIX.length)]: value } };
+}
 
 export const PROCUREMENT_RACM_ROWS: ProcurementRacmRow[] = [
   {
@@ -172,7 +234,7 @@ export const PROCUREMENT_RACM_ROWS: ProcurementRacmRow[] = [
     "controlId": "C002",
     "processArea": "Procurement Lifecycle Management",
     "subProcess": "Budget Planning and Allocation - Consolidation",
-    "riskCategory": "Financial Reporting",
+    "riskCategory": "Financial",
     "riskDescription": "Risk that consolidated budget contains overlaps, missed consolidation opportunities, or discrepancies with the overall corporate financial plan.",
     "riskRating": "Medium",
     "likelihood": "Medium",
@@ -228,7 +290,7 @@ export const PROCUREMENT_RACM_ROWS: ProcurementRacmRow[] = [
     "controlId": "C004",
     "processArea": "Procurement Lifecycle Management",
     "subProcess": "Budget Planning and Allocation - Approval",
-    "riskCategory": "Financial Reporting",
+    "riskCategory": "Financial",
     "riskDescription": "Risk that the procurement budget is not formally approved, leading to unauthorized spending limits.",
     "riskRating": "High",
     "likelihood": "Medium",
@@ -312,7 +374,7 @@ export const PROCUREMENT_RACM_ROWS: ProcurementRacmRow[] = [
     "controlId": "C007",
     "processArea": "Procurement Lifecycle Management",
     "subProcess": "Budget Planning and Allocation",
-    "riskCategory": "Financial Reporting",
+    "riskCategory": "Financial",
     "riskDescription": "Risk of unauthorized budget reallocations leading to misallocation of funds.",
     "riskRating": "Medium",
     "likelihood": "Medium",
@@ -340,7 +402,7 @@ export const PROCUREMENT_RACM_ROWS: ProcurementRacmRow[] = [
     "controlId": "C008",
     "processArea": "Procurement Lifecycle Management",
     "subProcess": "Budget Planning and Allocation",
-    "riskCategory": "Financial Reporting",
+    "riskCategory": "Financial",
     "riskDescription": "Risk of unbudgeted expenditures being incurred without proper authorization.",
     "riskRating": "Medium",
     "likelihood": "Medium",
@@ -368,7 +430,7 @@ export const PROCUREMENT_RACM_ROWS: ProcurementRacmRow[] = [
     "controlId": "C009",
     "processArea": "Procurement Lifecycle Management",
     "subProcess": "Budget Planning and Allocation",
-    "riskCategory": "Financial Reporting",
+    "riskCategory": "Financial",
     "riskDescription": "Risk of CAPEX items exceeding defined thresholds being approved without appropriate project-level scrutiny.",
     "riskRating": "High",
     "likelihood": "Medium",
@@ -396,7 +458,7 @@ export const PROCUREMENT_RACM_ROWS: ProcurementRacmRow[] = [
     "controlId": "C010",
     "processArea": "Procurement Lifecycle Management",
     "subProcess": "Budget Planning and Allocation",
-    "riskCategory": "Financial Reporting",
+    "riskCategory": "Financial",
     "riskDescription": "Risk of over-commitment of funds due to PRs or POs exceeding available budget.",
     "riskRating": "High",
     "likelihood": "Medium",
@@ -480,7 +542,7 @@ export const PROCUREMENT_RACM_ROWS: ProcurementRacmRow[] = [
     "controlId": "C013",
     "processArea": "Procurement Lifecycle Management",
     "subProcess": "Need Identification and Purchase Requisition - Budget Availability Check",
-    "riskCategory": "Financial Reporting",
+    "riskCategory": "Financial",
     "riskDescription": "Risk that PR proceeds without sufficient budget, leading to budget overruns.",
     "riskRating": "High",
     "likelihood": "Medium",
@@ -508,7 +570,7 @@ export const PROCUREMENT_RACM_ROWS: ProcurementRacmRow[] = [
     "controlId": "C014",
     "processArea": "Procurement Lifecycle Management",
     "subProcess": "Need Identification and Purchase Requisition - PR Approval",
-    "riskCategory": "Financial Reporting",
+    "riskCategory": "Financial",
     "riskDescription": "Risk of unauthorized PRs being approved, leading to unapproved commitments.",
     "riskRating": "High",
     "likelihood": "Medium",
@@ -564,7 +626,7 @@ export const PROCUREMENT_RACM_ROWS: ProcurementRacmRow[] = [
     "controlId": "C016",
     "processArea": "Procurement Lifecycle Management",
     "subProcess": "Need Identification and Purchase Requisition",
-    "riskCategory": "Financial Reporting",
+    "riskCategory": "Financial",
     "riskDescription": "Risk of unauthorized PRs up to $5,000 if Line Manager approval is bypassed.",
     "riskRating": "Medium",
     "likelihood": "Medium",
@@ -592,7 +654,7 @@ export const PROCUREMENT_RACM_ROWS: ProcurementRacmRow[] = [
     "controlId": "C017",
     "processArea": "Procurement Lifecycle Management",
     "subProcess": "Need Identification and Purchase Requisition",
-    "riskCategory": "Financial Reporting",
+    "riskCategory": "Financial",
     "riskDescription": "Risk of unauthorized PRs between $5,001 and $25,000 if dual approval is bypassed.",
     "riskRating": "Medium",
     "likelihood": "Medium",
@@ -620,7 +682,7 @@ export const PROCUREMENT_RACM_ROWS: ProcurementRacmRow[] = [
     "controlId": "C018",
     "processArea": "Procurement Lifecycle Management",
     "subProcess": "Need Identification and Purchase Requisition",
-    "riskCategory": "Financial Reporting",
+    "riskCategory": "Financial",
     "riskDescription": "Risk of unauthorized PRs between $25,001 and $100,000 if multi-level approval is bypassed.",
     "riskRating": "Medium",
     "likelihood": "Medium",
@@ -648,7 +710,7 @@ export const PROCUREMENT_RACM_ROWS: ProcurementRacmRow[] = [
     "controlId": "C019",
     "processArea": "Procurement Lifecycle Management",
     "subProcess": "Need Identification and Purchase Requisition",
-    "riskCategory": "Financial Reporting",
+    "riskCategory": "Financial",
     "riskDescription": "Risk of unauthorized PRs between $100,001 and $500,000 if multi-level approval is bypassed.",
     "riskRating": "High",
     "likelihood": "Medium",
@@ -676,7 +738,7 @@ export const PROCUREMENT_RACM_ROWS: ProcurementRacmRow[] = [
     "controlId": "C020",
     "processArea": "Procurement Lifecycle Management",
     "subProcess": "Need Identification and Purchase Requisition",
-    "riskCategory": "Financial Reporting",
+    "riskCategory": "Financial",
     "riskDescription": "Risk of unauthorized PRs above $500,000 if multi-level approval is bypassed.",
     "riskRating": "High",
     "likelihood": "Medium",
@@ -732,7 +794,7 @@ export const PROCUREMENT_RACM_ROWS: ProcurementRacmRow[] = [
     "controlId": "C022",
     "processArea": "Procurement Lifecycle Management",
     "subProcess": "Need Identification and Purchase Requisition",
-    "riskCategory": "IT General Control",
+    "riskCategory": "IT general control",
     "riskDescription": "Risk of PRs being approved by unauthorized personnel or bypassing the DOA matrix.",
     "riskRating": "High",
     "likelihood": "Medium",
@@ -760,7 +822,7 @@ export const PROCUREMENT_RACM_ROWS: ProcurementRacmRow[] = [
     "controlId": "C023",
     "processArea": "Procurement Lifecycle Management",
     "subProcess": "Need Identification and Purchase Requisition",
-    "riskCategory": "Financial Reporting",
+    "riskCategory": "Financial",
     "riskDescription": "Risk of budget overruns due to double commitment of funds after PR approval.",
     "riskRating": "Medium",
     "likelihood": "Medium",
@@ -1320,7 +1382,7 @@ export const PROCUREMENT_RACM_ROWS: ProcurementRacmRow[] = [
     "controlId": "C043",
     "processArea": "Procurement Lifecycle Management",
     "subProcess": "Purchase Order Creation and Approval - Budget Re-verification",
-    "riskCategory": "Financial Reporting",
+    "riskCategory": "Financial",
     "riskDescription": "Risk of budget overruns if PO value significantly exceeds PR estimate without re-verification.",
     "riskRating": "High",
     "likelihood": "Medium",
@@ -1348,7 +1410,7 @@ export const PROCUREMENT_RACM_ROWS: ProcurementRacmRow[] = [
     "controlId": "C044",
     "processArea": "Procurement Lifecycle Management",
     "subProcess": "Purchase Order Creation and Approval - PO Approval",
-    "riskCategory": "Financial Reporting",
+    "riskCategory": "Financial",
     "riskDescription": "Risk of unauthorized POs being issued, leading to unapproved contractual commitments.",
     "riskRating": "High",
     "likelihood": "Medium",
@@ -1432,7 +1494,7 @@ export const PROCUREMENT_RACM_ROWS: ProcurementRacmRow[] = [
     "controlId": "C047",
     "processArea": "Procurement Lifecycle Management",
     "subProcess": "Purchase Order Creation and Approval",
-    "riskCategory": "Financial Reporting",
+    "riskCategory": "Financial",
     "riskDescription": "Risk of unauthorized or unbudgeted purchases if POs are created without an approved PR.",
     "riskRating": "High",
     "likelihood": "Medium",
@@ -1460,7 +1522,7 @@ export const PROCUREMENT_RACM_ROWS: ProcurementRacmRow[] = [
     "controlId": "C048",
     "processArea": "Procurement Lifecycle Management",
     "subProcess": "Purchase Order Creation and Approval",
-    "riskCategory": "Financial Reporting",
+    "riskCategory": "Financial",
     "riskDescription": "Risk of budget overruns if POs are created exceeding available budget.",
     "riskRating": "High",
     "likelihood": "Medium",
@@ -1684,7 +1746,7 @@ export const PROCUREMENT_RACM_ROWS: ProcurementRacmRow[] = [
     "controlId": "C056",
     "processArea": "Procurement Lifecycle Management",
     "subProcess": "Goods / Service Receipt and Inspection - GRN / SRN Creation",
-    "riskCategory": "Financial Reporting",
+    "riskCategory": "Financial",
     "riskDescription": "Risk of inaccurate or incomplete GRN/SRN, leading to incorrect inventory records or payment issues.",
     "riskRating": "Medium",
     "likelihood": "Medium",
@@ -1880,7 +1942,7 @@ export const PROCUREMENT_RACM_ROWS: ProcurementRacmRow[] = [
     "controlId": "C063",
     "processArea": "Procurement Lifecycle Management",
     "subProcess": "Goods / Service Receipt and Inspection",
-    "riskCategory": "Financial Reporting",
+    "riskCategory": "Financial",
     "riskDescription": "Risk of goods/services being received but not invoiced, leading to unrecorded liabilities or lost invoices.",
     "riskRating": "Medium",
     "likelihood": "Medium",
@@ -1936,7 +1998,7 @@ export const PROCUREMENT_RACM_ROWS: ProcurementRacmRow[] = [
     "controlId": "C065",
     "processArea": "Procurement Lifecycle Management",
     "subProcess": "Invoice Processing and Three-Way Match - Invoice Validation",
-    "riskCategory": "Financial Reporting",
+    "riskCategory": "Financial",
     "riskDescription": "Risk of processing invalid or incorrect invoices, leading to erroneous payments or compliance issues.",
     "riskRating": "Medium",
     "likelihood": "Medium",
@@ -1964,7 +2026,7 @@ export const PROCUREMENT_RACM_ROWS: ProcurementRacmRow[] = [
     "controlId": "C066",
     "processArea": "Procurement Lifecycle Management",
     "subProcess": "Invoice Processing and Three-Way Match - Three-Way Match",
-    "riskCategory": "Financial Reporting",
+    "riskCategory": "Financial",
     "riskDescription": "Risk of paying for goods/services not ordered, not received, or at incorrect prices.",
     "riskRating": "High",
     "likelihood": "Medium",
@@ -2020,7 +2082,7 @@ export const PROCUREMENT_RACM_ROWS: ProcurementRacmRow[] = [
     "controlId": "C068",
     "processArea": "Procurement Lifecycle Management",
     "subProcess": "Invoice Processing and Three-Way Match - Invoice Approval",
-    "riskCategory": "Financial Reporting",
+    "riskCategory": "Financial",
     "riskDescription": "Risk of unauthorized invoice payments, especially for invoices exceeding tolerance limits.",
     "riskRating": "High",
     "likelihood": "Medium",
@@ -2048,7 +2110,7 @@ export const PROCUREMENT_RACM_ROWS: ProcurementRacmRow[] = [
     "controlId": "C069",
     "processArea": "Procurement Lifecycle Management",
     "subProcess": "Invoice Processing and Three-Way Match",
-    "riskCategory": "Financial Reporting",
+    "riskCategory": "Financial",
     "riskDescription": "Risk of unauthorized or incorrect payments if the three-way match is not performed.",
     "riskRating": "High",
     "likelihood": "Medium",
@@ -2104,7 +2166,7 @@ export const PROCUREMENT_RACM_ROWS: ProcurementRacmRow[] = [
     "controlId": "C071",
     "processArea": "Procurement Lifecycle Management",
     "subProcess": "Invoice Processing and Three-Way Match",
-    "riskCategory": "Financial Reporting",
+    "riskCategory": "Financial",
     "riskDescription": "Risk of unauthorized or unrecorded overrides of three-way match tolerance limits.",
     "riskRating": "Medium",
     "likelihood": "Medium",
@@ -2216,7 +2278,7 @@ export const PROCUREMENT_RACM_ROWS: ProcurementRacmRow[] = [
     "controlId": "C075",
     "processArea": "Procurement Lifecycle Management",
     "subProcess": "Payment Processing - Payment Proposal",
-    "riskCategory": "Financial Reporting",
+    "riskCategory": "Financial",
     "riskDescription": "Risk that payment proposals are incomplete or inaccurate, leading to incorrect payments.",
     "riskRating": "Medium",
     "likelihood": "Medium",
@@ -2244,7 +2306,7 @@ export const PROCUREMENT_RACM_ROWS: ProcurementRacmRow[] = [
     "controlId": "C076",
     "processArea": "Procurement Lifecycle Management",
     "subProcess": "Payment Processing - Payment Review",
-    "riskCategory": "Financial Reporting",
+    "riskCategory": "Financial",
     "riskDescription": "Risk that payment proposal contains errors, duplicate payments, or includes disputed invoices.",
     "riskRating": "Medium",
     "likelihood": "Medium",
@@ -2272,7 +2334,7 @@ export const PROCUREMENT_RACM_ROWS: ProcurementRacmRow[] = [
     "controlId": "C077",
     "processArea": "Procurement Lifecycle Management",
     "subProcess": "Payment Processing - Payment Approval",
-    "riskCategory": "Financial Reporting",
+    "riskCategory": "Financial",
     "riskDescription": "Risk of unauthorized payments being executed.",
     "riskRating": "High",
     "likelihood": "Medium",
@@ -2300,7 +2362,7 @@ export const PROCUREMENT_RACM_ROWS: ProcurementRacmRow[] = [
     "controlId": "C078",
     "processArea": "Procurement Lifecycle Management",
     "subProcess": "Payment Processing - Payment Execution",
-    "riskCategory": "Financial Reporting",
+    "riskCategory": "Financial",
     "riskDescription": "Risk of incorrect payment execution (wrong amount, wrong vendor, wrong method) or lack of maker-checker controls.",
     "riskRating": "High",
     "likelihood": "Medium",
@@ -2356,7 +2418,7 @@ export const PROCUREMENT_RACM_ROWS: ProcurementRacmRow[] = [
     "controlId": "C080",
     "processArea": "Procurement Lifecycle Management",
     "subProcess": "Payment Processing - Bank Reconciliation",
-    "riskCategory": "Financial Reporting",
+    "riskCategory": "Financial",
     "riskDescription": "Risk of undetected discrepancies between bank records and ERP, leading to financial misstatements or fraud.",
     "riskRating": "High",
     "likelihood": "Medium",
@@ -2384,7 +2446,7 @@ export const PROCUREMENT_RACM_ROWS: ProcurementRacmRow[] = [
     "controlId": "C081",
     "processArea": "Procurement Lifecycle Management",
     "subProcess": "Payment Processing",
-    "riskCategory": "Financial Reporting",
+    "riskCategory": "Financial",
     "riskDescription": "Risk of unauthorized payments up to $10,000 if AP Manager approval is bypassed.",
     "riskRating": "Medium",
     "likelihood": "Medium",
@@ -2412,7 +2474,7 @@ export const PROCUREMENT_RACM_ROWS: ProcurementRacmRow[] = [
     "controlId": "C082",
     "processArea": "Procurement Lifecycle Management",
     "subProcess": "Payment Processing",
-    "riskCategory": "Financial Reporting",
+    "riskCategory": "Financial",
     "riskDescription": "Risk of unauthorized payments between $10,001 and $50,000 if dual approval is bypassed.",
     "riskRating": "Medium",
     "likelihood": "Medium",
@@ -2440,7 +2502,7 @@ export const PROCUREMENT_RACM_ROWS: ProcurementRacmRow[] = [
     "controlId": "C083",
     "processArea": "Procurement Lifecycle Management",
     "subProcess": "Payment Processing",
-    "riskCategory": "Financial Reporting",
+    "riskCategory": "Financial",
     "riskDescription": "Risk of unauthorized payments between $50,001 and $250,000 if dual authorization is bypassed.",
     "riskRating": "High",
     "likelihood": "Medium",
@@ -2468,7 +2530,7 @@ export const PROCUREMENT_RACM_ROWS: ProcurementRacmRow[] = [
     "controlId": "C084",
     "processArea": "Procurement Lifecycle Management",
     "subProcess": "Payment Processing",
-    "riskCategory": "Financial Reporting",
+    "riskCategory": "Financial",
     "riskDescription": "Risk of unauthorized payments above $250,000 if dual authorization is bypassed.",
     "riskRating": "High",
     "likelihood": "Medium",
@@ -2524,7 +2586,7 @@ export const PROCUREMENT_RACM_ROWS: ProcurementRacmRow[] = [
     "controlId": "C086",
     "processArea": "Procurement Lifecycle Management",
     "subProcess": "Payment Processing",
-    "riskCategory": "Financial Reporting",
+    "riskCategory": "Financial",
     "riskDescription": "Risk of unauthorized high-value payments being executed.",
     "riskRating": "High",
     "likelihood": "Medium",
@@ -2636,7 +2698,7 @@ export const PROCUREMENT_RACM_ROWS: ProcurementRacmRow[] = [
     "controlId": "C090",
     "processArea": "Procurement Lifecycle Management",
     "subProcess": "Payment Processing",
-    "riskCategory": "Financial Reporting",
+    "riskCategory": "Financial",
     "riskDescription": "Risk of missed or duplicate payments going undetected.",
     "riskRating": "Medium",
     "likelihood": "Medium",
@@ -2664,7 +2726,7 @@ export const PROCUREMENT_RACM_ROWS: ProcurementRacmRow[] = [
     "controlId": "C091",
     "processArea": "Procurement Lifecycle Management",
     "subProcess": "Payment Processing",
-    "riskCategory": "Financial Reporting",
+    "riskCategory": "Financial",
     "riskDescription": "Risk of financial loss if advance payments are made without adequate security.",
     "riskRating": "Medium",
     "likelihood": "Low",
@@ -2692,7 +2754,7 @@ export const PROCUREMENT_RACM_ROWS: ProcurementRacmRow[] = [
     "controlId": "C092",
     "processArea": "Procurement Lifecycle Management",
     "subProcess": "Record Retention and Close-Out - PO Close-Out",
-    "riskCategory": "Financial Reporting",
+    "riskCategory": "Financial",
     "riskDescription": "Risk of open POs with residual balances, leading to inaccurate financial commitments or budget reporting.",
     "riskRating": "Low",
     "likelihood": "Low",
@@ -2804,7 +2866,7 @@ export const PROCUREMENT_RACM_ROWS: ProcurementRacmRow[] = [
     "controlId": "C096",
     "processArea": "Procurement Lifecycle Management",
     "subProcess": "Record Retention and Close-Out - Lessons Learned",
-    "riskCategory": "Strategic",
+    "riskCategory": "Operational",
     "riskDescription": "Risk of repeating past mistakes or missing opportunities for process improvement.",
     "riskRating": "Low",
     "likelihood": "Low",
@@ -3000,7 +3062,7 @@ export const PROCUREMENT_RACM_ROWS: ProcurementRacmRow[] = [
     "controlId": "C103",
     "processArea": "Procurement Lifecycle Management",
     "subProcess": "Key Controls and Segregation of Duties",
-    "riskCategory": "IT General Control",
+    "riskCategory": "IT general control",
     "riskDescription": "Risk of undetected SoD violations leading to increased fraud risk.",
     "riskRating": "High",
     "likelihood": "Medium",
@@ -3084,7 +3146,7 @@ export const PROCUREMENT_RACM_ROWS: ProcurementRacmRow[] = [
     "controlId": "C106",
     "processArea": "Procurement Lifecycle Management",
     "subProcess": "Exception Handling",
-    "riskCategory": "Financial Reporting",
+    "riskCategory": "Financial",
     "riskDescription": "Risk of unaddressed budget overruns leading to financial instability.",
     "riskRating": "High",
     "likelihood": "Medium",
@@ -3252,7 +3314,7 @@ export const PROCUREMENT_RACM_ROWS: ProcurementRacmRow[] = [
     "controlId": "C112",
     "processArea": "Procurement Lifecycle Management",
     "subProcess": "Exception Handling",
-    "riskCategory": "Strategic",
+    "riskCategory": "Operational",
     "riskDescription": "Risk of critical issues (financial exposure, legal, fraud) not receiving highest-level attention.",
     "riskRating": "Critical",
     "likelihood": "Medium",
@@ -3392,7 +3454,7 @@ export const PROCUREMENT_RACM_ROWS: ProcurementRacmRow[] = [
     "controlId": "C117",
     "processArea": "Procurement Lifecycle Management",
     "subProcess": "Governance",
-    "riskCategory": "Financial Reporting",
+    "riskCategory": "Financial",
     "riskDescription": "Risk of significant deviations from approved budget impacting financial planning.",
     "riskRating": "Medium",
     "likelihood": "Medium",
@@ -3504,7 +3566,7 @@ export const PROCUREMENT_RACM_ROWS: ProcurementRacmRow[] = [
     "controlId": "C121",
     "processArea": "Procurement Lifecycle Management",
     "subProcess": "Governance",
-    "riskCategory": "IT General Control",
+    "riskCategory": "IT general control",
     "riskDescription": "Risk of unauthorized access to ERP system functionalities, leading to fraud or data manipulation.",
     "riskRating": "High",
     "likelihood": "Medium",
@@ -3532,7 +3594,7 @@ export const PROCUREMENT_RACM_ROWS: ProcurementRacmRow[] = [
     "controlId": "C122",
     "processArea": "Procurement Lifecycle Management",
     "subProcess": "Governance",
-    "riskCategory": "IT General Control",
+    "riskCategory": "IT general control",
     "riskDescription": "Risk that DOA matrices and other thresholds are incorrectly configured in the ERP system, leading to unauthorized transactions.",
     "riskRating": "High",
     "likelihood": "Medium",
@@ -3560,7 +3622,7 @@ export const PROCUREMENT_RACM_ROWS: ProcurementRacmRow[] = [
     "controlId": "C123",
     "processArea": "Procurement Lifecycle Management",
     "subProcess": "Governance",
-    "riskCategory": "IT General Control",
+    "riskCategory": "IT general control",
     "riskDescription": "Risk of loss or corruption of critical procurement data, impacting audit trails and business continuity.",
     "riskRating": "High",
     "likelihood": "Medium",

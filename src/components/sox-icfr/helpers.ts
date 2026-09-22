@@ -1,3 +1,4 @@
+import { riskCategoryOf } from './racmImport';
 import { isInquiryOnly, ipeReliable, GRADE_RANK, AUDIT_SAMPLE_SPREADS, DEFAULT_AUDIT_SAMPLING, TESTING_STRATEGIES } from './types';
 import type {
   AuditorProofKind, AuditSampleSpread, AuditSampling, Conclusion, Control, Court, Deficiency, DesignDoc, DesignDocKind, DesignTrack, ExceptionGrade, HandoffTask, IcfrEngagement,
@@ -2951,16 +2952,19 @@ export function auditorProvenChecks(c: Control): number {
 // suggestions, every time. Nothing is inserted — each one is added or dismissed
 // by hand, because a check the auditor did not choose is a check they will not
 // defend.
+/** What the control says it does — its title and its description (22 Sep:
+ *  design checks are derived from the control description, not just the title). */
+const wordingOf = (c: Control) => `${c.description} ${c.controlActivity ?? ''}`;
 const CHECK_LIBRARY: { text: string; when: (c: Control) => boolean }[] = [
-  { text: 'The person performing the control is independent of the person who prepares what it checks.', when: c => c.type === 'Detective' || /review|approv|verif|reconcil/i.test(c.description) },
-  { text: 'The threshold or tolerance the control operates at is documented and approved.', when: c => /threshold|toleran|limit|exceed|above|below|match/i.test(`${c.description} ${c.precision ?? ''}`) },
-  { text: 'Exceptions the control raises are followed through to resolution, not just noted.', when: c => c.type === 'Detective' },
+  { text: 'The person performing the control is independent of the person who prepares what it checks.', when: c => c.type === 'Detective' || /review|approv|verif|reconcil/i.test(wordingOf(c)) },
+  { text: 'The threshold or tolerance the control operates at is documented and approved.', when: c => /threshold|toleran|limit|exceed|above|below|match/i.test(`${wordingOf(c)} ${c.precision ?? ''}`) },
+  { text: 'Exceptions the control raises are followed through to resolution, not just noted.', when: c => c.type === 'Detective' || /exception|investigat|follow[s]? up|differen/i.test(wordingOf(c)) },
   { text: 'The control leaves evidence that it operated — a reviewer can tell it ran on a given date.', when: () => true },
-  { text: 'The person performing the control has the authority and competence to do so.', when: c => c.nature === 'Manual' },
+  { text: 'The person performing the control has the authority and competence to do so.', when: c => c.nature === 'Manual' || /\bapprov|\bauthori[sz]|\bsigns? off/i.test(wordingOf(c)) },
   { text: 'The control operates over a complete population — nothing routes around it.', when: c => c.assertions?.includes('Completeness') ?? false },
   { text: 'Transactions are captured in the correct period.', when: c => c.assertions?.includes('Cut-off') ?? false },
   { text: 'The inputs to the calculation are independently verified before it runs.', when: c => c.assertions?.includes('Valuation') ?? false },
-  { text: 'The system configuration behind the control is under change control.', when: c => c.nature === 'Automated' || c.nature === 'IT-dependent' },
+  { text: 'The system configuration behind the control is under change control.', when: c => c.nature === 'Automated' || c.nature === 'IT-dependent' || /\bautomatic|\bconfigur|\bsystem blocks?\b/i.test(wordingOf(c)) },
   { text: 'The report the control is performed against is itself reliable.', when: c => c.nature === 'IT-dependent' },
   { text: 'The control runs often enough to catch a misstatement before it reaches the accounts.', when: c => c.frequency === 'Quarterly' || c.frequency === 'Annual' },
 ];
@@ -3049,6 +3053,24 @@ export function suggestPopulationFile(
   return { name: top.f.name, reason: listPhrase(top.why) };
 }
 
+/**
+ * Ira's design checks for a control that doesn't exist yet — the New control
+ * form (22 Sep), drafted from what the form holds so far. The same library and
+ * the same "already covered" test as `suggestedDesignChecks`.
+ */
+export function draftDesignChecks(input: {
+  title: string; description: string; type?: Control['type'] | null; nature?: Control['nature'] | null;
+  frequency?: Control['frequency'] | null; assertions?: Control['assertions'];
+}): string[] {
+  const draft = {
+    description: input.title, controlActivity: input.description, precision: '',
+    type: input.type ?? undefined, nature: input.nature ?? undefined, frequency: input.frequency ?? undefined,
+    assertions: input.assertions ?? [], design: { points: [] },
+  } as unknown as Control;
+  if (!`${input.title} ${input.description}`.trim()) return [];
+  return suggestedDesignChecks(draft);
+}
+
 export function suggestedDesignChecks(c: Control): string[] {
   // Control-level checks only, deliberately. The library offers control-level
   // considerations, and it decides "already covered" on keyword overlap — so
@@ -3088,6 +3110,7 @@ export function courtFor(c: Control, tasks: HandoffTask[], notes: ReviewNote[] =
 
 import type { AuditRecord, Frequency } from './types';
 import type { ProcurementRacmRow } from '../../data/procurement-racm';
+import { ownersOf } from './auditScope';
 const CYCLE_DAYS: Record<Frequency, number> = { Daily: 1, Weekly: 7, Monthly: 30, Quarterly: 90, Annual: 365, Recurring: 7, 'Ad-hoc': 30 };
 
 // ── year-end controls (A29) ──────────────────────────────────────────────────
@@ -3296,6 +3319,8 @@ export function formatDueDate(date: string | null | undefined): string {
 // a process's controls out in the editor's spreadsheet columns (the same grouping
 // Racm.tsx uses), and openEditorTab hands them over. Columns a control has no
 // field for stay blank.
+import { racmConfig } from './racmConfig';
+import { racmSetupKeyFor } from './racmLibrary';
 export const RACM_ROWS_KEY = (racmId: string) => `sox-racm-rows:${racmId}`;
 /** The rows the editor must not let anyone change — published control IDs, in
  *  the editor's own spelling. Handed over beside the rows: the editor refuses to
@@ -3342,6 +3367,10 @@ export function racmEditorRows(controls: Control[], process: string): Procuremen
         effectiveDate: c.effectiveDate ?? '',
         testingStrategy: c.testingStrategy ?? '',
         controlOwner: c.owner,
+        // The name every surface shows — the control's own risk owner, or its
+        // process owner where the RACM named none. `applyEditorRows` reads an
+        // untouched cell as "still that", so the fallback is never stamped on.
+        riskOwner: ownersOf(c).riskOwner,
         controlEvidence: evidence.join('; '),
         assertions: c.assertions.join(', '),
         fsLineItem: '',
@@ -3353,6 +3382,9 @@ export function racmEditorRows(controls: Control[], process: string): Procuremen
         confidence: '',
         sopSectionRef: '',
         attributes: c.operating.steps.map(s => s.description).join(' | '),
+        // The client's own columns travel with the row, so the grid can show
+        // them beside ours and an edit has somewhere to land on the way back.
+        extras: { ...c.extras },
       };
     });
 }
@@ -3411,6 +3443,10 @@ export function applyEditorRows(
     const c = controls.filter(x => x.process === process)[i];
     if (c) byKey.set(editorKey(r.riskId, r.controlId), c.id);
   });
+  // The client's own columns are theirs to define, and the set-up belongs to the
+  // client GROUP — read off the company this process is tested at, exactly as
+  // the grid these rows came from read it.
+  const definedExtras = racmConfig(racmSetupKeyFor(controls.find(c => c.process === process)?.entity).key).extras;
 
   let changed = 0;
   const seen = new Set<string>();
@@ -3428,6 +3464,14 @@ export function applyEditorRows(
     if (text(row.controlActivity) !== (c.controlActivity ?? '')) patch.controlActivity = text(row.controlActivity) || undefined;
     if (text(row.subProcess) !== c.subProcess) patch.subProcess = text(row.subProcess);
     if (text(row.controlOwner) && text(row.controlOwner) !== c.owner) patch.owner = text(row.controlOwner);
+    // Risk owner went out as the name shown, which may be the process owner
+    // standing in. Only a cell that now says something else is an edit; a
+    // cleared one drops the control's own name and the process owner shows
+    // again. A row with no such key came from an older tab and says nothing.
+    if (row.riskOwner != null) {
+      const riskOwner = text(row.riskOwner);
+      if (riskOwner !== ownersOf(c).riskOwner && (riskOwner || undefined) !== (c.riskOwner?.trim() || undefined)) patch.riskOwner = riskOwner || undefined;
+    }
     if (text(row.effectiveDate) !== (c.effectiveDate ?? '')) patch.effectiveDate = text(row.effectiveDate) || undefined;
     if (text(row.country) !== (c.country ?? '')) patch.country = text(row.country) || undefined;
     const nature = oneOf(NATURES, text(row.controlNature));
@@ -3440,7 +3484,29 @@ export function applyEditorRows(
     if (rating && rating !== c.riskRating) patch.riskRating = rating;
     const strategy = oneOf(TESTING_STRATEGIES, text(row.testingStrategy));
     if (strategy && strategy !== c.testingStrategy) patch.testingStrategy = strategy;
+    // Category is read rather than matched: "Financial Reporting" is a legitimate
+    // way of writing one of our six, so a cell pasted out of a client's own matrix
+    // still lands. A word that means none of them leaves the category alone.
+    const category = riskCategoryOf(text(row.riskCategory));
+    if (category && category !== c.clazz) patch.clazz = category;
     if (typeof row.isKey === 'boolean' && row.isKey !== c.isKey) patch.isKey = row.isKey;
+    // The client's own columns. Only a column their set-up still defines is
+    // written back, so one they have since dropped can't be resurrected by an
+    // edit to a different cell, and a cleared cell takes the value off the
+    // control rather than leaving an empty string on it. A row with no bag at
+    // all came from an older tab and says nothing about them.
+    const own = row.extras;
+    if (own) {
+      const extras = { ...c.extras };
+      let touched = false;
+      definedExtras.forEach(e => {
+        const now = (own[e.header] ?? '').trim();
+        if (now === (c.extras?.[e.header] ?? '')) return;
+        if (now) extras[e.header] = now; else delete extras[e.header];
+        touched = true;
+      });
+      if (touched) patch.extras = Object.keys(extras).length ? extras : undefined;
+    }
     if (!Object.keys(patch).length) return c;
     changed++;
     return { ...c, ...patch };
@@ -3458,6 +3524,11 @@ export function applyEditorRows(
     let id = (row.controlId ?? '').trim() || `${row.riskId}/C${String(fresh.length + 1).padStart(3, '0')}`;
     while (taken.has(id)) id = `${id}-2`;
     taken.add(id);
+    // A row typed into the grid carries the client's columns too — again only
+    // the ones their set-up defines, and only where something was filled in.
+    const own = Object.fromEntries(definedExtras
+      .map(e => [e.header, (row.extras?.[e.header] ?? '').trim()] as const)
+      .filter(([, v]) => v));
     fresh.push({
       id,
       wpRef: id,
@@ -3474,13 +3545,16 @@ export function applyEditorRows(
       riskDescription: (row.riskDescription ?? '').trim(),
       assertions: [],
       ...((row.riskTitle ?? '').trim() ? { riskTitle: row.riskTitle!.trim() } : {}),
+      ...((row.riskOwner ?? '').trim() ? { riskOwner: row.riskOwner!.trim() } : {}),
       ...((row.controlObjective ?? '').trim() ? { objective: row.controlObjective!.trim() } : {}),
       ...((row.controlActivity ?? '').trim() ? { controlActivity: row.controlActivity!.trim() } : {}),
       ...((row.entity ?? '').trim() ? { entity: row.entity!.trim() } : {}),
+      ...(Object.keys(own).length ? { extras: own } : {}),
       ...((row.effectiveDate ?? '').trim() ? { effectiveDate: row.effectiveDate!.trim() } : {}),
       ...((row.country ?? '').trim() ? { country: row.country!.trim() } : {}),
       ...(oneOf(TESTING_STRATEGIES, row.testingStrategy ?? '') ? { testingStrategy: oneOf(TESTING_STRATEGIES, row.testingStrategy ?? '')! } : {}),
       ...(oneOf(RATINGS, row.riskRating ?? '') ? { riskRating: oneOf(RATINGS, row.riskRating ?? '')! } : {}),
+      ...(riskCategoryOf(row.riskCategory ?? '') ? { clazz: riskCategoryOf(row.riskCategory ?? '')! } : {}),
       design: { documents: [], points: [], conclusion: 'Not tested', testedBy: null, testedAt: null },
       operating: { method: 'Manual', steps: [], conclusion: 'Not tested', testedBy: null, testedAt: null },
     });

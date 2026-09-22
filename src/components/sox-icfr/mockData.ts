@@ -22,16 +22,25 @@ const OPTIONAL_KINDS: DesignDoc['kind'][] = ['Flowchart', 'Policy / SOP'];
 const waivedDoc = (kind: DesignDoc['kind'], reason: DesignWaiverReason, note: string, by = 'A. Mehta'): DesignDoc =>
   ({ id: `dd${++_d}`, kind, name: `${kind} — not provided`, status: 'Missing', required: true, waiver: { reason, note, by, at: '11 Apr' } });
 
-/** Classification is derivable from the cycle — the transaction cycles are
- *  financial, IT general controls answer to compliance, the rest are operational.
+/** The risk category is derivable from the cycle — the transaction cycles are
+ *  financial, IT general controls are their own category since 22 Sep (they used
+ *  to be filed under Compliance, which read oddly on an ITGC row), tax answers to
+ *  compliance, and the rest are operational.
  *  The OBJECTIVE is not derivable: it is what the control is for, in the client's
  *  words, so generated rows carry none and the UI falls back to the control
  *  statement rather than printing a mechanical restatement of the title. */
 const CLASS_BY_PROCESS: Record<string, ControlClass> = {
   'Procure to Pay': 'Financial', 'Order to Cash': 'Financial', 'Record to Report': 'Financial',
-  'Treasury': 'Financial', 'Tax': 'Compliance', 'IT General Controls': 'Compliance',
+  'Treasury': 'Financial', 'Tax': 'Compliance', 'IT General Controls': 'IT general control',
 };
-const classOf = (process: string): ControlClass => CLASS_BY_PROCESS[process] ?? 'Operational';
+/** The cycle's category, unless the control's own words say it answers a fraud
+ *  risk — a diverted payment is a fraud risk whichever cycle it sits in, and the
+ *  matrix is scoped on that distinction. Mirrors `draftRiskCategory` in
+ *  racmImport, which cannot be imported here (it reads this file). */
+const classOf = (process: string, text = ''): ControlClass =>
+  /\bfraud\w*|\bdivert\w*|\bfictitious\b|\bmisappropriat\w*|\bcollusion\b|\bbrib\w*/i.test(text)
+    ? 'Fraud'
+    : CLASS_BY_PROCESS[process] ?? 'Operational';
 
 const doc = (kind: DesignDoc['kind'], name: string, status: DocStatus, by?: string): DesignDoc =>
   ({ id: `dd${++_d}`, kind, name, status, required: !OPTIONAL_KINDS.includes(kind),
@@ -374,7 +383,9 @@ const DETAILED: Control[] = [
       'Attempt a bank-detail change as the requester in the QA client and confirm the activation block holds.',
       'Confirm the change log is retained and cannot be edited by the master-data team.',
     ],
-    objective: 'Payments reach only the vendor the business actually contracted with.', clazz: 'Financial' as const,
+    // Fraud, not Financial: the risk on this row is "fraudulent … payments to
+    // fictitious or altered vendor bank accounts", and that is what it is scoped on.
+    objective: 'Payments reach only the vendor the business actually contracted with.', clazz: 'Fraud' as const,
     riskRating: 'High',
     performedBy: 'AM', wpRefHard: 'P2P/01', wpRefSoft: '/FY26/ICFR/P2P/P-01 vendor master/', reportRef: '4.1',
     assertions: ['Existence / Occurrence', 'Rights & Obligations'],
@@ -824,7 +835,7 @@ function generate(): Control[] {
         id: `${sp.prefix}-C-${String(idx + 1).padStart(2, '0')}`, wpRef: `${sp.wp}-${String(idx + 1).padStart(2, '0')}`,
         description: desc + '.', process: sp.process, subProcess: sp.subs[i % sp.subs.length],
         nature, type: i % 3 === 0 ? 'Detective' : 'Preventive', frequency: nature === 'Automated' ? 'Recurring' : (['Daily', 'Monthly', 'Quarterly'] as const)[i % 3],
-        isKey: i % 4 !== 0, clazz: classOf(sp.process), precision: `${title} — operates to prevent or detect the risk at transaction level.`,
+        isKey: i % 4 !== 0, clazz: classOf(sp.process, `${title} ${desc}`), precision: `${title} — operates to prevent or detect the risk at transaction level.`,
         // The rating tracks the key judgement: the row that isn't key is the one
         // whose failure the group can absorb, so it sizes at the bottom of the band.
         riskRating: (i % 4 === 0 ? 'Low' : i % 3 === 0 ? 'Medium' : 'High') as RiskRating,
@@ -2442,7 +2453,7 @@ export function racmTemplateForProcesses(names: string[], mode: 'fresh' | 'live'
         ]).map((title, i) => ({
           id: `${prefix}-${String(i + 1).padStart(2, '0')}`, wpRef: `${prefix.charAt(0)}X-${String(i + 1).padStart(2, '0')}`, description: title + '.',
           process: name, subProcess: 'General', nature: 'Manual' as Nature, type: typeOf(title), frequency: 'Monthly' as const,
-          isKey: i % 4 !== 3, clazz: classOf(name), precision: `${title}.`, controlActivity: activityOf('S. Iyer', 'General', 'Monthly', 'Manual'),
+          isKey: i % 4 !== 3, clazz: classOf(name, title), precision: `${title}.`, controlActivity: activityOf('S. Iyer', 'General', 'Monthly', 'Manual'),
           riskRating: (i % 4 === 3 ? 'Low' : i % 3 === 0 ? 'High' : 'Medium') as RiskRating,
           objective: objectiveFor(`R-${prefix}-1`, name),
           owner: 'S. Iyer', riskId: `R-${prefix}-1`,
@@ -2614,7 +2625,7 @@ export function racmTemplate(process: string): Control[] {
   return sp.titles.slice(0, 5).map((title, i) => ({
     id: `${sp.prefix}-${String(i + 1).padStart(2, '0')}`, wpRef: `${sp.wp}-${String(i + 1).padStart(2, '0')}`, description: title + '.',
     process: sp.process, subProcess: sp.subs[i % sp.subs.length], nature: 'Manual' as Nature, type: typeOf(title), frequency: 'Monthly' as const,
-    isKey: i % 4 !== 3, clazz: classOf(sp.process), precision: `${title}.`, controlActivity: activityOf(sp.owner, sp.subs[i % sp.subs.length], 'Monthly', 'Manual'),
+    isKey: i % 4 !== 3, clazz: classOf(sp.process, `${title} ${riskFor(sp, i).text}`), precision: `${title}.`, controlActivity: activityOf(sp.owner, sp.subs[i % sp.subs.length], 'Monthly', 'Manual'),
     riskRating: (i % 4 === 3 ? 'Low' : i % 3 === 0 ? 'High' : 'Medium') as RiskRating,
     objective: objectiveFor(riskFor(sp, i).id, sp.process),
     owner: sp.owner, riskId: riskFor(sp, i).id, riskDescription: riskFor(sp, i).text,

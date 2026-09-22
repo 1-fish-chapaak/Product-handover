@@ -9,6 +9,7 @@ import { useToast } from '../../../shared/Toast';
 import { EngagementTabBar, type TabDef } from '../../EngagementTabBar';
 import { fmtCr } from '../soxTestingData';
 import { SourceChips } from '../ProgrammeView';
+import { RISK_CATEGORY_TINT } from '../../../sox-icfr/types';
 import { EntityStatusChip, ViaChip } from './V2Wizard';
 import {
   CHASE_STAGES, SAMPLE_SIZES, V2_PHASES, deriveV2Racms, phaseWindows,
@@ -563,7 +564,10 @@ export default function V2ProgrammeView({ programme, onBack, onOpenWorkspace }: 
           <h3 className="text-[14px] font-bold text-text">What the auditor sees</h3>
           {p.controls.length > 0 && (
             <span className="text-[11.5px] text-text-muted">
-              {keyFinancial.length} of {p.controls.length} controls — operational, compliance and non-key stay internal
+              {/* Named the categories by hand until 22 Sep, when there were three
+                  of them. With six it would have to list five, and be wrong again
+                  the next time one is added. */}
+              {keyFinancial.length} of {p.controls.length} controls — every other category, and every non-key control, stays internal
             </span>
           )}
         </div>
@@ -754,11 +758,11 @@ function RescopeModal({ programme: p, onClose, onApply }: {
 function ControlsTable({ rows }: { rows: V2Control[] }) {
   return (
     <div className="border border-border-light rounded-xl bg-white overflow-hidden mb-8">
-      <div className="grid grid-cols-[2.2fr_1fr_0.8fr_0.55fr_0.6fr_0.6fr_1fr] gap-3 px-4 py-2 text-[10.5px] uppercase tracking-wider font-semibold text-text-muted/80 border-b border-border-light bg-surface-2/50">
-        <div>Control</div><div>RACM</div><div>Class</div><div>Key</div><div>TOD</div><div>TOE</div><div>Effective from</div>
+      <div className="grid grid-cols-[2.2fr_1fr_1.1fr_0.55fr_0.6fr_0.6fr_1fr] gap-3 px-4 py-2 text-[10.5px] uppercase tracking-wider font-semibold text-text-muted/80 border-b border-border-light bg-surface-2/50">
+        <div>Control</div><div>RACM</div><div>Risk category</div><div>Key</div><div>TOD</div><div>TOE</div><div>Effective from</div>
       </div>
       {rows.map(c => (
-        <div key={c.id} className="grid grid-cols-[2.2fr_1fr_0.8fr_0.55fr_0.6fr_0.6fr_1fr] gap-3 px-4 py-2.5 items-center border-b border-border-light last:border-b-0">
+        <div key={c.id} className="grid grid-cols-[2.2fr_1fr_1.1fr_0.55fr_0.6fr_0.6fr_1fr] gap-3 px-4 py-2.5 items-center border-b border-border-light last:border-b-0">
           <div className="min-w-0">
             <div className="text-[12.5px] text-text truncate">{c.name}</div>
             {c.note && <div className="text-[10.5px] text-text-muted truncate">{c.note}</div>}
@@ -779,11 +783,7 @@ function ControlsTable({ rows }: { rows: V2Control[] }) {
 }
 
 function ClassChip({ clazz }: { clazz: V2Control['clazz'] }) {
-  const cls =
-    clazz === 'Financial' ? 'bg-brand-50 text-brand-700'
-    : clazz === 'Operational' ? 'bg-mitigated-50 text-mitigated-700'
-    : 'bg-evidence-50 text-evidence-700';
-  return <span className={`inline-flex items-center px-2 h-5 rounded-full text-[10px] font-semibold ${cls}`}>{clazz}</span>;
+  return <span className={`inline-flex items-center px-2 h-5 rounded-full text-[0.625rem] font-semibold whitespace-nowrap ${RISK_CATEGORY_TINT[clazz]}`}>{clazz}</span>;
 }
 
 function ResultChip({ r }: { r: V2Control['tod'] | V2Control['toe'] }) {

@@ -2,7 +2,7 @@ import { createContext, useCallback, useContext, useMemo, useState, type ReactNo
 import { racmTemplateForProcesses, requiredDatasetsFor, sampleRefs, seedIcfrEngagement, type SeedMeta } from './mockData';
 import { assessSeverity, attestationOverruled, designApproved, designFilesOf, iraCannotTest, designRetestChecks, designOutstanding, fmtDateTime, requiredFilesOf, requiredFilesReady, canExtendToe, canRedrawToe, controlConclusion, reconcileConfirmations, formatINR, gradeException, icfrConclusion, inquiryOnlyAttributes, passedWithoutFiles, isControlLocked, isControlLockedIn, isEngagementLocked, itgcHolds, parseLooseDate, samePerson, populationSources, previewRegrades, sampleSizeGuide, samplesFor, sourceTotals, staleSteps, stepResult, TOE_MAX_ROUNDS, toeRoundFailed, toeRoundNo, toeRounds, trackResult, validationQA, validationSummary, validationTable, wfRunRef, auditSampling, dealSample, samplesTestedCount, sampleHome, spreadPhrase, workingAudit, yearEndPending, LEGACY_SOURCE_ID, type RulesPatch } from './helpers';
 import type {
-  Assertion, Attestation, AuditArchive, AuditFileRecord, AuditorProof, AuditRecord, Control, Deficiency, DesignDoc, DesignDocKind, DesignPoint, DiscussionAnchor, DocStatus, FileOrigin,
+  Assertion, Attestation, AuditArchive, AuditFileRecord, AuditorProof, AuditRecord, Control, ControlClass, Deficiency, DesignDoc, DesignDocKind, DesignPoint, DiscussionAnchor, DocStatus, FileOrigin,
   DesignJudgements, DesignWaiverReason, EvidenceFile, EvidenceMode, ExceptionStatus, ExecKind, ExecutionEvent, Frequency, HandoffTask, IcfrEngagement,
   DesignBasis, DesignTrack, EvidenceType, ExceptionKind, IpeConclusion, PopulationChecks, IpeTest, MaterialityRules, Walkthrough, Nature, OperatingStep, Override, Population, PopulationDefinition, RacmReview, Role, RulesChangeEntry, RunControlOutcome, RunRecord, ScopeArchiveEntry,
   PopulationSource, RequiredFile, Sample, Sampling, SignificantAccount, SourceRole, TestingStrategy, TestResult, ToeRound, TrackConclusion, RetestRound, UnableToTest, ChallengedInput, SeverityChallenge,
@@ -193,6 +193,19 @@ export interface NewControlDraft {
   effectiveDate?: string;
   /** How much of the population gets tested. Defaults to Sampling at creation. */
   testingStrategy?: TestingStrategy;
+  /** Preventive or Detective. The New control form always names it (22 Sep);
+   *  the scope step's quick add doesn't, and stays Preventive as before. */
+  type?: Control['type'];
+  /** Accountable for the risk — a record only. Absent means "same as process
+   *  owner", which `ownersOf().riskOwner` resolves at read time. */
+  riskOwner?: string;
+  /** Which of the six the risk is (22 Sep). Required on the New control form;
+   *  the scope step's quick add doesn't ask, and leaves it unset. */
+  clazz?: ControlClass;
+  /** Design checks for the TOD — land as control-level design points. */
+  designChecks?: string[];
+  /** Test attributes for the TOE — land as operating steps. */
+  attributes?: string[];
 }
 
 interface IcfrCtx {
@@ -3844,28 +3857,44 @@ export function IcfrProvider({ children, initialRole = 'auditor', seedMeta }: { 
     const cNo = 1 + Math.max(0, ...eng.controls.filter(c => c.riskId === riskId).map(c => parseInt(c.id.split('/C').pop() ?? '', 10)).filter(n => !Number.isNaN(n)));
     let id = `${riskId}/C${String(cNo).padStart(3, '0')}`;
     if (eng.controls.some(c => c.id === id)) id = uid(riskId);
+    const assertions: Assertion[] = draft.assertions.length ? draft.assertions : ['Accuracy'];
+    // The form's design checks and attributes, in the shapes an upload gives
+    // them (controlFromRow): checks as control-level design points, the same
+    // check twice kept once; attributes as operating steps numbered off the W/P.
+    const same = (s: string) => s.trim().replace(/\s+/g, ' ').toLowerCase();
+    const checks = (draft.designChecks ?? []).map(t => t.trim()).filter(Boolean)
+      .filter((t, i, all) => all.findIndex(x => same(x) === same(t)) === i);
+    const points: DesignPoint[] = checks.map(text => ({
+      id: uid('dp'), text, result: 'Not tested', workflowId: uid('wf-tod'), workflowName: 'Design walkthrough check',
+    }));
+    const steps: OperatingStep[] = (draft.attributes ?? []).map(t => t.trim()).filter(Boolean).map((description, k) => ({
+      id: uid('os'), code: `${wpRef}.${k + 1}`, description, assertion: assertions[0],
+      precision: 'Per item', procedures: ['Inspection'], result: 'Not tested',
+    }));
     const control: Control = {
       id, wpRef, description: draft.description, process: draft.process, entity,
       controlActivity: draft.controlActivity?.trim() || undefined,
       subProcess: draft.subProcess.trim() || 'General',
-      nature: draft.nature, type: 'Preventive', frequency: draft.frequency,
+      nature: draft.nature, type: draft.type ?? 'Preventive', frequency: draft.frequency,
       isKey: draft.isKey, precision: draft.description, owner: draft.owner,
       // Falls through to the process's recorded process owner when the form
       // didn't name one, so a control created by hand still knows who to ask.
       processOwner: draft.processOwner?.trim() || peopleForProcess(draft.process)?.processOwner,
+      ...(draft.riskOwner?.trim() ? { riskOwner: draft.riskOwner.trim() } : {}),
+      ...(draft.clazz ? { clazz: draft.clazz } : {}),
       riskId, riskDescription: draft.riskDescription,
       ...(draft.riskTitle?.trim() ? { riskTitle: draft.riskTitle.trim() } : {}),
       ...(draft.effectiveDate?.trim() ? { effectiveDate: draft.effectiveDate.trim() } : {}),
       ...(draft.testingStrategy ? { testingStrategy: draft.testingStrategy } : {}),
-      assertions: draft.assertions.length ? draft.assertions : ['Accuracy'],
+      assertions,
       design: {
         documents: [
           { id: uid('dd'), kind: 'Process narrative', name: 'Process narrative — to provide', status: 'Missing' },
           { id: uid('dd'), kind: 'Control description', name: 'Control description — to provide', status: 'Missing' },
         ],
-        points: [], conclusion: 'Not tested', testedBy: null, testedAt: null,
+        points, conclusion: 'Not tested', testedBy: null, testedAt: null,
       },
-      operating: { method: 'Manual', steps: [], conclusion: 'Not tested', testedBy: null, testedAt: null },
+      operating: { method: 'Manual', steps, conclusion: 'Not tested', testedBy: null, testedAt: null },
     };
     setEng(prev => ({ ...prev, controls: [...prev.controls, control] }));
     return id;

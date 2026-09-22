@@ -846,12 +846,38 @@ export type TestingStrategy = 'Sampling' | 'Full population' | 'Test of one';
 export const TESTING_STRATEGIES: TestingStrategy[] = ['Sampling', 'Full population', 'Test of one'];
 export const RISK_RATINGS: RiskRating[] = ['High', 'Medium', 'Low'];
 
-// ─── Control classification ──────────────────────────────────────────────────────
-// The RACM's own classification column. Same three words the V2 dataset uses
-// (`sox-testing/v2/v2Data.ts`) — deliberately the same vocabulary, so a control
-// classified in one place reads identically in the other.
-export type ControlClass = 'Financial' | 'Operational' | 'Compliance';
-export const CONTROL_CLASSES: ControlClass[] = ['Financial', 'Operational', 'Compliance'];
+// ─── Risk category ───────────────────────────────────────────────────────────────
+// The RACM's own category column — called "Risk category" everywhere it shows
+// (22 Sep: it was "Class" on the matrix and "Classification" in the working
+// paper; one field should not have three names). Same six words the V2 dataset
+// uses (`sox-testing/v2/v2Data.ts`) — deliberately the same vocabulary, so a
+// control categorised in one place reads identically in the other.
+//
+// The 22 Sep list. Three were added because client matrices already carry them
+// and the old three squashed them: a fraud risk and a financial-reporting risk
+// both landed on "Financial", and the distinction — the one an auditor scopes
+// on — was lost at import. Financial reporting is NOT separate from Financial
+// (the user's call: one category, not two).
+export type ControlClass =
+  | 'Financial' | 'Operational' | 'Compliance'
+  | 'Fraud' | 'IT general control' | 'Reputational';
+export const CONTROL_CLASSES: ControlClass[] = [
+  'Financial', 'Operational', 'Compliance', 'Fraud', 'IT general control', 'Reputational',
+];
+
+/** The tint each category's chip wears. One map, imported by the matrix, the
+ *  control dossier and the V2 programme view — the three had their own copies
+ *  and the same word came out a different colour on each screen. Every category
+ *  gets a hue (the user's call): with six of them a scan down the column should
+ *  separate fraud from financial without the reader stopping to read. */
+export const RISK_CATEGORY_TINT: Record<ControlClass, string> = {
+  Financial: 'bg-brand-50 text-brand-700',
+  Operational: 'bg-mitigated-50 text-mitigated-700',
+  Compliance: 'bg-evidence-50 text-evidence-700',
+  Fraud: 'bg-risk-50 text-risk-700',
+  'IT general control': 'bg-draft-50 text-draft-700',
+  Reputational: 'bg-high-50 text-high-700',
+};
 
 // ─── Control ─────────────────────────────────────────────────────────────────────
 
@@ -944,6 +970,12 @@ export interface Control {
    *  People step; absent on controls created before that step existed, which is
    *  why it is optional and every read falls back to `owner`. */
   processOwner?: string;
+  /** THE RISK OWNER — the person accountable for the risk this control answers
+   *  (22 Sep: a required RACM column). A record on the matrix only: it does not
+   *  change who is sent tasks or requests — that "risk owner" lane is still the
+   *  control and process owner (`ownersOf`). Absent on controls that predate the
+   *  field; every read falls back to the process owner (`ownersOf().riskOwner`). */
+  riskOwner?: string;
   riskId: string;
   /** THE RISK'S SHORT NAME — three or four words a reader scans in a column,
    *  where `riskDescription` is the sentence they read once they stop. Source

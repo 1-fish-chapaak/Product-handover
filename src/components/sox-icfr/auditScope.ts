@@ -503,6 +503,10 @@ export interface ControlOwners {
   controlOwnerEmail?: string;
   processOwner: string;
   processOwnerEmail?: string;
+  /** The risk owner the RACM names; the process owner where it names none
+   *  (22 Sep: every existing control takes its process owner). A record only —
+   *  `single` and `isOwnerOf` ignore it, so it routes nothing. */
+  riskOwner: string;
   /** The two names are the same person — either the control was created before
    *  the People step existed and has nothing to fall back to, or the process
    *  genuinely runs under one name. Surfaces show one line rather than two
@@ -527,6 +531,7 @@ export function ownersOf(c: Control): ControlOwners {
     controlOwnerEmail: people?.controlOwner === controlOwner ? people.coEmail : undefined,
     processOwner,
     processOwnerEmail: people?.processOwner === processOwner ? people.poEmail : undefined,
+    riskOwner: c.riskOwner?.trim() || processOwner,
     single: processOwner === controlOwner,
   };
 }

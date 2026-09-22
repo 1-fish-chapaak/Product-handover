@@ -45,8 +45,10 @@ import { cn } from '../../lib/cn';
 // types.ts say why. The imports go back with the blocks that used them:
 //   EXPOSURE_LABEL, exposureTotal, GAP_LABEL   (values)
 //   Exposure                                    (type)
-import { AUDIT_ROUNDS, AUDITOR_PROOF_KINDS, DESIGN_DOC_KINDS, DESIGN_WAIVER_REASONS, FIVE_W_1H, ipeSuggestion, ROLE_LABEL, ROUND_TAG } from './types';
+import { AUDIT_ROUNDS, AUDITOR_PROOF_KINDS, DESIGN_DOC_KINDS, DESIGN_WAIVER_REASONS, FIVE_W_1H, ipeSuggestion, RISK_CATEGORY_TINT, ROLE_LABEL, ROUND_TAG } from './types';
 import { requiredDatasetsFor, sampleRefs } from './mockData';
+import { extraLabel, useRacmConfig } from './racmConfig';
+import { racmSetupKeyFor } from './racmLibrary';
 import type {
   AuditRound, Control, DesignDoc, DesignDocKind, DesignPoint, DesignWaiverReason, DiscussionAnchor, DocStatus, EvidenceFile, OperatingStep,
   AuditorProofKind, FileOrigin, IpeCheck, IpeConclusion, PopulationSource, Role, Sampling, SourceRole, TestResult, ToeRound, TrackConclusion, ValidationResult,
@@ -120,13 +122,17 @@ function MoreLink({ open, onClick }: { open: boolean; onClick: () => void }) {
 /** One named field in the leadsheet header, read as "name: value". Mirrors the
  *  library control page so the two control screens read the same. */
 /** One of the header's classification chips — Financial, Manual, Preventive,
- *  Monthly. Quiet on purpose: six of these run across the top of the card and a
- *  toned pill each would turn a classification into a traffic light. The one
- *  chip that IS a judgement (the risk rating) keeps its tone, and is the only
- *  colour in the row. */
-function HeadChip({ icon, children }: { icon?: React.ReactNode; children: React.ReactNode }) {
+ *  Monthly. Quiet by default: six of these run across the top of the card and a
+ *  toned pill each would turn a classification into a traffic light. Two carry
+ *  colour: the risk rating, because it IS a judgement, and the risk category,
+ *  which is tinted from the shared map so the same word is the same colour here,
+ *  on the matrix and in the programme view. */
+function HeadChip({ icon, tint, children }: { icon?: React.ReactNode; tint?: string; children: React.ReactNode }) {
   return (
-    <span className="inline-flex items-center gap-1 h-6 px-2.5 rounded-full border border-canvas-border bg-paper-50/70 text-[0.71875rem] font-medium text-ink-700 whitespace-nowrap">
+    <span className={cn(
+      'inline-flex items-center gap-1 h-6 px-2.5 rounded-full text-[0.71875rem] font-medium whitespace-nowrap',
+      tint ?? 'border border-canvas-border bg-paper-50/70 text-ink-700',
+    )}>
       {icon && <span className="text-ink-400 shrink-0">{icon}</span>}
       {children}
     </span>
@@ -5376,6 +5382,10 @@ export default function ControlDossier() {
   // History would be the tool overruling them.
   const [railPane, setRailPane] = useState<RailPane>('chat');
   const control = eng.controls.find(c => c.id === selectedControlId);
+  // This client's own columns, for the head block. Read above the early return
+  // with the rest of the hooks, so it keys off the control when there is one and
+  // the engagement's own company when there isn't.
+  const clientColumns = useRacmConfig(racmSetupKeyFor(control?.entity ?? eng.entity).key).extras;
   // ── landing where the click was about ──────────────────────────────────────
   // Above the early return on purpose: hooks have to run on every render, and
   // a render that bails before them crashes the page the moment the counts
@@ -5540,7 +5550,7 @@ export default function ControlDossier() {
               {/* Key/non-key is agreed with management — it can never be read off
                   an SOP — so the auditor sets it here rather than reading it. */}
               <KeyControlChip control={control} canEdit={canEdit} />
-              {control.clazz && <HeadChip>{control.clazz}</HeadChip>}
+              {control.clazz && <HeadChip tint={RISK_CATEGORY_TINT[control.clazz]}>{control.clazz}</HeadChip>}
               {control.nature && <HeadChip icon={control.nature === 'Automated' ? <WorkflowIcon size={11} /> : <Hand size={11} />}>{control.nature}</HeadChip>}
               {control.type && <HeadChip>{control.type}</HeadChip>}
               {control.frequency && <HeadChip>{control.frequency}</HeadChip>}
@@ -5619,7 +5629,7 @@ export default function ControlDossier() {
                     <HeadField label="Control owner" value={headOwners.controlOwner} />
                     {!headOwners.single && <HeadField label="Process owner" value={headOwners.processOwner} />}
                     <HeadField label="Sub-process" value={control.subProcess} />
-                    <HeadField label="Class" value={control.clazz} />
+                    <HeadField label="Risk category" value={control.clazz} />
                     <HeadField label="Nature" value={control.nature} />
                     <HeadField label="Type" value={control.type} />
                     <HeadField label="Frequency" value={control.frequency} />
@@ -5635,6 +5645,17 @@ export default function ControlDossier() {
                         bad column mapping, and only the source tells you which. */}
                     <HeadField label={country.source === 'file' ? 'Country (from the file)' : 'Country'} value={country.source === 'none' ? undefined : country.value} />
                     <HeadField label="Testing strategy" value={control.testingStrategy} />
+                    {/* This client's own columns, last and under their set-up's
+                        names. Nothing here is tested against — it is the client's
+                        record, carried so the row reads the same here as on their
+                        own matrix. A value whose column has since been dropped
+                        from the set-up still shows: the data is real either way. */}
+                    {clientColumns.map(col => (
+                      <HeadField key={col.header} label={extraLabel(col)} value={control.extras?.[col.header]} />
+                    ))}
+                    {Object.entries(control.extras ?? {})
+                      .filter(([header]) => !clientColumns.some(col => col.header === header))
+                      .map(([header, value]) => <HeadField key={header} label={header} value={value} />)}
                   </div>
                 </motion.div>
               )}
