@@ -235,6 +235,10 @@ export function Bar({ value, total, tone = 'bg-brand-500' }: { value: number; to
 // ineffective conclusion is red no matter the percentage).
 export type RagMeterDef = {
   label: string;
+  /** The same score in one word, for the folded rail — a 5rem spine has no
+   *  room for "Design coverage confidence" and an abbreviation guessed at the
+   *  call site would drift from the name the open rail prints. */
+  short?: string;
   pct: number;
   detail: string;
   gate?: boolean;
@@ -255,6 +259,17 @@ export const ragColor = (m: RagMeterDef): string =>
   m.empty ? 'var(--color-ink-300)'
     : m.forceRed || m.pct < 40 ? 'var(--color-risk-500)' : m.pct < (m.gate ? 100 : 80) ? 'var(--color-high-400)' : 'var(--color-compliant-500)';
 const ragWord = (m: RagMeterDef): string => (m.empty ? 'none' : ragColor(m).includes('risk') ? 'red' : ragColor(m).includes('high') ? 'amber' : 'green');
+
+/** The state as a NOUN. Shipping "red" / "amber" / "green" to a screen reader
+ *  is the No-RAG violation in the one channel where colour really is the only
+ *  signal, so both the card and the row say this instead. */
+export function statusWordOf(m: RagMeterDef): string {
+  const state = ragWord(m);
+  return state === 'none' ? 'Not set up'
+    : state === 'red' ? 'Needs attention'
+    : state === 'amber' ? 'In progress'
+    : m.pct === 100 ? 'Complete' : 'On track';
+}
 
 /** One confidence score as a card that opens.
  *
@@ -279,8 +294,7 @@ export function RagCard({ m }: { m: RagMeterDef; /** @deprecated the card no lon
     : 'border-canvas-border bg-canvas-elevated';
   const statusCls = state === 'none' ? 'text-ink-400' : state === 'red' ? 'text-risk-700' : state === 'amber' ? 'text-high-700' : 'text-compliant-700';
   const StatusIcon = state === 'none' ? MinusCircle : state === 'red' ? AlertTriangle : state === 'amber' ? AlertCircle : CheckCircle2;
-  const statusWord = state === 'none' ? 'Not set up'
-    : state === 'red' ? 'Needs attention' : state === 'amber' ? 'In progress' : m.pct === 100 ? 'Complete' : 'On track';
+  const statusWord = statusWordOf(m);
   // r=16 → circumference 100.5, so the dash length is all but the percentage
   // itself. A round cap on a zero-length arc draws a floating dot, so a score
   // of nothing draws no arc at all.
@@ -293,7 +307,7 @@ export function RagCard({ m }: { m: RagMeterDef; /** @deprecated the card no lon
   return (
     <div className={cn('rounded-xl border transition-colors', open ? 'h-full' : 'self-start', tint)}>
       <button type="button" onClick={() => setOpen(o => !o)} aria-expanded={open} aria-controls={bodyId}
-        aria-label={m.empty ? `${m.label} — not set up` : `${m.label} ${m.pct}% — ${state}`}
+        aria-label={m.empty ? `${m.label} — not set up` : `${m.label} ${m.pct}% — ${statusWordOf(m)}`}
         className="w-full min-h-[4.75rem] text-left p-3.5 flex items-center gap-3 cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-200 rounded-xl">
         <div className="relative w-12 h-12 shrink-0">
           <svg viewBox="0 0 40 40" className="w-12 h-12 -rotate-90">
@@ -326,6 +340,100 @@ export function RagCard({ m }: { m: RagMeterDef; /** @deprecated the card no lon
                 <div className="mt-2.5 rounded-lg border border-canvas-border bg-paper-50/70 px-3 py-2.5">
                   <div className="text-[0.625rem] font-bold uppercase tracking-wider text-ink-400">How this is counted</div>
                   <div className="mt-1 font-mono text-[0.6875rem] leading-relaxed text-ink-800">{m.formula}</div>
+                </div>
+              )}
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+    </div>
+  );
+}
+
+/** The same three scores, shrunk to a KPI strip for a 400px rail.
+ *
+ *  Three cards stacked down a side rail cost most of a screen to say three
+ *  numbers, and on the control page they were pushing the conversation below
+ *  the fold. Here they are one panel and three columns: the number first
+ *  because the number is the point, its name under it, and a hairline bar
+ *  carrying the colour.
+ *
+ *  Nothing is lost — a column opens the same arithmetic the card did, one at a
+ *  time, underneath the row where there is width to read it.
+ *
+ *  Colour is spent on exceptions only, and at KPI size that means the NUMBER is
+ *  coloured rather than the whole tile: three tinted boxes in a strip this small
+ *  read as an error state rather than as a score. */
+/** ONE score may wear a colour, and only if it is the one that needs reading
+ *  (21 Sep). Three ramped columns side by side was the heat strip DESIGN.md
+ *  forbids by name — and the strip is the worse offender of the two shapes,
+ *  because a ramp read left to right invites the eye to compare scores that
+ *  measure completely different things. Red outranks amber; a tie goes to the
+ *  lower score. Everything else is ink, and the bar is a quantity, not a verdict.
+ *
+ *  Exported because the folded rail draws the same three scores in a column,
+ *  and a second copy of this rule would eventually pick a different one. */
+export function worstMeter(meters: RagMeterDef[]): RagMeterDef | null {
+  return meters.reduce<RagMeterDef | null>((acc, m) => {
+    if (m.empty) return acc;
+    const w = ragWord(m);
+    if (w !== 'red' && w !== 'amber') return acc;
+    if (!acc) return m;
+    const a = ragWord(acc);
+    if (a === 'red' && w === 'amber') return acc;
+    if (w === 'red' && a === 'amber') return m;
+    return m.pct < acc.pct ? m : acc;
+  }, null);
+}
+/** Red, amber, green or none — as a word, for whoever needs to branch on it. */
+export const ragState = ragWord;
+
+export function RagKpiRow({ meters, flush }: { meters: RagMeterDef[]; /** Sitting inside another panel — no border of its own, just a rule under it. */ flush?: boolean }) {
+  const [openLabel, setOpenLabel] = useState<string | null>(null);
+  const open = meters.find(m => m.label === openLabel) ?? null;
+  const worst = worstMeter(meters);
+  if (!meters.length) return null;
+  return (
+    <div className={cn(flush ? 'border-b border-canvas-border' : 'panel overflow-hidden')}>
+      <div className="grid" style={{ gridTemplateColumns: `repeat(${meters.length}, minmax(0, 1fr))` }}>
+        {meters.map((m, i) => {
+          const state = ragWord(m);
+          const on = openLabel === m.label;
+          const flagged = worst === m;
+          const StateIcon = state === 'red' ? AlertTriangle : AlertCircle;
+          const numCls = m.empty ? 'text-ink-300'
+            : flagged && state === 'red' ? 'text-risk-700'
+            : flagged && state === 'amber' ? 'text-high-700'
+            : 'text-ink-900';
+          return (
+            <button key={m.label} type="button" onClick={() => setOpenLabel(on ? null : m.label)}
+              aria-expanded={on} aria-label={m.empty ? `${m.label} — not set up` : `${m.label} ${m.pct}% — ${statusWordOf(m)}`}
+              className={cn('px-3 pt-3 pb-2.5 text-left cursor-pointer transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-200',
+                i > 0 && 'border-l border-canvas-border', on ? 'bg-paper-50' : 'hover:bg-paper-50/60')}>
+              <div className={cn('text-[1.0625rem] font-bold tabular-nums leading-none', numCls)}>{m.empty ? '—' : `${m.pct}%`}</div>
+              {/* The icon is why the colour is allowed at all: colour is never
+                  the only signal (DESIGN.md §6). */}
+              <div className="mt-1.5 flex items-start gap-1 text-[0.65625rem] font-semibold text-ink-500 leading-tight">
+                {flagged && <StateIcon size={11} className={cn('shrink-0 mt-px', state === 'red' ? 'text-risk-700' : 'text-high-700')} />}
+                <span className="min-w-0">{m.label}</span>
+              </div>
+              <div className="mt-2 h-[3px] rounded-full bg-paper-200 overflow-hidden">
+                <div className="h-full rounded-full bg-ink-300 transition-[width] duration-300" style={{ width: `${m.empty ? 0 : m.pct}%` }} />
+              </div>
+            </button>
+          );
+        })}
+      </div>
+      <AnimatePresence initial={false}>
+        {open && (
+          <motion.div key={open.label} initial={{ opacity: 0, y: -4 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }}
+            transition={{ duration: 0.15, ease: 'easeOut' }}>
+            <div className="px-3.5 py-3 border-t border-canvas-border">
+              <div className="text-[0.75rem] font-semibold text-ink-700">{open.detail}</div>
+              {open.formula && (
+                <div className="mt-2 rounded-lg border border-canvas-border bg-paper-50/70 px-3 py-2.5">
+                  <div className="text-[0.625rem] font-bold uppercase tracking-wider text-ink-400">How this is counted</div>
+                  <div className="mt-1 font-mono text-[0.6875rem] leading-relaxed text-ink-800">{open.formula}</div>
                 </div>
               )}
             </div>

@@ -1,6 +1,6 @@
 import { createContext, useCallback, useContext, useMemo, useState, type ReactNode } from 'react';
 import { racmTemplateForProcesses, requiredDatasetsFor, sampleRefs, seedIcfrEngagement, type SeedMeta } from './mockData';
-import { assessSeverity, attestationOverruled, designApproved, designFilesOf, designRetestChecks, designOutstanding, fmtDateTime, requiredFilesOf, requiredFilesReady, canExtendToe, canRedrawToe, controlConclusion, reconcileConfirmations, formatINR, gradeException, icfrConclusion, inquiryOnlyAttributes, passedWithoutFiles, isControlLocked, isEngagementLocked, itgcHolds, parseLooseDate, samePerson, populationSources, previewRegrades, sampleSizeGuide, samplesFor, sourceTotals, staleSteps, stepResult, TOE_MAX_ROUNDS, toeRoundFailed, toeRoundNo, toeRounds, trackResult, validationQA, validationSummary, validationTable, wfRunRef, auditSampling, dealSample, samplesTestedCount, sampleHome, spreadPhrase, workingAudit, yearEndPending, LEGACY_SOURCE_ID, type RulesPatch } from './helpers';
+import { assessSeverity, attestationOverruled, designApproved, designFilesOf, designRetestChecks, designOutstanding, fmtDateTime, requiredFilesOf, requiredFilesReady, canExtendToe, canRedrawToe, controlConclusion, reconcileConfirmations, formatINR, gradeException, icfrConclusion, inquiryOnlyAttributes, passedWithoutFiles, isControlLocked, isControlLockedIn, isEngagementLocked, itgcHolds, parseLooseDate, samePerson, populationSources, previewRegrades, sampleSizeGuide, samplesFor, sourceTotals, staleSteps, stepResult, TOE_MAX_ROUNDS, toeRoundFailed, toeRoundNo, toeRounds, trackResult, validationQA, validationSummary, validationTable, wfRunRef, auditSampling, dealSample, samplesTestedCount, sampleHome, spreadPhrase, workingAudit, yearEndPending, LEGACY_SOURCE_ID, type RulesPatch } from './helpers';
 import type {
   Assertion, Attestation, AuditArchive, AuditFileRecord, AuditorProof, AuditRecord, Control, Deficiency, DesignDoc, DesignDocKind, DesignPoint, DiscussionAnchor, DocStatus, FileOrigin,
   DesignJudgements, DesignWaiverReason, EvidenceFile, EvidenceMode, ExceptionStatus, ExecKind, ExecutionEvent, Frequency, HandoffTask, IcfrEngagement,
@@ -2253,6 +2253,14 @@ export function IcfrProvider({ children, initialRole = 'auditor', seedMeta }: { 
       if (d.conclusion !== 'Not tested' || d.points.length === 0 || onFile.length === 0) return c;
       const label = (doc: DesignDoc) => (doc.kind === 'Custom' ? doc.name : doc.kind);
       const missing = designOutstanding(c).filter(doc => doc.required !== false).map(label);
+      // A required element that is not on file stops the test, rather than
+      // failing every check on its absence (user ask, 22 Sep). The old
+      // behaviour wrote a run into the paper whose only finding was that the
+      // evidence had not arrived — a verdict on the file room, recorded as a
+      // verdict on the control. Refusing here shuts every door at once: the
+      // page's button, the chat's, and a typed instruction all read the same
+      // reason off `iraBlocked` and none of them can get round it.
+      if (missing.length > 0) return c;
       const read = onFile.map(label);
       const files = onFile.flatMap(doc => designFilesOf(doc).map(f => f.name));
       const list = (xs: string[]) => (xs.length < 2 ? xs.join('') : `${xs.slice(0, -1).join(', ')} and ${xs[xs.length - 1]}`);
@@ -3555,7 +3563,7 @@ export function IcfrProvider({ children, initialRole = 'auditor', seedMeta }: { 
       const c = prev.controls.find(x => x.id === controlId);
       // A concluded control cannot also be blocked — it was tested, and the
       // paper says what it concluded. Reopening is the way to say otherwise.
-      if (!c || c.unableToTest || isControlLocked(c)) return prev;
+      if (!c || c.unableToTest || isControlLockedIn(prev, c)) return prev;
       const block: UnableToTest = { track, reason: reason.trim(), needed: needed.trim(), raisedBy: me, raisedAt: 'just now' };
       const task: HandoffTask = {
         id: `UTT-${prev.tasks.length + 1}`, type: 'pbc', controlId,
@@ -3609,7 +3617,7 @@ export function IcfrProvider({ children, initialRole = 'auditor', seedMeta }: { 
       if (isEngagementLocked(prev)) return prev;
       const c = prev.controls.find(x => x.id === controlId);
       // This writes a track conclusion, so it is a testing act and obeys the lock.
-      if (!c?.unableToTest || c.unableToTest.convertedTo || isControlLocked(c)) return prev;
+      if (!c?.unableToTest || c.unableToTest.convertedTo || isControlLockedIn(prev, c)) return prev;
       const block = c.unableToTest;
       const next = Math.max(0, ...prev.deficiencies.map(d => parseInt(d.id.replace(/\D/g, ''), 10) || 0)) + 1;
       const defId = `DEF-${String(next).padStart(3, '0')}`;
@@ -3658,7 +3666,7 @@ export function IcfrProvider({ children, initialRole = 'auditor', seedMeta }: { 
     setEng(prev => {
       if (isEngagementLocked(prev)) return prev;
       const target = prev.controls.find(c => c.id === controlId);
-      if (!target || !isControlLocked(target)) return prev;
+      if (!target || !isControlLockedIn(prev, target)) return prev;
       const event: ExecutionEvent = {
         id: uid('ex'), controlId, track: 'design', kind: 'reopen',
         verb: 'reopened the control', target: reason ? short(reason, 80) : undefined,
@@ -3691,7 +3699,7 @@ export function IcfrProvider({ children, initialRole = 'auditor', seedMeta }: { 
     setEng(prev => {
       if (isEngagementLocked(prev)) return prev;
       const target = prev.controls.find(c => c.id === controlId);
-      if (!target || !isControlLocked(target)) return prev;               // only a concluded control's paper can be signed
+      if (!target || !isControlLockedIn(prev, target)) return prev;       // only a concluded control's paper can be signed
       if (step === 'preparer' && target.wpSignoff?.preparer) return prev; // already signed
       if (step === 'reviewer' && (!target.wpSignoff?.preparer || target.wpSignoff.reviewer)) return prev; // countersign follows the preparer
       if (step === 'reviewer' && prev.reviewNotes.some(n => n.controlId === controlId && n.status !== 'Closed')) return prev; // notes must clear before the countersign

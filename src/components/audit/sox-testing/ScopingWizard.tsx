@@ -27,7 +27,7 @@ import {
   sameCompany, type ScopeEntityRow, SOX_MAPPING_PROCESSES,
 } from '../../sox-icfr/auditScope';
 import {
-  clashSummary, controlIdClashes, copyRacmControls, markRacmsUsed, racmStatus, useRacmLibrary, type LibraryRacm,
+  clashSummary, controlIdClashes, copyRacmControls, isRowPublished, markRacmsUsed, racmStatus, useRacmLibrary, type LibraryRacm,
 } from '../../sox-icfr/racmLibrary';
 import CreateRacmFlow from '../../sox-icfr/CreateRacmFlow';
 // Upload RACM opens the RACM tab's own dialog, which is styled by the SOX
@@ -785,8 +785,9 @@ export default function ScopingWizard({ onCancel, onCreated, typePreselected, on
 
   // ── RACMs per in-scope process ───────────────────────────────────────────
   // Picked from the RACM tab — any number, any mix of companies (S11 decision
-  // 7). Every control of a ticked RACM is copied at creation; narrowing to key
-  // controls stays New audit's job (decision 13).
+  // 7). A ticked RACM brings every control in; since 22 Sep the user can take
+  // single controls out here, each with a note (this revises decision 13, which
+  // left all narrowing to New audit). Only what is left in is copied.
   // Only what has been published (17 Sep). A draft matrix is still being
   // written; scoping an engagement from it would commit the audit to rows
   // nobody has agreed yet. A matrix with published rows AND later additions
@@ -813,7 +814,29 @@ export default function ScopingWizard({ onCancel, onCreated, typePreselected, on
     const ids = racmPicks[process] ?? defaultPicksFor(process);
     return racmsFor(process).filter(r => ids.includes(r.id)).map(r => r.id);
   };
+  // ── Why a RACM that started ticked was taken out (user ask, 22 Sep) ──────
+  // The RACMs written for a company in scope start ticked. Unticking one asks
+  // why — as for a company, a process or a single control — and ticking it back
+  // drops the note. Ticking a RACM that didn't start ticked needs none.
+  const [racmNotes, setRacmNotes] = useState<Record<string, string>>({});
+  const [racmNoteDrafts, setRacmNoteDrafts] = useState<Record<string, string>>({});
+  const dropRacmNotes = (ids: string[]) => {
+    const drop = (prev: Record<string, string>) => {
+      if (!ids.some(id => id in prev)) return prev;
+      const out = { ...prev }; ids.forEach(id => delete out[id]); return out;
+    };
+    setRacmNotes(drop);
+    setRacmNoteDrafts(drop);
+  };
+  const saveRacmNote = (id: string) => {
+    const text = (racmNoteDrafts[id] ?? '').trim();
+    if (!text) return;
+    setRacmNotes(prev => ({ ...prev, [id]: text }));
+    setRacmNoteDrafts(prev => { const out = { ...prev }; delete out[id]; return out; });
+  };
   const toggleRacm = (process: string, id: string) => {
+    resetControls([id]);
+    if (!picksFor(process).includes(id)) dropRacmNotes([id]);
     setRacmPicks(prev => {
       const cur = prev[process] ?? defaultPicksFor(process);
       return { ...prev, [process]: cur.includes(id) ? cur.filter(x => x !== id) : [...cur, id] };
@@ -823,7 +846,83 @@ export default function ScopingWizard({ onCancel, onCreated, typePreselected, on
    *  it, or none. Ticks all even where two share control IDs — the clash note
    *  shows and Continue holds, as for ticks made one by one. */
   const setAllRacms = (process: string, on: boolean) => {
+    resetControls(racmsFor(process).map(r => r.id));
+    if (on) dropRacmNotes(racmsFor(process).map(r => r.id));
     setRacmPicks(prev => ({ ...prev, [process]: on ? racmsFor(process).map(r => r.id) : [] }));
+  };
+  /** Backing out of a fresh untick ticks the RACM back — no move without a
+   *  reason. Re-editing a saved note just throws the edit away. */
+  const cancelRacmNote = (process: string, id: string) => {
+    if (!racmNotes[id]) { toggleRacm(process, id); return; }
+    setRacmNoteDrafts(prev => { const out = { ...prev }; delete out[id]; return out; });
+  };
+
+  // ── Controls inside a ticked RACM (user ask, 22 Sep) ─────────────────────
+  // Every control of a ticked RACM is in by default. Taking one out asks why —
+  // the same rule as a company or a process moved on this step — and only a
+  // SAVED note releases Continue. Only published rows are offered, because
+  // only those are copied (`copyRacmControls`).
+  /** Controls taken out, by RACM id. Absent = every control in. */
+  const [ctlOuts, setCtlOuts] = useState<Record<string, string[]>>({});
+  /** Saved notes and the ones being typed, keyed `racmId::controlId`. */
+  const [ctlNotes, setCtlNotes] = useState<Record<string, string>>({});
+  const [ctlNoteDrafts, setCtlNoteDrafts] = useState<Record<string, string>>({});
+  /** The one ticked RACM whose controls are showing. */
+  const [openRacmCtl, setOpenRacmCtl] = useState<string | null>(null);
+  const ctlKey = (racmId: string, controlId: string) => `${racmId}::${controlId}`;
+  const scopableControls = (r: LibraryRacm) => r.controls.filter(c => isRowPublished(r, c.id));
+  const outOf = (r: LibraryRacm) => scopableControls(r).filter(c => (ctlOuts[r.id] ?? []).includes(c.id));
+  const keptOf = (r: LibraryRacm) => scopableControls(r).filter(c => !(ctlOuts[r.id] ?? []).includes(c.id));
+  /** Every control of these RACMs back in, their notes gone — ticking or
+   *  unticking a whole RACM starts it clean. */
+  function resetControls(racmIds: string[]) {
+    const ids = new Set(racmIds);
+    const drop = <T,>(prev: Record<string, T>): Record<string, T> => {
+      const next = Object.fromEntries(Object.entries(prev).filter(([k]) => !ids.has(k.split('::')[0])));
+      return Object.keys(next).length === Object.keys(prev).length ? prev : next;
+    };
+    setCtlOuts(drop);
+    setCtlNotes(drop);
+    setCtlNoteDrafts(drop);
+  }
+  /** Take a control out (and open its note) or put it back (and drop the note —
+   *  there is nothing left to explain). */
+  const flipControl = (r: LibraryRacm, controlId: string) => {
+    const key = ctlKey(r.id, controlId);
+    const wasOut = (ctlOuts[r.id] ?? []).includes(controlId);
+    setCtlOuts(prev => {
+      const cur = prev[r.id] ?? [];
+      return { ...prev, [r.id]: wasOut ? cur.filter(x => x !== controlId) : [...cur, controlId] };
+    });
+    if (wasOut) {
+      const strip = (prev: Record<string, string>) => {
+        if (!(key in prev)) return prev;
+        const out = { ...prev }; delete out[key]; return out;
+      };
+      setCtlNotes(strip);
+      setCtlNoteDrafts(strip);
+    } else {
+      setCtlNoteDrafts(prev => ({ ...prev, [key]: ctlNotes[key] ?? '' }));
+    }
+  };
+  const saveCtlNote = (key: string) => {
+    const text = (ctlNoteDrafts[key] ?? '').trim();
+    if (!text) return;
+    setCtlNotes(prev => ({ ...prev, [key]: text }));
+    setCtlNoteDrafts(prev => { const out = { ...prev }; delete out[key]; return out; });
+  };
+  /** Backing out of a fresh untick puts the control back — no move without a
+   *  reason. Re-editing a saved note just throws the edit away. */
+  const cancelCtlNote = (r: LibraryRacm, controlId: string) => {
+    const key = ctlKey(r.id, controlId);
+    if (!ctlNotes[key]) { flipControl(r, controlId); return; }
+    setCtlNoteDrafts(prev => { const out = { ...prev }; delete out[key]; return out; });
+  };
+  /** A RACM's own tick. Partly in → every control back in; all in → out;
+   *  out → in, with every control. */
+  const clickRacm = (process: string, r: LibraryRacm, ticked: boolean) => {
+    if (ticked && outOf(r).length > 0) { resetControls([r.id]); return; }
+    toggleRacm(process, r.id);
   };
   /** What each in-scope process takes, in the order the processes are listed
    *  (biggest material balance first) — which is also the order their controls
@@ -833,10 +932,34 @@ export default function ScopingWizard({ onCancel, onCreated, typePreselected, on
     return { process: r.process, racms: racmsFor(r.process).filter(x => ids.includes(x.id)) };
   });
   const tickedRacms: LibraryRacm[] = pickedByProcess.flatMap(g => g.racms);
-  const tickedControlCount = tickedRacms.reduce((s, r) => s + r.controls.length, 0);
+  const tickedControlCount = tickedRacms.reduce((s, r) => s + keptOf(r).length, 0);
   /** In scope with nothing to test it with. Continue holds until each has a
-   *  RACM ticked (or uploaded), or is moved out with a note. */
-  const noRacmInScope = pickedByProcess.filter(g => g.racms.length === 0).map(g => g.process);
+   *  RACM ticked (or uploaded) with at least one control left in, or is moved
+   *  out with a note. */
+  const noRacmInScope = pickedByProcess
+    .filter(g => g.racms.reduce((s, r) => s + keptOf(r).length, 0) === 0)
+    .map(g => g.process);
+  /** Every control taken out of a ticked RACM in an in-scope process, with its
+   *  note — the note gate, Review and the programme record. */
+  const ctlChanges = pickedByProcess.flatMap(g => g.racms.flatMap(r => outOf(r).map(c => ({
+    racmId: r.id,
+    racm: r.name,
+    controlId: c.id,
+    code: c.code ?? c.id,
+    control: c.description,
+    note: (ctlNotes[ctlKey(r.id, c.id)] ?? '').trim(),
+  }))));
+  const ctlNotesOutstanding = ctlChanges.filter(c => !c.note).length;
+  /** RACMs that started ticked in an in-scope process and were taken out, with
+   *  the reason — the note gate, Review and the programme record. */
+  const racmChanges = scopedProcesses.flatMap(p => {
+    const picked = picksFor(p.process);
+    const defaults = defaultPicksFor(p.process);
+    return racmsFor(p.process)
+      .filter(r => defaults.includes(r.id) && !picked.includes(r.id))
+      .map(r => ({ process: p.process, racmId: r.id, racm: r.name, note: (racmNotes[r.id] ?? '').trim() }));
+  });
+  const racmNotesOutstanding = racmChanges.filter(c => !c.note).length;
   // First look at Scope: open the first in-scope process still waiting on a
   // RACM (else the first in scope). After that the user opens and folds.
   useEffect(() => {
@@ -848,7 +971,7 @@ export default function ScopingWizard({ onCancel, onCreated, typePreselected, on
   /** Two ticked RACMs holding one control ID — two matrices written for one
    *  process at one company, both numbering from R001/C001. Flag and block
    *  (decision 9): copying both would put two controls under one ID. */
-  const clashes = controlIdClashes(tickedRacms.map(r => ({ name: r.name, controls: r.controls })));
+  const clashes = controlIdClashes(tickedRacms.map(r => ({ name: r.name, controls: keptOf(r) })));
   /** The clash lines for one process's RACMs — shown inside that process, next
    *  to the ticks that caused them. IDs carry the process code, so a clash is
    *  almost always between two RACMs of one process; any that isn't is shown
@@ -895,9 +1018,9 @@ export default function ScopingWizard({ onCancel, onCreated, typePreselected, on
 
   // ── Gates ────────────────────────────────────────────────────────────────
   const matTbReady = hasTb && unsourcedFiles === 0 && benchmark > 0 && (basis === 'custom' || pct > 0);
-  /** Moved companies and moved processes still owed a note — one count for the
-   *  footer. */
-  const notesDue = notesOutstanding + procNotesOutstanding;
+  /** Moved companies, moved processes, RACMs and controls taken out still owed
+   *  a note — one count for the footer. */
+  const notesDue = notesOutstanding + procNotesOutstanding + racmNotesOutstanding + ctlNotesOutstanding;
   const scopeReady = scopedProcesses.length > 0 && scopedEntities.length > 0
     && notesDue === 0 && noRacmInScope.length === 0 && clashes.length === 0;
 
@@ -1291,8 +1414,12 @@ export default function ScopingWizard({ onCancel, onCreated, typePreselected, on
     const CR = 10_000_000;
     /** The engagement's own copy of every RACM it ticked, process by process in
      *  the order Scope listed them. Copied now, at pick time: later edits on the
-     *  RACM tab only reach engagements created afterwards (S11 decision 4). */
-    const copied = tickedRacms.flatMap(copyRacmControls);
+     *  RACM tab only reach engagements created afterwards (S11 decision 4).
+     *  Controls taken out on Scope are left behind. */
+    const copied = tickedRacms.flatMap(r => {
+      const kept = new Set(keptOf(r).map(c => c.id));
+      return copyRacmControls(r).filter(c => kept.has(c.id));
+    });
     const tbNames = scopeFiles.filter(f => f.kind === 'tb').map(f => f.name);
     const companies = `${scopedEntities.length} of ${entities.length} ${entities.length === 1 ? 'company' : 'companies'}`;
     const processes = `${scopedProcesses.length} process${scopedProcesses.length === 1 ? '' : 'es'}`;
@@ -1395,7 +1522,7 @@ export default function ScopingWizard({ onCancel, onCreated, typePreselected, on
           // audit scoped by company would silently drop a process this
           // engagement deliberately brought in.
           entities: shorts.length ? shorts : scopedEntities.map(e => entityShort(e.id, entities)),
-          controls: g.racms.reduce((s, r) => s + r.controls.length, 0),
+          controls: g.racms.reduce((s, r) => s + keptOf(r).length, 0),
         };
       }),
       beyondTb: BEYOND_TB.filter(b => beyond[b.id]).map(b => b.id),
@@ -1416,6 +1543,8 @@ export default function ScopingWizard({ onCancel, onCreated, typePreselected, on
         }),
         entityIds: scopedEntities.map(e => e.id),
         scopeNotes: scopeChanges,
+        ...(racmChanges.length > 0 ? { racmNotes: racmChanges } : {}),
+        ...(ctlChanges.length > 0 ? { controlNotes: ctlChanges } : {}),
       },
     };
     onCreated(programme);
@@ -2520,7 +2649,7 @@ export default function ScopingWizard({ onCancel, onCreated, typePreselected, on
                   >
                     <p className="text-[0.75rem] text-ink-500 mb-3 leading-relaxed">
                       {recommendedCount > 0
-                        ? `Ira ticked the ${recommendedCount === 1 ? 'process' : `${recommendedCount} processes`} with material accounts. Choose the RACMs each one is tested with — their controls are copied in.`
+                        ? `Ira ticked the ${recommendedCount === 1 ? 'process' : `${recommendedCount} processes`} with material accounts. Choose the RACMs each one is tested with — every control in a ticked RACM is in scope; open it to take one out.`
                         : 'No process has material accounts in the trial balance. Tick the ones to test and choose their RACMs.'}
                     </p>
                     {crossClashLines.length > 0 && (
@@ -2539,7 +2668,7 @@ export default function ScopingWizard({ onCancel, onCreated, typePreselected, on
                           {visibleProcs.map(r => {
                             const on = procInScope(r);
                             const picks = on ? pickedByProcess.find(g => g.process === r.process)?.racms ?? [] : [];
-                            const pickedControls = picks.reduce((s, x) => s + x.controls.length, 0);
+                            const pickedControls = picks.reduce((s, x) => s + keptOf(x).length, 0);
                             const move = procOverrides[r.process];
                             const qualitative = move === true;
                             const editing = procNoteDrafts[r.process] !== undefined;
@@ -2547,7 +2676,9 @@ export default function ScopingWizard({ onCancel, onCreated, typePreselected, on
                             const onTab = on ? racmsFor(r.process) : [];
                             /** Nothing on the tab to tick — uploading is the only way on. */
                             const nothingOnTab = onTab.length === 0;
-                            const allTicked = !nothingOnTab && picks.length === onTab.length;
+                            // A RACM with controls taken out is only partly in,
+                            // so "Select all" reads as mixed until they're back.
+                            const allTicked = !nothingOnTab && picks.length === onTab.length && picks.every(x => outOf(x).length === 0);
                             const someTicked = picks.length > 0 && !allTicked;
                             const groupLines = on ? clashLinesFor(picks) : [];
                             const listOpen = on && openProc === r.process;
@@ -2555,13 +2686,21 @@ export default function ScopingWizard({ onCancel, onCreated, typePreselected, on
                             /** What the RACM handle says while folded. Short: it now
                              *  shares the name row with the process and its numbers,
                              *  and the list it opens repeats the detail anyway. */
+                            /** Notes this process still owes — RACMs and controls
+                             *  taken out. Named on the folded handle, because their
+                             *  boxes hide when the list closes. */
+                            const notesDueHere = racmChanges.filter(c => c.process === r.process && !c.note).length
+                              + picks.reduce((s, x) => s + outOf(x).filter(c => !(ctlNotes[ctlKey(x.id, c.id)] ?? '').trim()).length, 0);
+                            const racmHandleBase = picks.length > 0
+                              ? `${picks.length} of ${onTab.length} RACM${onTab.length === 1 ? '' : 's'} · ${pickedControls} control${pickedControls === 1 ? '' : 's'}`
+                              : nothingOnTab
+                                ? 'No RACM yet'
+                                : `Choose from ${onTab.length} RACM${onTab.length === 1 ? '' : 's'}`;
                             const racmHandleLabel = groupLines.length > 0
                               ? 'Control IDs clash — untick one'
-                              : picks.length > 0
-                                ? `${picks.length} of ${onTab.length} RACM${onTab.length === 1 ? '' : 's'} · ${pickedControls} control${pickedControls === 1 ? '' : 's'}`
-                                : nothingOnTab
-                                  ? 'No RACM yet'
-                                  : `Choose from ${onTab.length} RACM${onTab.length === 1 ? '' : 's'}`;
+                              : notesDueHere > 0
+                                ? `${racmHandleBase} · ${notesDueHere} note${notesDueHere === 1 ? '' : 's'} due`
+                                : racmHandleBase;
                             return (
                               <div key={r.process} className="border-b border-canvas-border last:border-b-0">
                                 {/* ── The name row ── tick, name, and (once the process
@@ -2732,26 +2871,129 @@ export default function ScopingWizard({ onCancel, onCreated, typePreselected, on
                                                 // ("Order to Cash — Airline Group Ltd");
                                                 // say it only when it doesn't.
                                                 const showEntity = !!x.entity && !x.name.toLowerCase().includes(x.entity.toLowerCase());
+                                                const all = scopableControls(x);
+                                                const outIds = ticked ? outOf(x).map(c => c.id) : [];
+                                                const keptCount = all.length - outIds.length;
+                                                const partial = outIds.length > 0;
+                                                const ctlNotesDue = outIds.filter(id => !(ctlNotes[ctlKey(x.id, id)] ?? '').trim()).length;
+                                                /** Started ticked and was taken out — owes a note. */
+                                                const racmOut = !ticked && racmChanges.some(c => c.racmId === x.id);
+                                                const ctlOpen = ticked && openRacmCtl === x.id;
+                                                const ctlListId = `scope-ctls-${x.id.replace(/\W+/g, '-')}`;
                                                 return (
-                                                  <button
-                                                    key={x.id}
-                                                    type="button"
-                                                    role="checkbox"
-                                                    aria-checked={ticked}
-                                                    aria-label={`${x.name} — ${x.controls.length} controls`}
-                                                    onClick={() => toggleRacm(r.process, x.id)}
-                                                    title={x.usedBy.length > 0 ? `Used by ${x.usedBy.map(u => u.name).join(', ')}` : undefined}
-                                                    className="group w-full flex items-center gap-3 py-2 border-b border-canvas-border text-left cursor-pointer"
-                                                  >
-                                                    <TickBox state={ticked} />
-                                                    <span className="flex-1 min-w-0 truncate text-[0.78125rem] text-ink-900">
-                                                      {x.name}
-                                                      {showEntity && <span className="text-ink-400"> · {x.entity}</span>}
-                                                    </span>
-                                                    <span className="shrink-0 text-[0.71875rem] text-ink-400 tabular-nums">
-                                                      {x.controls.length} control{x.controls.length === 1 ? '' : 's'}
-                                                    </span>
-                                                  </button>
+                                                  <div key={x.id} className="border-b border-canvas-border">
+                                                    <div className="flex items-center gap-3">
+                                                      <button
+                                                        type="button"
+                                                        role="checkbox"
+                                                        aria-checked={partial ? 'mixed' : ticked}
+                                                        aria-label={`${x.name} — ${all.length} controls`}
+                                                        onClick={() => clickRacm(r.process, x, ticked)}
+                                                        title={x.usedBy.length > 0 ? `Used by ${x.usedBy.map(u => u.name).join(', ')}` : undefined}
+                                                        className="group flex-1 min-w-0 flex items-center gap-3 py-2 text-left cursor-pointer"
+                                                      >
+                                                        <TickBox state={partial ? 'mixed' : ticked} />
+                                                        <span className="flex-1 min-w-0 truncate text-[0.78125rem] text-ink-900">
+                                                          {x.name}
+                                                          {showEntity && <span className="text-ink-400"> · {x.entity}</span>}
+                                                        </span>
+                                                      </button>
+                                                      {/* A ticked RACM opens to its controls — every one
+                                                          in, any can be taken out. */}
+                                                      {ticked ? (
+                                                        <button
+                                                          type="button"
+                                                          onClick={() => setOpenRacmCtl(ctlOpen ? null : x.id)}
+                                                          aria-expanded={ctlOpen}
+                                                          aria-controls={ctlListId}
+                                                          title={ctlOpen ? 'Hide controls' : 'Show controls — untick any that don’t apply'}
+                                                          className="shrink-0 h-6 -mr-1 pl-1.5 pr-1 inline-flex items-center gap-1 rounded-md text-[0.71875rem] text-ink-500 tabular-nums hover:text-brand-700 hover:bg-brand-50 transition-colors cursor-pointer"
+                                                        >
+                                                          {partial
+                                                            ? `${keptCount} of ${all.length} controls${ctlNotesDue > 0 ? ' · note due' : ''}`
+                                                            : `${all.length} control${all.length === 1 ? '' : 's'}`}
+                                                          <ChevronDown size={12} className={cn('shrink-0 transition-transform', ctlOpen && 'rotate-180')} />
+                                                        </button>
+                                                      ) : (
+                                                        <span className="shrink-0 text-[0.71875rem] text-ink-400 tabular-nums">
+                                                          {all.length} control{all.length === 1 ? '' : 's'}
+                                                        </span>
+                                                      )}
+                                                    </div>
+                                                    {/* No saved note yet → the box is open to type into;
+                                                        Cancel ticks the RACM back. */}
+                                                    {racmOut && (
+                                                      <ScopeNote
+                                                        className="ml-7 mb-2"
+                                                        question="Why is this RACM out of scope?"
+                                                        ariaLabel={`Why ${x.name} is out of scope`}
+                                                        editing={racmNoteDrafts[x.id] !== undefined || !racmNotes[x.id]}
+                                                        draft={racmNoteDrafts[x.id] ?? ''}
+                                                        onDraft={v => setRacmNoteDrafts(prev => ({ ...prev, [x.id]: v }))}
+                                                        canSave={!!(racmNoteDrafts[x.id] ?? '').trim()}
+                                                        onSave={() => saveRacmNote(x.id)}
+                                                        onCancel={() => cancelRacmNote(r.process, x.id)}
+                                                        onEdit={() => setRacmNoteDrafts(prev => ({ ...prev, [x.id]: racmNotes[x.id] ?? '' }))}
+                                                        saved={racmNotes[x.id]}
+                                                      />
+                                                    )}
+                                                    <AnimatePresence initial={false}>
+                                                      {ctlOpen && (
+                                                        <motion.div
+                                                          id={ctlListId}
+                                                          initial={{ opacity: 0, height: 0 }}
+                                                          animate={{ opacity: 1, height: 'auto' }}
+                                                          exit={{ opacity: 0, height: 0 }}
+                                                          transition={{ duration: 0.18, ease: [0.2, 0, 0, 1] }}
+                                                          className="overflow-hidden"
+                                                        >
+                                                          <div className="ml-7 pb-2" role="group" aria-label={`${x.name} controls`}>
+                                                            {all.map(c => {
+                                                              const isOut = outIds.includes(c.id);
+                                                              const key = ctlKey(x.id, c.id);
+                                                              const label = c.code ?? c.id;
+                                                              return (
+                                                                <div key={c.id}>
+                                                                  <button
+                                                                    type="button"
+                                                                    role="checkbox"
+                                                                    aria-checked={!isOut}
+                                                                    aria-label={`${label} — ${c.description}`}
+                                                                    onClick={() => flipControl(x, c.id)}
+                                                                    className="group w-full flex items-center gap-3 py-1.5 text-left cursor-pointer"
+                                                                  >
+                                                                    <TickBox state={!isOut} />
+                                                                    <span className="shrink-0 font-mono text-[0.6875rem] text-ink-500">{label}</span>
+                                                                    <span
+                                                                      title={c.description}
+                                                                      className={cn('flex-1 min-w-0 truncate text-[0.75rem]', isOut ? 'text-ink-400' : 'text-ink-800')}
+                                                                    >
+                                                                      {c.description}
+                                                                    </span>
+                                                                  </button>
+                                                                  {isOut && (
+                                                                    <ScopeNote
+                                                                      className="ml-7 mb-2"
+                                                                      question="Why is this control out of scope?"
+                                                                      ariaLabel={`Why ${label} is out of scope`}
+                                                                      editing={ctlNoteDrafts[key] !== undefined}
+                                                                      draft={ctlNoteDrafts[key] ?? ''}
+                                                                      onDraft={v => setCtlNoteDrafts(prev => ({ ...prev, [key]: v }))}
+                                                                      canSave={!!(ctlNoteDrafts[key] ?? '').trim()}
+                                                                      onSave={() => saveCtlNote(key)}
+                                                                      onCancel={() => cancelCtlNote(x, c.id)}
+                                                                      onEdit={() => setCtlNoteDrafts(prev => ({ ...prev, [key]: ctlNotes[key] ?? '' }))}
+                                                                      saved={ctlNotes[key]}
+                                                                    />
+                                                                  )}
+                                                                </div>
+                                                              );
+                                                            })}
+                                                          </div>
+                                                        </motion.div>
+                                                      )}
+                                                    </AnimatePresence>
+                                                  </div>
                                                 );
                                               })}
                                             </div>
@@ -3252,18 +3494,37 @@ export default function ScopingWizard({ onCancel, onCreated, typePreselected, on
                   the last place to see it before the copies are taken. */}
               <ReviewCard title="RACMs from the RACM tab">
                 {pickedByProcess.map(g => {
-                  const count = g.racms.reduce((s, r) => s + r.controls.length, 0);
+                  const count = g.racms.reduce((s, r) => s + keptOf(r).length, 0);
                   return (
                     <div key={g.process} className="py-2 border-b border-canvas-border">
                       <div className="flex items-baseline justify-between gap-3">
                         <span className="text-[0.75rem] font-semibold text-ink-900 min-w-0 truncate">{g.process}</span>
                         <span className="text-[0.6875rem] text-ink-500 tabular-nums shrink-0">{count} control{count === 1 ? '' : 's'}</span>
                       </div>
-                      {g.racms.map(r => (
-                        <div key={r.id} className="flex items-baseline justify-between gap-3 mt-1 text-[0.71875rem]">
-                          <span className="min-w-0 truncate text-ink-600" title={r.name}>{r.name}</span>
-                          <span className="shrink-0 text-ink-400 tabular-nums">{r.controls.length}</span>
-                        </div>
+                      {g.racms.map(r => {
+                        const kept = keptOf(r).length;
+                        const total = scopableControls(r).length;
+                        const outs = ctlChanges.filter(c => c.racmId === r.id);
+                        return (
+                          <div key={r.id} className="mt-1">
+                            <div className="flex items-baseline justify-between gap-3 text-[0.71875rem]">
+                              <span className="min-w-0 truncate text-ink-600" title={r.name}>{r.name}</span>
+                              <span className="shrink-0 text-ink-400 tabular-nums">{kept < total ? `${kept} of ${total}` : kept}</span>
+                            </div>
+                            {/* Each control taken out, with the reason given for it. */}
+                            {outs.map(c => (
+                              <p key={c.controlId} className="mt-0.5 pl-3 text-[0.6875rem] text-ink-500 leading-relaxed">
+                                <span className="font-mono">{c.code}</span> out — {c.note}
+                              </p>
+                            ))}
+                          </div>
+                        );
+                      })}
+                      {/* RACMs that started ticked and were taken out, and why. */}
+                      {racmChanges.filter(c => c.process === g.process).map(c => (
+                        <p key={c.racmId} className="mt-1 text-[0.6875rem] text-ink-500 leading-relaxed">
+                          <span className="text-ink-600">{c.racm}</span> taken out — {c.note}
+                        </p>
                       ))}
                     </div>
                   );
@@ -3519,8 +3780,10 @@ function TickBox({ state, disabled }: { state: boolean | 'mixed'; disabled?: boo
 /** The "why" under a Scope row moved against the numbers or against Ira. Set
  *  on workpaper tones — the note is retained in the working paper — and hung
  *  under the row's name like the RACM list. `children` sits above the text
- *  box (a qualitative pick's reason chips). */
-function ScopeNote({ question, ariaLabel, editing, draft, onDraft, canSave, onSave, onCancel, onEdit, saved, children }: {
+ *  box (a qualitative pick's reason chips). `className` replaces the default
+ *  indent — a control's note sits deeper, under the control. */
+function ScopeNote({ question, ariaLabel, editing, draft, onDraft, canSave, onSave, onCancel, onEdit, saved, children, className }: {
+  className?: string;
   question: string;
   ariaLabel: string;
   editing: boolean;
@@ -3534,7 +3797,7 @@ function ScopeNote({ question, ariaLabel, editing, draft, onDraft, canSave, onSa
   children?: React.ReactNode;
 }) {
   return (
-    <div className="ml-[2.75rem] mr-4 mb-3 p-3 rounded-lg border border-paper-300/70 bg-paper-50">
+    <div className={cn('p-3 rounded-lg border border-paper-300/70 bg-paper-50', className ?? 'ml-[2.75rem] mr-4 mb-3')}>
       <p className="text-[0.71875rem] font-semibold text-ink-800 mb-1.5">{question}</p>
       {editing ? (
         <>

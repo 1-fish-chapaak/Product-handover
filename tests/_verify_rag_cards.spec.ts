@@ -64,7 +64,7 @@ test('RAG cards — collapsed shows score + heading, expanded shows the logic', 
   await page.waitForTimeout(1200);
   await page.getByText('Payment runs approved by two authorisers.').first().click();
   await page.waitForTimeout(1500);
-  for (const label of ['Control completeness', 'Evidence validated', 'TOD coverage confidence']) {
+  for (const label of ['Control completeness', 'Evidence validated', 'Design coverage confidence']) {
     await expect(page.getByText(label, { exact: true }).first()).toBeVisible();
   }
   await page.getByRole('button', { name: /^Evidence validated/ }).click();

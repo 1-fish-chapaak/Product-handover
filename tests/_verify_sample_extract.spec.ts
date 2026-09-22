@@ -40,7 +40,7 @@ async function openT05(page: Page) {
   await expect(runCard.first()).toBeVisible({ timeout: 15_000 });
   await runCard.first().click();
   await page.waitForTimeout(1400);
-  await expect(page.getByText('TOD', { exact: true }).first()).toBeVisible({ timeout: 15_000 });
+  await expect(page.getByText('Test of design', { exact: true }).first()).toBeVisible({ timeout: 15_000 });
 }
 
 /** Step ① end to end: filter a file down, agree the count, lock it. */

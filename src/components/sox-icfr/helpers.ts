@@ -2508,6 +2508,34 @@ export function designCompleteness(c: Control): { done: number; total: number; p
 export function designOutstanding(c: Control): DesignDoc[] {
   return c.design.documents.filter(d => d.status !== 'Received' && !d.waiver);
 }
+/** What the evidence says the design conclusion should be.
+ *
+ *  Lifted out of DesignSection (21 Sep) when the chat rail started concluding
+ *  too: the page shows "Evidence suggests X" and files an override when the
+ *  auditor goes against it, so a second copy of this rule in the chat would
+ *  have been two products disagreeing about the same paper.
+ *
+ *  A failed walkthrough attribute counts as a design failure — the control as
+ *  built did not do what it claims on a real transaction. */
+export function designSuggestion(c: Control): TrackConclusion {
+  const d = c.design;
+  const walkFailed = d.walkthrough ? c.operating.steps.some(s => d.walkthrough!.attributeResults[s.id] === 'Fail') : false;
+  return d.documents.length === 0 && d.points.length === 0 ? 'Not tested'
+    : designOutstanding(c).length > 0 || walkFailed || d.points.some(p => pointResult(p) === 'Fail') ? 'Ineffective'
+    : d.points.length > 0 && d.points.every(p => pointResult(p) === 'Pass') ? 'Effective' : 'Not tested';
+}
+/** What the attribute results point to, before anybody concludes anything.
+ *
+ *  Lifted out of OperatingSection (22 Sep) for the same reason designSuggestion
+ *  was: the chat has to know what the evidence suggested in order to file the
+ *  conclusion as an override when the auditor departs from it, and two copies
+ *  of this expression would eventually disagree about whether they had. */
+export function operatingSuggestion(c: Control): TrackConclusion {
+  const steps = c.operating.steps;
+  if (steps.some(s => stepResult(s) === 'Fail')) return 'Ineffective';
+  return steps.length > 0 && steps.every(s => stepResult(s) !== 'Not tested') ? 'Effective' : 'Not tested';
+}
+
 /** The files on a design element. An older seeded element can read Received with
  *  no file list at all — its one file is the element itself — so that case is
  *  read as a single file with a stable id, and the page, the trail and a removal
@@ -2601,7 +2629,12 @@ export function operatingProgress(c: Control) {
   // an override, or a validation that stands over a contradicting attestation,
   // has to move both or neither.
   return {
-    tested: s.filter(x => x.result !== 'Not tested').length,
+    // Through stepResult like the other two (21 Sep). Reading raw `.result`
+    // here meant an attribute settled by override counted as passed or failed
+    // but never as tested, so "N of M tested" could never reach M — and the
+    // chat rail read it and told the auditor to keep going on work that was
+    // finished. The comment above had claimed this for a while; now it is true.
+    tested: s.filter(x => stepResult(x) !== 'Not tested').length,
     passed: s.filter(x => stepResult(x) === 'Pass').length,
     failed: s.filter(x => stepResult(x) === 'Fail').length,
     total: s.length,
@@ -2670,6 +2703,65 @@ export function extractionCriteria(c: Control, from: string, to: string, source?
   const where = source?.system ? ` from ${source.system}` : source ? ` in ${source.name}` : '';
   const entity = c.entity ? `, ${c.entity}` : '';
   return `All ${what} records${where}${window}${entity}, excluding reversals and test postings.`;
+}
+
+/** The row count a file is read as holding.
+ *
+ *  This prototype holds no file bytes, so the number is derived from the name —
+ *  which means it is stated once and never moves, however many times the same
+ *  file is read. It lives here because two doors now put a file on an audit
+ *  (the page's Add-source modal and the chat), and a file that counted 4,102
+ *  rows through one and 11,890 through the other would be two files. */
+export function readRowCount(name: string): number {
+  return 400 + (name.split('').reduce((a, ch) => (a * 31 + ch.charCodeAt(0)) >>> 0, 5) % 19000);
+}
+
+/**
+ * How far a filter narrows its source — the one answer, wherever it was run.
+ *
+ * Always a fraction of the file: a population the same size as the thing it
+ * came out of is a file somebody copied rather than a population somebody
+ * defined. Deterministic from the control AND the file, so two files under one
+ * control narrow to different numbers, and the same extract run twice does not
+ * move.
+ *
+ * Shared with the chat (user ask, 22 Sep), which runs the same extract. Two
+ * implementations of this would hand the reviewer two different populations for
+ * the same sentence, which is the one thing a second door must never do.
+ */
+export function narrowedCount(c: Control, file: { name: string; rows: number }): number {
+  const seed = `${seedKeyOf(c)}·${file.name}`.split('').reduce((a, ch) => (a * 31 + ch.charCodeAt(0)) >>> 0, 11);
+  const share = 0.2 + (seed % 30) / 100;
+  return Math.max(1, Math.min(file.rows - 1, Math.round(file.rows * share)));
+}
+
+/** The population one extract produces, built in one place so the form on the
+ *  left and the chat on the right file the identical record. */
+export function populationFrom(
+  c: Control,
+  chosen: { name: string; rows: number; from: string; system?: string },
+  criteria: string,
+  count: number,
+  ctx: { version: string; me: string; from?: string; to?: string },
+): Population {
+  return {
+    version: ctx.version,
+    source: `${chosen.name} · ${chosen.from}`,
+    sources: [{ id: 'src-1', file: chosen.name, rows: chosen.rows, count, criteria }],
+    sourceFile: chosen.name, sourceCount: chosen.rows,
+    criteria,
+    filterFrom: ctx.from || undefined, filterTo: ctx.to || undefined,
+    // The criteria are prose, but the over-extraction breakdown still needs a
+    // dimension to name ("type Banking 1,180 · type Other 238"). The sub-process
+    // is what the old Transaction-type box defaulted to.
+    filterType: c.subProcess && c.subProcess !== 'General' ? c.subProcess : undefined,
+    count,
+    // The person signed in is the person who just ran the extract, and the
+    // system fills itself in when the pull came from one.
+    provenance: { system: chosen.system ?? '', extractedBy: ctx.me, extractedOn: '' },
+    tieOut: `Filtered from ${chosen.rows.toLocaleString()} rows`,
+    evidence: [{ id: 'pop-ev', name: chosen.name, kind: chosen.name.endsWith('.csv') ? 'CSV' : 'XLSX', uploadedBy: ctx.me, uploadedAt: 'just now' }],
+  };
 }
 
 /** "a, b and c" — the Oxford-less join the rest of the copy uses. */

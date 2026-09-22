@@ -30,12 +30,16 @@ test('control page reads TOD / TOE', async ({ page }) => {
   await page.locator('tr.reg-row').first().click();
   await page.waitForTimeout(1400);
 
-  // the five steps of the working paper, in the order the work happens
-  for (const title of ['TOD', 'Population', 'Sample', 'TOE', 'Sign-off']) {
+  // the five steps of the working paper, in the order the work happens.
+  // Spelled out again (user ask, 21 Sep): they were shortened to TOD/TOE when
+  // this file was written, and the acronyms went back to full names because a
+  // reader who has to expand one before they know what it is has been made to
+  // work for nothing. The owner's step ① still reads "Documents".
+  for (const title of ['Test of design', 'Population', 'Sample drawing', 'Test of effectiveness', 'Final']) {
     await expect(main.getByText(title, { exact: true }).first()).toBeVisible({ timeout: 15_000 });
   }
-  // and the old track names are gone from it
-  await expect(main.getByText('Test of design', { exact: true })).toHaveCount(0);
+  // "Test of operating" was the old track name and stays gone — step ④ is
+  // "Test of effectiveness", not a revival of the track vocabulary.
   await expect(main.getByText('Test of operating', { exact: true })).toHaveCount(0);
   await expect(main.getByText('Operating effectiveness is locked')).toHaveCount(0);
 

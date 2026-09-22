@@ -1,8 +1,8 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
-import { motion, AnimatePresence } from 'motion/react';
+import { motion, AnimatePresence, useReducedMotion } from 'motion/react';
 import {
-  FileText, Upload, MessageSquare, Workflow as WorkflowIcon, Hand, AlertTriangle,
+  FileText, Upload, MessageSquare, PanelRightClose, Workflow as WorkflowIcon, Hand, AlertTriangle,
   Send, Lock, ClipboardCheck, FileCheck2, FlaskConical, CheckCircle2, XCircle,
   CornerDownRight, Pencil, RotateCcw, Cpu, ChevronRight, Scale, Paperclip, Plus, Trash2,
   Mail, X, Loader2, ChevronDown, Check, PlayCircle, Link2, ListChecks, Gavel, UserCheck, History, FileUp, ArrowLeft, Footprints, BadgeCheck, Star,
@@ -15,8 +15,8 @@ import {
   // the deficiency banner below. Both go back together.
   // formatINR,
   concludeRationale, controlCode, controlConclusion, courtFor, operatingApplies, designCompleteness, designOutstanding, discussionsFor, extractionCriteria,
-  isControlLocked, itgcHolds, failedItgcs, isItgcDependent, operatingProgress, TOE_MAX_ROUNDS, toeRoundFailed, toeRoundNo, toeRounds, toeSpent, canRedrawToe, canExtendToe, populationLocked, sampleSizeGuide, trackResult, pointResult, stepResult, attestationOverruled, inquiryOnlyAttributes, restsOnStatementAlone,
-  countVerdict, coverageVerdict, derivedRunCount, populationReady, designBasis, auditorProvenChecks, suggestedDesignChecks, suggestPopulationFile, fmtDay, parseDay,
+  isControlLocked, isControlLockedIn, itgcHolds, failedItgcs, isItgcDependent, operatingProgress, operatingSuggestion, TOE_MAX_ROUNDS, toeRoundFailed, toeRoundNo, toeRounds, toeSpent, canRedrawToe, canExtendToe, populationLocked, sampleSizeGuide, trackResult, pointResult, stepResult, attestationOverruled, inquiryOnlyAttributes, restsOnStatementAlone,
+  countVerdict, coverageVerdict, derivedRunCount, populationReady, designBasis, designSuggestion, auditorProvenChecks, suggestedDesignChecks, suggestPopulationFile, fmtDay, parseDay,
   monthlyBreakdown, spikeMonths, priorRoundCount, fileUsable, originLabel, guessFileKind, populationSources, ipeChecksFor, samplesFor,
   expectedInputsFor, hasRowCount, isAssisting, sampledSources, reviewNotesFor, isShared, entityCoverage, uncoveredEntities, hasPaths, pathCoverage, untouchedPaths, type PopVerdict,
   requiredFilesOf, requiredFilesCount, requiredFilesReady, passedWithoutFiles, designFilesOf,
@@ -24,15 +24,19 @@ import {
   auditSampling, dealSample, NO_COUNTRY, sampleDate, sampleHome, sampleSplit, spreadPhrase, workingAudit, yearSampleRounds, LEGACY_SOURCE_ID, type SampleSplit, type YearRound, yearEndPending,
   draftSamplePrompt, readSamplePrompt,
   populationInstances, sampleAmount, seedKeyOf,
+  narrowedCount, populationFrom, readRowCount,
 } from './helpers';
 import { useAuditFiles, type AuditFile } from './useAuditFiles';
+import { mapEvidence, type EvidenceMatch } from './controlChatEvidence';
 import { auditCovers, countryFor, countryOf, inScopeEntityNames, ownersOf, programmeFor, scopedForDraw } from './auditScope';
-import { ConclusionPill, CourtBadge, NatureChip, OriginPicker, Toggle, TrackPill, Tickmark, Stamp, RagCard, type RagMeterDef } from './parts';
+import { ConclusionPill, CourtBadge, NatureChip, OriginPicker, Toggle, TrackPill, Tickmark, Stamp, RagKpiRow, ragState, statusWordOf, worstMeter, type RagMeterDef } from './parts';
 import { Pill } from '../shared/StatusBadge';
 import { useToast } from '../shared/Toast';
 import { Sparkles, FileSpreadsheet } from 'lucide-react';
 import WorkingPaperModal from './WorkingPaperModal';
 import RemediationBriefModal from './RemediationBriefModal';
+import ControlChatPane from './ControlChatPane';
+import { DESIGN_RUN_STEPS, TOE_RUN_STEPS, endRun, startRun, railShown, useControlRun } from './controlChat';
 import { DeficiencyCard } from './extraViews';
 import DatePicker from '../shared/DatePicker';
 import { cn } from '../../lib/cn';
@@ -114,6 +118,20 @@ function MoreLink({ open, onClick }: { open: boolean; onClick: () => void }) {
 
 /** One named field in the leadsheet header, read as "name: value". Mirrors the
  *  library control page so the two control screens read the same. */
+/** One of the header's classification chips — Financial, Manual, Preventive,
+ *  Monthly. Quiet on purpose: six of these run across the top of the card and a
+ *  toned pill each would turn a classification into a traffic light. The one
+ *  chip that IS a judgement (the risk rating) keeps its tone, and is the only
+ *  colour in the row. */
+function HeadChip({ icon, children }: { icon?: React.ReactNode; children: React.ReactNode }) {
+  return (
+    <span className="inline-flex items-center gap-1 h-6 px-2.5 rounded-full border border-canvas-border bg-paper-50/70 text-[0.71875rem] font-medium text-ink-700 whitespace-nowrap">
+      {icon && <span className="text-ink-400 shrink-0">{icon}</span>}
+      {children}
+    </span>
+  );
+}
+
 function HeadField({ label, value }: { label: string; value?: string }) {
   if (!value) return null;
   return (
@@ -344,7 +362,16 @@ function ConcludeFooter({ control, which, suggestion, canEdit, disabled, disable
   const drafted = concludeRationale(control, which);
   const [note, setNote] = useState(track.rationale ?? drafted);
   const [seed, setSeed] = useState(track.rationale ?? drafted);
-  if (seed !== (track.rationale ?? drafted)) { setSeed(track.rationale ?? drafted); setNote(track.rationale ?? drafted); }
+  // Typed words are never overwritten (21 Sep). The draft is derived from the
+  // check and attribute counts, so it changes every time one is marked — and
+  // the re-seed below was wiping a rationale mid-sentence for anyone who wrote
+  // the reason before finishing the marking, which is the order most auditors
+  // work in. Re-drafting is still right for a box nobody has touched.
+  const [touched, setTouched] = useState(false);
+  if (seed !== (track.rationale ?? drafted)) {
+    setSeed(track.rationale ?? drafted);
+    if (!touched) setNote(track.rationale ?? drafted);
+  }
   // Runs recorded over a draw that has since changed — the store refuses to
   // conclude on them, so the buttons say why instead of failing silently.
   const staleRuns = which === 'operating' ? control.operating.steps.filter(s => s.staleRun).length : 0;
@@ -360,6 +387,7 @@ function ConcludeFooter({ control, which, suggestion, canEdit, disabled, disable
   if (!canEdit) return null;
   const apply = (target: TrackConclusion) => {
     const rationale = note.trim();
+    setTouched(false);   // filed — the box belongs to the paper again
     conclude(control.id, target, rationale);                       // conclusion and its words, together
     logEvent({ action: 'Update', description: `Concluded ${which === 'design' ? 'TOD' : 'TOE'} ${target.toLowerCase()} for ${control.id}`, module: 'SOX ICFR', entity: 'Control' });
     // Going against the evidence is still its own record — the same words, filed
@@ -377,7 +405,7 @@ function ConcludeFooter({ control, which, suggestion, canEdit, disabled, disable
           still carries a sentence saying what was tested and what it showed. */}
       <label className="block">
         <span className="text-[0.71875rem] font-semibold text-ink-500">Rationale</span>
-        <textarea value={note} onChange={e => setNote(e.target.value)} rows={2}
+        <textarea value={note} onChange={e => { setNote(e.target.value); setTouched(true); }} rows={2}
           placeholder="Record your rationale — retained in the working paper."
           className="mt-1 w-full text-[0.75rem] rounded-lg border border-canvas-border bg-canvas-elevated px-2.5 py-2 text-ink-800 placeholder:text-ink-400 focus:outline-none focus:ring-2 focus:ring-brand-200 resize-none" />
       </label>
@@ -613,6 +641,14 @@ function PointRow({ control, point, canEdit, checking = false }: { control: Cont
   const eff = pointResult(point);
   const runValidate = () => { setValidating(true); window.setTimeout(() => { validateDesignPoint(control.id, point.id); setValidating(false); }, VALIDATE_MS); };
 
+  // ── disagreeing with a recorded result costs a sentence (user, 22 Sep) ─────
+  // There is no quiet way to change an answer on this row any more: once a
+  // check has a result the ticks are gone and Override is the only door, and
+  // Override always writes a rationale. A working paper that says "Ira found
+  // this fails, and the auditor passed it" without saying why is a paper that
+  // cannot be reviewed.
+  const iraSaid = point.validation?.result;
+
   // The elements this check points at. Resolved by id every render rather than
   // cached — an element that was removed must stop being cited, not linger as a
   // reference to a document nobody can open.
@@ -788,20 +824,34 @@ function PointRow({ control, point, canEdit, checking = false }: { control: Cont
                 `runValidate` and the `validating` machinery are left in place
                 above, so putting this back is one line:
                 <button onClick={runValidate} title="Validate via workflow" className="h-7 px-2.5 inline-flex items-center gap-1 rounded-md border border-canvas-border bg-canvas-elevated text-[0.71875rem] font-semibold text-ink-600 hover:border-evidence-300 hover:text-evidence-700 cursor-pointer"><PlayCircle size={12} /> {point.validation ? 'Re-run' : 'Validate'}</button> */}
-            <button onClick={() => setDesignPoint(control.id, point.id, 'Pass')} title="Mark this check passed" aria-label="Mark this check passed"
-              className={cn('h-7 w-7 inline-flex items-center justify-center rounded-md border transition-colors cursor-pointer',
-                eff === 'Pass' ? 'bg-compliant-50 border-compliant-300 text-compliant-700' : 'border-canvas-border bg-canvas-elevated text-ink-500 hover:border-compliant-300 hover:text-compliant-700')}>
-              <Check size={13} />
-            </button>
-            <button onClick={() => setDesignPoint(control.id, point.id, 'Fail')} title="Mark this check failed" aria-label="Mark this check failed"
-              className={cn('h-7 w-7 inline-flex items-center justify-center rounded-md border transition-colors cursor-pointer',
-                eff === 'Fail' ? 'bg-risk-50 border-risk-300 text-risk-700' : 'border-canvas-border bg-canvas-elevated text-ink-500 hover:border-risk-300 hover:text-risk-700')}>
-              <X size={13} />
-            </button>
-            {/* The override pencil — back (S6, A17) now that Ira gives a verdict
-                to contradict again. It opens the rationale form below; an existing
-                override opens Remove override instead. */}
-            <button onClick={() => setOver(o => !o)} title={point.override ? 'Remove the override' : 'Override this check — record why'} aria-label={point.override ? 'Remove the override' : 'Override this check'} className={cn('h-7 w-7 inline-flex items-center justify-center rounded-md border cursor-pointer', point.override ? 'bg-high-50 border-high-300 text-high-700' : 'border-canvas-border bg-canvas-elevated text-ink-600 hover:border-high-300 hover:text-high-700')}><Pencil size={12} /></button>
+            {/* ── one door at a time (user ask, 22 Sep) ──────────────────────
+                Before there is a result, the ticks: somebody has to be able to
+                say what this check did. After there is one, they go, and the
+                only way to move it is Override — because the mark on the left
+                IS the answer, and a pair of live ticks beside a recorded
+                verdict invites it to be changed without anyone saying why. The
+                pencil went with them: an icon for the one action that writes a
+                sentence onto a working paper was the quietest thing in the row
+                and should have been the loudest. */}
+            {eff === 'Not tested' ? (
+              <>
+                <button onClick={() => setDesignPoint(control.id, point.id, 'Pass')} title="Mark this check passed" aria-label="Mark this check passed"
+                  className="h-7 w-7 inline-flex items-center justify-center rounded-md border border-canvas-border bg-canvas-elevated text-ink-500 hover:border-compliant-300 hover:text-compliant-700 transition-colors cursor-pointer">
+                  <Check size={13} />
+                </button>
+                <button onClick={() => setDesignPoint(control.id, point.id, 'Fail')} title="Mark this check failed" aria-label="Mark this check failed"
+                  className="h-7 w-7 inline-flex items-center justify-center rounded-md border border-canvas-border bg-canvas-elevated text-ink-500 hover:border-risk-300 hover:text-risk-700 transition-colors cursor-pointer">
+                  <X size={13} />
+                </button>
+              </>
+            ) : (
+              <button onClick={() => setOver(o => !o)}
+                title={point.override ? 'Take the override off and go back to what was found' : `Record why this check ${eff === 'Pass' ? 'fails' : 'passes'} after all`}
+                className={cn('h-7 px-2.5 inline-flex items-center rounded-md border text-[0.71875rem] font-semibold transition-colors cursor-pointer',
+                  point.override ? 'bg-high-50 border-high-300 text-high-700 hover:bg-high-100' : 'border-canvas-border bg-canvas-elevated text-ink-600 hover:border-high-300 hover:text-high-700')}>
+                {point.override ? 'Remove override' : 'Override'}
+              </button>
+            )}
             {/* PARKED (18 Sep, user ask) — the bin. A design check comes from the
                 RACM and is part of what the control was tested against; deleting
                 one mid-test rewrites the question after the answer. Failing it,
@@ -815,12 +865,18 @@ function PointRow({ control, point, canEdit, checking = false }: { control: Cont
       {validating && <div className="mt-2.5 ml-8 h-1.5 rounded-full bg-paper-100 overflow-hidden"><motion.div className="h-full bg-evidence-500" initial={{ width: 0 }} animate={{ width: '100%' }} transition={{ duration: VALIDATE_MS / 1000, ease: 'linear' }} /></div>}
       {over && (point.override
         ? <div className="mt-2 flex justify-end"><button onClick={() => { overrideDesignPoint(control.id, point.id, null); setOver(false); }} className="h-7 px-3 text-[0.75rem] font-semibold rounded-lg border border-canvas-border text-ink-600 hover:text-ink-900 inline-flex items-center gap-1.5 cursor-pointer"><RotateCcw size={12} /> Remove override</button></div>
-        : <RationaleForm title="Override this consideration — record why" onCancel={() => setOver(false)} buttons={[
-            { label: 'Override · Pass', onClick: n => { overrideDesignPoint(control.id, point.id, { result: 'Pass', by: me, at: 'just now', rationale: n }); setOver(false); } },
-            // The override sits on top of the result — Ira's answer stays on the
-            // check underneath it, so a failed override no longer rewrites it.
-            { label: 'Override · Fail', onClick: n => { overrideDesignPoint(control.id, point.id, { result: 'Fail', by: me, at: 'just now', rationale: n }); setOver(false); } },
-          ]} />)}
+        // The title names what is being contradicted, because that is the
+        // question the reviewer will ask first.
+        : <RationaleForm
+            title={iraSaid ? `Ira found this ${iraSaid === 'Pass' ? 'passes' : 'fails'} — record why you disagree` : 'Override this consideration — record why'}
+            onCancel={() => setOver(false)}
+            buttons={(['Pass', 'Fail'] as TestResult[]).map(r => ({
+              // The override sits on top of the result — Ira's answer stays on
+              // the check underneath it, so a failed override no longer
+              // rewrites it.
+              label: `Override · ${r}`,
+              onClick: (n: string) => { overrideDesignPoint(control.id, point.id, { result: r, by: me, at: 'just now', rationale: n }); setOver(false); },
+            }))} />)}
       <AnimatePresence>{showQA && point.validation && <QAResultsModal title={point.text} validation={point.validation} onClose={() => setShowQA(false)} />}</AnimatePresence>
     </div>
   );
@@ -832,9 +888,9 @@ function PointRow({ control, point, canEdit, checking = false }: { control: Cont
 // and a concluded control refuses the patch — so the switch shows itself shut
 // rather than accepting a click that changes nothing.
 export function KeyControlChip({ control, canEdit }: { control: Control; canEdit: boolean }) {
-  const { role, updateControlMeta } = useIcfr();
+  const { eng, role, updateControlMeta } = useIcfr();
   const logEvent = useAuditLog();
-  const locked = isControlLocked(control);
+  const locked = isControlLockedIn(eng, control);
   const settable = canEdit && role === 'auditor';
   if (!settable) return control.isKey ? <Pill tone="mitigated">Key control</Pill> : null;
   return (
@@ -1013,12 +1069,16 @@ function WalkthroughCard({ control, canEdit }: { control: Control; canEdit: bool
  *  stronger of the two. */
 // ── operating attribute — its required files + AI validation, and/or self-attestation ─
 function AttributeRow({ control, step, canEdit, testing }: { control: Control; step: OperatingStep; canEdit: boolean; testing: boolean }) {
-  const { me, setStepResult, overrideStep, attestStep, addStepEvidence, uploadRequiredFile, clearRequiredFile, toggleStepAttest, runStepValidation, removeAttribute } = useIcfr();
+  const { me, setStepResult, overrideStep, attestStep, addStepEvidence, uploadRequiredFile, clearRequiredFile, toggleStepAttest, runStepValidation } = useIcfr();
   const logEvent = useAuditLog();
   const [over, setOver] = useState(false);
   const [noteDraft, setNoteDraft] = useState(step.attestation?.note ?? '');
   const [validatingWf, setValidatingWf] = useState(false);
   const [showQA, setShowQA] = useState(false);
+  // A pile of files, mapped onto this attribute's lines but not yet written.
+  // Shown first, on purpose: the auditor signs a paper saying this evidence
+  // proves this attribute, so they see what went where before it is filed.
+  const [pile, setPile] = useState<EvidenceMatch[] | null>(null);
   const eff = stepResult(step);
   const att = step.attestation;
   const attestOn = step.attestEnabled ?? !!att;   // section 2 — separate toggle, default off (on if already attested)
@@ -1030,7 +1090,33 @@ function AttributeRow({ control, step, canEdit, testing }: { control: Control; s
   const { uploaded, total } = requiredFilesCount(step, control);
   const ready = requiredFilesReady(step, control);
   const busy = testing || validatingWf;
-  const runAI = () => { setValidatingWf(true); window.setTimeout(() => { runStepValidation(control.id, step.id); setValidatingWf(false); }, 4000); };
+  // One attribute's own run — narrated in the rail like every other, and named
+  // so the reader can tell it from the one that reads them all.
+  const runAI = () => {
+    setValidatingWf(true);
+    startRun(control.id, `Reading the files behind attribute ${step.code}`, TOE_RUN_STEPS, 4000, true);
+    window.setTimeout(() => { endRun(control.id); runStepValidation(control.id, step.id); setValidatingWf(false); }, 4000);
+  };
+
+  // ── a pile of files, sorted onto this attribute's lines ────────────────────
+  // Three required files is three pickers and three decisions about which line
+  // each one belongs to, made by a reader who is holding all three already.
+  // `mapEvidence` is the chat rail's own mapper, scoped to this attribute — one
+  // mapper in the product, so the page and the rail can never sort the same
+  // pile two ways. It scores; it does not guess silently.
+  const takePile = (list: FileList | null) => {
+    if (!list || list.length === 0) return;
+    setPile(mapEvidence(control, Array.from(list).map(f => f.name), step.id));
+  };
+  const filePile = () => {
+    if (!pile) return;
+    const placed = pile.filter(m => m.slot);
+    setPile(null);
+    placed.forEach(m => {
+      uploadRequiredFile(control.id, m.slot!.stepId, m.slot!.fileId, m.name);
+      logEvent({ action: 'Upload', description: `Uploaded ${m.name} as "${m.slot!.label}" for attribute ${m.slot!.code} (${control.id})`, module: 'SOX ICFR', entity: 'Evidence' });
+    });
+  };
 
   // No Pass without the evidence (17 Sep dev call) — the Pass button, an
   // override and an attestation all wait for every required file. Fail never does.
@@ -1061,7 +1147,14 @@ function AttributeRow({ control, step, canEdit, testing }: { control: Control; s
             {resultBtn('Pass', 'Pass', CheckCircle2, eff === 'Pass', 'bg-compliant-50 border-compliant-300 text-compliant-700')}
             {resultBtn('Fail', 'Fail', XCircle, eff === 'Fail', 'bg-risk-50 border-risk-300 text-risk-700')}
             <button onClick={() => setOver(o => !o)} title="Override result with rationale" className={cn('h-8 w-8 inline-flex items-center justify-center rounded-lg border cursor-pointer', step.override ? 'bg-high-50 border-high-300 text-high-700' : 'border-canvas-border bg-canvas-elevated text-ink-600 hover:border-high-300 hover:text-high-700')}><Pencil size={13} /></button>
-            <button onClick={() => { removeAttribute(control.id, step.id); logEvent({ action: 'Delete', description: `Removed attribute ${step.code} from ${control.id}`, module: 'SOX ICFR', entity: 'Control' }); }} title="Remove attribute" className="h-8 w-8 inline-flex items-center justify-center rounded-lg border border-canvas-border bg-canvas-elevated text-ink-400 hover:border-risk-300 hover:text-risk-600 cursor-pointer"><Trash2 size={13} /></button>
+            {/* PARKED (22 Sep, user ask) — the bin, for the same reason the
+                design check lost its own: an attribute comes from the RACM and
+                is part of what every sampled item was tested against. Deleting
+                one mid-test rewrites the question after the answer, and the
+                sample was drawn to cover it. Failing it, or overriding it with
+                a reason, is the way to disagree. `removeAttribute` stays on the
+                store; the attribute list itself is edited on the engagement
+                control page, which is where adding one happens too. */}
           </div>
         )}
       </div>
@@ -1091,7 +1184,55 @@ function AttributeRow({ control, step, canEdit, testing }: { control: Control; s
                 <Upload size={13} className="text-brand-600 shrink-0" />
                 <span className="text-[0.6875rem] font-semibold text-ink-600">Required files</span>
                 {total > 0 && <span className="text-[0.6875rem] text-ink-400 tabular-nums">{uploaded} of {total} uploaded</span>}
+                {/* Several at once, sorted onto the lines below. Only where
+                    there is more than one line to sort onto — on a one-line
+                    checklist this is the line's own Upload button wearing a
+                    different word, and two buttons for one job is one too many. */}
+                {canEdit && !busy && total > 1 && (
+                  <label title="Choose several files at once — each one is matched to the line it proves, and nothing is filed until you have seen where it went"
+                    className="ml-auto h-6 px-2 rounded-md border border-brand-200 bg-canvas-elevated text-brand-700 text-[0.6875rem] font-semibold hover:border-brand-400 hover:bg-brand-50 focus-within:ring-2 focus-within:ring-brand-200 inline-flex items-center gap-1 cursor-pointer">
+                    <input type="file" multiple className="sr-only" accept=".pdf,.png,.jpg,.jpeg,.xlsx,.xls,.csv,.doc,.docx"
+                      aria-label={`Upload several files for ${step.code}`}
+                      onChange={e => { takePile(e.target.files); e.target.value = ''; }} />
+                    <Upload size={10} /> {uploaded === 0 ? `Upload all ${total}` : 'Upload several'}
+                  </label>
+                )}
               </div>
+
+              {/* What the mapper decided, before anything is written. Every file
+                  says where it landed and how sure the match was; the ones it
+                  could not place are named rather than dropped, because the
+                  reader has to be told what did not land. */}
+              {pile && (
+                <div className="mt-2 rounded-md border border-brand-200 bg-canvas-elevated px-2.5 py-2">
+                  <div className="text-[0.625rem] font-bold uppercase tracking-wide text-ink-400">Where each one goes</div>
+                  <ul className="mt-1.5 space-y-1">
+                    {pile.map((m, i) => (
+                      <li key={`${m.name}-${i}`} className="flex items-start gap-1.5 text-[0.6875rem] leading-snug">
+                        {m.slot
+                          ? <CheckCircle2 size={11} className="text-compliant-600 shrink-0 mt-[3px]" />
+                          : <AlertTriangle size={11} className="text-mitigated-600 shrink-0 mt-[3px]" />}
+                        <span className="min-w-0">
+                          <span className="font-medium text-ink-800 break-all">{m.name}</span>
+                          {m.slot
+                            ? <> <span className="text-ink-400">→</span> <span className="text-ink-700">{m.slot.label}</span>
+                                {m.score < 30 && <span className="text-ink-400"> · a guess</span>}
+                                {m.slot.taken && <span className="text-mitigated-700"> · replaces what is there</span>}</>
+                            : <span className="text-ink-400"> — I could not place this one</span>}
+                        </span>
+                      </li>
+                    ))}
+                  </ul>
+                  <div className="mt-2 flex items-center gap-1.5">
+                    <button onClick={filePile} disabled={!pile.some(m => m.slot)}
+                      className="h-7 px-2.5 rounded-md bg-brand-600 text-white text-[0.6875rem] font-semibold enabled:hover:bg-brand-700 disabled:opacity-40 disabled:cursor-not-allowed inline-flex items-center gap-1 cursor-pointer">
+                      <Upload size={11} /> File {pile.filter(m => m.slot).length} {pile.filter(m => m.slot).length === 1 ? 'file' : 'files'}
+                    </button>
+                    <button onClick={() => setPile(null)}
+                      className="h-7 px-2.5 rounded-md border border-canvas-border bg-canvas-elevated text-ink-600 text-[0.6875rem] font-semibold hover:text-ink-900 hover:border-ink-300 cursor-pointer">Cancel</button>
+                  </div>
+                </div>
+              )}
               {total === 0 ? (
                 <p className="mt-1.5 text-[0.6875rem] text-ink-400">No required files listed — add them on the engagement control page.</p>
               ) : (
@@ -1232,14 +1373,16 @@ function designRagMeters(c: Control): RagMeterDef[] {
   const toeTotal = samples.length ? samples.length * steps.length : steps.length;
   const toeDone = samples.length
     ? steps.reduce((n, s) => n + samples.filter(smp => { const r = s.sampleResults?.[smp.id]; return r && r !== 'Not tested'; }).length, 0)
-    : steps.filter(s => s.result !== 'Not tested').length;
+    // stepResult, not the raw result: an attribute settled by override IS
+    // settled, and a meter that says otherwise contradicts the row above it.
+    : steps.filter(s => stepResult(s) !== 'Not tested').length;
   return [
     {
       // Optional elements are out of the denominator entirely, and a WAIVED
       // element counts as done — a recorded judgement with a mandatory reason is
       // not a missing file. This one gates: below 100% the TOD conclusion is
       // locked, and the lock names how many are still outstanding.
-      label: 'Control completeness', pct: comp.pct, detail: `${comp.done}/${comp.total} required elements evidenced`, gate: true,
+      label: 'Control completeness', short: 'Elements', pct: comp.pct, detail: `${comp.done}/${comp.total} required elements evidenced`, gate: true,
       empty: comp.total === 0,
       formula: 'required elements evidenced or waived ÷ required elements × 100',
     },
@@ -1249,7 +1392,7 @@ function designRagMeters(c: Control): RagMeterDef[] {
       // attribute level so the denominator is never zero mid-testing, and any
       // result other than "not tested" counts as run. Held to 100%: part-tested
       // is not tested.
-      label: 'Evidence validated', pct: toeTotal ? Math.round((toeDone / toeTotal) * 100) : 0, detail: `${toeDone}/${toeTotal} operating checks run`, gate: true,
+      label: 'Evidence validated', short: 'Evidence', pct: toeTotal ? Math.round((toeDone / toeTotal) * 100) : 0, detail: `${toeDone}/${toeTotal} operating checks run`, gate: true,
       empty: toeTotal === 0,
       formula: 'operating checks run ÷ operating checks total × 100',
     },
@@ -1258,7 +1401,7 @@ function designRagMeters(c: Control): RagMeterDef[] {
       // the answer. Not-yet-tested drags this down exactly as hard as failed: an
       // untested check gives no confidence either way. The only QUALITY measure
       // of the three, which is why it gates nothing on its own.
-      label: 'TOD coverage confidence', pct: points.length ? Math.round((passed / points.length) * 100) : 0, detail: `${passed}/${points.length} considerations pass`,
+      label: 'Design coverage confidence', short: 'Coverage', pct: points.length ? Math.round((passed / points.length) * 100) : 0, detail: `${passed}/${points.length} considerations pass`,
       empty: points.length === 0,
       formula: 'design considerations passing ÷ all design considerations × 100',
     },
@@ -1330,7 +1473,7 @@ function evidenceFileName(label: string, wpRef: string, kind: DesignDocKind): st
 }
 
 function DesignSection({ control, canEdit }: { control: Control; canEdit: boolean }) {
-  const { role, me, addDesignDoc, attachDesignEvidence, removeDesignFile, removeDesignDoc, waiveDesignDoc, clearDesignWaiver, addDesignPoint, setDesignPoint, validateDesignPoint, runDesignIra } = useIcfr();
+  const { role, me, addDesignDoc, attachDesignEvidence, removeDesignFile, waiveDesignDoc, clearDesignWaiver, addDesignPoint, setDesignPoint, validateDesignPoint, runDesignIra } = useIcfr();
   // The owner keeps the evidence lane and loses the testing lane — see the note
   // on the dossier's own canEdit / canTest split.
   const isOwner = role === 'risk-owner';
@@ -1393,15 +1536,31 @@ function DesignSection({ control, canEdit }: { control: Control; canEdit: boolea
   const elementsOnFile = d.documents.filter(doc => designFilesOf(doc).length > 0).length;
   // Checks arrive with the RACM and can no longer be written here (18 Sep), so
   // "add one first" would name a door that was taken off its hinges.
+  // A required element that is not on file stops the test (user ask, 22 Sep).
+  // Ira used to run anyway and fail every check for the same reason — an
+  // assessment of the file room, filed as an assessment of the control. The
+  // store refuses it now, so this names the reason rather than offering a
+  // button that would do nothing. Worded as the thing to do, with the elements
+  // named, because "cannot start" without a list sends the reader hunting.
+  const iraMissing = designOutstanding(control).filter(doc => doc.required !== false)
+    .map(doc => (doc.kind === 'Custom' ? doc.name : doc.kind));
   const iraBlocked = d.points.length === 0 ? 'This control’s RACM lists no design checks — there is nothing to assess'
+    : iraMissing.length > 0 ? `Attach ${iraMissing.join(', ')} first — the design checks are read against the evidence, and that is not on file yet`
     : elementsOnFile === 0 ? 'Upload evidence to a design element first'
     : d.conclusion !== 'Not tested' ? 'TOD is concluded — it has to be reopened or returned before Ira runs again'
     : null;
   const iraStale = !!d.ira?.evidenceChanged;
+  // The button is here; the narration is in the rail (user ask, 22 Sep). The
+  // row of checks below already shows each one turning over, so a second
+  // progress bar on this side would be the same fact twice — what the rail
+  // adds is the sentence that says what is being read and, when it lands, what
+  // it found. `true` asks the rail to come forward, since the reader pressed
+  // this on the left and would otherwise be watching the wrong column.
   const runIra = () => {
     setIraRunning(true);
+    startRun(control.id, 'Reading the evidence against each check', DESIGN_RUN_STEPS, VALIDATE_MS, true);
     logEvent({ action: 'Run', description: `Ran Ira on the design checks for ${control.id}`, module: 'SOX ICFR', entity: 'Test Result' });
-    window.setTimeout(() => { runDesignIra(control.id); setIraRunning(false); }, VALIDATE_MS);
+    window.setTimeout(() => { endRun(control.id); runDesignIra(control.id); setIraRunning(false); }, VALIDATE_MS);
   };
   const addStandard = (k: DesignDocKind) => { addDesignDoc(control.id, k); logEvent({ action: 'Create', description: `Added design element to ${control.id}`, module: 'SOX ICFR', entity: 'Control' }); };
   const saveCustom = () => {
@@ -1452,11 +1611,10 @@ function DesignSection({ control, canEdit }: { control: Control; canEdit: boolea
   // Parked with the walkthrough card — nothing reads it while that card is hidden.
   // const walkPending = walkthroughUntested(control);   // helpers.ts
   // A failed walkthrough attribute is a design failure in the reviewer's model —
-  // the control as built didn't do what it claims on a real transaction.
-  const walkFailed = d.walkthrough ? control.operating.steps.some(s => d.walkthrough!.attributeResults[s.id] === 'Fail') : false;
-  const suggestion: TrackConclusion = d.documents.length === 0 && d.points.length === 0 ? 'Not tested'
-    : missing.length > 0 || walkFailed || d.points.some(p => pointResult(p) === 'Fail') ? 'Ineffective'
-    : d.points.length > 0 && d.points.every(p => pointResult(p) === 'Pass') ? 'Effective' : 'Not tested';
+  // the control as built didn't do what it claims on a real transaction. The
+  // rule itself now lives in helpers.ts: the chat rail concludes too, and two
+  // copies of it would be two products disagreeing about one paper.
+  const suggestion: TrackConclusion = designSuggestion(control);
   const empty = d.documents.length === 0 && d.points.length === 0;
 
   // ── the checks, filed under what they are about (dev call, Aug 2026) ────────
@@ -1547,7 +1705,14 @@ function DesignSection({ control, canEdit }: { control: Control; canEdit: boolea
                       {doc.waiver && <button onClick={() => clearDesignWaiver(control.id, doc.id)} title="Remove the waiver — the element is required again" className="h-7 w-7 inline-flex items-center justify-center rounded-md border border-canvas-border bg-canvas-elevated text-ink-400 hover:border-brand-300 hover:text-brand-700 cursor-pointer"><RotateCcw size={12} /></button>}
                       {doc.status !== 'Received' && <button onClick={() => attach(doc)} title="Choose one or more files — PDF, image, XLSX, CSV or Word" className="h-7 px-2.5 text-[0.71875rem] font-semibold rounded-md border border-canvas-border bg-canvas-elevated text-ink-600 hover:text-compliant-700 hover:border-compliant-300 disabled:opacity-50 inline-flex items-center gap-1 cursor-pointer"><Upload size={11} /> Attach evidence</button>}
                       {doc.status === 'Received' && <button onClick={() => attach(doc)} title="Attach another file" aria-label={`Attach another file to ${docLabel(doc)}`} className="h-7 w-7 inline-flex items-center justify-center rounded-md border border-canvas-border bg-canvas-elevated text-ink-400 hover:border-brand-300 hover:text-brand-700 cursor-pointer"><Plus size={12} /></button>}
-                      <button onClick={() => { removeDesignDoc(control.id, doc.id); logEvent({ action: 'Delete', description: `Removed design element from ${control.id}`, module: 'SOX ICFR', entity: 'Control' }); }} title="Remove" className="h-7 w-7 inline-flex items-center justify-center rounded-md border border-canvas-border bg-canvas-elevated text-ink-400 hover:border-risk-300 hover:text-risk-600 cursor-pointer"><Trash2 size={12} /></button>
+                      {/* PARKED (22 Sep, user ask) — the bin. A design element
+                          is what the design was read against, and dropping one
+                          after the checks have been marked changes what the
+                          conclusion rests on without changing the conclusion.
+                          "Not applicable", beside it, is the honest way to
+                          account for an element that will not be provided — it
+                          asks for a reason and the working paper prints it.
+                          `removeDesignDoc` stays on the store. */}
                     </div>}
                   </div>
                   {/* the waiver is a judgement, so it takes a rationale — the reason
@@ -2426,7 +2591,7 @@ function ControlUploadModal({ onClose, onAdd }: { onClose: () => void; onAdd: (n
       // of the file, deterministic from its name so it never moves.
       window.setTimeout(() => {
         setName(f.name);
-        setRows(400 + (f.name.split('').reduce((a, ch) => (a * 31 + ch.charCodeAt(0)) >>> 0, 5) % 19000));
+        setRows(readRowCount(f.name));
         setReading(false);
       }, 900);
     };
@@ -2619,14 +2784,9 @@ function SourcePickerForm({ control, exclude, submitLabel, onSubmit, seedFile, s
     if (!chosen) return;
     setBusy(true);
     window.setTimeout(() => {
-      // A filtered subset, never the whole file — a population the same size as
-      // its source is a file that was copied rather than filtered. Deterministic
-      // from the control AND the file, so two files under one control narrow to
-      // different numbers and the same extract run twice does not.
-      const seed = `${seedKeyOf(control)}·${chosen.name}`.split('').reduce((a, ch) => (a * 31 + ch.charCodeAt(0)) >>> 0, 11);
-      const share = 0.2 + (seed % 30) / 100;
-      const narrowed = Math.max(1, Math.min(chosen.rows - 1, Math.round(chosen.rows * share)));
-      onSubmit(chosen, criteria.trim() || 'No filter applied', narrowed);
+      // A filtered subset, never the whole file — see narrowedCount, which the
+      // chat's own extract reads too so both doors produce one population.
+      onSubmit(chosen, criteria.trim() || 'No filter applied', narrowedCount(control, chosen));
       setBusy(false);
       setPicked(null);
     }, 1500);
@@ -2827,7 +2987,7 @@ function PopulationSection({ control, canEdit, locked: gated = false }: { contro
   const pop = control.operating.population;
   const audit = eng.audits.find(a => a.id === openAuditId);
   const version = `POP-${audit ? ROUND_TAG[audit.round] : 'v1'}`;
-  const canWrite = canEdit && !isControlLocked(control);
+  const canWrite = canEdit && !isControlLockedIn(eng, control);
   const isAuditor = role === 'auditor' && canWrite;
   // The first line stops at the extract. Everything past it — proving the
   // report, locking, and every step the lock opens — is the audit's own work,
@@ -2865,27 +3025,9 @@ function PopulationSection({ control, canEdit, locked: gated = false }: { contro
   // The extract itself lives in SourcePickerForm — the first file and every file
   // after it ask the same two questions, so they are asked in one place.
   const extract = (chosen: AuditFile, criteria: string, narrowed: number) => {
-    setPopulation(control.id, {
-      version,
-      source: `${chosen.name} · ${chosen.from}`,
-      sources: [{ id: 'src-1', file: chosen.name, rows: chosen.rows, count: narrowed, criteria }],
-      sourceFile: chosen.name, sourceCount: chosen.rows,
-      criteria,
-      filterFrom: winFrom || undefined, filterTo: winTo || undefined,
-      // The criteria are prose now, but the over-extraction breakdown still
-      // needs a dimension to name ("type Banking 1,180 · type Other 238"). The
-      // sub-process is what the old Transaction-type box defaulted to, so this
-      // is the same answer it always gave — just no longer typed by hand.
-      filterType: control.subProcess && control.subProcess !== 'General' ? control.subProcess : undefined,
-      count: narrowed,
-      // The person signed in is the person who just ran the extract, so that
-      // one fact is filled in rather than asked for. The system fills itself in
-      // too when the pull came from one — that is the whole point of fetching
-      // rather than being handed a file. It stays editable either way.
-      provenance: { system: chosen.system ?? '', extractedBy: me, extractedOn: '' },
-      tieOut: `Filtered from ${chosen.rows.toLocaleString()} rows`,
-      evidence: [{ id: 'pop-ev', name: chosen.name, kind: chosen.name.endsWith('.csv') ? 'CSV' : 'XLSX', uploadedBy: me, uploadedAt: 'just now' }],
-    });
+    // The record itself is built by `populationFrom`, which the chat's extract
+    // calls too — one population, whichever door it was run from.
+    setPopulation(control.id, populationFrom(control, chosen, criteria, narrowed, { version, me, from: winFrom, to: winTo }));
     setRefilterSeed(null);
     logEvent({ action: 'Run', description: `Extracted the population for ${control.id} — ${narrowed.toLocaleString()} instances from ${chosen.rows.toLocaleString()} rows in ${chosen.name}`, module: 'SOX ICFR', entity: 'Evidence' });
   };
@@ -3762,7 +3904,7 @@ function SampleExtractSection({ control, canEdit, locked }: { control: Control; 
   const { eng, role, openAuditId } = useIcfr();
   // Drawing a sample is the auditor's act — the store refuses it from anyone
   // else, so the journey is not offered to anyone else either.
-  const canDraw = canEdit && role === 'auditor' && !isControlLocked(control);
+  const canDraw = canEdit && role === 'auditor' && !isControlLockedIn(eng, control);
   const o = control.operating;
   // Only the files the control is tested ON. An assisting table is joined onto
   // the population by the workflow and never drawn from, so offering it a Draw
@@ -4087,7 +4229,7 @@ function ReviewNotesBlock({ control }: { control: Control }) {
   const [respondingTo, setRespondingTo] = useState<string | null>(null);
   const [response, setResponse] = useState('');
   const so = control.wpSignoff;
-  const canRaise = isReviewer && isControlLocked(control) && !so?.reviewer;
+  const canRaise = isReviewer && isControlLockedIn(eng, control) && !so?.reviewer;
 
   if (!notes.length && !canRaise) return null;
 
@@ -4274,7 +4416,7 @@ function SignOffSection({ control }: { control: Control }) {
   const { eng, role, me, signOffControlWp, returnControl } = useIcfr();
   const logEvent = useAuditLog();
   const so = control.wpSignoff;
-  const concluded = isControlLocked(control);
+  const concluded = isControlLockedIn(eng, control);
   const notesPending = eng.reviewNotes.filter(n => n.controlId === control.id && n.status !== 'Closed').length;
   const canSign = role === 'auditor' && concluded && !so?.preparer;
   const canCounter = role === 'reviewer' && !!so?.preparer && !so?.reviewer && notesPending === 0 && so.preparer.by !== me;
@@ -4459,13 +4601,13 @@ function PriorRound({ control, round }: { control: Control; round: ToeRound }) {
  * unsettle what a second sample has now shown twice.
  */
 function RoundActions({ control, canEdit }: { control: Control; canEdit: boolean }) {
-  const { extendSample, startToeRound } = useIcfr();
+  const { eng, extendSample, startToeRound } = useIcfr();
   const logEvent = useAuditLog();
   const { addToast } = useToast();
   const [asking, setAsking] = useState(false);
   const [why, setWhy] = useState('');
   const samp = control.operating.sampling;
-  if (!canEdit || !toeRoundFailed(control) || isControlLocked(control)) return null;
+  if (!canEdit || !toeRoundFailed(control) || isControlLockedIn(eng, control)) return null;
   const spent = toeSpent(control);
   const canRedraw = canRedrawToe(control);
   const canExtend = canExtendToe(control) && !!samp;
@@ -4565,7 +4707,7 @@ function OperatingSection({ control, canEdit, locked }: { control: Control; canE
   const o = control.operating; const prog = operatingProgress(control);
   const anyFail = o.steps.some(s => stepResult(s) === 'Fail');
   const allTested = o.steps.length > 0 && o.steps.every(s => stepResult(s) !== 'Not tested');
-  const suggestion: TrackConclusion = anyFail ? 'Ineffective' : allTested ? 'Effective' : 'Not tested';
+  const suggestion: TrackConclusion = operatingSuggestion(control);
   const [testing, setTesting] = useState(false);
   const [newAttr, setNewAttr] = useState('');
   const [addingAttr, setAddingAttr] = useState(false);
@@ -4579,6 +4721,10 @@ function OperatingSection({ control, canEdit, locked }: { control: Control; canE
 
   const runAll = () => {
     setTesting(true);
+    // Same rule as the design run: the button is here, the narration is in the
+    // rail, and the rail comes forward because the reader pressed this on the
+    // left and would otherwise be watching the wrong column.
+    startRun(control.id, 'Reading the uploaded files against each attribute', TOE_RUN_STEPS, 2400, true);
     logEvent({ action: 'Run', description: `Ran AI validation on ${ready} ready attribute(s) for ${control.id}`, module: 'SOX ICFR', entity: 'Test Result' });
     const skipped = o.steps.filter(s => !requiredFilesReady(s, control)).map(s => {
       const { uploaded, total } = requiredFilesCount(s, control);
@@ -4587,6 +4733,7 @@ function OperatingSection({ control, canEdit, locked }: { control: Control; canE
       return total === 0 ? `${s.code}: no required files listed` : `${s.code}: ${missing} file${missing === 1 ? '' : 's'} missing`;
     });
     window.setTimeout(() => {
+      endRun(control.id);
       validateReadyAttributes(control.id);
       setTesting(false);
       if (skipped.length) addToast({ type: 'warning', title: `AI validation ran on ${ready} attribute${ready === 1 ? '' : 's'}`, message: skipped.join(' · ') });
@@ -4638,7 +4785,7 @@ function OperatingSection({ control, canEdit, locked }: { control: Control; canE
             <span>{o.sampling.method} · {o.sampling.basis}</span>
             {o.population && <span className="text-ink-400">Population {o.population.count.toLocaleString()} · {o.population.tieOut}</span>}
           </div>
-        ) : !isControlLocked(control) && (
+        ) : !isControlLockedIn(eng, control) && (
           <div className="rounded-xl border border-dashed border-canvas-border p-3 text-[0.71875rem] text-ink-500 inline-flex items-center gap-1.5">
             <FlaskConical size={12} className="text-ink-400" /> No sample yet — draw one in step ③ to test against sampled items.
           </div>
@@ -4851,21 +4998,165 @@ function DiscussionPane({ control }: { control: Control }) {
   );
 }
 
-// right rail — the collaboration surfaces: what was done (History) and what was said (Discussion)
-function ActivityRail({ control }: { control: Control }) {
+// right rail — Ira, then the collaboration surfaces: what was done (History)
+// and what was said (Discussion).
+//
+// Ira leads and opens by default (user ask, 21 Sep). The other two panes are
+// records of work already finished; Ira is about the work in front of you, so
+// a rail that opened on History put the past where the next move should be.
+// Nothing was lost to make room — both old panes are one click away, and the
+// rail is 40px wider to carry three tabs without cramping them.
+/** Which of the rail's three panes is showing. Held by the page so the folded
+ *  spine and the open rail agree about it. */
+type RailPane = 'chat' | 'history' | 'discussion';
+
+function ActivityRail({ control, meters, pane, onPane, onCollapse }: { control: Control; meters: RagMeterDef[]; pane: RailPane; onPane: (p: RailPane) => void; onCollapse: () => void }) {
   const { eng } = useIcfr();
-  const [pane, setPane] = useState<'history' | 'discussion'>('history');
+  // The pane belongs to the page, not to this component: the folded spine
+  // picks one too, and a rail that forgot which tab was chosen the moment it
+  // was folded would make folding it destructive.
+  const setPane = onPane;
   const execCount = eng.executions.filter(e => e.controlId === control.id).length;
   const openDisc = discussionsFor(eng, control.id).filter(d => !d.resolved).length;
-  const tabCls = (on: boolean) => cn('flex-1 h-8 rounded-lg text-[0.75rem] font-semibold inline-flex items-center justify-center gap-1.5 transition-colors cursor-pointer', on ? 'bg-canvas-elevated text-brand-700 shadow-[0_1px_4px_-1px_rgba(15,8,30,0.18)] ring-1 ring-canvas-border' : 'text-ink-500 hover:text-ink-800');
+  const tabCls = (on: boolean) => cn('flex-1 min-w-0 h-8 rounded-lg text-[0.75rem] font-semibold inline-flex items-center justify-center gap-1.5 transition-colors cursor-pointer', on ? 'bg-canvas-elevated text-brand-700 shadow-[0_1px_4px_-1px_rgba(15,8,30,0.18)] ring-1 ring-canvas-border' : 'text-ink-500 hover:text-ink-800');
+  // No `sticky` any more — the rail is a pane, not a card that tries to keep
+  // up. It is as tall as the row it sits in and its own body scrolls, so there
+  // is nothing left for the page to carry it away from.
   return (
-    <aside className="panel sticky top-20 self-start max-h-[calc(100vh-7rem)] flex flex-col">
-      <div className="flex items-center gap-1 p-1 m-3 mb-2 rounded-xl bg-paper-50 border border-canvas-border">
-        <button onClick={() => setPane('history')} className={tabCls(pane === 'history')}><History size={13} /> History{execCount > 0 && <span className="text-[0.625rem] tabular-nums opacity-70">{execCount}</span>}</button>
-        <button onClick={() => setPane('discussion')} className={tabCls(pane === 'discussion')}><MessageSquare size={13} /> Discussion{openDisc > 0 && <span className="text-[0.625rem] tabular-nums opacity-70">{openDisc}</span>}</button>
+    <aside className="panel overflow-hidden h-full min-h-0 flex flex-col">
+      {/* The scores first, because they are the reading on the control, and the
+          conversation underneath is what to do about it. One panel, one rule
+          between them. */}
+      <RagKpiRow meters={meters} flush />
+      <div className="flex items-center gap-2 m-3 mb-2">
+        <div className="flex-1 min-w-0 flex items-center gap-1 p-1 rounded-xl bg-paper-50 border border-canvas-border">
+          <button onClick={() => setPane('chat')} className={tabCls(pane === 'chat')}><Sparkles size={13} /> Ira</button>
+          <button onClick={() => setPane('history')} className={tabCls(pane === 'history')}><History size={13} /> History{execCount > 0 && <span className="text-[0.625rem] tabular-nums opacity-70">{execCount}</span>}</button>
+          <button onClick={() => setPane('discussion')} className={tabCls(pane === 'discussion')}><MessageSquare size={13} /> Discussion{openDisc > 0 && <span className="text-[0.625rem] tabular-nums opacity-70">{openDisc}</span>}</button>
+        </div>
+        {/* Folding the rail away is a reading decision, so the control sits
+            with the reading — beside the tabs, not buried in a menu. */}
+        <button onClick={onCollapse} title="Hide this rail" aria-label="Hide the Ira rail"
+          className="shrink-0 w-8 h-8 rounded-lg text-ink-400 hover:text-ink-700 hover:bg-paper-50 inline-flex items-center justify-center transition-colors cursor-pointer">
+          <PanelRightClose size={16} />
+        </button>
       </div>
-      {pane === 'history' ? <ExecutionTrail control={control} /> : <DiscussionPane control={control} />}
+      {pane === 'chat' ? <ControlChatPane key={control.id} control={control} />
+        : pane === 'history' ? <ExecutionTrail control={control} />
+        : <DiscussionPane control={control} />}
     </aside>
+  );
+}
+
+/** The rail folded away — a spine, not a shut door (user ask, 22 Sep).
+ *
+ *  The first version of this was a 44px strip carrying the word "Ira" and
+ *  nothing else, which made folding the rail a choice between the scores and
+ *  the page. It is 80px now and keeps the two things worth glancing at: the
+ *  three scores, still ranked and still coloured by the same rule, and the way
+ *  back in. Every button here unfolds — the difference between them is WHICH
+ *  pane you land on, so a reader who wants the history does not have to open
+ *  the chat first and then leave it.
+ *
+ *  Deliberately not a summary of its own: the numbers are the same numbers,
+ *  read from the same meters, so the spine can never quietly disagree with the
+ *  rail it replaces. */
+function RailSpine({ control, meters, running, onOpen }: { control: Control; meters: RagMeterDef[]; running: boolean; onOpen: (p: RailPane) => void }) {
+  const { eng, role, me, openAuditId } = useIcfr();
+  const still = useReducedMotion();
+  const execCount = eng.executions.filter(e => e.controlId === control.id).length;
+  const openDisc = discussionsFor(eng, control.id).filter(d => !d.resolved).length;
+  const worst = worstMeter(meters);
+  // Three dashes in a column was the whole of the folded rail on a control
+  // nobody had set up — honest, and useless. When nothing is measurable yet,
+  // it says so once instead of three times.
+  const noScores = meters.every(m => m.empty);
+  const iconBtn = 'w-full h-8 rounded-lg inline-flex items-center justify-center gap-1 text-ink-400 hover:text-brand-700 hover:bg-brand-50 transition-colors cursor-pointer';
+  return (
+    <div className="panel absolute inset-0 bottom-6 flex flex-col overflow-hidden">
+      {/* The fold control sits where it sits in the open rail — top right of
+          the head — so it is in the same place in both states. */}
+      <button onClick={() => onOpen('chat')} title="Open the Ira rail" aria-label="Open the Ira rail"
+        className="shrink-0 h-7 mt-1 mx-1 rounded-lg text-ink-400 hover:text-ink-700 hover:bg-paper-50 inline-flex items-center justify-center transition-colors cursor-pointer">
+        <PanelRightClose size={15} className="rotate-180" />
+      </button>
+
+      {/* ── the scores ──────────────────────────────────────────────────────
+          At the top, the way they are at the top of the open rail — folding
+          the rail away should change the size of the reading, not its order.
+          No bar under each number: at 80px a 3px rule reads as decoration
+          rather than as a quantity, and the number already says it. Colour
+          follows the open row to the letter — ONE score may wear it. */}
+      {noScores ? (
+        <div className="px-2 pt-1 pb-2.5 text-[0.5625rem] font-semibold uppercase tracking-[0.06em] text-ink-300 text-center leading-snug">
+          Nothing<br />scored yet
+        </div>
+      ) : (
+        <div className="px-1.5 pt-1 pb-2 space-y-1.5">
+          {meters.map(m => {
+            const flagged = worst === m;
+            const state = ragState(m);
+            const StateIcon = state === 'red' ? AlertTriangle : AlertCircle;
+            return (
+              <button key={m.label} onClick={() => onOpen('chat')} title={`${m.label} — ${m.empty ? 'not set up' : `${m.pct}%, ${m.detail}`}`}
+                aria-label={m.empty ? `${m.label} — not set up` : `${m.label} ${m.pct}% — ${statusWordOf(m)}`}
+                className="w-full text-left rounded-lg px-1 py-0.5 hover:bg-paper-50 transition-colors cursor-pointer">
+                <div className="text-[0.5625rem] font-bold uppercase text-ink-400 truncate">{m.short ?? m.label}</div>
+                <div className="flex items-center gap-1">
+                  <span className={cn('text-[0.9375rem] font-bold tabular-nums leading-tight',
+                    m.empty ? 'text-ink-300' : flagged && state === 'red' ? 'text-risk-700' : flagged && state === 'amber' ? 'text-high-700' : 'text-ink-900')}>
+                    {m.empty ? '—' : `${m.pct}%`}
+                  </span>
+                  {/* Colour is never the only signal — DESIGN.md §6. */}
+                  {flagged && <StateIcon size={10} className={cn('shrink-0', state === 'red' ? 'text-risk-700' : 'text-high-700')} />}
+                </div>
+              </button>
+            );
+          })}
+        </div>
+      )}
+
+      <div className="border-t border-canvas-border" />
+
+      {/* ── the agent ───────────────────────────────────────────────────────
+          Under the reading, because that is the order the open rail reads in:
+          here is the score, here is what to do about it. The mark is the
+          product's AI signature (brand → fuchsia, Ask IRA's own avatar); a run
+          in flight rings it, so a validation started on the left is visible
+          from a column 80px wide. */}
+      <button onClick={() => onOpen('chat')} title="Ask Ira about this control" aria-label="Open the Ira chat"
+        className="group shrink-0 mx-1.5 mt-2 rounded-xl py-2 flex flex-col items-center gap-1.5 hover:bg-brand-50 transition-colors cursor-pointer">
+        <span className="relative inline-flex size-9">
+          {running && !still && (
+            <motion.span aria-hidden className="absolute inset-0 rounded-xl bg-brand-400"
+              animate={{ scale: [1, 1.5], opacity: [0.5, 0] }}
+              transition={{ duration: 1.6, repeat: Infinity, ease: 'easeOut' }} />
+          )}
+          <span className="relative inline-flex items-center justify-center w-full h-full rounded-xl bg-gradient-to-br from-brand-500 to-fuchsia-500 text-white shadow-[0_4px_16px_-4px_rgba(106,18,205,0.5)]">
+            <Sparkles size={17} strokeWidth={2.25} />
+          </span>
+        </span>
+        <span className="text-[0.5625rem] font-bold uppercase tracking-[0.12em] text-brand-700">Ira</span>
+      </button>
+
+      {/* PARKED (22 Sep, user ask) — the five-dot spine stood here. It said
+          which step the control was on, which the stepper down the left-hand
+          side of the page already says at full size and in words: the folded
+          rail sat directly beside it repeating the same five numbers in 20px
+          circles. The scores and the way back to Ira are what this column is
+          for, and the chat itself names the step in words the moment it is
+          opened. */}
+
+      <div className="mt-auto border-t border-canvas-border" />
+      <div className="shrink-0 px-1.5 py-2 space-y-1">
+        <button onClick={() => onOpen('history')} title={`History — ${execCount} run${execCount === 1 ? '' : 's'}`} aria-label="Open the run history" className={iconBtn}>
+          <History size={15} />{execCount > 0 && <span className="text-[0.625rem] font-semibold tabular-nums">{execCount}</span>}
+        </button>
+        <button onClick={() => onOpen('discussion')} title={openDisc > 0 ? `Discussion — ${openDisc} open` : 'Discussion'} aria-label="Open the discussion" className={iconBtn}>
+          <MessageSquare size={15} />{openDisc > 0 && <span className="text-[0.625rem] font-semibold tabular-nums text-high-700">{openDisc}</span>}
+        </button>
+      </div>
+    </div>
   );
 }
 
@@ -4882,7 +5173,7 @@ function ActivityRail({ control }: { control: Control }) {
  *  concludes ineffective and runs the ordinary ladder, carrying this reason across
  *  so the paper says why rather than merely that. */
 function UnableToTestBanner({ control }: { control: Control }) {
-  const { role, markUnableToTest, resolveUnableToTest, escalateUnableToTest } = useIcfr();
+  const { eng, role, markUnableToTest, resolveUnableToTest, escalateUnableToTest } = useIcfr();
   const [asking, setAsking] = useState(false);
   const [reason, setReason] = useState('');
   const [needed, setNeeded] = useState('');
@@ -4890,7 +5181,7 @@ function UnableToTestBanner({ control }: { control: Control }) {
   const isAuditor = role === 'auditor';
 
   if (!block) {
-    if (!isAuditor || isControlLocked(control)) return null;
+    if (!isAuditor || isControlLockedIn(eng, control)) return null;
     return asking ? (
       <div className="rounded-xl border border-mitigated-200 bg-mitigated-50/40 p-4 space-y-2">
         <h3 className="text-[0.8125rem] font-bold text-mitigated-800 inline-flex items-center gap-1.5"><FileWarning size={15} /> Record that you can't test this</h3>
@@ -4924,7 +5215,7 @@ function UnableToTestBanner({ control }: { control: Control }) {
           <p className="text-[0.75rem] text-ink-600 mt-0.5"><span className="text-ink-400">Needed</span> · {block.needed}</p>
           <p className="text-[0.6875rem] text-ink-400 mt-1">Recorded by {block.raisedBy} · {block.raisedAt}. No severity applies — nothing has been shown to have failed.</p>
         </div>
-        {isAuditor && !block.convertedTo && (
+        {isAuditor && !block.convertedTo && !isControlLockedIn(eng, control) && (
           <div className="flex items-center gap-2 shrink-0">
             <button onClick={() => resolveUnableToTest(control.id)} className="h-8 px-3 rounded-lg bg-brand-600 text-white text-[0.75rem] font-semibold hover:bg-brand-700 cursor-pointer">Received — resume testing</button>
             <button onClick={() => escalateUnableToTest(control.id)} title="The period is closing and it never arrived — the control could not be evidenced, so it becomes an ordinary exception"
@@ -4937,6 +5228,24 @@ function UnableToTestBanner({ control }: { control: Control }) {
 }
 
 // ── the dossier ──────────────────────────────────────────────────────────────────
+/** A yes/no that outlives the visit. Storage throws in a private window and
+ *  comes back empty when site data is cleared, so every touch is guarded and
+ *  the default simply stands — the worst case is a preference that lasts the
+ *  session instead of the week. */
+const RAIL_OPEN_KEY = 'sox-control-rail-open';
+function useRemembered(key: string, fallback: boolean) {
+  const [on, setOn] = useState(() => {
+    try { const v = window.localStorage.getItem(key); return v === null ? fallback : v === '1'; }
+    catch { return fallback; }
+  });
+  // Stable across renders so an effect can depend on it without re-firing.
+  const set = useCallback((next: boolean) => {
+    setOn(next);
+    try { window.localStorage.setItem(key, next ? '1' : '0'); } catch { /* storage blocked */ }
+  }, [key]);
+  return [on, set] as const;
+}
+
 export default function ControlDossier() {
   const { eng, role, selectedControlId, back, setView, reopenControl, focusStep, clearFocusStep, openAuditId } = useIcfr();
   const logEvent = useAuditLog();
@@ -4952,6 +5261,15 @@ export default function ControlDossier() {
   const [reopenWhy, setReopenWhy] = useState('');
   // The deficiency this paper raised, graded here rather than somewhere else.
   const [defOpen, setDefOpen] = useState(false);
+  // Whether the rail is out. It outlives the visit the way the tab order does
+  // — an auditor who folds it away to read a wide sample table has said
+  // something about how they work, not about this one control, and being made
+  // to say it again on the next control would be the tool forgetting.
+  const [railOpen, setRailOpen] = useRemembered(RAIL_OPEN_KEY, true);
+  // Which pane is showing, held here rather than inside the rail: the folded
+  // spine picks one too, and unfolding on the chat when the reader pressed
+  // History would be the tool overruling them.
+  const [railPane, setRailPane] = useState<RailPane>('chat');
   const control = eng.controls.find(c => c.id === selectedControlId);
   // ── landing where the click was about ──────────────────────────────────────
   // Above the early return on purpose: hooks have to run on every render, and
@@ -4981,6 +5299,21 @@ export default function ControlDossier() {
     const t = window.setTimeout(() => setArrivedAt(null), 2600);
     return () => window.clearTimeout(t);
   }, [arrivedAt]);
+
+  // A run started from the page narrates in the chat, so the rail comes forward
+  // to be read — including UNFOLDING it, which the earlier version did not do:
+  // pressing "Run AI validation" with the rail folded sent the narration to a
+  // pane that was not on the screen, and the reader watched nothing happen.
+  // It asks once. `railShown` lowers the flag so a reader who then chooses
+  // History, or folds the rail back up, is not dragged around by the next
+  // render.
+  const run = useControlRun(selectedControlId ?? '');
+  useEffect(() => {
+    if (!run?.wantsRail || !selectedControlId) return;
+    setRailPane('chat');
+    setRailOpen(true);
+    railShown(selectedControlId);
+  }, [run?.wantsRail, selectedControlId, setRailOpen]);
 
   if (!control) return <div className="text-ink-500">Control not found. <button onClick={back} className="text-brand-700 font-semibold">Back to register</button></div>;
   // ── who is standing here, and what that permits ─────────────────────────────
@@ -5054,9 +5387,33 @@ export default function ControlDossier() {
   const country = countryFor(eng.id, control);
 
   return (
-    <motion.div initial="hidden" animate="show" variants={{ hidden: {}, show: { transition: { staggerChildren: 0.08, delayChildren: 0.03 } } }}>
+    <motion.div className="h-full min-h-0 flex flex-col" initial="hidden" animate="show" variants={{ hidden: {}, show: { transition: { staggerChildren: 0.08, delayChildren: 0.03 } } }}>
       {/* no local Back button — the breadcrumb above (always rendered by
           SoxIcfrApp for the dossier view) already carries ← and the trail */}
+
+      {/* ── Two panes, the way the workflow executor does it ─────────────────
+          The page used to be one long scroll with the rail marked `sticky`,
+          which never worked: the rail's parent was a grid item exactly as tall
+          as the rail, so it had nowhere to travel and simply left with the
+          page. Rather than repair the stick, the page stops scrolling. This
+          row owns the height it was given, the left column is the only
+          scroller, and the rail is a sibling that cannot move because nothing
+          around it does. `min-h-0` is what lets the column scroll instead of
+          growing; `min-w-0` is what stops a wide table pushing the rail off
+          the screen. */}
+      <div className="flex-1 min-h-0 grid gap-5 transition-[grid-template-columns] duration-300 ease-[cubic-bezier(0.22,1,0.36,1)]"
+        style={{ gridTemplateColumns: railOpen ? 'minmax(0,1fr) 400px' : 'minmax(0,1fr) 5rem' }}>
+        {/* The header travels with the work rather than being frozen above it:
+            it is a third of the screen, and the steps are what the auditor
+            came for. The white band inside it now ends at this column, which
+            is what it should have said all along — the rail beside it is not
+            part of the leadsheet. */}
+        {/* `clip`, not `hidden`: hidden still lets the browser scroll the box
+            sideways to reveal something it has just focused — a modal closing,
+            a form opening — and with no sideways scrollbar to put it back, the
+            column stays shunted with its left edge cut off. `clip` refuses the
+            scroll as well as the scrollbar. */}
+        <div className="min-w-0 overflow-y-auto overflow-x-clip pb-6">
 
       {/* Leadsheet header — the same shape the library's control page carries
           (ControlLibraryDetail): a white band running to both screen edges, the
@@ -5064,95 +5421,44 @@ export default function ControlDossier() {
           a disclosure. What it keeps on top of that is the audit's own: whose
           court the control is in, the overall status with both track verdicts,
           and the working paper. */}
-      <motion.div className="relative pt-1 pb-5 mb-5" variants={{ hidden: { opacity: 0, y: 14 }, show: { opacity: 1, y: 0, transition: { duration: 0.32, ease: [0.22, 1, 0.36, 1] } } }}>
-        <div aria-hidden className="absolute inset-y-0 left-[-50vw] right-[-50vw] bg-canvas-elevated border-b border-canvas-border" />
+      <motion.div className="rounded-xl border border-canvas-border bg-canvas-elevated px-5 pt-4 pb-0 mb-5" variants={{ hidden: { opacity: 0, y: 14 }, show: { opacity: 1, y: 0, transition: { duration: 0.32, ease: [0.22, 1, 0.36, 1] } } }}>
         <div className="relative">
+          {/* ── the facts, above the name (22 Sep) ─────────────────────────────
+              What kind of control this is reads before what it says it does,
+              because a reader scanning a register full of these recognises the
+              shape before they read the sentence. The schema words are back as
+              chips rather than named fields: in a row of six they read as a
+              classification, which is what they are, and the ones that need a
+              label keep it in the detail below. */}
           <div className="flex items-start justify-between gap-4">
-            {/* Heading = the CONTROL TITLE (17 Sep). The objective held this spot
-                while the one-line statement had no name of its own; now that the
-                RACM splits title from description, the title is what belongs at
-                the top of the control's own page, and the objective reads as one
-                more fact about it below. It runs to the court badge (feedback
-                #27): the old 64ch cap wrapped a long heading into a narrow
-                column with half the header empty beside it. */}
-            <h1 className="leadsheet-title text-[1.625rem] leading-[1.25] text-ink-900 flex-1 min-w-0">{control.description}</h1>
+            <div className="flex items-center gap-1.5 flex-wrap min-w-0">
+              {/* Key/non-key is agreed with management — it can never be read off
+                  an SOP — so the auditor sets it here rather than reading it. */}
+              <KeyControlChip control={control} canEdit={canEdit} />
+              {control.clazz && <HeadChip>{control.clazz}</HeadChip>}
+              {control.nature && <HeadChip icon={control.nature === 'Automated' ? <WorkflowIcon size={11} /> : <Hand size={11} />}>{control.nature}</HeadChip>}
+              {control.type && <HeadChip>{control.type}</HeadChip>}
+              {control.frequency && <HeadChip>{control.frequency}</HeadChip>}
+              {control.riskRating && <Pill tone={control.riskRating === 'High' ? 'risk' : control.riskRating === 'Medium' ? 'mitigated' : 'draft'}>{control.riskRating} risk</Pill>}
+              {/* The control's own number, plain — it is a reference, not a
+                  judgement, so it does not wear a chip like one. */}
+              <span className="font-mono text-[0.71875rem] text-ink-400 ml-1">{control.wpRef ?? control.id}</span>
+            </div>
             {/* whose court it is, right-aligned. The W/P stamp that used to sit
                 beside it is gone: a working-paper reference is an audit output,
                 and the control page is where the work happens, not where the
                 paper is cited. It survives in the exported paper and report. */}
-            <div className="shrink-0 flex items-center justify-end gap-2 mt-1">
+            <div className="shrink-0 flex items-center justify-end gap-2">
               <CourtBadge court={courtFor(control, eng.tasks)} fromRole={role} />
             </div>
           </div>
 
-          {/* One line of identity. Judgements are chips because they are
-              somebody's call; the rest is named, because a bare run of
-              "Financial · Manual · Preventive · Monthly" asks the reader to
-              know the schema by heart — those moved into the detail below. */}
-          <div className="mt-3 flex items-center gap-2.5 flex-wrap text-[0.78125rem] text-ink-500">
-            {/* Key/non-key is agreed with management — it can never be read off
-                an SOP — so the auditor sets it here rather than reading it. */}
-            <KeyControlChip control={control} canEdit={canEdit} />
-            {control.riskRating && <Pill tone={control.riskRating === 'High' ? 'risk' : control.riskRating === 'Medium' ? 'mitigated' : 'draft'}>{control.riskRating} risk</Pill>}
-            <span aria-hidden className="w-px h-3.5 bg-canvas-border" />
-            {/* Which matrix this control answers to — a RACM is named by its
-                process (Racm.tsx keys them `sox-racm-{eng}-{process}`). */}
-            <span className="inline-flex items-center gap-1.5">
-              <span className="text-ink-400">RACM</span>
-              <span className="font-medium text-ink-800">{control.process}</span>
-            </span>
-            <span aria-hidden className="w-px h-3.5 bg-canvas-border" />
-            {/* Which company's copy this is. The same control number is tested
-                separately at each entity in scope, and this page is one of them.
-                A SHARED control is the other arrangement: performed at one
-                place, answering for several — so it says both, because "who runs
-                it" and "who it covers" stop being the same answer. */}
-            {isShared(control) ? (
-              <span className="inline-flex items-center gap-1.5 flex-wrap">
-                <span className="text-ink-400">Performed at</span>
-                <span className="font-medium text-ink-800">{control.entity}</span>
-                <span className="text-ink-400 ml-2">Covers</span>
-                {control.entities!.map(e => (
-                  <span key={e} className="inline-flex items-center h-[18px] px-1.5 rounded border border-canvas-border bg-paper-50/70 text-[0.6875rem] font-semibold text-ink-700">{e}</span>
-                ))}
-              </span>
-            ) : control.entity && (
-              <span className="inline-flex items-center gap-1.5">
-                <span className="text-ink-400">Entity</span>
-                <span className="font-medium text-ink-800">{control.entity}</span>
-              </span>
-            )}
-            <span aria-hidden className="w-px h-3.5 bg-canvas-border" />
-            {/* Both names, because they are two different people doing two
-                different jobs — and this page is where you find out who to ask.
-                The register shows only the accountable one. */}
-            <span className="inline-flex items-center gap-1.5">
-              <span className="text-ink-400">Control owner</span>
-              <span className="font-medium text-ink-800">{headOwners.controlOwner}</span>
-            </span>
-            {!headOwners.single && (
-              <span className="inline-flex items-center gap-1.5">
-                <span className="text-ink-400">Process owner</span>
-                <span className="font-medium text-ink-800">{headOwners.processOwner}</span>
-              </span>
-            )}
-            {/* The verdict, on the identity line (user ask). It used to sit in
-                the bar under the header, below the activity — the one answer
-                every reader of this page arrives for, three lines down. The
-                owner does not get it: watching a conclusion move teaches them
-                what is being tested and how it is going, and their job is the
-                evidence, not the grade. */}
-            {!isOwner && (
-              <>
-                <span aria-hidden className="w-px h-3.5 bg-canvas-border" />
-                {/* The pill, not the rubber stamp: the stamp is the ceremony at
-                    the end of a track, and one sitting in a row of chips reads
-                    as decoration. Here it is a fact among the other facts, said
-                    the way the audit-run cards say it. */}
-                <ConclusionPill c={concl} />
-              </>
-            )}
-          </div>
+          {/* Heading = the CONTROL TITLE (17 Sep). The objective held this spot
+              while the one-line statement had no name of its own; now that the
+              RACM splits title from description, the title is what belongs at
+              the top of the control's own page, and the objective reads as one
+              more fact about it below. */}
+          <h1 className="leadsheet-title text-[1.625rem] leading-[1.25] text-ink-900 mt-2.5">{control.description}</h1>
 
           {/* The detail half, read in the order the work happens: the risk the
               control answers, then how it is performed. Closed it is one line
@@ -5193,6 +5499,20 @@ export default function ControlDossier() {
                     {control.controlActivity}
                   </p>
                   <div className="mt-3.5 flex flex-wrap items-baseline gap-x-6 gap-y-2">
+                    {/* Who and where, moved off the header line (22 Sep): the
+                        chips above say what kind of control this is, and six
+                        named facts beside them made a strip nobody read. They
+                        are still one click away, which is where the reader who
+                        wants to know who to ask will look. */}
+                    <HeadField label="RACM" value={control.process} />
+                    {isShared(control) ? (
+                      <>
+                        <HeadField label="Performed at" value={control.entity} />
+                        <HeadField label="Covers" value={control.entities!.join(', ')} />
+                      </>
+                    ) : <HeadField label="Entity" value={control.entity} />}
+                    <HeadField label="Control owner" value={headOwners.controlOwner} />
+                    {!headOwners.single && <HeadField label="Process owner" value={headOwners.processOwner} />}
                     <HeadField label="Sub-process" value={control.subProcess} />
                     <HeadField label="Class" value={control.clazz} />
                     <HeadField label="Nature" value={control.nature} />
@@ -5216,7 +5536,13 @@ export default function ControlDossier() {
             </AnimatePresence>
           </div>
 
-          <div className="flex items-center gap-3 mt-4 pt-3 border-t border-canvas-border flex-wrap">
+          {/* ── the status bar ─────────────────────────────────────────────────
+              Full-bleed inside the card, so it reads as the card's own footer
+              rather than one more paragraph in it. The verdict is named here
+              rather than sitting anonymously in the row of chips above: this is
+              the line a reader arrives for, and "Not tested" needs to say what
+              it is not tested ABOUT. */}
+          <div className="flex items-center gap-3 mt-4 -mx-5 px-5 py-3 border-t border-canvas-border flex-wrap">
             {/* The conclusion and the two track verdicts are the auditor's read,
                 and an owner watching it move learns what is being tested and how
                 it is going. They see what is asked of them instead. */}
@@ -5224,6 +5550,9 @@ export default function ControlDossier() {
               <span className="text-[0.71875rem] font-semibold text-ink-400 uppercase tracking-wide">Your control</span>
             ) : (
               <>
+                <span className="text-[0.6875rem] font-semibold uppercase tracking-[0.08em] text-ink-400">Overall status</span>
+                <ConclusionPill c={concl} />
+                <span aria-hidden className="w-px h-4 bg-canvas-border" />
                 <span className="text-[0.71875rem] text-ink-400 inline-flex items-center gap-1.5"><Tickmark result={designResult === 'Effective' ? 'Pass' : designResult === 'Ineffective' ? 'Fail' : 'Not tested'} size={14} /> TOD {designResult.toLowerCase()}</span>
                 <ChevronRight size={13} className="text-ink-300" />
                 <span className="text-[0.71875rem] text-ink-400 inline-flex items-center gap-1.5"><Tickmark result={opResult === 'Effective' ? 'Pass' : opResult === 'Ineffective' ? 'Fail' : 'Not tested'} size={14} /> TOE {toeLocked ? 'locked' : opResult.toLowerCase()}</span>
@@ -5246,9 +5575,14 @@ export default function ControlDossier() {
                 <button onClick={() => { setWpPreview(true); logEvent({ action: 'Export', description: `Opened the working paper for ${control.id} — ${ROLE_LABEL[role]}`, module: 'SOX ICFR', entity: 'Evidence' }); }}
                   className="h-8 px-3 inline-flex items-center gap-1.5 rounded-lg bg-brand-50 text-[0.75rem] font-semibold text-brand-700 hover:bg-brand-100 transition-colors cursor-pointer"><FileSpreadsheet size={13} /> Working paper</button>
               )}
-              {isAuditor && isControlLocked(control) && (
+              {isAuditor && controlLocked && (
                 <button onClick={() => setReopening(true)} className="h-8 px-3 inline-flex items-center gap-1.5 rounded-lg bg-brand-50 text-[0.75rem] font-semibold text-brand-700 hover:bg-brand-100 transition-colors cursor-pointer"><RotateCcw size={13} /> Reopen</button>
               )}
+              {/* Where the trail lives, beside the paper that summarises it.
+                  Short because the rail takes 400px off this row: the longer
+                  version wrapped the status line onto two, and a status line
+                  that wraps stops being a status line. */}
+              {!isOwner && <span className="hidden xl:inline text-[0.6875rem] text-ink-400">Every run is logged in History</span>}
             </div>
           </div>
         </div>
@@ -5330,16 +5664,20 @@ export default function ControlDossier() {
           them can run — not a finding underneath them. */}
       <UnableToTestBanner control={control} />
 
-      {/* stepper + discussion */}
-      <div className="grid grid-cols-[minmax(0,1fr)_360px] gap-5 items-start">
-        <motion.div className="vstepper" variants={{ hidden: {}, show: { transition: { staggerChildren: 0.1, delayChildren: 0.08 } } }}>
+      {/* the stepper — the whole of the left column below the header */}
+      <motion.div className="vstepper" variants={{ hidden: {}, show: { transition: { staggerChildren: 0.1, delayChildren: 0.08 } } }}>
           {/* Design leads (user ask). It is also the order the work happens in:
               design gates operating, so a control whose design fails never needs
               a population at all — building one first was work done on spec. */}
-          <VStep n={1} title={isOwner ? 'Documents' : 'TOD'}
+          {/* The steps are named in full (user ask, 21 Sep): a reader who has
+              to expand "TOD" before they know what it is has been made to work
+              for nothing. The owner keeps "Documents" — they supply evidence
+              rather than test design, and naming the step after a test they
+              cannot run would describe somebody else's job. */}
+          <VStep n={1} id="vstep-design" title={isOwner ? 'Documents' : 'Test of design'}
             subtitle={isOwner
               ? 'The documents this control needs on file. Attach what you hold — the auditor tests them.'
-              : 'Test of design — the documents on file, one transaction traced end-to-end, and a design check for each thing that has to be true. Ends with the design marked effective or ineffective.'}
+              : 'The documents on file, one transaction traced end-to-end, and a design check for each thing that has to be true. Ends with the design marked effective or ineffective.'}
             status={designResult} hideStatus={isOwner}
             right={!isOwner && control.design.carriedFrom
               // A roll-forward carried this conclusion from its parent interim —
@@ -5412,7 +5750,7 @@ export default function ControlDossier() {
                 : <span className="text-[0.6875rem] font-semibold text-ink-400">Nothing extracted yet</span>}>
             <PopulationSection control={control} canEdit={canEdit} locked={popGated} />
           </VStep>
-          <VStep n={3} title="Sample" subtitle="Drawn off the locked population, sized by how often the control runs, with the selection method and its seed stored so anyone can reproduce the same items." hideStatus
+          <VStep n={3} id="vstep-sample" title="Sample drawing" subtitle="Drawn off the locked population, sized by how often the control runs, with the selection method and its seed stored so anyone can reproduce the same items." hideStatus
             status={sampleLocked ? 'Not tested' : control.operating.sampling ? 'Effective' : 'Not tested'} locked={sampleLocked}
             right={toeLocked
               ? <span className="text-[0.6875rem] font-semibold text-ink-400 inline-flex items-center gap-1"><Lock size={11} /> {gateNote}</span>
@@ -5423,13 +5761,13 @@ export default function ControlDossier() {
                   : <span className="text-[0.6875rem] font-semibold text-ink-400">Awaiting the draw</span>}>
             <SampleExtractSection control={control} canEdit={canEdit} locked={sampleLocked} />
           </VStep>
-          <VStep n={4} id="vstep-toe" title="TOE" subtitle="Test of operating effectiveness — each sampled item against each attribute, pass or fail, with the evidence attached. Concludes effective or ineffective." status={toeLocked ? 'Not tested' : opResult} locked={toeLocked}
+          <VStep n={4} id="vstep-toe" title="Test of effectiveness" subtitle="Each sampled item against each attribute, pass or fail, with the evidence attached. Concludes effective or ineffective." status={toeLocked ? 'Not tested' : opResult} locked={toeLocked}
             right={toeLocked ? <span className="text-[0.6875rem] font-semibold text-ink-400 inline-flex items-center gap-1"><Lock size={11} /> {gateNote}</span> : undefined}>
             <OperatingSection control={control} canEdit={canEdit} locked={toeLocked} />
           </VStep>
           </>
           )}
-          {!isOwner && <VStep n={5} title="Sign-off" subtitle="The auditor signs the paper, the reviewer countersigns it, and the control is done. Nobody countersigns work they prepared." hideStatus
+          {!isOwner && <VStep n={5} id="vstep-signoff" title="Final" subtitle="The auditor signs the paper, the reviewer countersigns it, and the control is done. Nobody countersigns work they prepared." hideStatus
             status={control.wpSignoff?.reviewer ? 'Effective' : 'Not tested'} locked={!controlLocked}
             right={control.wpSignoff?.reviewer
               ? <span className="text-[0.6875rem] font-bold text-compliant-700 inline-flex items-center gap-1"><BadgeCheck size={12} /> Control done</span>
@@ -5532,15 +5870,32 @@ export default function ControlDossier() {
             </motion.div>
           )}
         </motion.div>
-        {/* right rail — the three confidence scores, then the collaboration
-            surfaces. They read on the work rather than being part of it, so
-            they sit with what was done and what was said; the stepper gets the
-            full width of the page it earns. No wrapper card: the meters are
-            already cards, and a box around cards drew a group boundary the
-            rail didn't need. */}
-        <motion.div className="space-y-2.5" variants={{ hidden: { opacity: 0, y: 12 }, show: { opacity: 1, y: 0 } }}>
-          {designRagMeters(control).map(m => <RagCard key={m.label} m={m} />)}
-          <ActivityRail control={control} />
+        </div>
+        {/* right rail — ONE section (user ask, 21 Sep): the three scores sit
+            inside the same panel as the conversation rather than in a card of
+            their own above it. They read on the work rather than being part of
+            it, and two stacked boxes drew a boundary that said they were two
+            different things. The stepper gets the full width of the page it
+            earns.
+
+            400px, not 360: the rail carries a conversation, and a bubble with
+            a quick reply under it reads badly at 360. */}
+        {/* The rail stays MOUNTED when folded away, clipped rather than
+            unmounted. Pulling it out from under a running validation would
+            fire the pane's goodbye — "I stopped reading when you moved away"
+            — at a reader who did no such thing, and would throw away work
+            they asked for. So the panel keeps its full 400px and the track
+            slides over it. */}
+        <motion.div className="h-full min-h-0 pb-6 relative overflow-hidden" variants={{ hidden: { opacity: 0, y: 12 }, show: { opacity: 1, y: 0 } }}>
+          {/* `inert` so a folded rail cannot be tabbed into — it is clipped
+              out of sight, not merely out of the way. */}
+          <div className="h-full w-[400px]" inert={!railOpen}>
+            <ActivityRail control={control} meters={designRagMeters(control)} pane={railPane} onPane={setRailPane} onCollapse={() => setRailOpen(false)} />
+          </div>
+          {!railOpen && (
+            <RailSpine control={control} meters={designRagMeters(control)} running={!!run}
+              onOpen={p => { setRailPane(p); setRailOpen(true); }} />
+          )}
         </motion.div>
       </div>
 
