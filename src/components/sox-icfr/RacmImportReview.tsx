@@ -18,8 +18,8 @@
  */
 import { Fragment, useEffect, useMemo, useRef, useState } from 'react';
 import {
-  AlertTriangle, ArrowLeft, Check, CheckCircle2, ChevronRight, Circle, FileSpreadsheet, FileText, FileWarning,
-  Loader2, Paperclip, RotateCcw, Sparkles, Star, Wand2, X,
+  AlertTriangle, ArrowLeft, Check, CheckCircle2, ChevronDown, ChevronRight, Circle, FileSpreadsheet, FileText, FileWarning,
+  Loader2, Paperclip, RotateCcw, Search, Sparkles, Star, Wand2, X,
 } from 'lucide-react';
 import { racmTemplateForProcesses } from './mockData';
 import {
@@ -94,6 +94,95 @@ const selectCls = 'h-9 px-3 rounded-lg border border-canvas-border bg-canvas-ele
 const primaryBtn = 'h-9 px-3.5 inline-flex items-center gap-1.5 rounded-lg bg-brand-600 text-white text-[0.78125rem] font-semibold enabled:hover:bg-brand-700 disabled:opacity-40 disabled:cursor-not-allowed transition-colors cursor-pointer';
 const secondaryBtn = 'h-9 px-3.5 inline-flex items-center gap-1.5 rounded-lg border border-canvas-border text-[0.78125rem] font-semibold text-ink-600 hover:text-ink-900 transition-colors cursor-pointer';
 const quietBtn = 'h-7 px-2 inline-flex items-center gap-1 rounded-md border border-canvas-border bg-canvas-elevated text-[0.71875rem] font-semibold text-ink-600 hover:text-ink-900 hover:border-ink-300 disabled:opacity-40 disabled:cursor-not-allowed transition-colors cursor-pointer';
+
+/**
+ * Which column in the file, picked by name.
+ *
+ * A native <select> was fine when a RACM had a dozen columns. The matrices that
+ * actually arrive carry forty or more — S.No. through Sign-off Date — and
+ * finding "Control Frequency" in that list meant scrolling a list rendered by
+ * the operating system, which cannot be searched and cannot be told apart from
+ * the forty around it (user ask, 22 Sep).
+ *
+ * So it is a combobox: type a few letters, press Enter. Deliberately small —
+ * no portal, no virtualisation, no fuzzy matching. It is one substring test
+ * against the headers of one spreadsheet, and a menu that can be read.
+ */
+function ColumnPicker({ id, label, value, options, onPick }: {
+  id: string;
+  label: string;
+  /** The chosen column index, or null for "not in this file". */
+  value: number | null;
+  options: { i: number; label: string }[];
+  onPick: (v: string) => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const [q, setQ] = useState('');
+  const box = useRef<HTMLDivElement>(null);
+  const search = useRef<HTMLInputElement>(null);
+
+  useEffect(() => {
+    if (!open) return;
+    search.current?.focus();
+    const away = (e: MouseEvent) => { if (!box.current?.contains(e.target as Node)) setOpen(false); };
+    document.addEventListener('mousedown', away);
+    return () => document.removeEventListener('mousedown', away);
+  }, [open]);
+
+  const shown = useMemo(() => {
+    const t = q.trim().toLowerCase();
+    return t ? options.filter(o => o.label.toLowerCase().includes(t)) : options;
+  }, [q, options]);
+
+  const chosen = value === null ? null : options.find(o => o.i === value);
+  const take = (v: string) => { onPick(v); setOpen(false); setQ(''); };
+
+  return (
+    <div ref={box} className="relative">
+      <button id={id} type="button" aria-label={label} aria-expanded={open} aria-haspopup="listbox"
+        onClick={() => setOpen(o => !o)}
+        className={cn(selectCls, 'w-full h-8 text-[0.75rem] flex items-center justify-between gap-1.5 text-left')}>
+        <span className={cn('truncate', chosen ? 'text-ink-800' : 'text-ink-400')}>{chosen ? chosen.label : '— Not in file —'}</span>
+        <ChevronDown size={13} className="shrink-0 text-ink-400" />
+      </button>
+      {open && (
+        <div className="absolute z-30 left-0 right-0 mt-1 rounded-lg border border-canvas-border bg-canvas-elevated shadow-[0_12px_32px_-12px_rgba(15,8,30,0.28)] overflow-hidden">
+          <div className="flex items-center gap-1.5 px-2 h-8 border-b border-canvas-border">
+            <Search size={12} className="shrink-0 text-ink-400" />
+            <input ref={search} value={q} onChange={e => setQ(e.target.value)}
+              onKeyDown={e => {
+                if (e.key === 'Escape') { e.preventDefault(); setOpen(false); setQ(''); }
+                // Enter takes the only thing left, which is what typing three
+                // letters into a list of forty is for.
+                if (e.key === 'Enter' && shown.length === 1) { e.preventDefault(); take(String(shown[0].i)); }
+              }}
+              placeholder="Search the file\u2019s columns\u2026" aria-label={`Search columns for ${label}`}
+              className="min-w-0 flex-1 bg-transparent border-none outline-none text-[0.75rem] text-ink-800 placeholder:text-ink-400" />
+            {q && <button type="button" onClick={() => { setQ(''); search.current?.focus(); }} aria-label="Clear the search"
+              className="shrink-0 text-ink-400 hover:text-ink-700 cursor-pointer"><X size={11} /></button>}
+          </div>
+          <div role="listbox" className="max-h-[14rem] overflow-y-auto py-1">
+            {/* Always offered, and never filtered away: "not in this file" is an
+                answer, not a column, so searching for one must not hide it. */}
+            <button type="button" role="option" aria-selected={value === null} onClick={() => take('')}
+              className={cn('w-full text-left px-2.5 py-1.5 text-[0.75rem] flex items-center gap-1.5 cursor-pointer hover:bg-paper-50', value === null ? 'text-brand-700 font-semibold' : 'text-ink-500')}>
+              {value === null ? <Check size={11} className="shrink-0" /> : <span className="w-[11px] shrink-0" />}
+              — Not in file —
+            </button>
+            {shown.map(o => (
+              <button key={o.i} type="button" role="option" aria-selected={value === o.i} onClick={() => take(String(o.i))}
+                className={cn('w-full text-left px-2.5 py-1.5 text-[0.75rem] flex items-center gap-1.5 cursor-pointer hover:bg-paper-50', value === o.i ? 'text-brand-700 font-semibold' : 'text-ink-700')}>
+                {value === o.i ? <Check size={11} className="shrink-0" /> : <span className="w-[11px] shrink-0" />}
+                <span className="truncate">{o.label}</span>
+              </button>
+            ))}
+            {shown.length === 0 && <p className="px-2.5 py-2 text-[0.71875rem] text-ink-400">No column in this file matches that.</p>}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
 
 const plural = (n: number, one: string, many = `${one}s`) => `${n} ${n === 1 ? one : many}`;
 /** The register keeps names lower-cased; say them the way people write them. */
@@ -735,12 +824,8 @@ export default function RacmImportReview({ mode, file, process, entity, existing
                             </span>
                           </td>
                           <td>
-                            <select id={`racm-import-col-${m.field}`} aria-label={`Column in your file for ${f?.label ?? m.field}`}
-                              value={m.column === null ? '' : String(m.column)} onChange={e => setColumn(m.field, e.target.value)}
-                              className={cn(selectCls, 'w-full h-8 text-[0.75rem]')}>
-                              <option value="">— Not in file —</option>
-                              {columnOptions.map(o => <option key={o.i} value={o.i}>{o.label}</option>)}
-                            </select>
+                            <ColumnPicker id={`racm-import-col-${m.field}`} label={`Column in your file for ${f?.label ?? m.field}`}
+                              value={m.column} options={columnOptions} onPick={v => setColumn(m.field, v)} />
                           </td>
                           <td><ConfidencePill match={m} missing={missingRequired.some(x => x.field === m.field)} /></td>
                           <td><span className="block truncate text-ink-500" title={sampleValue || undefined}>{sampleValue || <span className="text-ink-300">—</span>}</span></td>
@@ -751,15 +836,28 @@ export default function RacmImportReview({ mode, file, process, entity, existing
                 </table>
               </div>
 
+              {/* ── the columns nothing above claimed ──────────────────────
+                  This said "Columns not imported", which was not true and had
+                  not been true for a long time: `buildImportRows` keeps every
+                  unclaimed column on the row as an extra, and the matrix prints
+                  all of them. What the table above decides is which columns the
+                  product READS — the ones it tests and reports on — not which
+                  ones survive the import (user ask, 22 Sep).
+
+                  So it says what actually happens. A reader who came here to
+                  rescue a column they thought was being dropped was being sent
+                  to fix something that was not broken. */}
               {unusedColumns.length > 0 && (
                 <div className="mt-4">
-                  <p className={labelCls}>Columns not imported</p>
+                  <p className={labelCls}>Also imported · {plural(unusedColumns.length, 'column')}</p>
                   <div className="flex flex-wrap gap-1.5">
                     {unusedColumns.map(o => (
                       <span key={o.i} className="inline-flex items-center h-6 px-2 rounded-md border border-canvas-border bg-paper-50 text-[0.71875rem] text-ink-600">{o.label}</span>
                     ))}
                   </div>
-                  <p className="text-[0.6875rem] text-ink-400 mt-1.5">Pick one for a field in the table to bring it in.</p>
+                  <p className="text-[0.6875rem] text-ink-400 mt-1.5">
+                    {unusedColumns.length === 1 ? 'This one comes across' : 'These come across'} with every row and {unusedColumns.length === 1 ? 'shows' : 'show'} in the matrix, but nothing tests {unusedColumns.length === 1 ? 'it' : 'them'}. Point a field above at one to have it read.
+                  </p>
                 </div>
               )}
             </>
