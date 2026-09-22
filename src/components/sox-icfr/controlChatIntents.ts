@@ -1,8 +1,8 @@
 import type { ChatAction, ChatActionId } from './controlChatActions';
 import type { Situation } from './controlChatScript';
 import { listOf } from './controlChatScript';
-import { pointResult } from './helpers';
-import type { Control, DesignPoint, Role, TestResult } from './types';
+import { pointResult, requiredFilesReady, stepResult } from './helpers';
+import type { Control, DesignPoint, OperatingStep, Role, TestResult } from './types';
 
 /**
  * Typing, understood as far as it honestly can be.
@@ -29,6 +29,10 @@ import type { Control, DesignPoint, Role, TestResult } from './types';
 export type Intent =
   | { kind: 'action'; action: ChatAction; note?: string }
   | { kind: 'mark'; pointId: string; label: string; result: TestResult }
+  /** The same sentence one track later. "pass 5.1" means the design check on
+   *  step ① and the attribute itself on step ④, because that is what it means
+   *  to the person typing it — they are looking at one of the two. */
+  | { kind: 'mark-step'; stepId: string; label: string; result: TestResult }
   | { kind: 'reply'; text: string };
 
 export interface IntentCtx {
@@ -63,11 +67,21 @@ const labelOf = (control: Control, p: DesignPoint): string => {
   return code ? `check ${code}` : `“${p.text.replace(/\.$/, '')}”`;
 };
 
+/** The attribute itself, by its code or by words from what it says. */
+function findStep(control: Control, ref: string): OperatingStep | undefined {
+  const needle = ref.trim().toLowerCase();
+  if (!needle) return undefined;
+  return control.operating.steps.find(s => s.code.toLowerCase() === needle)
+    ?? control.operating.steps.find(s => s.description.toLowerCase().includes(needle));
+}
+
+const stepLabelOf = (s: OperatingStep): string => `attribute ${s.code}`;
+
 /** Why an action the reader asked for is not on offer. Read off the same
  *  situation the buttons are, so the two can never disagree. */
 function refusal(id: ChatActionId, { s, role }: IntentCtx): string {
   if (s.sealed) return 'This engagement is signed off — nothing on this control can move now.';
-  const auditorsOwn: ChatActionId[] = ['ira-run', 'conclude-effective', 'conclude-ineffective', 'lock-population', 'conclude-op-effective', 'conclude-op-ineffective'];
+  const auditorsOwn: ChatActionId[] = ['ira-run', 'toe-run', 'conclude-effective', 'conclude-ineffective', 'lock-population', 'conclude-op-effective', 'conclude-op-ineffective'];
   if (role !== 'auditor' && auditorsOwn.includes(id)) {
     return `That one is the auditor’s. You are viewing as ${role === 'reviewer' ? 'the reviewer' : 'the risk owner'}, so I can’t do it from here.`;
   }
@@ -89,6 +103,12 @@ function refusal(id: ChatActionId, { s, role }: IntentCtx): string {
   if (id === 'conclude-ineffective') {
     if (s.designResult !== 'Not tested') return `The design is already concluded ${s.designResult.toLowerCase()}.`;
     return 'Not yet — the design is not ready to conclude.';
+  }
+  if (id === 'toe-run') {
+    if (s.operatingResult !== 'Not tested') return `Operating effectiveness is already concluded ${s.operatingResult.toLowerCase()}.`;
+    if (s.toe.total === 0) return 'This control has no attributes to test against — that comes from the RACM.';
+    if (s.toe.tested === s.toe.total) return 'Every attribute already has a result. Nothing left for me to read.';
+    return 'No attribute has all the files its test asks for yet, so there is nothing I can read.';
   }
   if (id === 'lock-population') {
     if (s.popLocked) return 'The population is already locked.';
@@ -187,11 +207,43 @@ export function readIntent(raw: string, ctx: IntentCtx): Intent {
     return { kind: 'reply', text: ctx.promptText };
   }
 
-  // ── mark one check ────────────────────────────────────────────────────────
+  // ── mark one check, or one attribute ──────────────────────────────────────
   const mark = /\b(pass|fail)\b/.exec(t);
   if (mark && !has(t, 'all')) {
     const result: TestResult = mark[1] === 'pass' ? 'Pass' : 'Fail';
-    const ref = t.replace(/\b(pass|fail|mark|the|check|as|it|please)\b/g, ' ').trim();
+    const ref = t.replace(/\b(pass|fail|mark|the|check|attribute|as|it|please)\b/g, ' ').trim();
+
+    // On step ④ the same words mean the attribute, not the design check that
+    // happens to hang off it. Whichever one the reader is looking at is the
+    // one they mean.
+    if (s.step === 'operating') {
+      const step = findStep(control, ref);
+      if (!step) {
+        const codes = control.operating.steps.map(x => x.code);
+        return { kind: 'reply', text: codes.length
+          ? `I could not tell which attribute you mean. This control has ${listOf(codes, 5)} — try “${result.toLowerCase()} ${codes[0]}”.`
+          : 'This control has no attributes to test against — that comes from the RACM.' };
+      }
+      if (ctx.role !== 'auditor' || s.locked || s.operatingResult !== 'Not tested') {
+        return { kind: 'reply', text: s.operatingResult !== 'Not tested'
+          ? `Operating effectiveness is already concluded ${s.operatingResult.toLowerCase()}, so the attributes are settled.`
+          : refusal('conclude-op-effective', ctx) };
+      }
+      if (stepResult(step) === result) {
+        return { kind: 'reply', text: `${stepLabelOf(step)} is already marked ${result === 'Pass' ? 'passed' : 'failed'}.` };
+      }
+      // The store refuses a pass on an attribute whose required files are not
+      // all in, so the reason is given rather than the click being swallowed.
+      if (result === 'Pass' && !requiredFilesReady(step, control)) {
+        const files = step.requiredFiles ?? [];
+        const missing = files.filter(f => !f.file).map(f => f.label);
+        return { kind: 'reply', text: files.length === 0
+          ? `${stepLabelOf(step)} lists no required files, so there is nothing to pass it on. Add what the test asks for on the attribute first.`
+          : `${stepLabelOf(step)} can’t be passed until its files are in — ${listOf(missing)} still missing. Failing it does not need them.` };
+      }
+      return { kind: 'mark-step', stepId: step.id, label: stepLabelOf(step), result };
+    }
+
     const point = findPoint(control, ref);
     if (!point) {
       const codes = control.design.points.map(p => codeOf(control, p)).filter(Boolean) as string[];
@@ -220,7 +272,11 @@ export function readIntent(raw: string, ctx: IntentCtx): Intent {
   // not a signature, so the conclusions are read before the paper is.
   if (has(t, 'lock the population', 'lock population', 'lock the pop')) return take('lock-population');
   if (has(t, 'countersign')) return take('countersign');
-  if (has(t, 'run', 'validate', 'validation', 'assess', 'check the evidence', 'ira')) return take('ira-run');
+  // Which validation is meant is decided by where the work is, the same way a
+  // conclusion is: on ④ there is only one thing left to run.
+  if (has(t, 'run', 'validate', 'validation', 'assess', 'check the evidence', 'ira')) {
+    return take(s.step === 'operating' ? 'toe-run' : 'ira-run');
+  }
   // Which track a conclusion lands on is decided by where the work is, not by
   // the reader having to say "TOE" — on step ④ "conclude it effective" can
   // only mean one thing.

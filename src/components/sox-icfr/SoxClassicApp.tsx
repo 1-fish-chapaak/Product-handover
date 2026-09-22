@@ -238,8 +238,9 @@ export default function SoxClassicInner({ onBack, backLabel = 'Back to Engagemen
           header, no role switcher; the persona is fixed until you go back to the
           engagement. */}
       {view !== 'dossier' && !isDrillIn && !inAudit && topBar}
-      <div className={cn('max-w-[1320px] mx-auto px-6 pt-4 w-full',
-        dossierPanes ? 'flex-1 min-h-0 flex flex-col' : 'pb-6')}>
+      {/* 32px gutter on the control page, as in the reworked shell. */}
+      <div className={cn('pt-4 w-full',
+        dossierPanes ? 'flex-1 min-h-0 flex flex-col px-8' : 'max-w-[1320px] mx-auto px-6 pb-6')}>
         {inAudit && isRoot && (
           <div className="flex items-start justify-between gap-3">
             <SoxBreadcrumb onBack={closeAudit} items={[

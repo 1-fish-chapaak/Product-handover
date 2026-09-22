@@ -1070,7 +1070,13 @@ function AttributeRow({ control, step, canEdit, testing }: { control: Control; s
   const { uploaded, total } = requiredFilesCount(step, control);
   const ready = requiredFilesReady(step, control);
   const busy = testing || validatingWf;
-  const runAI = () => { setValidatingWf(true); window.setTimeout(() => { runStepValidation(control.id, step.id); setValidatingWf(false); }, 4000); };
+  // One attribute's own run — narrated in the rail like every other, and named
+  // so the reader can tell it from the one that reads them all.
+  const runAI = () => {
+    setValidatingWf(true);
+    startRun(control.id, `Reading the files behind attribute ${step.code}`, true);
+    window.setTimeout(() => { endRun(control.id); runStepValidation(control.id, step.id); setValidatingWf(false); }, 4000);
+  };
 
   // No Pass without the evidence (17 Sep dev call) — the Pass button, an
   // override and an attestation all wait for every required file. Fail never does.
@@ -4636,6 +4642,10 @@ function OperatingSection({ control, canEdit, locked }: { control: Control; canE
 
   const runAll = () => {
     setTesting(true);
+    // Same rule as the design run: the button is here, the narration is in the
+    // rail, and the rail comes forward because the reader pressed this on the
+    // left and would otherwise be watching the wrong column.
+    startRun(control.id, 'Reading the uploaded files against each attribute', true);
     logEvent({ action: 'Run', description: `Ran AI validation on ${ready} ready attribute(s) for ${control.id}`, module: 'SOX ICFR', entity: 'Test Result' });
     const skipped = o.steps.filter(s => !requiredFilesReady(s, control)).map(s => {
       const { uploaded, total } = requiredFilesCount(s, control);
@@ -4644,6 +4654,7 @@ function OperatingSection({ control, canEdit, locked }: { control: Control; canE
       return total === 0 ? `${s.code}: no required files listed` : `${s.code}: ${missing} file${missing === 1 ? '' : 's'} missing`;
     });
     window.setTimeout(() => {
+      endRun(control.id);
       validateReadyAttributes(control.id);
       setTesting(false);
       if (skipped.length) addToast({ type: 'warning', title: `AI validation ran on ${ready} attribute${ready === 1 ? '' : 's'}`, message: skipped.join(' · ') });

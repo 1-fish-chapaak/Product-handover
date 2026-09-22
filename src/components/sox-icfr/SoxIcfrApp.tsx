@@ -273,8 +273,12 @@ function Inner({ onBack, backLabel = 'Back to Engagements' }: { onBack?: () => v
           header, no role switcher; the persona is fixed until you go back to the
           engagement. */}
       {view !== 'dossier' && !isDrillIn && !inAudit && topBar}
-      <div className={cn('max-w-[1320px] mx-auto px-6 pt-4 w-full',
-        dossierPanes ? 'flex-1 min-h-0 flex flex-col' : 'pb-6')}>
+      {/* The control page runs to a 32px gutter rather than a centred 1320px
+          column (user, 22 Sep — matching the production app). It is the one
+          page here that is two panes wide, and a centred column spent the
+          difference on empty canvas either side of the work. */}
+      <div className={cn('pt-4 w-full',
+        dossierPanes ? 'flex-1 min-h-0 flex flex-col px-8' : 'max-w-[1320px] mx-auto px-6 pb-6')}>
         {/* Inside an audit the engagement header gives way to a breadcrumb, but
             the persona switcher comes WITH it: every testing, review and
             sign-off action lives inside an audit, so this is where switching

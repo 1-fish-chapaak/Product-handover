@@ -27,6 +27,7 @@ export type ChatActionId =
   | 'conclude-ineffective'
   | 'approve-design'
   | 'lock-population'
+  | 'toe-run'
   | 'conclude-op-effective'
   | 'conclude-op-ineffective'
   | 'sign-paper'
@@ -50,6 +51,8 @@ export interface ChatAction {
 
 const show = (label: string, said: string, focus: ChatStepId, does = 'show you where it is on the page'): ChatAction =>
   ({ id: 'show-step', label, said, focus, does });
+
+const plural = (n: number, one: string, many = `${one}s`) => `${n} ${n === 1 ? one : many}`;
 
 export function actionsFor(s: Situation, role: Role): ChatAction[] {
   // A sealed engagement or a countersigned paper is a record, not a workspace.
@@ -143,6 +146,21 @@ export function actionsFor(s: Situation, role: Role): ChatAction[] {
   // both; everything else in `toeHolds` blocks only Effective.
   if (s.step === 'operating') {
     const out: ChatAction[] = [];
+    // The same offer the design step makes, one track later: read what has
+    // been uploaded and assess the attributes it covers. The page counts the
+    // ready ones on its own button, so this counts them the same way — an
+    // attribute whose files are not all in cannot be assessed and is not
+    // included in the promise.
+    if (s.toe.tested < s.toe.total && s.toeReady > 0) {
+      out.push({
+        id: 'toe-run', primary: true,
+        label: s.toeReady === s.toe.total - s.toe.tested
+          ? `Assess ${plural(s.toeReady, 'attribute')} for me`
+          : `Assess the ${plural(s.toeReady, 'attribute')} that ${s.toeReady === 1 ? 'has' : 'have'} its files`,
+        said: 'Run the AI validation over the ready attributes.',
+        does: 'read the uploaded files and assess every attribute that has them',
+      });
+    }
     if (s.toe.total > 0 && s.toe.tested === s.toe.total && !s.toeStale) {
       if (!s.toeHolds) out.push({ id: 'conclude-op-effective', label: 'Operating effective', said: 'Conclude the operating effectiveness effective.', primary: s.toe.failed === 0, does: 'conclude the operating effectiveness effective' });
       out.push({ id: 'conclude-op-ineffective', label: 'Operating ineffective', said: 'Conclude the operating effectiveness ineffective.', primary: s.toe.failed > 0, does: 'conclude the operating effectiveness ineffective' });

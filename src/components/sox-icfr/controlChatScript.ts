@@ -1,7 +1,7 @@
 import {
   designApproved, designCompleteness, designFilesOf, designOutstanding, designSuggestion, isControlLocked, isEngagementLocked,
   inquiryOnlyAttributes, operatingApplies, operatingProgress, passedWithoutFiles, pendingReviewNoteCount, pointResult,
-  populationLocked, populationSources, sampledSources, samePerson, stepResult, toeRoundFailed, trackResult, yearEndPending,
+  populationLocked, populationSources, requiredFilesReady, sampledSources, samePerson, stepResult, toeRoundFailed, trackResult, yearEndPending,
 } from './helpers';
 import type { AuditRecord, Control, DesignDoc, IcfrEngagement, Role, TrackConclusion } from './types';
 
@@ -93,6 +93,9 @@ export interface Situation {
   /** A run sits against a draw that has since changed. The page refuses BOTH
    *  conclusions on this, where every other hold only blocks Effective. */
   toeStale: boolean;
+  /** Attributes with every required file uploaded — what a validation run can
+   *  actually read, and the page's own count on its Run button. */
+  toeReady: number;
   operatingResult: TrackConclusion;
   preparerSigned?: { by: string; at: string };
   reviewerSigned?: { by: string; at: string };
@@ -214,7 +217,9 @@ export function situationOf({ eng, control, role, me, audit }: ChatCtx): Situati
     },
     preparedBy, approvedBy: d.approval?.approvedBy,
     popStarted, popLocked, popCount: o.population?.count ?? 0, popBlock,
-    sampleDrawn: !!o.sampling, drawsOwed, toe, toeHolds, toeStale: staleRuns > 0, operatingResult,
+    sampleDrawn: !!o.sampling, drawsOwed, toe, toeHolds, toeStale: staleRuns > 0,
+    toeReady: o.steps.filter(x => stepResult(x) === 'Not tested' && requiredFilesReady(x, control)).length,
+    operatingResult,
     preparerSigned: control.wpSignoff?.preparer, reviewerSigned: control.wpSignoff?.reviewer,
     notesPending: pendingReviewNoteCount(eng, control.id),
   };
@@ -353,9 +358,16 @@ export function nextPrompt(ctx: ChatCtx): ChatPrompt {
 
   if (s.step === 'operating') {
     if (s.toe.total === 0) return line('The sample is drawn, but this control has no attributes to test against — that comes from the RACM.');
-    if (s.toe.tested === 0) return line(`Sample is drawn and ${plural(s.toe.total, 'attribute')} are waiting. Each sampled item gets a pass or fail against each attribute, with the evidence attached.`);
+    // What is holding the untested ones is the useful half of this: "12 to go"
+    // and "12 to go, none of which have their files" are different problems.
+    const waiting = s.toe.total - s.toe.tested;
+    const filesNote = s.toeReady === 0
+      ? ` None of ${waiting === 1 ? 'it' : 'them'} ${waiting === 1 ? 'has' : 'have'} all the files the test asks for yet, so there is nothing I can read.`
+      : s.toeReady < waiting ? ` ${plural(s.toeReady, 'of them has', 'of them have')} all its files — I can read those.`
+      : ' Every one of them has its files, so I can read them all in one go.';
+    if (s.toe.tested === 0) return line(`Sample is drawn and ${plural(s.toe.total, 'attribute')} are waiting.${filesNote}`);
     if (s.toe.tested < s.toe.total) {
-      return line(`${s.toe.tested} of ${s.toe.total} attributes tested${s.toe.failed > 0 ? `, ${s.toe.failed} failed so far` : ''}. Keep going — the conclusion unlocks when every attribute has a result.`);
+      return line(`${s.toe.tested} of ${s.toe.total} attributes tested${s.toe.failed > 0 ? `, ${s.toe.failed} failed so far` : ''}.${filesNote}`);
     }
     if (s.toeHolds) {
       return line(`All ${s.toe.total} attributes are tested — ${s.toe.passed} pass, ${s.toe.failed} fail — but the conclusion is held: ${s.toeHolds}.`);

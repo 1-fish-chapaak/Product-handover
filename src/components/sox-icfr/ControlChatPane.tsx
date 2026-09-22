@@ -3,7 +3,7 @@ import { motion, useReducedMotion } from 'motion/react';
 import { ArrowRight, ArrowUp } from 'lucide-react';
 import { useIcfr } from './store';
 import { useAuditLog } from '../../context/AdminDataContext';
-import { concludeRationale, designOutstanding, designSuggestion, operatingSuggestion } from './helpers';
+import { concludeRationale, designOutstanding, designSuggestion, operatingSuggestion, trackResult } from './helpers';
 import { endRun, say, sayOnce, startRun, useControlRun, useControlThread } from './controlChat';
 import { acknowledge, listOf, nextPrompt, type ChatStepId, type Situation } from './controlChatScript';
 import { actionsFor, type ChatAction } from './controlChatActions';
@@ -58,6 +58,8 @@ const STEP_ANCHOR: Record<ChatStepId, string> = {
 /** The same beat the page's own validation takes (VALIDATE_MS). Ira is not
  *  faster than the button beside it — the wait is part of what it means. */
 const IRA_MS = 6000;
+/** And the attribute run's own beat — the page's `runAll` takes 2400ms. */
+const TOE_MS = 2400;
 
 /** The chat's thinking state, which is a named step and not three dots: the
  *  page's own validation says what it is doing, and so does this. Ask IRA
@@ -79,7 +81,8 @@ function WorkingStep({ text }: { text: string }) {
 
 export default function ControlChatPane({ control }: { control: Control }) {
   const { eng, role, me, openAuditId, runDesignIra, concludeDesign, overrideDesign, approveDesign, setDesignPoint, overrideDesignPoint,
-    lockPopulation, concludeOperating, overrideOperating, signOffControlWp } = useIcfr();
+    lockPopulation, concludeOperating, overrideOperating, signOffControlWp,
+    setStepResult, overrideStep, validateReadyAttributes } = useIcfr();
   const logEvent = useAuditLog();
   const audit = useMemo(() => eng.audits.find(a => a.id === openAuditId) ?? null, [eng.audits, openAuditId]);
   const prompt = useMemo(() => nextPrompt({ eng, control, role, me, audit }), [eng, control, role, me, audit]);
@@ -94,7 +97,7 @@ export default function ControlChatPane({ control }: { control: Control }) {
   // reason either (user ask, 22 Sep) — the page asks for it in a form, so the
   // chat asks for it in the only way a chat can: it holds the mark, asks, and
   // takes the next thing typed as the rationale.
-  const [awaitingWhy, setAwaitingWhy] = useState<{ pointId: string; label: string; result: TestResult } | null>(null);
+  const [awaitingWhy, setAwaitingWhy] = useState<{ kind: 'point' | 'attribute'; id: string; label: string; result: TestResult } | null>(null);
   const still = useReducedMotion();
 
   const scrollRef = useRef<HTMLDivElement>(null);
@@ -224,6 +227,24 @@ export default function ControlChatPane({ control }: { control: Control }) {
       return;
     }
 
+    if (a.id === 'toe-run') {
+      // The page's own beat for this run (runAll, 2400ms) — shorter than the
+      // design one because it reads uploaded files rather than the whole
+      // evidence set, and Ira is not faster than the button beside it.
+      startRun(control.id, 'Reading the uploaded files against each attribute');
+      timer.current = window.setTimeout(() => {
+        const now = latest.current;
+        endRun(now.id);
+        if (trackResult(now.operating) !== 'Not tested') {
+          say(now.id, 'ira', 'The testing was concluded while I was reading, so I stopped — the attributes are settled.');
+          return;
+        }
+        validateReadyAttributes(now.id);
+        logEvent({ action: 'Run', description: `Ran AI validation on the ready attributes for ${now.id} from the chat`, module: 'SOX ICFR', entity: 'Test Result' });
+      }, TOE_MS);
+      return;
+    }
+
     if (a.id === 'lock-population') {
       lockPopulation(control.id);
       logEvent({ action: 'Update', description: `Locked the population for ${control.id} from the chat`, module: 'SOX ICFR', entity: 'Evidence' });
@@ -274,9 +295,11 @@ export default function ControlChatPane({ control }: { control: Control }) {
     // auditor wrote, and second-guessing it would be the one place this rail
     // must not have an opinion.
     if (awaitingWhy) {
-      const { pointId, label, result } = awaitingWhy;
+      const { kind, id, label, result } = awaitingWhy;
       setAwaitingWhy(null);
-      overrideDesignPoint(control.id, pointId, { result, by: me, at: 'just now', rationale: text });
+      const override = { result, by: me, at: 'just now', rationale: text };
+      if (kind === 'point') overrideDesignPoint(control.id, id, override);
+      else overrideStep(control.id, id, override);
       logEvent({ action: 'Update', description: `Overrode ${label} to ${result.toLowerCase()} on ${control.id} from the chat — ${text}`, module: 'SOX ICFR', entity: 'Test Result' });
       skipAck.current = true;
       say(control.id, 'ira', `Recorded. ${label.charAt(0).toUpperCase()}${label.slice(1)} now reads ${result === 'Pass' ? 'passed' : 'failed'}, with your reason on the paper beside it.`);
@@ -297,7 +320,7 @@ export default function ControlChatPane({ control }: { control: Control }) {
       const point = control.design.points.find(p => p.id === intent.pointId);
       const iraSaid = point?.validation?.result;
       if (iraSaid && iraSaid !== intent.result) {
-        setAwaitingWhy({ pointId: intent.pointId, label: intent.label, result: intent.result });
+        setAwaitingWhy({ kind: 'point', id: intent.pointId, label: intent.label, result: intent.result });
         say(control.id, 'ira', `I read that one as ${iraSaid === 'Pass' ? 'a pass' : 'a fail'}. Marking it ${intent.result === 'Pass' ? 'passed' : 'failed'} goes against what I found, so tell me why and I will record both — your answer on the paper, mine underneath it.`);
         return;
       }
@@ -306,6 +329,22 @@ export default function ControlChatPane({ control }: { control: Control }) {
       // This names WHICH check moved, because the reader named it and deserves
       // to see the right one answered. The diff effect's generic "1 check
       // marked" would only repeat it, so it stands down for this one change.
+      skipAck.current = true;
+      say(control.id, 'ira', `Marked ${intent.label} ${intent.result === 'Pass' ? 'passed' : 'failed'}.`);
+      return;
+    }
+
+    // ── the same thing, one track later ──────────────────────────────────────
+    if (intent.kind === 'mark-step') {
+      const step = control.operating.steps.find(x => x.id === intent.stepId);
+      const iraSaid = step?.validation?.result;
+      if (iraSaid && iraSaid !== intent.result) {
+        setAwaitingWhy({ kind: 'attribute', id: intent.stepId, label: intent.label, result: intent.result });
+        say(control.id, 'ira', `I read that one as ${iraSaid === 'Pass' ? 'a pass' : 'a fail'}. Marking it ${intent.result === 'Pass' ? 'passed' : 'failed'} goes against what I found, so tell me why and I will record both — your answer on the paper, mine underneath it.`);
+        return;
+      }
+      setStepResult(control.id, intent.stepId, intent.result);
+      logEvent({ action: 'Update', description: `Marked ${intent.label} ${intent.result.toLowerCase()} on ${control.id} from the chat`, module: 'SOX ICFR', entity: 'Test Result' });
       skipAck.current = true;
       say(control.id, 'ira', `Marked ${intent.label} ${intent.result === 'Pass' ? 'passed' : 'failed'}.`);
       return;
