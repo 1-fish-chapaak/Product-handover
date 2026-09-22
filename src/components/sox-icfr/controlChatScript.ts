@@ -1,5 +1,6 @@
 import {
   designApproved, designBlocked, designCompleteness, designFilesOf, designOutstanding, designSuggestion, isControlLocked, isEngagementLocked,
+  exceptionCourtDetail,
   inquiryOnlyAttributes, operatingApplies, operatingProgress, passedWithoutFiles, pendingReviewNoteCount, pointResult,
   populationLocked, populationSources, requiredFilesCount, requiredFilesReady, sampledSources, samePerson, stepResult, toeRoundFailed, trackResult, yearEndPending,
 } from './helpers';
@@ -153,6 +154,24 @@ export interface Situation {
    *  reader is about to hand over, per attribute. */
   evidenceOwed: { stepId: string; code: string; missing: number; total: number }[];
   operatingResult: TrackConclusion;
+  /** The open exception on this control, and the one thing it is waiting for.
+   *
+   *  An exception is not a sixth step — remediation lives outside the paper's
+   *  five — but its ROOT CAUSE is written on this page, by the auditor, and it
+   *  is what the grade and the whole plan hang off. Until it is settled nothing
+   *  about the exception can move, so it is the one part of the exception the
+   *  rail speaks about. */
+  exception: {
+    id: string;
+    track: 'design' | 'operating';
+    /** What is on the paper now — Ira's draft, or the auditor's own words. */
+    rootCause: string;
+    /** Set while the sentence is still Ira's and nobody has taken or changed
+     *  it. `rootCauseReady` is false exactly while this is set. */
+    drafted?: string;
+    /** Whose court, and what they are doing with it — the page's own words. */
+    court: { who: string; doing: string };
+  } | null;
   preparerSigned?: { by: string; at: string };
   reviewerSigned?: { by: string; at: string };
   notesPending: number;
@@ -287,6 +306,18 @@ export function situationOf({ eng, control, role, me, audit, files }: ChatCtx): 
     toeReady: o.steps.filter(x => stepResult(x) === 'Not tested' && requiredFilesReady(x, control)).length,
     evidenceOwed: evidenceOwed(control),
     operatingResult,
+    exception: (() => {
+      // The page's own pick: the exception raised against THIS control. Only
+      // while it is still being sized — past that the baton is the owner's or
+      // the reviewer's, and the rail has nothing to offer on it.
+      const d = eng.deficiencies.find(x => x.controlId === control.id && x.status === 'Identified');
+      if (!d) return null;
+      return {
+        id: d.id, track: d.track, rootCause: d.rootCause,
+        drafted: d.iraSuggested?.rootCause,
+        court: exceptionCourtDetail(d, eng),
+      };
+    })(),
     preparerSigned: control.wpSignoff?.preparer, reviewerSigned: control.wpSignoff?.reviewer,
     notesPending: pendingReviewNoteCount(eng, control.id),
   };
@@ -303,6 +334,9 @@ export function situationOf({ eng, control, role, me, audit, files }: ChatCtx): 
     (files ?? []).map(f => (f.usable ? 'u' : '-')).join(''),
     toe.tested, toe.failed, operatingResult, o.steps.map(x => requiredFilesCount(x, control).uploaded).join(','),
     ipe?.conclusion ?? '-', ipe?.checks.map(k => k.result).join('') ?? '-',
+    // The exception's root cause moves the conversation too: it is written on
+    // this page and nothing about the exception moves until it is settled.
+    s.exception ? `${s.exception.id}:${s.exception.rootCause.trim() ? 'w' : '-'}${s.exception.drafted ? 'd' : '-'}` : '-',
     !!s.preparerSigned, !!s.reviewerSigned, s.notesPending, locked,
   ].join('|');
   return s;
@@ -393,6 +427,28 @@ export function nextPrompt(ctx: ChatCtx): ChatPrompt {
   }
 
   // ── the auditor: the work itself ──────────────────────────────────────────
+  // ── the exception's root cause, before anything else ──────────────────────
+  // It leads every other branch because nothing about the exception moves
+  // until it is settled: `completeSizing` refuses without it, the grade is
+  // computed off it, and the owner's whole plan is reviewed against it. A
+  // design exception also locks steps ③ and ④, so on that track there is
+  // genuinely nothing else to be getting on with.
+  const ex = s.exception;
+  if (ex) {
+    const what = ex.track === 'design' ? 'the design test' : 'the testing';
+    if (ex.drafted && ex.rootCause.trim()) {
+      return line(`${ex.id} is open on ${what}, and the root cause is still my draft:\n\n“${ex.rootCause}”\n\nI got that ${ex.drafted}. Take it as written if it is right, or tell me what the mechanism actually is and I will put your words on the paper instead. Nothing about the exception moves until this is settled — the grade and the plan both hang off it.`);
+    }
+    if (!ex.rootCause.trim()) {
+      return line(`${ex.id} is open on ${what} and it has no root cause yet. I could not draft one — there is nothing on this control that names a mechanism. Tell me what actually allows this to go wrong and I will write it down. Not the count: “the system allows manual posting that bypasses approval”, not “3 of 25 lacked approval”.`);
+    }
+    // Whose court it is decides the sentence. "A. Mehta is sizing it" said to
+    // A. Mehta is the page talking about them in the third person.
+    return line(ex.court.who === ctx.me
+      ? `${ex.id} has its root cause. That is step 1 done — size it on the left, and the grade computes off what you put in.`
+      : `${ex.id} has its root cause. ${ex.court.who} is ${ex.court.doing} — nothing here is waiting on you.`);
+  }
+
   if (s.step === 'design') {
     if (s.designReturn) {
       return line(`The reviewer sent the design back: “${s.designReturn.note}” — the conclusion is cleared, so this is open again. Fix what they raised and conclude afresh.`);

@@ -5896,8 +5896,11 @@ export default function ControlDossier() {
                   : <span className="text-[0.6875rem] font-semibold text-ink-400 inline-flex items-center gap-1"><Lock size={11} /> Unlocks once {opApplies ? 'both tracks conclude' : 'the design concludes'}</span>}>
             <SignOffSection control={control} />
           </VStep>}
+          {/* `id` on the card below so the rail can bring the reader here — the
+              exception's root cause is written on this page, and Ira offers to
+              do it from the chat. */}
           {concl === 'Ineffective' && (
-            <motion.div variants={{ hidden: { opacity: 0, y: 12 }, show: { opacity: 1, y: 0 } }} className="ml-[54px] rounded-xl border border-risk-200 bg-risk-50/40 p-4 mt-1">
+            <motion.div id="control-exception" variants={{ hidden: { opacity: 0, y: 12 }, show: { opacity: 1, y: 0 } }} className="ml-[54px] rounded-xl border border-risk-200 bg-risk-50/40 p-4 mt-1">
               {/* ── graded here, and only here ───────────────────────────────
                   This used to send the auditor to the Deficiency management tab
                   to grade the finding their own testing had just raised, which

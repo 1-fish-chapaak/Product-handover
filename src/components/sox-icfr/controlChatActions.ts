@@ -40,6 +40,9 @@ export type ChatActionId =
   | 'toe-run'
   | 'conclude-op-effective'
   | 'conclude-op-ineffective'
+  | 'rootcause-take'
+  | 'rootcause-write'
+  | 'show-exception'
   | 'sign-paper'
   | 'countersign'
   | 'show-step';
@@ -104,6 +107,26 @@ export function actionsFor(s: Situation, role: Role): ChatAction[] {
   }
 
   // ── the auditor ───────────────────────────────────────────────────────────
+  // ── the exception's root cause ────────────────────────────────────────────
+  // Same order as the prompt, and for the same reason: the store refuses
+  // `completeSizing` while this is unsettled, so nothing else on the exception
+  // can be offered until it is. Sizing itself stays the page's — likelihood,
+  // exposure and the compensating control are three fields with a working
+  // panel behind one of them, and half of that from a chat rail would be a
+  // grade nobody could reproduce.
+  if (s.exception) {
+    const ex = s.exception;
+    const out: ChatAction[] = [];
+    if (ex.drafted && ex.rootCause.trim()) {
+      out.push({ id: 'rootcause-take', label: 'Use it as written', said: 'Use that root cause as written.', primary: true, does: 'put my drafted root cause on the paper as written' });
+      out.push({ id: 'rootcause-write', label: 'I’ll say it in my own words', said: 'I’ll write the root cause myself.', does: 'take the root cause in your own words' });
+    } else if (!ex.rootCause.trim()) {
+      out.push({ id: 'rootcause-write', label: 'Tell me the mechanism', said: 'I’ll write the root cause.', primary: true, does: 'take the root cause in your own words' });
+    }
+    out.push({ id: 'show-exception', label: ex.rootCause.trim() && !ex.drafted ? 'Take me to the exception' : 'Show me the exception', said: 'Take me to the exception.', does: 'show you the exception on the page' });
+    return out;
+  }
+
   // Both tracks concluded: the paper is ready to sign, and signing it is a
   // single store call with a single guard, so it is offered rather than
   // pointed at. Once signed it belongs to the reviewer and there is nothing
