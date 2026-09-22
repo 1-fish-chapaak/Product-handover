@@ -5109,7 +5109,7 @@ function DiscussionPane({ control }: { control: Control }) {
  *  spine and the open rail agree about it. */
 type RailPane = 'chat' | 'history' | 'discussion';
 
-function ActivityRail({ control, meters, pane, onPane, onCollapse }: { control: Control; meters: RagMeterDef[]; pane: RailPane; onPane: (p: RailPane) => void; onCollapse: () => void }) {
+function ActivityRail({ control, pane, onPane, onCollapse }: { control: Control; pane: RailPane; onPane: (p: RailPane) => void; onCollapse: () => void }) {
   const { eng } = useIcfr();
   // The pane belongs to the page, not to this component: the folded spine
   // picks one too, and a rail that forgot which tab was chosen the moment it
@@ -5123,10 +5123,11 @@ function ActivityRail({ control, meters, pane, onPane, onCollapse }: { control: 
   // is nothing left for the page to carry it away from.
   return (
     <aside className="panel overflow-hidden h-full min-h-0 flex flex-col">
-      {/* The scores first, because they are the reading on the control, and the
-          conversation underneath is what to do about it. One panel, one rule
-          between them. */}
-      <RagKpiRow meters={meters} flush />
+      {/* The three scores stood here, above the tabs. They live in the control
+          header now (user ask, 22 Sep), beside the TOD → TOE status they are a
+          reading of — two columns of one screen stating the same three numbers
+          about the same control was one column too many. What is left in this
+          rail is the conversation, which is what to DO about them. */}
       <div className="flex items-center gap-2 m-3 mb-2">
         <div className="flex-1 min-w-0 flex items-center gap-1 p-1 rounded-xl bg-paper-50 border border-canvas-border">
           <button onClick={() => setPane('chat')} className={tabCls(pane === 'chat')}><Sparkles size={13} /> Ira</button>
@@ -5689,6 +5690,19 @@ export default function ControlDossier() {
               {!isOwner && <span className="hidden xl:inline text-[0.6875rem] text-ink-400">Every run is logged in History</span>}
             </div>
           </div>
+
+          {/* ── the three readings ─────────────────────────────────────────────
+              Moved off the top of the Ira rail (user ask, 22 Sep) to sit with
+              the status bar, which is where the control's verdict already
+              lives. TOD-then-TOE is the shape of the work; these are how far
+              each part of it has actually got, so the two belong in one footer
+              rather than in two columns of the screen saying the same thing
+              about the same control.
+
+              The owner does not get them: they are the auditor's read on how
+              the testing is going, and the owner's line above is deliberately
+              "Your control" and nothing else. */}
+          {!isOwner && <RagKpiRow meters={designRagMeters(control)} flush />}
         </div>
       </motion.div>
 
@@ -5994,7 +6008,7 @@ export default function ControlDossier() {
           {/* `inert` so a folded rail cannot be tabbed into — it is clipped
               out of sight, not merely out of the way. */}
           <div className="h-full w-[400px]" inert={!railOpen}>
-            <ActivityRail control={control} meters={designRagMeters(control)} pane={railPane} onPane={setRailPane} onCollapse={() => setRailOpen(false)} />
+            <ActivityRail control={control} pane={railPane} onPane={setRailPane} onCollapse={() => setRailOpen(false)} />
           </div>
           {!railOpen && (
             <RailSpine control={control} meters={designRagMeters(control)} running={!!run}
