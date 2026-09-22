@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { motion } from 'motion/react';
-import { Sparkles, Send } from 'lucide-react';
+import { motion, useReducedMotion } from 'motion/react';
+import { ArrowRight, ArrowUp } from 'lucide-react';
 import { useIcfr } from './store';
 import { useAuditLog } from '../../context/AdminDataContext';
 import { concludeRationale, designSuggestion } from './helpers';
@@ -8,7 +8,6 @@ import { say, sayOnce, useControlThread } from './controlChat';
 import { acknowledge, nextPrompt, type ChatStepId, type Situation } from './controlChatScript';
 import { actionsFor, type ChatAction } from './controlChatActions';
 import { readIntent } from './controlChatIntents';
-import { Button } from '../shared/Button';
 import { cn } from '../../lib/cn';
 import type { Control } from './types';
 
@@ -30,6 +29,13 @@ import type { Control } from './types';
  * The composer carries the same actions in words. A sentence is matched to
  * one of the buttons on offer and then runs the identical call — typing is
  * another way to press what is there, never a way round a gate.
+ *
+ * It looks like Ask IRA looks, scaled to 400px — DESIGN.md §7.1. Ira's words
+ * are prose, not a bubble: no border, no fill, no avatar, identity carried by
+ * left-flush alignment against the reader's tinted pill on the right. That is
+ * a house rule, and it also does a job here: once Ira stops speaking in boxes,
+ * the only boxed things left in the rail are the buttons, so what can be
+ * pressed is finally distinguishable from what has already been said.
  */
 
 /** The step names as the page prints them, so Ira and the left-hand stepper
@@ -53,15 +59,21 @@ const STEP_ANCHOR: Record<ChatStepId, string> = {
  *  faster than the button beside it — the wait is part of what it means. */
 const IRA_MS = 6000;
 
-function TypingDots() {
+/** The chat's thinking state, which is a named step and not three dots: the
+ *  page's own validation says what it is doing, and so does this. Ask IRA
+ *  shows reasoning steps OR pulsing dots, never both — there is one step here,
+ *  so the step is what shows, and the dot beside it carries the pulse. */
+function WorkingStep({ text }: { text: string }) {
+  const still = useReducedMotion();
   return (
-    <span className="inline-flex items-center gap-1 align-middle">
-      {[0, 0.15, 0.3].map((d, i) => (
-        <motion.span key={i} className="w-1 h-1 rounded-full bg-ink-400"
-          animate={{ opacity: [0.3, 1, 0.3] }}
-          transition={{ duration: 0.9, repeat: Infinity, delay: d, ease: 'easeInOut' }} />
-      ))}
-    </span>
+    <div className="pl-3 border-l border-canvas-border">
+      <div className="flex items-center gap-1.5 text-[0.75rem] text-ink-500">
+        <motion.span className="w-1.5 h-1.5 rounded-full bg-primary shrink-0"
+          animate={still ? undefined : { scale: [1, 1.3, 1], opacity: [0.4, 1, 0.4] }}
+          transition={{ duration: 1.2, repeat: Infinity, ease: 'easeInOut' }} />
+        {text}
+      </div>
+    </div>
   );
 }
 
@@ -74,6 +86,7 @@ export default function ControlChatPane({ control }: { control: Control }) {
   const thread = useControlThread(control.id);
   const [working, setWorking] = useState<string | null>(null);
   const [draft, setDraft] = useState('');
+  const still = useReducedMotion();
 
   const scrollRef = useRef<HTMLDivElement>(null);
   useEffect(() => {
@@ -229,47 +242,50 @@ export default function ControlChatPane({ control }: { control: Control }) {
 
   return (
     <>
-      <div ref={scrollRef} className="flex-1 min-h-0 overflow-y-auto p-3 space-y-2.5">
+      {/* 20px between turns, where the 840px thread uses 40 — prose needs the
+          room to read as prose, and the rail has half the column to give. */}
+      <div ref={scrollRef} className="flex-1 min-h-0 overflow-y-auto px-3 pt-3 pb-4 space-y-5">
         {thread.map(m => (
-          <div key={m.id} className={cn(m.who === 'user' ? 'ml-auto max-w-[85%]' : 'mr-auto max-w-[92%]')}>
-            <div className={cn(m.who === 'user'
-              ? 'rounded-xl rounded-br-md bg-brand-600 text-white px-3 py-2 text-[0.75rem] leading-relaxed'
-              : 'subcard px-3 py-2.5 text-[0.75rem] leading-relaxed text-ink-700')}>
-              {m.text}
+          m.who === 'user' ? (
+            <div key={m.id} className="flex justify-end">
+              <div className="w-fit max-w-[85%] px-3 py-2 rounded-2xl bg-brand-50 text-ink-800 text-[0.8125rem] leading-[1.6] whitespace-pre-wrap break-words">
+                {m.text}
+              </div>
             </div>
-          </div>
+          ) : (
+            <div key={m.id} className="text-[0.8125rem] leading-[1.65] text-ink-800">{m.text}</div>
+          )
         ))}
 
-        {working && (
-          <div className="mr-auto max-w-[92%]">
-            <div className="subcard px-3 py-2.5 text-[0.75rem] leading-relaxed text-ink-500">
-              {working} <TypingDots />
-            </div>
-          </div>
-        )}
+        {working && <WorkingStep text={working} />}
 
-        {/* Not a message — the live read on where this control stands. */}
+        {/* Not a message — the live read on where this control stands. The
+            eyebrow names the step rather than the speaker: which step Ira is
+            talking about is information, and "Ira" is not, since the voice is
+            already carried by the alignment. */}
         {!working && (
-          <div className="mr-auto max-w-[92%]">
-            <div className="flex items-center gap-1.5 mb-1 text-[0.65625rem] font-semibold uppercase tracking-wide text-ink-400">
-              <Sparkles size={11} className="text-brand-500" />
-              Ira · {STEP_NUM[prompt.step]} {stepLabel}
+          <div>
+            <div className="mb-1.5 text-[0.6875rem] font-semibold uppercase tracking-[0.08em] text-ink-500">
+              {STEP_NUM[prompt.step]} {stepLabel}
             </div>
-            <div className="subcard px-3 py-2.5 text-[0.75rem] leading-relaxed text-ink-700">{prompt.text}</div>
+            <div className="text-[0.8125rem] leading-[1.65] text-ink-800">{prompt.text}</div>
             {actions.length > 0 && (
-              <div className="mt-2 space-y-1.5">
-                {actions.map(a => (
-                  <button key={a.id + a.label} onClick={() => run(a)}
-                    // Filled brand is what the READER said — the purple bubble
-                    // above. An offer that wears the same clothes as a sent
-                    // message reads as already-done, so the lead action is a
-                    // tinted outline instead of a second purple block.
-                    className={cn('w-full text-left rounded-[10px] px-3 py-2 text-[0.75rem] border transition-colors cursor-pointer',
+              <div className="mt-3 space-y-1.5">
+                {actions.map((a, i) => (
+                  <motion.button key={a.id + a.label} onClick={() => run(a)}
+                    initial={still ? false : { opacity: 0, y: 6 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    transition={{ delay: 0.05 + i * 0.06, duration: 0.3, ease: [0.22, 1, 0.36, 1] }}
+                    // The chat's own follow-up card (ChatView `FollowUpCard`),
+                    // at rail width. The arrow is the click-scent: it is the
+                    // one thing a line of Ira's prose above can never grow.
+                    className={cn('group/row w-full flex items-center gap-2.5 text-left px-3.5 py-2.5 rounded-xl border text-[0.8125rem] leading-snug transition-colors duration-150 cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/30',
                       a.primary
-                        ? 'border-brand-300 bg-brand-50 text-brand-700 font-semibold hover:bg-brand-100'
-                        : 'border-canvas-border bg-canvas-elevated text-ink-700 hover:border-brand-300 hover:text-brand-700')}>
-                    {a.label}
-                  </button>
+                        ? 'bg-brand-50 text-brand-700 border-brand-200 font-semibold hover:bg-brand-100'
+                        : 'bg-canvas-elevated text-ink-700 border-canvas-border hover:bg-brand-50 hover:text-brand-700 hover:border-brand-200')}>
+                    <span className="flex-1 min-w-0">{a.label}</span>
+                    <ArrowRight size={14} className="shrink-0 -translate-x-1 opacity-0 transition-all duration-150 group-hover/row:translate-x-0 group-hover/row:opacity-100" />
+                  </motion.button>
                 ))}
               </div>
             )}
@@ -277,27 +293,31 @@ export default function ControlChatPane({ control }: { control: Control }) {
         )}
       </div>
 
+      {/* The chat composer floats on a tinted canvas; this panel is flat white,
+          so the hairline stays — it is what stops the thread sliding under the
+          input. The rest is §7.1.3: `.ai-border`, and the global focus ring
+          suppressed because the border tone is the focus signal. */}
       <div className="p-3 border-t border-canvas-border">
-        <div className="flex items-end gap-2">
+        <div className="ai-border">
           <textarea
             value={draft} onChange={e => setDraft(e.target.value)} rows={2}
             onKeyDown={e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); send(); } }}
-            disabled={!!working}
+            disabled={!!working} aria-label="Message Ira"
             placeholder={working ? 'One moment…' : 'Ask Ira, or tell it what to do…'}
-            className="flex-1 text-[0.75rem] rounded-lg border border-canvas-border bg-canvas-elevated px-2.5 py-2 text-ink-800 placeholder:text-ink-400 focus:outline-none focus:ring-2 focus:ring-brand-200 resize-none disabled:bg-paper-50 disabled:cursor-not-allowed"
+            className="no-focus-ring w-full bg-transparent border-none outline-none resize-none px-3.5 pt-3 pb-1.5 text-[0.8125rem] leading-[1.5] text-ink-800 placeholder:text-ink-400 disabled:cursor-not-allowed"
           />
-          {/* The shared Button, not a hand-rolled one: it brings the pressed
-              state and the focus ring this rail had no way to grow on its own,
-              and forces the accessible name an icon-only button was missing.
-              The platform convention for a faded-rather-than-grey disabled
-              primary is the `disabled:!` block — see ShareModal. */}
-          <Button
-            variant="primary" size="md" iconOnly shape="lg"
-            disabled={!draft.trim() || !!working} onClick={send} aria-label="Send to Ira"
-            className="shrink-0 hover:!bg-brand-700 !shadow-none disabled:!bg-primary disabled:!text-white disabled:!opacity-40"
-          >
-            <Send size={15} />
-          </Button>
+          {/* Send is mounted only when there is something to send, as it is in
+              the chat. The hint holds the row's height so the composer does
+              not grow by 32px under the reader's hands as they start typing. */}
+          <div className="flex items-center justify-between gap-2 px-2.5 pb-2.5">
+            <span className="text-[0.6875rem] text-ink-400 select-none">Enter to send</span>
+            {!!draft.trim() && !working && (
+              <button onClick={send} aria-label="Send to Ira" title="Send · Enter to send, Shift+Enter for new line"
+                className="inline-flex items-center justify-center size-8 rounded-lg bg-primary text-white hover:bg-primary-hover active:bg-brand-800 transition-colors cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/30">
+                <ArrowUp size={16} strokeWidth={2.25} />
+              </button>
+            )}
+          </div>
         </div>
       </div>
     </>

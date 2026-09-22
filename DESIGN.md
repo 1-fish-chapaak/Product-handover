@@ -423,7 +423,9 @@ Row: `flex items-center justify-between gap-2 px-3 pb-4`.
 
 #### 7.1.6 User message pill
 
-`bg-canvas-elevated`, 1px `canvas-border`, `rounded-2xl`, whisper shadow `shadow-[0_1px_2px_rgba(15,8,30,0.04)]`, hover `hover:border-brand-200 hover:shadow-[0_10px_28px_-14px_rgba(15,8,30,0.16)]`, `transition-[border-color,box-shadow] duration-300`. The white-sheet-on-paper signature. `InlineEditBubble` edits it in place (`text-[1rem] text-ink-900` field with `border-brand-200`).
+`px-4 py-2.5 rounded-2xl bg-brand-50 text-ink-800 text-[0.875rem] leading-[1.6] whitespace-pre-wrap break-words` (`ChatView.tsx:7237`) — a **tinted lavender pill: no border, no shadow, no tail**, `w-fit max-w-[80%] ml-auto`. The reader's voice is a soft fill; Ira's is unfilled prose (§7.1.7). `InlineEditBubble` edits it in place (`rounded-2xl bg-canvas border border-canvas-border focus-within:border-brand-400`, inner `rounded-xl bg-canvas-elevated`, `text-[0.9375rem]` field).
+
+> Corrected 22 Sep 2026. This section previously specified a white `canvas-elevated` sheet with a `canvas-border` hairline and a whisper shadow — that has not been the rendered pill for some time, and the in-file comment at `ChatView.tsx:7199-7209` (an italic margin-note anchored by a `brand-300` rule) is stale for the same reason. The 2-line hover reveal (Edit / Copy / Bookmark + timestamp) below the pill is unchanged.
 
 #### 7.1.7 AI response prose
 
