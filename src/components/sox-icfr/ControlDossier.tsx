@@ -27,6 +27,7 @@ import {
   narrowedCount, populationFrom, readRowCount,
 } from './helpers';
 import { useAuditFiles, type AuditFile } from './useAuditFiles';
+import { mapEvidence, type EvidenceMatch } from './controlChatEvidence';
 import { auditCovers, countryFor, countryOf, inScopeEntityNames, ownersOf, programmeFor, scopedForDraw } from './auditScope';
 import { ConclusionPill, CourtBadge, NatureChip, OriginPicker, Toggle, TrackPill, Tickmark, Stamp, RagKpiRow, ragState, statusWordOf, worstMeter, type RagMeterDef } from './parts';
 import { Pill } from '../shared/StatusBadge';
@@ -36,7 +37,6 @@ import WorkingPaperModal from './WorkingPaperModal';
 import RemediationBriefModal from './RemediationBriefModal';
 import ControlChatPane from './ControlChatPane';
 import { DESIGN_RUN_STEPS, TOE_RUN_STEPS, endRun, startRun, railShown, useControlRun } from './controlChat';
-import { situationOf, type ChatStepId } from './controlChatScript';
 import { DeficiencyCard } from './extraViews';
 import DatePicker from '../shared/DatePicker';
 import { cn } from '../../lib/cn';
@@ -1069,12 +1069,16 @@ function WalkthroughCard({ control, canEdit }: { control: Control; canEdit: bool
  *  stronger of the two. */
 // ── operating attribute — its required files + AI validation, and/or self-attestation ─
 function AttributeRow({ control, step, canEdit, testing }: { control: Control; step: OperatingStep; canEdit: boolean; testing: boolean }) {
-  const { me, setStepResult, overrideStep, attestStep, addStepEvidence, uploadRequiredFile, clearRequiredFile, toggleStepAttest, runStepValidation, removeAttribute } = useIcfr();
+  const { me, setStepResult, overrideStep, attestStep, addStepEvidence, uploadRequiredFile, clearRequiredFile, toggleStepAttest, runStepValidation } = useIcfr();
   const logEvent = useAuditLog();
   const [over, setOver] = useState(false);
   const [noteDraft, setNoteDraft] = useState(step.attestation?.note ?? '');
   const [validatingWf, setValidatingWf] = useState(false);
   const [showQA, setShowQA] = useState(false);
+  // A pile of files, mapped onto this attribute's lines but not yet written.
+  // Shown first, on purpose: the auditor signs a paper saying this evidence
+  // proves this attribute, so they see what went where before it is filed.
+  const [pile, setPile] = useState<EvidenceMatch[] | null>(null);
   const eff = stepResult(step);
   const att = step.attestation;
   const attestOn = step.attestEnabled ?? !!att;   // section 2 — separate toggle, default off (on if already attested)
@@ -1092,6 +1096,26 @@ function AttributeRow({ control, step, canEdit, testing }: { control: Control; s
     setValidatingWf(true);
     startRun(control.id, `Reading the files behind attribute ${step.code}`, TOE_RUN_STEPS, 4000, true);
     window.setTimeout(() => { endRun(control.id); runStepValidation(control.id, step.id); setValidatingWf(false); }, 4000);
+  };
+
+  // ── a pile of files, sorted onto this attribute's lines ────────────────────
+  // Three required files is three pickers and three decisions about which line
+  // each one belongs to, made by a reader who is holding all three already.
+  // `mapEvidence` is the chat rail's own mapper, scoped to this attribute — one
+  // mapper in the product, so the page and the rail can never sort the same
+  // pile two ways. It scores; it does not guess silently.
+  const takePile = (list: FileList | null) => {
+    if (!list || list.length === 0) return;
+    setPile(mapEvidence(control, Array.from(list).map(f => f.name), step.id));
+  };
+  const filePile = () => {
+    if (!pile) return;
+    const placed = pile.filter(m => m.slot);
+    setPile(null);
+    placed.forEach(m => {
+      uploadRequiredFile(control.id, m.slot!.stepId, m.slot!.fileId, m.name);
+      logEvent({ action: 'Upload', description: `Uploaded ${m.name} as "${m.slot!.label}" for attribute ${m.slot!.code} (${control.id})`, module: 'SOX ICFR', entity: 'Evidence' });
+    });
   };
 
   // No Pass without the evidence (17 Sep dev call) — the Pass button, an
@@ -1123,7 +1147,14 @@ function AttributeRow({ control, step, canEdit, testing }: { control: Control; s
             {resultBtn('Pass', 'Pass', CheckCircle2, eff === 'Pass', 'bg-compliant-50 border-compliant-300 text-compliant-700')}
             {resultBtn('Fail', 'Fail', XCircle, eff === 'Fail', 'bg-risk-50 border-risk-300 text-risk-700')}
             <button onClick={() => setOver(o => !o)} title="Override result with rationale" className={cn('h-8 w-8 inline-flex items-center justify-center rounded-lg border cursor-pointer', step.override ? 'bg-high-50 border-high-300 text-high-700' : 'border-canvas-border bg-canvas-elevated text-ink-600 hover:border-high-300 hover:text-high-700')}><Pencil size={13} /></button>
-            <button onClick={() => { removeAttribute(control.id, step.id); logEvent({ action: 'Delete', description: `Removed attribute ${step.code} from ${control.id}`, module: 'SOX ICFR', entity: 'Control' }); }} title="Remove attribute" className="h-8 w-8 inline-flex items-center justify-center rounded-lg border border-canvas-border bg-canvas-elevated text-ink-400 hover:border-risk-300 hover:text-risk-600 cursor-pointer"><Trash2 size={13} /></button>
+            {/* PARKED (22 Sep, user ask) — the bin, for the same reason the
+                design check lost its own: an attribute comes from the RACM and
+                is part of what every sampled item was tested against. Deleting
+                one mid-test rewrites the question after the answer, and the
+                sample was drawn to cover it. Failing it, or overriding it with
+                a reason, is the way to disagree. `removeAttribute` stays on the
+                store; the attribute list itself is edited on the engagement
+                control page, which is where adding one happens too. */}
           </div>
         )}
       </div>
@@ -1153,7 +1184,55 @@ function AttributeRow({ control, step, canEdit, testing }: { control: Control; s
                 <Upload size={13} className="text-brand-600 shrink-0" />
                 <span className="text-[0.6875rem] font-semibold text-ink-600">Required files</span>
                 {total > 0 && <span className="text-[0.6875rem] text-ink-400 tabular-nums">{uploaded} of {total} uploaded</span>}
+                {/* Several at once, sorted onto the lines below. Only where
+                    there is more than one line to sort onto — on a one-line
+                    checklist this is the line's own Upload button wearing a
+                    different word, and two buttons for one job is one too many. */}
+                {canEdit && !busy && total > 1 && (
+                  <label title="Choose several files at once — each one is matched to the line it proves, and nothing is filed until you have seen where it went"
+                    className="ml-auto h-6 px-2 rounded-md border border-brand-200 bg-canvas-elevated text-brand-700 text-[0.6875rem] font-semibold hover:border-brand-400 hover:bg-brand-50 focus-within:ring-2 focus-within:ring-brand-200 inline-flex items-center gap-1 cursor-pointer">
+                    <input type="file" multiple className="sr-only" accept=".pdf,.png,.jpg,.jpeg,.xlsx,.xls,.csv,.doc,.docx"
+                      aria-label={`Upload several files for ${step.code}`}
+                      onChange={e => { takePile(e.target.files); e.target.value = ''; }} />
+                    <Upload size={10} /> {uploaded === 0 ? `Upload all ${total}` : 'Upload several'}
+                  </label>
+                )}
               </div>
+
+              {/* What the mapper decided, before anything is written. Every file
+                  says where it landed and how sure the match was; the ones it
+                  could not place are named rather than dropped, because the
+                  reader has to be told what did not land. */}
+              {pile && (
+                <div className="mt-2 rounded-md border border-brand-200 bg-canvas-elevated px-2.5 py-2">
+                  <div className="text-[0.625rem] font-bold uppercase tracking-wide text-ink-400">Where each one goes</div>
+                  <ul className="mt-1.5 space-y-1">
+                    {pile.map((m, i) => (
+                      <li key={`${m.name}-${i}`} className="flex items-start gap-1.5 text-[0.6875rem] leading-snug">
+                        {m.slot
+                          ? <CheckCircle2 size={11} className="text-compliant-600 shrink-0 mt-[3px]" />
+                          : <AlertTriangle size={11} className="text-mitigated-600 shrink-0 mt-[3px]" />}
+                        <span className="min-w-0">
+                          <span className="font-medium text-ink-800 break-all">{m.name}</span>
+                          {m.slot
+                            ? <> <span className="text-ink-400">→</span> <span className="text-ink-700">{m.slot.label}</span>
+                                {m.score < 30 && <span className="text-ink-400"> · a guess</span>}
+                                {m.slot.taken && <span className="text-mitigated-700"> · replaces what is there</span>}</>
+                            : <span className="text-ink-400"> — I could not place this one</span>}
+                        </span>
+                      </li>
+                    ))}
+                  </ul>
+                  <div className="mt-2 flex items-center gap-1.5">
+                    <button onClick={filePile} disabled={!pile.some(m => m.slot)}
+                      className="h-7 px-2.5 rounded-md bg-brand-600 text-white text-[0.6875rem] font-semibold enabled:hover:bg-brand-700 disabled:opacity-40 disabled:cursor-not-allowed inline-flex items-center gap-1 cursor-pointer">
+                      <Upload size={11} /> File {pile.filter(m => m.slot).length} {pile.filter(m => m.slot).length === 1 ? 'file' : 'files'}
+                    </button>
+                    <button onClick={() => setPile(null)}
+                      className="h-7 px-2.5 rounded-md border border-canvas-border bg-canvas-elevated text-ink-600 text-[0.6875rem] font-semibold hover:text-ink-900 hover:border-ink-300 cursor-pointer">Cancel</button>
+                  </div>
+                </div>
+              )}
               {total === 0 ? (
                 <p className="mt-1.5 text-[0.6875rem] text-ink-400">No required files listed — add them on the engagement control page.</p>
               ) : (
@@ -1394,7 +1473,7 @@ function evidenceFileName(label: string, wpRef: string, kind: DesignDocKind): st
 }
 
 function DesignSection({ control, canEdit }: { control: Control; canEdit: boolean }) {
-  const { role, me, addDesignDoc, attachDesignEvidence, removeDesignFile, removeDesignDoc, waiveDesignDoc, clearDesignWaiver, addDesignPoint, setDesignPoint, validateDesignPoint, runDesignIra } = useIcfr();
+  const { role, me, addDesignDoc, attachDesignEvidence, removeDesignFile, waiveDesignDoc, clearDesignWaiver, addDesignPoint, setDesignPoint, validateDesignPoint, runDesignIra } = useIcfr();
   // The owner keeps the evidence lane and loses the testing lane — see the note
   // on the dossier's own canEdit / canTest split.
   const isOwner = role === 'risk-owner';
@@ -1626,7 +1705,14 @@ function DesignSection({ control, canEdit }: { control: Control; canEdit: boolea
                       {doc.waiver && <button onClick={() => clearDesignWaiver(control.id, doc.id)} title="Remove the waiver — the element is required again" className="h-7 w-7 inline-flex items-center justify-center rounded-md border border-canvas-border bg-canvas-elevated text-ink-400 hover:border-brand-300 hover:text-brand-700 cursor-pointer"><RotateCcw size={12} /></button>}
                       {doc.status !== 'Received' && <button onClick={() => attach(doc)} title="Choose one or more files — PDF, image, XLSX, CSV or Word" className="h-7 px-2.5 text-[0.71875rem] font-semibold rounded-md border border-canvas-border bg-canvas-elevated text-ink-600 hover:text-compliant-700 hover:border-compliant-300 disabled:opacity-50 inline-flex items-center gap-1 cursor-pointer"><Upload size={11} /> Attach evidence</button>}
                       {doc.status === 'Received' && <button onClick={() => attach(doc)} title="Attach another file" aria-label={`Attach another file to ${docLabel(doc)}`} className="h-7 w-7 inline-flex items-center justify-center rounded-md border border-canvas-border bg-canvas-elevated text-ink-400 hover:border-brand-300 hover:text-brand-700 cursor-pointer"><Plus size={12} /></button>}
-                      <button onClick={() => { removeDesignDoc(control.id, doc.id); logEvent({ action: 'Delete', description: `Removed design element from ${control.id}`, module: 'SOX ICFR', entity: 'Control' }); }} title="Remove" className="h-7 w-7 inline-flex items-center justify-center rounded-md border border-canvas-border bg-canvas-elevated text-ink-400 hover:border-risk-300 hover:text-risk-600 cursor-pointer"><Trash2 size={12} /></button>
+                      {/* PARKED (22 Sep, user ask) — the bin. A design element
+                          is what the design was read against, and dropping one
+                          after the checks have been marked changes what the
+                          conclusion rests on without changing the conclusion.
+                          "Not applicable", beside it, is the honest way to
+                          account for an element that will not be provided — it
+                          asks for a reason and the working paper prints it.
+                          `removeDesignDoc` stays on the store. */}
                     </div>}
                   </div>
                   {/* the waiver is a judgement, so it takes a rationale — the reason
@@ -4962,17 +5048,6 @@ function ActivityRail({ control, meters, pane, onPane, onCollapse }: { control: 
   );
 }
 
-/** The paper's five steps, for the folded rail's spine. Same numbers and same
- *  order as the stepper on the left and the eyebrow in the chat — three places
- *  that must never disagree about which step is which. */
-const SPINE_STEPS: { id: ChatStepId; n: string; label: string }[] = [
-  { id: 'design', n: '①', label: 'Test of design' },
-  { id: 'population', n: '②', label: 'Population' },
-  { id: 'sample', n: '③', label: 'Sample drawing' },
-  { id: 'operating', n: '④', label: 'Test of effectiveness' },
-  { id: 'signoff', n: '⑤', label: 'Final' },
-];
-
 /** The rail folded away — a spine, not a shut door (user ask, 22 Sep).
  *
  *  The first version of this was a 44px strip carrying the word "Ira" and
@@ -4992,9 +5067,6 @@ function RailSpine({ control, meters, running, onOpen }: { control: Control; met
   const execCount = eng.executions.filter(e => e.controlId === control.id).length;
   const openDisc = discussionsFor(eng, control.id).filter(d => !d.resolved).length;
   const worst = worstMeter(meters);
-  const audit = eng.audits.find(a => a.id === openAuditId) ?? null;
-  const here = situationOf({ eng, control, role, me, audit }).step;
-  const at = SPINE_STEPS.findIndex(x => x.id === here);
   // Three dashes in a column was the whole of the folded rail on a control
   // nobody had set up — honest, and useless. When nothing is measurable yet,
   // it says so once instead of three times.
@@ -5067,33 +5139,13 @@ function RailSpine({ control, meters, running, onOpen }: { control: Control; met
         <span className="text-[0.5625rem] font-bold uppercase tracking-[0.12em] text-brand-700">Ira</span>
       </button>
 
-      {/* ── where the work actually is ──────────────────────────────────────
-          The one reading that is never empty. A control with nothing on it is
-          still ON a step, so this is what makes the folded rail worth looking
-          at before any evidence exists. Same five steps, same numbers, same
-          order as the stepper on the left. */}
-      <div className="shrink-0 px-2 pt-1 pb-2">
-        <div className="flex flex-col items-center gap-0.5">
-          {SPINE_STEPS.map((st, i) => {
-            const done = at > i;
-            const now = at === i;
-            return (
-              <div key={st.id} className="flex flex-col items-center gap-0.5">
-                <button onClick={() => onOpen('chat')} title={`${st.n} ${st.label}${now ? ' — where this control is' : done ? ' — done' : ''}`}
-                  aria-label={`${st.label}${now ? ', current step' : done ? ', done' : ''}`}
-                  aria-current={now ? 'step' : undefined}
-                  className={cn('size-5 rounded-full text-[0.5625rem] font-bold inline-flex items-center justify-center transition-colors cursor-pointer',
-                    now ? 'bg-brand-600 text-white ring-2 ring-brand-200'
-                      : done ? 'bg-brand-100 text-brand-700 hover:bg-brand-200'
-                      : 'bg-paper-100 text-ink-300 hover:text-ink-500')}>
-                  {i + 1}
-                </button>
-                {i < SPINE_STEPS.length - 1 && <span className={cn('w-px h-2', done ? 'bg-brand-200' : 'bg-canvas-border')} />}
-              </div>
-            );
-          })}
-        </div>
-      </div>
+      {/* PARKED (22 Sep, user ask) — the five-dot spine stood here. It said
+          which step the control was on, which the stepper down the left-hand
+          side of the page already says at full size and in words: the folded
+          rail sat directly beside it repeating the same five numbers in 20px
+          circles. The scores and the way back to Ira are what this column is
+          for, and the chat itself names the step in words the moment it is
+          opened. */}
 
       <div className="mt-auto border-t border-canvas-border" />
       <div className="shrink-0 px-1.5 py-2 space-y-1">

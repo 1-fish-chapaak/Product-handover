@@ -108,16 +108,28 @@ export function mapEvidence(control: Control, names: string[], onlyStepId?: stri
     out[p.ni] = { name: names[p.ni], slot: p.slot, score: p.s };
   }
 
-  // One file, one obvious home: when the reader has scoped the upload to a
-  // single attribute and there is exactly one empty slot left on it, a file
-  // that matched nothing still belongs there. Anywhere else this would be a
-  // guess; here it is the only place it could go.
+  // Scoped to ONE attribute, the unmatched files still belong here — the reader
+  // said so by pressing that attribute's own button. Audit evidence is rarely
+  // named after what it proves ("Invoice-SKIE8PWJ-0007.pdf" against "Signed
+  // approval record"), so a mapper that placed nothing would be a bulk upload
+  // that does not upload. The leftovers are dealt onto the empty lines in order.
+  //
+  // How sure that is depends on whether there was a choice to get wrong: one
+  // file and one empty line is the only place it could have gone, so it lands
+  // at 35 and passes without comment. Two or more is an arbitrary order, so
+  // they land at 15 and the reader is told each one is a guess — which is the
+  // whole reason nothing is written until they have looked.
+  //
+  // Never across attributes: there the filename is all there is to go on, and a
+  // file put against the wrong attribute is a working paper that says this
+  // evidence proves something it does not.
   if (onlyStepId) {
     const empty = slots.map((slot, si) => ({ slot, si })).filter(x => !x.slot.taken && !takenSlot.has(x.si));
     const orphans = out.map((m, i) => ({ m, i })).filter(x => !x.m.slot);
-    if (empty.length === 1 && orphans.length === 1) {
-      out[orphans[0].i] = { name: orphans[0].m.name, slot: empty[0].slot, score: 35 };
-    }
+    const sure = empty.length === 1 && orphans.length === 1;
+    orphans.slice(0, empty.length).forEach((o, k) => {
+      out[o.i] = { name: o.m.name, slot: empty[k].slot, score: sure ? 35 : 15 };
+    });
   }
   return out;
 }
