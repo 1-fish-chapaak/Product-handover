@@ -509,7 +509,7 @@ export function suggestRootCause(
   const again = onSecondRound ? ' It failed again on the redrawn sample, so it is not a one-off.' : '';
   if (track === 'design') {
     const checks = c.design.points.filter(p => (p.override?.result ?? p.result) === 'Fail').map(p => p.text);
-    if (!checks.length) return null;
+    if (!checks.length) return suggestRootCauseWithoutFailures(c, again, 'design');
     const more = checks.length > 1 ? ` ${checks.length - 1} other design check${checks.length === 2 ? '' : 's'} failed the same way.` : '';
     return {
       text: `The control as designed does not make sure that ${lowerFirst(checks[0]!)} — nothing in the way it is set up forces that step.${more}`,
@@ -517,7 +517,18 @@ export function suggestRootCause(
     };
   }
   const steps = c.operating.steps.filter(s => stepResult(s) === 'Fail');
-  if (!steps.length) return null;
+  // ── concluded ineffective with nothing that failed ────────────────────────
+  // This is not a rare corner: an auditor can conclude against the evidence,
+  // and the page lets them precisely because the tick marks are not the whole
+  // of a judgement. Ira used to return null here and the exception opened with
+  // an empty root-cause box (user report, 22 Sep) — which is the one field the
+  // grade and the plan both hang off, so the reader was left at a blank page
+  // on the thing that gates everything after it.
+  //
+  // It cannot draft from failures that did not happen, so it drafts from what
+  // there IS, weakest claim last: the reason recorded on the conclusion, then
+  // the structural holds the page itself refuses Effective on.
+  if (!steps.length) return suggestRootCauseWithoutFailures(c, again);
   const first = steps[0]!;
   const noted = (c.operating.exceptions ?? []).find(x => x.reason.trim())?.reason.trim();
   const items = failedSamples.length
@@ -528,6 +539,60 @@ export function suggestRootCause(
     text: `The control relies on ${who} ${quote(first.description)} every time, and nothing stops the step being skipped.${items}${noted ? ` The notes on the failed items say: ${quote(noted)}.` : ''}${again}`,
     reason: `from the failed attribute ${first.code}${failedSamples.length ? ` and the items it failed on` : ''}${noted ? ', with the notes against them' : ''}`,
   };
+}
+
+/**
+ * A root cause for a control concluded ineffective with nothing marked failed.
+ *
+ * Read in order of how much the sentence can honestly claim:
+ *
+ *  1. THE REASON ON THE CONCLUSION. Somebody wrote why, and their account of
+ *     the mechanism beats anything derived. An override outranks the plain
+ *     rationale because an override is what a person writes when they are
+ *     departing from the evidence — it is the most deliberate sentence on the
+ *     whole control.
+ *  2. THE STRUCTURAL HOLDS. The page refuses Effective on these, so they are
+ *     already the product's own account of what is wrong: an attribute passed
+ *     with the files its test asks for still missing, or one resting on
+ *     somebody's word with nothing behind it. Both are mechanisms, which is
+ *     exactly what a root cause has to name.
+ *
+ * It never invents a failure. Where there is nothing to say it says nothing,
+ * and the box stays empty rather than opening with a sentence the reviewer
+ * would have to unpick.
+ */
+function suggestRootCauseWithoutFailures(
+  c: Control, again: string, track: 'design' | 'operating' = 'operating',
+): { text: string; reason: string } | null {
+  const t = track === 'design' ? c.design : c.operating;
+  const said = t.override?.rationale?.trim() || t.rationale?.trim();
+  if (said) {
+    return {
+      text: `${said.replace(/[.\s]+$/, '')}.${again}`,
+      reason: t.override?.rationale?.trim()
+        ? 'from the reason recorded when the conclusion went against the evidence — say what the mechanism is, not what the verdict was'
+        : 'from the rationale on the conclusion — say what the mechanism is, not what the verdict was',
+    };
+  }
+  if (track === 'operating') {
+    const unbacked = passedWithoutFiles(c);
+    if (unbacked.length) {
+      const first = unbacked[0]!;
+      return {
+        text: `${first.code} was passed without the evidence its test asks for, so nothing on file shows the step was actually performed.${unbacked.length > 1 ? ` ${unbacked.length - 1} other attribute${unbacked.length === 2 ? '' : 's'} stand${unbacked.length === 2 ? 's' : ''} the same way.` : ''}${again}`,
+        reason: `from ${first.code} passing with ${requiredFilesCount(first, c).total - requiredFilesCount(first, c).uploaded} of its required files still missing`,
+      };
+    }
+    const wordAlone = inquiryOnlyAttributes(c);
+    if (wordAlone.length) {
+      const first = wordAlone[0]!;
+      return {
+        text: `${first.code} rests on a statement that the step was performed, with nothing attached behind it — the control cannot be shown to have operated, only said to have.${again}`,
+        reason: `from ${first.code} resting on a statement alone`,
+      };
+    }
+  }
+  return null;
 }
 
 /** The named person the baton actually sits with, and what they are doing with
