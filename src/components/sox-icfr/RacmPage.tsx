@@ -32,7 +32,7 @@ export default function RacmPage({ canManage }: {
   ];
 
   return (
-    <div>
+    <div className="px-9">
       <div className="mb-5">
         <p className="text-[0.6875rem] font-semibold tracking-[0.08em] text-ink-400 uppercase">Risk and controls</p>
         <h1 className="mt-1 text-[1.75rem] leading-tight font-semibold text-ink-900">RACM</h1>
