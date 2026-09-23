@@ -1101,7 +1101,7 @@ function RacmGrid({
       {/* Sticky header */}
       <div className="sticky top-0 z-20 flex bg-surface-2/95 border-b border-border backdrop-blur">
         {/* checkbox column */}
-        <div className="sticky left-0 bg-surface-2/95 border-r border-border-light h-9 w-10 flex items-center justify-center z-10">
+        <div className="sticky left-0 bg-surface-2 border-r border-border-light h-9 w-10 flex items-center justify-center z-10">
           <span className="text-[0.5625rem] text-ink-400 font-bold">#</span>
         </div>
         {visibleColumns.map(c => {
@@ -1112,7 +1112,7 @@ function RacmGrid({
           return (
             <div key={c.key}
               style={{ width: c.width, minWidth: c.width, left: pinned ? left : undefined }}
-              className={`relative h-9 px-3 flex items-center justify-between gap-1 text-[0.5625rem] font-bold text-text-muted uppercase tracking-wider border-r border-border-light ${pinned ? 'sticky bg-surface-2/95 z-10' : ''} ${isLastPinned ? 'shadow-[2px_0_3px_-2px_rgba(0,0,0,0.08)]' : ''}`}>
+              className={`relative h-9 px-3 flex items-center justify-between gap-1 text-[0.5625rem] font-bold text-text-muted uppercase tracking-wider border-r border-border-light ${pinned ? 'sticky bg-surface-2 z-10' : ''} ${isLastPinned ? 'shadow-[2px_0_3px_-2px_rgba(0,0,0,0.08)]' : ''}`}>
               <span className="truncate">{c.label}</span>
               {filterMode && (
                 <ColumnFilterControl colKey={c.key as string} label={c.label}
@@ -1140,7 +1140,7 @@ function RacmGrid({
           <div key={group.label}>
             {showGroupHeaders && (
               <button onClick={() => onToggleGroup(group.label)}
-                className="sticky left-0 z-10 w-full text-left flex items-center gap-2 px-4 py-1.5 bg-primary/5 border-b border-primary/15 hover:bg-primary/10 transition-colors cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/30 focus-visible:ring-offset-1"
+                className="sticky left-0 z-10 w-full text-left flex items-center gap-2 px-4 py-1.5 bg-brand-50 border-b border-primary/15 hover:bg-brand-100 transition-colors cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/30 focus-visible:ring-offset-1"
                 style={{ minWidth: totalWidth }}>
                 {collapsed ? <ChevronRight size={12} className="text-primary" /> : <ChevronDown size={12} className="text-primary" />}
                 <span className="text-[0.6875rem] font-bold text-primary truncate">{group.label}</span>
@@ -1194,7 +1194,11 @@ function RacmGridRow({
   onToggleKey: (rowKey: string) => void;
 }) {
   const [editingKey, setEditingKey] = useState<RacmColumnKey | null>(null);
-  const bg = isSelected ? 'bg-primary/8' : (rowIdx % 2 === 0 ? 'bg-white' : 'bg-surface-2/30');
+  // OPAQUE, every state. A frozen column is painted over the rows sliding
+  // sideways beneath it, so a translucent background lets that content read
+  // straight through the pinned cells — two rows of text on top of each other.
+  // surface-2 is #FCFAFD, so at full strength the zebra looks as it always did.
+  const bg = isSelected ? 'bg-brand-50' : (rowIdx % 2 === 0 ? 'bg-white' : 'bg-surface-2');
   // A published row never opens an editor — including the attributes modal,
   // which would otherwise look like it saved and then quietly discard the work.
   // Editing in the grid is free text for every column, ours and the client's
@@ -1205,7 +1209,7 @@ function RacmGridRow({
   return (
     <div className={`group flex border-b border-border-light/70 hover:bg-primary/5 ${bg} transition-colors`}>
       {/* checkbox */}
-      <div className={`sticky left-0 h-10 w-10 flex items-center justify-center border-r border-border-light z-10 ${bg}`}>
+      <div className={`sticky left-0 h-10 w-10 flex items-center justify-center border-r border-border-light z-10 ${bg} group-hover:bg-brand-50`}>
         <label className="flex items-center gap-2 cursor-pointer">
           <input type="checkbox" checked={isSelected} onChange={onToggleSelected}
             className="w-3.5 h-3.5 rounded border-border accent-primary cursor-pointer" />
@@ -1220,7 +1224,7 @@ function RacmGridRow({
         return (
           <div key={c.key}
             style={{ width: c.width, minWidth: c.width, left: pinned ? left : undefined }}
-            className={`h-10 px-3 py-1.5 text-[0.6875rem] text-text border-r border-border-light/70 ${pinned ? `sticky z-10 ${bg}` : ''} ${isLastPinned ? 'shadow-[2px_0_3px_-2px_rgba(0,0,0,0.08)]' : ''} ${isEditing && !isAttrEditing ? 'p-0' : ''}`}>
+            className={`h-10 px-3 py-1.5 text-[0.6875rem] text-text border-r border-border-light/70 ${pinned ? `sticky z-10 ${bg} group-hover:bg-brand-50` : ''} ${isLastPinned ? 'shadow-[2px_0_3px_-2px_rgba(0,0,0,0.08)]' : ''} ${isEditing && !isAttrEditing ? 'p-0' : ''}`}>
             {isAttrEditing ? (
               <>
                 <CellContent row={row} col={c} locked={locked} onEdit={() => {}} onOpenDetail={onOpenDetail} onToggleKey={() => onToggleKey(rowKey)} />
