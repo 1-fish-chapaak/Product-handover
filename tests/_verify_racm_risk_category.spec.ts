@@ -95,8 +95,12 @@ test("a category we don't recognise is asked for, not filed silently", async ({ 
 
   const picker = page.locator('select[id$="-riskCategory"]').first();
   await expect(picker).toBeVisible({ timeout: 8000 });
-  const options = await picker.locator('option:not([disabled])').allTextContents();
-  expect(options).toEqual(['Financial', 'Operational', 'Compliance', 'Fraud', 'IT general control', 'Reputational']);
+  // Waited on rather than read once: Ira's fills land in an effect, so the row
+  // rebuilds after it first renders and a single read can catch the box
+  // half-built. toHaveCount retries; allTextContents does not.
+  const options = picker.locator('option:not([disabled])');
+  await expect(options).toHaveCount(6, { timeout: 8000 });
+  expect(await options.allTextContents()).toEqual(['Financial', 'Operational', 'Compliance', 'Fraud', 'IT general control', 'Reputational']);
 
   const importBtn = page.getByRole('button', { name: /^Import \d+ control/ });
   await expect(importBtn).toBeDisabled();
