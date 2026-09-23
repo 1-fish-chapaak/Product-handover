@@ -388,11 +388,49 @@ export function worstMeter(meters: RagMeterDef[]): RagMeterDef | null {
 /** Red, amber, green or none — as a word, for whoever needs to branch on it. */
 export const ragState = ragWord;
 
-export function RagKpiRow({ meters, flush }: { meters: RagMeterDef[]; /** Sitting inside another panel — no border of its own, just a rule under it. */ flush?: boolean }) {
+export function RagKpiRow({ meters, flush, inline }: {
+  meters: RagMeterDef[];
+  /** Sitting inside another panel — no border of its own, just a rule under it. */
+  flush?: boolean;
+  /** Riding IN the status bar rather than under it (user ask, 23 Sep): the three
+   *  readings and the verdict are one statement about how far this control has
+   *  got, and a row of their own under the row they belong to said it twice.
+   *
+   *  Inline drops the panel each reading could open. A popover hung off a status
+   *  bar is the wrong weight for one sentence, so the sentence becomes the
+   *  title — still there on hover, no longer a thing to open and close. */
+  inline?: boolean;
+}) {
   const [openLabel, setOpenLabel] = useState<string | null>(null);
   const open = meters.find(m => m.label === openLabel) ?? null;
   const worst = worstMeter(meters);
   if (!meters.length) return null;
+
+  if (inline) {
+    return (
+      <div className="flex items-center gap-5 min-w-0">
+        {meters.map(m => {
+          const state = ragWord(m);
+          const flagged = worst === m;
+          const StateIcon = state === 'red' ? AlertTriangle : AlertCircle;
+          return (
+            <div key={m.label} title={m.detail} className="min-w-0 inline-flex items-baseline gap-1.5">
+              <span className={cn('text-[0.8125rem] font-bold tabular-nums',
+                m.empty ? 'text-ink-300'
+                  : flagged && state === 'red' ? 'text-risk-700'
+                  : flagged && state === 'amber' ? 'text-high-700'
+                  : 'text-ink-900')}>{m.empty ? '—' : `${m.pct}%`}</span>
+              <span className="inline-flex items-center gap-1 text-[0.6875rem] font-semibold text-ink-500 truncate">
+                {flagged && <StateIcon size={10} className={cn('shrink-0', state === 'red' ? 'text-risk-700' : 'text-high-700')} />}
+                {m.label}
+              </span>
+            </div>
+          );
+        })}
+      </div>
+    );
+  }
+
   return (
     <div className={cn(flush ? 'border-b border-canvas-border' : 'panel overflow-hidden')}>
       <div className="grid" style={{ gridTemplateColumns: `repeat(${meters.length}, minmax(0, 1fr))` }}>
@@ -408,7 +446,7 @@ export function RagKpiRow({ meters, flush }: { meters: RagMeterDef[]; /** Sittin
           return (
             <button key={m.label} type="button" onClick={() => setOpenLabel(on ? null : m.label)}
               aria-expanded={on} aria-label={m.empty ? `${m.label} — not set up` : `${m.label} ${m.pct}% — ${statusWordOf(m)}`}
-              className={cn('px-3 pt-3 pb-2.5 text-left cursor-pointer transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-200',
+              className={cn('px-3 py-3 text-left cursor-pointer transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-200',
                 i > 0 && 'border-l border-canvas-border', on ? 'bg-paper-50' : 'hover:bg-paper-50/60')}>
               <div className={cn('text-[1.0625rem] font-bold tabular-nums leading-none', numCls)}>{m.empty ? '—' : `${m.pct}%`}</div>
               {/* The icon is why the colour is allowed at all: colour is never
@@ -417,9 +455,10 @@ export function RagKpiRow({ meters, flush }: { meters: RagMeterDef[]; /** Sittin
                 {flagged && <StateIcon size={11} className={cn('shrink-0 mt-px', state === 'red' ? 'text-risk-700' : 'text-high-700')} />}
                 <span className="min-w-0">{m.label}</span>
               </div>
-              <div className="mt-2 h-[3px] rounded-full bg-paper-200 overflow-hidden">
-                <div className="h-full rounded-full bg-ink-300 transition-[width] duration-300" style={{ width: `${m.empty ? 0 : m.pct}%` }} />
-              </div>
+              {/* No bar under the number (user ask, 23 Sep). It drew the same
+                  percentage a second time, in a form you cannot read a value
+                  off — so it added width, not information, and said the one
+                  fact twice. */}
             </button>
           );
         })}

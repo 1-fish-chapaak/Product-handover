@@ -5859,7 +5859,6 @@ export default function ControlDossier() {
               <span className="text-[0.71875rem] font-semibold text-ink-400 uppercase tracking-wide">Your control</span>
             ) : (
               <>
-                <span className="text-[0.6875rem] font-semibold uppercase tracking-[0.08em] text-ink-400">Overall status</span>
                 <ConclusionPill c={concl} />
                 <span aria-hidden className="w-px h-4 bg-canvas-border" />
                 <span className="text-[0.71875rem] text-ink-400 inline-flex items-center gap-1.5"><Tickmark result={designResult === 'Effective' ? 'Pass' : designResult === 'Ineffective' ? 'Fail' : 'Not tested'} size={14} /> TOD {designResult.toLowerCase()}</span>
@@ -5867,6 +5866,15 @@ export default function ControlDossier() {
                 <span className="text-[0.71875rem] text-ink-400 inline-flex items-center gap-1.5"><Tickmark result={opResult === 'Effective' ? 'Pass' : opResult === 'Ineffective' ? 'Fail' : 'Not tested'} size={14} /> TOE {toeLocked ? 'locked' : opResult.toLowerCase()}</span>
               </>
             )}
+            {/* The three readings, in the gap this row already had between the
+                verdict and the paper (user ask, 23 Sep). They were a band of
+                their own under this line, which made two rows out of one
+                statement: the verdict, and how far the work behind it has got.
+
+                The owner does not get them: they are the auditor's read on how
+                the testing is going, and the owner's line above is deliberately
+                "Your control" and nothing else. */}
+            {!isOwner && <RagKpiRow meters={designRagMeters(control)} inline />}
             {/* Secondary, per DESIGN.md: a tinted purple chip rather than the
                 outline every other control on the page already wears. These two
                 are the actions of this header, and an outline button beside an
@@ -5887,26 +5895,8 @@ export default function ControlDossier() {
               {isAuditor && controlLocked && (
                 <button onClick={() => setReopening(true)} className="h-8 px-3 inline-flex items-center gap-1.5 rounded-lg bg-brand-50 text-[0.75rem] font-semibold text-brand-700 hover:bg-brand-100 transition-colors cursor-pointer"><RotateCcw size={13} /> Reopen</button>
               )}
-              {/* Where the trail lives, beside the paper that summarises it.
-                  Short because the rail takes 400px off this row: the longer
-                  version wrapped the status line onto two, and a status line
-                  that wraps stops being a status line. */}
-              {!isOwner && <span className="hidden xl:inline text-[0.6875rem] text-ink-400">Every run is logged in History</span>}
             </div>
           </div>
-
-          {/* ── the three readings ─────────────────────────────────────────────
-              Moved off the top of the Ira rail (user ask, 22 Sep) to sit with
-              the status bar, which is where the control's verdict already
-              lives. TOD-then-TOE is the shape of the work; these are how far
-              each part of it has actually got, so the two belong in one footer
-              rather than in two columns of the screen saying the same thing
-              about the same control.
-
-              The owner does not get them: they are the auditor's read on how
-              the testing is going, and the owner's line above is deliberately
-              "Your control" and nothing else. */}
-          {!isOwner && <RagKpiRow meters={designRagMeters(control)} flush />}
         </div>
       </motion.div>
 
