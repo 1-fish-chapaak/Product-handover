@@ -32,10 +32,13 @@ export default function RacmPage({ canManage }: {
   ];
 
   return (
-    <div className="px-9">
+    // Scrolls itself and breathes at the top, the way every other sidebar page
+    // does — the shell's <main> is overflow-hidden, so a page that doesn't own
+    // its own scroll simply loses whatever falls past the fold.
+    <div className="h-full overflow-y-auto px-9 py-8">
       <div className="mb-5">
         <p className="text-[0.6875rem] font-semibold tracking-[0.08em] text-ink-400 uppercase">Risk and controls</p>
-        <h1 className="mt-1 text-[1.75rem] leading-tight font-semibold text-ink-900">RACM</h1>
+        <h1 className="mt-1 text-[1.75rem] leading-tight font-semibold text-ink-900">RACM Library</h1>
         <p className="mt-1.5 text-[0.8125rem] text-ink-500 max-w-[640px]">
           Every risk-and-control matrix this team keeps. Engagements scope from what is published here.
         </p>
