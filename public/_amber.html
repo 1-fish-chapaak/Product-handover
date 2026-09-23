@@ -1,0 +1,116 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<title>Amber in this product</title>
+<style>
+  :root { --paper:#FBFAFC; --ink:#1A1523; --ink-500:#6B6480; --rule:rgba(15,8,30,.10); }
+  * { box-sizing: border-box; }
+  body { margin:0; padding:40px 44px 64px; background:var(--paper); color:var(--ink);
+         font-family: Inter, -apple-system, "Segoe UI", sans-serif; }
+  h1 { font-size:26px; font-weight:700; margin:0 0 6px; letter-spacing:-.01em; }
+  .sub { color:var(--ink-500); font-size:14px; margin:0 0 34px; max-width:70ch; line-height:1.55; }
+  section { margin-bottom:38px; }
+  h2 { font-size:15px; font-weight:700; margin:0 0 3px; }
+  .note { color:var(--ink-500); font-size:12.5px; margin:0 0 14px; max-width:72ch; line-height:1.5; }
+  .ramp { display:grid; grid-template-columns:repeat(8, minmax(0,1fr)); gap:10px; }
+  .sw { border:1px solid var(--rule); border-radius:10px; overflow:hidden; background:#fff; }
+  .chip { height:74px; }
+  .meta { padding:8px 9px 10px; }
+  .name { font-size:11px; font-weight:600; color:var(--ink-500); }
+  .hex  { font-size:12.5px; font-weight:700; font-family:ui-monospace,SFMono-Regular,Menlo,monospace;
+          letter-spacing:.01em; margin-top:2px; }
+  .star { display:inline-block; margin-left:5px; font-size:10px; font-weight:700; color:#6A12CD; }
+  .used { border-color:#6A12CD; box-shadow:0 0 0 2px rgba(106,18,205,.16); }
+  .legend { margin-top:16px; font-size:12.5px; color:var(--ink-500); }
+  .legend b { color:var(--ink); }
+  .live { display:flex; gap:26px; align-items:flex-start; flex-wrap:wrap; margin-top:6px; }
+  .kpi { width:360px; border:1px solid var(--rule); border-radius:14px; background:#fff; display:grid;
+         grid-template-columns:repeat(3,1fr); }
+  .kpi > div { padding:12px 12px 10px; }
+  .kpi > div + div { border-left:1px solid var(--rule); }
+  .num { font-size:17px; font-weight:700; line-height:1; font-variant-numeric:tabular-nums; }
+  .lbl { margin-top:6px; font-size:10.5px; font-weight:600; color:var(--ink-500); line-height:1.25;
+         display:flex; gap:4px; align-items:flex-start; }
+  .bar { margin-top:8px; height:3px; border-radius:99px; background:#EFEAF4; overflow:hidden; }
+  .bar i { display:block; height:100%; background:#C2B9CB; border-radius:99px; }
+  .caption { font-size:12.5px; color:var(--ink-500); max-width:34ch; line-height:1.55; }
+</style>
+</head>
+<body>
+  <h1>Amber, as this product defines it</h1>
+  <p class="sub">There are two amber families and they are not interchangeable. <b>high</b> is the severity noun that sits in the middle of the RAG band; <b>mitigated</b> is the warning noun. Both are deliberately tilted away from stop-light amber — DESIGN.md calls for burnt orange, never <code>#FFBF00</code>. The ringed swatches are the ones the control page actually renders.</p>
+
+  <section>
+    <h2>high — High severity</h2>
+    <p class="note">The amber of the RAG band. <b>high-400</b> is what <code>ragColor()</code> returns for a score between 40 and 80; <b>high-700</b> is the ink used for an amber number and its status word.</p>
+    <div class="ramp">
+      <div class="sw"><div class="chip" style="background:#FFF7ED"></div><div class="meta"><div class="name">high-50</div><div class="hex">#FFF7ED</div></div></div>
+      <div class="sw"><div class="chip" style="background:#FFEAD5"></div><div class="meta"><div class="name">high-100</div><div class="hex">#FFEAD5</div></div></div>
+      <div class="sw"><div class="chip" style="background:#FDDCAB"></div><div class="meta"><div class="name">high-200</div><div class="hex">#FDDCAB</div></div></div>
+      <div class="sw"><div class="chip" style="background:#FEB273"></div><div class="meta"><div class="name">high-300</div><div class="hex">#FEB273</div></div></div>
+      <div class="sw used"><div class="chip" style="background:#FD853A"></div><div class="meta"><div class="name">high-400<span class="star">RAG</span></div><div class="hex">#FD853A</div></div></div>
+      <div class="sw"><div class="chip" style="background:#FB6514"></div><div class="meta"><div class="name">high-500</div><div class="hex">#FB6514</div></div></div>
+      <div class="sw"><div class="chip" style="background:#EC4A0A"></div><div class="meta"><div class="name">high-600</div><div class="hex">#EC4A0A</div></div></div>
+      <div class="sw used"><div class="chip" style="background:#9A3412"></div><div class="meta"><div class="name">high-700<span class="star">INK</span></div><div class="hex">#9A3412</div></div></div>
+    </div>
+    <p class="legend">Base noun <b>high</b> = <b>#C2410C</b> — the card's left rule and the severity badge.</p>
+  </section>
+
+  <section>
+    <h2>mitigated — Medium / Warning</h2>
+    <p class="note">The warning amber. <code>--color-warning</code> points straight at it. Used on the "unable to test" banner and medium-severity cards — never in the RAG ramp.</p>
+    <div class="ramp">
+      <div class="sw"><div class="chip" style="background:#FFFBEB"></div><div class="meta"><div class="name">mitigated-50</div><div class="hex">#FFFBEB</div></div></div>
+      <div class="sw"><div class="chip" style="background:#FEF0C7"></div><div class="meta"><div class="name">mitigated-100</div><div class="hex">#FEF0C7</div></div></div>
+      <div class="sw"><div class="chip" style="background:#FEDF89"></div><div class="meta"><div class="name">mitigated-200</div><div class="hex">#FEDF89</div></div></div>
+      <div class="sw"><div class="chip" style="background:#FEC84B"></div><div class="meta"><div class="name">mitigated-300</div><div class="hex">#FEC84B</div></div></div>
+      <div class="sw"><div class="chip" style="background:#FDB022"></div><div class="meta"><div class="name">mitigated-400</div><div class="hex">#FDB022</div></div></div>
+      <div class="sw"><div class="chip" style="background:#F79009"></div><div class="meta"><div class="name">mitigated-500</div><div class="hex">#F79009</div></div></div>
+      <div class="sw"><div class="chip" style="background:#DC6803"></div><div class="meta"><div class="name">mitigated-600</div><div class="hex">#DC6803</div></div></div>
+      <div class="sw"><div class="chip" style="background:#92400E"></div><div class="meta"><div class="name">mitigated-700</div><div class="hex">#92400E</div></div></div>
+    </div>
+    <p class="legend">Base noun <b>mitigated</b> = <b>#B45309</b>.</p>
+  </section>
+
+  <section>
+    <h2>The other two nouns, for context</h2>
+    <p class="note">What amber sits between in the band.</p>
+    <div class="ramp" style="grid-template-columns:repeat(8,minmax(0,1fr))">
+      <div class="sw used"><div class="chip" style="background:#F04438"></div><div class="meta"><div class="name">risk-500<span class="star">RAG</span></div><div class="hex">#F04438</div></div></div>
+      <div class="sw used"><div class="chip" style="background:#912018"></div><div class="meta"><div class="name">risk-700<span class="star">INK</span></div><div class="hex">#912018</div></div></div>
+      <div class="sw"><div class="chip" style="background:#B42318"></div><div class="meta"><div class="name">risk</div><div class="hex">#B42318</div></div></div>
+      <div class="sw"><div class="chip" style="background:#FEF3F2"></div><div class="meta"><div class="name">risk-50</div><div class="hex">#FEF3F2</div></div></div>
+      <div class="sw used"><div class="chip" style="background:#22C55E"></div><div class="meta"><div class="name">compliant-500<span class="star">RAG</span></div><div class="hex">#22C55E</div></div></div>
+      <div class="sw"><div class="chip" style="background:#166534"></div><div class="meta"><div class="name">compliant-700</div><div class="hex">#166534</div></div></div>
+      <div class="sw"><div class="chip" style="background:#15803D"></div><div class="meta"><div class="name">compliant</div><div class="hex">#15803D</div></div></div>
+      <div class="sw"><div class="chip" style="background:#F0FDF4"></div><div class="meta"><div class="name">compliant-50</div><div class="hex">#F0FDF4</div></div></div>
+    </div>
+  </section>
+
+  <section>
+    <h2>Where amber actually lands now</h2>
+    <p class="note">The control rail after today's change: at most one score wears a colour, and it carries an icon, because colour is never the only signal.</p>
+    <div class="live">
+      <div class="kpi">
+        <div>
+          <div class="num" style="color:#1A1523">72%</div>
+          <div class="lbl"><span>Control completeness</span></div>
+          <div class="bar"><i style="width:72%"></i></div>
+        </div>
+        <div>
+          <div class="num" style="color:#9A3412">55%</div>
+          <div class="lbl"><span style="color:#9A3412;font-weight:700">&#9888;</span><span>Evidence validated</span></div>
+          <div class="bar"><i style="width:55%"></i></div>
+        </div>
+        <div>
+          <div class="num" style="color:#1A1523">90%</div>
+          <div class="lbl"><span>Design coverage confidence</span></div>
+          <div class="bar"><i style="width:90%"></i></div>
+        </div>
+      </div>
+      <p class="caption">The amber number is <b>high-700 #9A3412</b>. The bars are ink — a bar is a quantity, not a verdict. The other two scores stay black however healthy they are, so the one that needs reading is the only coloured thing in the row.</p>
+    </div>
+  </section>
+</body>
+</html>
