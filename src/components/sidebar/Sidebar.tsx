@@ -412,7 +412,7 @@ export default function Sidebar({ view, setView, expanded, toggleSidebar, unread
           {/* RACM sits above the register and the library because it is where
               the other two come from: risks and controls are written into a
               matrix first, and published from there. */}
-          {can('racm_view') && <NavItem icon={Table2} label="RACM" active={view === 'racm-library'} expanded={isExpanded} onClick={() => setView('racm-library')} />}
+          {can('racm_view') && <NavItem icon={Table2} label="RACM Library" active={view === 'racm-library'} expanded={isExpanded} onClick={() => setView('racm-library')} />}
           {can('risk_view') && <NavItem icon={AlertTriangle} label="Risk Register" active={view === 'audit-risk-register'} expanded={isExpanded} onClick={() => setView('audit-risk-register')} />}
           {can('ctrl_view') && <NavItem icon={Shield} label="Control Library" active={view === 'governance-controls' || view === 'governance-control-detail'} expanded={isExpanded} onClick={() => setView('governance-controls')} />}
           {can('wf_view') && <NavItem icon={Workflow} label="Workflow Library" active={workflowViews.includes(view)} expanded={isExpanded} onClick={() => setView('workflow-library')} />}

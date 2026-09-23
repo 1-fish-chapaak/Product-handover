@@ -30,20 +30,28 @@ const row = (category: string, risk = 'Payments are made to the wrong bank accou
 
 async function openRacmPage(page: Page) {
   await page.goto('/');
-  await page.getByRole('button', { name: 'RACM', exact: true }).first().click();
-  await expect(page.getByRole('heading', { name: 'RACM', exact: true })).toBeVisible({ timeout: 8000 });
+  await page.getByRole('button', { name: 'RACM Library', exact: true }).first().click();
+  await expect(page.getByRole('heading', { name: 'RACM Library', exact: true })).toBeVisible({ timeout: 8000 });
 }
 
 async function startUpload(page: Page, name: string, rows: string[][]) {
   await page.getByRole('button', { name: /Create RACM/ }).first().click();
-  const entity = page.locator('#create-racm-entity');
-  await expect(entity).toBeVisible();
-  const entityValue = await entity.locator('option').nth(1).getAttribute('value');
-  await entity.selectOption(entityValue!);
-  const proc = page.locator('#create-racm-process');
-  const procValue = await proc.locator('option').nth(1).getAttribute('value');
-  await proc.selectOption(procValue!);
+  // The file comes first now (23 Sep) — entity and process are asked once it is
+  // in, and Ira has had her read of it. Waiting for the trigger to stop saying
+  // "Reading the file…" is what makes that read finished rather than racing the
+  // picks below. Both are the product's own dropdown, not a native <select>.
   await page.locator('input[aria-label="Upload a RACM workbook"]').setInputFiles({ name, mimeType: 'text/csv', buffer: csv(rows) });
+  const entity = page.getByRole('button', { name: 'Entity', exact: true });
+  await expect(entity).toBeVisible({ timeout: 8000 });
+  await expect(entity).toHaveText(/Choose the company/, { timeout: 8000 });
+  // Any real company and process will do — these files name neither. The second
+  // of each, which is the one these specs have always run on.
+  await entity.click();
+  await page.getByRole('listbox', { name: 'Entity' }).getByRole('option').nth(1).click();
+  const proc = page.getByRole('button', { name: 'Business process', exact: true });
+  await proc.click();
+  await page.getByRole('listbox', { name: 'Business process' }).getByRole('option').nth(1).click();
+  await page.getByRole('button', { name: 'Continue', exact: true }).click();
 }
 
 test.beforeEach(async ({ page }) => {

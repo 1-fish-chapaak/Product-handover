@@ -22,21 +22,28 @@ const csv = (rows: string[][]) => Buffer.from(rows.map(r => r.map(c => `"${c.rep
 
 async function openRacmPage(page: Page) {
   await page.goto('/');
-  await page.getByRole('button', { name: 'RACM', exact: true }).first().click();
-  await expect(page.getByRole('heading', { name: 'RACM', exact: true })).toBeVisible({ timeout: 8000 });
+  await page.getByRole('button', { name: 'RACM Library', exact: true }).first().click();
+  await expect(page.getByRole('heading', { name: 'RACM Library', exact: true })).toBeVisible({ timeout: 8000 });
 }
 
 async function startUpload(page: Page, name: string, rows: string[][]) {
   await page.getByRole('button', { name: /Create RACM/ }).first().click();
-  const entity = page.locator('#create-racm-entity');
-  await expect(entity).toBeVisible();
-  // Any real company and process will do — the columns are what's under test.
-  const entityValue = await entity.locator('option').nth(1).getAttribute('value');
-  await entity.selectOption(entityValue!);
-  const proc = page.locator('#create-racm-process');
-  const procValue = await proc.locator('option').nth(1).getAttribute('value');
-  await proc.selectOption(procValue!);
+  // The file comes first now (23 Sep) — entity and process are asked once it is
+  // in, and Ira has had her read of it. Waiting for the trigger to stop saying
+  // "Reading the file…" is what makes that read finished rather than racing the
+  // picks below. Both are the product's own dropdown, not a native <select>.
   await page.locator('input[aria-label="Upload a RACM workbook"]').setInputFiles({ name, mimeType: 'text/csv', buffer: csv(rows) });
+  const entity = page.getByRole('button', { name: 'Entity', exact: true });
+  await expect(entity).toBeVisible({ timeout: 8000 });
+  await expect(entity).toHaveText(/Choose the company/, { timeout: 8000 });
+  // Any real company and process will do — these files name neither. The second
+  // of each, which is the one these specs have always run on.
+  await entity.click();
+  await page.getByRole('listbox', { name: 'Entity' }).getByRole('option').nth(1).click();
+  const proc = page.getByRole('button', { name: 'Business process', exact: true });
+  await proc.click();
+  await page.getByRole('listbox', { name: 'Business process' }).getByRole('option').nth(1).click();
+  await page.getByRole('button', { name: 'Continue', exact: true }).click();
 }
 
 /** Clear every fill-in box at Review: take Ira's suggestion where she has one,
@@ -49,17 +56,22 @@ async function fillHeldRows(page: Page) {
   const importBtn = page.getByRole('button', { name: /^Import \d+ control/ });
   for (let guard = 0; guard < 40; guard++) {
     if (await importBtn.isEnabled()) return;
+    // Every click here is bounded and allowed to fail: taking one fill rebuilds
+    // the row, so a button found a moment ago can detach mid-click. This loop
+    // exists to retry — an unbounded click would hang on the stale element
+    // instead, and spend the whole test timeout doing it.
+    const step = (p: Promise<unknown>) => p.catch(() => {});
     const use = await firstVisible(page, /^Use Ira's/);
-    if (use) { await use.click(); await page.waitForTimeout(150); continue; }
+    if (use) { await step(use.click({ timeout: 5000 })); await page.waitForTimeout(150); continue; }
     const assertionGroup = page.getByRole('group', { name: /^Assertions for row/ }).first();
     if (await assertionGroup.count()) {
-      await assertionGroup.getByRole('button').first().click();
-      await assertionGroup.getByRole('button', { name: 'Set' }).click();
+      await step(assertionGroup.getByRole('button').first().click({ timeout: 5000 }));
+      await step(assertionGroup.getByRole('button', { name: 'Set' }).click({ timeout: 5000 }));
       await page.waitForTimeout(150);
       continue;
     }
     const freq = page.locator('select[id^="racm-import-freq-"]').first();
-    if (await freq.count()) { await freq.selectOption({ index: 1 }); await page.waitForTimeout(150); continue; }
+    if (await freq.count()) { await step(freq.selectOption({ index: 1 }, { timeout: 5000 })); await page.waitForTimeout(150); continue; }
     break;
   }
 }
@@ -251,7 +263,7 @@ test("Each client group keeps its own column set-up, and it survives a reload", 
 
   // And it is still there after a reload.
   await page.reload();
-  await page.getByRole('button', { name: 'RACM', exact: true }).first().click();
+  await page.getByRole('button', { name: 'RACM Library', exact: true }).first().click();
   await page.getByRole('tab', { name: /Config/ }).click();
   await expect(page.getByRole('switch', { name: 'Country' })).toHaveAttribute('aria-checked', 'true');
 });
