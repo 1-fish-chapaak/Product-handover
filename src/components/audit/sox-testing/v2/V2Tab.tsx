@@ -3,7 +3,6 @@ import { motion, AnimatePresence } from 'motion/react';
 import { Plus, Flag, Building2, X, FileSearch, RefreshCw } from 'lucide-react';
 import { useToast } from '../../../shared/Toast';
 import V2ScopingWizard from './V2ScopingWizard';
-import RollForwardWizard from '../RollForwardWizard';
 import ProgrammeView from '../ProgrammeView';
 import { fmtCr, type CyclePhase, type SoxProgramme } from '../soxTestingData';
 import { V2C_PROGRAMMES, registerV2CProgramme } from './v2ClassicStore';
@@ -24,7 +23,7 @@ const PHASE_CLS: Record<CyclePhase, string> = {
   Reporting: 'bg-compliant-50 text-compliant-700',
 };
 
-type TabView = 'home' | 'wizard' | { programmeId: string } | { rollFromId: string };
+type TabView = 'home' | 'wizard' | { programmeId: string };
 
 interface Props {
   /** Routes into the classic SOX workspace (tabs + control testing). */
@@ -51,13 +50,6 @@ export default function V2Tab({ onOpenEngagement }: Props) {
   const openProgramme = typeof view === 'object' && 'programmeId' in view
     ? programmes.find(x => x.id === view.programmeId)
     : undefined;
-  const rollFrom = typeof view === 'object' && 'rollFromId' in view
-    ? programmes.find(x => x.id === view.rollFromId)
-    : undefined;
-
-  /** The annual action lives on the latest cycle only — roll it into next year. */
-  const asOfYear = (p: SoxProgramme) => Number(/\d{4}/.exec(p.asOf)?.[0] ?? 0);
-  const latestId = programmes.reduce((best, p) => (asOfYear(p) > asOfYear(best) ? p : best), programmes[0])?.id;
 
   return (
     <>
@@ -109,15 +101,6 @@ export default function V2Tab({ onOpenEngagement }: Props) {
                     {p.phase}
                   </span>
                   <span className="ml-auto flex items-center gap-1 shrink-0">
-                    {p.id === latestId && (
-                      <button
-                        onClick={e => { e.stopPropagation(); setView({ rollFromId: p.id }); }}
-                        title={`Carry ${p.fy} scoping and RACMs into the next cycle`}
-                        className="inline-flex items-center gap-1.5 px-2 py-1 rounded-md text-[11px] font-semibold text-primary hover:bg-primary/5 transition-colors cursor-pointer"
-                      >
-                        <RefreshCw size={12} /> Roll forward
-                      </button>
-                    )}
                     <button
                       onClick={e => { e.stopPropagation(); setView({ programmeId: p.id }); }}
                       className="inline-flex items-center gap-1.5 px-2 py-1 rounded-md text-[11px] font-semibold text-primary hover:bg-primary/5 transition-colors cursor-pointer"
@@ -169,15 +152,13 @@ export default function V2Tab({ onOpenEngagement }: Props) {
       <AnimatePresence>
         {view !== 'home' && (
           <FlowModal
-            key={view === 'wizard' ? 'wizard' : rollFrom ? `roll-${rollFrom.id}` : openProgramme?.id ?? 'programme'}
-            label={view === 'wizard' ? 'New engagement' : rollFrom ? 'Roll forward' : 'SOX programme'}
+            key={view === 'wizard' ? 'wizard' : openProgramme?.id ?? 'programme'}
+            label={view === 'wizard' ? 'New engagement' : 'SOX programme'}
             widthCls="w-[1000px]"
             onClose={() => setView('home')}
           >
             {view === 'wizard' ? (
               <V2ScopingWizard onCancel={() => setView('home')} onCreated={handleCreated} />
-            ) : rollFrom ? (
-              <RollForwardWizard prior={rollFrom} onCancel={() => setView('home')} onCreated={handleCreated} />
             ) : openProgramme ? (
               <ProgrammeView
                 programme={openProgramme}
