@@ -136,6 +136,25 @@ function ReadNote({ from, what, onPutBack }: { from: ReadFrom; what: string; onP
   );
 }
 
+/** The box for naming one the list hasn't got, and the way back to the list.
+ *  It stands in place of the dropdown rather than under it: a picker showing
+ *  the same words being typed below it says the same thing twice. */
+function NameIt({ value, onChange, what, placeholder, onBackToList }: {
+  value: string; onChange: (v: string) => void; what: string; placeholder: string; onBackToList: () => void;
+}) {
+  return (
+    <>
+      <input value={value} onChange={e => onChange(e.target.value)} autoFocus
+        placeholder={placeholder} aria-label={`New ${what} name`}
+        className={`${fieldCls} placeholder:text-ink-400`} />
+      <button type="button" onClick={onBackToList}
+        className="mt-1.5 inline-flex items-center gap-1 text-[0.6875rem] font-semibold text-brand-700 hover:text-brand-800 hover:underline cursor-pointer">
+        <ArrowLeft size={11} aria-hidden /> Pick from the list instead
+      </button>
+    </>
+  );
+}
+
 export interface CreateRacmFlowProps {
   /** Set when the process is already decided (a Scope step row). */
   fixedProcess?: string;
@@ -180,15 +199,10 @@ export default function CreateRacmFlow({ fixedProcess, defaultEntity, publishOnC
   const entityOptions = useMemo(() => {
     const list: SelectOption[] = groups.flatMap(g => g.companies.map(c => ({ value: c, label: c, group: g.group })));
     if (defaultEntity && !allCompanies.includes(defaultEntity)) list.push({ value: defaultEntity, label: defaultEntity, group: 'From the engagement' });
-    if (entityChoice === NEW_OPTION) list.push({ value: NEW_OPTION, label: typedEntity.trim() || 'A new company', group: 'Added here' });
     return list;
-  }, [groups, allCompanies, defaultEntity, entityChoice, typedEntity]);
+  }, [groups, allCompanies, defaultEntity]);
 
-  const processOptions = useMemo(() => {
-    const list: SelectOption[] = SOX_RACM_PROCESSES.map(p => ({ value: p, label: p }));
-    if (processChoice === NEW_OPTION) list.push({ value: NEW_OPTION, label: typedProcess.trim() || 'A new process' });
-    return list;
-  }, [processChoice, typedProcess]);
+  const processOptions = useMemo(() => SOX_RACM_PROCESSES.map(p => ({ value: p, label: p })), []);
 
   const entity = entityChoice === NEW_OPTION ? typedEntity.trim() : entityChoice;
   const process = fixedProcess ?? (processChoice === NEW_OPTION ? typedProcess.trim() : processChoice);
@@ -309,20 +323,21 @@ export default function CreateRacmFlow({ fixedProcess, defaultEntity, publishOnC
             </div>
 
             <span id="create-racm-entity" className={labelCls}>Entity</span>
-            <FormSelect
-              value={entityChoice}
-              options={entityOptions}
-              onChange={v => { setEntityChoice(v); setReadFrom(p => ({ ...p, entity: undefined })); }}
-              className={`${fieldCls} h-9`}
-              ariaLabel="Entity"
-              portal
-              placeholder={reading ? 'Reading the file…' : 'Choose the company…'}
-              searchPlaceholder="Search companies"
-              action={{ label: 'Add a company', onClick: () => { setEntityChoice(NEW_OPTION); setReadFrom(p => ({ ...p, entity: undefined })); } }}
-            />
-            {entityChoice === NEW_OPTION && (
-              <input value={typedEntity} onChange={e => setTypedEntity(e.target.value)} autoFocus
-                placeholder="e.g. Altura Hydro Pvt Ltd" aria-label="New company name" className={`${fieldCls} mt-2 placeholder:text-ink-400`} />
+            {entityChoice === NEW_OPTION ? (
+              <NameIt value={typedEntity} onChange={setTypedEntity} what="company"
+                placeholder="e.g. Altura Hydro Pvt Ltd" onBackToList={() => { setTypedEntity(''); setEntityChoice(''); }} />
+            ) : (
+              <FormSelect
+                value={entityChoice}
+                options={entityOptions}
+                onChange={v => { setEntityChoice(v); setReadFrom(p => ({ ...p, entity: undefined })); }}
+                className={`${fieldCls} h-9`}
+                ariaLabel="Entity"
+                portal
+                placeholder={reading ? 'Reading the file…' : 'Choose the company…'}
+                searchPlaceholder="Search companies"
+                action={{ label: 'Add a company', onClick: () => { setEntityChoice(NEW_OPTION); setReadFrom(p => ({ ...p, entity: undefined })); } }}
+              />
             )}
             {readFrom.entity
               ? <ReadNote from={readFrom.entity} what="entity" onPutBack={() => { setEntityChoice(''); setReadFrom(p => ({ ...p, entity: undefined })); }} />
@@ -331,19 +346,20 @@ export default function CreateRacmFlow({ fixedProcess, defaultEntity, publishOnC
             {!fixedProcess && (
               <div className="mt-4">
                 <span id="create-racm-process" className={labelCls}>Business process</span>
-                <FormSelect
-                  value={processChoice}
-                  options={processOptions}
-                  onChange={v => { setProcessChoice(v); setReadFrom(p => ({ ...p, process: undefined })); }}
-                  className={`${fieldCls} h-9`}
-                  ariaLabel="Business process"
-                  portal
-                  placeholder={reading ? 'Reading the file…' : 'Choose the process…'}
-                  action={{ label: 'Add a process', onClick: () => { setProcessChoice(NEW_OPTION); setReadFrom(p => ({ ...p, process: undefined })); } }}
-                />
-                {processChoice === NEW_OPTION && (
-                  <input value={typedProcess} onChange={e => setTypedProcess(e.target.value)} autoFocus
-                    placeholder="e.g. Leases" aria-label="New process name" className={`${fieldCls} mt-2 placeholder:text-ink-400`} />
+                {processChoice === NEW_OPTION ? (
+                  <NameIt value={typedProcess} onChange={setTypedProcess} what="process"
+                    placeholder="e.g. Leases" onBackToList={() => { setTypedProcess(''); setProcessChoice(''); }} />
+                ) : (
+                  <FormSelect
+                    value={processChoice}
+                    options={processOptions}
+                    onChange={v => { setProcessChoice(v); setReadFrom(p => ({ ...p, process: undefined })); }}
+                    className={`${fieldCls} h-9`}
+                    ariaLabel="Business process"
+                    portal
+                    placeholder={reading ? 'Reading the file…' : 'Choose the process…'}
+                    action={{ label: 'Add a process', onClick: () => { setProcessChoice(NEW_OPTION); setReadFrom(p => ({ ...p, process: undefined })); } }}
+                  />
                 )}
                 {readFrom.process
                   ? <ReadNote from={readFrom.process} what="business process" onPutBack={() => { setProcessChoice(''); setReadFrom(p => ({ ...p, process: undefined })); }} />
