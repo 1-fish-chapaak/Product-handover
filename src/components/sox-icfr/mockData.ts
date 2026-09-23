@@ -1,7 +1,7 @@
 import { entityShort } from '../audit/sox-testing/soxTestingData';
 import { normaliseProcess, programmeFor } from './auditScope';
 import { NEW_FLOW_ENGAGEMENT_ID } from './flow';
-import { titleFromRisk, validationQA } from './helpers';
+import { requiredFilesOf, requiredFilesReady, stepResult, titleFromRisk, validationQA } from './helpers';
 import { entityCodeFor, processCodeFor, renameEngagementIds } from './racmIds';
 import { defaultSamplingMethodology, FIVE_W_1H, ipeChecklist, ROUND_TAG, ROUND_WINDOW_LABEL } from './types';
 import type {
@@ -2082,8 +2082,60 @@ const PROC_LABEL: Record<string, string> = { P2P: 'Procure to Pay', O2C: 'Order 
  * engagement's own.
  */
 export function seedIcfrEngagement(meta?: SeedMeta): IcfrEngagement {
-  const eng = withRacmFields(seedEngagementBody(meta));
+  const eng = withConcludedEvidence(withRacmFields(seedEngagementBody(meta)));
   return renameEngagementIds(eng, processCodeFor, e => entityCodeFor(e || eng.entity));
+}
+
+/** "Signed approval record" on attribute 4.2 -> signed_approval_record_4_2.pdf */
+const evidenceFileName = (label: string, code: string): string =>
+  `${label.toLowerCase().replace(/[^a-z0-9]+/g, '_').replace(/^_|_$/g, '')}_${code.replace(/[^a-zA-Z0-9]+/g, '_')}.pdf`;
+
+/**
+ * The evidence a conclusion the seed already reached would have needed.
+ *
+ * Seeded controls are plain objects. They never pass through `concludeOperating`,
+ * so not one of its guards ever ran against them — and 82 controls arrived TOE
+ * EFFECTIVE, signed, countersigned and locked, while every passing attribute
+ * still read "Required files 0 of 3 uploaded". That is the exact thing
+ * `passedWithoutFiles` exists to forbid: the demo was showing a finished control
+ * the product itself would have refused to let anybody finish.
+ *
+ * So the files a conclusion implies go on file, and nothing else moves. An
+ * attribute that did not pass gets nothing. A design element stays outstanding
+ * unless its own TOD concluded — the half-finished controls are the point of the
+ * seed, and filling those in would trade one lie for another. No result, no
+ * conclusion and no signature is touched anywhere.
+ *
+ * tests/seed-integrity.spec.ts holds this line, by asking of every concluded
+ * control the same question the store asks before it lets you conclude.
+ */
+function withConcludedEvidence(eng: IcfrEngagement): IcfrEngagement {
+  return {
+    ...eng,
+    controls: eng.controls.map(c => {
+      let next = c;
+      // TOE: a Pass the files do not back cannot carry an effective track.
+      if (c.operating.conclusion === 'Effective') {
+        next = { ...next, operating: { ...next.operating, steps: next.operating.steps.map(s => {
+          if (stepResult(s) !== 'Pass' || requiredFilesReady(s, c)) return s;
+          return { ...s, requiredFiles: requiredFilesOf(s, c).map(rf => rf.file ? rf : {
+            ...rf, file: file(evidenceFileName(rf.label, s.code), c.owner),
+          }) };
+        }) } };
+      }
+      // TOD: the conclude footer locks while a required element is neither
+      // evidenced nor waived, so an effective design cannot have one open.
+      if (c.design.conclusion === 'Effective') {
+        next = { ...next, design: { ...next.design, documents: next.design.documents.map(d => (
+          d.required === false || d.status === 'Received' || d.waiver ? d : {
+            ...d, status: 'Received' as DocStatus, uploadedBy: 'Risk Owner', at: '12 Apr',
+            files: [{ id: `ddf-${d.id}`, name: d.name, kind: (d.name.toLowerCase().endsWith('.xlsx') ? 'XLSX' : 'PDF') as EvidenceFile['kind'], uploadedBy: 'Risk Owner', uploadedAt: '12 Apr' }],
+          }
+        )) } };
+      }
+      return next;
+    }),
+  };
 }
 
 /**
