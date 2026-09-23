@@ -352,7 +352,11 @@ function ShortFormNote({ control }: { control: Control }) {
 }
 
 // ── conclude footer — always visible, prominent ───────────────────────────────────
-function ConcludeFooter({ control, which, suggestion, canEdit, disabled, disableEffective, disableEffectiveNote }: { control: Control; which: 'design' | 'operating'; suggestion: TrackConclusion; canEdit: boolean; disabled?: boolean; disableEffective?: boolean; disableEffectiveNote?: string }) {
+function ConcludeFooter({ control, which, suggestion, canEdit, disabled, disabledNote, disableEffective, disableEffectiveNote }: { control: Control; which: 'design' | 'operating'; suggestion: TrackConclusion; canEdit: boolean; disabled?: boolean;
+  /** Why both buttons are dead — said beside them, because a pair of greyed
+   *  buttons with no reason reads as the screen being broken. */
+  disabledNote?: string;
+  disableEffective?: boolean; disableEffectiveNote?: string }) {
   const { me, concludeDesign, concludeOperating, overrideDesign, overrideOperating } = useIcfr();
   const { addToast } = useToast();
   const logEvent = useAuditLog();
@@ -420,7 +424,9 @@ function ConcludeFooter({ control, which, suggestion, canEdit, disabled, disable
       <div className="flex items-center gap-2.5 flex-wrap mt-2.5">
         <button disabled={disabled || disableEffective || staleRuns > 0 || onWordAlone > 0 || roundFail} title={disableEffective ? disableEffectiveNote : undefined} onClick={() => apply('Effective')} className="h-9 px-4 inline-flex items-center gap-1.5 rounded-lg bg-compliant-600 text-white text-[0.78125rem] font-semibold enabled:hover:bg-compliant-700 disabled:opacity-40 transition-colors cursor-pointer">{disableEffective ? <Lock size={14} /> : <CheckCircle2 size={15} />} {effectiveLabel}</button>
         <button disabled={disabled || staleRuns > 0} onClick={() => apply('Ineffective')} className="h-9 px-4 inline-flex items-center gap-1.5 rounded-lg border border-risk-300 text-risk-700 text-[0.78125rem] font-semibold enabled:hover:bg-risk-50 disabled:opacity-40 transition-colors cursor-pointer"><XCircle size={15} /> {ineffectiveLabel}</button>
-        {disableEffective && disableEffectiveNote && <span className="text-[0.71875rem] text-mitigated-700 inline-flex items-center gap-1"><Lock size={11} /> {disableEffectiveNote}</span>}
+        {disabled && disabledNote
+          ? <span className="text-[0.71875rem] text-mitigated-700 inline-flex items-center gap-1"><Lock size={11} /> {disabledNote}</span>
+          : disableEffective && disableEffectiveNote && <span className="text-[0.71875rem] text-mitigated-700 inline-flex items-center gap-1"><Lock size={11} /> {disableEffectiveNote}</span>}
         {staleRuns > 0 && (
           <span className="text-[0.71875rem] text-mitigated-700 inline-flex items-center gap-1">
             <AlertTriangle size={11} /> {staleRuns} run{staleRuns === 1 ? ' predates' : 's predate'} the current draw — re-run before concluding.
@@ -1466,8 +1472,22 @@ function designRagMeters(c: Control): RagMeterDef[] {
   const steps = c.operating.steps;
   const samples = c.operating.sampling?.samples ?? [];
   const toeTotal = samples.length ? samples.length * steps.length : steps.length;
+  // A SETTLED attribute counts whole (23 Sep). Counting only the per-item marks
+  // made this meter stricter than the rule the product actually enforces:
+  // `concludeOperating` gates on `stepResult(s) === 'Not tested'` — attribute
+  // level, never cell level — so a control could be concluded, signed and closed
+  // and still read 0% here. 32 of the 40 concluded controls in the seed did
+  // exactly that, printing a red nought on the same line as "TOE effective".
+  //
+  // Two readings of one fact are allowed to differ in precision; they are not
+  // allowed to disagree. So: an attribute that is settled has been run across
+  // the draw, by whichever route settled it, and one still open counts the items
+  // actually marked — which is the progress reading, and the only place a
+  // part-done attribute has anything to say.
   const toeDone = samples.length
-    ? steps.reduce((n, s) => n + samples.filter(smp => { const r = s.sampleResults?.[smp.id]; return r && r !== 'Not tested'; }).length, 0)
+    ? steps.reduce((n, s) => n + (stepResult(s) !== 'Not tested'
+      ? samples.length
+      : samples.filter(smp => { const r = s.sampleResults?.[smp.id]; return r && r !== 'Not tested'; }).length), 0)
     // stepResult, not the raw result: an attribute settled by override IS
     // settled, and a meter that says otherwise contradicts the row above it.
     : steps.filter(s => stepResult(s) !== 'Not tested').length;
@@ -1567,12 +1587,21 @@ function evidenceFileName(label: string, wpRef: string, kind: DesignDocKind): st
   return `${label.replace(/[^A-Za-z0-9]+/g, '_')}_${wpRef}_FY26.${EVIDENCE_EXT[kind] ?? 'pdf'}`;
 }
 
-function DesignSection({ control, canEdit }: { control: Control; canEdit: boolean }) {
+function DesignSection({ control, canEdit: canEditIn, locked = false }: { control: Control; canEdit: boolean;
+  /** The reviewer has approved this TOD. The step is read-only from then on —
+   *  evidence, checks and the conclusion all stand as approved. Reopening it
+   *  goes through the reviewer's own send-back, which is the door that already
+   *  exists for it (`returnDesign`). */
+  locked?: boolean }) {
   const { role, me, addDesignDoc, attachDesignEvidence, removeDesignFile, waiveDesignDoc, clearDesignWaiver, addDesignPoint, setDesignPoint, validateDesignPoint, runDesignIra } = useIcfr();
   // The owner keeps the evidence lane and loses the testing lane — see the note
   // on the dossier's own canEdit / canTest split.
   const isOwner = role === 'risk-owner';
-  const canTest = canEdit && role === 'auditor';
+  const canEdit = canEditIn && !locked;
+  // The footer still RENDERS once approved — its buttons go dead with a reason
+  // beside them, which is what says "approved, and here is how to change it".
+  // Dropping it would leave the step ending in silence.
+  const canTest = canEditIn && role === 'auditor';
   const logEvent = useAuditLog();
   const d = control.design;
   const [modal, setModal] = useState(false);
@@ -1990,6 +2019,8 @@ function DesignSection({ control, canEdit }: { control: Control; canEdit: boolea
               walkthrough's inquiry and observation as ordinarily sufficient for
               design); operating is where inquiry alone actually refuses. */}
           <ConcludeFooter control={control} which="design" suggestion={suggestion} canEdit={canTest}
+            disabled={locked}
+            disabledNote={locked ? `Approved by ${control.design.approval?.approvedBy?.by ?? 'the reviewer'} — ask them to send it back to change it` : undefined}
             disableEffective={!complete || unvalidated > 0}
             disableEffectiveNote={!complete
               ? `Locked — ${completeness.total - completeness.done} required element${completeness.total - completeness.done === 1 ? ' still needs' : 's still need'} evidence`
@@ -5635,6 +5666,10 @@ export default function ControlDossier() {
   // the population stood on its own and design could be worked in parallel —
   // not any more. Clearing the TOD conclusion (a reopen, a return) clears the
   // approval too, so the steps lock again until TOD is concluded and approved.
+  // Also what locks step ① itself: it was the ONLY step that never took a
+  // `locked`, so an approved design still offered live Design effective /
+  // ineffective buttons — and re-concluding silently OVERWRITES the approval
+  // (store.tsx, concludeDesign). Locked, it stands until the reviewer sends it back.
   const todApproved = designApproved(control);
   // ── pending until year end (A29) ────────────────────────────────────────────
   // An Annual control has not run yet in an interim or roll-forward audit, so
@@ -5972,12 +6007,14 @@ export default function ControlDossier() {
               for nothing. The owner keeps "Documents" — they supply evidence
               rather than test design, and naming the step after a test they
               cannot run would describe somebody else's job. */}
-          <VStep n={1} id="vstep-design" title={isOwner ? 'Documents' : 'Test of design'}
+          <VStep n={1} id="vstep-design" locked={!isOwner && todApproved} title={isOwner ? 'Documents' : 'Test of design'}
             subtitle={isOwner
               ? 'The documents this control needs on file. Attach what you hold — the auditor tests them.'
               : 'The documents on file, one transaction traced end-to-end, and a design check for each thing that has to be true. Ends with the design marked effective or ineffective.'}
             status={designResult} hideStatus={isOwner}
-            right={!isOwner && control.design.carriedFrom
+            right={!isOwner && todApproved
+              ? <span className="text-[0.6875rem] font-semibold text-ink-400 inline-flex items-center gap-1"><Lock size={11} /> Approved by {control.design.approval?.approvedBy?.by}</span>
+              : !isOwner && control.design.carriedFrom
               // A roll-forward carried this conclusion from its parent interim —
               // TOD is retested only where TOD failed (user ask), so the step
               // says where the verdict came from instead of asking for it again.
@@ -5996,7 +6033,7 @@ export default function ControlDossier() {
                 </div>
               </div>
             )}
-            <DesignSection control={control} canEdit={canEdit} />
+            <DesignSection control={control} canEdit={canEdit} locked={todApproved} />
             <DesignApprovalBlock control={control} />
           </VStep>
           {/* An automated control stops here while its ITGCs hold — see
