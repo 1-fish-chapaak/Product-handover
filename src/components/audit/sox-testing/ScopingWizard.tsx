@@ -13,7 +13,7 @@ import { OWNER_NAMES } from '../../../data/grc-domain';
 import { registerEngagement, uniqueEngagementName, type EngType, type ProcessCode } from '../../../data/engagements';
 import { useAuditLog } from '../../../context/AdminDataContext';
 import type { FileOrigin, Frequency, SampleSizeRow, SamplingMethodology } from '../../sox-icfr/types';
-import { defaultSamplingMethodology, FREQUENCY_ORDER, FREQUENCY_SAYS, ROUND_BASIS_EFFECT, SAMPLING_METHODS } from '../../sox-icfr/types';
+import { defaultSamplingMethodology, FREQUENCY_ORDER, FREQUENCY_SAYS, ROUND_BASIS_EFFECT, SAMPLING_METHODS, SAMPLING_SPREADS, spreadLabel } from '../../sox-icfr/types';
 import { cn } from '../../../lib/cn';
 import {
   BASIS_OPTIONS, BEYOND_TB, ENTITY_TYPES, QUAL_REASONS, SEED_ENTITIES,
@@ -1443,6 +1443,14 @@ export default function ScopingWizard({ onCancel, onCreated, typePreselected, on
       const kept = new Set(keptOf(r).map(c => c.id));
       return copyRacmControls(r).filter(c => kept.has(c.id));
     });
+    /** What the lead settled on the Sampling step, signed by nobody. The same
+     *  proposal goes on the engagement and on the programme record, so the
+     *  workspace opens on the table that was just filled in rather than on the
+     *  demo seed's, and the reviewer still has to sign before testing (#22). */
+    const proposedSampling: SamplingMethodology = {
+      ...sampling,
+      proposedBy: { by: owner || 'Engagement lead', at: 'just now' },
+    };
     const tbNames = scopeFiles.filter(f => f.kind === 'tb').map(f => f.name);
     const companies = `${scopedEntities.length} of ${entities.length} ${entities.length === 1 ? 'company' : 'companies'}`;
     const processes = `${scopedProcesses.length} process${scopedProcesses.length === 1 ? '' : 'es'}`;
@@ -1470,6 +1478,7 @@ export default function ScopingWizard({ onCancel, onCreated, typePreselected, on
       soxSeedMode: 'fresh',
       soxRacms: tickedRacms.map(r => ({ racmId: r.id, name: r.name })),
       soxControls: copied,
+      soxSampling: proposedSampling,
       // The anchor is the biggest process in scope (falls back to P2P).
       process: ({
         'Procure to Pay': 'P2P', 'Order to Cash': 'O2C', 'Record to Report': 'R2R', 'IT General Controls': 'ITGC',
@@ -1551,7 +1560,7 @@ export default function ScopingWizard({ onCancel, onCreated, typePreselected, on
       beyondTb: BEYOND_TB.filter(b => beyond[b.id]).map(b => b.id),
       // Proposed, not agreed: the reviewer signs it on the Configuration tab,
       // and every control's sample size is read off it from then on (#22).
-      sampling: { ...sampling, proposedBy: { by: owner || 'Engagement lead', at: 'just now' } },
+      sampling: proposedSampling,
       // Scoped, not skipped: every process in scope has its RACMs, so the
       // workspace has nothing missing to nag about.
       scopingSkipped: undefined,
@@ -3487,6 +3496,30 @@ export default function ScopingWizard({ onCancel, onCreated, typePreselected, on
               </div>
             </div>
 
+            {/* Any, all or none — the one answer here that is not a choice of one
+                (the Dubai ask: quarters, countries and entities). */}
+            <div className="mb-4">
+              <div className="text-[0.78125rem] font-semibold text-text mb-1.5">What every draw has to reach</div>
+              <div className="grid grid-cols-3 gap-1.5" role="group" aria-label="What every draw has to reach">
+                {SAMPLING_SPREADS.map(x => {
+                  const on = sampling.spread.includes(x.id);
+                  return (
+                    <button
+                      key={x.id} type="button" role="checkbox" aria-checked={on}
+                      onClick={() => setSampling(s => ({ ...s, spread: on ? s.spread.filter(i => i !== x.id) : [...s.spread, x.id] }))}
+                      className={cn('px-3 py-2 rounded-lg border text-[0.78125rem] cursor-pointer transition-colors inline-flex items-center justify-center gap-1.5',
+                        on ? 'border-brand-200 bg-brand-50 text-brand-700 font-semibold' : 'border-border text-text-secondary hover:text-text')}
+                    >{on && <Check size={12} className="shrink-0" aria-hidden />}{x.label}</button>
+                  );
+                })}
+              </div>
+              <p className="text-[0.6875rem] text-text-muted mt-1.5 leading-relaxed">
+                {sampling.spread.length
+                  ? `Every control's draw is split across ${spreadLabel(sampling.spread).toLowerCase()}, with at least one item in each.`
+                  : 'Not spread — items fall wherever the selection puts them. Tick anything every draw has to reach.'}
+              </p>
+            </div>
+
             <div className="rounded-lg border border-border px-3.5 py-2.5 flex items-start gap-2">
               <Info size={13} className="text-text-muted shrink-0 mt-0.5" aria-hidden />
               <p className="text-[0.71875rem] text-text-secondary leading-relaxed">
@@ -3519,6 +3552,7 @@ export default function ScopingWizard({ onCancel, onCreated, typePreselected, on
                   follows, so it does not belong only in a step nobody revisits. */}
               <ReviewCard title="Sampling methodology">
                 <ReviewRow label="Selection" value={sampling.method} />
+                <ReviewRow label="Spread across" value={spreadLabel(sampling.spread)} />
                 <ReviewRow label="Across rounds" value={sampling.roundBasis === 'per-round' ? 'Per round' : 'Whole period'} />
                 <ReviewRow label="Monthly control" value={`${sampling.sizes.Monthly.low}–${sampling.sizes.Monthly.high} items, by risk rating`} />
                 <p className="text-[0.6875rem] text-ink-400 mt-1 leading-relaxed">

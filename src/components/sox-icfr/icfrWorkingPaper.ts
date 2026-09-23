@@ -1,5 +1,5 @@
 import * as XLSX from 'xlsx';
-import { assessSeverity, attestationOverruled, requiredFilesOf, restsOnStatementAlone, auditorProvenChecks, combinedSample, conclusionOf, controlConclusion, designBasis, operatingApplies, countVerdict, coverageVerdict, fileOriginOf, designOutstanding, formatDueDate, formatINR, icfrConclusion, isControlLocked, itgcHolds, openMaterialWeaknesses, populationSources, sampleSizeGuide, samplingOf, trackResult, designProgress, hasRowCount, isAssisting, toeRounds, LEGACY_SOURCE_ID } from './helpers';
+import { assessSeverity, attestationOverruled, requiredFilesOf, restsOnStatementAlone, auditorProvenChecks, combinedSample, conclusionOf, controlConclusion, designBasis, operatingApplies, countVerdict, coverageVerdict, fileOriginOf, designOutstanding, formatDueDate, formatINR, icfrConclusion, isControlLocked, itgcHolds, openMaterialWeaknesses, populationSources, sampleSizeGuide, samplingOf, spreadPhrase, trackResult, designProgress, hasRowCount, isAssisting, toeRounds, LEGACY_SOURCE_ID } from './helpers';
 import { FIVE_W_1H, gapNature } from './types';
 import { countryFor, ownersOf } from './auditScope';
 import { extraLabel, racmConfig, type ExtraColumn } from './racmConfig';
@@ -409,7 +409,7 @@ export function buildControlPaper(eng: IcfrEngagement, c: Control): PaperBlock[]
         const m = samplingOf(eng);
         const ran = audit?.samplingVersion ?? m.version;
         const signed = m.reviewer ? `agreed by ${m.reviewer.by} on ${m.reviewer.at}` : 'NOT YET AGREED — no reviewer signature';
-        return `v${ran} · ${m.method} · ${m.roundBasis === 'per-round' ? 'sampled per round' : 'sampled across the whole period'} — ${signed}${ran !== m.version ? ` (the engagement is now on v${m.version})` : ''}`;
+        return `v${ran} · ${m.method} · ${spreadPhrase(m.spread)} · ${m.roundBasis === 'per-round' ? 'sampled per round' : 'sampled across the whole period'} — ${signed}${ran !== m.version ? ` (the engagement is now on v${m.version})` : ''}`;
       })()],
       ['Sample size — indicated', `${guide.suggested} (${guide.range}) — ${guide.note}${guide.cell ? ` [read off the agreed table: ${guide.cell.frequency} · ${guide.cell.rating} risk]` : ''}`],
       ['Sample size — drawn', c.operating.sampling ? `${c.operating.sampling.samples.length} · ${c.operating.sampling.method}, ${c.operating.sampling.basis}` : 'None drawn'],

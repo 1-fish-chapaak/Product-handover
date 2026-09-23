@@ -1,9 +1,9 @@
 import { riskCategoryOf } from './racmImport';
-import { DEFAULT_SAMPLE_SIZES, defaultSamplingMethodology, isInquiryOnly, ipeReliable, GRADE_RANK, AUDIT_SAMPLE_SPREADS, DEFAULT_AUDIT_SAMPLING, TESTING_STRATEGIES } from './types';
+import { DEFAULT_SAMPLE_SIZES, defaultSamplingMethodology, isInquiryOnly, ipeReliable, GRADE_RANK, SAMPLING_SPREADS, TESTING_STRATEGIES } from './types';
 import type {
-  AuditorProofKind, AuditSampleSpread, AuditSampling, Conclusion, Control, Court, Deficiency, DesignDoc, DesignDocKind, DesignTrack, ExceptionGrade, HandoffTask, IcfrEngagement,
+  AuditorProofKind, Conclusion, Control, Court, Deficiency, DesignDoc, DesignDocKind, DesignTrack, ExceptionGrade, HandoffTask, IcfrEngagement,
   FileOrigin, IpeCheck, Likelihood, MaterialityRules, OperatingTrack, Population, PopulationBasis, PopulationSource, ReviewNote, RiskRating, Role,
-  Sample, SamplingMethodology, Severity, TestingStrategy, ToeRound, TrackConclusion, DeficiencyGroup, ExceptionStatus,
+  Sample, SamplingMethod, SamplingMethodology, SamplingSpread, Severity, TestingStrategy, ToeRound, TrackConclusion, DeficiencyGroup, ExceptionStatus,
   ControlType, Nature,
 } from './types';
 
@@ -951,10 +951,10 @@ export function untouchedPaths(c: Control): string[] {
   return pathCoverage(c).filter(p => p.drawn === 0).map(p => p.path);
 }
 
-// ─── The audit's sampling methodology (A28) ──────────────────────────────────────
+// ─── The engagement's sampling methodology, turned into a draw (A28) ─────────────
 // How items are selected, and what they have to be spread across, is agreed once
-// on the audit (feedback #38; Dubai — "an agreed sampling methodology covering
-// quarters, countries and entities"). A control asks how many, and from which
+// on the ENGAGEMENT (feedback #38; Dubai — "an agreed sampling methodology
+// covering quarters, countries and entities"). A control asks how many, and from which
 // months — in words, per file (see readSamplePrompt), never how. What follows
 // turns that agreement into a draw — which quarter each item falls in, which
 // company it is dealt to — and reads the draw back as the split the Sample step
@@ -968,12 +968,10 @@ type AuditWindow = Pick<AuditRecord, 'windowFrom' | 'windowTo' | 'yearBasis'>;
 export function workingAudit(eng: Pick<IcfrEngagement, 'audits'>, openAuditId: string | null): AuditRecord | undefined {
   return eng.audits.find(a => a.id === openAuditId) ?? eng.audits.find(a => !a.archive);
 }
-/** The audit's methodology, with the default standing in for a record older than it. */
-export const auditSampling = (a?: AuditRecord): AuditSampling => a?.sampling ?? DEFAULT_AUDIT_SAMPLING;
 
-/** "spread by quarter and entity", or "not spread" — named in the wizard's order. */
-export function spreadPhrase(spread: AuditSampleSpread[]): string {
-  const words = AUDIT_SAMPLE_SPREADS.map(s => s.id).filter(id => spread.includes(id));
+/** "spread by quarter and entity", or "not spread" — named in the agreed order. */
+export function spreadPhrase(spread: SamplingSpread[]): string {
+  const words = SAMPLING_SPREADS.map(s => s.id).filter(id => spread.includes(id));
   if (!words.length) return 'not spread';
   return `spread by ${words.length > 1 ? `${words.slice(0, -1).join(', ')} and ${words[words.length - 1]}` : words[0]}`;
 }
@@ -1008,7 +1006,7 @@ export function auditQuarters(a: AuditWindow): { label: string; from: string; to
   return out.map(q => ({ label: repeats ? `${q.label} ${q.year}` : q.label, from: q.from, to: q.to }));
 }
 
-/** When an item happened. A draw made under the audit's methodology stored the
+/** When an item happened. A draw made under the agreed methodology stored the
  *  date it dealt; an older item gets a stable one off its own id, somewhere in
  *  `home` — the round that drew it (sampleHome) — so the date on its row, the
  *  quarter it counts in and the round it counts toward all agree. Never the open
@@ -1345,7 +1343,7 @@ export interface DealtItem { date: string; entity?: string }
  * carry no date of their own (sampleHome).
  */
 export function dealSample(
-  c: Control, a: AuditWindow | undefined, sampling: AuditSampling, count: number, existing: Sample[], key: string,
+  c: Control, a: AuditWindow | undefined, sampling: SamplingMethodology, count: number, existing: Sample[], key: string,
   countryOf: (entity: string) => string | undefined, home: Pick<AuditRecord, 'windowFrom' | 'windowTo'> | undefined,
 ): DealtItem[] {
   const spread = sampling.spread;
@@ -1394,7 +1392,7 @@ export function dealSample(
 /** Label for the companies a register left without a country. Listed, so the
  *  gap shows, but never flagged as a group the draw missed — it isn't one. */
 export const NO_COUNTRY = 'Country not recorded';
-export interface SampleSplit { axis: AuditSampleSpread; groups: { label: string; n: number }[] }
+export interface SampleSplit { axis: SamplingSpread; groups: { label: string; n: number }[] }
 /**
  * The draw read back along each axis the audit spreads by. The groups come from
  * what the control has to reach — the quarters of the window, the companies it
@@ -1402,7 +1400,7 @@ export interface SampleSplit { axis: AuditSampleSpread; groups: { label: string;
  * with nothing in it is listed at 0. That is the point of listing it.
  */
 export function sampleSplit(
-  c: Control, a: AuditWindow | undefined, sampling: AuditSampling, countryOf: (entity: string) => string | undefined,
+  c: Control, a: AuditWindow | undefined, sampling: SamplingMethodology, countryOf: (entity: string) => string | undefined,
   home: Pick<AuditRecord, 'windowFrom' | 'windowTo'> | undefined,
 ): SampleSplit[] {
   const items = c.operating.sampling?.samples ?? [];
@@ -1410,7 +1408,7 @@ export function sampleSplit(
   // A row answering for one company owns its items without tagging them.
   const companyOf = (s: Sample) => s.entity ?? (companies.length === 1 ? companies[0] : undefined);
   const countryKey = (e: string) => countryOf(e) ?? NO_COUNTRY;
-  return AUDIT_SAMPLE_SPREADS.map(x => x.id).filter(axis => sampling.spread.includes(axis)).map(axis => {
+  return SAMPLING_SPREADS.map(x => x.id).filter(axis => sampling.spread.includes(axis)).map(axis => {
     if (axis === 'quarter') {
       const w = a ?? { ...FALLBACK_WINDOW, yearBasis: 'fy' as const };
       return { axis, groups: auditQuarters(w).map(q => ({ label: q.label, n: items.filter(s => { const d = sampleDate(s, home); return d >= q.from && d <= q.to; }).length })) };
@@ -1545,8 +1543,8 @@ export function expectedInputsFor(c: Control): { inputs: ExpectedInput[]; awaiti
 //
 // The words decide two things: how many items, and which months — a stretch
 // inside the audit's window. How the items are picked and what they are spread
-// across was agreed on the audit (A28), so an ask that names another method is
-// drawn the audit's way, and the reading says so rather than quietly ignoring it.
+// across was agreed on the engagement (A28), so an ask that names another method
+// is drawn the agreed way, and the reading says so rather than quietly ignoring it.
 
 /** The months a stretch runs through — "Jan–Jun", or "Nov 2025–Feb 2026" when it
  *  crosses a year. */
@@ -1585,14 +1583,16 @@ const WHEN = /\b(?:q([1-4])|h([12])|(first|second|third|fourth|1st|2nd|3rd|4th)\
 const ORDINAL: Record<string, number> = { first: 1, second: 2, third: 3, fourth: 4, '1st': 1, '2nd': 2, '3rd': 3, '4th': 4 };
 const NUMBER_WORDS: Record<string, number> = { one: 1, two: 2, three: 3, four: 4, five: 5, six: 6, seven: 7, eight: 8, nine: 9, ten: 10, eleven: 11, twelve: 12, fifteen: 15, twenty: 20, 'twenty-five': 25, thirty: 30, forty: 40, fifty: 50 };
 const UNIT = '(?:items?|rows?|instances?|samples?|vendors?|invoices?|entries|entry|transactions?|payments?|journals?)';
-const METHOD_WORDS: [RegExp, AuditSampling['method']][] = [
+// 'Targeted' is not one of the agreed methods — it is a word an ask can still
+// use, and naming it is how the reading can say the method did not move.
+const METHOD_WORDS: [RegExp, SamplingMethod | 'Targeted'][] = [
   [/\b(?:at\s+)?random(?:ly)?\b/, 'Random'],
   [/\bsystematic(?:ally)?\b|\bevery\s+(?:nth|\d+(?:st|nd|rd|th))\b|\bevenly\s+spaced\b/, 'Systematic'],
   [/\btarget(?:ed)?\b|\blargest\b|\bhighest\b|\bbiggest\b|\bjudge?ment(?:al)?\b/, 'Targeted'],
 ];
 
 export function readSamplePrompt(
-  prompt: string, source: PopulationSource, suggested: number, a: AuditWindow | undefined, sampling: AuditSampling,
+  prompt: string, source: PopulationSource, suggested: number, a: AuditWindow | undefined, sampling: SamplingMethodology,
 ): SamplePlan {
   const w = a ?? { ...FALLBACK_WINDOW, yearBasis: 'fy' as const };
   const whole = monthSpanLabel(w.windowFrom, w.windowTo);
@@ -1679,12 +1679,12 @@ export function readSamplePrompt(
     : runRate ? Math.max(1, Math.min(source.count, monthsN * perMonth))
     : suggested;
 
-  // ── the method is the audit's ────────────────────────────────────────────────
+  // ── the method is the engagement's ───────────────────────────────────────────
   const named = METHOD_WORDS.filter(([re]) => re.test(lower)).map(([, m]) => m);
   const notes = [
     runRate ? `every instance in ${monthsN === 1 ? 'that month' : `those ${monthsN} months`}, at this file's run rate` : '',
     outside ? 'the months asked for are outside this audit' : '',
-    named.some(m => m !== sampling.method) ? `method stays ${sampling.method} — set on the audit` : '',
+    named.some(m => m !== sampling.method) ? `method stays ${sampling.method} — agreed for this engagement` : '',
   ].filter(Boolean);
   return {
     size,
@@ -2720,6 +2720,21 @@ export function operatingSuggestion(c: Control): TrackConclusion {
   const steps = c.operating.steps;
   if (steps.some(s => stepResult(s) === 'Fail')) return 'Ineffective';
   return steps.length > 0 && steps.every(s => stepResult(s) !== 'Not tested') ? 'Effective' : 'Not tested';
+}
+
+/** A picked file's extension, read as one of the four evidence kinds the model
+ *  knows. Same mapping the store uses when a file arrives by any other door.
+ *
+ *  Lives here rather than beside one picker because there are now two doors on
+ *  to a design element — the page's and the chat rail's — and a file attached
+ *  from one must not come out a different kind from the same file attached
+ *  from the other. */
+export function evidenceKindOf(name: string): EvidenceFile['kind'] {
+  const n = name.toLowerCase();
+  if (n.endsWith('.csv')) return 'CSV';
+  if (n.endsWith('.xlsx') || n.endsWith('.xls')) return 'XLSX';
+  if (n.endsWith('.png') || n.endsWith('.jpg') || n.endsWith('.jpeg')) return 'IMG';
+  return 'PDF';
 }
 
 /** The files on a design element. An older seeded element can read Received with

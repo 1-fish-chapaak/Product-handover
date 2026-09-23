@@ -1552,6 +1552,28 @@ export interface EntityDetection { name: string; companyCode: string; source: st
 export const SAMPLING_METHODS = ['Random', 'Systematic', 'Full population'] as const;
 export type SamplingMethod = (typeof SAMPLING_METHODS)[number];
 
+/**
+ * What every draw has to reach (the Dubai ask — "an agreed sampling methodology
+ * covering quarters, countries and entities").
+ *
+ * Each group named here gets items of its own in every control's draw. None
+ * named is allowed: the selection then falls wherever it falls. It sits beside
+ * the method rather than on the audit for the reason the whole record does —
+ * spreading interim across countries and year-end across nothing would be two
+ * approaches inside one year's testing.
+ */
+export type SamplingSpread = 'quarter' | 'country' | 'entity';
+/** In the order the screens list them, which is also the order a phrase names them. */
+export const SAMPLING_SPREADS: { id: SamplingSpread; label: string }[] = [
+  { id: 'quarter', label: 'Quarters' },
+  { id: 'country', label: 'Countries' },
+  { id: 'entity', label: 'Entities' },
+];
+/** The groups as a reader names them — always in the order above, so the same
+ *  three ticked in a different order never reads as a change. */
+export const spreadLabel = (spread: SamplingSpread[]): string =>
+  SAMPLING_SPREADS.filter(s => spread.includes(s.id)).map(s => s.label).join(', ') || 'Not spread';
+
 /** How the year's rounds are sampled (23 Sep — the question that had no answer
  *  before). Interim covers part of the year and roll-forward covers the rest:
  *  either each round draws from its own period, or one draw at year end covers
@@ -1594,6 +1616,8 @@ export interface SamplingMethodology {
   /** Every frequency has a row, so no control falls outside the agreed table. */
   sizes: Record<Frequency, SampleSizeRow>;
   method: SamplingMethod;
+  /** Any, all or none of the three. Empty is a real answer, not a missing one. */
+  spread: SamplingSpread[];
   roundBasis: SamplingRoundBasis;
   /** The engagement lead, at creation. A proposal is not yet a methodology. */
   proposedBy?: SignoffEntry;
@@ -1620,6 +1644,9 @@ export const defaultSamplingMethodology = (): SamplingMethodology => ({
     Object.entries(DEFAULT_SAMPLE_SIZES).map(([f, row]) => [f, { ...row }]),
   ) as Record<Frequency, SampleSizeRow>,
   method: 'Random',
+  // Nothing asked for until the lead asks for it — a spread the product invented
+  // would be a rule nobody agreed to.
+  spread: [],
   roundBasis: 'per-round',
   version: 1,
 });
@@ -1722,39 +1749,6 @@ export const AUDIT_ROUNDS: { id: AuditRound; label: string; hint: string }[] = [
   { id: 'rollforward', label: 'Roll-forward', hint: 'Extends interim evidence towards the year end.' },
   { id: 'yearend', label: 'Year-end', hint: 'Tests as of the balance-sheet date.' },
 ];
-
-/**
- * How an audit's samples are picked, and what they have to be spread across
- * (A28 — feedback #38, and the Dubai ask for "an agreed sampling methodology
- * covering quarters, countries and entities").
- *
- * Set once, on the audit, rather than control by control: a methodology each
- * control could choose for itself is not an agreed one. The control's Sample
- * step reads it and asks only how many items. A roll-forward inherits its
- * interim's, for the same reason it inherits the materiality rule — two halves
- * of one year are sampled one way.
- */
-export type AuditSampleMethod = 'Random' | 'Systematic' | 'Targeted';
-export type AuditSampleSpread = 'quarter' | 'country' | 'entity';
-export interface AuditSampling {
-  method: AuditSampleMethod;
-  /** Every group named here gets items of its own in each control's draw.
-   *  Empty is allowed — the selection then falls wherever it falls. */
-  spread: AuditSampleSpread[];
-}
-export const AUDIT_SAMPLE_METHODS: { id: AuditSampleMethod; hint: string }[] = [
-  { id: 'Random', hint: 'Items picked at random from the population.' },
-  { id: 'Systematic', hint: 'Every nth item from a random start, so the picks run evenly through the window.' },
-  { id: 'Targeted', hint: 'Items picked on purpose — the largest, the riskiest, the unusual.' },
-];
-/** In the order the wizard lists them, which is also the order a phrase names them. */
-export const AUDIT_SAMPLE_SPREADS: { id: AuditSampleSpread; label: string }[] = [
-  { id: 'quarter', label: 'Quarters' },
-  { id: 'country', label: 'Countries' },
-  { id: 'entity', label: 'Entities' },
-];
-/** A new audit starts on a plain random draw with no spread asked for. */
-export const DEFAULT_AUDIT_SAMPLING: AuditSampling = { method: 'Random', spread: [] };
 
 /**
  * What an audit concluded, frozen when the next audit starts.
@@ -1870,10 +1864,6 @@ export interface AuditRecord {
   materiality: { basisLabel: string; benchmark: number; pct: number; pmPct?: number; ctPct?: number };
   /** ₹ Cr threshold the rule computes, frozen at creation. */
   overall: number;
-  /** How every control in this audit picks its sample (A28). Set on the period
-   *  step; a roll-forward carries its interim's. Optional only so a record that
-   *  predates it still reads — DEFAULT_AUDIT_SAMPLING stands in. */
-  sampling?: AuditSampling;
   /** This audit's own conclusion. Sign-off is per AUDIT, not per engagement —
    *  the testing happens inside an audit, so that is where the preparer signs and
    *  the reviewer countersigns. There is no engagement-level ICFR sign-off. */

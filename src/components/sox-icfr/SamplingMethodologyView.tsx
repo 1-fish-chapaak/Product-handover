@@ -1,21 +1,22 @@
 import { useMemo, useState } from 'react';
 import { createPortal } from 'react-dom';
-import { AlertTriangle, ArrowRight, BadgeCheck, CalendarRange, History, Info, Lock, ShieldCheck, Shuffle, Table2 } from 'lucide-react';
+import { AlertTriangle, ArrowRight, BadgeCheck, CalendarRange, Check, History, Info, Layers, Lock, ShieldCheck, Shuffle, Table2 } from 'lucide-react';
 import { useIcfr } from './store';
 import { cn } from '../../lib/cn';
 import { isEngagementLocked, samePerson, samplingOf, samplingOverrides } from './helpers';
 import {
-  DEFAULT_SAMPLE_SIZES, ROUND_BASIS_EFFECT, SAMPLING_METHODS, samplingAgreed,
-  type Frequency, type SampleSizeRow, type SamplingMethod, type SamplingMethodology, type SamplingRoundBasis,
+  DEFAULT_SAMPLE_SIZES, ROUND_BASIS_EFFECT, SAMPLING_METHODS, SAMPLING_SPREADS, samplingAgreed, spreadLabel,
+  type Frequency, type SampleSizeRow, type SamplingMethod, type SamplingMethodology, type SamplingRoundBasis, type SamplingSpread,
 } from './types';
 
 /**
  * The engagement's sampling methodology — agreed once, read by every control (#22).
  *
  * The client's words: sizing decided control by control is "124 separate
- * decisions, not a methodology". So the table, the selection method and the
- * round basis live here, on the engagement, and a control's sample step reads
- * off them rather than asking the auditor to choose again.
+ * decisions, not a methodology". So the table, the selection method, what every
+ * draw has to be spread across and the round basis live here, on the engagement,
+ * and a control's sample step reads off them rather than asking the auditor to
+ * choose again.
  *
  * Three acts, kept apart deliberately (the store enforces all three): the lead
  * PROPOSES, the reviewer SIGNS, and a change to something already signed is a
@@ -40,13 +41,19 @@ const METHOD_NOTE: Record<SamplingMethod, string> = {
   'Full population': 'Nothing is sampled — every item in the population is tested.',
 };
 
+const SPREAD_NOTE: Record<SamplingSpread, string> = {
+  quarter: 'Every quarter of the audit window takes items, so no stretch of the year goes untested.',
+  country: 'Every country the control answers for takes items of its own.',
+  entity: 'Every company the control answers for takes items of its own.',
+};
+
 const BASIS_LABEL: Record<SamplingRoundBasis, string> = { 'per-round': 'Per round', 'whole-period': 'Whole period' };
 const BASIS_NOTE: Record<SamplingRoundBasis, string> = {
   'per-round': 'Interim and roll-forward each draw their own sample, from their own window.',
   'whole-period': 'One draw at year end, covering the full year in a single sample.',
 };
 
-interface Draft { sizes: Record<Frequency, SampleSizeRow>; method: SamplingMethod; roundBasis: SamplingRoundBasis }
+interface Draft { sizes: Record<Frequency, SampleSizeRow>; method: SamplingMethod; spread: SamplingSpread[]; roundBasis: SamplingRoundBasis }
 
 /** A private copy of the agreed record, so typing in the table edits the draft
  *  rather than the thing the reviewer signed. */
@@ -55,6 +62,7 @@ const snapshot = (m: SamplingMethodology): Draft => ({
     FREQUENCIES.map(f => [f, { ...(m.sizes[f] ?? DEFAULT_SAMPLE_SIZES[f]) }]),
   ) as Record<Frequency, SampleSizeRow>,
   method: m.method,
+  spread: [...(m.spread ?? [])],
   roundBasis: m.roundBasis,
 });
 
@@ -72,6 +80,7 @@ const sizesDiffer = (a: Record<Frequency, SampleSizeRow>, b: Record<Frequency, S
 function pendingChanges(cur: SamplingMethodology, draft: Draft): { field: string; from: string; to: string }[] {
   const out: { field: string; from: string; to: string }[] = [];
   if (draft.method !== cur.method) out.push({ field: 'Selection method', from: cur.method, to: draft.method });
+  if (spreadLabel(draft.spread) !== spreadLabel(cur.spread)) out.push({ field: 'Spread across', from: spreadLabel(cur.spread), to: spreadLabel(draft.spread) });
   if (draft.roundBasis !== cur.roundBasis) out.push({ field: 'Across rounds', from: BASIS_LABEL[cur.roundBasis], to: BASIS_LABEL[draft.roundBasis] });
   FREQUENCIES.forEach(f => RATINGS.forEach(r => {
     const from = cur.sizes[f]?.[r] ?? DEFAULT_SAMPLE_SIZES[f][r];
@@ -90,7 +99,17 @@ export default function SamplingMethodologyView() {
   const m = samplingOf(eng);
   const agreed = samplingAgreed(m);
   const locked = isEngagementLocked(eng);
-  const canEdit = role === 'auditor' && !locked;
+  /* An AGREED methodology is a record, not a form (user ask, 23 Sep). Until
+   * somebody says out loud that they are revising it, every field below reads
+   * rather than edits — the reviewer signed a table, and a table that can be
+   * retyped under their signature is not one they signed.
+   *
+   * Revising is the way through, and it is deliberately a decision: it creates
+   * a new version, returns the record to unsigned and blocks testing until it
+   * is signed again. That belongs behind a button somebody pressed on purpose,
+   * not behind an input box nobody noticed was live. */
+  const [revisingDraft, setRevisingDraft] = useState(false);
+  const canEdit = role === 'auditor' && !locked && (!agreed || revisingDraft);
   const log = eng.samplingLog ?? [];
   // How far the agreed table is actually being followed, counted across the
   // whole register rather than per control — the point of agreeing it once.
@@ -105,7 +124,8 @@ export default function SamplingMethodologyView() {
   const [seenVersion, setSeenVersion] = useState(m.version);
   if (seenVersion !== m.version) { setSeenVersion(m.version); setDraft(snapshot(m)); }
 
-  const dirty = draft.method !== m.method || draft.roundBasis !== m.roundBasis || sizesDiffer(draft.sizes, m.sizes);
+  const dirty = draft.method !== m.method || spreadLabel(draft.spread) !== spreadLabel(m.spread)
+    || draft.roundBasis !== m.roundBasis || sizesDiffer(draft.sizes, m.sizes);
   const changes = pendingChanges(m, draft);
 
   const setSize = (f: Frequency, r: Rating, raw: string) => {
@@ -177,6 +197,26 @@ export default function SamplingMethodologyView() {
           {role !== 'reviewer' && !agreed && (
             <p className="text-[0.71875rem] text-ink-500 shrink-0">Waiting on a reviewer.</p>
           )}
+          {/* The one way back into the fields once it is agreed, and it says
+              what it costs before it is pressed rather than after. */}
+          {agreed && role === 'auditor' && !locked && (
+            revisingDraft ? (
+              <button
+                onClick={() => { setDraft(snapshot(m)); setRevisingDraft(false); }}
+                className="h-9 px-4 shrink-0 rounded-lg border border-canvas-border bg-canvas-elevated text-[0.78125rem] font-semibold text-ink-600 hover:border-ink-300 transition-colors cursor-pointer"
+              >
+                Stop revising
+              </button>
+            ) : (
+              <button
+                onClick={() => setRevisingDraft(true)}
+                title={`Creates v${m.version + 1} and returns the methodology to unsigned`}
+                className="h-9 px-4 shrink-0 inline-flex items-center gap-1.5 rounded-lg border border-canvas-border bg-canvas-elevated text-[0.78125rem] font-semibold text-ink-700 hover:border-brand-300 hover:text-brand-700 transition-colors cursor-pointer"
+              >
+                <History size={14} /> Revise the methodology
+              </button>
+            )
+          )}
         </div>
       </section>
 
@@ -197,13 +237,13 @@ export default function SamplingMethodologyView() {
             </span>
           </p>
           <div className="flex items-center gap-2 shrink-0">
-            <button onClick={() => setDraft(snapshot(m))} className="h-9 px-3.5 rounded-lg border border-canvas-border bg-canvas-elevated text-[0.78125rem] font-semibold text-ink-600 hover:border-ink-300 transition-colors cursor-pointer">Discard</button>
+            <button onClick={() => { setDraft(snapshot(m)); setRevisingDraft(false); }} className="h-9 px-3.5 rounded-lg border border-canvas-border bg-canvas-elevated text-[0.78125rem] font-semibold text-ink-600 hover:border-ink-300 transition-colors cursor-pointer">Discard</button>
             {agreed ? (
               <button onClick={() => setRevising(true)} className="h-9 px-4 inline-flex items-center gap-1.5 rounded-lg bg-brand-600 text-white text-[0.78125rem] font-semibold hover:bg-brand-700 transition-colors cursor-pointer">
                 <History size={14} /> Review &amp; revise
               </button>
             ) : (
-              <button onClick={() => proposeSampling({ sizes: draft.sizes, method: draft.method, roundBasis: draft.roundBasis })} className="h-9 px-4 rounded-lg bg-brand-600 text-white text-[0.78125rem] font-semibold hover:bg-brand-700 transition-colors cursor-pointer">
+              <button onClick={() => proposeSampling({ sizes: draft.sizes, method: draft.method, spread: draft.spread, roundBasis: draft.roundBasis })} className="h-9 px-4 rounded-lg bg-brand-600 text-white text-[0.78125rem] font-semibold hover:bg-brand-700 transition-colors cursor-pointer">
                 Save the proposal
               </button>
             )}
@@ -216,7 +256,7 @@ export default function SamplingMethodologyView() {
           nextVersion={m.version + 1}
           runningAudits={eng.audits.filter(a => !a.archive).map(a => `${a.period} · v${a.samplingVersion ?? m.version}`)}
           onClose={() => setRevising(false)}
-          onRevise={reason => { reviseSampling({ sizes: draft.sizes, method: draft.method, roundBasis: draft.roundBasis }, reason); setRevising(false); }}
+          onRevise={reason => { reviseSampling({ sizes: draft.sizes, method: draft.method, spread: draft.spread, roundBasis: draft.roundBasis }, reason); setRevising(false); setRevisingDraft(false); }}
         />
       )}
 
@@ -314,6 +354,31 @@ export default function SamplingMethodologyView() {
         </p>
       </section>
 
+      {/* ── what every draw has to reach ─────────────────────────────────────────
+          Any, all or none — a tick group, not a choice of one, which is why it is
+          its own section rather than three more cards under the method. */}
+      <section className="rounded-xl border border-canvas-border bg-canvas-elevated p-5">
+        <h2 className="text-[0.8125rem] font-bold text-ink-800 inline-flex items-center gap-1.5"><Layers size={15} className="text-brand-600" /> Spread across</h2>
+        <p className="text-[0.71875rem] text-ink-500 mt-0.5 mb-3">Each group ticked gets items of its own in every control's draw, so a sample cannot land entirely in one quarter or one company.</p>
+        <div className="grid grid-cols-3 gap-2.5" role="group" aria-label="Spread across">
+          {SAMPLING_SPREADS.map(opt => (
+            <OptionCard
+              key={opt.id} title={opt.label} note={SPREAD_NOTE[opt.id]} multi
+              selected={draft.spread.includes(opt.id)} canEdit={canEdit}
+              onPick={() => setDraft(d => ({ ...d, spread: d.spread.includes(opt.id) ? d.spread.filter(x => x !== opt.id) : [...d.spread, opt.id] }))}
+            />
+          ))}
+        </div>
+        <div className="mt-3 rounded-lg border border-canvas-border bg-paper-50/60 px-3.5 py-2.5 flex items-start gap-2">
+          <Info size={13} className="text-ink-500 shrink-0 mt-0.5" />
+          <p className="text-[0.75rem] text-ink-600 leading-relaxed">
+            {draft.spread.length
+              ? <>Every control's draw is split across <span className="font-semibold text-ink-900">{spreadLabel(draft.spread).toLowerCase()}</span>, with at least one item in each — and the Sample step reads the draw back group by group, so a group that got none is visible.</>
+              : <><span className="font-semibold text-ink-900">Not spread</span> — items fall wherever the selection puts them. Tick anything every draw has to reach.</>}
+          </p>
+        </div>
+      </section>
+
       {/* ── one year, two rounds ──────────────────────────────────────────────────
           The consequence sentence is on screen for whatever is currently chosen
           (user ask): this is a choice people make by its effect, not by its name. */}
@@ -376,19 +441,25 @@ export default function SamplingMethodologyView() {
 
 /** One choice in a group — a button when the reader may change it, a plain card
  *  when they may not. Absent rather than disabled, the rule the rest of the
- *  module follows: what a hat cannot do, it is not offered. */
-function OptionCard({ title, note, selected, canEdit, onPick }: {
-  title: string; note: string; selected: boolean; canEdit: boolean; onPick: () => void;
+ *  module follows: what a hat cannot do, it is not offered.
+ *
+ *  `multi` is the spread group, where any number may be on at once: same card,
+ *  but a tick, because a group of radios that does not behave like radios is the
+ *  worse of the two mistakes. */
+function OptionCard({ title, note, selected, canEdit, multi, onPick }: {
+  title: string; note: string; selected: boolean; canEdit: boolean; multi?: boolean; onPick: () => void;
 }) {
   const shell = cn('rounded-xl border px-3.5 py-3 text-left', selected ? 'border-brand-300 bg-brand-50/40' : 'border-canvas-border');
   const body = (
     <>
-      <span className={cn('block text-[0.78125rem] font-bold', selected ? 'text-brand-700' : 'text-ink-800')}>{title}</span>
+      <span className={cn('flex items-center gap-1.5 text-[0.78125rem] font-bold', selected ? 'text-brand-700' : 'text-ink-800')}>
+        {multi && selected && <Check size={12} className="shrink-0" />}{title}
+      </span>
       <span className="block text-[0.6875rem] text-ink-500 leading-relaxed mt-0.5">{note}</span>
     </>
   );
   return canEdit ? (
-    <button type="button" role="radio" aria-checked={selected} onClick={onPick}
+    <button type="button" role={multi ? 'checkbox' : 'radio'} aria-checked={selected} onClick={onPick}
       className={cn(shell, 'transition-colors cursor-pointer', !selected && 'hover:border-ink-300')}>{body}</button>
   ) : (
     <div className={shell}>{body}</div>

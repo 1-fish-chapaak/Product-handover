@@ -21,8 +21,9 @@ import {
   monthlyBreakdown, spikeMonths, priorRoundCount, fileUsable, originLabel, guessFileKind, populationSources, ipeChecksFor, samplesFor,
   expectedInputsFor, hasRowCount, isAssisting, sampledSources, reviewNotesFor, isShared, entityCoverage, uncoveredEntities, hasPaths, pathCoverage, untouchedPaths, type PopVerdict,
   requiredFilesOf, requiredFilesCount, requiredFilesReady, passedWithoutFiles, designFilesOf,
+  evidenceKindOf,
   designApproved, isEngagementLocked, samePerson, documentSystemRows,
-  auditSampling, dealSample, NO_COUNTRY, sampleDate, sampleHome, sampleSplit, spreadPhrase, workingAudit, yearSampleRounds, LEGACY_SOURCE_ID, type SampleSplit, type YearRound, yearEndPending,
+  dealSample, NO_COUNTRY, sampleDate, sampleHome, sampleSplit, spreadPhrase, workingAudit, yearSampleRounds, LEGACY_SOURCE_ID, type SampleSplit, type YearRound, yearEndPending,
   draftSamplePrompt, readSamplePrompt,
   populationInstances, sampleAmount, seedKeyOf,
   narrowedCount, populationFrom, readRowCount,
@@ -623,15 +624,6 @@ function RunResultsModal({ control, step, onClose }: { control: Control; step: O
 // ── design consideration row — validated by its own workflow (Q&A) + override ─────
 export const VALIDATE_MS = 6000;
 
-/** A picked file's extension, read as one of the four evidence kinds the model
- *  knows. Same mapping the store uses when a file arrives by any other door. */
-function evidenceKindOf(name: string): EvidenceFile['kind'] {
-  const n = name.toLowerCase();
-  if (n.endsWith('.csv')) return 'CSV';
-  if (n.endsWith('.xlsx') || n.endsWith('.xls')) return 'XLSX';
-  if (n.endsWith('.png') || n.endsWith('.jpg') || n.endsWith('.jpeg')) return 'IMG';
-  return 'PDF';
-}
 
 /** `checking` — Ira is running across every design check from the section header
  *  (S6, A17). The row wears the same busy state its own validation used to. */
@@ -1175,6 +1167,16 @@ function AttributeRow({ control, step, canEdit, testing }: { control: Control; s
     });
   };
 
+  // Every file has a line, so there is nothing left to agree to — it goes on
+  // the record without a press (user ask, 23 Sep). The old "File 3 files" asked
+  // the reader to confirm what choosing the files had already decided, and read
+  // as a dead button beside a counter still insisting 0 of 3 were in. The one
+  // thing that genuinely still needs a person is a file with NO line to go on,
+  // and that keeps its button below.
+  useEffect(() => {
+    if (pile && pile.length > 0 && pile.every(m => m.slot)) filePile();
+  }, [pile]); // eslint-disable-line react-hooks/exhaustive-deps
+
   // No Pass without the evidence (17 Sep dev call) — the Pass button, an
   // override and an attestation all wait for every required file. Fail never does.
   const passLock = ready ? undefined : `Upload all ${total} required files first`;
@@ -1246,7 +1248,7 @@ function AttributeRow({ control, step, canEdit, testing }: { control: Control; s
                     checklist this is the line's own Upload button wearing a
                     different word, and two buttons for one job is one too many. */}
                 {canEdit && !busy && total > 1 && (
-                  <label title="Choose several files at once — each one is matched to the line it proves, and nothing is filed until you have seen where it went"
+                  <label title="Choose several files at once — each one is matched to the line it proves and filed straight away; anything with no line to go on waits for you"
                     className="ml-auto h-6 px-2 rounded-md border border-brand-200 bg-canvas-elevated text-brand-700 text-[0.6875rem] font-semibold hover:border-brand-400 hover:bg-brand-50 focus-within:ring-2 focus-within:ring-brand-200 inline-flex items-center gap-1 cursor-pointer">
                     <input type="file" multiple className="sr-only" accept=".pdf,.png,.jpg,.jpeg,.xlsx,.xls,.csv,.doc,.docx"
                       aria-label={`Upload several files for ${step.code}`}
@@ -1343,23 +1345,25 @@ function AttributeRow({ control, step, canEdit, testing }: { control: Control; s
                   no line are named here rather than dropped — a file the reader
                   handed over and never heard of again is a file they will
                   assume went somewhere. */}
-              {pile && (
+              {pile && spare.length > 0 && (
                 <div className="mt-2.5 pt-2 border-t border-brand-100/70">
-                  {spare.length > 0 && (
-                    <p className="mb-1.5 text-[0.65625rem] text-mitigated-700 flex items-start gap-1">
-                      <AlertTriangle size={10} className="shrink-0 mt-[2px]" />
-                      <span className="min-w-0">{spare.length === 1 ? 'This one has no line to go on' : `${spare.length} have no line to go on`} — {spare.map(m => m.name).join(', ')}. Put {spare.length === 1 ? 'it' : 'them'} on a line above, or file the rest without {spare.length === 1 ? 'it' : 'them'}.</span>
-                    </p>
-                  )}
+                  <p className="mb-1.5 text-[0.65625rem] text-mitigated-700 flex items-start gap-1">
+                    <AlertTriangle size={10} className="shrink-0 mt-[2px]" />
+                    <span className="min-w-0">{spare.length === 1 ? 'This one has no line to go on' : `${spare.length} have no line to go on`} — {spare.map(m => m.name).join(', ')}. Put {spare.length === 1 ? 'it' : 'them'} on a line above{mapped > 0 ? `, or keep the ${mapped === 1 ? 'other one' : `other ${mapped}`} without ${spare.length === 1 ? 'it' : 'them'}` : ''}.</span>
+                  </p>
                   <div className="flex items-center gap-1.5 flex-wrap">
-                    <button onClick={filePile} disabled={mapped === 0}
-                      title={mapped === 0 ? 'Map at least one file to a line first' : undefined}
-                      className="h-7 px-2.5 rounded-md bg-brand-600 text-white text-[0.6875rem] font-semibold enabled:hover:bg-brand-700 disabled:opacity-40 disabled:cursor-not-allowed inline-flex items-center gap-1 cursor-pointer">
-                      <Upload size={11} /> File {mapped} {mapped === 1 ? 'file' : 'files'}
-                    </button>
+                    {/* The only decision left. The mapped ones are already on
+                        the record; this says what happens to the leftovers. */}
+                    {mapped > 0 && (
+                      <button onClick={filePile}
+                        className="h-7 px-2.5 rounded-md bg-brand-600 text-white text-[0.6875rem] font-semibold hover:bg-brand-700 inline-flex items-center gap-1 cursor-pointer">
+                        <Upload size={11} /> Keep the {mapped === 1 ? 'other one' : `other ${mapped}`}
+                      </button>
+                    )}
                     <button onClick={() => setPile(null)}
-                      className="h-7 px-2.5 rounded-md border border-canvas-border bg-canvas-elevated text-ink-600 text-[0.6875rem] font-semibold hover:text-ink-900 hover:border-ink-300 cursor-pointer">Cancel</button>
-                    <span className="text-[0.625rem] text-ink-400">Nothing is written until you file it.</span>
+                      className="h-7 px-2.5 rounded-md border border-canvas-border bg-canvas-elevated text-ink-600 text-[0.6875rem] font-semibold hover:text-ink-900 hover:border-ink-300 cursor-pointer">
+                      {mapped > 0 ? 'Cancel' : 'Discard these'}
+                    </button>
                   </div>
                 </div>
               )}
@@ -3878,15 +3882,14 @@ function SourceDrawRow({ control, source, canDraw, single, isOpen, onToggle, onA
   // the file, then the auditor's to rewrite — "प्रॉम्प्ट फॉलोज़, सैंपल फॉलोज़",
   // one ask per file because each file's question is its own. The words set how
   // many and which months; how the items are picked and what they are spread
-  // across was agreed on the audit (A28), so that is never theirs to change.
+  // across was agreed on the engagement (A28), so that is never theirs to change.
   const audit = workingAudit(eng, openAuditId);
-  const agreed = auditSampling(audit);
-  const method: Sampling['method'] = agreed.method;
+  const method: Sampling['method'] = methodology.method;
   const drafted = draftSamplePrompt(source, guide.suggested, audit);
   const [prompt, setPrompt] = useState(drafted);
   const [promptSeed, setPromptSeed] = useState(drafted);
   if (promptSeed !== drafted) { setPromptSeed(drafted); setPrompt(drafted); }
-  const plan = readSamplePrompt(prompt, source, guide.suggested, audit, agreed);
+  const plan = readSamplePrompt(prompt, source, guide.suggested, audit, methodology);
   // The stretch the items are dealt inside — the months the ask named, else the
   // audit's whole window — and the round any undated item already here was drawn in.
   const stretch = audit && plan.months ? { ...audit, windowFrom: plan.months.from, windowTo: plan.months.to } : audit;
@@ -3898,7 +3901,7 @@ function SourceDrawRow({ control, source, canDraw, single, isOpen, onToggle, onA
 
   const draw = () => {
     setStage('drawing');
-    logEvent({ action: 'Run', description: `Drew ${plan.size} items from ${source.file} for ${control.id} — ${prompt.trim() || 'no ask recorded'} (${method.toLowerCase()}, ${spreadPhrase(agreed.spread)})`, module: 'SOX ICFR', entity: 'Test Result' });
+    logEvent({ action: 'Run', description: `Drew ${plan.size} items from ${source.file} for ${control.id} — ${prompt.trim() || 'no ask recorded'} (${method.toLowerCase()}, ${spreadPhrase(methodology.spread)})`, module: 'SOX ICFR', entity: 'Test Result' });
     window.setTimeout(() => { setDrawn(sampleRefs(control.process, plan.size)); setStage('review'); }, 1800);
   };
   // Where each drawn item falls — its date, and on a shared control its company.
@@ -3906,7 +3909,7 @@ function SourceDrawRow({ control, source, canDraw, single, isOpen, onToggle, onA
   // other files' items, this file's key, the months asked for), so the rows shown
   // are the rows filed.
   const dealt = drawn.length
-    ? dealSample(drawControl, stretch, agreed, drawn.length,
+    ? dealSample(drawControl, stretch, methodology, drawn.length,
       (control.operating.sampling?.samples ?? []).filter(x => (x.sourceId ?? LEGACY_SOURCE_ID) !== source.id),
       `${seedKeyOf(control)}·${source.id}`, e => countryOf(eng.id, e), home)
     : [];
@@ -4227,11 +4230,10 @@ function SampleExtractSection({ control, canEdit, locked }: { control: Control; 
   // to look at.
   const doneFiles = sources.filter(s => s.approvedSample).length;
 
-  // The audit's sampling methodology (A28) — what every file's draw below follows —
-  // and this control's tested items across the year's rounds, each counted in the
-  // round its date falls in, so the split reads the same from either round.
+  // The engagement's sampling methodology (A28) — what every file's draw below
+  // follows — and this control's tested items across the year's rounds, each counted
+  // in the round its date falls in, so the split reads the same from either round.
   const current = workingAudit(eng, openAuditId);
-  const agreed = auditSampling(current);
   /** The control as the draw saw it — only its companies in scope (17 Sep). */
   const drawControl = scopedForDraw(control, inScopeEntityNames(eng.id, current));
   const yearRounds = yearSampleRounds(eng, control, current, a => auditCovers(a, control, eng.id));
@@ -4245,7 +4247,7 @@ function SampleExtractSection({ control, canEdit, locked }: { control: Control; 
   // companies are counted in the coverage strip already, so that axis is left to
   // the strip rather than said twice.
   const splits = o.sampling?.samples.length
-    ? sampleSplit(drawControl, current, agreed, e => countryOf(eng.id, e), sampleHome(eng, a => auditCovers(a, control, eng.id))).filter(sp => !(sp.axis === 'entity' && isShared(control)))
+    ? sampleSplit(drawControl, current, methodology, e => countryOf(eng.id, e), sampleHome(eng, a => auditCovers(a, control, eng.id))).filter(sp => !(sp.axis === 'entity' && isShared(control)))
     : [];
   const emptyGroups = splits.flatMap(sp => sp.groups.filter(g => g.n === 0 && g.label !== NO_COUNTRY).map(g => g.label));
   const SPLIT_LABEL: Record<SampleSplit['axis'], string> = { quarter: 'By quarter', country: 'By country', entity: 'By entity' };
@@ -4276,19 +4278,19 @@ function SampleExtractSection({ control, canEdit, locked }: { control: Control; 
         )}
       </div>
 
-      {/* ── how this audit samples, and the year so far (A28) ────────────────
-          Selection and spread were agreed on the audit, once for every control
-          in it, so they are stated here rather than asked — the files below ask
-          only how many and from which months. The running total answers #38: a control is tested
+      {/* ── how this engagement samples, and the year so far (A28) ───────────
+          Selection and spread were agreed on the engagement, once for every
+          control on it, so they are stated here rather than asked — the files
+          below ask only how many and from which months. The running total answers #38: a control is tested
           across the year's rounds, and nothing used to add them up against the
           number the sizing table sets. */}
       <div className="mt-4 rounded-xl border border-canvas-border bg-paper-50/40 p-3.5">
         <p className="text-[0.71875rem] text-ink-700">
-          <span className="font-bold">Method: {agreed.method}</span> · {spreadPhrase(agreed.spread)} <span className="text-ink-400">(set on the audit)</span>
+          <span className="font-bold">Method: {methodology.method}</span> · {spreadPhrase(methodology.spread)} <span className="text-ink-400">(agreed for this engagement)</span>
         </p>
-        {/* And how many, derived rather than chosen (#22). The method above was
-            settled on the audit; the size is settled on the engagement, and this
-            says which cell of it this control landed in. */}
+        {/* And how many, derived rather than chosen (#22). The method above and
+            the size are settled together on the engagement, and this says which
+            cell of the agreed table this control landed in. */}
         <div className="mt-1"><SizeDerivation control={control} guide={guide} methodology={methodology} /></div>
         {yearRounds.length > 0 && (
           <>

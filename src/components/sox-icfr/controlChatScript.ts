@@ -471,7 +471,10 @@ export function nextPrompt(ctx: ChatCtx): ChatPrompt {
       return line(`Design is concluded ${s.designResult.toLowerCase()} and sitting with the reviewer. Population unlocks once they approve it — nothing else to do on the design.`);
     }
     if (s.checksTotal === 0) {
-      return line('Every document is on file, but this control’s RACM lists no design checks, so there is nothing to assess. The conclusion is a judgement call on the documents alone.');
+      // Said plainly, and without offering a way past it. The design is
+      // concluded on what the checks found, so a control with no checks is not
+      // a control ready to conclude — it is a RACM row missing its checks.
+      return line('Every document is on file, but this control’s RACM lists no design checks — so there is nothing for me to read the evidence against. The checks come from the RACM row; add them there and I can assess them. Concluding without them is the page’s to allow, not mine to suggest.');
     }
     if (s.checksUnmarked > 0) {
       // ── the ones I read and could not answer (user ask, 22 Sep) ───────────

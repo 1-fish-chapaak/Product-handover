@@ -360,7 +360,7 @@ export function seedMetaFor(e: Engagement): SeedMeta {
     periodStart: e.periodStart, periodEnd: e.periodEnd, owner: e.owner,
     materiality: e.soxConfig?.overallMateriality, performanceMateriality: e.soxConfig?.performanceMateriality,
     clearlyTrivial: e.soxConfig?.clearlyTrivial, sdBandPct: e.soxConfig?.sdBandPct,
-    controls: e.soxControls,
+    controls: e.soxControls, sampling: e.soxSampling,
   };
 }
 

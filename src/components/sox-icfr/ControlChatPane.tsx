@@ -4,8 +4,8 @@ import { ArrowRight, ArrowUp, Paperclip, Plus, Sparkles, Square } from 'lucide-r
 import { useIcfr } from './store';
 import { useAuditLog } from '../../context/AdminDataContext';
 import {
-  auditSampling, concludeRationale, designOutstanding, designSuggestion, draftSamplePrompt, extractionCriteria,
-  fileUsable, guessFileKind, itgcHolds, narrowedCount, operatingSuggestion, populationFrom, populationSources,
+  concludeRationale, designOutstanding, designSuggestion, draftSamplePrompt, extractionCriteria,
+  evidenceKindOf, fileUsable, guessFileKind, itgcHolds, narrowedCount, operatingSuggestion, populationFrom, populationSources,
   readRowCount, readSamplePrompt, sampleSizeGuide, samplingOf, sampledSources, seedKeyOf, trackResult, workingAudit,
 } from './helpers';
 import { useAuditFiles } from './useAuditFiles';
@@ -16,10 +16,10 @@ import { DESIGN_RUN_STEPS, TOE_RUN_STEPS, endRun, say, sayOnce, startRun, useCon
 import { useTypewriter } from '../chat/reveal/useTypewriter';
 import { acknowledge, listOf, nextPrompt, type ChatStepId, type PopFile, type Situation } from './controlChatScript';
 import { actionsFor, type ChatAction, type ChatActionId } from './controlChatActions';
-import { readIntent } from './controlChatIntents';
+import { readIntent, readVerdict } from './controlChatIntents';
 import { mapEvidence, type EvidenceMatch } from './controlChatEvidence';
 import { cn } from '../../lib/cn';
-import type { Control, DesignDocKind, FileOrigin, TestResult } from './types';
+import type { Control, DesignDoc, DesignDocKind, DesignWaiverReason, FileOrigin, TestResult } from './types';
 
 /**
  * Ira, sitting beside the control rather than inside it.
@@ -87,6 +87,13 @@ const PICK_CAPTION: Partial<Record<ChatActionId, string>> = {
   'ipe-check': 'Pick a check',
   'draw-sample': 'Draw off',
 };
+
+/** The one waiver reason the chat offers. The page offers three; the other two
+ *  ("prepared by the audit team", "held by the client \u2014 inspected in situ") are
+ *  statements about where a document IS, which is a conversation with the file
+ *  in front of you. Not-applicable is the one that is a judgement about the
+ *  control, and it is the one people say out loud. */
+const NOT_APPLICABLE: DesignWaiverReason = 'Not applicable \u2014 design tested off the control description';
 
 /** The same beat the page's own validation takes (VALIDATE_MS). Ira is not
  *  faster than the button beside it — the wait is part of what it means. */
@@ -202,7 +209,7 @@ function IraText({ text, stream, onDone }: { text: string; stream: boolean; onDo
 export default function ControlChatPane({ control }: { control: Control }) {
   const { eng, role, me, openAuditId, addDesignDoc, runDesignIra, concludeDesign, overrideDesign, approveDesign, setDesignPoint, overrideDesignPoint,
     setIpeCheck, concludeIpe, uploadRequiredFile, drawSourceSample, approveSource, lockPopulation, concludeOperating, overrideOperating, signOffControlWp,
-    setStepResult, overrideStep, validateReadyAttributes, registerFile, setPopulation, updateDeficiency } = useIcfr();
+    setStepResult, overrideStep, validateReadyAttributes, registerFile, setPopulation, updateDeficiency, waiveDesignDoc, attachDesignEvidence } = useIcfr();
   const logEvent = useAuditLog();
   const audit = useMemo(() => eng.audits.find(a => a.id === openAuditId) ?? null, [eng.audits, openAuditId]);
   // The audit's own files, read exactly as the source picker on the left reads
@@ -265,6 +272,22 @@ export default function ControlChatPane({ control }: { control: Control }) {
   // rationale it is not parsed and not second-guessed — it goes on a working
   // paper in the auditor's words, and the mechanism is theirs to name.
   const [awaitingCause, setAwaitingCause] = useState<string | null>(null);
+  // A question Ira has asked about one design element. Two things can be done
+  // to an outstanding element — give it its file, or account for it as not
+  // applicable — and BOTH have to start by settling which one, so they share
+  // the question rather than asking it twice in two different voices.
+  //
+  // Only the waiver has a second beat. The page will not take one without a
+  // written reason (`disabled={!note.trim()}`), and a waiver the working paper
+  // prints with no reason on it is worse than the hole it was covering.
+  // Attaching has nothing to ask: the file picker is the rest of the sentence.
+  const [waive, setWaive] = useState<
+    | { kind: 'waive' | 'attach'; stage: 'which'; docs: DesignDoc[] }
+    | { kind: 'waive'; stage: 'why'; docId: string; label: string }
+    | null
+  >(null);
+  /** The design element a picked file belongs to, while the OS dialog is open. */
+  const pickDoc = useRef<string | undefined>(undefined);
   const still = useReducedMotion();
 
   // The id of the newest Ira line AS OF the render that first saw it. A message
@@ -286,6 +309,10 @@ export default function ControlChatPane({ control }: { control: Control }) {
   if (extract && control.operating.population) setExtract(null);
   // …and for the root cause: settled on the left, or the exception moved on.
   if (awaitingCause && prompt.situation.exception?.id !== awaitingCause) setAwaitingCause(null);
+  // …and for the waiver: answered on the left, or the element stopped being
+  // outstanding, and the question Ira is holding is no longer a question.
+  if (waive?.stage === 'why' && !prompt.situation.missing.some(d => d.id === waive.docId)) setWaive(null);
+  if (waive?.stage === 'which' && prompt.situation.missing.length === 0) setWaive(null);
   const liveIpeCheck = ipeDraft ? control.operating.ipe?.checks.find(k => k.id === ipeDraft.checkId) : undefined;
   if (ipeDraft && (!liveIpeCheck || liveIpeCheck.result !== 'Not tested')) setIpeDraft(null);
   if (awaitingWhy) {
@@ -440,6 +467,28 @@ export default function ControlChatPane({ control }: { control: Control }) {
    *  which is the point: typing is another way to press what is on offer, not
    *  a second set of rules. The reader's own line is posted by the caller,
    *  because a button says `a.said` and a typed sentence says itself. */
+  /** More than one thing is outstanding, so Ira does not guess which. */
+  const askWhich = (docs: DesignDoc[], kind: 'waive' | 'attach') => {
+    setWaive({ kind, stage: 'which', docs });
+    say(control.id, 'ira', kind === 'waive'
+      ? `${docs.length} elements are outstanding. Which one is not applicable?`
+      : `${docs.length} elements are outstanding. Which one is this for?`);
+  };
+  /** The file itself. No second beat — the picker is the rest of the sentence,
+   *  and it is the page's own accept list, so the same file lands the same way
+   *  whichever door it came through. */
+  const attachTo = (doc: DesignDoc) => {
+    setWaive(null);
+    pickDoc.current = doc.id;
+    picker.current?.click();
+  };
+  /** The reason. Asked in the page's own words, because it is the same field. */
+  const askWhy = (doc: DesignDoc) => {
+    const label = doc.kind === 'Custom' ? doc.name : doc.kind;
+    setWaive({ kind: 'waive', stage: 'why', docId: doc.id, label });
+    say(control.id, 'ira', `${label}, then. Why won\u2019t it be provided? The working paper prints this, so it is the reason a reviewer reads \u2014 not a note to yourself.`);
+  };
+
   const perform = (a: ChatAction) => {
     if (a.id === 'show-step') {
       const step = a.focus ?? prompt.step;
@@ -454,6 +503,31 @@ export default function ControlChatPane({ control }: { control: Control }) {
     if (a.id === 'add-element' && a.arg) {
       addDesignDoc(control.id, a.arg as DesignDocKind);
       logEvent({ action: 'Create', description: `Added the ${a.arg} design element to ${control.id} from the chat`, module: 'SOX ICFR', entity: 'Control' });
+      return;
+    }
+
+    // "Not applicable". The page's waiver form in two sentences: which element,
+    // then the reason it prints. Nothing is written on the first beat — an
+    // element is not accounted for until somebody has said why.
+    if (a.id === 'waive-doc') {
+      const missing = prompt.situation.missing;
+      if (missing.length === 0) { say(control.id, 'ira', 'Nothing is outstanding on this step, so there is nothing to account for.'); return; }
+      const one = a.arg ? missing.find(d => d.id === a.arg) : missing.length === 1 ? missing[0] : undefined;
+      if (!one) { askWhich(missing, 'waive'); return; }
+      askWhy(one);
+      return;
+    }
+
+    // The file for an outstanding element. The page's own picker sits two
+    // scrolls away under the element it belongs to; this is the same store
+    // call from where the reader already is (user ask, 23 Sep) — Ira offers to
+    // add an element and then has to be able to finish the job.
+    if (a.id === 'attach-doc') {
+      const missing = prompt.situation.missing;
+      if (missing.length === 0) { say(control.id, 'ira', 'Every element on this step has its evidence already.'); return; }
+      const one = a.arg ? missing.find(d => d.id === a.arg) : missing.length === 1 ? missing[0] : undefined;
+      if (!one) { askWhich(missing, 'attach'); return; }
+      attachTo(one);
       return;
     }
 
@@ -673,7 +747,12 @@ export default function ControlChatPane({ control }: { control: Control }) {
     const src = sampledSources(populationSources(control)).find(x => x.id === draw.sourceId);
     if (!src) { setDraw(null); return; }
     const audit = workingAudit(eng, openAuditId);
-    const plan = readSamplePrompt(ask, src, sampleSizeGuide(control, itgcHolds(eng, control), samplingOf(eng)).suggested, audit, auditSampling(audit));
+    // The methodology is the ENGAGEMENT's — one agreed selection method for the
+    // whole engagement, which is the thing a reviewer reperforms against. The
+    // sizing guide and the draw itself have to read the same one, or the rail
+    // sizes a sample by one rule and draws it by another.
+    const agreed = samplingOf(eng);
+    const plan = readSamplePrompt(ask, src, sampleSizeGuide(control, itgcHolds(eng, control), agreed).suggested, audit, agreed);
     setDraw({ ...draw, ask });
     startRun(control.id, `Drawing ${plan.size} of ${src.count.toLocaleString('en-IN')} from ${src.file}`, DRAW_RUN_STEPS, DRAW_MS);
     timer.current = window.setTimeout(() => {
@@ -691,8 +770,11 @@ export default function ControlChatPane({ control }: { control: Control }) {
     const src = sampledSources(populationSources(control)).find(x => x.id === draw.sourceId);
     if (!src) { setDraw(null); return; }
     const audit = workingAudit(eng, openAuditId);
-    const agreed = auditSampling(audit);
-    const plan = readSamplePrompt(draw.ask, src, sampleSizeGuide(control, itgcHolds(eng, control), samplingOf(eng)).suggested, audit, agreed);
+    // `agreed.method` is what gets written onto the draw, so it has to be the
+    // engagement's own — a sample filed from here saying "Random" under an
+    // engagement that agreed Systematic is a paper the reviewer cannot redo.
+    const agreed = samplingOf(eng);
+    const plan = readSamplePrompt(draw.ask, src, sampleSizeGuide(control, itgcHolds(eng, control), agreed).suggested, audit, agreed);
     // The same five-digit reperformance number the card computes, off the same
     // string — a reviewer walking the paper has to land on these items.
     const seed = 10000 + (`${seedKeyOf(control)}·${src.id}·${openAuditId ?? ''}`.split('').reduce((acc, ch) => (acc * 31 + ch.charCodeAt(0)) >>> 0, 17) % 89999);
@@ -706,8 +788,23 @@ export default function ControlChatPane({ control }: { control: Control }) {
    *  — the mapper is confident, not certain, and it is not its paper. */
   const picked = (list: FileList | null) => {
     const scope = pickFor.current;
+    const forDoc = pickDoc.current;
     pickFor.current = undefined;
+    pickDoc.current = undefined;
     if (!list || list.length === 0) return;
+    // A design element was waiting on this. No mapping and no guessing: the
+    // reader already said which element, so the files go there whole — the
+    // same call, with the same shape, the page's own picker makes.
+    if (forDoc) {
+      const doc = control.design.documents.find(d => d.id === forDoc);
+      const files = Array.from(list).map(f => ({ name: f.name, kind: evidenceKindOf(f.name), url: URL.createObjectURL(f) }));
+      attachDesignEvidence(control.id, forDoc, files);
+      const label = doc ? (doc.kind === 'Custom' ? doc.name : doc.kind) : 'the element';
+      logEvent({ action: 'Upload', description: `Attached ${files.map(f => f.name).join(', ')} to the ${label} design element on ${control.id} from the chat`, module: 'SOX ICFR', entity: 'Control' });
+      skipAck.current = true;
+      say(control.id, 'ira', `${listOf(files.map(f => f.name))} — on ${label}. It is no longer outstanding, and the design checks are read against it.`);
+      return;
+    }
     const names = Array.from(list).map(f => f.name);
     const matches = mapEvidence(control, names, scope);
     setPile(matches);
@@ -732,12 +829,16 @@ export default function ControlChatPane({ control }: { control: Control }) {
     });
   };
 
-  /** The verdict on the dimension whose finding is already recorded. */
-  const settleIpe = (result: TestResult) => {
+  /** The verdict on the dimension whose finding is already recorded.
+   *
+   *  `spoken` is set when the reader said it themselves rather than pressing
+   *  one of the two buttons — their own line is already in the thread, and Ira
+   *  restating it underneath reads as a stutter. */
+  const settleIpe = (result: TestResult, spoken = false) => {
     if (!ipeDraft?.note) return;
     const { checkId, dimension, note } = ipeDraft;
     setIpeDraft(null);
-    say(control.id, 'user', `${dimension} ${result === 'Pass' ? 'passes' : 'fails'}.`);
+    if (!spoken) say(control.id, 'user', `${dimension} ${result === 'Pass' ? 'passes' : 'fails'}.`);
     setIpeCheck(control.id, checkId, { result, note });
     logEvent({ action: 'Update', description: `Marked the report's ${dimension.toLowerCase()} ${result.toLowerCase()} on ${control.id} from the chat — ${note}`, module: 'SOX ICFR', entity: 'Evidence' });
   };
@@ -771,13 +872,49 @@ export default function ControlChatPane({ control }: { control: Control }) {
         say(control.id, 'ira', 'Left the draw alone.');
         return;
       }
-      runDraw(text);
-      return;
+      // Holding the composer is not a licence to read everything typed into it
+      // as the answer. "start toe" is an instruction about a different step,
+      // and reading it as a sampling ask drew a two-item sample nobody asked
+      // for (user report, 23 Sep). So the sentence is read FIRST and the ask is
+      // the fallback: an ask is prose about items and months, which is exactly
+      // the thing Ira cannot place as an instruction. The root cause and the
+      // waiver reason are the other way round on purpose — nothing reads those,
+      // they go on the paper in the auditor's own words.
+      const said = readIntent(text, { control, s: prompt.situation, role, actions, promptText: prompt.text });
+      if (said.kind === 'unplaced') { runDraw(text); return; }
+      // A question is neither an ask nor an instruction. Answer it and leave
+      // the draw standing exactly where it was.
+      if (said.kind === 'reply') {
+        say(control.id, 'ira', `${said.text}\n\nThe draw is still waiting on an ask — say what to take off ${draw.file}, or leave it for now.`);
+        return;
+      }
+      setDraw(null);
+      say(control.id, 'ira', `Leaving the draw then — nothing has been taken off ${draw.file}, and the ask is one press away whenever you want it back.`);
+      // …and on, to the bottom of this function, where a typed instruction is
+      // carried out exactly as it would be with no draw open at all.
     }
 
     // Mid-question on the root cause: this is the root cause. Not parsed and
     // not second-guessed — naming the mechanism is the auditor's judgement, and
     // it is what the grade and the whole remediation plan are read against.
+    // Mid-question on a waiver. Beat two: this is the reason, and it is the
+    // reason the working paper carries \u2014 so it is taken as written, like the
+    // rationale the form on the left takes.
+    if (waive?.stage === 'why') {
+      if (/^(no|not now|later|skip|cancel|stop|never ?mind|leave it)\b/i.test(text) && text.length < 40) {
+        setWaive(null);
+        say(control.id, 'ira', `Left ${waive.label} alone \u2014 it is still outstanding, and the design cannot be concluded around it.`);
+        return;
+      }
+      const { docId, label } = waive;
+      setWaive(null);
+      waiveDesignDoc(control.id, docId, NOT_APPLICABLE, text);
+      logEvent({ action: 'Update', description: `Waived the ${label} design element on ${control.id} as not applicable from the chat \u2014 ${text}`, module: 'SOX ICFR', entity: 'Control' });
+      skipAck.current = true;
+      say(control.id, 'ira', `${label} is accounted for \u2014 not applicable, in your words, and the paper prints them. It no longer holds the conclusion up.`);
+      return;
+    }
+
     if (awaitingCause) {
       if (/^(no|not now|later|skip|cancel|stop|never ?mind|leave it)\b/i.test(text) && text.length < 40) {
         setAwaitingCause(null);
@@ -839,10 +976,31 @@ export default function ControlChatPane({ control }: { control: Control }) {
         say(control.id, 'ira', `Left ${ipeDraft.dimension.toLowerCase()} open — nothing recorded against it.`);
         return;
       }
+      // …and unless they have answered the wrong question. "Pass kar do" here
+      // is the verdict, and filing it as the finding would print those three
+      // words on the working paper as what the auditor found. The page asks
+      // for the finding first for a reason, so the question is asked again
+      // rather than the sentence being taken for something it is not.
+      const early = readVerdict(text);
+      if (early) {
+        say(control.id, 'ira', `That is the verdict, and the finding comes first — the page will not take a ${early.toLowerCase()} until what you found is written down, and neither will I. Tell me what you found and “${early.toLowerCase()}” is one word away.`);
+        return;
+      }
       setIpeCheck(control.id, ipeDraft.checkId, { note: text });
       setIpeDraft({ ...ipeDraft, note: text });
       say(control.id, 'ira', `On the paper. Does ${ipeDraft.dimension.toLowerCase()} pass or fail on that?`);
       return;
+    }
+
+    // The finding is written and the live question is the verdict itself. The
+    // two buttons below say Pass and Fail; typing the same word has to reach
+    // the same store call, or the left-hand screen shows nothing for an
+    // instruction the reader plainly gave (user ask, 23 Sep). The dimension's
+    // own name is allowed in the sentence — "completeness passes" is the same
+    // instruction as "pass" when completeness is the question on the table.
+    if (ipeDraft && ipeDraft.note !== null) {
+      const verdict = readVerdict(text.toLowerCase().split(ipeDraft.dimension.toLowerCase()).join(' '));
+      if (verdict) { settleIpe(verdict, true); return; }
     }
 
     if (awaitingWhy) {
@@ -986,6 +1144,33 @@ export default function ControlChatPane({ control }: { control: Control }) {
             className="text-[0.6875rem] text-ink-400 hover:text-ink-700 transition-colors cursor-pointer">Leave it for now</button>
         )}
 
+        {/* Which element is not applicable. Chips rather than a typed name:
+            the answer is one of a short closed list, and reading it back is
+            the check that Ira understood which one. */}
+        {!working && waive?.stage === 'which' && (
+          <div>
+            <p className="text-[0.6875rem] font-semibold uppercase tracking-wide text-ink-400 mb-1.5">Which one</p>
+            <div className="flex flex-wrap gap-1.5">
+              {waive.docs.map(d => (
+                <button key={d.id} onClick={() => (waive.kind === 'waive' ? askWhy(d) : attachTo(d))}
+                  className="h-7 px-2.5 rounded-md border border-canvas-border bg-canvas-elevated text-[0.71875rem] font-semibold text-ink-700 hover:border-brand-300 hover:text-brand-700 transition-colors cursor-pointer">
+                  {d.kind === 'Custom' ? d.name : d.kind}
+                </button>
+              ))}
+            </div>
+            <button onClick={() => { setWaive(null); say(control.id, 'ira', 'Left them alone — they are all still outstanding.'); }}
+              className="mt-1.5 text-[0.6875rem] text-ink-400 hover:text-ink-700 transition-colors cursor-pointer">Leave it for now</button>
+          </div>
+        )}
+
+        {/* And the reason: the composer is the input, so this is only the way
+            out. Nothing is written until it is answered — the page will not
+            take a waiver without one either. */}
+        {!working && waive?.stage === 'why' && (
+          <button onClick={() => { const l = waive.label; setWaive(null); say(control.id, 'ira', `Left ${l} alone — it is still outstanding, and the design cannot be concluded around it.`); }}
+            className="text-[0.6875rem] text-ink-400 hover:text-ink-700 transition-colors cursor-pointer">Leave it for now</button>
+        )}
+
         {/* Where the file came from — the page's own picker, not a lookalike.
             One tap files it: the modal on the left needs a second click because
             it is also collecting the file, and here the file is already in. */}
@@ -1052,7 +1237,7 @@ export default function ControlChatPane({ control }: { control: Control }) {
           </div>
         )}
 
-        {!working && !ipeDraft && !pile && !draw && !extract && !awaitingCause && (
+        {!working && !ipeDraft && !pile && !draw && !extract && !awaitingCause && !waive && (
           <div>
             {/* Ira's mark sits on the LIVE line only. The thread above stays
                 unmarked prose (DESIGN.md §7.1.7 — no avatar, identity carried
@@ -1178,6 +1363,7 @@ export default function ControlChatPane({ control }: { control: Control }) {
             disabled={!!working} aria-label="Message Ira"
             placeholder={working ? 'One moment…'
               : awaitingCause ? 'What allows this to go wrong? — the mechanism, not the count'
+              : waive?.stage === 'why' ? `Why won’t ${waive.label} be provided? — the working paper prints this`
               : extract?.stage === 'origin' ? 'System export, or client-prepared? — recorded on the file'
               : extract?.stage === 'criteria' ? 'Say what to take out of it — or send the drafted filter as it is'
               : draw?.refs === null ? 'Say what to take — or send the drafted ask back as it is'

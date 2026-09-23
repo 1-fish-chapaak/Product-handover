@@ -33,7 +33,12 @@ export type Intent =
    *  step ① and the attribute itself on step ④, because that is what it means
    *  to the person typing it — they are looking at one of the two. */
   | { kind: 'mark-step'; stepId: string; label: string; result: TestResult }
-  | { kind: 'reply'; text: string };
+  | { kind: 'reply'; text: string }
+  /** Nothing matched at all. Held apart from a `reply` because a caller that
+   *  is mid-question needs the difference: "I understood you and here is the
+   *  answer" and "I could not place that" are the same bubble to the reader,
+   *  but only the second one can be an answer to a question Ira itself asked. */
+  | { kind: 'unplaced'; text: string };
 
 export interface IntentCtx {
   control: Control;
@@ -46,6 +51,27 @@ export interface IntentCtx {
 }
 
 const has = (t: string, ...words: string[]) => words.some(w => t.includes(w));
+
+/**
+ * A sentence that is nothing but a verdict — "pass", "pass it", "mark it fail",
+ * "pass kar do".
+ *
+ * It is for the one place where the live question IS pass-or-fail and the
+ * reader answers it in words instead of pressing one of the two buttons: the
+ * IPE dimension whose finding is already on the paper. Everything that is only
+ * politeness comes out, including the Hinglish imperative tail "kar do", which
+ * is exactly what "it" is doing in "pass it". What has to be left is the one
+ * word, so "does it pass?" stays a question and is not answered as an order.
+ */
+export function readVerdict(raw: string): TestResult | null {
+  const bare = raw.toLowerCase()
+    .replace(/[.!,]/g, ' ')
+    .replace(/\b(mark|it|this|that|one|the|check|as|please|now|kar\s*do|karo|kar\s*dijiye)\b/g, ' ')
+    .trim();
+  if (/^pass(ed|es)?$/.test(bare)) return 'Pass';
+  if (/^fail(ed|s)?$/.test(bare)) return 'Fail';
+  return null;
+}
 
 /** The code an attribute-level check inherits from its attribute — 5.1 and
  *  the like. Control-level checks have none; they are matched on their words. */
@@ -81,7 +107,7 @@ const stepLabelOf = (s: OperatingStep): string => `attribute ${s.code}`;
  *  situation the buttons are, so the two can never disagree. */
 function refusal(id: ChatActionId, { s, role }: IntentCtx): string {
   if (s.sealed) return 'This engagement is signed off — nothing on this control can move now.';
-  const auditorsOwn: ChatActionId[] = ['add-element', 'upload-source', 'pick-source', 'upload-evidence', 'draw-sample', 'file-sample', 'tick-sample', 'ipe-check', 'ipe-reliable', 'ipe-unreliable', 'ira-run', 'toe-run', 'conclude-effective', 'conclude-ineffective', 'lock-population', 'conclude-op-effective', 'conclude-op-ineffective', 'rootcause-take', 'rootcause-write'];
+  const auditorsOwn: ChatActionId[] = ['add-element', 'attach-doc', 'waive-doc', 'upload-source', 'pick-source', 'upload-evidence', 'draw-sample', 'file-sample', 'tick-sample', 'ipe-check', 'ipe-reliable', 'ipe-unreliable', 'ira-run', 'toe-run', 'conclude-effective', 'conclude-ineffective', 'lock-population', 'conclude-op-effective', 'conclude-op-ineffective', 'rootcause-take', 'rootcause-write'];
   if (role !== 'auditor' && auditorsOwn.includes(id)) {
     return `That one is the auditor’s. You are viewing as ${role === 'reviewer' ? 'the reviewer' : 'the risk owner'}, so I can’t do it from here.`;
   }
@@ -95,6 +121,16 @@ function refusal(id: ChatActionId, { s, role }: IntentCtx): string {
     if (s.designResult !== 'Not tested') return `The design is already concluded ${s.designResult.toLowerCase()} — it has to be reopened before what it is evidenced by can change.`;
     if (s.elementsOnFile > 0) return 'Evidence is already attached on this step, so I leave the element list to the page — Add element at the top of the design step has the whole menu, custom ones included.';
     return 'Every element I can add is already on this control. The page’s Add element menu has a Custom… option for anything else.';
+  }
+  if (id === 'attach-doc') {
+    if (s.missing.length === 0) return 'Every element on this design has its evidence already — there is nothing outstanding to attach to.';
+    if (s.designResult !== 'Not tested') return `The design is already concluded ${s.designResult.toLowerCase()}, and what it was tested against does not change after the fact. It has to be reopened first.`;
+    return 'I can’t attach it from here just now.';
+  }
+  if (id === 'waive-doc') {
+    if (s.missing.length === 0) return 'Nothing is outstanding on this design, so there is nothing to account for.';
+    if (s.designResult !== 'Not tested') return `The design is already concluded ${s.designResult.toLowerCase()}, and what it was tested against does not change after the fact. It has to be reopened first.`;
+    return 'I can’t account for it from here just now.';
   }
   if (id === 'rootcause-take' || id === 'rootcause-write') {
     if (!s.exception) return 'There is no exception open on this control that needs a root cause.';
@@ -133,14 +169,19 @@ function refusal(id: ChatActionId, { s, role }: IntentCtx): string {
   if (id === 'ira-run') {
     return s.iraBlocked ? `I can’t run it — ${s.iraBlocked}.` : 'There is nothing to assess just now.';
   }
+  // The order is elements → evidence → checks → conclusion, so a refusal names
+  // the step actually standing in the way rather than saying "not yet".
+  const noChecks = 'This control’s RACM lists no design checks, so nothing has been assessed. A conclusion drawn from here would rest on nothing I read — add the checks to the RACM row and I can assess them.';
   if (id === 'conclude-effective') {
     if (s.designResult !== 'Not tested') return `The design is already concluded ${s.designResult.toLowerCase()}. It has to be reopened or returned before it changes.`;
     if (!s.complete) return `Effective is held until every required element is accounted for — ${plural(s.missing.length, 'element')} still outstanding.`;
+    if (s.checksTotal === 0) return noChecks;
     if (s.checksUnmarked > 0) return `Effective is held until every check is marked — ${plural(s.checksUnmarked, 'check')} to go.`;
     return 'Not yet — the design is not ready to conclude.';
   }
   if (id === 'conclude-ineffective') {
     if (s.designResult !== 'Not tested') return `The design is already concluded ${s.designResult.toLowerCase()}.`;
+    if (s.checksTotal === 0) return noChecks;
     return 'Not yet — the design is not ready to conclude.';
   }
   if (id === 'toe-run') {
@@ -262,13 +303,20 @@ export function readIntent(raw: string, ctx: IntentCtx): Intent {
   const mark = /\b(pass|fail)\b/.exec(t);
   if (mark && !has(t, 'all')) {
     const result: TestResult = mark[1] === 'pass' ? 'Pass' : 'Fail';
-    const ref = t.replace(/\b(pass|fail|mark|the|check|attribute|as|it|please)\b/g, ' ').trim();
+    // "kar do" is the Hinglish tail for "do it", so it is doing the same job
+    // here that "it" is doing in "pass it" — nothing, once the instruction is
+    // read. It comes out with the rest of the politeness.
+    const ref = t.replace(/\b(pass|fail|mark|the|check|attribute|as|it|please|kar\s*do|karo)\b/g, ' ').trim();
 
     // On step ② the same words mean one of the report's four dimensions. The
     // reader is looking at the IPE test; nothing else on this step takes a
     // pass or a fail. It cannot be done in one line, though — the page will
     // not take a verdict without a written finding, so this opens the check
     // and Ira asks for the finding first.
+    //
+    // A dimension that is already mid-test never gets this far: the pane is
+    // holding that question, and it answers it itself. That is where a bare
+    // "pass kar do" is actually recorded on the control.
     if (s.step === 'population' && s.ipe && s.ipe.conclusion === 'Not tested') {
       const hit = s.ipe.untested.find(k => t.includes(k.dimension.toLowerCase()))
         ?? s.ipe.untested.find(k => k.dimension.toLowerCase().split(/[^a-z]+/).some(w => w.length >= 4 && t.includes(w)));
@@ -279,6 +327,12 @@ export function readIntent(raw: string, ctx: IntentCtx): Intent {
       if (s.ipe.untested.length > 0) {
         return { kind: 'reply', text: `Which one? ${listOf(s.ipe.untested.map(k => k.dimension.toLowerCase()), 4)}.` };
       }
+      // Every dimension is answered, so a pass on this step can only be about
+      // the report itself — and that is a different word, because a report is
+      // called reliable rather than passed. Without this the sentence fell
+      // through to the design checks and was answered with a list of codes
+      // from a step the reader left two steps ago.
+      return { kind: 'reply', text: `Every check on ${s.ipe.reportName} is answered — what is left is the report itself. Say “reliable” or “not reliable” and I will call it.` };
     }
 
     // On step ④ the same words mean the attribute, not the design check that
@@ -343,12 +397,15 @@ export function readIntent(raw: string, ctx: IntentCtx): Intent {
     const a = actions.find(x => x.id === 'draw-sample');
     return a ? { kind: 'action', action: a } : { kind: 'reply', text: refusal('draw-sample', ctx) };
   }
-  // What an upload MEANS depends on the step: on ② it is the source data the
-  // population comes out of, on ④ it is the evidence behind an attribute. The
-  // reader types the same sentence for both and means whichever one they are
-  // looking at.
+  // What an upload MEANS depends on the step: on ① it is the evidence behind a
+  // design element, on ② the source data the population comes out of, on ④ the
+  // evidence behind an attribute. Three steps, three meanings of one word, and
+  // the reader types the same sentence for all of them meaning whichever one
+  // is in front of them.
   if (has(t, 'upload', 'attach', 'here are the files', 'here is the file', 'take the file', 'evidence for')) {
-    const wanted: ChatActionId = s.step === 'population' ? 'upload-source' : 'upload-evidence';
+    const wanted: ChatActionId = s.step === 'population' ? 'upload-source'
+      : s.step === 'design' ? 'attach-doc'
+      : 'upload-evidence';
     const a = actions.find(x => x.id === wanted && !x.arg);
     return a ? { kind: 'action', action: a } : { kind: 'reply', text: refusal(wanted, ctx) };
   }
@@ -379,9 +436,29 @@ export function readIntent(raw: string, ctx: IntentCtx): Intent {
     return take('rootcause-write');
   }
   if (has(t, 'countersign')) return take('countersign');
+  // ④ asked for by its own name, before the words inside it are read for
+  // anything else — "test of effectiveness" contains "effective", and a reader
+  // asking to start the testing has not asked for a conclusion. It was not
+  // placed at all until now, which is how "start toe" ended up being taken for
+  // a sampling ask and drawing a sample nobody wanted (user report, 23 Sep).
+  if (/\btoe\b/.test(t) || has(t, 'test of effectiveness', 'start testing', 'step 4', 'step four', '④')) {
+    if (s.step === 'operating') return take('toe-run');
+    if (s.step === 'sample') {
+      return { kind: 'reply', text: s.drawsOwed > 0
+        ? `Testing is step ④, and it starts once every source file has its items — ${plural(s.drawsOwed, 'file')} still ${s.drawsOwed === 1 ? 'owes' : 'owe'} a draw.`
+        : 'Testing is step ④, and it starts once the sample is drawn off the locked population.' };
+    }
+    return { kind: 'reply', text: `Testing is step ④, and this control is not there yet. ${ctx.promptText}` };
+  }
   // Which validation is meant is decided by where the work is, the same way a
   // conclusion is: on ④ there is only one thing left to run.
-  if (has(t, 'run', 'validate', 'validation', 'assess', 'check the evidence', 'ira')) {
+  //
+  // "run" and "ira" are matched as WORDS, where everything else here is matched
+  // as a substring. Both of them live inside things an auditor types for
+  // entirely different reasons — payment_runs.xlsx, this very control's name,
+  // Irame itself — and a sampling ask that named one of those files used to be
+  // answered as a request to validate something.
+  if (/\b(run|ira)\b/.test(t) || has(t, 'validate', 'validation', 'assess', 'check the evidence')) {
     return take(s.step === 'operating' ? 'toe-run' : 'ira-run');
   }
   // Which track a conclusion lands on is decided by where the work is, not by
@@ -397,6 +474,13 @@ export function readIntent(raw: string, ctx: IntentCtx): Intent {
     return a ? { kind: 'action', action: a } : { kind: 'reply', text: 'There is nothing to send back just now.' };
   }
   // ── setting up the design step ────────────────────────────────────────────
+  // The commonest answer to "this is missing" is that it was never going to
+  // arrive. It is the page's waiver, so it runs the page's flow: which element,
+  // then the written reason the working paper prints. Neither half is skipped
+  // from here — the form on the left refuses an empty reason and so does Ira.
+  if (has(t, 'not applicable', 'n/a', 'does not apply', 'doesn’t apply', "doesn't apply", 'not apply')) {
+    return take('waive-doc');
+  }
   // "add a walkthrough", "add the process narrative". Matched against the SAME
   // chips the rail is offering, so typing can never add a kind that is already
   // on the control or touch a design that has been concluded.
@@ -418,5 +502,5 @@ export function readIntent(raw: string, ctx: IntentCtx): Intent {
     return a ? { kind: 'action', action: a } : { kind: 'reply', text: ctx.promptText };
   }
 
-  return { kind: 'reply', text: `I couldn’t place that. On this step I can ${capabilities(ctx)}.` };
+  return { kind: 'unplaced', text: `I couldn’t place that. On this step I can ${capabilities(ctx)}.` };
 }
