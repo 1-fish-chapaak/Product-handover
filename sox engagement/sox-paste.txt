@@ -1,0 +1,1012 @@
+Module	Feature	Action	Passing criteria	Failing criteria	Priority	In scope	Status	Defect / notes
+SOX	Library - Navigation	Verify that the Engagement Library page opens with its heading, the one-line description and the Overview tab already selected	Page opens with heading, description and Overview selected	Blank page or a spinner that never ends; a different tab opens; heading or description missing	P0	Yes		
+SOX	Library - Navigation	Verify that the user can move between Overview, All Engagements and Approval Flow without an error	Each tab opens its own content and is clearly marked as selected	A tab does not open; two look selected at once; the page errors	P0	Yes		
+SOX	Library - Navigation	Verify that the All Engagements tab shows a count next to its name and that the count matches the number of rows in the list	The number on the tab and the number of rows agree	The tab count and the list disagree	P1	Yes		
+SOX	Library - Navigation	Verify that grey placeholder shapes are shown while the page is still loading and are replaced in one go	Placeholders sit where the numbers will be and all fill in together	Numbers show as zero first and then jump; content flashes in piece by piece	P1	Yes		Observed on staging 21 Aug 2026 - tiles and lists fade in separately over 10 to 15 seconds
+SOX	Library - Navigation	Verify that refreshing the browser keeps the user on the same tab	The same tab comes back after the refresh	The page resets to Overview	P2	Yes		
+SOX	Library - Navigation	Verify that the page is readable on a smaller laptop screen	Nothing is cut off and the page scrolls up and down only	Text or buttons are cut off; the page scrolls sideways	P1	Yes		
+SOX	Library - Navigation	Verify that the left menu highlights Engagement while any engagement page is open	Engagement stays highlighted throughout	The highlight moves to another item or disappears	P2	Yes		
+SOX	Library - Navigation	Verify that collapsing and expanding the left menu keeps every menu name readable	Names are fully readable when expanded and icons remain clickable when collapsed	Names are cut off mid-word when expanded	P2	Yes		Observed on staging 21 Aug 2026 - collapsed menu shows single letters such as E and P instead of icons only
+SOX	Library - Summary Cards	Verify that the Total Engagements card shows a count that matches the All Engagements tab	Both numbers are the same	The two numbers differ	P0	Yes		
+SOX	Library - Summary Cards	Verify that the Active card shows the correct number of active engagements and the open exception count	Both figures match the underlying data	A figure is wrong or blank	P0	Yes		
+SOX	Library - Summary Cards	Verify that Portfolio Health is worked out from the engagements listed	The percentage matches the health of the engagements listed	The percentage does not follow from the data	P1	Yes		Observed on staging 21 Aug 2026 - shows 0 percent with 47 active engagements
+SOX	Library - Summary Cards	Verify that the Open Findings total adds up to the critical and high breakdown shown under it	The parts add up to the total shown	The parts do not add up	P0	Yes		
+SOX	Library - Summary Cards	Verify that very large counts are shown in full without being cut off	The whole number is readable	The number is cut off or overlaps the label	P1	Yes		
+SOX	Library - Summary Cards	Verify that clicking a summary card opens the matching filtered list	The list opens already filtered to what the card counts	Clicking does nothing or opens an unfiltered list	P1	Yes		
+SOX	Library - Summary Cards	Verify that a card with a count of zero shows a clear zero rather than a blank space	Zero is shown clearly	The card is blank or shows a dash	P2	Yes		
+SOX	Library - Summary Cards	Verify that the cards refresh after a new engagement is created	The counts go up by one	The counts stay stale until a manual refresh	P1	Yes		
+SOX	Library - Portfolio Breakdown	Verify that the By Type breakdown adds up to Total Engagements	The type counts add up to the total	They do not add up	P0	Yes		
+SOX	Library - Portfolio Breakdown	Verify that SOX / ICFR appears as its own type in the By Type breakdown	SOX / ICFR is listed with its own count	SOX engagements are folded into another type	P0	Yes		
+SOX	Library - Portfolio Breakdown	Verify that the By Status split adds up to Total Engagements	Active and Draft add up to the total	They do not add up	P0	Yes		
+SOX	Library - Portfolio Breakdown	Verify that the By Process list shows every process with its correct count	All processes are listed with correct counts	A process is missing or a count is wrong	P1	Yes		
+SOX	Library - Portfolio Breakdown	Verify that clicking a By Type row filters the library to that type	The list opens with that type filter applied	Nothing happens or the wrong filter is applied	P1	Yes		
+SOX	Library - Portfolio Breakdown	Verify that clicking a By Status row filters the library to that status	The list opens with that status filter applied	Nothing happens or the wrong filter is applied	P1	Yes		
+SOX	Library - Portfolio Breakdown	Verify that clicking a By Process row filters the library to that process	The list opens with that process filter applied	Nothing happens or the wrong filter is applied	P1	Yes		
+SOX	Library - Portfolio Breakdown	Verify that the number of rows after filtering matches the count that was shown on the breakdown row	The row count matches the count that was clicked	The counts do not match	P1	Yes		
+SOX	Library - Portfolio Breakdown	Verify that a fraction such as tested over total is shown in full without being cut off	The full figure is readable	The number is cut off or wraps badly	P2	Yes		
+SOX	Library - Portfolio Breakdown	Verify that a breakdown row with a count of zero does not mislead the user	It either cannot be clicked or opens a list that says there is nothing of this kind	An empty list opens with no explanation	P2	Yes		
+SOX	Library - Needs Attention	Verify that the Needs Attention panel lists engagements that need review with name, type tag, engagement code and exception count	All four are shown for each engagement	A value is missing or shows a dash	P1	Yes		
+SOX	Library - Needs Attention	Verify that engagements with no open exceptions are not listed under Needs Attention	Only engagements with real problems are listed	Healthy engagements appear in the list	P1	Yes		Observed on staging 21 Aug 2026 - engagements showing 0/0 exceptions are listed under Needs attention
+SOX	Library - Needs Attention	Verify that clicking an engagement in Needs Attention opens that engagement	The right engagement opens	Nothing happens or the wrong engagement opens	P1	Yes		
+SOX	Library - Needs Attention	Verify that the View all link opens the full Needs Attention list	The full list opens	The link does nothing	P2	Yes		
+SOX	Library - Needs Attention	Verify that the panel shows a friendly message when nothing needs attention	A short message says everything is on track	An empty box with no explanation is shown	P2	Yes		
+SOX	Library - Needs Attention	Verify that the panel is capped at a sensible number of rows with the rest behind View all	A short list is shown with a link to the rest	The panel grows without limit and pushes the page down	P2	Yes		
+SOX	Library - Upcoming Milestones	Verify that the Upcoming Milestones panel shows scheduled milestones when there are any	Milestones are listed with their dates	Milestones exist but the panel stays empty	P2	Yes		
+SOX	Library - Upcoming Milestones	Verify that the panel says clearly when nothing is scheduled	A short message says there are no scheduled milestones	A blank panel is shown	P2	Yes		
+SOX	Library - Upcoming Milestones	Verify that a feature marked as coming soon cannot be clicked into a dead end	The label is clear and the area is not clickable	Clicking opens an empty or broken screen	P2	Yes		Observed on staging 21 Aug 2026 - panel shows both "No scheduled milestones" and a "Coming soon" badge at the same time
+SOX	Library - Engagement List	Verify that every engagement row shows its name, status, type tag, engagement code, owner, date range and process tag	All of these are shown on the row	A field is missing or shows a dash	P0	Yes		
+SOX	Library - Engagement List	Verify that a SOX engagement row carries the SOX / ICFR tag	The tag reads SOX / ICFR	The tag is missing or shows another type	P0	Yes		
+SOX	Library - Engagement List	Verify that an engagement with no testing yet shows a clear health message rather than a blank	A message such as no runs yet is shown	The health column is blank	P1	Yes		
+SOX	Library - Engagement List	Verify that the list can be scrolled through to the last engagement	Every engagement can be reached	Scrolling stops early or the list re-loads from the top	P1	Yes		
+SOX	Library - Engagement List	Verify that the list loads within a reasonable wait on a full portfolio	The list is usable within a few seconds	The list takes longer than fifteen seconds or never appears	P0	Yes		Observed on staging 21 Aug 2026 - engagement pages routinely take 10 to 20 seconds to render
+SOX	Library - Engagement List	Verify that opening an engagement from the list opens that engagement	The right engagement opens	The wrong engagement opens or the click does nothing	P0	Yes		
+SOX	Library - Engagement List	Verify that the row count shown at the bottom matches the number of rows on screen	The two agree	They disagree	P2	Yes		
+SOX	Library - Engagement List	Verify that a draft engagement is clearly marked as draft	The row shows a draft status	A draft looks the same as an active engagement	P1	Yes		
+SOX	Library - Search and Filters	Verify that typing part of an engagement name narrows the list to matching engagements	Only matching engagements are listed	Nothing is filtered or the wrong rows are shown	P0	Yes		
+SOX	Library - Search and Filters	Verify that the search also matches on owner, framework and engagement code	Searching any of these finds the engagement	Only the name is searched	P1	Yes		
+SOX	Library - Search and Filters	Verify that search is not case sensitive	Upper and lower case find the same rows	Case changes the result	P1	Yes		
+SOX	Library - Search and Filters	Verify that a search with no matches shows a clear empty message	A short message says nothing matched	A blank list with no explanation is shown	P1	Yes		
+SOX	Library - Search and Filters	Verify that clearing the search brings the full list back	The full list returns	The list stays filtered	P1	Yes		
+SOX	Library - Search and Filters	Verify that the type filter lists every engagement type including SOX / ICFR	All types are listed	A type is missing	P0	Yes		
+SOX	Library - Search and Filters	Verify that choosing SOX / ICFR in the type filter shows only SOX engagements	Only SOX engagements are listed	Other types remain in the list	P0	Yes		
+SOX	Library - Search and Filters	Verify that the status filter lists Active and Draft	Both statuses are listed	A status is missing	P1	Yes		
+SOX	Library - Search and Filters	Verify that the third filter narrows the list as described by its label	The list narrows as the label promises	The filter has no effect	P1	Yes		
+SOX	Library - Search and Filters	Verify that search and filters work together rather than cancelling each other	Both are applied at once	Applying one clears the other	P1	Yes		
+SOX	Library - Search and Filters	Verify that the filters can all be reset back to the default view	The full list returns after reset	Some filter stays stuck	P1	Yes		
+SOX	Library - Search and Filters	Verify that the filter choices survive moving to another tab and back	The choices are still applied	The filters reset	P2	Yes		
+SOX	Library - Row Actions	Verify that hovering a row reveals its actions	The actions appear on hover	No actions appear	P2	Yes		
+SOX	Library - Row Actions	Verify that the run action on a row starts the expected job and gives feedback	A confirmation or progress indicator appears	Nothing visible happens	P1	Yes		
+SOX	Library - Row Actions	Verify that the delete action asks for confirmation before removing an engagement	A confirmation step is shown first	The engagement is deleted straight away	P0	Yes		
+SOX	Library - Row Actions	Verify that a deleted engagement disappears from the list and the counts go down	The row is gone and the totals drop by one	The row stays or the counts do not change	P0	Yes		
+SOX	Library - Row Actions	Verify that cancelling the delete confirmation leaves the engagement untouched	The engagement is still there	The engagement is deleted anyway	P0	Yes		
+SOX	Library - Row Actions	Verify that a user without delete rights does not see the delete action	The action is hidden or disabled	A user without rights can delete	P0	Yes		
+SOX	Library - Row Actions	Verify that row actions do not open the engagement by accident	Only the action runs	The engagement page opens as well	P2	Yes		
+SOX	Library - Approval Flow	Verify that the Approval Flow tab shows the Risk Owner and Auditor hierarchies	Both hierarchies are available	A hierarchy is missing	P1	Yes		
+SOX	Library - Approval Flow	Verify that each hierarchy tab shows a count of the people in it	The count matches the people shown	The count and the people disagree	P1	Yes		
+SOX	Library - Approval Flow	Verify that the reporting chart shows who reports to whom	Each person sits under their manager	The chart is flat or the lines are wrong	P1	Yes		
+SOX	Library - Approval Flow	Verify that the table under the chart shows name, email, role, teams, status and manager	All six are shown	A column is blank for a person who has a value	P1	Yes		
+SOX	Library - Approval Flow	Verify that a person with no manager shows a clear dash rather than a blank	A dash is shown	The cell is blank and reads as a bug	P2	Yes		
+SOX	Library - Approval Flow	Verify that a person with no role shows a clear dash rather than a blank	A dash is shown	The cell is blank	P2	Yes		
+SOX	Library - Approval Flow	Verify that the results count above the table matches the rows shown	The two agree	They disagree	P2	Yes		
+SOX	Library - Approval Flow	Verify that searching a person narrows the table	Only matching people are shown	The search has no effect	P1	Yes		
+SOX	Library - Approval Flow	Verify that the tab explains in one line what the hierarchy is for	A short description sits under the heading	No explanation is given	P2	Yes		
+SOX	Library - Approval Flow	Verify that a person who belongs to several teams shows all their teams	Every team is listed	Only one team is shown	P2	Yes		
+SOX	Library - Approval Flow	Verify that an inactive person is clearly marked	The status column shows they are inactive	An inactive person looks active	P1	Yes		
+SOX	Library - Approval Flow	Verify that the hierarchy is read only for a user without admin rights	No editing controls are offered	A user without rights can change the hierarchy	P0	Yes		
+SOX	Create Engagement - Type	Verify that New Engagement opens a three step panel showing Type, Basics and Review	The panel opens on step 1 of 3 with the three step names visible	The panel does not open or shows the wrong number of steps	P0	Yes		
+SOX	Create Engagement - Type	Verify that all four engagement types are listed with a one line description each	Automation, SOX / ICFR, Internal Audit and Compliance are listed with descriptions	A type is missing or has no description	P0	Yes		
+SOX	Create Engagement - Type	Verify that Compliance is clearly marked as coming soon and cannot be chosen	The type is greyed with a coming soon label and cannot be selected	The type can be selected and the flow breaks later	P1	Yes		
+SOX	Create Engagement - Type	Verify that selecting SOX / ICFR marks that type as chosen	A tick appears against SOX / ICFR and no other type looks chosen	No tick appears or two types look chosen	P0	Yes		
+SOX	Create Engagement - Type	Verify that Next stays disabled until a type is chosen	Next cannot be used with nothing selected	Next works with nothing selected	P0	Yes		
+SOX	Create Engagement - Type	Verify that the step name at the top changes only once the next step is actually shown	The step label and the content on screen always match	The label says Basics while the Type list is still on screen	P0	Yes		Observed on staging 21 Aug 2026 - header jumps to "Step 2 of 3 BASICS" while the type list is still showing, for about three seconds
+SOX	Create Engagement - Type	Verify that Cancel closes the panel without creating anything	The panel closes and no new engagement appears	An engagement is created anyway	P0	Yes		
+SOX	Create Engagement - Type	Verify that the close cross behaves the same as Cancel	The panel closes with nothing created	Something is saved on close	P1	Yes		
+SOX	Create Engagement - Type	Verify that choosing a different type before moving on replaces the earlier choice	Only the last chosen type is carried forward	Both choices are carried forward	P1	Yes		
+SOX	Create Engagement - Basics	Verify that the Basics step asks for engagement name, description, company or group name and entities	All four are on the step	A field is missing	P0	Yes		
+SOX	Create Engagement - Basics	Verify that engagement name and description are marked as required	Both carry a required marker	A required field is not marked	P0	Yes		
+SOX	Create Engagement - Basics	Verify that required field errors appear only after the user has tried to leave the field empty	No error is shown on a field the user has not touched yet	Red errors are shown before the user has typed anything	P1	Yes		Observed on staging 21 Aug 2026 - "Name is required" and "Description is required" appear the moment the step opens
+SOX	Create Engagement - Basics	Verify that a valid name clears the name error	The error disappears as soon as a name is typed	The error stays after a valid name is entered	P0	Yes		
+SOX	Create Engagement - Basics	Verify that a very long engagement name is either accepted in full or capped with a clear message	The name is stored in full or the limit is explained	The name is silently cut off	P1	Yes		
+SOX	Create Engagement - Basics	Verify that leading and trailing spaces in the name are trimmed	The stored name has no stray spaces	A name made only of spaces is accepted	P1	Yes		
+SOX	Create Engagement - Basics	Verify that two engagements cannot be created with exactly the same name without a warning	A warning or a distinct code makes them tellable apart	Two identical names are created with nothing to separate them	P1	Yes		
+SOX	Create Engagement - Basics	Verify that special characters and other languages are accepted in the name	The name is stored and shown correctly	Characters are lost or shown as question marks	P2	Yes		
+SOX	Create Engagement - Basics	Verify that the description accepts a full sentence and shows it in full later	The whole description is stored and shown	The description is cut off	P1	Yes		
+SOX	Create Engagement - Basics	Verify that company or group name is optional and the step can be completed without it	The step can be completed without it	The step is blocked by an optional field	P1	Yes		
+SOX	Create Engagement - Basics	Verify that the company name field keeps what is typed into it	The typed value stays in the field	The field clears itself after typing	P0	Yes		Observed on staging 21 Aug 2026 - the company name field lost its value once when the entities section shifted the layout during typing
+SOX	Create Engagement - Basics	Verify that Next stays disabled until both required fields are filled	Next cannot be used until then	Next works with an empty required field	P0	Yes		
+SOX	Create Engagement - Basics	Verify that Back returns to the type step with the chosen type still selected	The type is still selected on return	The type choice is lost	P1	Yes		
+SOX	Create Engagement - Basics	Verify that the step explains that entities are read from the uploaded files and cannot be typed	A short line says so under the upload area	No explanation is given and the user looks for a text field	P2	Yes		
+SOX	Create Engagement - Entities	Verify that ticking we are a single entity company hides the trial balance and general ledger uploads	The upload area disappears and the step can be completed	The uploads stay on screen and still block the step	P0	Yes		
+SOX	Create Engagement - Entities	Verify that unticking single entity brings the upload area back	The upload area returns	The area stays hidden and the user is stuck	P0	Yes		
+SOX	Create Engagement - Entities	Verify that a trial balance can be uploaded as an xlsx file	The file is accepted and the entities are read from it	The file is refused or nothing happens	P0	Yes		
+SOX	Create Engagement - Entities	Verify that a trial balance can be uploaded as a csv file	The file is accepted	Only xlsx works even though csv is offered	P0	Yes		
+SOX	Create Engagement - Entities	Verify that a file of an unsupported kind is refused with a clear message	A message names the kinds of file that are accepted	The file is accepted and fails silently later	P0	Yes		
+SOX	Create Engagement - Entities	Verify that each entity found in the trial balance is listed back to the user before creation	Every entity in the file is listed	Entities are missed or duplicated	P0	Yes		
+SOX	Create Engagement - Entities	Verify that an empty trial balance is refused with a clear message	A message says no entities were found	An engagement is created with no entities and no warning	P0	Yes		
+SOX	Create Engagement - Entities	Verify that a trial balance with no entity column is refused with a clear message	A message says which column is missing	The file is accepted and the entity list is blank	P0	Yes		
+SOX	Create Engagement - Entities	Verify that an uploaded file can be removed before the step is completed	The file can be removed and the entity list clears	The file cannot be removed	P1	Yes		
+SOX	Create Engagement - Entities	Verify that a very large trial balance either uploads or explains the size limit	The file uploads or the limit is explained	The upload hangs with no message	P1	Yes		
+SOX	Create Engagement - Review	Verify that the Review step shows everything that was entered on the earlier steps	Name, description, company and entity choice are all shown	A value is missing from the summary	P0	Yes		
+SOX	Create Engagement - Review	Verify that the Review step shows the engagement type that was chosen	The type is named on the review	The type is not shown anywhere on the review	P1	Yes		Observed on staging 21 Aug 2026 - the review step repeats the Basics form and never names the chosen type
+SOX	Create Engagement - Review	Verify that the fields on the Review step cannot be edited in place	The fields are read only	A field can be edited without going back a step	P1	Yes		
+SOX	Create Engagement - Review	Verify that Back from Review returns to Basics with every value still in place	All values are still there	Values are lost on the way back	P0	Yes		
+SOX	Create Engagement - Review	Verify that both Create as Draft and Create and Activate are offered	Both buttons are shown	A button is missing	P0	Yes		
+SOX	Create Engagement - Review	Verify that the difference between draft and active is explained on the step	A short line explains the difference	The user has to guess	P2	Yes		
+SOX	Create Engagement - Review	Verify that Cancel from Review closes without creating anything	Nothing is created	An engagement is created anyway	P0	Yes		
+SOX	Create Engagement - Review	Verify that pressing Create twice quickly does not create two engagements	Only one engagement is created	Two identical engagements appear	P0	Yes		
+SOX	Create Engagement - Post Creation	Verify that Create and Activate creates the engagement with an Active status	The engagement is created and shows as Active	The engagement is created as Draft or fails	P0	Yes		
+SOX	Create Engagement - Post Creation	Verify that Create as Draft creates the engagement with a Draft status	The engagement is created and shows as Draft	The engagement is created as Active	P0	Yes		
+SOX	Create Engagement - Post Creation	Verify that a new engagement is given the next engagement code in sequence	The code follows the last one used	The code repeats an existing code	P0	Yes		
+SOX	Create Engagement - Post Creation	Verify that the user is taken into the new engagement after it is created	The engagement page opens	The user is left on the library with no feedback	P0	Yes		
+SOX	Create Engagement - Post Creation	Verify that the user lands on the Overview tab of the new engagement	Overview opens first	A later tab such as RACM opens first	P1	Yes		Observed on staging 21 Aug 2026 - creation lands on the RACM tab, not Overview
+SOX	Create Engagement - Post Creation	Verify that a brand new SOX engagement contains no RACMs	The RACM library is empty	A RACM from somewhere else is already listed	P0	Yes		Observed on staging 21 Aug 2026 - ENG-050 was created with an "Inventory Management SOP_RACM (3)" RACM already in it
+SOX	Create Engagement - Post Creation	Verify that a brand new SOX engagement contains no controls	The control library is empty	Controls from another engagement are already listed	P0	Yes		Observed on staging 21 Aug 2026 - 23 controls were present in a brand new engagement before anything was imported
+SOX	Create Engagement - Post Creation	Verify that a brand new SOX engagement contains no audits	The audit list is empty with a clear first step	An audit already exists	P0	Yes		
+SOX	Create Engagement - Post Creation	Verify that the new engagement appears in the library list and in the counts	The row is there and the totals go up by one	The engagement is missing until a manual refresh	P1	Yes		
+SOX	Engagement Header	Verify that the engagement header shows the name, status, type tag and engagement code	All four are shown	A value is missing	P0	Yes		
+SOX	Engagement Header	Verify that the engagement description is shown under the header	The description is shown in full	The description is missing or cut off	P1	Yes		
+SOX	Engagement Header	Verify that the SOX badge next to the name matches the engagement type	The badge says SOX	The badge shows a different type	P1	Yes		
+SOX	Engagement Header	Verify that Back to Engagements returns to the library	The library opens	The link does nothing	P1	Yes		
+SOX	Engagement Header	Verify that the Configuration link in the header opens the engagement settings	The settings page opens	The link does nothing	P1	Yes		
+SOX	Engagement Header	Verify that the header stays in place while the tabs below are changed	The header does not move or reload	The header flickers or reloads on every tab change	P2	Yes		
+SOX	Engagement Header	Verify that a very long engagement name does not push the status and type tags off the line	Everything stays on screen	Tags are pushed out of view	P2	Yes		
+SOX	Engagement Header	Verify that the header is the same on every tab of the engagement	The header does not change between tabs	The header changes or disappears on some tabs	P2	Yes		
+SOX	Engagement Tabs	Verify that a SOX engagement shows Overview, RACM, Controls and SOX audit	All four tabs are shown	A tab is missing or an unrelated tab is shown	P0	Yes		
+SOX	Engagement Tabs	Verify that each tab opens its own content	Each tab shows content that belongs to it	A tab shows another tab content	P0	Yes		Observed on staging 21 Aug 2026 - the Controls tab briefly rendered the SOX audit list before its own table appeared
+SOX	Engagement Tabs	Verify that the selected tab is clearly marked	Only the open tab is highlighted	No tab or two tabs look selected	P1	Yes		
+SOX	Engagement Tabs	Verify that the browser address changes with the tab so a tab can be shared as a link	The address matches the open tab	Every tab shares the same address	P1	Yes		
+SOX	Engagement Tabs	Verify that opening a tab link directly opens that tab	The right tab opens	The default tab opens instead	P1	Yes		
+SOX	Engagement Tabs	Verify that each tab finishes loading within a reasonable wait	Content appears within a few seconds	A tab takes longer than fifteen seconds or stays blank	P0	Yes		Observed on staging 21 Aug 2026 - the Controls tab took about 15 seconds to render on a 26 control engagement
+SOX	Engagement Tabs	Verify that moving away from a tab and back does not lose filters or search text	The earlier view is restored	Everything resets	P2	Yes		
+SOX	Engagement Overview	Verify that an engagement with no audits shows a clear first step rather than an empty page	A short message explains what an audit is and offers New audit	A blank page is shown	P0	Yes		
+SOX	Engagement Overview	Verify that the Before you start checklist shows RACM, control library and entities with their counts	All three lines are shown with counts	A line is missing or the count is blank	P1	Yes		
+SOX	Engagement Overview	Verify that the RACM line count matches the number of processes actually in the engagement	The counts agree	The counts disagree	P1	Yes		Observed on staging 21 Aug 2026 - checklist reported 3 processes while the RACM library reported 1 RACM
+SOX	Engagement Overview	Verify that the control library line count matches the Controls tab	The counts agree	The counts disagree	P1	Yes		
+SOX	Engagement Overview	Verify that the entities line count matches the entities on the engagement	The counts agree	The counts disagree	P1	Yes		
+SOX	Engagement Overview	Verify that a checklist line that is not yet done is clearly marked as not done	Incomplete lines are visibly different	Every line looks complete regardless of the count	P1	Yes		Observed on staging 21 Aug 2026 - all three lines show a green tick even before anything is set up
+SOX	Engagement Overview	Verify that New audit on the empty state opens the new audit panel	The panel opens	The button does nothing	P0	Yes		
+SOX	Engagement Overview	Verify that once audits exist the Overview shows them rather than the empty state	The audits are listed	The empty state is still shown	P0	Yes		
+SOX	Engagement Overview	Verify that the Overview and the SOX audit tab do not show identical content	Each tab has its own purpose and content	Both tabs show the same empty state and the same buttons	P1	Yes		Observed on staging 21 Aug 2026 - Overview and SOX audit render the same "No audits yet" block on an empty engagement
+SOX	Library - Global Actions	Verify that the New Engagement button opens the engagement creation panel	The panel opens	Nothing happens	P0	Yes		
+SOX	Library - Global Actions	Verify that the Audit Planning Timeline button marked as coming soon cannot be used	The button is disabled and does not respond	Clicking opens an empty or broken screen	P1	Yes		
+SOX	Library - Global Actions	Verify that the New Engagement button is hidden or disabled for a viewer	The button is not usable by a viewer	A viewer can start creating an engagement	P0	Yes		
+SOX	Library - Global Actions	Verify that a coming soon badge is shown next to any feature that is not built yet	The badge is shown	A dead action looks live	P2	Yes		
+SOX	Library - Data Integrity	Verify that Portfolio Health and Open Findings stay the same across a page refresh	The figures are unchanged	The figures move without any underlying change	P0	Yes		
+SOX	Library - Data Integrity	Verify that the engagement counts stay the same across a page refresh	The counts are unchanged	The counts move on refresh	P0	Yes		
+SOX	Library - Data Integrity	Verify that the same engagement shows the same exception count on the overview and in the list	The two agree	They disagree	P0	Yes		
+SOX	Library - Data Integrity	Verify that the library figures survive a filter being applied and cleared	The totals return to their original values	The totals drift	P1	Yes		
+SOX	Library - Performance	Verify that the Engagement Library loads within a reasonable wait on a large portfolio	The page is usable within a few seconds	The page takes longer than fifteen seconds	P0	Yes		Observed on staging 21 Aug 2026 - the library takes 10 to 15 seconds with 47 engagements
+SOX	Library - Performance	Verify that scrolling a long engagement list stays smooth	Scrolling is smooth	The list stutters or re-renders	P2	Yes		
+SOX	Library - Performance	Verify that switching between tabs does not reload the whole page	Only the tab content changes	The whole page reloads each time	P2	Yes		
+SOX	Engagement Configuration	Verify that the Configuration link in the engagement header opens the engagement settings	The settings open	The link does nothing	P1	Yes		
+SOX	Engagement Configuration	Verify that the engagement settings show the company name and the entities	Both are shown	A value is missing	P1	Yes		
+SOX	Engagement Configuration	Verify that the financial year the engagement runs on is captured	The financial year is shown	The engagement has no financial year	P1	Yes		No financial year field exists on staging as at 21 Aug 2026
+SOX	Engagement Configuration	Verify that entities can be added to an engagement after it is created	Entities can be added	The entity list is fixed at creation	P1	Yes		
+SOX	Engagement Configuration	Verify that changing an engagement setting warns about audits already running on it	A warning is shown	Live audits change under the user	P0	Yes		
+SOX	Engagement Configuration	Verify that people and roles for the engagement can be seen from the settings	The people are listed with their roles	There is no way to see who is on the engagement	P1	Yes		
+SOX	RACM Library	Verify that the RACM tab shows a RACM library header with the process tag and the number of matrices	The header shows the process tag and the count	The header is missing or the count is wrong	P1	Yes		
+SOX	RACM Library	Verify that the RACM library header does not show empty separators where a value is missing	The header reads cleanly	Two dots appear next to each other where a value is missing	P2	Yes		Observed on staging 21 Aug 2026 - header reads "P2P . . 2 RACMs"
+SOX	RACM Library	Verify that an engagement with no RACM shows a clear starting screen with both ways in	The screen offers upload a RACM and upload an SOP	A blank tab is shown	P0	Yes		
+SOX	RACM Library	Verify that the file kinds named on the starting screen match the file kinds the upload actually accepts	Both say the same thing	The screen says xlsx only while the upload also accepts csv and images	P1	Yes		Observed on staging 21 Aug 2026 - empty state says .xlsx, the modal says .xlsx / .csv, and the file picker accepts pdf, pptx, png, jpg, tiff, bmp and webp
+SOX	RACM Library	Verify that each RACM in the library shows its name, source label, version, state and when it was last changed	All five are shown	A value is missing	P1	Yes		
+SOX	RACM Library	Verify that Open in editor opens that RACM in the full editor	The right RACM opens	The wrong RACM opens or nothing happens	P0	Yes		
+SOX	RACM Library	Verify that the with SOP counter matches the number of RACMs that came from an SOP	The counts agree	The counter is wrong	P2	Yes		
+SOX	RACM Library	Verify that only RACMs belonging to this engagement are listed	Nothing from another engagement appears	A RACM created elsewhere is listed here	P0	Yes		Observed on staging 21 Aug 2026 - "Inventory Management SOP_RACM (3)" appeared in a brand new engagement
+SOX	RACM Library	Verify that New RACM is available whether or not the library already has matrices	The button is always available	The button disappears once one RACM exists	P1	Yes		
+SOX	Create RACM	Verify that New RACM opens a modal offering upload a RACM and extract from an SOP	Both routes are offered with a one line description each	The modal does not open or a route is missing	P0	Yes		
+SOX	Create RACM	Verify that the modal can be closed without creating anything	The modal closes and the library is unchanged	A RACM is created on close	P0	Yes		
+SOX	Create RACM	Verify that choosing upload a RACM opens the file picker	The file picker opens	The modal closes with nothing happening	P0	Yes		Observed on staging 21 Aug 2026 - clicking the card once closed the modal without opening a picker
+SOX	Create RACM	Verify that choosing upload an SOP opens a picker limited to pdf	Only pdf can be chosen	Any file type can be chosen	P1	Yes		
+SOX	Create RACM	Verify that the modal offers a way to build a RACM by hand for teams with no file	A manual route is offered	The only ways in are file uploads	P1	Yes		No manual create option exists on staging as at 21 Aug 2026
+SOX	Create RACM	Verify that the modal explains in one line what each route does	Both routes carry a short description	A route has no description	P2	Yes		
+SOX	Upload RACM - File	Verify that an xlsx matrix is accepted and read	The import screen opens with the file name shown	The file is refused	P0	Yes		
+SOX	Upload RACM - File	Verify that a csv matrix is accepted and read	The import screen opens	The file is refused even though csv is offered	P0	Yes		
+SOX	Upload RACM - File	Verify that a file of an unsupported kind is refused with a clear message	A message names what can be uploaded	An unsupported file is accepted and fails later	P0	Yes		
+SOX	Upload RACM - File	Verify that an image file cannot be uploaded as a RACM	The file is refused	An image is accepted as a control matrix	P0	Yes		Observed on staging 21 Aug 2026 - the RACM file picker accepts png, jpg, tiff, bmp and webp
+SOX	Upload RACM - File	Verify that an empty file is refused with a clear message	A message says the file has no rows	An empty RACM is created	P0	Yes		
+SOX	Upload RACM - File	Verify that a workbook with several sheets picks the sheet that holds the matrix and says why	The chosen sheet is named with a short reason	A random sheet is used with no explanation	P1	Yes		
+SOX	Upload RACM - File	Verify that a very large matrix either imports or explains the size limit	The file imports or the limit is explained	The upload hangs with no message	P1	Yes		
+SOX	Upload RACM - File	Verify that a file already being uploaded cannot be submitted twice	Only one import runs	Two identical RACMs are created	P1	Yes		
+SOX	Upload RACM - File	Verify that the file name is shown on the import screen so the user knows what they are mapping	The file name is shown at the top	The file name is not shown	P2	Yes		
+SOX	Upload RACM - File	Verify that a corrupt or password protected file is refused with a clear message	A message explains the file could not be read	The screen hangs or shows a technical error	P1	Yes		
+SOX	Import RACM - Header Row	Verify that the import screen shows which row it thinks the headers are on	The chosen header row is shown with its first few column names	No header row is shown	P0	Yes		
+SOX	Import RACM - Header Row	Verify that a confidence figure is shown against the header row choice	A percentage or similar is shown	No confidence is shown	P1	Yes		
+SOX	Import RACM - Header Row	Verify that the header row can be changed to another row in the file	Another row can be chosen and the mapping refreshes	The header row cannot be changed	P0	Yes		
+SOX	Import RACM - Header Row	Verify that the row chooser lists the first few rows of the file so the user can recognise the right one	Real rows from the file are shown	Only row numbers are shown	P1	Yes		
+SOX	Import RACM - Header Row	Verify that changing the header row updates the field mapping below it	The mapping is worked out again	The old mapping stays	P0	Yes		
+SOX	Import RACM - Header Row	Verify that a file whose first row is a title rather than headers is still handled	The real header row is found or can be chosen	The title row is used as headers with no way to fix it	P1	Yes		
+SOX	Import RACM - Field Mapping	Verify that the import screen shows how many of the platform fields were matched out of the total	A count such as matched over total is shown	No count is shown	P0	Yes		
+SOX	Import RACM - Field Mapping	Verify that automatically matched fields are grouped together with an average confidence	A grouped line shows the count and the average confidence	Every field is listed flat with no summary	P1	Yes		
+SOX	Import RACM - Field Mapping	Verify that the automatically matched group can be expanded to review each match	Each match can be seen and changed	The matches cannot be reviewed	P0	Yes		
+SOX	Import RACM - Field Mapping	Verify that fields that could not be matched are listed under a needs attention heading with a count	A clear list is shown with a count	Unmatched fields are hidden	P0	Yes		
+SOX	Import RACM - Field Mapping	Verify that every unmatched field offers a dropdown of the columns in the uploaded file	The dropdown lists the file columns	The dropdown is empty	P0	Yes		
+SOX	Import RACM - Field Mapping	Verify that a field can be left unmapped on purpose	Leaving it as not in this file is allowed	The import is blocked by a field the file does not have	P0	Yes		
+SOX	Import RACM - Field Mapping	Verify that the same file column cannot be mapped to two different platform fields without a warning	A warning is shown or the second mapping is blocked	The same column silently fills two fields	P1	Yes		
+SOX	Import RACM - Field Mapping	Verify that a column mapped by hand shows a confidence or a manual marker	The row shows it was set by hand	The row looks the same as an automatic match	P2	Yes		
+SOX	Import RACM - Field Mapping	Verify that the attributes column in the file is mapped to the attributes field and not to the control activity	The attributes field holds the attribute text from the file	The attributes field holds a copy of the control activity	P0	Yes		Observed on staging 21 Aug 2026 - the imported Attributes column was filled with the control activity text on all three rows
+SOX	Import RACM - Field Mapping	Verify that the key control column in the file is carried into the matrix	The key control flag survives the import	The key control flag is dropped	P0	Yes		Observed on staging 21 Aug 2026 - Key Control was listed under "not imported" although the control page later showed a Key control chip
+SOX	Import RACM - Field Mapping	Verify that the process owner column is mapped to process owner and not to control owner	The two owners stay separate	The same person is shown as both owners	P1	Yes		Observed on staging 21 Aug 2026 - control page shows AP Manager as both control owner and process owner although the file named Head of Finance
+SOX	Import RACM - Field Mapping	Verify that changing one mapping does not reset the others	Only the changed row moves	The whole mapping resets	P1	Yes		
+SOX	Import RACM - Confidence and Reasoning	Verify that the screen offers a short explanation of why the mappings were chosen	An expandable explanation is offered	No explanation is offered	P1	Yes		
+SOX	Import RACM - Confidence and Reasoning	Verify that the explanation names the sheet that was used and why	The sheet and the reason are named	The explanation is vague	P2	Yes		
+SOX	Import RACM - Confidence and Reasoning	Verify that the explanation names the fields the file did not contain	Missing fields are named	Missing fields are not explained	P2	Yes		
+SOX	Import RACM - Confidence and Reasoning	Verify that the explanation can be collapsed again	It collapses back	It cannot be closed once opened	P2	Yes		
+SOX	Import RACM - Confidence and Reasoning	Verify that a low confidence match is visibly flagged for review	Low confidence rows stand out	All rows look the same	P1	Yes		
+SOX	Import RACM - Not Imported	Verify that columns in the file that will not be imported are listed with a count	A clear not imported list is shown	Columns are dropped silently	P1	Yes		
+SOX	Import RACM - Not Imported	Verify that a column shown as not imported does not also appear as mapped	A column appears in one place only	The same column appears as both mapped and not imported	P1	Yes		Observed on staging 21 Aug 2026 - Key Control was listed under "not imported" while a Key Control field also existed
+SOX	Import RACM - Not Imported	Verify that a not imported column can be mapped to a platform field from that list	The column can be rescued	There is no way to map it	P1	Yes		
+SOX	Import RACM - Not Imported	Verify that the reason a column is not imported is given	A short reason is shown	No reason is given	P2	Yes		
+SOX	Import RACM - Not Imported	Verify that a column of notes the firm needs is not silently lost	Either it maps to remarks or the user is told it will be dropped	The column disappears without a word	P1	Yes		
+SOX	Import RACM - Import	Verify that the import button shows how many rows will be imported	The button names the row count	The button gives no count	P1	Yes		
+SOX	Import RACM - Import	Verify that the row count on the button matches the rows in the file below the header	The counts agree	The counts disagree	P0	Yes		
+SOX	Import RACM - Import	Verify that Cancel on the import screen leaves the library unchanged	No RACM is created	A partly imported RACM is left behind	P0	Yes		
+SOX	Import RACM - Import	Verify that the import completes and a success message names the file and the number of controls saved	A success message is shown	No feedback is given	P0	Yes		
+SOX	Import RACM - Import	Verify that the imported RACM appears in the library with the file name	The RACM is named after the file	The RACM takes an unrelated name	P0	Yes		
+SOX	Import RACM - Import	Verify that the imported controls appear in the Controls tab	Every imported control is listed	Controls are missing	P0	Yes		
+SOX	Import RACM - Import	Verify that importing a second matrix does not overwrite the first	Both matrices exist side by side	The first is replaced	P0	Yes		
+SOX	Import RACM - Import	Verify that a row with no control identifier is either rejected or flagged	The problem row is called out	A control with no identifier is created	P1	Yes		
+SOX	Import RACM - Import	Verify that a duplicate control identifier within the same file is flagged	A warning names the duplicate	Two controls share one identifier	P1	Yes		
+SOX	Select Entities	Verify that after the mapping step the user is asked which entities the RACM applies to	An entity picker is shown	The import completes without asking	P0	Yes		
+SOX	Select Entities	Verify that the entity picker lists every entity on the engagement	All entities are listed	An entity is missing	P0	Yes		
+SOX	Select Entities	Verify that a select all option is offered	Select all is available and ticks every entity	No select all is offered	P1	Yes		
+SOX	Select Entities	Verify that Continue is blocked until at least one entity is ticked	Continue cannot be used with nothing ticked	The import completes with no entity attached	P0	Yes		Observed on staging 21 Aug 2026 - Continue worked with no entity ticked and the controls were saved with an empty entity
+SOX	Select Entities	Verify that the chosen entities appear against the controls afterwards	The entity is shown on each control row	The entity column stays empty	P0	Yes		Observed on staging 21 Aug 2026 - the Entity column shows a padlock icon and no entity name
+SOX	Select Entities	Verify that the picker names the file the entities are being chosen for	The file name is in the question	The question is generic	P2	Yes		
+SOX	Select Entities	Verify that Cancel on the entity step does not leave a half imported RACM	Nothing is saved	The RACM is saved without entities	P0	Yes		
+SOX	Select Entities	Verify that a single entity engagement still asks the question or skips it cleanly	Either it skips with the one entity attached or asks once	The step is shown with nothing to choose	P2	Yes		
+SOX	Upload SOP - Extract	Verify that a pdf procedure can be uploaded for extraction	The file is accepted and extraction starts	The file is refused	P0	Yes		
+SOX	Upload SOP - Extract	Verify that a file that is not a pdf is refused on the SOP route	A clear message is shown	A non pdf is accepted	P1	Yes		
+SOX	Upload SOP - Extract	Verify that progress is shown while the document is being read	A progress indicator is shown	The screen looks frozen	P0	Yes		
+SOX	Upload SOP - Extract	Verify that the drafted RACM is shown for review before it is saved	A review step is offered	The RACM is saved straight away	P0	Yes		
+SOX	Upload SOP - Extract	Verify that each drafted row can be edited or removed before saving	Rows can be changed	The draft is read only	P0	Yes		
+SOX	Upload SOP - Extract	Verify that each drafted row points back to the part of the document it came from	A section reference is shown	No trace back is offered	P1	Yes		
+SOX	Upload SOP - Extract	Verify that a document with no recognisable controls is reported rather than saved empty	A message says nothing could be extracted	An empty RACM is created	P1	Yes		
+SOX	Upload SOP - Extract	Verify that the saved RACM is marked as having come from an SOP	The library shows the SOP source	The source is not recorded	P1	Yes		
+SOX	RACM Editor - Layout	Verify that the editor header shows the engagement code, the RACM name and the process tag	All three are shown	A value is missing	P1	Yes		
+SOX	RACM Editor - Layout	Verify that the back arrow returns to the RACM library	The library opens	The arrow does nothing	P1	Yes		
+SOX	RACM Editor - Layout	Verify that a saved indicator confirms that changes have been stored	A short all changes saved message is shown	No save feedback is given	P0	Yes		
+SOX	RACM Editor - Layout	Verify that the summary strip shows total controls, total risks, sub processes, rating counts and manual against automated	Every figure is shown	A figure is missing	P1	Yes		
+SOX	RACM Editor - Layout	Verify that the summary figures match the rows in the grid	The figures agree with the rows	The figures are stale	P1	Yes		
+SOX	RACM Editor - Layout	Verify that the summary strip updates after a row is edited or deleted	The figures move	The figures stay stale until a refresh	P1	Yes		
+SOX	RACM Editor - Layout	Verify that the editor opens within a reasonable wait	The grid appears within a few seconds	The editor takes longer than fifteen seconds	P1	Yes		
+SOX	RACM Editor - Layout	Verify that the editor fits a smaller laptop screen without hiding the toolbar	The toolbar stays reachable	The toolbar is pushed off screen	P2	Yes		
+SOX	RACM Editor - Columns	Verify that the column button shows how many columns are visible out of the total	A count such as visible over total is shown	No count is shown	P1	Yes		
+SOX	RACM Editor - Columns	Verify that columns are grouped into named groups that can be switched on and off together	Groups such as IDs, Process, Risk and Control are offered	No grouping is offered	P1	Yes		
+SOX	RACM Editor - Columns	Verify that switching a group off hides every column in it	All the group columns disappear	Some stay behind	P1	Yes		
+SOX	RACM Editor - Columns	Verify that switching a group back on brings the columns back in the same order	The columns return in order	The order changes	P2	Yes		
+SOX	RACM Editor - Columns	Verify that the pinned columns can be chosen so they stay visible while scrolling sideways	The chosen columns stay in place	Pinning has no effect	P1	Yes		
+SOX	RACM Editor - Columns	Verify that pinned columns do not overlap the scrolling columns	The two areas stay separate	Text from one column sits on top of another	P1	Yes		Reported previously on the RACM table for rows R007 and R009
+SOX	RACM Editor - Columns	Verify that the column choices survive leaving the editor and coming back	The choices are remembered	Everything resets	P2	Yes		
+SOX	RACM Editor - Columns	Verify that the grid still works with every column switched on	The grid scrolls sideways cleanly	The grid breaks or becomes unusable	P1	Yes		
+SOX	RACM Editor - Grid	Verify that every control imported into the RACM is shown as a row	The row count matches the import	Rows are missing	P0	Yes		
+SOX	RACM Editor - Grid	Verify that the risk identifier and control identifier are shown on every row	Both are shown	Either is blank	P0	Yes		
+SOX	RACM Editor - Grid	Verify that risk rating, likelihood and impact are shown as readable labels	The labels are readable	Raw codes are shown	P1	Yes		
+SOX	RACM Editor - Grid	Verify that a field the file did not contain shows a dash rather than a blank	A dash is shown	The cell is blank and reads as a bug	P2	Yes		
+SOX	RACM Editor - Grid	Verify that long text in a cell can be read in full	The full text can be seen or expanded	Text is cut off with no way to read it	P1	Yes		
+SOX	RACM Editor - Grid	Verify that the rows per page choice changes how many rows are shown	The page size changes	The choice has no effect	P1	Yes		
+SOX	RACM Editor - Grid	Verify that the showing count at the bottom matches the rows on screen	The two agree	They disagree	P2	Yes		
+SOX	RACM Editor - Grid	Verify that a RACM with many rows pages through to the last row	Every row can be reached	Paging stops early	P1	Yes		
+SOX	RACM Editor - Search	Verify that the search box searches across every column	A term in any column finds the row	Only some columns are searched	P1	Yes		
+SOX	RACM Editor - Search	Verify that search narrows the grid as the user types	The grid narrows	Nothing happens until Enter	P2	Yes		
+SOX	RACM Editor - Search	Verify that clearing the search brings every row back	The full grid returns	The grid stays filtered	P1	Yes		
+SOX	RACM Editor - Search	Verify that a search with no matches shows a clear empty message	A short message says nothing matched	A blank grid is shown	P1	Yes		
+SOX	RACM Editor - Search	Verify that the column filters narrow the grid to the chosen values	Only matching rows remain	The filter has no effect	P1	Yes		
+SOX	RACM Editor - Search	Verify that two column filters can be used at once	Both are applied	The second replaces the first	P1	Yes		
+SOX	RACM Editor - Search	Verify that an active filter is visibly marked on the column	The column shows it is filtered	There is no sign a filter is on	P1	Yes		
+SOX	RACM Editor - Search	Verify that the grouping choice groups rows by sub process, process area or risk rating	Rows are grouped under headings	Grouping has no effect	P1	Yes		
+SOX	RACM Editor - Editing	Verify that a cell can be opened for editing by double clicking it	An editable box opens in place	Nothing happens	P0	Yes		
+SOX	RACM Editor - Editing	Verify that a change is saved and the saved indicator confirms it	The value sticks and the indicator confirms	The value reverts	P0	Yes		
+SOX	RACM Editor - Editing	Verify that pressing escape while editing leaves the original value in place	The original value stays	The cell is cleared	P1	Yes		
+SOX	RACM Editor - Editing	Verify that a field with a fixed set of choices offers those choices rather than free text	A list of choices is offered	Free text is accepted into a coded field	P1	Yes		
+SOX	RACM Editor - Editing	Verify that clearing a required field is refused with a clear message	A message explains the field is needed	The row is saved with a required field empty	P1	Yes		
+SOX	RACM Editor - Editing	Verify that an edit made in the RACM shows up on the matching control	The control reflects the change	The two drift apart	P0	Yes		
+SOX	RACM Editor - Editing	Verify that a change made while a filter is on does not move the row out of view without warning	The row stays visible or the user is told	The row vanishes mid edit	P2	Yes		
+SOX	RACM Editor - Editing	Verify that two people editing the same RACM do not silently overwrite each other	The later change is flagged	The last save wins silently	P1	Yes		
+SOX	RACM Editor - Editing	Verify that a control that has already been tested in an audit cannot be edited without a warning	A warning explains the effect on the working paper	The control is changed silently under a concluded test	P0	Yes		
+SOX	RACM Editor - Rows	Verify that a row can be selected with its tick box	The row is selected and a count is shown	The tick box does nothing	P1	Yes		
+SOX	RACM Editor - Rows	Verify that several rows can be selected at once	The count goes up with each row	Only one row can be selected	P1	Yes		
+SOX	RACM Editor - Rows	Verify that a select all tick box is offered in the header	Every row on the page can be selected in one action	There is no way to select all	P1	Yes		No header tick box exists on staging as at 21 Aug 2026
+SOX	RACM Editor - Rows	Verify that deleting selected rows asks for confirmation first	A confirmation step is shown	Rows are deleted straight away	P0	Yes		
+SOX	RACM Editor - Rows	Verify that deleted rows disappear and the summary figures drop	The rows are gone and the figures drop	The rows stay or the figures are stale	P0	Yes		
+SOX	RACM Editor - Rows	Verify that a control already used in an audit cannot be deleted without a clear warning	A warning explains what will be lost	The control is deleted under a live working paper	P0	Yes		
+SOX	RACM Editor - Rows	Verify that clearing the selection removes the delete action	The action disappears	The action stays with nothing selected	P2	Yes		
+SOX	RACM Editor - Export	Verify that Export downloads the RACM as a spreadsheet	A file downloads	Nothing happens	P1	Yes		
+SOX	RACM Editor - Export	Verify that the exported file holds every visible column and row	The file matches what is on screen	Columns or rows are missing	P1	Yes		
+SOX	RACM Editor - Export	Verify that the export respects the current filters or says that it does not	The behaviour is clear either way	The user cannot tell what was exported	P2	Yes		
+SOX	RACM Editor - Export	Verify that the exported file opens cleanly in a spreadsheet tool	The file opens without repair prompts	The file is corrupt	P1	Yes		
+SOX	RACM Editor - Export	Verify that the exported file is named after the RACM	The file name identifies the RACM	The file has a generic name	P2	Yes		
+SOX	RACM Versioning	Verify that each RACM shows its version number	A version is shown	No version is shown	P1	Yes		
+SOX	RACM Versioning	Verify that the active version is clearly marked	The active version is marked	No version is marked active	P1	Yes		
+SOX	RACM Versioning	Verify that editing a RACM either raises the version or explains why it does not	The behaviour is consistent and explained	Versions never change however much is edited	P1	Yes		
+SOX	RACM Versioning	Verify that an earlier version can be viewed	The earlier version opens read only	There is no way back to an earlier version	P1	Yes		
+SOX	RACM Versioning	Verify that an audit already under way keeps testing against the version it started on	The audit keeps its version	A RACM change silently rewrites a live audit	P0	Yes		
+SOX	Controls Tab - Summary	Verify that the Controls tab shows tiles for controls, attributes, workflows mapped, runs logged and audit runs	All five tiles are shown	A tile is missing	P1	Yes		
+SOX	Controls Tab - Summary	Verify that the controls tile matches the number of rows in the table	The two agree	They disagree	P0	Yes		
+SOX	Controls Tab - Summary	Verify that the attributes tile matches the attributes across the controls listed	The two agree	The tile shows zero while the rows show attributes	P0	Yes		Observed on staging 21 Aug 2026 - the attributes tile flipped between 26 and 0 on the same data during loading
+SOX	Controls Tab - Summary	Verify that the workflows mapped tile shows mapped out of total	A fraction is shown	A single number is shown with no context	P1	Yes		
+SOX	Controls Tab - Summary	Verify that the workflows mapped tile goes up after a workflow is mapped to a control	The figure rises	The figure stays stale	P1	Yes		
+SOX	Controls Tab - Summary	Verify that runs logged reflects workflow runs against these controls	The figure matches the runs	The figure never moves	P1	Yes		
+SOX	Controls Tab - Summary	Verify that audit runs reflects the number of audits these controls sit in	The figure matches the audits	The figure is wrong	P1	Yes		
+SOX	Controls Tab - List	Verify that the table shows process, control, entity, control type, frequency, control owner, objective, nature, attributes, workflows, audit runs and last run	Every column is present	A column is missing	P1	Yes		
+SOX	Controls Tab - List	Verify that each control row shows its control identifier and sub process under the name	Both are shown	Either is missing	P1	Yes		
+SOX	Controls Tab - List	Verify that the control column shows something the auditor can recognise rather than a long activity sentence	A short control name or objective is shown	The full control activity paragraph is shown and cut off mid sentence	P1	Yes		Observed on staging 21 Aug 2026 - the Control column shows the control activity text truncated with an ellipsis
+SOX	Controls Tab - List	Verify that the entity column shows the entity the control is tested at	The entity name is shown	The column is empty or shows only an icon	P0	Yes		Observed on staging 21 Aug 2026 - the Entity column shows a padlock icon and no name
+SOX	Controls Tab - List	Verify that rows are grouped by process with a per group count	Groups carry counts	No grouping or counts are shown	P1	Yes		
+SOX	Controls Tab - List	Verify that the per group counts add up to the total control count	The counts add up	They do not add up	P1	Yes		
+SOX	Controls Tab - List	Verify that only controls belonging to this engagement are listed	Nothing from another engagement appears	Controls from elsewhere are listed	P0	Yes		Observed on staging 21 Aug 2026 - 23 unrelated Inventory Management controls appeared in a new engagement
+SOX	Controls Tab - List	Verify that clicking a control opens that control page	The right control opens	Nothing happens or the wrong control opens	P0	Yes		
+SOX	Controls Tab - Filters	Verify that the search box narrows the list by control text and owner	Matching rows are shown	The search has no effect	P1	Yes		
+SOX	Controls Tab - Filters	Verify that the process filter narrows the list to one process	Only that process remains	The filter has no effect	P1	Yes		
+SOX	Controls Tab - Filters	Verify that the entity filter narrows the list to one entity	Only that entity remains	The filter has no effect	P1	Yes		
+SOX	Controls Tab - Filters	Verify that the control type filter narrows the list	Only matching rows remain	The filter has no effect	P1	Yes		
+SOX	Controls Tab - Filters	Verify that the frequency filter narrows the list	Only matching rows remain	The filter has no effect	P1	Yes		
+SOX	Controls Tab - Filters	Verify that the control owner filter narrows the list	Only matching rows remain	The filter has no effect	P1	Yes		
+SOX	Controls Tab - Filters	Verify that the workflows filter separates mapped from unmapped controls	The split works	The filter has no effect	P1	Yes		
+SOX	Controls Tab - Filters	Verify that filters can be combined	All chosen filters are applied	One filter cancels another	P1	Yes		
+SOX	Controls Tab - Filters	Verify that the group by choice offers process, entity and no grouping	All three are offered	A choice is missing	P1	Yes		
+SOX	Controls Tab - Views	Verify that the dense view makes the rows shorter without losing any column	Rows shrink and all columns remain	Columns disappear in dense view	P2	Yes		
+SOX	Controls Tab - Views	Verify that the card view shows the same controls as the table view	Both views hold the same controls	The views disagree	P1	Yes		
+SOX	Controls Tab - Views	Verify that switching views keeps the current search and filters	The view changes and the filters stay	The filters reset	P2	Yes		
+SOX	Controls Tab - Views	Verify that the chosen view is remembered on the next visit	The view is remembered	It resets each time	P2	Yes		
+SOX	Controls Tab - Views	Verify that the working paper export action produces a file	A file downloads	Nothing happens	P1	Yes		
+SOX	Controls Tab - Views	Verify that the Audit report action opens the report for the current audit	The report preview opens	Nothing happens	P1	Yes		
+SOX	Control Page - Header	Verify that the control page shows the control objective as its heading	The objective is the heading	A raw identifier or the activity text is the heading	P1	Yes		
+SOX	Control Page - Header	Verify that the control line and the control activity line hold different text	The two lines say different things	Both lines repeat the same sentence	P1	Yes		Observed on staging 21 Aug 2026 - Control and Control activity are identical on every imported control
+SOX	Control Page - Header	Verify that the chips show key control, control type, nature, frequency and risk rating	All five are shown	A chip is missing	P1	Yes		
+SOX	Control Page - Header	Verify that no chip is repeated	Each chip appears once	The same chip appears twice	P2	Yes		Observed on staging 21 Aug 2026 - the working paper header shows the Preventive chip twice
+SOX	Control Page - Header	Verify that the identity line shows entity, process, control owner, process owner, risk and assertions	All six are shown	A value is missing	P1	Yes		
+SOX	Control Page - Header	Verify that the entity is named on the control page	The entity name is shown	The entity shows only a padlock and a dash	P0	Yes		Observed on staging 21 Aug 2026 - Entity is blank and the breadcrumb reads "C001/-"
+SOX	Control Page - Header	Verify that the assertions shown match the assertions on the RACM row	The two agree	They disagree	P1	Yes		
+SOX	Control Page - Header	Verify that the linked risk identifier and description match the RACM	The two agree	They disagree	P1	Yes		
+SOX	Control Page - Header	Verify that Back to Control Library returns to the list	The list opens	The link does nothing	P1	Yes		
+SOX	Control Page - Header	Verify that a control with a very long objective still shows its chips and identity line	Everything stays readable	The chips are pushed off screen	P2	Yes		
+SOX	Control Page - Risk Owner	Verify that the risk owner selector lists the people who can hold the role	Eligible people are listed	The list is empty or lists everyone	P1	Yes		
+SOX	Control Page - Risk Owner	Verify that a control starts with no risk owner assigned	The selector reads unassigned	A person is assigned without anyone choosing them	P1	Yes		
+SOX	Control Page - Risk Owner	Verify that choosing a risk owner saves without a separate save action	The choice sticks	The choice reverts on refresh	P0	Yes		
+SOX	Control Page - Risk Owner	Verify that the risk owner can be changed later	The new person replaces the old one	The field locks after the first choice	P1	Yes		
+SOX	Control Page - Risk Owner	Verify that a workflow cannot be mapped until a risk owner is set	The mapping control is disabled with a clear reason	A workflow can be mapped with no owner	P0	Yes		
+SOX	Control Page - Risk Owner	Verify that the reason the mapping is blocked is shown next to the control	A short line explains the risk owner is needed first	The control is simply greyed with no reason	P1	Yes		
+SOX	Control Page - Risk Owner	Verify that the risk owner change is recorded so it can be traced later	The change appears in history	No trace is kept	P1	Yes		
+SOX	Control Page - Attributes	Verify that every attribute on the control is listed with its own code	All attributes are listed with codes	Attributes are missing	P0	Yes		
+SOX	Control Page - Attributes	Verify that the attribute count matches the attributes on the RACM row	The two agree	The RACM lists several attributes and the control shows one	P0	Yes		Observed on staging 21 Aug 2026 - a RACM row with two attributes separated by a vertical bar produced a single attribute
+SOX	Control Page - Attributes	Verify that an attribute keeps the same code wherever it is shown	The code is the same on the control page and in the working paper	The same attribute carries two different codes	P1	Yes		Observed on staging 21 Aug 2026 - the same attribute appears as C001-CA388 on the control page and C001-CAF4B4 in the working paper
+SOX	Control Page - Attributes	Verify that a new attribute can be added by hand	The attribute is added and listed	Add attribute does nothing	P1	Yes		
+SOX	Control Page - Attributes	Verify that an attribute can be removed	The attribute disappears	Removal fails silently	P1	Yes		
+SOX	Control Page - Attributes	Verify that an attribute already tested in an audit cannot be removed without a warning	A warning explains the effect	The attribute is removed under a concluded test	P0	Yes		
+SOX	Control Page - Attributes	Verify that the mapped count above the table matches the attributes that carry a workflow	The two agree	They disagree	P1	Yes		
+SOX	Control Page - Attributes	Verify that an attribute with no workflow is clearly marked as not mapped	A not mapped label is shown	Mapped and unmapped look the same	P1	Yes		
+SOX	Control Page - Workflow Mapping	Verify that each attribute offers a way to map a workflow to it	A picker is offered on each attribute row	No mapping control exists	P0	Yes		
+SOX	Control Page - Workflow Mapping	Verify that the picker lists the workflows available to this organisation	Workflows are listed	The list is empty	P0	Yes		
+SOX	Control Page - Workflow Mapping	Verify that the workflow picker can be searched or filtered	The list can be narrowed	The user has to scroll a very long list	P0	Yes		Observed on staging 21 Aug 2026 - the picker lists 138 workflows with no search
+SOX	Control Page - Workflow Mapping	Verify that the workflow list does not show several entries with the same name	Names are distinguishable	Several identical names appear with no way to tell them apart	P1	Yes		Observed on staging 21 Aug 2026 - DBinvoice, test, pdfsign, testmemory3 and others appear more than once
+SOX	Control Page - Workflow Mapping	Verify that choosing a workflow marks the attribute as mapped	The row changes to mapped and names the workflow	The row does not change	P0	Yes		
+SOX	Control Page - Workflow Mapping	Verify that the workflow name on the mapped row links to that workflow	The workflow opens	The name is not clickable	P1	Yes		
+SOX	Control Page - Workflow Mapping	Verify that a mapped workflow can be removed	The mapping clears and the row shows not mapped	The mapping cannot be undone	P1	Yes		
+SOX	Control Page - Workflow Mapping	Verify that a mapped workflow can be swapped for another	The new workflow replaces the old	Both remain mapped	P1	Yes		
+SOX	Control Page - Workflow Mapping	Verify that mapping a workflow updates the workflows mapped tile on the Controls tab	The tile rises	The tile stays stale	P1	Yes		
+SOX	Control Page - Workflow Mapping	Verify that the workflow mapping is what makes the population sources appear in the working paper	Sources appear once a workflow is mapped	Sources never appear	P0	Yes		
+SOX	Control Page - Workflow Mapping	Verify that a control with no workflow explains that population cannot start yet	A short line explains what is missing	The population step is simply empty	P0	Yes		
+SOX	Control Page - Workflow Mapping	Verify that mapping a workflow is recorded so it can be traced later	The change appears in history	No trace is kept	P1	Yes		
+SOX	Control Page - Audit Runs	Verify that the control page lists the audits this control sits in	Each audit is listed with its round and period	No audits are listed	P1	Yes		
+SOX	Control Page - Audit Runs	Verify that each audit row shows the current state of the control in that audit	A state such as in progress is shown	No state is shown	P1	Yes		
+SOX	Control Page - Audit Runs	Verify that clicking an audit row opens the working paper for that audit	The working paper opens	The row is not clickable	P1	Yes		
+SOX	Control Page - Audit Runs	Verify that the testing activity section says clearly when no workflow has run	A short message says it has never run	A blank area is shown	P2	Yes		
+SOX	Control Page - Audit Runs	Verify that a completed workflow run is listed with its date and result	The run is listed	Runs never appear	P0	Yes		
+SOX	Control Page - Audit Runs	Verify that a control tested in more than one audit lists all of them	Every audit is listed	Only the latest is listed	P1	Yes		
+SOX	Control Page - Audit Runs	Verify that the control page loads within a reasonable wait	The page appears within a few seconds	The page takes longer than fifteen seconds	P1	Yes		
+SOX	New Control	Verify that New control opens a modal explaining that the control lands in the library and the RACM	The modal opens with that explanation	The modal does not open	P1	Yes		
+SOX	New Control	Verify that control description is marked as required	The field carries a required marker	The field is not marked	P0	Yes		
+SOX	New Control	Verify that Create control stays disabled until a description is entered	The button is disabled with a clear reason	The button works with an empty description	P0	Yes		
+SOX	New Control	Verify that the process list holds the processes that exist on this engagement	Only this engagement processes are offered	Processes from a demo data set are offered	P0	Yes		Observed on staging 21 Aug 2026 - the list offers Order to Cash, Record to Report, IT General Controls, Inventory and Treasury on an engagement whose only process is Procure to Pay
+SOX	New Control	Verify that a new process can be added from the picker	The new process is created and chosen	Add new process does nothing	P1	Yes		
+SOX	New Control	Verify that the linked risk list holds the risks that exist on this engagement	Only this engagement risks are offered	Unrelated risks are offered	P0	Yes		Observed on staging 21 Aug 2026 - risks R-08, R-12, R-15 and R-21 are offered although the engagement RACM holds R001 to R003
+SOX	New Control	Verify that a new risk can be created from the picker with the next identifier	A new risk is created in sequence	The identifier repeats an existing risk	P1	Yes		
+SOX	New Control	Verify that nature offers manual, automated and IT dependent	All three are offered	A choice is missing	P1	Yes		
+SOX	New Control	Verify that frequency offers the full set from annual through to ad hoc	All frequencies are offered	A frequency is missing	P1	Yes		
+SOX	New Control	Verify that the owner list holds the people on this engagement	Only relevant people are offered	A demo list of people is offered	P0	Yes		Observed on staging 21 Aug 2026 - owners R. Khanna, S. Iyer, M. Nair, D. Rao and A. Sharma are offered although none are on the engagement
+SOX	New Control	Verify that the key control toggle can be switched on and off	The toggle changes state	The toggle does nothing	P1	Yes		
+SOX	New Control	Verify that the assertion chips can be selected and deselected	Chips toggle cleanly and several can be chosen	Only one chip can be chosen	P1	Yes		
+SOX	New Control	Verify that the created control appears in the control library and in the RACM	It appears in both	It appears in only one	P0	Yes		
+SOX	New Control	Verify that the created control is given the next control identifier	The identifier follows the last one used	The identifier repeats an existing control	P0	Yes		
+SOX	New Control	Verify that Cancel closes the modal without creating a control	Nothing is created	A control is created anyway	P0	Yes		
+SOX	SOX Audit Tab	Verify that the SOX audit tab lists every audit on the engagement	All audits are listed	An audit is missing	P0	Yes		
+SOX	SOX Audit Tab	Verify that each audit row shows the period, the round and the state	All three are shown	A value is missing	P1	Yes		
+SOX	SOX Audit Tab	Verify that each audit row shows its materiality	The materiality is shown	The materiality is missing	P1	Yes		
+SOX	SOX Audit Tab	Verify that each audit row shows how many controls are signed off out of the total	A fraction is shown	No progress is shown	P1	Yes		
+SOX	SOX Audit Tab	Verify that clicking an audit opens its dashboard	The audit dashboard opens	Nothing happens	P0	Yes		
+SOX	SOX Audit Tab	Verify that an engagement with no audits shows a clear starting screen with New audit	A first step is offered	A blank tab is shown	P0	Yes		
+SOX	SOX Audit Tab	Verify that the audit list is ordered so the current round is easy to find	The newest or active round is first	The order is random	P2	Yes		
+SOX	SOX Audit Tab	Verify that a concluded audit is visibly different from an open one	The state makes the difference clear	Both look the same	P1	Yes		
+SOX	New Audit - Period	Verify that New audit opens a four step panel showing Period, Materiality, Scope and Review	The panel opens on step 1 of 4 with all four names visible	The panel does not open or the steps are wrong	P0	Yes		
+SOX	New Audit - Period	Verify that the period step asks for a from date and a to date	Both are asked for	A date is missing	P0	Yes		
+SOX	New Audit - Period	Verify that the round choice offers interim, roll forward and year end	All three are offered	A round is missing	P0	Yes		
+SOX	New Audit - Period	Verify that each round carries a one line explanation of what it is for	Every round has an explanation	A round has no explanation	P1	Yes		
+SOX	New Audit - Period	Verify that the from and to dates can be typed as well as picked	Typing a date works	Typed text is ignored and only the picker works	P1	Yes		Observed on staging 21 Aug 2026 - typing into the date field is ignored; only the calendar sets the value
+SOX	New Audit - Period	Verify that a to date earlier than the from date is refused with a clear message	A message explains the order	A backwards period is accepted	P0	Yes		
+SOX	New Audit - Period	Verify that once both dates are set the period is confirmed back to the user in words	A line confirms the period covered	No confirmation is given	P1	Yes		
+SOX	New Audit - Period	Verify that the month names in the confirmation are written consistently	All months are abbreviated the same way	One month is shortened differently from another	P2	Yes		Observed on staging 21 Aug 2026 - reads "01 Apr 2026 - 30 Sept 2026", mixing three and four letter months
+SOX	New Audit - Period	Verify that Next stays disabled until both dates and a round are chosen	Next is disabled until then	Next works with a missing date	P0	Yes		
+SOX	New Audit - Period	Verify that roll forward cannot be chosen when there is no concluded interim audit to attach it to	The choice is disabled with a clear reason	Roll forward can be chosen on an engagement with no audits	P0	Yes		Observed on staging 21 Aug 2026 - roll forward is freely selectable on a brand new engagement
+SOX	New Audit - Period	Verify that a roll forward audit takes its dates from the parent interim audit	The dates are derived and read only	The user can set any dates	P1	Yes		
+SOX	New Audit - Period	Verify that a second year end audit cannot be created for the same financial year	The second attempt is refused with a clear message	Two year end audits are created for one year	P1	Yes		
+SOX	New Audit - Period	Verify that the financial year the audit belongs to is captured somewhere in the flow	The financial year is recorded	The audit has dates but no financial year	P1	Yes		No financial year field exists on staging as at 21 Aug 2026
+SOX	New Audit - Materiality	Verify that the materiality step offers optional trial balance and general ledger uploads	Both uploads are offered and marked as optional where they are	An upload is missing	P0	Yes		
+SOX	New Audit - Materiality	Verify that the step explains that the trial balance names the companies the audit can cover	A short explanation is shown	No explanation is given	P1	Yes		
+SOX	New Audit - Materiality	Verify that a trial balance can be uploaded as xlsx or csv	Both are accepted	A named format is refused	P0	Yes		
+SOX	New Audit - Materiality	Verify that an uploaded file asks where it came from before it can be relied on	The system export or client prepared choice is asked	Provenance is never asked	P0	Yes		
+SOX	New Audit - Materiality	Verify that the warning that provenance is still needed disappears once it is answered	The warning clears	The warning stays after the answer	P1	Yes		
+SOX	New Audit - Materiality	Verify that an uploaded file can be removed and replaced	The file can be swapped	The file cannot be removed	P1	Yes		
+SOX	New Audit - Materiality	Verify that the basis list offers profit before tax, revenue, net assets, total assets, total expenses and a direct amount	All six are offered	A basis is missing	P0	Yes		
+SOX	New Audit - Materiality	Verify that each basis carries a short note on when it is used	A note is shown under the choice	No guidance is given	P1	Yes		
+SOX	New Audit - Materiality	Verify that choosing set the amount directly hides the benchmark and percentage and asks for one figure	Only the amount is asked for	The percentage fields stay on screen	P1	Yes		
+SOX	New Audit - Materiality	Verify that the benchmark amount and the percentage are both required before moving on	Next is blocked until both are set	Next works with an empty benchmark	P0	Yes		
+SOX	New Audit - Materiality	Verify that the step does not arrive with example numbers already filled in	The fields start empty	The fields arrive pre filled with sample figures the user may not notice	P1	Yes		Observed on staging 21 Aug 2026 - benchmark 420, basis 5 percent, performance 75 percent and clearly trivial 5 percent are pre filled
+SOX	New Audit - Materiality	Verify that a negative or zero benchmark is refused with a clear message	A message explains the value must be positive	A zero materiality is accepted	P0	Yes		
+SOX	New Audit - Materiality	Verify that a percentage above one hundred is refused	A message explains the range	A percentage over one hundred is accepted	P0	Yes		
+SOX	New Audit - Materiality	Verify that performance materiality above overall materiality is refused	A message explains the relationship	Performance materiality exceeds overall materiality	P0	Yes		
+SOX	New Audit - Materiality	Verify that the clearly trivial threshold cannot exceed performance materiality	A message explains the relationship	The thresholds cross over	P0	Yes		
+SOX	New Audit - Materiality	Verify that the guidance for performance materiality names the usual range	A short note names the usual range	No guidance is given	P2	Yes		
+SOX	New Audit - Thresholds	Verify that overall materiality is worked out as the percentage of the benchmark	The figure and the working shown agree	The arithmetic is wrong	P0	Yes		
+SOX	New Audit - Thresholds	Verify that performance materiality is worked out as the percentage of overall materiality	The figure and the working agree	The arithmetic is wrong	P0	Yes		
+SOX	New Audit - Thresholds	Verify that the clearly trivial threshold is worked out as the percentage of overall materiality	The figure and the working agree	The arithmetic is wrong	P0	Yes		
+SOX	New Audit - Thresholds	Verify that the computed thresholds change as soon as an input changes	The figures move with the inputs	The figures lag behind	P0	Yes		
+SOX	New Audit - Thresholds	Verify that the working behind each threshold is shown in words	A short working is shown under each figure	Only the number is shown	P1	Yes		
+SOX	New Audit - Thresholds	Verify that the four grade bands are shown with their money amounts	All four bands are shown	A band is missing	P0	Yes		
+SOX	New Audit - Thresholds	Verify that the band boundaries do not overlap or leave a gap	The bands run continuously	Two bands claim the same amount or an amount falls in no band	P0	Yes		
+SOX	New Audit - Thresholds	Verify that the significant deficiency band is shown as a percentage of materiality as well as an amount	Both are shown	Only the amount is shown	P1	Yes		
+SOX	New Audit - Thresholds	Verify that the material weakness band names the material weakness indicators as an alternative route in	The band says either the amount or any indicator	Indicators are not mentioned	P1	Yes		
+SOX	New Audit - Scope	Verify that the scope step offers scoping by entity or by RACM as a choice of one	The two are offered as alternatives	Both can be active at once	P0	Yes		
+SOX	New Audit - Scope	Verify that a short line explains that it is one or the other	The explanation is shown	No explanation is given	P2	Yes		
+SOX	New Audit - Scope	Verify that scoping by entity lists the companies found in the trial balance	Every company in the file is listed	A company is missing	P0	Yes		
+SOX	New Audit - Scope	Verify that each company row shows its share of the group and its balance	Both are shown	A figure is missing	P1	Yes		
+SOX	New Audit - Scope	Verify that each company row explains why it is in or out	A short reason is printed on the row	No reason is given	P1	Yes		
+SOX	New Audit - Scope	Verify that a company found only in the trial balance is flagged as not on the engagement	The row says so plainly	The difference is hidden	P1	Yes		
+SOX	New Audit - Scope	Verify that an engagement entity missing from the trial balance is flagged and excluded with a reason	The row explains it is not in the trial balance	The entity silently disappears	P0	Yes		Observed on staging 21 Aug 2026 - the engagement entity Altura Infra Group is excluded because it is not in the trial balance
+SOX	New Audit - Scope	Verify that the coverage meter shows the percentage covered against the target	Both the percentage and the target are shown	The target is not shown	P1	Yes		
+SOX	New Audit - Scope	Verify that switching a company in or out moves the coverage percentage	The percentage moves	The percentage is stale	P0	Yes		
+SOX	New Audit - Scope	Verify that coverage below the target is called out	A warning is shown	Low coverage passes silently	P0	Yes		
+SOX	New Audit - Scope	Verify that the footer names how many entities are in scope	The count is shown	No count is given	P2	Yes		
+SOX	New Audit - Scope	Verify that a scope that reaches no controls is blocked with a clear explanation	Next is blocked and the message says what to do	The audit is created with nothing to test	P0	Yes		
+SOX	New Audit - Scope by RACM	Verify that scoping by RACM lists the matrices on the engagement with their control counts	Each matrix is listed with a count	A matrix is missing	P0	Yes		
+SOX	New Audit - Scope by RACM	Verify that a matrix can be expanded to pick individual controls	Individual controls can be ticked	Only whole matrices can be chosen	P1	Yes		
+SOX	New Audit - Scope by RACM	Verify that ticking a matrix ticks every control under it	All its controls are ticked and the count shows the total	Only some are ticked	P1	Yes		
+SOX	New Audit - Scope by RACM	Verify that unticking a single control leaves the matrix partly selected	The matrix shows a partial count such as two of three	The matrix flips to fully unselected	P1	Yes		
+SOX	New Audit - Scope by RACM	Verify that the key controls only toggle selects every key control across matrices	Only key controls are selected	The toggle has no effect	P1	Yes		
+SOX	New Audit - Scope by RACM	Verify that the footer names how many matrices and controls are selected	Both counts are shown	A count is missing	P2	Yes		
+SOX	New Audit - Scope by RACM	Verify that Next is blocked until at least one control is selected	Next is blocked	An audit with no controls can be created	P0	Yes		
+SOX	New Audit - Scope by RACM	Verify that only matrices belonging to this engagement are listed	Nothing unrelated appears	A matrix from another engagement is listed	P0	Yes		
+SOX	New Audit - Scope by RACM	Verify that switching between by entity and by RACM does not silently keep the earlier selection	The earlier selection is cleared or clearly carried	A hidden selection from the other mode is used	P1	Yes		
+SOX	New Audit - Scope by RACM	Verify that the entity each control will be tested at is still captured when scoping by RACM	The entity is recorded	The audit is created with no entity scope	P0	Yes		Observed on staging 21 Aug 2026 - creating by RACM produced the error "Audit created, but its entity scope was not saved"
+SOX	New Audit - Review	Verify that the review step shows the period, the round, all three materiality figures, the files and the scope	Everything is listed	A value is missing	P0	Yes		
+SOX	New Audit - Review	Verify that the materiality lines name the basis as well as the amount	Both are shown	Only the amount is shown	P1	Yes		
+SOX	New Audit - Review	Verify that the review names the entities in scope when scoping by entity	The entities are named	The entities are not shown	P1	Yes		
+SOX	New Audit - Review	Verify that the review names the matrices in scope when scoping by RACM	The matrices are named	The matrices are not shown	P1	Yes		
+SOX	New Audit - Review	Verify that the number of controls in scope is shown	The count is shown	No count is shown	P0	Yes		
+SOX	New Audit - Review	Verify that the review explains what state the audit will be created in	A short line explains it starts as planned	No explanation is given	P2	Yes		
+SOX	New Audit - Review	Verify that Back from review keeps every earlier answer	Everything is still set	Answers are lost	P0	Yes		
+SOX	New Audit - Review	Verify that Create audit is the only action that creates the audit	Nothing is created until Create audit is used	The audit is created on an earlier step	P0	Yes		
+SOX	New Audit - Create	Verify that the audit is created and the user is taken into its dashboard	The dashboard opens	The user is left on the wizard	P0	Yes		
+SOX	New Audit - Create	Verify that the created audit carries the period, round and materiality that were entered	Everything matches the wizard	A value is lost	P0	Yes		
+SOX	New Audit - Create	Verify that the created audit carries the entity scope that was chosen	The scope is saved	An error says the entity scope was not saved	P0	Yes		Observed on staging 21 Aug 2026 - error shown on creation and the Configuration tab then shows "0 selected"
+SOX	New Audit - Create	Verify that the trial balance attached during creation is listed under the audit source files	The file is listed	Source files shows nothing attached	P0	Yes		Observed on staging 21 Aug 2026 - the trial balance attached in the wizard does not appear under Source files
+SOX	New Audit - Create	Verify that the created audit holds only the controls that were scoped	Only those controls are listed	Extra controls appear	P0	Yes		
+SOX	New Audit - Create	Verify that the audit appears on the SOX audit tab and the engagement overview	It is listed in both places	It is missing from one	P1	Yes		
+SOX	New Audit - Create	Verify that pressing Create audit twice does not create two audits	Only one audit is created	Two audits appear	P0	Yes		
+SOX	New Audit - Create	Verify that a failure during creation leaves no half made audit behind	Either the audit is complete or nothing is saved	A broken audit is left in the list	P0	Yes		Observed on staging 21 Aug 2026 - an audit was created with its entity scope missing rather than the creation being rolled back
+SOX	New Audit - Create	Verify that the audit is created in the planned state until testing starts	The state reads planned	The audit starts as active	P1	Yes		
+SOX	Audit Config - Period	Verify that the configuration tab explains that its settings apply to this audit only	A short line explains it	No explanation is given	P2	Yes		
+SOX	Audit Config - Period	Verify that the period from and to dates can be changed after creation	The dates can be changed and are saved	The dates are read only with no explanation	P1	Yes		
+SOX	Audit Config - Period	Verify that the round can be changed after creation	The round can be changed	The control does nothing	P1	Yes		
+SOX	Audit Config - Period	Verify that the round control matches the one used in the wizard	Both use the same style and the same options	The wizard uses buttons and configuration uses a dropdown	P2	Yes		Observed on staging 21 Aug 2026 - round is a button group in the wizard and a dropdown in configuration
+SOX	Audit Config - Period	Verify that the created by line names the person who created the audit	A name is shown	The line reads "created by on" with no name	P1	Yes		Observed on staging 21 Aug 2026 - the line reads "created by on 2026-08-21"
+SOX	Audit Config - Period	Verify that changing the period warns about work already done against the old period	A warning is shown	The period changes silently under concluded work	P0	Yes		
+SOX	Audit Config - Period	Verify that a to date earlier than the from date is refused	A message explains the order	A backwards period is saved	P0	Yes		
+SOX	Audit Config - Scope	Verify that the scope block offers the same by entity and by RACM choice as the wizard	The same choice is offered	The two screens offer different options	P1	Yes		
+SOX	Audit Config - Scope	Verify that the scope block shows what was actually chosen at creation	The chosen scope is ticked	The block shows nothing selected	P0	Yes		Observed on staging 21 Aug 2026 - the block reads "0 selected" although three controls were scoped
+SOX	Audit Config - Scope	Verify that the by RACM list names matrices and not processes	The matrices are listed	Processes are listed instead	P1	Yes		Observed on staging 21 Aug 2026 - the wizard lists RACM names and configuration lists process names
+SOX	Audit Config - Scope	Verify that only processes and matrices from this engagement are listed	Nothing unrelated appears	Processes that do not exist on this engagement are listed	P0	Yes		Observed on staging 21 Aug 2026 - Order to Cash, Payroll, Tax and Treasury are listed on an engagement whose only process is Procure to Pay
+SOX	Audit Config - Scope	Verify that changing the scope warns about controls that already carry testing	A warning names what will be lost	Tested controls are dropped silently	P0	Yes		
+SOX	Audit Config - Scope	Verify that a scope change is reflected in the audit control library	The library changes to match	The library is stale	P0	Yes		
+SOX	Audit Config - Scope	Verify that the scope cannot be emptied on an audit that is already under way	The change is refused with a clear reason	An audit with work done is left with no controls	P0	Yes		
+SOX	Audit Config - Scope	Verify that a short line explains that re scoping changes which controls are tested	The line is shown	No warning is given	P2	Yes		
+SOX	Audit Config - Source Files	Verify that every file the audit holds is listed with where it came from	Each file shows its provenance	Files are listed with no provenance	P0	Yes		
+SOX	Audit Config - Source Files	Verify that a file attached during audit creation appears here	The file is listed	The section says nothing is attached	P0	Yes		Observed on staging 21 Aug 2026 - the trial balance attached at creation is not listed
+SOX	Audit Config - Source Files	Verify that a trial balance can be added from this screen	The file uploads and is listed	The action does nothing	P0	Yes		
+SOX	Audit Config - Source Files	Verify that a general ledger can be added from this screen	The file uploads and is listed	The action does nothing	P0	Yes		
+SOX	Audit Config - Source Files	Verify that the provenance of a file can be changed here	The answer can be changed	The answer is fixed forever	P1	Yes		
+SOX	Audit Config - Source Files	Verify that changing a provenance answer is reflected everywhere that file is read	The change carries through	The change applies in one place only	P0	Yes		
+SOX	Audit Config - Source Files	Verify that a control already concluded on the old provenance gets a review note rather than a silent rewrite	A review note is raised	The working paper is silently rewritten	P0	Yes		
+SOX	Audit Config - Source Files	Verify that the screen states that provenance is answered once here and never per control	The line is shown	Provenance is also asked on the control	P1	Yes		
+SOX	Audit Config - Source Files	Verify that a file can be removed and the effect on any control that used it is explained	A warning names the affected controls	The file is removed silently	P0	Yes		
+SOX	Audit Config - Materiality	Verify that the materiality block shows the basis, the benchmark and the percentage together with the computed thresholds	Everything is in one block	The inputs and the results are split across screens	P1	Yes		
+SOX	Audit Config - Materiality	Verify that the benchmark field shows the value that was entered at creation	The value is shown	The field is blank although the computed line quotes the value	P1	Yes		Observed on staging 21 Aug 2026 - the benchmark field is empty while the line below reads "5 percent of 420.00 Cr"
+SOX	Audit Config - Materiality	Verify that changing the basis recomputes every threshold	All thresholds move together	A threshold is left behind	P0	Yes		
+SOX	Audit Config - Materiality	Verify that changing materiality re grades every open exception	Open exceptions are re graded	Exceptions keep their old grade	P0	Yes		
+SOX	Audit Config - Materiality	Verify that a re grade caused by a materiality change is announced rather than silent	A notice explains what changed	Grades change with no notice	P0	Yes		
+SOX	Audit Config - Materiality	Verify that materiality cannot be changed by a user who is not allowed to set it	The block is read only for them	Anyone can change the thresholds	P0	Yes		
+SOX	Audit Config - Materiality	Verify that changing materiality after sign off is blocked or requires reopening	The change is blocked with a reason	A signed audit is silently re graded	P0	Yes		
+SOX	Audit Config - Severity Ladder	Verify that the four grades are shown with the money band for each	All four bands are shown	A band is missing	P0	Yes		
+SOX	Audit Config - Severity Ladder	Verify that the significant deficiency band can be set as a percentage of materiality	The percentage can be changed	The band is fixed	P1	Yes		
+SOX	Audit Config - Severity Ladder	Verify that changing the significant deficiency band recomputes the bands around it	The neighbouring bands move	The bands cross over or leave a gap	P0	Yes		
+SOX	Audit Config - Severity Ladder	Verify that changing the band re grades every open exception	Open exceptions are re graded	Exceptions keep their old grade	P0	Yes		
+SOX	Audit Config - Severity Ladder	Verify that the rule behind the ladder is written on screen in plain English	A short explanation is shown	The user has to guess the rule	P1	Yes		
+SOX	Audit Config - Severity Ladder	Verify that the screen states that a compensating control can cap but never clear a deficiency	The line is shown	The cap is not explained	P1	Yes		
+SOX	Audit Config - Severity Ladder	Verify that the ladder shown here matches the ladder shown during audit creation	The two agree	The two disagree	P1	Yes		
+SOX	Audit Config - Aggregation	Verify that the aggregation setting explains what combining deficiencies means	A short explanation is shown	The setting has no explanation	P1	Yes		
+SOX	Audit Config - Aggregation	Verify that aggregation is not offered as a simple on and off switch	Grouping is driven by rules rather than a toggle	A single toggle turns judgement on and off	P1	Yes		Design concern previously raised - combining deficiencies is a judgement, not a setting
+SOX	Audit Config - Aggregation	Verify that the auto routing setting explains where a finding goes at each severity	The routing is spelled out	No explanation is given	P1	Yes		
+SOX	Audit Config - Aggregation	Verify that the routing text names the right role for each step	Sign off is named as the reviewer's act	Sign off is described as the auditor's act	P1	Yes		Previously reported - copy wrongly says "auditor (sign-off)"
+SOX	Audit Config - Aggregation	Verify that turning routing off leaves findings for someone to pick up rather than losing them	Findings stay visible and unassigned	Findings disappear from every queue	P0	Yes		
+SOX	Audit Config - Aggregation	Verify that changing either setting is recorded so it can be traced later	The change is recorded	No trace is kept	P1	Yes		
+SOX	Audit Config - MW Indicators	Verify that the material weakness indicator list is shown with how many are in force	The list and the count are shown	The count is missing	P1	Yes		
+SOX	Audit Config - MW Indicators	Verify that each indicator explains that it makes a finding a material weakness whatever the amount	The rule is stated once above the list	The rule is not stated	P1	Yes		
+SOX	Audit Config - MW Indicators	Verify that an indicator can be taken out of force for this audit	The indicator can be switched off	The list is read only	P1	Yes		
+SOX	Audit Config - MW Indicators	Verify that indicators taken from the standard are distinguished from house rules	The two groups are marked differently	All indicators look equally authoritative	P1	Yes		Only four of the five listed come from AS 2201.69; ineffective control environment and ineffective period end reporting are practice rules
+SOX	Audit Config - MW Indicators	Verify that ineffective audit committee oversight is available as an indicator	The indicator is listed	The indicator is missing from the list	P1	Yes		Observed on staging 21 Aug 2026 - audit committee oversight is not in the list of five
+SOX	Audit Config - MW Indicators	Verify that switching an indicator on or off re grades any exception that carries it	The affected exceptions are re graded	Grades are stale	P0	Yes		
+SOX	Audit Config - MW Indicators	Verify that indicators that belong to the whole audit are separated from those set on a single exception	The two kinds are clearly split	Both kinds sit in one flat list	P1	Yes		
+SOX	Audit Config - Significant Accounts	Verify that the significant accounts table shows account, process, balance, in scope and assertions	All five columns are shown	A column is missing	P1	Yes		
+SOX	Audit Config - Significant Accounts	Verify that the in scope count above the table matches the rows marked in scope	The two agree	They disagree	P1	Yes		
+SOX	Audit Config - Significant Accounts	Verify that the balances come from the trial balance attached to this audit	The figures match the file	The figures come from somewhere else	P0	Yes		Observed on staging 21 Aug 2026 - accounts payable shows 184.00 Cr while the attached trial balance holds 110.40 Cr
+SOX	Audit Config - Significant Accounts	Verify that an account can be brought into or taken out of scope	The state can be changed	The table is read only	P1	Yes		
+SOX	Audit Config - Significant Accounts	Verify that a reason is captured when an account is taken out of scope	A reason is asked for	An account is dropped with no reason	P1	Yes		
+SOX	Audit Config - Significant Accounts	Verify that the screen states that significant accounts are set once for the engagement	The line is shown	The scoping looks per audit	P2	Yes		
+SOX	Audit Config - Significant Accounts	Verify that an account with a balance above performance materiality that is left out is flagged	A warning is shown	A large account is quietly out of scope	P0	Yes		
+SOX	Audit Config - Significant Accounts	Verify that the assertions listed against an account are sensible for that account	The assertions match the account	The assertions look unrelated	P2	Yes		
+SOX	Audit Dashboard - Counters	Verify that the top rail shows design concluded, operating concluded, effective, ineffective, awaiting review and waiting on owner	All six counters are shown	A counter is missing	P0	Yes		
+SOX	Audit Dashboard - Counters	Verify that design concluded and operating concluded are shown as a fraction of the controls in scope	Both show a fraction	A counter shows a bare number	P1	Yes		
+SOX	Audit Dashboard - Counters	Verify that effective and ineffective add up to the controls concluded on operating	The figures add up	They do not add up	P0	Yes		
+SOX	Audit Dashboard - Counters	Verify that concluding a control moves the matching counter	The counter moves	The counter is stale until a refresh	P0	Yes		
+SOX	Audit Dashboard - Counters	Verify that a counter that is zero shows a clear zero	Zero is shown	The tile is blank	P2	Yes		
+SOX	Audit Dashboard - Counters	Verify that clicking a counter opens the matching filtered control list	The list opens filtered	Nothing happens	P1	Yes		
+SOX	Audit Dashboard - Health	Verify that the audit health block shows testing progress, control effectiveness and sample testing	All three scores are shown	A score is missing	P0	Yes		
+SOX	Audit Dashboard - Health	Verify that each score shows a percentage, the underlying counts and a one line meaning	All three parts are shown	Only the percentage is shown	P1	Yes		
+SOX	Audit Dashboard - Health	Verify that testing progress counts controls that reached a conclusion on both tracks	The count matches that rule	A control concluded on design only is counted as complete	P0	Yes		
+SOX	Audit Dashboard - Health	Verify that a single ineffective control turns control effectiveness red	The score turns red	The score stays green	P0	Yes		
+SOX	Audit Dashboard - Health	Verify that sample testing counts the checks completed across the operating tests	The count matches the checks	The count is wrong	P1	Yes		
+SOX	Audit Dashboard - Health	Verify that a score with nothing to measure yet says so rather than showing a misleading zero	A clear message is shown	Zero percent is shown as if it were a failure	P1	Yes		
+SOX	Audit Dashboard - Health	Verify that the scores move as testing progresses	The scores move	The scores are stale	P0	Yes		
+SOX	Audit Dashboard - Health	Verify that each score explains what would turn it green	A short explanation is shown	No guidance is given	P2	Yes		
+SOX	Audit Dashboard - Cards	Verify that the deficiencies card shows open and total counts and a breakdown by grade	Both counts and the breakdown are shown	A figure is missing	P0	Yes		
+SOX	Audit Dashboard - Cards	Verify that the grade breakdown adds up to the total deficiencies	The parts add up	They do not add up	P0	Yes		
+SOX	Audit Dashboard - Cards	Verify that the manage deficiencies link opens the deficiency register	The register opens	The link does nothing	P1	Yes		
+SOX	Audit Dashboard - Cards	Verify that the handoffs card shows document requests, open questions and remediations	All three are shown	A line is missing	P1	Yes		
+SOX	Audit Dashboard - Cards	Verify that the handoffs card says clearly when nothing is outstanding	A short message is shown	A blank card is shown	P2	Yes		
+SOX	Audit Dashboard - Cards	Verify that the materiality card shows overall, performance and clearly trivial	All three are shown	A figure is missing	P1	Yes		
+SOX	Audit Dashboard - Cards	Verify that the materiality figures match the configuration tab	The two agree	They disagree	P0	Yes		
+SOX	Audit Dashboard - Cards	Verify that the materiality and scope link opens the configuration tab	The right tab opens	The link does nothing	P1	Yes		
+SOX	Audit Dashboard - Closing	Verify that the block that must close before the opinion date lists everything outstanding	Every outstanding item is listed	An item is missing	P0	Yes		
+SOX	Audit Dashboard - Closing	Verify that controls not concluded are counted and can be opened from the list	The count is right and the list opens	The row is not clickable	P1	Yes		
+SOX	Audit Dashboard - Closing	Verify that open material weaknesses are called out with what happens if they stay open	A clear warning is shown	Material weaknesses are listed like anything else	P0	Yes		
+SOX	Audit Dashboard - Closing	Verify that a countdown to the opinion date is shown once a year end date exists	The countdown is shown	No countdown is shown	P1	Yes		
+SOX	Audit Dashboard - Closing	Verify that the block is empty and says so once everything has closed	A short message confirms everything is closed	The block still lists stale items	P1	Yes		
+SOX	Audit Dashboard - Sign Off	Verify that the sign off block explains that the preparer signs first and the reviewer countersigns	The rule is written on screen	No explanation is given	P1	Yes		
+SOX	Audit Dashboard - Sign Off	Verify that sign off is locked until every control has concluded	The action is disabled with a clear reason	The audit can be signed with controls untested	P0	Yes		
+SOX	Audit Dashboard - Sign Off	Verify that the concluded and countersigned counts are shown as fractions	Both fractions are shown	A count is missing	P1	Yes		
+SOX	Audit Dashboard - Sign Off	Verify that the named reviewer who will countersign is shown	The reviewer is named	No reviewer is named	P1	Yes		
+SOX	Audit Dashboard - Sign Off	Verify that the same person cannot both prepare and countersign	The second signature is blocked with a clear reason	One person signs both	P0	Yes		
+SOX	Audit Dashboard - Sign Off	Verify that signing as preparer records the person and the time	Both are recorded	The signature has no name or time	P0	Yes		
+SOX	Audit Dashboard - Sign Off	Verify that a signed audit is clearly marked as signed	The state changes	The audit still looks open	P1	Yes		
+SOX	Audit Dashboard - Sign Off	Verify that a signed audit cannot have its testing changed without being reopened	Changes are blocked with a clear reason	A signed audit can be edited	P0	Yes		
+SOX	Audit Dashboard - By Process	Verify that the by process block lists every process in the audit with its control count	All processes are listed	A process is missing	P1	Yes		
+SOX	Audit Dashboard - By Process	Verify that each process row shows effective and not tested counts	Both are shown	A count is missing	P1	Yes		
+SOX	Audit Dashboard - By Process	Verify that the design and operating fractions on each row match the controls in that process	The fractions agree	They disagree	P1	Yes		
+SOX	Audit Dashboard - By Process	Verify that clicking a process opens the control list filtered to it	The filtered list opens	Nothing happens	P1	Yes		
+SOX	Audit Control Library	Verify that the audit control library shows tiles for controls, tests due now, effective, awaiting review and waiting on owner	All five tiles are shown	A tile is missing	P1	Yes		
+SOX	Audit Control Library	Verify that the controls tile matches the rows in the table	The two agree	They disagree	P0	Yes		
+SOX	Audit Control Library	Verify that the table shows the design and operating tracks as separate columns	Both tracks are shown separately	The two are merged into one status	P0	Yes		
+SOX	Audit Control Library	Verify that each row shows an overall conclusion and whose court the work is in	Both are shown	A value is missing	P1	Yes		
+SOX	Audit Control Library	Verify that the design column shows the number of documents on file	The count matches the design elements filed	The count reads zero although a document is attached	P1	Yes		Observed on staging 21 Aug 2026 - a control with one attached narrative shows "0/0 docs"
+SOX	Audit Control Library	Verify that the operating column shows the checks completed out of the total	The fraction matches the operating test	The fraction is wrong	P1	Yes		
+SOX	Audit Control Library	Verify that a due badge is shown against each control	A badge such as due in or overdue is shown	No badge is shown	P1	Yes		
+SOX	Audit Control Library	Verify that a due date is worked out from the control frequency and the audit period	The badge is sensible for the period	A control in a period that has not started yet is already overdue	P0	Yes		Observed on staging 21 Aug 2026 - C002 shows "Overdue 1d" on an audit created the same day for a period ending 30 Sept 2026
+SOX	Audit Control Library	Verify that a control needing a retest after remediation carries its own badge	The badge names the retest	The control looks like any other	P1	Yes		
+SOX	Audit Control Library	Verify that the group headings show the design and operating progress for the group	Both are shown	No progress is shown	P1	Yes		
+SOX	Audit Control Library	Verify that only controls in this audit scope are listed	Nothing outside the scope appears	Out of scope controls are listed	P0	Yes		
+SOX	Audit Control Library	Verify that clicking a control opens its working paper for this audit	The working paper opens	The engagement level control page opens instead	P0	Yes		
+SOX	Audit Control Library	Verify that the search narrows by control text, owner and working paper reference	All three find the control	Only the text is searched	P1	Yes		
+SOX	Working Paper - Shell	Verify that the working paper shows the control objective, the control line and the activity line	All three are shown	A line is missing	P1	Yes		
+SOX	Working Paper - Shell	Verify that the breadcrumb names the engagement, the audit period and the control	All three are named	A part is missing or shows a dash	P1	Yes		Observed on staging 21 Aug 2026 - the breadcrumb ends "C001/-" because the entity is blank
+SOX	Working Paper - Shell	Verify that the overall status is shown with both track states next to it	The overall status and both tracks are shown	A track is missing	P0	Yes		
+SOX	Working Paper - Shell	Verify that the overall status stays not tested until both tracks conclude	The status waits for both tracks	The status flips on the first track	P1	Yes		
+SOX	Working Paper - Shell	Verify that the five steps are shown in order with their own one line description	All five steps are shown in order	A step is missing or out of order	P0	Yes		
+SOX	Working Paper - Shell	Verify that a locked step explains what unlocks it	Each locked step names its gate	A step is locked with no reason	P0	Yes		
+SOX	Working Paper - Shell	Verify that the operating test does not claim to unlock after design when it actually waits for the sample	The gate text names the real gate	The operating step says it unlocks after design while it waits for a sample	P1	Yes		Observed on staging 21 Aug 2026 - the operating step reads "Unlocks after design" long after design concluded
+SOX	Working Paper - Shell	Verify that the working paper button opens the printable paper	The paper opens	The button does nothing	P1	Yes		
+SOX	Working Paper - Shell	Verify that the line about both roles testing and every run being logged is shown	The line is shown	No such explanation is given	P2	Yes		
+SOX	Working Paper - Shell	Verify that a reopen action is available on a concluded paper for someone with the right to use it	The action is offered	There is no way to reopen	P1	Yes		
+SOX	Working Paper - Shell	Verify that the working paper loads within a reasonable wait	The paper appears within a few seconds	The paper takes longer than fifteen seconds	P1	Yes		
+SOX	Working Paper - Shell	Verify that the same working paper opened twice shows the same state	The state is the same	The two views disagree	P1	Yes		
+SOX	Working Paper - Programme	Verify that the audit programme block lists the steps this paper enforces	The steps are listed	No programme is shown	P1	Yes		
+SOX	Working Paper - Programme	Verify that the number of steps named in the heading matches the steps listed	The two agree	They disagree	P2	Yes		
+SOX	Working Paper - Programme	Verify that the programme names how many design elements are required	The count matches the elements on the paper	The count is wrong	P1	Yes		Observed on staging 21 Aug 2026 - the step read "Gather the 0 required design elements" before anything was added and "Gather the 2 required design elements" when only one existed
+SOX	Working Paper - Programme	Verify that the programme names how many attributes will be tested	The count matches the attributes on the control	The count is wrong	P1	Yes		Observed on staging 21 Aug 2026 - the step says "Test 3 attributes" on a control with one attribute
+SOX	Working Paper - Programme	Verify that the performed by line names the person once testing has started	A name is shown	The line stays as a dash after work has been done	P1	Yes		
+SOX	Working Paper - Programme	Verify that the hard copy file reference, the soft copy path and the report reference are shown	All three are shown	A reference is missing	P1	Yes		
+SOX	Working Paper - Programme	Verify that the working paper reference follows the control identifier	The reference is readable such as WP-C001	The reference is a raw identifier	P1	Yes		
+SOX	Working Paper - Programme	Verify that the programme can be collapsed and expanded	It collapses and expands	It cannot be closed	P2	Yes		
+SOX	Working Paper - Programme	Verify that the programme reflects the control frequency and risk rather than a fixed script	The steps match this control	Every control shows an identical programme	P1	Yes		
+SOX	Cannot Test This	Verify that a can't test this action is available on the working paper	The action is offered	There is no way to record that a control cannot be tested	P1	Yes		
+SOX	Cannot Test This	Verify that choosing it asks for a reason before anything is recorded	A reason is required	The control is parked with no reason	P0	Yes		
+SOX	Cannot Test This	Verify that the recorded reason is shown on the working paper afterwards	The reason is visible	The reason disappears	P1	Yes		
+SOX	Cannot Test This	Verify that a control marked as untestable is counted as untested rather than effective	It counts as untested	It counts towards effective controls	P0	Yes		
+SOX	Cannot Test This	Verify that a control marked as untestable is flagged before audit sign off	The sign off checklist names it	The audit can be signed with it ignored	P0	Yes		
+SOX	Cannot Test This	Verify that the mark can be undone	The control returns to normal testing	The mark cannot be removed	P1	Yes		
+SOX	Cannot Test This	Verify that marking a control untestable is recorded so it can be traced later	It appears in history	No trace is kept	P1	Yes		
+SOX	TOD - Start	Verify that a control with no design test yet shows a clear starting screen	A short message and a start action are shown	A blank step is shown	P1	Yes		
+SOX	TOD - Start	Verify that starting the design test lists every attribute on the control	All attributes are listed	An attribute is missing	P0	Yes		
+SOX	TOD - Start	Verify that each attribute row shows its code and its wording	Both are shown	The code is missing	P1	Yes		
+SOX	TOD - Start	Verify that each attribute row shows its own state	A state such as not started is shown	No state is shown	P1	Yes		
+SOX	TOD - Start	Verify that an attribute row can be expanded and collapsed	It opens and closes	It cannot be opened	P1	Yes		
+SOX	TOD - Start	Verify that the attribute state changes as checks are added and passed	The state moves from not started to a count and then to passed	The state is stale	P1	Yes		
+SOX	TOD - Start	Verify that starting the design test is recorded so it can be traced later	It appears in history	No trace is kept	P2	Yes		
+SOX	TOD - Elements	Verify that design elements can be added from a list of the usual document kinds	Narrative, flowchart, walkthrough, control description, policy, precision and segregation of duties are offered	A kind is missing	P1	Yes		
+SOX	TOD - Elements	Verify that a custom element kind can be added	A custom kind can be named and added	Only the fixed list is available	P1	Yes		
+SOX	TOD - Elements	Verify that an added element is marked required or optional	The marker is shown	No marker is shown	P1	Yes		
+SOX	TOD - Elements	Verify that an element with nothing attached is marked as missing	A missing marker is shown	The element looks complete	P0	Yes		
+SOX	TOD - Elements	Verify that an element can be removed	The element disappears	Removal does nothing	P1	Yes		
+SOX	TOD - Elements	Verify that the completeness score counts only required elements	The score matches the required elements	Optional elements move the score	P1	Yes		
+SOX	TOD - Elements	Verify that the same element kind cannot be added twice without a warning	A warning is shown	Two identical elements are added	P2	Yes		
+SOX	TOD - Elements	Verify that adding an element is recorded so it can be traced later	It appears in history	No trace is kept	P1	Yes		
+SOX	TOD - Elements	Verify that the element list explains that required elements gate the conclusion and optional ones do not	The rule is written on screen	The rule is not stated	P1	Yes		
+SOX	TOD - Elements	Verify that an element added after the design concluded reopens the conclusion or is refused	The behaviour is explained either way	The conclusion silently stands on a changed file	P0	Yes		
+SOX	TOD - Elements	Verify that the design elements section is empty and says so on a fresh control	A short message is shown	A blank area is shown	P2	Yes		
+SOX	TOD - Not Applicable	Verify that an element can be marked as not applicable with a reason	A reason must be chosen	The element is waived with no reason	P0	Yes		
+SOX	TOD - Not Applicable	Verify that the reasons offered cover covered elsewhere, not applicable, superseded and tested centrally	All four are offered	A reason is missing	P1	Yes		
+SOX	TOD - Not Applicable	Verify that the chosen reason is shown on the element afterwards	The reason is visible	Only a waived label is shown	P1	Yes		
+SOX	TOD - Not Applicable	Verify that a waiver can be undone	An undo action is offered and works	The waiver cannot be reversed	P1	Yes		
+SOX	TOD - Not Applicable	Verify that the reason list disappears once the element is evidenced	The reasons are hidden	The reason buttons stay on an evidenced element	P2	Yes		Observed on staging 21 Aug 2026 - the WHY reasons stay on screen after evidence is attached
+SOX	TOD - Not Applicable	Verify that waiving a required element is treated differently from evidencing it	The score or the paper shows the difference	A waived required element counts as fully complete	P1	Yes		Observed on staging 21 Aug 2026 - waiving the only required element moved completeness straight to 100 percent
+SOX	TOD - Not Applicable	Verify that a design check cannot cite a waived element as its evidence	The check must point at real evidence	A check is shown as evidenced by a document that was waived	P0	Yes		Observed on staging 21 Aug 2026 - the design check reads "Evidenced by Process narrative" although that narrative was marked not applicable
+SOX	TOD - Not Applicable	Verify that waiving an element is recorded so it can be traced later	It appears in history	No trace is kept	P1	Yes		
+SOX	TOD - Evidence	Verify that a document can be attached to a design element	The file uploads and the element shows as evidenced	The upload fails	P0	Yes		
+SOX	TOD - Evidence	Verify that the accepted file kinds are stated before the picker opens	The kinds are stated	The user finds out only when a file is refused	P2	Yes		
+SOX	TOD - Evidence	Verify that a file of an unsupported kind is refused with a clear message	A message names the accepted kinds	An unsupported file is accepted	P1	Yes		
+SOX	TOD - Evidence	Verify that the attached file shows its name, size and who supplied it	All three are shown	The row shows a name and a stray separator	P1	Yes		Observed on staging 21 Aug 2026 - the file chip reads "Vendor-Master-Process-Narrative.csv , " with nothing after the comma
+SOX	TOD - Evidence	Verify that the attached file can be opened or previewed	The file opens	There is no way to see it	P1	Yes		
+SOX	TOD - Evidence	Verify that an attached file can be removed	The element returns to missing	The file cannot be removed	P1	Yes		
+SOX	TOD - Evidence	Verify that more than one document can be attached to one element	Several files can be attached	Only one is allowed with no explanation	P1	Yes		
+SOX	TOD - Evidence	Verify that attaching evidence moves the completeness score	The score moves	The score is stale	P0	Yes		
+SOX	TOD - Evidence	Verify that attaching evidence is recorded so it can be traced later	It appears in history	The attachment is not recorded	P1	Yes		Observed on staging 21 Aug 2026 - the history count did not move when a file was attached
+SOX	TOD - Checks	Verify that a design check can be added in the tester's own words	The check is added and listed	The action does nothing	P0	Yes		
+SOX	TOD - Checks	Verify that an empty design check is refused	The add action is blocked	A blank check is created	P1	Yes		
+SOX	TOD - Checks	Verify that each check can be passed or failed individually	Both actions work	A check cannot be marked	P0	Yes		
+SOX	TOD - Checks	Verify that pass all and fail all set every check at once	All checks change together	The bulk action has no effect	P1	Yes		
+SOX	TOD - Checks	Verify that a check shows which element it was assessed against	The element is named	No evidence link is shown	P1	Yes		
+SOX	TOD - Checks	Verify that the element a check is assessed against can be changed	The link can be changed	The link is fixed	P1	Yes		
+SOX	TOD - Checks	Verify that the auditor can attach their own proof against a check	A proof can be attached	There is no way to add proof	P1	Yes		
+SOX	TOD - Checks	Verify that a check state can be changed after it has been set	The state can be changed	The first answer is final	P1	Yes		
+SOX	TOD - Checks	Verify that a check can be deleted	The check disappears	Deletion does nothing	P1	Yes		
+SOX	TOD - Checks	Verify that the design coverage score counts checks passed out of checks added	The score matches	The score is wrong	P1	Yes		
+SOX	TOD - Checks	Verify that one failed check turns the coverage score red however complete the file is	The score turns red	A failed check is ignored	P0	Yes		
+SOX	TOD - Checks	Verify that adding, passing and failing a check are each recorded	All three appear in history	Only some are recorded	P1	Yes		
+SOX	TOD - Conclude	Verify that conclude effective is blocked while any required element is missing evidence or a reason	The action is blocked with the reason named	The design is concluded on an incomplete file	P0	Yes		
+SOX	TOD - Conclude	Verify that conclude effective is blocked while any design check has not been assessed	The action is blocked with the reason named	The design is concluded with untested checks	P0	Yes		
+SOX	TOD - Conclude	Verify that conclude effective is blocked while any design check has failed	The action is blocked	A failing check is concluded effective	P0	Yes		
+SOX	TOD - Conclude	Verify that conclude ineffective is disabled with the same clarity as conclude effective when it cannot be used	Both buttons behave the same way	One button is enabled and simply errors when pressed	P1	Yes		Observed on staging 21 Aug 2026 - conclude ineffective looks enabled and only errors afterwards
+SOX	TOD - Conclude	Verify that a rationale is required before a conclusion is recorded	The conclusion is blocked without one	A conclusion is recorded with an empty rationale	P0	Yes		Observed on staging 21 Aug 2026 - the design was concluded effective with the rationale box empty
+SOX	TOD - Conclude	Verify that the rationale is shown on the concluded step afterwards	The rationale is visible on the paper	The rationale is nowhere to be seen	P0	Yes		
+SOX	TOD - Conclude	Verify that the system suggests a conclusion from the results before the tester chooses	A suggestion is shown	No suggestion is offered	P1	Yes		
+SOX	TOD - Conclude	Verify that a suggested rationale is offered that the tester can accept or rewrite	A draft is offered	The tester writes from a blank box every time	P1	Yes		
+SOX	TOD - Conclude	Verify that concluding design effective unlocks the population step	Population opens	The step stays locked	P0	Yes		
+SOX	TOD - Conclude	Verify that concluding design ineffective raises an exception	A deficiency is raised automatically	Nothing is raised	P0	Yes		Could not verify on staging 21 Aug 2026 - no control could be brought to a failing conclusion
+SOX	TOD - Conclude	Verify that a concluded design step becomes read only	The step is read only	Checks can still be changed after the conclusion	P0	Yes		
+SOX	TOD - Conclude	Verify that concluding the design is recorded with the person and the time	Both are recorded	The record has no name or time	P0	Yes		
+SOX	Population - Sources	Verify that the population step lists the sources the control's workflows need	Each source is listed	No sources are shown	P0	Yes		
+SOX	Population - Sources	Verify that a control with no mapped workflow explains that sources appear once a workflow is mapped	The explanation is shown	The step is simply empty	P0	Yes		
+SOX	Population - Sources	Verify that each source names the workflow that needs it	The workflow is named	No workflow is named	P1	Yes		
+SOX	Population - Sources	Verify that a source with no file yet is clearly marked as awaiting a file	A clear message is shown	The source looks ready	P0	Yes		
+SOX	Population - Sources	Verify that the count of sources still awaiting a file is shown	The count is shown	No count is shown	P1	Yes		
+SOX	Population - Sources	Verify that extract population is blocked while any declared source has not arrived	The action is blocked with the reason named	The extract runs on a missing source	P0	Yes		
+SOX	Population - Sources	Verify that each source must be ticked before it is drawn on	The tick is required	The extract runs on sources the control does not use	P1	Yes		
+SOX	Population - Sources	Verify that a source already used shows that it has been drawn on	A clear marker is shown	The same source can be drawn twice with no sign	P1	Yes		
+SOX	Population - Sources	Verify that the step states that there is one population per source	The line is shown	The rule is not stated	P2	Yes		
+SOX	Population - Sources	Verify that a source can be removed before the population is locked	The source can be removed	The source cannot be removed	P1	Yes		
+SOX	Population - Supply Files	Verify that supply files opens a panel that links files to this control's slots	The panel opens with a slot per source	The panel does not open	P0	Yes		
+SOX	Population - Supply Files	Verify that the panel states that nothing runs when a file is linked	The line is shown	The user fears a workflow will fire	P2	Yes		
+SOX	Population - Supply Files	Verify that files can be added to a pool before being assigned	The pool accepts files	Files must be assigned as they are chosen	P1	Yes		
+SOX	Population - Supply Files	Verify that a file in the pool can be removed before it is linked	The file can be removed	The file cannot be removed	P1	Yes		
+SOX	Population - Supply Files	Verify that each slot offers a dropdown of the files in the pool	The dropdown lists the pool	The dropdown is empty although the pool has files	P0	Yes		
+SOX	Population - Supply Files	Verify that auto map fills a slot when a file name matches the slot	The slot is filled	Auto map does nothing on an exact name match	P1	Yes		Observed on staging 21 Aug 2026 - auto map left the slot empty for a file whose name matched the slot exactly
+SOX	Population - Supply Files	Verify that the link action names how many files will be linked	The count is on the button	No count is shown	P2	Yes		
+SOX	Population - Supply Files	Verify that link is blocked while any slot is empty	The action is blocked	A population is built on an unfilled slot	P1	Yes		
+SOX	Population - Supply Files	Verify that a file uploaded for one control can be reused on another control without uploading it again	The file can be picked from a shared pool	The same file has to be uploaded again for every control	P1	Yes		Observed on staging 21 Aug 2026 - the pool for a second control was empty and the same file had to be uploaded again
+SOX	Population - Supply Files	Verify that closing the panel without linking leaves the source untouched	The source is still awaiting a file	A half linked source is left behind	P1	Yes		
+SOX	Population - Supply Files	Verify that the file picker restricts the kinds of file that can be supplied	Only sensible data files are accepted	Any file at all is accepted	P1	Yes		Observed on staging 21 Aug 2026 - the population upload input carries no file type restriction
+SOX	Population - Supply Files	Verify that the same file is not added to the pool twice from one action	One copy is added	Two identical copies appear	P1	Yes		Observed on staging 21 Aug 2026 - a single choose action produced two identical uploads
+SOX	Population - Column Mapping	Verify that the column mapping panel names the file and the slot it is mapping	Both are named	The panel is generic	P1	Yes		
+SOX	Population - Column Mapping	Verify that every column the workflow expects is listed	All are listed	A column is missing	P0	Yes		
+SOX	Population - Column Mapping	Verify that a suggested match is marked as auto suggested	The marker is shown	Suggested and manual matches look the same	P1	Yes		
+SOX	Population - Column Mapping	Verify that each expected column offers a dropdown of the columns in the file	The dropdown lists the file columns	The dropdown is empty	P0	Yes		
+SOX	Population - Column Mapping	Verify that a column can be left unmapped on purpose	Leaving it unmapped is allowed	The panel cannot be completed	P1	Yes		
+SOX	Population - Column Mapping	Verify that confirming with a required column unmapped is refused or clearly warned	A warning or a block is shown	The mapping is confirmed with required columns empty	P1	Yes		Observed on staging 21 Aug 2026 - four of six expected columns were left unmapped and the link was confirmed with no warning
+SOX	Population - Column Mapping	Verify that the mapping can be changed before it is confirmed	Changes can be made	The first choice is final	P1	Yes		
+SOX	Population - Column Mapping	Verify that cancelling the mapping leaves the slot unlinked	The slot is still empty	A half mapped slot is saved	P1	Yes		
+SOX	Population - Column Mapping	Verify that the confirmed mapping is stored so the extract can be reperformed later	The mapping is recorded	The mapping is not kept	P1	Yes		
+SOX	Population - Extract	Verify that the extract reads the linked file and reports how many rows it found	The row count is shown	No count is shown	P0	Yes		
+SOX	Population - Extract	Verify that the row count matches the rows in the supplied file	The counts agree	The counts disagree	P0	Yes		
+SOX	Population - Extract	Verify that the extract can be filtered to the instances that belong to this control	A filter can be applied and is recorded	There is no way to filter	P0	Yes		
+SOX	Population - Extract	Verify that the filter used is stored word for word	The filter is stored	The filter is lost	P0	Yes		
+SOX	Population - Extract	Verify that a population with zero rows is refused or forces an answer	The user must say why there are no instances	An empty population is locked	P0	Yes		
+SOX	Population - Extract	Verify that the population can be previewed before it is locked	A preview is offered	The population is locked unseen	P1	Yes		
+SOX	Population - Extract	Verify that the population cannot be locked before the report test has concluded reliable	Locking is blocked with a clear reason	An unproven report is locked	P0	Yes		
+SOX	Population - Extract	Verify that locking freezes the set the sample will be drawn from	A clear line explains what locking does	Locking is unexplained	P1	Yes		
+SOX	Population - Extract	Verify that a locked population can be reopened with a warning about what will be lost	A warning names the sample and results that go with it	A locked population is reopened silently	P0	Yes		
+SOX	Population - Extract	Verify that locking is recorded with the person and the time	Both are recorded	The record has no name or time	P0	Yes		
+SOX	IPE - Checks	Verify that the report test appears once a population has been extracted	The test appears	No report test is offered	P0	Yes		
+SOX	IPE - Checks	Verify that the report test explains why an unproven report matters	A short explanation is shown	No explanation is given	P2	Yes		
+SOX	IPE - Checks	Verify that the four checks are source and parameters, period coverage, completeness and accuracy	All four are shown	A check is missing	P0	Yes		
+SOX	IPE - Checks	Verify that each check carries a plain English question	A question is shown	Only a label is shown	P1	Yes		
+SOX	IPE - Checks	Verify that each check can be passed or failed	Both actions work	A check cannot be marked	P0	Yes		
+SOX	IPE - Checks	Verify that the completeness check asks for an independent count	A count field is offered	No count is asked for	P0	Yes		
+SOX	IPE - Checks	Verify that the completeness check cannot be passed with the independent count left empty	The pass is blocked with a clear reason	The check passes with no count entered	P0	Yes		Observed on staging 21 Aug 2026 - completeness passed with the count field empty
+SOX	IPE - Checks	Verify that an independent count that differs from the extracted count is flagged	A difference is called out	A mismatch passes silently	P0	Yes		
+SOX	IPE - Checks	Verify that the completeness check explains that the count must come from the source system	The line is shown	No such guidance is given	P1	Yes		
+SOX	IPE - Checks	Verify that a note can be recorded against each check	A note box is offered	There is no way to record what was done	P1	Yes		
+SOX	IPE - Checks	Verify that proof can be attached against each check	An attach action is offered and works	There is no way to attach proof	P1	Yes		
+SOX	IPE - Checks	Verify that the count of checks still to pass is shown	The count is shown	No count is shown	P1	Yes		
+SOX	IPE - Checks	Verify that a failed check blocks the report from being called reliable	The reliable action is blocked	A failing report is called reliable	P0	Yes		
+SOX	IPE - Conclude	Verify that conclude reliable is blocked until all four checks have passed	The action is blocked with the reason named	The report is called reliable early	P0	Yes		
+SOX	IPE - Conclude	Verify that marking the report not reliable is offered as the other outcome	The action is offered	Only the reliable path exists	P0	Yes		
+SOX	IPE - Conclude	Verify that a report marked not reliable blocks the population from being locked	Locking is blocked	An unreliable report still feeds a locked population	P0	Yes		
+SOX	IPE - Conclude	Verify that a report marked not reliable raises the problem rather than ending quietly	The problem is surfaced on the paper	Nothing happens	P0	Yes		
+SOX	IPE - Conclude	Verify that a concluded report test can be reopened	A reopen action is offered	The conclusion is final	P1	Yes		
+SOX	IPE - Conclude	Verify that reopening the report test also unlocks the population that leaned on it	Both reopen together	The population stays locked on a reopened report	P0	Yes		
+SOX	IPE - Conclude	Verify that the report test is recorded per file rather than per control	One record per file is kept	The same file is tested again on every control	P1	Yes		
+SOX	IPE - Conclude	Verify that concluding the report reliable is recorded with the person and the time	Both are recorded	The record has no name or time	P0	Yes		
+SOX	IPE - Conclude	Verify that a locked file is clearly marked as locked	A locked marker is shown	The file looks open	P1	Yes		
+SOX	Sample - Sizing	Verify that the sample step is locked until the population is locked	The step names the gate	The sample can be drawn from an open population	P0	Yes		
+SOX	Sample - Sizing	Verify that a suggested size is shown with the band it came from	Both the size and the band are shown	Only a number is shown	P0	Yes		
+SOX	Sample - Sizing	Verify that the reasoning behind the size names the frequency and the risk rating	Both are named	No reasoning is given	P1	Yes		
+SOX	Sample - Sizing	Verify that the suggested size changes with the control frequency	A daily control is sized above a monthly one	Every control gets the same size	P0	Yes		
+SOX	Sample - Sizing	Verify that the suggested size is capped at the size of the population	The size never exceeds the population	A sample larger than the population is suggested	P0	Yes		
+SOX	Sample - Sizing	Verify that a control with no fixed schedule says the size is a judgement call	The screen says so	A number is invented	P1	Yes		
+SOX	Sample - Sizing	Verify that asking for fewer items than the band is allowed but recorded	The ask is honoured and written on the paper	The ask is silently replaced by the band size	P1	Yes		
+SOX	Sample - Sizing	Verify that asking for fewer items than the band is flagged to the reviewer	A flag or note is raised	An under sized sample passes unnoticed	P1	Yes		
+SOX	Sample - Ask	Verify that the ask can be written in the tester's own words	A free text ask is accepted	Only a number can be entered	P1	Yes		
+SOX	Sample - Ask	Verify that an example ask is offered to show the shape expected	An example is shown	The box is blank with no guidance	P2	Yes		
+SOX	Sample - Ask	Verify that reading the ask returns a plain English restatement of what will be drawn	A restatement is shown	Nothing is returned	P0	Yes		
+SOX	Sample - Ask	Verify that reading the ask completes without a server error	The restatement returns	The action fails with a server error	P0	Yes		Observed on staging 21 Aug 2026 - "Read the ask" returned "Request failed: 502" on three consecutive attempts and blocked the whole sample step
+SOX	Sample - Ask	Verify that a failed read of the ask can be retried without losing the ask	The text is still there and can be retried	The ask is lost	P1	Yes		
+SOX	Sample - Ask	Verify that a failed read of the ask does not leave draw sample permanently disabled	Another route or a retry is offered	The step is a dead end	P0	Yes		Observed on staging 21 Aug 2026 - draw sample stayed disabled after every failed read
+SOX	Sample - Ask	Verify that an ask that would widen the set beyond the population is refused	The ask is refused with a clear reason	The draw reaches outside the locked population	P0	Yes		
+SOX	Sample - Ask	Verify that a targeted rather than random ask is labelled as targeted on the paper	The paper says it was targeted	A targeted draw is recorded as random	P1	Yes		
+SOX	Sample - Ask	Verify that the ask is stored word for word on the working paper	The ask is stored as written	The ask is paraphrased or lost	P0	Yes		
+SOX	Sample - Draw	Verify that drawing the sample returns the number of items asked for	The count matches the ask	A different number is returned	P0	Yes		
+SOX	Sample - Draw	Verify that the drawn items are shown in a table with the columns from the source file	The table is shown	Only a count is shown	P0	Yes		
+SOX	Sample - Draw	Verify that the drawn items all come from the locked population	Every item is in the population	An item from outside the set appears	P0	Yes		
+SOX	Sample - Draw	Verify that the seed used for the draw is shown and stored	The seed is shown	No seed is recorded	P0	Yes		
+SOX	Sample - Draw	Verify that the screen explains that the seed lets anyone reperform the draw	The explanation is shown	The seed is shown with no meaning	P1	Yes		
+SOX	Sample - Draw	Verify that the drawn items honour the spread that was asked for	The spread matches the ask	The ask says one per period and two land in the same period	P1	Yes		Observed on staging 21 Aug 2026 - an ask for one per period returned two items dated in September
+SOX	Sample - Draw	Verify that the drawn items can be paged through when the sample is large	Paging works	Only the first page can be seen	P1	Yes		
+SOX	Sample - Draw	Verify that a redraw uses the same locked population and stores a new seed alongside the first	Both seeds are kept	The first seed is overwritten	P0	Yes		
+SOX	Sample - Draw	Verify that a redraw never edits the population	The population is untouched	The population changes	P0	Yes		
+SOX	Sample - Draw	Verify that drawing the sample is recorded with the count and the seed	Both are recorded in history	Nothing is recorded	P1	Yes		
+SOX	Sample - Approve	Verify that the drawn sample must be approved before the operating test opens	Approval is required	The operating test opens on an unapproved sample	P0	Yes		
+SOX	Sample - Approve	Verify that rejecting the sample offers a redraw rather than ending the step	A redraw is offered	Rejecting is a dead end	P1	Yes		
+SOX	Sample - Approve	Verify that the approval records who approved the items	The person is recorded	No name is kept	P0	Yes		
+SOX	Sample - Approve	Verify that the approved count is shown at the top of the step	A count such as one sample approved is shown	No summary is shown	P2	Yes		
+SOX	Sample - Approve	Verify that an approved sample cannot be redrawn without a warning	A warning names what will be lost	The sample is redrawn silently	P0	Yes		
+SOX	Sample - Approve	Verify that withdrawing the population after the sample was drawn warns about the results that go with it	A warning names what will be lost	The sample disappears silently	P0	Yes		
+SOX	Sample - Approve	Verify that a control with several paths flags a draw that touched only one path	A flag is raised	The gap is not mentioned	P1	Yes		
+SOX	Sample - Approve	Verify that approving the sample unlocks the operating test	The operating test opens	The step stays locked	P0	Yes		
+SOX	TOE - Start	Verify that the operating test names the approved sample it is testing against	The sample and its size are named	No sample is named	P0	Yes		
+SOX	TOE - Start	Verify that every attribute on the control is listed for testing	All attributes are listed	An attribute is missing	P0	Yes		
+SOX	TOE - Start	Verify that a running total of passed, failed and untested attributes is shown	All three counts are shown	A count is missing	P1	Yes		
+SOX	TOE - Start	Verify that each attribute shows the workflow mapped to it	The workflow is named	Only a raw identifier is shown	P1	Yes		Observed on staging 21 Aug 2026 - the mapped workflow shows as ac9c0a4e-c527-4129-99d3-a6f30e63d218 after a run
+SOX	TOE - Start	Verify that an attribute with no mapped workflow explains what is missing	A clear message is shown	The row is simply blank	P1	Yes		
+SOX	TOE - Start	Verify that the step explains that any exception fails the attribute and one failed attribute fails the control	The rule is written on screen	The rule is not stated	P1	Yes		
+SOX	TOE - Run	Verify that running the mapped workflow shows progress while it runs	Progress is shown	The screen looks frozen	P0	Yes		
+SOX	TOE - Run	Verify that a completed run returns a pass or fail result against the attribute	A result is returned	The run never returns anything	P0	Yes		Observed on staging 21 Aug 2026 - a run left the attribute at untested with no result after several minutes
+SOX	TOE - Run	Verify that a failed or timed out run is reported rather than left silent	An error is shown with a way to retry	The run disappears with no message	P0	Yes		
+SOX	TOE - Run	Verify that the run can be repeated after a failure	A retry is offered	The attribute is stuck for good	P0	Yes		Observed on staging 21 Aug 2026 - the run button disappeared after one run and never came back
+SOX	TOE - Run	Verify that a run in progress does not block the tester from recording a manual result	Manual pass and fail still work	Both buttons stop responding	P0	Yes		Observed on staging 21 Aug 2026 - Pass and Fail did nothing at all after a run was started, before and after a page reload
+SOX	TOE - Run	Verify that the run result names the sampled items that failed	The failing items are listed	Only a count is given	P0	Yes		
+SOX	TOE - Run	Verify that the run is recorded in history with the person and the time	Both are recorded	The record has no name or time	P1	Yes		
+SOX	TOE - Run	Verify that validation by workflow and validation by AI cannot both be used on one attribute	Only one is active	Both run and give different answers	P1	Yes		
+SOX	TOE - Run	Verify that AI validation requires a file before it can run	The run is blocked until a file is supplied	The run starts with nothing to check	P1	Yes		
+SOX	TOE - Manual	Verify that an attribute can be passed by hand	The attribute moves to passed and the counter moves	Nothing happens	P0	Yes		Observed on staging 21 Aug 2026 - the Pass button had no effect
+SOX	TOE - Manual	Verify that an attribute can be failed by hand	The attribute moves to failed and the counter moves	Nothing happens	P0	Yes		Observed on staging 21 Aug 2026 - the Fail button had no effect
+SOX	TOE - Manual	Verify that a manual result asks for a written reason	A reason is required	A result is recorded with no explanation	P0	Yes		
+SOX	TOE - Manual	Verify that a manual result recorded over a workflow result is marked as an override	The override is marked	The override is invisible	P0	Yes		
+SOX	TOE - Manual	Verify that an override is recorded per attribute and never for the whole control	The record sits on the attribute	One override covers everything	P1	Yes		
+SOX	TOE - Manual	Verify that self attestation is off by default and is offered only for physical controls	It is off and limited	It is offered on every control	P1	Yes		
+SOX	TOE - Manual	Verify that self attestation requires a written note before a result is recorded	A note is required	A result is recorded with no note	P1	Yes		
+SOX	TOE - Manual	Verify that a manual result can be changed before the test concludes	The result can be changed	The first answer is final	P1	Yes		
+SOX	TOE - Failure Handling	Verify that a single failed item does not end the test on its own	The tester is asked whether to draw more items	A single failure ends the test with no choice	P0	Yes		Could not verify on staging 21 Aug 2026 - no attribute could be marked failed
+SOX	TOE - Failure Handling	Verify that drawing more items uses the same locked population and stores a new seed	Both seeds are kept	The population changes or the seed is lost	P0	Yes		
+SOX	TOE - Failure Handling	Verify that the extra items are added to the same sample rather than replacing it	The sample grows	The first items are lost	P0	Yes		
+SOX	TOE - Failure Handling	Verify that further failures in the extra items conclude the control ineffective	The control concludes ineffective	The test continues indefinitely	P0	Yes		
+SOX	TOE - Failure Handling	Verify that a failure judged a one off is recorded with a written explanation	The explanation is required and stored	A failure is passed over silently	P0	Yes		
+SOX	TOE - Failure Handling	Verify that a second round of testing is clearly recorded as a second round	The paper shows both rounds	Only the last round is kept	P0	Yes		
+SOX	TOE - Failure Handling	Verify that the sample size for the extra items is proposed rather than left to guesswork	A proposed size is shown	The tester is given no guidance	P1	Yes		
+SOX	TOE - Conclude	Verify that conclude effective is blocked while any attribute is untested	The action is blocked with the reason named	The control concludes effective with untested attributes	P0	Yes		
+SOX	TOE - Conclude	Verify that conclude effective is blocked while any attribute has failed	The action is blocked	A failing attribute concludes effective	P0	Yes		
+SOX	TOE - Conclude	Verify that conclude ineffective is disabled with a visible reason when it cannot be used	The button is disabled with the reason next to it	The button looks enabled and errors only after it is pressed	P0	Yes		Observed on staging 21 Aug 2026 - conclude ineffective returned the error "1 attribute(s) are still untested"
+SOX	TOE - Conclude	Verify that a rationale is required before the operating conclusion is recorded	The conclusion is blocked without one	A conclusion is recorded with an empty rationale	P0	Yes		
+SOX	TOE - Conclude	Verify that a conclusion drafted from the results is offered before the tester chooses	A draft conclusion and rationale are offered	The tester starts from a blank box	P1	Yes		
+SOX	TOE - Conclude	Verify that concluding ineffective raises a deficiency automatically	A deficiency appears on the register	Nothing is raised	P0	Yes		Could not verify on staging 21 Aug 2026 - the operating test could not be concluded
+SOX	TOE - Conclude	Verify that concluding effective moves the overall status to effective	The overall status changes	The status is stale	P0	Yes		
+SOX	TOE - Conclude	Verify that concluding the operating test unlocks sign off	Sign off opens	The step stays locked	P0	Yes		
+SOX	TOE - Conclude	Verify that a concluded operating test becomes read only	The step is read only	Results can still be changed after the conclusion	P0	Yes		
+SOX	TOE - Conclude	Verify that concluding is recorded with the person, the time and the outcome	All three are recorded	The record is incomplete	P0	Yes		
+SOX	Sign Off	Verify that sign off is locked until both tracks have concluded	The step names the gate	Sign off opens with a track still open	P0	Yes		
+SOX	Sign Off	Verify that the step explains that the auditor signs and the reviewer countersigns	The rule is written on screen	No explanation is given	P1	Yes		
+SOX	Sign Off	Verify that the preparer signature records the person and the time	Both are recorded	The signature has no name or time	P0	Yes		
+SOX	Sign Off	Verify that the countersignature records the person and the time	Both are recorded	The signature has no name or time	P0	Yes		
+SOX	Sign Off	Verify that the same person cannot countersign a paper they prepared	The second signature is blocked with a clear reason	One person signs both	P0	Yes		
+SOX	Sign Off	Verify that the reviewer can send the paper back instead of countersigning	A send back action with a reason is offered	The reviewer can only sign	P1	Yes		
+SOX	Sign Off	Verify that a paper sent back names what has to change	The reason is shown on the paper	The paper returns with no explanation	P1	Yes		
+SOX	Sign Off	Verify that a signed paper cannot be edited without being reopened	Edits are blocked	A signed paper can be changed	P0	Yes		
+SOX	Sign Off	Verify that reopening a signed paper records who reopened it and why	Both are recorded	No trace is kept	P0	Yes		
+SOX	Sign Off	Verify that a signed control counts towards the audit sign off progress	The audit progress moves	The progress is stale	P1	Yes		
+SOX	Sign Off	Verify that the court indicator on the control changes as the paper moves between people	The indicator follows the work	The indicator is stale	P1	Yes		
+SOX	Sign Off	Verify that signing off is recorded in history	The signature appears in history	No trace is kept	P0	Yes		
+SOX	Confidence Scores	Verify that the working paper shows control completeness, design coverage and operating effectiveness scores	All three are shown	A score is missing	P1	Yes		
+SOX	Confidence Scores	Verify that each score shows a percentage, the counts behind it and a one line meaning	All three parts are shown	Only the percentage is shown	P1	Yes		
+SOX	Confidence Scores	Verify that control completeness counts required elements evidenced or reasoned	The count follows that rule	Optional elements move the score	P1	Yes		
+SOX	Confidence Scores	Verify that design coverage counts design checks passed	The count follows that rule	The score does not match the checks	P1	Yes		
+SOX	Confidence Scores	Verify that operating effectiveness reflects the checks run across the sample	The score matches the checks	The score is wrong	P1	Yes		
+SOX	Confidence Scores	Verify that a score at one hundred is marked complete and a lower score is marked needs attention	The markers follow the score	The markers do not change	P1	Yes		
+SOX	Confidence Scores	Verify that the scores move as work is done on the paper	The scores move	The scores are stale	P0	Yes		
+SOX	Confidence Scores	Verify that a score that cannot be measured yet says so rather than showing a bare zero	A clear message is shown	Zero percent reads as a failure	P1	Yes		
+SOX	Confidence Scores	Verify that the audit level scores on the dashboard agree with the control level scores	The two agree	They disagree	P1	Yes		
+SOX	Confidence Scores	Verify that the wording of each score is understandable without audit jargon	An auditor with no product training can read it	The wording assumes product knowledge	P2	Yes		
+SOX	History and Discussion	Verify that the history panel lists every conclusion, lock and signature on the paper	Every event is listed	An event is missing	P0	Yes		
+SOX	History and Discussion	Verify that each history entry names the person, the action and the time	All three are shown	A value is missing	P0	Yes		
+SOX	History and Discussion	Verify that each history entry is tagged with the track it belongs to	The tag is correct	A design event is tagged as operating	P1	Yes		Observed on staging 21 Aug 2026 - supplying a population file is tagged TOE
+SOX	History and Discussion	Verify that each history entry names the role the person was acting in	The role is shown	No role is shown	P1	Yes		
+SOX	History and Discussion	Verify that the history can be filtered to design or operating only	Both filters work	A filter has no effect	P1	Yes		
+SOX	History and Discussion	Verify that the history count in the tab matches the entries listed	The two agree	They disagree	P2	Yes		
+SOX	History and Discussion	Verify that attaching evidence is recorded in history	The attachment appears	The attachment is not recorded	P1	Yes		Observed on staging 21 Aug 2026 - the history count did not move when a file was attached
+SOX	History and Discussion	Verify that history cannot be edited or deleted by anyone	The history is read only	Entries can be removed	P0	Yes		
+SOX	History and Discussion	Verify that the discussion tab allows a comment to be left on the paper	A comment can be posted	The tab does nothing	P1	Yes		
+SOX	History and Discussion	Verify that a comment names its author and the time	Both are shown	A value is missing	P1	Yes		
+SOX	History and Discussion	Verify that a comment can be replied to and the thread stays together	The thread holds together	Replies are shown loose	P2	Yes		
+SOX	History and Discussion	Verify that an empty history says so clearly on a fresh paper	A short message is shown	A blank panel is shown	P2	Yes		
+SOX	Exception Raised	Verify that concluding a control ineffective raises a finding without the auditor creating one	The finding appears on its own	The auditor has to create it by hand	P0	Yes		Could not verify on staging 21 Aug 2026 - no control could be concluded ineffective
+SOX	Exception Raised	Verify that a raised finding is created against the control that failed	The finding names the control	The finding is not linked to a control	P0	Yes		
+SOX	Exception Raised	Verify that a raised finding lists the sampled items that failed	The failing items are listed	No items are listed	P0	Yes		
+SOX	Exception Raised	Verify that a raised finding starts with an empty root cause	The root cause is blank	A root cause is invented	P0	Yes		
+SOX	Exception Raised	Verify that the finding is announced on the working paper without navigating away	A banner appears on the same page	The user has to find the register	P1	Yes		
+SOX	Exception Raised	Verify that a finding cannot be created by hand from the register	There is no manual create	Findings can be created that trace back to nothing	P0	Yes		
+SOX	Exception Raised	Verify that a finding raised on the design track is marked as a design gap	The track is recorded	The track is not recorded	P1	Yes		
+SOX	Exception Raised	Verify that a finding raised on the operating track is marked as an operating failure	The track is recorded	The track is not recorded	P1	Yes		
+SOX	Deficiency Register	Verify that the deficiency tab lists every finding on the audit	All findings are listed	A finding is missing	P0	Yes		
+SOX	Deficiency Register	Verify that the empty state message matches the real state of the audit	The message is accurate	It says every tested control is effective when nothing has been concluded	P1	Yes		Observed on staging 21 Aug 2026 - the tab reads "No deficiencies - every tested control is effective" with zero controls concluded on operating
+SOX	Deficiency Register	Verify that each row shows the finding reference, the control, the track, the exposure, the grade, the stage and whose court it is in	All seven are shown	A value is missing	P0	Yes		
+SOX	Deficiency Register	Verify that each column can be filtered	Every column filters	A filter has no effect	P1	Yes		
+SOX	Deficiency Register	Verify that the register can be filtered to open findings only	The filter works	Closed findings stay in the list	P1	Yes		
+SOX	Deficiency Register	Verify that a row can be expanded to show the whole finding	The detail opens in place	The row is not expandable	P0	Yes		
+SOX	Deficiency Register	Verify that the expanded finding shows the root cause in full	The root cause is shown	Only a count of failures is shown	P0	Yes		
+SOX	Deficiency Register	Verify that the expanded finding lists the failed sample references	The references are listed	No references are shown	P0	Yes		
+SOX	Deficiency Register	Verify that the six step stepper shows where the finding has reached	The current step is marked	No stepper is shown	P0	Yes		
+SOX	Deficiency Register	Verify that the stepper names whose court the finding is in at the current step	The person or role is named	No owner is named	P0	Yes		
+SOX	Deficiency Register	Verify that the register agrees with the deficiency counts on the audit dashboard	The two agree	They disagree	P1	Yes		
+SOX	Deficiency Register	Verify that a finding below the clearly trivial threshold is logged but not put through evaluation	It is logged and left alone	A trivial finding is pushed through the whole flow	P1	Yes		
+SOX	Deficiency Register	Verify that findings carried forward from an earlier round are shown	Carried findings are listed	Open findings are lost between rounds	P0	Yes		
+SOX	Deficiency Register	Verify that a closed finding is visibly different from an open one	The state is clear	Both look the same	P1	Yes		
+SOX	Severity - Inputs	Verify that the root cause must be written before the finding can be sized	Sizing is blocked until it is written	A finding is graded with no root cause	P0	Yes		
+SOX	Severity - Inputs	Verify that the root cause is a written explanation rather than a count	The field asks for the mechanism	The field accepts a bare count as sufficient	P1	Yes		
+SOX	Severity - Inputs	Verify that the severity panel is editable while the finding is being sized	The inputs can be changed	The panel is read only too early	P0	Yes		
+SOX	Severity - Inputs	Verify that the panel becomes read only once the fix has started	Editing is blocked with a clear reason	The grade can be moved while someone is fixing it	P0	Yes		
+SOX	Severity - Inputs	Verify that likelihood is asked for with a clear set of choices	The choices are offered	Likelihood is not asked for	P0	Yes		
+SOX	Severity - Inputs	Verify that exposure is asked for in money and compared to materiality on screen	Both are shown	The comparison is missing	P0	Yes		
+SOX	Severity - Inputs	Verify that the screen defines exposure as what could have slipped through rather than the error found	The definition is on screen	The definition is not given	P1	Yes		
+SOX	Severity - Inputs	Verify that a negative exposure is refused	A clear message is shown	A negative exposure is accepted	P1	Yes		
+SOX	Severity - Inputs	Verify that the grade is computed from the inputs rather than typed in	The grade is computed	The grade can be set by hand	P0	Yes		
+SOX	Severity - Inputs	Verify that the computed grade changes as the inputs change	The grade moves	The grade is stale	P0	Yes		
+SOX	Severity - Inputs	Verify that the working behind the grade can be shown in order	Each rule is listed in order	Only the answer is shown	P0	Yes		
+SOX	Severity - Inputs	Verify that the gap nature such as operating failure or design gap is recorded	The gap nature is shown	The gap nature is missing	P1	Yes		
+SOX	Severity - Inputs	Verify that a grade of significant or worse parks the finding with the reviewer	The finding waits for the reviewer	The owner can start work on an unconfirmed rating	P0	Yes		
+SOX	Severity - Inputs	Verify that the reviewer can send a rating back with a reason instead of confirming it	A send back with a reason is offered	The reviewer can only confirm	P1	Yes		
+SOX	Severity - Indicators	Verify that material weakness indicators can be set against a finding	The indicators can be ticked	No indicators are offered	P0	Yes		
+SOX	Severity - Indicators	Verify that any indicator in force makes the finding a material weakness whatever the amount	The grade jumps to material weakness	The amount still decides	P0	Yes		
+SOX	Severity - Indicators	Verify that indicators that belong to the whole audit are shown read only on the finding	They are read only	They can be ticked per finding	P1	Yes		
+SOX	Severity - Indicators	Verify that only the two exception level indicators can be set on a finding	Only auditor found misstatement and senior management fraud can be ticked here	All five can be ticked on any finding	P1	Yes		
+SOX	Severity - Indicators	Verify that an audit level indicator turning true raises its own entity level finding	A separate finding is raised	It is attached as a chip to an unrelated exception	P1	Yes		
+SOX	Severity - Indicators	Verify that the source of each indicator is shown so house rules are not mistaken for the standard	The source is shown	Every indicator looks equally authoritative	P1	Yes		
+SOX	Severity - Indicators	Verify that removing an indicator re grades the finding	The grade drops back	The grade stays raised	P0	Yes		
+SOX	Severity - Indicators	Verify that changing an indicator after the reviewer confirmed the rating demands re confirmation	A warning demands re confirmation	The confirmed rating silently no longer matches	P0	Yes		
+SOX	Severity - Compensating	Verify that a compensating control can be named against a finding	A control can be chosen	No compensating control can be recorded	P1	Yes		
+SOX	Severity - Compensating	Verify that only a control tested effective can be used as a compensating control	Ineffective controls are not offered	Any control can be chosen	P0	Yes		
+SOX	Severity - Compensating	Verify that a compensating control caps the grade one step and never clears the finding	The grade drops one step and the finding stays open	The finding is cleared	P0	Yes		
+SOX	Severity - Compensating	Verify that the cap is explained on screen in plain English	The explanation is shown	The user has to guess	P1	Yes		
+SOX	Severity - Compensating	Verify that removing the compensating control restores the uncapped grade	The grade returns	The cap sticks	P0	Yes		
+SOX	Severity - Compensating	Verify that the compensating control appears in the shown working for the grade	It is named in the working	The cap is applied silently	P1	Yes		
+SOX	Aggregation	Verify that findings that share a financial statement line item are grouped together	The group is formed	Related findings are evaluated alone	P0	Yes		
+SOX	Aggregation	Verify that the key a group was formed on is shown and marked as derived	The key is shown and marked derived	The group has no explanation	P1	Yes		
+SOX	Aggregation	Verify that a group shows its combined exposure and its combined grade	Both are shown	A value is missing	P0	Yes		
+SOX	Aggregation	Verify that a combined grade higher than a member's own grade is surfaced rather than silent	The change is announced on the member	A finding is quietly raised a grade	P0	Yes		
+SOX	Aggregation	Verify that a member leaving a group falls back to its own standalone grade	The grade falls back	The raised grade sticks	P0	Yes		
+SOX	Aggregation	Verify that adding a finding to a group recomputes every member	Every member is recomputed	Only the new member is graded	P0	Yes		
+SOX	Aggregation	Verify that a group with a single member is not shown as a group	No group is rendered	A one member group is shown	P2	Yes		
+SOX	Aggregation	Verify that a finding below the clearly trivial threshold is not aggregated	It is left out of every group	Trivial findings inflate a group	P1	Yes		
+SOX	Aggregation	Verify that group membership can span audits within one engagement	An interim finding still open joins the year end group	Groups reset at every round	P1	Yes		
+SOX	Aggregation	Verify that a member cannot simply be removed from a derived group	Removal is refused and a documented conclusion is required instead	Members can be dropped to lower a grade	P0	Yes		
+SOX	Deficiency Lifecycle	Verify that the owner can write a remediation plan with a named person and a date	Both are captured	The plan has no owner or date	P0	Yes		
+SOX	Deficiency Lifecycle	Verify that the auditor can judge the plan against the root cause	The auditor can accept or reject	The plan is accepted automatically	P0	Yes		
+SOX	Deficiency Lifecycle	Verify that rejecting a plan requires a written reason	A reason is required	A plan is rejected with no explanation	P0	Yes		
+SOX	Deficiency Lifecycle	Verify that a rejected plan returns to the owner rather than ending the finding	The finding returns to planning	The finding is closed	P0	Yes		
+SOX	Deficiency Lifecycle	Verify that the auditor cannot write or carry out the fix themselves	Those actions are not offered to the auditor	The auditor can do the owner's work	P0	Yes		
+SOX	Deficiency Lifecycle	Verify that the owner must attach proof before marking the fix done	Submission is blocked without proof	A fix is declared done with nothing attached	P0	Yes		
+SOX	Deficiency Lifecycle	Verify that only the owner can declare the fix ready for retest	Only the owner has the action	Anyone can declare it ready	P0	Yes		
+SOX	Deficiency Lifecycle	Verify that the finding shows whose court it is in at every step	The court is always shown	The court is missing at some step	P1	Yes		
+SOX	Deficiency Lifecycle	Verify that each step change is recorded with the person and the time	Both are recorded	The record is incomplete	P0	Yes		
+SOX	Deficiency Lifecycle	Verify that a finding cannot skip a step	Steps run in order	A finding jumps from raised to closed	P0	Yes		
+SOX	Deficiency Lifecycle	Verify that the business can raise a formal challenge on an input rather than on the grade	A challenge can be recorded against an input	Disagreements have nowhere to go	P1	Yes		
+SOX	Deficiency Lifecycle	Verify that the auditor must respond to a challenge with a reason either way	A response is required	A challenge can be ignored	P1	Yes		
+SOX	Retest	Verify that a retest draws a fresh sample only from items after the fix landed	The draw is limited to the period after the fix	Items from the broken period are retested	P0	Yes		Could not verify on staging 21 Aug 2026 - the flow could not be reached
+SOX	Retest	Verify that the retest sample is sized to the control's own frequency and risk	The size follows the control	The size is copied from the original test	P1	Yes		
+SOX	Retest	Verify that the earliest date a retest is possible is shown when the control runs infrequently	A date is shown with the reasoning	A retest can be run too early	P0	Yes		
+SOX	Retest	Verify that a retest that cannot happen before the opinion date is warned about now	A warning is raised early	The problem surfaces only at year end	P0	Yes		
+SOX	Retest	Verify that an annual control with no second occurrence says so plainly and carries forward	A clear message is shown	A retest is promised that cannot happen	P1	Yes		
+SOX	Retest	Verify that a passing retest moves the finding to close	The finding moves to the close step	The finding stays open	P0	Yes		
+SOX	Retest	Verify that a failing retest returns the finding to planning rather than to fixing	The finding returns to planning	The finding returns to fixing	P0	Yes		
+SOX	Retest	Verify that every retest attempt is kept with the reason it failed	Each attempt is kept	Only the last attempt is kept	P0	Yes		
+SOX	Retest	Verify that two failed retests escalate to the reviewer with different wording	The escalation is raised and worded differently	The second failure looks the same as the first	P0	Yes		
+SOX	Retest	Verify that a retest reopens the control's operating test rather than editing the concluded one	A new round is recorded	The concluded round is overwritten	P0	Yes		
+SOX	Retest	Verify that the control is marked as needing a retest in the control library	A retest badge is shown	The control looks like any other	P1	Yes		
+SOX	Retest	Verify that the person who ran the retest cannot close the finding	Closing is blocked for them	The same person retests and closes	P0	Yes		
+SOX	Retest	Verify that the reviewer closing the finding records the person and the time	Both are recorded	The close has no name or time	P0	Yes		
+SOX	Retest	Verify that a closed finding can be reopened by the reviewer with a reason	A reopen with a reason is offered	A closed finding is final	P1	Yes		
+SOX	Retest	Verify that reopening a finding puts the control back into testing	The control reopens	The control stays concluded	P0	Yes		
+SOX	Audit Report	Verify that the audit report preview opens from the control library	The preview opens	The action does nothing	P1	Yes		
+SOX	Audit Report	Verify that the report names the audit period and the round	Both are named	A value is missing	P1	Yes		
+SOX	Audit Report	Verify that the result block shows controls in scope, effective, ineffective and not concluded	All four are shown	A figure is missing	P0	Yes		
+SOX	Audit Report	Verify that the four figures add up to the controls in scope	The figures add up	They do not add up	P0	Yes		
+SOX	Audit Report	Verify that the observations table lists every ineffective control with its finding	Every one is listed	A finding is missing	P0	Yes		
+SOX	Audit Report	Verify that the observations table names the control by its identifier rather than a raw system reference	The control identifier is shown	A raw internal identifier is shown	P1	Yes		Observed on staging 21 Aug 2026 - the not concluded table lists controls as 844c998a-118b-4d7a-a8c6-c623edc3f234
+SOX	Audit Report	Verify that the observations table names the working paper reference for each row	The reference is shown	The reference is missing	P1	Yes		
+SOX	Audit Report	Verify that the management action plan table lists the owner committed fix for each observation	Every observation has its plan	A plan is missing	P0	Yes		
+SOX	Audit Report	Verify that the not concluded table lists every control still open at the report date	Every open control is listed	A control is missing	P0	Yes		
+SOX	Audit Report	Verify that the not concluded table shows the state of both tracks	Both tracks are shown	Only one track is shown	P1	Yes		
+SOX	Audit Report	Verify that a report with no observations says so clearly rather than showing an empty table	A short line explains there are none	An empty table is shown with no explanation	P1	Yes		
+SOX	Audit Report	Verify that the no observations line is only shown when every concluded control was effective	The line matches the data	The line claims everything is effective when nothing was concluded	P1	Yes		Observed on staging 21 Aug 2026 - the report shows "Every concluded control operated effectively" with zero controls concluded on operating
+SOX	Audit Report	Verify that the report states that the downloaded file matches the preview	The line is shown	The file and the preview can differ silently	P1	Yes		
+SOX	Audit Report	Verify that downloading the report produces a spreadsheet	A file downloads	Nothing happens	P0	Yes		
+SOX	Audit Report	Verify that the downloaded file matches the preview exactly	The two agree	The file has extra or missing rows	P0	Yes		
+SOX	Audit Report	Verify that the downloaded file opens cleanly in a spreadsheet tool	The file opens	The file is corrupt	P1	Yes		
+SOX	Audit Report	Verify that the report can be generated at any point rather than only after sign off	The report can be produced early with its state clear	The report is blocked until sign off	P1	Yes		
+SOX	Audit Report	Verify that the report reflects the materiality in force at the time it is produced	The materiality is shown and matches	The report quotes a stale materiality	P1	Yes		
+SOX	Roles - Auditor	Verify that an auditor can see all four audit tabs	Dashboard, control library, deficiency management and configuration are all visible	A tab is missing	P0	Yes		
+SOX	Roles - Auditor	Verify that an auditor can run the design test and the operating test	Both are available	An action is blocked	P0	Yes		
+SOX	Roles - Auditor	Verify that an auditor can lock a population and approve a sample	Both are available	An action is blocked	P0	Yes		
+SOX	Roles - Auditor	Verify that an auditor can size a deficiency	The severity panel is editable	The panel is read only	P0	Yes		
+SOX	Roles - Auditor	Verify that an auditor cannot confirm a rating they set themselves	The confirm action is blocked	The auditor confirms their own rating	P0	Yes		
+SOX	Roles - Auditor	Verify that an auditor cannot close a deficiency	Closing is not offered	The auditor can close findings	P0	Yes		
+SOX	Roles - Auditor	Verify that an auditor cannot set or edit materiality	The materiality block is read only	The auditor can change the thresholds	P0	Yes		
+SOX	Roles - Auditor	Verify that an auditor cannot countersign a paper they prepared	The countersignature is blocked	The auditor signs both lines	P0	Yes		
+SOX	Roles - Reviewer	Verify that a reviewer can see every control, paper and finding on the audit	Everything is visible	Content is hidden	P0	Yes		
+SOX	Roles - Reviewer	Verify that a reviewer can confirm a deficiency rating	The confirm action is available	The action is missing	P0	Yes		
+SOX	Roles - Reviewer	Verify that a reviewer can send a rating back with a reason	The send back action is available	Only confirm is offered	P1	Yes		
+SOX	Roles - Reviewer	Verify that a reviewer can countersign a paper they did not prepare	The countersignature works	The action is blocked wrongly	P0	Yes		
+SOX	Roles - Reviewer	Verify that a reviewer cannot size a deficiency	The severity panel is read only for them	The reviewer can set the inputs	P0	Yes		
+SOX	Roles - Reviewer	Verify that a reviewer cannot close a deficiency whose retest they ran	Closing is blocked with a clear reason	The same person retests and closes	P0	Yes		
+SOX	Roles - Reviewer	Verify that a reviewer can close a deficiency after a retest run by someone else	Closing works	The action is blocked wrongly	P0	Yes		
+SOX	Roles - Reviewer	Verify that a reviewer can reopen a closed deficiency with a reason	The reopen works and the reason is captured	Reopening is not offered	P1	Yes		
+SOX	Roles - Reviewer	Verify that a reviewer cannot conclude the operating test	The conclude actions are not offered	The reviewer concludes testing	P0	Yes		
+SOX	Roles - Risk Owner	Verify that a risk owner sees only their own controls and findings	The lists are filtered to them	They see the whole audit	P0	Yes		
+SOX	Roles - Risk Owner	Verify that the filtered list says plainly that it is filtered to their controls	A short line explains the filter	The filter is invisible	P1	Yes		
+SOX	Roles - Risk Owner	Verify that a risk owner can attach remediation evidence	The attach action works	The action is missing	P0	Yes		
+SOX	Roles - Risk Owner	Verify that a risk owner can submit a fix for retest	The submit action works	The action is missing	P0	Yes		
+SOX	Roles - Risk Owner	Verify that a risk owner cannot grade or confirm a severity	The severity panel is read only for them	The owner can change the grade	P0	Yes		
+SOX	Roles - Risk Owner	Verify that a risk owner cannot retest their own fix	The retest action is not offered	The owner retests their own work	P0	Yes		
+SOX	Roles - Risk Owner	Verify that a risk owner cannot close a deficiency	Closing is not offered	The owner closes findings	P0	Yes		
+SOX	Roles - Risk Owner	Verify that a risk owner cannot reach the audit configuration	The tab is hidden or blocked	The owner can change the ground rules	P0	Yes		
+SOX	Roles - No Access	Verify that a plain member cannot open a SOX engagement they are not on	Access is refused with a clear message	The engagement opens	P0	Yes		
+SOX	Roles - No Access	Verify that a plain member cannot open the deficiency register	Access is refused	The register opens	P0	Yes		
+SOX	Roles - No Access	Verify that a user with view only rights cannot change anything	Every editing action is hidden or disabled	A view only user can edit	P0	Yes		
+SOX	Roles - No Access	Verify that a user who loses their role mid session loses access on the next action	Access is refused	The old access continues	P0	Yes		
+SOX	Roles - No Access	Verify that an unauthorised request typed directly into the address bar is refused	Access is refused	The page opens	P0	Yes		
+SOX	Roles - No Access	Verify that an admin can see the SOX engagements without being able to conclude testing	Reading works and concluding is blocked	An admin can conclude tests	P1	Yes		
+SOX	Four Eyes	Verify that the same person cannot prepare and countersign the same paper	The second act is blocked	One person does both	P0	Yes		
+SOX	Four Eyes	Verify that the same person cannot confirm a rating on a control they own	The act is blocked	One person does both	P0	Yes		
+SOX	Four Eyes	Verify that the same person cannot run a retest and close the finding	The close is blocked	One person does both	P0	Yes		
+SOX	Four Eyes	Verify that the same person cannot sign the engagement at both steps	The second signature is blocked	One person does both	P0	Yes		
+SOX	Four Eyes	Verify that the block is on the person and not just the role	Switching hats does not get past it	Changing role lets the same person do both	P0	Yes		
+SOX	Four Eyes	Verify that a blocked act explains why in plain English	A clear reason is shown	The action is greyed with no explanation	P1	Yes		
+SOX	Cross Cutting	Verify that every page finishes loading within a reasonable wait	Pages appear within a few seconds	Pages take longer than fifteen seconds	P0	Yes		Observed on staging 21 Aug 2026 - most engagement and control pages take 10 to 20 seconds
+SOX	Cross Cutting	Verify that a slow page shows placeholders rather than a blank screen	Placeholders are shown	The screen is blank while loading	P1	Yes		
+SOX	Cross Cutting	Verify that a failed background request shows an error rather than a blank page	An error message is shown with a retry	The whole page renders blank with nothing on it	P0	Yes		Observed on staging 21 Aug 2026 - when the backend returned 502 the application rendered an empty page with only the left rail
+SOX	Cross Cutting	Verify that an error message names what failed in plain English	The message is understandable	Only a code is shown	P1	Yes		
+SOX	Cross Cutting	Verify that an error message carries a reference the team can trace	A reference code is shown and can be copied	No reference is given	P1	Yes		
+SOX	Cross Cutting	Verify that an error banner can be dismissed and does not block the page	It can be dismissed	The banner covers the controls	P2	Yes		
+SOX	Cross Cutting	Verify that a failed action can be retried without redoing the earlier steps	A retry is offered	The user has to start again	P0	Yes		
+SOX	Cross Cutting	Verify that work in progress is not lost when a request fails	The entered text survives	Everything typed is lost	P0	Yes		
+SOX	Cross Cutting	Verify that the same figure is shown consistently across the dashboard, the library and the report	Every screen agrees	Screens disagree	P0	Yes		
+SOX	Cross Cutting	Verify that a screen never shows two different values for one counter within a few seconds	The value settles once	The counter flips between two values while loading	P1	Yes		Observed on staging 21 Aug 2026 - the attributes tile showed 26 and then 0 on the same data
+SOX	Cross Cutting	Verify that money is shown in one consistent format across the product	The format is consistent	Some screens use a different format	P2	Yes		
+SOX	Cross Cutting	Verify that dates are shown in one consistent format across the product	The format is consistent	Month names are abbreviated differently on different screens	P2	Yes		
+SOX	Cross Cutting	Verify that the browser back button behaves sensibly inside an engagement	Back returns to the previous screen	Back leaves the application	P1	Yes		
+SOX	Cross Cutting	Verify that a page opened directly from a shared link opens the right screen	The right screen opens	The user is bounced to a default page	P1	Yes		
+SOX	Cross Cutting	Verify that nothing from another engagement ever appears inside an engagement	The data is isolated	Data from elsewhere appears	P0	Yes		Observed on staging 21 Aug 2026 - an unrelated RACM and 23 unrelated controls appeared in a brand new engagement
+SOX	Cross Cutting	Verify that demo or example data does not appear in dropdowns on a real engagement	Only real data is offered	Sample processes, risks and owners are offered	P0	Yes		Observed on staging 21 Aug 2026 - the new control modal offers processes, risks and owners that do not exist on the engagement
+SOX	Cross Cutting	Verify that the copy on screen uses the language auditors use rather than product language	The wording reads naturally to an auditor	Product terms such as chat or slot appear in an audit screen	P1	Yes		Observed on staging 21 Aug 2026 - the file picker inside a working paper says "20 data sources max per chat"
+SOX	Cross Cutting	Verify that no raw internal identifier is shown to the user	Everything is named	Long system identifiers appear on screen	P1	Yes		Observed on staging 21 Aug 2026 - raw identifiers appear on the mapped workflow row and in the audit report
+SOX	Cross Cutting	Verify that a number that should never be shown in a sentence is not rendered as zero	The sentence reads correctly	A sentence reads "Gather the 0 required design elements"	P2	Yes		
+SOX	Cross Cutting	Verify that the product is usable on a smaller laptop screen throughout	Nothing is cut off	Content is cut off on some screens	P1	Yes		
+SOX	Cross Cutting	Verify that every action that changes data can be reached by keyboard	Keyboard use works	Some actions need a mouse	P2	Yes		
+SOX	Cross Cutting	Verify that text has enough contrast to be read comfortably	The text is readable	Grey on white text is hard to read	P2	Yes		
+SOX	Cross Cutting	Verify that two people working on the same audit do not overwrite each other silently	A conflict is flagged	The last save wins with no warning	P1	Yes		
+SOX	Cross Cutting	Verify that a session that has expired asks the user to sign in again rather than failing quietly	A sign in prompt is shown	Actions fail with unrelated errors	P1	Yes		

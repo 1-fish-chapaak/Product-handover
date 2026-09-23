@@ -147,18 +147,21 @@ export function HeaderFilter({ label, value, options, allLabel, onChange, ariaLa
 
 /** Form-field dropdown — drop-in for a native <select>: pass the same className
  *  the input used; value/label options; the menu opens in the product language. */
-export function FormSelect({ value, options, onChange, className, ariaLabel, align = 'left', menuCls }: {
+export function FormSelect({ value, options, onChange, className, ariaLabel, align = 'left', menuCls, placeholder }: {
   value: string; options: readonly (string | SelectOption)[]; onChange: (v: string) => void;
   className?: string; ariaLabel?: string; align?: 'left' | 'right'; menuCls?: string;
+  /** Shown, muted, while nothing is chosen (`value` is ''). */
+  placeholder?: string;
 }) {
   const [open, setOpen] = useState(false);
   const opts = options.map(norm);
   const label = opts.find(o => o.value === value)?.label ?? value;
+  const empty = !label && !!placeholder;
   return (
     <div className="relative">
       <button type="button" onClick={() => setOpen(o => !o)} aria-label={ariaLabel} aria-expanded={open}
         className={cn(className, 'inline-flex items-center justify-between gap-2 text-left cursor-pointer', open && 'border-brand-300')}>
-        <span className="truncate">{label}</span>
+        <span className={cn('truncate', empty && 'text-ink-400')}>{empty ? placeholder : label}</span>
         <ChevronDown size={14} className={cn('shrink-0 transition-transform', open ? 'rotate-180 text-brand-600' : 'text-ink-400')} />
       </button>
       <OptionsPopover open={open} onClose={() => setOpen(false)} options={opts} value={value}

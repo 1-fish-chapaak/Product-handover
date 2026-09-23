@@ -37,6 +37,9 @@ export interface EvidenceMatch {
   slot: EvidenceSlot | null;
   /** 0-100. Under 30 the rail marks it a guess; 0 means it was not placed. */
   score: number;
+  /** The reader moved this one by hand, so the score is no longer what put it
+   *  here and must not be shown as if it were. */
+  chosen?: boolean;
 }
 
 /** Words too common to carry a match on their own — every audit file is

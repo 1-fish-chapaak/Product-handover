@@ -1,5 +1,5 @@
 import { ENGAGEMENTS, registerEngagement } from '../../../data/engagements';
-import type { FileOrigin } from '../../sox-icfr/types';
+import type { FileOrigin, SamplingMethodology } from '../../sox-icfr/types';
 
 /**
  * SOX Testing tab — data layer for the scoping-first flow prototype.
@@ -345,6 +345,10 @@ export interface SoxProgramme {
   quantCount: number;
   qualCount: number;
   racms: DerivedRacm[];
+  /** The sampling methodology the lead proposed on the Sampling step (#22).
+   *  Proposed, never signed here — the reviewer signs it on the engagement's
+   *  Configuration tab, and testing waits for that signature. */
+  sampling?: SamplingMethodology;
   beyondTb: string[];
   /** Set when the wizard's Scoping step was skipped — the workspace Overview
    *  flags the missing RACM and GL / trial balances until they're added

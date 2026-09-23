@@ -12,7 +12,8 @@ import { FormSelect } from '../../shared/FilterSelect';
 import { OWNER_NAMES } from '../../../data/grc-domain';
 import { registerEngagement, uniqueEngagementName, type EngType, type ProcessCode } from '../../../data/engagements';
 import { useAuditLog } from '../../../context/AdminDataContext';
-import type { FileOrigin } from '../../sox-icfr/types';
+import type { FileOrigin, Frequency, SampleSizeRow, SamplingMethodology } from '../../sox-icfr/types';
+import { defaultSamplingMethodology, FREQUENCY_ORDER, FREQUENCY_SAYS, ROUND_BASIS_EFFECT, SAMPLING_METHODS } from '../../sox-icfr/types';
 import { cn } from '../../../lib/cn';
 import {
   BASIS_OPTIONS, BEYOND_TB, ENTITY_TYPES, QUAL_REASONS, SEED_ENTITIES,
@@ -56,9 +57,14 @@ const SCOPING_STEP = false;
 /** S11 — materiality, the trial balance and process scope moved here from New
  *  audit's first pass at it: the engagement is scoped once, when it is created,
  *  and picks its RACMs from the RACM tab on the Engagements page. */
-const STEPS: readonly string[] = ['Type', 'Basics', 'Materiality', 'Scope', 'Review'];
+const STEPS: readonly string[] = ['Type', 'Basics', 'Materiality', 'Scope', 'Sampling', 'Review'];
 const MAT_TB_STEP = 2;
 const SCOPE_STEP = 3;
+/** #22 — the sampling methodology is agreed here, once materiality and scope are
+ *  settled: the size a control is tested at depends on both, so it cannot be
+ *  agreed before them. The lead proposes it; the reviewer signs it afterwards on
+ *  the engagement's Configuration tab, and testing waits for that signature. */
+const SAMPLING_STEP = 4;
 /** Review is always last. */
 const REVIEW_STEP = STEPS.length - 1;
 
@@ -446,6 +452,14 @@ export default function ScopingWizard({ onCancel, onCreated, typePreselected, on
   // skip, and create() records scopingSkipped as undefined. Kept for the parked
   // Scoping step's "Skip for now" button.
   const [scopingSkipped, setScopingSkipped] = useState(false);
+
+  // ── The sampling methodology, proposed here (#22) ────────────────────────────
+  // It opens on the product's table rather than on empty boxes: the lead is
+  // agreeing a method, not inventing one, and a blank table would invite a
+  // number typed to get past the step.
+  const [sampling, setSampling] = useState<SamplingMethodology>(() => defaultSamplingMethodology());
+  const setSize = (f: Frequency, rating: keyof SampleSizeRow, n: number) =>
+    setSampling(m => ({ ...m, sizes: { ...m.sizes, [f]: { ...m.sizes[f], [rating]: n } } }));
   const skipScoping = () => { setScopingSkipped(true); setStep(3); };
 
   // Step 2 — materiality
@@ -1031,6 +1045,12 @@ export default function ScopingWizard({ onCancel, onCreated, typePreselected, on
   const finalName = uniqueEngagementName(name);
   const nameTaken = finalName !== name.trim();
 
+  /** Every cell a real count — a 0 or a blank box is not an agreed size. */
+  const samplingReady = FREQUENCY_ORDER.every(f => {
+    const row = sampling.sizes[f];
+    return (['low', 'medium', 'high'] as const).every(r => Number.isFinite(row[r]) && row[r] >= 1);
+  });
+
   const canContinue = [
     // Type — this journey only continues for SOX / ICFR.
     type === 'SOX / ICFR',
@@ -1049,6 +1069,9 @@ export default function ScopingWizard({ onCancel, onCreated, typePreselected, on
     // Scope — at least one process and one company in, every move explained,
     // every in-scope process with a RACM ticked, and no control ID held twice.
     scopeReady,
+    // Sampling — every cell of the agreed table is a real count. A zero would
+    // mean a control nobody tests, which is not a sampling decision.
+    samplingReady,
     true,
   ][step];
 
@@ -1526,6 +1549,9 @@ export default function ScopingWizard({ onCancel, onCreated, typePreselected, on
         };
       }),
       beyondTb: BEYOND_TB.filter(b => beyond[b.id]).map(b => b.id),
+      // Proposed, not agreed: the reviewer signs it on the Configuration tab,
+      // and every control's sample size is read off it from then on (#22).
+      sampling: { ...sampling, proposedBy: { by: owner || 'Engagement lead', at: 'just now' } },
       // Scoped, not skipped: every process in scope has its RACMs, so the
       // workspace has nothing missing to nag about.
       scopingSkipped: undefined,
@@ -3382,6 +3408,96 @@ export default function ScopingWizard({ onCancel, onCreated, typePreselected, on
           </StepShell>
         )}
 
+        {step === SAMPLING_STEP && (
+          <StepShell
+            sub="How this engagement samples — agreed once here, and what every control's sample size is then read off. Nothing is decided control by control."
+          >
+            <div className="rounded-lg border border-border overflow-hidden mb-4">
+              <div className="px-3.5 py-2 border-b border-border bg-canvas">
+                <div className="text-[0.78125rem] font-semibold text-text">Sample sizes</div>
+                <p className="text-[0.71875rem] text-text-secondary mt-0.5">How many items to test, by how often the control runs and how the risk is rated.</p>
+              </div>
+              <table className="w-full text-[0.78125rem]">
+                <thead>
+                  <tr className="text-[0.6875rem] uppercase tracking-wide text-text-muted">
+                    <th className="text-left font-semibold px-3.5 py-2">How often it runs</th>
+                    <th className="font-semibold px-2 py-2 w-24">Low risk</th>
+                    <th className="font-semibold px-2 py-2 w-24">Medium</th>
+                    <th className="font-semibold px-2 py-2 w-24">High risk</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {FREQUENCY_ORDER.map(f => (
+                    <tr key={f} className="border-t border-border">
+                      <td className="px-3.5 py-1.5 text-text">
+                        {FREQUENCY_SAYS[f]}
+                        {/* No rhythm to size against, so these are a starting
+                            point rather than a rule — said here, not hidden. */}
+                        {f === 'Ad-hoc' && <span className="block text-[0.6875rem] text-text-muted">Judgment — size by how often it actually ran</span>}
+                      </td>
+                      {(['low', 'medium', 'high'] as const).map(r => (
+                        <td key={r} className="px-2 py-1.5 text-center">
+                          <input
+                            type="number" min={1} value={sampling.sizes[f][r]}
+                            onChange={e => setSize(f, r, Math.max(1, Math.floor(Number(e.target.value) || 0)))}
+                            aria-label={`${FREQUENCY_SAYS[f]}, ${r} risk`}
+                            className="w-16 px-2 py-1 text-center border border-border rounded-md text-[0.78125rem] text-text bg-white outline-none focus:border-primary/40"
+                          />
+                        </td>
+                      ))}
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+
+            <div className="grid grid-cols-2 gap-3 mb-4">
+              <div>
+                <div className="text-[0.78125rem] font-semibold text-text mb-1.5">How items are selected</div>
+                <div className="flex flex-col gap-1.5">
+                  {SAMPLING_METHODS.map(m => (
+                    <button
+                      key={m} type="button" role="radio" aria-checked={sampling.method === m}
+                      onClick={() => setSampling(s => ({ ...s, method: m }))}
+                      className={cn('px-3 py-2 rounded-lg border text-left text-[0.78125rem] cursor-pointer transition-colors',
+                        sampling.method === m ? 'border-brand-200 bg-brand-50 text-brand-700 font-semibold' : 'border-border text-text-secondary hover:text-text')}
+                    >{m}</button>
+                  ))}
+                </div>
+                <p className="text-[0.6875rem] text-text-muted mt-1.5 leading-relaxed">
+                  The seed behind every draw is stored, so anyone can reperform the selection and land on the same items.
+                </p>
+              </div>
+
+              <div>
+                <div className="text-[0.78125rem] font-semibold text-text mb-1.5">Across the year's rounds</div>
+                <div className="flex flex-col gap-1.5">
+                  {(['per-round', 'whole-period'] as const).map(b => (
+                    <button
+                      key={b} type="button" role="radio" aria-checked={sampling.roundBasis === b}
+                      onClick={() => setSampling(s => ({ ...s, roundBasis: b }))}
+                      className={cn('px-3 py-2 rounded-lg border text-left text-[0.78125rem] cursor-pointer transition-colors',
+                        sampling.roundBasis === b ? 'border-brand-200 bg-brand-50 text-brand-700 font-semibold' : 'border-border text-text-secondary hover:text-text')}
+                    >{b === 'per-round' ? 'Per round' : 'Whole period'}</button>
+                  ))}
+                </div>
+                {/* The choice is made with its effect visible, rather than
+                    explained somewhere the person choosing will not be. */}
+                <p className="text-[0.6875rem] text-text-muted mt-1.5 leading-relaxed">{ROUND_BASIS_EFFECT[sampling.roundBasis]}</p>
+              </div>
+            </div>
+
+            <div className="rounded-lg border border-border px-3.5 py-2.5 flex items-start gap-2">
+              <Info size={13} className="text-text-muted shrink-0 mt-0.5" aria-hidden />
+              <p className="text-[0.71875rem] text-text-secondary leading-relaxed">
+                This is your proposal. It becomes the agreed methodology when the reviewer signs it on the engagement's
+                Configuration tab — <span className="font-semibold text-text">testing waits for that signature</span>. Changing it afterwards creates a new version,
+                and an audit already running finishes on the version it started under.
+              </p>
+            </div>
+          </StepShell>
+        )}
+
         {step === REVIEW_STEP && (
           <StepShell
             title="Review"
@@ -3396,6 +3512,18 @@ export default function ScopingWizard({ onCancel, onCreated, typePreselected, on
                 <ReviewRow label="Code" value={code.trim().toUpperCase()} />
                 <ReviewRow label="Owner" value={owner} />
                 <ReviewRow label="Cycle" value={<>{fyLabel} <span className="font-normal text-ink-400">· opinion as of {asOf}</span></>} />
+              </ReviewCard>
+
+              {/* What was agreed on the Sampling step, said back before the
+                  programme is created — it decides every sample size that
+                  follows, so it does not belong only in a step nobody revisits. */}
+              <ReviewCard title="Sampling methodology">
+                <ReviewRow label="Selection" value={sampling.method} />
+                <ReviewRow label="Across rounds" value={sampling.roundBasis === 'per-round' ? 'Per round' : 'Whole period'} />
+                <ReviewRow label="Monthly control" value={`${sampling.sizes.Monthly.low}–${sampling.sizes.Monthly.high} items, by risk rating`} />
+                <p className="text-[0.6875rem] text-ink-400 mt-1 leading-relaxed">
+                  Proposed. Testing waits until the reviewer signs it on the Configuration tab.
+                </p>
               </ReviewCard>
 
               <ReviewCard title={soloEntity ? 'Company in scope' : 'Group & entities'}>

@@ -40,6 +40,9 @@ export type ChatActionId =
   | 'toe-run'
   | 'conclude-op-effective'
   | 'conclude-op-ineffective'
+  | 'rootcause-take'
+  | 'rootcause-write'
+  | 'show-exception'
   | 'sign-paper'
   | 'countersign'
   | 'show-step';
@@ -104,6 +107,26 @@ export function actionsFor(s: Situation, role: Role): ChatAction[] {
   }
 
   // ── the auditor ───────────────────────────────────────────────────────────
+  // ── the exception's root cause ────────────────────────────────────────────
+  // Same order as the prompt, and for the same reason: the store refuses
+  // `completeSizing` while this is unsettled, so nothing else on the exception
+  // can be offered until it is. Sizing itself stays the page's — likelihood,
+  // exposure and the compensating control are three fields with a working
+  // panel behind one of them, and half of that from a chat rail would be a
+  // grade nobody could reproduce.
+  if (s.exception) {
+    const ex = s.exception;
+    const out: ChatAction[] = [];
+    if (ex.drafted && ex.rootCause.trim()) {
+      out.push({ id: 'rootcause-take', label: 'Use it as written', said: 'Use that root cause as written.', primary: true, does: 'put my drafted root cause on the paper as written' });
+      out.push({ id: 'rootcause-write', label: 'I’ll say it in my own words', said: 'I’ll write the root cause myself.', does: 'take the root cause in your own words' });
+    } else if (!ex.rootCause.trim()) {
+      out.push({ id: 'rootcause-write', label: 'Tell me the mechanism', said: 'I’ll write the root cause.', primary: true, does: 'take the root cause in your own words' });
+    }
+    out.push({ id: 'show-exception', label: ex.rootCause.trim() && !ex.drafted ? 'Take me to the exception' : 'Show me the exception', said: 'Take me to the exception.', does: 'show you the exception on the page' });
+    return out;
+  }
+
   // Both tracks concluded: the paper is ready to sign, and signing it is a
   // single store call with a single guard, so it is offered rather than
   // pointed at. Once signed it belongs to the reviewer and there is nothing
@@ -152,8 +175,13 @@ export function actionsFor(s: Situation, role: Role): ChatAction[] {
     }
     if (s.checksUnmarked > 0) {
       const out: ChatAction[] = [];
-      if (!s.iraBlocked) out.push({ id: 'ira-run', label: `Assess all ${s.checksTotal} checks for me`, said: 'Run the AI validation over the design checks.', primary: true, does: 'read the evidence and assess every design check' });
-      out.push(show('I’ll mark them myself', 'I’ll mark them myself.', 'design'));
+      // Nothing left but the ones Ira already read and could not answer. The
+      // run is not offered again: it would produce the same sentence, and a
+      // button that costs six seconds to tell you what it told you last time
+      // is a button that teaches the reader to stop pressing them.
+      const allBlocked = s.checksBlocked.length > 0 && s.checksBlocked.length === s.checksUnmarked;
+      if (!s.iraBlocked && !allBlocked) out.push({ id: 'ira-run', label: `Assess all ${s.checksTotal} checks for me`, said: 'Run the AI validation over the design checks.', primary: true, does: 'read the evidence and assess every design check' });
+      out.push(show(allBlocked ? 'Show me the ones you couldn’t test' : 'I’ll mark them myself', 'Take me to the design checks.', 'design'));
       return out;
     }
     if (s.checksTotal > 0 && s.iraStale) {

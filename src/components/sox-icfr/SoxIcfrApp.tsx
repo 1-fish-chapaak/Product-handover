@@ -24,6 +24,7 @@ import ControlDossier from './ControlDossier';
 import ControlLibraryDetail from './ControlLibraryDetail';
 import AuditLogsView from './AuditLogsView';
 import AuditConfigView from './AuditConfigView';
+import SamplingMethodologyView from './SamplingMethodologyView';
 import AuditArchiveView from './AuditArchiveView';
 import { DeficienciesView, HandoffsView, ScopeView } from './extraViews';
 import RacmFullPageEditor from '../audit/RacmFullPageEditor';
@@ -40,8 +41,11 @@ const LIBRARY_LENS = true;
    it and putting its branch back:
 
      ConfigurationView  — the engagement's entities / TBs / period / materiality.
-                          The AUDIT has its own Configuration (AuditConfigView);
-                          this was the engagement-wide one.
+                          The engagement's Configuration TAB is back (23 Sep) but
+                          this file did not come back with it: the tab holds the
+                          sampling methodology and nothing else. Entities, TBs,
+                          period and materiality are still per cycle, on
+                          AuditConfigView.
      DashboardView      — the engagement read-out that listed audits, from the
                           Dashboard / Audit logs pair the engagement used to have
      RunsView           — the engagement-wide run registry, which the SOX audit
@@ -78,26 +82,38 @@ const SOX_TABS: TabDef[] = [
      still a DRILL-IN under a breadcrumb: every route in calls
      setView('deficiencies'), which works at either level. */
   { id: 'runs', label: 'SOX testing' },
-  /* Configuration is not an ENGAGEMENT tab — it belongs to an audit, and lives
-     in AUDIT_TABS below. Period, scope, TB / GL and materiality are set per
-     cycle, so there is nothing engagement-wide left to configure here; the
-     engagement's own ConfigurationView stays parked. */
+  /* Configuration is BACK at the engagement level (23 Sep), carrying one thing:
+     the sampling methodology (#22). It was parked because period, scope, TB / GL
+     and materiality are all set per cycle — there was nothing engagement-wide
+     left to configure. Sampling is the first setting that genuinely is: the
+     approach does not change between a year's interim and year-end rounds, so
+     putting it on an audit would let two rounds of one year test off different
+     tables, and putting it on a control is the 124-separate-decisions problem
+     the client raised.
+     The AUDIT keeps its own Configuration — same tab id, different page, the way
+     Overview and Control Library already fork by level (see `body` below).
+     The old engagement-wide ConfigurationView — entities, TBs, period,
+     materiality — stays parked; none of it came back with this. */
+  { id: 'config', label: 'Configuration' },
 ];
 
 /**
  * Two levels again (user ask).
  *
- * The ENGAGEMENT is the tabs in SOX_TABS above — Overview, Control Library and
- * SOX audit, the audit register (RACM is parked, S11 — RACMs live on the
- * Engagements page's RACM tab). Opening an audit from that register,
+ * The ENGAGEMENT is the tabs in SOX_TABS above — Overview, Control Library,
+ * SOX audit (the audit register) and Configuration, which holds the one setting
+ * that is genuinely engagement-wide: the sampling methodology every audit and
+ * every control reads off. (RACM is parked, S11 — RACMs live on the
+ * Engagements page's RACM tab.) Opening an audit from that register,
  * or creating one (createAudit opens what it creates), swaps in AUDIT_TABS behind
  * a breadcrumb: that cycle's Dashboard, its Control Library — only the controls
  * its scope covers, reset to Not started by createAudit — its deficiencies and
  * its Configuration.
  *
  * What stays retired: DashboardView, the engagement-level Dashboard / Audit logs
- * pair it belonged to, and the engagement's own Configuration tab. Their files
- * are untouched and still compile.
+ * pair it belonged to, and ConfigurationView — the engagement's old entities /
+ * TBs / period / materiality page, which the revived Configuration tab does not
+ * bring back. Their files are untouched and still compile.
  *
  * Deficiency management is a TAB inside an audit and a DRILL-IN outside one —
  * hence the `inAudit` term in `isRoot` below. Every route into it calls
@@ -254,7 +270,11 @@ function Inner({ onBack, backLabel = 'Back to Engagements' }: { onBack?: () => v
     : tab === 'racm' ? (view === 'racm-list' ? <Racm /> : <RacmLanding />)
     : tab === 'risks' ? <RiskLibrary />
     : tab === 'runs' ? <AuditLogsView />
-    : tab === 'config' ? (audit ? <AuditConfigView audit={audit} /> : null)
+    // Two pages behind one tab, like Overview and Control Library above. Inside
+    // an audit, Configuration is that cycle's own settings; at the engagement it
+    // is the sampling methodology, which is agreed once and outlives every audit
+    // that reads it.
+    : tab === 'config' ? (audit ? <AuditConfigView audit={audit} /> : <SamplingMethodologyView />)
     // Two different Control Library lenses (user ask, 30 Jul): the engagement
     // root asks "what is this control made of" (ControlLibrary — attributes,
     // workflow mapping). Inside an audit the question is "did it pass" — TOD

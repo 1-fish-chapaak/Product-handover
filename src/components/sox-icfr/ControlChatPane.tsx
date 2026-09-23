@@ -6,7 +6,7 @@ import { useAuditLog } from '../../context/AdminDataContext';
 import {
   auditSampling, concludeRationale, designOutstanding, designSuggestion, draftSamplePrompt, extractionCriteria,
   fileUsable, guessFileKind, itgcHolds, narrowedCount, operatingSuggestion, populationFrom, populationSources,
-  readRowCount, readSamplePrompt, sampleSizeGuide, sampledSources, seedKeyOf, trackResult, workingAudit,
+  readRowCount, readSamplePrompt, sampleSizeGuide, samplingOf, sampledSources, seedKeyOf, trackResult, workingAudit,
 } from './helpers';
 import { useAuditFiles } from './useAuditFiles';
 import { OriginPicker } from './parts';
@@ -202,7 +202,7 @@ function IraText({ text, stream, onDone }: { text: string; stream: boolean; onDo
 export default function ControlChatPane({ control }: { control: Control }) {
   const { eng, role, me, openAuditId, addDesignDoc, runDesignIra, concludeDesign, overrideDesign, approveDesign, setDesignPoint, overrideDesignPoint,
     setIpeCheck, concludeIpe, uploadRequiredFile, drawSourceSample, approveSource, lockPopulation, concludeOperating, overrideOperating, signOffControlWp,
-    setStepResult, overrideStep, validateReadyAttributes, registerFile, setPopulation } = useIcfr();
+    setStepResult, overrideStep, validateReadyAttributes, registerFile, setPopulation, updateDeficiency } = useIcfr();
   const logEvent = useAuditLog();
   const audit = useMemo(() => eng.audits.find(a => a.id === openAuditId) ?? null, [eng.audits, openAuditId]);
   // The audit's own files, read exactly as the source picker on the left reads
@@ -261,6 +261,10 @@ export default function ControlChatPane({ control }: { control: Control }) {
     | null
   >(null);
   const srcPicker = useRef<HTMLInputElement>(null);
+  // Ira has asked for the exception's root cause and is waiting for it. Like a
+  // rationale it is not parsed and not second-guessed — it goes on a working
+  // paper in the auditor's words, and the mechanism is theirs to name.
+  const [awaitingCause, setAwaitingCause] = useState<string | null>(null);
   const still = useReducedMotion();
 
   // The id of the newest Ira line AS OF the render that first saw it. A message
@@ -280,6 +284,8 @@ export default function ControlChatPane({ control }: { control: Control }) {
   // from the form on the left while this was half-answered — settles the
   // question, so the question goes.
   if (extract && control.operating.population) setExtract(null);
+  // …and for the root cause: settled on the left, or the exception moved on.
+  if (awaitingCause && prompt.situation.exception?.id !== awaitingCause) setAwaitingCause(null);
   const liveIpeCheck = ipeDraft ? control.operating.ipe?.checks.find(k => k.id === ipeDraft.checkId) : undefined;
   if (ipeDraft && (!liveIpeCheck || liveIpeCheck.result !== 'Not tested')) setIpeDraft(null);
   if (awaitingWhy) {
@@ -463,6 +469,39 @@ export default function ControlChatPane({ control }: { control: Control }) {
       return;
     }
 
+    // The exception is not one of the paper's five steps — remediation lives
+    // outside them — so it has its own anchor rather than being squeezed into
+    // STEP_ANCHOR as a sixth thing the stepper does not have.
+    if (a.id === 'show-exception') {
+      document.getElementById('control-exception')?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      say(control.id, 'ira', `It’s on the left — ${prompt.situation.exception?.id ?? 'the exception'}, under the testing.`);
+      return;
+    }
+
+    // ── the exception's root cause ──────────────────────────────────────────
+    // "Use it as written" is the page's own move, argument for argument: the
+    // tag is destructured out and the WHOLE `iraSuggested` object is patched
+    // back, which is the one shape `updateDeficiency` takes as written rather
+    // than treating as an edit.
+    if (a.id === 'rootcause-take') {
+      const ex = prompt.situation.exception;
+      if (!ex?.drafted) return;
+      const d = eng.deficiencies.find(x => x.id === ex.id);
+      if (!d) return;
+      const { rootCause: _drafted, ...rest } = d.iraSuggested ?? {};
+      updateDeficiency(ex.id, { iraSuggested: Object.keys(rest).length ? rest : undefined });
+      logEvent({ action: 'Update', description: `Took Ira's drafted root cause as written on ${ex.id} (${control.id}) from the chat`, module: 'SOX ICFR', entity: 'Control' });
+      return;
+    }
+
+    if (a.id === 'rootcause-write') {
+      const ex = prompt.situation.exception;
+      if (!ex) return;
+      setAwaitingCause(ex.id);
+      say(control.id, 'ira', 'Go on then — what actually allows this to go wrong? The mechanism, not the count: “the system allows manual posting that bypasses approval”, not “3 of 25 lacked approval”. It goes on the paper in your words.');
+      return;
+    }
+
     // ── ② the source data ───────────────────────────────────────────────────
     // A separate picker from the evidence one, with the page's own accept list
     // — a population is filtered out of rows, and a PDF has none.
@@ -479,7 +518,7 @@ export default function ControlChatPane({ control }: { control: Control }) {
     if (a.id === 'draw-sample' && a.arg) {
       const src = sampledSources(populationSources(control)).find(x => x.id === a.arg);
       if (!src) return;
-      const guide = sampleSizeGuide(control, itgcHolds(eng, control));
+      const guide = sampleSizeGuide(control, itgcHolds(eng, control), samplingOf(eng));
       const ask = draftSamplePrompt(src, guide.suggested, workingAudit(eng, openAuditId));
       setDraw({ sourceId: src.id, file: src.file, ask, refs: null });
       say(control.id, 'ira', `I have drafted the ask:\n\n“${ask}”\n\nThe sizing table says ${guide.suggested} for this one — band ${guide.range}. Send it as it stands, or type a different ask and I will read that instead.`);
@@ -634,7 +673,7 @@ export default function ControlChatPane({ control }: { control: Control }) {
     const src = sampledSources(populationSources(control)).find(x => x.id === draw.sourceId);
     if (!src) { setDraw(null); return; }
     const audit = workingAudit(eng, openAuditId);
-    const plan = readSamplePrompt(ask, src, sampleSizeGuide(control, itgcHolds(eng, control)).suggested, audit, auditSampling(audit));
+    const plan = readSamplePrompt(ask, src, sampleSizeGuide(control, itgcHolds(eng, control), samplingOf(eng)).suggested, audit, auditSampling(audit));
     setDraw({ ...draw, ask });
     startRun(control.id, `Drawing ${plan.size} of ${src.count.toLocaleString('en-IN')} from ${src.file}`, DRAW_RUN_STEPS, DRAW_MS);
     timer.current = window.setTimeout(() => {
@@ -653,7 +692,7 @@ export default function ControlChatPane({ control }: { control: Control }) {
     if (!src) { setDraw(null); return; }
     const audit = workingAudit(eng, openAuditId);
     const agreed = auditSampling(audit);
-    const plan = readSamplePrompt(draw.ask, src, sampleSizeGuide(control, itgcHolds(eng, control)).suggested, audit, agreed);
+    const plan = readSamplePrompt(draw.ask, src, sampleSizeGuide(control, itgcHolds(eng, control), samplingOf(eng)).suggested, audit, agreed);
     // The same five-digit reperformance number the card computes, off the same
     // string — a reviewer walking the paper has to land on these items.
     const seed = 10000 + (`${seedKeyOf(control)}·${src.id}·${openAuditId ?? ''}`.split('').reduce((acc, ch) => (acc * 31 + ch.charCodeAt(0)) >>> 0, 17) % 89999);
@@ -733,6 +772,28 @@ export default function ControlChatPane({ control }: { control: Control }) {
         return;
       }
       runDraw(text);
+      return;
+    }
+
+    // Mid-question on the root cause: this is the root cause. Not parsed and
+    // not second-guessed — naming the mechanism is the auditor's judgement, and
+    // it is what the grade and the whole remediation plan are read against.
+    if (awaitingCause) {
+      if (/^(no|not now|later|skip|cancel|stop|never ?mind|leave it)\b/i.test(text) && text.length < 40) {
+        setAwaitingCause(null);
+        say(control.id, 'ira', 'Left it alone — the root cause is still open, and nothing about the exception moves until it is written.');
+        return;
+      }
+      const id = awaitingCause;
+      setAwaitingCause(null);
+      // One patch: the words, and the tag off. Typing into the box on the left
+      // drops the tag by itself, but this is not that box, so it is said here.
+      const d = eng.deficiencies.find(x => x.id === id);
+      const { rootCause: _drafted, ...rest } = d?.iraSuggested ?? {};
+      updateDeficiency(id, { rootCause: text, iraSuggested: Object.keys(rest).length ? rest : undefined });
+      logEvent({ action: 'Update', description: `Wrote the root cause for ${id} (${control.id}) from the chat — ${text}`, module: 'SOX ICFR', entity: 'Control' });
+      skipAck.current = true;
+      say(control.id, 'ira', 'On the paper, in your words. That is step 1 done — size it on the left and the exception goes on its way.');
       return;
     }
 
@@ -917,6 +978,14 @@ export default function ControlChatPane({ control }: { control: Control }) {
             className="text-[0.6875rem] text-ink-400 hover:text-ink-700 transition-colors cursor-pointer">Leave it for now</button>
         )}
 
+        {/* Mid-question on the root cause: the composer is the input, so all
+            this adds is the way out. Nothing is written until it is answered —
+            a half-written mechanism is worse on a paper than an empty box. */}
+        {!working && awaitingCause && (
+          <button onClick={() => { setAwaitingCause(null); say(control.id, 'ira', 'Left it alone — the root cause is still open, and nothing about the exception moves until it is written.'); }}
+            className="text-[0.6875rem] text-ink-400 hover:text-ink-700 transition-colors cursor-pointer">Leave it for now</button>
+        )}
+
         {/* Where the file came from — the page's own picker, not a lookalike.
             One tap files it: the modal on the left needs a second click because
             it is also collecting the file, and here the file is already in. */}
@@ -983,7 +1052,7 @@ export default function ControlChatPane({ control }: { control: Control }) {
           </div>
         )}
 
-        {!working && !ipeDraft && !pile && !draw && !extract && (
+        {!working && !ipeDraft && !pile && !draw && !extract && !awaitingCause && (
           <div>
             {/* Ira's mark sits on the LIVE line only. The thread above stays
                 unmarked prose (DESIGN.md §7.1.7 — no avatar, identity carried
@@ -1108,6 +1177,7 @@ export default function ControlChatPane({ control }: { control: Control }) {
             }}
             disabled={!!working} aria-label="Message Ira"
             placeholder={working ? 'One moment…'
+              : awaitingCause ? 'What allows this to go wrong? — the mechanism, not the count'
               : extract?.stage === 'origin' ? 'System export, or client-prepared? — recorded on the file'
               : extract?.stage === 'criteria' ? 'Say what to take out of it — or send the drafted filter as it is'
               : draw?.refs === null ? 'Say what to take — or send the drafted ask back as it is'

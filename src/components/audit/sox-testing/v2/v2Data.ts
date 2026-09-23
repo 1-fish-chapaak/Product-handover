@@ -178,7 +178,11 @@ export const PEOPLE_SUGGESTIONS: Record<string, Omit<V2PeopleRow, 'area'>> = {
 
 /* ── Controls & the auditor filter ──────────────────────────────────────── */
 
-export type ControlClass = 'Financial' | 'Operational' | 'Compliance';
+/** Mirrors `sox-icfr/types.ts` — the same six words, kept as its own union so
+ *  this dataset stays free of the classic module. */
+export type ControlClass =
+  | 'Financial' | 'Operational' | 'Compliance'
+  | 'Fraud' | 'IT general control' | 'Reputational';
 
 export interface V2Control {
   id: string;

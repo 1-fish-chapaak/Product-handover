@@ -81,7 +81,7 @@ const stepLabelOf = (s: OperatingStep): string => `attribute ${s.code}`;
  *  situation the buttons are, so the two can never disagree. */
 function refusal(id: ChatActionId, { s, role }: IntentCtx): string {
   if (s.sealed) return 'This engagement is signed off — nothing on this control can move now.';
-  const auditorsOwn: ChatActionId[] = ['add-element', 'upload-source', 'pick-source', 'upload-evidence', 'draw-sample', 'file-sample', 'tick-sample', 'ipe-check', 'ipe-reliable', 'ipe-unreliable', 'ira-run', 'toe-run', 'conclude-effective', 'conclude-ineffective', 'lock-population', 'conclude-op-effective', 'conclude-op-ineffective'];
+  const auditorsOwn: ChatActionId[] = ['add-element', 'upload-source', 'pick-source', 'upload-evidence', 'draw-sample', 'file-sample', 'tick-sample', 'ipe-check', 'ipe-reliable', 'ipe-unreliable', 'ira-run', 'toe-run', 'conclude-effective', 'conclude-ineffective', 'lock-population', 'conclude-op-effective', 'conclude-op-ineffective', 'rootcause-take', 'rootcause-write'];
   if (role !== 'auditor' && auditorsOwn.includes(id)) {
     return `That one is the auditor’s. You are viewing as ${role === 'reviewer' ? 'the reviewer' : 'the risk owner'}, so I can’t do it from here.`;
   }
@@ -95,6 +95,11 @@ function refusal(id: ChatActionId, { s, role }: IntentCtx): string {
     if (s.designResult !== 'Not tested') return `The design is already concluded ${s.designResult.toLowerCase()} — it has to be reopened before what it is evidenced by can change.`;
     if (s.elementsOnFile > 0) return 'Evidence is already attached on this step, so I leave the element list to the page — Add element at the top of the design step has the whole menu, custom ones included.';
     return 'Every element I can add is already on this control. The page’s Add element menu has a Custom… option for anything else.';
+  }
+  if (id === 'rootcause-take' || id === 'rootcause-write') {
+    if (!s.exception) return 'There is no exception open on this control that needs a root cause.';
+    if (id === 'rootcause-take') return 'There is nothing of mine to take — the root cause on the paper is already in somebody\u2019s own words.';
+    return 'I can\u2019t write it from here just now.';
   }
   if (id === 'upload-source' || id === 'pick-source') {
     if (s.step !== 'population') {
@@ -367,6 +372,11 @@ export function readIntent(raw: string, ctx: IntentCtx): Intent {
     const a = actions.find(x => x.id === 'ipe-check' && (named ? x.arg === named.id : true));
     if (a) return { kind: 'action', action: a };
     return { kind: 'reply', text: refusal('ipe-check', ctx) };
+  }
+  // The root cause, by name or by the two ways of settling it.
+  if (has(t, 'root cause', 'rootcause', 'mechanism')) {
+    if (has(t, 'use it', 'use that', 'as written', 'keep it', 'that\u2019s right', 'thats right', 'looks right')) return take('rootcause-take');
+    return take('rootcause-write');
   }
   if (has(t, 'countersign')) return take('countersign');
   // Which validation is meant is decided by where the work is, the same way a

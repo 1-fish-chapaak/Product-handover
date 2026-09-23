@@ -1,10 +1,12 @@
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { CalendarRange, Check, ChevronDown, ChevronRight, FileText, History, ListChecks, Plus, Trash2, X } from 'lucide-react';
 import { useIcfr } from './store';
 import { useAuditLog } from '../../context/AdminDataContext';
 import { controlConclusion, requiredFilesOf } from './helpers';
 import { countryFor, ownersOf } from './auditScope';
+import { extraLabel, useRacmConfig } from './racmConfig';
+import { racmSetupKeyFor } from './racmLibrary';
 import { ConclusionPill } from './parts';
 import { Pill } from '../shared/StatusBadge';
 import { Dropdown, EmptyState, KeyControlChip, menuItem } from './ControlDossier';
@@ -248,6 +250,11 @@ export default function ControlLibraryDetail() {
   const [addingAttr, setAddingAttr] = useState(false);
 
   const control = eng.controls.find(c => c.id === selectedControlId);
+  // The client's own columns are set up per client group, so the key is read off
+  // the company this control is tested at. Above the guard below, because the
+  // set-up is read with a hook and a hook cannot sit behind a return.
+  const setupKey = useMemo(() => racmSetupKeyFor(control?.entity ?? eng.entity).key, [control?.entity, eng.entity]);
+  const { extras } = useRacmConfig(setupKey);
   if (!control) return <div className="text-ink-500">Control not found. <button onClick={back} className="text-brand-700 font-semibold cursor-pointer">Back to Control Library</button></div>;
   const country = countryFor(eng.id, control);
 
@@ -350,6 +357,15 @@ export default function ControlLibraryDetail() {
             <OwnerField value={detailOwners.processOwner} options={ownerNames} canEdit={canReassign}
               onChange={v => { updateControlMeta(control.id, { processOwner: v }); logEvent({ action: 'Update', description: `Reassigned process owner for ${control.id} to ${v}`, module: 'SOX ICFR', entity: 'Control' }); }} />
           </span>
+          {/* The third name — who answers for the RISK. Shown even when it is the
+              process owner standing in, so the header never implies nobody does.
+              A record only: it routes no request, so it reads rather than
+              reassigns here; the RACM is where it is changed. Set in the resting
+              face of the two names beside it so the line reads as one. */}
+          <span className="inline-flex items-center gap-1.5">
+            <span className="text-ink-400">Risk owner</span>
+            <span className={canReassign ? 'text-[0.8125rem] font-medium text-ink-800' : undefined}>{detailOwners.riskOwner}</span>
+          </span>
         </div>
 
         {/* The detail half of the band, read the way the audit control page
@@ -395,7 +411,7 @@ export default function ControlLibraryDetail() {
                     heart. */}
                 <div className="mt-3.5 flex flex-wrap items-baseline gap-x-6 gap-y-2">
                   <Field label="Sub-process" value={control.subProcess} />
-                  <Field label="Class" value={control.clazz} />
+                  <Field label="Risk category" value={control.clazz} />
                   <Field label="Nature" value={control.nature} />
                   <Field label="Type" value={control.type} />
                   <Field label="Frequency" value={control.frequency} />
@@ -410,8 +426,16 @@ export default function ControlLibraryDetail() {
                   {control.testingStrategy && <Field label="Testing strategy" value={control.testingStrategy} />}
                   {/* The source file's own columns. We have no field for these and
                       nothing reads them — they are shown because the client put
-                      them in their matrix for a reason. */}
-                  {Object.entries(control.extras ?? {}).map(([k, v]) => <Field key={k} label={k} value={v} />)}
+                      them in their matrix for a reason. Named and ordered by the
+                      client's set-up, so a renamed column reads the same here as
+                      on the matrix and in the working paper. */}
+                  {extras.map(col => <Field key={col.header} label={extraLabel(col)} value={control.extras?.[col.header]} />)}
+                  {/* A value whose column has since been dropped from the set-up is
+                      still something the client wrote down, so it keeps its own
+                      header and follows the defined ones rather than vanishing. */}
+                  {Object.entries(control.extras ?? {})
+                    .filter(([k]) => !extras.some(col => col.header === k))
+                    .map(([k, v]) => <Field key={k} label={k} value={v} />)}
                 </div>
               </motion.div>
             )}

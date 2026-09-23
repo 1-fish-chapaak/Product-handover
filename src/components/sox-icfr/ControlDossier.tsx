@@ -15,8 +15,9 @@ import {
   // the deficiency banner below. Both go back together.
   // formatINR,
   concludeRationale, controlCode, controlConclusion, courtFor, operatingApplies, designCompleteness, designOutstanding, discussionsFor, extractionCriteria,
-  isControlLocked, isControlLockedIn, itgcHolds, failedItgcs, isItgcDependent, operatingProgress, operatingSuggestion, TOE_MAX_ROUNDS, toeRoundFailed, toeRoundNo, toeRounds, toeSpent, canRedrawToe, canExtendToe, populationLocked, sampleSizeGuide, trackResult, pointResult, stepResult, attestationOverruled, inquiryOnlyAttributes, restsOnStatementAlone,
+  isControlLocked, isControlLockedIn, itgcHolds, failedItgcs, isItgcDependent, operatingProgress, operatingSuggestion, TOE_MAX_ROUNDS, toeRoundFailed, toeRoundNo, toeRounds, toeSpent, canRedrawToe, canExtendToe, populationLocked, sampleSizeGuide, samplingOf, trackResult, pointResult, stepResult, attestationOverruled, inquiryOnlyAttributes, restsOnStatementAlone,
   countVerdict, coverageVerdict, derivedRunCount, populationReady, designBasis, designSuggestion, auditorProvenChecks, suggestedDesignChecks, suggestPopulationFile, fmtDay, parseDay,
+  iraCannotTest, designBlocked,
   monthlyBreakdown, spikeMonths, priorRoundCount, fileUsable, originLabel, guessFileKind, populationSources, ipeChecksFor, samplesFor,
   expectedInputsFor, hasRowCount, isAssisting, sampledSources, reviewNotesFor, isShared, entityCoverage, uncoveredEntities, hasPaths, pathCoverage, untouchedPaths, type PopVerdict,
   requiredFilesOf, requiredFilesCount, requiredFilesReady, passedWithoutFiles, designFilesOf,
@@ -27,7 +28,7 @@ import {
   narrowedCount, populationFrom, readRowCount,
 } from './helpers';
 import { useAuditFiles, type AuditFile } from './useAuditFiles';
-import { mapEvidence, type EvidenceMatch } from './controlChatEvidence';
+import { evidenceSlots, mapEvidence, type EvidenceMatch } from './controlChatEvidence';
 import { auditCovers, countryFor, countryOf, inScopeEntityNames, ownersOf, programmeFor, scopedForDraw } from './auditScope';
 import { ConclusionPill, CourtBadge, NatureChip, OriginPicker, Toggle, TrackPill, Tickmark, Stamp, RagKpiRow, ragState, statusWordOf, worstMeter, type RagMeterDef } from './parts';
 import { Pill } from '../shared/StatusBadge';
@@ -44,11 +45,13 @@ import { cn } from '../../lib/cn';
 // types.ts say why. The imports go back with the blocks that used them:
 //   EXPOSURE_LABEL, exposureTotal, GAP_LABEL   (values)
 //   Exposure                                    (type)
-import { AUDIT_ROUNDS, AUDITOR_PROOF_KINDS, DESIGN_DOC_KINDS, DESIGN_WAIVER_REASONS, FIVE_W_1H, ipeSuggestion, ROLE_LABEL, ROUND_TAG } from './types';
+import { AUDIT_ROUNDS, AUDITOR_PROOF_KINDS, DESIGN_DOC_KINDS, DESIGN_WAIVER_REASONS, FIVE_W_1H, ipeSuggestion, RISK_CATEGORY_TINT, ROLE_LABEL, ROUND_TAG, samplingAgreed } from './types';
 import { requiredDatasetsFor, sampleRefs } from './mockData';
+import { extraLabel, useRacmConfig } from './racmConfig';
+import { racmSetupKeyFor } from './racmLibrary';
 import type {
   AuditRound, Control, DesignDoc, DesignDocKind, DesignPoint, DesignWaiverReason, DiscussionAnchor, DocStatus, EvidenceFile, OperatingStep,
-  AuditorProofKind, FileOrigin, IpeCheck, IpeConclusion, PopulationSource, Role, Sampling, SourceRole, TestResult, ToeRound, TrackConclusion, ValidationResult,
+  AuditorProofKind, FileOrigin, IpeCheck, IpeConclusion, PopulationSource, Role, Sampling, SamplingMethodology, SourceRole, TestResult, ToeRound, TrackConclusion, ValidationResult,
 } from './types';
 
 // Short button labels for the waiver reasons — the stored reason is the full
@@ -119,13 +122,17 @@ function MoreLink({ open, onClick }: { open: boolean; onClick: () => void }) {
 /** One named field in the leadsheet header, read as "name: value". Mirrors the
  *  library control page so the two control screens read the same. */
 /** One of the header's classification chips — Financial, Manual, Preventive,
- *  Monthly. Quiet on purpose: six of these run across the top of the card and a
- *  toned pill each would turn a classification into a traffic light. The one
- *  chip that IS a judgement (the risk rating) keeps its tone, and is the only
- *  colour in the row. */
-function HeadChip({ icon, children }: { icon?: React.ReactNode; children: React.ReactNode }) {
+ *  Monthly. Quiet by default: six of these run across the top of the card and a
+ *  toned pill each would turn a classification into a traffic light. Two carry
+ *  colour: the risk rating, because it IS a judgement, and the risk category,
+ *  which is tinted from the shared map so the same word is the same colour here,
+ *  on the matrix and in the programme view. */
+function HeadChip({ icon, tint, children }: { icon?: React.ReactNode; tint?: string; children: React.ReactNode }) {
   return (
-    <span className="inline-flex items-center gap-1 h-6 px-2.5 rounded-full border border-canvas-border bg-paper-50/70 text-[0.71875rem] font-medium text-ink-700 whitespace-nowrap">
+    <span className={cn(
+      'inline-flex items-center gap-1 h-6 px-2.5 rounded-full text-[0.71875rem] font-medium whitespace-nowrap',
+      tint ?? 'border border-canvas-border bg-paper-50/70 text-ink-700',
+    )}>
       {icon && <span className="text-ink-400 shrink-0">{icon}</span>}
       {children}
     </span>
@@ -498,7 +505,7 @@ function SampleResultsTable({ control, step }: { control: Control; step: Operati
 // Exported for the design-track retest (extraViews), whose checks carry the same
 // validation shape and read out the same way.
 export function QAResultsModal({ title, validation, control, step, onClose }: { title: string; validation: ValidationResult; control?: Control; step?: OperatingStep; onClose: () => void }) {
-  const { qa, summary, table, result, fileName } = validation;
+  const { qa, summary, table, result, fileName, blocked } = validation;
   const passed = qa.filter(x => x.pass).length;
   // An operating attribute is tested against the drawn sample, so its real
   // item-level answer is the sample table. The generated evidence table is the
@@ -511,7 +518,11 @@ export function QAResultsModal({ title, validation, control, step, onClose }: { 
         <div className="flex items-center justify-between px-5 py-3.5 border-b border-canvas-border">
           <div className="flex items-center gap-2"><Sparkles size={16} className="text-brand-600" /><h3 className="text-[0.875rem] font-bold text-ink-900">Ask IRA — validation results</h3></div>
           <div className="flex items-center gap-2">
-            {result && <span className={cn('inline-flex items-center gap-1 text-[0.75rem] font-bold px-2 h-6 rounded-full', result === 'Pass' ? 'bg-compliant-50 text-compliant-700' : 'bg-risk-50 text-risk-700')}><Tickmark result={result} size={13} /> {result}</span>}
+            {result
+              ? <span className={cn('inline-flex items-center gap-1 text-[0.75rem] font-bold px-2 h-6 rounded-full', result === 'Pass' ? 'bg-compliant-50 text-compliant-700' : 'bg-risk-50 text-risk-700')}><Tickmark result={result} size={13} /> {result}</span>
+              /* No verdict, and the pill says which kind of no: amber, because
+                 the evidence fell short, not the control. */
+              : blocked && <span className="inline-flex items-center gap-1 text-[0.75rem] font-bold px-2 h-6 rounded-full bg-mitigated-50 text-mitigated-800"><AlertTriangle size={11} /> Could not test</span>}
             <button onClick={onClose} className="h-8 w-8 inline-flex items-center justify-center rounded-lg text-ink-400 hover:text-ink-800 hover:bg-paper-50 cursor-pointer"><X size={16} /></button>
           </div>
         </div>
@@ -648,6 +659,12 @@ function PointRow({ control, point, canEdit, checking = false }: { control: Cont
   // this fails, and the auditor passed it" without saying why is a paper that
   // cannot be reviewed.
   const iraSaid = point.validation?.result;
+  // What Ira said it could not do, and which of the two problems it is. Only
+  // while the check is still unmarked: once the auditor has answered it by
+  // hand, the assistant's inability to is history and the row should not keep
+  // apologising for it.
+  const blocked = eff === 'Not tested' ? point.validation?.blocked : undefined;
+  const blockKind = blocked ? iraCannotTest(point, control)?.kind ?? 'insufficient' : undefined;
 
   // The elements this check points at. Resolved by id every render rather than
   // cached — an element that was removed must stop being cited, not linger as a
@@ -671,6 +688,24 @@ function PointRow({ control, point, canEdit, checking = false }: { control: Cont
         <div className="min-w-0 flex-1">
           <div className="flex items-center gap-2"><span className="text-[0.78125rem] font-medium text-ink-800">{point.text}</span>{point.override && <span className="override-tag"><Pencil size={9} /> Overridden</span>}</div>
           <div className="text-[0.6875rem] text-ink-400 mt-1 inline-flex items-center gap-1.5"><WorkflowIcon size={11} /> {point.workflowName ?? 'Design walkthrough check'} · {checking ? 'checking…' : validating ? 'validating…' : (point.workflowRunRef ?? 'not validated')}</div>
+
+          {/* ── Ira read it and could not answer it (user ask, 22 Sep) ────────
+              Amber, not red: red is a finding about the control, and this is a
+              finding about the evidence. The check is still Not tested — the
+              tick on the left says so and the conclusion is still held — so
+              this line's whole job is to say WHY the assistant left it alone
+              and what would let it try again. It clears itself the moment the
+              check is marked or the missing element lands, because it is read
+              off the validation the next run overwrites. */}
+          {blocked && !validating && (
+            <div className="mt-1.5 rounded-md border border-mitigated-200 bg-mitigated-50/70 px-2.5 py-1.5 flex items-start gap-1.5">
+              <AlertTriangle size={11} className="text-mitigated-600 shrink-0 mt-[3px]" />
+              <p className="text-[0.6875rem] leading-snug text-mitigated-800 min-w-0">
+                <span className="font-semibold">Ira could not test this — {blockKind === 'missing' ? 'missing files' : 'not enough to go on'}.</span>{' '}
+                {blocked}
+              </p>
+            </div>
+          )}
           {/* The override stands when a file comes or goes after it — it is still
               the auditor's recorded judgement — but it says the evidence under it
               moved, so the reader knows to look again. */}
@@ -1108,6 +1143,28 @@ function AttributeRow({ control, step, canEdit, testing }: { control: Control; s
     if (!list || list.length === 0) return;
     setPile(mapEvidence(control, Array.from(list).map(f => f.name), step.id));
   };
+  /** How many of the pile have a line, and which have none. */
+  const mapped = pile?.filter(m => m.slot).length ?? 0;
+  const spare = pile?.filter(m => !m.slot) ?? [];
+  /** Move a file onto a line, or clear the line.
+   *
+   *  One file, one line, both ways: taking a file that was sitting on another
+   *  line moves it rather than copying it, and the line it left goes back to
+   *  Not mapped. Anything else would let the same document prove two different
+   *  attributes on the same paper. */
+  const assignFile = (name: string | null, fileId: string) => {
+    setPile(prev => {
+      if (!prev) return prev;
+      const slot = evidenceSlots(control, step.id).find(x => x.fileId === fileId);
+      if (!slot) return prev;
+      return prev.map(m => {
+        if (m.slot?.fileId === fileId) return { ...m, slot: null, score: 0, chosen: undefined };
+        if (name && m.name === name) return { ...m, slot, score: 0, chosen: true };
+        return m;
+      });
+    });
+  };
+
   const filePile = () => {
     if (!pile) return;
     const placed = pile.filter(m => m.slot);
@@ -1199,40 +1256,6 @@ function AttributeRow({ control, step, canEdit, testing }: { control: Control; s
                 )}
               </div>
 
-              {/* What the mapper decided, before anything is written. Every file
-                  says where it landed and how sure the match was; the ones it
-                  could not place are named rather than dropped, because the
-                  reader has to be told what did not land. */}
-              {pile && (
-                <div className="mt-2 rounded-md border border-brand-200 bg-canvas-elevated px-2.5 py-2">
-                  <div className="text-[0.625rem] font-bold uppercase tracking-wide text-ink-400">Where each one goes</div>
-                  <ul className="mt-1.5 space-y-1">
-                    {pile.map((m, i) => (
-                      <li key={`${m.name}-${i}`} className="flex items-start gap-1.5 text-[0.6875rem] leading-snug">
-                        {m.slot
-                          ? <CheckCircle2 size={11} className="text-compliant-600 shrink-0 mt-[3px]" />
-                          : <AlertTriangle size={11} className="text-mitigated-600 shrink-0 mt-[3px]" />}
-                        <span className="min-w-0">
-                          <span className="font-medium text-ink-800 break-all">{m.name}</span>
-                          {m.slot
-                            ? <> <span className="text-ink-400">→</span> <span className="text-ink-700">{m.slot.label}</span>
-                                {m.score < 30 && <span className="text-ink-400"> · a guess</span>}
-                                {m.slot.taken && <span className="text-mitigated-700"> · replaces what is there</span>}</>
-                            : <span className="text-ink-400"> — I could not place this one</span>}
-                        </span>
-                      </li>
-                    ))}
-                  </ul>
-                  <div className="mt-2 flex items-center gap-1.5">
-                    <button onClick={filePile} disabled={!pile.some(m => m.slot)}
-                      className="h-7 px-2.5 rounded-md bg-brand-600 text-white text-[0.6875rem] font-semibold enabled:hover:bg-brand-700 disabled:opacity-40 disabled:cursor-not-allowed inline-flex items-center gap-1 cursor-pointer">
-                      <Upload size={11} /> File {pile.filter(m => m.slot).length} {pile.filter(m => m.slot).length === 1 ? 'file' : 'files'}
-                    </button>
-                    <button onClick={() => setPile(null)}
-                      className="h-7 px-2.5 rounded-md border border-canvas-border bg-canvas-elevated text-ink-600 text-[0.6875rem] font-semibold hover:text-ink-900 hover:border-ink-300 cursor-pointer">Cancel</button>
-                  </div>
-                </div>
-              )}
               {total === 0 ? (
                 <p className="mt-1.5 text-[0.6875rem] text-ink-400">No required files listed — add them on the engagement control page.</p>
               ) : (
@@ -1249,7 +1272,47 @@ function AttributeRow({ control, step, canEdit, testing }: { control: Control; s
                         </div>
                         {f.file && <div className="text-[0.65625rem] text-ink-400 mt-0.5">Uploaded by {f.file.uploadedBy} · {f.file.uploadedAt}</div>}
                       </div>
-                      {canEdit && !busy && (
+                      {/* ── while a pile is being mapped ────────────────────
+                          The per-slot uploader goes (user ask, 22 Sep): three
+                          Upload buttons beside a list of three files already
+                          chosen is the same job offered twice, and pressing one
+                          would have quietly dropped the mapping. What stands in
+                          its place is the workflow executor's own shape — the
+                          SLOT leads the row, the file it was matched to sits on
+                          it as a chip, and a dropdown moves it. */}
+                      {canEdit && !busy && pile && (() => {
+                        const m = pile.find(x => x.slot?.fileId === f.id);
+                        const tier = !m ? null : m.chosen ? 'chosen' : m.score >= 70 ? 'sure' : m.score >= 30 ? 'review' : 'guess';
+                        return (
+                          <div className="flex items-center gap-1.5 shrink-0">
+                            {m ? (
+                              <span className={cn('inline-flex items-center gap-1 h-6 pl-1.5 pr-1 rounded-md border text-[0.65625rem] font-semibold max-w-[180px]',
+                                tier === 'sure' || tier === 'chosen' ? 'border-compliant-200 bg-compliant-50 text-compliant-700' : 'border-mitigated-200 bg-mitigated-50 text-mitigated-800')}>
+                                <Paperclip size={9} className="shrink-0" />
+                                <span className="truncate" title={m.name}>{m.name}</span>
+                                <button onClick={() => assignFile(null, f.id)} aria-label={`Unmap ${m.name}`} title="Not this one"
+                                  className="shrink-0 text-ink-400 hover:text-risk-600 cursor-pointer"><X size={11} /></button>
+                              </span>
+                            ) : (
+                              <span className="inline-flex items-center gap-1 h-6 px-2 rounded-md border border-dashed border-canvas-border text-[0.65625rem] text-ink-400 italic"><Link2 size={10} /> Not mapped</span>
+                            )}
+                            {/* Which file goes here. Every file in the pile is
+                                offered, including one mapped elsewhere — picking
+                                it moves it, rather than making the reader unmap
+                                the other row first. */}
+                            <select value={m?.name ?? ''} onChange={e => assignFile(e.target.value || null, f.id)}
+                              aria-label={`Which file proves ${f.label}`}
+                              className="h-6 max-w-[7.5rem] rounded-md border border-canvas-border bg-canvas-elevated px-1 text-[0.65625rem] text-ink-600 cursor-pointer focus:outline-none focus:ring-2 focus:ring-brand-200">
+                              <option value="">Not mapped</option>
+                              {pile.map(x => <option key={x.name} value={x.name}>{x.name}</option>)}
+                            </select>
+                            <span className={cn('text-[0.625rem] font-bold whitespace-nowrap', tier === 'sure' || tier === 'chosen' ? 'text-compliant-700' : tier ? 'text-mitigated-700' : 'text-ink-300')}>
+                              {tier === 'chosen' ? 'You mapped it' : tier === 'sure' ? 'Auto-mapped' : tier === 'review' ? 'Auto · review' : tier === 'guess' ? 'A guess' : '—'}
+                            </span>
+                          </div>
+                        );
+                      })()}
+                      {canEdit && !busy && !pile && (
                         <div className="flex items-center gap-1 shrink-0">
                           <label className="h-6 px-2 rounded-md border border-canvas-border bg-canvas-elevated text-ink-600 text-[0.6875rem] font-semibold hover:border-brand-300 hover:text-brand-700 focus-within:ring-2 focus-within:ring-brand-200 inline-flex items-center gap-1 cursor-pointer">
                             <input type="file" className="sr-only" aria-label={`Upload ${f.label} for ${step.code}`}
@@ -1271,6 +1334,34 @@ function AttributeRow({ control, step, canEdit, testing }: { control: Control; s
                     </li>
                   ))}
                 </ul>
+              )}
+
+              {/* ── the pile's own footer ──────────────────────────────────
+                  Nothing is written until this is pressed: the mapper is
+                  confident, not certain, and what it decides ends up on a
+                  working paper under the auditor's name. The files that found
+                  no line are named here rather than dropped — a file the reader
+                  handed over and never heard of again is a file they will
+                  assume went somewhere. */}
+              {pile && (
+                <div className="mt-2.5 pt-2 border-t border-brand-100/70">
+                  {spare.length > 0 && (
+                    <p className="mb-1.5 text-[0.65625rem] text-mitigated-700 flex items-start gap-1">
+                      <AlertTriangle size={10} className="shrink-0 mt-[2px]" />
+                      <span className="min-w-0">{spare.length === 1 ? 'This one has no line to go on' : `${spare.length} have no line to go on`} — {spare.map(m => m.name).join(', ')}. Put {spare.length === 1 ? 'it' : 'them'} on a line above, or file the rest without {spare.length === 1 ? 'it' : 'them'}.</span>
+                    </p>
+                  )}
+                  <div className="flex items-center gap-1.5 flex-wrap">
+                    <button onClick={filePile} disabled={mapped === 0}
+                      title={mapped === 0 ? 'Map at least one file to a line first' : undefined}
+                      className="h-7 px-2.5 rounded-md bg-brand-600 text-white text-[0.6875rem] font-semibold enabled:hover:bg-brand-700 disabled:opacity-40 disabled:cursor-not-allowed inline-flex items-center gap-1 cursor-pointer">
+                      <Upload size={11} /> File {mapped} {mapped === 1 ? 'file' : 'files'}
+                    </button>
+                    <button onClick={() => setPile(null)}
+                      className="h-7 px-2.5 rounded-md border border-canvas-border bg-canvas-elevated text-ink-600 text-[0.6875rem] font-semibold hover:text-ink-900 hover:border-ink-300 cursor-pointer">Cancel</button>
+                    <span className="text-[0.625rem] text-ink-400">Nothing is written until you file it.</span>
+                  </div>
+                </div>
               )}
             </div>
             {/* run + result */}
@@ -1550,7 +1641,10 @@ function DesignSection({ control, canEdit }: { control: Control; canEdit: boolea
     : d.conclusion !== 'Not tested' ? 'TOD is concluded — it has to be reopened or returned before Ira runs again'
     : null;
   const iraStale = !!d.ira?.evidenceChanged;
-  // The button is here; the narration is in the rail (user ask, 22 Sep). The
+  // Checks the last run read and could not answer. Still Not tested, still
+  // holding the conclusion — the count is here so that is visible without
+  // opening every row.
+  const iraCouldNot = designBlocked(control);  // The button is here; the narration is in the rail (user ask, 22 Sep). The
   // row of checks below already shows each one turning over, so a second
   // progress bar on this side would be the same fact twice — what the rail
   // adds is the sentence that says what is being read and, when it lands, what
@@ -1778,7 +1872,18 @@ function DesignSection({ control, canEdit }: { control: Control; canEdit: boolea
           )}
           */}
           <div className="flex items-center justify-between mb-2.5 gap-2 flex-wrap">
-            <h4 className="text-[0.78125rem] font-bold text-ink-700 inline-flex items-center gap-1.5"><ClipboardCheck size={14} /> Design checks <span className="font-normal text-ink-400">· assessed against the evidence</span></h4>
+            <h4 className="text-[0.78125rem] font-bold text-ink-700 inline-flex items-center gap-1.5 flex-wrap"><ClipboardCheck size={14} /> Design checks <span className="font-normal text-ink-400">· assessed against the evidence</span>
+              {/* What the run left behind, said once at the top so it does not
+                  have to be found by scrolling. Amber, and a count rather than
+                  a warning: these are checks waiting for a person, which is an
+                  ordinary state, not an alarm. */}
+              {iraCouldNot.length > 0 && !iraRunning && (
+                <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-md bg-mitigated-50 text-mitigated-800 text-[0.65625rem] font-bold whitespace-nowrap"
+                  title={`Ira read the evidence and could not reach a verdict on ${iraCouldNot.length === 1 ? 'this one' : 'these'} — mark ${iraCouldNot.length === 1 ? 'it' : 'them'} yourself, or attach what ${iraCouldNot.length === 1 ? 'it needs' : 'they need'}`}>
+                  <AlertTriangle size={9} /> {iraCouldNot.length} Ira couldn’t test
+                </span>
+              )}
+            </h4>
             <div className="flex items-center gap-2">
               {/* PARKED (Aug 2026, user ask) — the Validate all button. `runValidateAll`
                   and `validatingAll` are left above so restoring it is one line:
@@ -3569,6 +3674,160 @@ function PopulationSection({ control, canEdit, locked: gated = false }: { contro
   );
 }
 
+/**
+ * Where the number came from, in one line.
+ *
+ * Since #22 nothing about the size is decided on the control: the frequency and
+ * the risk rating are the RACM row's, and the number is read off the table the
+ * engagement agreed once for every control in it. The question an auditor
+ * actually arrives with is "why four?", and the only answer that holds is the
+ * row and the column it was read from — so the CELL is shown, not just the
+ * number it produced.
+ *
+ * Both inputs read as facts of the control rather than as fields, because
+ * changing either one here is not something this step can do: they sit behind a
+ * lock, in the quiet weights the page uses for stated facts, and the sentence
+ * after them says where each is actually settled.
+ */
+function SizeDerivation({ control, guide, methodology }: {
+  control: Control; guide: ReturnType<typeof sampleSizeGuide>; methodology: SamplingMethodology;
+}) {
+  // A test of one is not read off the table at all — it rests on the automation
+  // and its ITGCs — so claiming a cell for it would be inventing a derivation.
+  if (!guide.cell) {
+    return (
+      <span className="inline-flex items-center gap-1.5 text-[0.65625rem] text-ink-500">
+        <Lock size={10} className="text-ink-400 shrink-0" />
+        <span className="font-semibold text-ink-600">Automated</span>
+        <span className="text-ink-400">→</span>
+        <span className="font-bold text-ink-700">test of one</span>
+        <span className="text-ink-400">— not sized from the agreed table.</span>
+      </span>
+    );
+  }
+  // An unrated control still lands in a column — the middle one — and saying
+  // "Medium risk" without saying that would put a rating in the RACM row's
+  // mouth that nobody has given it.
+  const rated = !!control.riskRating;
+  return (
+    <span className="inline-flex items-baseline gap-1.5 flex-wrap text-[0.65625rem] text-ink-500">
+      <Lock size={10} className="text-ink-400 shrink-0 self-center" />
+      <span className="font-semibold text-ink-600">{guide.cell.frequency}</span>
+      <span className="text-ink-300">·</span>
+      <span className="font-semibold text-ink-600">{guide.cell.rating} risk</span>
+      <span className="text-ink-400">→</span>
+      <span className="font-bold text-ink-700 tabular-nums">{guide.suggested} item{guide.suggested === 1 ? '' : 's'}</span>
+      <span className="text-ink-400">
+        , from the {samplingAgreed(methodology) ? 'agreed' : 'proposed'} methodology (v{methodology.version}
+        {samplingAgreed(methodology) ? '' : ', not signed yet'}).
+      </span>
+      <span className="text-ink-400">
+        Frequency{rated ? ' and rating come' : ' comes'} from the RACM row{rated ? '' : ' — unrated, so it reads as the middle column'}; the number comes from the engagement's table. Neither is set here.
+      </span>
+    </span>
+  );
+}
+
+/**
+ * A size the auditor set against the one the agreed table gave.
+ *
+ * Allowed, and never blocked — a methodology that cannot be departed from stops
+ * being a methodology and becomes a cage. But it is a DEPARTURE, not an edit, so
+ * it cannot be made silently and it cannot be read as an ordinary value: the ask
+ * is for the reason first, and once set the size is stated against the number it
+ * departed from, with the reason and the name beside it.
+ *
+ * Appended under the Sample step's methodology card, affordance included, so the
+ * one place the number can be moved is the one place it is explained.
+ */
+function SampleSizeDeparture({ control, agreed, canEdit }: { control: Control; agreed: number; canEdit: boolean }) {
+  const { resizeSample } = useIcfr();
+  const logEvent = useAuditLog();
+  const { addToast } = useToast();
+  const s = control.operating.sampling;
+  const [open, setOpen] = useState(false);
+  const [size, setSize] = useState(String(s?.size ?? agreed));
+  const [why, setWhy] = useState('');
+  if (!s) return null;
+  const dep = s.override;
+  const n = Number(size);
+  const valid = Number.isInteger(n) && n >= 1 && n !== s.size;
+
+  const save = () => {
+    resizeSample(control.id, n, why.trim());
+    logEvent({ action: 'Update', description: `Departed from the agreed sample size on ${control.id} — ${n} items where the methodology gives ${agreed}: ${why.trim()}`, module: 'SOX ICFR', entity: 'Test Result' });
+    addToast({ type: 'success', title: 'Departure recorded', message: `${n} items against an agreed ${agreed} — the reason prints on the paper.` });
+    setWhy(''); setOpen(false);
+  };
+
+  return (
+    <div className={cn('mt-4 rounded-xl border p-3.5', dep ? 'border-mitigated-200 bg-mitigated-50/50' : 'border-canvas-border bg-paper-50/40')}>
+      {dep ? (
+        <div className="flex items-start gap-2.5">
+          <AlertTriangle size={14} className="text-mitigated-700 mt-0.5 shrink-0" />
+          <div className="min-w-0 flex-1">
+            <p className="text-[0.71875rem] font-bold text-mitigated-700">
+              Departure from the agreed methodology — set to <span className="tabular-nums">{dep.size}</span> items where the table gives <span className="tabular-nums">{dep.agreed}</span>
+            </p>
+            <p className="text-[0.6875rem] text-ink-700 mt-1 leading-relaxed">{dep.reason}</p>
+            {/* An extension after a failure moves the size again, and it is not
+                part of this departure — so the two numbers are kept apart. */}
+            {s.size !== dep.size && (
+              <p className="text-[0.6875rem] text-ink-500 mt-1">Standing at <span className="tabular-nums font-semibold text-ink-700">{s.size}</span> items now, after the sample was extended.</p>
+            )}
+            <p className="text-[0.625rem] text-ink-400 mt-1">{dep.by} · {dep.at} — recorded on the working paper and the trail.</p>
+          </div>
+        </div>
+      ) : (
+        <p className="text-[0.6875rem] text-ink-500 leading-relaxed">
+          This control is tested at <span className="font-semibold text-ink-700 tabular-nums">{s.size}</span> items, the number the agreed table gives it.
+          Testing a different number is allowed, and is recorded as a departure from the methodology rather than as a change of mind.
+        </p>
+      )}
+
+      {canEdit && !open && (
+        <button onClick={() => { setSize(String(s.size)); setOpen(true); }}
+          className="mt-2.5 h-8 px-3 inline-flex items-center gap-1.5 rounded-lg border border-canvas-border bg-canvas-elevated text-[0.75rem] font-semibold text-ink-700 hover:border-mitigated-300 hover:text-mitigated-700 transition-colors cursor-pointer">
+          <Scale size={13} /> {dep ? 'Revise the departure' : 'Test a different number of items'}
+        </button>
+      )}
+
+      {canEdit && open && (
+        <div className="mt-3 pt-3 border-t border-canvas-border">
+          <div className="flex items-center gap-2 flex-wrap">
+            <label className="inline-flex items-center gap-2">
+              <span className="text-[0.71875rem] font-semibold text-ink-600">Test</span>
+              <input type="number" min={1} autoFocus value={size} onChange={e => setSize(e.target.value)}
+                aria-label="Number of items to test"
+                className="h-8 w-20 px-2 rounded-lg border border-canvas-border bg-canvas-elevated text-[0.78125rem] text-ink-800 tabular-nums focus:outline-none focus:ring-2 focus:ring-brand-200" />
+              <span className="text-[0.71875rem] text-ink-500">items, against an agreed <span className="font-semibold text-ink-700 tabular-nums">{agreed}</span></span>
+            </label>
+          </div>
+          {/* The question is the specific one. "Why a different size" invites
+              "professional judgment", which is what #22 was raised about; asking
+              what the table did not know about this control asks for the fact
+              that would have changed the table had it been known. */}
+          <label className="block mt-2.5">
+            <span className="text-[0.71875rem] font-semibold text-ink-600">What does this control have that the agreed table did not allow for?</span>
+            <textarea value={why} onChange={e => setWhy(e.target.value)} rows={2}
+              placeholder="e.g. the control changed hands in August, so the period either side of the handover is tested separately"
+              className="mt-1.5 w-full text-[0.75rem] rounded-lg border border-canvas-border bg-canvas-elevated px-2.5 py-2 text-ink-800 placeholder:text-ink-400 focus:outline-none focus:ring-2 focus:ring-brand-200 resize-none" />
+          </label>
+          <div className="mt-2 flex items-center gap-2 flex-wrap">
+            <button disabled={!valid || !why.trim()} onClick={save}
+              title={!valid ? 'Give a whole number of items, different from the size now' : why.trim() ? undefined : 'A departure with no reason is a size nobody can defend'}
+              className="h-8 px-3.5 inline-flex items-center gap-1.5 rounded-md bg-mitigated-600 text-white text-[0.71875rem] font-semibold enabled:hover:bg-mitigated-700 disabled:opacity-40 disabled:cursor-not-allowed transition-colors cursor-pointer">
+              <Scale size={12} /> Record the departure
+            </button>
+            <button onClick={() => { setOpen(false); setWhy(''); }} className="h-8 px-3 text-[0.71875rem] font-semibold text-ink-500 hover:text-ink-900 cursor-pointer">Cancel</button>
+            <span className="text-[0.625rem] text-ink-400">Recorded results on any item dropped go with it, and the tested attributes go stale until re-run.</span>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
 /** STEP 3 — SAMPLE.
  *
  *  A draw, and nothing else. Filtering happened at step ① and produced the
@@ -3603,7 +3862,8 @@ function SourceDrawRow({ control, source, canDraw, single, isOpen, onToggle, onA
   // control's frequency, nature and risk rating, and reduced to sizing-like-a-
   // manual-control the moment an ITGC underneath it fails.
   const holds = itgcHolds(eng, control);
-  const guide = sampleSizeGuide(control, holds);
+  const methodology = samplingOf(eng);
+  const guide = sampleSizeGuide(control, holds, methodology);
   const already = samplesFor(control, source.id);
   // Only the companies in scope take items (17 Sep) — the store deals with the same list.
   const drawControl = scopedForDraw(control, inScopeEntityNames(eng.id, workingAudit(eng, openAuditId)));
@@ -3787,9 +4047,14 @@ function SourceDrawRow({ control, source, canDraw, single, isOpen, onToggle, onA
                 <span className="font-semibold text-ink-700">Read as:</span> {plan.reading}
               </p>
               <div className="mt-3 flex items-center justify-between gap-3 flex-wrap">
-                <p className="text-[0.65625rem] text-ink-400 min-w-0">
-                  The sizing table says <span className="font-semibold text-ink-600 tabular-nums">{guide.suggested}</span> — band {guide.range}. Ask for something else and the paper records what you asked for.
-                </p>
+                {/* Not "the table says 4" but the cell that said it — #22 moved
+                    the number onto an agreed table, and a number read off a
+                    table is only defensible while the reader can see the row
+                    and the column it came from. */}
+                <div className="min-w-0">
+                  <SizeDerivation control={control} guide={guide} methodology={methodology} />
+                  <p className="text-[0.65625rem] text-ink-400 mt-1">Band {guide.range}. Ask for something else and the paper records what you asked for.</p>
+                </div>
                 <button disabled={stage !== 'ready'} onClick={draw}
                   className="shrink-0 h-9 px-4 inline-flex items-center gap-1.5 rounded-lg bg-brand-600 text-white text-[0.78125rem] font-semibold enabled:hover:bg-brand-700 disabled:opacity-40 disabled:cursor-not-allowed transition-colors cursor-pointer">
                   {stage === 'drawing' ? <><Loader2 size={14} className="animate-spin" /> Drawing…</> : <><FlaskConical size={14} /> Draw sample</>}
@@ -3912,7 +4177,8 @@ function SampleExtractSection({ control, canEdit, locked }: { control: Control; 
   const sources = sampledSources(populationSources(control));
   const assisting = populationSources(control).filter(isAssisting);
   const holds = itgcHolds(eng, control);
-  const guide = sampleSizeGuide(control, holds);
+  const methodology = samplingOf(eng);
+  const guide = sampleSizeGuide(control, holds, methodology);
   // One file open at a time, starting on the first that still owes work. A
   // control with ten files is not finished in one sitting, and the point of the
   // marks is that returning to it lands on what is left.
@@ -4020,6 +4286,10 @@ function SampleExtractSection({ control, canEdit, locked }: { control: Control; 
         <p className="text-[0.71875rem] text-ink-700">
           <span className="font-bold">Method: {agreed.method}</span> · {spreadPhrase(agreed.spread)} <span className="text-ink-400">(set on the audit)</span>
         </p>
+        {/* And how many, derived rather than chosen (#22). The method above was
+            settled on the audit; the size is settled on the engagement, and this
+            says which cell of it this control landed in. */}
+        <div className="mt-1"><SizeDerivation control={control} guide={guide} methodology={methodology} /></div>
         {yearRounds.length > 0 && (
           <>
             <div className="ac-div my-2.5" />
@@ -4029,9 +4299,9 @@ function SampleExtractSection({ control, canEdit, locked }: { control: Control; 
               {yearTotal > guide.suggested
                 ? <span className="text-[0.71875rem] font-bold text-ink-700"><span className="tabular-nums">{yearTotal}</span> samples tested this year — above the target of <span className="tabular-nums">{guide.suggested}</span></span>
                 : <span className="text-[0.71875rem] font-bold text-ink-700">This year so far: <span className="tabular-nums">{yearTotal} of {guide.suggested}</span> samples tested</span>}
-              <span className="text-[0.65625rem] text-ink-400">
-                Target {guide.suggested} — {control.frequency.toLowerCase()} control{control.riskRating ? `, ${control.riskRating.toLowerCase()} risk` : ''}
-              </span>
+              {/* The cell that set this target is stated once at the top of the
+                  card, so here it is only the number it produced. */}
+              <span className="text-[0.65625rem] text-ink-400 tabular-nums">Target {guide.suggested}</span>
             </div>
             <p className="mt-1 text-[0.6875rem] text-ink-500 tabular-nums">
               {yearRounds.map((r, i) => (
@@ -4045,6 +4315,12 @@ function SampleExtractSection({ control, canEdit, locked }: { control: Control; 
           </>
         )}
       </div>
+
+      {/* ── a size set against the agreed one ────────────────────────────────
+          The one place on this page the number can be moved, and the one place
+          it is explained. Only once something has been drawn: before that there
+          is no size to depart from. */}
+      {o.sampling && <SampleSizeDeparture control={control} agreed={guide.suggested} canEdit={canDraw} />}
 
       {/* ── who the sample reaches ───────────────────────────────────────────
           A shared control concludes once for every company it answers for, so
@@ -4782,6 +5058,16 @@ function OperatingSection({ control, canEdit, locked }: { control: Control; canE
         {o.sampling ? (
           <div className="rounded-xl border border-canvas-border bg-paper-50/40 p-3 flex items-center gap-3 flex-wrap text-[0.71875rem] text-ink-500">
             <span className="inline-flex items-center gap-1.5 font-semibold text-ink-700"><FlaskConical size={12} /> Testing {o.sampling.size} sampled items</span>
+            {/* A size the auditor set against the agreed table is not an
+                ordinary value, and the step that records the results is where
+                it would most easily be read as one — so it is named here too,
+                against the number it departed from. */}
+            {o.sampling.override && (
+              <span className="inline-flex items-center gap-1.5 font-semibold text-mitigated-700">
+                <AlertTriangle size={12} className="shrink-0" />
+                Departure from the agreed methodology — the table gives <span className="tabular-nums">{o.sampling.override.agreed}</span>
+              </span>
+            )}
             <span>{o.sampling.method} · {o.sampling.basis}</span>
             {o.population && <span className="text-ink-400">Population {o.population.count.toLocaleString()} · {o.population.tieOut}</span>}
           </div>
@@ -5010,7 +5296,7 @@ function DiscussionPane({ control }: { control: Control }) {
  *  spine and the open rail agree about it. */
 type RailPane = 'chat' | 'history' | 'discussion';
 
-function ActivityRail({ control, meters, pane, onPane, onCollapse }: { control: Control; meters: RagMeterDef[]; pane: RailPane; onPane: (p: RailPane) => void; onCollapse: () => void }) {
+function ActivityRail({ control, pane, onPane, onCollapse }: { control: Control; pane: RailPane; onPane: (p: RailPane) => void; onCollapse: () => void }) {
   const { eng } = useIcfr();
   // The pane belongs to the page, not to this component: the folded spine
   // picks one too, and a rail that forgot which tab was chosen the moment it
@@ -5024,10 +5310,11 @@ function ActivityRail({ control, meters, pane, onPane, onCollapse }: { control: 
   // is nothing left for the page to carry it away from.
   return (
     <aside className="panel overflow-hidden h-full min-h-0 flex flex-col">
-      {/* The scores first, because they are the reading on the control, and the
-          conversation underneath is what to do about it. One panel, one rule
-          between them. */}
-      <RagKpiRow meters={meters} flush />
+      {/* The three scores stood here, above the tabs. They live in the control
+          header now (user ask, 22 Sep), beside the TOD → TOE status they are a
+          reading of — two columns of one screen stating the same three numbers
+          about the same control was one column too many. What is left in this
+          rail is the conversation, which is what to DO about them. */}
       <div className="flex items-center gap-2 m-3 mb-2">
         <div className="flex-1 min-w-0 flex items-center gap-1 p-1 rounded-xl bg-paper-50 border border-canvas-border">
           <button onClick={() => setPane('chat')} className={tabCls(pane === 'chat')}><Sparkles size={13} /> Ira</button>
@@ -5116,39 +5403,44 @@ function RailSpine({ control, meters, running, onOpen }: { control: Control; met
         </div>
       )}
 
-      <div className="border-t border-canvas-border" />
+      {/* PARKED (22 Sep, user ask) — the five-dot spine stood between the
+          scores and the footer. It said which step the control was on, which
+          the stepper down the left-hand side of the page already says at full
+          size and in words: the folded rail sat directly beside it repeating
+          the same five numbers in 20px circles. The scores and the way back to
+          Ira are what this column is for, and the chat itself names the step
+          in words the moment it is opened. */}
 
-      {/* ── the agent ───────────────────────────────────────────────────────
-          Under the reading, because that is the order the open rail reads in:
-          here is the score, here is what to do about it. The mark is the
-          product's AI signature (brand → fuchsia, Ask IRA's own avatar); a run
-          in flight rings it, so a validation started on the left is visible
-          from a column 80px wide. */}
-      <button onClick={() => onOpen('chat')} title="Ask Ira about this control" aria-label="Open the Ira chat"
-        className="group shrink-0 mx-1.5 mt-2 rounded-xl py-2 flex flex-col items-center gap-1.5 hover:bg-brand-50 transition-colors cursor-pointer">
-        <span className="relative inline-flex size-9">
-          {running && !still && (
-            <motion.span aria-hidden className="absolute inset-0 rounded-xl bg-brand-400"
-              animate={{ scale: [1, 1.5], opacity: [0.5, 0] }}
-              transition={{ duration: 1.6, repeat: Infinity, ease: 'easeOut' }} />
-          )}
-          <span className="relative inline-flex items-center justify-center w-full h-full rounded-xl bg-gradient-to-br from-brand-500 to-fuchsia-500 text-white shadow-[0_4px_16px_-4px_rgba(106,18,205,0.5)]">
-            <Sparkles size={17} strokeWidth={2.25} />
-          </span>
-        </span>
-        <span className="text-[0.5625rem] font-bold uppercase tracking-[0.12em] text-brand-700">Ira</span>
-      </button>
+      {/* ── the three ways back in ──────────────────────────────────────────
+          One group at the floor (user ask, 22 Sep). Ira used to sit directly
+          under the scores with History and Discussion pinned at the bottom,
+          which read correctly while the spine filled the gap between them and
+          as a stranded button once it went. They are the same KIND of thing —
+          each one unfolds the rail, and the only difference is which pane you
+          land on — so they belong in one stack rather than at opposite ends of
+          an empty column.
 
-      {/* PARKED (22 Sep, user ask) — the five-dot spine stood here. It said
-          which step the control was on, which the stepper down the left-hand
-          side of the page already says at full size and in words: the folded
-          rail sat directly beside it repeating the same five numbers in 20px
-          circles. The scores and the way back to Ira are what this column is
-          for, and the chat itself names the step in words the moment it is
-          opened. */}
-
+          Ira leads it and keeps its mark: the product's AI signature (brand →
+          fuchsia, Ask IRA's own avatar), ringed while a run is in flight so a
+          validation started on the left is visible from a column 80px wide.
+          The other two stay flat icons, which is the hierarchy — one thing
+          here does the work. */}
       <div className="mt-auto border-t border-canvas-border" />
       <div className="shrink-0 px-1.5 py-2 space-y-1">
+        <button onClick={() => onOpen('chat')} title="Ask Ira about this control" aria-label="Open the Ira chat"
+          className="group w-full rounded-xl py-2 flex flex-col items-center gap-1.5 hover:bg-brand-50 transition-colors cursor-pointer">
+          <span className="relative inline-flex size-9">
+            {running && !still && (
+              <motion.span aria-hidden className="absolute inset-0 rounded-xl bg-brand-400"
+                animate={{ scale: [1, 1.5], opacity: [0.5, 0] }}
+                transition={{ duration: 1.6, repeat: Infinity, ease: 'easeOut' }} />
+            )}
+            <span className="relative inline-flex items-center justify-center w-full h-full rounded-xl bg-gradient-to-br from-brand-500 to-fuchsia-500 text-white shadow-[0_4px_16px_-4px_rgba(106,18,205,0.5)]">
+              <Sparkles size={17} strokeWidth={2.25} />
+            </span>
+          </span>
+          <span className="text-[0.5625rem] font-bold uppercase tracking-[0.12em] text-brand-700">Ira</span>
+        </button>
         <button onClick={() => onOpen('history')} title={`History — ${execCount} run${execCount === 1 ? '' : 's'}`} aria-label="Open the run history" className={iconBtn}>
           <History size={15} />{execCount > 0 && <span className="text-[0.625rem] font-semibold tabular-nums">{execCount}</span>}
         </button>
@@ -5271,6 +5563,10 @@ export default function ControlDossier() {
   // History would be the tool overruling them.
   const [railPane, setRailPane] = useState<RailPane>('chat');
   const control = eng.controls.find(c => c.id === selectedControlId);
+  // This client's own columns, for the head block. Read above the early return
+  // with the rest of the hooks, so it keys off the control when there is one and
+  // the engagement's own company when there isn't.
+  const clientColumns = useRacmConfig(racmSetupKeyFor(control?.entity ?? eng.entity).key).extras;
   // ── landing where the click was about ──────────────────────────────────────
   // Above the early return on purpose: hooks have to run on every render, and
   // a render that bails before them crashes the page the moment the counts
@@ -5435,7 +5731,7 @@ export default function ControlDossier() {
               {/* Key/non-key is agreed with management — it can never be read off
                   an SOP — so the auditor sets it here rather than reading it. */}
               <KeyControlChip control={control} canEdit={canEdit} />
-              {control.clazz && <HeadChip>{control.clazz}</HeadChip>}
+              {control.clazz && <HeadChip tint={RISK_CATEGORY_TINT[control.clazz]}>{control.clazz}</HeadChip>}
               {control.nature && <HeadChip icon={control.nature === 'Automated' ? <WorkflowIcon size={11} /> : <Hand size={11} />}>{control.nature}</HeadChip>}
               {control.type && <HeadChip>{control.type}</HeadChip>}
               {control.frequency && <HeadChip>{control.frequency}</HeadChip>}
@@ -5514,7 +5810,7 @@ export default function ControlDossier() {
                     <HeadField label="Control owner" value={headOwners.controlOwner} />
                     {!headOwners.single && <HeadField label="Process owner" value={headOwners.processOwner} />}
                     <HeadField label="Sub-process" value={control.subProcess} />
-                    <HeadField label="Class" value={control.clazz} />
+                    <HeadField label="Risk category" value={control.clazz} />
                     <HeadField label="Nature" value={control.nature} />
                     <HeadField label="Type" value={control.type} />
                     <HeadField label="Frequency" value={control.frequency} />
@@ -5530,6 +5826,17 @@ export default function ControlDossier() {
                         bad column mapping, and only the source tells you which. */}
                     <HeadField label={country.source === 'file' ? 'Country (from the file)' : 'Country'} value={country.source === 'none' ? undefined : country.value} />
                     <HeadField label="Testing strategy" value={control.testingStrategy} />
+                    {/* This client's own columns, last and under their set-up's
+                        names. Nothing here is tested against — it is the client's
+                        record, carried so the row reads the same here as on their
+                        own matrix. A value whose column has since been dropped
+                        from the set-up still shows: the data is real either way. */}
+                    {clientColumns.map(col => (
+                      <HeadField key={col.header} label={extraLabel(col)} value={control.extras?.[col.header]} />
+                    ))}
+                    {Object.entries(control.extras ?? {})
+                      .filter(([header]) => !clientColumns.some(col => col.header === header))
+                      .map(([header, value]) => <HeadField key={header} label={header} value={value} />)}
                   </div>
                 </motion.div>
               )}
@@ -5585,6 +5892,19 @@ export default function ControlDossier() {
               {!isOwner && <span className="hidden xl:inline text-[0.6875rem] text-ink-400">Every run is logged in History</span>}
             </div>
           </div>
+
+          {/* ── the three readings ─────────────────────────────────────────────
+              Moved off the top of the Ira rail (user ask, 22 Sep) to sit with
+              the status bar, which is where the control's verdict already
+              lives. TOD-then-TOE is the shape of the work; these are how far
+              each part of it has actually got, so the two belong in one footer
+              rather than in two columns of the screen saying the same thing
+              about the same control.
+
+              The owner does not get them: they are the auditor's read on how
+              the testing is going, and the owner's line above is deliberately
+              "Your control" and nothing else. */}
+          {!isOwner && <RagKpiRow meters={designRagMeters(control)} flush />}
         </div>
       </motion.div>
 
@@ -5778,8 +6098,11 @@ export default function ControlDossier() {
                   : <span className="text-[0.6875rem] font-semibold text-ink-400 inline-flex items-center gap-1"><Lock size={11} /> Unlocks once {opApplies ? 'both tracks conclude' : 'the design concludes'}</span>}>
             <SignOffSection control={control} />
           </VStep>}
+          {/* `id` on the card below so the rail can bring the reader here — the
+              exception's root cause is written on this page, and Ira offers to
+              do it from the chat. */}
           {concl === 'Ineffective' && (
-            <motion.div variants={{ hidden: { opacity: 0, y: 12 }, show: { opacity: 1, y: 0 } }} className="ml-[54px] rounded-xl border border-risk-200 bg-risk-50/40 p-4 mt-1">
+            <motion.div id="control-exception" variants={{ hidden: { opacity: 0, y: 12 }, show: { opacity: 1, y: 0 } }} className="ml-[54px] rounded-xl border border-risk-200 bg-risk-50/40 p-4 mt-1">
               {/* ── graded here, and only here ───────────────────────────────
                   This used to send the auditor to the Deficiency management tab
                   to grade the finding their own testing had just raised, which
@@ -5890,7 +6213,7 @@ export default function ControlDossier() {
           {/* `inert` so a folded rail cannot be tabbed into — it is clipped
               out of sight, not merely out of the way. */}
           <div className="h-full w-[400px]" inert={!railOpen}>
-            <ActivityRail control={control} meters={designRagMeters(control)} pane={railPane} onPane={setRailPane} onCollapse={() => setRailOpen(false)} />
+            <ActivityRail control={control} pane={railPane} onPane={setRailPane} onCollapse={() => setRailOpen(false)} />
           </div>
           {!railOpen && (
             <RailSpine control={control} meters={designRagMeters(control)} running={!!run}

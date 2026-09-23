@@ -20,7 +20,7 @@
  */
 import { useSyncExternalStore } from 'react';
 import { libraryEngagements, type Engagement } from '../../data/engagements';
-import { programmeFor } from './auditScope';
+import { programmeFor, sameCompany } from './auditScope';
 import { applyEditorRows, lockedEditorIds, RACM_LOCKED_KEY, RACM_ROWS_KEY, racmEditorRows } from './helpers';
 import { seedIcfrEngagement, type SeedMeta } from './mockData';
 import type { Control } from './types';
@@ -309,6 +309,21 @@ const bare = (n: string) => n.replace(/\s*\((listed|unlisted|nyse|nasdaq|bse|nse
  * Entity list Create RACM offers. Companies typed in on the tab join under
  * "Added on the RACM tab".
  */
+/**
+ * WHOSE COLUMN SET-UP AN UPLOAD FOLLOWS (22 Sep).
+ *
+ * One set-up per client group, and the company was already chosen at Create
+ * RACM — so the upload never asks. A company that belongs to no group yet keeps
+ * its own set-up under its own name until it joins one, and an upload with no
+ * company at all falls back to the shape the product ships with.
+ */
+export function racmSetupKeyFor(entity: string | undefined): { key: string; label: string } {
+  const name = (entity ?? '').trim();
+  if (!name) return { key: 'default', label: 'All clients' };
+  const group = knownCompanies().find(g => g.companies.some(c => sameCompany(c, name)))?.group;
+  return group ? { key: group, label: group } : { key: bare(name), label: bare(name) };
+}
+
 export function knownCompanies(): { group: string; companies: string[] }[] {
   const groups = new Map<string, Set<string>>();
   const add = (group: string, company: string | undefined) => {
@@ -424,6 +439,7 @@ export function racmRowOf(c: Control): Control {
     ...(c.isMrc ? { isMrc: c.isMrc, mrcThreshold: c.mrcThreshold } : {}),
     owner: c.owner,
     ...(c.processOwner ? { processOwner: c.processOwner } : {}),
+    ...(c.riskOwner ? { riskOwner: c.riskOwner } : {}),
     riskId: c.riskId,
     ...(c.riskTitle ? { riskTitle: c.riskTitle } : {}),
     riskDescription: c.riskDescription,
