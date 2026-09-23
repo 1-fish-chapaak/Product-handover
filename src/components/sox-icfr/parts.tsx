@@ -369,10 +369,7 @@ export function RagCard({ m }: { m: RagMeterDef; /** @deprecated the card no lon
  *  forbids by name — and the strip is the worse offender of the two shapes,
  *  because a ramp read left to right invites the eye to compare scores that
  *  measure completely different things. Red outranks amber; a tie goes to the
- *  lower score. Everything else is ink, and the bar is a quantity, not a verdict.
- *
- *  Exported because the folded rail draws the same three scores in a column,
- *  and a second copy of this rule would eventually pick a different one. */
+ *  lower score. Everything else is ink, and the bar is a quantity, not a verdict. */
 export function worstMeter(meters: RagMeterDef[]): RagMeterDef | null {
   return meters.reduce<RagMeterDef | null>((acc, m) => {
     if (m.empty) return acc;
@@ -385,10 +382,7 @@ export function worstMeter(meters: RagMeterDef[]): RagMeterDef | null {
     return m.pct < acc.pct ? m : acc;
   }, null);
 }
-/** Red, amber, green or none — as a word, for whoever needs to branch on it. */
-export const ragState = ragWord;
-
-export function RagKpiRow({ meters, flush, inline }: {
+export function RagKpiRow({ meters, flush, inline, dial }: {
   meters: RagMeterDef[];
   /** Sitting inside another panel — no border of its own, just a rule under it. */
   flush?: boolean;
@@ -400,6 +394,18 @@ export function RagKpiRow({ meters, flush, inline }: {
    *  bar is the wrong weight for one sentence, so the sentence becomes the
    *  title — still there on hover, no longer a thing to open and close. */
   inline?: boolean;
+  /** Inline, but each number wearing its own arc (user ask, 23 Sep) — for when
+   *  the Ira rail is open and this row has 400px less to say the same thing in.
+   *
+   *  It reads as the richer treatment and is in fact the far narrower one: the
+   *  number moves INSIDE the ring and the NAME drops to the tooltip, which is
+   *  where the width actually was — three scores called things like "Design
+   *  coverage confidence" is most of a row. What is left is the one thing a
+   *  glance can use: 100 / 80 / 50, told apart by the arc before they are read.
+   *
+   *  With the rail shut there is room for the names, so they come back and the
+   *  rings go: a row of dials across a full-width status bar is decoration. */
+  dial?: boolean;
 }) {
   const [openLabel, setOpenLabel] = useState<string | null>(null);
   const open = meters.find(m => m.label === openLabel) ?? null;
@@ -407,23 +413,67 @@ export function RagKpiRow({ meters, flush, inline }: {
   if (!meters.length) return null;
 
   if (inline) {
+    // Same geometry as the card's ring, so the two never drift: r=16 in a 40
+    // viewBox, the arc drawn from twelve o'clock, and nothing drawn at all for a
+    // score of zero — a round cap on a zero-length dash leaves a floating dot.
+    const C = 2 * Math.PI * 16;
     return (
-      <div className="flex items-center gap-5 min-w-0">
+      <div className={cn('flex items-center min-w-0', dial ? 'gap-2' : 'gap-5')}>
         {meters.map(m => {
           const state = ragWord(m);
           const flagged = worst === m;
           const StateIcon = state === 'red' ? AlertTriangle : AlertCircle;
+          // The strip's rule, kept: ONE score may wear a colour and only if it
+          // is the one that needs reading. Three ramped arcs side by side is the
+          // heat strip by another shape, and worse here — a ring reads as a
+          // gauge, so three of them invite a comparison between scores that
+          // measure completely different things. The arc length is the quantity;
+          // the colour is the exception.
+          const numCls = m.empty ? 'text-ink-300'
+            : flagged && state === 'red' ? 'text-risk-700'
+            : flagged && state === 'amber' ? 'text-high-700'
+            : 'text-ink-900';
+          const label = (
+            <span className="inline-flex items-center gap-1 text-[0.6875rem] font-semibold text-ink-500 truncate">
+              {flagged && <StateIcon size={10} className={cn('shrink-0', state === 'red' ? 'text-risk-700' : 'text-high-700')} />}
+              {m.label}
+            </span>
+          );
+          if (!dial) {
+            return (
+              <div key={m.label} title={m.detail} className="min-w-0 inline-flex items-baseline gap-1.5">
+                <span className={cn('text-[0.8125rem] font-bold tabular-nums', numCls)}>{m.empty ? '—' : `${m.pct}%`}</span>
+                {label}
+              </div>
+            );
+          }
+          // No name beside the dial (user ask, 23 Sep) — it is the name that
+          // costs the width, and three of "Design coverage confidence" is most
+          // of a row that has 400px less of one. The ring says how far; the
+          // hover says of what.
           return (
-            <div key={m.label} title={m.detail} className="min-w-0 inline-flex items-baseline gap-1.5">
-              <span className={cn('text-[0.8125rem] font-bold tabular-nums',
-                m.empty ? 'text-ink-300'
-                  : flagged && state === 'red' ? 'text-risk-700'
-                  : flagged && state === 'amber' ? 'text-high-700'
-                  : 'text-ink-900')}>{m.empty ? '—' : `${m.pct}%`}</span>
-              <span className="inline-flex items-center gap-1 text-[0.6875rem] font-semibold text-ink-500 truncate">
-                {flagged && <StateIcon size={10} className={cn('shrink-0', state === 'red' ? 'text-risk-700' : 'text-high-700')} />}
-                {m.label}
-              </span>
+            <div key={m.label} title={`${m.label} — ${statusWordOf(m)}. ${m.detail}`} className="shrink-0 inline-flex items-center gap-1">
+              <div className="relative w-8 h-8">
+                <svg viewBox="0 0 40 40" aria-hidden className="w-8 h-8 -rotate-90">
+                  <circle cx="20" cy="20" r="16" fill="none" stroke="var(--color-paper-200)" strokeWidth="4" />
+                  {!m.empty && m.pct > 0 && (
+                    <circle cx="20" cy="20" r="16" fill="none" strokeWidth="4" strokeLinecap="round"
+                      stroke={flagged ? ragColor(m) : 'var(--color-ink-400)'}
+                      strokeDasharray={`${(m.pct / 100) * C} ${C}`} />
+                  )}
+                </svg>
+                {/* No per-cent sign inside the ring. A ring IS a proportion, so
+                    the symbol earns nothing and the fourth character is what
+                    pushes "100%" wider than the hole it has to sit in. */}
+                <span className={cn('absolute inset-0 flex items-center justify-center text-[0.625rem] font-bold tabular-nums', numCls)}>{m.empty ? '—' : m.pct}</span>
+              </div>
+              {/* The one thing that does not become a tooltip. Dropping the name
+                  is a width decision; dropping the flag would leave colour as
+                  the only signal, which is the one thing DESIGN.md forbids
+                  outright. */}
+              {flagged && <StateIcon size={11} className={cn('shrink-0', state === 'red' ? 'text-risk-700' : 'text-high-700')} />}
+              {/* Sighted readers hover. Everyone else still gets the name. */}
+              <span className="sr-only">{m.label} — {m.empty ? 'not set up' : `${m.pct}%`}, {statusWordOf(m)}</span>
             </div>
           );
         })}

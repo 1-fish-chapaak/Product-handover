@@ -31,7 +31,7 @@ import {
 import { useAuditFiles, type AuditFile } from './useAuditFiles';
 import { evidenceSlots, mapEvidence, type EvidenceMatch } from './controlChatEvidence';
 import { auditCovers, countryFor, countryOf, inScopeEntityNames, ownersOf, programmeFor, scopedForDraw } from './auditScope';
-import { ConclusionPill, CourtBadge, NatureChip, OriginPicker, Toggle, TrackPill, Tickmark, Stamp, RagKpiRow, ragState, statusWordOf, worstMeter, type RagMeterDef } from './parts';
+import { ConclusionPill, CourtBadge, NatureChip, OriginPicker, Toggle, TrackPill, Tickmark, Stamp, RagKpiRow, type RagMeterDef } from './parts';
 import { Pill } from '../shared/StatusBadge';
 import { useToast } from '../shared/Toast';
 import { Sparkles, FileSpreadsheet } from 'lucide-react';
@@ -5339,28 +5339,31 @@ function ActivityRail({ control, pane, onPane, onCollapse }: { control: Control;
 
 /** The rail folded away — a spine, not a shut door (user ask, 22 Sep).
  *
- *  The first version of this was a 44px strip carrying the word "Ira" and
- *  nothing else, which made folding the rail a choice between the scores and
- *  the page. It is 80px now and keeps the two things worth glancing at: the
- *  three scores, still ranked and still coloured by the same rule, and the way
- *  back in. Every button here unfolds — the difference between them is WHICH
- *  pane you land on, so a reader who wants the history does not have to open
- *  the chat first and then leave it.
+ *  It carries the ways back IN and nothing else. It used to stack the three
+ *  scores above them (22 Sep) — but the status bar now prints those scores
+ *  across the top of the page in either state, so a folded rail repeating them
+ *  down an 80px column was the same three numbers twice on one screen, in the
+ *  narrower and worse of the two shapes (user ask, 23 Sep).
  *
- *  Deliberately not a summary of its own: the numbers are the same numbers,
- *  read from the same meters, so the spine can never quietly disagree with the
- *  rail it replaces. */
-function RailSpine({ control, meters, running, onOpen }: { control: Control; meters: RagMeterDef[]; running: boolean; onOpen: (p: RailPane) => void }) {
+ *  Every button here unfolds. The difference between them is WHICH pane you
+ *  land on, so a reader who wants the history does not have to open the chat
+ *  first and then leave it. */
+function RailSpine({ control, running, onOpen }: { control: Control; running: boolean; onOpen: (p: RailPane) => void }) {
   const { eng, role, me, openAuditId } = useIcfr();
   const still = useReducedMotion();
   const execCount = eng.executions.filter(e => e.controlId === control.id).length;
   const openDisc = discussionsFor(eng, control.id).filter(d => !d.resolved).length;
-  const worst = worstMeter(meters);
-  // Three dashes in a column was the whole of the folded rail on a control
-  // nobody had set up — honest, and useless. When nothing is measurable yet,
-  // it says so once instead of three times.
-  const noScores = meters.every(m => m.empty);
-  const iconBtn = 'w-full h-8 rounded-lg inline-flex items-center justify-center gap-1 text-ink-400 hover:text-brand-700 hover:bg-brand-50 transition-colors cursor-pointer';
+  // One shape for all three (user ask, 23 Sep). History and Discussion were
+  // naked 15px glyphs stacked under a 36px tile that plainly WAS a button, so
+  // they read as leftovers rather than as the other two ways in. They take Ira's
+  // tile and Ira's caption — and a flat paper face against its gradient, because
+  // the hierarchy is the point: one thing in this column does the work.
+  const tile = 'group w-full rounded-xl py-2 flex flex-col items-center gap-1.5 transition-colors cursor-pointer';
+  const quietFace = 'relative inline-flex items-center justify-center size-9 rounded-xl border border-canvas-border bg-paper-50 text-ink-500 transition-colors group-hover:border-brand-100 group-hover:bg-brand-50 group-hover:text-brand-700';
+  const cap = 'text-[0.5625rem] font-bold uppercase tracking-[0.08em]';
+  // The count rides the tile's corner rather than sharing a line with the icon:
+  // at this size a numeral beside a glyph reads as part of the glyph.
+  const badge = 'absolute -top-1 -right-1 min-w-[15px] h-[15px] px-1 rounded-full inline-flex items-center justify-center text-[0.5rem] font-bold tabular-nums';
   return (
     <div className="panel absolute inset-0 bottom-6 flex flex-col overflow-hidden">
       {/* The fold control sits where it sits in the open rail — top right of
@@ -5369,41 +5372,6 @@ function RailSpine({ control, meters, running, onOpen }: { control: Control; met
         className="shrink-0 h-7 mt-1 mx-1 rounded-lg text-ink-400 hover:text-ink-700 hover:bg-paper-50 inline-flex items-center justify-center transition-colors cursor-pointer">
         <PanelRightClose size={15} className="rotate-180" />
       </button>
-
-      {/* ── the scores ──────────────────────────────────────────────────────
-          At the top, the way they are at the top of the open rail — folding
-          the rail away should change the size of the reading, not its order.
-          No bar under each number: at 80px a 3px rule reads as decoration
-          rather than as a quantity, and the number already says it. Colour
-          follows the open row to the letter — ONE score may wear it. */}
-      {noScores ? (
-        <div className="px-2 pt-1 pb-2.5 text-[0.5625rem] font-semibold uppercase tracking-[0.06em] text-ink-300 text-center leading-snug">
-          Nothing<br />scored yet
-        </div>
-      ) : (
-        <div className="px-1.5 pt-1 pb-2 space-y-1.5">
-          {meters.map(m => {
-            const flagged = worst === m;
-            const state = ragState(m);
-            const StateIcon = state === 'red' ? AlertTriangle : AlertCircle;
-            return (
-              <button key={m.label} onClick={() => onOpen('chat')} title={`${m.label} — ${m.empty ? 'not set up' : `${m.pct}%, ${m.detail}`}`}
-                aria-label={m.empty ? `${m.label} — not set up` : `${m.label} ${m.pct}% — ${statusWordOf(m)}`}
-                className="w-full text-left rounded-lg px-1 py-0.5 hover:bg-paper-50 transition-colors cursor-pointer">
-                <div className="text-[0.5625rem] font-bold uppercase text-ink-400 truncate">{m.short ?? m.label}</div>
-                <div className="flex items-center gap-1">
-                  <span className={cn('text-[0.9375rem] font-bold tabular-nums leading-tight',
-                    m.empty ? 'text-ink-300' : flagged && state === 'red' ? 'text-risk-700' : flagged && state === 'amber' ? 'text-high-700' : 'text-ink-900')}>
-                    {m.empty ? '—' : `${m.pct}%`}
-                  </span>
-                  {/* Colour is never the only signal — DESIGN.md §6. */}
-                  {flagged && <StateIcon size={10} className={cn('shrink-0', state === 'red' ? 'text-risk-700' : 'text-high-700')} />}
-                </div>
-              </button>
-            );
-          })}
-        </div>
-      )}
 
       {/* PARKED (22 Sep, user ask) — the five-dot spine stood between the
           scores and the footer. It said which step the control was on, which
@@ -5424,13 +5392,11 @@ function RailSpine({ control, meters, running, onOpen }: { control: Control; met
 
           Ira leads it and keeps its mark: the product's AI signature (brand →
           fuchsia, Ask IRA's own avatar), ringed while a run is in flight so a
-          validation started on the left is visible from a column 80px wide.
-          The other two stay flat icons, which is the hierarchy — one thing
-          here does the work. */}
+          validation started on the left is visible from a column 80px wide. */}
       <div className="mt-auto border-t border-canvas-border" />
       <div className="shrink-0 px-1.5 py-2 space-y-1">
         <button onClick={() => onOpen('chat')} title="Ask Ira about this control" aria-label="Open the Ira chat"
-          className="group w-full rounded-xl py-2 flex flex-col items-center gap-1.5 hover:bg-brand-50 transition-colors cursor-pointer">
+          className={cn(tile, 'hover:bg-brand-50')}>
           <span className="relative inline-flex size-9">
             {running && !still && (
               <motion.span aria-hidden className="absolute inset-0 rounded-xl bg-brand-400"
@@ -5441,13 +5407,25 @@ function RailSpine({ control, meters, running, onOpen }: { control: Control; met
               <Sparkles size={17} strokeWidth={2.25} />
             </span>
           </span>
-          <span className="text-[0.5625rem] font-bold uppercase tracking-[0.12em] text-brand-700">Ira</span>
+          <span className={cn(cap, 'text-brand-700')}>Ira</span>
         </button>
-        <button onClick={() => onOpen('history')} title={`History — ${execCount} run${execCount === 1 ? '' : 's'}`} aria-label="Open the run history" className={iconBtn}>
-          <History size={15} />{execCount > 0 && <span className="text-[0.625rem] font-semibold tabular-nums">{execCount}</span>}
+        <button onClick={() => onOpen('history')} title={`History — ${execCount} run${execCount === 1 ? '' : 's'}`} aria-label="Open the run history"
+          className={cn(tile, 'hover:bg-paper-50')}>
+          <span className={quietFace}>
+            <History size={17} strokeWidth={2} />
+            {execCount > 0 && <span className={cn(badge, 'bg-paper-200 text-ink-600')}>{execCount}</span>}
+          </span>
+          <span className={cn(cap, 'text-ink-400 group-hover:text-brand-700')}>History</span>
         </button>
-        <button onClick={() => onOpen('discussion')} title={openDisc > 0 ? `Discussion — ${openDisc} open` : 'Discussion'} aria-label="Open the discussion" className={iconBtn}>
-          <MessageSquare size={15} />{openDisc > 0 && <span className="text-[0.625rem] font-semibold tabular-nums text-high-700">{openDisc}</span>}
+        <button onClick={() => onOpen('discussion')} title={openDisc > 0 ? `Discussion — ${openDisc} open` : 'Discussion'} aria-label="Open the discussion"
+          className={cn(tile, 'hover:bg-paper-50')}>
+          <span className={quietFace}>
+            <MessageSquare size={17} strokeWidth={2} />
+            {/* Amber, because an open thread is somebody waiting — the same
+                colour the row above spends on a score that needs reading. */}
+            {openDisc > 0 && <span className={cn(badge, 'bg-high-100 text-high-700')}>{openDisc}</span>}
+          </span>
+          <span className={cn(cap, 'text-ink-400 group-hover:text-brand-700')}>Discussion</span>
         </button>
       </div>
     </div>
@@ -5873,8 +5851,14 @@ export default function ControlDossier() {
 
                 The owner does not get them: they are the auditor's read on how
                 the testing is going, and the owner's line above is deliberately
-                "Your control" and nothing else. */}
-            {!isOwner && <RagKpiRow meters={designRagMeters(control)} inline />}
+                "Your control" and nothing else.
+
+                With the rail open this row loses 400px, so each number takes a
+                ring (user ask, 23 Sep): it is the narrower shape — the number
+                moves inside the arc — and the one that survives being skimmed,
+                which is all the room there is for it here. Rail shut, the plain
+                numbers have the width they want. */}
+            {!isOwner && <RagKpiRow meters={designRagMeters(control)} inline dial={railOpen} />}
             {/* Secondary, per DESIGN.md: a tinted purple chip rather than the
                 outline every other control on the page already wears. These two
                 are the actions of this header, and an outline button beside an
@@ -6208,7 +6192,7 @@ export default function ControlDossier() {
             <ActivityRail control={control} pane={railPane} onPane={setRailPane} onCollapse={() => setRailOpen(false)} />
           </div>
           {!railOpen && (
-            <RailSpine control={control} meters={designRagMeters(control)} running={!!run}
+            <RailSpine control={control} running={!!run}
               onOpen={p => { setRailPane(p); setRailOpen(true); }} />
           )}
         </motion.div>
