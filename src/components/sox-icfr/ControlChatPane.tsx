@@ -6,7 +6,7 @@ import { useAuditLog } from '../../context/AdminDataContext';
 import {
   auditSampling, concludeRationale, designOutstanding, designSuggestion, draftSamplePrompt, extractionCriteria,
   fileUsable, guessFileKind, itgcHolds, narrowedCount, operatingSuggestion, populationFrom, populationSources,
-  readRowCount, readSamplePrompt, sampleSizeGuide, sampledSources, seedKeyOf, trackResult, workingAudit,
+  readRowCount, readSamplePrompt, sampleSizeGuide, samplingOf, sampledSources, seedKeyOf, trackResult, workingAudit,
 } from './helpers';
 import { useAuditFiles } from './useAuditFiles';
 import { OriginPicker } from './parts';
@@ -518,7 +518,7 @@ export default function ControlChatPane({ control }: { control: Control }) {
     if (a.id === 'draw-sample' && a.arg) {
       const src = sampledSources(populationSources(control)).find(x => x.id === a.arg);
       if (!src) return;
-      const guide = sampleSizeGuide(control, itgcHolds(eng, control));
+      const guide = sampleSizeGuide(control, itgcHolds(eng, control), samplingOf(eng));
       const ask = draftSamplePrompt(src, guide.suggested, workingAudit(eng, openAuditId));
       setDraw({ sourceId: src.id, file: src.file, ask, refs: null });
       say(control.id, 'ira', `I have drafted the ask:\n\n“${ask}”\n\nThe sizing table says ${guide.suggested} for this one — band ${guide.range}. Send it as it stands, or type a different ask and I will read that instead.`);
@@ -673,7 +673,7 @@ export default function ControlChatPane({ control }: { control: Control }) {
     const src = sampledSources(populationSources(control)).find(x => x.id === draw.sourceId);
     if (!src) { setDraw(null); return; }
     const audit = workingAudit(eng, openAuditId);
-    const plan = readSamplePrompt(ask, src, sampleSizeGuide(control, itgcHolds(eng, control)).suggested, audit, auditSampling(audit));
+    const plan = readSamplePrompt(ask, src, sampleSizeGuide(control, itgcHolds(eng, control), samplingOf(eng)).suggested, audit, auditSampling(audit));
     setDraw({ ...draw, ask });
     startRun(control.id, `Drawing ${plan.size} of ${src.count.toLocaleString('en-IN')} from ${src.file}`, DRAW_RUN_STEPS, DRAW_MS);
     timer.current = window.setTimeout(() => {
@@ -692,7 +692,7 @@ export default function ControlChatPane({ control }: { control: Control }) {
     if (!src) { setDraw(null); return; }
     const audit = workingAudit(eng, openAuditId);
     const agreed = auditSampling(audit);
-    const plan = readSamplePrompt(draw.ask, src, sampleSizeGuide(control, itgcHolds(eng, control)).suggested, audit, agreed);
+    const plan = readSamplePrompt(draw.ask, src, sampleSizeGuide(control, itgcHolds(eng, control), samplingOf(eng)).suggested, audit, agreed);
     // The same five-digit reperformance number the card computes, off the same
     // string — a reviewer walking the paper has to land on these items.
     const seed = 10000 + (`${seedKeyOf(control)}·${src.id}·${openAuditId ?? ''}`.split('').reduce((acc, ch) => (acc * 31 + ch.charCodeAt(0)) >>> 0, 17) % 89999);

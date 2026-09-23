@@ -3,7 +3,7 @@ import { normaliseProcess, programmeFor } from './auditScope';
 import { NEW_FLOW_ENGAGEMENT_ID } from './flow';
 import { titleFromRisk, validationQA } from './helpers';
 import { entityCodeFor, processCodeFor, renameEngagementIds } from './racmIds';
-import { FIVE_W_1H, ipeChecklist, ROUND_TAG, ROUND_WINDOW_LABEL } from './types';
+import { defaultSamplingMethodology, FIVE_W_1H, ipeChecklist, ROUND_TAG, ROUND_WINDOW_LABEL } from './types';
 import type {
   Assertion, Attestation, AuditArchive, AuditRecord, AuditSampling, Control, DesignDoc, DesignPoint, DesignTrack, DesignWaiverReason, Deficiency, Discussion, DocStatus,
   // PARKED (Aug 2026) — `GapType` went with the Gap type field; see types.ts.
@@ -997,6 +997,15 @@ const ENGAGEMENT: IcfrEngagement = {
     lockedAt: '01 Apr 2025 · at go-live',
   },
   rules: { clearlyTrivial: 250_000, sdBandPct: 20, aggregate: true, autoRoute: true, mwIndicators: [] },
+  // Agreed before this engagement's testing began, which is why every control in
+  // the seed already has sizes to trace back to. The lead proposed it and the
+  // engagement's own reviewer signed — never the same person (#22).
+  samplingMethodology: {
+    ...defaultSamplingMethodology(),
+    proposedBy: { by: 'A. Mehta', at: '2 Apr' },
+    reviewer: { by: REVIEWER, at: '3 Apr' },
+  },
+  samplingLog: [],
   accounts: ACCOUNTS,
   controls: [...DETAILED, ...generate()],
   deficiencies: DEFICIENCIES,

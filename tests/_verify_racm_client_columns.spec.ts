@@ -78,24 +78,39 @@ test('a client column can be added, renamed, defined and required', async ({ pag
   await required.click();
   await expect(required).toHaveAttribute('aria-checked', 'true');
 
-  // It survives a reload, like the rest of the set-up.
+  // It survives a reload, like the rest of the set-up. Reloading lands on Home,
+  // so the walk back to Config is the same one the test opened with.
   await page.reload();
-  await page.getByRole('tab', { name: /Config/ }).click();
+  await openConfig(page);
   await expect(page.getByLabel('What to call the column "SOX Cycle Ref"')).toHaveValue('SOX cycle');
   await expect(page.getByText('SOX Cycle Ref in the file')).toBeVisible();
 });
 
 test('a required client column holds a row until it is filled', async ({ page }) => {
-  test.setTimeout(150_000);
+  test.setTimeout(180_000);
+
+  // A set-up belongs to a CLIENT GROUP, and an upload follows the group of the
+  // company chosen at Create RACM. So the upload is run once just to learn whose
+  // columns it lands on — configuring a different group would prove nothing.
+  await page.goto('/');
+  await page.getByRole('button', { name: 'RACM', exact: true }).first().click();
+  await expect(page.getByRole('heading', { name: 'RACM', exact: true })).toBeVisible({ timeout: 8000 });
+  await startUpload(page, 'whose-columns.csv', [HEAD, row()]);
+  await page.getByRole('button', { name: 'Continue', exact: true }).click();
+  const using = await page.getByText(/^Using .+'s columns$/).textContent();
+  const group = using!.replace(/^Using /, '').replace(/'s columns$/, '');
+
+  // Now give THAT group a required column of its own.
   await openConfig(page);
+  await page.getByRole('button', { name: 'Column set-up for' }).click();
+  await page.getByRole('option', { name: new RegExp(`^${group}`) }).click();
   await page.getByLabel('Heading of a column to keep').fill('Cost centre');
   await page.getByRole('button', { name: /Keep it/ }).click();
   await page.getByRole('switch', { name: /Required/ }).last().click();
 
-  await page.getByRole('tab', { name: /Library/ }).click();
   // The file has no Cost centre column at all, so every row waits for one.
+  await page.getByRole('tab', { name: /Library/ }).click();
   await startUpload(page, 'no-cost-centre.csv', [HEAD, row()]);
-  await expect(page.getByText(/You'll fill at Review/).first()).toBeVisible({ timeout: 8000 });
   await page.getByRole('button', { name: 'Continue', exact: true }).click();
 
   const importBtn = page.getByRole('button', { name: /^Import \d+ control/ });

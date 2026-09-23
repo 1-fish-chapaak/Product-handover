@@ -426,6 +426,15 @@ export interface Sampling {
    *  reperformable. Without it "we picked at random" is not a procedure anyone
    *  else can walk, and the reviewer cannot land on the same items. */
   seed?: number;
+  /** A size the auditor set against the one the agreed methodology produced
+   *  (#22). The engagement agrees the sizing table once, so a different number
+   *  on one control is a DEPARTURE from that agreement, not a preference — it
+   *  is always allowed, but it carries the number that was agreed, the reason
+   *  given, and who gave it, so departures can be counted across the engagement
+   *  and printed rather than disappearing into a size nobody can trace. Present
+   *  only once a size has actually been set against the table; a fresh draw
+   *  rebuilds `sampling` and so clears it. */
+  override?: { size: number; agreed: number; reason: string; by: string; at: string };
   samples: Sample[];
 }
 
@@ -1526,6 +1535,98 @@ export interface MaterialityBasis {
 /** What the tool detected from the uploaded RACM / GL when the engagement was created. */
 export interface EntityDetection { name: string; companyCode: string; source: string; }
 
+// ─── Sampling methodology — agreed once, for the whole engagement ────────────────
+/**
+ * How this engagement samples, agreed once and traced to by every control (#22).
+ *
+ * It lives on the ENGAGEMENT for two reasons the client gave. Not on the control,
+ * because a sizing decision repeated 124 times is not a methodology — when a
+ * reviewer or an external auditor asks what the sampling approach is, there has
+ * to be one answer. And not on the audit, because the approach does not change
+ * between the interim and year-end rounds of the same year; putting it there
+ * would let two rounds of one year test off different tables.
+ *
+ * What stays on the audit is only what is tied to the period: which round it is,
+ * the roll-forward window, and any entity being rotated this cycle.
+ */
+export const SAMPLING_METHODS = ['Random', 'Systematic', 'Full population'] as const;
+export type SamplingMethod = (typeof SAMPLING_METHODS)[number];
+
+/** How the year's rounds are sampled (23 Sep — the question that had no answer
+ *  before). Interim covers part of the year and roll-forward covers the rest:
+ *  either each round draws from its own period, or one draw at year end covers
+ *  the whole of it. */
+export type SamplingRoundBasis = 'per-round' | 'whole-period';
+export const ROUND_BASIS_EFFECT: Record<SamplingRoundBasis, string> = {
+  'per-round': 'Each round draws its own sample from its own period, so every round stands on its own evidence — and a control tested twice is sampled twice.',
+  'whole-period': 'One sample is drawn at year end covering the full year, so the year is tested once — but nothing is concluded on until the year has closed.',
+};
+
+/** One row of the agreed table: how many items to test at each risk rating. */
+export interface SampleSizeRow { low: number; medium: number; high: number }
+
+/** The order the table reads in — least often at the top, most often at the
+ *  bottom, which is also the order the sizes climb. */
+export const FREQUENCY_ORDER: Frequency[] = ['Annual', 'Quarterly', 'Monthly', 'Weekly', 'Daily', 'Recurring', 'Ad-hoc'];
+/** How each frequency is said on the methodology table — plainer than the stored
+ *  word, because this table is read by people agreeing to it, not by the code. */
+export const FREQUENCY_SAYS: Record<Frequency, string> = {
+  Annual: 'Once a year', Quarterly: 'Quarterly', Monthly: 'Monthly', Weekly: 'Weekly',
+  Daily: 'Daily', Recurring: 'Many times a day', 'Ad-hoc': 'Ad-hoc',
+};
+
+/** The table the product ships with, and what an engagement starts from. These
+ *  are the bands `sampleSizeGuide` has always used — agreeing the methodology
+ *  changes who owns the numbers, not the numbers themselves. */
+export const DEFAULT_SAMPLE_SIZES: Record<Frequency, SampleSizeRow> = {
+  Annual: { low: 1, medium: 1, high: 1 },
+  Quarterly: { low: 1, medium: 2, high: 4 },
+  Monthly: { low: 2, medium: 4, high: 5 },
+  Weekly: { low: 5, medium: 10, high: 15 },
+  Daily: { low: 15, medium: 25, high: 40 },
+  Recurring: { low: 25, medium: 40, high: 60 },
+  // No fixed rhythm to size against, so the numbers are a starting point rather
+  // than a rule — the screen says so beside the row.
+  'Ad-hoc': { low: 5, medium: 10, high: 15 },
+};
+
+export interface SamplingMethodology {
+  /** Every frequency has a row, so no control falls outside the agreed table. */
+  sizes: Record<Frequency, SampleSizeRow>;
+  method: SamplingMethod;
+  roundBasis: SamplingRoundBasis;
+  /** The engagement lead, at creation. A proposal is not yet a methodology. */
+  proposedBy?: SignoffEntry;
+  /** What makes it AGREED rather than merely configured. Until this is here,
+   *  testing is blocked and the block names who it is waiting on. */
+  reviewer?: SignoffEntry;
+  /** 1 upwards. An audit records the version it was created under and finishes
+   *  on it, so one audit is never half-tested under two methods. */
+  version: number;
+}
+
+/** A revision to the methodology — what moved, why, and the version it created. */
+export interface SamplingChangeEntry {
+  id: string;
+  version: number;
+  changes: { field: string; from: string; to: string }[];
+  reason: string;
+  by: string;
+  at: string;
+}
+
+export const defaultSamplingMethodology = (): SamplingMethodology => ({
+  sizes: Object.fromEntries(
+    Object.entries(DEFAULT_SAMPLE_SIZES).map(([f, row]) => [f, { ...row }]),
+  ) as Record<Frequency, SampleSizeRow>,
+  method: 'Random',
+  roundBasis: 'per-round',
+  version: 1,
+});
+
+/** Agreed means signed by the reviewer — nothing else counts. */
+export const samplingAgreed = (m: SamplingMethodology | undefined): boolean => !!m?.reviewer;
+
 export interface MaterialityRules {
   clearlyTrivial: number;        // de-minimis threshold (₹) — below this, an exception is clearly trivial
   sdBandPct: number;             // significant-deficiency lower band, as % of overall materiality (e.g. 20)
@@ -1706,6 +1807,11 @@ export interface AuditRecord {
   periodSpan: string;               // 'Apr 2026 – Mar 2027'
   /** Which round of the cycle this is. */
   round: AuditRound;
+  /** The sampling methodology version in force when this audit was created. It
+   *  finishes on that version whatever happens to the methodology afterwards,
+   *  so one audit is never half-tested under two methods, and the working paper
+   *  can name which one it ran under. */
+  samplingVersion?: number;
   /** The window the round actually covers, as ISO dates. `periodSpan` above is
    *  the prose label and can't be measured; the coverage timeline needs real
    *  months to place a bar and to spot an uncovered stretch. */
@@ -1838,6 +1944,13 @@ export interface IcfrEngagement {
   entityDetected?: EntityDetection;
   materialityBasis?: MaterialityBasis;
   rules: MaterialityRules;
+  /** How this engagement samples — agreed once, before testing starts, and the
+   *  thing every sample size traces back to (#22). Optional only so engagements
+   *  seeded before it existed still read; `samplingOf` fills the default. */
+  samplingMethodology?: SamplingMethodology;
+  /** Every revision to it, newest last. The methodology a reader is looking at
+   *  is only defensible alongside the history of what it used to be. */
+  samplingLog?: SamplingChangeEntry[];
   accounts: SignificantAccount[];
   controls: Control[];
   deficiencies: Deficiency[];

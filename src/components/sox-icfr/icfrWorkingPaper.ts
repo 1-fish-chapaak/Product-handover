@@ -1,5 +1,5 @@
 import * as XLSX from 'xlsx';
-import { assessSeverity, attestationOverruled, requiredFilesOf, restsOnStatementAlone, auditorProvenChecks, combinedSample, conclusionOf, controlConclusion, designBasis, operatingApplies, countVerdict, coverageVerdict, fileOriginOf, designOutstanding, formatDueDate, formatINR, icfrConclusion, isControlLocked, itgcHolds, openMaterialWeaknesses, populationSources, sampleSizeGuide, trackResult, designProgress, hasRowCount, isAssisting, toeRounds, LEGACY_SOURCE_ID } from './helpers';
+import { assessSeverity, attestationOverruled, requiredFilesOf, restsOnStatementAlone, auditorProvenChecks, combinedSample, conclusionOf, controlConclusion, designBasis, operatingApplies, countVerdict, coverageVerdict, fileOriginOf, designOutstanding, formatDueDate, formatINR, icfrConclusion, isControlLocked, itgcHolds, openMaterialWeaknesses, populationSources, sampleSizeGuide, samplingOf, trackResult, designProgress, hasRowCount, isAssisting, toeRounds, LEGACY_SOURCE_ID } from './helpers';
 import { FIVE_W_1H, gapNature } from './types';
 import { countryFor, ownersOf } from './auditScope';
 import { extraLabel, racmConfig, type ExtraColumn } from './racmConfig';
@@ -104,7 +104,7 @@ export function buildControlPaper(eng: IcfrEngagement, c: Control): PaperBlock[]
   // "1 (test of one)" on a control the app had already resized to 25 because an
   // ITGC underneath it failed — the paper contradicting the working file it is
   // supposed to be a record of.
-  const guide = sampleSizeGuide(c, itgcHolds(eng, c));
+  const guide = sampleSizeGuide(c, itgcHolds(eng, c), samplingOf(eng));
   // The two population checks are computed, not attested — so the paper prints
   // what the application concluded and, where it disagreed, the reason it was
   // overridden. A row that only ever said "ticked" told a reviewer nothing.
@@ -400,7 +400,18 @@ export function buildControlPaper(eng: IcfrEngagement, c: Control): PaperBlock[]
   blocks.push({
     kind: 'kv', title: 'Sample details', rows: [
       ['Period tested', periodLine(eng)],
-      ['Sample size — indicated', `${guide.suggested} (${guide.range}) — ${guide.note}`],
+      // Which agreed table the number came from, and which version of it. A size
+      // on a paper that cannot be traced to a methodology is a size the reviewer
+      // has to take on trust (#22) — and an audit finishes on the version it
+      // started under, so the engagement's current version may not be the one
+      // this control was tested against.
+      ['Sampling methodology', (() => {
+        const m = samplingOf(eng);
+        const ran = audit?.samplingVersion ?? m.version;
+        const signed = m.reviewer ? `agreed by ${m.reviewer.by} on ${m.reviewer.at}` : 'NOT YET AGREED — no reviewer signature';
+        return `v${ran} · ${m.method} · ${m.roundBasis === 'per-round' ? 'sampled per round' : 'sampled across the whole period'} — ${signed}${ran !== m.version ? ` (the engagement is now on v${m.version})` : ''}`;
+      })()],
+      ['Sample size — indicated', `${guide.suggested} (${guide.range}) — ${guide.note}${guide.cell ? ` [read off the agreed table: ${guide.cell.frequency} · ${guide.cell.rating} risk]` : ''}`],
       ['Sample size — drawn', c.operating.sampling ? `${c.operating.sampling.samples.length} · ${c.operating.sampling.method}, ${c.operating.sampling.basis}` : 'None drawn'],
       // The two facts that make a draw reperformable. A reviewer who cannot
       // re-run the selection cannot check that it was not steered — and each

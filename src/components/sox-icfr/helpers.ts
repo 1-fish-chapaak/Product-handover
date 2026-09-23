@@ -1,9 +1,9 @@
 import { riskCategoryOf } from './racmImport';
-import { isInquiryOnly, ipeReliable, GRADE_RANK, AUDIT_SAMPLE_SPREADS, DEFAULT_AUDIT_SAMPLING, TESTING_STRATEGIES } from './types';
+import { DEFAULT_SAMPLE_SIZES, defaultSamplingMethodology, isInquiryOnly, ipeReliable, GRADE_RANK, AUDIT_SAMPLE_SPREADS, DEFAULT_AUDIT_SAMPLING, TESTING_STRATEGIES } from './types';
 import type {
   AuditorProofKind, AuditSampleSpread, AuditSampling, Conclusion, Control, Court, Deficiency, DesignDoc, DesignDocKind, DesignTrack, ExceptionGrade, HandoffTask, IcfrEngagement,
   FileOrigin, IpeCheck, Likelihood, MaterialityRules, OperatingTrack, Population, PopulationBasis, PopulationSource, ReviewNote, RiskRating, Role,
-  Sample, Severity, TestingStrategy, ToeRound, TrackConclusion, DeficiencyGroup, ExceptionStatus,
+  Sample, SamplingMethodology, Severity, TestingStrategy, ToeRound, TrackConclusion, DeficiencyGroup, ExceptionStatus,
   ControlType, Nature,
 } from './types';
 
@@ -2235,20 +2235,60 @@ const RATING_NOTE: Record<RiskRating, string> = {
   Medium: 'Rated medium risk — the middle of the band.',
   Low: 'Rated low risk — the lightest test that still holds.',
 };
-export function sampleSizeGuide(c: Control, itgcHolds = true): { suggested: number; range: string; note: string } {
+/**
+ * How far the agreed methodology is actually being followed (#22).
+ *
+ * Surfaced, never enforced — the user's instruction was explicit. A high count
+ * is not an error to block; it is the finding. If 40 of 124 controls were sized
+ * against something other than the agreed table, the methodology has quietly
+ * become a suggestion, and the number is how anyone notices.
+ *
+ * Only controls that have actually been sized count in the denominator: a
+ * control nobody has drawn a sample for has not departed from anything.
+ */
+export function samplingOverrides(controls: Control[]): { overridden: number; sized: number } {
+  const sized = controls.filter(c => c.operating?.sampling);
+  return { overridden: sized.filter(c => c.operating.sampling?.override).length, sized: sized.length };
+}
+
+/** This engagement's agreed sampling methodology — the product default where an
+ *  engagement predates it, so every reader has a table to size against and no
+ *  caller has to handle "no methodology yet". */
+export const samplingOf = (eng: { samplingMethodology?: SamplingMethodology }): SamplingMethodology =>
+  eng.samplingMethodology ?? defaultSamplingMethodology();
+
+/**
+ * The size this control is tested at, and what produced it.
+ *
+ * Since #22 the numbers come from the engagement's AGREED methodology rather
+ * than from a constant in this file: the auditor decides nothing here, they
+ * read off a table their reviewer signed. `SIZE_BANDS` stays as the source of
+ * the prose — what the band means and what the rating did to it — and as the
+ * product default when no methodology has been agreed.
+ *
+ * `cell` comes back so the control page can show the auditor the row and column
+ * their number was read from. A size nobody can trace is a size nobody can defend.
+ */
+export function sampleSizeGuide(
+  c: Control, itgcHolds = true, methodology: SamplingMethodology = defaultSamplingMethodology(),
+): { suggested: number; range: string; note: string; cell?: { frequency: Frequency; rating: RiskRating } } {
   if (c.nature === 'Automated' && itgcHolds) return { suggested: 1, range: 'test of one', note: 'Automated — one instance proves the rule, valid only while ITGCs hold.' };
   // Everything below this line is the manual path — and an automated control
   // whose ITGCs have failed takes it. "Sized like a manual control" has to mean
   // sized like a manual control OF THIS FREQUENCY AND RATING, not a flat number:
   // a quarterly control does not become a daily one because an ITGC broke.
   const band = SIZE_BANDS[c.frequency];
-  const rating = c.riskRating;
-  const suggested = rating === 'High' ? band.high : rating === 'Low' ? band.low : band.mid;
-  const sized = rating ? `${band.note} ${RATING_NOTE[rating]}` : band.note;
+  const agreed = methodology.sizes[c.frequency] ?? DEFAULT_SAMPLE_SIZES[c.frequency];
+  // No rating agreed yet reads as the middle of the band, which is what this
+  // sized at before anyone rated anything.
+  const rating: RiskRating = c.riskRating ?? 'Medium';
+  const suggested = rating === 'High' ? agreed.high : rating === 'Low' ? agreed.low : agreed.medium;
+  const sized = c.riskRating ? `${band.note} ${RATING_NOTE[rating]}` : band.note;
   return {
     suggested,
-    range: band.range,
+    range: `${agreed.low}–${agreed.high}`,
     note: c.nature === 'Automated' ? `ITGC failure in force — test of one is invalid; sized like a manual control. ${sized}` : sized,
+    cell: { frequency: c.frequency, rating },
   };
 }
 
