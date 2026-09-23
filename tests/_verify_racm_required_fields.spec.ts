@@ -108,7 +108,9 @@ test('A file missing most required columns still uploads — Ira drafts, Risk ow
   await expect(page.getByText('— the file has no column for it').first()).toBeVisible();
   const importBtn = page.getByRole('button', { name: /^Import \d+ control/ });
   await expect(importBtn).toBeDisabled();
-  await page.getByLabel('Set for all rows').fill('Priya Singh');
+  // An owner is picked from the tenant's own users now, not typed: a name the
+  // product cannot route an evidence request to is not an owner.
+  await page.getByLabel('Set for all rows').selectOption('Priya Singh');
   await page.getByRole('button', { name: 'Apply', exact: true }).click();
   await expect(page.getByText(/2 rows need a risk owner/)).toHaveCount(0);
 

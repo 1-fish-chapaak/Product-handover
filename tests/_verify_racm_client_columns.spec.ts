@@ -137,3 +137,32 @@ test("a client column shows on the matrix once it is set up", async ({ page }) =
   await importBtn.click();
   await expect(page.getByText(/imported for/).first()).toBeVisible({ timeout: 8000 });
 });
+
+test("an owner is picked from the tenant's users, and the file's own name survives", async ({ page }) => {
+  test.setTimeout(150_000);
+  await page.goto('/');
+  await page.getByRole('button', { name: 'RACM', exact: true }).first().click();
+  await expect(page.getByRole('heading', { name: 'RACM', exact: true })).toBeVisible({ timeout: 8000 });
+
+  // The file names owners this tenant has never heard of.
+  await startUpload(page, 'owners.csv', [HEAD, row()]);
+  await page.getByRole('button', { name: 'Continue', exact: true }).click();
+
+  // Open the row's details, where the owners sit.
+  await page.getByRole('button', { name: /^Show attributes and design checks/ }).first().click();
+  const owner = page.getByRole('combobox', { name: /^Control owner for row/ });
+  await expect(owner).toBeVisible({ timeout: 8000 });
+
+  // The client wrote "R. Khanna", who is nobody in this workspace — kept, and
+  // said to be from the file rather than silently dropped.
+  await expect(owner.locator('option', { hasText: 'R. Khanna — from the file' })).toHaveCount(1);
+  await expect(owner).toHaveValue('R. Khanna');
+
+  // And the tenant's own users are what you can assign.
+  await expect(owner.locator('option', { hasText: 'Priya Singh' })).toHaveCount(1);
+  // A user who cannot sign in is not offered as an owner.
+  await expect(owner.locator('option', { hasText: 'Farah Khan' })).toHaveCount(0);
+
+  await owner.selectOption('Priya Singh');
+  await expect(owner).toHaveValue('Priya Singh');
+});

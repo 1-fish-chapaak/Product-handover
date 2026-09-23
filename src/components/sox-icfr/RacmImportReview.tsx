@@ -28,7 +28,7 @@ import {
   setEntityCode, setProcessCode,
 } from './racmIds';
 import { useToast } from '../shared/Toast';
-import { useAuditLog } from '../../context/AdminDataContext';
+import { useAdminData, useAuditLog, type UserStatus } from '../../context/AdminDataContext';
 import { Pill } from '../shared/StatusBadge';
 import { cn } from '../../lib/cn';
 import { configureFromSample, rememberMapping, useRacmConfig } from './racmConfig';
@@ -96,6 +96,20 @@ const fieldLabel = (k: RacmFieldKey) => FIELD_BY_KEY.get(k)?.label ?? k;
 const TITLE_PAIR: RacmFieldKey[] = ['controlTitle', 'controlActivity'];
 /** Set once for every row at Review when the file has no column for them. */
 const PEOPLE_FIELDS: RacmFieldKey[] = ['riskOwner', 'owner'];
+/** Every field that names a person, so all three of them offer the same list. */
+const ALL_PEOPLE_FIELDS: RacmFieldKey[] = ['riskOwner', 'owner', 'processOwner'];
+const isPersonField = (field: RacmFieldKey): boolean => ALL_PEOPLE_FIELDS.includes(field);
+/** A user who cannot sign in cannot own a control, so they are not offered —
+ *  assigning one reads as an owner with nobody behind it. An invited user is
+ *  offered: the invitation is out, and work is assigned ahead of acceptance all
+ *  the time. */
+const ASSIGNABLE: UserStatus[] = ['Active', 'Invited'];
+/** What the file wrote, when it is not one of this tenant's users. Kept at the
+ *  top of that row's list rather than dropped: the client named somebody for a
+ *  reason, and a picker that cannot say what the matrix already says would make
+ *  opening the row destroy the answer. */
+const fromFileOption = (current: string, people: string[]): string[] =>
+  current && !people.includes(current) ? [current] : [];
 
 const labelCls = 'text-[0.6875rem] font-semibold uppercase tracking-wide text-ink-400 mb-1.5 block';
 const selectCls = 'h-9 px-3 rounded-lg border border-canvas-border bg-canvas-elevated text-[0.78125rem] text-ink-800 cursor-pointer focus:outline-none focus:ring-2 focus:ring-brand-200';
@@ -332,7 +346,7 @@ const BLANK_OPTIONS: Partial<Record<CoreBlank, readonly string[]>> = {
  * boxes (22 Sep). Ira offers nothing beside them: a column that isn't ours has
  * no meaning she can read off the rest of the row.
  */
-function BlankFixRow({ row, blanks, clientBlanks, fills, attributeIdeas, checkIdeas, colSpan, onSet, onSetExtra, onLeaveOut }: {
+function BlankFixRow({ row, blanks, clientBlanks, fills, attributeIdeas, checkIdeas, colSpan, people, onSet, onSetExtra, onLeaveOut }: {
   row: ImportRow;
   blanks: CoreBlank[];
   /** This client's own required columns the row left blank, written by header. */
@@ -342,6 +356,8 @@ function BlankFixRow({ row, blanks, clientBlanks, fills, attributeIdeas, checkId
   /** Ira's design checks for this row — offered when the row has none left. */
   checkIdeas: string[];
   colSpan: number;
+  /** The tenant's assignable users — an owner blank is picked, never typed. */
+  people: string[];
   onSet: (field: RacmFieldKey, value: string) => void;
   onSetExtra: (header: string, value: string) => void;
   onLeaveOut: () => void;
@@ -399,7 +415,16 @@ function BlankFixRow({ row, blanks, clientBlanks, fills, attributeIdeas, checkId
                 <div key={b} className="grid grid-cols-[8.5rem_minmax(0,1fr)] gap-x-3 items-start">
                   <label htmlFor={id} className="pt-1.5 text-[0.71875rem] font-semibold text-ink-600">{BLANK_TITLE[b]}</label>
                   <div className="min-w-0">
-                    {BLANK_OPTIONS[b] ? (
+                    {/* A person is picked from the tenant's users, never typed —
+                        same rule as the Set-for-all box above, so the two can
+                        never disagree about who an owner may be. */}
+                    {isPersonField(BLANK_FIELD[b]) ? (
+                      <select id={id} value="" onChange={e => { if (e.target.value) onSet(BLANK_FIELD[b], e.target.value); }}
+                        className={cn(inputCls, 'w-48 cursor-pointer')}>
+                        <option value="" disabled>{`Pick a ${BLANK_TITLE[b].toLowerCase()}`}</option>
+                        {people.map(p => <option key={p} value={p}>{p}</option>)}
+                      </select>
+                    ) : BLANK_OPTIONS[b] ? (
                       <select id={id} value="" onChange={e => { if (e.target.value) onSet(BLANK_FIELD[b], e.target.value); }}
                         className={cn(inputCls, 'w-48 cursor-pointer')}>
                         <option value="" disabled>{`Pick a ${BLANK_TITLE[b].toLowerCase()}`}</option>
@@ -523,8 +548,8 @@ function StepRail({ steps, current }: { steps: { key: Step; label: string }[]; c
  * One person for every row still missing them (22 Sep). Rows stay held until
  * the field is filled; after Apply any single row is changed from its details.
  */
-function SetForAllBox({ label, count, noColumn, onApply }: {
-  label: string; count: number; noColumn: boolean; onApply: (value: string) => void;
+function SetForAllBox({ label, count, noColumn, people, onApply }: {
+  label: string; count: number; noColumn: boolean; people: string[]; onApply: (value: string) => void;
 }) {
   const [value, setValue] = useState('');
   const id = `racm-import-all-${label.replace(/\W+/g, '-').toLowerCase()}`;
@@ -538,9 +563,13 @@ function SetForAllBox({ label, count, noColumn, onApply }: {
       </p>
       <div className="flex-1" />
       <label htmlFor={id} className="text-[0.71875rem] text-ink-600">Set for all rows</label>
-      <input id={id} value={value} onChange={e => setValue(e.target.value)} onKeyDown={e => { if (e.key === 'Enter') apply(); }}
-        placeholder={label === 'Risk owner' ? 'e.g. Priya Singh' : 'e.g. AP Manager'}
-        className="h-8 w-48 px-2.5 rounded-lg border border-canvas-border bg-canvas-elevated text-[0.75rem] text-ink-800 placeholder:text-ink-400 focus:outline-none focus:ring-2 focus:ring-brand-200" />
+      {/* The tenant's own users, not a typed name: an owner is somebody who can
+          be asked for evidence, and a name nobody can route to is not one. */}
+      <select id={id} value={value} onChange={e => setValue(e.target.value)}
+        className="h-8 w-48 px-2 rounded-lg border border-canvas-border bg-canvas-elevated text-[0.75rem] text-ink-800 cursor-pointer focus:outline-none focus:ring-2 focus:ring-brand-200">
+        <option value="" disabled>{`Pick a ${label.toLowerCase()}`}</option>
+        {people.map(p => <option key={p} value={p}>{p}</option>)}
+      </select>
       <button type="button" onClick={apply} disabled={!value.trim()}
         className="h-8 px-3 rounded-lg bg-brand-600 text-white text-[0.71875rem] font-semibold enabled:hover:bg-brand-700 disabled:opacity-40 disabled:cursor-not-allowed transition-colors cursor-pointer">
         Apply
@@ -560,6 +589,14 @@ function ConfidencePill({ match, missing }: { match: ColumnMatch; missing: boole
 export default function RacmImportReview({ mode, file, process, entity, existing, onClose, onImport }: RacmImportReviewProps) {
   const { addToast } = useToast();
   const logEvent = useAuditLog();
+  // The people this tenant can actually assign. Read from the workspace's own
+  // user list rather than from names seen in past matrices: an owner has to be
+  // somebody the product can route an evidence request to.
+  const { users } = useAdminData();
+  const tenantPeople = useMemo(
+    () => Array.from(new Set(users.filter(u => ASSIGNABLE.includes(u.status)).map(u => u.name))).sort((a, b) => a.localeCompare(b)),
+    [users],
+  );
   // The team's column set-up: which columns a row can't arrive without, which
   // of the file's own columns to keep, and what its headers meant last time.
   // Whose columns this upload lands by: the client group of the company chosen
@@ -1296,7 +1333,7 @@ export default function RacmImportReview({ mode, file, process, entity, existing
               {/* People a whole file may lack a column for — set once for every
                   row still missing one (22 Sep). */}
               {peopleGaps.map(g => (
-                <SetForAllBox key={g.field} label={fieldLabel(g.field)} count={g.rows.length}
+                <SetForAllBox key={g.field} label={fieldLabel(g.field)} count={g.rows.length} people={tenantPeople}
                   noColumn={mode === 'racm' ? !matches.some(m => m.field === g.field && m.column !== null) : false}
                   onApply={v => setForAll(g.field, v)} />
               ))}
@@ -1514,7 +1551,7 @@ export default function RacmImportReview({ mode, file, process, entity, existing
                               <BlankFixRow key={`fix-${row.key}`} row={row} blanks={blanks} clientBlanks={clientBlanks} fills={rowFills}
                                 attributeIdeas={sugg.filter(x => x.kind === 'attribute').map(x => x.text)}
                                 checkIdeas={sugg.filter(x => x.kind === 'check').map(x => x.text)}
-                                colSpan={reviewCols} onSet={(field, value) => setValue(row.key, field, value)}
+                                colSpan={reviewCols} people={tenantPeople} onSet={(field, value) => setValue(row.key, field, value)}
                                 onSetExtra={(header, value) => setExtra(row.key, header, value)} onLeaveOut={() => toggleLeftOut(row.key)} />
                             )}
                             {/* Held the same way a blank row is, and worded the same way — the
@@ -1552,11 +1589,19 @@ export default function RacmImportReview({ mode, file, process, entity, existing
                                     {PEOPLE_FIELDS.map(f => (
                                       <label key={f} className="inline-flex items-center gap-1.5">
                                         <span className="font-semibold text-ink-500">{fieldLabel(f)}:</span>
-                                        <input key={`${row.key}-${f}-${cell(row.values[f])}`} defaultValue={cell(row.values[f])}
+                                        <select value={cell(row.values[f])}
                                           aria-label={`${fieldLabel(f)} for row ${row.rowNo}`}
-                                          onBlur={e => { const v = e.target.value.trim(); if (v !== cell(row.values[f])) setValue(row.key, f, v); }}
-                                          onKeyDown={e => { if (e.key === 'Enter') (e.target as HTMLInputElement).blur(); }}
-                                          className="h-7 w-44 px-2 rounded-md border border-canvas-border bg-canvas-elevated text-[0.71875rem] text-ink-800 focus:outline-none focus:ring-2 focus:ring-brand-200" />
+                                          onChange={e => { if (e.target.value !== cell(row.values[f])) setValue(row.key, f, e.target.value); }}
+                                          className="h-7 w-44 px-1.5 rounded-md border border-canvas-border bg-canvas-elevated text-[0.71875rem] text-ink-800 cursor-pointer focus:outline-none focus:ring-2 focus:ring-brand-200">
+                                          <option value="">Nobody yet</option>
+                                          {/* What the client's file wrote, when it names somebody
+                                              this tenant has never added — kept so opening the row
+                                              cannot quietly discard the matrix's own answer. */}
+                                          {fromFileOption(cell(row.values[f]), tenantPeople).map(v => (
+                                            <option key={v} value={v}>{v} — from the file</option>
+                                          ))}
+                                          {tenantPeople.map(p => <option key={p} value={p}>{p}</option>)}
+                                        </select>
                                       </label>
                                     ))}
                                   </div>
