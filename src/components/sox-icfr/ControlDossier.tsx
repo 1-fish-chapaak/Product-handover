@@ -5382,19 +5382,21 @@ function RailSpine({ control, running, onOpen }: { control: Control; running: bo
           in words the moment it is opened. */}
 
       {/* ── the three ways back in ──────────────────────────────────────────
-          One group at the floor (user ask, 22 Sep). Ira used to sit directly
-          under the scores with History and Discussion pinned at the bottom,
-          which read correctly while the spine filled the gap between them and
-          as a stranded button once it went. They are the same KIND of thing —
-          each one unfolds the rail, and the only difference is which pane you
-          land on — so they belong in one stack rather than at opposite ends of
-          an empty column.
+          At the top, under the fold (user ask, 23 Sep). They sat at the floor
+          while the scores filled the column above them, which was the right
+          answer then and is the wrong one now that the scores have gone: three
+          buttons pinned to the bottom of an otherwise empty 80px strip read as
+          having been left there. Under the fold they read as the column's
+          content, and they land where the open rail puts the same three — its
+          tab row is the first thing in the pane, so unfolding no longer moves
+          them from one end of the screen to the other.
 
-          Ira leads it and keeps its mark: the product's AI signature (brand →
-          fuchsia, Ask IRA's own avatar), ringed while a run is in flight so a
-          validation started on the left is visible from a column 80px wide. */}
-      <div className="mt-auto border-t border-canvas-border" />
-      <div className="shrink-0 px-1.5 py-2 space-y-1">
+          They are the same KIND of thing: each one unfolds, and the only
+          difference is which pane you land on. Ira leads and keeps its mark —
+          the product's AI signature (brand → fuchsia, Ask IRA's own avatar),
+          ringed while a run is in flight so a validation started on the left is
+          visible from a column this narrow. */}
+      <div className="shrink-0 px-1.5 pt-0.5 pb-2 space-y-1">
         <button onClick={() => onOpen('chat')} title="Ask Ira about this control" aria-label="Open the Ira chat"
           className={cn(tile, 'hover:bg-brand-50')}>
           <span className="relative inline-flex size-9">
