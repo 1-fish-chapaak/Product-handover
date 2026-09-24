@@ -7,7 +7,7 @@ import {
   Shield, Search as SearchIcon, Settings, Clock, Check,
   Wand2, MoreHorizontal, LogOut, HelpCircle, ExternalLink,
   ClipboardCheck, FlaskConical, Layers, Inbox, BarChart3,
-  Brain,
+  Brain, Table2,
 } from 'lucide-react';
 import PersonalMemoryDrawer from './PersonalMemoryDrawer';
 import NotificationBell from '../../notifications/NotificationBell';
@@ -38,10 +38,19 @@ function NavItem({ icon: Icon, label, active, expanded, onClick, badge, dot }: {
     <motion.button
       onClick={onClick}
       title={!expanded ? label : undefined}
+      /* The label is not in the DOM while the rail is collapsed, so without
+         this the only accessible name is the `title`, which is the weakest
+         source there is and never appears on keyboard focus. */
+      aria-label={label}
+      aria-current={active ? 'page' : undefined}
       whileTap={prefersReducedMotion ? undefined : { scale: 0.97 }}
       transition={{ type: 'spring', stiffness: 600, damping: 30 }}
+      /* These rows had NO focused state: outline none, no ring, no background
+         change. Focus landed and was invisible, on a 64px rail showing icons
+         and no labels, so tabbing through read as nothing happening at all. */
       className={`
         flex items-center gap-2.5 rounded-sm transition-colors duration-150 relative cursor-pointer
+        focus:outline-none focus-visible:ring-2 focus-visible:ring-sidebar-accent focus-visible:ring-offset-1 focus-visible:ring-offset-sidebar-bg
         ${expanded ? 'w-full h-8 px-3.5' : 'w-8 h-8 mx-auto px-0 justify-center'}
         ${active
           ? 'text-sidebar-accent font-semibold'
@@ -196,6 +205,29 @@ export default function Sidebar({ view, setView, expanded, toggleSidebar, unread
     }
   };
 
+  /* Keyboard focus opens the rail, the same way hovering does.
+   *
+   * Tabbing into a collapsed rail put focus on an icon with no label beside it,
+   * which is not a navigable menu, it is a column of guesses. It opens only for
+   * focus the browser itself considers keyboard focus (`:focus-visible`), so a
+   * mouse click does not pin the rail open until focus happens to move away.
+   * No delay either: a hover delay stops the rail twitching as the pointer
+   * crosses it, and a keyboard user crossing nothing should not wait. */
+  const handleFocus = (e: React.FocusEvent<HTMLElement>) => {
+    if (expanded) return;
+    if (!(e.target as HTMLElement).matches?.(':focus-visible')) return;
+    if (hoverTimerRef.current) clearTimeout(hoverTimerRef.current);
+    setHoverExpanded(true);
+  };
+
+  const handleBlur = (e: React.FocusEvent<HTMLElement>) => {
+    if (expanded) return;
+    // Moving between two rows inside the rail is not leaving it.
+    if (e.currentTarget.contains(e.relatedTarget as Node)) return;
+    if (hoverTimerRef.current) clearTimeout(hoverTimerRef.current);
+    setHoverExpanded(false);
+  };
+
   /* View group helpers for active detection */
   const workflowViews: View[] = ['workflow-templates', 'workflow-detail', 'workflow-library', 'workflow-executor'];
   const aiConciergeViews: View[] = ['ai-concierge', 'ai-concierge-forensics', 'ai-concierge-table-extractor'];
@@ -209,6 +241,8 @@ export default function Sidebar({ view, setView, expanded, toggleSidebar, unread
       transition={prefersReducedMotion ? { duration: 0 } : { duration: 0.4, ease: [0.32, 0.72, 0, 1] }}
       onMouseEnter={handleMouseEnter}
       onMouseLeave={handleMouseLeave}
+      onFocus={handleFocus}
+      onBlur={handleBlur}
       className="h-full bg-sidebar-bg noise-texture flex flex-col shrink-0 overflow-hidden z-50"
     >
       {/* ── Sidebar header: collapsed shows ONLY the bell (centered in 64px);
@@ -375,6 +409,10 @@ export default function Sidebar({ view, setView, expanded, toggleSidebar, unread
 
           {can('db_view') && <NavItem icon={LayoutDashboard} label="Dashboard" active={view === 'dashboards'} expanded={isExpanded} onClick={() => setView('dashboards')} />}
           {can('rp_view') && <NavItem icon={FileBarChart} label="Report" active={view === 'reports' || view === 'report-history' || view === 'report-builder'} expanded={isExpanded} onClick={() => setView('reports')} />}
+          {/* RACM sits above the register and the library because it is where
+              the other two come from: risks and controls are written into a
+              matrix first, and published from there. */}
+          {can('racm_view') && <NavItem icon={Table2} label="RACM Library" active={view === 'racm-library'} expanded={isExpanded} onClick={() => setView('racm-library')} />}
           {can('risk_view') && <NavItem icon={AlertTriangle} label="Risk Register" active={view === 'audit-risk-register'} expanded={isExpanded} onClick={() => setView('audit-risk-register')} />}
           {can('ctrl_view') && <NavItem icon={Shield} label="Control Library" active={view === 'governance-controls' || view === 'governance-control-detail'} expanded={isExpanded} onClick={() => setView('governance-controls')} />}
           {can('wf_view') && <NavItem icon={Workflow} label="Workflow Library" active={workflowViews.includes(view)} expanded={isExpanded} onClick={() => setView('workflow-library')} />}
@@ -384,7 +422,14 @@ export default function Sidebar({ view, setView, expanded, toggleSidebar, unread
           <Divider label="System" expanded={isExpanded} />
 
           {can('ds_live') && <NavItem icon={Database} label="Knowledge Hub" active={view === 'knowledge-hub' || view === 'data-sources' || view === 'configuration'} expanded={isExpanded} onClick={() => setView('knowledge-hub')} />}
-          {canAny(['ad_usage', 'ad_usage_people']) && <NavItem icon={BarChart3} label="Platform Usage" active={view === 'platform-usage'} expanded={isExpanded} onClick={() => setView('platform-usage')} />}
+          {/* One entry, four tabs: what the platform did, what that work was
+              worth, what it cost to run, and what can be looked up outside
+              this workspace. They answer the same question from different
+              ends, so they sit behind one nav entry rather than four.
+
+              Ungated, because two of the four tabs are open to everybody. The
+              page itself drops the tabs a reader's role does not carry. */}
+          <NavItem icon={BarChart3} label="Platform Usage" active={view === 'platform-usage' || view === 'connectors'} expanded={isExpanded} onClick={() => setView('platform-usage')} />
           {adminVisible && <NavItem icon={Settings} label="Admin" active={adminViews.includes(view)} expanded={isExpanded} onClick={() => setView(firstAdminView)} />}
 
         </div>

@@ -21,9 +21,13 @@ import { useAuditLog } from '../../context/AdminDataContext';
 import { useToast } from '../shared/Toast';
 import {
   PROCUREMENT_RACM_ROWS, PROCUREMENT_RACM_COLUMNS, COLUMN_GROUP_LABELS, COLUMN_GROUP_ORDER,
+  extraColumnKey, extraRacmColumns, racmCellText, racmRowWithCell,
   groupRowsBySubProcess, deriveRiskRatingClass, deriveControlTypeClass, deriveControlNatureClass,
-  type ProcurementRacmRow, type ColumnGroup, type RacmColumnDef,
+  type ProcurementRacmRow, type ColumnGroup, type RacmColumnDef, type RacmColumnKey,
 } from '../../data/procurement-racm';
+import { useRacmConfig } from '../sox-icfr/racmConfig';
+import { racmSetupKeyFor } from '../sox-icfr/racmLibrary';
+import { CONTROL_CLASSES } from '../sox-icfr/types';
 import Gated from '../shared/Gated';
 import { Button } from '../shared/Button';
 import ListPlaceholder from '../shared/ListPlaceholder';
@@ -73,21 +77,23 @@ const LOCKED_ROW_TITLE = 'Published — this row is fixed. Add a new control ins
 const REF_COLUMN: RacmColumnDef = { key: 'ref', label: 'Ref', group: 'meta', width: 220 };
 
 // Columns that render with a styled chip rather than plain text
-const CHIP_COLUMNS = new Set<keyof ProcurementRacmRow>([
+const CHIP_COLUMNS = new Set<RacmColumnKey>([
   'riskRating', 'likelihood', 'impact', 'controlType', 'controlNature', 'frequency', 'confidence',
 ]);
 
 // Columns that the user can pin / freeze to the left. Key Control rides with the
 // identity block: it qualifies the control id, so scrolling it out of view would
 // leave the grid unable to say which of the visible rows are the key ones.
-const PINNABLE_KEYS: (keyof ProcurementRacmRow)[] = ['riskId', 'controlId', 'isKey', 'subProcess'];
+const PINNABLE_KEYS: RacmColumnKey[] = ['riskId', 'controlId', 'isKey', 'subProcess'];
 // Columns frozen (sticky) while scrolling sideways — fixed set, not user-toggleable.
-const PINNED_KEYS = new Set<keyof ProcurementRacmRow>(PINNABLE_KEYS);
+const PINNED_KEYS = new Set<RacmColumnKey>(PINNABLE_KEYS);
 // Identity columns that can never be hidden — shown as "locked" in the column picker.
-const LOCKED_KEYS = new Set<keyof ProcurementRacmRow>(['riskId', 'controlId']);
-// Default visible columns (mirrors the prior default group selection).
+const LOCKED_KEYS = new Set<RacmColumnKey>(['riskId', 'controlId']);
+// Default visible columns (mirrors the prior default group selection). The
+// client's own columns are added on top of these, because a column a client has
+// gone to the trouble of defining is one they expect to see.
 const DEFAULT_VISIBLE_GROUPS = new Set<ColumnGroup>(['identity', 'context', 'risk', 'control', 'assertions']);
-const DEFAULT_VISIBLE_COLS = new Set<keyof ProcurementRacmRow>(
+const DEFAULT_VISIBLE_COLS = new Set<RacmColumnKey>(
   PROCUREMENT_RACM_COLUMNS.filter(c => DEFAULT_VISIBLE_GROUPS.has(c.group)).map(c => c.key),
 );
 
@@ -102,7 +108,7 @@ const COLUMN_FILTER_MODE: Record<string, 'multi' | 'text' | 'flag'> = {
   riskRating: 'multi', likelihood: 'multi', impact: 'multi',
   controlType: 'multi', controlNature: 'multi', frequency: 'multi',
   testingStrategy: 'multi',
-  controlOwner: 'multi', segregationOfDuties: 'multi', confidence: 'multi',
+  controlOwner: 'multi', riskOwner: 'multi', segregationOfDuties: 'multi', confidence: 'multi',
 };
 
 // Key controls are a user-set designation (a manual tag), independent of risk
@@ -132,12 +138,16 @@ const GROUP_BY_OPTIONS: { value: GroupByMode; label: string }[] = [
 // Bulk "Update column" — the columns a reviewer can set across many rows at once.
 // Identity (Risk/Control ID) must stay unique per row, Key Control is a flag with
 // its own toggle, and Ref is the source file — none of those take one shared value.
-const BULK_EDIT_EXCLUDED = new Set<keyof ProcurementRacmRow>(['riskId', 'controlId', 'isKey', 'ref']);
-const BULK_EDIT_COLUMNS = PROCUREMENT_RACM_COLUMNS.filter(c => !BULK_EDIT_EXCLUDED.has(c.key));
+const BULK_EDIT_EXCLUDED = new Set<RacmColumnKey>(['riskId', 'controlId', 'isKey', 'ref']);
 // Columns with a closed vocabulary get a picker, so a bulk edit can't mint a new
 // spelling ("high", "Adhoc") that would split the header filters and chips.
 const RATING_VALUES = ['High', 'Medium', 'Low'];
-const BULK_VALUE_OPTIONS: Partial<Record<keyof ProcurementRacmRow, string[]>> = {
+// The two answers a yes/no column of the client's may hold.
+const YES_NO_VALUES = ['Yes', 'No'];
+const BULK_VALUE_OPTIONS: Partial<Record<RacmColumnKey, string[]>> = {
+  // Risk category reads its six from the control record rather than a list of its
+  // own, so the grid, the import and the control can never drift onto a seventh.
+  riskCategory: CONTROL_CLASSES,
   riskRating: RATING_VALUES, likelihood: RATING_VALUES, impact: RATING_VALUES,
   controlType: ['Preventive', 'Detective'],
   controlNature: ['Manual', 'Automated', 'IT-dependent'],
@@ -145,7 +155,7 @@ const BULK_VALUE_OPTIONS: Partial<Record<keyof ProcurementRacmRow, string[]>> = 
   testingStrategy: ['Sampling', 'Full population', 'Test of one'],
 };
 // Long-form columns get a textarea rather than a one-line input.
-const BULK_LONG_TEXT_KEYS = new Set<keyof ProcurementRacmRow>([
+const BULK_LONG_TEXT_KEYS = new Set<RacmColumnKey>([
   'riskDescription', 'controlObjective', 'controlActivity', 'controlEvidence',
   'attributes', 'ipeIceDetails', 'mgmtReviewControl',
 ]);
@@ -166,6 +176,20 @@ export default function RacmFullPageEditor({ onBack, backView, backLabel, racmNa
       isKey: r.isKey ?? isKeyControl(r.controlId),
       ...(showRef ? { ref: sourceFiles![i % sourceFiles!.length] } : {}),
     })));
+  // ─── The client's own columns ────────────────────────────────────────
+  // A client's matrix carries columns the product has no field for. The set-up
+  // that defines them belongs to the client GROUP, so it is read off the company
+  // whose matrix is open — every row in one RACM is tested at the same company,
+  // and a row that lists several names the first of them. A client with none
+  // defined leaves the grid exactly as it was.
+  const entity = useMemo(() => rows.find(r => r.entity?.trim())?.entity?.split(',')[0]?.trim(), [rows]);
+  const setupKey = useMemo(() => racmSetupKeyFor(entity).key, [entity]);
+  const { extras } = useRacmConfig(setupKey);
+  const clientColumns = useMemo(() => extraRacmColumns(extras), [extras]);
+  const clientByKey = useMemo(() => new Map(extras.map(e => [extraColumnKey(e), e] as const)), [extras]);
+  // Every consumer below — the picker, the grid, the filters, the bulk edit —
+  // works off this one list, so a client column is never half-supported.
+  const allColumns = useMemo(() => [...PROCUREMENT_RACM_COLUMNS, ...clientColumns], [clientColumns]);
   const [search, setSearch] = useState('');
   const [groupBy, setGroupBy] = useState<GroupByMode>('subProcess');
   const [collapsedGroups, setCollapsedGroups] = useState<Set<string>>(new Set());
@@ -174,9 +198,19 @@ export default function RacmFullPageEditor({ onBack, backView, backLabel, racmNa
   const setColumnFilter = (key: string, vals: string[]) =>
     setColumnFilters(prev => { const next = { ...prev }; if (vals.length) next[key] = vals; else delete next[key]; return next; });
   // Per-column visibility (Manage-Exceptions style). Pins are fixed (PINNED_KEYS).
-  const [visibleCols, setVisibleCols] = useState<Set<keyof ProcurementRacmRow>>(
-    () => new Set(DEFAULT_VISIBLE_COLS)
+  const [visibleCols, setVisibleCols] = useState<Set<RacmColumnKey>>(
+    () => new Set([...DEFAULT_VISIBLE_COLS, ...clientColumns.map(c => c.key)])
   );
+  // A column defined while this tab is open is one the client has just said
+  // matters, so it appears without a trip to the picker. Only a key never seen
+  // before is added — one the user has hidden stays hidden.
+  const seededClientKeys = useRef(new Set(clientColumns.map(c => c.key)));
+  useEffect(() => {
+    const fresh = clientColumns.map(c => c.key).filter(k => !seededClientKeys.current.has(k));
+    if (!fresh.length) return;
+    fresh.forEach(k => seededClientKeys.current.add(k));
+    setVisibleCols(prev => new Set([...prev, ...fresh]));
+  }, [clientColumns]);
   // User-resized column widths (override the per-column defaults), remembered per RACM.
   const [colWidths, setColWidths] = useState<Record<string, number>>(() => {
     try { return JSON.parse(localStorage.getItem(`racm-colw-${racmId ?? 'x'}`) || '{}'); } catch { return {}; }
@@ -211,7 +245,7 @@ export default function RacmFullPageEditor({ onBack, backView, backLabel, racmNa
   const [groupByOpen, setGroupByOpen] = useState(false);
   // Bulk "Update column" popover — which column, and the value to write into it.
   const [updateColOpen, setUpdateColOpen] = useState(false);
-  const [bulkCol, setBulkCol] = useState<keyof ProcurementRacmRow | ''>('');
+  const [bulkCol, setBulkCol] = useState<RacmColumnKey | ''>('');
   const [bulkValue, setBulkValue] = useState('');
 
   // ─── Derived ─────────────────────────────────────────────────────────
@@ -226,37 +260,50 @@ export default function RacmFullPageEditor({ onBack, backView, backLabel, racmNa
     [rows, lockedControlIds],
   );
 
+  // Which columns offer a header filter. A client's column that holds a list or
+  // a yes/no filters by its values, the way our closed-vocabulary columns do;
+  // anything free-form gets the search box our free-text columns get.
+  const columnFilterModes = useMemo<Record<string, 'multi' | 'text' | 'flag'>>(() => {
+    const modes: Record<string, 'multi' | 'text' | 'flag'> = { ...COLUMN_FILTER_MODE };
+    clientByKey.forEach((e, key) => { modes[key] = e.kind === 'list' || e.kind === 'yesno' ? 'multi' : 'text'; });
+    return modes;
+  }, [clientByKey]);
+
   // Distinct values per multi-select column, sorted, for the header filter menus.
   const columnFilterOptions = useMemo(() => {
     const opts: Record<string, string[]> = {};
-    for (const key of Object.keys(COLUMN_FILTER_MODE)) {
-      if (COLUMN_FILTER_MODE[key] !== 'multi') continue;
+    for (const [key, mode] of Object.entries(columnFilterModes)) {
+      if (mode !== 'multi') continue;
       const set = new Set<string>();
-      for (const r of rows) { const v = String((r as unknown as Record<string, unknown>)[key] ?? '').trim(); if (v) set.add(v); }
+      for (const r of rows) { const v = racmCellText(r, key as RacmColumnKey).trim(); if (v) set.add(v); }
       opts[key] = Array.from(set).sort();
     }
     return opts;
-  }, [rows]);
+  }, [rows, columnFilterModes]);
 
   const filteredRows = useMemo(() => {
     const q = search.trim().toLowerCase();
     return rows.filter(r => {
       if (q) {
-        const hit = Object.values(r).some(v => String(v).toLowerCase().includes(q));
+        // The client's own columns hold values like any other cell, so a search
+        // finds a word in one of theirs as readily as in one of ours.
+        const { extras: own, ...fields } = r;
+        const hit = [...Object.values(fields), ...Object.values(own ?? {})]
+          .some(v => String(v).toLowerCase().includes(q));
         if (!hit) return false;
       }
       // Key controls are a user-set tag (see isKeyControl), not derived from severity.
       if (showOnlyKey && !r.isKey) return false;
       for (const [key, vals] of Object.entries(columnFilters)) {
         if (!vals.length) continue;
-        const cell = String((r as unknown as Record<string, unknown>)[key] ?? '');
-        if (COLUMN_FILTER_MODE[key] === 'text') {
+        const cell = racmCellText(r, key as RacmColumnKey);
+        if (columnFilterModes[key] === 'text') {
           if (!cell.toLowerCase().includes(vals[0].toLowerCase())) return false;
         } else if (!vals.includes(cell)) return false;
       }
       return true;
     });
-  }, [rows, search, showOnlyKey, columnFilters]);
+  }, [rows, search, showOnlyKey, columnFilters, columnFilterModes]);
 
   // ─── Pagination (applied before grouping) ──────────────────────────────
   const totalPages = Math.max(1, Math.ceil(filteredRows.length / perPage));
@@ -320,8 +367,8 @@ export default function RacmFullPageEditor({ onBack, backView, backLabel, racmNa
 
   const visibleColumns = useMemo<RacmColumnDef[]>(() => {
     // pinned first, then by configured group order
-    const pinned = PROCUREMENT_RACM_COLUMNS.filter(c => PINNED_KEYS.has(c.key) && visibleCols.has(c.key));
-    const rest = PROCUREMENT_RACM_COLUMNS.filter(c => !PINNED_KEYS.has(c.key) && visibleCols.has(c.key));
+    const pinned = allColumns.filter(c => PINNED_KEYS.has(c.key) && visibleCols.has(c.key));
+    const rest = allColumns.filter(c => !PINNED_KEYS.has(c.key) && visibleCols.has(c.key));
     let cols = [...pinned, ...rest];
     // A constant Process Area lives in the header instead of a per-row column.
     if (singleProcessArea) cols = cols.filter(c => c.key !== 'processArea');
@@ -332,7 +379,7 @@ export default function RacmFullPageEditor({ onBack, backView, backLabel, racmNa
       cols.splice(Math.max(afterControlId, 1), 0, REF_COLUMN);
     }
     return cols;
-  }, [visibleCols, showRef, singleProcessArea]);
+  }, [allColumns, visibleCols, showRef, singleProcessArea]);
 
   // Overlay any user resize overrides on the default widths, then hand these
   // "effective" columns to the header + rows so widths stay in sync everywhere.
@@ -356,10 +403,10 @@ export default function RacmFullPageEditor({ onBack, backView, backLabel, racmNa
   };
 
   // ─── Mutations ───────────────────────────────────────────────────────
-  const updateCell = (rowKey: string, colKey: keyof ProcurementRacmRow, value: string) => {
+  const updateCell = (rowKey: string, colKey: RacmColumnKey, value: string) => {
     if (lockedRowKeys.has(rowKey)) return;
     setSaveStatus('saving');
-    setRows(prev => prev.map(r => (`${r.riskId}-${r.controlId}`) === rowKey ? { ...r, [colKey]: value } : r));
+    setRows(prev => prev.map(r => (`${r.riskId}-${r.controlId}`) === rowKey ? racmRowWithCell(r, colKey, value) : r));
     window.setTimeout(() => { setSaveStatus('saved'); setSavedToast(true); }, 600);
   };
 
@@ -396,7 +443,7 @@ export default function RacmFullPageEditor({ onBack, backView, backLabel, racmNa
       controlObjective: '', controlActivity: '',
       controlType: 'Preventive', controlNature: 'Manual', frequency: 'Monthly',
       effectiveDate: '', testingStrategy: '',
-      controlOwner: '', controlEvidence: '',
+      controlOwner: '', riskOwner: '', controlEvidence: '',
       assertions: '', fsLineItem: '', regulatoryRef: '',
       keyReport: '', ipeIceDetails: '', segregationOfDuties: '', mgmtReviewControl: '',
       confidence: 'DRAFT', sopSectionRef: '', attributes: '',
@@ -433,13 +480,25 @@ export default function RacmFullPageEditor({ onBack, backView, backLabel, racmNa
     if (!updateColOpen) { setBulkCol(''); setBulkValue(''); }
     setUpdateColOpen(o => !o);
   };
-  const bulkOptions = bulkCol ? BULK_VALUE_OPTIONS[bulkCol] : undefined;
+  const bulkEditColumns = useMemo(() => allColumns.filter(c => !BULK_EDIT_EXCLUDED.has(c.key)), [allColumns]);
+  // A client's column has a closed vocabulary too when their set-up says so, so
+  // it gets the same picker rather than a box that could mint a spelling their
+  // own list doesn't have.
+  const bulkValueOptions = useMemo<Record<string, string[] | undefined>>(() => {
+    const map: Record<string, string[] | undefined> = { ...BULK_VALUE_OPTIONS };
+    clientByKey.forEach((e, key) => {
+      if (e.kind === 'list' && e.options?.length) map[key] = e.options;
+      else if (e.kind === 'yesno') map[key] = YES_NO_VALUES;
+    });
+    return map;
+  }, [clientByKey]);
+  const bulkOptions = bulkCol ? bulkValueOptions[bulkCol] : undefined;
   const canApplyBulk = !!bulkCol && (!bulkOptions || bulkValue !== '');
   const applyBulkUpdate = () => {
     if (!bulkCol || !canApplyBulk || selectedRowIds.size === 0) return;
     const col = bulkCol;
     const value = bulkOptions ? bulkValue : bulkValue.trim();
-    const label = BULK_EDIT_COLUMNS.find(c => c.key === col)?.label ?? col;
+    const label = bulkEditColumns.find(c => c.key === col)?.label ?? col;
     // Published rows keep the values they were signed off with, so the edit runs
     // over the rest of the selection and reports what it left alone. The audit
     // trail counts only the rows that actually changed.
@@ -455,7 +514,7 @@ export default function RacmFullPageEditor({ onBack, backView, backLabel, racmNa
       return;
     }
     setSaveStatus('saving');
-    setRows(prev => prev.map(r => targets.has(`${r.riskId}-${r.controlId}`) ? { ...r, [col]: value } : r));
+    setRows(prev => prev.map(r => targets.has(`${r.riskId}-${r.controlId}`) ? racmRowWithCell(r, col, value) : r));
     window.setTimeout(() => { setSaveStatus('saved'); setSavedToast(true); }, 600);
     const target = `${n} ${n === 1 ? 'row' : 'rows'} in ${racmName ?? 'the RACM'}`;
     logEvent({
@@ -481,7 +540,7 @@ export default function RacmFullPageEditor({ onBack, backView, backLabel, racmNa
       return n;
     });
 
-  const toggleColumn = (key: keyof ProcurementRacmRow) => {
+  const toggleColumn = (key: RacmColumnKey) => {
     if (LOCKED_KEYS.has(key)) return; // locked identity columns can't be hidden
     setVisibleCols(prev => {
       const n = new Set(prev);
@@ -490,7 +549,9 @@ export default function RacmFullPageEditor({ onBack, backView, backLabel, racmNa
     });
   };
 
-  const resetColumns = () => setVisibleCols(new Set(DEFAULT_VISIBLE_COLS));
+  // Reset puts back the default view, which includes the client's own columns —
+  // they are part of their matrix, not an extra someone switched on.
+  const resetColumns = () => setVisibleCols(new Set([...DEFAULT_VISIBLE_COLS, ...clientColumns.map(c => c.key)]));
 
   const toggleRowSelected = (id: string) =>
     setSelectedRowIds(prev => {
@@ -636,10 +697,10 @@ export default function RacmFullPageEditor({ onBack, backView, backLabel, racmNa
                         <div>
                           <label htmlFor="racm-bulk-column" className="text-[0.5625rem] font-semibold text-text-muted uppercase tracking-wider block mb-1">Column</label>
                           <select id="racm-bulk-column" autoFocus value={bulkCol}
-                            onChange={e => { setBulkCol(e.target.value as keyof ProcurementRacmRow | ''); setBulkValue(''); }}
+                            onChange={e => { setBulkCol(e.target.value as RacmColumnKey | ''); setBulkValue(''); }}
                             className="w-full h-7 px-2 border border-border rounded-lg text-xs text-text bg-white outline-none focus:border-primary/40 focus-visible:ring-2 focus-visible:ring-primary/20 cursor-pointer">
                             <option value="">Choose a column…</option>
-                            {BULK_EDIT_COLUMNS.map(c => <option key={c.key} value={c.key}>{c.label}</option>)}
+                            {bulkEditColumns.map(c => <option key={c.key} value={c.key}>{c.label}</option>)}
                           </select>
                         </div>
                         {bulkCol && (
@@ -717,11 +778,11 @@ export default function RacmFullPageEditor({ onBack, backView, backLabel, racmNa
               aria-haspopup="dialog" aria-expanded={showColumnPanel}
               className={`px-2.5 h-7 rounded-lg text-xs font-semibold cursor-pointer transition-colors flex items-center gap-1.5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/30 focus-visible:ring-offset-1 ${showColumnPanel ? 'bg-primary/10 text-primary ring-1 ring-primary/30' : 'border border-border text-text-secondary hover:bg-surface-2'}`}>
               <Columns3 size={12} />
-              Columns ({visibleColumns.length}/{PROCUREMENT_RACM_COLUMNS.length})
+              Columns ({visibleColumns.length}/{allColumns.length})
             </button>
             {showColumnPanel && (
               <ColumnVisibilityPanel
-                columns={singleProcessArea ? PROCUREMENT_RACM_COLUMNS.filter(c => c.key !== 'processArea') : PROCUREMENT_RACM_COLUMNS}
+                columns={singleProcessArea ? allColumns.filter(c => c.key !== 'processArea') : allColumns}
                 visibleCols={visibleCols}
                 onToggle={toggleColumn}
                 onReset={resetColumns}
@@ -782,6 +843,7 @@ export default function RacmFullPageEditor({ onBack, backView, backLabel, racmNa
             onToggleKey={toggleKey}
             showGroupHeaders={groupBy !== 'none'}
             columnFilters={columnFilters}
+            columnFilterModes={columnFilterModes}
             columnFilterOptions={columnFilterOptions}
             onColumnFilterChange={setColumnFilter}
             keyOnly={showOnlyKey}
@@ -821,6 +883,7 @@ export default function RacmFullPageEditor({ onBack, backView, backLabel, racmNa
         {detailRow && (
           <DetailPanel
             row={detailRow}
+            columns={allColumns}
             readOnly={lockedRowKeys.has(`${detailRow.riskId}-${detailRow.controlId}`)}
             onClose={() => setDetailRowId(null)}
             onImport={() => fileInputRef.current?.click()}
@@ -946,8 +1009,8 @@ function ColumnVisibilityPanel({
   columns, visibleCols, onToggle, onReset, onClose,
 }: {
   columns: RacmColumnDef[];
-  visibleCols: Set<keyof ProcurementRacmRow>;
-  onToggle: (k: keyof ProcurementRacmRow) => void;
+  visibleCols: Set<RacmColumnKey>;
+  onToggle: (k: RacmColumnKey) => void;
   onReset: () => void;
   onClose: () => void;
 }) {
@@ -1006,24 +1069,26 @@ function ColumnVisibilityPanel({
 function RacmGrid({
   grouped, collapsedGroups, onToggleGroup, visibleColumns, onResize, pinnedKeys, stickyOffsets,
   selectedRowIds, lockedRowKeys, onToggleRowSelected, onOpenDetail, onUpdateCell, onToggleKey, showGroupHeaders,
-  columnFilters, columnFilterOptions, onColumnFilterChange, keyOnly, onKeyOnlyChange,
+  columnFilters, columnFilterModes, columnFilterOptions, onColumnFilterChange, keyOnly, onKeyOnlyChange,
 }: {
   grouped: { label: string; rows: ProcurementRacmRow[]; count: number }[];
   collapsedGroups: Set<string>;
   onToggleGroup: (label: string) => void;
   visibleColumns: RacmColumnDef[];
   onResize: (e: { clientX: number; preventDefault: () => void; stopPropagation: () => void }, key: string, startW: number) => void;
-  pinnedKeys: Set<keyof ProcurementRacmRow>;
+  pinnedKeys: Set<RacmColumnKey>;
   stickyOffsets: { offsets: Map<string, number>; total: number };
   selectedRowIds: Set<string>;
   /** Row keys of controls the RACM has published — shown, but not editable. */
   lockedRowKeys: Set<string>;
   onToggleRowSelected: (id: string) => void;
   onOpenDetail: (id: string) => void;
-  onUpdateCell: (rowKey: string, col: keyof ProcurementRacmRow, value: string) => void;
+  onUpdateCell: (rowKey: string, col: RacmColumnKey, value: string) => void;
   onToggleKey: (rowKey: string) => void;
   showGroupHeaders: boolean;
   columnFilters: Record<string, string[]>;
+  /** Our own columns' filter modes with the client's columns folded in. */
+  columnFilterModes: Record<string, 'multi' | 'text' | 'flag'>;
   columnFilterOptions: Record<string, string[]>;
   onColumnFilterChange: (key: string, vals: string[]) => void;
   keyOnly: boolean;
@@ -1043,7 +1108,7 @@ function RacmGrid({
           const pinned = pinnedKeys.has(c.key);
           const left = stickyOffsets.offsets.get(c.key);
           const isLastPinned = pinned && [...pinnedKeys].slice(-1)[0] === c.key;
-          const filterMode = COLUMN_FILTER_MODE[c.key as string];
+          const filterMode = columnFilterModes[c.key as string];
           return (
             <div key={c.key}
               style={{ width: c.width, minWidth: c.width, left: pinned ? left : undefined }}
@@ -1121,18 +1186,21 @@ function RacmGridRow({
   /** This control has been published, so the row reads but never edits. */
   locked: boolean;
   visibleColumns: RacmColumnDef[];
-  pinnedKeys: Set<keyof ProcurementRacmRow>;
+  pinnedKeys: Set<RacmColumnKey>;
   stickyOffsets: { offsets: Map<string, number>; total: number };
   onToggleSelected: () => void;
   onOpenDetail: () => void;
-  onUpdateCell: (rowKey: string, col: keyof ProcurementRacmRow, value: string) => void;
+  onUpdateCell: (rowKey: string, col: RacmColumnKey, value: string) => void;
   onToggleKey: (rowKey: string) => void;
 }) {
-  const [editingKey, setEditingKey] = useState<keyof ProcurementRacmRow | null>(null);
+  const [editingKey, setEditingKey] = useState<RacmColumnKey | null>(null);
   const bg = isSelected ? 'bg-primary/8' : (rowIdx % 2 === 0 ? 'bg-white' : 'bg-surface-2/30');
   // A published row never opens an editor — including the attributes modal,
   // which would otherwise look like it saved and then quietly discard the work.
-  const beginEdit = (key: keyof ProcurementRacmRow) => { if (!locked) setEditingKey(key); };
+  // Editing in the grid is free text for every column, ours and the client's
+  // alike: a Frequency cell takes typing here too, and the closed lists live on
+  // the bulk "Update column" picker.
+  const beginEdit = (key: RacmColumnKey) => { if (!locked) setEditingKey(key); };
 
   return (
     <div className={`group flex border-b border-border-light/70 hover:bg-primary/5 ${bg} transition-colors`}>
@@ -1157,13 +1225,13 @@ function RacmGridRow({
               <>
                 <CellContent row={row} col={c} locked={locked} onEdit={() => {}} onOpenDetail={onOpenDetail} onToggleKey={() => onToggleKey(rowKey)} />
                 <AttributeEditModal
-                  value={String(row[c.key] ?? '')}
+                  value={racmCellText(row, c.key)}
                   onSave={(v) => { onUpdateCell(rowKey, c.key, v); setEditingKey(null); }}
                   onClose={() => setEditingKey(null)}
                 />
               </>
             ) : isEditing ? (
-              <input autoFocus defaultValue={String(row[c.key] ?? '')}
+              <input autoFocus defaultValue={racmCellText(row, c.key)}
                 onBlur={e => { onUpdateCell(rowKey, c.key, e.target.value); setEditingKey(null); }}
                 onKeyDown={e => {
                   if (e.key === 'Enter') { onUpdateCell(rowKey, c.key, (e.target as HTMLInputElement).value); setEditingKey(null); }
@@ -1284,7 +1352,7 @@ function CellContent({
   onOpenDetail: () => void;
   onToggleKey: () => void;
 }) {
-  const val = String(row[col.key] ?? '');
+  const val = racmCellText(row, col.key);
   const isId = col.key === 'riskId' || col.key === 'controlId';
 
   // Key control — the designation IS the affordance. Both states name themselves
@@ -1377,13 +1445,15 @@ function CellContent({
 
 // ─── Detail Panel ─────────────────────────────────────────────────────────
 function DetailPanel({
-  row, readOnly, onClose, onUpdate, onImport,
+  row, columns, readOnly, onClose, onUpdate, onImport,
 }: {
   row: ProcurementRacmRow;
+  /** Our columns plus the client's own, so the panel shows the whole row. */
+  columns: RacmColumnDef[];
   /** The control has been published: every field reads, none of them edit. */
   readOnly: boolean;
   onClose: () => void;
-  onUpdate: (k: keyof ProcurementRacmRow, v: string) => void;
+  onUpdate: (k: RacmColumnKey, v: string) => void;
   onImport?: () => void;
 }) {
   const sections: { group: ColumnGroup; label: string }[] = COLUMN_GROUP_ORDER.map(g => ({ group: g, label: COLUMN_GROUP_LABELS[g] }));
@@ -1420,12 +1490,12 @@ function DetailPanel({
       {/* body */}
       <div className="flex-1 overflow-y-auto px-5 py-4 space-y-5">
         {sections.map(s => {
-          const cols = PROCUREMENT_RACM_COLUMNS.filter(c => c.group === s.group);
+          const cols = columns.filter(c => c.group === s.group);
           if (cols.length === 0) return null;
           return (
             <DetailSection key={s.group} label={s.label}>
               {cols.map(c => (
-                <DetailField key={c.key} label={c.label} value={String(row[c.key] ?? '')} readOnly={readOnly} onChange={v => onUpdate(c.key, v)} multiLine={['riskDescription', 'controlObjective', 'controlActivity', 'controlEvidence', 'ipeIceDetails', 'mgmtReviewControl'].includes(c.key)} />
+                <DetailField key={c.key} label={c.label} value={racmCellText(row, c.key)} readOnly={readOnly} onChange={v => onUpdate(c.key, v)} multiLine={['riskDescription', 'controlObjective', 'controlActivity', 'controlEvidence', 'ipeIceDetails', 'mgmtReviewControl'].includes(c.key)} />
               ))}
             </DetailSection>
           );

@@ -1,8 +1,9 @@
-import { isInquiryOnly, ipeReliable, GRADE_RANK, AUDIT_SAMPLE_SPREADS, DEFAULT_AUDIT_SAMPLING, TESTING_STRATEGIES } from './types';
+import { riskCategoryOf } from './racmImport';
+import { DEFAULT_SAMPLE_SIZES, defaultSamplingMethodology, isInquiryOnly, ipeReliable, GRADE_RANK, AUDIT_SAMPLE_SPREADS, DEFAULT_AUDIT_SAMPLING, TESTING_STRATEGIES } from './types';
 import type {
-  AuditorProofKind, AuditSampleSpread, AuditSampling, Conclusion, Control, Court, Deficiency, DesignDoc, DesignTrack, ExceptionGrade, HandoffTask, IcfrEngagement,
+  AuditorProofKind, AuditSampleSpread, AuditSampling, Conclusion, Control, Court, Deficiency, DesignDoc, DesignDocKind, DesignTrack, ExceptionGrade, HandoffTask, IcfrEngagement,
   FileOrigin, IpeCheck, Likelihood, MaterialityRules, OperatingTrack, Population, PopulationBasis, PopulationSource, ReviewNote, RiskRating, Role,
-  Sample, Severity, TestingStrategy, ToeRound, TrackConclusion, DeficiencyGroup, ExceptionStatus,
+  Sample, SamplingMethodology, Severity, TestingStrategy, ToeRound, TrackConclusion, DeficiencyGroup, ExceptionStatus,
   ControlType, Nature,
 } from './types';
 
@@ -509,7 +510,7 @@ export function suggestRootCause(
   const again = onSecondRound ? ' It failed again on the redrawn sample, so it is not a one-off.' : '';
   if (track === 'design') {
     const checks = c.design.points.filter(p => (p.override?.result ?? p.result) === 'Fail').map(p => p.text);
-    if (!checks.length) return null;
+    if (!checks.length) return suggestRootCauseWithoutFailures(c, again, 'design');
     const more = checks.length > 1 ? ` ${checks.length - 1} other design check${checks.length === 2 ? '' : 's'} failed the same way.` : '';
     return {
       text: `The control as designed does not make sure that ${lowerFirst(checks[0]!)} — nothing in the way it is set up forces that step.${more}`,
@@ -517,7 +518,18 @@ export function suggestRootCause(
     };
   }
   const steps = c.operating.steps.filter(s => stepResult(s) === 'Fail');
-  if (!steps.length) return null;
+  // ── concluded ineffective with nothing that failed ────────────────────────
+  // This is not a rare corner: an auditor can conclude against the evidence,
+  // and the page lets them precisely because the tick marks are not the whole
+  // of a judgement. Ira used to return null here and the exception opened with
+  // an empty root-cause box (user report, 22 Sep) — which is the one field the
+  // grade and the plan both hang off, so the reader was left at a blank page
+  // on the thing that gates everything after it.
+  //
+  // It cannot draft from failures that did not happen, so it drafts from what
+  // there IS, weakest claim last: the reason recorded on the conclusion, then
+  // the structural holds the page itself refuses Effective on.
+  if (!steps.length) return suggestRootCauseWithoutFailures(c, again);
   const first = steps[0]!;
   const noted = (c.operating.exceptions ?? []).find(x => x.reason.trim())?.reason.trim();
   const items = failedSamples.length
@@ -528,6 +540,60 @@ export function suggestRootCause(
     text: `The control relies on ${who} ${quote(first.description)} every time, and nothing stops the step being skipped.${items}${noted ? ` The notes on the failed items say: ${quote(noted)}.` : ''}${again}`,
     reason: `from the failed attribute ${first.code}${failedSamples.length ? ` and the items it failed on` : ''}${noted ? ', with the notes against them' : ''}`,
   };
+}
+
+/**
+ * A root cause for a control concluded ineffective with nothing marked failed.
+ *
+ * Read in order of how much the sentence can honestly claim:
+ *
+ *  1. THE REASON ON THE CONCLUSION. Somebody wrote why, and their account of
+ *     the mechanism beats anything derived. An override outranks the plain
+ *     rationale because an override is what a person writes when they are
+ *     departing from the evidence — it is the most deliberate sentence on the
+ *     whole control.
+ *  2. THE STRUCTURAL HOLDS. The page refuses Effective on these, so they are
+ *     already the product's own account of what is wrong: an attribute passed
+ *     with the files its test asks for still missing, or one resting on
+ *     somebody's word with nothing behind it. Both are mechanisms, which is
+ *     exactly what a root cause has to name.
+ *
+ * It never invents a failure. Where there is nothing to say it says nothing,
+ * and the box stays empty rather than opening with a sentence the reviewer
+ * would have to unpick.
+ */
+function suggestRootCauseWithoutFailures(
+  c: Control, again: string, track: 'design' | 'operating' = 'operating',
+): { text: string; reason: string } | null {
+  const t = track === 'design' ? c.design : c.operating;
+  const said = t.override?.rationale?.trim() || t.rationale?.trim();
+  if (said) {
+    return {
+      text: `${said.replace(/[.\s]+$/, '')}.${again}`,
+      reason: t.override?.rationale?.trim()
+        ? 'from the reason recorded when the conclusion went against the evidence — say what the mechanism is, not what the verdict was'
+        : 'from the rationale on the conclusion — say what the mechanism is, not what the verdict was',
+    };
+  }
+  if (track === 'operating') {
+    const unbacked = passedWithoutFiles(c);
+    if (unbacked.length) {
+      const first = unbacked[0]!;
+      return {
+        text: `${first.code} was passed without the evidence its test asks for, so nothing on file shows the step was actually performed.${unbacked.length > 1 ? ` ${unbacked.length - 1} other attribute${unbacked.length === 2 ? '' : 's'} stand${unbacked.length === 2 ? 's' : ''} the same way.` : ''}${again}`,
+        reason: `from ${first.code} passing with ${requiredFilesCount(first, c).total - requiredFilesCount(first, c).uploaded} of its required files still missing`,
+      };
+    }
+    const wordAlone = inquiryOnlyAttributes(c);
+    if (wordAlone.length) {
+      const first = wordAlone[0]!;
+      return {
+        text: `${first.code} rests on a statement that the step was performed, with nothing attached behind it — the control cannot be shown to have operated, only said to have.${again}`,
+        reason: `from ${first.code} resting on a statement alone`,
+      };
+    }
+  }
+  return null;
 }
 
 /** The named person the baton actually sits with, and what they are doing with
@@ -2169,20 +2235,60 @@ const RATING_NOTE: Record<RiskRating, string> = {
   Medium: 'Rated medium risk — the middle of the band.',
   Low: 'Rated low risk — the lightest test that still holds.',
 };
-export function sampleSizeGuide(c: Control, itgcHolds = true): { suggested: number; range: string; note: string } {
+/**
+ * How far the agreed methodology is actually being followed (#22).
+ *
+ * Surfaced, never enforced — the user's instruction was explicit. A high count
+ * is not an error to block; it is the finding. If 40 of 124 controls were sized
+ * against something other than the agreed table, the methodology has quietly
+ * become a suggestion, and the number is how anyone notices.
+ *
+ * Only controls that have actually been sized count in the denominator: a
+ * control nobody has drawn a sample for has not departed from anything.
+ */
+export function samplingOverrides(controls: Control[]): { overridden: number; sized: number } {
+  const sized = controls.filter(c => c.operating?.sampling);
+  return { overridden: sized.filter(c => c.operating.sampling?.override).length, sized: sized.length };
+}
+
+/** This engagement's agreed sampling methodology — the product default where an
+ *  engagement predates it, so every reader has a table to size against and no
+ *  caller has to handle "no methodology yet". */
+export const samplingOf = (eng: { samplingMethodology?: SamplingMethodology }): SamplingMethodology =>
+  eng.samplingMethodology ?? defaultSamplingMethodology();
+
+/**
+ * The size this control is tested at, and what produced it.
+ *
+ * Since #22 the numbers come from the engagement's AGREED methodology rather
+ * than from a constant in this file: the auditor decides nothing here, they
+ * read off a table their reviewer signed. `SIZE_BANDS` stays as the source of
+ * the prose — what the band means and what the rating did to it — and as the
+ * product default when no methodology has been agreed.
+ *
+ * `cell` comes back so the control page can show the auditor the row and column
+ * their number was read from. A size nobody can trace is a size nobody can defend.
+ */
+export function sampleSizeGuide(
+  c: Control, itgcHolds = true, methodology: SamplingMethodology = defaultSamplingMethodology(),
+): { suggested: number; range: string; note: string; cell?: { frequency: Frequency; rating: RiskRating } } {
   if (c.nature === 'Automated' && itgcHolds) return { suggested: 1, range: 'test of one', note: 'Automated — one instance proves the rule, valid only while ITGCs hold.' };
   // Everything below this line is the manual path — and an automated control
   // whose ITGCs have failed takes it. "Sized like a manual control" has to mean
   // sized like a manual control OF THIS FREQUENCY AND RATING, not a flat number:
   // a quarterly control does not become a daily one because an ITGC broke.
   const band = SIZE_BANDS[c.frequency];
-  const rating = c.riskRating;
-  const suggested = rating === 'High' ? band.high : rating === 'Low' ? band.low : band.mid;
-  const sized = rating ? `${band.note} ${RATING_NOTE[rating]}` : band.note;
+  const agreed = methodology.sizes[c.frequency] ?? DEFAULT_SAMPLE_SIZES[c.frequency];
+  // No rating agreed yet reads as the middle of the band, which is what this
+  // sized at before anyone rated anything.
+  const rating: RiskRating = c.riskRating ?? 'Medium';
+  const suggested = rating === 'High' ? agreed.high : rating === 'Low' ? agreed.low : agreed.medium;
+  const sized = c.riskRating ? `${band.note} ${RATING_NOTE[rating]}` : band.note;
   return {
     suggested,
-    range: band.range,
+    range: `${agreed.low}–${agreed.high}`,
     note: c.nature === 'Automated' ? `ITGC failure in force — test of one is invalid; sized like a manual control. ${sized}` : sized,
+    cell: { frequency: c.frequency, rating },
   };
 }
 
@@ -2376,6 +2482,86 @@ export function passedWithoutFiles(c: Control): OperatingStep[] {
   return c.operating.steps.filter(s => stepResult(s) === 'Pass' && !requiredFilesReady(s, c));
 }
 
+/**
+ * Why Ira cannot answer one design check, or null if it can.
+ *
+ * A real assistant reads the evidence it was given and sometimes finds that
+ * nothing in it speaks to the question. Saying so is the honest outcome; the
+ * dishonest one is a Pass, because a check nobody could assess and a check that
+ * held look identical on a working paper once a tick is on it.
+ *
+ * Two ways it happens, and they are different problems with different fixes:
+ *
+ *  · MISSING — the element that answers this check is on the control, and
+ *    nobody has attached its file. One upload away.
+ *  · INSUFFICIENT — the element that answers it is not on the control at all.
+ *    A process narrative does not say who holds which SAP role, and reading one
+ *    harder will not make it. Somebody has to add the element.
+ *
+ * Nothing here is invented: the check's own words say what it is asking about,
+ * and the control's own elements say whether that question has anything behind
+ * it. Run twice on the same control it gives the same answer, because it is a
+ * reading of the control rather than a roll of the dice.
+ */
+export interface IraBlock {
+  kind: 'missing' | 'insufficient';
+  /** The element that would have answered it. */
+  needs: DesignDocKind;
+  /** The sentence the row prints, in amber. */
+  reason: string;
+}
+
+/** What a check is asking about, and the element that answers it. Only the two
+ *  specialised kinds are here: the general ones (narrative, flowchart,
+ *  walkthrough, control description) describe the control as a whole, so any of
+ *  them can speak to an ordinary check. These two cannot be substituted —
+ *  neither who-holds-which-role nor where-the-threshold-sits is in a narrative. */
+const ANSWERED_BY: { kind: DesignDocKind; asks: RegExp }[] = [
+  { kind: 'Segregation of duties', asks: /\b(segregat\w*|independent of|distinct|four[- ]eyes|same person|different person|requester|preparer|authoriser|second authoriser)\b/i },
+  { kind: 'Precision & thresholds', asks: /\b(threshold\w*|toleran\w*|signing limits?|precision|materiality|tiers?|de minimis)\b/i },
+];
+
+export function iraCannotTest(p: DesignPoint, c: Control): IraBlock | null {
+  const onFile = c.design.documents.filter(d => designFilesOf(d).length > 0);
+  const label = (k: string) => k.toLowerCase();
+
+  // The check names its own evidence and none of what it names has arrived.
+  // This outranks the reading below: a check told where to look and finding an
+  // empty shelf is the plainest case there is.
+  const cited = p.evidencedBy?.length ? c.design.documents.filter(d => p.evidencedBy!.includes(d.id)) : [];
+  if (cited.length > 0 && cited.every(d => designFilesOf(d).length === 0)) {
+    const names = cited.map(d => (d.kind === 'Custom' ? d.name : d.kind));
+    return {
+      kind: 'missing', needs: cited[0].kind,
+      reason: `Nothing is attached to ${listPhrase(names.map(n => n.toLowerCase()))} yet, and that is what this check points at.`,
+    };
+  }
+
+  // What it is asking about, and whether anything on file can answer it.
+  const needs = ANSWERED_BY.find(x => x.asks.test(p.text));
+  if (!needs) return null;
+  if (onFile.some(d => d.kind === needs.kind)) return null;
+  const onControl = c.design.documents.some(d => d.kind === needs.kind);
+  return onControl
+    ? {
+      kind: 'missing', needs: needs.kind,
+      reason: `${needs.kind} is on this control but has no file, so there is nothing to read this one against.`,
+    }
+    : {
+      kind: 'insufficient', needs: needs.kind,
+      reason: onFile.length === 0
+        ? 'Nothing is attached to any element yet, so there is nothing to read.'
+        : `${cap(listPhrase(onFile.map(d => label(d.kind === 'Custom' ? d.name : d.kind))))} ${onFile.length === 1 ? 'is' : 'are'} all that is on file, and ${onFile.length === 1 ? 'it does' : 'they do'} not say enough to answer this. A ${label(needs.kind)} element would.`,
+    };
+}
+
+const cap = (s: string): string => (s ? s.charAt(0).toUpperCase() + s.slice(1) : s);
+
+/** Checks Ira ran and could not reach a verdict on — what the header counts. */
+export function designBlocked(c: Control): DesignPoint[] {
+  return c.design.points.filter(p => !!p.validation?.blocked && pointResult(p) === 'Not tested');
+}
+
 /** Deterministic Q&A a design-validation workflow returns for a consideration. */
 export function validationQA(text: string, fail: boolean): ValidationQA[] {
   return [
@@ -2508,6 +2694,34 @@ export function designCompleteness(c: Control): { done: number; total: number; p
 export function designOutstanding(c: Control): DesignDoc[] {
   return c.design.documents.filter(d => d.status !== 'Received' && !d.waiver);
 }
+/** What the evidence says the design conclusion should be.
+ *
+ *  Lifted out of DesignSection (21 Sep) when the chat rail started concluding
+ *  too: the page shows "Evidence suggests X" and files an override when the
+ *  auditor goes against it, so a second copy of this rule in the chat would
+ *  have been two products disagreeing about the same paper.
+ *
+ *  A failed walkthrough attribute counts as a design failure — the control as
+ *  built did not do what it claims on a real transaction. */
+export function designSuggestion(c: Control): TrackConclusion {
+  const d = c.design;
+  const walkFailed = d.walkthrough ? c.operating.steps.some(s => d.walkthrough!.attributeResults[s.id] === 'Fail') : false;
+  return d.documents.length === 0 && d.points.length === 0 ? 'Not tested'
+    : designOutstanding(c).length > 0 || walkFailed || d.points.some(p => pointResult(p) === 'Fail') ? 'Ineffective'
+    : d.points.length > 0 && d.points.every(p => pointResult(p) === 'Pass') ? 'Effective' : 'Not tested';
+}
+/** What the attribute results point to, before anybody concludes anything.
+ *
+ *  Lifted out of OperatingSection (22 Sep) for the same reason designSuggestion
+ *  was: the chat has to know what the evidence suggested in order to file the
+ *  conclusion as an override when the auditor departs from it, and two copies
+ *  of this expression would eventually disagree about whether they had. */
+export function operatingSuggestion(c: Control): TrackConclusion {
+  const steps = c.operating.steps;
+  if (steps.some(s => stepResult(s) === 'Fail')) return 'Ineffective';
+  return steps.length > 0 && steps.every(s => stepResult(s) !== 'Not tested') ? 'Effective' : 'Not tested';
+}
+
 /** The files on a design element. An older seeded element can read Received with
  *  no file list at all — its one file is the element itself — so that case is
  *  read as a single file with a stable id, and the page, the trail and a removal
@@ -2601,7 +2815,12 @@ export function operatingProgress(c: Control) {
   // an override, or a validation that stands over a contradicting attestation,
   // has to move both or neither.
   return {
-    tested: s.filter(x => x.result !== 'Not tested').length,
+    // Through stepResult like the other two (21 Sep). Reading raw `.result`
+    // here meant an attribute settled by override counted as passed or failed
+    // but never as tested, so "N of M tested" could never reach M — and the
+    // chat rail read it and told the auditor to keep going on work that was
+    // finished. The comment above had claimed this for a while; now it is true.
+    tested: s.filter(x => stepResult(x) !== 'Not tested').length,
     passed: s.filter(x => stepResult(x) === 'Pass').length,
     failed: s.filter(x => stepResult(x) === 'Fail').length,
     total: s.length,
@@ -2672,6 +2891,65 @@ export function extractionCriteria(c: Control, from: string, to: string, source?
   return `All ${what} records${where}${window}${entity}, excluding reversals and test postings.`;
 }
 
+/** The row count a file is read as holding.
+ *
+ *  This prototype holds no file bytes, so the number is derived from the name —
+ *  which means it is stated once and never moves, however many times the same
+ *  file is read. It lives here because two doors now put a file on an audit
+ *  (the page's Add-source modal and the chat), and a file that counted 4,102
+ *  rows through one and 11,890 through the other would be two files. */
+export function readRowCount(name: string): number {
+  return 400 + (name.split('').reduce((a, ch) => (a * 31 + ch.charCodeAt(0)) >>> 0, 5) % 19000);
+}
+
+/**
+ * How far a filter narrows its source — the one answer, wherever it was run.
+ *
+ * Always a fraction of the file: a population the same size as the thing it
+ * came out of is a file somebody copied rather than a population somebody
+ * defined. Deterministic from the control AND the file, so two files under one
+ * control narrow to different numbers, and the same extract run twice does not
+ * move.
+ *
+ * Shared with the chat (user ask, 22 Sep), which runs the same extract. Two
+ * implementations of this would hand the reviewer two different populations for
+ * the same sentence, which is the one thing a second door must never do.
+ */
+export function narrowedCount(c: Control, file: { name: string; rows: number }): number {
+  const seed = `${seedKeyOf(c)}·${file.name}`.split('').reduce((a, ch) => (a * 31 + ch.charCodeAt(0)) >>> 0, 11);
+  const share = 0.2 + (seed % 30) / 100;
+  return Math.max(1, Math.min(file.rows - 1, Math.round(file.rows * share)));
+}
+
+/** The population one extract produces, built in one place so the form on the
+ *  left and the chat on the right file the identical record. */
+export function populationFrom(
+  c: Control,
+  chosen: { name: string; rows: number; from: string; system?: string },
+  criteria: string,
+  count: number,
+  ctx: { version: string; me: string; from?: string; to?: string },
+): Population {
+  return {
+    version: ctx.version,
+    source: `${chosen.name} · ${chosen.from}`,
+    sources: [{ id: 'src-1', file: chosen.name, rows: chosen.rows, count, criteria }],
+    sourceFile: chosen.name, sourceCount: chosen.rows,
+    criteria,
+    filterFrom: ctx.from || undefined, filterTo: ctx.to || undefined,
+    // The criteria are prose, but the over-extraction breakdown still needs a
+    // dimension to name ("type Banking 1,180 · type Other 238"). The sub-process
+    // is what the old Transaction-type box defaulted to.
+    filterType: c.subProcess && c.subProcess !== 'General' ? c.subProcess : undefined,
+    count,
+    // The person signed in is the person who just ran the extract, and the
+    // system fills itself in when the pull came from one.
+    provenance: { system: chosen.system ?? '', extractedBy: ctx.me, extractedOn: '' },
+    tieOut: `Filtered from ${chosen.rows.toLocaleString()} rows`,
+    evidence: [{ id: 'pop-ev', name: chosen.name, kind: chosen.name.endsWith('.csv') ? 'CSV' : 'XLSX', uploadedBy: ctx.me, uploadedAt: 'just now' }],
+  };
+}
+
 /** "a, b and c" — the Oxford-less join the rest of the copy uses. */
 function listPhrase(items: string[]): string {
   if (items.length <= 1) return items[0] ?? '';
@@ -2714,16 +2992,19 @@ export function auditorProvenChecks(c: Control): number {
 // suggestions, every time. Nothing is inserted — each one is added or dismissed
 // by hand, because a check the auditor did not choose is a check they will not
 // defend.
+/** What the control says it does — its title and its description (22 Sep:
+ *  design checks are derived from the control description, not just the title). */
+const wordingOf = (c: Control) => `${c.description} ${c.controlActivity ?? ''}`;
 const CHECK_LIBRARY: { text: string; when: (c: Control) => boolean }[] = [
-  { text: 'The person performing the control is independent of the person who prepares what it checks.', when: c => c.type === 'Detective' || /review|approv|verif|reconcil/i.test(c.description) },
-  { text: 'The threshold or tolerance the control operates at is documented and approved.', when: c => /threshold|toleran|limit|exceed|above|below|match/i.test(`${c.description} ${c.precision ?? ''}`) },
-  { text: 'Exceptions the control raises are followed through to resolution, not just noted.', when: c => c.type === 'Detective' },
+  { text: 'The person performing the control is independent of the person who prepares what it checks.', when: c => c.type === 'Detective' || /review|approv|verif|reconcil/i.test(wordingOf(c)) },
+  { text: 'The threshold or tolerance the control operates at is documented and approved.', when: c => /threshold|toleran|limit|exceed|above|below|match/i.test(`${wordingOf(c)} ${c.precision ?? ''}`) },
+  { text: 'Exceptions the control raises are followed through to resolution, not just noted.', when: c => c.type === 'Detective' || /exception|investigat|follow[s]? up|differen/i.test(wordingOf(c)) },
   { text: 'The control leaves evidence that it operated — a reviewer can tell it ran on a given date.', when: () => true },
-  { text: 'The person performing the control has the authority and competence to do so.', when: c => c.nature === 'Manual' },
+  { text: 'The person performing the control has the authority and competence to do so.', when: c => c.nature === 'Manual' || /\bapprov|\bauthori[sz]|\bsigns? off/i.test(wordingOf(c)) },
   { text: 'The control operates over a complete population — nothing routes around it.', when: c => c.assertions?.includes('Completeness') ?? false },
   { text: 'Transactions are captured in the correct period.', when: c => c.assertions?.includes('Cut-off') ?? false },
   { text: 'The inputs to the calculation are independently verified before it runs.', when: c => c.assertions?.includes('Valuation') ?? false },
-  { text: 'The system configuration behind the control is under change control.', when: c => c.nature === 'Automated' || c.nature === 'IT-dependent' },
+  { text: 'The system configuration behind the control is under change control.', when: c => c.nature === 'Automated' || c.nature === 'IT-dependent' || /\bautomatic|\bconfigur|\bsystem blocks?\b/i.test(wordingOf(c)) },
   { text: 'The report the control is performed against is itself reliable.', when: c => c.nature === 'IT-dependent' },
   { text: 'The control runs often enough to catch a misstatement before it reaches the accounts.', when: c => c.frequency === 'Quarterly' || c.frequency === 'Annual' },
 ];
@@ -2812,6 +3093,24 @@ export function suggestPopulationFile(
   return { name: top.f.name, reason: listPhrase(top.why) };
 }
 
+/**
+ * Ira's design checks for a control that doesn't exist yet — the New control
+ * form (22 Sep), drafted from what the form holds so far. The same library and
+ * the same "already covered" test as `suggestedDesignChecks`.
+ */
+export function draftDesignChecks(input: {
+  title: string; description: string; type?: Control['type'] | null; nature?: Control['nature'] | null;
+  frequency?: Control['frequency'] | null; assertions?: Control['assertions'];
+}): string[] {
+  const draft = {
+    description: input.title, controlActivity: input.description, precision: '',
+    type: input.type ?? undefined, nature: input.nature ?? undefined, frequency: input.frequency ?? undefined,
+    assertions: input.assertions ?? [], design: { points: [] },
+  } as unknown as Control;
+  if (!`${input.title} ${input.description}`.trim()) return [];
+  return suggestedDesignChecks(draft);
+}
+
 export function suggestedDesignChecks(c: Control): string[] {
   // Control-level checks only, deliberately. The library offers control-level
   // considerations, and it decides "already covered" on keyword overlap — so
@@ -2851,6 +3150,7 @@ export function courtFor(c: Control, tasks: HandoffTask[], notes: ReviewNote[] =
 
 import type { AuditRecord, Frequency } from './types';
 import type { ProcurementRacmRow } from '../../data/procurement-racm';
+import { ownersOf } from './auditScope';
 const CYCLE_DAYS: Record<Frequency, number> = { Daily: 1, Weekly: 7, Monthly: 30, Quarterly: 90, Annual: 365, Recurring: 7, 'Ad-hoc': 30 };
 
 // ── year-end controls (A29) ──────────────────────────────────────────────────
@@ -3059,6 +3359,8 @@ export function formatDueDate(date: string | null | undefined): string {
 // a process's controls out in the editor's spreadsheet columns (the same grouping
 // Racm.tsx uses), and openEditorTab hands them over. Columns a control has no
 // field for stay blank.
+import { racmConfig } from './racmConfig';
+import { racmSetupKeyFor } from './racmLibrary';
 export const RACM_ROWS_KEY = (racmId: string) => `sox-racm-rows:${racmId}`;
 /** The rows the editor must not let anyone change — published control IDs, in
  *  the editor's own spelling. Handed over beside the rows: the editor refuses to
@@ -3105,6 +3407,10 @@ export function racmEditorRows(controls: Control[], process: string): Procuremen
         effectiveDate: c.effectiveDate ?? '',
         testingStrategy: c.testingStrategy ?? '',
         controlOwner: c.owner,
+        // The name every surface shows — the control's own risk owner, or its
+        // process owner where the RACM named none. `applyEditorRows` reads an
+        // untouched cell as "still that", so the fallback is never stamped on.
+        riskOwner: ownersOf(c).riskOwner,
         controlEvidence: evidence.join('; '),
         assertions: c.assertions.join(', '),
         fsLineItem: '',
@@ -3116,6 +3422,9 @@ export function racmEditorRows(controls: Control[], process: string): Procuremen
         confidence: '',
         sopSectionRef: '',
         attributes: c.operating.steps.map(s => s.description).join(' | '),
+        // The client's own columns travel with the row, so the grid can show
+        // them beside ours and an edit has somewhere to land on the way back.
+        extras: { ...c.extras },
       };
     });
 }
@@ -3174,6 +3483,10 @@ export function applyEditorRows(
     const c = controls.filter(x => x.process === process)[i];
     if (c) byKey.set(editorKey(r.riskId, r.controlId), c.id);
   });
+  // The client's own columns are theirs to define, and the set-up belongs to the
+  // client GROUP — read off the company this process is tested at, exactly as
+  // the grid these rows came from read it.
+  const definedExtras = racmConfig(racmSetupKeyFor(controls.find(c => c.process === process)?.entity).key).extras;
 
   let changed = 0;
   const seen = new Set<string>();
@@ -3191,6 +3504,14 @@ export function applyEditorRows(
     if (text(row.controlActivity) !== (c.controlActivity ?? '')) patch.controlActivity = text(row.controlActivity) || undefined;
     if (text(row.subProcess) !== c.subProcess) patch.subProcess = text(row.subProcess);
     if (text(row.controlOwner) && text(row.controlOwner) !== c.owner) patch.owner = text(row.controlOwner);
+    // Risk owner went out as the name shown, which may be the process owner
+    // standing in. Only a cell that now says something else is an edit; a
+    // cleared one drops the control's own name and the process owner shows
+    // again. A row with no such key came from an older tab and says nothing.
+    if (row.riskOwner != null) {
+      const riskOwner = text(row.riskOwner);
+      if (riskOwner !== ownersOf(c).riskOwner && (riskOwner || undefined) !== (c.riskOwner?.trim() || undefined)) patch.riskOwner = riskOwner || undefined;
+    }
     if (text(row.effectiveDate) !== (c.effectiveDate ?? '')) patch.effectiveDate = text(row.effectiveDate) || undefined;
     if (text(row.country) !== (c.country ?? '')) patch.country = text(row.country) || undefined;
     const nature = oneOf(NATURES, text(row.controlNature));
@@ -3203,7 +3524,29 @@ export function applyEditorRows(
     if (rating && rating !== c.riskRating) patch.riskRating = rating;
     const strategy = oneOf(TESTING_STRATEGIES, text(row.testingStrategy));
     if (strategy && strategy !== c.testingStrategy) patch.testingStrategy = strategy;
+    // Category is read rather than matched: "Financial Reporting" is a legitimate
+    // way of writing one of our six, so a cell pasted out of a client's own matrix
+    // still lands. A word that means none of them leaves the category alone.
+    const category = riskCategoryOf(text(row.riskCategory));
+    if (category && category !== c.clazz) patch.clazz = category;
     if (typeof row.isKey === 'boolean' && row.isKey !== c.isKey) patch.isKey = row.isKey;
+    // The client's own columns. Only a column their set-up still defines is
+    // written back, so one they have since dropped can't be resurrected by an
+    // edit to a different cell, and a cleared cell takes the value off the
+    // control rather than leaving an empty string on it. A row with no bag at
+    // all came from an older tab and says nothing about them.
+    const own = row.extras;
+    if (own) {
+      const extras = { ...c.extras };
+      let touched = false;
+      definedExtras.forEach(e => {
+        const now = (own[e.header] ?? '').trim();
+        if (now === (c.extras?.[e.header] ?? '')) return;
+        if (now) extras[e.header] = now; else delete extras[e.header];
+        touched = true;
+      });
+      if (touched) patch.extras = Object.keys(extras).length ? extras : undefined;
+    }
     if (!Object.keys(patch).length) return c;
     changed++;
     return { ...c, ...patch };
@@ -3221,6 +3564,11 @@ export function applyEditorRows(
     let id = (row.controlId ?? '').trim() || `${row.riskId}/C${String(fresh.length + 1).padStart(3, '0')}`;
     while (taken.has(id)) id = `${id}-2`;
     taken.add(id);
+    // A row typed into the grid carries the client's columns too — again only
+    // the ones their set-up defines, and only where something was filled in.
+    const own = Object.fromEntries(definedExtras
+      .map(e => [e.header, (row.extras?.[e.header] ?? '').trim()] as const)
+      .filter(([, v]) => v));
     fresh.push({
       id,
       wpRef: id,
@@ -3237,13 +3585,16 @@ export function applyEditorRows(
       riskDescription: (row.riskDescription ?? '').trim(),
       assertions: [],
       ...((row.riskTitle ?? '').trim() ? { riskTitle: row.riskTitle!.trim() } : {}),
+      ...((row.riskOwner ?? '').trim() ? { riskOwner: row.riskOwner!.trim() } : {}),
       ...((row.controlObjective ?? '').trim() ? { objective: row.controlObjective!.trim() } : {}),
       ...((row.controlActivity ?? '').trim() ? { controlActivity: row.controlActivity!.trim() } : {}),
       ...((row.entity ?? '').trim() ? { entity: row.entity!.trim() } : {}),
+      ...(Object.keys(own).length ? { extras: own } : {}),
       ...((row.effectiveDate ?? '').trim() ? { effectiveDate: row.effectiveDate!.trim() } : {}),
       ...((row.country ?? '').trim() ? { country: row.country!.trim() } : {}),
       ...(oneOf(TESTING_STRATEGIES, row.testingStrategy ?? '') ? { testingStrategy: oneOf(TESTING_STRATEGIES, row.testingStrategy ?? '')! } : {}),
       ...(oneOf(RATINGS, row.riskRating ?? '') ? { riskRating: oneOf(RATINGS, row.riskRating ?? '')! } : {}),
+      ...(riskCategoryOf(row.riskCategory ?? '') ? { clazz: riskCategoryOf(row.riskCategory ?? '')! } : {}),
       design: { documents: [], points: [], conclusion: 'Not tested', testedBy: null, testedAt: null },
       operating: { method: 'Manual', steps: [], conclusion: 'Not tested', testedBy: null, testedAt: null },
     });

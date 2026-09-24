@@ -355,6 +355,7 @@ export const VIEW_PERMISSIONS: Partial<Record<View, PermissionKey | PermissionKe
   'racm-full-editor': 'racm_edit',
   'governance-controls': 'ctrl_view',
   'governance-control-detail': 'ctrl_view',
+  'racm-library': 'racm_view',
   'audit-risk-register': 'risk_view',
   // Intelligence
   'dashboards': 'db_view',
@@ -375,7 +376,5 @@ export const VIEW_PERMISSIONS: Partial<Record<View, PermissionKey | PermissionKe
   'admin-users': 'ad_users_manage',
   'admin-roles': 'ad_roles_manage',
   'admin-logs': 'ad_logs',
-  // Either the workspace-wide admin view, or a team lead's own-team scope.
-  'platform-usage': ['ad_usage', 'ad_usage_people'],
   // home, recents, dev routes intentionally ungated (open to all)
 };

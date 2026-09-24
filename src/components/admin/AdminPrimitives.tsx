@@ -152,7 +152,11 @@ function AdminKpiCard({ stat, index, active, onClick }: { stat: Stat; index: num
       )}
       <div className="min-w-0 flex items-baseline gap-1.5">
         <span className={`text-[1.125rem] font-bold leading-none tabular-nums ${active ? 'text-brand-800' : attn ? 'text-mitigated-700' : 'text-ink-900'}`}>
-          <KpiCountUp value={String(stat.value)} delay={120 + index * 80} />
+          {stat.instant ? (
+            String(stat.value)
+          ) : (
+            <KpiCountUp value={String(stat.value)} delay={120 + index * 80} />
+          )}
         </span>
         <span className={`text-[0.75rem] font-medium truncate ${attn ? 'text-mitigated-700/80' : 'text-ink-500'}`}>
           {stat.label}

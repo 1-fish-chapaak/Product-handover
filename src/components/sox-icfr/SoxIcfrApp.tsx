@@ -24,6 +24,7 @@ import ControlDossier from './ControlDossier';
 import ControlLibraryDetail from './ControlLibraryDetail';
 import AuditLogsView from './AuditLogsView';
 import AuditConfigView from './AuditConfigView';
+import SamplingMethodologyView from './SamplingMethodologyView';
 import AuditArchiveView from './AuditArchiveView';
 import { DeficienciesView, HandoffsView, ScopeView } from './extraViews';
 import RacmFullPageEditor from '../audit/RacmFullPageEditor';
@@ -40,8 +41,11 @@ const LIBRARY_LENS = true;
    it and putting its branch back:
 
      ConfigurationView  — the engagement's entities / TBs / period / materiality.
-                          The AUDIT has its own Configuration (AuditConfigView);
-                          this was the engagement-wide one.
+                          The engagement's Configuration TAB is back (23 Sep) but
+                          this file did not come back with it: the tab holds the
+                          sampling methodology and nothing else. Entities, TBs,
+                          period and materiality are still per cycle, on
+                          AuditConfigView.
      DashboardView      — the engagement read-out that listed audits, from the
                           Dashboard / Audit logs pair the engagement used to have
      RunsView           — the engagement-wide run registry, which the SOX audit
@@ -78,26 +82,38 @@ const SOX_TABS: TabDef[] = [
      still a DRILL-IN under a breadcrumb: every route in calls
      setView('deficiencies'), which works at either level. */
   { id: 'runs', label: 'SOX testing' },
-  /* Configuration is not an ENGAGEMENT tab — it belongs to an audit, and lives
-     in AUDIT_TABS below. Period, scope, TB / GL and materiality are set per
-     cycle, so there is nothing engagement-wide left to configure here; the
-     engagement's own ConfigurationView stays parked. */
+  /* Configuration is BACK at the engagement level (23 Sep), carrying one thing:
+     the sampling methodology (#22). It was parked because period, scope, TB / GL
+     and materiality are all set per cycle — there was nothing engagement-wide
+     left to configure. Sampling is the first setting that genuinely is: the
+     approach does not change between a year's interim and year-end rounds, so
+     putting it on an audit would let two rounds of one year test off different
+     tables, and putting it on a control is the 124-separate-decisions problem
+     the client raised.
+     The AUDIT keeps its own Configuration — same tab id, different page, the way
+     Overview and Control Library already fork by level (see `body` below).
+     The old engagement-wide ConfigurationView — entities, TBs, period,
+     materiality — stays parked; none of it came back with this. */
+  { id: 'config', label: 'Configuration' },
 ];
 
 /**
  * Two levels again (user ask).
  *
- * The ENGAGEMENT is the tabs in SOX_TABS above — Overview, Control Library and
- * SOX audit, the audit register (RACM is parked, S11 — RACMs live on the
- * Engagements page's RACM tab). Opening an audit from that register,
+ * The ENGAGEMENT is the tabs in SOX_TABS above — Overview, Control Library,
+ * SOX audit (the audit register) and Configuration, which holds the one setting
+ * that is genuinely engagement-wide: the sampling methodology every audit and
+ * every control reads off. (RACM is parked, S11 — RACMs live on the
+ * Engagements page's RACM tab.) Opening an audit from that register,
  * or creating one (createAudit opens what it creates), swaps in AUDIT_TABS behind
  * a breadcrumb: that cycle's Dashboard, its Control Library — only the controls
  * its scope covers, reset to Not started by createAudit — its deficiencies and
  * its Configuration.
  *
  * What stays retired: DashboardView, the engagement-level Dashboard / Audit logs
- * pair it belonged to, and the engagement's own Configuration tab. Their files
- * are untouched and still compile.
+ * pair it belonged to, and ConfigurationView — the engagement's old entities /
+ * TBs / period / materiality page, which the revived Configuration tab does not
+ * bring back. Their files are untouched and still compile.
  *
  * Deficiency management is a TAB inside an audit and a DRILL-IN outside one —
  * hence the `inAudit` term in `isRoot` below. Every route into it calls
@@ -222,6 +238,11 @@ function Inner({ onBack, backLabel = 'Back to Engagements' }: { onBack?: () => v
   // stands alone under a breadcrumb outside one.
   const isDeficiencies = view === 'deficiencies' && !inAudit;
   const isDrillIn = isRacmMatrix || isScope || isHandoffs || isDeficiencies;
+  // The audit's control page runs two panes — a scrolling stepper and a rail
+  // beside it that has to stay put — so it takes the height rather than the
+  // scroll. Everything else here keeps the ordinary one-scroll page, including
+  // the library's control page, which is deliberately one column.
+  const dossierPanes = view === 'dossier' && inAudit;
   const isRoot = view === 'overview' || view === 'racm' || view === 'risks' || view === 'register'
     || view === 'runs' || view === 'config' || (inAudit && view === 'deficiencies');
   // A CONCLUDED audit is read from its archive, not from the live controls —
@@ -249,7 +270,11 @@ function Inner({ onBack, backLabel = 'Back to Engagements' }: { onBack?: () => v
     : tab === 'racm' ? (view === 'racm-list' ? <Racm /> : <RacmLanding />)
     : tab === 'risks' ? <RiskLibrary />
     : tab === 'runs' ? <AuditLogsView />
-    : tab === 'config' ? (audit ? <AuditConfigView audit={audit} /> : null)
+    // Two pages behind one tab, like Overview and Control Library above. Inside
+    // an audit, Configuration is that cycle's own settings; at the engagement it
+    // is the sampling methodology, which is agreed once and outlives every audit
+    // that reads it.
+    : tab === 'config' ? (audit ? <AuditConfigView audit={audit} /> : <SamplingMethodologyView />)
     // Two different Control Library lenses (user ask, 30 Jul): the engagement
     // root asks "what is this control made of" (ControlLibrary — attributes,
     // workflow mapping). Inside an audit the question is "did it pass" — TOD
@@ -260,14 +285,20 @@ function Inner({ onBack, backLabel = 'Back to Engagements' }: { onBack?: () => v
     : <ControlRegister />;
 
   return (
-    <div className="sox-book-ui h-full overflow-y-auto overflow-x-hidden bg-canvas">
-      {/* overflow-x-hidden above lets the control page's full-bleed header band
-          overshoot the centred container without opening a sideways scrollbar. */}
+    <div className={cn('sox-book-ui h-full bg-canvas',
+      // overflow-x-hidden lets the control page's full-bleed header band
+      // overshoot the centred container without opening a sideways scrollbar.
+      dossierPanes ? 'overflow-hidden flex flex-col' : 'overflow-y-auto overflow-x-hidden')}>
       {/* The control detail page and the RACM matrix stand alone — no engagement
           header, no role switcher; the persona is fixed until you go back to the
           engagement. */}
       {view !== 'dossier' && !isDrillIn && !inAudit && topBar}
-      <div className="max-w-[1320px] mx-auto px-6 pt-4 pb-6">
+      {/* The control page runs to a 32px gutter rather than a centred 1320px
+          column (user, 22 Sep — matching the production app). It is the one
+          page here that is two panes wide, and a centred column spent the
+          difference on empty canvas either side of the work. */}
+      <div className={cn('pt-4 w-full',
+        dossierPanes ? 'flex-1 min-h-0 flex flex-col px-8' : 'max-w-[1320px] mx-auto px-6 pb-6')}>
         {/* Inside an audit the engagement header gives way to a breadcrumb, but
             the persona switcher comes WITH it: every testing, review and
             sign-off action lives inside an audit, so this is where switching
@@ -335,16 +366,10 @@ function Inner({ onBack, backLabel = 'Back to Engagements' }: { onBack?: () => v
               { label: wpRef },
             ]} />
           );
-          // The library's control page carries a white header band that runs to
-          // both screen edges; the trail sits on the same white, so the two read
-          // as one region rather than a strip floating on the canvas. Inside an
-          // Both control pages carry that band now, so both trails sit on it.
-          return (
-            <div className="relative flow-root -mt-4 pt-4">
-              <div aria-hidden className="absolute inset-y-0 left-[-50vw] right-[-50vw] bg-canvas-elevated" />
-              <div className="relative">{trail}</div>
-            </div>
-          );
+          // The white band behind this went with the header's own (22 Sep):
+          // the header is a card on the canvas now, and a full-bleed strip
+          // above a card reads as a seam rather than a region.
+          return trail;
         })()}
         {isHandoffs && (
           <SoxBreadcrumb onBack={back} items={[
@@ -374,7 +399,8 @@ function Inner({ onBack, backLabel = 'Back to Engagements' }: { onBack?: () => v
           </div>
         )}
         <AnimatePresence mode="wait">
-          <motion.div key={`${role}-${openAuditId ?? 'eng'}-${tab}-${view}`} initial={{ opacity: 0, y: 6 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -4 }} transition={{ duration: 0.16 }}>
+          <motion.div key={`${role}-${openAuditId ?? 'eng'}-${tab}-${view}`} className={cn(dossierPanes && 'flex-1 min-h-0 flex flex-col')}
+            initial={{ opacity: 0, y: 6 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -4 }} transition={{ duration: 0.16 }}>
             {body}
           </motion.div>
         </AnimatePresence>

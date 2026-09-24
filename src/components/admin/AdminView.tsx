@@ -15,8 +15,7 @@ import {
   Users, User, Shield, ScrollText,
   UserPlus, Plus, Download, ArrowRight,
   ChevronDown, Pencil, Trash2, X, Check, Crown, Send, UserCheck, UserX, Gauge, UserMinus,
-  Brain, Lock, CircleSlash, Undo2,
-} from 'lucide-react';
+  Brain, Lock, CircleSlash, Undo2,} from 'lucide-react';
 import { MEMORY_STORE, KIND_META, SCOPE_META } from '../../data/memoryStore';
 import {
   useMemorySessionVersion, allMemories, decisionFor, forgetMemory, undoForget,

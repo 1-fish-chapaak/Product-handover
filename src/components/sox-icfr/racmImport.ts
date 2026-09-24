@@ -23,6 +23,7 @@ import * as XLSX from 'xlsx';
 import { sameCompany } from './auditScope';
 import { requiredFilesOf, suggestedDesignChecks, titleFromRisk } from './helpers';
 import { racmTemplateForProcesses } from './mockData';
+import { CONTROL_CLASSES } from './types';
 import type { Assertion, Control, ControlClass, ControlType, DesignPoint, Frequency, Nature, OperatingStep, RiskRating, TestingStrategy } from './types';
 
 // ─── Fields ──────────────────────────────────────────────────────────────────────
@@ -31,16 +32,69 @@ export type RacmFieldKey =
   | 'riskId' | 'riskTitle' | 'riskDescription' | 'riskCategory' | 'riskRating'
   | 'controlId' | 'controlTitle' | 'objective' | 'controlActivity'
   | 'subProcess' | 'type' | 'nature' | 'frequency' | 'isKey'
-  | 'owner' | 'processOwner' | 'assertions' | 'attributes'
+  | 'owner' | 'processOwner' | 'riskOwner' | 'assertions' | 'attributes'
   | 'controlEvidence' | 'designChecks' | 'sopSectionRef' | 'entity'
   | 'effectiveDate' | 'country' | 'testingStrategy';
+
+/** What a client's own column holds. Decides what the upload checks and which
+ *  box Review offers when one is blank. */
+export type ExtraKind = 'text' | 'number' | 'date' | 'yesno' | 'list';
+
+/**
+ * A column this client's matrix has and ours does not (22 Sep, feedback #2 —
+ * "add, remove, rename and define columns during initial setup").
+ *
+ * `header` is the client's own spelling and is what an upload matches on, so a
+ * rename can never break the match: `label` is only what we call it on screen.
+ * That split is the whole reason rename is safe to offer.
+ */
+export interface ExtraColumn {
+  /** The header as the client's file spells it. The match key — never edited. */
+  header: string;
+  /** What we call it on screen. Absent until someone renames it. */
+  label?: string;
+  kind: ExtraKind;
+  /** For `list` — the only values it may hold, in the order they're offered. */
+  options?: string[];
+  /** A row can't be imported with this one blank. Off unless someone says so:
+   *  a column the product kept from a file should not block the next upload. */
+  required: boolean;
+}
+
+/** What to call a client's column on screen. */
+export const extraLabel = (e: ExtraColumn): string => e.label?.trim() || e.header;
+
+/**
+ * A row's value for one of the client's columns.
+ *
+ * Matched on the normalised heading, never on the exact string. A row's extras
+ * are keyed by what the FILE wrote; the set-up is keyed by what someone typed
+ * on the Config tab. "Cost centre" and "Cost Centre" are the same column to
+ * every other part of the import, and an exact match here would hold every row
+ * for a value that is sitting right there.
+ */
+export function extraValue(row: Pick<ImportRow, 'extras'>, column: ExtraColumn): string {
+  const want = normaliseHeader(column.header);
+  const hit = Object.entries(row.extras).find(([header]) => normaliseHeader(header) === want);
+  return (hit?.[1] ?? '').trim();
+}
+
+/** A client's own columns this row has left blank — the required ones only.
+ *  Kept apart from `coreBlanks` because these are the client's columns, not
+ *  ours: they have no `RacmFieldKey` and no meaning we can read. */
+export function extraBlanks(row: ImportRow, extras: ExtraColumn[] = []): ExtraColumn[] {
+  return extras.filter(e => e.required && !extraValue(row, e));
+}
 
 export interface RacmField {
   key: RacmFieldKey;
   /** What the review screen calls the field. */
   label: string;
-  /** Import can't go ahead until a required field has a column (or, for
-   *  controlTitle / controlActivity, at least one of the two does). */
+  /** Every imported control must end up with a value (22 Sep list — locked:
+   *  neither the Config tab nor a first upload can switch it off). A missing
+   *  COLUMN only stops the import when nothing can supply it: Ira fills what she
+   *  can read, IDs are built, and the rest is filled at Review. The one hard
+   *  stop is a file with neither a control title nor a description column. */
   required: boolean;
   /** Header spellings that mean this field, lower-case. */
   synonyms: string[];
@@ -48,12 +102,14 @@ export interface RacmField {
 
 export const RACM_FIELDS: RacmField[] = [
   { key: 'riskId', label: 'Risk ID', required: false, synonyms: ['risk id', 'risk ref', 'risk no', 'risk number', 'risk #'] },
-  { key: 'riskTitle', label: 'Risk title', required: false, synonyms: ['risk title', 'risk name', 'risk heading', 'risk short name'] },
+  { key: 'riskTitle', label: 'Risk title', required: true, synonyms: ['risk title', 'risk name', 'risk heading', 'risk short name'] },
   { key: 'riskDescription', label: 'Risk description', required: true, synonyms: ['risk description', 'risk', 'risk statement', 'what could go wrong'] },
-  { key: 'riskCategory', label: 'Risk category', required: false, synonyms: ['risk category', 'risk type', 'category'] },
+  // 22 Sep: on the required list, and one of the six (see CONTROL_CLASSES).
+  // Ira reads it off the risk where the file has no column.
+  { key: 'riskCategory', label: 'Risk category', required: true, synonyms: ['risk category', 'risk type', 'category', 'risk classification', 'classification', 'class'] },
   { key: 'riskRating', label: 'Risk rating', required: false, synonyms: ['risk rating', 'inherent risk', 'risk level', 'rating'] },
-  { key: 'controlId', label: 'Control ID', required: true, synonyms: ['control id', 'control ref', 'control no', 'control number', 'control #'] },
-  { key: 'controlTitle', label: 'Control title', required: false, synonyms: ['control title', 'control name', 'control'] },
+  { key: 'controlId', label: 'Control ID', required: false, synonyms: ['control id', 'control ref', 'control no', 'control number', 'control #'] },
+  { key: 'controlTitle', label: 'Control title', required: true, synonyms: ['control title', 'control name', 'control'] },
   { key: 'objective', label: 'Control objective', required: false, synonyms: ['control objective', 'objective'] },
   // Labelled "Control description" since the 17 Sep call: this is the narrative
   // the auditor tests against. 'control description' moved here from
@@ -61,16 +117,19 @@ export const RACM_FIELDS: RacmField[] = [
   // the header now names.
   { key: 'controlActivity', label: 'Control description', required: true, synonyms: ['control activity', 'control description', 'control procedure', 'activity', 'how the control operates'] },
   { key: 'subProcess', label: 'Sub-process', required: false, synonyms: ['sub-process', 'sub process', 'subprocess', 'process area'] },
-  { key: 'type', label: 'Control type', required: false, synonyms: ['control type', 'type', 'preventive / detective'] },
-  { key: 'nature', label: 'Control nature', required: false, synonyms: ['control nature', 'nature', 'manual / automated', 'automation'] },
+  { key: 'type', label: 'Control type', required: true, synonyms: ['control type', 'type', 'preventive / detective'] },
+  { key: 'nature', label: 'Control nature', required: true, synonyms: ['control nature', 'nature', 'manual / automated', 'automation'] },
   { key: 'frequency', label: 'Frequency', required: true, synonyms: ['frequency', 'control frequency', 'how often'] },
   { key: 'isKey', label: 'Key control', required: false, synonyms: ['key control', 'key', 'key / non-key', 'is key'] },
-  { key: 'owner', label: 'Control owner', required: false, synonyms: ['control owner', 'owner', 'performed by', 'control performer'] },
+  { key: 'owner', label: 'Control owner', required: true, synonyms: ['control owner', 'owner', 'performed by', 'control performer'] },
   { key: 'processOwner', label: 'Process owner', required: false, synonyms: ['process owner'] },
-  { key: 'assertions', label: 'Assertions', required: false, synonyms: ['assertions', 'assertion', 'financial statement assertions', 'ceavop'] },
-  { key: 'attributes', label: 'Attributes', required: false, synonyms: ['attributes', 'test attributes', 'attribute', 'testing attributes'] },
+  // 22 Sep: accountable for the risk. A record on the matrix only — it routes no
+  // task or request (that lane stays the control and process owner).
+  { key: 'riskOwner', label: 'Risk owner', required: true, synonyms: ['risk owner', 'risk accountable', 'risk accountability', 'owner of the risk', 'accountable for risk'] },
+  { key: 'assertions', label: 'Assertions', required: true, synonyms: ['assertions', 'assertion', 'financial statement assertions', 'ceavop'] },
+  { key: 'attributes', label: 'Attributes', required: true, synonyms: ['attributes', 'test attributes', 'attribute', 'testing attributes'] },
   { key: 'controlEvidence', label: 'Control evidence', required: false, synonyms: ['control evidence', 'evidence', 'supporting evidence', 'documents'] },
-  { key: 'designChecks', label: 'Design checks (TOD)', required: false, synonyms: ['tod checks performed', 'tod checks', 'design checks', 'test of design', 'tod'] },
+  { key: 'designChecks', label: 'Design checks (TOD)', required: true, synonyms: ['tod checks performed', 'tod checks', 'design checks', 'test of design', 'tod'] },
   { key: 'sopSectionRef', label: 'SOP section', required: false, synonyms: ['sop section ref', 'sop section', 'sop reference', 'sop ref'] },
   // The company a row is tested at — the ENTITY part of its ID (S11). A file
   // without one takes the company chosen when the RACM was created.
@@ -459,7 +518,7 @@ function parseType(cell: string): { type: ControlType | null; flag?: 'unreadable
   return { type: null, flag: 'unreadable' };
 }
 
-const ASSERTION_ORDER: Assertion[] = ['Completeness', 'Accuracy', 'Existence / Occurrence', 'Cut-off', 'Valuation', 'Rights & Obligations', 'Presentation'];
+export const ASSERTION_ORDER: Assertion[] = ['Completeness', 'Accuracy', 'Existence / Occurrence', 'Cut-off', 'Valuation', 'Rights & Obligations', 'Presentation'];
 const ASSERTION_CELL: [RegExp, Assertion][] = [
   [/\bcompleteness\b|\bcomplete\b/, 'Completeness'],
   [/\baccuracy\b|\baccurate\b/, 'Accuracy'],
@@ -664,14 +723,14 @@ function findDuplicate(values: Partial<Record<RacmFieldKey, string>>, idWasGener
  *  rows. `existing` is every control on the engagement (for A8 duplicates) and
  *  `process` is the RACM being created — a row is checked against both, and
  *  against the rows read before it. */
-export function buildImportRows(rows: string[][], headerRow: number, matches: ColumnMatch[], existing: Control[], process: string, entity = '', keepExtras: string[] = []): ImportRow[] {
+export function buildImportRows(rows: string[][], headerRow: number, matches: ColumnMatch[], existing: Control[], process: string, entity = '', keepExtras: ExtraColumn[] = []): ImportRow[] {
   const mapped = matches.filter((m): m is ColumnMatch & { column: number } => m.column != null);
   // Columns no field claimed. The process column is skipped — it is chosen
   // before the import and would otherwise ride along on every row as an extra
   // saying what the RACM already says.
   const spokenFor = new Set(mapped.map(m => m.column));
   const headers = rows[headerRow] ?? [];
-  const wanted = new Set(keepExtras.map(h => normaliseHeader(h)));
+  const wanted = new Set(keepExtras.map(e => normaliseHeader(e.header)));
   const extraCols = headers
     .map((h, column) => ({ header: String(h ?? '').trim(), column }))
     .filter(h => h.header && !spokenFor.has(h.column) && !PROCESS_HEADERS.has(normaliseHeader(h.header)))
@@ -823,36 +882,131 @@ function riskFromText(text: string): string {
   return `Risk that "${lower}" does not happen, so errors go unnoticed.`;
 }
 
-/** The core values a row can't be imported without (17 Sep dev call). A blank
- *  Risk or Control ID is not one — the ID is built at import. */
-export type CoreBlank = 'riskDescription' | 'control' | 'nature' | 'type' | 'attributes';
+/**
+ * Ira's risk category, read off the risk's own words (22 Sep). One rule for the
+ * upload's Review and the New control form, like `draftAttributes`.
+ *
+ * `word` comes back so the screen can say WHY — "Risk mentions 'diverted'" is
+ * checkable; "Fraud" on its own is not.
+ *
+ * The fallback is deliberate and stated rather than hidden: on an ICFR matrix a
+ * risk that names nothing else is a risk to the financial statements. That is
+ * the matrix's whole subject. She says so, and the reviewer can change it.
+ */
+export function draftRiskCategory(riskText: string, controlText = ''): { category: ControlClass; word: string | null } {
+  const text = `${riskText} ${controlText}`.trim();
+  if (text) {
+    for (const [re, category] of CATEGORY_TEXT) {
+      const m = re.exec(text);
+      if (m) return { category, word: m[0].toLowerCase() };
+    }
+  }
+  return { category: 'Financial', word: null };
+}
+
+/** The values a row can't be imported without. 17 Sep started it; the 22 Sep
+ *  list made it every field below and locked it (`ALWAYS_REQUIRED`). A blank
+ *  Risk or Control ID is not one — the ID is built at import. Frequency is
+ *  checked on its own (`rowBlocked`), because it is parsed, not typed. */
+export type CoreBlank =
+  | 'riskTitle' | 'riskDescription' | 'riskOwner' | 'riskCategory'
+  | 'controlTitle' | 'controlActivity' | 'owner'
+  | 'nature' | 'type' | 'assertions' | 'designChecks' | 'attributes'
+  // Switched on per client group on the Config tab: a blank one holds the row
+  // only where that client's set-up says the column is required (22 Sep).
+  | 'objective' | 'subProcess' | 'riskRating' | 'processOwner'
+  | 'controlEvidence' | 'sopSectionRef' | 'effectiveDate' | 'country' | 'testingStrategy';
 export const CORE_BLANK_LABEL: Record<CoreBlank, string> = {
-  riskDescription: 'a risk description', control: 'a control title or activity', nature: 'a nature', type: 'a type', attributes: 'attributes',
+  riskTitle: 'a risk title', riskDescription: 'a risk description', riskOwner: 'a risk owner',
+  controlTitle: 'a control title', controlActivity: 'a control description', owner: 'a control owner',
+  nature: 'a nature', type: 'a type', assertions: 'assertions', designChecks: 'design checks', attributes: 'attributes',
+  objective: 'an objective', subProcess: 'a sub-process', riskCategory: 'a risk category', riskRating: 'a risk rating',
+  processOwner: 'a process owner', controlEvidence: 'control evidence', sopSectionRef: 'an SOP section',
+  effectiveDate: 'an effective date', country: 'a country', testingStrategy: 'a testing strategy',
 };
+/** The order a row's blanks are asked for, and said in the Review summary. */
+export const CORE_BLANK_ORDER: CoreBlank[] = [
+  'riskTitle', 'riskDescription', 'riskOwner', 'riskCategory', 'riskRating',
+  'controlTitle', 'controlActivity', 'objective', 'subProcess', 'owner', 'processOwner',
+  'nature', 'type', 'assertions', 'designChecks', 'attributes', 'controlEvidence',
+  'testingStrategy', 'effectiveDate', 'country', 'sopSectionRef',
+];
+/** THE 22 SEP LIST — every imported control ends up with each of these, whatever
+ *  the first file carried or the Config tab says. Risk and Control ID are on it
+ *  and always met: a blank one is built at import. */
+export const ALWAYS_REQUIRED: RacmFieldKey[] = [
+  'riskId', 'controlId', 'riskTitle', 'riskDescription', 'riskCategory', 'controlTitle', 'controlActivity',
+  'nature', 'type', 'frequency', 'owner', 'riskOwner', 'designChecks', 'attributes', 'assertions',
+];
+export const isAlwaysRequired = (field: RacmFieldKey): boolean => ALWAYS_REQUIRED.includes(field);
 export function coreBlanks(row: ImportRow, core: RacmFieldKey[] = DEFAULT_CORE_FIELDS): CoreBlank[] {
   const val = (k: RacmFieldKey) => (row.values[k] ?? '').trim();
-  const on = (k: RacmFieldKey) => core.includes(k);
-  const out: CoreBlank[] = [];
-  if (on('riskDescription') && !val('riskDescription')) out.push('riskDescription');
-  // The control's two wordings answer for each other — a row with a full
-  // narrative and no title is not a row missing its control.
-  if ((on('controlActivity') || on('controlTitle')) && !val('controlTitle') && !val('controlActivity')) out.push('control');
-  if (on('nature') && row.nature === null) out.push('nature');
-  if (on('type') && row.type === null) out.push('type');
-  if (on('attributes') && row.attributes.length === 0) out.push('attributes');
-  return out;
+  const on = (k: RacmFieldKey) => isAlwaysRequired(k) || core.includes(k);
+  const blank: Record<CoreBlank, boolean> = {
+    riskTitle: !val('riskTitle'),
+    riskDescription: !val('riskDescription'),
+    riskOwner: !val('riskOwner'),
+    controlTitle: !val('controlTitle'),
+    controlActivity: !val('controlActivity'),
+    owner: !val('owner'),
+    nature: row.nature === null,
+    type: row.type === null,
+    assertions: row.assertions.length === 0,
+    designChecks: row.designChecks.length === 0,
+    attributes: row.attributes.length === 0,
+    objective: !val('objective'),
+    subProcess: !val('subProcess'),
+    // A word we don't recognise counts as blank: better to ask at Review than
+    // to file an "Environmental" risk under Financial without saying so.
+    riskCategory: !riskCategoryOf(val('riskCategory')),
+    riskRating: !row.riskRating,
+    processOwner: !val('processOwner'),
+    controlEvidence: !val('controlEvidence'),
+    sopSectionRef: !val('sopSectionRef') && !row.sectionRef,
+    effectiveDate: !val('effectiveDate'),
+    country: !val('country'),
+    testingStrategy: !row.testingStrategy,
+  };
+  // Entity and Key control are never blank in the sense a row is held for: the
+  // company comes from Create RACM where the file is silent, and a tick box
+  // always answers. They stay switchable on Config for what they mean, not as a
+  // gate.
+  return CORE_BLANK_ORDER.filter(b => on(b) && blank[b]);
 }
-/** The fields the module insisted on before any of this was the team's choice.
- *  Kept here so `racmImport` stays pure — the configured list is passed in. */
-export const DEFAULT_CORE_FIELDS: RacmFieldKey[] = ['riskDescription', 'controlActivity', 'frequency', 'nature', 'type', 'attributes'];
+/** The fields a row can't be imported without — the locked 22 Sep list. The
+ *  Config tab can add to it, never take from it. Kept here so `racmImport`
+ *  stays pure — the configured list is passed in. */
+export const DEFAULT_CORE_FIELDS: RacmFieldKey[] = [...ALWAYS_REQUIRED];
 
-/** Held back from import: a core value missing, or no frequency where the team
- *  counts frequency as core. */
-export const rowBlocked = (row: ImportRow, core: RacmFieldKey[] = DEFAULT_CORE_FIELDS) =>
-  (core.includes('frequency') && row.frequency === null) || coreBlanks(row, core).length > 0;
+/** Held back from import: a required value missing, or no frequency. Frequency
+ *  is always required (22 Sep), so a row without one never reaches a control. */
+export const rowBlocked = (row: ImportRow, core: RacmFieldKey[] = DEFAULT_CORE_FIELDS, extras: ExtraColumn[] = []) =>
+  row.frequency === null || coreBlanks(row, core).length > 0 || extraBlanks(row, extras).length > 0;
 
 /** A9: values for this row's empty fields, read off its other columns. Never
  *  proposes a value for a field that already has one, and never for isKey. */
+/**
+ * Required fields Ira can fill from the row's other columns when the file has
+ * no column for them at all.
+ *
+ * Read it as the answer to "does the import have to stop here?". A RACM that
+ * never wrote a Frequency column is an ordinary RACM — the activity says
+ * "monthly" and `proposeBlankFills` reads it. One with no control description
+ * is not a RACM at all: there is nothing to derive a control FROM, and a
+ * suggestion built on nothing would be the import inventing controls.
+ *
+ * Kept beside `proposeBlankFills` on purpose. The two are one statement about
+ * the same thing, and in two files they would drift the first time a field
+ * was added to either.
+ */
+export const IRA_FILLS: RacmFieldKey[] = ['frequency', 'riskDescription', 'riskTitle', 'riskCategory', 'controlTitle', 'controlActivity', 'nature', 'type', 'owner', 'testingStrategy', 'riskRating', 'assertions', 'designChecks'];
+/** Required fields Ira SUGGESTS at Review but does not write herself (22 Sep:
+ *  attributes stay suggestions to accept) — a file without the column is not
+ *  stopped, the reviewer takes her suggestions or types their own. */
+export const IRA_SUGGESTS: RacmFieldKey[] = ['attributes'];
+
+export const iraCanFill = (field: RacmFieldKey): boolean => IRA_FILLS.includes(field);
+
 export function proposeBlankFills(row: ImportRow): BlankFill[] {
   const val = (k: RacmFieldKey) => (row.values[k] ?? '').trim();
   const blank = (k: RacmFieldKey) => !val(k);
@@ -909,11 +1063,17 @@ export function proposeBlankFills(row: ImportRow): BlankFill[] {
     }
   }
 
-  // Risk description — what goes wrong if the control's aim isn't met.
+  // Risk description — the risk title written out (22 Sep), else what goes
+  // wrong if the control's aim isn't met.
   if (blank('riskDescription')) {
-    const source = objective ? ['objective', objective] as const : title ? ['title', title] as const : activity ? ['activity', activity] as const : null;
-    const text = source ? riskFromText(source[1]) : '';
-    if (source && text) fills.push({ field: 'riskDescription', value: text, reason: `The control ${source[0]}, turned round into what could go wrong` });
+    const fromTitle = draftRiskDescription(val('riskTitle'));
+    if (fromTitle) {
+      fills.push({ field: 'riskDescription', value: fromTitle, reason: 'The risk title, written out as what could go wrong' });
+    } else {
+      const source = objective ? ['objective', objective] as const : title ? ['title', title] as const : activity ? ['activity', activity] as const : null;
+      const text = source ? riskFromText(source[1]) : '';
+      if (source && text) fills.push({ field: 'riskDescription', value: text, reason: `The control ${source[0]}, turned round into what could go wrong` });
+    }
   }
 
   // Risk title — the description, shortened. Only where the file had no title
@@ -941,6 +1101,38 @@ export function proposeBlankFills(row: ImportRow): BlankFill[] {
       const clause = firstClause(activity);
       if (clause.length >= 3) fills.push({ field: 'controlTitle', value: sentenceCase(clause), reason: 'The first clause of the control activity' });
     }
+  }
+
+  // Control description — the title written out as what is done (22 Sep), with
+  // the owner and frequency the row already names. Only where the file had no
+  // description of its own.
+  if (blank('controlActivity')) {
+    const from = title || fills.find(f => f.field === 'controlTitle')?.value || '';
+    const owner = val('owner') || fills.find(f => f.field === 'owner')?.value || '';
+    const frequency = row.frequency ?? fills.find(f => f.field === 'frequency')?.value;
+    const text = draftControlDescription(from, { owner, frequency: frequency as Frequency | undefined });
+    if (text) {
+      fills.push({
+        field: 'controlActivity',
+        value: text,
+        reason: `The control title, written out as what is done${owner || frequency ? ` — with the ${[owner && 'owner', frequency && 'frequency'].filter(Boolean).join(' and ')} the row names` : ''}`,
+      });
+    }
+  }
+
+  // Risk category — the risk's own words, then the control's. Runs against the
+  // filled risk description too, so a file with neither column still lands on a
+  // category rather than holding every row.
+  if (!riskCategoryOf(val('riskCategory'))) {
+    const riskText = [val('riskTitle'), risk || fills.find(f => f.field === 'riskDescription')?.value || ''].filter(Boolean).join(' ');
+    const { category, word } = draftRiskCategory(riskText, [title, objective, activity].filter(Boolean).join(' '));
+    fills.push({
+      field: 'riskCategory',
+      value: category,
+      reason: word
+        ? `Risk mentions '${word}'`
+        : 'Nothing names another category, and an ICFR matrix’s default risk is to the financial statements',
+    });
   }
 
   // Risk rating — only a starting point; the rating is agreed with management.
@@ -980,12 +1172,108 @@ export function applyFills(row: ImportRow, fills: BlankFill[], existing: Control
   return rowFromValues(values, row, existing, process, earlier, entity);
 }
 
+/** Write a value into one of the client's own columns and re-derive the row.
+ *  Review's counterpart to `applyFills`, kept separate because an extra has no
+ *  field key to write into `values`. */
+export function setRowExtra(row: ImportRow, header: string, value: string, existing: Control[], process: string, earlier: ImportRow[] = [], entity = ''): ImportRow {
+  // Written back over the spelling the FILE used where the row already has one,
+  // so filling a blank can't leave the same column on the control twice under
+  // two spellings. Only a column the file never wrote takes the set-up's.
+  const want = normaliseHeader(header);
+  const key = Object.keys(row.extras).find(h => normaliseHeader(h) === want) ?? header;
+  return rowFromValues(row.values, { ...row, extras: { ...row.extras, [key]: value } }, existing, process, earlier, entity);
+}
+
 // ── A7 suggestions ───────────────────────────────────────────────────────────────
 
-const SUGGESTED_ATTRIBUTES: Record<ControlType, string[]> = {
+/** The attributes a control is usually tested on, by type — only where the
+ *  control's own wording names nothing Ira recognises. */
+const TYPE_ATTRIBUTES: Record<ControlType, string[]> = {
   Preventive: ['Approval is evidenced before the transaction is processed', 'Approver is independent of the preparer'],
   Detective: ['Review is performed within the required timeframe', 'Exceptions are investigated and resolved'],
 };
+
+/** What a control's wording says it does, and the attributes that test it. */
+const ATTRIBUTE_RULES: { re: RegExp; attributes: string[] }[] = [
+  { re: /\bapprov\w*|\bauthori[sz]\w*|\bsign(?:s|ed)? off\b/i, attributes: ['Approval is evidenced before the item is processed', 'The approver is independent of the preparer', 'The approver holds the authority for the amount approved'] },
+  { re: /\breconcil\w*/i, attributes: ['The reconciliation agrees to the source balances', 'Reconciling differences are investigated and cleared', 'The reconciliation is reviewed and signed off'] },
+  { re: /\b(?:three|3)[- ]way\b|\bmatch\w*/i, attributes: ['The documents agree before the item is paid or posted', 'Mismatches beyond tolerance are held for resolution'] },
+  { re: /\breview\w*|\bmonitor\w*|\banaly[sz]\w*|\binspect\w*/i, attributes: ['The review is evidenced with a sign-off and date', 'Exceptions found in the review are followed up to resolution'] },
+  { re: /\baccess\b|\buser\w*|\bpassword\w*|\brole\w*/i, attributes: ['Access is granted only on an approved request', 'Access held matches the user\'s role'] },
+  { re: /\bautomatic\w*|\bsystem\w*|\bconfigur\w*|\bblock\w*/i, attributes: ['The system rule operates as configured', 'Changes to the configuration are authorised and tested'] },
+  { re: /\bsegregat\w*/i, attributes: ['Duties are segregated as described'] },
+  { re: /\bthreshold\w*|\blimit\w*|\btoleran\w*/i, attributes: ['The threshold applied matches the approved limit'] },
+];
+
+/**
+ * Ira's attributes for a control, read off its title and description (22 Sep:
+ * "attributes are derived from the control description"). One rule for the
+ * upload's Review and the New control form. Falls back to the usual attributes
+ * for the control's type only when the wording names nothing she recognises;
+ * with neither, she offers nothing rather than guessing.
+ */
+export function draftAttributes(text: string, type: ControlType | null = null): string[] {
+  const out: string[] = [];
+  for (const rule of ATTRIBUTE_RULES) {
+    if (!rule.re.test(text)) continue;
+    rule.attributes.forEach(a => { if (!alreadySaid(out, a)) out.push(a); });
+    if (out.length >= 4) break;
+  }
+  if (out.length === 0 && type) return [...TYPE_ATTRIBUTES[type]];
+  return out.slice(0, 4);
+}
+
+const FREQUENCY_PHRASE: Record<Frequency, string> = {
+  Annual: 'once a year', Quarterly: 'every quarter', Monthly: 'every month', Weekly: 'every week',
+  Daily: 'every day', Recurring: 'on every transaction', 'Ad-hoc': 'whenever it is needed',
+};
+
+/**
+ * Ira's control description, written from the control title (22 Sep). It says
+ * what is done, by whom and how often — using only the owner and frequency the
+ * row or form already names, never an invented person. '' when the title is too
+ * short to write from.
+ */
+export function draftControlDescription(title: string, ctx: { owner?: string; frequency?: Frequency | null } = {}): string {
+  const t = stripMarkers(title).replace(/[.;:\s]+$/, '').trim();
+  if (t.length < 3) return '';
+  // A role reads with "The" ("The AP Manager reviews…"); a person's name
+  // doesn't ("S. Iyer reviews…").
+  const owner = (ctx.owner ?? '').trim().replace(/^the\s+/i, '');
+  const isRole = /\b(?:manager|controller|head|officer|lead|team|director|clerk|analyst|accountant|cfo|ceo|coo|cfo|treasurer|executive|supervisor|department|desk|committee|board|admin\w*|owner)\b/i.test(owner);
+  const who = !owner ? 'An authorised person' : isRole ? `The ${owner}` : owner;
+  const when = ctx.frequency ? ` ${FREQUENCY_PHRASE[ctx.frequency]}` : '';
+  const lead = sentenceCase(t);
+  if (/\bautomatic\w*|\bsystem\b|\bconfigur\w*|\bblock\w*/i.test(t)) {
+    return `${lead}. The system enforces this${when}; any change to the rule is authorised before it takes effect.`;
+  }
+  if (/\breconcil\w*/i.test(t)) {
+    return `${lead}. ${who} prepares the reconciliation${when}, investigates any difference and records how it was cleared.`;
+  }
+  if (/\bapprov\w*|\bauthori[sz]\w*/i.test(t)) {
+    return `${lead}. ${who} reviews each item and approves it before it is processed${when ? `,${when}` : ''}; the approval is recorded.`;
+  }
+  if (/\b(?:three|3)[- ]way\b|\bmatch\w*/i.test(t)) {
+    return `${lead}. The documents are matched before the item is paid or posted${when ? `,${when}` : ''}; a mismatch is held until it is resolved.`;
+  }
+  if (/\breview\w*|\bmonitor\w*|\banaly[sz]\w*/i.test(t)) {
+    return `${lead}. ${who} performs the review${when}, follows up every exception and signs the review off.`;
+  }
+  return `${lead}. ${who} performs this control${when} and keeps evidence that it was done.`;
+}
+
+/**
+ * Ira's risk description, written from the risk title (22 Sep). The title is
+ * kept word for word — its negative included — and said as a risk. '' when
+ * there is no title.
+ */
+export function draftRiskDescription(riskTitle: string): string {
+  const t = stripMarkers(riskTitle).replace(/[.;:\s]+$/, '').trim();
+  if (t.length < 3) return '';
+  const lower = /^[A-Z][a-z]/.test(t) ? t.charAt(0).toLowerCase() + t.slice(1) : t;
+  const clause = /\b(?:is|are|was|were|may|can|could|might|do|does|get|gets|go|goes|has|have)\b/i.test(t);
+  return `Risk ${clause ? 'that' : 'of'} ${lower}, and that it is not prevented or detected in time.`;
+}
 
 /** A7: attributes and design checks Ira would add to this row — only ones the
  *  row doesn't already have. */
@@ -994,9 +1282,10 @@ export function suggestForRow(row: ImportRow, process: string): { attributes: st
   const have = new Set(row.designChecks.map(sameText));
   const designChecks = suggestedDesignChecks(control).filter(t => !have.has(sameText(t)));
   const present = row.attributes.map(a => a.text);
-  // Attributes follow the control's type — none are offered until it is known.
-  const attributes = row.attributes.length < 2 && row.type
-    ? SUGGESTED_ATTRIBUTES[row.type].filter(t => !alreadySaid(present, t))
+  // Attributes are read off the control's own wording (22 Sep).
+  const wording = [row.values.controlTitle, row.values.controlActivity].filter(Boolean).join('. ');
+  const attributes = row.attributes.length < 2
+    ? draftAttributes(wording, row.type).filter(t => !alreadySaid(present, t))
     : [];
   return { attributes, designChecks };
 }
@@ -1015,10 +1304,38 @@ function processInitials(process: string): string {
   return use.map(w => w[0].toUpperCase()).join('').slice(0, 3);
 }
 
+/** What a file's own category word means in our six (22 Sep). Read top-down —
+ *  the narrower readings come first, because a file that writes "IT general
+ *  control" also contains the word "control", and one that writes "financial
+ *  reporting fraud" is a fraud risk before it is a financial one.
+ *
+ *  Two mappings are the user's calls, not inference: "financial reporting"
+ *  reads as **Financial** (one category, not two), and "strategic" reads as
+ *  **Operational** (there is no strategic category to put it in). */
+const CATEGORY_TEXT: [RegExp, ControlClass][] = [
+  [/\bfraud\w*|\btheft\b|\bmisappropriat\w*|\bcorrupt\w*|\bbrib\w*|\bcollusion\b|\bdivert\w*|\bfictitious\b|\bforg(?:ed|ery)\b|\bfalsif\w*/i, 'Fraud'],
+  [/\bitgc\b|\bit\s*general\b|\bgeneral\s*it\b|\bit\s*(?:application|dependent|system|access)\b|\binformation\s*technology\b|\bcyber\w*|\bchange\s*management\b/i, 'IT general control'],
+  [/\breputation\w*|\bbrand\b|\bpublic\s*(?:perception|confidence|trust)\b|\bmedia\b/i, 'Reputational'],
+  [/\bcomplian\w*|\bregulat\w*|\blegal\b|\bstatutor\w*|\blicen[cs]\w*/i, 'Compliance'],
+  [/\boperation\w*|\bstrateg\w*|\bprocess\b|\bbusiness\b|\bsupply\b|\bhealth\b|\bsafety\b/i, 'Operational'],
+  [/\bfinancial\w*|\breport\w*|\baccount\w*|\bmisstat\w*|\bledger\b|\bdisclos\w*/i, 'Financial'],
+];
+
+/** The category a file's word maps to, or null where it says nothing. Null
+ *  only reaches a control through a path that imports a blank row — the
+ *  import itself holds one back (`coreBlanks`), because the category is on the
+ *  22 Sep required list. */
+export function riskCategoryOf(category: string): ControlClass | null {
+  const text = category.trim();
+  if (!text) return null;
+  const exact = CONTROL_CLASSES.find(c => c.toLowerCase() === text.toLowerCase());
+  if (exact) return exact;
+  for (const [re, c] of CATEGORY_TEXT) if (re.test(text)) return c;
+  return null;
+}
+
 function clazzOf(category: string): ControlClass {
-  if (/complian|regulat/i.test(category)) return 'Compliance';
-  if (/operation/i.test(category)) return 'Operational';
-  return 'Financial';
+  return riskCategoryOf(category) ?? 'Financial';
 }
 
 /** Placeholder keys for rows the file gave no ID — digit-free, so the ID
@@ -1094,6 +1411,8 @@ function controlFromRow(row: ImportRow, process: string, n: number, frequency: F
   if (activity) control.controlActivity = activity;
   const processOwner = val('processOwner');
   if (processOwner) control.processOwner = processOwner;
+  const riskOwner = val('riskOwner');
+  if (riskOwner) control.riskOwner = riskOwner;
   if (row.riskRating) control.riskRating = row.riskRating;
   // The risk's short name, where the file carried one. A blank is filled by
   // proposeBlankFills before import, so this is the file's wording or Ira's.
@@ -1117,8 +1436,8 @@ function controlFromRow(row: ImportRow, process: string, n: number, frequency: F
 /** Turn reviewed rows into engagement controls for createRacm. Every row must
  *  have a frequency by now. Attributes become operating steps with their
  *  `requiredFiles`; design checks become design points (merged, not doubled). */
-export function importRowsToControls(rows: ImportRow[], process: string, core: RacmFieldKey[] = DEFAULT_CORE_FIELDS): Control[] {
-  const missing = rows.filter(r => rowBlocked(r, core));
+export function importRowsToControls(rows: ImportRow[], process: string, core: RacmFieldKey[] = DEFAULT_CORE_FIELDS, extras: ExtraColumn[] = []): Control[] {
+  const missing = rows.filter(r => rowBlocked(r, core, extras));
   if (missing.length) {
     const ids = missing.map(r => (r.values.controlId ?? '').trim() || `row ${r.rowNo}`);
     throw new Error(`Fill the blanks before importing — ${missing.length === 1 ? `${ids[0]} has` : `${ids.join(', ')} have`} some.`);
@@ -1134,7 +1453,7 @@ export function importRowsToControls(rows: ImportRow[], process: string, core: R
 export const DEFAULT_SOP_PROMPT = `You are extracting a SOX / ICFR risk and control matrix (RACM) from the attached standard operating procedure.
 
 1. Read the whole SOP. Work only from what it says; do not invent controls it does not describe.
-2. For every risk the SOP addresses, record: Risk ID, risk description, risk category and risk rating.
+2. For every risk the SOP addresses, record: Risk ID, risk description, risk owner, risk rating, and risk category — one of Financial, Operational, Compliance, Fraud, IT general control or Reputational.
 3. For every control that mitigates a risk, record: Control ID, control title, control objective, control activity (who does what, where, when, how and why), control type (Preventive / Detective), control nature (Manual / Automated / IT-dependent), frequency (Annual, Quarterly, Monthly, Weekly, Daily, Recurring or Ad-hoc — never "Continuous"), key control (Yes / No), control owner and process owner.
 4. Keep the SOP's own risk and control IDs exactly as written. Only create an ID when the SOP has none, and say so.
 5. For each control, list its test attributes one per line, and the control evidence each attribute needs.

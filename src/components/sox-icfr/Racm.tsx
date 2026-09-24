@@ -5,6 +5,8 @@ import {
 } from 'lucide-react';
 import { useAuditControls } from './useAuditControls';
 import { entitiesFor, racmAuditUse } from './auditScope';
+import { extraLabel, useRacmConfig } from './racmConfig';
+import { racmSetupKeyFor } from './racmLibrary';
 import { defWord } from './flow';
 import { useIcfr } from './store';
 import { conclusionOf, controlCode, RACM_ROWS_KEY, racmEditorRows, trackResult } from './helpers';
@@ -19,7 +21,7 @@ import ColumnFilter from '../shared/ColumnFilter';
 import { cn } from '../../lib/cn';
 import { isEngagementLocked } from './helpers';
 import { rowEntities } from './registerColumns';
-import { CONTROL_CLASSES } from './types';
+import { CONTROL_CLASSES, RISK_CATEGORY_TINT } from './types';
 import type { Control, IcfrEngagement } from './types';
 
 /** The processes a SOX RACM can be created for — the scoping wizard's seven
@@ -587,6 +589,13 @@ export default function Racm() {
   const myDocs = racmDocs.filter(d => !d.process || d.process === proc);
   const controls = useMemo(() => eng.controls.filter(c => c.process === proc), [eng.controls, proc]);
 
+  // The client's own columns — theirs to define, ours only to carry. The set-up
+  // belongs to the client GROUP, so the key is read off the company whose matrix
+  // is open: every row here is tested at the same one, and an empty matrix falls
+  // back to the engagement's company. No set-up, no columns, no change.
+  const setupKey = useMemo(() => racmSetupKeyFor(controls[0]?.entity ?? eng.entity).key, [controls, eng.entity]);
+  const { extras } = useRacmConfig(setupKey);
+
   const counts = useMemo(() => ({
     approved: controls.filter(c => c.racmReview?.status === 'Approved').length,
     remarks: controls.filter(c => c.racmReview?.status === 'Remark').length,
@@ -619,9 +628,10 @@ export default function Racm() {
   const saveRemark = () => { if (remarkFor && remarkText.trim()) { remarkRacmRow(remarkFor.id, remarkText.trim()); setRemarkFor(null); } };
 
   // the row-select column only renders for the auditor (only they have bulk actions)
-  // 13 columns: Risk · Entity · Root cause · Control · Class · Nature · TOD · TOE ·
-  // Performed by · Evidence W/P · Report ref · Pre-testing review · actions (+ select)
-  const colSpan = isAuditor ? 14 : 13;
+  // 13 columns: Risk · Entity · Root cause · Control · Risk category · Nature · TOD · TOE ·
+  // Performed by · Evidence W/P · Report ref · Pre-testing review · actions (+ select),
+  // then one more for each column this client's own matrix carries
+  const colSpan = (isAuditor ? 14 : 13) + extras.length;
 
   return (
     <div>
@@ -706,9 +716,9 @@ export default function Racm() {
                   because a control aimed at the symptom is the commonest design gap */}
               <th style={{ width: 200 }} title="The condition underneath the risk — what makes it possible">Root cause</th>
               <th>Control</th>
-              <th style={{ width: 104 }} title="The RACM's classification — financial, operational or compliance">
-                <span className="inline-flex items-center gap-1">Class
-                  <ColumnFilter label="Class" options={[...CONTROL_CLASSES]} value={classF} onChange={setClassF} />
+              <th style={{ width: 132 }} title="The category the RACM gives the risk this control answers">
+                <span className="inline-flex items-center gap-1">Risk category
+                  <ColumnFilter label="Risk category" options={[...CONTROL_CLASSES]} value={classF} onChange={setClassF} />
                 </span>
               </th>
               <th style={{ width: 104 }}>
@@ -733,6 +743,13 @@ export default function Racm() {
               <th style={{ width: 92 }} title="The paragraph in the issued report this row lands in">Report ref</th>
               <th style={{ width: 200 }} title="Approving a row means the control as documented is ready to test">Pre-testing review</th>
               <th style={{ width: 88 }} />
+              {/* This client's own columns, under the names their set-up gives
+                  them. Last on purpose: the approve and remark buttons keep
+                  their place at every width, and these are the columns that
+                  scroll when a matrix is wider than the screen. */}
+              {extras.map(col => (
+                <th key={col.header} style={{ width: 140 }} title={`${extraLabel(col)} — carried from this client's own matrix`}>{extraLabel(col)}</th>
+              ))}
             </tr>
           </thead>
           <tbody>
@@ -777,7 +794,11 @@ export default function Racm() {
                       {[c.id, c.subProcess, c.owner].filter(Boolean).join(' · ')}
                     </div>
                   </td>
-                  <td>{c.clazz ? <Pill tone="draft">{c.clazz}</Pill> : <span className="text-ink-300">—</span>}</td>
+                  {/* tinted from the shared map, not the neutral draft pill it used
+                      to wear — six categories all in grey said only "it has one" */}
+                  <td>{c.clazz
+                    ? <span className={cn('inline-flex items-center px-2.5 h-6 rounded-full text-[0.75rem] font-medium whitespace-nowrap', RISK_CATEGORY_TINT[c.clazz])}>{c.clazz}</span>
+                    : <span className="text-ink-300">—</span>}</td>
                   <td><NatureChip nature={c.nature} small /></td>
                   <td><span className="inline-flex items-center gap-1.5 cursor-help" title={`TOD — ${d}`}><Tickmark result={d === 'Effective' ? 'Pass' : d === 'Ineffective' ? 'Fail' : 'Not tested'} size={16} /></span></td>
                   <td><span className="inline-flex items-center gap-1.5 cursor-help" title={`TOE — ${o}`}><Tickmark result={o === 'Effective' ? 'Pass' : o === 'Ineffective' ? 'Fail' : 'Not tested'} size={16} /></span></td>
@@ -804,6 +825,18 @@ export default function Racm() {
                       </span>
                     )}
                   </td>
+                  {/* Ordinary data, read exactly as the file wrote it — nothing
+                      here means anything to us, so nothing is tinted or badged. */}
+                  {extras.map(col => {
+                    const v = c.extras?.[col.header]?.trim();
+                    return (
+                      <td key={col.header} className="tight">
+                        {v
+                          ? <div className="text-[0.71875rem] text-ink-600 leading-snug line-clamp-2" title={v}>{v}</div>
+                          : <span className="text-ink-300">—</span>}
+                      </td>
+                    );
+                  })}
                 </tr>
               );
             })}

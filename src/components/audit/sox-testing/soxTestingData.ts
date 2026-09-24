@@ -1,5 +1,5 @@
 import { ENGAGEMENTS, registerEngagement } from '../../../data/engagements';
-import type { FileOrigin } from '../../sox-icfr/types';
+import type { FileOrigin, SamplingMethodology } from '../../sox-icfr/types';
 
 /**
  * SOX Testing tab — data layer for the scoping-first flow prototype.
@@ -345,6 +345,10 @@ export interface SoxProgramme {
   quantCount: number;
   qualCount: number;
   racms: DerivedRacm[];
+  /** The sampling methodology the lead proposed on the Sampling step (#22).
+   *  Proposed, never signed here — the reviewer signs it on the engagement's
+   *  Configuration tab, and testing waits for that signature. */
+  sampling?: SamplingMethodology;
   beyondTb: string[];
   /** Set when the wizard's Scoping step was skipped — the workspace Overview
    *  flags the missing RACM and GL / trial balances until they're added
@@ -391,6 +395,13 @@ export interface EngagementScoping {
   entityIds: string[];
   /** Where the user overruled the derived company scope, and why. */
   scopeNotes: { entityId: string; name: string; inScope: boolean; note: string }[];
+  /** RACMs that started ticked on Scope (written for a company in scope) and
+   *  were taken out, and why (22 Sep). Absent when none were. */
+  racmNotes?: { process: string; racmId: string; racm: string; note: string }[];
+  /** Controls taken out of a ticked RACM on Scope, and why (22 Sep). A ticked
+   *  RACM brings every control in; each one taken out carries a note. Absent
+   *  when every control of every ticked RACM went in. */
+  controlNotes?: { racmId: string; racm: string; controlId: string; code: string; control: string; note: string }[];
 }
 
 const ENTITY_SHORT: Record<string, string> = {

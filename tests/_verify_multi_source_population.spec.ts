@@ -296,7 +296,7 @@ test('the owner derives the population; the auditor tests it', async ({ page }) 
   // The auditor's half is not shown to them, and not greyed either.
   await expect(page.getByText('IPE test')).toHaveCount(0);
   await expect(page.getByRole('button', { name: /Lock the population/ })).toHaveCount(0);
-  await expect(page.getByText('Sample', { exact: true })).toHaveCount(0);
+  await expect(page.getByText('Sample drawing', { exact: true })).toHaveCount(0);
   await page.screenshot({ path: `${SHOTS}/11-owner-population.png`, fullPage: true });
 });
 

@@ -1,0 +1,1507 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<title>Altura Infra Holdings Limited — Legal Entity Structure</title>
+<style>
+  @page { size: A3 landscape; margin: 11mm; }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; font-family: "Helvetica Neue", Helvetica, Arial, sans-serif;
+    color: #1a1d23; background: #fff; -webkit-font-smoothing: antialiased;
+  }
+  .page { padding: 16px 18px 12px; page-break-after: always; position: relative; }
+  .page:last-child { page-break-after: auto; }
+
+  /* ── Masthead ───────────────────────────────────────────────────────── */
+  .masthead { border-bottom: 2px solid #1a1d23; padding-bottom: 8px; }
+  .masthead .company { font-family: "Times New Roman", Times, serif; font-size: 22px; font-weight: 700; letter-spacing: -0.01em; margin: 0; }
+  .masthead .doc-title { font-size: 9.5px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.16em; color: #5b6270; margin: 5px 0 0; }
+  .pagelead { font-size: 9px; color: #5b6270; margin: 7px 0 0; max-width: 200mm; line-height: 1.5; }
+  .meta { display: flex; flex-wrap: wrap; gap: 0 22px; font-size: 9px; color: #5b6270; margin: 8px 0 0; padding: 0; list-style: none; }
+  .meta strong { color: #1a1d23; font-weight: 600; }
+
+  /* ── Cards ──────────────────────────────────────────────────────────── */
+  .node { border: 1px solid #c3c8d2; background: #fff; border-radius: 3px; padding: 7px 9px; text-align: left; }
+  .node .name { font-size: 10px; font-weight: 700; line-height: 1.26; }
+  .node .line { font-size: 7.8px; color: #5b6270; margin-top: 2px; line-height: 1.38; }
+  .node .own { font-size: 7.8px; font-weight: 700; margin-top: 3px; }
+  .node .own .held { font-weight: 400; color: #5b6270; }
+  .node.root { border: 2px solid #1a1d23; padding: 9px 13px; width: 330px; margin: 0 auto; text-align: center; }
+  .node.root .name { font-size: 13px; }
+  .node.root .line { font-size: 8.6px; }
+  /* Dashed = part of the company sits outside the group. */
+  .node.partial { border-style: dashed; }
+  .node.sub { padding: 6px 8px; }
+  .node.sub .name { font-size: 9.4px; }
+
+  /* ── Tiers ──────────────────────────────────────────────────────────── */
+  .chart { margin-top: 14px; }
+  .trunk { width: 0; height: 16px; border-left: 1px solid #9aa1af; margin: 0 auto; }
+  .tier { display: flex; justify-content: center; align-items: flex-start; list-style: none; margin: 0; padding: 0; }
+  .tier > li { position: relative; padding: 16px 5px 0; width: 205px; }
+  .tier > li::before, .tier > li::after { content: ''; position: absolute; top: 0; right: 50%; border-top: 1px solid #9aa1af; width: 50%; height: 16px; }
+  .tier > li::after { right: auto; left: 50%; border-left: 1px solid #9aa1af; }
+  .tier > li:first-child::before, .tier > li:last-child::after { border-top: 0 none; }
+  .tier > li:last-child::before { border-right: 1px solid #9aa1af; }
+  /* A wrapped second row needs its rail joined to the spine above, or it reads
+     as a chart fragment floating on the page. */
+  .tier-wrapped { margin-top: 16px; position: relative; }
+  .tier-wrapped::before { content: ''; position: absolute; left: 50%; top: -16px; height: 16px; border-left: 1px solid #9aa1af; }
+  .tier > li.col { width: 232px; }
+
+  /* ── Children on the rail ───────────────────────────────────────────── */
+  .kids { list-style: none; margin: 0; padding: 0 0 0 11px; position: relative; }
+  .kids::before { content: ''; position: absolute; left: 11px; top: 0; bottom: 12px; border-left: 1px solid #9aa1af; }
+  .kids > li { position: relative; padding: 5px 0 0 11px; font-size: 8px; line-height: 1.32; }
+  .kids > li::before { content: ''; position: absolute; left: 0; top: 11px; width: 11px; border-top: 1px solid #9aa1af; }
+  .kids > li.partial .kn { border-bottom: 1px dashed #9aa1af; }
+  .kids .kn { display: block; font-weight: 600; }
+  .kids .km { display: block; color: #5b6270; font-size: 7.2px; }
+  .kids > li.more { font-style: italic; color: #5b6270; }
+  .kids > li.more::before { border-top-style: dashed; }
+
+  /* ── Cover tables ───────────────────────────────────────────────────── */
+  .h { font-size: 7.6px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.14em; color: #1a1d23; margin: 14px 0 5px; }
+  .h:first-child { margin-top: 12px; }
+  .cover-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 0 22px; margin-top: 4px; }
+  table.stat { width: 100%; border-collapse: collapse; font-size: 8.2px; }
+  table.stat th, table.stat td { border-bottom: 1px solid #e4e7ec; padding: 3px 0; text-align: left; vertical-align: top; }
+  table.stat th { font-weight: 400; color: #5b6270; padding-right: 8px; }
+  table.stat td { font-weight: 700; text-align: right; white-space: nowrap; }
+
+  /* ── Jurisdiction page ──────────────────────────────────────────────── */
+  .jur-grid { display: grid; grid-template-columns: repeat(5, 1fr); gap: 12px 18px; margin-top: 12px; }
+  .jur { break-inside: avoid; }
+  .jur-h { font-size: 9.5px; font-weight: 700; border-bottom: 1px solid #1a1d23; padding-bottom: 2px; display: flex; justify-content: space-between; }
+  .jur-h span { color: #5b6270; font-weight: 400; }
+  .jur-m { font-size: 7px; color: #5b6270; margin: 2px 0 3px; }
+  .jur ul { list-style: none; margin: 0; padding: 0; }
+  .jur li { font-size: 7.6px; line-height: 1.4; padding: 1.5px 0; border-bottom: 1px solid #f1f3f6; display: flex; justify-content: space-between; gap: 6px; }
+  .jur li span { color: #5b6270; white-space: nowrap; }
+  .jur li.more { font-style: italic; color: #5b6270; }
+
+  /* ── Notes page ─────────────────────────────────────────────────────── */
+  /* Capped measure. A3 is wide enough to run a note to 150 characters a line,
+     which nobody reads twice. */
+  .notes-grid { display: grid; grid-template-columns: 108mm 134mm; gap: 0 26px; margin-top: 10px; }
+  ul.legend { list-style: none; margin: 0; padding: 0; font-size: 8.4px; line-height: 1.62; color: #3a4050; }
+  ul.legend li { margin-bottom: 5px; }
+  .sw { display: inline-block; width: 20px; height: 10px; vertical-align: -1px; margin-right: 5px; border: 1px solid #c3c8d2; border-radius: 2px; }
+  .sw.dashed { border-style: dashed; }
+  .sw.heavy { border: 2px solid #1a1d23; }
+  ol.notes { margin: 0; padding-left: 14px; font-size: 8.4px; line-height: 1.62; color: #3a4050; }
+  ol.notes li { margin-bottom: 6px; }
+
+  /* ── Appendix table ─────────────────────────────────────────────────── */
+  table.apx { width: 100%; border-collapse: collapse; font-size: 7.2px; margin-top: 10px; }
+  table.apx thead { display: table-header-group; }
+  table.apx th { text-align: left; border-bottom: 1px solid #1a1d23; padding: 3px 4px; font-size: 6.8px; text-transform: uppercase; letter-spacing: 0.08em; color: #5b6270; }
+  table.apx td { border-bottom: 1px solid #eef0f4; padding: 2.4px 4px; vertical-align: top; }
+  table.apx tr { break-inside: avoid; }
+  table.apx td:nth-child(3), table.apx td:nth-child(5), table.apx td:nth-child(6), table.apx td:nth-child(12) { text-align: right; white-space: nowrap; }
+  table.apx tr.in td:last-child { font-weight: 700; }
+
+  /* ── Platform strip on the top-of-group sheet ───────────────────────── */
+  table.strip { width: 100%; border-collapse: collapse; font-size: 8px; }
+  table.strip th { text-align: left; border-bottom: 1px solid #1a1d23; padding: 3px 6px 3px 0; font-size: 6.9px; text-transform: uppercase; letter-spacing: 0.08em; color: #5b6270; }
+  table.strip td { border-bottom: 1px solid #eef0f4; padding: 3px 6px 3px 0; }
+  table.strip th:nth-child(n+3):nth-child(-n+6), table.strip td:nth-child(n+3):nth-child(-n+6) { text-align: right; white-space: nowrap; }
+  table.strip td:first-child { font-weight: 600; }
+</style>
+</head>
+<body>
+<section class="page">
+  <header class="masthead">
+    <h1 class="company">Altura Infra Holdings Limited</h1>
+    <p class="doc-title">Legal entity structure chart — consolidated group</p>
+  </header>
+  <ul class="meta">
+    <li><strong>Listing</strong> NSE &amp; BSE, India (ALTURA) · NYSE ADS programme</li>
+    <li><strong>Registrant</strong> SEC — Form 20-F filer (foreign private issuer)</li>
+    <li><strong>Position as at</strong> 30 September 2025</li>
+    <li><strong>Entities</strong> 254 across 8 levels and 30 jurisdictions</li>
+    <li><strong>Prepared for</strong> FY26 SOX 404 scoping (year ending 31 March 2026)</li>
+  </ul>
+
+  <div class="cover-grid">
+    <div>
+      <div class="h">The group in figures</div>
+      <table class="stat"><tbody><tr><th>Companies on the register</th><td>254</td></tr><tr><th>Jurisdictions of incorporation</th><td>30</td></tr><tr><th>Consolidated revenue FY26</th><td>₹ 4,820 Cr</td></tr><tr><th>Consolidated profit before tax FY26</th><td>₹ 240 Cr</td></tr><tr><th>Consolidated total assets FY26</th><td>₹ 19,450 Cr</td></tr><tr><th>Group overall materiality</th><td>₹ 12 Cr (5% of profit before tax)</td></tr><tr><th>Group performance materiality</th><td>₹ 9 Cr (75% of overall)</td></tr></tbody></table>
+      <div class="h">FY26 SOX 404 scope</div>
+      <table class="stat"><tbody><tr><th>Companies in scope</th><td>43</td></tr><tr><th>Companies out of scope</th><td>211</td></tr><tr><th>Coverage — group revenue</th><td>73.06%</td></tr><tr><th>Coverage — group assets</th><td>65.57%</td></tr></tbody></table>
+    </div>
+    <div>
+      <div class="h">Companies by level</div>
+      <table class="stat"><tbody><tr><th>Level 0 — listed parent</th><td>1</td></tr><tr><th>Level 1</th><td>13</td></tr><tr><th>Level 2</th><td>49</td></tr><tr><th>Level 3</th><td>178</td></tr><tr><th>Level 4</th><td>8</td></tr><tr><th>Level 5</th><td>2</td></tr><tr><th>Level 6</th><td>2</td></tr><tr><th>Level 7</th><td>1</td></tr></tbody></table>
+      <div class="h">Companies by consolidation method</div>
+      <table class="stat"><tbody><tr><th>Full consolidation</th><td>234</td></tr><tr><th>Equity method</th><td>8</td></tr><tr><th>Branch — included in parent</th><td>6</td></tr><tr><th>Not consolidated — divested</th><td>2</td></tr><tr><th>Not consolidated — held for sale</th><td>2</td></tr><tr><th>Joint operation</th><td>1</td></tr><tr><th>Parent</th><td>1</td></tr></tbody></table>
+      <div class="h">Companies by standing on the register</div>
+      <table class="stat"><tbody><tr><th>Active</th><td>240</td></tr><tr><th>Dormant</th><td>5</td></tr><tr><th>Newly incorporated</th><td>3</td></tr><tr><th>Divested during the period</th><td>2</td></tr><tr><th>Held for sale</th><td>2</td></tr><tr><th>Under liquidation</th><td>2</td></tr></tbody></table>
+    </div>
+    <div>
+      <div class="h">Companies by business segment</div>
+      <table class="stat"><tbody><tr><th>Renewables</th><td>85</td></tr><tr><th>International</th><td>56</td></tr><tr><th>Transport</th><td>33</td></tr><tr><th>Transmission &amp; Metering</th><td>28</td></tr><tr><th>Logistics</th><td>26</td></tr><tr><th>Corporate &amp; Shared Services</th><td>14</td></tr><tr><th>Urban Utilities</th><td>12</td></tr></tbody></table>
+      <div class="h">Ten largest companies by revenue</div>
+      <table class="stat"><tbody><tr><th>Altura Roadways Pvt Ltd</th><td>₹ 370.97 Cr · 7.7%</td></tr><tr><th>Altura Solar One Pvt Ltd</th><td>₹ 292.86 Cr · 6.08%</td></tr><tr><th>Altura Transmission Pvt Ltd</th><td>₹ 244.05 Cr · 5.06%</td></tr><tr><th>Altura Logistics Parks Pvt Ltd</th><td>₹ 205 Cr · 4.25%</td></tr><tr><th>Altura Wind Two Pvt Ltd</th><td>₹ 185.48 Cr · 3.85%</td></tr><tr><th>Altura Water Utilities Pvt Ltd</th><td>₹ 151.31 Cr · 3.14%</td></tr><tr><th>Altura South Africa (Pty) Ltd</th><td>₹ 134.52 Cr · 2.79%</td></tr><tr><th>Altura Shared Services Private Limited</th><td>₹ 117.14 Cr · 2.43%</td></tr><tr><th>Altura Yield Roads Services Pvt Ltd</th><td>₹ 111.59 Cr · 2.32%</td></tr><tr><th>Altura Capital &amp; Treasury Private Limited</th><td>₹ 92.74 Cr · 1.92%</td></tr></tbody></table>
+    </div>
+    <div>
+      <div class="h">Companies by jurisdiction</div>
+      <table class="stat"><tbody><tr><th>India</th><td>198</td></tr><tr><th>Mauritius</th><td>4</td></tr><tr><th>Singapore</th><td>4</td></tr><tr><th>United Arab Emirates</th><td>4</td></tr><tr><th>United Kingdom</th><td>4</td></tr><tr><th>United States</th><td>4</td></tr><tr><th>Australia</th><td>3</td></tr><tr><th>Brazil</th><td>3</td></tr><tr><th>Kenya</th><td>3</td></tr><tr><th>Germany</th><td>2</td></tr><tr><th>Ireland</th><td>2</td></tr><tr><th>Japan</th><td>2</td></tr><tr><th>Malaysia</th><td>2</td></tr><tr><th>Netherlands</th><td>2</td></tr><tr><th>Poland</th><td>2</td></tr><tr><th>Bangladesh</th><td>1</td></tr><tr><th>Canada</th><td>1</td></tr><tr><th>Chile</th><td>1</td></tr><tr><th>Hong Kong</th><td>1</td></tr><tr><th>Indonesia</th><td>1</td></tr><tr><th>Luxembourg</th><td>1</td></tr><tr><th>Mexico</th><td>1</td></tr><tr><th>Philippines</th><td>1</td></tr><tr><th>Qatar</th><td>1</td></tr><tr><th>Saudi Arabia</th><td>1</td></tr><tr><th>South Africa</th><td>1</td></tr><tr><th>Spain</th><td>1</td></tr><tr><th>Sri Lanka</th><td>1</td></tr><tr><th>Switzerland</th><td>1</td></tr><tr><th>Vietnam</th><td>1</td></tr></tbody></table>
+    </div>
+  </div>
+</section>
+<section class="page">
+  <header class="masthead">
+    <h1 class="company">Altura Infra Holdings Limited</h1>
+    <p class="doc-title">Top of the group</p>
+  </header><p class="pagelead">The listed parent and the 13 companies it holds directly. Each card names how many companies sit beneath it; those are drawn on the pages that follow.</p>
+  <div class="chart">
+    <div class="node  root">
+      <div class="name">Altura Infra Holdings Limited</div>
+      <div class="line">Mumbai · Listed parent / platform holding company</div>
+      <div class="own"><span class="held">253 companies beneath</span></div>
+    </div>
+    <div class="trunk"></div>
+    <ul class="tier tier-7"><li><div class="node  ">
+      <div class="name">Altura Roadways Pvt Ltd</div>
+      <div class="line">Nagpur · Toll road concession (NH-44)</div>
+      <div class="own">100% owned<span class="held"> · 30 companies beneath</span></div>
+    </div></li><li><div class="node  ">
+      <div class="name">Altura Solar One Pvt Ltd</div>
+      <div class="line">Bhuj · 300 MW solar generation</div>
+      <div class="own">100% owned<span class="held"> · 16 companies beneath</span></div>
+    </div></li><li><div class="node partial ">
+      <div class="name">Altura Transmission Pvt Ltd</div>
+      <div class="line">Gurugram · 400 kV transmission joint venture</div>
+      <div class="own">74% owned<span class="held"> · 27 companies beneath</span></div>
+    </div></li><li><div class="node  ">
+      <div class="name">Altura Logistics Parks Pvt Ltd</div>
+      <div class="line">Bhiwandi · Grade-A warehousing</div>
+      <div class="own">100% owned<span class="held"> · 25 companies beneath</span></div>
+    </div></li><li><div class="node  ">
+      <div class="name">Altura Wind Two Pvt Ltd</div>
+      <div class="line">Tirunelveli · 180 MW wind generation</div>
+      <div class="own">100% owned<span class="held"> · 14 companies beneath</span></div>
+    </div></li><li><div class="node partial ">
+      <div class="name">Altura Water Utilities Pvt Ltd</div>
+      <div class="line">Pune · Water treatment &amp; supply concession</div>
+      <div class="own">51% owned<span class="held"> · 11 companies beneath</span></div>
+    </div></li><li><div class="node  ">
+      <div class="name">Altura Shared Services Private Limited</div>
+      <div class="line">Hyderabad · Group business services centre</div>
+      <div class="own">100% owned<span class="held"> · 4 companies beneath</span></div>
+    </div></li></ul><ul class="tier tier-6 tier-wrapped"><li><div class="node  ">
+      <div class="name">Altura Capital &amp; Treasury Private Limited</div>
+      <div class="line">Mumbai · Group treasury and funding</div>
+      <div class="own">100% owned<span class="held"> · 3 companies beneath</span></div>
+    </div></li><li><div class="node  ">
+      <div class="name">Altura Renewables Limited</div>
+      <div class="line">Mumbai · Renewables platform holding company</div>
+      <div class="own">100% owned<span class="held"> · 49 companies beneath</span></div>
+    </div></li><li><div class="node  ">
+      <div class="name">Altura International Holdings B.V.</div>
+      <div class="line">Amsterdam · Netherlands · Overseas platform holding company</div>
+      <div class="own">100% owned<span class="held"> · 61 companies beneath</span></div>
+    </div></li><li><div class="node partial ">
+      <div class="name">Altura Petro Services Pvt Ltd</div>
+      <div class="line">Rajkot · Disposed of during the period</div>
+      <div class="own">Disposed 2025-08-14</div>
+    </div></li><li><div class="node  ">
+      <div class="name">Altura Realty Holdings Pvt Ltd</div>
+      <div class="line">Mumbai · Dormant — no transactions in the period</div>
+      <div class="own">100% owned</div>
+    </div></li><li><div class="node  ">
+      <div class="name">Altura Ventures Pvt Ltd</div>
+      <div class="line">Mumbai · Dormant — no transactions in the period</div>
+      <div class="own">100% owned</div>
+    </div></li></ul>
+  </div>
+
+  <div class="h">What sits beneath each platform</div>
+  <table class="strip">
+    <thead><tr><th>Platform</th><th>Segment</th><th>Companies beneath</th><th>Jurisdictions</th><th>Revenue incl. subsidiaries (₹ Cr)</th><th>In FY26 SOX scope</th></tr></thead>
+    <tbody><tr><td>Altura Roadways Pvt Ltd</td><td>Transport</td><td>30</td><td>1</td><td>738.19</td><td>4 of 31</td></tr><tr><td>Altura Solar One Pvt Ltd</td><td>Renewables</td><td>16</td><td>1</td><td>388.06</td><td>1 of 17</td></tr><tr><td>Altura Transmission Pvt Ltd</td><td>Transmission &amp; Metering</td><td>27</td><td>1</td><td>639.92</td><td>6 of 28</td></tr><tr><td>Altura Logistics Parks Pvt Ltd</td><td>Logistics</td><td>25</td><td>1</td><td>348.02</td><td>2 of 26</td></tr><tr><td>Altura Wind Two Pvt Ltd</td><td>Renewables</td><td>14</td><td>1</td><td>280.39</td><td>2 of 15</td></tr><tr><td>Altura Water Utilities Pvt Ltd</td><td>Urban Utilities</td><td>11</td><td>1</td><td>278.79</td><td>2 of 12</td></tr><tr><td>Altura Shared Services Private Limited</td><td>Corporate &amp; Shared Services</td><td>4</td><td>1</td><td>268.79</td><td>3 of 5</td></tr><tr><td>Altura Capital &amp; Treasury Private Limited</td><td>Corporate &amp; Shared Services</td><td>3</td><td>1</td><td>228.91</td><td>4 of 4</td></tr><tr><td>Altura Renewables Limited</td><td>Renewables</td><td>49</td><td>1</td><td>382.2</td><td>3 of 50</td></tr><tr><td>Altura International Holdings B.V.</td><td>International</td><td>61</td><td>30</td><td>1,221.83</td><td>15 of 62</td></tr><tr><td>Altura Petro Services Pvt Ltd</td><td>Corporate &amp; Shared Services</td><td>0</td><td>1</td><td>0</td><td>0 of 1</td></tr><tr><td>Altura Realty Holdings Pvt Ltd</td><td>Corporate &amp; Shared Services</td><td>0</td><td>1</td><td>0</td><td>0 of 1</td></tr><tr><td>Altura Ventures Pvt Ltd</td><td>Corporate &amp; Shared Services</td><td>0</td><td>1</td><td>0</td><td>0 of 1</td></tr></tbody>
+  </table>
+</section>
+<section class="page">
+      <header class="masthead">
+    <h1 class="company">Altura Infra Holdings Limited</h1>
+    <p class="doc-title">Altura Roadways Pvt Ltd — companies held beneath</p>
+  </header><p class="pagelead">30 companies in total. Percentages on a card are the direct holding of its immediate parent; "effective" is the share reaching the listed parent through the chain.</p>
+      <div class="chart">
+        <div class="node  root">
+      <div class="name">Altura Roadways Pvt Ltd</div>
+      <div class="line">Nagpur · Toll road concession (NH-44)</div>
+      <div class="own">100% owned<span class="held"> · 30 companies beneath</span></div>
+    </div>
+        <div class="trunk"></div>
+        <ul class="tier tier-6"><li class="col">
+      <div class="node  sub">
+      <div class="name">Altura Tolling Services Pvt Ltd</div>
+      <div class="line">Nagpur · Toll collection and plaza operations</div>
+      <div class="own">100% owned</div>
+    </div>
+      
+    </li><li class="col">
+      <div class="node partial sub">
+      <div class="name">Deccan Expressway Development Pvt Ltd</div>
+      <div class="line">Hyderabad · Joint venture interest</div>
+      <div class="own">50% owned</div>
+    </div>
+      
+    </li><li class="col">
+      <div class="node  sub">
+      <div class="name">Altura Expressways Pvt Ltd</div>
+      <div class="line">Nagpur · Expressway concession holding company</div>
+      <div class="own">100% owned<span class="held"> · 13 companies beneath</span></div>
+    </div>
+      <ul class="kids"><li class="">
+      <span class="kn">Altura Cuttack Angul Tollway Pvt Ltd</span>
+      <span class="km">100% owned</span>
+    </li><li class="">
+      <span class="kn">Altura Sambalpur Highways One Pvt Ltd</span>
+      <span class="km">100% owned</span>
+    </li><li class="">
+      <span class="kn">Altura Jhansi Kanpur Tollway Pvt Ltd</span>
+      <span class="km">100% owned</span>
+    </li><li class="">
+      <span class="kn">Altura Bathinda Ludhiana Tollway Pvt Ltd</span>
+      <span class="km">100% owned</span>
+    </li><li class="">
+      <span class="kn">Altura Rewa Katni Tollway Pvt Ltd</span>
+      <span class="km">100% owned</span>
+    </li><li class="">
+      <span class="kn">Altura Ranchi Bokaro Tollway Pvt Ltd</span>
+      <span class="km">100% owned</span>
+    </li><li class="">
+      <span class="kn">Altura Sambalpur Highways Two Pvt Ltd</span>
+      <span class="km">100% owned</span>
+    </li><li class="">
+      <span class="kn">Altura Nagpur Betul Tollway Pvt Ltd</span>
+      <span class="km">100% owned</span>
+    </li><li class="">
+      <span class="kn">Altura Kurnool Anantapur Tollway Pvt Ltd</span>
+      <span class="km">100% owned</span>
+    </li><li class="">
+      <span class="kn">Altura Guwahati Jorhat Tollway Pvt Ltd</span>
+      <span class="km">100% owned</span>
+    </li><li class="">
+      <span class="kn">Altura Solapur Bijapur Tollway Pvt Ltd</span>
+      <span class="km">100% owned</span>
+    </li><li class="">
+      <span class="kn">Altura Kharagpur Balasore Tollway Pvt Ltd</span>
+      <span class="km">100% owned</span>
+    </li><li class="">
+      <span class="kn">Altura Hisar Rewari Tollway Pvt Ltd</span>
+      <span class="km">100% owned</span>
+    </li></ul>
+    </li><li class="col">
+      <div class="node  sub">
+      <div class="name">Altura Highway Concessions Pvt Ltd</div>
+      <div class="line">Hyderabad · Annuity and HAM road holding company</div>
+      <div class="own">100% owned<span class="held"> · 11 companies beneath</span></div>
+    </div>
+      <ul class="kids"><li class="">
+      <span class="kn">Altura Dhule Sangli Highways Pvt Ltd</span>
+      <span class="km">100% owned</span>
+    </li><li class="">
+      <span class="kn">Altura Palakkad Kochi Highways Pvt Ltd</span>
+      <span class="km">100% owned</span>
+    </li><li class="">
+      <span class="kn">Altura Raipur Bilaspur Highways Pvt Ltd</span>
+      <span class="km">100% owned</span>
+    </li><li class="">
+      <span class="kn">Altura Muzaffarpur Highways One Pvt Ltd</span>
+      <span class="km">100% owned</span>
+    </li><li class="">
+      <span class="kn">Altura Karur Tuticorin Highways Pvt Ltd</span>
+      <span class="km">100% owned</span>
+    </li><li class="">
+      <span class="kn">Altura Bikaner Jodhpur Highways Pvt Ltd</span>
+      <span class="km">100% owned</span>
+    </li><li class="">
+      <span class="kn">Altura Haridwar Rudrapur Highways Pvt Ltd</span>
+      <span class="km">100% owned</span>
+    </li><li class="">
+      <span class="kn">Altura Durgapur Siliguri Highways Pvt Ltd</span>
+      <span class="km">100% owned</span>
+    </li><li class="">
+      <span class="kn">Altura Warangal Nalgonda Highways Pvt Ltd</span>
+      <span class="km">100% owned</span>
+    </li><li class="">
+      <span class="kn">Altura Muzaffarpur Highways Two Pvt Ltd</span>
+      <span class="km">100% owned</span>
+    </li><li class="">
+      <span class="kn">Altura Patna Gaya Highways Pvt Ltd</span>
+      <span class="km">100% owned</span>
+    </li></ul>
+    </li><li class="col">
+      <div class="node  sub">
+      <div class="name">Altura Urban Transit Pvt Ltd</div>
+      <div class="line">Bengaluru · Classified as held for sale under Ind AS 105</div>
+      <div class="own">100% owned</div>
+    </div>
+      
+    </li><li class="col">
+      <div class="node  sub">
+      <div class="name">Altura Pavements Pvt Ltd</div>
+      <div class="line">Nagpur · Dormant — no transactions in the period</div>
+      <div class="own">100% owned</div>
+    </div>
+      
+    </li></ul>
+      </div>
+    </section>
+<section class="page">
+      <header class="masthead">
+    <h1 class="company">Altura Infra Holdings Limited</h1>
+    <p class="doc-title">Altura Solar One Pvt Ltd — companies held beneath</p>
+  </header><p class="pagelead">16 companies in total. Percentages on a card are the direct holding of its immediate parent; "effective" is the share reaching the listed parent through the chain.</p>
+      <div class="chart">
+        <div class="node  root">
+      <div class="name">Altura Solar One Pvt Ltd</div>
+      <div class="line">Bhuj · 300 MW solar generation</div>
+      <div class="own">100% owned<span class="held"> · 16 companies beneath</span></div>
+    </div>
+        <div class="trunk"></div>
+        <ul class="tier tier-2"><li class="col">
+      <div class="node  sub">
+      <div class="name">Altura Solar O&amp;M Pvt Ltd</div>
+      <div class="line">Bhuj · Solar operations &amp; maintenance</div>
+      <div class="own">100% owned</div>
+    </div>
+      
+    </li><li class="col">
+      <div class="node  sub">
+      <div class="name">Altura Solar Assets Pvt Ltd</div>
+      <div class="line">Ahmedabad · Solar SPV holding company</div>
+      <div class="own">100% owned<span class="held"> · 14 companies beneath</span></div>
+    </div>
+      <ul class="kids"><li class="">
+      <span class="kn">Altura Solar Gujarat One Pvt Ltd</span>
+      <span class="km">100% owned</span>
+    </li><li class="">
+      <span class="kn">Altura Solar Telangana One Pvt Ltd</span>
+      <span class="km">100% owned</span>
+    </li><li class="">
+      <span class="kn">Altura Solar Andhra Pradesh One Pvt Ltd</span>
+      <span class="km">100% owned</span>
+    </li><li class="">
+      <span class="kn">Altura Solar Maharashtra One Pvt Ltd</span>
+      <span class="km">100% owned</span>
+    </li><li class="">
+      <span class="kn">Altura Solar Rajasthan Two Pvt Ltd</span>
+      <span class="km">100% owned</span>
+    </li><li class="">
+      <span class="kn">Altura Solar Madhya Pradesh One Pvt Ltd</span>
+      <span class="km">100% owned</span>
+    </li><li class="">
+      <span class="kn">Altura Solar Madhya Pradesh Two Pvt Ltd</span>
+      <span class="km">100% owned</span>
+    </li><li class="">
+      <span class="kn">Altura Jodhpur Power Two Pvt Ltd</span>
+      <span class="km">100% owned</span>
+    </li><li class="">
+      <span class="kn">Altura Jodhpur Power One Pvt Ltd</span>
+      <span class="km">100% owned</span>
+    </li><li class="">
+      <span class="kn">Altura Solar Karnataka One Pvt Ltd</span>
+      <span class="km">100% owned</span>
+    </li><li class="">
+      <span class="kn">Altura Solar Rajasthan One Pvt Ltd</span>
+      <span class="km">100% owned</span>
+    </li><li class="">
+      <span class="kn">Altura Solar Karnataka Two Pvt Ltd</span>
+      <span class="km">100% owned</span>
+    </li><li class="">
+      <span class="kn">Altura Solar Uttar Pradesh One Pvt Ltd</span>
+      <span class="km">100% owned</span>
+    </li><li class="">
+      <span class="kn">Altura Solar Gujarat Two Pvt Ltd</span>
+      <span class="km">100% owned</span>
+    </li></ul>
+    </li></ul>
+      </div>
+    </section>
+<section class="page">
+      <header class="masthead">
+    <h1 class="company">Altura Infra Holdings Limited</h1>
+    <p class="doc-title">Altura Transmission Pvt Ltd — companies held beneath</p>
+  </header><p class="pagelead">27 companies in total. Percentages on a card are the direct holding of its immediate parent; "effective" is the share reaching the listed parent through the chain.</p>
+      <div class="chart">
+        <div class="node partial root">
+      <div class="name">Altura Transmission Pvt Ltd</div>
+      <div class="line">Gurugram · 400 kV transmission joint venture</div>
+      <div class="own">74% owned<span class="held"> · 27 companies beneath</span></div>
+    </div>
+        <div class="trunk"></div>
+        <ul class="tier tier-5"><li class="col">
+      <div class="node partial sub">
+      <div class="name">Altura Smart Metering Pvt Ltd</div>
+      <div class="line">Noida · AMI smart-meter rollout</div>
+      <div class="own">100% · effective 74%<span class="held"> · 8 companies beneath</span></div>
+    </div>
+      <ul class="kids"><li class="partial">
+      <span class="kn">Altura Metering Noida Pvt Ltd</span>
+      <span class="km">100% · effective 74%</span>
+    </li><li class="partial">
+      <span class="kn">Altura Metering Varanasi Pvt Ltd</span>
+      <span class="km">100% · effective 74%</span>
+    </li><li class="partial">
+      <span class="kn">Altura Metering Kanpur Pvt Ltd</span>
+      <span class="km">100% · effective 74%</span>
+    </li><li class="partial">
+      <span class="kn">Altura Metering Faridabad Pvt Ltd</span>
+      <span class="km">100% · effective 74%</span>
+    </li><li class="partial">
+      <span class="kn">Altura Metering Kota Pvt Ltd</span>
+      <span class="km">100% · effective 74%</span>
+    </li><li class="partial">
+      <span class="kn">Altura Metering Ghaziabad Pvt Ltd</span>
+      <span class="km">100% · effective 74%</span>
+    </li><li class="partial">
+      <span class="kn">Altura Metering Jaipur Pvt Ltd</span>
+      <span class="km">100% · effective 74%</span>
+    </li><li class="partial">
+      <span class="kn">Altura Metering Gurugram Pvt Ltd</span>
+      <span class="km">100% · effective 74%</span>
+    </li></ul>
+    </li><li class="col">
+      <div class="node partial sub">
+      <div class="name">Altura Grid Solutions Pvt Ltd</div>
+      <div class="line">Gurugram · Substation EPC and grid services</div>
+      <div class="own">100% · effective 74%</div>
+    </div>
+      
+    </li><li class="col">
+      <div class="node partial sub">
+      <div class="name">Northern Grid Interconnect Pvt Ltd</div>
+      <div class="line">Gurugram · Associate interest</div>
+      <div class="own">26% · effective 19.24%</div>
+    </div>
+      
+    </li><li class="col">
+      <div class="node partial sub">
+      <div class="name">Altura–Vidyut Transmission Joint Operation</div>
+      <div class="line">Jaipur · Unincorporated joint operation — proportionately consolidated</div>
+      <div class="own">50% · effective 37%</div>
+    </div>
+      
+    </li><li class="col">
+      <div class="node partial sub">
+      <div class="name">Altura Transmission Assets Pvt Ltd</div>
+      <div class="line">Jaipur · Transmission line SPV holding company</div>
+      <div class="own">100% · effective 74%<span class="held"> · 14 companies beneath</span></div>
+    </div>
+      <ul class="kids"><li class="partial">
+      <span class="kn">Altura Korba Raipur Transco Pvt Ltd</span>
+      <span class="km">100% · effective 74%</span>
+    </li><li class="partial">
+      <span class="kn">Altura Kurnool Nellore Transco Pvt Ltd</span>
+      <span class="km">100% · effective 74%</span>
+    </li><li class="partial">
+      <span class="kn">Altura Bokaro Dhanbad Transco Pvt Ltd</span>
+      <span class="km">100% · effective 74%</span>
+    </li><li class="partial">
+      <span class="kn">Altura Hisar Panipat Transco Pvt Ltd</span>
+      <span class="km">100% · effective 74%</span>
+    </li><li class="partial">
+      <span class="kn">Altura Kannur Palakkad Transco Pvt Ltd</span>
+      <span class="km">100% · effective 74%</span>
+    </li><li class="partial">
+      <span class="kn">Altura Jhansi Mirzapur Transco Pvt Ltd</span>
+      <span class="km">100% · effective 74%</span>
+    </li><li class="partial">
+      <span class="kn">Altura Osmanabad Transco Two Pvt Ltd</span>
+      <span class="km">100% · effective 74%</span>
+    </li><li class="partial">
+      <span class="kn">Altura Ballari Gadag Transco Pvt Ltd</span>
+      <span class="km">100% · effective 74%</span>
+    </li><li class="partial">
+      <span class="kn">Altura Warangal Mahbubnagar Transco Pvt Ltd</span>
+      <span class="km">100% · effective 74%</span>
+    </li><li class="partial">
+      <span class="kn">Altura Rewa Neemuch Transco Pvt Ltd</span>
+      <span class="km">100% · effective 74%</span>
+    </li><li class="partial">
+      <span class="kn">Altura Patan Rajkot Transco Pvt Ltd</span>
+      <span class="km">100% · effective 74%</span>
+    </li><li class="partial">
+      <span class="kn">Altura Jaipur Bhadla Transco Pvt Ltd</span>
+      <span class="km">100% · effective 74%</span>
+    </li><li class="partial">
+      <span class="kn">Altura Osmanabad Transco One Pvt Ltd</span>
+      <span class="km">100% · effective 74%</span>
+    </li><li class="partial">
+      <span class="kn">Altura Angul Sambalpur Transco Pvt Ltd</span>
+      <span class="km">100% · effective 74%</span>
+    </li></ul>
+    </li></ul>
+      </div>
+    </section>
+<section class="page">
+      <header class="masthead">
+    <h1 class="company">Altura Infra Holdings Limited</h1>
+    <p class="doc-title">Altura Logistics Parks Pvt Ltd — companies held beneath</p>
+  </header><p class="pagelead">25 companies in total. Percentages on a card are the direct holding of its immediate parent; "effective" is the share reaching the listed parent through the chain.</p>
+      <div class="chart">
+        <div class="node  root">
+      <div class="name">Altura Logistics Parks Pvt Ltd</div>
+      <div class="line">Bhiwandi · Grade-A warehousing</div>
+      <div class="own">100% owned<span class="held"> · 25 companies beneath</span></div>
+    </div>
+        <div class="trunk"></div>
+        <ul class="tier tier-6"><li class="col">
+      <div class="node  sub">
+      <div class="name">Altura Cold Chain Pvt Ltd</div>
+      <div class="line">Bhiwandi · Temperature-controlled warehousing</div>
+      <div class="own">100% owned<span class="held"> · 5 companies beneath</span></div>
+    </div>
+      <ul class="kids"><li class="">
+      <span class="kn">Altura Cold Storage Sonipat Pvt Ltd</span>
+      <span class="km">100% owned</span>
+    </li><li class="">
+      <span class="kn">Altura Cold Storage Kochi Pvt Ltd</span>
+      <span class="km">100% owned</span>
+    </li><li class="">
+      <span class="kn">Altura Cold Storage Jalandhar Pvt Ltd</span>
+      <span class="km">100% owned</span>
+    </li><li class="">
+      <span class="kn">Altura Cold Storage Nashik Pvt Ltd</span>
+      <span class="km">100% owned</span>
+    </li><li class="">
+      <span class="kn">Altura Cold Storage Guntur Pvt Ltd</span>
+      <span class="km">100% owned</span>
+    </li></ul>
+    </li><li class="col">
+      <div class="node  sub">
+      <div class="name">Altura Freight Forwarding Pvt Ltd</div>
+      <div class="line">Navi Mumbai · Freight forwarding and customs brokerage</div>
+      <div class="own">100% owned</div>
+    </div>
+      
+    </li><li class="col">
+      <div class="node partial sub">
+      <div class="name">Konkan Warehousing Ventures Pvt Ltd</div>
+      <div class="line">Panvel · Associate interest</div>
+      <div class="own">35% owned</div>
+    </div>
+      
+    </li><li class="col">
+      <div class="node  sub">
+      <div class="name">Altura Warehousing Assets Pvt Ltd</div>
+      <div class="line">Bhiwandi · Warehousing park SPV holding company</div>
+      <div class="own">100% owned<span class="held"> · 14 companies beneath</span></div>
+    </div>
+      <ul class="kids"><li class="">
+      <span class="kn">Altura Logistics Park Bhiwandi Pvt Ltd</span>
+      <span class="km">100% owned</span>
+    </li><li class="">
+      <span class="kn">Altura Logistics Park Sriperumbudur Pvt Ltd</span>
+      <span class="km">100% owned</span>
+    </li><li class="">
+      <span class="kn">Altura Logistics Park Hosur Pvt Ltd</span>
+      <span class="km">100% owned</span>
+    </li><li class="">
+      <span class="kn">Altura Jodhpur Logistics One Pvt Ltd</span>
+      <span class="km">100% owned</span>
+    </li><li class="">
+      <span class="kn">Altura Logistics Park Farukhnagar Pvt Ltd</span>
+      <span class="km">100% owned</span>
+    </li><li class="">
+      <span class="kn">Altura Logistics Park Nagpur Pvt Ltd</span>
+      <span class="km">100% owned</span>
+    </li><li class="">
+      <span class="kn">Altura Logistics Park Luhari Pvt Ltd</span>
+      <span class="km">100% owned</span>
+    </li><li class="">
+      <span class="kn">Altura Logistics Park Panvel Pvt Ltd</span>
+      <span class="km">100% owned</span>
+    </li><li class="">
+      <span class="kn">Altura Logistics Park Ahmedabad Pvt Ltd</span>
+      <span class="km">100% owned</span>
+    </li><li class="">
+      <span class="kn">Altura Logistics Park Kolkata Pvt Ltd</span>
+      <span class="km">100% owned</span>
+    </li><li class="">
+      <span class="kn">Altura Logistics Park Lucknow Pvt Ltd</span>
+      <span class="km">100% owned</span>
+    </li><li class="">
+      <span class="kn">Altura Logistics Park Guwahati Pvt Ltd</span>
+      <span class="km">100% owned</span>
+    </li><li class="">
+      <span class="kn">Altura Jodhpur Logistics Two Pvt Ltd</span>
+      <span class="km">100% owned</span>
+    </li><li class="">
+      <span class="kn">Altura Logistics Park Chakan Pvt Ltd</span>
+      <span class="km">100% owned</span>
+    </li></ul>
+    </li><li class="col">
+      <div class="node  sub">
+      <div class="name">Altura Industrial Estates Pvt Ltd</div>
+      <div class="line">Rajkot · Classified as held for sale under Ind AS 105</div>
+      <div class="own">100% owned</div>
+    </div>
+      
+    </li><li class="col">
+      <div class="node  sub">
+      <div class="name">Altura Container Services Pvt Ltd</div>
+      <div class="line">Navi Mumbai · Dormant — no transactions in the period</div>
+      <div class="own">100% owned</div>
+    </div>
+      
+    </li></ul>
+      </div>
+    </section>
+<section class="page">
+      <header class="masthead">
+    <h1 class="company">Altura Infra Holdings Limited</h1>
+    <p class="doc-title">Altura Wind Two Pvt Ltd — companies held beneath</p>
+  </header><p class="pagelead">14 companies in total. Percentages on a card are the direct holding of its immediate parent; "effective" is the share reaching the listed parent through the chain.</p>
+      <div class="chart">
+        <div class="node  root">
+      <div class="name">Altura Wind Two Pvt Ltd</div>
+      <div class="line">Tirunelveli · 180 MW wind generation</div>
+      <div class="own">100% owned<span class="held"> · 14 companies beneath</span></div>
+    </div>
+        <div class="trunk"></div>
+        <ul class="tier tier-2"><li class="col">
+      <div class="node  sub">
+      <div class="name">Altura Wind O&amp;M Pvt Ltd</div>
+      <div class="line">Tirunelveli · Wind operations &amp; maintenance</div>
+      <div class="own">100% owned</div>
+    </div>
+      
+    </li><li class="col">
+      <div class="node  sub">
+      <div class="name">Altura Wind Assets Pvt Ltd</div>
+      <div class="line">Chennai · Wind SPV holding company</div>
+      <div class="own">100% owned<span class="held"> · 12 companies beneath</span></div>
+    </div>
+      <ul class="kids"><li class="">
+      <span class="kn">Altura Wind Maharashtra Two Pvt Ltd</span>
+      <span class="km">100% owned</span>
+    </li><li class="">
+      <span class="kn">Altura Gadag Power One Pvt Ltd</span>
+      <span class="km">100% owned</span>
+    </li><li class="">
+      <span class="kn">Altura Wind Rajasthan One Pvt Ltd</span>
+      <span class="km">100% owned</span>
+    </li><li class="">
+      <span class="kn">Altura Wind Karnataka Two Pvt Ltd</span>
+      <span class="km">100% owned</span>
+    </li><li class="">
+      <span class="kn">Altura Wind Andhra Pradesh One Pvt Ltd</span>
+      <span class="km">100% owned</span>
+    </li><li class="">
+      <span class="kn">Altura Gadag Power Two Pvt Ltd</span>
+      <span class="km">100% owned</span>
+    </li><li class="">
+      <span class="kn">Altura Wind Gujarat One Pvt Ltd</span>
+      <span class="km">100% owned</span>
+    </li><li class="">
+      <span class="kn">Altura Wind Gujarat Two Pvt Ltd</span>
+      <span class="km">100% owned</span>
+    </li><li class="">
+      <span class="kn">Altura Wind Maharashtra One Pvt Ltd</span>
+      <span class="km">100% owned</span>
+    </li><li class="">
+      <span class="kn">Altura Wind Tamil Nadu Two Pvt Ltd</span>
+      <span class="km">100% owned</span>
+    </li><li class="">
+      <span class="kn">Altura Wind Karnataka One Pvt Ltd</span>
+      <span class="km">100% owned</span>
+    </li><li class="">
+      <span class="kn">Altura Wind Tamil Nadu One Pvt Ltd</span>
+      <span class="km">100% owned</span>
+    </li></ul>
+    </li></ul>
+      </div>
+    </section>
+<section class="page">
+      <header class="masthead">
+    <h1 class="company">Altura Infra Holdings Limited</h1>
+    <p class="doc-title">Altura Water Utilities Pvt Ltd — companies held beneath</p>
+  </header><p class="pagelead">11 companies in total. Percentages on a card are the direct holding of its immediate parent; "effective" is the share reaching the listed parent through the chain.</p>
+      <div class="chart">
+        <div class="node partial root">
+      <div class="name">Altura Water Utilities Pvt Ltd</div>
+      <div class="line">Pune · Water treatment &amp; supply concession</div>
+      <div class="own">51% owned<span class="held"> · 11 companies beneath</span></div>
+    </div>
+        <div class="trunk"></div>
+        <ul class="tier tier-3"><li class="col">
+      <div class="node partial sub">
+      <div class="name">Altura Municipal Services Pvt Ltd</div>
+      <div class="line">Nashik · Municipal solid waste and billing services</div>
+      <div class="own">100% · effective 51%<span class="held"> · 3 companies beneath</span></div>
+    </div>
+      <ul class="kids"><li class="partial">
+      <span class="kn">Altura Water Bhopal Pvt Ltd</span>
+      <span class="km">100% · effective 51%</span>
+    </li><li class="partial">
+      <span class="kn">Altura Water Mysuru Pvt Ltd</span>
+      <span class="km">100% · effective 51%</span>
+    </li><li class="partial">
+      <span class="kn">Altura Water Vadodara Pvt Ltd</span>
+      <span class="km">100% · effective 51%</span>
+    </li></ul>
+    </li><li class="col">
+      <div class="node partial sub">
+      <div class="name">Sahyadri Water Solutions Pvt Ltd</div>
+      <div class="line">Nashik · Associate interest</div>
+      <div class="own">30% · effective 15.3%</div>
+    </div>
+      
+    </li><li class="col">
+      <div class="node partial sub">
+      <div class="name">Altura Wastewater Pvt Ltd</div>
+      <div class="line">Pune · Sewage treatment concessions</div>
+      <div class="own">100% · effective 51%<span class="held"> · 5 companies beneath</span></div>
+    </div>
+      <ul class="kids"><li class="partial">
+      <span class="kn">Altura Water Pune Pvt Ltd</span>
+      <span class="km">100% · effective 51%</span>
+    </li><li class="partial">
+      <span class="kn">Altura Water Surat Pvt Ltd</span>
+      <span class="km">100% · effective 51%</span>
+    </li><li class="partial">
+      <span class="kn">Altura Water Indore Pvt Ltd</span>
+      <span class="km">100% · effective 51%</span>
+    </li><li class="partial">
+      <span class="kn">Altura Water Coimbatore Pvt Ltd</span>
+      <span class="km">100% · effective 51%</span>
+    </li><li class="partial">
+      <span class="kn">Altura Water Nashik Pvt Ltd</span>
+      <span class="km">100% · effective 51%</span>
+    </li></ul>
+    </li></ul>
+      </div>
+    </section>
+<section class="page">
+      <header class="masthead">
+    <h1 class="company">Altura Infra Holdings Limited</h1>
+    <p class="doc-title">Altura Shared Services Private Limited — companies held beneath</p>
+  </header><p class="pagelead">4 companies in total. Percentages on a card are the direct holding of its immediate parent; "effective" is the share reaching the listed parent through the chain.</p>
+      <div class="chart">
+        <div class="node  root">
+      <div class="name">Altura Shared Services Private Limited</div>
+      <div class="line">Hyderabad · Group business services centre</div>
+      <div class="own">100% owned<span class="held"> · 4 companies beneath</span></div>
+    </div>
+        <div class="trunk"></div>
+        <ul class="tier tier-2"><li class="col">
+      <div class="node  sub">
+      <div class="name">Altura Business Process Services Pvt Ltd</div>
+      <div class="line">Coimbatore · Finance and payroll shared service centre</div>
+      <div class="own">100% owned</div>
+    </div>
+      
+    </li><li class="col">
+      <div class="node  sub">
+      <div class="name">Altura Technology Centre Pvt Ltd</div>
+      <div class="line">Hyderabad · Group IT and application support</div>
+      <div class="own">100% owned<span class="held"> · 2 companies beneath</span></div>
+    </div>
+      <ul class="kids"><li class="">
+      <span class="kn">Altura Digital Labs Pvt Ltd</span>
+      <span class="km">100% owned</span>
+    </li><li class="">
+      <span class="kn">Altura Cyber Services Pvt Ltd</span>
+      <span class="km">100% owned</span>
+    </li></ul>
+    </li></ul>
+      </div>
+    </section>
+<section class="page">
+      <header class="masthead">
+    <h1 class="company">Altura Infra Holdings Limited</h1>
+    <p class="doc-title">Altura Capital &amp; Treasury Private Limited — companies held beneath</p>
+  </header><p class="pagelead">3 companies in total. Percentages on a card are the direct holding of its immediate parent; "effective" is the share reaching the listed parent through the chain.</p>
+      <div class="chart">
+        <div class="node  root">
+      <div class="name">Altura Capital &amp; Treasury Private Limited</div>
+      <div class="line">Mumbai · Group treasury and funding</div>
+      <div class="own">100% owned<span class="held"> · 3 companies beneath</span></div>
+    </div>
+        <div class="trunk"></div>
+        <ul class="tier tier-1"><li class="col">
+      <div class="node  sub">
+      <div class="name">Altura Infra Finance Pvt Ltd</div>
+      <div class="line">Mumbai · Non-banking finance company (infrastructure)</div>
+      <div class="own">100% owned<span class="held"> · 2 companies beneath</span></div>
+    </div>
+      <ul class="kids"><li class="">
+      <span class="kn">Altura InvIT Management Pvt Ltd</span>
+      <span class="km">100% owned</span>
+    </li><li class="">
+      <span class="kn">Altura Infra Investment Managers Pvt Ltd</span>
+      <span class="km">100% owned</span>
+    </li></ul>
+    </li></ul>
+      </div>
+    </section>
+<section class="page">
+      <header class="masthead">
+    <h1 class="company">Altura Infra Holdings Limited</h1>
+    <p class="doc-title">Altura Renewables Limited — companies held beneath</p>
+  </header><p class="pagelead">49 companies in total · sheet 1 of 2. Percentages on a card are the direct holding of its immediate parent; "effective" is the share reaching the listed parent through the chain.</p>
+      <div class="chart">
+        <div class="node  root">
+      <div class="name">Altura Renewables Limited</div>
+      <div class="line">Mumbai · Renewables platform holding company</div>
+      <div class="own">100% owned<span class="held"> · 49 companies beneath</span></div>
+    </div>
+        <div class="trunk"></div>
+        <ul class="tier tier-6"><li class="col">
+      <div class="node  sub">
+      <div class="name">Altura Green Energy Trading Pvt Ltd</div>
+      <div class="line">Mumbai · Open-access power trading</div>
+      <div class="own">100% owned</div>
+    </div>
+      
+    </li><li class="col">
+      <div class="node  sub">
+      <div class="name">Altura Solar Holdings Pvt Ltd</div>
+      <div class="line">Mumbai · Utility-scale solar platform</div>
+      <div class="own">100% owned<span class="held"> · 15 companies beneath</span></div>
+    </div>
+      <ul class="kids"><li class="">
+      <span class="kn">Altura Solar Park Telangana Two Pvt Ltd</span>
+      <span class="km">100% owned</span>
+    </li><li class="">
+      <span class="kn">Altura Solar Park Andhra Pradesh One Pvt Ltd</span>
+      <span class="km">100% owned</span>
+    </li><li class="">
+      <span class="kn">Altura Solar Park Karnataka One Pvt Ltd</span>
+      <span class="km">100% owned</span>
+    </li><li class="">
+      <span class="kn">Altura Patan Power One Pvt Ltd</span>
+      <span class="km">100% owned</span>
+    </li><li class="">
+      <span class="kn">Altura Solar Park Madhya Pradesh Two Pvt Ltd</span>
+      <span class="km">100% owned</span>
+    </li><li class="">
+      <span class="kn">Altura Solar Park Uttar Pradesh Two Pvt Ltd</span>
+      <span class="km">100% owned</span>
+    </li><li class="">
+      <span class="kn">Altura Solar Park Gujarat One Pvt Ltd</span>
+      <span class="km">100% owned</span>
+    </li><li class="">
+      <span class="kn">Altura Solar Park Uttar Pradesh One Pvt Ltd</span>
+      <span class="km">100% owned</span>
+    </li><li class="">
+      <span class="kn">Altura Patan Power Two Pvt Ltd</span>
+      <span class="km">100% owned</span>
+    </li><li class="">
+      <span class="kn">Altura Solar Park Maharashtra One Pvt Ltd</span>
+      <span class="km">100% owned</span>
+    </li><li class="">
+      <span class="kn">Altura Solar Park Madhya Pradesh One Pvt Ltd</span>
+      <span class="km">100% owned</span>
+    </li><li class="">
+      <span class="kn">Altura Solar Park Rajasthan One Pvt Ltd</span>
+      <span class="km">100% owned</span>
+    </li><li class="">
+      <span class="kn">Altura Solar Park Andhra Pradesh Two Pvt Ltd</span>
+      <span class="km">100% owned</span>
+    </li><li class="">
+      <span class="kn">Altura Solar Park Telangana One Pvt Ltd</span>
+      <span class="km">100% owned</span>
+    </li><li class="">
+      <span class="kn">Altura Solar Odisha One Pvt Ltd</span>
+      <span class="km">100% owned · Newly incorporated</span>
+    </li></ul>
+    </li><li class="col">
+      <div class="node partial sub">
+      <div class="name">Suryodaya Renewable Power Pvt Ltd</div>
+      <div class="line">Ahmedabad · Associate interest</div>
+      <div class="own">40% owned</div>
+    </div>
+      
+    </li><li class="col">
+      <div class="node partial sub">
+      <div class="name">Altura Rooftop Solar Pvt Ltd</div>
+      <div class="line">Bengaluru · Commercial &amp; industrial rooftop platform</div>
+      <div class="own">74% owned<span class="held"> · 6 companies beneath</span></div>
+    </div>
+      <ul class="kids"><li class="partial">
+      <span class="kn">Altura Rooftop Chennai Pvt Ltd</span>
+      <span class="km">100% · effective 74%</span>
+    </li><li class="partial">
+      <span class="kn">Altura Rooftop Gurugram Pvt Ltd</span>
+      <span class="km">100% · effective 74%</span>
+    </li><li class="partial">
+      <span class="kn">Altura Rooftop Pune Pvt Ltd</span>
+      <span class="km">100% · effective 74%</span>
+    </li><li class="partial">
+      <span class="kn">Altura Rooftop Ahmedabad Pvt Ltd</span>
+      <span class="km">100% · effective 74%</span>
+    </li><li class="partial">
+      <span class="kn">Altura Rooftop Hyderabad Pvt Ltd</span>
+      <span class="km">100% · effective 74%</span>
+    </li><li class="partial">
+      <span class="kn">Altura Rooftop Bengaluru Pvt Ltd</span>
+      <span class="km">100% · effective 74%</span>
+    </li></ul>
+    </li><li class="col">
+      <div class="node  sub">
+      <div class="name">Altura Hybrid &amp; Storage Pvt Ltd</div>
+      <div class="line">Bengaluru · Hybrid and battery storage platform</div>
+      <div class="own">100% owned<span class="held"> · 12 companies beneath</span></div>
+    </div>
+      <ul class="kids"><li class="">
+      <span class="kn">Altura Hybrid Gujarat One Pvt Ltd</span>
+      <span class="km">100% owned</span>
+    </li><li class="">
+      <span class="kn">Altura Hybrid Madhya Pradesh One Pvt Ltd</span>
+      <span class="km">100% owned</span>
+    </li><li class="partial">
+      <span class="kn">Vidyut Storage Systems Pvt Ltd</span>
+      <span class="km">26% owned · equity accounted</span>
+    </li><li class="">
+      <span class="kn">Altura Hybrid Andhra Pradesh One Pvt Ltd</span>
+      <span class="km">100% owned</span>
+    </li><li class="">
+      <span class="kn">Altura Hybrid Telangana One Pvt Ltd</span>
+      <span class="km">100% owned</span>
+    </li><li class="">
+      <span class="kn">Altura Hybrid Rajasthan One Pvt Ltd</span>
+      <span class="km">100% owned</span>
+    </li><li class="">
+      <span class="kn">Altura Hybrid Karnataka One Pvt Ltd</span>
+      <span class="km">100% owned</span>
+    </li><li class="">
+      <span class="kn">Altura Osmanabad Power One Pvt Ltd</span>
+      <span class="km">100% owned</span>
+    </li><li class="">
+      <span class="kn">Altura Osmanabad Power Two Pvt Ltd</span>
+      <span class="km">100% owned</span>
+    </li><li class="">
+      <span class="kn">Altura Hybrid Uttar Pradesh One Pvt Ltd</span>
+      <span class="km">100% owned</span>
+    </li><li class="">
+      <span class="kn">Altura Hybrid Maharashtra One Pvt Ltd</span>
+      <span class="km">100% owned</span>
+    </li><li class="">
+      <span class="kn">Altura Storage Systems Pvt Ltd</span>
+      <span class="km">100% owned · Newly incorporated</span>
+    </li></ul>
+    </li><li class="col">
+      <div class="node  sub">
+      <div class="name">Altura Wind Holdings Pvt Ltd</div>
+      <div class="line">Mumbai · Utility-scale wind platform</div>
+      <div class="own">100% owned<span class="held"> · 8 companies beneath</span></div>
+    </div>
+      <ul class="kids"><li class="">
+      <span class="kn">Altura Windfarm Rajasthan One Pvt Ltd</span>
+      <span class="km">100% owned</span>
+    </li><li class="">
+      <span class="kn">Altura Windfarm Gujarat One Pvt Ltd</span>
+      <span class="km">100% owned</span>
+    </li><li class="">
+      <span class="kn">Altura Windfarm Tamil Nadu One Pvt Ltd</span>
+      <span class="km">100% owned</span>
+    </li><li class="">
+      <span class="kn">Altura Windfarm Andhra Pradesh One Pvt Ltd</span>
+      <span class="km">100% owned</span>
+    </li><li class="">
+      <span class="kn">Altura Windfarm Karnataka One Pvt Ltd</span>
+      <span class="km">100% owned</span>
+    </li><li class="">
+      <span class="kn">Altura Windfarm Karnataka Two Pvt Ltd</span>
+      <span class="km">100% owned</span>
+    </li><li class="">
+      <span class="kn">Altura Windfarm Maharashtra Two Pvt Ltd</span>
+      <span class="km">100% owned</span>
+    </li><li class="">
+      <span class="kn">Altura Windfarm Maharashtra One Pvt Ltd</span>
+      <span class="km">100% owned</span>
+    </li></ul>
+    </li></ul>
+      </div>
+    </section>
+<section class="page">
+      <header class="masthead">
+    <h1 class="company">Altura Infra Holdings Limited</h1>
+    <p class="doc-title">Altura Renewables Limited — companies held beneath</p>
+  </header><p class="pagelead">49 companies in total · sheet 2 of 2. Percentages on a card are the direct holding of its immediate parent; "effective" is the share reaching the listed parent through the chain.</p>
+      <div class="chart">
+        <div class="node  root">
+      <div class="name">Altura Renewables Limited</div>
+      <div class="line">Mumbai · Renewables platform holding company</div>
+      <div class="own">100% owned<span class="held"> · 49 companies beneath</span></div>
+    </div>
+        <div class="trunk"></div>
+        <ul class="tier tier-2"><li class="col">
+      <div class="node  sub">
+      <div class="name">Altura Renewable Energy Services Pvt Ltd</div>
+      <div class="line">Mumbai · Asset management and advisory</div>
+      <div class="own">100% owned</div>
+    </div>
+      
+    </li><li class="col">
+      <div class="node  sub">
+      <div class="name">Altura Biomass Pvt Ltd</div>
+      <div class="line">Bathinda · Incorporated during the period — no operations yet</div>
+      <div class="own">100% owned</div>
+    </div>
+      
+    </li></ul>
+      </div>
+    </section>
+<section class="page">
+      <header class="masthead">
+    <h1 class="company">Altura Infra Holdings Limited</h1>
+    <p class="doc-title">Altura International Holdings B.V. — companies held beneath</p>
+  </header><p class="pagelead">61 companies in total · sheet 1 of 3. Percentages on a card are the direct holding of its immediate parent; "effective" is the share reaching the listed parent through the chain.</p>
+      <div class="chart">
+        <div class="node  root">
+      <div class="name">Altura International Holdings B.V.</div>
+      <div class="line">Amsterdam · Netherlands · Overseas platform holding company</div>
+      <div class="own">100% owned<span class="held"> · 61 companies beneath</span></div>
+    </div>
+        <div class="trunk"></div>
+        <ul class="tier tier-6"><li class="col">
+      <div class="node  sub">
+      <div class="name">Altura Mauritius Holdings Ltd</div>
+      <div class="line">Ebène · Mauritius · Investment holding company</div>
+      <div class="own">100% owned<span class="held"> · 9 companies beneath</span></div>
+    </div>
+      <ul class="kids"><li class="">
+      <span class="kn">Altura Infra Feeder One Ltd</span>
+      <span class="km">100% owned · 4 beneath</span>
+    </li><li class="">
+      <span class="kn">Altura Infra Feeder Three Ltd</span>
+      <span class="km">100% owned · 3 beneath</span>
+    </li></ul>
+    </li><li class="col">
+      <div class="node  sub">
+      <div class="name">Altura Renewables UK Limited</div>
+      <div class="line">London · United Kingdom · UK and Ireland holding company</div>
+      <div class="own">100% owned<span class="held"> · 4 companies beneath</span></div>
+    </div>
+      <ul class="kids"><li class="">
+      <span class="kn">Altura Renewables Ireland DAC</span>
+      <span class="km">100% owned</span>
+    </li><li class="">
+      <span class="kn">Altura Grid Services UK Limited</span>
+      <span class="km">100% owned · 1 beneath</span>
+    </li><li class="">
+      <span class="kn">Altura Renewables Scotland Limited</span>
+      <span class="km">100% owned</span>
+    </li></ul>
+    </li><li class="col">
+      <div class="node partial sub">
+      <div class="name">Emerald Wind Partners B.V.</div>
+      <div class="line">Rotterdam · Netherlands · Joint venture interest</div>
+      <div class="own">50% owned</div>
+    </div>
+      
+    </li><li class="col">
+      <div class="node  sub">
+      <div class="name">Altura Latam Holdings S.à r.l.</div>
+      <div class="line">Luxembourg · Luxembourg · Latin America holding company</div>
+      <div class="own">100% owned<span class="held"> · 4 companies beneath</span></div>
+    </div>
+      <ul class="kids"><li class="">
+      <span class="kn">Altura Energía Chile SpA</span>
+      <span class="km">100% owned</span>
+    </li><li class="">
+      <span class="kn">Altura Serviços de Infraestrutura Ltda.</span>
+      <span class="km">100% owned</span>
+    </li><li class="">
+      <span class="kn">Altura Energia do Brasil Ltda.</span>
+      <span class="km">100% owned · 1 beneath</span>
+    </li></ul>
+    </li><li class="col">
+      <div class="node  sub">
+      <div class="name">Altura Deutschland GmbH</div>
+      <div class="line">Frankfurt am Main · Germany · Continental Europe holding company</div>
+      <div class="own">100% owned<span class="held"> · 3 companies beneath</span></div>
+    </div>
+      <ul class="kids"><li class="">
+      <span class="kn">Altura Polska Sp. z o.o.</span>
+      <span class="km">100% owned</span>
+    </li><li class="">
+      <span class="kn">Altura Iberia, S.L.</span>
+      <span class="km">100% owned</span>
+    </li><li class="">
+      <span class="kn">Altura Energie Deutschland GmbH</span>
+      <span class="km">100% owned</span>
+    </li></ul>
+    </li><li class="col">
+      <div class="node  sub">
+      <div class="name">Altura Infra USA, Inc.</div>
+      <div class="line">Wilmington · United States · North America holding company</div>
+      <div class="own">100% owned<span class="held"> · 5 companies beneath</span></div>
+    </div>
+      <ul class="kids"><li class="">
+      <span class="kn">Altura Canada Inc.</span>
+      <span class="km">100% owned</span>
+    </li><li class="">
+      <span class="kn">Altura Infra Services USA, Inc.</span>
+      <span class="km">100% owned · 1 beneath</span>
+    </li><li class="">
+      <span class="kn">Altura México, S.A. de C.V.</span>
+      <span class="km">100% owned</span>
+    </li><li class="">
+      <span class="kn">Altura Solar US, LLC</span>
+      <span class="km">100% owned</span>
+    </li></ul>
+    </li></ul>
+      </div>
+    </section>
+<section class="page">
+      <header class="masthead">
+    <h1 class="company">Altura Infra Holdings Limited</h1>
+    <p class="doc-title">Altura International Holdings B.V. — companies held beneath</p>
+  </header><p class="pagelead">61 companies in total · sheet 2 of 3. Percentages on a card are the direct holding of its immediate parent; "effective" is the share reaching the listed parent through the chain.</p>
+      <div class="chart">
+        <div class="node  root">
+      <div class="name">Altura International Holdings B.V.</div>
+      <div class="line">Amsterdam · Netherlands · Overseas platform holding company</div>
+      <div class="own">100% owned<span class="held"> · 61 companies beneath</span></div>
+    </div>
+        <div class="trunk"></div>
+        <ul class="tier tier-6"><li class="col">
+      <div class="node  sub">
+      <div class="name">Altura Asia Pacific Holdings Pte. Ltd.</div>
+      <div class="line">Singapore · Singapore · North Asia holding company</div>
+      <div class="own">100% owned<span class="held"> · 5 companies beneath</span></div>
+    </div>
+      <ul class="kids"><li class="">
+      <span class="kn">Altura Philippines Inc.</span>
+      <span class="km">100% owned</span>
+    </li><li class="">
+      <span class="kn">Altura Japan K.K.</span>
+      <span class="km">100% owned · 1 beneath</span>
+    </li><li class="">
+      <span class="kn">Altura Asia Services Limited</span>
+      <span class="km">100% owned</span>
+    </li><li class="">
+      <span class="kn">Altura Lanka (Private) Limited</span>
+      <span class="km">100% owned</span>
+    </li></ul>
+    </li><li class="col">
+      <div class="node  sub">
+      <div class="name">Altura Energy Singapore Pte. Ltd.</div>
+      <div class="line">Singapore · Singapore · South-East Asia holding company</div>
+      <div class="own">100% owned<span class="held"> · 6 companies beneath</span></div>
+    </div>
+      <ul class="kids"><li class="">
+      <span class="kn">Altura Energy Trading Pte. Ltd.</span>
+      <span class="km">100% owned</span>
+    </li><li class="">
+      <span class="kn">Altura Malaysia Sdn. Bhd.</span>
+      <span class="km">100% owned · 1 beneath</span>
+    </li><li class="">
+      <span class="kn">Altura Vietnam Company Limited</span>
+      <span class="km">100% owned</span>
+    </li><li class="partial">
+      <span class="kn">Straits Clean Energy Pte. Ltd.</span>
+      <span class="km">50% owned · equity accounted</span>
+    </li><li class="">
+      <span class="kn">PT Altura Energi Indonesia</span>
+      <span class="km">100% owned</span>
+    </li></ul>
+    </li><li class="col">
+      <div class="node  sub">
+      <div class="name">Altura Australia Pty Ltd</div>
+      <div class="line">Sydney · Australia · Australia and New Zealand holding company</div>
+      <div class="own">100% owned<span class="held"> · 2 companies beneath</span></div>
+    </div>
+      <ul class="kids"><li class="">
+      <span class="kn">Altura Asset Services Pty Ltd</span>
+      <span class="km">100% owned</span>
+    </li><li class="">
+      <span class="kn">Altura Renewables Australia Pty Ltd</span>
+      <span class="km">100% owned</span>
+    </li></ul>
+    </li><li class="col">
+      <div class="node  sub">
+      <div class="name">Altura Africa Holdings Limited</div>
+      <div class="line">Nairobi · Kenya · Sub-Saharan Africa holding company</div>
+      <div class="own">100% owned<span class="held"> · 4 companies beneath</span></div>
+    </div>
+      <ul class="kids"><li class="">
+      <span class="kn">Altura South Africa (Pty) Ltd</span>
+      <span class="km">100% owned</span>
+    </li><li class="">
+      <span class="kn">Altura Energy Kenya Limited</span>
+      <span class="km">100% owned</span>
+    </li><li class="">
+      <span class="kn">Altura East Africa Services Limited</span>
+      <span class="km">100% owned</span>
+    </li><li class="">
+      <span class="kn">Altura Energy Bangladesh Private Limited</span>
+      <span class="km">100% owned · Under liquidation</span>
+    </li></ul>
+    </li><li class="col">
+      <div class="node  sub">
+      <div class="name">Altura Middle East FZ-LLC</div>
+      <div class="line">Dubai · United Arab Emirates · Middle East holding company</div>
+      <div class="own">100% owned<span class="held"> · 5 companies beneath</span></div>
+    </div>
+      <ul class="kids"><li class="">
+      <span class="kn">Altura Qatar LLC</span>
+      <span class="km">100% owned</span>
+    </li><li class="">
+      <span class="kn">Altura Arabia for Energy LLC</span>
+      <span class="km">100% owned</span>
+    </li><li class="">
+      <span class="kn">Altura Infra Services Middle East FZ-LLC</span>
+      <span class="km">100% owned</span>
+    </li><li class="">
+      <span class="kn">Altura Gulf Energy FZ-LLC</span>
+      <span class="km">100% owned · 1 beneath</span>
+    </li></ul>
+    </li><li class="col">
+      <div class="node partial sub">
+      <div class="name">Altura Energy Poland Sp. z o.o.</div>
+      <div class="line">Kraków · Poland · Disposed of during the period</div>
+      <div class="own">Disposed 2025-06-27</div>
+    </div>
+      
+    </li></ul>
+      </div>
+    </section>
+<section class="page">
+      <header class="masthead">
+    <h1 class="company">Altura Infra Holdings Limited</h1>
+    <p class="doc-title">Altura International Holdings B.V. — companies held beneath</p>
+  </header><p class="pagelead">61 companies in total · sheet 3 of 3. Percentages on a card are the direct holding of its immediate parent; "effective" is the share reaching the listed parent through the chain.</p>
+      <div class="chart">
+        <div class="node  root">
+      <div class="name">Altura International Holdings B.V.</div>
+      <div class="line">Amsterdam · Netherlands · Overseas platform holding company</div>
+      <div class="own">100% owned<span class="held"> · 61 companies beneath</span></div>
+    </div>
+        <div class="trunk"></div>
+        <ul class="tier tier-2"><li class="col">
+      <div class="node  sub">
+      <div class="name">Altura Capital Suisse AG</div>
+      <div class="line">Zug · Switzerland · Members’ voluntary liquidation in progress</div>
+      <div class="own">100% owned</div>
+    </div>
+      
+    </li><li class="col">
+      <div class="node  sub">
+      <div class="name">Altura Energy Ireland Limited</div>
+      <div class="line">Dublin · Ireland · Dormant — no transactions in the period</div>
+      <div class="own">100% owned</div>
+    </div>
+      
+    </li></ul>
+      </div>
+    </section>
+<section class="page">
+  <header class="masthead">
+    <h1 class="company">Altura Infra Holdings Limited</h1>
+    <p class="doc-title">Companies by jurisdiction of incorporation</p>
+  </header><p class="pagelead">30 jurisdictions. Statutory year ends and component auditors differ by country and are stated per jurisdiction; the group reports to 31 March.</p>
+  <div class="jur-grid"><div class="jur">
+      <div class="jur-h">India <span>198</span></div>
+      <div class="jur-m">INR · year end 31 March · S. R. Batliboi &amp; Associates LLP</div>
+      <ul><li>Altura Infra Holdings Limited<span></span></li><li>Altura Solar One Pvt Ltd<span></span></li><li>Altura Wind Two Pvt Ltd<span></span></li><li>Altura Roadways Pvt Ltd<span></span></li><li>Altura Transmission Pvt Ltd<span>effective 74%</span></li><li>Altura Water Utilities Pvt Ltd<span>effective 51%</span></li><li>Altura Logistics Parks Pvt Ltd<span></span></li><li>Altura Renewables Limited<span></span></li><li>Altura Shared Services Private Limited<span></span></li><li>Altura Capital &amp; Treasury Private Limited<span></span></li><li>Altura Solar Assets Pvt Ltd<span></span></li><li>Altura Solar O&amp;M Pvt Ltd<span></span></li><li>Altura Wind Assets Pvt Ltd<span></span></li><li>Altura Wind O&amp;M Pvt Ltd<span></span></li>
+      <li class="more">+184 further companies — see the register at the back</li></ul>
+    </div><div class="jur">
+      <div class="jur-h">Mauritius <span>4</span></div>
+      <div class="jur-m">USD · year end 31 December · Nexia Baker &amp; Arenson</div>
+      <ul><li>Altura Mauritius Holdings Ltd<span></span></li><li>Altura Infra Feeder One Ltd<span></span></li><li>Altura Infra Feeder Two Ltd<span></span></li><li>Altura Infra Feeder Three Ltd<span></span></li>
+      </ul>
+    </div><div class="jur">
+      <div class="jur-h">Singapore <span>4</span></div>
+      <div class="jur-m">SGD · year end 31 December · RSM Chio Lim LLP</div>
+      <ul><li>Altura Energy Singapore Pte. Ltd.<span></span></li><li>Altura Asia Pacific Holdings Pte. Ltd.<span></span></li><li>Altura Energy Trading Pte. Ltd.<span></span></li><li>Straits Clean Energy Pte. Ltd.<span>effective 50%</span></li>
+      </ul>
+    </div><div class="jur">
+      <div class="jur-h">United Arab Emirates <span>4</span></div>
+      <div class="jur-m">AED · year end 31 December · Grant Thornton UAE</div>
+      <ul><li>Altura Middle East FZ-LLC<span></span></li><li>Altura Gulf Energy FZ-LLC<span></span></li><li>Altura Infra Services Middle East FZ-LLC<span></span></li><li>Altura Gulf Energy FZ-LLC — Oman Branch<span></span></li>
+      </ul>
+    </div><div class="jur">
+      <div class="jur-h">United Kingdom <span>4</span></div>
+      <div class="jur-m">GBP · year end 31 December · BDO LLP</div>
+      <ul><li>Altura Renewables UK Limited<span></span></li><li>Altura Renewables Scotland Limited<span></span></li><li>Altura Grid Services UK Limited<span></span></li><li>Altura Grid Services UK Limited — Netherlands Branch<span></span></li>
+      </ul>
+    </div><div class="jur">
+      <div class="jur-h">United States <span>4</span></div>
+      <div class="jur-m">USD · year end 31 December · Crowe LLP</div>
+      <ul><li>Altura Infra USA, Inc.<span></span></li><li>Altura Solar US, LLC<span></span></li><li>Altura Infra Services USA, Inc.<span></span></li><li>Altura Infra Services USA, Inc. — California Branch<span></span></li>
+      </ul>
+    </div><div class="jur">
+      <div class="jur-h">Australia <span>3</span></div>
+      <div class="jur-m">AUD · year end 30 June · Pitcher Partners</div>
+      <ul><li>Altura Australia Pty Ltd<span></span></li><li>Altura Renewables Australia Pty Ltd<span></span></li><li>Altura Asset Services Pty Ltd<span></span></li>
+      </ul>
+    </div><div class="jur">
+      <div class="jur-h">Brazil <span>3</span></div>
+      <div class="jur-m">BRL · year end 31 December · BDO RCS Auditores</div>
+      <ul><li>Altura Energia do Brasil Ltda.<span></span></li><li>Altura Serviços de Infraestrutura Ltda.<span></span></li><li>Altura Energia do Brasil Ltda. — Bahia Branch<span></span></li>
+      </ul>
+    </div><div class="jur">
+      <div class="jur-h">Kenya <span>3</span></div>
+      <div class="jur-m">KES · year end 31 December · PKF Kenya LLP</div>
+      <ul><li>Altura Africa Holdings Limited<span></span></li><li>Altura Energy Kenya Limited<span></span></li><li>Altura East Africa Services Limited<span></span></li>
+      </ul>
+    </div><div class="jur">
+      <div class="jur-h">Germany <span>2</span></div>
+      <div class="jur-m">EUR · year end 31 December · Rödl &amp; Partner GmbH</div>
+      <ul><li>Altura Deutschland GmbH<span></span></li><li>Altura Energie Deutschland GmbH<span></span></li>
+      </ul>
+    </div><div class="jur">
+      <div class="jur-h">Ireland <span>2</span></div>
+      <div class="jur-m">EUR · year end 31 December · Grant Thornton Ireland</div>
+      <ul><li>Altura Renewables Ireland DAC<span></span></li><li>Altura Energy Ireland Limited<span>dormant</span></li>
+      </ul>
+    </div><div class="jur">
+      <div class="jur-h">Japan <span>2</span></div>
+      <div class="jur-m">JPY · year end 31 March · Gyosei &amp; Co.</div>
+      <ul><li>Altura Japan K.K.<span></span></li><li>Altura Japan K.K. — Osaka Branch<span></span></li>
+      </ul>
+    </div><div class="jur">
+      <div class="jur-h">Malaysia <span>2</span></div>
+      <div class="jur-m">MYR · year end 31 December · Baker Tilly Malaysia</div>
+      <ul><li>Altura Malaysia Sdn. Bhd.<span></span></li><li>Altura Malaysia Sdn. Bhd. — Thailand Branch<span></span></li>
+      </ul>
+    </div><div class="jur">
+      <div class="jur-h">Netherlands <span>2</span></div>
+      <div class="jur-m">EUR · year end 31 December · Mazars Accountants N.V.</div>
+      <ul><li>Altura International Holdings B.V.<span></span></li><li>Emerald Wind Partners B.V.<span>effective 50%</span></li>
+      </ul>
+    </div><div class="jur">
+      <div class="jur-h">Poland <span>2</span></div>
+      <div class="jur-m">PLN · year end 31 December · Moore Polska</div>
+      <ul><li>Altura Polska Sp. z o.o.<span></span></li><li>Altura Energy Poland Sp. z o.o.<span>disposed 2025-06-27</span></li>
+      </ul>
+    </div><div class="jur">
+      <div class="jur-h">Bangladesh <span>1</span></div>
+      <div class="jur-m">BDT · year end 30 June · Hoda Vasi Chowdhury &amp; Co.</div>
+      <ul><li>Altura Energy Bangladesh Private Limited<span>under liquidation</span></li>
+      </ul>
+    </div><div class="jur">
+      <div class="jur-h">Canada <span>1</span></div>
+      <div class="jur-m">CAD · year end 31 December · MNP LLP</div>
+      <ul><li>Altura Canada Inc.<span></span></li>
+      </ul>
+    </div><div class="jur">
+      <div class="jur-h">Chile <span>1</span></div>
+      <div class="jur-m">CLP · year end 31 December · Surlatina Auditores</div>
+      <ul><li>Altura Energía Chile SpA<span></span></li>
+      </ul>
+    </div><div class="jur">
+      <div class="jur-h">Hong Kong <span>1</span></div>
+      <div class="jur-m">HKD · year end 31 December · Mazars CPA Limited</div>
+      <ul><li>Altura Asia Services Limited<span></span></li>
+      </ul>
+    </div><div class="jur">
+      <div class="jur-h">Indonesia <span>1</span></div>
+      <div class="jur-m">IDR · year end 31 December · Tanudiredja Wibisana</div>
+      <ul><li>PT Altura Energi Indonesia<span></span></li>
+      </ul>
+    </div><div class="jur">
+      <div class="jur-h">Luxembourg <span>1</span></div>
+      <div class="jur-m">EUR · year end 31 December · Mazars Luxembourg S.A.</div>
+      <ul><li>Altura Latam Holdings S.à r.l.<span></span></li>
+      </ul>
+    </div><div class="jur">
+      <div class="jur-h">Mexico <span>1</span></div>
+      <div class="jur-m">MXN · year end 31 December · Salles Sainz Grant Thornton</div>
+      <ul><li>Altura México, S.A. de C.V.<span></span></li>
+      </ul>
+    </div><div class="jur">
+      <div class="jur-h">Philippines <span>1</span></div>
+      <div class="jur-m">PHP · year end 31 December · Reyes Tacandong &amp; Co.</div>
+      <ul><li>Altura Philippines Inc.<span></span></li>
+      </ul>
+    </div><div class="jur">
+      <div class="jur-h">Qatar <span>1</span></div>
+      <div class="jur-m">QAR · year end 31 December · Talal Abu Ghazaleh &amp; Co.</div>
+      <ul><li>Altura Qatar LLC<span></span></li>
+      </ul>
+    </div><div class="jur">
+      <div class="jur-h">Saudi Arabia <span>1</span></div>
+      <div class="jur-m">SAR · year end 31 December · Al Bassam &amp; Co.</div>
+      <ul><li>Altura Arabia for Energy LLC<span></span></li>
+      </ul>
+    </div><div class="jur">
+      <div class="jur-h">South Africa <span>1</span></div>
+      <div class="jur-m">ZAR · year end 31 December · SNG Grant Thornton</div>
+      <ul><li>Altura South Africa (Pty) Ltd<span></span></li>
+      </ul>
+    </div><div class="jur">
+      <div class="jur-h">Spain <span>1</span></div>
+      <div class="jur-m">EUR · year end 31 December · Auren Auditores S.L.</div>
+      <ul><li>Altura Iberia, S.L.<span></span></li>
+      </ul>
+    </div><div class="jur">
+      <div class="jur-h">Sri Lanka <span>1</span></div>
+      <div class="jur-m">LKR · year end 31 December · BDO Partners</div>
+      <ul><li>Altura Lanka (Private) Limited<span></span></li>
+      </ul>
+    </div><div class="jur">
+      <div class="jur-h">Switzerland <span>1</span></div>
+      <div class="jur-m">CHF · year end 31 December · BDO AG</div>
+      <ul><li>Altura Capital Suisse AG<span>under liquidation</span></li>
+      </ul>
+    </div><div class="jur">
+      <div class="jur-h">Vietnam <span>1</span></div>
+      <div class="jur-m">VND · year end 31 December · A&amp;C Auditing</div>
+      <ul><li>Altura Vietnam Company Limited<span></span></li>
+      </ul>
+    </div></div>
+</section>
+<section class="page">
+  <header class="masthead">
+    <h1 class="company">Altura Infra Holdings Limited</h1>
+    <p class="doc-title">Legend, notes and basis of preparation</p>
+  </header>
+  <div class="notes-grid">
+    <div>
+      <div class="h">Legend</div>
+      <ul class="legend">
+        <li><span class="sw solid"></span> Wholly owned and fully consolidated.</li>
+        <li><span class="sw dashed"></span> Part of the equity sits outside the group — a non-controlling interest, an associate or a joint arrangement.</li>
+        <li><span class="sw heavy"></span> The registrant. The only company that carries the filing obligation and the only one that names an exchange.</li>
+        <li><strong>“x% owned”</strong> — the direct holding of the immediate parent.</li>
+        <li><strong>“effective y%”</strong> — the share reaching the listed parent through the chain, being the product of every direct holding between the two.</li>
+        <li><strong>“n companies beneath”</strong> — companies held below this one at any depth, drawn on the page named for that platform.</li>
+      </ul>
+
+      <div class="h">Consolidation</div>
+      <ul class="legend">
+        <li><strong>Full consolidation</strong> — the group controls the company and takes 100% of its results, showing the non-controlling interest separately.</li>
+        <li><strong>Joint operation</strong> — the group takes its share of the assets, liabilities and results line by line.</li>
+        <li><strong>Equity method</strong> — associates and joint ventures. One line in the consolidated accounts; never inside group revenue or group assets, which is why their percentage-of-group columns are blank.</li>
+        <li><strong>Branch — included in parent</strong> — a registered branch with no separate legal personality. It is tested with its parent, not on its own.</li>
+      </ul>
+    </div>
+    <div>
+      <div class="h">Notes</div>
+      <ol class="notes">
+        <li>Only Altura Infra Holdings Limited is listed. Every other company on this register is privately held and consolidates into the parent’s financial statements; none has securities registered on any exchange. SOX 404 applies to the group through the parent’s NYSE-listed ADS programme.</li>
+        <li>Consolidation follows control, not ownership. Altura Transmission Pvt Ltd is consolidated notwithstanding the 26% non-controlling interest held by a state transmission utility. Altura Water Utilities Pvt Ltd is consolidated on the basis of control under its concession agreement; the remaining 49% is held by the municipal corporation. The 50% joint ventures are <em>not</em> consolidated, because a half share is not control.</li>
+        <li>Effective ownership is the product of the direct holdings down the chain. Altura Smart Metering Pvt Ltd is wholly owned by Altura Transmission Pvt Ltd, which is itself 74% owned — so 74% reaches the group.</li>
+        <li>Non-controlling interest is shown only for consolidated subsidiaries. An associate has other shareholders, but it has no non-controlling interest, and the column is left blank rather than filled with the inverse of the holding.</li>
+        <li><strong>This register reflects the statutory registers as at 30 September 2025.</strong> Any company incorporated or acquired after that date — including any SPV formed in the second half of FY26 — will appear in the consolidated trial balance for the year but is not shown here. The registers are maintained by hand; the trial balance is not.</li>
+        <li>Companies disposed of during the period are retained on the register with their disposal date, and are excluded from the consolidated figures from that date. Dormant companies are shown; they carry no transactions and are out of scope for testing.</li>
+        <li>Standalone revenue, profit before tax and total assets are stated in INR crore, translated at closing rates for companies whose functional currency is not the rupee. Percentages of group revenue and group assets are computed on consolidated companies only.</li>
+        <li>Scoping bases are stated for every company on the register, in scope or out. A scope without stated reasons cannot be reviewed.</li>
+      </ol>
+    </div>
+  </div>
+</section>
+<section class="page">
+  <header class="masthead">
+    <h1 class="company">Altura Infra Holdings Limited</h1>
+    <p class="doc-title">Register of companies</p>
+  </header><p class="pagelead">All 254 companies on the register, in entity-ID order. The full register — 39 columns including registration numbers, tax registrations, statutory auditors, allocated materiality and scoping bases — is issued alongside this chart as a workbook.</p>
+  <table class="apx">
+    <thead><tr><th>ID</th><th>Legal entity name</th><th>L</th><th>Parent</th><th>Direct %</th><th>Effective %</th><th>Consolidation</th><th>Jurisdiction</th><th>City</th><th>Status</th><th>Segment</th><th>Revenue ₹ Cr</th><th>Scope</th></tr></thead>
+    <tbody><tr class="in"><td>ALT-0001</td><td>Altura Infra Holdings Limited</td><td>0</td><td>—</td><td>100</td><td>100</td><td>Parent</td><td>India</td><td>Mumbai</td><td>Active</td><td>Corporate &amp; Shared Services</td><td>44.9</td><td>Yes</td></tr><tr class="in"><td>ALT-0002</td><td>Altura Solar One Pvt Ltd</td><td>1</td><td>ALT-0001</td><td>100</td><td>100</td><td>Full consolidation</td><td>India</td><td>Bhuj</td><td>Active</td><td>Renewables</td><td>292.86</td><td>Yes</td></tr><tr class="in"><td>ALT-0003</td><td>Altura Wind Two Pvt Ltd</td><td>1</td><td>ALT-0001</td><td>100</td><td>100</td><td>Full consolidation</td><td>India</td><td>Tirunelveli</td><td>Active</td><td>Renewables</td><td>185.48</td><td>Yes</td></tr><tr class="in"><td>ALT-0004</td><td>Altura Roadways Pvt Ltd</td><td>1</td><td>ALT-0001</td><td>100</td><td>100</td><td>Full consolidation</td><td>India</td><td>Nagpur</td><td>Active</td><td>Transport</td><td>370.97</td><td>Yes</td></tr><tr class="in"><td>ALT-0005</td><td>Altura Transmission Pvt Ltd</td><td>1</td><td>ALT-0001</td><td>74</td><td>74</td><td>Full consolidation</td><td>India</td><td>Gurugram</td><td>Active</td><td>Transmission &amp; Metering</td><td>244.05</td><td>Yes</td></tr><tr class="in"><td>ALT-0006</td><td>Altura Water Utilities Pvt Ltd</td><td>1</td><td>ALT-0001</td><td>51</td><td>51</td><td>Full consolidation</td><td>India</td><td>Pune</td><td>Active</td><td>Urban Utilities</td><td>151.31</td><td>Yes</td></tr><tr class="in"><td>ALT-0007</td><td>Altura Logistics Parks Pvt Ltd</td><td>1</td><td>ALT-0001</td><td>100</td><td>100</td><td>Full consolidation</td><td>India</td><td>Bhiwandi</td><td>Active</td><td>Logistics</td><td>205</td><td>Yes</td></tr><tr class=""><td>ALT-0008</td><td>Altura Renewables Limited</td><td>1</td><td>ALT-0001</td><td>100</td><td>100</td><td>Full consolidation</td><td>India</td><td>Mumbai</td><td>Active</td><td>Renewables</td><td>3.53</td><td>No</td></tr><tr class=""><td>ALT-0009</td><td>Altura International Holdings B.V.</td><td>1</td><td>ALT-0001</td><td>100</td><td>100</td><td>Full consolidation</td><td>Netherlands</td><td>Amsterdam</td><td>Active</td><td>International</td><td>1.19</td><td>No</td></tr><tr class="in"><td>ALT-0010</td><td>Altura Shared Services Private Limited</td><td>1</td><td>ALT-0001</td><td>100</td><td>100</td><td>Full consolidation</td><td>India</td><td>Hyderabad</td><td>Active</td><td>Corporate &amp; Shared Services</td><td>117.14</td><td>Yes</td></tr><tr class="in"><td>ALT-0011</td><td>Altura Capital &amp; Treasury Private Limited</td><td>1</td><td>ALT-0001</td><td>100</td><td>100</td><td>Full consolidation</td><td>India</td><td>Mumbai</td><td>Active</td><td>Corporate &amp; Shared Services</td><td>92.74</td><td>Yes</td></tr><tr class=""><td>ALT-0012</td><td>Altura Solar Assets Pvt Ltd</td><td>2</td><td>ALT-0002</td><td>100</td><td>100</td><td>Full consolidation</td><td>India</td><td>Ahmedabad</td><td>Active</td><td>Renewables</td><td>2.07</td><td>No</td></tr><tr class=""><td>ALT-0013</td><td>Altura Solar O&amp;M Pvt Ltd</td><td>2</td><td>ALT-0002</td><td>100</td><td>100</td><td>Full consolidation</td><td>India</td><td>Bhuj</td><td>Active</td><td>Renewables</td><td>7.72</td><td>No</td></tr><tr class=""><td>ALT-0014</td><td>Altura Wind Assets Pvt Ltd</td><td>2</td><td>ALT-0003</td><td>100</td><td>100</td><td>Full consolidation</td><td>India</td><td>Chennai</td><td>Active</td><td>Renewables</td><td>3.39</td><td>No</td></tr><tr class=""><td>ALT-0015</td><td>Altura Wind O&amp;M Pvt Ltd</td><td>2</td><td>ALT-0003</td><td>100</td><td>100</td><td>Full consolidation</td><td>India</td><td>Tirunelveli</td><td>Active</td><td>Renewables</td><td>19.09</td><td>No</td></tr><tr class=""><td>ALT-0016</td><td>Altura Expressways Pvt Ltd</td><td>2</td><td>ALT-0004</td><td>100</td><td>100</td><td>Full consolidation</td><td>India</td><td>Nagpur</td><td>Active</td><td>Transport</td><td>7.18</td><td>No</td></tr><tr class=""><td>ALT-0017</td><td>Altura Highway Concessions Pvt Ltd</td><td>2</td><td>ALT-0004</td><td>100</td><td>100</td><td>Full consolidation</td><td>India</td><td>Hyderabad</td><td>Active</td><td>Transport</td><td>0.87</td><td>No</td></tr><tr class="in"><td>ALT-0018</td><td>Altura Tolling Services Pvt Ltd</td><td>2</td><td>ALT-0004</td><td>100</td><td>100</td><td>Full consolidation</td><td>India</td><td>Nagpur</td><td>Active</td><td>Transport</td><td>53.69</td><td>Yes</td></tr><tr class="in"><td>ALT-0019</td><td>Altura Smart Metering Pvt Ltd</td><td>2</td><td>ALT-0005</td><td>100</td><td>74</td><td>Full consolidation</td><td>India</td><td>Noida</td><td>Active</td><td>Transmission &amp; Metering</td><td>85.91</td><td>Yes</td></tr><tr class="in"><td>ALT-0020</td><td>Altura Grid Solutions Pvt Ltd</td><td>2</td><td>ALT-0005</td><td>100</td><td>74</td><td>Full consolidation</td><td>India</td><td>Gurugram</td><td>Active</td><td>Transmission &amp; Metering</td><td>70.29</td><td>Yes</td></tr><tr class=""><td>ALT-0021</td><td>Altura Transmission Assets Pvt Ltd</td><td>2</td><td>ALT-0005</td><td>100</td><td>74</td><td>Full consolidation</td><td>India</td><td>Jaipur</td><td>Active</td><td>Transmission &amp; Metering</td><td>7.08</td><td>No</td></tr><tr class=""><td>ALT-0022</td><td>Altura Wastewater Pvt Ltd</td><td>2</td><td>ALT-0006</td><td>100</td><td>51</td><td>Full consolidation</td><td>India</td><td>Pune</td><td>Active</td><td>Urban Utilities</td><td>5.75</td><td>No</td></tr><tr class=""><td>ALT-0023</td><td>Altura Municipal Services Pvt Ltd</td><td>2</td><td>ALT-0006</td><td>100</td><td>51</td><td>Full consolidation</td><td>India</td><td>Nashik</td><td>Active</td><td>Urban Utilities</td><td>24.55</td><td>No</td></tr><tr class=""><td>ALT-0024</td><td>Altura Cold Chain Pvt Ltd</td><td>2</td><td>ALT-0007</td><td>100</td><td>100</td><td>Full consolidation</td><td>India</td><td>Bhiwandi</td><td>Active</td><td>Logistics</td><td>4.58</td><td>No</td></tr><tr class=""><td>ALT-0025</td><td>Altura Warehousing Assets Pvt Ltd</td><td>2</td><td>ALT-0007</td><td>100</td><td>100</td><td>Full consolidation</td><td>India</td><td>Bhiwandi</td><td>Active</td><td>Logistics</td><td>1.82</td><td>No</td></tr><tr class=""><td>ALT-0026</td><td>Altura Freight Forwarding Pvt Ltd</td><td>2</td><td>ALT-0007</td><td>100</td><td>100</td><td>Full consolidation</td><td>India</td><td>Navi Mumbai</td><td>Active</td><td>Logistics</td><td>3.37</td><td>No</td></tr><tr class=""><td>ALT-0027</td><td>Altura Solar Holdings Pvt Ltd</td><td>2</td><td>ALT-0008</td><td>100</td><td>100</td><td>Full consolidation</td><td>India</td><td>Mumbai</td><td>Active</td><td>Renewables</td><td>7.89</td><td>No</td></tr><tr class=""><td>ALT-0028</td><td>Altura Wind Holdings Pvt Ltd</td><td>2</td><td>ALT-0008</td><td>100</td><td>100</td><td>Full consolidation</td><td>India</td><td>Mumbai</td><td>Active</td><td>Renewables</td><td>3.82</td><td>No</td></tr><tr class=""><td>ALT-0029</td><td>Altura Hybrid &amp; Storage Pvt Ltd</td><td>2</td><td>ALT-0008</td><td>100</td><td>100</td><td>Full consolidation</td><td>India</td><td>Bengaluru</td><td>Active</td><td>Renewables</td><td>4.56</td><td>No</td></tr><tr class="in"><td>ALT-0030</td><td>Altura Green Energy Trading Pvt Ltd</td><td>2</td><td>ALT-0008</td><td>100</td><td>100</td><td>Full consolidation</td><td>India</td><td>Mumbai</td><td>Active</td><td>Renewables</td><td>64.01</td><td>Yes</td></tr><tr class=""><td>ALT-0031</td><td>Altura Renewable Energy Services Pvt Ltd</td><td>2</td><td>ALT-0008</td><td>100</td><td>100</td><td>Full consolidation</td><td>India</td><td>Mumbai</td><td>Active</td><td>Renewables</td><td>0.82</td><td>No</td></tr><tr class=""><td>ALT-0032</td><td>Altura Rooftop Solar Pvt Ltd</td><td>2</td><td>ALT-0008</td><td>74</td><td>74</td><td>Full consolidation</td><td>India</td><td>Bengaluru</td><td>Active</td><td>Renewables</td><td>4.82</td><td>No</td></tr><tr class=""><td>ALT-0033</td><td>Altura Energy Singapore Pte. Ltd.</td><td>2</td><td>ALT-0009</td><td>100</td><td>100</td><td>Full consolidation</td><td>Singapore</td><td>Singapore</td><td>Active</td><td>International</td><td>3.47</td><td>No</td></tr><tr class=""><td>ALT-0034</td><td>Altura Renewables UK Limited</td><td>2</td><td>ALT-0009</td><td>100</td><td>100</td><td>Full consolidation</td><td>United Kingdom</td><td>London</td><td>Active</td><td>International</td><td>8.55</td><td>No</td></tr><tr class=""><td>ALT-0035</td><td>Altura Infra USA, Inc.</td><td>2</td><td>ALT-0009</td><td>100</td><td>100</td><td>Full consolidation</td><td>United States</td><td>Wilmington</td><td>Active</td><td>International</td><td>5.48</td><td>No</td></tr><tr class=""><td>ALT-0036</td><td>Altura Middle East FZ-LLC</td><td>2</td><td>ALT-0009</td><td>100</td><td>100</td><td>Full consolidation</td><td>United Arab Emirates</td><td>Dubai</td><td>Active</td><td>International</td><td>1.64</td><td>No</td></tr><tr class=""><td>ALT-0037</td><td>Altura Australia Pty Ltd</td><td>2</td><td>ALT-0009</td><td>100</td><td>100</td><td>Full consolidation</td><td>Australia</td><td>Sydney</td><td>Active</td><td>International</td><td>2.09</td><td>No</td></tr><tr class=""><td>ALT-0038</td><td>Altura Deutschland GmbH</td><td>2</td><td>ALT-0009</td><td>100</td><td>100</td><td>Full consolidation</td><td>Germany</td><td>Frankfurt am Main</td><td>Active</td><td>International</td><td>6.77</td><td>No</td></tr><tr class=""><td>ALT-0039</td><td>Altura Mauritius Holdings Ltd</td><td>2</td><td>ALT-0009</td><td>100</td><td>100</td><td>Full consolidation</td><td>Mauritius</td><td>Ebène</td><td>Active</td><td>International</td><td>8.7</td><td>No</td></tr><tr class=""><td>ALT-0040</td><td>Altura Africa Holdings Limited</td><td>2</td><td>ALT-0009</td><td>100</td><td>100</td><td>Full consolidation</td><td>Kenya</td><td>Nairobi</td><td>Active</td><td>International</td><td>1.85</td><td>No</td></tr><tr class=""><td>ALT-0041</td><td>Altura Latam Holdings S.à r.l.</td><td>2</td><td>ALT-0009</td><td>100</td><td>100</td><td>Full consolidation</td><td>Luxembourg</td><td>Luxembourg</td><td>Active</td><td>International</td><td>7.9</td><td>No</td></tr><tr class=""><td>ALT-0042</td><td>Altura Asia Pacific Holdings Pte. Ltd.</td><td>2</td><td>ALT-0009</td><td>100</td><td>100</td><td>Full consolidation</td><td>Singapore</td><td>Singapore</td><td>Active</td><td>International</td><td>4.82</td><td>No</td></tr><tr class="in"><td>ALT-0043</td><td>Altura Technology Centre Pvt Ltd</td><td>2</td><td>ALT-0010</td><td>100</td><td>100</td><td>Full consolidation</td><td>India</td><td>Hyderabad</td><td>Active</td><td>Corporate &amp; Shared Services</td><td>56.62</td><td>Yes</td></tr><tr class="in"><td>ALT-0044</td><td>Altura Business Process Services Pvt Ltd</td><td>2</td><td>ALT-0010</td><td>100</td><td>100</td><td>Full consolidation</td><td>India</td><td>Coimbatore</td><td>Active</td><td>Corporate &amp; Shared Services</td><td>62.48</td><td>Yes</td></tr><tr class="in"><td>ALT-0045</td><td>Altura Infra Finance Pvt Ltd</td><td>2</td><td>ALT-0011</td><td>100</td><td>100</td><td>Full consolidation</td><td>India</td><td>Mumbai</td><td>Active</td><td>Corporate &amp; Shared Services</td><td>44.9</td><td>Yes</td></tr><tr class=""><td>ALT-0046</td><td>Altura Solar Rajasthan One Pvt Ltd</td><td>3</td><td>ALT-0012</td><td>100</td><td>100</td><td>Full consolidation</td><td>India</td><td>Jodhpur</td><td>Active</td><td>Renewables</td><td>1.29</td><td>No</td></tr><tr class=""><td>ALT-0047</td><td>Altura Solar Gujarat One Pvt Ltd</td><td>3</td><td>ALT-0012</td><td>100</td><td>100</td><td>Full consolidation</td><td>India</td><td>Patan</td><td>Active</td><td>Renewables</td><td>22.31</td><td>No</td></tr><tr class=""><td>ALT-0048</td><td>Altura Solar Karnataka One Pvt Ltd</td><td>3</td><td>ALT-0012</td><td>100</td><td>100</td><td>Full consolidation</td><td>India</td><td>Gadag</td><td>Active</td><td>Renewables</td><td>1.63</td><td>No</td></tr><tr class=""><td>ALT-0049</td><td>Altura Solar Madhya Pradesh One Pvt Ltd</td><td>3</td><td>ALT-0012</td><td>100</td><td>100</td><td>Full consolidation</td><td>India</td><td>Shajapur</td><td>Active</td><td>Renewables</td><td>7.29</td><td>No</td></tr><tr class=""><td>ALT-0050</td><td>Altura Solar Andhra Pradesh One Pvt Ltd</td><td>3</td><td>ALT-0012</td><td>100</td><td>100</td><td>Full consolidation</td><td>India</td><td>Kurnool</td><td>Active</td><td>Renewables</td><td>9.26</td><td>No</td></tr><tr class=""><td>ALT-0051</td><td>Altura Solar Telangana One Pvt Ltd</td><td>3</td><td>ALT-0012</td><td>100</td><td>100</td><td>Full consolidation</td><td>India</td><td>Nalgonda</td><td>Active</td><td>Renewables</td><td>17.18</td><td>No</td></tr><tr class=""><td>ALT-0052</td><td>Altura Solar Uttar Pradesh One Pvt Ltd</td><td>3</td><td>ALT-0012</td><td>100</td><td>100</td><td>Full consolidation</td><td>India</td><td>Noida</td><td>Active</td><td>Renewables</td><td>0.55</td><td>No</td></tr><tr class=""><td>ALT-0053</td><td>Altura Solar Maharashtra One Pvt Ltd</td><td>3</td><td>ALT-0012</td><td>100</td><td>100</td><td>Full consolidation</td><td>India</td><td>Osmanabad</td><td>Active</td><td>Renewables</td><td>7.94</td><td>No</td></tr><tr class=""><td>ALT-0054</td><td>Altura Solar Rajasthan Two Pvt Ltd</td><td>3</td><td>ALT-0012</td><td>100</td><td>100</td><td>Full consolidation</td><td>India</td><td>Jodhpur</td><td>Active</td><td>Renewables</td><td>7.5</td><td>No</td></tr><tr class=""><td>ALT-0055</td><td>Altura Solar Gujarat Two Pvt Ltd</td><td>3</td><td>ALT-0012</td><td>100</td><td>100</td><td>Full consolidation</td><td>India</td><td>Patan</td><td>Active</td><td>Renewables</td><td>0.31</td><td>No</td></tr><tr class=""><td>ALT-0056</td><td>Altura Solar Karnataka Two Pvt Ltd</td><td>3</td><td>ALT-0012</td><td>100</td><td>100</td><td>Full consolidation</td><td>India</td><td>Gadag</td><td>Active</td><td>Renewables</td><td>1.01</td><td>No</td></tr><tr class=""><td>ALT-0057</td><td>Altura Solar Madhya Pradesh Two Pvt Ltd</td><td>3</td><td>ALT-0012</td><td>100</td><td>100</td><td>Full consolidation</td><td>India</td><td>Shajapur</td><td>Active</td><td>Renewables</td><td>3.31</td><td>No</td></tr><tr class=""><td>ALT-0058</td><td>Altura Solar Park Madhya Pradesh One Pvt Ltd</td><td>3</td><td>ALT-0027</td><td>100</td><td>100</td><td>Full consolidation</td><td>India</td><td>Neemuch</td><td>Active</td><td>Renewables</td><td>2.73</td><td>No</td></tr><tr class=""><td>ALT-0059</td><td>Altura Solar Park Andhra Pradesh One Pvt Ltd</td><td>3</td><td>ALT-0027</td><td>100</td><td>100</td><td>Full consolidation</td><td>India</td><td>Kadapa</td><td>Active</td><td>Renewables</td><td>19.66</td><td>No</td></tr><tr class=""><td>ALT-0060</td><td>Altura Solar Park Telangana One Pvt Ltd</td><td>3</td><td>ALT-0027</td><td>100</td><td>100</td><td>Full consolidation</td><td>India</td><td>Warangal</td><td>Active</td><td>Renewables</td><td>1.01</td><td>No</td></tr><tr class=""><td>ALT-0061</td><td>Altura Solar Park Uttar Pradesh One Pvt Ltd</td><td>3</td><td>ALT-0027</td><td>100</td><td>100</td><td>Full consolidation</td><td>India</td><td>Jhansi</td><td>Active</td><td>Renewables</td><td>5.21</td><td>No</td></tr><tr class=""><td>ALT-0062</td><td>Altura Solar Park Maharashtra One Pvt Ltd</td><td>3</td><td>ALT-0027</td><td>100</td><td>100</td><td>Full consolidation</td><td>India</td><td>Dhule</td><td>Active</td><td>Renewables</td><td>3.93</td><td>No</td></tr><tr class=""><td>ALT-0063</td><td>Altura Solar Park Rajasthan One Pvt Ltd</td><td>3</td><td>ALT-0027</td><td>100</td><td>100</td><td>Full consolidation</td><td>India</td><td>Jaisalmer</td><td>Active</td><td>Renewables</td><td>2.27</td><td>No</td></tr><tr class=""><td>ALT-0064</td><td>Altura Solar Park Gujarat One Pvt Ltd</td><td>3</td><td>ALT-0027</td><td>100</td><td>100</td><td>Full consolidation</td><td>India</td><td>Rajkot</td><td>Active</td><td>Renewables</td><td>5.78</td><td>No</td></tr><tr class=""><td>ALT-0065</td><td>Altura Solar Park Karnataka One Pvt Ltd</td><td>3</td><td>ALT-0027</td><td>100</td><td>100</td><td>Full consolidation</td><td>India</td><td>Pavagada</td><td>Active</td><td>Renewables</td><td>18.31</td><td>No</td></tr><tr class=""><td>ALT-0066</td><td>Altura Solar Park Madhya Pradesh Two Pvt Ltd</td><td>3</td><td>ALT-0027</td><td>100</td><td>100</td><td>Full consolidation</td><td>India</td><td>Neemuch</td><td>Active</td><td>Renewables</td><td>14.48</td><td>No</td></tr><tr class=""><td>ALT-0067</td><td>Altura Solar Park Andhra Pradesh Two Pvt Ltd</td><td>3</td><td>ALT-0027</td><td>100</td><td>100</td><td>Full consolidation</td><td>India</td><td>Kadapa</td><td>Active</td><td>Renewables</td><td>1.86</td><td>No</td></tr><tr class="in"><td>ALT-0068</td><td>Altura Solar Park Telangana Two Pvt Ltd</td><td>3</td><td>ALT-0027</td><td>100</td><td>100</td><td>Full consolidation</td><td>India</td><td>Warangal</td><td>Active</td><td>Renewables</td><td>29.68</td><td>Yes</td></tr><tr class=""><td>ALT-0069</td><td>Altura Solar Park Uttar Pradesh Two Pvt Ltd</td><td>3</td><td>ALT-0027</td><td>100</td><td>100</td><td>Full consolidation</td><td>India</td><td>Jhansi</td><td>Active</td><td>Renewables</td><td>11.64</td><td>No</td></tr><tr class=""><td>ALT-0070</td><td>Altura Wind Tamil Nadu One Pvt Ltd</td><td>3</td><td>ALT-0014</td><td>100</td><td>100</td><td>Full consolidation</td><td>India</td><td>Tuticorin</td><td>Active</td><td>Renewables</td><td>0.34</td><td>No</td></tr><tr class=""><td>ALT-0071</td><td>Altura Wind Gujarat One Pvt Ltd</td><td>3</td><td>ALT-0014</td><td>100</td><td>100</td><td>Full consolidation</td><td>India</td><td>Patan</td><td>Active</td><td>Renewables</td><td>3.08</td><td>No</td></tr><tr class=""><td>ALT-0072</td><td>Altura Wind Karnataka One Pvt Ltd</td><td>3</td><td>ALT-0014</td><td>100</td><td>100</td><td>Full consolidation</td><td>India</td><td>Gadag</td><td>Active</td><td>Renewables</td><td>1.9</td><td>No</td></tr><tr class=""><td>ALT-0073</td><td>Altura Wind Maharashtra One Pvt Ltd</td><td>3</td><td>ALT-0014</td><td>100</td><td>100</td><td>Full consolidation</td><td>India</td><td>Osmanabad</td><td>Active</td><td>Renewables</td><td>2.4</td><td>No</td></tr><tr class=""><td>ALT-0074</td><td>Altura Wind Andhra Pradesh One Pvt Ltd</td><td>3</td><td>ALT-0014</td><td>100</td><td>100</td><td>Full consolidation</td><td>India</td><td>Kurnool</td><td>Active</td><td>Renewables</td><td>4.32</td><td>No</td></tr><tr class=""><td>ALT-0075</td><td>Altura Wind Rajasthan One Pvt Ltd</td><td>3</td><td>ALT-0014</td><td>100</td><td>100</td><td>Full consolidation</td><td>India</td><td>Bikaner</td><td>Active</td><td>Renewables</td><td>6.23</td><td>No</td></tr><tr class=""><td>ALT-0076</td><td>Altura Wind Tamil Nadu Two Pvt Ltd</td><td>3</td><td>ALT-0014</td><td>100</td><td>100</td><td>Full consolidation</td><td>India</td><td>Coimbatore</td><td>Active</td><td>Renewables</td><td>1.94</td><td>No</td></tr><tr class=""><td>ALT-0077</td><td>Altura Wind Gujarat Two Pvt Ltd</td><td>3</td><td>ALT-0014</td><td>100</td><td>100</td><td>Full consolidation</td><td>India</td><td>Rajkot</td><td>Active</td><td>Renewables</td><td>2.8</td><td>No</td></tr><tr class=""><td>ALT-0078</td><td>Altura Wind Karnataka Two Pvt Ltd</td><td>3</td><td>ALT-0014</td><td>100</td><td>100</td><td>Full consolidation</td><td>India</td><td>Pavagada</td><td>Active</td><td>Renewables</td><td>4.54</td><td>No</td></tr><tr class="in"><td>ALT-0079</td><td>Altura Wind Maharashtra Two Pvt Ltd</td><td>3</td><td>ALT-0014</td><td>100</td><td>100</td><td>Full consolidation</td><td>India</td><td>Dhule</td><td>Active</td><td>Renewables</td><td>26.56</td><td>Yes</td></tr><tr class=""><td>ALT-0080</td><td>Altura Windfarm Karnataka One Pvt Ltd</td><td>3</td><td>ALT-0028</td><td>100</td><td>100</td><td>Full consolidation</td><td>India</td><td>Gadag</td><td>Active</td><td>Renewables</td><td>5.65</td><td>No</td></tr><tr class=""><td>ALT-0081</td><td>Altura Windfarm Maharashtra One Pvt Ltd</td><td>3</td><td>ALT-0028</td><td>100</td><td>100</td><td>Full consolidation</td><td>India</td><td>Osmanabad</td><td>Active</td><td>Renewables</td><td>0.67</td><td>No</td></tr><tr class=""><td>ALT-0082</td><td>Altura Windfarm Andhra Pradesh One Pvt Ltd</td><td>3</td><td>ALT-0028</td><td>100</td><td>100</td><td>Full consolidation</td><td>India</td><td>Kurnool</td><td>Active</td><td>Renewables</td><td>5.96</td><td>No</td></tr><tr class=""><td>ALT-0083</td><td>Altura Windfarm Rajasthan One Pvt Ltd</td><td>3</td><td>ALT-0028</td><td>100</td><td>100</td><td>Full consolidation</td><td>India</td><td>Bikaner</td><td>Active</td><td>Renewables</td><td>7.84</td><td>No</td></tr><tr class=""><td>ALT-0084</td><td>Altura Windfarm Tamil Nadu One Pvt Ltd</td><td>3</td><td>ALT-0028</td><td>100</td><td>100</td><td>Full consolidation</td><td>India</td><td>Coimbatore</td><td>Active</td><td>Renewables</td><td>6.61</td><td>No</td></tr><tr class=""><td>ALT-0085</td><td>Altura Windfarm Gujarat One Pvt Ltd</td><td>3</td><td>ALT-0028</td><td>100</td><td>100</td><td>Full consolidation</td><td>India</td><td>Rajkot</td><td>Active</td><td>Renewables</td><td>7.03</td><td>No</td></tr><tr class=""><td>ALT-0086</td><td>Altura Windfarm Karnataka Two Pvt Ltd</td><td>3</td><td>ALT-0028</td><td>100</td><td>100</td><td>Full consolidation</td><td>India</td><td>Pavagada</td><td>Active</td><td>Renewables</td><td>2.8</td><td>No</td></tr><tr class=""><td>ALT-0087</td><td>Altura Windfarm Maharashtra Two Pvt Ltd</td><td>3</td><td>ALT-0028</td><td>100</td><td>100</td><td>Full consolidation</td><td>India</td><td>Dhule</td><td>Active</td><td>Renewables</td><td>2.24</td><td>No</td></tr><tr class=""><td>ALT-0088</td><td>Altura Hybrid Telangana One Pvt Ltd</td><td>3</td><td>ALT-0029</td><td>100</td><td>100</td><td>Full consolidation</td><td>India</td><td>Warangal</td><td>Active</td><td>Renewables</td><td>5.55</td><td>No</td></tr><tr class=""><td>ALT-0089</td><td>Altura Hybrid Uttar Pradesh One Pvt Ltd</td><td>3</td><td>ALT-0029</td><td>100</td><td>100</td><td>Full consolidation</td><td>India</td><td>Jhansi</td><td>Active</td><td>Renewables</td><td>1.98</td><td>No</td></tr><tr class=""><td>ALT-0090</td><td>Altura Hybrid Maharashtra One Pvt Ltd</td><td>3</td><td>ALT-0029</td><td>100</td><td>100</td><td>Full consolidation</td><td>India</td><td>Dhule</td><td>Active</td><td>Renewables</td><td>0.92</td><td>No</td></tr><tr class=""><td>ALT-0091</td><td>Altura Hybrid Rajasthan One Pvt Ltd</td><td>3</td><td>ALT-0029</td><td>100</td><td>100</td><td>Full consolidation</td><td>India</td><td>Jaisalmer</td><td>Active</td><td>Renewables</td><td>3.3</td><td>No</td></tr><tr class="in"><td>ALT-0092</td><td>Altura Hybrid Gujarat One Pvt Ltd</td><td>3</td><td>ALT-0029</td><td>100</td><td>100</td><td>Full consolidation</td><td>India</td><td>Rajkot</td><td>Active</td><td>Renewables</td><td>34.31</td><td>Yes</td></tr><tr class=""><td>ALT-0093</td><td>Altura Hybrid Karnataka One Pvt Ltd</td><td>3</td><td>ALT-0029</td><td>100</td><td>100</td><td>Full consolidation</td><td>India</td><td>Pavagada</td><td>Active</td><td>Renewables</td><td>3.06</td><td>No</td></tr><tr class=""><td>ALT-0094</td><td>Altura Hybrid Madhya Pradesh One Pvt Ltd</td><td>3</td><td>ALT-0029</td><td>100</td><td>100</td><td>Full consolidation</td><td>India</td><td>Neemuch</td><td>Active</td><td>Renewables</td><td>22.82</td><td>No</td></tr><tr class=""><td>ALT-0095</td><td>Altura Hybrid Andhra Pradesh One Pvt Ltd</td><td>3</td><td>ALT-0029</td><td>100</td><td>100</td><td>Full consolidation</td><td>India</td><td>Kadapa</td><td>Active</td><td>Renewables</td><td>8.43</td><td>No</td></tr><tr class=""><td>ALT-0096</td><td>Altura Rooftop Bengaluru Pvt Ltd</td><td>3</td><td>ALT-0032</td><td>100</td><td>74</td><td>Full consolidation</td><td>India</td><td>Bengaluru</td><td>Active</td><td>Renewables</td><td>0.95</td><td>No</td></tr><tr class=""><td>ALT-0097</td><td>Altura Rooftop Pune Pvt Ltd</td><td>3</td><td>ALT-0032</td><td>100</td><td>74</td><td>Full consolidation</td><td>India</td><td>Pune</td><td>Active</td><td>Renewables</td><td>7.59</td><td>No</td></tr><tr class=""><td>ALT-0098</td><td>Altura Rooftop Chennai Pvt Ltd</td><td>3</td><td>ALT-0032</td><td>100</td><td>74</td><td>Full consolidation</td><td>India</td><td>Coimbatore</td><td>Active</td><td>Renewables</td><td>10.68</td><td>No</td></tr><tr class=""><td>ALT-0099</td><td>Altura Rooftop Gurugram Pvt Ltd</td><td>3</td><td>ALT-0032</td><td>100</td><td>74</td><td>Full consolidation</td><td>India</td><td>Gurugram</td><td>Active</td><td>Renewables</td><td>8.53</td><td>No</td></tr><tr class=""><td>ALT-0100</td><td>Altura Rooftop Ahmedabad Pvt Ltd</td><td>3</td><td>ALT-0032</td><td>100</td><td>74</td><td>Full consolidation</td><td>India</td><td>Rajkot</td><td>Active</td><td>Renewables</td><td>2.11</td><td>No</td></tr><tr class=""><td>ALT-0101</td><td>Altura Rooftop Hyderabad Pvt Ltd</td><td>3</td><td>ALT-0032</td><td>100</td><td>74</td><td>Full consolidation</td><td>India</td><td>Hyderabad</td><td>Active</td><td>Renewables</td><td>1.48</td><td>No</td></tr><tr class=""><td>ALT-0102</td><td>Altura Nagpur Betul Tollway Pvt Ltd</td><td>3</td><td>ALT-0016</td><td>100</td><td>100</td><td>Full consolidation</td><td>India</td><td>Nagpur</td><td>Active</td><td>Transport</td><td>9.04</td><td>No</td></tr><tr class=""><td>ALT-0103</td><td>Altura Solapur Bijapur Tollway Pvt Ltd</td><td>3</td><td>ALT-0016</td><td>100</td><td>100</td><td>Full consolidation</td><td>India</td><td>Solapur</td><td>Active</td><td>Transport</td><td>7.28</td><td>No</td></tr><tr class=""><td>ALT-0104</td><td>Altura Rewa Katni Tollway Pvt Ltd</td><td>3</td><td>ALT-0016</td><td>100</td><td>100</td><td>Full consolidation</td><td>India</td><td>Rewa</td><td>Active</td><td>Transport</td><td>16.38</td><td>No</td></tr><tr class=""><td>ALT-0105</td><td>Altura Hisar Rewari Tollway Pvt Ltd</td><td>3</td><td>ALT-0016</td><td>100</td><td>100</td><td>Full consolidation</td><td>India</td><td>Hisar</td><td>Active</td><td>Transport</td><td>2.08</td><td>No</td></tr><tr class="in"><td>ALT-0106</td><td>Altura Cuttack Angul Tollway Pvt Ltd</td><td>3</td><td>ALT-0016</td><td>100</td><td>100</td><td>Full consolidation</td><td>India</td><td>Cuttack</td><td>Active</td><td>Transport</td><td>30.45</td><td>Yes</td></tr><tr class=""><td>ALT-0107</td><td>Altura Kharagpur Balasore Tollway Pvt Ltd</td><td>3</td><td>ALT-0016</td><td>100</td><td>100</td><td>Full consolidation</td><td>India</td><td>Kharagpur</td><td>Active</td><td>Transport</td><td>3.75</td><td>No</td></tr><tr class=""><td>ALT-0108</td><td>Altura Kurnool Anantapur Tollway Pvt Ltd</td><td>3</td><td>ALT-0016</td><td>100</td><td>100</td><td>Full consolidation</td><td>India</td><td>Kurnool</td><td>Active</td><td>Transport</td><td>8.83</td><td>No</td></tr><tr class=""><td>ALT-0109</td><td>Altura Jhansi Kanpur Tollway Pvt Ltd</td><td>3</td><td>ALT-0016</td><td>100</td><td>100</td><td>Full consolidation</td><td>India</td><td>Jhansi</td><td>Active</td><td>Transport</td><td>18.95</td><td>No</td></tr><tr class=""><td>ALT-0110</td><td>Altura Bathinda Ludhiana Tollway Pvt Ltd</td><td>3</td><td>ALT-0016</td><td>100</td><td>100</td><td>Full consolidation</td><td>India</td><td>Bathinda</td><td>Active</td><td>Transport</td><td>17.34</td><td>No</td></tr><tr class=""><td>ALT-0111</td><td>Altura Ranchi Bokaro Tollway Pvt Ltd</td><td>3</td><td>ALT-0016</td><td>100</td><td>100</td><td>Full consolidation</td><td>India</td><td>Ranchi</td><td>Active</td><td>Transport</td><td>16.26</td><td>No</td></tr><tr class=""><td>ALT-0112</td><td>Altura Guwahati Jorhat Tollway Pvt Ltd</td><td>3</td><td>ALT-0016</td><td>100</td><td>100</td><td>Full consolidation</td><td>India</td><td>Guwahati</td><td>Active</td><td>Transport</td><td>8.14</td><td>No</td></tr><tr class=""><td>ALT-0113</td><td>Altura Palakkad Kochi Highways Pvt Ltd</td><td>3</td><td>ALT-0017</td><td>100</td><td>100</td><td>Full consolidation</td><td>India</td><td>Palakkad</td><td>Active</td><td>Transport</td><td>20.83</td><td>No</td></tr><tr class=""><td>ALT-0114</td><td>Altura Raipur Bilaspur Highways Pvt Ltd</td><td>3</td><td>ALT-0017</td><td>100</td><td>100</td><td>Full consolidation</td><td>India</td><td>Raipur</td><td>Active</td><td>Transport</td><td>17.66</td><td>No</td></tr><tr class=""><td>ALT-0115</td><td>Altura Haridwar Rudrapur Highways Pvt Ltd</td><td>3</td><td>ALT-0017</td><td>100</td><td>100</td><td>Full consolidation</td><td>India</td><td>Haridwar</td><td>Active</td><td>Transport</td><td>8.18</td><td>No</td></tr><tr class=""><td>ALT-0116</td><td>Altura Patna Gaya Highways Pvt Ltd</td><td>3</td><td>ALT-0017</td><td>100</td><td>100</td><td>Full consolidation</td><td>India</td><td>Patna</td><td>Active</td><td>Transport</td><td>2.65</td><td>No</td></tr><tr class=""><td>ALT-0117</td><td>Altura Warangal Nalgonda Highways Pvt Ltd</td><td>3</td><td>ALT-0017</td><td>100</td><td>100</td><td>Full consolidation</td><td>India</td><td>Warangal</td><td>Active</td><td>Transport</td><td>3.75</td><td>No</td></tr><tr class="in"><td>ALT-0118</td><td>Altura Dhule Sangli Highways Pvt Ltd</td><td>3</td><td>ALT-0017</td><td>100</td><td>100</td><td>Full consolidation</td><td>India</td><td>Dhule</td><td>Active</td><td>Transport</td><td>37.81</td><td>Yes</td></tr><tr class=""><td>ALT-0119</td><td>Altura Karur Tuticorin Highways Pvt Ltd</td><td>3</td><td>ALT-0017</td><td>100</td><td>100</td><td>Full consolidation</td><td>India</td><td>Karur</td><td>Active</td><td>Transport</td><td>10.29</td><td>No</td></tr><tr class=""><td>ALT-0120</td><td>Altura Bikaner Jodhpur Highways Pvt Ltd</td><td>3</td><td>ALT-0017</td><td>100</td><td>100</td><td>Full consolidation</td><td>India</td><td>Bikaner</td><td>Active</td><td>Transport</td><td>10.16</td><td>No</td></tr><tr class=""><td>ALT-0121</td><td>Altura Durgapur Siliguri Highways Pvt Ltd</td><td>3</td><td>ALT-0017</td><td>100</td><td>100</td><td>Full consolidation</td><td>India</td><td>Durgapur</td><td>Active</td><td>Transport</td><td>3.77</td><td>No</td></tr><tr class=""><td>ALT-0122</td><td>Altura Jaipur Bhadla Transco Pvt Ltd</td><td>3</td><td>ALT-0021</td><td>100</td><td>74</td><td>Full consolidation</td><td>India</td><td>Jaipur</td><td>Active</td><td>Transmission &amp; Metering</td><td>1.12</td><td>No</td></tr><tr class=""><td>ALT-0123</td><td>Altura Hisar Panipat Transco Pvt Ltd</td><td>3</td><td>ALT-0021</td><td>100</td><td>74</td><td>Full consolidation</td><td>India</td><td>Hisar</td><td>Active</td><td>Transmission &amp; Metering</td><td>9.37</td><td>No</td></tr><tr class=""><td>ALT-0124</td><td>Altura Rewa Neemuch Transco Pvt Ltd</td><td>3</td><td>ALT-0021</td><td>100</td><td>74</td><td>Full consolidation</td><td>India</td><td>Rewa</td><td>Active</td><td>Transmission &amp; Metering</td><td>5.4</td><td>No</td></tr><tr class="in"><td>ALT-0125</td><td>Altura Kurnool Nellore Transco Pvt Ltd</td><td>3</td><td>ALT-0021</td><td>100</td><td>74</td><td>Full consolidation</td><td>India</td><td>Kurnool</td><td>Active</td><td>Transmission &amp; Metering</td><td>32.9</td><td>Yes</td></tr><tr class=""><td>ALT-0126</td><td>Altura Ballari Gadag Transco Pvt Ltd</td><td>3</td><td>ALT-0021</td><td>100</td><td>74</td><td>Full consolidation</td><td>India</td><td>Ballari</td><td>Active</td><td>Transmission &amp; Metering</td><td>6.78</td><td>No</td></tr><tr class=""><td>ALT-0127</td><td>Altura Angul Sambalpur Transco Pvt Ltd</td><td>3</td><td>ALT-0021</td><td>100</td><td>74</td><td>Full consolidation</td><td>India</td><td>Angul</td><td>Active</td><td>Transmission &amp; Metering</td><td>0.42</td><td>No</td></tr><tr class=""><td>ALT-0128</td><td>Altura Jhansi Mirzapur Transco Pvt Ltd</td><td>3</td><td>ALT-0021</td><td>100</td><td>74</td><td>Full consolidation</td><td>India</td><td>Jhansi</td><td>Active</td><td>Transmission &amp; Metering</td><td>7.66</td><td>No</td></tr><tr class=""><td>ALT-0129</td><td>Altura Patan Rajkot Transco Pvt Ltd</td><td>3</td><td>ALT-0021</td><td>100</td><td>74</td><td>Full consolidation</td><td>India</td><td>Patan</td><td>Active</td><td>Transmission &amp; Metering</td><td>5.05</td><td>No</td></tr><tr class=""><td>ALT-0130</td><td>Altura Warangal Mahbubnagar Transco Pvt Ltd</td><td>3</td><td>ALT-0021</td><td>100</td><td>74</td><td>Full consolidation</td><td>India</td><td>Warangal</td><td>Active</td><td>Transmission &amp; Metering</td><td>6.56</td><td>No</td></tr><tr class="in"><td>ALT-0131</td><td>Altura Korba Raipur Transco Pvt Ltd</td><td>3</td><td>ALT-0021</td><td>100</td><td>74</td><td>Full consolidation</td><td>India</td><td>Korba</td><td>Active</td><td>Transmission &amp; Metering</td><td>35.53</td><td>Yes</td></tr><tr class=""><td>ALT-0132</td><td>Altura Bokaro Dhanbad Transco Pvt Ltd</td><td>3</td><td>ALT-0021</td><td>100</td><td>74</td><td>Full consolidation</td><td>India</td><td>Bokaro</td><td>Active</td><td>Transmission &amp; Metering</td><td>17.2</td><td>No</td></tr><tr class=""><td>ALT-0133</td><td>Altura Kannur Palakkad Transco Pvt Ltd</td><td>3</td><td>ALT-0021</td><td>100</td><td>74</td><td>Full consolidation</td><td>India</td><td>Kannur</td><td>Active</td><td>Transmission &amp; Metering</td><td>9.12</td><td>No</td></tr><tr class="in"><td>ALT-0134</td><td>Altura Metering Noida Pvt Ltd</td><td>3</td><td>ALT-0019</td><td>100</td><td>74</td><td>Full consolidation</td><td>India</td><td>Noida</td><td>Active</td><td>Transmission &amp; Metering</td><td>26.88</td><td>Yes</td></tr><tr class=""><td>ALT-0135</td><td>Altura Metering Ghaziabad Pvt Ltd</td><td>3</td><td>ALT-0019</td><td>100</td><td>74</td><td>Full consolidation</td><td>India</td><td>Ghaziabad</td><td>Active</td><td>Transmission &amp; Metering</td><td>5.63</td><td>No</td></tr><tr class=""><td>ALT-0136</td><td>Altura Metering Kanpur Pvt Ltd</td><td>3</td><td>ALT-0019</td><td>100</td><td>74</td><td>Full consolidation</td><td>India</td><td>Kanpur</td><td>Active</td><td>Transmission &amp; Metering</td><td>8.97</td><td>No</td></tr><tr class=""><td>ALT-0137</td><td>Altura Metering Varanasi Pvt Ltd</td><td>3</td><td>ALT-0019</td><td>100</td><td>74</td><td>Full consolidation</td><td>India</td><td>Varanasi</td><td>Active</td><td>Transmission &amp; Metering</td><td>11.81</td><td>No</td></tr><tr class=""><td>ALT-0138</td><td>Altura Metering Jaipur Pvt Ltd</td><td>3</td><td>ALT-0019</td><td>100</td><td>74</td><td>Full consolidation</td><td>India</td><td>Jaipur</td><td>Active</td><td>Transmission &amp; Metering</td><td>2.51</td><td>No</td></tr><tr class=""><td>ALT-0139</td><td>Altura Metering Kota Pvt Ltd</td><td>3</td><td>ALT-0019</td><td>100</td><td>74</td><td>Full consolidation</td><td>India</td><td>Kota</td><td>Active</td><td>Transmission &amp; Metering</td><td>7.77</td><td>No</td></tr><tr class=""><td>ALT-0140</td><td>Altura Metering Gurugram Pvt Ltd</td><td>3</td><td>ALT-0019</td><td>100</td><td>74</td><td>Full consolidation</td><td>India</td><td>Gurugram</td><td>Active</td><td>Transmission &amp; Metering</td><td>1.7</td><td>No</td></tr><tr class=""><td>ALT-0141</td><td>Altura Metering Faridabad Pvt Ltd</td><td>3</td><td>ALT-0019</td><td>100</td><td>74</td><td>Full consolidation</td><td>India</td><td>Faridabad</td><td>Active</td><td>Transmission &amp; Metering</td><td>8.25</td><td>No</td></tr><tr class=""><td>ALT-0142</td><td>Altura Water Pune Pvt Ltd</td><td>3</td><td>ALT-0022</td><td>100</td><td>51</td><td>Full consolidation</td><td>India</td><td>Pune</td><td>Active</td><td>Urban Utilities</td><td>12.51</td><td>No</td></tr><tr class=""><td>ALT-0143</td><td>Altura Water Nashik Pvt Ltd</td><td>3</td><td>ALT-0022</td><td>100</td><td>51</td><td>Full consolidation</td><td>India</td><td>Nashik</td><td>Active</td><td>Urban Utilities</td><td>1.35</td><td>No</td></tr><tr class=""><td>ALT-0144</td><td>Altura Water Indore Pvt Ltd</td><td>3</td><td>ALT-0022</td><td>100</td><td>51</td><td>Full consolidation</td><td>India</td><td>Indore</td><td>Active</td><td>Urban Utilities</td><td>9.29</td><td>No</td></tr><tr class=""><td>ALT-0145</td><td>Altura Water Surat Pvt Ltd</td><td>3</td><td>ALT-0022</td><td>100</td><td>51</td><td>Full consolidation</td><td>India</td><td>Surat</td><td>Active</td><td>Urban Utilities</td><td>10.82</td><td>No</td></tr><tr class=""><td>ALT-0146</td><td>Altura Water Coimbatore Pvt Ltd</td><td>3</td><td>ALT-0022</td><td>100</td><td>51</td><td>Full consolidation</td><td>India</td><td>Coimbatore</td><td>Active</td><td>Urban Utilities</td><td>1.84</td><td>No</td></tr><tr class=""><td>ALT-0147</td><td>Altura Water Mysuru Pvt Ltd</td><td>3</td><td>ALT-0023</td><td>100</td><td>51</td><td>Full consolidation</td><td>India</td><td>Mysuru</td><td>Active</td><td>Urban Utilities</td><td>11.22</td><td>No</td></tr><tr class="in"><td>ALT-0148</td><td>Altura Water Bhopal Pvt Ltd</td><td>3</td><td>ALT-0023</td><td>100</td><td>51</td><td>Full consolidation</td><td>India</td><td>Bhopal</td><td>Active</td><td>Urban Utilities</td><td>46.27</td><td>Yes</td></tr><tr class=""><td>ALT-0149</td><td>Altura Water Vadodara Pvt Ltd</td><td>3</td><td>ALT-0023</td><td>100</td><td>51</td><td>Full consolidation</td><td>India</td><td>Vadodara</td><td>Active</td><td>Urban Utilities</td><td>3.88</td><td>No</td></tr><tr class="in"><td>ALT-0150</td><td>Altura Logistics Park Bhiwandi Pvt Ltd</td><td>3</td><td>ALT-0025</td><td>100</td><td>100</td><td>Full consolidation</td><td>India</td><td>Bhiwandi</td><td>Active</td><td>Logistics</td><td>31.61</td><td>Yes</td></tr><tr class=""><td>ALT-0151</td><td>Altura Logistics Park Chakan Pvt Ltd</td><td>3</td><td>ALT-0025</td><td>100</td><td>100</td><td>Full consolidation</td><td>India</td><td>Chakan</td><td>Active</td><td>Logistics</td><td>0.62</td><td>No</td></tr><tr class=""><td>ALT-0152</td><td>Altura Logistics Park Farukhnagar Pvt Ltd</td><td>3</td><td>ALT-0025</td><td>100</td><td>100</td><td>Full consolidation</td><td>India</td><td>Farukhnagar</td><td>Active</td><td>Logistics</td><td>5.98</td><td>No</td></tr><tr class=""><td>ALT-0153</td><td>Altura Logistics Park Hosur Pvt Ltd</td><td>3</td><td>ALT-0025</td><td>100</td><td>100</td><td>Full consolidation</td><td>India</td><td>Hosur</td><td>Active</td><td>Logistics</td><td>11.29</td><td>No</td></tr><tr class=""><td>ALT-0154</td><td>Altura Logistics Park Sriperumbudur Pvt Ltd</td><td>3</td><td>ALT-0025</td><td>100</td><td>100</td><td>Full consolidation</td><td>India</td><td>Sriperumbudur</td><td>Active</td><td>Logistics</td><td>15.77</td><td>No</td></tr><tr class=""><td>ALT-0155</td><td>Altura Logistics Park Luhari Pvt Ltd</td><td>3</td><td>ALT-0025</td><td>100</td><td>100</td><td>Full consolidation</td><td>India</td><td>Luhari</td><td>Active</td><td>Logistics</td><td>5.53</td><td>No</td></tr><tr class=""><td>ALT-0156</td><td>Altura Logistics Park Panvel Pvt Ltd</td><td>3</td><td>ALT-0025</td><td>100</td><td>100</td><td>Full consolidation</td><td>India</td><td>Panvel</td><td>Active</td><td>Logistics</td><td>4.97</td><td>No</td></tr><tr class=""><td>ALT-0157</td><td>Altura Logistics Park Nagpur Pvt Ltd</td><td>3</td><td>ALT-0025</td><td>100</td><td>100</td><td>Full consolidation</td><td>India</td><td>Nagpur</td><td>Active</td><td>Logistics</td><td>5.64</td><td>No</td></tr><tr class=""><td>ALT-0158</td><td>Altura Logistics Park Guwahati Pvt Ltd</td><td>3</td><td>ALT-0025</td><td>100</td><td>100</td><td>Full consolidation</td><td>India</td><td>Guwahati</td><td>Active</td><td>Logistics</td><td>1.61</td><td>No</td></tr><tr class=""><td>ALT-0159</td><td>Altura Logistics Park Kolkata Pvt Ltd</td><td>3</td><td>ALT-0025</td><td>100</td><td>100</td><td>Full consolidation</td><td>India</td><td>Kolkata</td><td>Active</td><td>Logistics</td><td>4.31</td><td>No</td></tr><tr class=""><td>ALT-0160</td><td>Altura Logistics Park Ahmedabad Pvt Ltd</td><td>3</td><td>ALT-0025</td><td>100</td><td>100</td><td>Full consolidation</td><td>India</td><td>Ahmedabad</td><td>Active</td><td>Logistics</td><td>4.75</td><td>No</td></tr><tr class=""><td>ALT-0161</td><td>Altura Logistics Park Lucknow Pvt Ltd</td><td>3</td><td>ALT-0025</td><td>100</td><td>100</td><td>Full consolidation</td><td>India</td><td>Lucknow</td><td>Active</td><td>Logistics</td><td>3.36</td><td>No</td></tr><tr class=""><td>ALT-0162</td><td>Altura Cold Storage Nashik Pvt Ltd</td><td>3</td><td>ALT-0024</td><td>100</td><td>100</td><td>Full consolidation</td><td>India</td><td>Nashik</td><td>Active</td><td>Logistics</td><td>4.28</td><td>No</td></tr><tr class=""><td>ALT-0163</td><td>Altura Cold Storage Kochi Pvt Ltd</td><td>3</td><td>ALT-0024</td><td>100</td><td>100</td><td>Full consolidation</td><td>India</td><td>Kochi</td><td>Active</td><td>Logistics</td><td>4.33</td><td>No</td></tr><tr class=""><td>ALT-0164</td><td>Altura Cold Storage Sonipat Pvt Ltd</td><td>3</td><td>ALT-0024</td><td>100</td><td>100</td><td>Full consolidation</td><td>India</td><td>Sonipat</td><td>Active</td><td>Logistics</td><td>15.15</td><td>No</td></tr><tr class=""><td>ALT-0165</td><td>Altura Cold Storage Guntur Pvt Ltd</td><td>3</td><td>ALT-0024</td><td>100</td><td>100</td><td>Full consolidation</td><td>India</td><td>Guntur</td><td>Active</td><td>Logistics</td><td>1.48</td><td>No</td></tr><tr class=""><td>ALT-0166</td><td>Altura Cold Storage Jalandhar Pvt Ltd</td><td>3</td><td>ALT-0024</td><td>100</td><td>100</td><td>Full consolidation</td><td>India</td><td>Jalandhar</td><td>Active</td><td>Logistics</td><td>4.28</td><td>No</td></tr><tr class="in"><td>ALT-0167</td><td>Altura Energy Trading Pte. Ltd.</td><td>3</td><td>ALT-0033</td><td>100</td><td>100</td><td>Full consolidation</td><td>Singapore</td><td>Singapore</td><td>Active</td><td>International</td><td>29.73</td><td>Yes</td></tr><tr class=""><td>ALT-0168</td><td>Altura Malaysia Sdn. Bhd.</td><td>3</td><td>ALT-0033</td><td>100</td><td>100</td><td>Full consolidation</td><td>Malaysia</td><td>Kuala Lumpur</td><td>Active</td><td>International</td><td>22.13</td><td>No</td></tr><tr class=""><td>ALT-0169</td><td>PT Altura Energi Indonesia</td><td>3</td><td>ALT-0033</td><td>100</td><td>100</td><td>Full consolidation</td><td>Indonesia</td><td>Jakarta</td><td>Active</td><td>International</td><td>3.34</td><td>No</td></tr><tr class=""><td>ALT-0170</td><td>Altura Vietnam Company Limited</td><td>3</td><td>ALT-0033</td><td>100</td><td>100</td><td>Full consolidation</td><td>Vietnam</td><td>Ho Chi Minh City</td><td>Active</td><td>International</td><td>12.8</td><td>No</td></tr><tr class=""><td>ALT-0171</td><td>Altura Renewables Scotland Limited</td><td>3</td><td>ALT-0034</td><td>100</td><td>100</td><td>Full consolidation</td><td>United Kingdom</td><td>Glasgow</td><td>Active</td><td>International</td><td>3.31</td><td>No</td></tr><tr class=""><td>ALT-0172</td><td>Altura Grid Services UK Limited</td><td>3</td><td>ALT-0034</td><td>100</td><td>100</td><td>Full consolidation</td><td>United Kingdom</td><td>Manchester</td><td>Active</td><td>International</td><td>16.27</td><td>No</td></tr><tr class="in"><td>ALT-0173</td><td>Altura Renewables Ireland DAC</td><td>3</td><td>ALT-0034</td><td>100</td><td>100</td><td>Full consolidation</td><td>Ireland</td><td>Dublin</td><td>Active</td><td>International</td><td>81.71</td><td>Yes</td></tr><tr class=""><td>ALT-0174</td><td>Altura Solar US, LLC</td><td>3</td><td>ALT-0035</td><td>100</td><td>100</td><td>Full consolidation</td><td>United States</td><td>Austin</td><td>Active</td><td>International</td><td>5.69</td><td>No</td></tr><tr class="in"><td>ALT-0175</td><td>Altura Infra Services USA, Inc.</td><td>3</td><td>ALT-0035</td><td>100</td><td>100</td><td>Full consolidation</td><td>United States</td><td>Denver</td><td>Active</td><td>International</td><td>84.5</td><td>Yes</td></tr><tr class="in"><td>ALT-0176</td><td>Altura Canada Inc.</td><td>3</td><td>ALT-0035</td><td>100</td><td>100</td><td>Full consolidation</td><td>Canada</td><td>Toronto</td><td>Active</td><td>International</td><td>89.56</td><td>Yes</td></tr><tr class="in"><td>ALT-0177</td><td>Altura México, S.A. de C.V.</td><td>3</td><td>ALT-0035</td><td>100</td><td>100</td><td>Full consolidation</td><td>Mexico</td><td>Monterrey</td><td>Active</td><td>International</td><td>29</td><td>Yes</td></tr><tr class=""><td>ALT-0178</td><td>Altura Gulf Energy FZ-LLC</td><td>3</td><td>ALT-0036</td><td>100</td><td>100</td><td>Full consolidation</td><td>United Arab Emirates</td><td>Dubai</td><td>Active</td><td>International</td><td>1.26</td><td>No</td></tr><tr class="in"><td>ALT-0179</td><td>Altura Arabia for Energy LLC</td><td>3</td><td>ALT-0036</td><td>100</td><td>100</td><td>Full consolidation</td><td>Saudi Arabia</td><td>Riyadh</td><td>Active</td><td>International</td><td>44.78</td><td>Yes</td></tr><tr class="in"><td>ALT-0180</td><td>Altura Qatar LLC</td><td>3</td><td>ALT-0036</td><td>100</td><td>100</td><td>Full consolidation</td><td>Qatar</td><td>Doha</td><td>Active</td><td>International</td><td>74.4</td><td>Yes</td></tr><tr class=""><td>ALT-0181</td><td>Altura Infra Services Middle East FZ-LLC</td><td>3</td><td>ALT-0036</td><td>100</td><td>100</td><td>Full consolidation</td><td>United Arab Emirates</td><td>Abu Dhabi</td><td>Active</td><td>International</td><td>10.64</td><td>No</td></tr><tr class=""><td>ALT-0182</td><td>Altura Renewables Australia Pty Ltd</td><td>3</td><td>ALT-0037</td><td>100</td><td>100</td><td>Full consolidation</td><td>Australia</td><td>Melbourne</td><td>Active</td><td>International</td><td>7.7</td><td>No</td></tr><tr class=""><td>ALT-0183</td><td>Altura Asset Services Pty Ltd</td><td>3</td><td>ALT-0037</td><td>100</td><td>100</td><td>Full consolidation</td><td>Australia</td><td>Brisbane</td><td>Active</td><td>International</td><td>9.48</td><td>No</td></tr><tr class=""><td>ALT-0184</td><td>Altura Energie Deutschland GmbH</td><td>3</td><td>ALT-0038</td><td>100</td><td>100</td><td>Full consolidation</td><td>Germany</td><td>Hamburg</td><td>Active</td><td>International</td><td>3.19</td><td>No</td></tr><tr class=""><td>ALT-0185</td><td>Altura Polska Sp. z o.o.</td><td>3</td><td>ALT-0038</td><td>100</td><td>100</td><td>Full consolidation</td><td>Poland</td><td>Warsaw</td><td>Active</td><td>International</td><td>7.29</td><td>No</td></tr><tr class=""><td>ALT-0186</td><td>Altura Iberia, S.L.</td><td>3</td><td>ALT-0038</td><td>100</td><td>100</td><td>Full consolidation</td><td>Spain</td><td>Madrid</td><td>Active</td><td>International</td><td>3.51</td><td>No</td></tr><tr class="in"><td>ALT-0187</td><td>Altura Energy Kenya Limited</td><td>3</td><td>ALT-0040</td><td>100</td><td>100</td><td>Full consolidation</td><td>Kenya</td><td>Nairobi</td><td>Active</td><td>International</td><td>44.25</td><td>Yes</td></tr><tr class="in"><td>ALT-0188</td><td>Altura South Africa (Pty) Ltd</td><td>3</td><td>ALT-0040</td><td>100</td><td>100</td><td>Full consolidation</td><td>South Africa</td><td>Johannesburg</td><td>Active</td><td>International</td><td>134.52</td><td>Yes</td></tr><tr class="in"><td>ALT-0189</td><td>Altura East Africa Services Limited</td><td>3</td><td>ALT-0040</td><td>100</td><td>100</td><td>Full consolidation</td><td>Kenya</td><td>Mombasa</td><td>Active</td><td>International</td><td>41.56</td><td>Yes</td></tr><tr class=""><td>ALT-0190</td><td>Altura Energia do Brasil Ltda.</td><td>3</td><td>ALT-0041</td><td>100</td><td>100</td><td>Full consolidation</td><td>Brazil</td><td>São Paulo</td><td>Active</td><td>International</td><td>20.27</td><td>No</td></tr><tr class="in"><td>ALT-0191</td><td>Altura Energía Chile SpA</td><td>3</td><td>ALT-0041</td><td>100</td><td>100</td><td>Full consolidation</td><td>Chile</td><td>Santiago</td><td>Active</td><td>International</td><td>61.12</td><td>Yes</td></tr><tr class="in"><td>ALT-0192</td><td>Altura Serviços de Infraestrutura Ltda.</td><td>3</td><td>ALT-0041</td><td>100</td><td>100</td><td>Full consolidation</td><td>Brazil</td><td>Rio de Janeiro</td><td>Active</td><td>International</td><td>54.33</td><td>Yes</td></tr><tr class="in"><td>ALT-0193</td><td>Altura Japan K.K.</td><td>3</td><td>ALT-0042</td><td>100</td><td>100</td><td>Full consolidation</td><td>Japan</td><td>Tokyo</td><td>Active</td><td>International</td><td>31.56</td><td>Yes</td></tr><tr class=""><td>ALT-0194</td><td>Altura Asia Services Limited</td><td>3</td><td>ALT-0042</td><td>100</td><td>100</td><td>Full consolidation</td><td>Hong Kong</td><td>Hong Kong</td><td>Active</td><td>International</td><td>14.24</td><td>No</td></tr><tr class="in"><td>ALT-0195</td><td>Altura Philippines Inc.</td><td>3</td><td>ALT-0042</td><td>100</td><td>100</td><td>Full consolidation</td><td>Philippines</td><td>Makati City</td><td>Active</td><td>International</td><td>43.28</td><td>Yes</td></tr><tr class=""><td>ALT-0196</td><td>Altura Lanka (Private) Limited</td><td>3</td><td>ALT-0042</td><td>100</td><td>100</td><td>Full consolidation</td><td>Sri Lanka</td><td>Colombo</td><td>Active</td><td>International</td><td>12.34</td><td>No</td></tr><tr class=""><td>ALT-0197</td><td>Altura Digital Labs Pvt Ltd</td><td>3</td><td>ALT-0043</td><td>100</td><td>100</td><td>Full consolidation</td><td>India</td><td>Hyderabad</td><td>Active</td><td>Corporate &amp; Shared Services</td><td>17.99</td><td>No</td></tr><tr class=""><td>ALT-0198</td><td>Altura Cyber Services Pvt Ltd</td><td>3</td><td>ALT-0043</td><td>100</td><td>100</td><td>Full consolidation</td><td>India</td><td>Hyderabad</td><td>Active</td><td>Corporate &amp; Shared Services</td><td>14.56</td><td>No</td></tr><tr class="in"><td>ALT-0199</td><td>Altura Infra Investment Managers Pvt Ltd</td><td>3</td><td>ALT-0045</td><td>100</td><td>100</td><td>Full consolidation</td><td>India</td><td>Mumbai</td><td>Active</td><td>Corporate &amp; Shared Services</td><td>28.72</td><td>Yes</td></tr><tr class="in"><td>ALT-0200</td><td>Altura InvIT Management Pvt Ltd</td><td>3</td><td>ALT-0045</td><td>100</td><td>100</td><td>Full consolidation</td><td>India</td><td>Mumbai</td><td>Active</td><td>Corporate &amp; Shared Services</td><td>62.55</td><td>Yes</td></tr><tr class=""><td>ALT-0201</td><td>Altura Malaysia Sdn. Bhd. — Thailand Branch</td><td>4</td><td>ALT-0168</td><td>100</td><td>100</td><td>Branch — included in parent</td><td>Malaysia</td><td>Bangkok</td><td>Active</td><td>International</td><td>12.2</td><td>No</td></tr><tr class=""><td>ALT-0202</td><td>Altura Grid Services UK Limited — Netherlands Branch</td><td>4</td><td>ALT-0172</td><td>100</td><td>100</td><td>Branch — included in parent</td><td>United Kingdom</td><td>Rotterdam</td><td>Active</td><td>International</td><td>7.45</td><td>No</td></tr><tr class=""><td>ALT-0203</td><td>Altura Gulf Energy FZ-LLC — Oman Branch</td><td>4</td><td>ALT-0178</td><td>100</td><td>100</td><td>Branch — included in parent</td><td>United Arab Emirates</td><td>Muscat</td><td>Active</td><td>International</td><td>11.73</td><td>No</td></tr><tr class=""><td>ALT-0204</td><td>Altura Infra Services USA, Inc. — California Branch</td><td>4</td><td>ALT-0175</td><td>100</td><td>100</td><td>Branch — included in parent</td><td>United States</td><td>San Diego</td><td>Active</td><td>International</td><td>9.08</td><td>No</td></tr><tr class=""><td>ALT-0205</td><td>Altura Energia do Brasil Ltda. — Bahia Branch</td><td>4</td><td>ALT-0190</td><td>100</td><td>100</td><td>Branch — included in parent</td><td>Brazil</td><td>Salvador</td><td>Active</td><td>International</td><td>11.13</td><td>No</td></tr><tr class=""><td>ALT-0206</td><td>Altura Japan K.K. — Osaka Branch</td><td>4</td><td>ALT-0193</td><td>100</td><td>100</td><td>Branch — included in parent</td><td>Japan</td><td>Osaka</td><td>Active</td><td>International</td><td>4.37</td><td>No</td></tr><tr class=""><td>ALT-0207</td><td>Altura Infra Feeder One Ltd</td><td>3</td><td>ALT-0039</td><td>100</td><td>100</td><td>Full consolidation</td><td>Mauritius</td><td>Ebène</td><td>Active</td><td>International</td><td>5.27</td><td>No</td></tr><tr class=""><td>ALT-0208</td><td>Altura Infra Feeder Two Ltd</td><td>4</td><td>ALT-0207</td><td>100</td><td>100</td><td>Full consolidation</td><td>Mauritius</td><td>Ebène</td><td>Active</td><td>International</td><td>8.01</td><td>No</td></tr><tr class=""><td>ALT-0209</td><td>Altura Yield Assets Pvt Ltd</td><td>5</td><td>ALT-0208</td><td>74</td><td>74</td><td>Full consolidation</td><td>India</td><td>Mumbai</td><td>Active</td><td>Corporate &amp; Shared Services</td><td>0.79</td><td>No</td></tr><tr class=""><td>ALT-0210</td><td>Altura Yield Roads One Pvt Ltd</td><td>6</td><td>ALT-0209</td><td>100</td><td>74</td><td>Full consolidation</td><td>India</td><td>Rewa</td><td>Active</td><td>Transport</td><td>16.31</td><td>No</td></tr><tr class="in"><td>ALT-0211</td><td>Altura Yield Roads Services Pvt Ltd</td><td>7</td><td>ALT-0210</td><td>100</td><td>74</td><td>Full consolidation</td><td>India</td><td>Rewa</td><td>Active</td><td>Transport</td><td>111.59</td><td>Yes</td></tr><tr class=""><td>ALT-0212</td><td>Altura Infra Feeder Three Ltd</td><td>3</td><td>ALT-0039</td><td>100</td><td>100</td><td>Full consolidation</td><td>Mauritius</td><td>Ebène</td><td>Active</td><td>International</td><td>3.87</td><td>No</td></tr><tr class=""><td>ALT-0213</td><td>Altura Yield Renewables Pvt Ltd</td><td>4</td><td>ALT-0212</td><td>51</td><td>51</td><td>Full consolidation</td><td>India</td><td>Bengaluru</td><td>Active</td><td>Renewables</td><td>2.78</td><td>No</td></tr><tr class=""><td>ALT-0214</td><td>Altura Yield Solar One Pvt Ltd</td><td>5</td><td>ALT-0213</td><td>100</td><td>51</td><td>Full consolidation</td><td>India</td><td>Pavagada</td><td>Active</td><td>Renewables</td><td>7.52</td><td>No</td></tr><tr class=""><td>ALT-0215</td><td>Altura Yield Solar Services Pvt Ltd</td><td>6</td><td>ALT-0214</td><td>100</td><td>51</td><td>Full consolidation</td><td>India</td><td>Pavagada</td><td>Active</td><td>Renewables</td><td>4.48</td><td>No</td></tr><tr class=""><td>ALT-0216</td><td>Suryodaya Renewable Power Pvt Ltd</td><td>2</td><td>ALT-0008</td><td>40</td><td>40</td><td>Equity method</td><td>India</td><td>Ahmedabad</td><td>Active</td><td>Renewables</td><td>6.71</td><td>No</td></tr><tr class=""><td>ALT-0217</td><td>Deccan Expressway Development Pvt Ltd</td><td>2</td><td>ALT-0004</td><td>50</td><td>50</td><td>Equity method</td><td>India</td><td>Hyderabad</td><td>Active</td><td>Transport</td><td>19.59</td><td>No</td></tr><tr class=""><td>ALT-0218</td><td>Northern Grid Interconnect Pvt Ltd</td><td>2</td><td>ALT-0005</td><td>26</td><td>19.24</td><td>Equity method</td><td>India</td><td>Gurugram</td><td>Active</td><td>Transmission &amp; Metering</td><td>39.57</td><td>No</td></tr><tr class=""><td>ALT-0219</td><td>Konkan Warehousing Ventures Pvt Ltd</td><td>2</td><td>ALT-0007</td><td>35</td><td>35</td><td>Equity method</td><td>India</td><td>Panvel</td><td>Active</td><td>Logistics</td><td>3.26</td><td>No</td></tr><tr class=""><td>ALT-0220</td><td>Emerald Wind Partners B.V.</td><td>2</td><td>ALT-0009</td><td>50</td><td>50</td><td>Equity method</td><td>Netherlands</td><td>Rotterdam</td><td>Active</td><td>International</td><td>8.31</td><td>No</td></tr><tr class=""><td>ALT-0221</td><td>Sahyadri Water Solutions Pvt Ltd</td><td>2</td><td>ALT-0006</td><td>30</td><td>15.3</td><td>Equity method</td><td>India</td><td>Nashik</td><td>Active</td><td>Urban Utilities</td><td>7.53</td><td>No</td></tr><tr class=""><td>ALT-0222</td><td>Straits Clean Energy Pte. Ltd.</td><td>3</td><td>ALT-0033</td><td>50</td><td>50</td><td>Equity method</td><td>Singapore</td><td>Singapore</td><td>Active</td><td>International</td><td>3.6</td><td>No</td></tr><tr class=""><td>ALT-0223</td><td>Vidyut Storage Systems Pvt Ltd</td><td>3</td><td>ALT-0029</td><td>26</td><td>26</td><td>Equity method</td><td>India</td><td>Bengaluru</td><td>Active</td><td>Renewables</td><td>19.74</td><td>No</td></tr><tr class=""><td>ALT-0224</td><td>Altura–Vidyut Transmission Joint Operation</td><td>2</td><td>ALT-0005</td><td>50</td><td>37</td><td>Joint operation</td><td>India</td><td>Jaipur</td><td>Active</td><td>Transmission &amp; Metering</td><td>13.74</td><td>No</td></tr><tr class=""><td>ALT-0225</td><td>Altura Ventures Pvt Ltd</td><td>1</td><td>ALT-0001</td><td>100</td><td>100</td><td>Full consolidation</td><td>India</td><td>Mumbai</td><td>Dormant</td><td>Corporate &amp; Shared Services</td><td>0</td><td>No</td></tr><tr class=""><td>ALT-0226</td><td>Altura Realty Holdings Pvt Ltd</td><td>1</td><td>ALT-0001</td><td>100</td><td>100</td><td>Full consolidation</td><td>India</td><td>Mumbai</td><td>Dormant</td><td>Corporate &amp; Shared Services</td><td>0</td><td>No</td></tr><tr class=""><td>ALT-0227</td><td>Altura Pavements Pvt Ltd</td><td>2</td><td>ALT-0004</td><td>100</td><td>100</td><td>Full consolidation</td><td>India</td><td>Nagpur</td><td>Dormant</td><td>Transport</td><td>0</td><td>No</td></tr><tr class=""><td>ALT-0228</td><td>Altura Container Services Pvt Ltd</td><td>2</td><td>ALT-0007</td><td>100</td><td>100</td><td>Full consolidation</td><td>India</td><td>Navi Mumbai</td><td>Dormant</td><td>Logistics</td><td>0</td><td>No</td></tr><tr class=""><td>ALT-0229</td><td>Altura Energy Ireland Limited</td><td>2</td><td>ALT-0009</td><td>100</td><td>100</td><td>Full consolidation</td><td>Ireland</td><td>Dublin</td><td>Dormant</td><td>International</td><td>0</td><td>No</td></tr><tr class=""><td>ALT-0230</td><td>Altura Capital Suisse AG</td><td>2</td><td>ALT-0009</td><td>100</td><td>100</td><td>Full consolidation</td><td>Switzerland</td><td>Zug</td><td>Under liquidation</td><td>International</td><td>5.16</td><td>No</td></tr><tr class=""><td>ALT-0231</td><td>Altura Energy Bangladesh Private Limited</td><td>3</td><td>ALT-0040</td><td>100</td><td>100</td><td>Full consolidation</td><td>Bangladesh</td><td>Dhaka</td><td>Under liquidation</td><td>International</td><td>5.83</td><td>No</td></tr><tr class=""><td>ALT-0232</td><td>Altura Industrial Estates Pvt Ltd</td><td>2</td><td>ALT-0007</td><td>100</td><td>100</td><td>Not consolidated — held for sale</td><td>India</td><td>Rajkot</td><td>Held for sale</td><td>Logistics</td><td>18.99</td><td>No</td></tr><tr class=""><td>ALT-0233</td><td>Altura Urban Transit Pvt Ltd</td><td>2</td><td>ALT-0004</td><td>100</td><td>100</td><td>Not consolidated — held for sale</td><td>India</td><td>Bengaluru</td><td>Held for sale</td><td>Transport</td><td>13.13</td><td>No</td></tr><tr class=""><td>ALT-0234</td><td>Altura Petro Services Pvt Ltd</td><td>1</td><td>ALT-0001</td><td>0</td><td>0</td><td>Not consolidated — divested</td><td>India</td><td>Rajkot</td><td>Divested during the period</td><td>Corporate &amp; Shared Services</td><td>4.27</td><td>No</td></tr><tr class=""><td>ALT-0235</td><td>Altura Energy Poland Sp. z o.o.</td><td>2</td><td>ALT-0009</td><td>0</td><td>0</td><td>Not consolidated — divested</td><td>Poland</td><td>Kraków</td><td>Divested during the period</td><td>International</td><td>15.8</td><td>No</td></tr><tr class=""><td>ALT-0236</td><td>Altura Biomass Pvt Ltd</td><td>2</td><td>ALT-0008</td><td>100</td><td>100</td><td>Full consolidation</td><td>India</td><td>Bathinda</td><td>Newly incorporated</td><td>Renewables</td><td>0</td><td>No</td></tr><tr class=""><td>ALT-0237</td><td>Altura Storage Systems Pvt Ltd</td><td>3</td><td>ALT-0029</td><td>100</td><td>100</td><td>Full consolidation</td><td>India</td><td>Bengaluru</td><td>Newly incorporated</td><td>Renewables</td><td>0</td><td>No</td></tr><tr class=""><td>ALT-0238</td><td>Altura Solar Odisha One Pvt Ltd</td><td>3</td><td>ALT-0027</td><td>100</td><td>100</td><td>Full consolidation</td><td>India</td><td>Angul</td><td>Newly incorporated</td><td>Renewables</td><td>0</td><td>No</td></tr><tr class=""><td>ALT-0239</td><td>Altura Jodhpur Power One Pvt Ltd</td><td>3</td><td>ALT-0012</td><td>100</td><td>100</td><td>Full consolidation</td><td>India</td><td>Jodhpur</td><td>Active</td><td>Renewables</td><td>2.83</td><td>No</td></tr><tr class=""><td>ALT-0240</td><td>Altura Patan Power One Pvt Ltd</td><td>3</td><td>ALT-0027</td><td>100</td><td>100</td><td>Full consolidation</td><td>India</td><td>Patan</td><td>Active</td><td>Renewables</td><td>16.09</td><td>No</td></tr><tr class=""><td>ALT-0241</td><td>Altura Gadag Power One Pvt Ltd</td><td>3</td><td>ALT-0014</td><td>100</td><td>100</td><td>Full consolidation</td><td>India</td><td>Gadag</td><td>Active</td><td>Renewables</td><td>15.07</td><td>No</td></tr><tr class=""><td>ALT-0242</td><td>Altura Osmanabad Transco One Pvt Ltd</td><td>3</td><td>ALT-0021</td><td>100</td><td>74</td><td>Full consolidation</td><td>India</td><td>Osmanabad</td><td>Active</td><td>Transmission &amp; Metering</td><td>0.98</td><td>No</td></tr><tr class=""><td>ALT-0243</td><td>Altura Jodhpur Logistics One Pvt Ltd</td><td>3</td><td>ALT-0025</td><td>100</td><td>100</td><td>Full consolidation</td><td>India</td><td>Jodhpur</td><td>Active</td><td>Logistics</td><td>7.33</td><td>No</td></tr><tr class=""><td>ALT-0244</td><td>Altura Sambalpur Highways One Pvt Ltd</td><td>3</td><td>ALT-0016</td><td>100</td><td>100</td><td>Full consolidation</td><td>India</td><td>Sambalpur</td><td>Active</td><td>Transport</td><td>19.07</td><td>No</td></tr><tr class=""><td>ALT-0245</td><td>Altura Muzaffarpur Highways One Pvt Ltd</td><td>3</td><td>ALT-0017</td><td>100</td><td>100</td><td>Full consolidation</td><td>India</td><td>Muzaffarpur</td><td>Active</td><td>Transport</td><td>14.46</td><td>No</td></tr><tr class=""><td>ALT-0246</td><td>Altura Osmanabad Power One Pvt Ltd</td><td>3</td><td>ALT-0029</td><td>100</td><td>100</td><td>Full consolidation</td><td>India</td><td>Osmanabad</td><td>Active</td><td>Renewables</td><td>2.66</td><td>No</td></tr><tr class=""><td>ALT-0247</td><td>Altura Jodhpur Power Two Pvt Ltd</td><td>3</td><td>ALT-0012</td><td>100</td><td>100</td><td>Full consolidation</td><td>India</td><td>Jodhpur</td><td>Active</td><td>Renewables</td><td>3</td><td>No</td></tr><tr class=""><td>ALT-0248</td><td>Altura Patan Power Two Pvt Ltd</td><td>3</td><td>ALT-0027</td><td>100</td><td>100</td><td>Full consolidation</td><td>India</td><td>Patan</td><td>Active</td><td>Renewables</td><td>4.4</td><td>No</td></tr><tr class=""><td>ALT-0249</td><td>Altura Gadag Power Two Pvt Ltd</td><td>3</td><td>ALT-0014</td><td>100</td><td>100</td><td>Full consolidation</td><td>India</td><td>Gadag</td><td>Active</td><td>Renewables</td><td>3.25</td><td>No</td></tr><tr class=""><td>ALT-0250</td><td>Altura Osmanabad Transco Two Pvt Ltd</td><td>3</td><td>ALT-0021</td><td>100</td><td>74</td><td>Full consolidation</td><td>India</td><td>Osmanabad</td><td>Active</td><td>Transmission &amp; Metering</td><td>7.24</td><td>No</td></tr><tr class=""><td>ALT-0251</td><td>Altura Jodhpur Logistics Two Pvt Ltd</td><td>3</td><td>ALT-0025</td><td>100</td><td>100</td><td>Full consolidation</td><td>India</td><td>Jodhpur</td><td>Active</td><td>Logistics</td><td>0.96</td><td>No</td></tr><tr class=""><td>ALT-0252</td><td>Altura Sambalpur Highways Two Pvt Ltd</td><td>3</td><td>ALT-0016</td><td>100</td><td>100</td><td>Full consolidation</td><td>India</td><td>Sambalpur</td><td>Active</td><td>Transport</td><td>14.63</td><td>No</td></tr><tr class=""><td>ALT-0253</td><td>Altura Muzaffarpur Highways Two Pvt Ltd</td><td>3</td><td>ALT-0017</td><td>100</td><td>100</td><td>Full consolidation</td><td>India</td><td>Muzaffarpur</td><td>Active</td><td>Transport</td><td>3.72</td><td>No</td></tr><tr class=""><td>ALT-0254</td><td>Altura Osmanabad Power Two Pvt Ltd</td><td>3</td><td>ALT-0029</td><td>100</td><td>100</td><td>Full consolidation</td><td>India</td><td>Osmanabad</td><td>Active</td><td>Renewables</td><td>2.53</td><td>No</td></tr></tbody>
+  </table>
+</section>
+</body>
+</html>

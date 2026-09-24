@@ -1,7 +1,9 @@
 import * as XLSX from 'xlsx';
-import { assessSeverity, attestationOverruled, requiredFilesOf, restsOnStatementAlone, auditorProvenChecks, combinedSample, conclusionOf, controlConclusion, designBasis, operatingApplies, countVerdict, coverageVerdict, fileOriginOf, designOutstanding, formatDueDate, formatINR, icfrConclusion, isControlLocked, itgcHolds, openMaterialWeaknesses, populationSources, sampleSizeGuide, trackResult, designProgress, hasRowCount, isAssisting, toeRounds, LEGACY_SOURCE_ID } from './helpers';
+import { assessSeverity, attestationOverruled, requiredFilesOf, restsOnStatementAlone, auditorProvenChecks, combinedSample, conclusionOf, controlConclusion, designBasis, operatingApplies, countVerdict, coverageVerdict, fileOriginOf, designOutstanding, formatDueDate, formatINR, icfrConclusion, isControlLocked, itgcHolds, openMaterialWeaknesses, populationSources, sampleSizeGuide, samplingOf, trackResult, designProgress, hasRowCount, isAssisting, toeRounds, LEGACY_SOURCE_ID } from './helpers';
 import { FIVE_W_1H, gapNature } from './types';
 import { countryFor, ownersOf } from './auditScope';
+import { extraLabel, racmConfig, type ExtraColumn } from './racmConfig';
+import { racmSetupKeyFor } from './racmLibrary';
 // ─── PARKED (Aug 2026) — Priced impact & Gap type ────────────────────────────
 // Restore this import alongside the blocks parked further down the file.
 //
@@ -40,6 +42,11 @@ function quarterlySplit(c: Control): string {
   const q = [0, 1, 2, 3].map(i => per + (i < rem ? 1 : 0));
   return `Q1 ${q[0]} · Q2 ${q[1]} · Q3 ${q[2]} · Q4 ${q[3]} (${n} items)`;
 }
+
+/** The client's own columns — the ones their matrix carries and we have no field
+ *  for. The set-up belongs to the client GROUP, so the company a row is tested
+ *  at is what decides which columns a paper prints. */
+const clientColumns = (entity: string | undefined): ExtraColumn[] => racmConfig(racmSetupKeyFor(entity).key).extras;
 
 /** P / r ticks, as real working papers mark them. */
 const tick = (r: TestResult | 'Effective' | 'Ineffective' | undefined): string =>
@@ -97,7 +104,7 @@ export function buildControlPaper(eng: IcfrEngagement, c: Control): PaperBlock[]
   // "1 (test of one)" on a control the app had already resized to 25 because an
   // ITGC underneath it failed — the paper contradicting the working file it is
   // supposed to be a record of.
-  const guide = sampleSizeGuide(c, itgcHolds(eng, c));
+  const guide = sampleSizeGuide(c, itgcHolds(eng, c), samplingOf(eng));
   // The two population checks are computed, not attested — so the paper prints
   // what the application concluded and, where it disagreed, the reason it was
   // overridden. A row that only ever said "ticked" told a reviewer nothing.
@@ -118,12 +125,16 @@ export function buildControlPaper(eng: IcfrEngagement, c: Control): PaperBlock[]
       // The paper names both: a reviewer asking "who was this chased from" needs
       // the process owner, and it is not always the accountable name above.
       ...(ownersOf(c).single ? [] : [['Process owner', ownersOf(c).processOwner] as [string, string]]),
+      // Always printed, even where it repeats a name above: who answers for the
+      // RISK is a separate question on the matrix, and a blank would read as
+      // nobody. A record only — nothing was chased from this name.
+      ['Risk owner', ownersOf(c).riskOwner],
       ['Control number', c.id],
       // what the control is FOR, above what it is called and how it is worded
       ['Control objective', c.objective ?? '—'],
       ['Control title', c.description],
       ['Control description', c.controlActivity ?? '—'],
-      ['Classification', c.clazz ?? '—'],
+      ['Risk category', c.clazz ?? '—'],
       // Since when, and where. A control that only started operating part-way
       // through the period cannot be sampled across the whole of it, so the
       // date belongs on the paper beside the frequency it is sized on. The
@@ -210,6 +221,11 @@ export function buildControlPaper(eng: IcfrEngagement, c: Control): PaperBlock[]
       ['W/P reference — hard copy', c.wpRefHard ?? '—'],
       ['W/P reference — soft copy', c.wpRefSoft ?? '—'],
       ['Report reference', c.reportRef ?? '—'],
+      // The client's own columns, last and in their set-up's order. Nothing here
+      // is read or reasoned over; a paper that drops them describes a row the
+      // client cannot recognise as theirs.
+      ...clientColumns(c.entity ?? eng.entity)
+        .map(e => [extraLabel(e), c.extras?.[e.header]?.trim() || '—'] as [string, string]),
     ],
   });
 
@@ -384,7 +400,18 @@ export function buildControlPaper(eng: IcfrEngagement, c: Control): PaperBlock[]
   blocks.push({
     kind: 'kv', title: 'Sample details', rows: [
       ['Period tested', periodLine(eng)],
-      ['Sample size — indicated', `${guide.suggested} (${guide.range}) — ${guide.note}`],
+      // Which agreed table the number came from, and which version of it. A size
+      // on a paper that cannot be traced to a methodology is a size the reviewer
+      // has to take on trust (#22) — and an audit finishes on the version it
+      // started under, so the engagement's current version may not be the one
+      // this control was tested against.
+      ['Sampling methodology', (() => {
+        const m = samplingOf(eng);
+        const ran = audit?.samplingVersion ?? m.version;
+        const signed = m.reviewer ? `agreed by ${m.reviewer.by} on ${m.reviewer.at}` : 'NOT YET AGREED — no reviewer signature';
+        return `v${ran} · ${m.method} · ${m.roundBasis === 'per-round' ? 'sampled per round' : 'sampled across the whole period'} — ${signed}${ran !== m.version ? ` (the engagement is now on v${m.version})` : ''}`;
+      })()],
+      ['Sample size — indicated', `${guide.suggested} (${guide.range}) — ${guide.note}${guide.cell ? ` [read off the agreed table: ${guide.cell.frequency} · ${guide.cell.rating} risk]` : ''}`],
       ['Sample size — drawn', c.operating.sampling ? `${c.operating.sampling.samples.length} · ${c.operating.sampling.method}, ${c.operating.sampling.basis}` : 'None drawn'],
       // The two facts that make a draw reperformable. A reviewer who cannot
       // re-run the selection cannot check that it was not steered — and each
@@ -738,6 +765,9 @@ export function buildIcfrPaper(eng: IcfrEngagement, controls: Control[] = eng.co
 
   const signoff: IcfrSheet = { name: 'Sign-off', blocks: [{ kind: 'kv', title: ENG_SIGNOFF_TITLE, rows: signoffRows(eng) }] };
 
+  // One header row stands for every control on the sheet, so the columns are the
+  // engagement's client group rather than any one row's company.
+  const clientCols = clientColumns(eng.entity);
   const summary: IcfrSheet = {
     name: 'Control Summary', blocks: [{
       kind: 'table', title: 'Control summary', note: `${controls.length} controls`,
@@ -745,14 +775,16 @@ export function buildIcfrPaper(eng: IcfrEngagement, controls: Control[] = eng.co
       // after Process answer "tested where, since when, and how" on a register
       // a reviewer reads across without opening a single control's paper. A
       // shared control is tested at several entities, so all of them are named.
-      headers: ['W/P', 'Control ID', 'Description', 'Process', 'Entity', 'Effective date', 'Country', 'Testing strategy', 'Nature', 'Key', 'Control owner', 'Process owner', 'Root cause', 'TOD', 'Report (IPE)', 'TOE', 'TOE method', 'Conclusion', 'Conclusion rationale', 'Performed by', 'W/P hard copy', 'W/P soft copy', 'Report ref'],
+      // The client's own columns close the row, as they do on the control paper.
+      headers: ['W/P', 'Control ID', 'Description', 'Process', 'Entity', 'Effective date', 'Country', 'Testing strategy', 'Nature', 'Key', 'Control owner', 'Process owner', 'Risk owner', 'Root cause', 'TOD', 'Report (IPE)', 'TOE', 'TOE method', 'Conclusion', 'Conclusion rationale', 'Performed by', 'W/P hard copy', 'W/P soft copy', 'Report ref', ...clientCols.map(extraLabel)],
       rows: controls.map(c => [c.wpRef, c.id, c.description, c.process,
         c.entities?.length ? c.entities.join(', ') : (c.entity ?? '—'), c.effectiveDate ?? '—', countryFor(eng.id, c).value, c.testingStrategy ?? '—',
-        c.nature, c.isKey ? 'Yes' : 'No', c.owner, ownersOf(c).processOwner, c.rootCause ?? '—', trackResult(c.design), c.operating.ipe?.conclusion ?? 'Not registered', trackResult(c.operating), c.operating.method, controlConclusion(c),
+        c.nature, c.isKey ? 'Yes' : 'No', c.owner, ownersOf(c).processOwner, ownersOf(c).riskOwner, c.rootCause ?? '—', trackResult(c.design), c.operating.ipe?.conclusion ?? 'Not registered', trackResult(c.operating), c.operating.method, controlConclusion(c),
         // one column, both tracks — the register answers "why does this read the
         // way it does" without opening the control's own paper
         [c.design.rationale && `TOD — ${c.design.rationale}`, c.operating.rationale && `TOE — ${c.operating.rationale}`].filter(Boolean).join(' ') || '—',
-        c.performedBy ?? '—', c.wpRefHard ?? '—', c.wpRefSoft ?? '—', c.reportRef ?? '—']),
+        c.performedBy ?? '—', c.wpRefHard ?? '—', c.wpRefSoft ?? '—', c.reportRef ?? '—',
+        ...clientCols.map(e => c.extras?.[e.header]?.trim() || '—')]),
     }],
   };
 

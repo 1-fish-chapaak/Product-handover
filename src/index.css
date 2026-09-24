@@ -578,7 +578,14 @@ button:focus-visible,
 [role="button"]:focus-visible {
   outline: none;
   box-shadow: 0 0 0 4px rgba(106, 18, 205, 0.24);
-  border-radius: var(--radius-md);
+  /* No border-radius here (21 Sep). This block is unlayered, so it beat every
+     Tailwind rounded-* utility and reshaped the ELEMENT — not the ring — for
+     as long as it held focus: the pill switch became an 8px box with a round
+     knob, rounded-full chips squared off, the 14px control cards shrank to 8,
+     and 202 shared Buttons went 12px → 8px. DESIGN.md §5 says there are no
+     square buttons; the app was drawing them on every Tab. An outer shadow
+     follows the element's own radius, so removing this line is all it takes
+     for the ring to fit whatever shape the button already is. */
 }
 
 /* Opt-out: suppress the global focus ring on anything tagged .no-focus-ring

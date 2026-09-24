@@ -21,6 +21,7 @@ import WorkflowDetail from './components/workflow/WorkflowDetail';
 import WorkflowLibraryView from './components/workflow/WorkflowLibraryView';
 import BusinessProcesses, { ControlDetailStandalone } from './components/audit/BusinessProcesses';
 import RiskRegister from './components/audit/RiskRegister';
+import RacmPage from './components/sox-icfr/RacmPage';
 import AuditExecution from './components/audit/AuditExecution';
 import DashboardView from './components/dashboard/DashboardView';
 import DashboardListPage from './components/dashboard/DashboardListPage';
@@ -68,7 +69,7 @@ import ChatWorkflowWorkspace from './components/chat/ChatWorkflowWorkspace';
 import type { ComposerContext } from './components/chat/composerContext';
 import WorkflowBuilderJourney from './components/concierge-workflow-builder/WorkflowBuilderJourney';
 import AdminView from './components/admin/AdminView';
-import PlatformUsageView from './components/usage/PlatformUsageView';
+import PlatformUsageTabs from './components/usage/PlatformUsageTabs';
 import WorkflowExecutor from './components/workflow/WorkflowExecutor';
 import WorkflowEditInChatJourney from './components/workflow-edit-in-chat/WorkflowEditInChatJourney';
 import ControlDetailDrawer from './components/engagement/ControlDetailDrawer';
@@ -951,6 +952,13 @@ function AppInner() {
           />
         );
 
+      // RACM — the team's matrices and the shape they arrive in. A sidebar
+      // page since 18 Sep: a RACM outlives the engagements scoped from it, so
+      // it belongs with Risk Register and Control Library rather than inside
+      // the engagement portfolio.
+      case 'racm-library':
+        return <RacmPage canManage={can('eng_create')} />;
+
       case 'audit-risk-register':
         return (
           <RiskRegister
@@ -1261,6 +1269,9 @@ function AppInner() {
         );
 
       // Admin
+      case 'platform-usage':
+        return <PlatformUsageTabs />;
+
       case 'admin-users':
         return <AdminView activeTab="users" />;
       case 'admin-roles':
@@ -1268,8 +1279,12 @@ function AppInner() {
       case 'admin-logs':
         return <AdminView activeTab="logs" />;
 
-      case 'platform-usage':
-        return <PlatformUsageView />;
+      // Connectors has no nav entry of its own any more — it is a tab on the
+      // Platform Usage page, and the sidebar marks that entry active for this
+      // view. A stale link therefore lands on the page that carries it rather
+      // than on a section with no title above it.
+      case 'connectors':
+        return <PlatformUsageTabs />;
 
       // V3 Configurable Engagement — dev-only preview route
       case 'dev-configurable-engagement-v3':

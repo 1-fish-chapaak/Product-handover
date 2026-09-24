@@ -191,6 +191,11 @@ export default function SoxClassicInner({ onBack, backLabel = 'Back to Engagemen
   const isHandoffs = view === 'handoffs';
   // drilled-in document pages carry a breadcrumb instead of the engagement header
   const isDrillIn = isRacmMatrix || isScope || isDeficiencies || isHandoffs;
+  // Same as the reworked shell: the audit's control page runs two panes and
+  // takes the height rather than the scroll. It has to be kept in step here —
+  // ControlDossier's row is `flex-1 min-h-0`, which collapses to nothing if
+  // the page above it has no height of its own to give.
+  const dossierPanes = view === 'dossier' && inAudit;
   const isRoot = view === 'overview' || view === 'racm' || view === 'risks' || view === 'register'
     || view === 'runs' || view === 'config' || (inAudit && view === 'deficiencies');
   // Same as the reworked shell: a concluded audit is its archive, read-only.
@@ -225,14 +230,17 @@ export default function SoxClassicInner({ onBack, backLabel = 'Back to Engagemen
     : <ControlRegister />;
 
   return (
-    <div className="sox-book-ui h-full overflow-y-auto overflow-x-hidden bg-canvas">
-      {/* overflow-x-hidden above lets the control page's full-bleed header band
-          overshoot the centred container without opening a sideways scrollbar. */}
+    <div className={cn('sox-book-ui h-full bg-canvas',
+      // overflow-x-hidden lets the control page's full-bleed header band
+      // overshoot the centred container without opening a sideways scrollbar.
+      dossierPanes ? 'overflow-hidden flex flex-col' : 'overflow-y-auto overflow-x-hidden')}>
       {/* The control detail page and the RACM matrix stand alone — no engagement
           header, no role switcher; the persona is fixed until you go back to the
           engagement. */}
       {view !== 'dossier' && !isDrillIn && !inAudit && topBar}
-      <div className="max-w-[1320px] mx-auto px-6 pt-4 pb-6">
+      {/* 32px gutter on the control page, as in the reworked shell. */}
+      <div className={cn('pt-4 w-full',
+        dossierPanes ? 'flex-1 min-h-0 flex flex-col px-8' : 'max-w-[1320px] mx-auto px-6 pb-6')}>
         {inAudit && isRoot && (
           <div className="flex items-start justify-between gap-3">
             <SoxBreadcrumb onBack={closeAudit} items={[
@@ -326,7 +334,8 @@ export default function SoxClassicInner({ onBack, backLabel = 'Back to Engagemen
           </div>
         )}
         <AnimatePresence mode="wait">
-          <motion.div key={`${role}-${tab}-${view}`} initial={{ opacity: 0, y: 6 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -4 }} transition={{ duration: 0.16 }}>
+          <motion.div key={`${role}-${tab}-${view}`} className={cn(dossierPanes && 'flex-1 min-h-0 flex flex-col')}
+            initial={{ opacity: 0, y: 6 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -4 }} transition={{ duration: 0.16 }}>
             {body}
           </motion.div>
         </AnimatePresence>

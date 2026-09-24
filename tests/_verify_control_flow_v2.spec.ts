@@ -34,7 +34,7 @@ async function openAuditLevelControl(page: import('@playwright/test').Page) {
   await runCard.first().click();
   await page.waitForTimeout(1400);
   // sanity: we are on the tester, not the library detail
-  await expect(page.getByText('TOD', { exact: true }).first()).toBeVisible({ timeout: 15_000 });
+  await expect(page.getByText('Test of design', { exact: true }).first()).toBeVisible({ timeout: 15_000 });
 }
 
 test('five steps, and only five', async ({ page }) => {
@@ -45,7 +45,7 @@ test('five steps, and only five', async ({ page }) => {
   await page.screenshot({ path: `${SHOTS}/01-page.png`, fullPage: true });
 
   // ── the five steps, in order ──────────────────────────────────────────────
-  for (const title of ['TOD', 'Population', 'Sample', 'TOE', 'Sign-off']) {
+  for (const title of ['Test of design', 'Population', 'Sample drawing', 'Test of effectiveness', 'Final']) {
     await expect(page.getByText(title, { exact: true }).first()).toBeVisible();
   }
 
@@ -189,7 +189,7 @@ test('header, sign-off gating and the working paper', async ({ page }) => {
   await page.waitForTimeout(500);
 
   // ── step ⑤ is locked until both tracks conclude ───────────────────────────
-  await expect(page.getByText('Sign-off', { exact: true }).first()).toBeVisible();
+  await expect(page.getByText('Final', { exact: true }).first()).toBeVisible();
   const signBtn = page.getByRole('button', { name: 'Sign off', exact: true });
   const lockedNote = page.getByText(/Unlocks once both tracks conclude|Sign-off is locked/);
   if (await lockedNote.count() > 0) {
