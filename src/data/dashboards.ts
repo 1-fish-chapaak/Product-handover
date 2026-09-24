@@ -32,6 +32,16 @@ export interface Dashboard {
 
 export const MY_DASHBOARDS: Dashboard[] = [
   {
+    id: 'choco',
+    name: 'Chocolate Sales',
+    description: 'Sales analytics from the Chocolate Sales workbook — revenue, boxes shipped, country and product mix, sales-person performance. Built for Compare.',
+    timeAgo: '10 minutes ago',
+    creator: 'You',
+    accent: 'bg-brand-50 text-brand-700',
+    dataSource: 'excel',
+    dataSourceNames: ['Chocolate Sales (Latest).xlsx'],
+  },
+  {
     id: 'p2p',
     name: 'Procurement (P2P)',
     description: 'Procure-to-Pay analytics — invoice processing, duplicate flags, compliance rate, and vendor spend tracking.',

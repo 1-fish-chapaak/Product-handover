@@ -84,6 +84,8 @@ import NotificationEmailModal from './notifications/NotificationEmailModal';
 import NotificationPreferencesModal from './notifications/NotificationPreferencesModal';
 import { NotificationProvider, useNotifications } from './notifications/NotificationContext';
 import type { PlatformNotification } from './data/notifications';
+import type { DashboardWidget } from './components/dashboard/widgetTypes';
+import { MY_DASHBOARDS as CATALOG_DASHBOARDS } from './data/dashboards';
 import CommandPalette from './components/shared/CommandPalette';
 // V3 Configurable Engagement — dev-only preview (not wired to main flow)
 import ConfigurableEngagementWizard from './components/engagement-configurable/ConfigurableEngagementWizard';
@@ -725,7 +727,7 @@ function AppInner() {
                   });
                 }
                 // Build widget stubs from granular selection
-                const widgetStubs: { chartType: string; title: string; xField: string; yField: string }[] = [];
+                const widgetStubs: DashboardWidget[] = [];
                 if (payload.selection.kpis.length > 0) {
                   widgetStubs.push({ chartType: 'kpi', title: 'Query KPIs', xField: 'Category', yField: 'Value' });
                 }
@@ -995,7 +997,8 @@ function AppInner() {
         );
 
       case 'dashboard-detail': {
-        const created = state.createdDashboards.find(d => d.id === state.selectedDashboardId);
+        const created = state.createdDashboards.find(d => d.id === state.selectedDashboardId)
+          ?? CATALOG_DASHBOARDS.find(d => d.id === state.selectedDashboardId);
         return (
           <DashboardView
             initialDashboardId={state.selectedDashboardId}

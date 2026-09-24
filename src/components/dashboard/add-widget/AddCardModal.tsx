@@ -3,7 +3,7 @@
  * Two-column layout with left sidebar and main configuration area.
  */
 
-import { useState, useRef, useEffect } from "react";
+import { useState, useRef, useEffect, useMemo } from "react";
 import {
   Dialog, DialogContent, DialogTitle, DialogDescription,
 } from "./ui-dialog";
@@ -20,11 +20,11 @@ import {
 } from "lucide-react";
 import { createPortal } from "react-dom";
 import { ConfigurableChart, PIE_DATA } from "./ConfigurableChart";
-// ─── Multi-table (model) widget building — merged into Add Widget ───
-import MultiTableFieldPicker from "../model/MultiTableFieldPicker";
+// ─── Model-bound widgets: fields come from the dashboard's data model, the
+//     preview runs the widget's own query, and the saved widget carries it. ───
 import ModelChart from "../model/ModelChart";
-import { buildWidgetRows, distinctValues, colByName, tableById } from "../model/joinEngine";
-import type { ModelTable, Relationship, WidgetModelConfig, WidgetModelField } from "../model/relationshipTypes";
+import { buildWidgetRows, distinctValues } from "../model/joinEngine";
+import type { AggFn, ColumnType, ModelTable, Relationship, WidgetModelConfig, WidgetModelField } from "../model/relationshipTypes";
 import Gated from "../../shared/Gated";
 import { FileTreeView, type FileTreeFile } from "./FileTreeView";
 import { ColorPicker } from "./ColorPicker";
@@ -76,6 +76,10 @@ interface DataField {
   Icon: React.ElementType;
   color: string;
   axisValue: string;
+  /** Set when the field is a model column — the widget then carries a re-runnable query. */
+  table?: string;
+  column?: string;
+  type?: ColumnType;
 }
 
 const FIELDS: DataField[] = [
@@ -143,6 +147,42 @@ function resolveFieldId(label: string): string {
   return label;
 }
 
+/* ─── Model catalog — the dashboard's tables as draggable fields ──────────── */
+const MODEL_FIELD_SEP = '::';
+const modelFieldId = (table: string, column: string) => `${table}${MODEL_FIELD_SEP}${column}`;
+const MEASURE_ICON: Record<string, React.ElementType> = { amount: IndianRupee, risk: AlertTriangle, duplicate: Copy, count: Hash, score: Percent, rate: Percent, box: Package, unit: Package, time: Clock, day: Clock };
+function iconForColumn(label: string, type: ColumnType, role: FieldKind): React.ElementType {
+  if (type === 'date') return Calendar;
+  const l = label.toLowerCase();
+  if (role === 'dimension') {
+    if (/month|quarter|year|week|date/.test(l)) return Calendar;
+    if (/region|country|state|city|location/.test(l)) return MapPin;
+    if (/status|stage|category|type|method|channel/.test(l)) return Tag;
+    if (/product|item|sku/.test(l)) return Package;
+    return Briefcase;
+  }
+  const hit = Object.keys(MEASURE_ICON).find(k => l.includes(k));
+  return hit ? MEASURE_ICON[hit] : Hash;
+}
+/** Every column of every table as a field. Ids are table-qualified so two
+ *  tables may share a label (Vendor ID in Invoices and in Vendors). */
+function buildModelCatalog(tables: ModelTable[]): DataField[] {
+  return tables.flatMap(t => t.columns.map(c => ({
+    id: modelFieldId(t.id, c.name), label: c.label, kind: c.role, group: t.name,
+    Icon: iconForColumn(c.label, c.type, c.role), color: c.role === 'measure' ? '#6a12cd' : '#0ea5e9', axisValue: c.label,
+    table: t.id, column: c.name, type: c.type,
+  })));
+}
+/** The Aggregation dropdown's values → the engine's functions. Anything the
+ *  engine cannot do (median, std dev…) falls back to sum. */
+const AGG_TO_ENGINE: Record<string, AggFn> = { sum: 'sum', average: 'avg', minimum: 'min', maximum: 'max', count: 'count', count_d: 'countDistinct' };
+const ENGINE_TO_AGG: Record<AggFn, string> = { sum: 'sum', avg: 'average', min: 'minimum', max: 'maximum', count: 'count', countDistinct: 'count_d' };
+/** Dropping the raw Date on an axis and picking a granularity groups by the
+ *  sibling Year / Quarter / Month column when the table has one. */
+const GRANULARITY_COLUMN: Record<string, string> = { year: 'Year', quarterly: 'Quarter', month: 'Month', day: 'Date' };
+const GRANULARITY_PRIORITY = ['day', 'month', 'quarterly', 'year'];
+const GRANULARITY_TO_AXIS: Record<string, string> = { day: 'Day', month: 'Month', quarterly: 'Quarter', year: 'Year' };
+
 /* ─── Widget catalogue ────────────────────────────────────────────────────── */
 interface WidgetDef {
   id: string;
@@ -184,13 +224,13 @@ const WIDGETS: WidgetDef[] = [
 ];
 
 /* ─── Aggregation portal dropdown ─────────────────────────────────────────── */
-function AggDropdown({ value, onChange, fieldId }: { value: string; onChange: (v: string) => void; fieldId?: string }) {
+function AggDropdown({ value, onChange, fieldId, isDate, single }: { value: string; onChange: (v: string) => void; fieldId?: string; isDate?: boolean; single?: boolean }) {
   const [open, setOpen] = useState(false);
   const btnRef = useRef<HTMLButtonElement>(null);
   const [pos, setPos] = useState({ top: 0, left: 0 });
   
   // Check if this is the Date field
-  const isDateField = fieldId === "date";
+  const isDateField = fieldId === "date" || !!isDate;
   
   // For Date field, value stores selected temporal options as comma-separated string
   const selectedTemporalOptions = isDateField && value ? value.split(",") : [];
@@ -215,6 +255,8 @@ function AggDropdown({ value, onChange, fieldId }: { value: string; onChange: (v
   }, [open]);
 
   const handleTemporalToggle = (optValue: string) => {
+    // A model axis groups by one granularity at a time.
+    if (single) { onChange(optValue); setOpen(false); return; }
     const current = value ? value.split(",") : [];
     const updated = current.includes(optValue)
       ? current.filter(v => v !== optValue)
@@ -325,14 +367,14 @@ interface AddCardModalProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   onSelectCard: (cardType: string, config?: { xAxis: string; yAxis: string; color: string; name?: string; description?: string; seriesColors?: Record<string, string>; fontFamily?: string; model?: WidgetModelConfig; slicerMode?: string }) => void;
-  /** Related tables → when present (and not a SQL dashboard), the Data Source
-   *  tab becomes the multi-table model builder. */
+  /** The dashboard's data model. Its columns fill the Data Source tree (file →
+   *  sheet → fields) and every widget built here carries a model query, so it
+   *  renders live, answers slicers and takes part in Compare. SQL dashboards
+   *  keep their DB-schema tree. */
   modelTables?: ModelTable[];
   relationships?: Relationship[];
-  /** Pre-fills the model builder when editing a combined widget. */
+  /** Pre-fills the field slots when editing a model-bound widget. */
   initialModel?: WidgetModelConfig;
-  /** Opens the relationship manager (from the "needs connecting" prompt). */
-  onConnectTables?: () => void;
   mode?: 'add' | 'edit';
   initialXAxis?: string;
   initialYAxis?: string;
@@ -356,7 +398,7 @@ interface AddCardModalProps {
 }
 
 /* ─── Modal ─────────────────────────────────────────────────────────────────── */
-export function AddCardModal({ open, onOpenChange, onSelectCard, mode = 'add', initialXAxis, initialYAxis, initialWidgetType, initialColor, initialFontFamily, initialName, initialSeriesColors, onOpenExcelUpload, onOpenQueryModal, onOpenAddData, onOpenKnowledgeHub, isCreateDashboardMode = false, onNavigateToBuilder, dashboardSource, modelTables, relationships = [], initialModel, onConnectTables }: AddCardModalProps) {
+export function AddCardModal({ open, onOpenChange, onSelectCard, mode = 'add', initialXAxis, initialYAxis, initialWidgetType, initialColor, initialFontFamily, initialName, initialSeriesColors, onOpenExcelUpload, onOpenQueryModal, onOpenAddData, onOpenKnowledgeHub, isCreateDashboardMode = false, onNavigateToBuilder, dashboardSource, modelTables, relationships = [], initialModel }: AddCardModalProps) {
   const [activeTab, setActiveTab] = useState<"data" | "format">("data");
   const [selected, setSelected] = useState<WidgetDef | null>(null); // No default selection
   const [chartTypeOpen, setChartTypeOpen] = useState(true);
@@ -377,22 +419,36 @@ export function AddCardModal({ open, onOpenChange, onSelectCard, mode = 'add', i
   // Widget Info section collapsed state
   const [widgetInfoCollapsed, setWidgetInfoCollapsed] = useState(false);
 
-  // ── Multi-table (model) widget state ──
-  const [modelFields, setModelFields] = useState<WidgetModelField[]>(initialModel?.fields ?? []);
-  const [modelType, setModelType] = useState<string>(initialWidgetType ?? 'Bar Chart');
-  const [modelColor, setModelColor] = useState<string>(initialColor ?? '#6a12cd');
-  // Slicer display style — chosen here, changeable later on the tile itself.
-  const [slicerMode, setSlicerMode] = useState<'list' | 'dropdown' | 'between'>('list');
-  useEffect(() => {
-    if (!open) return;
-    if (initialModel) {
-      setModelFields(initialModel.fields);
-      setModelType(initialWidgetType ?? 'Bar Chart');
-      setModelColor(initialColor ?? '#6a12cd');
-    } else if (mode === 'add') {
-      setModelFields([]);
-    }
-  }, [open, initialModel, mode, initialWidgetType, initialColor]);
+  // ── Live-SQL widget: build the Database → Table → Column tree from
+  //    DB_SCHEMAS so the user gets real DB columns instead of the canonical
+  //    Excel demo files. We map each column's label back to an existing
+  //    FIELDS id when one matches, so dragged items reuse the same icons,
+  //    aggregations, and chart wiring as the Excel flow.
+  // Three SQL states need to be distinguished:
+  //   1. isSqlBound       — dashboard claims a SQL source but its sourceId is
+  //                          unknown OR has no published tables. Render empty
+  //                          state panel; do NOT fall through to Excel demos.
+  //   2. isSqlWidget       — known sourceId + tables present; render DB tree.
+  //   3. neither           — Excel/CSV/combo/query → the dashboard's data model.
+  const isSqlBound = widgetSource?.type === 'sql' && !!widgetSource?.sourceId;
+  const sqlBindingValid = isSqlBound && !!DB_SCHEMAS[widgetSource!.sourceId!] && DB_SCHEMAS[widgetSource!.sourceId!].length > 0;
+  const isSqlWidget = isSqlBound && sqlBindingValid;
+  const sqlTables = isSqlWidget ? DB_SCHEMAS[widgetSource!.sourceId!] : [];
+  const sqlIntegration = widgetSource?.sourceId ? INTEGRATION_CONFIGS[widgetSource.sourceId] : undefined;
+  const sqlHeaderName = isSqlWidget
+    ? `${widgetSource?.sourceName || 'Database'}${sqlIntegration?.provider ? ` · ${sqlIntegration.provider}` : ''}`
+    : '';
+
+  // ── The field catalog. A dashboard with a data model (every file / query /
+  //    combo dashboard) offers its real columns; the widget built from them
+  //    carries a model query and is therefore live, sliceable and comparable.
+  //    SQL dashboards and dashboards without a model keep the demo catalog.
+  const modelCatalog = useMemo<DataField[] | null>(
+    () => (!isSqlWidget && modelTables && modelTables.length > 0 ? buildModelCatalog(modelTables) : null),
+    [isSqlWidget, modelTables],
+  );
+  const catalog: DataField[] = modelCatalog ?? FIELDS;
+  const fieldById = (id: string) => catalog.find(f => f.id === id);
 
   // Chart type dropdown state
   const [chartDropdownOpen, setChartDropdownOpen] = useState(false);
@@ -506,7 +562,16 @@ export function AddCardModal({ open, onOpenChange, onSelectCard, mode = 'add', i
       );
       if (match) setSelected(match);
     }
-    if (open && mode === 'edit') {
+    if (open && mode === 'edit' && initialModel && modelTables?.length) {
+      const dims = initialModel.fields.filter(f => f.role === 'dimension').map(f => modelFieldId(f.table, f.column));
+      const measures = initialModel.fields.filter(f => f.role === 'measure');
+      const isTableWidget = (initialWidgetType ?? '').toLowerCase().includes('table');
+      setXFieldIds(isTableWidget ? [...dims, ...measures.map(f => modelFieldId(f.table, f.column))] : dims);
+      setYFieldIds(isTableWidget ? [] : measures.map(f => modelFieldId(f.table, f.column)));
+      setYAggs(Object.fromEntries(measures.map(f => [modelFieldId(f.table, f.column), ENGINE_TO_AGG[f.agg ?? 'sum']])));
+      setLegendFieldIds([]);
+      setSecondaryYFieldIds([]);
+    } else if (open && mode === 'edit') {
       if (initialXAxis) {
         const xId = resolveFieldId(initialXAxis);
         setXFieldIds([xId]);
@@ -521,6 +586,8 @@ export function AddCardModal({ open, onOpenChange, onSelectCard, mode = 'add', i
         setYFieldIds([]);
         setYAggs({});
       }
+    }
+    if (open && mode === 'edit') {
       // Pre-fill color, font family, name, and series colors
       if (initialColor) setChartColor(initialColor);
       if (initialFontFamily) setFontFamily(initialFontFamily);
@@ -547,7 +614,7 @@ export function AddCardModal({ open, onOpenChange, onSelectCard, mode = 'add', i
       setChartColor("#6a12cd");
       setFontFamily("Inter");
     }
-  }, [open, mode, initialWidgetType, initialXAxis, initialYAxis, initialColor, initialFontFamily, initialName, initialSeriesColors]);
+  }, [open, mode, initialWidgetType, initialXAxis, initialYAxis, initialColor, initialFontFamily, initialName, initialSeriesColors, initialModel, modelTables]);
 
   const removeXField = (id: string) => setXFieldIds(prev => prev.filter(f => f !== id));
   const removeYField = (id: string) => {
@@ -558,12 +625,13 @@ export function AddCardModal({ open, onOpenChange, onSelectCard, mode = 'add', i
   const removeYIndexField = (id: string) => setYIndexFieldIds(prev => prev.filter(f => f !== id));
   const changeAgg = (fieldId: string, v: string) => setYAggs(prev => ({ ...prev, [fieldId]: v }));
 
-  const xAxisValue = xFieldIds[0] ? (FIELDS.find(f => f.id === xFieldIds[0])?.axisValue ?? "") : "";
-  const yAxisValue = yFieldIds[0] ? (FIELDS.find(f => f.id === yFieldIds[0])?.axisValue ?? "") : "";
+  const xAxisValue = xFieldIds[0] ? (fieldById(xFieldIds[0])?.axisValue ?? "") : "";
+  const yAxisValue = yFieldIds[0] ? (fieldById(yFieldIds[0])?.axisValue ?? "") : "";
   const needsFields = selected?.useFieldBuilder ?? false;
 
-  // ── Slicer (single-source flow): the picked field is mapped to a model column
-  //    (by label) so the tile can read real values and drive the page filter. ──
+  // ── Slicer: the picked field must be a model column (a date column has a
+  //    value per row — not a slicer) so the tile reads real values and drives
+  //    the page filter. ──
   const isSlicer = selected?.builderType === 'slicer';
   const findModelField = (label: string): WidgetModelField | null => {
     if (!modelTables) return null;
@@ -573,23 +641,69 @@ export function AddCardModal({ open, onOpenChange, onSelectCard, mode = 'add', i
     }
     return null;
   };
-  const slicerFieldLabel = isSlicer && xFieldIds[0] ? (FIELDS.find(f => f.id === xFieldIds[0])?.label ?? "") : "";
-  const slicerModelField = isSlicer ? findModelField(slicerFieldLabel) : null;
+  const slicerFieldLabel = isSlicer && xFieldIds[0] ? (fieldById(xFieldIds[0])?.label ?? "") : "";
+  const slicerCatalogField = isSlicer && xFieldIds[0] ? fieldById(xFieldIds[0]) : undefined;
+  const slicerModelField: WidgetModelField | null = isSlicer
+    ? (slicerCatalogField?.table && slicerCatalogField.column
+        ? (slicerCatalogField.type === 'date' ? null : { table: slicerCatalogField.table, column: slicerCatalogField.column, role: slicerCatalogField.kind })
+        : findModelField(slicerFieldLabel))
+    : null;
 
-  const editHasInitialValues = mode === 'edit' && !!(initialXAxis || initialYAxis);
-  const previewReady = isSlicer ? true : (!needsFields || (xAxisValue !== "" && yAxisValue !== "") || editHasInitialValues);
+  // ── The model query behind the widget (model dashboards only). Dimensions
+  //    come from the axis / legend slots, measures from the value slots with
+  //    their aggregation; a KPI is measures-only, a table takes every column.
+  const isKpi = selected?.id === 'kpi';
   const isTable = selected?.builderType === 'table';
+  const toModelField = (fid: string, role: FieldKind): WidgetModelField | null => {
+    const f = fieldById(fid);
+    if (!f?.table || !f.column) return null;
+    if (role === 'dimension') {
+      // Raw Date + a granularity → the derived Year / Quarter / Month column.
+      if (f.type === 'date' && modelTables) {
+        const picked = (yAggs[fid] || 'month').split(',').filter(Boolean);
+        const g = GRANULARITY_PRIORITY.find(x => picked.includes(x)) ?? 'month';
+        const col = GRANULARITY_COLUMN[g];
+        const has = modelTables.find(t => t.id === f.table)?.columns.some(c => c.name === col);
+        return { table: f.table, column: has ? col : f.column, role: 'dimension' };
+      }
+      return { table: f.table, column: f.column, role: 'dimension' };
+    }
+    const agg: AggFn = AGG_TO_ENGINE[yAggs[fid]] ?? (f.kind === 'measure' ? 'sum' : 'count');
+    return { table: f.table, column: f.column, role: 'measure', agg };
+  };
+  const modelQuery: WidgetModelConfig | undefined = (() => {
+    if (!modelCatalog || !selected || isSlicer) return undefined;
+    const fields: WidgetModelField[] = [];
+    if (isTable) {
+      xFieldIds.forEach(id => { const f = fieldById(id); const mf = f ? toModelField(id, f.kind) : null; if (mf) fields.push(mf); });
+    } else {
+      if (!isKpi) [...xFieldIds, ...legendFieldIds].forEach(id => { const mf = toModelField(id, 'dimension'); if (mf) fields.push(mf); });
+      [...yFieldIds, ...secondaryYFieldIds].forEach(id => { const mf = toModelField(id, 'measure'); if (mf) fields.push(mf); });
+    }
+    return fields.length ? { fields } : undefined;
+  })();
+  const modelHasMeasure = !!modelQuery?.fields.some(f => f.role === 'measure');
+  const modelHasDimension = !!modelQuery?.fields.some(f => f.role === 'dimension');
+  const modelReady = !!modelQuery && (isKpi ? modelHasMeasure : isTable ? modelQuery.fields.length > 0 : modelHasDimension && modelHasMeasure);
+  // The preview runs the real query over every row; memoised on the query so
+  // hover / drag renders do not re-aggregate a large sheet.
+  const modelQueryKey = modelQuery ? JSON.stringify(modelQuery) : '';
+  const modelPreview = useMemo(
+    () => (modelQueryKey && modelTables ? buildWidgetRows(modelTables, relationships, JSON.parse(modelQueryKey) as WidgetModelConfig) : null),
+    [modelQueryKey, modelTables, relationships],
+  );
+
+  const editHasInitialValues = mode === 'edit' && !!(initialXAxis || initialYAxis || initialModel);
+  const previewReady = isSlicer ? true : modelCatalog ? modelReady : (!needsFields || (xAxisValue !== "" && yAxisValue !== "") || editHasInitialValues);
   const canCustomize = !!selected && (isTable ? xFieldIds.length > 0 || editHasInitialValues : previewReady);
-  const canAdd = selected && (isSlicer ? !!slicerModelField : (!needsFields || previewReady));
+  const canAdd = selected && (isSlicer ? !!slicerModelField : modelCatalog ? (modelReady && !modelPreview?.error) : (!needsFields || previewReady));
 
   const rawXAxis = xAxisValue || (editHasInitialValues ? initialXAxis : undefined) || selected?.defaultX || "";
   const resolvedYAxis = yAxisValue || (editHasInitialValues ? initialYAxis : undefined) || selected?.defaultY || "";
 
   // Map date granularity to effective X axis
-  const GRANULARITY_PRIORITY = ['day', 'month', 'quarterly', 'year'];
-  const GRANULARITY_TO_AXIS: Record<string, string> = { day: 'Day', month: 'Month', quarterly: 'Quarter', year: 'Year' };
-  const xFieldIsDate = xFieldIds[0] === 'date' || rawXAxis === 'Date';
-  const dateGranularity = xFieldIsDate ? (yAggs['date'] || 'month') : '';
+  const xFieldIsDate = xFieldIds[0] === 'date' || rawXAxis === 'Date' || fieldById(xFieldIds[0] ?? '')?.type === 'date';
+  const dateGranularity = xFieldIsDate ? (yAggs[xFieldIds[0]] || yAggs['date'] || 'month') : '';
   const resolvedXAxis = (() => {
     if (!xFieldIsDate || !dateGranularity) return rawXAxis;
     const selected_g = dateGranularity.split(',').filter(Boolean);
@@ -612,18 +726,29 @@ export function AddCardModal({ open, onOpenChange, onSelectCard, mode = 'add', i
       onOpenChange(false);
       return;
     }
-    const xAxis = needsFields ? xAxisValue : "";
-    const yAxis = needsFields ? yAxisValue : selected.defaultY;
-    onSelectCard(selected.cardType, { xAxis, yAxis, color: chartColor, name: widgetName, description: widgetDescription, seriesColors: Object.keys(seriesColors).length > 0 ? seriesColors : undefined, fontFamily });
+    const xAxis = needsFields ? (modelCatalog ? (fieldById(xFieldIds[0] ?? '')?.label ?? '') : xAxisValue) : "";
+    const yAxis = needsFields ? (modelCatalog ? (fieldById(yFieldIds[0] ?? '')?.label ?? '') : yAxisValue) : selected.defaultY;
+    onSelectCard(selected.cardType, { xAxis, yAxis, color: chartColor, name: widgetName || defaultWidgetName, description: widgetDescription, seriesColors: Object.keys(seriesColors).length > 0 ? seriesColors : undefined, fontFamily, model: modelQuery });
     onOpenChange(false);
   };
+  // "Sum of Amount by Country" when the user leaves the name blank.
+  const defaultWidgetName = (() => {
+    if (!modelQuery || !modelTables) return selected?.cardType ?? '';
+    const label = (f: WidgetModelField) => modelTables.find(t => t.id === f.table)?.columns.find(c => c.name === f.column)?.label ?? f.column;
+    const m = modelQuery.fields.find(f => f.role === 'measure');
+    const d = modelQuery.fields.find(f => f.role === 'dimension');
+    const AGG_WORD: Record<AggFn, string> = { sum: 'Sum', avg: 'Average', count: 'Count', countDistinct: 'Distinct', min: 'Min', max: 'Max' };
+    const head = m ? `${AGG_WORD[m.agg ?? 'sum']} of ${label(m)}` : (d ? label(d) : '');
+    return d && m ? `${head} by ${label(d)}` : head;
+  })();
 
+  const isDateFieldId = (fieldId: string) => fieldId === "date" || fieldById(fieldId)?.type === 'date';
   const addFieldToX = (fieldId: string) => {
     if (xFieldIds.length >= 3) return;
     if (!xFieldIds.includes(fieldId)) {
       setXFieldIds(prev => [...prev, fieldId]);
-      if (fieldId === "date") {
-        setYAggs(prev => ({ ...prev, [fieldId]: "year,quarterly,month,day" }));
+      if (isDateFieldId(fieldId)) {
+        setYAggs(prev => ({ ...prev, [fieldId]: modelCatalog ? "month" : "year,quarterly,month,day" }));
       }
     }
   };
@@ -632,7 +757,7 @@ export function AddCardModal({ open, onOpenChange, onSelectCard, mode = 'add', i
     if (yFieldIds.length >= 3) return;
     if (!yFieldIds.includes(fieldId)) {
       setYFieldIds(prev => [...prev, fieldId]);
-      setYAggs(prev => ({ ...prev, [fieldId]: fieldId === "date" ? "year,quarterly,month,day" : "" }));
+      setYAggs(prev => ({ ...prev, [fieldId]: isDateFieldId(fieldId) ? "year,quarterly,month,day" : (fieldById(fieldId)?.table ? (fieldById(fieldId)?.kind === 'measure' ? 'sum' : 'count') : "") }));
     }
   };
 
@@ -640,7 +765,7 @@ export function AddCardModal({ open, onOpenChange, onSelectCard, mode = 'add', i
     if (timeFieldIds.length >= 3) return;
     if (!timeFieldIds.includes(fieldId)) {
       setTimeFieldIds(prev => [...prev, fieldId]);
-      if (fieldId === "date") {
+      if (isDateFieldId(fieldId)) {
         setYAggs(prev => ({ ...prev, [fieldId]: "year,quarterly,month,day" }));
       }
     }
@@ -653,32 +778,13 @@ export function AddCardModal({ open, onOpenChange, onSelectCard, mode = 'add', i
     }
   };
 
-  const filteredFields = FIELDS.filter(f => 
+  const filteredFields = catalog.filter(f => 
     f.label.toLowerCase().includes(dataSearch.toLowerCase())
   );
 
   const dimensionFields = filteredFields.filter(f => f.kind === "dimension");
   const measureFields = filteredFields.filter(f => f.kind === "measure");
 
-  // ── Live-SQL widget: build the Database → Table → Column tree from
-  //    DB_SCHEMAS so the user gets real DB columns instead of the canonical
-  //    Excel demo files. We map each column's label back to an existing
-  //    FIELDS id when one matches, so dragged items reuse the same icons,
-  //    aggregations, and chart wiring as the Excel flow.
-  // Three SQL states need to be distinguished:
-  //   1. isSqlBound       — dashboard claims a SQL source but its sourceId is
-  //                          unknown OR has no published tables. Render empty
-  //                          state panel; do NOT fall through to Excel demos.
-  //   2. isSqlWidget       — known sourceId + tables present; render DB tree.
-  //   3. neither           — Excel/CSV/combo/query → existing demo files path.
-  const isSqlBound = widgetSource?.type === 'sql' && !!widgetSource?.sourceId;
-  const sqlBindingValid = isSqlBound && !!DB_SCHEMAS[widgetSource!.sourceId!] && DB_SCHEMAS[widgetSource!.sourceId!].length > 0;
-  const isSqlWidget = isSqlBound && sqlBindingValid;
-  const sqlTables = isSqlWidget ? DB_SCHEMAS[widgetSource!.sourceId!] : [];
-  const sqlIntegration = widgetSource?.sourceId ? INTEGRATION_CONFIGS[widgetSource.sourceId] : undefined;
-  const sqlHeaderName = isSqlWidget
-    ? `${widgetSource?.sourceName || 'Database'}${sqlIntegration?.provider ? ` · ${sqlIntegration.provider}` : ''}`
-    : '';
   const sqlFiles: FileTreeFile[] = isSqlWidget ? [{
     name: sqlHeaderName,
     icon: 'database',
@@ -698,6 +804,17 @@ export function AddCardModal({ open, onOpenChange, onSelectCard, mode = 'add', i
       }
     }
   }
+
+  // The data-model tree: the dashboard's source as the file, each table a
+  //    sheet, columns table-qualified so same-named fields stay distinct.
+  const modelFiles: FileTreeFile[] = modelCatalog && modelTables ? [{
+    name: widgetSource?.sourceName || dashboardSource?.sourceName || 'Data model',
+    icon: widgetSource?.type === 'csv' ? 'csv' : 'excel',
+    sheets: modelTables.map(t => ({
+      name: t.name,
+      columns: t.columns.filter(c => !dataSearch || c.label.toLowerCase().includes(dataSearch.toLowerCase())).map(c => ({ label: c.label, id: modelFieldId(t.id, c.name) })),
+    })),
+  }] : [];
 
   // Determine which datasource is active based on selected fields
   const getActiveDatasource = (): "file1" | "file2" | null => {
@@ -722,122 +839,6 @@ export function AddCardModal({ open, onOpenChange, onSelectCard, mode = 'add', i
   const activeDatasource = getActiveDatasource();
   const isFile1Disabled = activeDatasource === "file2";
   const isFile2Disabled = activeDatasource === "file1";
-
-  // ── Multi-table model builder: active for file/custom dashboards (excel /
-  //    csv / query / combo). SQL-typed dashboards keep their DB-table path
-  //    (valid → DB tree, invalid binding → SQL empty state). ──
-  const useModel = widgetSource?.type !== 'sql' && (modelTables?.length ?? 0) > 0;
-  const MODEL_CHART_TYPES = ['Bar Chart', 'Line Chart', 'Area Chart', 'Pie Chart', 'KPI', 'Table', 'Slicer'];
-  const MODEL_COLORS = ['#6a12cd', '#0d9488', '#C2410C', '#1a2744', '#dc2626'];
-  const isSlicerType = modelType === 'Slicer';
-  // A slicer binds to ONE dimension field. Pick the first dimension the user
-  // added (or the first field, so any pick works).
-  const slicerField = modelFields.find(f => f.role === 'dimension') ?? modelFields[0];
-  const slicerCol = slicerField && useModel ? colByName(tableById(modelTables!, slicerField.table), slicerField.column) : undefined;
-  const slicerValues = slicerField && useModel ? distinctValues(modelTables!, slicerField.table, slicerField.column) : [];
-  const modelPreview = useModel && !isSlicerType ? buildWidgetRows(modelTables!, relationships, { fields: modelFields }) : null;
-  const canAddModel = useModel && (isSlicerType ? !!slicerField : (modelFields.length > 0 && !modelPreview?.error));
-  const addModelWidget = () => {
-    if (isSlicerType) {
-      if (!slicerField) return;
-      onSelectCard('Slicer', { xAxis: '', yAxis: '', color: modelColor, name: widgetName || (slicerCol?.label ?? 'Slicer'), model: { fields: [slicerField] }, slicerMode });
-    } else {
-      onSelectCard(modelType, { xAxis: '', yAxis: '', color: modelColor, name: widgetName || 'Combined widget', model: { fields: modelFields } });
-    }
-    onOpenChange(false);
-  };
-
-  const renderModelBuilder = () => (
-    <div className="flex flex-1 overflow-hidden min-h-0">
-      <div className="flex-1 p-4 min-h-0 overflow-hidden">
-        <MultiTableFieldPicker
-          tables={modelTables!}
-          relationships={relationships}
-          selected={modelFields}
-          onChange={setModelFields}
-          onConnectTables={() => { onOpenChange(false); onConnectTables?.(); }}
-        />
-      </div>
-      <div className="w-[340px] shrink-0 border-l border-[#f3f4f6] bg-[rgba(249,250,251,0.5)] p-4 flex flex-col gap-4 overflow-y-auto">
-        <div>
-          <label className="text-[0.6875rem] font-semibold uppercase tracking-wide text-ink-500 mb-1.5 block">Widget name</label>
-          <input value={widgetName} onChange={e => setWidgetName(e.target.value)} placeholder="e.g. Spend by Vendor" className="w-full h-9 px-3 bg-white border border-[#e5e7eb] rounded-md text-[0.78125rem] text-text focus:outline-none focus:border-[#6a12cd]/40" />
-        </div>
-        <div>
-          <label className="text-[0.6875rem] font-semibold uppercase tracking-wide text-ink-500 mb-1.5 block">Chart type</label>
-          <div className="grid grid-cols-3 gap-1.5">
-            {MODEL_CHART_TYPES.map(ct => (
-              <button key={ct} onClick={() => setModelType(ct)} className={`py-2 rounded-md border text-[0.65625rem] font-medium cursor-pointer transition-colors ${modelType === ct ? 'border-[#6a12cd]/40 bg-[#faf5ff] text-[#6a12cd]' : 'border-[#e5e7eb] text-ink-600 hover:border-[#6a12cd]/20'}`}>
-                {ct.replace(' Chart', '')}
-              </button>
-            ))}
-          </div>
-        </div>
-        {isSlicerType ? (
-          <div>
-            <label className="text-[0.6875rem] font-semibold uppercase tracking-wide text-ink-500 mb-1.5 block">Slicer style</label>
-            <div className="grid grid-cols-3 gap-1.5">
-              {([
-                { id: 'list', label: 'List' },
-                { id: 'dropdown', label: 'Dropdown' },
-                { id: 'between', label: 'Between', numeric: true },
-              ] as { id: 'list' | 'dropdown' | 'between'; label: string; numeric?: boolean }[]).map(s => {
-                const disabled = s.numeric && slicerCol?.type !== 'number';
-                return (
-                  <button key={s.id} disabled={disabled} onClick={() => setSlicerMode(s.id)} title={disabled ? 'Between needs a numeric field' : undefined}
-                    className={`py-2 rounded-md border text-[10.5px] font-medium transition-colors ${disabled ? 'border-[#e5e7eb] text-ink-300 cursor-not-allowed' : slicerMode === s.id ? 'border-[#6a12cd]/40 bg-[#faf5ff] text-[#6a12cd] cursor-pointer' : 'border-[#e5e7eb] text-ink-600 hover:border-[#6a12cd]/20 cursor-pointer'}`}>
-                    {s.label}
-                  </button>
-                );
-              })}
-            </div>
-            <p className="mt-1.5 text-[10.5px] text-ink-400 leading-snug">A slicer filters every related widget on the dashboard — Power BI page-filter behaviour.</p>
-          </div>
-        ) : (
-          <div>
-            <label className="text-[0.6875rem] font-semibold uppercase tracking-wide text-ink-500 mb-1.5 block">Color</label>
-            <div className="flex gap-1.5">
-              {MODEL_COLORS.map(c => <button key={c} onClick={() => setModelColor(c)} className={`w-7 h-7 rounded-md border-2 cursor-pointer ${modelColor === c ? 'border-ink-900 scale-110' : 'border-transparent'}`} style={{ background: c }} />)}
-            </div>
-          </div>
-        )}
-        <div>
-          <label className="text-[0.6875rem] font-semibold uppercase tracking-wide text-ink-500 mb-1.5 block">Preview</label>
-          <div className="h-[200px] border border-[#e5e7eb] rounded-lg p-2 bg-white overflow-hidden">
-            {isSlicerType ? (
-              !slicerField
-                ? <div className="h-full flex items-center justify-center text-[0.71875rem] text-ink-400 text-center px-4">Pick one field to slice by.</div>
-                : (
-                  <div className="h-full flex flex-col">
-                    <div className="text-[11px] font-semibold text-[#26064a] mb-1.5 truncate">{slicerCol?.label ?? slicerField.column}</div>
-                    {slicerMode === 'between' && slicerCol?.type === 'number' ? (
-                      <div className="flex items-center gap-2 text-[11px] text-ink-500">
-                        <span className="px-2 py-1 rounded-[6px] border border-[#e5e7eb] tabular-nums">{Math.min(...slicerValues.map(Number))}</span>
-                        <span>–</span>
-                        <span className="px-2 py-1 rounded-[6px] border border-[#e5e7eb] tabular-nums">{Math.max(...slicerValues.map(Number))}</span>
-                      </div>
-                    ) : (
-                      <div className="flex-1 overflow-y-auto space-y-0.5">
-                        {slicerValues.slice(0, 20).map(v => (
-                          <div key={String(v)} className="flex items-center gap-2 px-1 py-1 text-[11.5px] text-ink-700">
-                            <span className="w-3.5 h-3.5 rounded-[4px] border border-[#d1d5db] shrink-0" /> {String(v)}
-                          </div>
-                        ))}
-                      </div>
-                    )}
-                  </div>
-                )
-            ) : modelFields.length === 0
-              ? <div className="h-full flex items-center justify-center text-[0.71875rem] text-ink-400 text-center px-4">Pick fields from the related tables to preview the chart.</div>
-              : <ModelChart data={modelPreview!} type={modelType} color={modelColor} />}
-          </div>
-        </div>
-        <button onClick={addModelWidget} disabled={!canAddModel} className="mt-auto h-10 inline-flex items-center justify-center gap-2 text-[0.8125rem] font-semibold text-white bg-[#6a12cd] hover:bg-[#5a0ebd] rounded-md cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed">
-          {mode === 'edit' ? 'Save Widget' : 'Add Widget'}
-        </button>
-      </div>
-    </div>
-  );
 
   // Open chart dropdown
   const openChartDropdown = () => {
@@ -878,7 +879,6 @@ export function AddCardModal({ open, onOpenChange, onSelectCard, mode = 'add', i
           </button>
         </div>
 
-        {useModel ? renderModelBuilder() : (
         <div className="flex flex-1 overflow-hidden min-h-0">
 
           {/* ── Right Sidebar (moved to right) ── */}
@@ -1013,7 +1013,7 @@ export function AddCardModal({ open, onOpenChange, onSelectCard, mode = 'add', i
                       {!(isSqlBound && !sqlBindingValid) && (
                         <div className="mx-2.5 mb-2.5">
                           <FileTreeView
-                            files={isSqlWidget ? sqlFiles : [
+                            files={isSqlWidget ? sqlFiles : modelCatalog ? modelFiles : [
                               { name: 'Invoice_Master.xlsx', icon: 'excel', sheets: [{ name: 'Sheet1', columns: dimensionFields.slice(0, 8).map(f => f.label) }] },
                               { name: 'Vendor_Finance.xlsx', icon: 'excel', sheets: [{ name: 'Sheet1', columns: measureFields.map(f => f.label) }] },
                             ]}
@@ -1484,7 +1484,7 @@ export function AddCardModal({ open, onOpenChange, onSelectCard, mode = 'add', i
                     if (!selected) return;
                     const xAxis = needsFields ? xAxisValue : "";
                     const yAxis = needsFields ? yAxisValue : selected.defaultY;
-                    onNavigateToBuilder({ cardType: selected.cardType, config: { xAxis, yAxis, color: chartColor, name: widgetName, description: widgetDescription, fontFamily } });
+                    onNavigateToBuilder({ cardType: selected.cardType, config: { xAxis, yAxis, color: chartColor, name: widgetName || defaultWidgetName, description: widgetDescription, fontFamily, model: modelQuery } });
                     onOpenChange(false);
                   } else {
                     handleAdd();
@@ -1539,13 +1539,15 @@ export function AddCardModal({ open, onOpenChange, onSelectCard, mode = 'add', i
                         ) : (
                           <div className="flex flex-wrap gap-1.5 items-center">
                             {slot.ids.map((fid) => {
-                              const field = FIELDS.find(f => f.id === fid);
+                              const field = fieldById(fid);
                               if (!field) return null;
                               const agg = yAggs[fid] || "";
+                              // Dimensions on an axis carry no aggregation; a raw Date offers its granularity.
+                              const showAgg = slot.showAgg && (field.type === 'date' || fid === 'date' || dim.key !== 'xAxis' || !modelCatalog);
                               return (
                                 <div key={fid} className="flex items-center gap-1.5 h-[28px] px-2.5 bg-[#faf5ff] rounded-xs border border-[#6a12cd]/30 shrink-0">
                                   <span className="text-[0.75rem] font-medium text-[#26064a] whitespace-nowrap">{field.label}</span>
-                                  {slot.showAgg && <AggDropdown value={agg} onChange={(v) => changeAgg(fid, v)} fieldId={fid} />}
+                                  {showAgg && <AggDropdown value={agg} onChange={(v) => changeAgg(fid, v)} fieldId={fid} isDate={field.type === 'date'} single={!!modelCatalog} />}
                                   <button onClick={() => slot.remove(fid)} className="p-0.5 rounded hover:bg-[rgba(38,6,74,0.1)] transition-colors">
                                     <X className="size-[12px] text-[#6b7280] hover:text-[#ef4444]" strokeWidth={2} />
                                   </button>
@@ -1679,11 +1681,21 @@ export function AddCardModal({ open, onOpenChange, onSelectCard, mode = 'add', i
                           </div>
                         )}
                       </div>
+                    ) : modelCatalog && modelPreview ? (
+                      <div className="w-full h-full min-h-[300px] flex flex-col">
+                        <div className="flex items-center justify-between mb-3">
+                          <p className="text-[0.875rem] font-semibold text-[#26064a] truncate">{widgetName || defaultWidgetName}</p>
+                          <span className="text-[0.6875rem] text-[#9ca3af] tabular-nums shrink-0">{modelPreview.rows.length} {modelPreview.rows.length === 1 ? 'row' : 'rows'}</span>
+                        </div>
+                        <div className="flex-1 min-h-[260px]">
+                          <ModelChart data={modelPreview} type={selected.cardType} color={chartColor} />
+                        </div>
+                      </div>
                     ) : selected.id === "kpi" ? (
                       yFieldIds.length > 0 ? (
                         <div className="flex items-center justify-center h-full gap-5 flex-wrap">
                           {yFieldIds.map((fid, i) => {
-                            const field = FIELDS.find(f => f.id === fid);
+                            const field = fieldById(fid);
                             const label = field?.label || fid;
                             const values = ["12,450", "94.2%", "₹4.2M", "23", "1.8d", "38d", "₹85L"];
                             return (
@@ -1736,7 +1748,7 @@ export function AddCardModal({ open, onOpenChange, onSelectCard, mode = 'add', i
                         invertRange={rangeInvert}
                         conditionalRules={conditionalRules}
                         aggregation={yFieldIds[0] ? (yAggs[yFieldIds[0]] || undefined) : undefined}
-                        tableColumns={isTable ? [...xFieldIds, ...yFieldIds].map(id => FIELDS.find(f => f.id === id)?.label || id) : undefined}
+                        tableColumns={isTable ? [...xFieldIds, ...yFieldIds].map(id => fieldById(id)?.label || id) : undefined}
                       />
                     )}
                   </div>
@@ -1772,7 +1784,6 @@ export function AddCardModal({ open, onOpenChange, onSelectCard, mode = 'add', i
             </div>
           </div>
         </div>
-        )}
       </DialogContent>
 
 

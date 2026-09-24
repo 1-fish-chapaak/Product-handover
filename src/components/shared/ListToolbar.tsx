@@ -54,36 +54,55 @@ export interface ToolbarChip<T extends string> {
 
 /** Light-track segmented chip group — used for the primary type selector. */
 export function ToolbarChips<T extends string>({
-  options, value, onChange, layoutId,
+  options, value, onChange, layoutId, size = 'md', semantics, ariaLabel,
 }: {
   options: ToolbarChip<T>[];
   value: T;
   onChange: (key: T) => void;
   /** Unique per instance so multiple chip groups don't share one indicator. */
   layoutId: string;
+  /** 'sm' fits inside popovers and card headers. */
+  size?: 'sm' | 'md';
+  /** Announce as tabs or a radio group (arrow keys move the selection). */
+  semantics?: 'tabs' | 'radio';
+  ariaLabel?: string;
 }) {
+  const sm = size === 'sm';
+  const roleGroup = semantics === 'tabs' ? 'tablist' : semantics === 'radio' ? 'radiogroup' : undefined;
+  const roleItem = semantics === 'tabs' ? 'tab' : semantics === 'radio' ? 'radio' : undefined;
+  const step = (dir: 1 | -1) => {
+    const i = options.findIndex(o => o.key === value);
+    const next = options[(i + dir + options.length) % options.length];
+    if (next) onChange(next.key);
+  };
   return (
-    <div className="inline-flex items-center gap-1 p-1.5 rounded-lg border border-canvas-border/60 bg-canvas-elevated/40 w-fit max-w-full overflow-x-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+    <div role={roleGroup} aria-label={ariaLabel} className={`inline-flex items-center gap-1 ${sm ? 'p-1 rounded-md' : 'p-1.5 rounded-lg'} border border-canvas-border/60 bg-canvas-elevated/40 w-fit max-w-full overflow-x-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden`}>
       {options.map(o => {
         const Icon = o.icon;
         const active = value === o.key;
         return (
           <button
             key={o.key}
+            type="button"
+            role={roleItem}
+            aria-selected={semantics === 'tabs' ? active : undefined}
+            aria-checked={semantics === 'radio' ? active : undefined}
+            tabIndex={semantics && !active ? -1 : undefined}
             onClick={() => onChange(o.key)}
-            className={`shrink-0 relative inline-flex items-center gap-2.5 px-3.5 h-9 rounded-lg text-[0.875rem] transition-colors cursor-pointer ${
+            onKeyDown={semantics ? (e) => { if (e.key === 'ArrowRight' || e.key === 'ArrowDown') { e.preventDefault(); step(1); } else if (e.key === 'ArrowLeft' || e.key === 'ArrowUp') { e.preventDefault(); step(-1); } } : undefined}
+            className={`shrink-0 relative inline-flex items-center ${sm ? 'gap-1.5 px-2.5 h-7 rounded-sm text-[0.75rem]' : 'gap-2.5 px-3.5 h-9 rounded-lg text-[0.875rem]'} transition-colors cursor-pointer ${
               active ? 'text-brand-700 font-semibold' : 'text-ink-500 font-medium hover:text-ink-800'
             }`}
           >
             {active && (
               <motion.div
                 layoutId={layoutId}
-                className="absolute inset-0 bg-canvas-elevated rounded-lg shadow-[0_1px_2px_rgb(15_8_30_/_0.06),0_2px_6px_rgb(15_8_30_/_0.04)] border border-canvas-border"
+                className={`absolute inset-0 bg-canvas-elevated ${sm ? 'rounded-sm' : 'rounded-lg'} shadow-[0_1px_2px_rgb(15_8_30_/_0.06),0_2px_6px_rgb(15_8_30_/_0.04)] border border-canvas-border`}
                 transition={{ type: 'spring', stiffness: 400, damping: 30 }}
               />
             )}
             <span className="relative z-10 flex items-center gap-2">
-              {Icon && <Icon size={15} className={active ? 'text-brand-600' : 'text-ink-400'} />}
+              {Icon && <Icon size={sm ? 13 : 15} className={active ? 'text-brand-600' : 'text-ink-400'} />}
               <span>{o.label}</span>
               {typeof o.count === 'number' && (
                 <span className={`tabular-nums font-bold text-[0.8125rem] ${active ? 'text-brand-700' : 'text-ink-400'}`}>{o.count}</span>

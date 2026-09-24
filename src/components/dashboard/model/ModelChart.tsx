@@ -4,8 +4,8 @@ import {
 } from 'recharts';
 import { AlertTriangle } from 'lucide-react';
 import type { ModelChartData } from './relationshipTypes';
+import { PALETTE, fmtAxis, fmtNumber } from './chartTokens';
 
-const PALETTE = ['#6a12cd', '#8838DE', '#A366F0', '#0d9488', '#C2410C', '#B45309', '#0369A1'];
 
 /** Renders joined+aggregated multi-table data for a widget. Self-contained so
  *  the giant ConfigurableChart is untouched.
@@ -37,7 +37,7 @@ export default function ModelChart({
 
   const series = data.series;
   const colorFor = (i: number) => (i === 0 ? color : PALETTE[i % PALETTE.length]);
-  const fmt = (v: number) => (Math.abs(v) >= 1000 ? v.toLocaleString('en-IN') : String(v));
+  const fmt = fmtNumber;
   const opacityFor = (label: string) => (highlight != null && label !== highlight ? 0.26 : 1);
   const clickable = !!onSelect;
   const pick = (label: string | number) => onSelect?.(String(label));
@@ -47,7 +47,7 @@ export default function ModelChart({
     const total = data.rows.reduce((s, r) => s + (Number(r[key]) || 0), 0);
     return (
       <div className="h-full w-full flex flex-col items-center justify-center">
-        <div className="text-[1.75rem] font-bold text-text tabular-nums">{fmt(total)}</div>
+        <div className="text-[1.75rem] font-bold text-text tabular-nums">{fmt(total, key)}</div>
         <div className="text-[0.6875rem] text-text-muted mt-1">{key}</div>
       </div>
     );
@@ -72,7 +72,7 @@ export default function ModelChart({
                 style={{ opacity: opacityFor(String(r.label)) }}
               >
                 <td className="px-2 py-1.5 text-text">{r.label}</td>
-                {series.map(s => <td key={s} className="px-2 py-1.5 text-right tabular-nums text-text-secondary">{fmt(Number(r[s]) || 0)}</td>)}
+                {series.map(s => <td key={s} className="px-2 py-1.5 text-right tabular-nums text-text-secondary">{fmt(Number(r[s]) || 0, s)}</td>)}
               </tr>
             ))}
           </tbody>
@@ -93,7 +93,7 @@ export default function ModelChart({
           >
             {data.rows.map((r, i) => <Cell key={i} fill={colorFor(i)} fillOpacity={opacityFor(String(r.label))} />)}
           </Pie>
-          <Tooltip formatter={(v) => fmt(Number(v) || 0)} />
+          <Tooltip formatter={(v) => fmt(Number(v) || 0, key)} />
           <Legend wrapperStyle={{ fontSize: 11 }} />
         </PieChart>
       </ResponsiveContainer>
@@ -114,8 +114,8 @@ export default function ModelChart({
       <Cartesian data={data.rows} margin={{ top: 8, right: 12, left: 0, bottom: 0 }} onClick={onChartClick} className={clickable ? 'cursor-pointer' : ''}>
         <CartesianGrid strokeDasharray="3 3" stroke="#EEEEF1" vertical={false} />
         <XAxis dataKey="label" tick={{ fontSize: 10, fill: '#6B5D82' }} tickLine={false} axisLine={{ stroke: '#E5E7EB' }} />
-        <YAxis tick={{ fontSize: 10, fill: '#6B5D82' }} tickLine={false} axisLine={false} tickFormatter={fmt} width={48} />
-        <Tooltip formatter={(v) => fmt(Number(v) || 0)} contentStyle={{ fontSize: 11, borderRadius: 8 }} cursor={{ fill: 'rgba(106,18,205,0.06)' }} />
+        <YAxis tick={{ fontSize: 10, fill: '#6B5D82' }} tickLine={false} axisLine={false} tickFormatter={fmtAxis} width={48} />
+        <Tooltip formatter={(v, name) => fmt(Number(v) || 0, String(name ?? ''))} contentStyle={{ fontSize: 11, borderRadius: 8 }} cursor={{ fill: 'rgba(106,18,205,0.06)' }} />
         {series.length > 1 && <Legend wrapperStyle={{ fontSize: 11 }} />}
         {series.map((s, i) => (
           isLine ? <Line key={s} type="monotone" dataKey={s} stroke={colorFor(i)} strokeWidth={2} dot={false} />
