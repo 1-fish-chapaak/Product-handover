@@ -5,7 +5,13 @@ import { motion, useReducedMotion } from 'motion/react';
 // Parses a formatted KPI string into prefix / number / suffix so the
 // numeric portion can be animated 0 → target while currency symbols and
 // abbreviations (₹, M, L, K, %) stay locked.
-function parseKpiValue(v: string): { prefix: string; num: number; suffix: string; decimals: number } | null {
+// The grouping the value arrived with is kept: "19,791,583" counts up in
+// en-US, "1,97,91,583" in en-IN (the platform default when ambiguous).
+function groupingLocale(numStr: string): string {
+  const groups = numStr.split('.')[0].split(',');
+  return groups.length >= 3 && groups.slice(1).every(g => g.length === 3) ? 'en-US' : 'en-IN';
+}
+function parseKpiValue(v: string): { prefix: string; num: number; suffix: string; decimals: number; locale: string } | null {
   const m = v.match(/^([^\d.-]*)([\d.,]+)([^\d.,]*)$/);
   if (!m) return null;
   const [, prefix, numStr, suffix] = m;
@@ -13,7 +19,7 @@ function parseKpiValue(v: string): { prefix: string; num: number; suffix: string
   const decimals = cleaned.includes('.') ? cleaned.split('.')[1].length : 0;
   const num = parseFloat(cleaned);
   if (Number.isNaN(num)) return null;
-  return { prefix, num, suffix, decimals };
+  return { prefix, num, suffix, decimals, locale: groupingLocale(numStr) };
 }
 
 export function KpiCountUp({ value, delay = 0, duration = 1400 }: { value: string; delay?: number; duration?: number }) {
@@ -57,7 +63,7 @@ export function KpiCountUp({ value, delay = 0, duration = 1400 }: { value: strin
   if (!parsed) return <>{value}</>;
   return (
     <span className="inline-block">
-      {parsed.prefix}{n.toLocaleString('en-IN', { minimumFractionDigits: parsed.decimals, maximumFractionDigits: parsed.decimals })}{parsed.suffix}
+      {parsed.prefix}{n.toLocaleString(parsed.locale, { minimumFractionDigits: parsed.decimals, maximumFractionDigits: parsed.decimals })}{parsed.suffix}
     </span>
   );
 }
@@ -89,14 +95,20 @@ export interface KpiTileProps {
    *  where a ramping counter means two places disagree for a second. */
   instant?: boolean;
   className?: string;
+  /** Right-aligned on the label row (e.g. a delta chip in Compare mode). */
+  aside?: React.ReactNode;
+  /** After the value on the value row (e.g. "vs 1,368 · Aug 2026"). */
+  secondary?: React.ReactNode;
+  /** Overrides the default "label: value" announcement. */
+  ariaLabel?: string;
 }
 
-export function KpiTile({ label, value, index = 0, onClick, editing, footer, valueClassName = 'text-ink-900', className = '', selected = false, instant = false }: KpiTileProps) {
+export function KpiTile({ label, value, index = 0, onClick, editing, footer, valueClassName = 'text-ink-900', className = '', selected = false, instant = false, aside, secondary, ariaLabel }: KpiTileProps) {
   const prefersReducedMotion = useReducedMotion();
   return (
     <motion.div
       role={onClick ? 'button' : 'listitem'}
-      aria-label={editing ? undefined : `${label}: ${value}`}
+      aria-label={editing ? undefined : (ariaLabel ?? `${label}: ${value}`)}
       aria-pressed={onClick ? selected : undefined}
       tabIndex={onClick ? 0 : undefined}
       onClick={onClick}
@@ -114,12 +126,16 @@ export function KpiTile({ label, value, index = 0, onClick, editing, footer, val
     >
       {editing ?? (
         <>
-          <p className="text-[0.6875rem] font-semibold text-ink-500 uppercase tracking-wide mb-2 truncate" aria-hidden="true">
-            {label}
-          </p>
-          <p className={`text-[1.625rem] font-bold leading-none tabular-nums ${valueClassName}`} aria-hidden="true">
-            {instant ? value : <KpiCountUp value={value} delay={120 + index * 80} />}
-          </p>
+          <div className="flex items-start justify-between gap-2 mb-2" aria-hidden="true">
+            <p className="text-[0.6875rem] font-semibold text-ink-500 uppercase tracking-wide truncate">{label}</p>
+            {aside && <span className="shrink-0 -mt-0.5">{aside}</span>}
+          </div>
+          <div className="flex items-baseline gap-2.5 flex-wrap" aria-hidden="true">
+            <p className={`text-[1.625rem] font-bold leading-none tabular-nums ${valueClassName}`}>
+              {instant ? value : <KpiCountUp value={value} delay={120 + index * 80} />}
+            </p>
+            {secondary}
+          </div>
           {footer && <div className="mt-2">{footer}</div>}
         </>
       )}

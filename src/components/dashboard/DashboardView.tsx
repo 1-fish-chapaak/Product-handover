@@ -27,7 +27,7 @@ import { useShare, rectFromEvent } from '../../context/ShareContext';
 import { KpiTile } from '../shared/KpiTile';
 import { AddCardModal } from './add-widget/AddCardModal';
 // ─── Data model (table relationships + multi-table widgets) ───
-import { MODEL_TABLES, DEFAULT_RELATIONSHIPS } from './model/modelData';
+import { MODEL_TABLES, DEFAULT_RELATIONSHIPS, tablesForDashboard } from './model/modelData';
 import type { Relationship, WidgetModelConfig, ModelFilter, ModelTable } from './model/relationshipTypes';
 import { buildWidgetRows, distinctValues, colByName, tableById } from './model/joinEngine';
 import RelationshipManagerModal from './model/RelationshipManagerModal';
@@ -35,6 +35,23 @@ import ModelChart from './model/ModelChart';
 import { AddDataModal } from './AddDataModal';
 import { WhiteDropdown } from './add-widget/WhiteDropdown';
 import { ConfigurableChart } from './add-widget/ConfigurableChart';
+import type { DashboardWidget } from './widgetTypes';
+import CompareControl from './compare/CompareControl';
+import CompareStrip from './compare/CompareStrip';
+import CompareKpiTile from './compare/CompareKpiTile';
+import { fmtNumber } from './model/chartTokens';
+import CompareWidgetBody from './compare/CompareWidgetBody';
+import SeriesCompareBody from './compare/SeriesCompareBody';
+import SeriesKpiTile from './compare/SeriesKpiTile';
+import WidgetCompareMenu from './compare/WidgetCompareMenu';
+import { CompareStatusBadge, type CompareStatus } from './compare/CompareChip';
+import { isSeriesCompare } from './compare/compareTypes';
+import { compareClock, conflictingFilters, resolveCompare, runCompare, runSeriesCompare } from './compare/compareEngine';
+import { loadCompareConfig, saveCompareConfig } from './compare/compareStorage';
+import { seedModelFor } from './compare/seedModels';
+import { metricKey } from './compare/polarity';
+import type { CompareConfig, SeedSlot, WidgetCompareOverride } from './compare/compareTypes';
+import type { PolarityMetric } from './compare/PolarityEditor';
 import SlicerWidget, { type SlicerMode } from './add-widget/SlicerWidget';
 import DashboardAssistant from './assistant/DashboardAssistant';
 import { runAssistant, type AssistantResult, type UserWidget as AssistantWidget } from './assistant/assistantEngine';
@@ -580,7 +597,7 @@ const SHARE_EMAIL_TEMPLATES: Record<DashboardId, { subject: string; body: string
 // ─── Alerts Panel Component ─────────────────────────────────────────────────
 
 function EmptyAlertsPanel() {
-  const [expanded, setExpanded] = useState(true);
+  const [expanded, setExpanded] = useState(false); // collapsed until there is something to read — an empty digest must not push the widgets down
   return (
     <motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} className="glass-card mb-5 overflow-hidden">
       <div className="flex items-center justify-between px-5 py-4 border-b border-border-light/50">
@@ -3069,8 +3086,14 @@ function WidgetCard({
   hideDrill,
   dataSourceInfo,
   hasAlert,
+  compareBadge,
+  compareMenu,
 }: {
   title: string;
+  /** Compare mode — the widget's status badge (pinned / excluded / not comparable). */
+  compareBadge?: React.ReactNode;
+  /** Compare mode — the override section rendered inside the card menu. */
+  compareMenu?: (close: () => void) => React.ReactNode;
   subtitle?: string;
   children: React.ReactNode;
   onExpand?: () => void;
@@ -3232,6 +3255,7 @@ function WidgetCard({
               ) : (
                 <span className="inline-flex items-center gap-1 text-[0.5625rem] text-ink-400 shrink-0"><FileText size={8} className="text-green-600" /> Excel</span>
               )}
+              {compareBadge}
               {dataLinksFromParent && dataLinksFromParent.length > 0 && (() => {
                 const widgetLabels = (widgetFields || []).map(id => DRAG_FIELDS.find(f => f.id === id)?.label).filter(Boolean);
                 const relevantCount = dataLinksFromParent.filter(l => widgetLabels.includes(l.fieldA) || widgetLabels.includes(l.fieldB)).length;
@@ -3506,6 +3530,7 @@ function WidgetCard({
                       </button>
                     </>
                   )}
+                  {compareMenu && <div onClick={(e) => e.stopPropagation()}>{compareMenu(() => setShowMenu(false))}</div>}
                   {onDelete && (
                     <>
                       <div className="my-1 mx-3 border-t border-canvas-border/40" />
@@ -3871,8 +3896,8 @@ interface DashboardProps {
    *  single-source dashboards have one. The Add Data modal renders this list
    *  so users can pick a primary or attach more. */
   initialDataSourceNames?: string[];
-  savedWidgets?: Array<{ chartType: string; title: string; xField: string; yField: string; color?: string; fontFamily?: string; seriesColors?: Record<string, string> }>;
-  onSaveWidgets?: (widgets: Array<{ chartType: string; title: string; xField: string; yField: string; color?: string; fontFamily?: string; seriesColors?: Record<string, string> }>) => void;
+  savedWidgets?: DashboardWidget[];
+  onSaveWidgets?: (widgets: DashboardWidget[]) => void;
   /** Persist any change to the dashboard's source binding (attach a new
    *  source, swap primary, change DB) back into App state. */
   onUpdateDashboardSource?: (patch: { dataSource?: 'excel' | 'csv' | 'sql' | 'query' | 'combo'; sourceId?: string; dataSourceNames?: string[] }) => void;
@@ -3968,6 +3993,12 @@ export default function DashboardView({ initialDashboardId, initialDashboardName
   // removing the same default 3× is the signal that retires it.
   const [removedMemoryDefaults, setRemovedMemoryDefaults] = useState<Set<string>>(() => new Set());
   const isCustomInitial = !!initialDashboardId && !DASHBOARDS.some(d => d.id === initialDashboardId);
+  // The data model behind this dashboard — the seed P2P/GRC tables, or a
+  // workbook's own single sheet. Every widget, slicer and Compare runs on it.
+  const modelTables = useMemo(() => tablesForDashboard(initialDashboardId ?? undefined), [initialDashboardId]);
+  // Compare's "today": the seed model runs on a fixed 2026 clock; any other
+  // model is anchored to its latest dated row.
+  const COMPARE_TODAY = useMemo(() => (modelTables === MODEL_TABLES ? new Date(Date.UTC(2026, 8, 15)) : compareClock(modelTables)), [modelTables]);
   const [activeId, setActiveId] = useState<DashboardId>(
     !isCustomInitial && (initialDashboardId as DashboardId) && DASHBOARDS.some(d => d.id === initialDashboardId)
       ? (initialDashboardId as DashboardId)
@@ -4009,11 +4040,22 @@ export default function DashboardView({ initialDashboardId, initialDashboardName
     return cloneSchedule(DEFAULT_SYNC_SCHEDULE);
   });
   useEffect(() => { try { localStorage.setItem(syncKey, JSON.stringify(syncSchedule)); } catch { /* ignore */ } }, [syncKey, syncSchedule]);
+  // ── Compare mode ── A vs B across the dashboard, persisted per dashboard
+  // (seeds switch via the sidebar, so their key follows activeId).
+  const compareStorageId = isCustomInitial ? (initialDashboardId ?? 'default') : activeId;
+  const [compare, setCompareState] = useState<CompareConfig>(() => loadCompareConfig(compareStorageId, COMPARE_TODAY));
+  const [compareLoadedFor, setCompareLoadedFor] = useState(compareStorageId);
+  if (compareLoadedFor !== compareStorageId) { setCompareLoadedFor(compareStorageId); setCompareState(loadCompareConfig(compareStorageId, COMPARE_TODAY)); }
+  const setCompare = (next: CompareConfig | ((c: CompareConfig) => CompareConfig)) => {
+    setCompareState(prev => { const n = typeof next === 'function' ? next(prev) : next; saveCompareConfig(compareStorageId, n); return n; });
+  };
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [widgetLoadingStates, setWidgetLoadingStates] = useState<Record<string, 'loading' | 'loaded' | 'error'>>({});
   const [hasLoadedOnce, setHasLoadedOnce] = useState(false);
   const [isFullScreen, setIsFullScreen] = useState(false);
   const dashboardContainerRef = useRef<HTMLDivElement>(null);
+  // The page header pins to the top of the board; once scrolled it earns a hairline + soft shadow.
+  const [headerStuck, setHeaderStuck] = useState(false);
   useEffect(() => {
     const handler = () => setIsFullScreen(!!document.fullscreenElement);
     document.addEventListener('fullscreenchange', handler);
@@ -4064,9 +4106,9 @@ export default function DashboardView({ initialDashboardId, initialDashboardName
     setExpandYField(yLabel);
     setExpandLegendField('');
   }, [expandedWidget]);
-  const [editingWidget, setEditingWidget] = useState<{ index: number; data: { chartType: string; title: string; xField: string; yField: string; color?: string; fontFamily?: string; seriesColors?: Record<string, string>; model?: WidgetModelConfig; slicerMode?: string } } | null>(null);
+  const [editingWidget, setEditingWidget] = useState<{ index: number; data: DashboardWidget } | null>(null);
   const [customFields] = useState<string[] | null>(initialCustomFields || null);
-  const [userWidgets, setUserWidgets] = useState<Array<{ chartType: string; title: string; xField: string; yField: string; color?: string; fontFamily?: string; seriesColors?: Record<string, string>; model?: WidgetModelConfig; slicerMode?: string }>>(savedWidgets);
+  const [userWidgets, setUserWidgets] = useState<DashboardWidget[]>(savedWidgets);
   // Per-slicer single/multi-select toggle (tile-local, keyed by widget index).
   const [slicerSingle, setSlicerSingle] = useState<Record<number, boolean>>({});
   // Data-model relationships (table joins). Combined widgets are built directly
@@ -4087,7 +4129,7 @@ export default function DashboardView({ initialDashboardId, initialDashboardName
 
   // ── Global filter context (page slicers + chart-click cross-filter) ──
   const splitFieldId = (id: string) => { const [table, column] = id.split('::'); return { table, column }; };
-  const modelFieldLabel = (id: string) => { const { table, column } = splitFieldId(id); return colByName(tableById(MODEL_TABLES, table), column)?.label ?? column; };
+  const modelFieldLabel = (id: string) => { const { table, column } = splitFieldId(id); return colByName(tableById(modelTables, table), column)?.label ?? column; };
   const pageModelFilters: ModelFilter[] = pageFilterFields
     .map(id => { const { table, column } = splitFieldId(id); return { table, column, values: pageFilterValues[id] ?? [] }; })
     .filter(f => f.values.length > 0);
@@ -4111,6 +4153,78 @@ export default function DashboardView({ initialDashboardId, initialDashboardName
   };
   const highlightForWidget = (index: number): string | null =>
     crossFilter && crossFilter.source === index ? crossFilter.value : null;
+
+  // ── Compare resolution ──
+  const resolvedFor = (i: number) => resolveCompare(compare, userWidgets[i]?.compare);
+  const resolvedForSeed = (slot: SeedSlot) => (seedModelFor(activeId, slot) ? resolveCompare(compare, compare.seedOverrides?.[slot]) : null);
+  const seedStatus = (slot: SeedSlot): CompareStatus => {
+    if (!seedModelFor(activeId, slot)) return 'not-comparable';
+    const o = compare.seedOverrides?.[slot];
+    return o?.mode === 'pin' ? 'pinned' : o?.mode === 'off' ? 'excluded' : 'inherit';
+  };
+  const widgetStatus = (w: DashboardWidget): CompareStatus => {
+    if (!w.model || w.chartType === 'Slicer') return 'not-comparable';
+    return w.compare?.mode === 'pin' ? 'pinned' : w.compare?.mode === 'off' ? 'excluded' : 'inherit';
+  };
+  const setWidgetCompare = (i: number, next?: WidgetCompareOverride) => {
+    const nextW = userWidgets.map((x, j) => (j === i ? { ...x, compare: next } : x));
+    setUserWidgets(nextW); onSaveWidgets?.(nextW);
+  };
+  const setSeedCompare = (slot: SeedSlot, next?: WidgetCompareOverride) =>
+    setCompare(c => { const so = { ...(c.seedOverrides ?? {}) }; if (next) so[slot] = next; else delete so[slot]; return { ...c, seedOverrides: so }; });
+  // Metrics in scope for the polarity editor: every measure any widget uses.
+  const compareMetrics: PolarityMetric[] = (() => {
+    const seen = new Map<string, string>();
+    const add = (m?: WidgetModelConfig) => m?.fields.filter(f => f.role === 'measure').forEach(f => { const k = metricKey(f.table, f.column); if (!seen.has(k)) seen.set(k, colByName(tableById(modelTables, f.table), f.column)?.label ?? f.column); });
+    userWidgets.forEach(w => add(w.model));
+    // Seed slots exist only on the seed dashboards — a custom board lists just its own metrics.
+    if (!isCustomDashboard) (['kpi0', 'kpi1', 'kpi2', 'kpi3', 'w1', 'w2', 'w3', 'w4', 'table'] as SeedSlot[]).forEach(slot => add(seedModelFor(activeId, slot)));
+    return [...seen.entries()].map(([key, label]) => ({ key, label }));
+  })();
+  const SEED_SLOTS: SeedSlot[] = isCustomDashboard ? [] : ['kpi0', 'kpi1', 'kpi2', 'kpi3', 'w1', 'w2', 'w3', 'w4', 'table'];
+  const compareCounts = (() => {
+    // Slicers are filters, not visuals — they neither compare nor count.
+    const statuses = [...userWidgets.filter(w => w.chartType !== 'Slicer').map(widgetStatus), ...SEED_SLOTS.map(seedStatus)];
+    return { total: statuses.length, pinned: statuses.filter(x => x === 'pinned').length, excluded: statuses.filter(x => x === 'excluded').length, notComparable: statuses.filter(x => x === 'not-comparable').length };
+  })();
+  // User widgets lay out like the seed dashboards: model-bound KPIs in a
+  // four-up tile row, everything else in the two-column chart grid, tables
+  // full width. Indices are preserved — every handler is keyed by them.
+  const indexedWidgets = userWidgets.map((w, i) => ({ w, i }));
+  const userKpis = indexedWidgets.filter(({ w }) => w.chartType === 'KPI' && !!w.model);
+  const userGridWidgets = indexedWidgets.filter(({ w }) => !(w.chartType === 'KPI' && !!w.model));
+  const widgetSpan = (i: number): 1 | 2 => widgetSizes[i] ?? (userWidgets[i]?.chartType === 'Table' ? 2 : 1);
+  const compareConflicts = compare.enabled
+    ? [...new Set(conflictingFilters([...pageModelFilters, ...slicerModelFilters], compare.a, compare.b, modelTables).map(f => colByName(tableById(modelTables, f.table), f.column)?.label ?? f.column))]
+    : [];
+  const slicerPaused = (table: string, column: string) => compare.enabled && conflictingFilters([{ table, column, values: ['x'] }], compare.a, compare.b, modelTables).length > 0;
+  const compareOpts = { polarity: compare.polarity, normalizePerDay: compare.normalizePerDay };
+  const runFor = (model: WidgetModelConfig, base: ModelFilter[], rc: NonNullable<ReturnType<typeof resolvedFor>>) =>
+    runCompare(modelTables, relationships, model, base, rc, compareOpts);
+  const runSeriesFor = (model: WidgetModelConfig, base: ModelFilter[], rc: NonNullable<ReturnType<typeof resolvedFor>>) =>
+    runSeriesCompare(modelTables, relationships, model, base, rc, compareOpts);
+  /** A widget's compare body — two sides, or a series when the span has more. */
+  const compareBody = (model: WidgetModelConfig, base: ModelFilter[], rc: NonNullable<ReturnType<typeof resolvedFor>>, props: { chartType: string; title?: string; color?: string; onSelect?: (label: string) => void }) =>
+    isSeriesCompare(rc)
+      ? <SeriesCompareBody result={runSeriesFor(model, base, rc)} chartType={props.chartType} title={props.title} onSelect={props.onSelect} />
+      : <CompareWidgetBody result={runFor(model, base, rc)} resolved={rc} chartType={props.chartType} title={props.title} color={props.color} onSelect={props.onSelect} />;
+  /** A KPI tile in compare mode, either shape. */
+  const compareKpi = (model: WidgetModelConfig, base: ModelFilter[], rc: NonNullable<ReturnType<typeof resolvedFor>>, props: { label: string; index: number; onClick?: () => void; footer?: React.ReactNode }) =>
+    isSeriesCompare(rc)
+      ? <SeriesKpiTile label={props.label} result={runSeriesFor(model, base, rc)} index={props.index} onClick={props.onClick} footer={props.footer} />
+      : <CompareKpiTile label={props.label} result={runFor(model, base, rc)} a={rc.a} b={rc.b} index={props.index} onClick={props.onClick} footer={props.footer} />;
+  /** Compare view for a seed slot, or null to keep the static widget. */
+  const seedCompareBody = (slot: SeedSlot, chartType: string, title: string) => {
+    const model = seedModelFor(activeId, slot); const rc = resolvedForSeed(slot);
+    if (!model || !rc) return null;
+    return compareBody(model, [...pageModelFilters, ...slicerModelFilters], rc, { chartType, title });
+  };
+  const seedCompareMenu = (slot: SeedSlot, title: string) => (close: () => void) => (
+    <WidgetCompareMenu override={compare.seedOverrides?.[slot]} dashboard={compare} widgetTitle={title} comparable={!!seedModelFor(activeId, slot)} tables={modelTables} today={COMPARE_TODAY} onChange={next => setSeedCompare(slot, next)} onClose={close} />
+  );
+  const seedBadge = (slot: SeedSlot) => (compare.enabled || compare.seedOverrides?.[slot]?.mode === 'pin')
+    ? <CompareStatusBadge status={seedStatus(slot)} pinnedLabel={compare.seedOverrides?.[slot]?.mode === 'pin' ? `${(compare.seedOverrides[slot] as { a: { label: string } }).a.label} vs ${(compare.seedOverrides[slot] as { b: { label: string } }).b.label}` : undefined} reason="This widget has no bound data model. Compare works on widgets built from the data model." />
+    : null;
   // Click on a model widget element → set/toggle the cross-filter on the
   // widget's first dimension (multi-dim labels 'A · B' map to the first dim).
   const handleWidgetSelect = (index: number, model: WidgetModelConfig | undefined, label: string) => {
@@ -4134,14 +4248,20 @@ export default function DashboardView({ initialDashboardId, initialDashboardName
   // Runs the pure engine, then executes its action against real dashboard state.
   const handleAssistantSubmit = (prompt: string): AssistantResult => {
     const result = runAssistant(prompt, {
-      tables: MODEL_TABLES,
+      tables: modelTables,
       relationships,
       filters: assistantFilters,
+      today: COMPARE_TODAY,
       focusedWidget: assistantFocus,
       widgetTitles: userWidgets.map(w => w.title),
+      compare,
     });
     const a = result.action;
-    if (a?.kind === 'createWidget') {
+    if (a?.kind === 'setCompare') {
+      setCompare(c => ({ ...c, enabled: true, a: a.a, b: a.b, periods: undefined }));
+    } else if (a?.kind === 'clearCompare') {
+      setCompare(c => ({ ...c, enabled: false }));
+    } else if (a?.kind === 'createWidget') {
       const next = [...userWidgets, a.widget];
       setUserWidgets(next); onSaveWidgets?.(next);
     } else if (a?.kind === 'setFilter') {
@@ -4309,6 +4429,7 @@ export default function DashboardView({ initialDashboardId, initialDashboardName
       <div
         className="flex-1 overflow-y-auto relative transition-[margin] duration-300 ease-out"
         style={{ marginRight: filtersOpen ? FILTER_PANEL_WIDTH : 0 }}
+        onScroll={(e) => { const stuck = e.currentTarget.scrollTop > 8; if (stuck !== headerStuck) setHeaderStuck(stuck); }}
       >
         <AnimatePresence mode="wait">
           <motion.div
@@ -4319,8 +4440,11 @@ export default function DashboardView({ initialDashboardId, initialDashboardName
             transition={{ duration: 0.25 }}
             className="p-8"
           >
-            {/* Page header — Editorial: breadcrumb · serif title · context · actions */}
-            <div className={isFullScreen ? 'mb-4' : 'mb-6'}>
+            {/* Page header — Editorial: breadcrumb · serif title · context · actions.
+                Pinned while the board scrolls, so Add Widget / Filter / Compare /
+                Share stay in reach; it bleeds into the page padding so nothing
+                shows through beside it. */}
+            <div className={`sticky top-0 z-30 -mx-8 -mt-8 px-8 pt-8 bg-canvas/95 backdrop-blur-md transition-[box-shadow,border-color] duration-200 border-b ${headerStuck ? 'border-canvas-border shadow-[0_8px_24px_-16px_rgba(38,6,74,0.25)]' : 'border-transparent'} ${isFullScreen ? 'pb-3 mb-1' : 'pb-4 mb-2'}`}>
               {!isFullScreen && (
                 <div className="font-mono text-[0.75rem] text-ink-500 mb-2 flex items-center gap-1">
                   {onBack && (
@@ -4451,6 +4575,9 @@ export default function DashboardView({ initialDashboardId, initialDashboardName
                     )}
                   </button>
 
+                  {/* Compare — A vs B across the dashboard */}
+                  <CompareControl config={compare} onChange={setCompare} tables={modelTables} metrics={compareMetrics} today={COMPARE_TODAY} />
+
                   {/* Divider */}
                   <div className="w-px h-5 bg-canvas-border" />
 
@@ -4548,6 +4675,20 @@ export default function DashboardView({ initialDashboardId, initialDashboardName
             {!isCustomDashboard && !isExcelDashboard && <AlertsPanel dashboardId={activeId} />}
             {isCustomDashboard && <EmptyAlertsPanel />}
 
+            {/* Compare strip — the one place the A vs B state is announced */}
+            <AnimatePresence>
+              {compare.enabled && (
+                <CompareStrip
+                  key="compare-strip"
+                  config={compare}
+                  counts={compareCounts}
+                  conflicts={compareConflicts}
+                  onPick={() => { (document.querySelector('[aria-label^="Change A:"]') as HTMLElement | null)?.click(); }}
+                  onExit={() => setCompare(c => ({ ...c, enabled: false }))}
+                />
+              )}
+            </AnimatePresence>
+
             {/* KPI Cards */}
             {!isCustomDashboard && (
               <motion.div
@@ -4560,6 +4701,19 @@ export default function DashboardView({ initialDashboardId, initialDashboardName
                   const override = kpiOverrides[i];
                   const displayTitle = override?.title || kpi.title;
                   const isEditing = editingKpiIdx === i;
+                  const kpiSlot = `kpi${i}` as SeedSlot;
+                  const kpiModel = seedModelFor(activeId, kpiSlot);
+                  const kpiRc = !isEditing ? resolvedForSeed(kpiSlot) : null;
+                  if (kpiModel && kpiRc) {
+                    return (
+                      <div key={i} onDoubleClick={(e) => { e.stopPropagation(); setEditingKpiIdx(i); }}>
+                        {compareKpi(kpiModel, [...pageModelFilters, ...slicerModelFilters], kpiRc, {
+                          label: displayTitle, index: i,
+                          onClick: () => setExpandedWidget({ title: displayTitle, subtitle: 'KPI detail' }),
+                        })}
+                      </div>
+                    );
+                  }
                   return (
                     <div
                       key={i}
@@ -4570,8 +4724,11 @@ export default function DashboardView({ initialDashboardId, initialDashboardName
                         value={String(kpi.value)}
                         index={i}
                         onClick={isEditing ? undefined : () => setExpandedWidget({ title: displayTitle, subtitle: 'KPI detail' })}
-                        footer={!isEditing && override?.field ? (
-                          <p className="text-[0.625rem] text-ink-400">Source: {override.field}</p>
+                        footer={!isEditing && (override?.field || (compare.enabled && !kpiModel)) ? (
+                          <div className="flex items-center justify-between gap-2">
+                            {override?.field ? <p className="text-[0.625rem] text-ink-400">Source: {override.field}</p> : <span />}
+                            {compare.enabled && !kpiModel && <CompareStatusBadge status="not-comparable" reason="This KPI has no bound data model." />}
+                          </div>
                         ) : undefined}
                         editing={isEditing ? (
                           <div className="space-y-2" onClick={e => e.stopPropagation()}>
@@ -4626,7 +4783,7 @@ export default function DashboardView({ initialDashboardId, initialDashboardName
                 {crossFilter && (
                   <span className="flex items-center gap-1.5 bg-evidence-50 border border-evidence/30 text-evidence-700 text-[0.75rem] font-medium px-2.5 py-1 rounded-lg">
                     <Link2 size={11} />
-                    <span className="font-semibold">{colByName(tableById(MODEL_TABLES, crossFilter.table), crossFilter.column)?.label ?? crossFilter.column}</span>
+                    <span className="font-semibold">{colByName(tableById(modelTables, crossFilter.table), crossFilter.column)?.label ?? crossFilter.column}</span>
                     <span className="text-evidence/60">·</span> {crossFilter.value}
                     <button onClick={() => setCrossFilter(null)} className="hover:text-evidence-900 cursor-pointer"><X size={11} /></button>
                   </span>
@@ -4664,17 +4821,63 @@ export default function DashboardView({ initialDashboardId, initialDashboardName
               </motion.div>
             )}
 
+            {/* User-created KPI tiles — the same four-up row the seed dashboards use. */}
+            {userKpis.length > 0 && (
+              <motion.div
+                initial={{ opacity: 0, y: 6 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ delay: 0.1 }}
+                className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-6"
+              >
+                {userKpis.map(({ w, i }, k) => {
+                  const model = w.model!;
+                  const rc = resolvedFor(i);
+                  const data = buildWidgetRows(modelTables, relationships, model, filtersForWidget(i));
+                  const key = data.series[0];
+                  const total = data.rows.reduce((s, r) => s + (Number(r[key]) || 0), 0);
+                  const openDetail = () => setExpandedWidget({ title: w.title, subtitle: key });
+                  const status = widgetStatus(w);
+                  return (
+                    <div key={i} className="relative group">
+                      {rc ? (
+                        compareKpi(model, filtersForWidget(i), rc, { label: w.title, index: k, onClick: openDetail })
+                      ) : (
+                        <KpiTile
+                          label={w.title}
+                          value={data.error ? '—' : fmtNumber(total, key)}
+                          index={k}
+                          onClick={openDetail}
+                          footer={(
+                            <div className="flex items-center justify-between gap-2 min-w-0">
+                              <p className="text-[0.625rem] text-ink-400 truncate">{data.error ? 'Tables not connected' : key}</p>
+                              {(compare.enabled || status === 'pinned') && status !== 'inherit' && <CompareStatusBadge status={status} pinnedLabel={w.compare?.mode === 'pin' ? `${w.compare.a.label} vs ${w.compare.b.label}` : undefined} />}
+                            </div>
+                          )}
+                        />
+                      )}
+                      {/* Hover actions — edit / delete, and the compare menu the card would carry. */}
+                      <div className="absolute top-2 right-2 flex items-center gap-0.5 opacity-0 group-hover:opacity-100 focus-within:opacity-100 transition-opacity" onClick={(e) => e.stopPropagation()}>
+                        <button type="button" aria-label={`Edit ${w.title}`} onClick={() => { setEditingWidget({ index: i, data: w }); setAddWidgetOpen(true); }} className="p-1 rounded-md text-ink-400 hover:text-brand-700 hover:bg-brand-50 cursor-pointer"><Edit size={12} /></button>
+                        <button type="button" aria-label={`Delete ${w.title}`} onClick={() => { const next = userWidgets.filter((_, j) => j !== i); setUserWidgets(next); onSaveWidgets?.(next); addToast({ message: 'Widget removed', type: 'info' }); }} className="p-1 rounded-md text-ink-400 hover:text-risk-700 hover:bg-risk-50 cursor-pointer"><Trash2 size={12} /></button>
+                      </div>
+                    </div>
+                  );
+                })}
+              </motion.div>
+            )}
+
             {/* User-created widgets — render on any dashboard (custom or seeded)
-                so combined/model widgets added via Add Widget actually appear. */}
-            {userWidgets.length > 0 && (
+                so combined/model widgets added via Add Widget actually appear.
+                Two columns, tables full width — the seed dashboards' grid. */}
+            {userGridWidgets.length > 0 && (
               <motion.div
                 initial={{ opacity: 0 }}
                 animate={{ opacity: 1 }}
                 transition={{ delay: 0.25 }}
-                className="grid gap-5 mb-6"
-                style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(360px, 1fr))', gridAutoRows: 'minmax(420px, auto)' }}
+                className="grid grid-cols-1 lg:grid-cols-2 gap-5 mb-6"
+                style={{ gridAutoRows: 'minmax(420px, auto)' }}
               >
-                {userWidgets.map((w, i) => (
+                {userGridWidgets.map(({ w, i }) => (
                   <WidgetCard
                     key={i}
                     title={w.title}
@@ -4683,7 +4886,7 @@ export default function DashboardView({ initialDashboardId, initialDashboardName
                     loading={widgetLoadingStates[`user-${i}`] === 'loading'}
                     isFirstLoad={!hasLoadedOnce}
                     dataSourceInfo={widgetDataSourceInfo}
-                    colSpan={widgetSizes[i] || 1}
+                    colSpan={widgetSpan(i)}
                     onChangeSize={(span) => setWidgetSizes(prev => ({ ...prev, [i]: span }))}
                     onMoveUp={i > 0 ? () => {
                       const next = [...userWidgets];
@@ -4710,6 +4913,10 @@ export default function DashboardView({ initialDashboardId, initialDashboardName
                     dataLinks={dataLinks}
                     onRemovePageFilter={(id) => setPageFilterFields(pageFilterFields.filter(f => f !== id))}
                     onClearPageFilters={() => setPageFilterFields([])}
+                    compareBadge={w.chartType !== 'Slicer' && (compare.enabled || w.compare?.mode === 'pin') ? <CompareStatusBadge status={widgetStatus(w)} pinnedLabel={w.compare?.mode === 'pin' ? `${w.compare.a.label} vs ${w.compare.b.label}` : undefined} reason={w.chartType === 'Slicer' ? 'Slicers filter the page; they are not compared.' : 'This widget has no bound data model. Compare works on widgets built from the data model.'} /> : undefined}
+                    compareMenu={w.chartType === 'Slicer' ? undefined : (close) => (
+                      <WidgetCompareMenu override={w.compare} dashboard={compare} widgetTitle={w.title} comparable={!!w.model} tables={modelTables} today={COMPARE_TODAY} onChange={next => setWidgetCompare(i, next)} onClose={close} />
+                    )}
                   >
                     {/* Render chart based on type */}
                     {(() => {
@@ -4719,12 +4926,15 @@ export default function DashboardView({ initialDashboardId, initialDashboardName
                       if (w.chartType === 'Slicer' && w.model?.fields?.[0]) {
                         const sf = w.model.fields[0];
                         const sid = `${sf.table}::${sf.column}`;
-                        const scol = colByName(tableById(MODEL_TABLES, sf.table), sf.column);
+                        const scol = colByName(tableById(modelTables, sf.table), sf.column);
+                        const paused = slicerPaused(sf.table, sf.column);
                         return (
+                          <div className="h-full w-full flex flex-col">
+                            <div className={`flex-1 min-h-0 ${paused ? 'opacity-60 pointer-events-none' : ''}`} aria-disabled={paused || undefined}>
                           <SlicerWidget
                             colLabel={scol?.label ?? sf.column}
                             colType={scol?.type ?? 'string'}
-                            values={distinctValues(MODEL_TABLES, sf.table, sf.column)}
+                            values={distinctValues(modelTables, sf.table, sf.column)}
                             mode={(w.slicerMode as SlicerMode) ?? 'list'}
                             onModeChange={(m) => { const next = userWidgets.map((x, j) => j === i ? { ...x, slicerMode: m } : x); setUserWidgets(next); onSaveWidgets?.(next); }}
                             single={slicerSingle[i] ?? false}
@@ -4732,14 +4942,24 @@ export default function DashboardView({ initialDashboardId, initialDashboardName
                             selected={pageFilterValues[sid] ?? []}
                             onChange={(vv) => setPageFilterValues(prev => ({ ...prev, [sid]: vv }))}
                           />
+                            </div>
+                            {paused && <p className="shrink-0 px-3 py-2 text-[0.6875rem] text-ink-400 border-t border-canvas-border">Paused — this field is being compared. Your selection is kept.</p>}
+                          </div>
                         );
                       }
                       // Multi-table (model) widgets render real joined+aggregated data,
                       // filtered by global page slicers + chart-click cross-filter.
                       if (w.model) {
+                        // Compare mode: the widget's own query, run for A and B.
+                        const rc = resolvedFor(i);
+                        // Tables scroll inside the card instead of stretching the row.
+                        const bodyCls = w.chartType === 'Table' ? 'h-full w-full max-h-[24rem]' : 'h-full w-full';
+                        if (rc) {
+                          return <div className={bodyCls}>{compareBody(w.model, filtersForWidget(i), rc, { chartType: w.chartType, color: w.color, title: w.title, onSelect: (label) => handleWidgetSelect(i, w.model!, label) })}</div>;
+                        }
                         // stopPropagation so a chart-element click cross-filters
                         // instead of bubbling to the card's expand handler.
-                        return <div className="h-full w-full p-3" onClick={(e) => e.stopPropagation()}><ModelChart data={buildWidgetRows(MODEL_TABLES, relationships, w.model, filtersForWidget(i))} type={w.chartType} color={w.color} onSelect={(label) => handleWidgetSelect(i, w.model, label)} highlight={highlightForWidget(i)} /></div>;
+                        return <div className={`${bodyCls} p-3`} onClick={(e) => e.stopPropagation()}><ModelChart data={buildWidgetRows(modelTables, relationships, w.model, filtersForWidget(i))} type={w.chartType} color={w.color} onSelect={(label) => handleWidgetSelect(i, w.model, label)} highlight={highlightForWidget(i)} /></div>;
                       }
                       const labels = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun'];
                       const vals = [45, 62, 38, 71, 55, 84];
@@ -4839,10 +5059,14 @@ export default function DashboardView({ initialDashboardId, initialDashboardName
                 isFirstLoad={!hasLoadedOnce}
                 chartType="bar"
                 hasAlert={!isExcelDashboard}
+                compareBadge={seedBadge('w1')}
+                compareMenu={seedCompareMenu('w1', dashboard.lineTrend?.title || 'Detection Accuracy Goals')}
               >
+                {seedCompareBody('w1', 'bar', dashboard.lineTrend?.title || 'Detection Accuracy Goals') ?? (
                 <div className="w-full h-full">
                   <ConfigurableChart type={"combo" as any} xAxis="Month" yAxis="Duplicate Count" />
                 </div>
+                )}
               </WidgetCard>
 
               {/* Widget 2 — Area Chart */}
@@ -4864,10 +5088,14 @@ export default function DashboardView({ initialDashboardId, initialDashboardName
                 isFirstLoad={!hasLoadedOnce}
                 chartType="line"
                 hasAlert={!isExcelDashboard}
+                compareBadge={seedBadge('w2')}
+                compareMenu={seedCompareMenu('w2', dashboard.progress?.title || 'Invoice Volume Trend')}
               >
+                {seedCompareBody('w2', 'area', dashboard.progress?.title || 'Invoice Volume Trend') ?? (
                 <div className="w-full h-full">
                   <ConfigurableChart type="area" xAxis="Month" yAxis="Duplicate Count" />
                 </div>
+                )}
               </WidgetCard>
 
               {/* Widget 3 — Bar Chart */}
@@ -4888,10 +5116,14 @@ export default function DashboardView({ initialDashboardId, initialDashboardName
                 loading={widgetLoadingStates['w3'] === 'loading'}
                 isFirstLoad={!hasLoadedOnce}
                 chartType="bar"
+                compareBadge={seedBadge('w3')}
+                compareMenu={seedCompareMenu('w3', dashboard.bars?.title || 'Monthly Invoice Volume')}
               >
+                {seedCompareBody('w3', 'bar', dashboard.bars?.title || 'Monthly Invoice Volume') ?? (
                 <div className="w-full h-full">
                   <ConfigurableChart type="bar" xAxis="Month" yAxis="Duplicate Count" showTarget={false} />
                 </div>
+                )}
               </WidgetCard>
 
               {/* Widget 4 — Pie Chart */}
@@ -4913,10 +5145,14 @@ export default function DashboardView({ initialDashboardId, initialDashboardName
                 isFirstLoad={!hasLoadedOnce}
                 chartType="pie"
                 hasAlert={!isExcelDashboard}
+                compareBadge={seedBadge('w4')}
+                compareMenu={seedCompareMenu('w4', dashboard.donut?.title || 'Invoice Status')}
               >
+                {seedCompareBody('w4', 'pie', dashboard.donut?.title || 'Invoice Status') ?? (
                 <div className="w-full h-full">
                   <ConfigurableChart type="pie" xAxis="Status" yAxis="Duplicate Count" />
                 </div>
+                )}
               </WidgetCard>
             </motion.div>
 
@@ -4945,7 +5181,10 @@ export default function DashboardView({ initialDashboardId, initialDashboardName
                 isFirstLoad={!hasLoadedOnce}
                 chartType="table"
                 hideDrill
+                compareBadge={seedBadge('table')}
+                compareMenu={seedCompareMenu('table', dashboard.table.title)}
               >
+                {seedCompareBody('table', 'table', dashboard.table.title) ?? (<>
                 <div className="overflow-x-auto">
                   <table className="w-full text-left" style={{ minWidth: 900 }}>
                     <thead>
@@ -4999,6 +5238,7 @@ export default function DashboardView({ initialDashboardId, initialDashboardName
                     </button>
                   </div>
                 </div>
+                </>)}
               </WidgetCard>
             </motion.div>
 
@@ -5118,6 +5358,27 @@ export default function DashboardView({ initialDashboardId, initialDashboardName
         {/* Visualization tab content — render the matching ConfigurableChart */}
         {expandedWidget && (() => {
           const t = expandedWidget.title.toLowerCase();
+          // Compare mode: the expanded view shows the same two-sided answer as
+          // the card (chart + legend, or "what changed" + the variance table).
+          {
+            const ui = userWidgets.findIndex(w => w.title === expandedWidget.title);
+            const uw = ui >= 0 ? userWidgets[ui] : undefined;
+            const seedTitles: [SeedSlot, string, string][] = [
+              ['w1', dashboard.lineTrend?.title || 'Detection Accuracy Goals', 'bar'],
+              ['w2', dashboard.progress?.title || 'Invoice Volume Trend', 'area'],
+              ['w3', dashboard.bars?.title || 'Monthly Invoice Volume', 'bar'],
+              ['w4', dashboard.donut?.title || 'Invoice Status', 'pie'],
+              ['table', dashboard.table.title, 'table'],
+            ];
+            const seed = seedTitles.find(([, title]) => title === expandedWidget.title);
+            if (uw?.model && uw.chartType !== 'Slicer') {
+              const rc = resolvedFor(ui);
+              if (rc) return <div className="w-full h-full min-h-[420px]">{compareBody(uw.model, filtersForWidget(ui), rc, { chartType: uw.chartType, color: uw.color, title: uw.title })}</div>;
+            } else if (seed) {
+              const body = seedCompareBody(seed[0], seed[2], seed[1]);
+              if (body) return <div className="w-full h-full min-h-[420px]">{body}</div>;
+            }
+          }
           // Match by title keywords to be resilient to title changes
           let chartConfig: { type: string; xAxis: string; yAxis: string } | null = null;
           if (t.includes('accuracy') || t.includes('detection') || t.includes('goals')) {
@@ -5242,7 +5503,7 @@ export default function DashboardView({ initialDashboardId, initialDashboardName
       <FilterPanel
         open={filtersOpen}
         onClose={() => setFiltersOpen(false)}
-        modelTables={MODEL_TABLES}
+        modelTables={modelTables}
         pageFilterFields={pageFilterFields}
         onPageFilterFieldsChange={setPageFilterFields}
         pageFilterValues={pageFilterValues}
@@ -5257,7 +5518,7 @@ export default function DashboardView({ initialDashboardId, initialDashboardName
           <RelationshipManagerModal
             open={connectTablesOpen}
             onClose={() => setConnectTablesOpen(false)}
-            tables={MODEL_TABLES}
+            tables={modelTables}
             relationships={relationships}
             setRelationships={setRelationships}
             widgets={userWidgets.map(w => ({ title: w.title, model: w.model }))}
@@ -5285,9 +5546,8 @@ export default function DashboardView({ initialDashboardId, initialDashboardName
         initialName={editingWidget?.data?.title}
         initialSeriesColors={editingWidget?.data?.seriesColors}
         initialModel={editingWidget?.data?.model}
-        modelTables={MODEL_TABLES}
+        modelTables={modelTables}
         relationships={relationships}
-        onConnectTables={() => setConnectTablesOpen(true)}
         onSelectCard={(cardType, config) => {
           const widget = {
             chartType: cardType,
