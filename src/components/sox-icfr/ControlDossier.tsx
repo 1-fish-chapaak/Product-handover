@@ -21,8 +21,9 @@ import {
   monthlyBreakdown, spikeMonths, priorRoundCount, fileUsable, originLabel, guessFileKind, populationSources, ipeChecksFor, samplesFor,
   expectedInputsFor, hasRowCount, isAssisting, sampledSources, reviewNotesFor, isShared, entityCoverage, uncoveredEntities, hasPaths, pathCoverage, untouchedPaths, type PopVerdict,
   requiredFilesOf, requiredFilesCount, requiredFilesReady, passedWithoutFiles, designFilesOf,
+  evidenceKindOf,
   designApproved, isEngagementLocked, samePerson, documentSystemRows,
-  auditSampling, dealSample, NO_COUNTRY, sampleDate, sampleHome, sampleSplit, spreadPhrase, workingAudit, yearSampleRounds, LEGACY_SOURCE_ID, type SampleSplit, type YearRound, yearEndPending,
+  dealSample, NO_COUNTRY, sampleDate, sampleHome, sampleSplit, spreadPhrase, workingAudit, yearSampleRounds, LEGACY_SOURCE_ID, type SampleSplit, type YearRound, yearEndPending,
   draftSamplePrompt, readSamplePrompt,
   populationInstances, sampleAmount, seedKeyOf,
   narrowedCount, populationFrom, readRowCount,
@@ -30,7 +31,7 @@ import {
 import { useAuditFiles, type AuditFile } from './useAuditFiles';
 import { evidenceSlots, mapEvidence, type EvidenceMatch } from './controlChatEvidence';
 import { auditCovers, countryFor, countryOf, inScopeEntityNames, ownersOf, programmeFor, scopedForDraw } from './auditScope';
-import { ConclusionPill, CourtBadge, NatureChip, OriginPicker, Toggle, TrackPill, Tickmark, Stamp, RagKpiRow, ragState, statusWordOf, worstMeter, type RagMeterDef } from './parts';
+import { ConclusionPill, CourtBadge, NatureChip, OriginPicker, Toggle, TrackPill, Tickmark, Stamp, RagKpiRow, type RagMeterDef } from './parts';
 import { Pill } from '../shared/StatusBadge';
 import { useToast } from '../shared/Toast';
 import { Sparkles, FileSpreadsheet } from 'lucide-react';
@@ -351,7 +352,11 @@ function ShortFormNote({ control }: { control: Control }) {
 }
 
 // ── conclude footer — always visible, prominent ───────────────────────────────────
-function ConcludeFooter({ control, which, suggestion, canEdit, disabled, disableEffective, disableEffectiveNote }: { control: Control; which: 'design' | 'operating'; suggestion: TrackConclusion; canEdit: boolean; disabled?: boolean; disableEffective?: boolean; disableEffectiveNote?: string }) {
+function ConcludeFooter({ control, which, suggestion, canEdit, disabled, disabledNote, disableEffective, disableEffectiveNote }: { control: Control; which: 'design' | 'operating'; suggestion: TrackConclusion; canEdit: boolean; disabled?: boolean;
+  /** Why both buttons are dead — said beside them, because a pair of greyed
+   *  buttons with no reason reads as the screen being broken. */
+  disabledNote?: string;
+  disableEffective?: boolean; disableEffectiveNote?: string }) {
   const { me, concludeDesign, concludeOperating, overrideDesign, overrideOperating } = useIcfr();
   const { addToast } = useToast();
   const logEvent = useAuditLog();
@@ -419,7 +424,9 @@ function ConcludeFooter({ control, which, suggestion, canEdit, disabled, disable
       <div className="flex items-center gap-2.5 flex-wrap mt-2.5">
         <button disabled={disabled || disableEffective || staleRuns > 0 || onWordAlone > 0 || roundFail} title={disableEffective ? disableEffectiveNote : undefined} onClick={() => apply('Effective')} className="h-9 px-4 inline-flex items-center gap-1.5 rounded-lg bg-compliant-600 text-white text-[0.78125rem] font-semibold enabled:hover:bg-compliant-700 disabled:opacity-40 transition-colors cursor-pointer">{disableEffective ? <Lock size={14} /> : <CheckCircle2 size={15} />} {effectiveLabel}</button>
         <button disabled={disabled || staleRuns > 0} onClick={() => apply('Ineffective')} className="h-9 px-4 inline-flex items-center gap-1.5 rounded-lg border border-risk-300 text-risk-700 text-[0.78125rem] font-semibold enabled:hover:bg-risk-50 disabled:opacity-40 transition-colors cursor-pointer"><XCircle size={15} /> {ineffectiveLabel}</button>
-        {disableEffective && disableEffectiveNote && <span className="text-[0.71875rem] text-mitigated-700 inline-flex items-center gap-1"><Lock size={11} /> {disableEffectiveNote}</span>}
+        {disabled && disabledNote
+          ? <span className="text-[0.71875rem] text-mitigated-700 inline-flex items-center gap-1"><Lock size={11} /> {disabledNote}</span>
+          : disableEffective && disableEffectiveNote && <span className="text-[0.71875rem] text-mitigated-700 inline-flex items-center gap-1"><Lock size={11} /> {disableEffectiveNote}</span>}
         {staleRuns > 0 && (
           <span className="text-[0.71875rem] text-mitigated-700 inline-flex items-center gap-1">
             <AlertTriangle size={11} /> {staleRuns} run{staleRuns === 1 ? ' predates' : 's predate'} the current draw — re-run before concluding.
@@ -623,15 +630,6 @@ function RunResultsModal({ control, step, onClose }: { control: Control; step: O
 // ── design consideration row — validated by its own workflow (Q&A) + override ─────
 export const VALIDATE_MS = 6000;
 
-/** A picked file's extension, read as one of the four evidence kinds the model
- *  knows. Same mapping the store uses when a file arrives by any other door. */
-function evidenceKindOf(name: string): EvidenceFile['kind'] {
-  const n = name.toLowerCase();
-  if (n.endsWith('.csv')) return 'CSV';
-  if (n.endsWith('.xlsx') || n.endsWith('.xls')) return 'XLSX';
-  if (n.endsWith('.png') || n.endsWith('.jpg') || n.endsWith('.jpeg')) return 'IMG';
-  return 'PDF';
-}
 
 /** `checking` — Ira is running across every design check from the section header
  *  (S6, A17). The row wears the same busy state its own validation used to. */
@@ -1175,6 +1173,16 @@ function AttributeRow({ control, step, canEdit, testing }: { control: Control; s
     });
   };
 
+  // Every file has a line, so there is nothing left to agree to — it goes on
+  // the record without a press (user ask, 23 Sep). The old "File 3 files" asked
+  // the reader to confirm what choosing the files had already decided, and read
+  // as a dead button beside a counter still insisting 0 of 3 were in. The one
+  // thing that genuinely still needs a person is a file with NO line to go on,
+  // and that keeps its button below.
+  useEffect(() => {
+    if (pile && pile.length > 0 && pile.every(m => m.slot)) filePile();
+  }, [pile]); // eslint-disable-line react-hooks/exhaustive-deps
+
   // No Pass without the evidence (17 Sep dev call) — the Pass button, an
   // override and an attestation all wait for every required file. Fail never does.
   const passLock = ready ? undefined : `Upload all ${total} required files first`;
@@ -1246,7 +1254,7 @@ function AttributeRow({ control, step, canEdit, testing }: { control: Control; s
                     checklist this is the line's own Upload button wearing a
                     different word, and two buttons for one job is one too many. */}
                 {canEdit && !busy && total > 1 && (
-                  <label title="Choose several files at once — each one is matched to the line it proves, and nothing is filed until you have seen where it went"
+                  <label title="Choose several files at once — each one is matched to the line it proves and filed straight away; anything with no line to go on waits for you"
                     className="ml-auto h-6 px-2 rounded-md border border-brand-200 bg-canvas-elevated text-brand-700 text-[0.6875rem] font-semibold hover:border-brand-400 hover:bg-brand-50 focus-within:ring-2 focus-within:ring-brand-200 inline-flex items-center gap-1 cursor-pointer">
                     <input type="file" multiple className="sr-only" accept=".pdf,.png,.jpg,.jpeg,.xlsx,.xls,.csv,.doc,.docx"
                       aria-label={`Upload several files for ${step.code}`}
@@ -1343,23 +1351,25 @@ function AttributeRow({ control, step, canEdit, testing }: { control: Control; s
                   no line are named here rather than dropped — a file the reader
                   handed over and never heard of again is a file they will
                   assume went somewhere. */}
-              {pile && (
+              {pile && spare.length > 0 && (
                 <div className="mt-2.5 pt-2 border-t border-brand-100/70">
-                  {spare.length > 0 && (
-                    <p className="mb-1.5 text-[0.65625rem] text-mitigated-700 flex items-start gap-1">
-                      <AlertTriangle size={10} className="shrink-0 mt-[2px]" />
-                      <span className="min-w-0">{spare.length === 1 ? 'This one has no line to go on' : `${spare.length} have no line to go on`} — {spare.map(m => m.name).join(', ')}. Put {spare.length === 1 ? 'it' : 'them'} on a line above, or file the rest without {spare.length === 1 ? 'it' : 'them'}.</span>
-                    </p>
-                  )}
+                  <p className="mb-1.5 text-[0.65625rem] text-mitigated-700 flex items-start gap-1">
+                    <AlertTriangle size={10} className="shrink-0 mt-[2px]" />
+                    <span className="min-w-0">{spare.length === 1 ? 'This one has no line to go on' : `${spare.length} have no line to go on`} — {spare.map(m => m.name).join(', ')}. Put {spare.length === 1 ? 'it' : 'them'} on a line above{mapped > 0 ? `, or keep the ${mapped === 1 ? 'other one' : `other ${mapped}`} without ${spare.length === 1 ? 'it' : 'them'}` : ''}.</span>
+                  </p>
                   <div className="flex items-center gap-1.5 flex-wrap">
-                    <button onClick={filePile} disabled={mapped === 0}
-                      title={mapped === 0 ? 'Map at least one file to a line first' : undefined}
-                      className="h-7 px-2.5 rounded-md bg-brand-600 text-white text-[0.6875rem] font-semibold enabled:hover:bg-brand-700 disabled:opacity-40 disabled:cursor-not-allowed inline-flex items-center gap-1 cursor-pointer">
-                      <Upload size={11} /> File {mapped} {mapped === 1 ? 'file' : 'files'}
-                    </button>
+                    {/* The only decision left. The mapped ones are already on
+                        the record; this says what happens to the leftovers. */}
+                    {mapped > 0 && (
+                      <button onClick={filePile}
+                        className="h-7 px-2.5 rounded-md bg-brand-600 text-white text-[0.6875rem] font-semibold hover:bg-brand-700 inline-flex items-center gap-1 cursor-pointer">
+                        <Upload size={11} /> Keep the {mapped === 1 ? 'other one' : `other ${mapped}`}
+                      </button>
+                    )}
                     <button onClick={() => setPile(null)}
-                      className="h-7 px-2.5 rounded-md border border-canvas-border bg-canvas-elevated text-ink-600 text-[0.6875rem] font-semibold hover:text-ink-900 hover:border-ink-300 cursor-pointer">Cancel</button>
-                    <span className="text-[0.625rem] text-ink-400">Nothing is written until you file it.</span>
+                      className="h-7 px-2.5 rounded-md border border-canvas-border bg-canvas-elevated text-ink-600 text-[0.6875rem] font-semibold hover:text-ink-900 hover:border-ink-300 cursor-pointer">
+                      {mapped > 0 ? 'Cancel' : 'Discard these'}
+                    </button>
                   </div>
                 </div>
               )}
@@ -1462,8 +1472,22 @@ function designRagMeters(c: Control): RagMeterDef[] {
   const steps = c.operating.steps;
   const samples = c.operating.sampling?.samples ?? [];
   const toeTotal = samples.length ? samples.length * steps.length : steps.length;
+  // A SETTLED attribute counts whole (23 Sep). Counting only the per-item marks
+  // made this meter stricter than the rule the product actually enforces:
+  // `concludeOperating` gates on `stepResult(s) === 'Not tested'` — attribute
+  // level, never cell level — so a control could be concluded, signed and closed
+  // and still read 0% here. 32 of the 40 concluded controls in the seed did
+  // exactly that, printing a red nought on the same line as "TOE effective".
+  //
+  // Two readings of one fact are allowed to differ in precision; they are not
+  // allowed to disagree. So: an attribute that is settled has been run across
+  // the draw, by whichever route settled it, and one still open counts the items
+  // actually marked — which is the progress reading, and the only place a
+  // part-done attribute has anything to say.
   const toeDone = samples.length
-    ? steps.reduce((n, s) => n + samples.filter(smp => { const r = s.sampleResults?.[smp.id]; return r && r !== 'Not tested'; }).length, 0)
+    ? steps.reduce((n, s) => n + (stepResult(s) !== 'Not tested'
+      ? samples.length
+      : samples.filter(smp => { const r = s.sampleResults?.[smp.id]; return r && r !== 'Not tested'; }).length), 0)
     // stepResult, not the raw result: an attribute settled by override IS
     // settled, and a meter that says otherwise contradicts the row above it.
     : steps.filter(s => stepResult(s) !== 'Not tested').length;
@@ -1563,12 +1587,21 @@ function evidenceFileName(label: string, wpRef: string, kind: DesignDocKind): st
   return `${label.replace(/[^A-Za-z0-9]+/g, '_')}_${wpRef}_FY26.${EVIDENCE_EXT[kind] ?? 'pdf'}`;
 }
 
-function DesignSection({ control, canEdit }: { control: Control; canEdit: boolean }) {
+function DesignSection({ control, canEdit: canEditIn, locked = false }: { control: Control; canEdit: boolean;
+  /** The reviewer has approved this TOD. The step is read-only from then on —
+   *  evidence, checks and the conclusion all stand as approved. Reopening it
+   *  goes through the reviewer's own send-back, which is the door that already
+   *  exists for it (`returnDesign`). */
+  locked?: boolean }) {
   const { role, me, addDesignDoc, attachDesignEvidence, removeDesignFile, waiveDesignDoc, clearDesignWaiver, addDesignPoint, setDesignPoint, validateDesignPoint, runDesignIra } = useIcfr();
   // The owner keeps the evidence lane and loses the testing lane — see the note
   // on the dossier's own canEdit / canTest split.
   const isOwner = role === 'risk-owner';
-  const canTest = canEdit && role === 'auditor';
+  const canEdit = canEditIn && !locked;
+  // The footer still RENDERS once approved — its buttons go dead with a reason
+  // beside them, which is what says "approved, and here is how to change it".
+  // Dropping it would leave the step ending in silence.
+  const canTest = canEditIn && role === 'auditor';
   const logEvent = useAuditLog();
   const d = control.design;
   const [modal, setModal] = useState(false);
@@ -1986,6 +2019,8 @@ function DesignSection({ control, canEdit }: { control: Control; canEdit: boolea
               walkthrough's inquiry and observation as ordinarily sufficient for
               design); operating is where inquiry alone actually refuses. */}
           <ConcludeFooter control={control} which="design" suggestion={suggestion} canEdit={canTest}
+            disabled={locked}
+            disabledNote={locked ? `Approved by ${control.design.approval?.approvedBy?.by ?? 'the reviewer'} — ask them to send it back to change it` : undefined}
             disableEffective={!complete || unvalidated > 0}
             disableEffectiveNote={!complete
               ? `Locked — ${completeness.total - completeness.done} required element${completeness.total - completeness.done === 1 ? ' still needs' : 's still need'} evidence`
@@ -3878,15 +3913,14 @@ function SourceDrawRow({ control, source, canDraw, single, isOpen, onToggle, onA
   // the file, then the auditor's to rewrite — "प्रॉम्प्ट फॉलोज़, सैंपल फॉलोज़",
   // one ask per file because each file's question is its own. The words set how
   // many and which months; how the items are picked and what they are spread
-  // across was agreed on the audit (A28), so that is never theirs to change.
+  // across was agreed on the engagement (A28), so that is never theirs to change.
   const audit = workingAudit(eng, openAuditId);
-  const agreed = auditSampling(audit);
-  const method: Sampling['method'] = agreed.method;
+  const method: Sampling['method'] = methodology.method;
   const drafted = draftSamplePrompt(source, guide.suggested, audit);
   const [prompt, setPrompt] = useState(drafted);
   const [promptSeed, setPromptSeed] = useState(drafted);
   if (promptSeed !== drafted) { setPromptSeed(drafted); setPrompt(drafted); }
-  const plan = readSamplePrompt(prompt, source, guide.suggested, audit, agreed);
+  const plan = readSamplePrompt(prompt, source, guide.suggested, audit, methodology);
   // The stretch the items are dealt inside — the months the ask named, else the
   // audit's whole window — and the round any undated item already here was drawn in.
   const stretch = audit && plan.months ? { ...audit, windowFrom: plan.months.from, windowTo: plan.months.to } : audit;
@@ -3898,7 +3932,7 @@ function SourceDrawRow({ control, source, canDraw, single, isOpen, onToggle, onA
 
   const draw = () => {
     setStage('drawing');
-    logEvent({ action: 'Run', description: `Drew ${plan.size} items from ${source.file} for ${control.id} — ${prompt.trim() || 'no ask recorded'} (${method.toLowerCase()}, ${spreadPhrase(agreed.spread)})`, module: 'SOX ICFR', entity: 'Test Result' });
+    logEvent({ action: 'Run', description: `Drew ${plan.size} items from ${source.file} for ${control.id} — ${prompt.trim() || 'no ask recorded'} (${method.toLowerCase()}, ${spreadPhrase(methodology.spread)})`, module: 'SOX ICFR', entity: 'Test Result' });
     window.setTimeout(() => { setDrawn(sampleRefs(control.process, plan.size)); setStage('review'); }, 1800);
   };
   // Where each drawn item falls — its date, and on a shared control its company.
@@ -3906,7 +3940,7 @@ function SourceDrawRow({ control, source, canDraw, single, isOpen, onToggle, onA
   // other files' items, this file's key, the months asked for), so the rows shown
   // are the rows filed.
   const dealt = drawn.length
-    ? dealSample(drawControl, stretch, agreed, drawn.length,
+    ? dealSample(drawControl, stretch, methodology, drawn.length,
       (control.operating.sampling?.samples ?? []).filter(x => (x.sourceId ?? LEGACY_SOURCE_ID) !== source.id),
       `${seedKeyOf(control)}·${source.id}`, e => countryOf(eng.id, e), home)
     : [];
@@ -4227,11 +4261,10 @@ function SampleExtractSection({ control, canEdit, locked }: { control: Control; 
   // to look at.
   const doneFiles = sources.filter(s => s.approvedSample).length;
 
-  // The audit's sampling methodology (A28) — what every file's draw below follows —
-  // and this control's tested items across the year's rounds, each counted in the
-  // round its date falls in, so the split reads the same from either round.
+  // The engagement's sampling methodology (A28) — what every file's draw below
+  // follows — and this control's tested items across the year's rounds, each counted
+  // in the round its date falls in, so the split reads the same from either round.
   const current = workingAudit(eng, openAuditId);
-  const agreed = auditSampling(current);
   /** The control as the draw saw it — only its companies in scope (17 Sep). */
   const drawControl = scopedForDraw(control, inScopeEntityNames(eng.id, current));
   const yearRounds = yearSampleRounds(eng, control, current, a => auditCovers(a, control, eng.id));
@@ -4245,7 +4278,7 @@ function SampleExtractSection({ control, canEdit, locked }: { control: Control; 
   // companies are counted in the coverage strip already, so that axis is left to
   // the strip rather than said twice.
   const splits = o.sampling?.samples.length
-    ? sampleSplit(drawControl, current, agreed, e => countryOf(eng.id, e), sampleHome(eng, a => auditCovers(a, control, eng.id))).filter(sp => !(sp.axis === 'entity' && isShared(control)))
+    ? sampleSplit(drawControl, current, methodology, e => countryOf(eng.id, e), sampleHome(eng, a => auditCovers(a, control, eng.id))).filter(sp => !(sp.axis === 'entity' && isShared(control)))
     : [];
   const emptyGroups = splits.flatMap(sp => sp.groups.filter(g => g.n === 0 && g.label !== NO_COUNTRY).map(g => g.label));
   const SPLIT_LABEL: Record<SampleSplit['axis'], string> = { quarter: 'By quarter', country: 'By country', entity: 'By entity' };
@@ -4276,19 +4309,19 @@ function SampleExtractSection({ control, canEdit, locked }: { control: Control; 
         )}
       </div>
 
-      {/* ── how this audit samples, and the year so far (A28) ────────────────
-          Selection and spread were agreed on the audit, once for every control
-          in it, so they are stated here rather than asked — the files below ask
-          only how many and from which months. The running total answers #38: a control is tested
+      {/* ── how this engagement samples, and the year so far (A28) ───────────
+          Selection and spread were agreed on the engagement, once for every
+          control on it, so they are stated here rather than asked — the files
+          below ask only how many and from which months. The running total answers #38: a control is tested
           across the year's rounds, and nothing used to add them up against the
           number the sizing table sets. */}
       <div className="mt-4 rounded-xl border border-canvas-border bg-paper-50/40 p-3.5">
         <p className="text-[0.71875rem] text-ink-700">
-          <span className="font-bold">Method: {agreed.method}</span> · {spreadPhrase(agreed.spread)} <span className="text-ink-400">(set on the audit)</span>
+          <span className="font-bold">Method: {methodology.method}</span> · {spreadPhrase(methodology.spread)} <span className="text-ink-400">(agreed for this engagement)</span>
         </p>
-        {/* And how many, derived rather than chosen (#22). The method above was
-            settled on the audit; the size is settled on the engagement, and this
-            says which cell of it this control landed in. */}
+        {/* And how many, derived rather than chosen (#22). The method above and
+            the size are settled together on the engagement, and this says which
+            cell of the agreed table this control landed in. */}
         <div className="mt-1"><SizeDerivation control={control} guide={guide} methodology={methodology} /></div>
         {yearRounds.length > 0 && (
           <>
@@ -5337,28 +5370,31 @@ function ActivityRail({ control, pane, onPane, onCollapse }: { control: Control;
 
 /** The rail folded away — a spine, not a shut door (user ask, 22 Sep).
  *
- *  The first version of this was a 44px strip carrying the word "Ira" and
- *  nothing else, which made folding the rail a choice between the scores and
- *  the page. It is 80px now and keeps the two things worth glancing at: the
- *  three scores, still ranked and still coloured by the same rule, and the way
- *  back in. Every button here unfolds — the difference between them is WHICH
- *  pane you land on, so a reader who wants the history does not have to open
- *  the chat first and then leave it.
+ *  It carries the ways back IN and nothing else. It used to stack the three
+ *  scores above them (22 Sep) — but the status bar now prints those scores
+ *  across the top of the page in either state, so a folded rail repeating them
+ *  down an 80px column was the same three numbers twice on one screen, in the
+ *  narrower and worse of the two shapes (user ask, 23 Sep).
  *
- *  Deliberately not a summary of its own: the numbers are the same numbers,
- *  read from the same meters, so the spine can never quietly disagree with the
- *  rail it replaces. */
-function RailSpine({ control, meters, running, onOpen }: { control: Control; meters: RagMeterDef[]; running: boolean; onOpen: (p: RailPane) => void }) {
+ *  Every button here unfolds. The difference between them is WHICH pane you
+ *  land on, so a reader who wants the history does not have to open the chat
+ *  first and then leave it. */
+function RailSpine({ control, running, onOpen }: { control: Control; running: boolean; onOpen: (p: RailPane) => void }) {
   const { eng, role, me, openAuditId } = useIcfr();
   const still = useReducedMotion();
   const execCount = eng.executions.filter(e => e.controlId === control.id).length;
   const openDisc = discussionsFor(eng, control.id).filter(d => !d.resolved).length;
-  const worst = worstMeter(meters);
-  // Three dashes in a column was the whole of the folded rail on a control
-  // nobody had set up — honest, and useless. When nothing is measurable yet,
-  // it says so once instead of three times.
-  const noScores = meters.every(m => m.empty);
-  const iconBtn = 'w-full h-8 rounded-lg inline-flex items-center justify-center gap-1 text-ink-400 hover:text-brand-700 hover:bg-brand-50 transition-colors cursor-pointer';
+  // One shape for all three (user ask, 23 Sep). History and Discussion were
+  // naked 15px glyphs stacked under a 36px tile that plainly WAS a button, so
+  // they read as leftovers rather than as the other two ways in. They take Ira's
+  // tile and Ira's caption — and a flat paper face against its gradient, because
+  // the hierarchy is the point: one thing in this column does the work.
+  const tile = 'group w-full rounded-xl py-2 flex flex-col items-center gap-1.5 transition-colors cursor-pointer';
+  const quietFace = 'relative inline-flex items-center justify-center size-9 rounded-xl border border-canvas-border bg-paper-50 text-ink-500 transition-colors group-hover:border-brand-100 group-hover:bg-brand-50 group-hover:text-brand-700';
+  const cap = 'text-[0.5625rem] font-bold uppercase tracking-[0.08em]';
+  // The count rides the tile's corner rather than sharing a line with the icon:
+  // at this size a numeral beside a glyph reads as part of the glyph.
+  const badge = 'absolute -top-1 -right-1 min-w-[15px] h-[15px] px-1 rounded-full inline-flex items-center justify-center text-[0.5rem] font-bold tabular-nums';
   return (
     <div className="panel absolute inset-0 bottom-6 flex flex-col overflow-hidden">
       {/* The fold control sits where it sits in the open rail — top right of
@@ -5367,41 +5403,6 @@ function RailSpine({ control, meters, running, onOpen }: { control: Control; met
         className="shrink-0 h-7 mt-1 mx-1 rounded-lg text-ink-400 hover:text-ink-700 hover:bg-paper-50 inline-flex items-center justify-center transition-colors cursor-pointer">
         <PanelRightClose size={15} className="rotate-180" />
       </button>
-
-      {/* ── the scores ──────────────────────────────────────────────────────
-          At the top, the way they are at the top of the open rail — folding
-          the rail away should change the size of the reading, not its order.
-          No bar under each number: at 80px a 3px rule reads as decoration
-          rather than as a quantity, and the number already says it. Colour
-          follows the open row to the letter — ONE score may wear it. */}
-      {noScores ? (
-        <div className="px-2 pt-1 pb-2.5 text-[0.5625rem] font-semibold uppercase tracking-[0.06em] text-ink-300 text-center leading-snug">
-          Nothing<br />scored yet
-        </div>
-      ) : (
-        <div className="px-1.5 pt-1 pb-2 space-y-1.5">
-          {meters.map(m => {
-            const flagged = worst === m;
-            const state = ragState(m);
-            const StateIcon = state === 'red' ? AlertTriangle : AlertCircle;
-            return (
-              <button key={m.label} onClick={() => onOpen('chat')} title={`${m.label} — ${m.empty ? 'not set up' : `${m.pct}%, ${m.detail}`}`}
-                aria-label={m.empty ? `${m.label} — not set up` : `${m.label} ${m.pct}% — ${statusWordOf(m)}`}
-                className="w-full text-left rounded-lg px-1 py-0.5 hover:bg-paper-50 transition-colors cursor-pointer">
-                <div className="text-[0.5625rem] font-bold uppercase text-ink-400 truncate">{m.short ?? m.label}</div>
-                <div className="flex items-center gap-1">
-                  <span className={cn('text-[0.9375rem] font-bold tabular-nums leading-tight',
-                    m.empty ? 'text-ink-300' : flagged && state === 'red' ? 'text-risk-700' : flagged && state === 'amber' ? 'text-high-700' : 'text-ink-900')}>
-                    {m.empty ? '—' : `${m.pct}%`}
-                  </span>
-                  {/* Colour is never the only signal — DESIGN.md §6. */}
-                  {flagged && <StateIcon size={10} className={cn('shrink-0', state === 'red' ? 'text-risk-700' : 'text-high-700')} />}
-                </div>
-              </button>
-            );
-          })}
-        </div>
-      )}
 
       {/* PARKED (22 Sep, user ask) — the five-dot spine stood between the
           scores and the footer. It said which step the control was on, which
@@ -5412,23 +5413,23 @@ function RailSpine({ control, meters, running, onOpen }: { control: Control; met
           in words the moment it is opened. */}
 
       {/* ── the three ways back in ──────────────────────────────────────────
-          One group at the floor (user ask, 22 Sep). Ira used to sit directly
-          under the scores with History and Discussion pinned at the bottom,
-          which read correctly while the spine filled the gap between them and
-          as a stranded button once it went. They are the same KIND of thing —
-          each one unfolds the rail, and the only difference is which pane you
-          land on — so they belong in one stack rather than at opposite ends of
-          an empty column.
+          At the top, under the fold (user ask, 23 Sep). They sat at the floor
+          while the scores filled the column above them, which was the right
+          answer then and is the wrong one now that the scores have gone: three
+          buttons pinned to the bottom of an otherwise empty 80px strip read as
+          having been left there. Under the fold they read as the column's
+          content, and they land where the open rail puts the same three — its
+          tab row is the first thing in the pane, so unfolding no longer moves
+          them from one end of the screen to the other.
 
-          Ira leads it and keeps its mark: the product's AI signature (brand →
-          fuchsia, Ask IRA's own avatar), ringed while a run is in flight so a
-          validation started on the left is visible from a column 80px wide.
-          The other two stay flat icons, which is the hierarchy — one thing
-          here does the work. */}
-      <div className="mt-auto border-t border-canvas-border" />
-      <div className="shrink-0 px-1.5 py-2 space-y-1">
+          They are the same KIND of thing: each one unfolds, and the only
+          difference is which pane you land on. Ira leads and keeps its mark —
+          the product's AI signature (brand → fuchsia, Ask IRA's own avatar),
+          ringed while a run is in flight so a validation started on the left is
+          visible from a column this narrow. */}
+      <div className="shrink-0 px-1.5 pt-0.5 pb-2 space-y-1">
         <button onClick={() => onOpen('chat')} title="Ask Ira about this control" aria-label="Open the Ira chat"
-          className="group w-full rounded-xl py-2 flex flex-col items-center gap-1.5 hover:bg-brand-50 transition-colors cursor-pointer">
+          className={cn(tile, 'hover:bg-brand-50')}>
           <span className="relative inline-flex size-9">
             {running && !still && (
               <motion.span aria-hidden className="absolute inset-0 rounded-xl bg-brand-400"
@@ -5439,13 +5440,25 @@ function RailSpine({ control, meters, running, onOpen }: { control: Control; met
               <Sparkles size={17} strokeWidth={2.25} />
             </span>
           </span>
-          <span className="text-[0.5625rem] font-bold uppercase tracking-[0.12em] text-brand-700">Ira</span>
+          <span className={cn(cap, 'text-brand-700')}>Ira</span>
         </button>
-        <button onClick={() => onOpen('history')} title={`History — ${execCount} run${execCount === 1 ? '' : 's'}`} aria-label="Open the run history" className={iconBtn}>
-          <History size={15} />{execCount > 0 && <span className="text-[0.625rem] font-semibold tabular-nums">{execCount}</span>}
+        <button onClick={() => onOpen('history')} title={`History — ${execCount} run${execCount === 1 ? '' : 's'}`} aria-label="Open the run history"
+          className={cn(tile, 'hover:bg-paper-50')}>
+          <span className={quietFace}>
+            <History size={17} strokeWidth={2} />
+            {execCount > 0 && <span className={cn(badge, 'bg-paper-200 text-ink-600')}>{execCount}</span>}
+          </span>
+          <span className={cn(cap, 'text-ink-400 group-hover:text-brand-700')}>History</span>
         </button>
-        <button onClick={() => onOpen('discussion')} title={openDisc > 0 ? `Discussion — ${openDisc} open` : 'Discussion'} aria-label="Open the discussion" className={iconBtn}>
-          <MessageSquare size={15} />{openDisc > 0 && <span className="text-[0.625rem] font-semibold tabular-nums text-high-700">{openDisc}</span>}
+        <button onClick={() => onOpen('discussion')} title={openDisc > 0 ? `Discussion — ${openDisc} open` : 'Discussion'} aria-label="Open the discussion"
+          className={cn(tile, 'hover:bg-paper-50')}>
+          <span className={quietFace}>
+            <MessageSquare size={17} strokeWidth={2} />
+            {/* Amber, because an open thread is somebody waiting — the same
+                colour the row above spends on a score that needs reading. */}
+            {openDisc > 0 && <span className={cn(badge, 'bg-high-100 text-high-700')}>{openDisc}</span>}
+          </span>
+          <span className={cn(cap, 'text-ink-400 group-hover:text-brand-700')}>Discussion</span>
         </button>
       </div>
     </div>
@@ -5653,6 +5666,10 @@ export default function ControlDossier() {
   // the population stood on its own and design could be worked in parallel —
   // not any more. Clearing the TOD conclusion (a reopen, a return) clears the
   // approval too, so the steps lock again until TOD is concluded and approved.
+  // Also what locks step ① itself: it was the ONLY step that never took a
+  // `locked`, so an approved design still offered live Design effective /
+  // ineffective buttons — and re-concluding silently OVERWRITES the approval
+  // (store.tsx, concludeDesign). Locked, it stands until the reviewer sends it back.
   const todApproved = designApproved(control);
   // ── pending until year end (A29) ────────────────────────────────────────────
   // An Annual control has not run yet in an interim or roll-forward audit, so
@@ -5857,7 +5874,6 @@ export default function ControlDossier() {
               <span className="text-[0.71875rem] font-semibold text-ink-400 uppercase tracking-wide">Your control</span>
             ) : (
               <>
-                <span className="text-[0.6875rem] font-semibold uppercase tracking-[0.08em] text-ink-400">Overall status</span>
                 <ConclusionPill c={concl} />
                 <span aria-hidden className="w-px h-4 bg-canvas-border" />
                 <span className="text-[0.71875rem] text-ink-400 inline-flex items-center gap-1.5"><Tickmark result={designResult === 'Effective' ? 'Pass' : designResult === 'Ineffective' ? 'Fail' : 'Not tested'} size={14} /> TOD {designResult.toLowerCase()}</span>
@@ -5865,6 +5881,21 @@ export default function ControlDossier() {
                 <span className="text-[0.71875rem] text-ink-400 inline-flex items-center gap-1.5"><Tickmark result={opResult === 'Effective' ? 'Pass' : opResult === 'Ineffective' ? 'Fail' : 'Not tested'} size={14} /> TOE {toeLocked ? 'locked' : opResult.toLowerCase()}</span>
               </>
             )}
+            {/* The three readings, in the gap this row already had between the
+                verdict and the paper (user ask, 23 Sep). They were a band of
+                their own under this line, which made two rows out of one
+                statement: the verdict, and how far the work behind it has got.
+
+                The owner does not get them: they are the auditor's read on how
+                the testing is going, and the owner's line above is deliberately
+                "Your control" and nothing else.
+
+                With the rail open this row loses 400px, so each number takes a
+                ring (user ask, 23 Sep): it is the narrower shape — the number
+                moves inside the arc — and the one that survives being skimmed,
+                which is all the room there is for it here. Rail shut, the plain
+                numbers have the width they want. */}
+            {!isOwner && <RagKpiRow meters={designRagMeters(control)} inline dial={railOpen} />}
             {/* Secondary, per DESIGN.md: a tinted purple chip rather than the
                 outline every other control on the page already wears. These two
                 are the actions of this header, and an outline button beside an
@@ -5885,26 +5916,8 @@ export default function ControlDossier() {
               {isAuditor && controlLocked && (
                 <button onClick={() => setReopening(true)} className="h-8 px-3 inline-flex items-center gap-1.5 rounded-lg bg-brand-50 text-[0.75rem] font-semibold text-brand-700 hover:bg-brand-100 transition-colors cursor-pointer"><RotateCcw size={13} /> Reopen</button>
               )}
-              {/* Where the trail lives, beside the paper that summarises it.
-                  Short because the rail takes 400px off this row: the longer
-                  version wrapped the status line onto two, and a status line
-                  that wraps stops being a status line. */}
-              {!isOwner && <span className="hidden xl:inline text-[0.6875rem] text-ink-400">Every run is logged in History</span>}
             </div>
           </div>
-
-          {/* ── the three readings ─────────────────────────────────────────────
-              Moved off the top of the Ira rail (user ask, 22 Sep) to sit with
-              the status bar, which is where the control's verdict already
-              lives. TOD-then-TOE is the shape of the work; these are how far
-              each part of it has actually got, so the two belong in one footer
-              rather than in two columns of the screen saying the same thing
-              about the same control.
-
-              The owner does not get them: they are the auditor's read on how
-              the testing is going, and the owner's line above is deliberately
-              "Your control" and nothing else. */}
-          {!isOwner && <RagKpiRow meters={designRagMeters(control)} flush />}
         </div>
       </motion.div>
 
@@ -5994,12 +6007,14 @@ export default function ControlDossier() {
               for nothing. The owner keeps "Documents" — they supply evidence
               rather than test design, and naming the step after a test they
               cannot run would describe somebody else's job. */}
-          <VStep n={1} id="vstep-design" title={isOwner ? 'Documents' : 'Test of design'}
+          <VStep n={1} id="vstep-design" locked={!isOwner && todApproved} title={isOwner ? 'Documents' : 'Test of design'}
             subtitle={isOwner
               ? 'The documents this control needs on file. Attach what you hold — the auditor tests them.'
               : 'The documents on file, one transaction traced end-to-end, and a design check for each thing that has to be true. Ends with the design marked effective or ineffective.'}
             status={designResult} hideStatus={isOwner}
-            right={!isOwner && control.design.carriedFrom
+            right={!isOwner && todApproved
+              ? <span className="text-[0.6875rem] font-semibold text-ink-400 inline-flex items-center gap-1"><Lock size={11} /> Approved by {control.design.approval?.approvedBy?.by}</span>
+              : !isOwner && control.design.carriedFrom
               // A roll-forward carried this conclusion from its parent interim —
               // TOD is retested only where TOD failed (user ask), so the step
               // says where the verdict came from instead of asking for it again.
@@ -6018,7 +6033,7 @@ export default function ControlDossier() {
                 </div>
               </div>
             )}
-            <DesignSection control={control} canEdit={canEdit} />
+            <DesignSection control={control} canEdit={canEdit} locked={todApproved} />
             <DesignApprovalBlock control={control} />
           </VStep>
           {/* An automated control stops here while its ITGCs hold — see
@@ -6216,7 +6231,7 @@ export default function ControlDossier() {
             <ActivityRail control={control} pane={railPane} onPane={setRailPane} onCollapse={() => setRailOpen(false)} />
           </div>
           {!railOpen && (
-            <RailSpine control={control} meters={designRagMeters(control)} running={!!run}
+            <RailSpine control={control} running={!!run}
               onOpen={p => { setRailPane(p); setRailOpen(true); }} />
           )}
         </motion.div>

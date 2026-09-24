@@ -24,7 +24,7 @@ import { sameCompany } from './auditScope';
 import { requiredFilesOf, suggestedDesignChecks, titleFromRisk } from './helpers';
 import { racmTemplateForProcesses } from './mockData';
 import { CONTROL_CLASSES } from './types';
-import type { Assertion, Control, ControlClass, ControlType, DesignPoint, Frequency, Nature, OperatingStep, RiskRating, TestingStrategy } from './types';
+import type { Assertion, Control, ControlClass, ControlType, DesignPoint, Frequency, Nature, OperatingStep, RiskLikelihood, RiskRating, TestingStrategy } from './types';
 
 // ─── Fields ──────────────────────────────────────────────────────────────────────
 
@@ -34,7 +34,7 @@ export type RacmFieldKey =
   | 'subProcess' | 'type' | 'nature' | 'frequency' | 'isKey'
   | 'owner' | 'processOwner' | 'riskOwner' | 'assertions' | 'attributes'
   | 'controlEvidence' | 'designChecks' | 'sopSectionRef' | 'entity'
-  | 'effectiveDate' | 'country' | 'testingStrategy';
+  | 'effectiveDate' | 'country' | 'testingStrategy' | 'likelihood';
 
 /** What a client's own column holds. Decides what the upload checks and which
  *  box Review offers when one is blank. */
@@ -107,22 +107,23 @@ export const RACM_FIELDS: RacmField[] = [
   // 22 Sep: on the required list, and one of the six (see CONTROL_CLASSES).
   // Ira reads it off the risk where the file has no column.
   { key: 'riskCategory', label: 'Risk category', required: true, synonyms: ['risk category', 'risk type', 'category', 'risk classification', 'classification', 'class'] },
-  { key: 'riskRating', label: 'Risk rating', required: false, synonyms: ['risk rating', 'inherent risk', 'risk level', 'rating'] },
+  { key: 'riskRating', label: 'Risk rating', required: true, synonyms: ['risk rating', 'inherent risk', 'risk level', 'rating'] },
+  { key: 'likelihood', label: 'Likelihood', required: true, synonyms: ['likelihood', 'risk likelihood', 'probability', 'likelihood rating', 'likelihood of occurrence', 'chance'] },
   { key: 'controlId', label: 'Control ID', required: false, synonyms: ['control id', 'control ref', 'control no', 'control number', 'control #'] },
   { key: 'controlTitle', label: 'Control title', required: true, synonyms: ['control title', 'control name', 'control'] },
-  { key: 'objective', label: 'Control objective', required: false, synonyms: ['control objective', 'objective'] },
+  { key: 'objective', label: 'Control objective', required: true, synonyms: ['control objective', 'objective'] },
   // Labelled "Control description" since the 17 Sep call: this is the narrative
   // the auditor tests against. 'control description' moved here from
   // controlTitle with the label, so a file using that header lands on the field
   // the header now names.
   { key: 'controlActivity', label: 'Control description', required: true, synonyms: ['control activity', 'control description', 'control procedure', 'activity', 'how the control operates'] },
-  { key: 'subProcess', label: 'Sub-process', required: false, synonyms: ['sub-process', 'sub process', 'subprocess', 'process area'] },
+  { key: 'subProcess', label: 'Sub-process', required: true, synonyms: ['sub-process', 'sub process', 'subprocess', 'process area'] },
   { key: 'type', label: 'Control type', required: true, synonyms: ['control type', 'type', 'preventive / detective'] },
   { key: 'nature', label: 'Control nature', required: true, synonyms: ['control nature', 'nature', 'manual / automated', 'automation'] },
   { key: 'frequency', label: 'Frequency', required: true, synonyms: ['frequency', 'control frequency', 'how often'] },
-  { key: 'isKey', label: 'Key control', required: false, synonyms: ['key control', 'key', 'key / non-key', 'is key'] },
+  { key: 'isKey', label: 'Key control', required: true, synonyms: ['key control', 'key', 'key / non-key', 'is key'] },
   { key: 'owner', label: 'Control owner', required: true, synonyms: ['control owner', 'owner', 'performed by', 'control performer'] },
-  { key: 'processOwner', label: 'Process owner', required: false, synonyms: ['process owner'] },
+  { key: 'processOwner', label: 'Process owner', required: true, synonyms: ['process owner'] },
   // 22 Sep: accountable for the risk. A record on the matrix only — it routes no
   // task or request (that lane stays the control and process owner).
   { key: 'riskOwner', label: 'Risk owner', required: true, synonyms: ['risk owner', 'risk accountable', 'risk accountability', 'owner of the risk', 'accountable for risk'] },
@@ -133,7 +134,7 @@ export const RACM_FIELDS: RacmField[] = [
   { key: 'sopSectionRef', label: 'SOP section', required: false, synonyms: ['sop section ref', 'sop section', 'sop reference', 'sop ref'] },
   // The company a row is tested at — the ENTITY part of its ID (S11). A file
   // without one takes the company chosen when the RACM was created.
-  { key: 'entity', label: 'Entity', required: false, synonyms: ['entity', 'legal entity', 'entity name', 'subsidiary', 'company', 'company name'] },
+  { key: 'entity', label: 'Entity', required: true, synonyms: ['entity', 'legal entity', 'entity name', 'subsidiary', 'company', 'company name'] },
   // Added 17 Sep. None of the three blocks an import — a file that does not
   // carry them still lands, and Ira offers a fill per row.
   { key: 'effectiveDate', label: 'Effective date', required: false, synonyms: ['effective date', 'effective from', 'date effective', 'implementation date', 'in place from', 'go live date'] },
@@ -262,14 +263,6 @@ function sameWord(a: string, b: string): boolean {
 
 function sharesWord(a: string[], b: string[]): boolean {
   return a.some(x => b.some(y => sameWord(x, y)));
-}
-
-function keywordJaccard(a: string, b: string): number {
-  const wa = meaningfulWords(a);
-  const wb = meaningfulWords(b);
-  if (!wa.length || !wb.length) return 0;
-  const shared = wa.filter(x => wb.some(y => sameWord(x, y))).length;
-  return shared / (wa.length + wb.length - shared);
 }
 
 /** Share of the candidate's words already said by some line in `have`. */
@@ -453,21 +446,42 @@ export interface ImportRow {
   typeFlag?: 'unreadable' | 'blank';
   assertions: Assertion[];
   riskRating?: RiskRating;
+  likelihood?: RiskLikelihood;
   /** Undefined when the file leaves it blank or says something we can't read —
    *  optional, so a blank one never blocks the import (17 Sep). */
   testingStrategy?: TestingStrategy;
-  /** A8: this looks like a control the engagement already has, or one an earlier
-   *  row of this same file already wrote. `kind` says what that means, because
-   *  the two are not the same thing: 'same-process' is the same control twice in
-   *  one matrix — a repeat, held back from import — while 'other-process' is a
-   *  control that also answers for another process, which is legitimate and is
-   *  only pointed out. */
-  duplicateOf?: { kind: 'same-process' | 'other-process'; controlId: string; process: string; reason: string };
+  /** A8: this row says, word for word, what a control already on file says —
+   *  one already in this RACM, one in another RACM, or one an earlier row of
+   *  this same file already wrote. Set only when EVERY field in
+   *  `DUPLICATE_FIELDS` is identical (24 Sep rule); anything less is a different
+   *  control and is imported. `kind` only says which RACM the twin sits in —
+   *  both are duplicates and both start left out. */
+  duplicateOf?: {
+    kind: 'same-process' | 'other-process';
+    /** The control's id, or the key of an earlier row in this import. */
+    controlId: string;
+    process: string;
+    /** What a person recognises it by — 'AIH/INV/R001/C001', or 'row 4'. */
+    name: string;
+    /** Where it sits, in words — 'this RACM', 'this file', 'the Treasury RACM
+     *  for Airline Group Ltd'. */
+    where: string;
+    /** The whole verdict in one sentence, for a tooltip or a screen reader. */
+    reason: string;
+  };
 }
 
-/** Held back from import: the row repeats a control this RACM already has
- *  (17 Sep — flag and don't create). A match in another process is not one. */
-export const rowRepeats = (row: ImportRow) => row.duplicateOf?.kind === 'same-process';
+/** Held back from import: the row is a duplicate — every field in
+ *  `DUPLICATE_FIELDS` matches a control already on file.
+ *
+ *  Both kinds count. The 17 Sep build held back only a twin in THIS matrix and
+ *  let a twin in another RACM through as a note, on the reasoning that one
+ *  control can legitimately answer for two processes. The 24 Sep rule is about
+ *  the control, not about where its twin sits: if all of it is the same, it is
+ *  the same control and we do not write it again. Nothing is hidden either way
+ *  — a left-out row is still on screen, still says which control it repeats,
+ *  and is still one tick from going in. */
+export const rowRepeats = (row: ImportRow) => !!row.duplicateOf;
 
 // ── cell readers ─────────────────────────────────────────────────────────────────
 
@@ -543,6 +557,14 @@ export function parseAssertions(cell: string): Assertion[] {
   return ASSERTION_ORDER.filter(a => found.has(a));
 }
 
+function parseLikelihood(cell: string): RiskLikelihood | undefined {
+  const t = normaliseHeader(cell);
+  if (!t) return undefined;
+  if (/\b(?:high|likely|probable|almost certain)\b/.test(t)) return 'High';
+  if (/\b(?:medium|moderate|possible)\b/.test(t)) return 'Medium';
+  if (/\b(?:low|unlikely|remote|rare)\b/.test(t)) return 'Low';
+  return undefined;
+}
 function parseRiskRating(cell: string): RiskRating | undefined {
   const t = normaliseHeader(cell);
   if (!t) return undefined;
@@ -587,8 +609,48 @@ function sopFilesFor(text: string, values: Partial<Record<RacmFieldKey, string>>
   return labels.filter(l => inEvidence.has(sameText(l)));
 }
 
-/** How alike two wordings have to read before a row is called a duplicate. */
-const DUPLICATE_MATCH = 0.75;
+/**
+ * EVERY field that has to be identical before a row is called a duplicate
+ * (24 Sep rule). All of them, or it is a different control and it is imported.
+ *
+ * This replaces a similarity score. The old rule held a row back when three
+ * quarters of the meaningful words in its control wording matched something
+ * else — a resemblance, not a repeat. Two different approval controls written
+ * by the same hand scored the same as one control uploaded twice, so the
+ * reviewer was asked to argue with a guess, about rows they could not see the
+ * other side of. Nothing is held back now unless it says, field for field,
+ * what something already on file says.
+ *
+ * The list doubles as the reason on screen: Review prints these labels and puts
+ * the two values side by side, so the verdict is read rather than trusted.
+ * Anything added here appears there automatically.
+ *
+ * The control's activity and its description are ONE field, because they are
+ * one field in this product: `controlActivity` is labelled "Control
+ * description" (17 Sep call) and holds the narrative the auditor tests against.
+ */
+export const DUPLICATE_FIELDS: { key: RacmFieldKey; label: string }[] = [
+  { key: 'riskTitle', label: 'Risk title' },
+  { key: 'riskDescription', label: 'Risk description' },
+  { key: 'controlTitle', label: 'Control title' },
+  { key: 'controlActivity', label: 'Control description' },
+  { key: 'frequency', label: 'Frequency' },
+  { key: 'type', label: 'Control type' },
+  // A control tested differently IS a different control (user ask, 24 Sep):
+  // two rows sharing a title and a description but asking for different design
+  // checks, or different test attributes, are two pieces of work and both belong
+  // in the matrix. Order does not matter — see `listKey`.
+  { key: 'designChecks', label: 'Design checks' },
+  { key: 'attributes', label: 'Attributes' },
+];
+
+/** A list compared as a set: normalised, de-duplicated and sorted, so the same
+ *  checks written in a different order still read as the same checks. */
+const listKey = (items: string[]): string =>
+  Array.from(new Set(items.map(sameText).filter(Boolean))).sort().join(' | ');
+
+/** The six values of one side of the comparison. */
+export type DuplicateValues = Partial<Record<RacmFieldKey, string>>;
 
 /** Something a row is compared against: a control already on the engagement, or
  *  a row earlier in the same import. */
@@ -596,16 +658,17 @@ interface DuplicateCandidate {
   /** What `duplicateOf` carries — a control's id, or an earlier row's key. */
   id: string;
   process: string;
-  /** The same process means the same matrix, so a match is a repeat. */
+  /** Whether the twin sits in the RACM being built. It changes how the reason
+   *  reads, not whether the row is a duplicate. */
   sameProcess: boolean;
+  /** Whether the twin belongs to the SAME COMPANY. Only these are compared at
+   *  all — see `findDuplicate`. */
+  sameFirm: boolean;
   /** How the reason names it, and where it says that thing sits. */
   name: string;
   where: string;
-  /** The control ID a person would recognise. '' when there is none to compare. */
-  controlId: string;
-  /** Every wording of the control, and of the risk, worth comparing against. */
-  controlTexts: string[];
-  riskTexts: string[];
+  /** The six fields, read the same way on both sides. */
+  values: DuplicateValues;
 }
 
 /** The same matrix means the same process AT THE SAME COMPANY.
@@ -628,11 +691,27 @@ function candidateFromControl(c: Control, process: string, entity: string): Dupl
     id: c.id,
     process: c.process,
     sameProcess,
+    sameFirm: !c.entity?.trim() || !entity.trim() || sameCompany(c.entity, entity),
     name: shown,
-    where: sameProcess ? ', already in this RACM' : ` in the ${c.process} RACM${c.entity && !sameCompany(c.entity, entity) ? ` for ${c.entity}` : ''}`,
-    controlId: shown,
-    controlTexts: [c.description, c.controlActivity ?? ''],
-    riskTexts: [c.riskDescription, c.riskTitle ?? ''],
+    where: sameProcess ? 'this RACM' : `the ${c.process} RACM${c.entity && !sameCompany(c.entity, entity) ? ` for ${c.entity}` : ''}`,
+    values: controlDuplicateValues(c),
+  };
+}
+
+/** The six fields off a control already on the engagement — the other side of
+ *  the comparison, and what Review prints beside the row's own values. */
+export function controlDuplicateValues(c: Control): DuplicateValues {
+  return {
+    riskTitle: c.riskTitle ?? '',
+    riskDescription: c.riskDescription,
+    // `description` is what the RACM calls the control title; `controlActivity`
+    // is what it calls the control description. Same two fields, both sides.
+    controlTitle: c.description,
+    controlActivity: c.controlActivity ?? '',
+    frequency: c.frequency,
+    type: c.type,
+    designChecks: listKey(c.design.points.map(p => p.text)),
+    attributes: listKey(c.operating.steps.map(st => st.description)),
   };
 }
 
@@ -641,82 +720,108 @@ function candidateFromControl(c: Control, process: string, entity: string): Dupl
  *  company per row, and the same control tested at two companies is two rows,
  *  not a repeat. */
 function candidateFromRow(row: ImportRow, process: string, entity: string): DuplicateCandidate {
-  const v = row.values;
-  const rowEntity = (v.entity ?? '').trim() || entity;
+  const rowEntity = (row.values.entity ?? '').trim() || entity;
   return {
     id: row.key,
     process,
     sameProcess: sameMatrix(process, rowEntity, process, entity),
-    name: `row ${row.rowNo} above`,
-    where: '',
-    controlId: (v.controlId ?? '').trim(),
-    controlTexts: [(v.controlTitle ?? '').trim(), (v.controlActivity ?? '').trim()],
-    riskTexts: [(v.riskDescription ?? '').trim(), (v.riskTitle ?? '').trim()],
+    sameFirm: !rowEntity.trim() || !entity.trim() || sameCompany(rowEntity, entity),
+    name: `row ${row.rowNo}`,
+    where: 'this file',
+    values: duplicateValues(row),
   };
 }
 
-/** The closest of every pair of wordings. */
-function bestMatch(mine: string[], theirs: string[]): number {
-  let best = 0;
-  for (const a of mine) {
-    if (!a) continue;
-    for (const b of theirs) if (b) best = Math.max(best, keywordJaccard(a, b));
-  }
-  return best;
+/** The six fields off a row. Frequency and type are read from what the row
+ *  PARSED, not from the raw cell, so the comparison is between the two values
+ *  this product will actually store — "Monthly", "monthly" and "MONTHLY " are
+ *  one frequency here, and a spelling `parseFrequency` cannot read is not
+ *  quietly compared as text (it is null, the row is held for a frequency, and
+ *  it is never called a duplicate on a value nobody has confirmed). */
+export function duplicateValues(row: ImportRow): DuplicateValues {
+  const v = row.values;
+  return {
+    riskTitle: (v.riskTitle ?? '').trim(),
+    riskDescription: (v.riskDescription ?? '').trim(),
+    controlTitle: (v.controlTitle ?? '').trim(),
+    controlActivity: (v.controlActivity ?? '').trim(),
+    frequency: row.frequency ?? '',
+    type: row.type ?? '',
+    designChecks: listKey(row.designChecks),
+    attributes: listKey(row.attributes.map(a => a.text)),
+  };
 }
 
-/** Does this row say what something else already says? Both directions are
- *  looked for and they mean different things (17 Sep): the same control twice in
- *  THIS matrix is a repeat nobody meant to create, while the same control in
- *  another process is usually right — one control can genuinely answer for two
- *  processes — so that one is only pointed out. `earlier` is the rows already
- *  read from this file, since two identical lines in one upload are the
- *  commonest repeat of all. */
-function findDuplicate(values: Partial<Record<RacmFieldKey, string>>, idWasGenerated: boolean, existing: Control[], process: string, earlier: ImportRow[], entity: string): ImportRow['duplicateOf'] {
+/**
+ * Are these the same control? Field by field, normalised for case, punctuation
+ * and spacing — nothing looser.
+ *
+ * A blank on EITHER side is never a match. Sameness cannot be established on a
+ * field nobody filled in, and the two mistakes here are not equal: keeping a
+ * row that turns out to be a repeat costs one deletion, while dropping a
+ * control nobody meant to drop leaves a hole in the matrix that only shows up
+ * at testing. So an unanswered field keeps the row.
+ */
+function identical(mine: DuplicateValues, theirs: DuplicateValues): boolean {
+  return DUPLICATE_FIELDS.every(f => {
+    const a = sameText(mine[f.key] ?? '');
+    return !!a && a === sameText(theirs[f.key] ?? '');
+  });
+}
+
+/**
+ * Does this row say, field for field, what something already on file says?
+ *
+ * The only answer that counts is all of `DUPLICATE_FIELDS` or none of it
+ * (24 Sep): a row is either the same control, and we do not write it twice, or
+ * it is a different control, and we keep it. Nothing in between is a reason to
+ * hold anything back — a row that merely reads alike imports like any other.
+ *
+ * Three places a twin can sit, all of them checked: this RACM, another RACM of
+ * the SAME COMPANY, and `earlier` — the rows already read from this same file,
+ * since two identical lines in one upload are the commonest repeat there is.
+ *
+ * Another company is never a duplicate, however identical the wording. The
+ * library holds one Inventory matrix per legal entity on purpose, and the same
+ * control written the same way is exactly what two entities running the same
+ * procedure SHOULD have — each is tested, evidenced and signed off separately.
+ * Without this, uploading Altura's Inventory SOP called all five of its rows
+ * repeats of Airline Group's Inventory RACM and left every one of them out, for
+ * a matrix Altura did not yet have. "The same control in another RACM" means
+ * another of this company's RACMs.
+ *
+ * A control ID no longer decides anything on its own. Two files number their
+ * controls independently, so the same ID rarely meant the same control; and the
+ * ID this row imports under is built at Import from the codes and the row
+ * order, not taken from the file. What the ID does now is NAME the twin in the
+ * reason, so the reviewer can go and look at it.
+ */
+function findDuplicate(row: ImportRow, existing: Control[], process: string, earlier: ImportRow[], entity: string): ImportRow['duplicateOf'] {
   // The row's own company wins over the RACM's, the same way it does everywhere
   // else a row carries one.
-  const mine = (values.entity ?? '').trim() || entity;
-  const candidates = [
+  const mine = (row.values.entity ?? '').trim() || entity;
+  const values = duplicateValues(row);
+  // Nothing to compare: a row still missing one of the six cannot be shown to
+  // be a duplicate, so it is not one. See `identical`.
+  if (DUPLICATE_FIELDS.some(f => !sameText(values[f.key] ?? ''))) return undefined;
+
+  const hits = [
     ...existing.map(c => candidateFromControl(c, process, mine)),
     ...earlier.map(r => candidateFromRow(r, process, mine)),
-  ];
-  if (!candidates.length) return undefined;
-  // The risk is only said out loud on a repeat, where the reviewer is being
-  // asked to hold a row back and deserves to know how sure this is. A control
-  // that also answers for another process reads exactly as it always has.
-  const flag = (c: DuplicateCandidate, lead: string, riskToo: boolean): ImportRow['duplicateOf'] => ({
-    kind: c.sameProcess ? 'same-process' : 'other-process',
-    controlId: c.id,
-    process: c.process,
-    reason: `${lead} ${c.name}${c.where}${riskToo && c.sameProcess ? ' — same risk too' : ''}`,
-  });
+  ].filter(c => c.sameFirm && identical(values, c.values));
+  if (!hits.length) return undefined;
 
-  const id = (values.controlId ?? '').trim().toLowerCase();
-  if (id && !idWasGenerated) {
-    const byId = candidates.filter(c => c.controlId && c.controlId.toLowerCase() === id);
-    // A repeat in this matrix outranks the same ID elsewhere: one is a mistake to
-    // hold back, the other is a cross-reference worth reading.
-    const hit = byId.find(c => c.sameProcess) ?? byId[0];
-    if (hit) return flag(hit, 'Same control ID as', false);
-  }
-
-  const controlTexts = [(values.controlTitle ?? '').trim(), (values.controlActivity ?? '').trim()];
-  if (!controlTexts.some(Boolean)) return undefined;
-  const riskTexts = [(values.riskDescription ?? '').trim(), (values.riskTitle ?? '').trim()];
-  let best: { c: DuplicateCandidate; rank: number; riskToo: boolean } | null = null;
-  for (const c of candidates) {
-    const score = bestMatch(controlTexts, c.controlTexts);
-    if (score < DUPLICATE_MATCH) continue;
-    // The risk is read too, but only to say how sure this is. Two controls in one
-    // process often answer the same risk, so a risk that matches on its own means
-    // nothing — a row that matches on both is the one to look hardest at, and it
-    // is ranked above a row that matches on its control alone.
-    const riskToo = bestMatch(riskTexts, c.riskTexts) >= DUPLICATE_MATCH;
-    const rank = (c.sameProcess ? 4 : 0) + (riskToo ? 2 : 0) + score;
-    if (!best || rank > best.rank) best = { c, rank, riskToo };
-  }
-  if (!best) return undefined;
-  return flag(best.c, 'Reads like', best.riskToo);
+  // A twin in this RACM is named ahead of one elsewhere — it is the one the
+  // reviewer can open in the next tab and check.
+  const hit = hits.find(c => c.sameProcess) ?? hits[0]!;
+  return {
+    kind: hit.sameProcess ? 'same-process' : 'other-process',
+    controlId: hit.id,
+    process: hit.process,
+    name: hit.name,
+    where: hit.where,
+    reason: `Identical to ${hit.name} in ${hit.where} — all ${DUPLICATE_FIELDS.length} fields match`,
+  };
 }
 
 /** Build review rows from the data rows below `headerRow`, skipping fully blank
@@ -774,9 +879,6 @@ export function headerMapping(rows: string[][], headerRow: number, matches: Colu
  *  `earlier` is the rows that come before it in the same import. */
 export function rowFromValues(values: Partial<Record<RacmFieldKey, string>>, base: Pick<ImportRow, 'key' | 'rowNo' | 'origin' | 'sectionRef'> & { extras?: Record<string, string> }, existing: Control[], process: string, earlier: ImportRow[] = [], entity = ''): ImportRow {
   const v: Partial<Record<RacmFieldKey, string>> = { ...values };
-  // A blank Control ID stays blank — the ID is built at import from the codes
-  // and the row order (17 Sep: no "C-00n" that reads as if the file said it).
-  const idWasGenerated = !(v.controlId ?? '').trim();
 
   const attributeTexts = splitList(v.attributes ?? '');
   const evidence = splitList(v.controlEvidence ?? '');
@@ -815,9 +917,13 @@ export function rowFromValues(values: Partial<Record<RacmFieldKey, string>>, bas
   if (type.flag) row.typeFlag = type.flag;
   const rating = parseRiskRating(v.riskRating ?? '');
   if (rating) row.riskRating = rating;
+  const likely = parseLikelihood(v.likelihood ?? '');
+  if (likely) row.likelihood = likely;
   const strategy = parseTestingStrategy(v.testingStrategy ?? '');
   if (strategy) row.testingStrategy = strategy;
-  const dup = findDuplicate(v, idWasGenerated, existing, process, earlier, entity);
+  // Read off the BUILT row, not the raw cells: the duplicate rule compares the
+  // frequency and the type this row actually parsed to.
+  const dup = findDuplicate(row, existing, process, earlier, entity);
   if (dup) row.duplicateOf = dup;
   return row;
 }
@@ -914,19 +1020,19 @@ export type CoreBlank =
   | 'nature' | 'type' | 'assertions' | 'designChecks' | 'attributes'
   // Switched on per client group on the Config tab: a blank one holds the row
   // only where that client's set-up says the column is required (22 Sep).
-  | 'objective' | 'subProcess' | 'riskRating' | 'processOwner'
+  | 'objective' | 'subProcess' | 'riskRating' | 'likelihood' | 'processOwner'
   | 'controlEvidence' | 'sopSectionRef' | 'effectiveDate' | 'country' | 'testingStrategy';
 export const CORE_BLANK_LABEL: Record<CoreBlank, string> = {
   riskTitle: 'a risk title', riskDescription: 'a risk description', riskOwner: 'a risk owner',
   controlTitle: 'a control title', controlActivity: 'a control description', owner: 'a control owner',
   nature: 'a nature', type: 'a type', assertions: 'assertions', designChecks: 'design checks', attributes: 'attributes',
-  objective: 'an objective', subProcess: 'a sub-process', riskCategory: 'a risk category', riskRating: 'a risk rating',
+  objective: 'an objective', subProcess: 'a sub-process', riskCategory: 'a risk category', riskRating: 'a risk rating', likelihood: 'a likelihood',
   processOwner: 'a process owner', controlEvidence: 'control evidence', sopSectionRef: 'an SOP section',
   effectiveDate: 'an effective date', country: 'a country', testingStrategy: 'a testing strategy',
 };
 /** The order a row's blanks are asked for, and said in the Review summary. */
 export const CORE_BLANK_ORDER: CoreBlank[] = [
-  'riskTitle', 'riskDescription', 'riskOwner', 'riskCategory', 'riskRating',
+  'riskTitle', 'riskDescription', 'riskOwner', 'riskCategory', 'riskRating', 'likelihood',
   'controlTitle', 'controlActivity', 'objective', 'subProcess', 'owner', 'processOwner',
   'nature', 'type', 'assertions', 'designChecks', 'attributes', 'controlEvidence',
   'testingStrategy', 'effectiveDate', 'country', 'sopSectionRef',
@@ -937,11 +1043,18 @@ export const CORE_BLANK_ORDER: CoreBlank[] = [
 export const ALWAYS_REQUIRED: RacmFieldKey[] = [
   'riskId', 'controlId', 'riskTitle', 'riskDescription', 'riskCategory', 'controlTitle', 'controlActivity',
   'nature', 'type', 'frequency', 'owner', 'riskOwner', 'designChecks', 'attributes', 'assertions',
+  // Added 24 Sep — the client's own list of what a matrix cannot arrive without.
+  // `sopSectionRef` is NOT here: it is required "in case of SOP" only, and an
+  // .xlsx has no section to quote, so it is switched on per row below.
+  'objective', 'subProcess', 'riskRating', 'likelihood', 'isKey', 'entity', 'processOwner',
 ];
 export const isAlwaysRequired = (field: RacmFieldKey): boolean => ALWAYS_REQUIRED.includes(field);
 export function coreBlanks(row: ImportRow, core: RacmFieldKey[] = DEFAULT_CORE_FIELDS): CoreBlank[] {
   const val = (k: RacmFieldKey) => (row.values[k] ?? '').trim();
-  const on = (k: RacmFieldKey) => isAlwaysRequired(k) || core.includes(k);
+  // "SOP section reference in case of SOP" (24 Sep) — an uploaded workbook has
+  // no section to quote, so this one is required of SOP-drafted rows only.
+  const on = (k: RacmFieldKey) => isAlwaysRequired(k) || core.includes(k)
+    || (k === 'sopSectionRef' && row.origin === 'sop');
   const blank: Record<CoreBlank, boolean> = {
     riskTitle: !val('riskTitle'),
     riskDescription: !val('riskDescription'),
@@ -960,6 +1073,7 @@ export function coreBlanks(row: ImportRow, core: RacmFieldKey[] = DEFAULT_CORE_F
     // to file an "Environmental" risk under Financial without saying so.
     riskCategory: !riskCategoryOf(val('riskCategory')),
     riskRating: !row.riskRating,
+    likelihood: !row.likelihood,
     processOwner: !val('processOwner'),
     controlEvidence: !val('controlEvidence'),
     sopSectionRef: !val('sopSectionRef') && !row.sectionRef,
@@ -1414,6 +1528,7 @@ function controlFromRow(row: ImportRow, process: string, n: number, frequency: F
   const riskOwner = val('riskOwner');
   if (riskOwner) control.riskOwner = riskOwner;
   if (row.riskRating) control.riskRating = row.riskRating;
+  if (row.likelihood) control.likelihood = row.likelihood;
   // The risk's short name, where the file carried one. A blank is filled by
   // proposeBlankFills before import, so this is the file's wording or Ira's.
   const riskTitle = val('riskTitle');
@@ -1463,7 +1578,16 @@ export const DEFAULT_SOP_PROMPT = `You are extracting a SOX / ICFR risk and cont
 /** Draft review rows for `process` from its template once the prompt is
  *  validated: most rows `origin: 'sop'` with a section ref, roughly one in four
  *  `origin: 'suggested'`. Deterministic for the same process + file name. */
-export function draftRowsFromSop(process: string, fileName: string, prompt: string, existing: Control[]): ImportRow[] {
+/**
+ * `entity` is not optional in practice (24 Sep). Without it every drafted row
+ * was compared against every control of the same process in the WHOLE library,
+ * because `sameMatrix` reads a blank company on either side as a match — so
+ * re-extracting a process that already had a RACM flagged the entire draft as
+ * repeats, and `resetReview` then left every one of them out. The reviewer met
+ * a screen of grey rows and a button reading "Import 0 controls", with nothing
+ * on it saying why.
+ */
+export function draftRowsFromSop(process: string, fileName: string, prompt: string, existing: Control[], entity = ''): ImportRow[] {
   void prompt; // validated upstream; the draft reads the same whatever it says
   const template = racmTemplateForProcesses([process], 'fresh');
   const seed = hashString(`${process}|${fileName}`);
@@ -1482,12 +1606,16 @@ export function draftRowsFromSop(process: string, fileName: string, prompt: stri
       sectionRef = `§ ${firstSection + subProcesses.indexOf(c.subProcess)}.${minor}`;
     }
     const steps = c.operating.steps;
+    // Two rows in three are the SOP's own account; the rest read verbatim, so
+    // the duplicate band still has something true to catch.
+    const saysMore = !suggested && (i + offset) % 3 !== 0;
     const evidence = Array.from(new Set(steps.flatMap(s => requiredFilesOf(s, c).map(f => f.label))));
     const values: Partial<Record<RacmFieldKey, string>> = {
       riskId: c.riskId,
       riskDescription: c.riskDescription,
       riskCategory: c.clazz ?? '',
       riskRating: c.riskRating ?? '',
+      likelihood: c.likelihood ?? '',
       controlId: c.code ?? c.id,
       controlTitle: c.description.replace(/\.$/, ''),
       objective: c.objective ?? '',
@@ -1500,13 +1628,21 @@ export function draftRowsFromSop(process: string, fileName: string, prompt: stri
       owner: c.owner,
       processOwner: c.processOwner ?? '',
       assertions: c.assertions.join(', '),
-      attributes: steps.map(s => s.description).join('\n'),
+      // WHAT THE SOP ITSELF SAYS, which is not word for word what the matrix
+      // already holds (24 Sep). A procedure is written for the people who run
+      // the control, so it spells out things a matrix row never captured — and
+      // a control tested against different checks or different attributes IS a
+      // different control, so these rows import rather than reading as repeats.
+      // Every third row is left verbatim: those genuinely ARE already on file,
+      // and catching them is the other half of the job.
+      attributes: [...steps.map(s => s.description), ...(saysMore ? [`The ${c.subProcess.toLowerCase()} record names who performed it and when${sectionRef ? ` (${sectionRef})` : ''}`] : [])].join('\n'),
       controlEvidence: evidence.join('; '),
       // control-level checks only — attribute-level ones belong to their attribute
-      designChecks: c.design.points.filter(p => !p.stepId).map(p => p.text).join('\n'),
+      designChecks: [...c.design.points.filter(p => !p.stepId).map(p => p.text),
+        ...(saysMore ? [`The procedure requires the ${c.nature === 'Automated' ? 'system to enforce this without an override' : 'reviewer to be someone other than the preparer'}${sectionRef ? ` (${sectionRef})` : ''}`] : [])].join('\n'),
       sopSectionRef: sectionRef ?? '',
     };
-    out.push(rowFromValues(values, { key: `sop-${i + 1}`, rowNo: i + 1, origin: suggested ? 'suggested' : 'sop', sectionRef }, existing, process, out));
+    out.push(rowFromValues(values, { key: `sop-${i + 1}`, rowNo: i + 1, origin: suggested ? 'suggested' : 'sop', sectionRef }, existing, process, out, entity));
   });
   return out;
 }

@@ -16,13 +16,21 @@ import { DESIGN_DOC_KINDS, type Role } from './types';
  *     with them. Ira offering any of those would quietly undo a decision the
  *     page has already made.
  *
- * Heavy actions — attaching a file, waiving an element, writing the reviewer's
- * note — are not reimplemented. They open the real thing on the left, so there
- * is exactly one uploader and one waiver form in the product.
+ * Nothing here is REIMPLEMENTED. Attaching a file and waiving an element are
+ * done from the rail now (23 Sep) — but by making the page's own store calls,
+ * `attachDesignEvidence` and `waiveDesignDoc`, with the page's own accept list
+ * and the page's own insistence on a written reason. Two doors, one
+ * implementation; a file attached from here is indistinguishable from one
+ * attached on the left, because it is the same write.
+ *
+ * What stays on the page is what carries judgement a rail cannot hold: the
+ * exception's sizing panel, the reviewer's note, the design-check editor.
  */
 
 export type ChatActionId =
   | 'add-element'
+  | 'attach-doc'
+  | 'waive-doc'
   | 'upload-source'
   | 'pick-source'
   | 'upload-evidence'
@@ -168,7 +176,33 @@ export function actionsFor(s: Situation, role: Role): ChatAction[] {
       return picks.length > 0 ? picks : [show('Take me to the design step', 'Take me to the design step.', 'design')];
     }
     if (s.missing.length > 0) {
-      return [show(s.missing.length === 1 ? 'Show me the missing element' : 'Show me the missing elements', 'Show me what is missing.', 'design'), ...picks];
+      const one = s.missing.length === 1;
+      // An element that will never arrive is not a hole in the paper — it is a
+      // judgement, and the page takes it with a written reason the working
+      // paper prints. Offered here because "not applicable" is the commonest
+      // answer to "this is missing", and sending the reader to the left to say
+      // it makes the rail a thing that only ever reports problems.
+      // Ira offers to add an element; an element with nothing on it is not
+      // finished work, so it offers the file too. Leading, because attaching
+      // is what the reader came to do — the waiver is the exception.
+      const attach: ChatAction[] = s.designResult === 'Not tested' && !s.locked
+        ? [{
+          id: 'attach-doc' as const, arg: one ? s.missing[0]!.id : undefined,
+          label: one ? 'Attach the file' : 'Attach a file',
+          said: one ? 'Attach the file for it.' : 'Attach a file.',
+          primary: true,
+          does: 'attach the evidence for an outstanding element',
+        }]
+        : [];
+      const waive: ChatAction[] = s.designResult === 'Not tested' && !s.locked
+        ? [{
+          id: 'waive-doc' as const, arg: one ? s.missing[0]!.id : undefined,
+          label: one ? 'Not applicable' : 'Mark one not applicable',
+          said: one ? 'That one is not applicable.' : 'One of them is not applicable.',
+          does: 'account for an element that will not be provided',
+        }]
+        : [];
+      return [...attach, show(one ? 'Show me the missing element' : 'Show me the missing elements', 'Show me what is missing.', 'design'), ...waive, ...picks];
     }
     if (s.designResult !== 'Not tested' && !s.todApproved) {
       return [show('Show me what I concluded', 'Show me what I concluded.', 'design')];
@@ -190,6 +224,20 @@ export function actionsFor(s: Situation, role: Role): ChatAction[] {
         show('Conclude anyway', 'Take me to the conclusion.', 'design'),
       ];
     }
+    // A control whose RACM lists no design checks. Nothing has been ASSESSED,
+    // so nothing is concluded from here (user ask, 23 Sep): the order is
+    // elements → evidence → the checks read against it → the conclusion, and
+    // the last step cannot be reached by the first three finishing. Falling
+    // through to a verdict here was how attaching one file put "Design
+    // effective" on offer against nothing that had been tested.
+    //
+    // The page's own footer still concludes it — a judgement on the documents
+    // alone is the auditor's to make, and refusing it outright would be the
+    // rail overruling the page. It is just not a thing Ira offers.
+    if (s.checksTotal === 0) {
+      return [show('Take me to the design step', 'Take me to the design step.', 'design'), ...picks];
+    }
+
     // Everything is marked. The page disables Effective until every required
     // element is accounted for and no check is unmarked; the same gate here.
     const out: ChatAction[] = [];

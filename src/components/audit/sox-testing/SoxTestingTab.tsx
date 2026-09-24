@@ -3,7 +3,6 @@ import { motion, AnimatePresence } from 'motion/react';
 import { Plus, Flag, Building2, X, FileSearch, RefreshCw } from 'lucide-react';
 import { useToast } from '../../shared/Toast';
 import ScopingWizard from './ScopingWizard';
-import RollForwardWizard from './RollForwardWizard';
 
 /** Card actions parked (user ask) — roll forward is a per-audit action now,
  *  reached from the engagement's Audit logs tab; the scoping-summary modal has
@@ -35,7 +34,7 @@ const PIPELINE = [
 ];
 */
 
-type TabView = 'home' | 'wizard' | { programmeId: string } | { rollFromId: string };
+type TabView = 'home' | 'wizard' | { programmeId: string };
 
 interface Props {
   /** Routes into the classic SOX workspace (tabs + control testing). */
@@ -73,13 +72,7 @@ export default function SoxTestingTab({ onOpenEngagement }: Props) {
   const openProgramme = typeof view === 'object' && 'programmeId' in view
     ? programmes.find(x => x.id === view.programmeId)
     : undefined;
-  const rollFrom = typeof view === 'object' && 'rollFromId' in view
-    ? programmes.find(x => x.id === view.rollFromId)
-    : undefined;
 
-  /** The annual action lives on the latest cycle only — roll it into next year. */
-  const asOfYear = (p: SoxProgramme) => Number(/\d{4}/.exec(p.asOf)?.[0] ?? 0);
-  const latestId = programmes.reduce((best, p) => (asOfYear(p) > asOfYear(best) ? p : best), programmes[0])?.id;
 
   return (
     <>
@@ -157,15 +150,6 @@ export default function SoxTestingTab({ onOpenEngagement }: Props) {
                   </span>
                   {CARD_ACTIONS && (
                   <span className="ml-auto flex items-center gap-1 shrink-0">
-                    {p.id === latestId && (
-                      <button
-                        onClick={e => { e.stopPropagation(); setView({ rollFromId: p.id }); }}
-                        title={`Carry ${p.fy} scoping and RACMs into the next cycle`}
-                        className="inline-flex items-center gap-1.5 px-2 py-1 rounded-md text-[11px] font-semibold text-primary hover:bg-primary/5 transition-colors cursor-pointer"
-                      >
-                        <RefreshCw size={12} /> Roll forward
-                      </button>
-                    )}
                     <button
                       onClick={e => { e.stopPropagation(); setView({ programmeId: p.id }); }}
                       className="inline-flex items-center gap-1.5 px-2 py-1 rounded-md text-[11px] font-semibold text-primary hover:bg-primary/5 transition-colors cursor-pointer"
@@ -215,23 +199,21 @@ export default function SoxTestingTab({ onOpenEngagement }: Props) {
         </div>
       </motion.div>
 
-      {/* Creation flows (scoping wizard, roll-forward) slide in as a full-height
-          side sheet; the scoping summary keeps the centred modal. */}
+      {/* The scoping wizard slides in as a full-height side sheet; the scoping
+          summary keeps the centred modal. */}
       <AnimatePresence>
         {view !== 'home' && (
           <FlowModal
-            key={view === 'wizard' ? 'wizard' : rollFrom ? `roll-${rollFrom.id}` : openProgramme?.id ?? 'programme'}
-            label={view === 'wizard' ? 'New engagement' : rollFrom ? 'Roll forward' : 'SOX programme'}
-            widthCls={view === 'wizard' || rollFrom ? 'w-full max-w-[560px]' : 'w-[1000px]'}
-            variant={view === 'wizard' || rollFrom ? 'sheet' : 'modal'}
+            key={view === 'wizard' ? 'wizard' : openProgramme?.id ?? 'programme'}
+            label={view === 'wizard' ? 'New engagement' : 'SOX programme'}
+            widthCls={view === 'wizard' ? 'w-full max-w-[560px]' : 'w-[1000px]'}
+            variant={view === 'wizard' ? 'sheet' : 'modal'}
             /* the scoping sheet carries its own header close */
             hideClose={view === 'wizard'}
             onClose={() => setView('home')}
           >
             {view === 'wizard' ? (
               <ScopingWizard onCancel={() => setView('home')} onCreated={handleCreated} />
-            ) : rollFrom ? (
-              <RollForwardWizard prior={rollFrom} onCancel={() => setView('home')} onCreated={handleCreated} />
             ) : openProgramme ? (
               <ProgrammeView
                 programme={openProgramme}

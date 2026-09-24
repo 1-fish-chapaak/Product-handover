@@ -22,7 +22,9 @@ import ControlLibraryDetail from './ControlLibraryDetail';
 import AuditLogsView from './AuditLogsView';
 import { DeficienciesView, HandoffsView, ScopeView } from './extraViews';
 import RacmFullPageEditor from '../audit/RacmFullPageEditor';
-import ConfigurationView from './ConfigurationView';
+import SamplingMethodologyView from './SamplingMethodologyView';
+// PARKED with the old engagement-wide Configuration page — see SOX_TABS below.
+// import ConfigurationView from './ConfigurationView';
 
 /**
  * The SOX engagement as it stood before the audit-first rework (commit 1a0fe4d),
@@ -66,17 +68,22 @@ const SOX_TABS: TabDef[] = [
   // { id: 'risks', label: 'Risk Register' },
   { id: 'controls', label: 'Control Library' },
   { id: 'runs', label: 'SOX testing' },
-  /* Configuration — PARKED from the engagement tabs (user ask). Same shape as
-     the park on the reworked flow, where engagement-level Configuration gave
-     way to Audit logs. The `tab === 'config' ? <ConfigurationView />` branch
-     below stays wired, so restoring is uncommenting this line.
-     Known consequence while it's off — ConfigurationView was the only place a
-     classic engagement could edit its entities, upload their trial balances or
-     re-derive scoping. Materiality survives as the 'Materiality & scope'
-     drill-in off the Overview. The one inbound link, the Overview's
-     scoping-gap nag, was rewritten with this park rather than left pointing at
-     a tab that no longer exists. */
-  // { id: 'config', label: 'Configuration' },
+  /* Configuration is BACK (23 Sep), carrying the same one thing the reworked
+     shell's does: the sampling methodology (#22). It had been parked because
+     period, scope, TB / GL and materiality are all set per cycle and nothing
+     engagement-wide was left to configure.
+
+     It has to come back HERE and not only on the reworked shell, because only
+     `sox-v2-fy26` takes that shell — every engagement the wizard creates lands
+     on this one. Those engagements now arrive carrying the lead's proposed
+     methodology, unsigned, and testing waits on a reviewer's signature that
+     can only be given on this tab. Without it the proposal had no door, and
+     the gate would have held shut with nothing able to open it.
+
+     What does NOT come back is the old engagement-wide ConfigurationView —
+     entities, trial balances, re-deriving scope. That park stands (user ask);
+     its branch below stays wired, so restoring it is swapping the component. */
+  { id: 'config', label: 'Configuration' },
 ];
 
 export default function SoxClassicInner({ onBack, backLabel = 'Back to Engagements' }: { onBack?: () => void; backLabel?: string }) {
@@ -220,7 +227,10 @@ export default function SoxClassicInner({ onBack, backLabel = 'Back to Engagemen
     : tab === 'racm' ? (view === 'racm-list' ? <Racm /> : <RacmLanding />)
     : tab === 'risks' ? <RiskLibrary />
     : tab === 'runs' ? <AuditLogsView />
-    : tab === 'config' ? <ConfigurationView />
+    // The engagement level holds the methodology; the audit level holds the
+    // cycle's own settings (above). Same tab id, two pages, forking by level
+    // exactly as Overview and Control Library already do.
+    : tab === 'config' ? <SamplingMethodologyView />
     // Two different Control Library lenses (user ask, 30 Jul), same split as
     // the reworked shell: engagement root = ControlLibrary (attributes,
     // workflow mapping); inside an audit = ControlRegister (TOD/TOE results,

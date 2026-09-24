@@ -19,14 +19,14 @@ import {
   entitiesFor, entitiesInFiles, entityTotals, materialAccounts, mergeScopeEntities, normaliseProcess,
   type ProcessScopeRow, recommendProcesses, SOX_MAPPING_PROCESSES,
 } from './auditScope';
-import { conclusionOf, isEngagementLocked, spreadPhrase, trackResult } from './helpers';
+import { conclusionOf, isEngagementLocked, trackResult } from './helpers';
 import RacmImportReview from './RacmImportReview';
 import { useIcfr } from './store';
 import { useAuditLog } from '../../context/AdminDataContext';
 import { useToast } from '../shared/Toast';
 import {
-  AUDIT_ROUNDS, AUDIT_SAMPLE_METHODS, AUDIT_SAMPLE_SPREADS, DEFAULT_AUDIT_SAMPLING,
-  type AuditRecord, type AuditRound, type AuditSampleMethod, type AuditSampleSpread, type AuditScopeKind, type Control, type FileOrigin,
+  AUDIT_ROUNDS,
+  type AuditRecord, type AuditRound, type AuditScopeKind, type Control, type FileOrigin,
 } from './types';
 import { cn } from '../../lib/cn';
 
@@ -299,21 +299,6 @@ export default function NewAuditWizard({ onClose, prefillFrom }: {
     : round === 'rollforward' ? !!parent
     : round === 'yearend' ? !!fromDate && fromDate <= yearEnd
     : false;
-
-  // ── Sampling methodology (A28) ───────────────────────────────────────────
-  // Agreed once for the whole audit — how items are selected and what every
-  // control's draw has to be spread across — so no control picks its own. A new
-  // audit starts on a plain random draw with no spread asked for.
-  const [sampMethod, setSampMethod] = useState<AuditSampleMethod>(DEFAULT_AUDIT_SAMPLING.method);
-  const [sampSpread, setSampSpread] = useState<AuditSampleSpread[]>(DEFAULT_AUDIT_SAMPLING.spread);
-  const toggleSpread = (id: AuditSampleSpread) =>
-    setSampSpread(prev => (prev.includes(id) ? prev.filter(x => x !== id) : [...prev, id]));
-  /** What the audit is created with. A roll-forward reads its interim's, the way
-   *  it reads the year and the materiality rule — two halves of one year are
-   *  sampled one way. */
-  const sampFinal = round === 'rollforward' && parent
-    ? (parent.sampling ?? DEFAULT_AUDIT_SAMPLING)
-    : { method: sampMethod, spread: AUDIT_SAMPLE_SPREADS.map(x => x.id).filter(id => sampSpread.includes(id)) };
 
   // ── Files ────────────────────────────────────────────────────────────────
   // Provenance rides with the file from the moment it is picked — it is a
@@ -924,7 +909,6 @@ export default function NewAuditWizard({ onClose, prefillFrom }: {
         files: engFiles,
         materiality: { basisLabel: engMat.basisLabel, benchmark: engMat.benchmark, pct: engMat.pct, pmPct: engMat.pmPct, ctPct: engMat.ctPct },
         overall: engMat.overall,
-        sampling: sampFinal,
       });
       addToast({
         type: 'success',
@@ -976,7 +960,6 @@ export default function NewAuditWizard({ onClose, prefillFrom }: {
       // verbatim, or the step's own inputs.
       materiality: { basisLabel: matFinal.basisLabel, benchmark: matFinal.benchmark, pct: matFinal.pct, pmPct: matFinal.pmPct, ctPct: matFinal.ctPct },
       overall: matFinal.overall,
-      sampling: sampFinal,
     }, { freshControlIds: addedControlIds });
     // The answers given upstairs become the files' records, so every control on
     // this audit inherits them and none is asked again.
@@ -1242,105 +1225,6 @@ export default function NewAuditWizard({ onClose, prefillFrom }: {
                       : 'Pick the concluded interim this roll-forward continues from.'}
               </p>
             </div>
-
-            {/* Sampling methodology (A28) — after the dates, once the round is
-                known, because a roll-forward doesn't get to answer it. Agreed
-                here for every control in the audit: each control's Sample step
-                reads it and asks only how many items. A roll-forward still
-                waiting on its parent has no answer to show yet. */}
-            {round && (round !== 'rollforward' || parent) && (
-              <div className="mt-6 pt-5 border-t border-canvas-border">
-                <div className="flex items-center gap-2 mb-0.5">
-                  <h4 className="text-[0.8125rem] font-semibold text-ink-900">Sampling methodology</h4>
-                  {round === 'rollforward' && parent && (
-                    <span className="inline-flex items-center gap-1 text-[0.625rem] font-bold uppercase tracking-wider text-ink-400">
-                      <Lock size={10} /> Inherited
-                    </span>
-                  )}
-                </div>
-                <p className="text-[0.75rem] text-ink-500 mb-4 leading-relaxed">
-                  How every control in this audit picks its samples. Each control then sets only how many items.
-                </p>
-                {round === 'rollforward' && parent ? (
-                  /* Read-only, like the year above: the interim answered it, and
-                     one year is sampled one way. */
-                  <>
-                    <div className="grid grid-cols-2 gap-3">
-                      <div>
-                        <label className={labelCls}>Selection</label>
-                        <div className="w-full px-3 py-2 text-[0.8125rem] border border-canvas-border rounded-lg bg-canvas text-ink-600 flex items-center justify-between gap-2">
-                          <span>{sampFinal.method}</span>
-                          <Lock size={12} className="text-ink-400 shrink-0" />
-                        </div>
-                      </div>
-                      <div>
-                        <label className={labelCls}>Spread by</label>
-                        <div className="w-full px-3 py-2 text-[0.8125rem] border border-canvas-border rounded-lg bg-canvas text-ink-600 flex items-center justify-between gap-2">
-                          <span className="truncate">
-                            {sampFinal.spread.length
-                              ? AUDIT_SAMPLE_SPREADS.filter(x => sampFinal.spread.includes(x.id)).map(x => x.label).join(', ')
-                              : 'Not spread'}
-                          </span>
-                          <Lock size={12} className="text-ink-400 shrink-0" />
-                        </div>
-                      </div>
-                    </div>
-                    <p className="text-[0.6875rem] text-ink-400 mt-1.5">From the {parent.period} interim — can't be changed here.</p>
-                  </>
-                ) : (
-                  <>
-                    <label className={labelCls}>Selection</label>
-                    <div className="grid grid-cols-3 gap-1.5">
-                      {AUDIT_SAMPLE_METHODS.map(m => (
-                        <button
-                          key={m.id}
-                          onClick={() => setSampMethod(m.id)}
-                          aria-pressed={sampMethod === m.id}
-                          className={cn(
-                            'px-2 py-2 rounded-lg border text-[0.75rem] font-bold transition-all cursor-pointer',
-                            sampMethod === m.id
-                              ? 'border-brand-500 bg-brand-50 text-brand-700 ring-2 ring-brand-500/15'
-                              : 'border-canvas-border bg-white text-ink-500 hover:bg-brand-50/40',
-                          )}
-                        >
-                          {m.id}
-                        </button>
-                      ))}
-                    </div>
-                    <p className="text-[0.6875rem] text-ink-400 mt-1.5">{AUDIT_SAMPLE_METHODS.find(m => m.id === sampMethod)!.hint}</p>
-
-                    {/* Any, all or none — each one ticked gets items of its own
-                        in every control's draw. */}
-                    <label className={`${labelCls} mt-4`}>Spread by</label>
-                    <div className="grid grid-cols-3 gap-1.5">
-                      {AUDIT_SAMPLE_SPREADS.map(x => {
-                        const on = sampSpread.includes(x.id);
-                        return (
-                          <button
-                            key={x.id}
-                            onClick={() => toggleSpread(x.id)}
-                            aria-pressed={on}
-                            className={cn(
-                              'px-2 py-2 rounded-lg border text-[0.75rem] font-bold transition-all cursor-pointer inline-flex items-center justify-center gap-1.5',
-                              on
-                                ? 'border-brand-500 bg-brand-50 text-brand-700 ring-2 ring-brand-500/15'
-                                : 'border-canvas-border bg-white text-ink-500 hover:bg-brand-50/40',
-                            )}
-                          >
-                            {on && <Check size={12} className="shrink-0" />}{x.label}
-                          </button>
-                        );
-                      })}
-                    </div>
-                    <p className="text-[0.6875rem] text-ink-400 mt-1.5">
-                      {sampSpread.length
-                        ? `Every control's draw is split across ${AUDIT_SAMPLE_SPREADS.filter(x => sampSpread.includes(x.id)).map(x => x.label.toLowerCase()).join(', ').replace(/, ([^,]*)$/, ' and $1')}, with at least one item in each.`
-                        : 'Not spread — items fall wherever the selection puts them. Pick any that every draw has to reach.'}
-                    </p>
-                  </>
-                )}
-              </div>
-            )}
           </StepShell>
         )}
 
@@ -2328,7 +2212,6 @@ export default function NewAuditWizard({ onClose, prefillFrom }: {
                 <ReviewRow label="Continues from" value={`${parent.period} interim`} />
               )}
               <ReviewRow label="Window" value={windowFrom && windowTo ? `${fmtDate(windowFrom)} – ${fmtDate(windowTo)}` : '—'} />
-              <ReviewRow label="Sampling" value={<>{sampFinal.method} <span className="font-normal text-ink-400">· {spreadPhrase(sampFinal.spread)}{round === 'rollforward' ? ' · from parent' : ''}</span></>} />
               {/* S11 follow-up — what the engagement already settled, read-only:
                   the rule and files set when it was created, and the whole
                   Control Library as the scope. */}

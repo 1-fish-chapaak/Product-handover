@@ -1,15 +1,15 @@
 import { entityShort } from '../audit/sox-testing/soxTestingData';
 import { normaliseProcess, programmeFor } from './auditScope';
 import { NEW_FLOW_ENGAGEMENT_ID } from './flow';
-import { titleFromRisk, validationQA } from './helpers';
+import { requiredFilesOf, requiredFilesReady, stepResult, titleFromRisk, validationQA } from './helpers';
 import { entityCodeFor, processCodeFor, renameEngagementIds } from './racmIds';
 import { defaultSamplingMethodology, FIVE_W_1H, ipeChecklist, ROUND_TAG, ROUND_WINDOW_LABEL } from './types';
 import type {
-  Assertion, Attestation, AuditArchive, AuditRecord, AuditSampling, Control, DesignDoc, DesignPoint, DesignTrack, DesignWaiverReason, Deficiency, Discussion, DocStatus,
+  Assertion, Attestation, AuditArchive, AuditRecord, Control, DesignDoc, DesignPoint, DesignTrack, DesignWaiverReason, Deficiency, Discussion, DocStatus,
   // PARKED (Aug 2026) — `GapType` went with the Gap type field; see types.ts.
   // GapType,
   EvidenceFile, ExceptionStatus, ExecKind, ExecutionEvent, Frequency, HandoffTask, IcfrEngagement, IpeTest, Nature, OperatingStep, OperatingTrack,
-  ControlClass, ControlType, FiveWOneH, RacmReview, ReviewNote, RiskRating, Role, Sample, Severity, RunControlOutcome, RunRecord, Sampling, SignificantAccount, SourceRole, TestingStrategy, TestProcedure, TestResult, TrackConclusion,
+  ControlClass, ControlType, FiveWOneH, RacmReview, ReviewNote, RiskRating, Role, Sample, SamplingMethodology, Severity, RunControlOutcome, RunRecord, Sampling, SignificantAccount, SourceRole, TestingStrategy, TestProcedure, TestResult, TrackConclusion,
 } from './types';
 
 // ── builders ─────────────────────────────────────────────────────────────────────
@@ -1002,6 +1002,10 @@ const ENGAGEMENT: IcfrEngagement = {
   // engagement's own reviewer signed — never the same person (#22).
   samplingMethodology: {
     ...defaultSamplingMethodology(),
+    // Spread so each company a control answers for gets items of its own — the
+    // seeded draws were dealt that way, and a methodology that did not ask for
+    // it would not explain the samples already on the controls.
+    spread: ['entity'],
     proposedBy: { by: 'A. Mehta', at: '2 Apr' },
     reviewer: { by: REVIEWER, at: '3 Apr' },
   },
@@ -1093,12 +1097,6 @@ function libraryRunHistory(controls: Control[]): RunRecord[] {
   return runs;
 }
 
-/** Every seeded audit, on every SOX engagement, samples the same way (A28): at
- *  random, spread so each company a control answers for gets items of its own.
- *  Draws already on the seeded controls stay exactly as they were — only a new
- *  draw follows it. */
-const SEEDED_SAMPLING: AuditSampling = { method: 'Random', spread: ['entity'] };
-
 /**
  * The cycles this engagement has run — the engagement Overview's primary content.
  *
@@ -1178,7 +1176,7 @@ function libraryAudits(processes: string[], controls: Control[]): AuditRecord[] 
       periodSpan: 'Jan 2026 – Dec 2026', round: 'interim', windowFrom: '2026-01-01', windowTo: '2026-06-30',
       scopeKind: 'racm', scopeNames: processes, scopeIds: [],
       files: [{ name: 'altura-group-tb-2026.xlsx', kind: 'tb' }, { name: 'altura-group-gl-2026.csv', kind: 'gl' }],
-      materiality: { basisLabel, benchmark: 240, pct: 5 }, overall: 12, sampling: SEEDED_SAMPLING,
+      materiality: { basisLabel, benchmark: 240, pct: 5 }, overall: 12,
       by: 'A. Mehta', role: 'auditor', at: '02 Jan 2026',
     },
     {
@@ -1187,7 +1185,7 @@ function libraryAudits(processes: string[], controls: Control[]): AuditRecord[] 
       scopeKind: 'racm', scopeNames: first, scopeIds: [],
       // Same threshold as the interim round on purpose: one opinion, one ruler.
       // The consistency check on the engagement Overview is reading these two.
-      files: [], materiality: { basisLabel, benchmark: 240, pct: 5 }, overall: 12, sampling: SEEDED_SAMPLING,
+      files: [], materiality: { basisLabel, benchmark: 240, pct: 5 }, overall: 12,
       rolledFromId: 'audit-cy26-interim',
       by: 'A. Mehta', role: 'auditor', at: '04 Jul 2026',
     },
@@ -1196,7 +1194,7 @@ function libraryAudits(processes: string[], controls: Control[]): AuditRecord[] 
       periodSpan: 'Jan 2025 – Dec 2025', round: 'yearend', windowFrom: '2025-10-01', windowTo: '2025-12-31',
       scopeKind: 'racm', scopeNames: first, scopeIds: [],
       files: [{ name: 'altura-group-tb-2025.xlsx', kind: 'tb' }],
-      materiality: { basisLabel, benchmark: 210, pct: 5 }, overall: 10.5, sampling: SEEDED_SAMPLING,
+      materiality: { basisLabel, benchmark: 210, pct: 5 }, overall: 10.5,
       signoff: { preparer: { by: 'A. Mehta', at: '10 Jan 2026' }, reviewer: { by: 'J. Fernandes', at: '12 Jan 2026' }, icfrConclusion: 'Effective' },
       archive,
       by: 'A. Mehta', role: 'auditor', at: '03 Jan 2025',
@@ -1971,7 +1969,6 @@ function singleAudit(meta: SeedMeta, controls: Control[]): AuditRecord[] {
     files: [],
     materiality: { basisLabel: 'Profit before tax (consolidated)', benchmark: 240, pct: 5 },
     overall: 12,
-    sampling: SEEDED_SAMPLING,
     by: meta.owner ?? 'A. Mehta',
     role: 'auditor',
     at: `01 Apr ${year - 1}`,
@@ -2006,7 +2003,6 @@ function signedInterim(meta: SeedMeta, controls: Control[]): AuditRecord[] {
     files: [{ name: `altura-renewables-tb-fy${String(year).slice(-2)}.xlsx`, kind: 'tb' }],
     materiality: { basisLabel: 'Profit before tax (consolidated)', benchmark: 240, pct: 5, pmPct: 75, ctPct: 5 },
     overall: 12,
-    sampling: SEEDED_SAMPLING,
     signoff: {
       preparer: { by: 'A. Mehta', at: `12 Aug ${year - 1}` },
       reviewer: { by: 'J. Fernandes', at: `14 Aug ${year - 1}` },
@@ -2069,7 +2065,7 @@ function rfDemoDeficiencies(controls: Control[]): Deficiency[] {
 export interface SeedMeta { id?: string; code?: string; name?: string; /** The company being audited. Carried because the workspace clones the flagship
   *  seed: without it every engagement inherited the flagship's own company, and
   *  the audit report — which names the entity in its title and its first table —
-  *  issued under the wrong client. */ entity?: string; process?: string; /** Scoping-derived process list — when present, the workspace seeds one RACM per entry. */ processes?: string[]; /** Testing state for scoping-derived RACMs — see Engagement.soxSeedMode. */ seedMode?: 'fresh' | 'live' | 'carried'; periodStart?: string; periodEnd?: string; owner?: string; materiality?: number; performanceMateriality?: number; clearlyTrivial?: number; sdBandPct?: number; /** Controls copied from the RACM tab when the engagement was created (S11) — when present they are the register, as picked. */ controls?: Control[]; }
+  *  issued under the wrong client. */ entity?: string; process?: string; /** Scoping-derived process list — when present, the workspace seeds one RACM per entry. */ processes?: string[]; /** Testing state for scoping-derived RACMs — see Engagement.soxSeedMode. */ seedMode?: 'fresh' | 'live' | 'carried'; periodStart?: string; periodEnd?: string; owner?: string; materiality?: number; performanceMateriality?: number; clearlyTrivial?: number; sdBandPct?: number; /** Controls copied from the RACM tab when the engagement was created (S11) — when present they are the register, as picked. */ controls?: Control[]; /** The sampling approach the lead proposed at creation (#22) — when present it replaces the flagship's agreed one, proposal and all, so the workspace opens on what was just proposed and still waiting to be signed. */ sampling?: SamplingMethodology; }
 
 /** A group is recorded with its listing status attached — "Altura Infra Holdings
  *  Ltd (Listed)" — because that is what the scoping screens key off. A document
@@ -2086,8 +2082,60 @@ const PROC_LABEL: Record<string, string> = { P2P: 'Procure to Pay', O2C: 'Order 
  * engagement's own.
  */
 export function seedIcfrEngagement(meta?: SeedMeta): IcfrEngagement {
-  const eng = withRacmFields(seedEngagementBody(meta));
+  const eng = withConcludedEvidence(withRacmFields(seedEngagementBody(meta)));
   return renameEngagementIds(eng, processCodeFor, e => entityCodeFor(e || eng.entity));
+}
+
+/** "Signed approval record" on attribute 4.2 -> signed_approval_record_4_2.pdf */
+const evidenceFileName = (label: string, code: string): string =>
+  `${label.toLowerCase().replace(/[^a-z0-9]+/g, '_').replace(/^_|_$/g, '')}_${code.replace(/[^a-zA-Z0-9]+/g, '_')}.pdf`;
+
+/**
+ * The evidence a conclusion the seed already reached would have needed.
+ *
+ * Seeded controls are plain objects. They never pass through `concludeOperating`,
+ * so not one of its guards ever ran against them — and 82 controls arrived TOE
+ * EFFECTIVE, signed, countersigned and locked, while every passing attribute
+ * still read "Required files 0 of 3 uploaded". That is the exact thing
+ * `passedWithoutFiles` exists to forbid: the demo was showing a finished control
+ * the product itself would have refused to let anybody finish.
+ *
+ * So the files a conclusion implies go on file, and nothing else moves. An
+ * attribute that did not pass gets nothing. A design element stays outstanding
+ * unless its own TOD concluded — the half-finished controls are the point of the
+ * seed, and filling those in would trade one lie for another. No result, no
+ * conclusion and no signature is touched anywhere.
+ *
+ * tests/seed-integrity.spec.ts holds this line, by asking of every concluded
+ * control the same question the store asks before it lets you conclude.
+ */
+function withConcludedEvidence(eng: IcfrEngagement): IcfrEngagement {
+  return {
+    ...eng,
+    controls: eng.controls.map(c => {
+      let next = c;
+      // TOE: a Pass the files do not back cannot carry an effective track.
+      if (c.operating.conclusion === 'Effective') {
+        next = { ...next, operating: { ...next.operating, steps: next.operating.steps.map(s => {
+          if (stepResult(s) !== 'Pass' || requiredFilesReady(s, c)) return s;
+          return { ...s, requiredFiles: requiredFilesOf(s, c).map(rf => rf.file ? rf : {
+            ...rf, file: file(evidenceFileName(rf.label, s.code), c.owner),
+          }) };
+        }) } };
+      }
+      // TOD: the conclude footer locks while a required element is neither
+      // evidenced nor waived, so an effective design cannot have one open.
+      if (c.design.conclusion === 'Effective') {
+        next = { ...next, design: { ...next.design, documents: next.design.documents.map(d => (
+          d.required === false || d.status === 'Received' || d.waiver ? d : {
+            ...d, status: 'Received' as DocStatus, uploadedBy: 'Risk Owner', at: '12 Apr',
+            files: [{ id: `ddf-${d.id}`, name: d.name, kind: (d.name.toLowerCase().endsWith('.xlsx') ? 'XLSX' : 'PDF') as EvidenceFile['kind'], uploadedBy: 'Risk Owner', uploadedAt: '12 Apr' }],
+          }
+        )) } };
+      }
+      return next;
+    }),
+  };
 }
 
 /**
@@ -2125,6 +2173,15 @@ function seedEngagementBody(meta?: SeedMeta): IcfrEngagement {
   if (meta?.performanceMateriality) base.performanceMateriality = meta.performanceMateriality;
   if (meta?.clearlyTrivial != null) base.rules.clearlyTrivial = meta.clearlyTrivial;
   if (meta?.sdBandPct) base.rules.sdBandPct = meta.sdBandPct;
+  // The flagship's table came with the reviewer's signature already on it, and a
+  // clone of that would tell a brand-new engagement its sampling had been agreed
+  // before anyone looked at it. So a proposal made at creation replaces the whole
+  // record: the signature comes off, because it is the reviewer's to give, and
+  // the revision history starts empty, because nothing has been revised (#22).
+  if (meta?.sampling) {
+    base.samplingMethodology = { ...structuredClone(meta.sampling), reviewer: undefined };
+    base.samplingLog = [];
+  }
   // No meta, or the flagship engagement → the fully-populated demo, with identity overlaid.
   if (!meta || !meta.id || meta.id === 'eng-1') {
     if (meta) {

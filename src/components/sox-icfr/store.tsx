@@ -1,6 +1,6 @@
 import { createContext, useCallback, useContext, useMemo, useState, type ReactNode } from 'react';
 import { racmTemplateForProcesses, requiredDatasetsFor, sampleRefs, seedIcfrEngagement, type SeedMeta } from './mockData';
-import { assessSeverity, attestationOverruled, designApproved, designFilesOf, iraCannotTest, designRetestChecks, designOutstanding, fmtDateTime, requiredFilesOf, requiredFilesReady, canExtendToe, canRedrawToe, controlConclusion, reconcileConfirmations, formatINR, gradeException, icfrConclusion, inquiryOnlyAttributes, passedWithoutFiles, isControlLocked, isControlLockedIn, isEngagementLocked, itgcHolds, parseLooseDate, samePerson, samplingOf, populationSources, previewRegrades, sampleSizeGuide, samplesFor, sourceTotals, staleSteps, stepResult, TOE_MAX_ROUNDS, toeRoundFailed, toeRoundNo, toeRounds, trackResult, validationQA, validationSummary, validationTable, wfRunRef, auditSampling, dealSample, samplesTestedCount, sampleHome, spreadPhrase, workingAudit, yearEndPending, LEGACY_SOURCE_ID, type RulesPatch } from './helpers';
+import { assessSeverity, attestationOverruled, designApproved, designFilesOf, iraCannotTest, designRetestChecks, designOutstanding, fmtDateTime, requiredFilesOf, requiredFilesReady, canExtendToe, canRedrawToe, controlConclusion, reconcileConfirmations, formatINR, gradeException, icfrConclusion, inquiryOnlyAttributes, passedWithoutFiles, isControlLocked, isControlLockedIn, isEngagementLocked, itgcHolds, parseLooseDate, samePerson, samplingOf, populationSources, previewRegrades, sampleSizeGuide, samplesFor, sourceTotals, staleSteps, stepResult, TOE_MAX_ROUNDS, toeRoundFailed, toeRoundNo, toeRounds, trackResult, validationQA, validationSummary, validationTable, wfRunRef, dealSample, samplesTestedCount, sampleHome, spreadPhrase, workingAudit, yearEndPending, LEGACY_SOURCE_ID, type RulesPatch } from './helpers';
 import type {
   Assertion, Attestation, AuditArchive, AuditFileRecord, AuditorProof, AuditRecord, Control, ControlClass, Deficiency, DesignDoc, DesignDocKind, DesignPoint, DiscussionAnchor, DocStatus, FileOrigin,
   DesignJudgements, DesignWaiverReason, EvidenceFile, EvidenceMode, ExceptionStatus, ExecKind, ExecutionEvent, Frequency, HandoffTask, IcfrEngagement,
@@ -127,7 +127,7 @@ const stampSamples = (c: Control, s: OperatingStep, res: TestResult): OperatingS
   return { ...s, sampleResults: m };
 };
 // PARKED (Aug 2026): `defaultGapType` — the exception no longer carries a gap type.
-import { ipeChecklist, ROLE_LABEL } from './types';
+import { ipeChecklist, ROLE_LABEL, spreadLabel } from './types';
 import { auditCovers, captionsFor, countryOf, entitiesFor, inScopeEntityNames, isOwnerOf, normaliseProcess, ownersOf, peopleForProcess, processesForAudit, racmAuditUse, scopedForDraw } from './auditScope';
 import { rootCauseReady, seedKeyOf, suggestRootCause, suggestSizing, type ExposureContext } from './helpers';
 import { entityCodeFor, processCodeFor, riskIdOf } from './racmIds';
@@ -522,11 +522,11 @@ interface IcfrCtx {
   addControl: (draft: NewControlDraft) => string;
   /** The lead's proposal, before anyone has signed it. Refused once signed —
    *  a change from there is a revision, not an edit. */
-  proposeSampling: (patch: Partial<Pick<SamplingMethodology, 'sizes' | 'method' | 'roundBasis'>>) => void;
+  proposeSampling: (patch: Partial<Pick<SamplingMethodology, 'sizes' | 'method' | 'spread' | 'roundBasis'>>) => void;
   /** The reviewer's signature. What makes the methodology agreed. */
   signSampling: () => void;
   /** A change to an agreed methodology — mints the next version, with a reason. */
-  reviseSampling: (patch: Partial<Pick<SamplingMethodology, 'sizes' | 'method' | 'roundBasis'>>, reason: string) => void;
+  reviseSampling: (patch: Partial<Pick<SamplingMethodology, 'sizes' | 'method' | 'spread' | 'roundBasis'>>, reason: string) => void;
   /** Sign off the OPEN audit. There is no engagement-level ICFR sign-off — the
    *  testing lives inside an audit, so the conclusion does too. */
   signOffAudit: (step: 'preparer' | 'reviewer') => void;
@@ -1443,10 +1443,10 @@ export function IcfrProvider({ children, initialRole = 'auditor', seedMeta }: { 
     });
   }, [patchControl, pushExec, role]);
 
-  // The audit a draw is made under, and the sampling methodology it agreed
+  // The audit a draw is made under, and the methodology the ENGAGEMENT agreed
   // (A28). Every action that adds items to a sample deals them by it.
   const drawAudit = workingAudit(eng, openAuditId);
-  const drawMethod = auditSampling(drawAudit);
+  const drawMethod = samplingOf(eng);
   /** The companies a draw may deal to — the audit's (or engagement's) scope. */
   const drawScope = inScopeEntityNames(eng.id, drawAudit);
   // The round an undated item already on the control was drawn in (sampleHome),
@@ -1463,7 +1463,7 @@ export function IcfrProvider({ children, initialRole = 'auditor', seedMeta }: { 
       const existing = populationSources(c);
       if (!existing.some(s => s.id === sourceId)) return c;
       const samp = c.operating.sampling;
-      // Each item is dealt as the audit's methodology says (A28): a quarter of
+      // Each item is dealt as the agreed methodology says (A28): a quarter of
       // the window, and — on a control answering for several companies — a
       // company, so the coverage strip can tell whether the draw reached each
       // one. The other files' items are what the deal evens out against; the
@@ -3307,6 +3307,11 @@ export function IcfrProvider({ children, initialRole = 'auditor', seedMeta }: { 
       const cur = samplingOf(prev);
       const changes: { field: string; from: string; to: string }[] = [];
       if (patch.method && patch.method !== cur.method) changes.push({ field: 'Selection method', from: cur.method, to: patch.method });
+      // Said as the groups themselves, not as a count: "Quarters, Entities →
+      // Quarters" is the change; "2 → 1" is a number nobody can check.
+      if (patch.spread && spreadLabel(patch.spread) !== spreadLabel(cur.spread)) {
+        changes.push({ field: 'Spread across', from: spreadLabel(cur.spread), to: spreadLabel(patch.spread) });
+      }
       if (patch.roundBasis && patch.roundBasis !== cur.roundBasis) {
         const say = (b: SamplingRoundBasis) => (b === 'per-round' ? 'Per round' : 'Whole period');
         changes.push({ field: 'Across rounds', from: say(cur.roundBasis), to: say(patch.roundBasis) });

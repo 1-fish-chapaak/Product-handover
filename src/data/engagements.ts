@@ -5,7 +5,7 @@
  * Single source of truth so adding/changing an engagement is one edit, not two.
  */
 
-import type { Control as SoxControl } from '../components/sox-icfr/types';
+import type { Control as SoxControl, SamplingMethodology } from '../components/sox-icfr/types';
 
 export type ProcessCode = 'P2P' | 'O2C' | 'R2R' | 'S2C' | 'ITGC';
 export type EngStatus = 'Active' | 'In Progress' | 'Planned' | 'Review' | 'Draft' | 'Closed';
@@ -100,6 +100,10 @@ export interface Engagement {
    *  Copy at pick time — later edits on the RACM tab never reach this engagement.
    *  When present the workspace seeds exactly these. */
   soxControls?: SoxControl[];
+  /** SOX (#22): the sampling approach the lead proposed on the Sampling step.
+   *  Carried here proposed and unsigned — the reviewer signs it inside the
+   *  workspace, on the Configuration tab, and testing waits for that. */
+  soxSampling?: SamplingMethodology;
   /** Present only for Compliance engagements created via the wizard. */
   complianceConfig?: ComplianceConfig;
   /** Present only for Internal Audit engagements created via the wizard. */
