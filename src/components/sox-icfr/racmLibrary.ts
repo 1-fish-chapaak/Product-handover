@@ -199,6 +199,17 @@ export function addLibraryRacm(input: Omit<LibraryRacm, 'id' | 'usedBy' | 'creat
  * did not arrive, and the editor still holds the rows either way.
  */
 function applyEditorWrite(key: string, raw: string | null): void {
+  // Publish asked for from the editor's tab. The rows it wants published are
+  // whatever is unpublished here when the ask arrives — the editor cannot know
+  // the library's state, so it asks for the action, never the outcome.
+  if (raw && key.startsWith('sox-racm-publish:')) {
+    const racm = findLibraryRacm(key.slice('sox-racm-publish:'.length));
+    if (!racm) return;
+    let by = 'You';
+    try { by = (JSON.parse(raw) as { by?: string }).by || 'You'; } catch { /* the ask still stands */ }
+    publishRacm(racm.id, by);
+    return;
+  }
   if (!raw || !key.startsWith('sox-racm-rows:')) return;
   const racm = findLibraryRacm(key.slice('sox-racm-rows:'.length));
   if (!racm) return;

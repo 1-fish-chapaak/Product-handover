@@ -3383,6 +3383,13 @@ export const RACM_ROWS_KEY = (racmId: string) => `sox-racm-rows:${racmId}`;
  *  the first lock lives in another browser tab and can be reached by other
  *  means. */
 export const RACM_LOCKED_KEY = (racmId: string) => `sox-racm-locked:${racmId}`;
+/** The editor asking for this matrix to be published (24 Sep). A RACM made in
+ *  the library starts as a draft and only a published row can be scoped into an
+ *  engagement, so Publish had to be reachable from the spreadsheet — but the
+ *  editor runs in its OWN TAB with its own module state and cannot call the
+ *  library's store. It writes here instead, and the library tab listens on the
+ *  same `storage` event that already carries row edits. */
+export const RACM_PUBLISH_KEY = (racmId: string) => `sox-racm-publish:${racmId}`;
 export function racmEditorRows(controls: Control[], process: string): ProcurementRacmRow[] {
   const seen = new Set<string>();
   return controls

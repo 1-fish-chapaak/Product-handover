@@ -854,6 +854,13 @@ export type RiskRating = 'High' | 'Medium' | 'Low';
 export type TestingStrategy = 'Sampling' | 'Full population' | 'Test of one';
 export const TESTING_STRATEGIES: TestingStrategy[] = ['Sampling', 'Full population', 'Test of one'];
 export const RISK_RATINGS: RiskRating[] = ['High', 'Medium', 'Low'];
+/** HOW LIKELY THE RISK IS TO HAPPEN — the other half of the rating, and a
+ *  required column since 24 Sep. Rating is the answer; likelihood and impact are
+ *  the reasoning behind it, and a matrix that carries only the answer cannot be
+ *  re-argued when management disagrees. Same three words as the rating, because
+ *  a client's matrix rates both on one scale. */
+export type RiskLikelihood = 'High' | 'Medium' | 'Low';
+export const RISK_LIKELIHOODS: RiskLikelihood[] = ['High', 'Medium', 'Low'];
 
 // ─── Risk category ───────────────────────────────────────────────────────────────
 // The RACM's own category column — called "Risk category" everywhere it shows
@@ -1000,6 +1007,10 @@ export interface Control {
   /** The risk's agreed rating. Drives how deep the sample goes — see
    *  `sampleSizeGuide` — and is argued with management, not derived. */
   riskRating?: RiskRating;
+  /** How likely the risk was judged to be. Read off the matrix, never derived —
+   *  the RACM list used to invent it from the rating, which meant every control
+   *  with no rating read "Medium" as though somebody had decided that. */
+  likelihood?: RiskLikelihood;
   /** WHEN THE CONTROL STARTED OPERATING in its current form — a control put in
    *  place in September cannot be tested over a year that began in April, and a
    *  sample drawn across the whole period would be drawing from months the
