@@ -1,0 +1,13 @@
+Entity ID,Legal entity name,Entity type,Level,Immediate parent ID,Immediate parent name,Direct ownership %,Effective group ownership %,Non-controlling interest %,Jurisdiction of incorporation
+ENT-MGH,"Meridian Global Holdings, Inc.",Holding,0,,,100,100,0,United States
+ENT-MFS,Meridian Freight Systems LLC,Subsidiary,1,ENT-MGH,"Meridian Global Holdings, Inc.",100,100,0,United States
+ENT-MTM,Meridian Trucking Midwest LLC,Subsidiary,2,ENT-MFS,Meridian Freight Systems LLC,100,100,0,United States
+ENT-MLM,Meridian Last Mile LLC,Subsidiary,2,ENT-MFS,Meridian Freight Systems LLC,80,80,20,United States
+ENT-MAC,"Meridian Air Cargo, Inc.",Subsidiary,1,ENT-MGH,"Meridian Global Holdings, Inc.",100,100,0,United States
+ENT-MACC,Meridian Air Cargo Canada ULC,Subsidiary,2,ENT-MAC,"Meridian Air Cargo, Inc.",100,100,0,Canada
+ENT-MCS,Meridian Charter Services LLC,Subsidiary,2,ENT-MAC,"Meridian Air Cargo, Inc.",100,100,0,United States
+ENT-MLE,Meridian Logistics Europe B.V.,Subsidiary,1,ENT-MGH,"Meridian Global Holdings, Inc.",100,100,0,Netherlands
+ENT-MLD,Meridian Logistics Deutschland GmbH,Subsidiary,2,ENT-MLE,Meridian Logistics Europe B.V.,100,100,0,Germany
+ENT-MLF,Meridian Logistics France SAS,Subsidiary,2,ENT-MLE,Meridian Logistics Europe B.V.,95,95,5,France
+ENT-MPS,Meridian Port Services LLC,Subsidiary,1,ENT-MGH,"Meridian Global Holdings, Inc.",74,74,26,United States
+ENT-GTO,Gulf Terminal Operations LLC,Subsidiary,2,ENT-MPS,Meridian Port Services LLC,100,74,0,United States
