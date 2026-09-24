@@ -239,6 +239,8 @@ export const PROCUREMENT_RACM_ROWS: ProcurementRacmRow[] = [
     "mgmtReviewControl": "",
     "confidence": "INFERRED",
     "sopSectionRef": "SOP-PROC-001, Section 5.2.1",
+    "processOwner": "Head of Financial Planning & Analysis",
+    "designChecks": "The person performing the control is independent of the person who prepares what it checks. | The control leaves evidence that it operated — a reviewer can tell it ran on a given date. | The person performing the control has the authority and competence to do so. | The control operates over a complete population — nothing routes around it.",
     "attributes": "Evidence of review"
   },
   {
@@ -267,6 +269,8 @@ export const PROCUREMENT_RACM_ROWS: ProcurementRacmRow[] = [
     "mgmtReviewControl": "",
     "confidence": "INFERRED",
     "sopSectionRef": "SOP-PROC-001, Section 5.2.2",
+    "processOwner": "Head of Financial Planning & Analysis",
+    "designChecks": "The person performing the control is independent of the person who prepares what it checks. | The control leaves evidence that it operated — a reviewer can tell it ran on a given date. | The person performing the control has the authority and competence to do so. | The control operates over a complete population — nothing routes around it.",
     "attributes": "Sign-off obtained"
   },
   {
@@ -295,6 +299,8 @@ export const PROCUREMENT_RACM_ROWS: ProcurementRacmRow[] = [
     "mgmtReviewControl": "",
     "confidence": "INFERRED",
     "sopSectionRef": "SOP-PROC-001, Section 5.2.3",
+    "processOwner": "Head of Financial Planning & Analysis",
+    "designChecks": "The person performing the control is independent of the person who prepares what it checks. | The threshold or tolerance the control operates at is documented and approved. | Exceptions the control raises are followed through to resolution, not just noted. | The control leaves evidence that it operated — a reviewer can tell it ran on a given date.",
     "attributes": "Completeness of documentation"
   },
   {
@@ -323,6 +329,8 @@ export const PROCUREMENT_RACM_ROWS: ProcurementRacmRow[] = [
     "mgmtReviewControl": "",
     "confidence": "INFERRED",
     "sopSectionRef": "SOP-PROC-001, Section 5.2.4",
+    "processOwner": "Head of Financial Planning & Analysis",
+    "designChecks": "The person performing the control is independent of the person who prepares what it checks. | The control leaves evidence that it operated — a reviewer can tell it ran on a given date. | The person performing the control has the authority and competence to do so. | The control runs often enough to catch a misstatement before it reaches the accounts.",
     "attributes": "Timeliness of execution,Sign-off obtained"
   },
   {
@@ -351,6 +359,8 @@ export const PROCUREMENT_RACM_ROWS: ProcurementRacmRow[] = [
     "mgmtReviewControl": "",
     "confidence": "INFERRED",
     "sopSectionRef": "SOP-PROC-001, Section 5.2.5",
+    "processOwner": "Head of Financial Planning & Analysis",
+    "designChecks": "The person performing the control is independent of the person who prepares what it checks. | The control leaves evidence that it operated — a reviewer can tell it ran on a given date. | The person performing the control has the authority and competence to do so. | The control operates over a complete population — nothing routes around it.",
     "attributes": "Approval evidence verified"
   },
   {
@@ -379,6 +389,8 @@ export const PROCUREMENT_RACM_ROWS: ProcurementRacmRow[] = [
     "mgmtReviewControl": "",
     "confidence": "EXTRACTED",
     "sopSectionRef": "SOP-PROC-001, Section 5.3",
+    "processOwner": "Head of Financial Planning & Analysis",
+    "designChecks": "The person performing the control is independent of the person who prepares what it checks. | Exceptions the control raises are followed through to resolution, not just noted. | The control leaves evidence that it operated — a reviewer can tell it ran on a given date. | The control operates over a complete population — nothing routes around it.",
     "attributes": "Completeness of documentation,Sign-off obtained"
   },
   {
@@ -407,6 +419,8 @@ export const PROCUREMENT_RACM_ROWS: ProcurementRacmRow[] = [
     "mgmtReviewControl": "",
     "confidence": "EXTRACTED",
     "sopSectionRef": "SOP-PROC-001, Section 5.3",
+    "processOwner": "Head of Financial Planning & Analysis",
+    "designChecks": "The person performing the control is independent of the person who prepares what it checks. | The control leaves evidence that it operated — a reviewer can tell it ran on a given date. | The person performing the control has the authority and competence to do so.",
     "attributes": "Exception identification accuracy"
   },
   {
@@ -435,6 +449,8 @@ export const PROCUREMENT_RACM_ROWS: ProcurementRacmRow[] = [
     "mgmtReviewControl": "",
     "confidence": "EXTRACTED",
     "sopSectionRef": "SOP-PROC-001, Section 5.3",
+    "processOwner": "Head of Financial Planning & Analysis",
+    "designChecks": "The person performing the control is independent of the person who prepares what it checks. | The control leaves evidence that it operated — a reviewer can tell it ran on a given date. | The person performing the control has the authority and competence to do so.",
     "attributes": "Timeliness of execution,Sign-off obtained"
   },
   {
@@ -463,6 +479,8 @@ export const PROCUREMENT_RACM_ROWS: ProcurementRacmRow[] = [
     "mgmtReviewControl": "",
     "confidence": "EXTRACTED",
     "sopSectionRef": "SOP-PROC-001, Section 5.3",
+    "processOwner": "Head of Financial Planning & Analysis",
+    "designChecks": "The person performing the control is independent of the person who prepares what it checks. | The threshold or tolerance the control operates at is documented and approved. | The control leaves evidence that it operated — a reviewer can tell it ran on a given date. | The person performing the control has the authority and competence to do so.",
     "attributes": "Completeness of documentation"
   },
   {
@@ -491,6 +509,8 @@ export const PROCUREMENT_RACM_ROWS: ProcurementRacmRow[] = [
     "mgmtReviewControl": "",
     "confidence": "EXTRACTED",
     "sopSectionRef": "SOP-PROC-001, Section 5.3",
+    "processOwner": "Head of Financial Planning & Analysis",
+    "designChecks": "The control leaves evidence that it operated — a reviewer can tell it ran on a given date. | The control operates over a complete population — nothing routes around it. | The system configuration behind the control is under change control.",
     "attributes": "Approval evidence verified,Sign-off obtained"
   },
   {
@@ -519,6 +539,8 @@ export const PROCUREMENT_RACM_ROWS: ProcurementRacmRow[] = [
     "mgmtReviewControl": "",
     "confidence": "INFERRED",
     "sopSectionRef": "SOP-PROC-001, Section 6.2.1",
+    "processOwner": "Head of Procurement Operations",
+    "designChecks": "The person performing the control is independent of the person who prepares what it checks. | The control leaves evidence that it operated — a reviewer can tell it ran on a given date. | The person performing the control has the authority and competence to do so.",
     "attributes": "Evidence of review,Segregation of duties confirmed"
   },
   {
@@ -547,6 +569,8 @@ export const PROCUREMENT_RACM_ROWS: ProcurementRacmRow[] = [
     "mgmtReviewControl": "",
     "confidence": "INFERRED",
     "sopSectionRef": "SOP-PROC-001, Section 6.2.2",
+    "processOwner": "Head of Procurement Operations",
+    "designChecks": "The control leaves evidence that it operated — a reviewer can tell it ran on a given date. | The control operates over a complete population — nothing routes around it.",
     "attributes": "Completeness of documentation,Timeliness of execution,Sign-off obtained"
   },
   {
@@ -575,6 +599,8 @@ export const PROCUREMENT_RACM_ROWS: ProcurementRacmRow[] = [
     "mgmtReviewControl": "",
     "confidence": "INFERRED",
     "sopSectionRef": "SOP-PROC-001, Section 6.2.3",
+    "processOwner": "Head of Procurement Operations",
+    "designChecks": "The person performing the control is independent of the person who prepares what it checks. | The control leaves evidence that it operated — a reviewer can tell it ran on a given date. | The person performing the control has the authority and competence to do so. | The control operates over a complete population — nothing routes around it.",
     "attributes": "Evidence of review,System configuration validated"
   },
   {
@@ -603,6 +629,8 @@ export const PROCUREMENT_RACM_ROWS: ProcurementRacmRow[] = [
     "mgmtReviewControl": "",
     "confidence": "INFERRED",
     "sopSectionRef": "SOP-PROC-001, Section 6.2.4",
+    "processOwner": "Head of Procurement Operations",
+    "designChecks": "The person performing the control is independent of the person who prepares what it checks. | The control leaves evidence that it operated — a reviewer can tell it ran on a given date. | The person performing the control has the authority and competence to do so. | The system configuration behind the control is under change control.",
     "attributes": "Exception identification accuracy,Sign-off obtained"
   },
   {
@@ -631,6 +659,8 @@ export const PROCUREMENT_RACM_ROWS: ProcurementRacmRow[] = [
     "mgmtReviewControl": "",
     "confidence": "INFERRED",
     "sopSectionRef": "SOP-PROC-001, Section 6.2.5",
+    "processOwner": "Head of Procurement Operations",
+    "designChecks": "The person performing the control is independent of the person who prepares what it checks. | The control leaves evidence that it operated — a reviewer can tell it ran on a given date. | The person performing the control has the authority and competence to do so. | The control operates over a complete population — nothing routes around it.",
     "attributes": "Completeness of documentation,Approval evidence verified"
   },
   {
@@ -659,6 +689,8 @@ export const PROCUREMENT_RACM_ROWS: ProcurementRacmRow[] = [
     "mgmtReviewControl": "",
     "confidence": "EXTRACTED",
     "sopSectionRef": "SOP-PROC-001, Section 6.3",
+    "processOwner": "Head of Procurement Operations",
+    "designChecks": "The person performing the control is independent of the person who prepares what it checks. | The control leaves evidence that it operated — a reviewer can tell it ran on a given date. | The person performing the control has the authority and competence to do so. | The system configuration behind the control is under change control.",
     "attributes": "Timeliness of execution,Sign-off obtained"
   },
   {
@@ -687,6 +719,8 @@ export const PROCUREMENT_RACM_ROWS: ProcurementRacmRow[] = [
     "mgmtReviewControl": "",
     "confidence": "EXTRACTED",
     "sopSectionRef": "SOP-PROC-001, Section 6.3",
+    "processOwner": "Head of Procurement Operations",
+    "designChecks": "The person performing the control is independent of the person who prepares what it checks. | The control leaves evidence that it operated — a reviewer can tell it ran on a given date. | The person performing the control has the authority and competence to do so. | The system configuration behind the control is under change control.",
     "attributes": "Evidence of review"
   },
   {
@@ -715,6 +749,8 @@ export const PROCUREMENT_RACM_ROWS: ProcurementRacmRow[] = [
     "mgmtReviewControl": "",
     "confidence": "EXTRACTED",
     "sopSectionRef": "SOP-PROC-001, Section 6.3",
+    "processOwner": "Head of Procurement Operations",
+    "designChecks": "The person performing the control is independent of the person who prepares what it checks. | The control leaves evidence that it operated — a reviewer can tell it ran on a given date. | The person performing the control has the authority and competence to do so. | The system configuration behind the control is under change control.",
     "attributes": "Completeness of documentation,Sign-off obtained"
   },
   {
@@ -743,6 +779,8 @@ export const PROCUREMENT_RACM_ROWS: ProcurementRacmRow[] = [
     "mgmtReviewControl": "",
     "confidence": "EXTRACTED",
     "sopSectionRef": "SOP-PROC-001, Section 6.3",
+    "processOwner": "Head of Procurement Operations",
+    "designChecks": "The person performing the control is independent of the person who prepares what it checks. | The control leaves evidence that it operated — a reviewer can tell it ran on a given date. | The person performing the control has the authority and competence to do so. | The system configuration behind the control is under change control.",
     "attributes": "Evidence of review"
   },
   {
@@ -771,6 +809,8 @@ export const PROCUREMENT_RACM_ROWS: ProcurementRacmRow[] = [
     "mgmtReviewControl": "",
     "confidence": "EXTRACTED",
     "sopSectionRef": "SOP-PROC-001, Section 6.3",
+    "processOwner": "Head of Procurement Operations",
+    "designChecks": "The person performing the control is independent of the person who prepares what it checks. | The threshold or tolerance the control operates at is documented and approved. | The control leaves evidence that it operated — a reviewer can tell it ran on a given date. | The person performing the control has the authority and competence to do so.",
     "attributes": "Timeliness of execution,Approval evidence verified,Sign-off obtained"
   },
   {
@@ -799,6 +839,8 @@ export const PROCUREMENT_RACM_ROWS: ProcurementRacmRow[] = [
     "mgmtReviewControl": "",
     "confidence": "EXTRACTED",
     "sopSectionRef": "SOP-PROC-001, Section 6.4",
+    "processOwner": "Head of Procurement Operations",
+    "designChecks": "The control leaves evidence that it operated — a reviewer can tell it ran on a given date. | The control operates over a complete population — nothing routes around it. | The system configuration behind the control is under change control.",
     "attributes": "Completeness of documentation,Exception identification accuracy"
   },
   {
@@ -827,6 +869,8 @@ export const PROCUREMENT_RACM_ROWS: ProcurementRacmRow[] = [
     "mgmtReviewControl": "",
     "confidence": "EXTRACTED",
     "sopSectionRef": "SOP-PROC-001, Section 6.4",
+    "processOwner": "Head of Procurement Operations",
+    "designChecks": "The person performing the control is independent of the person who prepares what it checks. | The control leaves evidence that it operated — a reviewer can tell it ran on a given date. | The person performing the control has the authority and competence to do so. | The system configuration behind the control is under change control.",
     "attributes": "Sign-off obtained,Segregation of duties confirmed"
   },
   {
@@ -855,6 +899,8 @@ export const PROCUREMENT_RACM_ROWS: ProcurementRacmRow[] = [
     "mgmtReviewControl": "",
     "confidence": "EXTRACTED",
     "sopSectionRef": "SOP-PROC-001, Section 6.4",
+    "processOwner": "Head of Procurement Operations",
+    "designChecks": "The person performing the control is independent of the person who prepares what it checks. | The control leaves evidence that it operated — a reviewer can tell it ran on a given date. | The person performing the control has the authority and competence to do so. | The control operates over a complete population — nothing routes around it.",
     "attributes": "Evidence of review"
   },
   {
@@ -883,6 +929,8 @@ export const PROCUREMENT_RACM_ROWS: ProcurementRacmRow[] = [
     "mgmtReviewControl": "",
     "confidence": "EXTRACTED",
     "sopSectionRef": "SOP-PROC-001, Section 6.4",
+    "processOwner": "Head of Procurement Operations",
+    "designChecks": "The person performing the control is independent of the person who prepares what it checks. | Exceptions the control raises are followed through to resolution, not just noted. | The control leaves evidence that it operated — a reviewer can tell it ran on a given date. | The control operates over a complete population — nothing routes around it.",
     "attributes": "Completeness of documentation,Timeliness of execution,Sign-off obtained"
   },
   {
@@ -911,6 +959,8 @@ export const PROCUREMENT_RACM_ROWS: ProcurementRacmRow[] = [
     "mgmtReviewControl": "",
     "confidence": "EXTRACTED",
     "sopSectionRef": "SOP-PROC-001, Section 6.4",
+    "processOwner": "Head of Procurement Operations",
+    "designChecks": "The person performing the control is independent of the person who prepares what it checks. | The control leaves evidence that it operated — a reviewer can tell it ran on a given date. | The person performing the control has the authority and competence to do so. | The system configuration behind the control is under change control.",
     "attributes": "Approval evidence verified"
   },
   {
@@ -939,6 +989,8 @@ export const PROCUREMENT_RACM_ROWS: ProcurementRacmRow[] = [
     "mgmtReviewControl": "",
     "confidence": "EXTRACTED",
     "sopSectionRef": "SOP-PROC-001, Section 7.2",
+    "processOwner": "Head of Vendor Management",
+    "designChecks": "The control leaves evidence that it operated — a reviewer can tell it ran on a given date. | The person performing the control has the authority and competence to do so.",
     "attributes": "Sign-off obtained,System configuration validated"
   },
   {
@@ -967,6 +1019,8 @@ export const PROCUREMENT_RACM_ROWS: ProcurementRacmRow[] = [
     "mgmtReviewControl": "",
     "confidence": "EXTRACTED",
     "sopSectionRef": "SOP-PROC-001, Section 7.2",
+    "processOwner": "Head of Vendor Management",
+    "designChecks": "The control leaves evidence that it operated — a reviewer can tell it ran on a given date. | The person performing the control has the authority and competence to do so.",
     "attributes": "Completeness of documentation"
   },
   {
@@ -995,6 +1049,8 @@ export const PROCUREMENT_RACM_ROWS: ProcurementRacmRow[] = [
     "mgmtReviewControl": "",
     "confidence": "EXTRACTED",
     "sopSectionRef": "SOP-PROC-001, Section 7.2",
+    "processOwner": "Head of Vendor Management",
+    "designChecks": "The control leaves evidence that it operated — a reviewer can tell it ran on a given date. | The person performing the control has the authority and competence to do so.",
     "attributes": "Timeliness of execution,Exception identification accuracy,Sign-off obtained"
   },
   {
@@ -1023,6 +1079,8 @@ export const PROCUREMENT_RACM_ROWS: ProcurementRacmRow[] = [
     "mgmtReviewControl": "",
     "confidence": "EXTRACTED",
     "sopSectionRef": "SOP-PROC-001, Section 7.2",
+    "processOwner": "Head of Vendor Management",
+    "designChecks": "The threshold or tolerance the control operates at is documented and approved. | The control leaves evidence that it operated — a reviewer can tell it ran on a given date. | The person performing the control has the authority and competence to do so.",
     "attributes": "Evidence of review"
   },
   {
@@ -1051,6 +1109,8 @@ export const PROCUREMENT_RACM_ROWS: ProcurementRacmRow[] = [
     "mgmtReviewControl": "",
     "confidence": "INFERRED",
     "sopSectionRef": "SOP-PROC-001, Section 7.3.1",
+    "processOwner": "Head of Vendor Management",
+    "designChecks": "The person performing the control is independent of the person who prepares what it checks. | The threshold or tolerance the control operates at is documented and approved. | The control leaves evidence that it operated — a reviewer can tell it ran on a given date. | The person performing the control has the authority and competence to do so.",
     "attributes": "Completeness of documentation,Approval evidence verified,Sign-off obtained"
   },
   {
@@ -1079,6 +1139,8 @@ export const PROCUREMENT_RACM_ROWS: ProcurementRacmRow[] = [
     "mgmtReviewControl": "",
     "confidence": "INFERRED",
     "sopSectionRef": "SOP-PROC-001, Section 7.3.2",
+    "processOwner": "Head of Vendor Management",
+    "designChecks": "The person performing the control is independent of the person who prepares what it checks. | The control leaves evidence that it operated — a reviewer can tell it ran on a given date. | The person performing the control has the authority and competence to do so.",
     "attributes": "Evidence of review"
   },
   {
@@ -1107,6 +1169,8 @@ export const PROCUREMENT_RACM_ROWS: ProcurementRacmRow[] = [
     "mgmtReviewControl": "",
     "confidence": "INFERRED",
     "sopSectionRef": "SOP-PROC-001, Section 7.3.3",
+    "processOwner": "Head of Vendor Management",
+    "designChecks": "The control leaves evidence that it operated — a reviewer can tell it ran on a given date. | The person performing the control has the authority and competence to do so. | The control operates over a complete population — nothing routes around it.",
     "attributes": "Timeliness of execution,Sign-off obtained"
   },
   {
@@ -1135,6 +1199,8 @@ export const PROCUREMENT_RACM_ROWS: ProcurementRacmRow[] = [
     "mgmtReviewControl": "",
     "confidence": "INFERRED",
     "sopSectionRef": "SOP-PROC-001, Section 7.3.4",
+    "processOwner": "Head of Vendor Management",
+    "designChecks": "The control leaves evidence that it operated — a reviewer can tell it ran on a given date. | The person performing the control has the authority and competence to do so.",
     "attributes": "Completeness of documentation,Segregation of duties confirmed"
   },
   {
@@ -1163,6 +1229,8 @@ export const PROCUREMENT_RACM_ROWS: ProcurementRacmRow[] = [
     "mgmtReviewControl": "",
     "confidence": "INFERRED",
     "sopSectionRef": "SOP-PROC-001, Section 7.3.5",
+    "processOwner": "Head of Vendor Management",
+    "designChecks": "The control leaves evidence that it operated — a reviewer can tell it ran on a given date. | The person performing the control has the authority and competence to do so. | The control operates over a complete population — nothing routes around it.",
     "attributes": "Sign-off obtained"
   },
   {
@@ -1191,6 +1259,8 @@ export const PROCUREMENT_RACM_ROWS: ProcurementRacmRow[] = [
     "mgmtReviewControl": "",
     "confidence": "INFERRED",
     "sopSectionRef": "SOP-PROC-001, Section 7.3.6",
+    "processOwner": "Head of Vendor Management",
+    "designChecks": "The person performing the control is independent of the person who prepares what it checks. | The control leaves evidence that it operated — a reviewer can tell it ran on a given date. | The person performing the control has the authority and competence to do so.",
     "attributes": "Approval evidence verified,Exception identification accuracy"
   },
   {
@@ -1219,6 +1289,8 @@ export const PROCUREMENT_RACM_ROWS: ProcurementRacmRow[] = [
     "mgmtReviewControl": "",
     "confidence": "EXTRACTED",
     "sopSectionRef": "SOP-PROC-001, Section 7.4",
+    "processOwner": "Head of Vendor Management",
+    "designChecks": "The threshold or tolerance the control operates at is documented and approved. | The control leaves evidence that it operated — a reviewer can tell it ran on a given date. | The person performing the control has the authority and competence to do so.",
     "attributes": "Completeness of documentation,Timeliness of execution,Sign-off obtained"
   },
   {
@@ -1247,6 +1319,8 @@ export const PROCUREMENT_RACM_ROWS: ProcurementRacmRow[] = [
     "mgmtReviewControl": "",
     "confidence": "EXTRACTED",
     "sopSectionRef": "SOP-PROC-001, Section 7.4",
+    "processOwner": "Head of Vendor Management",
+    "designChecks": "The control leaves evidence that it operated — a reviewer can tell it ran on a given date. | The person performing the control has the authority and competence to do so.",
     "attributes": "Evidence of review"
   },
   {
@@ -1275,6 +1349,8 @@ export const PROCUREMENT_RACM_ROWS: ProcurementRacmRow[] = [
     "mgmtReviewControl": "",
     "confidence": "EXTRACTED",
     "sopSectionRef": "SOP-PROC-001, Section 7.4",
+    "processOwner": "Head of Vendor Management",
+    "designChecks": "The control leaves evidence that it operated — a reviewer can tell it ran on a given date. | The person performing the control has the authority and competence to do so.",
     "attributes": "Sign-off obtained"
   },
   {
@@ -1303,6 +1379,8 @@ export const PROCUREMENT_RACM_ROWS: ProcurementRacmRow[] = [
     "mgmtReviewControl": "",
     "confidence": "EXTRACTED",
     "sopSectionRef": "SOP-PROC-001, Section 7.4",
+    "processOwner": "Head of Vendor Management",
+    "designChecks": "The person performing the control is independent of the person who prepares what it checks. | The control leaves evidence that it operated — a reviewer can tell it ran on a given date. | The person performing the control has the authority and competence to do so.",
     "attributes": "Completeness of documentation,System configuration validated"
   },
   {
@@ -1331,6 +1409,8 @@ export const PROCUREMENT_RACM_ROWS: ProcurementRacmRow[] = [
     "mgmtReviewControl": "",
     "confidence": "EXTRACTED",
     "sopSectionRef": "SOP-PROC-001, Section 7.4",
+    "processOwner": "Head of Vendor Management",
+    "designChecks": "The person performing the control is independent of the person who prepares what it checks. | The control leaves evidence that it operated — a reviewer can tell it ran on a given date. | The person performing the control has the authority and competence to do so.",
     "attributes": "Timeliness of execution,Approval evidence verified,Sign-off obtained"
   },
   {
@@ -1359,6 +1439,8 @@ export const PROCUREMENT_RACM_ROWS: ProcurementRacmRow[] = [
     "mgmtReviewControl": "",
     "confidence": "EXTRACTED",
     "sopSectionRef": "SOP-PROC-001, Section 7.4",
+    "processOwner": "Head of Vendor Management",
+    "designChecks": "The control leaves evidence that it operated — a reviewer can tell it ran on a given date. | The person performing the control has the authority and competence to do so. | The control runs often enough to catch a misstatement before it reaches the accounts.",
     "attributes": "Evidence of review"
   },
   {
@@ -1387,6 +1469,8 @@ export const PROCUREMENT_RACM_ROWS: ProcurementRacmRow[] = [
     "mgmtReviewControl": "",
     "confidence": "INFERRED",
     "sopSectionRef": "SOP-PROC-001, Section 8.2.1",
+    "processOwner": "Head of Procurement Operations",
+    "designChecks": "The person performing the control is independent of the person who prepares what it checks. | The control leaves evidence that it operated — a reviewer can tell it ran on a given date. | The person performing the control has the authority and competence to do so. | The control operates over a complete population — nothing routes around it.",
     "attributes": "Completeness of documentation,Exception identification accuracy,Sign-off obtained"
   },
   {
@@ -1415,6 +1499,8 @@ export const PROCUREMENT_RACM_ROWS: ProcurementRacmRow[] = [
     "mgmtReviewControl": "",
     "confidence": "INFERRED",
     "sopSectionRef": "SOP-PROC-001, Section 8.2.2",
+    "processOwner": "Head of Procurement Operations",
+    "designChecks": "The person performing the control is independent of the person who prepares what it checks. | The threshold or tolerance the control operates at is documented and approved. | The control leaves evidence that it operated — a reviewer can tell it ran on a given date. | The person performing the control has the authority and competence to do so.",
     "attributes": "Evidence of review"
   },
   {
@@ -1443,6 +1529,8 @@ export const PROCUREMENT_RACM_ROWS: ProcurementRacmRow[] = [
     "mgmtReviewControl": "",
     "confidence": "INFERRED",
     "sopSectionRef": "SOP-PROC-001, Section 8.2.3",
+    "processOwner": "Head of Procurement Operations",
+    "designChecks": "The person performing the control is independent of the person who prepares what it checks. | The threshold or tolerance the control operates at is documented and approved. | The control leaves evidence that it operated — a reviewer can tell it ran on a given date. | The person performing the control has the authority and competence to do so.",
     "attributes": "Timeliness of execution,Sign-off obtained,Segregation of duties confirmed"
   },
   {
@@ -1471,6 +1559,8 @@ export const PROCUREMENT_RACM_ROWS: ProcurementRacmRow[] = [
     "mgmtReviewControl": "",
     "confidence": "INFERRED",
     "sopSectionRef": "SOP-PROC-001, Section 8.2.4",
+    "processOwner": "Head of Procurement Operations",
+    "designChecks": "The person performing the control is independent of the person who prepares what it checks. | The control leaves evidence that it operated — a reviewer can tell it ran on a given date. | The person performing the control has the authority and competence to do so. | The control operates over a complete population — nothing routes around it.",
     "attributes": "Completeness of documentation,Approval evidence verified"
   },
   {
@@ -1499,6 +1589,8 @@ export const PROCUREMENT_RACM_ROWS: ProcurementRacmRow[] = [
     "mgmtReviewControl": "",
     "confidence": "INFERRED",
     "sopSectionRef": "SOP-PROC-001, Section 8.2.5",
+    "processOwner": "Head of Procurement Operations",
+    "designChecks": "The person performing the control is independent of the person who prepares what it checks. | The control leaves evidence that it operated — a reviewer can tell it ran on a given date. | The person performing the control has the authority and competence to do so.",
     "attributes": "Sign-off obtained"
   },
   {
@@ -1527,6 +1619,8 @@ export const PROCUREMENT_RACM_ROWS: ProcurementRacmRow[] = [
     "mgmtReviewControl": "",
     "confidence": "EXTRACTED",
     "sopSectionRef": "SOP-PROC-001, Section 8.3",
+    "processOwner": "Head of Procurement Operations",
+    "designChecks": "The person performing the control is independent of the person who prepares what it checks. | The control leaves evidence that it operated — a reviewer can tell it ran on a given date. | The person performing the control has the authority and competence to do so. | The system configuration behind the control is under change control.",
     "attributes": "Evidence of review"
   },
   {
@@ -1555,6 +1649,8 @@ export const PROCUREMENT_RACM_ROWS: ProcurementRacmRow[] = [
     "mgmtReviewControl": "",
     "confidence": "EXTRACTED",
     "sopSectionRef": "SOP-PROC-001, Section 8.3",
+    "processOwner": "Head of Procurement Operations",
+    "designChecks": "The threshold or tolerance the control operates at is documented and approved. | The control leaves evidence that it operated — a reviewer can tell it ran on a given date. | The control operates over a complete population — nothing routes around it. | The system configuration behind the control is under change control.",
     "attributes": "Completeness of documentation,Timeliness of execution,Sign-off obtained"
   },
   {
@@ -1583,6 +1679,8 @@ export const PROCUREMENT_RACM_ROWS: ProcurementRacmRow[] = [
     "mgmtReviewControl": "",
     "confidence": "EXTRACTED",
     "sopSectionRef": "SOP-PROC-001, Section 8.3",
+    "processOwner": "Head of Procurement Operations",
+    "designChecks": "The person performing the control is independent of the person who prepares what it checks. | The threshold or tolerance the control operates at is documented and approved. | The control leaves evidence that it operated — a reviewer can tell it ran on a given date. | The person performing the control has the authority and competence to do so.",
     "attributes": "Exception identification accuracy"
   },
   {
@@ -1611,6 +1709,8 @@ export const PROCUREMENT_RACM_ROWS: ProcurementRacmRow[] = [
     "mgmtReviewControl": "",
     "confidence": "EXTRACTED",
     "sopSectionRef": "SOP-PROC-001, Section 8.3",
+    "processOwner": "Head of Procurement Operations",
+    "designChecks": "The person performing the control is independent of the person who prepares what it checks. | The control leaves evidence that it operated — a reviewer can tell it ran on a given date. | The person performing the control has the authority and competence to do so. | The system configuration behind the control is under change control.",
     "attributes": "Approval evidence verified,Sign-off obtained"
   },
   {
@@ -1639,6 +1739,8 @@ export const PROCUREMENT_RACM_ROWS: ProcurementRacmRow[] = [
     "mgmtReviewControl": "",
     "confidence": "EXTRACTED",
     "sopSectionRef": "SOP-PROC-001, Section 8.3",
+    "processOwner": "Head of Procurement Operations",
+    "designChecks": "The person performing the control is independent of the person who prepares what it checks. | The threshold or tolerance the control operates at is documented and approved. | The control leaves evidence that it operated — a reviewer can tell it ran on a given date. | The person performing the control has the authority and competence to do so.",
     "attributes": "Completeness of documentation"
   },
   {
@@ -1667,6 +1769,8 @@ export const PROCUREMENT_RACM_ROWS: ProcurementRacmRow[] = [
     "mgmtReviewControl": "",
     "confidence": "EXTRACTED",
     "sopSectionRef": "SOP-PROC-001, Section 8.3",
+    "processOwner": "Head of Procurement Operations",
+    "designChecks": "The person performing the control is independent of the person who prepares what it checks. | Exceptions the control raises are followed through to resolution, not just noted. | The control leaves evidence that it operated — a reviewer can tell it ran on a given date.",
     "attributes": "Timeliness of execution,Sign-off obtained,System configuration validated"
   },
   {
@@ -1695,6 +1799,8 @@ export const PROCUREMENT_RACM_ROWS: ProcurementRacmRow[] = [
     "mgmtReviewControl": "",
     "confidence": "INFERRED",
     "sopSectionRef": "SOP-PROC-001, Section 9.2.1",
+    "processOwner": "Head of Warehouse & Receiving",
+    "designChecks": "The control leaves evidence that it operated — a reviewer can tell it ran on a given date. | The person performing the control has the authority and competence to do so. | The control operates over a complete population — nothing routes around it.",
     "attributes": "Evidence of review"
   },
   {
@@ -1723,6 +1829,8 @@ export const PROCUREMENT_RACM_ROWS: ProcurementRacmRow[] = [
     "mgmtReviewControl": "",
     "confidence": "INFERRED",
     "sopSectionRef": "SOP-PROC-001, Section 9.2.2",
+    "processOwner": "Head of Warehouse & Receiving",
+    "designChecks": "The person performing the control is independent of the person who prepares what it checks. | The control leaves evidence that it operated — a reviewer can tell it ran on a given date. | The person performing the control has the authority and competence to do so.",
     "attributes": "Completeness of documentation,Sign-off obtained"
   },
   {
@@ -1751,6 +1859,8 @@ export const PROCUREMENT_RACM_ROWS: ProcurementRacmRow[] = [
     "mgmtReviewControl": "",
     "confidence": "INFERRED",
     "sopSectionRef": "SOP-PROC-001, Section 9.2.3",
+    "processOwner": "Head of Warehouse & Receiving",
+    "designChecks": "The control leaves evidence that it operated — a reviewer can tell it ran on a given date. | The person performing the control has the authority and competence to do so.",
     "attributes": "Approval evidence verified,Segregation of duties confirmed"
   },
   {
@@ -1779,6 +1889,8 @@ export const PROCUREMENT_RACM_ROWS: ProcurementRacmRow[] = [
     "mgmtReviewControl": "",
     "confidence": "INFERRED",
     "sopSectionRef": "SOP-PROC-001, Section 9.2.4",
+    "processOwner": "Head of Warehouse & Receiving",
+    "designChecks": "The control leaves evidence that it operated — a reviewer can tell it ran on a given date. | The control operates over a complete population — nothing routes around it.",
     "attributes": "Timeliness of execution,Exception identification accuracy,Sign-off obtained"
   },
   {
@@ -1807,6 +1919,8 @@ export const PROCUREMENT_RACM_ROWS: ProcurementRacmRow[] = [
     "mgmtReviewControl": "",
     "confidence": "INFERRED",
     "sopSectionRef": "SOP-PROC-001, Section 9.2.5",
+    "processOwner": "Head of Warehouse & Receiving",
+    "designChecks": "The control leaves evidence that it operated — a reviewer can tell it ran on a given date. | The person performing the control has the authority and competence to do so. | The control operates over a complete population — nothing routes around it.",
     "attributes": "Completeness of documentation"
   },
   {
@@ -1835,6 +1949,8 @@ export const PROCUREMENT_RACM_ROWS: ProcurementRacmRow[] = [
     "mgmtReviewControl": "",
     "confidence": "EXTRACTED",
     "sopSectionRef": "SOP-PROC-001, Section 9.3",
+    "processOwner": "Head of Warehouse & Receiving",
+    "designChecks": "The person performing the control is independent of the person who prepares what it checks. | The control leaves evidence that it operated — a reviewer can tell it ran on a given date. | The person performing the control has the authority and competence to do so. | The control operates over a complete population — nothing routes around it.",
     "attributes": "Sign-off obtained"
   },
   {
@@ -1863,6 +1979,8 @@ export const PROCUREMENT_RACM_ROWS: ProcurementRacmRow[] = [
     "mgmtReviewControl": "",
     "confidence": "EXTRACTED",
     "sopSectionRef": "SOP-PROC-001, Section 9.3",
+    "processOwner": "Head of Warehouse & Receiving",
+    "designChecks": "The control leaves evidence that it operated — a reviewer can tell it ran on a given date. | The control operates over a complete population — nothing routes around it. | The system configuration behind the control is under change control.",
     "attributes": "Evidence of review"
   },
   {
@@ -1891,6 +2009,8 @@ export const PROCUREMENT_RACM_ROWS: ProcurementRacmRow[] = [
     "mgmtReviewControl": "",
     "confidence": "EXTRACTED",
     "sopSectionRef": "SOP-PROC-001, Section 9.3",
+    "processOwner": "Head of Warehouse & Receiving",
+    "designChecks": "The person performing the control is independent of the person who prepares what it checks. | The threshold or tolerance the control operates at is documented and approved. | The control leaves evidence that it operated — a reviewer can tell it ran on a given date. | The person performing the control has the authority and competence to do so.",
     "attributes": "Completeness of documentation,Timeliness of execution,Approval evidence verified,Sign-off obtained"
   },
   {
@@ -1919,6 +2039,8 @@ export const PROCUREMENT_RACM_ROWS: ProcurementRacmRow[] = [
     "mgmtReviewControl": "",
     "confidence": "EXTRACTED",
     "sopSectionRef": "SOP-PROC-001, Section 9.3",
+    "processOwner": "Head of Warehouse & Receiving",
+    "designChecks": "The control leaves evidence that it operated — a reviewer can tell it ran on a given date. | The system configuration behind the control is under change control.",
     "attributes": "Evidence of review"
   },
   {
@@ -1947,6 +2069,8 @@ export const PROCUREMENT_RACM_ROWS: ProcurementRacmRow[] = [
     "mgmtReviewControl": "",
     "confidence": "EXTRACTED",
     "sopSectionRef": "SOP-PROC-001, Section 9.3",
+    "processOwner": "Head of Warehouse & Receiving",
+    "designChecks": "The person performing the control is independent of the person who prepares what it checks. | The control leaves evidence that it operated — a reviewer can tell it ran on a given date. | The person performing the control has the authority and competence to do so. | The system configuration behind the control is under change control.",
     "attributes": "Sign-off obtained"
   },
   {
@@ -1975,6 +2099,8 @@ export const PROCUREMENT_RACM_ROWS: ProcurementRacmRow[] = [
     "mgmtReviewControl": "",
     "confidence": "EXTRACTED",
     "sopSectionRef": "SOP-PROC-001, Section 9.3",
+    "processOwner": "Head of Warehouse & Receiving",
+    "designChecks": "The person performing the control is independent of the person who prepares what it checks. | The threshold or tolerance the control operates at is documented and approved. | Exceptions the control raises are followed through to resolution, not just noted. | The control leaves evidence that it operated — a reviewer can tell it ran on a given date.",
     "attributes": "Completeness of documentation,Exception identification accuracy"
   },
   {
@@ -2003,6 +2129,8 @@ export const PROCUREMENT_RACM_ROWS: ProcurementRacmRow[] = [
     "mgmtReviewControl": "",
     "confidence": "INFERRED",
     "sopSectionRef": "SOP-PROC-001, Section 10.2.1",
+    "processOwner": "Head of Accounts Payable",
+    "designChecks": "The control leaves evidence that it operated — a reviewer can tell it ran on a given date. | The person performing the control has the authority and competence to do so. | The control operates over a complete population — nothing routes around it.",
     "attributes": "Timeliness of execution,Sign-off obtained"
   },
   {
@@ -2031,6 +2159,8 @@ export const PROCUREMENT_RACM_ROWS: ProcurementRacmRow[] = [
     "mgmtReviewControl": "",
     "confidence": "INFERRED",
     "sopSectionRef": "SOP-PROC-001, Section 10.2.2",
+    "processOwner": "Head of Accounts Payable",
+    "designChecks": "The person performing the control is independent of the person who prepares what it checks. | The control leaves evidence that it operated — a reviewer can tell it ran on a given date. | The person performing the control has the authority and competence to do so.",
     "attributes": "Approval evidence verified,System configuration validated"
   },
   {
@@ -2059,6 +2189,8 @@ export const PROCUREMENT_RACM_ROWS: ProcurementRacmRow[] = [
     "mgmtReviewControl": "",
     "confidence": "INFERRED",
     "sopSectionRef": "SOP-PROC-001, Section 10.2.3",
+    "processOwner": "Head of Accounts Payable",
+    "designChecks": "The threshold or tolerance the control operates at is documented and approved. | The control leaves evidence that it operated — a reviewer can tell it ran on a given date. | The control operates over a complete population — nothing routes around it.",
     "attributes": "Completeness of documentation,Sign-off obtained,Segregation of duties confirmed"
   },
   {
@@ -2087,6 +2219,8 @@ export const PROCUREMENT_RACM_ROWS: ProcurementRacmRow[] = [
     "mgmtReviewControl": "",
     "confidence": "INFERRED",
     "sopSectionRef": "SOP-PROC-001, Section 10.2.5",
+    "processOwner": "Head of Accounts Payable",
+    "designChecks": "The person performing the control is independent of the person who prepares what it checks. | The threshold or tolerance the control operates at is documented and approved. | Exceptions the control raises are followed through to resolution, not just noted. | The control leaves evidence that it operated — a reviewer can tell it ran on a given date.",
     "attributes": "Evidence of review"
   },
   {
@@ -2115,6 +2249,8 @@ export const PROCUREMENT_RACM_ROWS: ProcurementRacmRow[] = [
     "mgmtReviewControl": "",
     "confidence": "INFERRED",
     "sopSectionRef": "SOP-PROC-001, Section 10.2.6",
+    "processOwner": "Head of Accounts Payable",
+    "designChecks": "The person performing the control is independent of the person who prepares what it checks. | The threshold or tolerance the control operates at is documented and approved. | The control leaves evidence that it operated — a reviewer can tell it ran on a given date. | The person performing the control has the authority and competence to do so.",
     "attributes": "Timeliness of execution,Sign-off obtained"
   },
   {
@@ -2143,6 +2279,8 @@ export const PROCUREMENT_RACM_ROWS: ProcurementRacmRow[] = [
     "mgmtReviewControl": "",
     "confidence": "EXTRACTED",
     "sopSectionRef": "SOP-PROC-001, Section 10.3",
+    "processOwner": "Head of Accounts Payable",
+    "designChecks": "The threshold or tolerance the control operates at is documented and approved. | The control leaves evidence that it operated — a reviewer can tell it ran on a given date. | The person performing the control has the authority and competence to do so. | The system configuration behind the control is under change control.",
     "attributes": "Completeness of documentation"
   },
   {
@@ -2171,6 +2309,8 @@ export const PROCUREMENT_RACM_ROWS: ProcurementRacmRow[] = [
     "mgmtReviewControl": "",
     "confidence": "EXTRACTED",
     "sopSectionRef": "SOP-PROC-001, Section 10.3",
+    "processOwner": "Head of Accounts Payable",
+    "designChecks": "The control leaves evidence that it operated — a reviewer can tell it ran on a given date. | The system configuration behind the control is under change control.",
     "attributes": "Approval evidence verified,Exception identification accuracy,Sign-off obtained"
   },
   {
@@ -2199,6 +2339,8 @@ export const PROCUREMENT_RACM_ROWS: ProcurementRacmRow[] = [
     "mgmtReviewControl": "",
     "confidence": "EXTRACTED",
     "sopSectionRef": "SOP-PROC-001, Section 10.3",
+    "processOwner": "Head of Accounts Payable",
+    "designChecks": "The threshold or tolerance the control operates at is documented and approved. | The control leaves evidence that it operated — a reviewer can tell it ran on a given date. | The system configuration behind the control is under change control.",
     "attributes": "Evidence of review"
   },
   {
@@ -2227,6 +2369,8 @@ export const PROCUREMENT_RACM_ROWS: ProcurementRacmRow[] = [
     "mgmtReviewControl": "",
     "confidence": "EXTRACTED",
     "sopSectionRef": "SOP-PROC-001, Section 10.3",
+    "processOwner": "Head of Accounts Payable",
+    "designChecks": "The person performing the control is independent of the person who prepares what it checks. | The threshold or tolerance the control operates at is documented and approved. | Exceptions the control raises are followed through to resolution, not just noted. | The control leaves evidence that it operated — a reviewer can tell it ran on a given date.",
     "attributes": "Completeness of documentation,Timeliness of execution,Sign-off obtained"
   },
   {
@@ -2255,6 +2399,8 @@ export const PROCUREMENT_RACM_ROWS: ProcurementRacmRow[] = [
     "mgmtReviewControl": "",
     "confidence": "EXTRACTED",
     "sopSectionRef": "SOP-PROC-001, Section 10.3",
+    "processOwner": "Head of Accounts Payable",
+    "designChecks": "The person performing the control is independent of the person who prepares what it checks. | The control leaves evidence that it operated — a reviewer can tell it ran on a given date. | The person performing the control has the authority and competence to do so. | The system configuration behind the control is under change control.",
     "attributes": "Evidence of review"
   },
   {
@@ -2283,6 +2429,8 @@ export const PROCUREMENT_RACM_ROWS: ProcurementRacmRow[] = [
     "mgmtReviewControl": "",
     "confidence": "EXTRACTED",
     "sopSectionRef": "SOP-PROC-001, Section 10.3",
+    "processOwner": "Head of Accounts Payable",
+    "designChecks": "The control leaves evidence that it operated — a reviewer can tell it ran on a given date. | The person performing the control has the authority and competence to do so.",
     "attributes": "Sign-off obtained"
   },
   {
@@ -2311,6 +2459,8 @@ export const PROCUREMENT_RACM_ROWS: ProcurementRacmRow[] = [
     "mgmtReviewControl": "",
     "confidence": "INFERRED",
     "sopSectionRef": "SOP-PROC-001, Section 11.2.1",
+    "processOwner": "Head of Accounts Payable",
+    "designChecks": "The person performing the control is independent of the person who prepares what it checks. | The control leaves evidence that it operated — a reviewer can tell it ran on a given date. | The person performing the control has the authority and competence to do so. | The control operates over a complete population — nothing routes around it.",
     "attributes": "Completeness of documentation,Approval evidence verified"
   },
   {
@@ -2339,6 +2489,8 @@ export const PROCUREMENT_RACM_ROWS: ProcurementRacmRow[] = [
     "mgmtReviewControl": "",
     "confidence": "INFERRED",
     "sopSectionRef": "SOP-PROC-001, Section 11.2.2",
+    "processOwner": "Head of Accounts Payable",
+    "designChecks": "The person performing the control is independent of the person who prepares what it checks. | Exceptions the control raises are followed through to resolution, not just noted. | The control leaves evidence that it operated — a reviewer can tell it ran on a given date.",
     "attributes": "Timeliness of execution,Sign-off obtained"
   },
   {
@@ -2367,6 +2519,8 @@ export const PROCUREMENT_RACM_ROWS: ProcurementRacmRow[] = [
     "mgmtReviewControl": "",
     "confidence": "INFERRED",
     "sopSectionRef": "SOP-PROC-001, Section 11.2.3",
+    "processOwner": "Head of Accounts Payable",
+    "designChecks": "The person performing the control is independent of the person who prepares what it checks. | The threshold or tolerance the control operates at is documented and approved. | The control leaves evidence that it operated — a reviewer can tell it ran on a given date. | The person performing the control has the authority and competence to do so.",
     "attributes": "Exception identification accuracy,Segregation of duties confirmed"
   },
   {
@@ -2395,6 +2549,8 @@ export const PROCUREMENT_RACM_ROWS: ProcurementRacmRow[] = [
     "mgmtReviewControl": "",
     "confidence": "INFERRED",
     "sopSectionRef": "SOP-PROC-001, Section 11.2.4",
+    "processOwner": "Head of Accounts Payable",
+    "designChecks": "The person performing the control is independent of the person who prepares what it checks. | The threshold or tolerance the control operates at is documented and approved. | Exceptions the control raises are followed through to resolution, not just noted. | The control leaves evidence that it operated — a reviewer can tell it ran on a given date.",
     "attributes": "Completeness of documentation,Sign-off obtained,System configuration validated"
   },
   {
@@ -2423,6 +2579,8 @@ export const PROCUREMENT_RACM_ROWS: ProcurementRacmRow[] = [
     "mgmtReviewControl": "",
     "confidence": "INFERRED",
     "sopSectionRef": "SOP-PROC-001, Section 11.2.5",
+    "processOwner": "Head of Accounts Payable",
+    "designChecks": "The control leaves evidence that it operated — a reviewer can tell it ran on a given date. | The control operates over a complete population — nothing routes around it. | The system configuration behind the control is under change control.",
     "attributes": "Evidence of review"
   },
   {
@@ -2451,6 +2609,8 @@ export const PROCUREMENT_RACM_ROWS: ProcurementRacmRow[] = [
     "mgmtReviewControl": "",
     "confidence": "INFERRED",
     "sopSectionRef": "SOP-PROC-001, Section 11.2.6",
+    "processOwner": "Head of Accounts Payable",
+    "designChecks": "The person performing the control is independent of the person who prepares what it checks. | Exceptions the control raises are followed through to resolution, not just noted. | The control leaves evidence that it operated — a reviewer can tell it ran on a given date. | The control operates over a complete population — nothing routes around it.",
     "attributes": "Timeliness of execution,Approval evidence verified,Sign-off obtained"
   },
   {
@@ -2479,6 +2639,8 @@ export const PROCUREMENT_RACM_ROWS: ProcurementRacmRow[] = [
     "mgmtReviewControl": "",
     "confidence": "EXTRACTED",
     "sopSectionRef": "SOP-PROC-001, Section 11.3",
+    "processOwner": "Head of Accounts Payable",
+    "designChecks": "The control leaves evidence that it operated — a reviewer can tell it ran on a given date. | The person performing the control has the authority and competence to do so. | The system configuration behind the control is under change control.",
     "attributes": "Completeness of documentation"
   },
   {
@@ -2507,6 +2669,8 @@ export const PROCUREMENT_RACM_ROWS: ProcurementRacmRow[] = [
     "mgmtReviewControl": "",
     "confidence": "EXTRACTED",
     "sopSectionRef": "SOP-PROC-001, Section 11.3",
+    "processOwner": "Head of Accounts Payable",
+    "designChecks": "The control leaves evidence that it operated — a reviewer can tell it ran on a given date. | The person performing the control has the authority and competence to do so. | The system configuration behind the control is under change control.",
     "attributes": "Sign-off obtained"
   },
   {
@@ -2535,6 +2699,8 @@ export const PROCUREMENT_RACM_ROWS: ProcurementRacmRow[] = [
     "mgmtReviewControl": "",
     "confidence": "EXTRACTED",
     "sopSectionRef": "SOP-PROC-001, Section 11.3",
+    "processOwner": "Head of Accounts Payable",
+    "designChecks": "The control leaves evidence that it operated — a reviewer can tell it ran on a given date. | The person performing the control has the authority and competence to do so. | The system configuration behind the control is under change control.",
     "attributes": "Evidence of review"
   },
   {
@@ -2563,6 +2729,8 @@ export const PROCUREMENT_RACM_ROWS: ProcurementRacmRow[] = [
     "mgmtReviewControl": "",
     "confidence": "EXTRACTED",
     "sopSectionRef": "SOP-PROC-001, Section 11.3",
+    "processOwner": "Head of Accounts Payable",
+    "designChecks": "The threshold or tolerance the control operates at is documented and approved. | The control leaves evidence that it operated — a reviewer can tell it ran on a given date. | The person performing the control has the authority and competence to do so. | The system configuration behind the control is under change control.",
     "attributes": "Completeness of documentation,Timeliness of execution,Exception identification accuracy,Sign-off obtained"
   },
   {
@@ -2591,6 +2759,8 @@ export const PROCUREMENT_RACM_ROWS: ProcurementRacmRow[] = [
     "mgmtReviewControl": "",
     "confidence": "EXTRACTED",
     "sopSectionRef": "SOP-PROC-001, Section 11.4",
+    "processOwner": "Head of Accounts Payable",
+    "designChecks": "The person performing the control is independent of the person who prepares what it checks. | The control leaves evidence that it operated — a reviewer can tell it ran on a given date. | The person performing the control has the authority and competence to do so.",
     "attributes": "Approval evidence verified"
   },
   {
@@ -2619,6 +2789,8 @@ export const PROCUREMENT_RACM_ROWS: ProcurementRacmRow[] = [
     "mgmtReviewControl": "",
     "confidence": "EXTRACTED",
     "sopSectionRef": "SOP-PROC-001, Section 11.4",
+    "processOwner": "Head of Accounts Payable",
+    "designChecks": "The threshold or tolerance the control operates at is documented and approved. | The control leaves evidence that it operated — a reviewer can tell it ran on a given date. | The person performing the control has the authority and competence to do so. | The system configuration behind the control is under change control.",
     "attributes": "Sign-off obtained"
   },
   {
@@ -2647,6 +2819,8 @@ export const PROCUREMENT_RACM_ROWS: ProcurementRacmRow[] = [
     "mgmtReviewControl": "",
     "confidence": "EXTRACTED",
     "sopSectionRef": "SOP-PROC-001, Section 11.4",
+    "processOwner": "Head of Accounts Payable",
+    "designChecks": "The control leaves evidence that it operated — a reviewer can tell it ran on a given date. | The system configuration behind the control is under change control.",
     "attributes": "Completeness of documentation"
   },
   {
@@ -2675,6 +2849,8 @@ export const PROCUREMENT_RACM_ROWS: ProcurementRacmRow[] = [
     "mgmtReviewControl": "",
     "confidence": "EXTRACTED",
     "sopSectionRef": "SOP-PROC-001, Section 11.4",
+    "processOwner": "Head of Accounts Payable",
+    "designChecks": "The control leaves evidence that it operated — a reviewer can tell it ran on a given date. | The system configuration behind the control is under change control.",
     "attributes": "Timeliness of execution,Sign-off obtained,Segregation of duties confirmed"
   },
   {
@@ -2703,6 +2879,8 @@ export const PROCUREMENT_RACM_ROWS: ProcurementRacmRow[] = [
     "mgmtReviewControl": "",
     "confidence": "EXTRACTED",
     "sopSectionRef": "SOP-PROC-001, Section 11.4",
+    "processOwner": "Head of Accounts Payable",
+    "designChecks": "The control leaves evidence that it operated — a reviewer can tell it ran on a given date. | The person performing the control has the authority and competence to do so. | The system configuration behind the control is under change control.",
     "attributes": "Evidence of review"
   },
   {
@@ -2731,6 +2909,8 @@ export const PROCUREMENT_RACM_ROWS: ProcurementRacmRow[] = [
     "mgmtReviewControl": "",
     "confidence": "EXTRACTED",
     "sopSectionRef": "SOP-PROC-001, Section 11.4",
+    "processOwner": "Head of Accounts Payable",
+    "designChecks": "The person performing the control is independent of the person who prepares what it checks. | Exceptions the control raises are followed through to resolution, not just noted. | The control leaves evidence that it operated — a reviewer can tell it ran on a given date. | The person performing the control has the authority and competence to do so.",
     "attributes": "Completeness of documentation,Approval evidence verified,Sign-off obtained"
   },
   {
@@ -2759,6 +2939,8 @@ export const PROCUREMENT_RACM_ROWS: ProcurementRacmRow[] = [
     "mgmtReviewControl": "",
     "confidence": "EXTRACTED",
     "sopSectionRef": "SOP-PROC-001, Section 11.4",
+    "processOwner": "Head of Accounts Payable",
+    "designChecks": "The control leaves evidence that it operated — a reviewer can tell it ran on a given date. | The person performing the control has the authority and competence to do so.",
     "attributes": "Exception identification accuracy,System configuration validated"
   },
   {
@@ -2787,6 +2969,8 @@ export const PROCUREMENT_RACM_ROWS: ProcurementRacmRow[] = [
     "mgmtReviewControl": "",
     "confidence": "INFERRED",
     "sopSectionRef": "SOP-PROC-001, Section 12.2.1",
+    "processOwner": "Head of Procurement Operations",
+    "designChecks": "The threshold or tolerance the control operates at is documented and approved. | The control leaves evidence that it operated — a reviewer can tell it ran on a given date. | The control operates over a complete population — nothing routes around it.",
     "attributes": "Timeliness of execution,Sign-off obtained"
   },
   {
@@ -2815,6 +2999,8 @@ export const PROCUREMENT_RACM_ROWS: ProcurementRacmRow[] = [
     "mgmtReviewControl": "",
     "confidence": "INFERRED",
     "sopSectionRef": "SOP-PROC-001, Section 12.2.2",
+    "processOwner": "Head of Vendor Management",
+    "designChecks": "The person performing the control is independent of the person who prepares what it checks. | The threshold or tolerance the control operates at is documented and approved. | Exceptions the control raises are followed through to resolution, not just noted. | The control leaves evidence that it operated — a reviewer can tell it ran on a given date.",
     "attributes": "Completeness of documentation"
   },
   {
@@ -2843,6 +3029,8 @@ export const PROCUREMENT_RACM_ROWS: ProcurementRacmRow[] = [
     "mgmtReviewControl": "",
     "confidence": "INFERRED",
     "sopSectionRef": "SOP-PROC-001, Section 12.2.3",
+    "processOwner": "Chief Procurement Officer",
+    "designChecks": "The person performing the control is independent of the person who prepares what it checks. | The threshold or tolerance the control operates at is documented and approved. | Exceptions the control raises are followed through to resolution, not just noted. | The control leaves evidence that it operated — a reviewer can tell it ran on a given date.",
     "attributes": "Sign-off obtained"
   },
   {
@@ -2871,6 +3059,8 @@ export const PROCUREMENT_RACM_ROWS: ProcurementRacmRow[] = [
     "mgmtReviewControl": "",
     "confidence": "INFERRED",
     "sopSectionRef": "SOP-PROC-001, Section 12.2.4",
+    "processOwner": "Chief Procurement Officer",
+    "designChecks": "The control leaves evidence that it operated — a reviewer can tell it ran on a given date. | The person performing the control has the authority and competence to do so.",
     "attributes": "Approval evidence verified"
   },
   {
@@ -2899,6 +3089,8 @@ export const PROCUREMENT_RACM_ROWS: ProcurementRacmRow[] = [
     "mgmtReviewControl": "",
     "confidence": "INFERRED",
     "sopSectionRef": "SOP-PROC-001, Section 12.2.5",
+    "processOwner": "Chief Procurement Officer",
+    "designChecks": "The control leaves evidence that it operated — a reviewer can tell it ran on a given date. | The person performing the control has the authority and competence to do so.",
     "attributes": "Completeness of documentation,Timeliness of execution,Sign-off obtained"
   },
   {
@@ -2927,6 +3119,8 @@ export const PROCUREMENT_RACM_ROWS: ProcurementRacmRow[] = [
     "mgmtReviewControl": "",
     "confidence": "EXTRACTED",
     "sopSectionRef": "SOP-PROC-001, Section 13",
+    "processOwner": "Chief Procurement Officer",
+    "designChecks": "The person performing the control is independent of the person who prepares what it checks. | The control leaves evidence that it operated — a reviewer can tell it ran on a given date. | The person performing the control has the authority and competence to do so. | The system configuration behind the control is under change control.",
     "attributes": "Evidence of review"
   },
   {
@@ -2955,6 +3149,8 @@ export const PROCUREMENT_RACM_ROWS: ProcurementRacmRow[] = [
     "mgmtReviewControl": "",
     "confidence": "EXTRACTED",
     "sopSectionRef": "SOP-PROC-001, Section 13",
+    "processOwner": "Chief Procurement Officer",
+    "designChecks": "The control leaves evidence that it operated — a reviewer can tell it ran on a given date. | The system configuration behind the control is under change control.",
     "attributes": "Exception identification accuracy,Sign-off obtained"
   },
   {
@@ -2983,6 +3179,8 @@ export const PROCUREMENT_RACM_ROWS: ProcurementRacmRow[] = [
     "mgmtReviewControl": "",
     "confidence": "EXTRACTED",
     "sopSectionRef": "SOP-PROC-001, Section 13",
+    "processOwner": "Chief Procurement Officer",
+    "designChecks": "The control leaves evidence that it operated — a reviewer can tell it ran on a given date. | The system configuration behind the control is under change control.",
     "attributes": "Completeness of documentation,Segregation of duties confirmed"
   },
   {
@@ -3011,6 +3209,8 @@ export const PROCUREMENT_RACM_ROWS: ProcurementRacmRow[] = [
     "mgmtReviewControl": "",
     "confidence": "EXTRACTED",
     "sopSectionRef": "SOP-PROC-001, Section 13",
+    "processOwner": "Chief Procurement Officer",
+    "designChecks": "The control leaves evidence that it operated — a reviewer can tell it ran on a given date. | The person performing the control has the authority and competence to do so. | The system configuration behind the control is under change control.",
     "attributes": "Timeliness of execution,Approval evidence verified,Sign-off obtained"
   },
   {
@@ -3039,6 +3239,8 @@ export const PROCUREMENT_RACM_ROWS: ProcurementRacmRow[] = [
     "mgmtReviewControl": "",
     "confidence": "EXTRACTED",
     "sopSectionRef": "SOP-PROC-001, Section 13",
+    "processOwner": "Chief Procurement Officer",
+    "designChecks": "The control leaves evidence that it operated — a reviewer can tell it ran on a given date. | The system configuration behind the control is under change control.",
     "attributes": "Evidence of review"
   },
   {
@@ -3067,6 +3269,8 @@ export const PROCUREMENT_RACM_ROWS: ProcurementRacmRow[] = [
     "mgmtReviewControl": "",
     "confidence": "EXTRACTED",
     "sopSectionRef": "SOP-PROC-001, Section 13",
+    "processOwner": "Chief Procurement Officer",
+    "designChecks": "The person performing the control is independent of the person who prepares what it checks. | The control leaves evidence that it operated — a reviewer can tell it ran on a given date. | The person performing the control has the authority and competence to do so. | The system configuration behind the control is under change control.",
     "attributes": "Completeness of documentation,Sign-off obtained"
   },
   {
@@ -3095,6 +3299,8 @@ export const PROCUREMENT_RACM_ROWS: ProcurementRacmRow[] = [
     "mgmtReviewControl": "",
     "confidence": "EXTRACTED",
     "sopSectionRef": "SOP-PROC-001, Section 13",
+    "processOwner": "Chief Procurement Officer",
+    "designChecks": "The person performing the control is independent of the person who prepares what it checks. | Exceptions the control raises are followed through to resolution, not just noted. | The control leaves evidence that it operated — a reviewer can tell it ran on a given date. | The control runs often enough to catch a misstatement before it reaches the accounts.",
     "attributes": "Evidence of review"
   },
   {
@@ -3123,6 +3329,8 @@ export const PROCUREMENT_RACM_ROWS: ProcurementRacmRow[] = [
     "mgmtReviewControl": "",
     "confidence": "EXTRACTED",
     "sopSectionRef": "SOP-PROC-001, Section 14.1",
+    "processOwner": "Head of Procurement Operations",
+    "designChecks": "The person performing the control is independent of the person who prepares what it checks. | The control leaves evidence that it operated — a reviewer can tell it ran on a given date. | The person performing the control has the authority and competence to do so.",
     "attributes": "Timeliness of execution,Sign-off obtained,System configuration validated"
   },
   {
@@ -3151,6 +3359,8 @@ export const PROCUREMENT_RACM_ROWS: ProcurementRacmRow[] = [
     "mgmtReviewControl": "",
     "confidence": "EXTRACTED",
     "sopSectionRef": "SOP-PROC-001, Section 14.1",
+    "processOwner": "Head of Procurement Operations",
+    "designChecks": "The person performing the control is independent of the person who prepares what it checks. | The control leaves evidence that it operated — a reviewer can tell it ran on a given date. | The person performing the control has the authority and competence to do so.",
     "attributes": "Completeness of documentation,Approval evidence verified,Exception identification accuracy"
   },
   {
@@ -3179,6 +3389,8 @@ export const PROCUREMENT_RACM_ROWS: ProcurementRacmRow[] = [
     "mgmtReviewControl": "",
     "confidence": "EXTRACTED",
     "sopSectionRef": "SOP-PROC-001, Section 14.1",
+    "processOwner": "Head of Procurement Operations",
+    "designChecks": "The control leaves evidence that it operated — a reviewer can tell it ran on a given date. | The person performing the control has the authority and competence to do so.",
     "attributes": "Sign-off obtained"
   },
   {
@@ -3207,6 +3419,8 @@ export const PROCUREMENT_RACM_ROWS: ProcurementRacmRow[] = [
     "mgmtReviewControl": "",
     "confidence": "EXTRACTED",
     "sopSectionRef": "SOP-PROC-001, Section 14.1",
+    "processOwner": "Head of Procurement Operations",
+    "designChecks": "The threshold or tolerance the control operates at is documented and approved. | The control leaves evidence that it operated — a reviewer can tell it ran on a given date. | The person performing the control has the authority and competence to do so.",
     "attributes": "Evidence of review"
   },
   {
@@ -3235,6 +3449,8 @@ export const PROCUREMENT_RACM_ROWS: ProcurementRacmRow[] = [
     "mgmtReviewControl": "",
     "confidence": "EXTRACTED",
     "sopSectionRef": "SOP-PROC-001, Section 14.1",
+    "processOwner": "Head of Procurement Operations",
+    "designChecks": "The person performing the control is independent of the person who prepares what it checks. | The control leaves evidence that it operated — a reviewer can tell it ran on a given date. | The person performing the control has the authority and competence to do so.",
     "attributes": "Completeness of documentation,Timeliness of execution,Sign-off obtained"
   },
   {
@@ -3263,6 +3479,8 @@ export const PROCUREMENT_RACM_ROWS: ProcurementRacmRow[] = [
     "mgmtReviewControl": "",
     "confidence": "EXTRACTED",
     "sopSectionRef": "SOP-PROC-001, Section 14.1",
+    "processOwner": "Head of Procurement Operations",
+    "designChecks": "The control leaves evidence that it operated — a reviewer can tell it ran on a given date. | The person performing the control has the authority and competence to do so.",
     "attributes": "Evidence of review"
   },
   {
@@ -3291,6 +3509,8 @@ export const PROCUREMENT_RACM_ROWS: ProcurementRacmRow[] = [
     "mgmtReviewControl": "",
     "confidence": "INFERRED",
     "sopSectionRef": "SOP-PROC-001, Section 14.2",
+    "processOwner": "Head of Procurement Operations",
+    "designChecks": "Exceptions the control raises are followed through to resolution, not just noted. | The control leaves evidence that it operated — a reviewer can tell it ran on a given date. | The person performing the control has the authority and competence to do so.",
     "attributes": "Approval evidence verified,Sign-off obtained,Segregation of duties confirmed"
   },
   {
@@ -3319,6 +3539,8 @@ export const PROCUREMENT_RACM_ROWS: ProcurementRacmRow[] = [
     "mgmtReviewControl": "",
     "confidence": "INFERRED",
     "sopSectionRef": "SOP-PROC-001, Section 14.2",
+    "processOwner": "Head of Procurement Operations",
+    "designChecks": "The threshold or tolerance the control operates at is documented and approved. | Exceptions the control raises are followed through to resolution, not just noted. | The control leaves evidence that it operated — a reviewer can tell it ran on a given date. | The person performing the control has the authority and competence to do so.",
     "attributes": "Completeness of documentation"
   },
   {
@@ -3347,6 +3569,8 @@ export const PROCUREMENT_RACM_ROWS: ProcurementRacmRow[] = [
     "mgmtReviewControl": "",
     "confidence": "INFERRED",
     "sopSectionRef": "SOP-PROC-001, Section 14.2",
+    "processOwner": "Head of Procurement Operations",
+    "designChecks": "The control leaves evidence that it operated — a reviewer can tell it ran on a given date. | The person performing the control has the authority and competence to do so.",
     "attributes": "Timeliness of execution,Exception identification accuracy,Sign-off obtained"
   },
   {
@@ -3375,6 +3599,8 @@ export const PROCUREMENT_RACM_ROWS: ProcurementRacmRow[] = [
     "mgmtReviewControl": "",
     "confidence": "INFERRED",
     "sopSectionRef": "SOP-PROC-001, Section 15",
+    "processOwner": "Chief Procurement Officer",
+    "designChecks": "The person performing the control is independent of the person who prepares what it checks. | Exceptions the control raises are followed through to resolution, not just noted. | The control leaves evidence that it operated — a reviewer can tell it ran on a given date.",
     "attributes": "Evidence of review"
   },
   {
@@ -3403,6 +3629,8 @@ export const PROCUREMENT_RACM_ROWS: ProcurementRacmRow[] = [
     "mgmtReviewControl": "",
     "confidence": "INFERRED",
     "sopSectionRef": "SOP-PROC-001, Section 15",
+    "processOwner": "Chief Procurement Officer",
+    "designChecks": "The person performing the control is independent of the person who prepares what it checks. | The threshold or tolerance the control operates at is documented and approved. | Exceptions the control raises are followed through to resolution, not just noted. | The control leaves evidence that it operated — a reviewer can tell it ran on a given date.",
     "attributes": "Completeness of documentation,Sign-off obtained"
   },
   {
@@ -3431,6 +3659,8 @@ export const PROCUREMENT_RACM_ROWS: ProcurementRacmRow[] = [
     "mgmtReviewControl": "",
     "confidence": "INFERRED",
     "sopSectionRef": "SOP-PROC-001, Section 15",
+    "processOwner": "Chief Procurement Officer",
+    "designChecks": "The person performing the control is independent of the person who prepares what it checks. | Exceptions the control raises are followed through to resolution, not just noted. | The control leaves evidence that it operated — a reviewer can tell it ran on a given date. | The control runs often enough to catch a misstatement before it reaches the accounts.",
     "attributes": "Approval evidence verified"
   },
   {
@@ -3459,6 +3689,8 @@ export const PROCUREMENT_RACM_ROWS: ProcurementRacmRow[] = [
     "mgmtReviewControl": "",
     "confidence": "INFERRED",
     "sopSectionRef": "SOP-PROC-001, Section 15",
+    "processOwner": "Chief Procurement Officer",
+    "designChecks": "The person performing the control is independent of the person who prepares what it checks. | Exceptions the control raises are followed through to resolution, not just noted. | The control leaves evidence that it operated — a reviewer can tell it ran on a given date.",
     "attributes": "Timeliness of execution,Sign-off obtained"
   },
   {
@@ -3487,6 +3719,8 @@ export const PROCUREMENT_RACM_ROWS: ProcurementRacmRow[] = [
     "mgmtReviewControl": "",
     "confidence": "INFERRED",
     "sopSectionRef": "SOP-PROC-001, Section 15",
+    "processOwner": "Chief Procurement Officer",
+    "designChecks": "The person performing the control is independent of the person who prepares what it checks. | Exceptions the control raises are followed through to resolution, not just noted. | The control leaves evidence that it operated — a reviewer can tell it ran on a given date. | The person performing the control has the authority and competence to do so.",
     "attributes": "Completeness of documentation,System configuration validated"
   },
   {
@@ -3515,6 +3749,8 @@ export const PROCUREMENT_RACM_ROWS: ProcurementRacmRow[] = [
     "mgmtReviewControl": "",
     "confidence": "EXTRACTED",
     "sopSectionRef": "SOP-PROC-001, Section 16 Note",
+    "processOwner": "Chief Procurement Officer",
+    "designChecks": "The person performing the control is independent of the person who prepares what it checks. | The control leaves evidence that it operated — a reviewer can tell it ran on a given date. | The person performing the control has the authority and competence to do so. | The control runs often enough to catch a misstatement before it reaches the accounts.",
     "attributes": "Sign-off obtained"
   },
   {
@@ -3543,6 +3779,8 @@ export const PROCUREMENT_RACM_ROWS: ProcurementRacmRow[] = [
     "mgmtReviewControl": "",
     "confidence": "RECOMMENDED",
     "sopSectionRef": "SOP-PROC-001, Section 16 Note",
+    "processOwner": "Chief Procurement Officer",
+    "designChecks": "The person performing the control is independent of the person who prepares what it checks. | The control leaves evidence that it operated — a reviewer can tell it ran on a given date. | The person performing the control has the authority and competence to do so. | The control runs often enough to catch a misstatement before it reaches the accounts.",
     "attributes": "Exception identification accuracy"
   },
   {
@@ -3571,6 +3809,8 @@ export const PROCUREMENT_RACM_ROWS: ProcurementRacmRow[] = [
     "mgmtReviewControl": "",
     "confidence": "RECOMMENDED",
     "sopSectionRef": "SOP-PROC-001, Section 3",
+    "processOwner": "Chief Procurement Officer",
+    "designChecks": "The control leaves evidence that it operated — a reviewer can tell it ran on a given date. | The person performing the control has the authority and competence to do so. | The control runs often enough to catch a misstatement before it reaches the accounts.",
     "attributes": "Completeness of documentation,Timeliness of execution,Approval evidence verified,Sign-off obtained"
   },
   {
@@ -3599,6 +3839,8 @@ export const PROCUREMENT_RACM_ROWS: ProcurementRacmRow[] = [
     "mgmtReviewControl": "",
     "confidence": "RECOMMENDED",
     "sopSectionRef": "SOP-PROC-001, Section 13",
+    "processOwner": "Chief Procurement Officer",
+    "designChecks": "The person performing the control is independent of the person who prepares what it checks. | Exceptions the control raises are followed through to resolution, not just noted. | The control leaves evidence that it operated — a reviewer can tell it ran on a given date. | The control runs often enough to catch a misstatement before it reaches the accounts.",
     "attributes": "Evidence of review,Segregation of duties confirmed"
   },
   {
@@ -3627,6 +3869,8 @@ export const PROCUREMENT_RACM_ROWS: ProcurementRacmRow[] = [
     "mgmtReviewControl": "",
     "confidence": "RECOMMENDED",
     "sopSectionRef": "SOP-PROC-001, Sections 6.3, 7.2, 11.3",
+    "processOwner": "Chief Procurement Officer",
+    "designChecks": "The person performing the control is independent of the person who prepares what it checks. | The threshold or tolerance the control operates at is documented and approved. | Exceptions the control raises are followed through to resolution, not just noted. | The control leaves evidence that it operated — a reviewer can tell it ran on a given date.",
     "attributes": "Sign-off obtained"
   },
   {
@@ -3655,6 +3899,8 @@ export const PROCUREMENT_RACM_ROWS: ProcurementRacmRow[] = [
     "mgmtReviewControl": "",
     "confidence": "RECOMMENDED",
     "sopSectionRef": "SOP-PROC-001, Section 12.2.4",
+    "processOwner": "Chief Procurement Officer",
+    "designChecks": "The control leaves evidence that it operated — a reviewer can tell it ran on a given date. | The control operates over a complete population — nothing routes around it. | The system configuration behind the control is under change control.",
     "attributes": "Completeness of documentation"
   },
   {
@@ -3683,6 +3929,8 @@ export const PROCUREMENT_RACM_ROWS: ProcurementRacmRow[] = [
     "mgmtReviewControl": "",
     "confidence": "RECOMMENDED",
     "sopSectionRef": "SOP-PROC-001, Sections 6.3, 11.3",
+    "processOwner": "Chief Procurement Officer",
+    "designChecks": "The person performing the control is independent of the person who prepares what it checks. | The threshold or tolerance the control operates at is documented and approved. | Exceptions the control raises are followed through to resolution, not just noted. | The control leaves evidence that it operated — a reviewer can tell it ran on a given date.",
     "attributes": "Timeliness of execution,Sign-off obtained"
   }
 ];
