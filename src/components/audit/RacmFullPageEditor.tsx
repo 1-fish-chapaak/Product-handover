@@ -22,14 +22,14 @@ import { useToast } from '../shared/Toast';
 import {
   PROCUREMENT_RACM_ROWS, PROCUREMENT_RACM_COLUMNS, COLUMN_GROUP_LABELS, COLUMN_GROUP_ORDER,
   extraColumnKey, extraRacmColumns, racmCellText, racmRowWithCell,
-  groupRowsBySubProcess, deriveRiskRatingClass, deriveControlTypeClass, deriveControlNatureClass,
+  groupRowsBySubProcess, deriveRiskRatingClass, deriveLikelihoodClass, deriveControlTypeClass, deriveControlNatureClass,
   type ProcurementRacmRow, type ColumnGroup, type RacmColumnDef, type RacmColumnKey,
 } from '../../data/procurement-racm';
 import { useRacmConfig } from '../sox-icfr/racmConfig';
 import { racmSetupKeyFor } from '../sox-icfr/racmLibrary';
 import { RACM_PUBLISH_KEY } from '../sox-icfr/helpers';
 import { useCurrentUser } from '../../context/CurrentUserContext';
-import { CONTROL_CLASSES } from '../sox-icfr/types';
+import { CONTROL_CLASSES, RISK_LIKELIHOODS } from '../sox-icfr/types';
 import Gated from '../shared/Gated';
 import { Button } from '../shared/Button';
 import ListPlaceholder from '../shared/ListPlaceholder';
@@ -144,13 +144,16 @@ const BULK_EDIT_EXCLUDED = new Set<RacmColumnKey>(['riskId', 'controlId', 'isKey
 // Columns with a closed vocabulary get a picker, so a bulk edit can't mint a new
 // spelling ("high", "Adhoc") that would split the header filters and chips.
 const RATING_VALUES = ['High', 'Medium', 'Low'];
+// Likelihood is NOT rated on the rating's scale (24 Sep). It reads on the
+// standard's own three words, so the grid offers those and nothing else.
+const LIKELIHOOD_VALUES = [...RISK_LIKELIHOODS];
 // The two answers a yes/no column of the client's may hold.
 const YES_NO_VALUES = ['Yes', 'No'];
 const BULK_VALUE_OPTIONS: Partial<Record<RacmColumnKey, string[]>> = {
   // Risk category reads its six from the control record rather than a list of its
   // own, so the grid, the import and the control can never drift onto a seventh.
   riskCategory: CONTROL_CLASSES,
-  riskRating: RATING_VALUES, likelihood: RATING_VALUES, impact: RATING_VALUES,
+  riskRating: RATING_VALUES, likelihood: LIKELIHOOD_VALUES, impact: RATING_VALUES,
   controlType: ['Preventive', 'Detective'],
   controlNature: ['Manual', 'Automated', 'IT-dependent'],
   frequency: ['Annual', 'Quarterly', 'Monthly', 'Weekly', 'Daily', 'Recurring', 'Ad-hoc'],
@@ -468,9 +471,13 @@ export default function RacmFullPageEditor({ onBack, backView, backLabel, racmNa
       processArea: processLabel || 'Procurement Lifecycle Management', subProcess: '(Add sub-process)',
       entity: '', country: '',
       riskCategory: '', riskTitle: '', riskDescription: '',
-      riskRating: 'Medium', likelihood: 'Medium', impact: 'Medium',
+      // Likelihood starts blank on purpose: a new control's likelihood is a
+      // judgement somebody makes, and pre-filling it meant every added row
+      // read as though that judgement had already been made.
+      riskRating: 'Medium', likelihood: '', impact: 'Medium',
       controlObjective: '', controlActivity: '',
       controlType: 'Preventive', controlNature: 'Manual', frequency: 'Monthly',
+      designChecks: '',
       effectiveDate: '', testingStrategy: '',
       controlOwner: '', riskOwner: '', controlEvidence: '',
       assertions: '', fsLineItem: '', regulatoryRef: '',
@@ -1502,7 +1509,9 @@ function CellContent({
 
   if (CHIP_COLUMNS.has(col.key)) {
     const cls =
-      col.key === 'riskRating' || col.key === 'likelihood' || col.key === 'impact'
+      col.key === 'likelihood'
+        ? deriveLikelihoodClass(val)
+        : col.key === 'riskRating' || col.key === 'impact'
         ? deriveRiskRatingClass(val)
         : col.key === 'controlType'
           ? deriveControlTypeClass(val)

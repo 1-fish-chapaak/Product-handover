@@ -857,10 +857,15 @@ export const RISK_RATINGS: RiskRating[] = ['High', 'Medium', 'Low'];
 /** HOW LIKELY THE RISK IS TO HAPPEN — the other half of the rating, and a
  *  required column since 24 Sep. Rating is the answer; likelihood and impact are
  *  the reasoning behind it, and a matrix that carries only the answer cannot be
- *  re-argued when management disagrees. Same three words as the rating, because
- *  a client's matrix rates both on one scale. */
-export type RiskLikelihood = 'High' | 'Medium' | 'Low';
-export const RISK_LIKELIHOODS: RiskLikelihood[] = ['High', 'Medium', 'Low'];
+ *  re-argued when management disagrees.
+ *
+ *  NOT the rating's three words (24 Sep). Likelihood is read on the standard's
+ *  own scale — Remote, Reasonably possible, Probable — the same scale the
+ *  deficiency ladder already grades on, which is why this aliases `Likelihood`
+ *  rather than declaring a second set. High/Medium/Low is `RiskRating`, and a
+ *  control that said "Medium" here was answering the wrong question. */
+export type RiskLikelihood = Likelihood;
+export const RISK_LIKELIHOODS: RiskLikelihood[] = ['Remote', 'Reasonably possible', 'Probable'];
 
 // ─── Risk category ───────────────────────────────────────────────────────────────
 // The RACM's own category column — called "Risk category" everywhere it shows
@@ -986,6 +991,12 @@ export interface Control {
    *  People step; absent on controls created before that step existed, which is
    *  why it is optional and every read falls back to `owner`. */
   processOwner?: string;
+  /** WHICH PART OF THE SOP THIS CAME FROM — "§ 4.2". Carried so an extracted
+   *  control can be read back against the procedure it was drawn from, which
+   *  is the first thing a reviewer asks of an SOP extraction. Collected on the
+   *  import row since the required-column list was agreed, but it had nowhere
+   *  to live on the control until 24 Sep, so it stopped at the preview. */
+  sopSectionRef?: string;
   /** THE RISK OWNER — the person accountable for the risk this control answers
    *  (22 Sep: a required RACM column). A record on the matrix only: it does not
    *  change who is sent tasks or requests — that "risk owner" lane is still the

@@ -31,6 +31,9 @@ import {
   clashSummary, controlIdClashes, copyRacmControls, isRowPublished, markRacmsUsed, racmStatus, useRacmLibrary, type LibraryRacm,
 } from '../../sox-icfr/racmLibrary';
 import CreateRacmFlow from '../../sox-icfr/CreateRacmFlow';
+import { parseOrgChartFile } from './orgChartImport';
+import LedgerExplorer from './LedgerExplorer';
+import { parseTrialBalanceFile, parseGeneralLedgerFile, isReadableLedger, captionKey, type TbParseOk, type GlParseOk, type GlLine } from './ledgerImport';
 // Upload RACM opens the RACM tab's own dialog, which is styled by the SOX
 // register sheet (.modal-backdrop / .modal). Imported here as well so the
 // dialog is dressed whichever screen opened this sheet.
@@ -176,12 +179,6 @@ const ALTURA_CHART: SampleChart = {
 
 const SAMPLE_CHARTS: SampleChart[] = [MERIDIAN_CHART, ALTURA_CHART];
 
-/** Which client's chart was uploaded. An unrecognised filename still extracts —
- *  a demo that reads "nothing happened" is worse than one that reads the group
- *  it has — so Meridian remains the default. */
-const chartFor = (fileName: string): SampleChart =>
-  SAMPLE_CHARTS.find(c => c.match.test(fileName)) ?? MERIDIAN_CHART;
-
 /** A row and everything held beneath it, however deep. Deleting one company
  *  has to take its whole family: a subsidiary only reaches the group THROUGH
  *  its parent, so leaving the children behind would claim the group still owns
@@ -240,6 +237,12 @@ const effectiveOwnership = (ent: GroupEntity, all: GroupEntity[]): number => {
  *  "did a chart put this row here", and the answer cannot depend on which chart
  *  is on screen now. */
 const ORG_CHART_ENTITY_IDS = new Set(SAMPLE_CHARTS.flatMap(c => c.entities.map(e => e.id)));
+
+/** Did an org chart put this row in the table? Rows parsed out of an uploaded
+ *  document carry an `oc-` id minted from the file, so the question can no
+ *  longer be answered by a fixed list of ids — the sample ids stay in it only
+ *  for a table filled before the reader was real (24 Sep). */
+const isChartRow = (id: string) => id.startsWith('oc-') || ORG_CHART_ENTITY_IDS.has(id);
 
 /** The listing parenthetical belongs to the group field, not to a name people
  *  will read on a card: "Meridian Global Holdings, Inc. (NYSE: MGH)" is how the
@@ -487,8 +490,30 @@ export default function ScopingWizard({ onCancel, onCreated, typePreselected, on
   const [beyond, setBeyond] = useState<Record<string, boolean>>(() =>
     Object.fromEntries(BEYOND_TB.map(b => [b.id, true])));
 
-  /** All captions for the current entity set. */
-  const captions = useMemo<TbCaption[]>(() => captionsForEntities(entities), [entities]);
+  /** ── What the trial balance actually said ────────────────────────────────
+   *  Held from the moment the file is read, because everything downstream —
+   *  captions, materiality, which processes each company runs — is derived
+   *  from it rather than from the seed. */
+  const [tbParse, setTbParse] = useState<TbParseOk | null>(null);
+  const [glParse, setGlParse] = useState<GlParseOk | null>(null);
+  /** A ledger we could not read, named so the user knows which file to fix. */
+  const [ledgerError, setLedgerError] = useState<{ kind: 'tb' | 'gl'; name: string; reason: string } | null>(null);
+  /** Rows the trial balance put in the table itself, so the explorer can mark
+   *  them: nobody drew them on the chart and nobody typed them. */
+  const [tbAddedIds, setTbAddedIds] = useState<Set<string>>(new Set());
+
+  /** All captions for the current entity set. The uploaded trial balance wins
+   *  wherever it has something to say: before it existed every company the
+   *  seed did not know got the same four invented captions, which made one
+   *  company indistinguishable from the next and left materiality deciding
+   *  nothing (24 Sep). The seed still answers for rows the file never
+   *  mentioned, so a hand-typed company is not left blank. */
+  const captions = useMemo<TbCaption[]>(() => {
+    if (!tbParse) return captionsForEntities(entities);
+    const spoken = new Set(tbParse.captions.map(c => c.entityId));
+    const silent = entities.filter(e => !spoken.has(e.id));
+    return [...tbParse.captions.filter(c => entities.some(e => e.id === c.entityId)), ...captionsForEntities(silent)];
+  }, [entities, tbParse]);
 
   const captionProcess = (c: TbCaption): ProcessName => mapping[c.id] ?? c.process;
   /** Distinct processes extracted for one entity — shown on its Scoping row. */
@@ -1135,7 +1160,12 @@ export default function ScopingWizard({ onCancel, onCreated, typePreselected, on
    *  org chart says nothing about processes, so those cells stay the user's to
    *  fill until a RACM or trial balance arrives with something to extract.
    *  Merged by name, so a row already typed never doubles up. */
-  const [orgChart, setOrgChart] = useState<{ name: string; state: 'parsing' | 'done' } | null>(null);
+  const [orgChart, setOrgChart] = useState<
+    | { name: string; state: 'parsing' }
+    | { name: string; state: 'done'; found: number }
+    | { name: string; state: 'unreadable'; reason: string }
+    | null
+  >(null);
   /** The chart the uploaded document turned out to be. Held rather than derived
    *  on each read: the clash prompt can sit open for as long as the user likes,
    *  and the merge it eventually runs has to be the one the upload started. */
@@ -1200,37 +1230,43 @@ export default function ScopingWizard({ onCancel, onCreated, typePreselected, on
     setClash(null);
   };
 
-  const onOrgChartSelected = (list: FileList | null) => {
+  const onOrgChartSelected = async (list: FileList | null) => {
     const file = list?.[0];
     if (!file) return;
-    // Which client's chart this is, decided once, here — everything downstream
-    // reads the decision rather than re-making it off a filename that may have
-    // been replaced by the time the merge runs.
-    const src = chartFor(file.name);
-    setChart(src);
     setClash(null);
     setOrgChart({ name: file.name, state: 'parsing' });
-    window.setTimeout(() => {
-      // The user can tick "There are no separate entities" while this is still
-      // reading. That answer wins: merging a whole group in underneath it would
-      // contradict the box they just ticked, and none of the rows would be
-      // removable. Drop the extraction rather than half-apply it.
-      if (soloEntityRef.current) { setOrgChart(null); return; }
-      const have = new Set(entitiesRef.current.map(e => e.name.trim().toLowerCase()));
-      const clashing = src.entities.filter(e => have.has(e.name.toLowerCase()));
-      if (clashing.length) {
-        // Stop and ask. Nothing is merged until the user says which version wins.
-        setClash(clashing.map(c => c.name));
-        setOrgChart(prev => (prev?.name === file.name ? { ...prev, state: 'done' } : prev));
-        return;
-      }
-      setEntities(prev => mergedWithChart(prev, 'adopt', src));
-      // The chart's root IS the group. Filled in only while the field still
-      // holds the untouched default or nothing — a name the user typed is an
-      // answer, and an extraction does not get to overwrite an answer.
-      setGroupName(prev => (prev.trim() === '' || prev.trim() === SEED_GROUP_NAME ? src.groupName : prev));
-      setOrgChart(prev => (prev?.name === file.name ? { ...prev, state: 'done' } : prev));
-    }, 900);
+
+    // The document itself decides what lands (24 Sep). It used to be the
+    // filename, which meant every chart but two extracted somebody else's group.
+    const result = await parseOrgChartFile(file);
+
+    // The user can tick "There are no separate entities" while this is still
+    // reading. That answer wins: merging a whole group in underneath it would
+    // contradict the box they just ticked, and none of the rows would be
+    // removable. Drop the extraction rather than half-apply it.
+    if (soloEntityRef.current) { setOrgChart(null); return; }
+
+    if (!result.ok) {
+      setOrgChart(prev => (prev?.name === file.name ? { name: file.name, state: 'unreadable', reason: result.reason } : prev));
+      return;
+    }
+
+    const src: SampleChart = { match: /(?!)/, groupName: result.chart.groupName, entities: result.chart.entities };
+    setChart(src);
+    const have = new Set(entitiesRef.current.map(e => e.name.trim().toLowerCase()));
+    const clashing = src.entities.filter(e => have.has(e.name.toLowerCase()));
+    if (clashing.length) {
+      // Stop and ask. Nothing is merged until the user says which version wins.
+      setClash(clashing.map(c => c.name));
+      setOrgChart(prev => (prev?.name === file.name ? { name: file.name, state: 'done', found: src.entities.length } : prev));
+      return;
+    }
+    setEntities(prev => mergedWithChart(prev, 'adopt', src));
+    // The chart's root IS the group. Filled in only while the field still
+    // holds the untouched default or nothing — a name the user typed is an
+    // answer, and an extraction does not get to overwrite an answer.
+    setGroupName(prev => (prev.trim() === '' || prev.trim() === SEED_GROUP_NAME ? src.groupName : prev));
+    setOrgChart(prev => (prev?.name === file.name ? { name: file.name, state: 'done', found: src.entities.length } : prev));
   };
 
   const extractedReady = racmUpload === 'done' || tbUpload === 'done';
@@ -1255,7 +1291,16 @@ export default function ScopingWizard({ onCancel, onCreated, typePreselected, on
     }
     setAttached(prev => [...prev, ...batch]);
     if (batch.some(b => b.req === 'racm') && racmUpload !== 'done') simulateRacmUpload();
-    if (TB_UPLOAD && batch.some(b => b.req === 'tb') && tbUpload !== 'done') simulateTbUpload();
+    // The file itself is read, not its name. A ledger we cannot open falls
+    // back to the simulated load so the step is never a dead end.
+    const files = Array.from(list);
+    const tbFile = files.find((f, i) => batch[i]?.req === 'tb');
+    const glFile = files.find((f, i) => batch[i]?.req === 'gl');
+    if (TB_UPLOAD && tbFile && tbUpload !== 'done') {
+      if (isReadableLedger(tbFile.name)) void ingestTrialBalance(tbFile);
+      else simulateTbUpload();
+    }
+    if (glFile && isReadableLedger(glFile.name)) void ingestGeneralLedger(glFile);
   };
 
   /** Removing the last file of a requirement re-arms it (and the step gate). */
@@ -1263,7 +1308,8 @@ export default function ScopingWizard({ onCancel, onCreated, typePreselected, on
     const next = attached.filter(a => a.id !== id);
     setAttached(next);
     if (!next.some(a => a.req === 'racm')) setRacmUpload('idle');
-    if (TB_UPLOAD && !next.some(a => a.req === 'tb')) { setTbUpload('idle'); setUploads({}); }
+    if (TB_UPLOAD && !next.some(a => a.req === 'tb')) { setTbUpload('idle'); setUploads({}); setTbParse(null); setTbAddedIds(new Set()); }
+    if (!next.some(a => a.req === 'gl')) setGlParse(null);
   };
 
   /** One consolidated group file per requirement — re-uploading replaces the
@@ -1276,9 +1322,10 @@ export default function ScopingWizard({ onCancel, onCreated, typePreselected, on
     if (!file) return;
     setAttached(prev => [...prev.filter(a => a.req !== req), { id: `att-grp-${req}-${Date.now()}`, name: file.name, req }]);
     if (req === 'tb') {
-      setTbUpload('parsing');
-      window.setTimeout(() => setTbUpload('done'), 800);
+      if (isReadableLedger(file.name)) void ingestTrialBalance(file);
+      else { setTbUpload('parsing'); window.setTimeout(() => setTbUpload('done'), 800); }
     }
+    if (req === 'gl' && isReadableLedger(file.name)) void ingestGeneralLedger(file);
   };
 
   /** RACM attached to one entity. It also registers as a group `racm`
@@ -1415,6 +1462,48 @@ export default function ScopingWizard({ onCancel, onCreated, typePreselected, on
     });
   };
 
+  /** ── Trial balance → captions ────────────────────────────────────────────
+   *  Reads the file. What it finds replaces the seeded figures wholesale: a
+   *  company's captions, their balances, and the processes each one implies.
+   *  Falls back to the old simulated load only when there is nothing readable
+   *  to parse, so a demo run with a PDF still gets somewhere. */
+  const ingestTrialBalance = async (file: File) => {
+    setTbUpload('parsing');
+    setLedgerError(null);
+    const result = await parseTrialBalanceFile(file, entitiesRef.current);
+    if (!result.ok) {
+      setTbUpload('idle');
+      setLedgerError({ kind: 'tb', name: file.name, reason: result.reason });
+      return;
+    }
+    setTbParse(result);
+    setUploads(Object.fromEntries(Object.entries(result.perEntity).map(([id, f]) => [id, { ...f }])));
+    // The trial balance is the one input that knows about a company nobody
+    // drew on the chart — a subsidiary incorporated mid-year has ledger
+    // balances before it has ever appeared on an org chart. Those rows are
+    // added rather than dropped, which is the whole reason a TB is asked for
+    // at scoping rather than at fieldwork.
+    if (result.unmatched.length) {
+      setEntities(prev => {
+        const have = new Set(prev.map(e => e.name.trim().toLowerCase()));
+        const fresh = result.unmatched
+          .filter(u => u.fileName && !have.has(u.fileName.trim().toLowerCase()))
+          .map(u => ({ id: `tb-${u.fileName.toLowerCase().replace(/[^a-z0-9]+/g, '-')}`, name: u.fileName, type: 'Subsidiary' as const, ownership: 100 }));
+        if (fresh.length) setTbAddedIds(new Set(fresh.map(f => f.id)));
+        return fresh.length ? [...prev, ...fresh] : prev;
+      });
+      // The captions of a company the table had no row for are keyed to a
+      // blank entity until the row exists — re-point them at the row just made.
+      result.captions.push(...result.unmatched.flatMap(u => {
+        const id = `tb-${u.fileName.toLowerCase().replace(/[^a-z0-9]+/g, '-')}`;
+        return u.captions.map(c => ({ ...c, entityId: id }));
+      }));
+    }
+    setTbUpload('done');
+  };
+
+  /** A trial balance we could not open at all. The seeded load is kept for
+   *  this case only, so the step still has something to show. */
   const simulateTbUpload = () => {
     setTbUpload('parsing');
     window.setTimeout(() => {
@@ -1422,6 +1511,17 @@ export default function ScopingWizard({ onCancel, onCreated, typePreselected, on
       mergeExtractedEntities();
       setUploads(Object.fromEntries(Object.entries(SEED_TB_FILES).map(([id, f]) => [id, { ...f }])));
     }, 800);
+  };
+
+  /** ── General ledger → the lines behind a caption ─────────────────────────
+   *  The GL used to be attached and never opened. Reading it is what lets a
+   *  caption be drilled into: the postings that make it up, and which of them
+   *  somebody keyed by hand. */
+  const ingestGeneralLedger = async (file: File) => {
+    setLedgerError(null);
+    const result = await parseGeneralLedgerFile(file, entitiesRef.current);
+    if (!result.ok) { setLedgerError({ kind: 'gl', name: file.name, reason: result.reason }); return; }
+    setGlParse(result);
   };
 
   /** Everything Review stands on — reachable only through both gates, but
@@ -1888,6 +1988,18 @@ export default function ScopingWizard({ onCancel, onCreated, typePreselected, on
                       <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md border border-border-light bg-white text-[11px] font-semibold text-text-muted shrink-0">
                         <Loader2 size={11} className="animate-spin" /> Reading the chart…
                       </span>
+                    ) : orgChart.state === 'unreadable' ? (
+                      <span className="inline-flex items-center gap-1.5 pl-2 pr-1 py-0.5 rounded-md border border-high-100 bg-high-50 max-w-[15rem] min-w-0 shrink-0">
+                        <AlertTriangle size={11} className="text-high-700 shrink-0" />
+                        <span className="text-[11px] text-high-700 truncate" title={orgChart.name}>{orgChart.name}</span>
+                        <button
+                          onClick={() => setOrgChart(null)}
+                          aria-label="Remove org chart"
+                          className="p-1 rounded text-high-700 hover:bg-high-100 transition-colors cursor-pointer shrink-0"
+                        >
+                          <X size={11} />
+                        </button>
+                      </span>
                     ) : (
                       <span className="inline-flex items-center gap-1.5 pl-2 pr-1 py-0.5 rounded-md border border-border-light bg-white max-w-[15rem] min-w-0 shrink-0">
                         <FileText size={11} className="text-text-muted shrink-0" />
@@ -1906,6 +2018,24 @@ export default function ScopingWizard({ onCancel, onCreated, typePreselected, on
                     </div>
                   )}
                 </div>
+                {/* A chart we cannot read says so, rather than quietly handing
+                    over somebody else's group. Only a spreadsheet can be read
+                    honestly here; a drawn chart needs OCR the prototype has
+                    not got, so the message points at the two ways forward —
+                    both of which are already on the row above. */}
+                {!soloEntity && orgChart?.state === 'unreadable' && (
+                  <div className="mb-1.5 rounded-md border border-high-100 bg-high-50 px-2.5 py-2">
+                    <p className="text-[11px] text-high-700 leading-relaxed">
+                      {orgChart.reason === 'not-a-spreadsheet'
+                        ? <>Couldn’t read <span className="font-semibold">{orgChart.name}</span>. Ira reads org charts kept as <span className="font-semibold">Excel or CSV</span> — a drawn chart, PDF or image can’t be extracted. Re-upload it as .xlsx / .csv, or add the companies with <span className="font-semibold">Add entity</span>.</>
+                        : orgChart.reason === 'no-entity-column'
+                          ? <>Read <span className="font-semibold">{orgChart.name}</span>, but no column names the companies. The sheet needs a <span className="font-semibold">legal entity name</span> column — a parent, ownership % and jurisdiction column are read too, if it has them.</>
+                          : orgChart.reason === 'no-rows'
+                            ? <>Read <span className="font-semibold">{orgChart.name}</span>, but it has no company rows under its header.</>
+                            : <>Couldn’t open <span className="font-semibold">{orgChart.name}</span> as a spreadsheet. Save it as .xlsx or .csv and upload it again.</>}
+                    </p>
+                  </div>
+                )}
                 {/* Extraction is a first draft, not an answer — say so once, in
                     the place the rows landed. */}
                 {/* The chart named a company the table already has. Nothing is
@@ -2098,7 +2228,7 @@ export default function ScopingWizard({ onCancel, onCreated, typePreselected, on
                         // names companies but not what they run — have nothing
                         // extracted yet, so the user fills it in.
                         if (ent.id.startsWith('ent-new-') || ent.id === SOLO_ENTITY_ID
-                          || (ORG_CHART_ENTITY_IDS.has(ent.id) && !extractedReady)) {
+                          || (isChartRow(ent.id) && !extractedReady)) {
                           return (
                             <input
                               value={manualProcs[ent.id] ?? ''}
@@ -2261,6 +2391,24 @@ export default function ScopingWizard({ onCancel, onCreated, typePreselected, on
             <p className="text-[0.75rem] text-ink-500 mb-4 leading-relaxed">
               Upload the trial balance to continue — its material accounts decide which processes this engagement covers. The general ledger can be added later.
             </p>
+
+            {/* A ledger we could not read says so, and says what to do about
+                it — the same rule the org chart follows. */}
+            {ledgerError && (
+              <div className="mb-3 rounded-md border border-high-100 bg-high-50 px-2.5 py-2">
+                <p className="text-[0.71875rem] text-high-700 leading-relaxed">
+                  {ledgerError.reason === 'not-a-spreadsheet'
+                    ? <>Couldn’t read <span className="font-semibold">{ledgerError.name}</span>. Ira reads a {ledgerError.kind === 'tb' ? 'trial balance' : 'general ledger'} kept as <span className="font-semibold">Excel or CSV</span>. Save it in one of those and upload it again.</>
+                    : ledgerError.reason === 'no-amount-column'
+                      ? <>Read <span className="font-semibold">{ledgerError.name}</span>, but no column carries an amount. A trial balance needs a <span className="font-semibold">debit and credit</span>, or a closing balance.</>
+                      : ledgerError.reason === 'not-a-ledger'
+                        ? <>Read <span className="font-semibold">{ledgerError.name}</span>, but it doesn’t look like a general ledger — journal lines need a <span className="font-semibold">posting date or document number</span> alongside the amount.</>
+                        : ledgerError.reason === 'no-rows'
+                          ? <>Read <span className="font-semibold">{ledgerError.name}</span>, but it has no ledger rows under its header.</>
+                          : <>Couldn’t open <span className="font-semibold">{ledgerError.name}</span> as a spreadsheet. Save it as .xlsx or .csv and upload it again.</>}
+                </p>
+              </div>
+            )}
 
             {/* Each kind owns its uploads: empty, the box is a dashed prompt
                 with a labelled Upload; once it holds a file it becomes a solid
@@ -2434,6 +2582,20 @@ export default function ScopingWizard({ onCancel, onCreated, typePreselected, on
                 </div>
               )}
             </div>
+
+            {/* What the uploaded ledgers said. Only appears once a trial
+                balance has actually been read — there is nothing honest to
+                show about a file we could not open. */}
+            {tbParse && (
+              <LedgerExplorer
+                entities={entities}
+                captions={captions}
+                gl={glParse}
+                perf={perf}
+                money={money}
+                addedByTb={tbAddedIds}
+              />
+            )}
 
             {/* ── Map material accounts to processes ─────────────────────────
                 After the rule, because it reads it: only accounts at or above
