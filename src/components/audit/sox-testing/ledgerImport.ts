@@ -104,6 +104,19 @@ function normaliseDate(cell: string): string {
   const t = String(cell ?? '').trim();
   if (!t) return '';
   if (/^\d{4}-\d{2}-\d{2}/.test(t)) return t.slice(0, 10);
+  // An Excel date is a day count from 30 Dec 1899, and a sheet that carries no
+  // format string hands it over as that bare number — "45942.229" rather than a
+  // date. Left unread it printed the serial straight into the drill-down.
+  // Bounded to a plausible range so a document number or an amount that happens
+  // to be numeric is never mistaken for a date.
+  if (/^\d{5}(?:\.\d+)?$/.test(t)) {
+    const serial = Number(t);
+    if (serial >= 20000 && serial <= 60000) {
+      const ms = Math.round((serial - 25569) * 86400 * 1000);
+      const d = new Date(ms);
+      if (!Number.isNaN(d.getTime())) return d.toISOString().slice(0, 10);
+    }
+  }
   const m = t.match(/^(\d{1,2})[/-](\d{1,2})[/-](\d{2,4})$/);
   if (m) {
     // Sheets written here are m/d/y; a day above twelve settles it either way.
