@@ -557,12 +557,18 @@ export function parseAssertions(cell: string): Assertion[] {
   return ASSERTION_ORDER.filter(a => found.has(a));
 }
 
+/** Reads the likelihood column onto the standard's three words. A client's
+ *  matrix rarely uses them — most say High/Medium/Low, some say Likely/Rare —
+ *  so the common dialects map across. "Reasonably possible" is checked before
+ *  the bare "possible" and "remote" alternatives, because the phrase contains
+ *  both words and would otherwise be caught by whichever line ran first. */
 function parseLikelihood(cell: string): RiskLikelihood | undefined {
   const t = normaliseHeader(cell);
   if (!t) return undefined;
-  if (/\b(?:high|likely|probable|almost certain)\b/.test(t)) return 'High';
-  if (/\b(?:medium|moderate|possible)\b/.test(t)) return 'Medium';
-  if (/\b(?:low|unlikely|remote|rare)\b/.test(t)) return 'Low';
+  if (/\breasonably possible\b/.test(t)) return 'Reasonably possible';
+  if (/\b(?:probable|likely|almost certain|high|frequent)\b/.test(t)) return 'Probable';
+  if (/\b(?:possible|moderate|medium|occasional)\b/.test(t)) return 'Reasonably possible';
+  if (/\b(?:remote|unlikely|rare|low|improbable)\b/.test(t)) return 'Remote';
   return undefined;
 }
 function parseRiskRating(cell: string): RiskRating | undefined {
