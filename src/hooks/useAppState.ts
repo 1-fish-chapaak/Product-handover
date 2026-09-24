@@ -1,4 +1,6 @@
 import { useState, useCallback, useEffect } from 'react';
+import type { DashboardWidget } from '../components/dashboard/widgetTypes';
+import { CHOCOLATE_DASHBOARD_ID, CHOCOLATE_DEFAULT_WIDGETS } from '../components/dashboard/chocolateDashboard';
 import { useCurrentUser } from '../context/CurrentUserContext';
 import { findEngagement } from '../data/engagements';
 import type { WorkflowTypeId } from '../data/mockData';
@@ -167,8 +169,8 @@ export interface AppState {
   // Dashboard detail
   selectedDashboardId: string | null;
   dashboardCustomFields: string[] | null;
-  // Persisted widgets per custom dashboard
-  dashboardWidgets: Record<string, Array<{ chartType: string; title: string; xField: string; yField: string }>>;
+  // Persisted widgets per dashboard (localStorage, see DASHBOARD_WIDGETS_KEY)
+  dashboardWidgets: Record<string, DashboardWidget[]>;
   // User-created dashboards (persisted across navigation)
   createdDashboards: Array<{
     id: string;
@@ -292,6 +294,21 @@ const getInitialChatDraft = (): string | null => {
   return params.get('prompt');
 };
 
+// Widgets survive a reload (and so do their compare overrides).
+const DASHBOARD_WIDGETS_KEY = 'irame.dashboard.widgets.v1';
+function loadDashboardWidgets(): Record<string, DashboardWidget[]> {
+  try {
+    const raw = localStorage.getItem(DASHBOARD_WIDGETS_KEY);
+    const parsed = raw ? JSON.parse(raw) : null;
+    const stored = parsed && typeof parsed === 'object' && !Array.isArray(parsed) ? parsed as Record<string, DashboardWidget[]> : {};
+    // The Chocolate Sales dashboard ships with its widgets; seeded once, then owned by the user.
+    return CHOCOLATE_DASHBOARD_ID in stored ? stored : { ...stored, [CHOCOLATE_DASHBOARD_ID]: CHOCOLATE_DEFAULT_WIDGETS };
+  } catch { return { [CHOCOLATE_DASHBOARD_ID]: CHOCOLATE_DEFAULT_WIDGETS }; }
+}
+function persistDashboardWidgets(w: Record<string, DashboardWidget[]>) {
+  try { localStorage.setItem(DASHBOARD_WIDGETS_KEY, JSON.stringify(w)); } catch { /* quota */ }
+}
+
 const INITIAL_STATE: AppState = {
   view: getInitialView(),
   sidebarExpanded: false,
@@ -358,6 +375,7 @@ export function useAppState() {
     ...INITIAL_STATE,
     exceptionRole: authRoleId === 'role-risk' ? 'risk-owner' : 'auditor',
     notifications: loadPersistedNotifications(),
+    dashboardWidgets: loadDashboardWidgets(),
   }));
 
   // Re-sync the exception persona when the signed-in identity changes
@@ -377,6 +395,9 @@ export function useAppState() {
   useEffect(() => {
     persistNotifications(state.notifications);
   }, [state.notifications]);
+  useEffect(() => {
+    persistDashboardWidgets(state.dashboardWidgets);
+  }, [state.dashboardWidgets]);
 
   const setView = useCallback((view: View) => {
     setState(prev => ({
@@ -557,7 +578,7 @@ export function useAppState() {
     setState(prev => ({ ...prev, view: 'dashboard-detail' as View, selectedDashboardId: dashboardId, dashboardCustomFields: customFields || null }));
   }, []);
 
-  const saveDashboardWidgets = useCallback((dashboardId: string, widgets: Array<{ chartType: string; title: string; xField: string; yField: string }>) => {
+  const saveDashboardWidgets = useCallback((dashboardId: string, widgets: DashboardWidget[]) => {
     setState(prev => ({ ...prev, dashboardWidgets: { ...prev.dashboardWidgets, [dashboardId]: widgets } }));
   }, []);
 

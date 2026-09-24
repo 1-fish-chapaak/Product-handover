@@ -1,7 +1,12 @@
 import { useState } from "react";
 import { FileText, ChevronDown, LayoutGrid, GripVertical, Database } from "lucide-react";
 
-export interface FileTreeSheet { name: string; columns: string[]; }
+/** A column is a plain label, or a label with its own drag id when two sheets
+ *  share a label (table-qualified model fields). */
+export type FileTreeColumn = string | { label: string; id: string };
+export interface FileTreeSheet { name: string; columns: FileTreeColumn[]; }
+const colLabel = (c: FileTreeColumn) => (typeof c === "string" ? c : c.label);
+const colId = (c: FileTreeColumn) => (typeof c === "string" ? undefined : c.id);
 export interface FileTreeFile { name: string; icon?: 'excel' | 'csv' | 'database'; sheets: FileTreeSheet[]; }
 
 export const FILE_TREE_DATA: FileTreeFile[] = [
@@ -38,7 +43,7 @@ export function FileTreeView({ files, search, draggable, fieldIdMap }: {
     ...f,
     sheets: f.sheets.map(s => ({
       ...s,
-      columns: search ? s.columns.filter(c => c.toLowerCase().includes(search.toLowerCase())) : s.columns,
+      columns: search ? s.columns.filter(c => colLabel(c).toLowerCase().includes(search.toLowerCase())) : s.columns,
     })).filter(s => !search || s.columns.length > 0),
   })).filter(f => !search || f.sheets.length > 0 || f.name.toLowerCase().includes(search.toLowerCase()));
 
@@ -87,13 +92,16 @@ export function FileTreeView({ files, search, draggable, fieldIdMap }: {
                       </button>
                       {isSheetOpen && (
                         <div className="pb-1">
-                          {sheet.columns.map(col => (
+                          {sheet.columns.map(column => {
+                            const col = colLabel(column);
+                            const id = colId(column) ?? fieldIdMap?.[col] ?? col;
+                            return (
                             <div
-                              key={col}
+                              key={id}
                               draggable={!!draggable}
                               onDragStart={draggable ? (e) => {
                                 e.dataTransfer.effectAllowed = 'copy';
-                                e.dataTransfer.setData('fieldId', fieldIdMap?.[col] || col);
+                                e.dataTransfer.setData('fieldId', id);
                                 if (fieldIdMap?.[col]) {
                                   const kind = col.match(/Amount|Count|Score|Risk|Time|Accuracy|Scanned|Found/) ? 'measure' : 'dimension';
                                   e.dataTransfer.setData('fieldKind', kind);
@@ -104,7 +112,8 @@ export function FileTreeView({ files, search, draggable, fieldIdMap }: {
                               <GripVertical size={11} className="text-[#d1d5db] shrink-0" />
                               <span className="text-[0.6875rem] text-[#4b5563]">{col}</span>
                             </div>
-                          ))}
+                            );
+                          })}
                         </div>
                       )}
                     </div>

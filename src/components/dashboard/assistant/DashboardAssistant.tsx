@@ -1,7 +1,7 @@
 import { useState, useRef, useEffect, useCallback, type ReactNode } from 'react';
 import { AnimatePresence, motion } from 'motion/react';
 import {
-  Sparkles, Plus, Send, PanelRightClose, BarChart3, Eraser, X, SquarePen,
+  Sparkles, Plus, Send, PanelRightClose, BarChart3, Eraser, X, SquarePen, GitCompareArrows,
   LineChart, TrendingUp, PieChart, Hash, Table2, SlidersHorizontal, LayoutGrid, ChevronRight,
 } from 'lucide-react';
 import type { AssistantResult } from './assistantEngine';
@@ -73,7 +73,7 @@ interface Msg {
 // Default prompt pills shown in the empty composer (dashboard-relevant).
 const SUGGESTIONS = [
   'Invoice amount by region',
-  'Top 3 vendors by amount at risk',
+  'Compare May vs August',
   'Summarise the dashboard',
 ];
 
@@ -120,6 +120,16 @@ function AssistantBubble({ result, onSuggest }: { result: AssistantResult; onSug
         {created && (
           <div className="mt-2.5 flex items-center gap-2 rounded-[9px] bg-brand-50 border border-brand-200 px-2.5 py-2 text-[11.5px] text-brand-700">
             <BarChart3 size={14} className="shrink-0" /> Widget added to the dashboard.
+          </div>
+        )}
+        {result.action?.kind === 'setCompare' && (
+          <div className="mt-2.5 flex items-center gap-2 rounded-md bg-brand-50 border border-brand-200 px-2.5 py-2 text-[0.75rem] text-brand-700">
+            <GitCompareArrows size={13} className="shrink-0" /> Compare on — {result.action.a.label} vs {result.action.b.label}.
+          </div>
+        )}
+        {result.action?.kind === 'clearCompare' && (
+          <div className="mt-2.5 flex items-center gap-2 rounded-md bg-brand-50 border border-brand-200 px-2.5 py-2 text-[0.75rem] text-brand-700">
+            <GitCompareArrows size={13} className="shrink-0" /> Compare off.
           </div>
         )}
         {result.action?.kind === 'clearFilters' && (

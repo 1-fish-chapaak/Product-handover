@@ -95,6 +95,9 @@ function aggregate(values: number[], fn: AggFn): number {
   }
 }
 
+/** A filter constrains rows when it carries values or a date range. */
+export const isFilterActive = (f: ModelFilter): boolean => f.values.length > 0 || !!f.range;
+
 export const AGG_LABEL: Record<AggFn, string> = {
   sum: 'Sum', avg: 'Average', count: 'Count', countDistinct: 'Distinct', min: 'Min', max: 'Max',
 };
@@ -130,7 +133,7 @@ export function buildWidgetRows(tables: ModelTable[], rels: Relationship[], conf
   // tables join into the row set so the predicates can be evaluated; unrelated
   // filters are ignored entirely (the visual stays unfiltered by them).
   const applicableFilters = filters.filter(f =>
-    f.values.length > 0 && tablesConnected(rels, [...new Set([...widgetTables, f.table])]),
+    isFilterActive(f) && tablesConnected(rels, [...new Set([...widgetTables, f.table])]),
   );
   const needed = [...new Set([...widgetTables, ...applicableFilters.map(f => f.table)])];
 
@@ -187,7 +190,9 @@ export function buildWidgetRows(tables: ModelTable[], rels: Relationship[], conf
     combined = combined.filter(row =>
       applicableFilters.every(f => {
         const v = row[ns(f.table, f.column)];
-        return f.values.some(fv => String(fv) === String(v));
+        // ISO dates compare lexically, so a range needs no Date parsing.
+        if (f.range) { const s = String(v); if (s < f.range.from || s > f.range.to) return false; }
+        return f.values.length === 0 || f.values.some(fv => String(fv) === String(v));
       }),
     );
   }
@@ -203,14 +208,58 @@ export function buildWidgetRows(tables: ModelTable[], rels: Relationship[], conf
       out['Count'] = groupRows.length;
     } else {
       measures.forEach(m => {
-        const vals = groupRows.map(r => Number(r[ns(m.table, m.column)]) || 0);
-        out[measureLabel(m)] = aggregate(vals, m.agg ?? 'sum');
+        const agg = m.agg ?? 'sum';
+        // Counting works on any column (distinct sales people); arithmetic needs numbers.
+        const raw = groupRows.map(r => r[ns(m.table, m.column)]);
+        out[measureLabel(m)] = agg === 'count' ? raw.filter(v => v !== undefined && v !== null && v !== '').length
+          : agg === 'countDistinct' ? new Set(raw.map(String)).size
+          : aggregate(raw.map(v => Number(v) || 0), agg);
       });
     }
     return out;
   });
   rows.sort((a, b) => String(a.label).localeCompare(String(b.label)));
-  return { xLabel, series, rows };
+  return sortTimeRows({ xLabel, series, rows });
+}
+
+// ─── Time-like labels ───
+const MONTH_FULL = ['january', 'february', 'march', 'april', 'may', 'june', 'july', 'august', 'september', 'october', 'november', 'december'];
+const TIME_MONTH_RE = /^([a-z]{3,9})(?:\s+(\d{4}))?$/;
+const TIME_QUARTER_RE = /^q([1-4])(?:\s+(\d{4}))?$/;
+const TIME_MKEY_RE = /^m(\d{2})$/;
+const TIME_YM_RE = /^(\d{4})-(\d{2})$/;
+const TIME_YEAR_RE = /^(\d{4})$/;
+/** A sortable rank for 'May', 'May 2026', 'Q3', 'Q3 2024', 'M05', '2024', '2024-05';
+ *  null when the label is not a period. Years weigh in so 'Dec 2023' < 'Jan 2024'. */
+export function timeRank(label: string): number | null {
+  const l = label.trim().toLowerCase();
+  const m = l.match(TIME_MONTH_RE);
+  // 'may' / 'sept' / 'september' — but not 'marketing'.
+  if (m) { const mi = MONTH_FULL.findIndex(name => name.startsWith(m[1]) || (m[1] === 'sept' && name === 'september')); if (mi >= 0) return (m[2] ? Number(m[2]) : 0) * 12 + mi; }
+  const q = l.match(TIME_QUARTER_RE); if (q) return (q[2] ? Number(q[2]) : 0) * 12 + (Number(q[1]) - 1) * 3;
+  const mk = l.match(TIME_MKEY_RE); if (mk) return Number(mk[1]) - 1;
+  const ym = l.match(TIME_YM_RE); if (ym) return Number(ym[1]) * 12 + Number(ym[2]) - 1;
+  const y = l.match(TIME_YEAR_RE); if (y) return Number(y[1]) * 12;
+  return null;
+}
+/** Grouping sorts labels alphabetically, so months come out Apr, Aug, Dec…
+ *  When every label reads as a period, put them in calendar order instead. */
+export function sortTimeRows(d: ModelChartData): ModelChartData {
+  const ranks = d.rows.map(r => timeRank(String(r.label)));
+  if (d.rows.length < 2 || ranks.some(r => r === null)) return d;
+  const idx = d.rows.map((_, i) => i).sort((x, y) => (ranks[x] as number) - (ranks[y] as number));
+  return { ...d, rows: idx.map(i => d.rows[i]) };
+}
+
+/** Earliest and latest ISO date across every 'date' column, or null when the
+ *  model has no dates. Anchors Compare's presets and pickers to the data. */
+export function dateExtent(tables: ModelTable[]): { min: string; max: string } | null {
+  let min: string | null = null, max: string | null = null;
+  for (const t of tables) for (const c of t.columns) {
+    if (c.type !== 'date') continue;
+    for (const r of t.rows) { const v = String(r[c.name] ?? ''); if (!v) continue; if (min === null || v < min) min = v; if (max === null || v > max) max = v; }
+  }
+  return min && max ? { min, max } : null;
 }
 
 /** Distinct values of a column, sorted — drives the page-slicer value picker. */

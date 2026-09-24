@@ -11,6 +11,11 @@
 // DashboardView executes those actions against its real state.
 
 import { MODEL_TABLES, DEFAULT_RELATIONSHIPS } from '../model/modelData';
+import type { DashboardWidget } from '../widgetTypes';
+import { runCompare, resolveCompare } from '../compare/compareEngine';
+import { summarizeCompare } from '../compare/compareSummary';
+import { parsePeriodToken, periodSide, presetRange } from '../compare/comparePresets';
+import type { CompareConfig, CompareSide } from '../compare/compareTypes';
 import { buildWidgetRows, distinctValues, AGG_LABEL, colByName, tableById } from '../model/joinEngine';
 import type { ModelTable, Relationship, ModelFilter, WidgetModelField, WidgetModelConfig, AggFn } from '../model/relationshipTypes';
 
@@ -107,17 +112,11 @@ const AGG_WORDS: { agg: AggFn; words: string[] }[] = [
 
 // ─── result + context types ─────────────────────────────────────────────────
 
-export interface UserWidget {
-  chartType: string;
-  title: string;
-  xField: string;
-  yField: string;
-  color?: string;
-  model?: WidgetModelConfig;
-  slicerMode?: string;
-}
+export type UserWidget = DashboardWidget;
 
 export type AssistantAction =
+  | { kind: 'setCompare'; a: CompareSide; b: CompareSide }
+  | { kind: 'clearCompare' }
   | { kind: 'createWidget'; widget: UserWidget }
   | { kind: 'setFilter'; table: string; column: string; label: string; values: (string | number)[] }
   | { kind: 'clearFilters' };
@@ -138,6 +137,69 @@ export interface AssistantContext {
   focusedWidget?: UserWidget | null;
   /** Titles of widgets on the dashboard (for summaries / "what's on my dashboard"). */
   widgetTitles?: string[];
+  /** The dashboard's Compare state, so "what changed" can answer from it. */
+  compare?: CompareConfig | null;
+  /** The data clock — "this month" and bare month names resolve against it. */
+  today?: Date;
+}
+
+// ─── compare intent ─────────────────────────────────────────────────────────
+
+const PERIOD_TOKEN = /\b(jan(?:uary)?|feb(?:ruary)?|mar(?:ch)?|apr(?:il)?|may|jun(?:e)?|jul(?:y)?|aug(?:ust)?|sep(?:t(?:ember)?)?|oct(?:ober)?|nov(?:ember)?|dec(?:ember)?|q[1-4]|h[12])(?:\s+(20\d{2}))?\b/g;
+
+/** A and B out of the sentence: two period tokens, a "with last month"
+ *  shortcut, or two values of one dimension. */
+function parseCompareSides(text: string, ctx: AssistantContext): { a: CompareSide; b: CompareSide } | null {
+  const { tables } = ctxDefaults(ctx);
+  const anchor = ctx.today ?? new Date(Date.UTC(2026, 8, 15)); // the data clock
+  const periods = [...text.matchAll(PERIOD_TOKEN)].map(m => parsePeriodToken(m[2] ? `${m[1]} ${m[2]}` : m[1], anchor.getUTCFullYear())).filter((r): r is NonNullable<typeof r> => !!r);
+  if (periods.length >= 2) return { a: periodSide(periods[0]), b: periodSide(periods[1]) };
+  const current = ctx.compare?.a.kind === 'period' ? { from: ctx.compare.a.from, to: ctx.compare.a.to } : presetRange('this-month', anchor);
+  if (/\blast month\b/.test(text)) return { a: periodSide(presetRange('last-month', anchor)), b: periodSide(current) };
+  if (/\bprevious (period|month)\b/.test(text)) return { a: periodSide(presetRange('previous-period', anchor, current)), b: periodSide(current) };
+  if (/\bsame (month|period) last year\b/.test(text)) return { a: periodSide(presetRange('same-month-last-year', anchor, current)), b: periodSide(current) };
+  if (/\blast quarter\b/.test(text)) return { a: periodSide(presetRange('last-quarter', anchor)), b: periodSide(presetRange('this-quarter', anchor)) };
+  if (periods.length === 1) return { a: periodSide(periods[0]), b: periodSide(current) };
+  // Two values of one dimension.
+  for (const d of DIMENSIONS) {
+    const values = distinctValues(tables, d.table, d.column).map(String);
+    const hits = values.filter(v => text.includes(` ${v.toLowerCase()} `) || text.includes(` ${v.toLowerCase()}`)).slice(0, 2);
+    if (hits.length === 2) {
+      const ordered = [...hits].sort((x, y) => text.indexOf(x.toLowerCase()) - text.indexOf(y.toLowerCase()));
+      return { a: { kind: 'entity', table: d.table, column: d.column, value: ordered[0], label: ordered[0] }, b: { kind: 'entity', table: d.table, column: d.column, value: ordered[1], label: ordered[1] } };
+    }
+  }
+  return null;
+}
+
+/** "What changed" — the compare summary for the three headline measures, plus the movers by department. */
+function whatChanged(ctx: AssistantContext): AssistantResult {
+  const cfg = ctx.compare;
+  if (!cfg?.enabled) return { text: 'Turn on Compare first — e.g. *compare May vs August* — and I will tell you what moved.', suggestions: ['Compare May vs August', 'Compare with last month'] };
+  const { tables, rels: relationships } = ctxDefaults(ctx);
+  const rc = resolveCompare(cfg)!;
+  const lines: string[] = [];
+  const rows: (string | number)[][] = [];
+  for (const m of MEASURES.slice(0, 3)) {
+    const model = { fields: [{ table: m.table, column: m.column, role: 'measure' as const, agg: m.defaultAgg }] };
+    const r = runCompare(tables, relationships, model, ctx.filters ?? [], rc, { polarity: cfg.polarity });
+    const s = r.kpi[r.series[0]];
+    if (!s) continue;
+    const summary = summarizeCompare(r, { a: rc.a, b: rc.b, xLabel: 'Total' });
+    lines.push(summary.headline);
+    rows.push([m.label, fmtMeasure(m, s.a), fmtMeasure(m, s.b), s.pct === null ? (s.a === 0 ? 'new' : '—') : `${s.pct > 0 ? '+' : ''}${s.pct}%`]);
+  }
+  // Movers by department for the first measure.
+  const dept = { fields: [{ table: 'departments', column: 'Department', role: 'dimension' as const }, { table: MEASURES[1].table, column: MEASURES[1].column, role: 'measure' as const, agg: MEASURES[1].defaultAgg }] };
+  const rd = runCompare(tables, relationships, dept, ctx.filters ?? [], rc, { polarity: cfg.polarity });
+  const ds = summarizeCompare(rd, { a: rc.a, b: rc.b, xLabel: 'Department' });
+  lines.push(...ds.bullets.slice(0, 2));
+  if (ds.caveats.length) lines.push(ds.caveats[0]);
+  return {
+    text: `**${rc.a.label} → ${rc.b.label}**\n${lines.map(l => `• ${l}`).join('\n')}`,
+    table: { columns: ['Metric', rc.a.label, rc.b.label, 'Δ%'], rows },
+    suggestions: ['Swap A and B', 'Compare Finance and Operations', 'Stop comparing'],
+  };
 }
 
 // ─── formatting ─────────────────────────────────────────────────────────────
@@ -236,6 +298,9 @@ function buildWidget(chartType: string, dim: DimensionDef | null, measure: Measu
 // ─── intent handlers ────────────────────────────────────────────────────────
 
 const CREATE_RE = /\b(create|add|make|build|generate|insert|plot|draw|visuali[sz]e|show me a|give me a|put)\b/;
+const COMPARE_RE = /\b(compare|comparison|versus|vs\.?|against|side by side)\b/;
+const CHANGED_RE = /\b(what('s| has| is)? changed|what changed|difference between|how did .* change|what moved)\b/;
+const STOP_COMPARE_RE = /\b(stop|turn off|disable|exit|clear|end)\b.*\bcompar/;
 const CLEAR_RE = /\b(clear|reset|remove)\b.*\bfilter/;
 const FILTER_RE = /\b(filter|show only|only show|show just|where|slice)\b/;
 const SUMMARY_RE = /\b(summari[sz]e|summary|overview|briefing|insights?|highlights|tell me about the dashboard|what'?s going on|key (metrics|findings|numbers))\b/;
@@ -263,7 +328,8 @@ export function runAssistant(prompt: string, ctx: AssistantContext = {}): Assist
   // 0 — help
   if (HELP_RE.test(text)) {
     return {
-      text: `I'm **Irame**, your dashboard analyst. I can:\n• **Analyse** — "total amount at risk", "top 3 vendors by spend", "invoice amount by region", "duplicate count by month"\n• **Create widgets** — "add a pie chart of status", "create a KPI of total amount", "add a slicer on region"\n• **Filter** — "show only flagged", "filter region to North", "clear filters"\n• **Explain** — open a widget's menu → *Ask Ira*, or "explain the amount-by-region chart"\n• **Summarise** — "summarise the dashboard"`,
+      text: `I'm **Irame**, your dashboard analyst. I can:\n• **Analyse** — "total amount at risk", "top 3 vendors by spend", "invoice amount by region", "duplicate count by month"\n• **Create widgets** — "add a pie chart of status", "create a KPI of total amount", "add a slicer on region"\n• **Filter** — "show only flagged", "filter region to North", "clear filters"\n• **Explain** — open a widget's menu → *Ask Ira*, or "explain the amount-by-region chart"\n• **Summarise** — "summarise the dashboard"
+• **Compare** — "compare May vs August", "compare Finance and Operations", then "what changed?"`,
       suggestions: ['Summarise the dashboard', 'Top 3 vendors by amount', 'Add a pie chart of status'],
     };
   }
@@ -271,6 +337,27 @@ export function runAssistant(prompt: string, ctx: AssistantContext = {}): Assist
   // 1 — clear filters
   if (CLEAR_RE.test(text) || /^\s*(clear|reset)\s+(all\s+)?filters?\s*$/.test(text)) {
     return { text: 'Cleared all page filters — every widget is back to the full data set.', action: { kind: 'clearFilters' } };
+  }
+
+  // 1b — compare. "compare May vs August", "compare Finance and Operations",
+  // "compare with last month", "what changed?", "stop comparing".
+  if (STOP_COMPARE_RE.test(text)) {
+    return { text: 'Compare is off — every widget is back to a single view.', action: { kind: 'clearCompare' } };
+  }
+  if (CHANGED_RE.test(text)) return whatChanged(ctx);
+  if (/\bswap\b.*\b(a and b|sides|periods)\b/.test(text) && ctx.compare?.enabled) {
+    return { text: `Swapped — **${ctx.compare.b.label}** is now A and **${ctx.compare.a.label}** is B.`, action: { kind: 'setCompare', a: ctx.compare.b, b: ctx.compare.a }, suggestions: ['What changed?', 'Stop comparing'] };
+  }
+  if (COMPARE_RE.test(text) && !CREATE_RE.test(text)) {
+    const sides = parseCompareSides(text, ctx);
+    if (sides) {
+      return {
+        text: `Comparing **${sides.a.label}** (A) against **${sides.b.label}** (B) — every widget now shows A vs B. KPIs carry the change, charts show both sides, tables list the variance.`,
+        action: { kind: 'setCompare', a: sides.a, b: sides.b },
+        suggestions: ['What changed?', 'Compare Finance and Operations', 'Stop comparing'],
+      };
+    }
+    return { text: 'Tell me the two sides — e.g. "compare May vs August", "compare Q2 with Q3", "compare Finance and Operations", or "compare with last month".', suggestions: ['Compare May vs August', 'Compare with last month', 'Compare Finance and Operations'] };
   }
 
   const measure = findMeasure(text);

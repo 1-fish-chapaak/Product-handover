@@ -499,6 +499,30 @@ Six widget types, selected by `type`: **Line**, **Area**, **Bar**, **Pie**, **Ta
 - `AddDataModal` (`dashboard/AddDataModal`) — attach a dataset.
 - `Orb` (`shared/Orb`) — ambient "ask about this dashboard" affordance. `useToast` for toasts.
 
+#### 7.2.6 Compare mode (`dashboard/compare/*`)
+
+Two answers on one dashboard — A vs B, where each side is a date range or one value of a dimension. The rules that keep it one system:
+
+- **Side colours.** A is the widget's colour (default `brand-600`); B is always `brand-300` (`#C393FA`) — and on lines B is **dashed**, on chips B's swatch is **ringed**. The pair differs in lightness and shape, never hue alone.
+- **Delta chip** (`shared/DeltaChip.tsx`) — arrow + signed text, toned by the metric's *polarity* (`compliant` good / `risk` bad / ink neutral). Polarity is configurable per metric; a chip never assumes "up" is progress. `+12%`, `−8%`, `±0`, `new` (A was zero) — never `∞`.
+- **KPI in compare** keeps the §7.2.2 tile: label · chip aside; A at `1.625rem`; "vs B · label" beside it, `instant` (no ramping counter next to a static number).
+- **Variance table** — label · A · B · Δ · Δ%; tone lives only on the Δ% chip, **no row fills** (No-RAG). Totals row `border-t-2 border-brand-600/20 bg-brand-50/40`.
+- **"IRA · What changed"** — a flat bordered card with a mono meta line and bullet lines; identity through typography, not an avatar, no glow.
+- **Chrome** — header chip `[● A ▾] vs [○ B ▾] ⇄ ×` in the Filter button's chrome; a `role="status"` strip above the KPI row is the single announcement point. Popover: `w-[26rem]`, `POP_ANIM`, non-modal dialog.
+- **Motion** ≤ 300 ms, `[0.2,0,0,1]`; B series draws 150 ms after A; all of it collapses under `prefers-reduced-motion`.
+
+**Asking for it.** One span and one view — `Compare across [from] [to]` then `Daily · Weekly · Monthly · Quarterly · Yearly · Custom`. The span is sliced into whole periods: two of them *is* the A/B comparison above; three or more switch every widget to **series mode**. Custom keeps the two From/To editors for anything the five views cannot say. Pickers stop exactly at the data's first and last dated row, a span that yields fewer than two periods or more than `MAX_PERIODS` (60) is refused in words, and a pinned widget stays two-sided.
+
+**Series mode** (`SeriesCompareBody` and friends) — the same shapes, read across N periods:
+
+- **Period colour** is a single-hue ramp (`periodColors`), palest oldest → `brand-600` newest. Time is an order, not a set of categories, so hue never varies; it survives greyscale and reads at any length.
+- **Shape by data, not by guess.** A widget whose own axis collapses to one point inside each period becomes the *period axis* (Jan 22 … Dec 24). One that keeps its axis draws one series per period; when its labels read as periods themselves the year is stripped and the periods stack on one Jan–Dec axis — the year-over-year chart. Pies become small multiples, one donut per period.
+- **Scrolling, never squeezing.** Plots, the legend and the variance table scroll horizontally (`ScrollX`, sticky first column) rather than compress thirty-six months into slivers.
+- **KPI** shows the latest period big, its move against the period before, and every period as a bar strip inside the tile.
+- **Honesty.** Periods with no rows at all are named in the caveats ("4 of 32 periods have no rows — the source has no data there"), never reported as a collapse.
+- **Animation stops scaling**: a span over 8 periods draws at once — a stagger of thirty-six would take two seconds to settle.
+- Recharts 3 identifies a series by its **React key**, and a *numeric* key renders nothing at all. Every series, `Cell` and donut here is keyed by a string.
+
 ### 7.3 Home (`home/HomeView.tsx`)
 
 The one sanctioned decorative surface — the hero ships two ambient radial gradients (`brand-500` top-right + `brand-400` bottom-left) inline. Everywhere else stays neutral.

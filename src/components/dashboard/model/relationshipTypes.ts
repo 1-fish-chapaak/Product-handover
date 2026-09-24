@@ -57,6 +57,10 @@ export interface ModelFilter {
   table: string;       // table id
   column: string;      // raw column name
   values: (string | number)[];
+  /** Inclusive ISO (yyyy-mm-dd) range on a 'date'-typed column. A filter with a
+   *  range is active even when `values` is empty; both apply when both are set.
+   *  Used by dashboard Compare to run a widget for "Period A" and "Period B". */
+  range?: { from: string; to: string };
 }
 
 /** A relationship auto-detect proposes (never applied without approval). */
