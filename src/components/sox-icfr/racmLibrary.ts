@@ -139,13 +139,78 @@ const listeners = new Set<() => void>();
 const emit = () => listeners.forEach(l => l());
 const subscribe = (l: () => void) => { listeners.add(l); return () => { listeners.delete(l); }; };
 
+/** ── Where the library lives between page loads ──────────────────────────────
+ *  It used to live in this module variable and nowhere else, so a refresh —
+ *  accidental or otherwise — took every uploaded RACM with it, and anyone
+ *  mid-demo had to import their matrix again (24 Sep).
+ *
+ *  Versioned in the key rather than inside the payload: if the shape of a
+ *  LibraryRacm ever changes, the old key is simply never read again, which is
+ *  safer than trying to migrate a half-understood record.
+ */
+const LIBRARY_KEY = 'sox-racm-library:v1';
+
+/** Anything unreadable is treated as nothing saved. A library that fails to
+ *  parse should fall back to the seeds, not take the page down with it. */
+function loadLibrary(): LibraryRacm[] | null {
+  if (typeof window === 'undefined') return null;
+  try {
+    const raw = window.localStorage.getItem(LIBRARY_KEY);
+    if (!raw) return null;
+    const parsed: unknown = JSON.parse(raw);
+    if (!Array.isArray(parsed)) return null;
+    // Shallow shape check — enough to reject a stale or foreign payload
+    // without pretending to validate every field.
+    const ok = parsed.every(r => r && typeof r === 'object'
+      && typeof (r as LibraryRacm).id === 'string'
+      && typeof (r as LibraryRacm).process === 'string'
+      && Array.isArray((r as LibraryRacm).controls));
+    return ok ? (parsed as LibraryRacm[]) : null;
+  } catch { return null; }
+}
+
+/** Saving is best-effort. A private window, blocked storage or a library past
+ *  the quota all mean the same thing here: this tab keeps working from memory
+ *  and the next load starts from the seeds. */
+function saveLibrary(list: LibraryRacm[]): void {
+  if (typeof window === 'undefined') return;
+  try { window.localStorage.setItem(LIBRARY_KEY, JSON.stringify(list)); } catch { /* memory only */ }
+}
+
 function all(): LibraryRacm[] {
-  if (!RACMS) RACMS = seedFromEngagements();
+  if (!RACMS) {
+    const saved = loadLibrary();
+    const seeded = seedFromEngagements();
+    // A seeded id is derived from its engagement and process, so it is the same
+    // string on every load. That makes the merge safe both ways: what the user
+    // changed is kept, and a RACM belonging to an engagement created since the
+    // last save still appears rather than being hidden by the restore.
+    if (saved) {
+      const have = new Set(saved.map(r => r.id));
+      RACMS = [...saved, ...seeded.filter(s => !have.has(s.id))];
+    } else {
+      RACMS = seeded;
+    }
+  }
   return RACMS;
 }
 function commit(next: LibraryRacm[]): void {
   RACMS = next;
+  saveLibrary(next);
   emit();
+}
+
+/** Another tab changed the library. Adopt its list rather than re-saving it —
+ *  the tab that made the change has already written it, and writing again from
+ *  here would bounce the same value back at every other tab. */
+function adoptLibrary(raw: string | null): void {
+  if (!raw) return;
+  try {
+    const parsed: unknown = JSON.parse(raw);
+    if (!Array.isArray(parsed)) return;
+    RACMS = parsed as LibraryRacm[];
+    emit();
+  } catch { /* unreadable — keep what this tab has */ }
 }
 
 /** Every RACM on the tab, newest first. Re-renders when one is added, deleted or picked. */
@@ -235,7 +300,13 @@ function applyEditorWrite(key: string, raw: string | null): void {
 }
 
 if (typeof window !== 'undefined') {
-  window.addEventListener('storage', e => { if (e.key) applyEditorWrite(e.key, e.newValue); });
+  window.addEventListener('storage', e => {
+    if (!e.key) return;
+    // The library itself travels between tabs too, so a RACM uploaded on one
+    // tab shows up on the RACM Library open in another.
+    if (e.key === LIBRARY_KEY) { adoptLibrary(e.newValue); return; }
+    applyEditorWrite(e.key, e.newValue);
+  });
 }
 
 /** Hand a RACM's rows to the spreadsheet editor, with the list of rows it must

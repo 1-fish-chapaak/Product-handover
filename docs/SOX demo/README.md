@@ -11,7 +11,8 @@ the same invoices, purchase orders and goods receipt notes.
 
 ## The documents
 
-All paths relative to `docs/samples/`.
+Everything sits in this one folder: the four source documents loose at the top, then a
+folder per tested control, each holding a **TOD** and a **TOE** folder.
 
 | Step | File | What it is |
 |---|---|---|
@@ -19,7 +20,7 @@ All paths relative to `docs/samples/`.
 | Materiality | `altura-infra-group-trial-balance-fy26.xlsx` | 443 account rows, 8 companies — ties to the register |
 | Materiality | `altura-infra-group-general-ledger-fy26.xlsx` | 1,274 journal lines behind those captions |
 | Scope | `altura-p2p-racm-fy26.xlsx` | **10 P2P controls**, all 22 required columns, TOD checks + attributes on every row |
-| TOD / TOE | `p2p-evidence/<control>/…` | 32 evidence documents for the three tested controls |
+| TOD / TOE | `<control>/TOD/` and `<control>/TOE/` | 32 evidence documents for the three tested controls |
 
 ### The three controls that get tested
 
@@ -90,7 +91,7 @@ Open the engagement → **SOX testing** tab → **New audit**.
 Inside the audit: **Control Library → C069**.
 
 Step ① **Test of design** — for each design element press **Attach evidence** and give it
-the matching file from `p2p-evidence/C069-three-way-match/TOD/`:
+the matching file from `C069 - Three-way match (automated, effective)/TOD/`:
 
 | Design element | File |
 |---|---|
@@ -118,7 +119,7 @@ Step ② Population → step ③ Sample drawing. Draw the sample.
 ### 5 · Test of operating effectiveness
 
 Step ④. Each attribute lists the evidence it needs. Press **Upload several** and select
-**all** the files for that attribute from `p2p-evidence/C069-three-way-match/TOE/`.
+**all** the files for that attribute from `C069 - Three-way match (automated, effective)/TOE/`.
 
 They file themselves — every filename scores 100 against its slot, so there is no
 mapping to do and no button to press afterwards.
@@ -133,7 +134,7 @@ Pass each attribute, then conclude. **C069 is effective.**
 
 ### 6 · The one that fails
 
-Repeat for **C070** using `p2p-evidence/C070-duplicate-detection/`.
+Repeat for **C070** using `C070 - Duplicate detection (FAILS - deficiency)/`.
 
 Its evidence contains two invoices paid twice on an override with no approval on file —
 `B1_signed_approval_record.pdf` shows both overrides missing the Head of AP's approval
@@ -145,7 +146,7 @@ duplicate check compares the invoice number as keyed, so a re-keyed reference sl
 
 ### 7 · C065 if you want a manual control too
 
-`p2p-evidence/C065-invoice-validation/` — same shape, manual control, reviewer sign-off
+`C065 - Invoice validation (manual, effective)/` — same shape, manual control, reviewer sign-off
 rather than system configuration.
 
 ---
