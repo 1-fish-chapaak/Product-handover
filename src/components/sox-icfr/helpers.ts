@@ -3418,7 +3418,7 @@ export function racmEditorRows(controls: Control[], process: string): Procuremen
         riskTitle: c.riskTitle ?? '',
         riskDescription: c.riskDescription,
         riskRating: c.riskRating ?? '',
-        likelihood: '',
+        likelihood: c.likelihood ?? '',
         impact: '',
         controlTitle: c.description,
         controlObjective: c.objective ?? '',
@@ -3433,6 +3433,7 @@ export function racmEditorRows(controls: Control[], process: string): Procuremen
         // process owner where the RACM named none. `applyEditorRows` reads an
         // untouched cell as "still that", so the fallback is never stamped on.
         riskOwner: ownersOf(c).riskOwner,
+        processOwner: c.processOwner ?? '',
         controlEvidence: evidence.join('; '),
         assertions: c.assertions.join(', '),
         fsLineItem: '',
@@ -3442,7 +3443,12 @@ export function racmEditorRows(controls: Control[], process: string): Procuremen
         segregationOfDuties: '',
         mgmtReviewControl: c.isMrc ? 'Yes' : '',
         confidence: '',
-        sopSectionRef: '',
+        sopSectionRef: c.sopSectionRef ?? '',
+        // What was checked to conclude the control is designed to work. The
+        // grid had no column for these at all until 24 Sep, so a RACM built
+        // from an upload or an SOP carried its TOD checks through the import
+        // and then dropped them at the last step.
+        designChecks: c.design.points.map(p => p.text).join(' | '),
         attributes: c.operating.steps.map(s => s.description).join(' | '),
         // The client's own columns travel with the row, so the grid can show
         // them beside ours and an edit has somewhere to land on the way back.

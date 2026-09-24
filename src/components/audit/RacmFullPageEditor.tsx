@@ -477,6 +477,7 @@ export default function RacmFullPageEditor({ onBack, backView, backLabel, racmNa
       riskRating: 'Medium', likelihood: '', impact: 'Medium',
       controlObjective: '', controlActivity: '',
       controlType: 'Preventive', controlNature: 'Manual', frequency: 'Monthly',
+      designChecks: '',
       effectiveDate: '', testingStrategy: '',
       controlOwner: '', riskOwner: '', controlEvidence: '',
       assertions: '', fsLineItem: '', regulatoryRef: '',

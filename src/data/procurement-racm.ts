@@ -84,6 +84,16 @@ export interface ProcurementRacmRow {
   confidence: string;
   /** SOP Section Ref */
   sopSectionRef: string;
+  /** Process Owner — who owns the process the control sits in, as against the
+   *  control's own owner. A required import column; it had no grid column
+   *  until 24 Sep, so it was read and then dropped. */
+  processOwner?: string;
+  /** Design checks (TOD) — what was checked to decide the control is DESIGNED
+   *  to work, as against `attributes`, which is what gets tested when it RUNS.
+   *  Optional because the 124 generated rows below predate the column (24 Sep);
+   *  an imported or extracted RACM always carries it, since it is a required
+   *  import column. */
+  designChecks?: string;
   /** Attributes — comma-separated list of test attributes for this control (a control can have one or multiple) */
   attributes: string;
   /** Ref — source file this row was extracted from. Set only for multi-file consolidation (RACM Generator). */
@@ -138,7 +148,9 @@ export const PROCUREMENT_RACM_COLUMNS: RacmColumnDef[] = [
   { key: 'testingStrategy', label: "Testing Strategy", group: 'control', width: 150 },
   { key: 'controlOwner', label: "Control Owner", group: 'control', width: 160 },
   { key: 'riskOwner', label: "Risk Owner", group: 'control', width: 160 },
+  { key: 'processOwner', label: "Process Owner", group: 'control', width: 160 },
   { key: 'controlEvidence', label: "Control Evidence", group: 'control', width: 280 },
+  { key: 'designChecks', label: "Design Checks (TOD)", group: 'control', width: 300 },
   { key: 'attributes', label: "Attributes", group: 'control', width: 300 },
   { key: 'assertions', label: "Assertions (CEAVOP)", group: 'assertions', width: 200 },
   { key: 'fsLineItem', label: "FS Line Item", group: 'assertions', width: 220 },

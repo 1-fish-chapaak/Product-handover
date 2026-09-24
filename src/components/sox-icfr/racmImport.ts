@@ -1549,6 +1549,8 @@ function controlFromRow(row: ImportRow, process: string, n: number, frequency: F
   // country and the two can never drift apart (see `countryFor`).
   const country = val('country');
   if (country) control.country = country;
+  const sopSectionRef = val('sopSectionRef');
+  if (sopSectionRef) control.sopSectionRef = sopSectionRef;
   if (row.testingStrategy) control.testingStrategy = row.testingStrategy;
   if (Object.keys(row.extras).length) control.extras = { ...row.extras };
   return control;
