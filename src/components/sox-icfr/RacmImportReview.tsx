@@ -5,6 +5,12 @@
  *   Upload a RACM (A5):  Columns (match the file's columns to our fields) → Review → Import
  *   Upload an SOP (A6):  Prompt (read it, edit it, validate it) → extraction → Review → Import
  *
+ * An SOP produces more than a matrix (25 Sep): the same draft rows are read
+ * back as a process NARRATIVE as well, on a toggle inside Review, and the
+ * prompt on the step before drives both. A RACM workbook has no toggle — it
+ * arrived as a matrix. `SopNarrativeView` renders it; `sopNarrative.ts` holds
+ * the stage → risk → control spine it is built on.
+ *
  * Review is the same screen for both, and it asks ONE question of every row:
  * does this control go into the RACM? The tick box is the answer, and it is the
  * only thing that decides — nothing else on the screen sets a row's fate.
@@ -27,12 +33,15 @@
  * lives in racmImport.ts; this file only decides what the reviewer sees and
  * when a value is written.
  */
-import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { Fragment, useCallback, useDeferredValue, useEffect, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import {
-  AlertTriangle, ArrowLeft, Check, CheckCircle2, ChevronDown, ChevronRight, Circle, Copy, FileSpreadsheet, FileText, FileWarning,
-  Loader2, Paperclip, RotateCcw, Search, Sparkles, Star, Undo2, X,
+  AlertTriangle, AlignLeft, ArrowLeft, Check, CheckCircle2, ChevronDown, ChevronRight, Circle, Copy, FileSpreadsheet, FileText, FileWarning,
+  Loader2, Paperclip, RotateCcw, Search, Sparkles, Star, Table2, Undo2, Workflow, X,
 } from 'lucide-react';
+import SopNarrativeView from './SopNarrativeView';
+import SopFlowchartView from './SopFlowchartView';
+import { riskKeyOf } from './sopNarrative';
 import { racmTemplateForProcesses } from './mockData';
 import {
   CODE_OK, assignRacmIds, cleanCode, entityCodeTakenBy, peekEntityCode, peekProcessCode, processCodeTakenBy,
@@ -57,6 +66,17 @@ import {
 } from './racmImport';
 
 type Step = 'columns' | 'prompt' | 'review';
+
+/** The three readings of one SOP draft (25 Sep). Same rows, same prompt behind
+ *  all of them — a narrative to read, a flowchart to follow, a matrix to work
+ *  on. Edit the prompt and all three change together, because none of them
+ *  holds any data of its own. */
+type ReviewView = 'narrative' | 'flowchart' | 'matrix';
+const REVIEW_VIEWS: { key: ReviewView; label: string; Icon: typeof AlignLeft; hint: string }[] = [
+  { key: 'narrative', label: 'Narrative', Icon: AlignLeft, hint: 'The process written out, stage by stage' },
+  { key: 'flowchart', label: 'Flowchart', Icon: Workflow, hint: 'The risks mapped onto the process, with their controls' },
+  { key: 'matrix', label: 'Matrix', Icon: Table2, hint: 'The rows, and what goes into the RACM' },
+];
 
 export interface RacmImportMeta {
   source: 'racm' | 'sop';
@@ -790,6 +810,56 @@ export default function RacmImportReview({ mode, file, process, entity, existing
   /** Rows the reviewer has ticked IN by hand. A duplicate they deliberately
    *  asked for is never taken away from them again by the effect below. */
   const askedFor = useRef<Set<string>>(new Set());
+  /** Which reading of the SOP draft is on screen. Opens on the matrix: the tick
+   *  boxes and the fix boxes live there, and they are what this step is for.
+   *  The narrative is the same rows, read rather than worked on. */
+  const [view, setView] = useState<ReviewView>('matrix');
+  /** What the reviewer renamed a stage Ira grouped, keyed by the name she gave
+   *  it. Held here rather than in the narrative because the flowchart shows the
+   *  same stages: a rename on one is a rename on both. */
+  const [stageNames, setStageNames] = useState<Record<string, string>>({});
+  /** Set when the reviewer turns Ira's grouping down. Never reached when the
+   *  SOP names its own stages — those are not ours to switch off. */
+  const [ungrouped, setUngrouped] = useState(false);
+  const stageNameFor = useCallback((name: string) => stageNames[name] ?? name, [stageNames]);
+  /** Names typed straight onto the flowchart, instead of into the prompt (user
+   *  ask, 25 Sep). Keyed by the DRAFT's own risk and control IDs, not by row
+   *  key: the prompt beside the chart redraws the rows on every keystroke, and
+   *  a name keyed to a row would be lost the moment it did. */
+  const [riskNames, setRiskNames] = useState<Record<string, string>>({});
+  const [controlNames, setControlNames] = useState<Record<string, string>>({});
+  /**
+   * A name typed onto the chart.
+   *
+   * Two things happen, and both are needed. The name is remembered against the
+   * draft's own ID, so the next keystroke in the prompt does not wipe it; and
+   * it is written into the rows that already exist, so a rename made in Review
+   * — where the rows were drafted minutes ago — reaches the Matrix and the
+   * import rather than only the box that was clicked.
+   */
+  const writeName = (field: 'riskTitle' | 'controlTitle', matches: (r: ImportRow) => boolean, to: string) =>
+    setRows(prev => {
+      const patches = new Map<string, Partial<Record<RacmFieldKey, string>>>();
+      prev.forEach(r => { if (matches(r)) patches.set(r.key, { [field]: to }); });
+      return patches.size ? rebuildRows(prev, patches) : prev;
+    });
+  const renameRisk = (key: string, to: string) => {
+    setRiskNames(prev => ({ ...prev, [key]: to }));
+    writeName('riskTitle', r => riskKeyOf(r) === key, to);
+  };
+  /** A control's title as it read the first time it was renamed. The stage
+   *  grouping keeps reading this one, so typing a new name never re-files the
+   *  control — see `inferStages`. */
+  const [originalTitles, setOriginalTitles] = useState<Record<string, string>>({});
+  const renameControl = (id: string, to: string, was: string) => {
+    setOriginalTitles(prev => (prev[id] ? prev : { ...prev, [id]: was }));
+    setControlNames(prev => ({ ...prev, [id]: to }));
+    writeName('controlTitle', r => (cell(r.values.controlId) || r.key) === id, to);
+  };
+  const classifyBy = useCallback(
+    (row: ImportRow) => originalTitles[cell(row.values.controlId) || row.key] ?? '',
+    [originalTitles],
+  );
 
   /** Start the review of a freshly built set of rows. A row that repeats a
    *  control this RACM already has starts left out — the 17 Sep call asked for
@@ -968,7 +1038,7 @@ export default function RacmImportReview({ mode, file, process, entity, existing
     // a beat after the last tick, so the finished list is seen before it goes
     timers.current.push(window.setTimeout(() => {
       try {
-        const drafted = draftRowsFromSop(process, file.name, used, existing, entity);
+        const drafted = draftWithNames(used);
         setRows(drafted);
         resetReview(drafted);
         builtFrom.current = used;
@@ -979,6 +1049,44 @@ export default function RacmImportReview({ mode, file, process, entity, existing
       }
     }, EXTRACT_STEPS.length * EXTRACT_STEP_MS + 300));
   };
+
+  /**
+   * The draft for a prompt, with the reviewer's own names written over Ira's.
+   *
+   * Used twice on purpose: once for the live chart beside the prompt, once by
+   * the extraction itself. One builder means the chart is never a flattering
+   * preview of a draft that then lands different.
+   */
+  const draftWithNames = useCallback((text: string): ImportRow[] => {
+    const draft = draftRowsFromSop(process, file.name, text, existing, entity);
+    const patches = new Map<string, Partial<Record<RacmFieldKey, string>>>();
+    draft.forEach(r => {
+      const patch: Partial<Record<RacmFieldKey, string>> = {};
+      // The same keys the chart drew the boxes under — see `riskKeyOf`.
+      const rid = riskKeyOf(r);
+      const cid = cell(r.values.controlId) || r.key;
+      if (rid && riskNames[rid]) patch.riskTitle = riskNames[rid];
+      if (cid && controlNames[cid]) patch.controlTitle = controlNames[cid];
+      if (Object.keys(patch).length) patches.set(r.key, patch);
+    });
+    if (!patches.size) return draft;
+    // Rebuilt in order, because a renamed row is also checked against the rows
+    // above it — the same rule `rebuildRows` follows in Review.
+    const out: ImportRow[] = [];
+    for (const r of draft) {
+      const patch = patches.get(r.key);
+      out.push(rowFromValues(patch ? { ...r.values, ...patch } : r.values, r, existing, process, out, entity));
+    }
+    return out;
+  }, [process, file.name, existing, entity, riskNames, controlNames]);
+
+  /** The chart that sits beside the prompt. Deferred so a long prompt stays
+   *  smooth to type in — the chart catches up a frame later. */
+  const livePrompt = useDeferredValue(prompt);
+  const liveDraft = useMemo(
+    () => (mode === 'sop' ? draftWithNames(livePrompt) : []),
+    [mode, draftWithNames, livePrompt],
+  );
 
   // ── Review derivations ────────────────────────────────────────────────────────
   const effective = useMemo(() => rows.map(r => withAccepted(r, acceptedSugg[r.key])), [rows, acceptedSugg]);
@@ -1158,6 +1266,10 @@ export default function RacmImportReview({ mode, file, process, entity, existing
     return new Map(included.map((r, i) => [r.key, out[i]!.id]));
   }, [included, processCode, entityCodeDrafts, entity]); // eslint-disable-line react-hooks/exhaustive-deps
 
+  /** The ID a row will carry once imported — what every view should call it, so
+   *  the narrative and the matrix never name the same control two ways. */
+  const idFor = useCallback((row: ImportRow) => newIds.get(row.key) ?? idOf(row), [newIds]);
+
   const canImport = included.length > 0 && needFix === 0 && codesOk;
 
   const toggleExpanded = (key: string) => setExpanded(prev => { const n = new Set(prev); if (n.has(key)) n.delete(key); else n.add(key); return n; });
@@ -1309,6 +1421,10 @@ export default function RacmImportReview({ mode, file, process, entity, existing
 
   const steps = mode === 'racm' ? RACM_STEPS : SOP_STEPS;
   const reviewCols = 5;
+  /** An SOP is turned into a narrative and a matrix; a RACM workbook arrives as
+   *  a matrix already, so there is nothing to switch between and no toggle. */
+  const showViews = mode === 'sop';
+  const activeView: ReviewView = showViews ? view : 'matrix';
 
   return (
     <div className="modal-backdrop" style={{ padding: '6vh 20px' }}>
@@ -1535,26 +1651,58 @@ export default function RacmImportReview({ mode, file, process, entity, existing
                   )}
                 </div>
               ) : (
-                <>
-                  <div className="flex items-end justify-between gap-3 mb-1.5">
-                    <label htmlFor="sop-prompt" className="text-[0.6875rem] font-semibold uppercase tracking-wide text-ink-400">Extraction prompt</label>
-                    <button type="button" onClick={() => { setPrompt(DEFAULT_SOP_PROMPT); setPromptTooShort(false); }} disabled={prompt === DEFAULT_SOP_PROMPT}
-                      className="inline-flex items-center gap-1 text-[0.71875rem] font-semibold text-brand-700 enabled:hover:text-brand-800 disabled:text-ink-300 disabled:cursor-not-allowed cursor-pointer">
-                      <RotateCcw size={11} /> Reset to default
-                    </button>
+                /* The prompt and what it produces, side by side (user ask, 25
+                   Sep): "flowchart mere prompt ke side mein aayega. Agar main
+                   prompt change karungi, to flowchart bhi change ho jayega."
+                   The chart is the prompt's read-out — type a line, watch the
+                   controls it draws appear or go. It stacks on a narrow window,
+                   prompt first, because the prompt is the thing being written. */
+                <div className="grid gap-5 lg:grid-cols-[minmax(0,21rem)_minmax(0,1fr)] items-start">
+                  <div>
+                    <div className="flex items-end justify-between gap-3 mb-1.5">
+                      <label htmlFor="sop-prompt" className="text-[0.6875rem] font-semibold uppercase tracking-wide text-ink-400">Extraction prompt</label>
+                      <button type="button" onClick={() => { setPrompt(DEFAULT_SOP_PROMPT); setPromptTooShort(false); }} disabled={prompt === DEFAULT_SOP_PROMPT}
+                        className="inline-flex items-center gap-1 text-[0.71875rem] font-semibold text-brand-700 enabled:hover:text-brand-800 disabled:text-ink-300 disabled:cursor-not-allowed cursor-pointer">
+                        <RotateCcw size={11} /> Reset to default
+                      </button>
+                    </div>
+                    <textarea id="sop-prompt" rows={16} value={prompt}
+                      onChange={e => { setPrompt(e.target.value); if (promptTooShort) setPromptTooShort(false); }}
+                      aria-invalid={promptTooShort || undefined} aria-describedby={promptTooShort ? 'sop-prompt-error' : 'sop-prompt-hint'}
+                      className={cn('w-full rounded-lg border bg-canvas-elevated p-3 text-[0.78125rem] leading-relaxed text-ink-800 focus:outline-none focus:ring-2 focus:ring-brand-200 resize-y',
+                        promptTooShort ? 'border-risk-300' : 'border-canvas-border')} />
+                    {promptTooShort
+                      ? <p id="sop-prompt-error" role="alert" className="text-[0.71875rem] text-risk-700 mt-1.5">Write what Ira should extract — the prompt is too short to run.</p>
+                      : <p id="sop-prompt-hint" className="text-[0.71875rem] text-ink-500 mt-1.5">Ira extracts only after you validate this prompt.</p>}
+                    {extract.phase === 'failed' && (
+                      <p role="alert" className="mt-4 text-[0.75rem] text-risk-700 flex items-center gap-1.5"><AlertTriangle size={13} /> Ira couldn't draft a RACM from {file.name} — try again.</p>
+                    )}
                   </div>
-                  <textarea id="sop-prompt" rows={16} value={prompt}
-                    onChange={e => { setPrompt(e.target.value); if (promptTooShort) setPromptTooShort(false); }}
-                    aria-invalid={promptTooShort || undefined} aria-describedby={promptTooShort ? 'sop-prompt-error' : 'sop-prompt-hint'}
-                    className={cn('w-full rounded-lg border bg-canvas-elevated p-3 text-[0.78125rem] leading-relaxed text-ink-800 focus:outline-none focus:ring-2 focus:ring-brand-200 resize-y',
-                      promptTooShort ? 'border-risk-300' : 'border-canvas-border')} />
-                  {promptTooShort
-                    ? <p id="sop-prompt-error" role="alert" className="text-[0.71875rem] text-risk-700 mt-1.5">Write what Ira should extract — the prompt is too short to run.</p>
-                    : <p id="sop-prompt-hint" className="text-[0.71875rem] text-ink-500 mt-1.5">Ira extracts only after you validate this prompt.</p>}
-                  {extract.phase === 'failed' && (
-                    <p role="alert" className="mt-4 text-[0.75rem] text-risk-700 flex items-center gap-1.5"><AlertTriangle size={13} /> Ira couldn't draft a RACM from {file.name} — try again.</p>
-                  )}
-                </>
+
+                  <div className="min-w-0">
+                    <div className="flex items-baseline gap-2 mb-1.5">
+                      <p className="text-[0.6875rem] font-semibold uppercase tracking-wide text-ink-400">What this prompt draws</p>
+                      <span className="text-[0.6875rem] text-ink-400 tabular-nums">{plural(liveDraft.length, 'control')}</span>
+                    </div>
+                    {/* A name is faster to fix here than to describe in the
+                        prompt, so it can be typed straight onto the box — and it
+                        survives the next keystroke in the prompt, because it is
+                        stored against the draft's own IDs rather than the rows. */}
+                    <p className="text-[0.71875rem] text-ink-500 mb-3">
+                      Edit the prompt to change what Ira extracts. To change only a name, click it on the chart.
+                    </p>
+                    <div className="rounded-xl border border-canvas-border bg-paper-50/40 px-3 py-3 max-h-[30rem] overflow-y-auto">
+                      {liveDraft.length === 0 ? (
+                        <p className="py-10 text-center text-[0.75rem] text-ink-500">This prompt draws no controls. Widen it to see something here.</p>
+                      ) : (
+                        <SopFlowchartView compact rows={liveDraft} process={process} entity={entity} source={file.name}
+                          idFor={r => cell(r.values.controlId) || r.key} omitted={0}
+                          ungrouped={ungrouped} nameFor={stageNameFor} classifyBy={classifyBy} onUngroup={setUngrouped}
+                          onRenameRisk={renameRisk} onRenameControl={renameControl} />
+                      )}
+                    </div>
+                  </div>
+                </div>
               )}
             </div>
           )}
@@ -1625,14 +1773,6 @@ export default function RacmImportReview({ mode, file, process, entity, existing
                 </p>
               </div>
 
-              {/* People a whole file may lack a column for — set once for every
-                  row still missing one (22 Sep). */}
-              {peopleGaps.map(g => (
-                <SetForAllBox key={g.field} label={fieldLabel(g.field)} count={g.rows.length} people={tenantPeople}
-                  noColumn={mode === 'racm' ? !matches.some(m => m.field === g.field && m.column !== null) : false}
-                  onApply={v => setForAll(g.field, v)} />
-              ))}
-
               {/* A9 — what Ira read off each row's other cells, already in the
                   rows below, with the reason and a way back to blank. Nothing
                   is saved until Import either way. */}
@@ -1673,9 +1813,49 @@ export default function RacmImportReview({ mode, file, process, entity, existing
                 </section>
               )}
 
-              {/* IDs (S11) — the short codes every row's ID is built from, in
-                  the order they read (entity, then process), editable before
-                  import. Exactly three characters each (17 Sep). */}
+              {/* Three things come out of one SOP (25 Sep) — this is the switch
+                  between them. It sits BELOW the summary because the summary is
+                  true of every view: how many rows are going in does not change
+                  with the way you read them. */}
+              {showViews && (
+                <div role="tablist" aria-label="How to read this draft" className="inline-flex items-center gap-0.5 rounded-lg border border-canvas-border bg-paper-50 p-0.5 mb-4">
+                  {REVIEW_VIEWS.map(({ key, label, Icon, hint }) => {
+                    const on = activeView === key;
+                    return (
+                      <button key={key} type="button" role="tab" aria-selected={on} title={hint} onClick={() => setView(key)}
+                        className={cn('h-7 px-3 inline-flex items-center gap-1.5 rounded-md text-[0.75rem] font-semibold transition-colors cursor-pointer',
+                          on ? 'bg-canvas text-ink-900 border border-canvas-border' : 'border border-transparent text-ink-500 hover:text-ink-800')}>
+                        <Icon size={13} aria-hidden /> {label}
+                      </button>
+                    );
+                  })}
+                </div>
+              )}
+
+              {activeView === 'narrative' && (
+                <SopNarrativeView rows={included} process={process} entity={entity} source={file.name}
+                  idFor={idFor} omitted={effective.length - included.length}
+                  ungrouped={ungrouped} nameFor={stageNameFor} classifyBy={classifyBy}
+                  onRenameStage={(name, to) => setStageNames(prev => ({ ...prev, [name]: to }))}
+                  onUngroup={setUngrouped} />
+              )}
+
+              {activeView === 'flowchart' && (
+                <SopFlowchartView rows={included} process={process} entity={entity} source={file.name}
+                  idFor={idFor} omitted={effective.length - included.length}
+                  ungrouped={ungrouped} nameFor={stageNameFor} classifyBy={classifyBy} onUngroup={setUngrouped}
+                  onRenameRisk={renameRisk} onRenameControl={renameControl} />
+              )}
+
+              {activeView === 'matrix' && (<>
+              {/* People a whole file may lack a column for — set once for every
+                  row still missing one (22 Sep). */}
+              {peopleGaps.map(g => (
+                <SetForAllBox key={g.field} label={fieldLabel(g.field)} count={g.rows.length} people={tenantPeople}
+                  noColumn={mode === 'racm' ? !matches.some(m => m.field === g.field && m.column !== null) : false}
+                  onApply={v => setForAll(g.field, v)} />
+              ))}
+
               {/* IDs (S11) — the short codes every row's ID is built from, in
                   the order they read (entity, then process). A band of three
                   labelled inputs sat here permanently for something almost
@@ -2014,6 +2194,7 @@ export default function RacmImportReview({ mode, file, process, entity, existing
                   </table>
                 </div>
               )}
+              </>)}
             </>
           )}
         </div>

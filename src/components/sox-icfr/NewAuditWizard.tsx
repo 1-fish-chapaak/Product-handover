@@ -454,7 +454,8 @@ export default function NewAuditWizard({ onClose, prefillFrom }: {
    *
    * It is the SAME judgement the control page sets, on the same field, so it
    * lands on the engagement's control and shows up wherever that control is
-   * read: the RACM, both registers, the working paper and the audit report.
+   * read: the RACM, both registers, the working paper and the Internal
+   * Controls Status Report.
    *
    * No concluded-control guard, unlike the control page: scoping runs before
    * any testing exists. A new audit is created with nothing tested, and a

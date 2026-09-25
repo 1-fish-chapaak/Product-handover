@@ -46,7 +46,7 @@ test('the owner reaches their own findings on the classic shell too', async ({ p
   // the empty state saying so rather than the page looking broken.
   await expect(page.getByText(/No exceptions on your controls\.|Filter by court/).first()).toBeVisible();
   // Still their lane: the audit-wide export stays auditor-side.
-  await expect(page.getByRole('button', { name: 'Audit report' })).toHaveCount(0);
+  await expect(page.getByRole('button', { name: 'Reports' })).toHaveCount(0);
 });
 
 test('the same pair of hands cannot take two rungs in a row', async ({ page }) => {

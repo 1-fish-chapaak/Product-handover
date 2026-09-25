@@ -460,7 +460,8 @@ export interface Sampling {
  * Once, and never silently. Opening the second round REQUIRES a written reason,
  * because the alternative is drawing until a clean sample turns up, which is
  * not sampling at all. The reason, the person and the round it set aside are
- * all kept here, and all three print on the working paper and the audit report:
+ * all kept here, and all three print on the working paper and the Internal
+ * Controls Status Report:
  * a round that is not on the paper is a round that was hidden.
  *
  * The LIVE round is not stored here — it is the ordinary `sampling` and the
