@@ -90,12 +90,13 @@ const short = (s: string, n = 40) => (s.length > n ? `${s.slice(0, n - 1)}…` :
 // check Ira failed only for a missing element must not stay failed once the
 // element arrives, and the second line is how it remembers the check had
 // already been marked failed before that.
+//
+// Both are preconditions rather than findings, so they only ever appear when
+// they STOP Ira answering. A run that had everything it needed shows the
+// check's own answer and nothing else.
 const IRA_ON_FILE_Q = 'Is every required design element on file?';
 const IRA_STOOD_FAILED_Q = 'Was this check already marked failed?';
 const IRA_COULD_TEST_Q = 'Is there anything on file that answers this check?';
-// The retest's version of the first question: a TOD retest reads the fix, so what
-// has to be on file is the owner's evidence of it, not the design elements.
-const RETEST_FIX_ON_FILE_Q = 'Is the evidence of the fix on file?';
 
 /** The design-track retest round in progress, started if there is none — there
  *  is no sample to draw, so the first mark or Ira run is the start. A sampled
@@ -2361,9 +2362,17 @@ export function IcfrProvider({ children, initialRole = 'auditor', seedMeta }: { 
         if (willFail) failed += 1;
         const res: TestResult = willFail ? 'Fail' : 'Pass';
         const stoodLine = { q: IRA_STOOD_FAILED_Q, a: 'Yes — it was marked failed before Ira ran.', pass: false };
+        // One check was clicked, so one answer comes back (user, 25 Sep — "abhi
+        // bhi 2 design checks kyu aa rahe hain when I am viewing result on 1
+        // design check only"). `IRA_ON_FILE_Q` is a precondition, not a check:
+        // when something is missing it is the ONLY thing there is to say, and
+        // when nothing is it says nothing the summary line and the file chips
+        // above it have not already said. Only its failing form is ever read
+        // back (see `lastWasMissing`), so dropping the passing one costs the
+        // next run nothing.
         const qa = missing.length > 0
           ? [{ q: IRA_ON_FILE_Q, a: `No — ${list(missing)} ${missing.length === 1 ? 'isn’t' : 'aren’t'} on file yet.`, pass: false }, ...(stoodFailed ? [stoodLine] : [])]
-          : [{ q: IRA_ON_FILE_Q, a: 'Yes — every required element is on file or accounted for.', pass: true }, ...designCheckQA(p.text, willFail)];
+          : designCheckQA(p.text, willFail);
         const summary = missing.length > 0
           ? `${cap(the(missing))} ${missing.length === 1 ? 'isn’t' : 'aren’t'} on file yet, so Ira couldn’t confirm this check.`
           : willFail
@@ -3494,14 +3503,16 @@ export function IcfrProvider({ children, initialRole = 'auditor', seedMeta }: { 
       if (!files.length) return prev;
       const draft = designRetestDraft(prev, target, me);
       if (!draft?.checks?.length) return prev;
-      const list = files.length < 2 ? files.join('') : `${files.slice(0, -1).join(', ')} and ${files[files.length - 1]}`;
       let failed = 0;
       const checks = draft.checks.map(x => {
         const stoodFailed = x.result === 'Fail';
         if (stoodFailed) failed += 1;
         const res: TestResult = stoodFailed ? 'Fail' : 'Pass';
+        // One check, one answer — the same rule the first run follows. The fix
+        // evidence is named in the summary and carried in `fileName` below, and
+        // this path already returned if there was none, so a row saying it is
+        // on file could only ever pass and could only ever be noise.
         const qa = [
-          { q: RETEST_FIX_ON_FILE_Q, a: `Yes — ${list}.`, pass: true },
           ...(stoodFailed ? [{ q: IRA_STOOD_FAILED_Q, a: 'Yes — it was marked failed before Ira ran.', pass: false }] : []),
           ...designCheckQA(x.text, stoodFailed),
         ];
