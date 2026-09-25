@@ -616,6 +616,59 @@ export default function ScopingWizard({ onCancel, onCreated, typePreselected, on
     return names.map(p => ({ value: p, label: racmProcessNames.includes(p) ? p : `${p} · no RACM yet` }));
   }, [racmProcessNames]);
 
+  // The companies come FIRST in this file as well as on screen (25 Sep). The
+  // Scope step asks which companies are in before it asks which processes, and
+  // now that the process list is drawn from the companies that are in, the
+  // derivation has to exist before `processRows` reads it.
+  // ── Companies ────────────────────────────────────────────────────────────
+  // The Basics table, weighed against performance materiality. Built straight
+  // off the table rather than through mergeScopeEntities: that merges by NAME,
+  // and two rows typed with one name would collapse into one company here.
+  // `inData` asks the captions — a company the trial balance has nothing for
+  // can't be weighed, so it is shown excluded rather than judged too small.
+  const entityRows = useMemo<ScopeEntityRow[]>(
+    () => entities.map(e => ({
+      id: e.id, name: e.name, type: e.type, parentId: e.parentId,
+      inRegister: true, inData: captions.some(c => c.entityId === e.id),
+    })),
+    [entities, captions],
+  );
+  const totals = useMemo(() => entityTotalsOf(captions), [captions]);
+  const scope = useMemo(
+    () => deriveEntityScope(entityRows, totals, perf, money, hasTb),
+    [entityRows, totals, perf, hasTb],
+  );
+  /** Where the user overruled the derivation, by entity id. */
+  const [overrides, setOverrides] = useState<Record<string, boolean>>({});
+  /** Why, by entity id — required before Continue. Saved vs being typed, with
+   *  the same Save / Cancel meaning as the process notes. */
+  const [scopeNotes, setScopeNotes] = useState<Record<string, string>>({});
+  const [noteDrafts, setNoteDrafts] = useState<Record<string, string>>({});
+  /** In scope after the user has had their say. A company the trial balance
+   *  never mentioned can't be overruled in — there is nothing to test it on. */
+  const companyInScope = (r: DerivedScopeRow) =>
+    r.status === 'absent' ? false : overrides[r.id] ?? (r.status === 'tb' || r.status === 'coverage');
+  const scopedEntities = scope.rows.filter(companyInScope);
+
+  /**
+   * IS THIS RACM WRITTEN FOR A COMPANY THAT IS IN SCOPE? (user, 25 Sep —
+   * "by process mein jo upar entity selected hai, sirf usi ke related process
+   * aur controls dikhne chahiye. Saare entities ke nahi dikhai denge.")
+   *
+   * The step used to list every process and every RACM the tab holds, whoever
+   * they belonged to, and only PRE-TICK the ones written for an in-scope
+   * company (`defaultPicksFor`). So scoping one subsidiary still showed the
+   * other twelve companies' processes and controls, and a control could be
+   * ticked into an engagement that does not cover the company it belongs to.
+   *
+   * A matrix with NO company on it is not tied to one, so it stays — hiding it
+   * would lose a RACM that is legitimately group-wide.
+   */
+  const racmInScope = useCallback(
+    (r: LibraryRacm) => !r.entity || scopedEntities.some(e => sameCompany(e.name, r.entity)),
+    [scopedEntities],
+  );
+
   // ══ S11 · Scope ══════════════════════════════════════════════════════════
   // New audit's Scope step without its entity / RACM either-or: processes at
   // the top (Ira's call, overruled with a note), the companies beneath (the
@@ -623,9 +676,22 @@ export default function ScopingWizard({ onCancel, onCreated, typePreselected, on
   // has — the RACMs each in-scope process is tested with, picked off the tab.
 
   // ── Processes ────────────────────────────────────────────────────────────
+  /** The material accounts belonging to the companies ticked in above. A
+   *  company taken out of scope takes its accounts — and any process only it
+   *  ran — off this list with it. */
+  const scopedMaterialRows = useMemo(() => {
+    const inIds = new Set(scopedEntities.map(e => e.id));
+    return materialRows.filter(c => inIds.has(c.entityId));
+  }, [materialRows, scopedEntities]);
+  /** …and the processes the in-scope companies keep a RACM for, which is what
+   *  fills the quiet tail under "Show more". */
+  const scopedRacmProcessNames = useMemo(
+    () => Array.from(new Set(libraryRacms.filter(r => racmStatus(r).status !== 'Draft' && racmInScope(r)).map(r => normaliseProcess(r.process)))),
+    [libraryRacms, racmInScope],
+  );
   const processRows = useMemo(
-    () => recommendProcesses(materialRows.map(c => ({ balance: c.balance, process: processOf(c) })), racmProcessNames),
-    [materialRows, processOf, racmProcessNames],
+    () => recommendProcesses(scopedMaterialRows.map(c => ({ balance: c.balance, process: processOf(c) })), scopedRacmProcessNames),
+    [scopedMaterialRows, processOf, scopedRacmProcessNames],
   );
   /** Where the user overruled Ira, by process. Absent means "as recommended" —
    *  `true` is a qualitative pick, `false` a recommended process taken out. */
@@ -637,11 +703,24 @@ export default function ScopingWizard({ onCancel, onCreated, typePreselected, on
   /** The qualitative reason, saved and draft. '' in a draft = not picked yet. */
   const [procReasons, setProcReasons] = useState<Record<string, string>>({});
   const [procReasonDrafts, setProcReasonDrafts] = useState<Record<string, string>>({});
-  /** The one process whose RACM list is open (user ask, 17 Sep: RACMs are
-   *  picked inside the process row). One at a time keeps the step short.
-   *  `undefined` until Scope first shows — then it opens the first in-scope
-   *  process still waiting on a RACM, and the user drives it from there. */
-  const [openProc, setOpenProc] = useState<string | null | undefined>(undefined);
+  /** WHICH processes have their RACM list open — as many at once as the user
+   *  wants (user, 25 Sep: "user should be able to select multiple processes ek
+   *  time pe. ek process ka ye kabhi bhi testing nahi hogi").
+   *
+   *  Ticking a process was already independent of every other; what was not was
+   *  this. It held ONE process (17 Sep — "one at a time keeps the step short"),
+   *  so ticking a second process folded the first one's RACM list away
+   *  mid-pick. An engagement is never scoped to a single process, so the shape
+   *  that keeps the step short was the shape that fought the ordinary case.
+   *
+   *  `undefined` until Scope first shows — then the first in-scope process
+   *  still waiting on a RACM opens, and the user drives it from there. */
+  const [openProcs, setOpenProcs] = useState<Set<string> | undefined>(undefined);
+  const toggleProcOpen = (process: string) => setOpenProcs(prev => {
+    const next = new Set(prev ?? []);
+    if (!next.delete(process)) next.add(process);
+    return next;
+  });
   /** Processes with no material accounts sit behind "Show more" unless one is
    *  in scope or was moved — they are the long, quiet tail of the list. */
   const [showAllProcs, setShowAllProcs] = useState(false);
@@ -668,7 +747,9 @@ export default function ScopingWizard({ onCancel, onCreated, typePreselected, on
   const flipProcess = (r: ProcessScopeRow) => {
     const next = !procInScope(r);
     // Switching a process in opens its RACM list — picking them comes next.
-    if (next) setOpenProc(r.process);
+    // Added to whatever is already open, never replacing it: the process ticked
+    // a moment ago is usually still being worked on.
+    if (next) setOpenProcs(prev => new Set(prev ?? []).add(r.process));
     if (next === r.recommended) { clearProcMove(r.process); return; }
     setProcOverrides(prev => ({ ...prev, [r.process]: next }));
     setProcNoteDrafts(prev => ({ ...prev, [r.process]: procNotes[r.process] ?? '' }));
@@ -722,35 +803,6 @@ export default function ScopingWizard({ onCancel, onCreated, typePreselected, on
   const quietProcCount = processRows.filter(isQuietProc).length;
   const visibleProcs = showAllProcs ? processRows : processRows.filter(r => !isQuietProc(r));
 
-  // ── Companies ────────────────────────────────────────────────────────────
-  // The Basics table, weighed against performance materiality. Built straight
-  // off the table rather than through mergeScopeEntities: that merges by NAME,
-  // and two rows typed with one name would collapse into one company here.
-  // `inData` asks the captions — a company the trial balance has nothing for
-  // can't be weighed, so it is shown excluded rather than judged too small.
-  const entityRows = useMemo<ScopeEntityRow[]>(
-    () => entities.map(e => ({
-      id: e.id, name: e.name, type: e.type, parentId: e.parentId,
-      inRegister: true, inData: captions.some(c => c.entityId === e.id),
-    })),
-    [entities, captions],
-  );
-  const totals = useMemo(() => entityTotalsOf(captions), [captions]);
-  const scope = useMemo(
-    () => deriveEntityScope(entityRows, totals, perf, money, hasTb),
-    [entityRows, totals, perf, hasTb],
-  );
-  /** Where the user overruled the derivation, by entity id. */
-  const [overrides, setOverrides] = useState<Record<string, boolean>>({});
-  /** Why, by entity id — required before Continue. Saved vs being typed, with
-   *  the same Save / Cancel meaning as the process notes. */
-  const [scopeNotes, setScopeNotes] = useState<Record<string, string>>({});
-  const [noteDrafts, setNoteDrafts] = useState<Record<string, string>>({});
-  /** In scope after the user has had their say. A company the trial balance
-   *  never mentioned can't be overruled in — there is nothing to test it on. */
-  const companyInScope = (r: DerivedScopeRow) =>
-    r.status === 'absent' ? false : overrides[r.id] ?? (r.status === 'tb' || r.status === 'coverage');
-  const scopedEntities = scope.rows.filter(companyInScope);
   /** What the numbers said before anyone touched it. */
   const derivedIn = (r: DerivedScopeRow) => r.status === 'tb' || r.status === 'coverage';
 
@@ -833,14 +885,14 @@ export default function ScopingWizard({ onCancel, onCreated, typePreselected, on
   // still appears — its published half is scopable, and `copyRacmControls`
   // takes only that half.
   const racmsFor = useCallback(
-    (process: string) => libraryRacms.filter(r => normaliseProcess(r.process) === process && racmStatus(r).status !== 'Draft'),
-    [libraryRacms],
+    (process: string) => libraryRacms.filter(r => normaliseProcess(r.process) === process && racmStatus(r).status !== 'Draft' && racmInScope(r)),
+    [libraryRacms, racmInScope],
   );
   /** Drafts for a process, named as the reason this list looks emptier than the
    *  RACM tab does — hiding them silently would read as a RACM gone missing. */
   const draftRacmsFor = useCallback(
-    (process: string) => libraryRacms.filter(r => normaliseProcess(r.process) === process && racmStatus(r).status === 'Draft'),
-    [libraryRacms],
+    (process: string) => libraryRacms.filter(r => normaliseProcess(r.process) === process && racmStatus(r).status === 'Draft' && racmInScope(r)),
+    [libraryRacms, racmInScope],
   );
   /** The user's ticks, by process. Absent means "the default": every RACM
    *  written for a company in scope. Once a process's list is touched it is the
@@ -1002,11 +1054,12 @@ export default function ScopingWizard({ onCancel, onCreated, typePreselected, on
   // First look at Scope: open the first in-scope process still waiting on a
   // RACM (else the first in scope). After that the user opens and folds.
   useEffect(() => {
-    if (step !== SCOPE_STEP || openProc !== undefined) return;
-    setOpenProc((pickedByProcess.find(g => g.racms.length === 0) ?? pickedByProcess[0])?.process ?? null);
-    // Only the arrival matters — later ticks must not move the open list.
+    if (step !== SCOPE_STEP || openProcs !== undefined) return;
+    const first = (pickedByProcess.find(g => g.racms.length === 0) ?? pickedByProcess[0])?.process;
+    setOpenProcs(new Set(first ? [first] : []));
+    // Only the arrival matters — later ticks must not fold anything.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [step, openProc]);
+  }, [step, openProcs]);
   /** Two ticked RACMs holding one control ID — two matrices written for one
    *  process at one company, both numbering from R001/C001. Flag and block
    *  (decision 9): copying both would put two controls under one ID. */
@@ -2845,9 +2898,12 @@ export default function ScopingWizard({ onCancel, onCreated, typePreselected, on
                     className="overflow-hidden"
                   >
                     <p className="text-[0.75rem] text-ink-500 mb-3 leading-relaxed">
+                      {/* The list is drawn from the companies ticked above, so
+                          it says so — otherwise a process the user knows the
+                          group runs looks like it has gone missing. */}
                       {recommendedCount > 0
-                        ? `Ira ticked the ${recommendedCount === 1 ? 'process' : `${recommendedCount} processes`} with material accounts. Choose the RACMs each one is tested with — every control in a ticked RACM is in scope; open it to take one out.`
-                        : 'No process has material accounts in the trial balance. Tick the ones to test and choose their RACMs.'}
+                        ? `${scopedEntities.length === 1 ? 'For the company in scope' : `Across the ${scopedEntities.length} companies in scope`}, Ira ticked the ${recommendedCount === 1 ? 'process' : `${recommendedCount} processes`} with material accounts. Tick as many as this engagement tests, and choose the RACMs each one is tested with — every control in a ticked RACM is in scope; open it to take one out.`
+                        : `No process has material accounts for the ${scopedEntities.length === 1 ? 'company' : 'companies'} in scope. Tick the ones to test and choose their RACMs.`}
                     </p>
                     {crossClashLines.length > 0 && (
                       <ClashNote lines={crossClashLines} />
@@ -2856,9 +2912,14 @@ export default function ScopingWizard({ onCancel, onCreated, typePreselected, on
                     <div className="rounded-lg border border-canvas-border bg-white overflow-hidden">
                       {processRows.length === 0 ? (
                         <p className="text-[0.75rem] text-ink-400 px-4 py-6 text-center">
-                          {ACCOUNT_MAPPING
-                            ? 'No material accounts mapped and no RACMs on the RACM tab yet.'
-                            : 'No material accounts in the trial balance and no RACMs on the RACM tab yet.'}
+                          {/* An empty list now has two different causes, and
+                              saying the wrong one sends the user to the RACM tab
+                              to fix something that is not broken. */}
+                          {scopedEntities.length === 0
+                            ? 'No company is in scope — tick one above and its processes appear here.'
+                            : ACCOUNT_MAPPING
+                              ? 'No material accounts mapped, and no RACMs for the companies in scope.'
+                              : 'No material accounts in the trial balance, and no RACMs for the companies in scope.'}
                         </p>
                       ) : (
                         <>
@@ -2878,7 +2939,7 @@ export default function ScopingWizard({ onCancel, onCreated, typePreselected, on
                             const allTicked = !nothingOnTab && picks.length === onTab.length && picks.every(x => outOf(x).length === 0);
                             const someTicked = picks.length > 0 && !allTicked;
                             const groupLines = on ? clashLinesFor(picks) : [];
-                            const listOpen = on && openProc === r.process;
+                            const listOpen = on && !!openProcs?.has(r.process);
                             const listId = `scope-racms-${r.process.replace(/\W+/g, '-').toLowerCase()}`;
                             /** What the RACM handle says while folded. Short: it now
                              *  shares the name row with the process and its numbers,
@@ -2935,7 +2996,7 @@ export default function ScopingWizard({ onCancel, onCreated, typePreselected, on
                                   {on && (
                                     <button
                                       type="button"
-                                      onClick={e => { e.stopPropagation(); setOpenProc(listOpen ? null : r.process); }}
+                                      onClick={e => { e.stopPropagation(); toggleProcOpen(r.process); }}
                                       aria-expanded={listOpen}
                                       aria-controls={listId}
                                       title={racmHandleLabel}

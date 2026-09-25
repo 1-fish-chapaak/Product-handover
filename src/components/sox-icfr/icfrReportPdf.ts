@@ -2,7 +2,8 @@ import { buildAuditReport } from './icfrAuditReport';
 import { periodLine, type PaperBlock } from './icfrWorkingPaper';
 import type { Control, IcfrEngagement } from './types';
 
-// The audit report as a real .pdf — the format it is actually issued in.
+// The Internal Controls Status Report as a real .pdf — the format it is
+// actually issued in.
 //
 // The user's rule (Aug 2026): the report goes out as a PDF first; preview and
 // the .xlsx export stay as options. All three read the SAME sheets from
@@ -171,7 +172,7 @@ function blockContent(b: PaperBlock): Content[] {
 // ─── entry point ───
 
 /**
- * Compose and download the audit report as a real .pdf — each sheet a page.
+ * Compose and download the status report as a real .pdf — each sheet a page.
  *
  * Resolves once the browser has been handed the file. Throws if pdfmake fails
  * to load, so the caller can say so rather than silently doing nothing.
@@ -179,7 +180,7 @@ function blockContent(b: PaperBlock): Content[] {
 export async function downloadAuditReportPdf(eng: IcfrEngagement, controls: Control[] = eng.controls): Promise<void> {
   const pdfMake = await loadPdfMake();
   const sheets = buildAuditReport(eng, controls);
-  const reportName = `Audit_Report_ICFR_${eng.code}`;
+  const reportName = `Internal_Controls_Status_Report_${eng.code}`;
 
   const content: Content[] = [];
   sheets.forEach((sheet, i) => {
@@ -197,7 +198,7 @@ export async function downloadAuditReportPdf(eng: IcfrEngagement, controls: Cont
 
   const docDefinition = {
     info: {
-      title: `Audit report — ${eng.name} (${eng.code})`,
+      title: `Internal Controls Status Report — ${eng.name} (${eng.code})`,
       author: eng.preparer,
       subject: `${eng.framework} · ${periodLine(eng)}`,
       creator: 'Irame',

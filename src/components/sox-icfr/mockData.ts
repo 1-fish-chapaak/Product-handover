@@ -1,7 +1,7 @@
 import { entityShort } from '../audit/sox-testing/soxTestingData';
 import { normaliseProcess, programmeFor } from './auditScope';
 import { NEW_FLOW_ENGAGEMENT_ID } from './flow';
-import { requiredFilesOf, requiredFilesReady, stepResult, titleFromRisk, validationQA } from './helpers';
+import { designCheckQA, requiredFilesOf, requiredFilesReady, stepResult, titleFromRisk } from './helpers';
 import { entityCodeFor, processCodeFor, renameEngagementIds } from './racmIds';
 import { defaultSamplingMethodology, FIVE_W_1H, ipeChecklist, ROUND_TAG, ROUND_WINDOW_LABEL } from './types';
 import type {
@@ -76,7 +76,7 @@ const activityOf = (owner: string, subProcess: string, frequency: Frequency, nat
 
 let _p = 0;
 const point = (text: string, result: DesignPoint['result'] = 'Pass', wfName = 'Design walkthrough check', stepId?: string): DesignPoint =>
-  ({ id: `dp${++_p}`, text, stepId, result, workflowId: `wf-tod-${_p}`, workflowName: wfName, workflowRunRef: result !== 'Not tested' ? 'run · validated' : undefined, validation: result !== 'Not tested' ? { qa: validationQA(text, result === 'Fail'), at: '14 Apr' } : undefined });
+  ({ id: `dp${++_p}`, text, stepId, result, workflowId: `wf-tod-${_p}`, workflowName: wfName, workflowRunRef: result !== 'Not tested' ? 'run · validated' : undefined, validation: result !== 'Not tested' ? { qa: designCheckQA(text, result === 'Fail'), at: '14 Apr' } : undefined });
 
 let _s = 0;
 const step = (code: string, description: string, assertion: Assertion, precision: string, procedures: TestProcedure[], result: OperatingStep['result'] = 'Not tested', extra: Partial<OperatingStep> = {}): OperatingStep => {
@@ -2064,7 +2064,7 @@ function rfDemoDeficiencies(controls: Control[]): Deficiency[] {
 /** Identity carried in from the app-level Engagement record (engagements.ts). */
 export interface SeedMeta { id?: string; code?: string; name?: string; /** The company being audited. Carried because the workspace clones the flagship
   *  seed: without it every engagement inherited the flagship's own company, and
-  *  the audit report — which names the entity in its title and its first table —
+  *  the status report — which names the entity in its title and its first table —
   *  issued under the wrong client. */ entity?: string; process?: string; /** Scoping-derived process list — when present, the workspace seeds one RACM per entry. */ processes?: string[]; /** Testing state for scoping-derived RACMs — see Engagement.soxSeedMode. */ seedMode?: 'fresh' | 'live' | 'carried'; periodStart?: string; periodEnd?: string; owner?: string; materiality?: number; performanceMateriality?: number; clearlyTrivial?: number; sdBandPct?: number; /** Controls copied from the RACM tab when the engagement was created (S11) — when present they are the register, as picked. */ controls?: Control[]; /** The sampling approach the lead proposed at creation (#22) — when present it replaces the flagship's agreed one, proposal and all, so the workspace opens on what was just proposed and still waiting to be signed. */ sampling?: SamplingMethodology; }
 
 /** A group is recorded with its listing status attached — "Altura Infra Holdings
@@ -2217,9 +2217,19 @@ function seedEngagementBody(meta?: SeedMeta): IcfrEngagement {
   // Picked from the RACM tab at creation (S11): the copies the engagement took,
   // already carrying their companies and IDs.
   const picked = meta.controls ? structuredClone(meta.controls) : null;
+  // Both branches build through the SAME builder (25 Sep). `racmTemplate` alone
+  // returns bare shells — `design: designTrack('Not tested', [], [])` — so the
+  // classic single-process engagements (ENG-002 O2C, ENG-010 R2R) arrived with
+  // no design elements, no attributes and no design checks: a Test of Design
+  // step with nothing in it to test, and a Test of Operating Effectiveness with
+  // nothing to sample. That is not a "fresh" state, it is an empty one, and it
+  // made those two engagements the only SOX engagements a walkthrough could not
+  // be started in. Scoping-derived engagements already got the full body from
+  // racmTemplateForProcesses; routing the default through it gives the classic
+  // ones the same register, untested, which is what fresh should mean.
   const built = picked ?? (meta.processes
     ? (meta.processes.length ? racmTemplateForProcesses(meta.processes, meta.seedMode, rich) : [])
-    : racmTemplate(proc));
+    : racmTemplateForProcesses([proc], meta.seedMode, rich));
   // Every control gets the company it is performed at, plus — where its process
   // reaches further — the companies its one conclusion answers for. One row per
   // control either way. Only Altura's scoping actually spans companies today, so

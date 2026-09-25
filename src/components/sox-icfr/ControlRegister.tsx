@@ -336,7 +336,7 @@ export default function ControlRegister() {
           {/* The working paper, back on the toolbar (Aug 2026). It was parked as
               clutter, but parking it took the ENGAGEMENT paper's only door with
               it: buildIcfrPaper still assembles Index, Control Summary, TOE and
-              Scope, and nothing opened them. Audit report is a different
+              Scope, and nothing opened them. The status report is a different
               document — what management reads, not the evidence file — so it was
               never a substitute. NAMED like its sibling (user ask, Aug 2026):
               two documents whose difference is a rule cannot have one of them
@@ -344,9 +344,11 @@ export default function ControlRegister() {
               "what is this?", which is exactly the question it caused.
               Absent for the risk owner: see the note on the control page. */}
           {role !== 'risk-owner' && <button onClick={() => setWpPreview(true)} title="Working paper — the audit's evidence file, every control the filters leave visible" className="h-9 px-3 inline-flex items-center gap-1.5 rounded-lg border border-canvas-border text-[12.5px] font-semibold text-ink-600 hover:text-ink-900 hover:border-ink-300 transition-colors cursor-pointer"><FileSpreadsheet size={14} /> Working paper</button>}
-          {/* the audit report — what management and the board actually read: the
-              observations, what they are worth, and who has committed to the fix */}
-          {role !== 'risk-owner' && <button onClick={() => setReportPreview(true)} title="Audit report — observations and the management action plan" className="h-9 px-3 inline-flex items-center gap-1.5 rounded-lg border border-canvas-border text-[12.5px] font-semibold text-ink-600 hover:text-ink-900 hover:border-ink-300 transition-colors cursor-pointer"><FileText size={14} /> Audit report</button>}
+          {/* the Internal Controls Status Report — what management and the board
+              actually read: the observations, what they are worth, and who has
+              committed to the fix. The button says "Reports" (user, 25 Sep): the
+              full name is the document's, not a toolbar's. */}
+          {role !== 'risk-owner' && <button onClick={() => setReportPreview(true)} title="Internal Controls Status Report — observations and the management action plan" className="h-9 px-3 inline-flex items-center gap-1.5 rounded-lg border border-canvas-border text-[12.5px] font-semibold text-ink-600 hover:text-ink-900 hover:border-ink-300 transition-colors cursor-pointer"><FileText size={14} /> Reports</button>}
           {/* Add RACM (S11) — copies controls in from RACMs on the Engagements
               page's RACM tab, into the ENGAGEMENT. Engagement level only: inside
               an audit this register is that cycle's scope, which was fixed when

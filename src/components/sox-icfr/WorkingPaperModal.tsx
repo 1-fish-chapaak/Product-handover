@@ -205,8 +205,8 @@ function EngagementSignoff({ eng, onAttest }: { eng: IcfrEngagement; onAttest: (
 }
 
 export default function WorkingPaperModal({ eng, control, controls, report, onClose, onDownload }: { eng: IcfrEngagement; control?: Control; controls?: Control[];
-  /** Preview the AUDIT REPORT instead of a working paper. Same renderer and the
-   *  same block union — but NOT the same reading model.
+  /** Preview the INTERNAL CONTROLS STATUS REPORT instead of a working paper.
+   *  Same renderer and the same block union — but NOT the same reading model.
    *
    *  A working paper previews sheet by sheet because it exports to a workbook,
    *  and the tabs on screen are that workbook's tabs (Jul 28). The report is not
@@ -248,7 +248,7 @@ export default function WorkingPaperModal({ eng, control, controls, report, onCl
   // library exports (and previews) a filtered paper
   const included = controls ?? eng.controls;
   // the report is issued as a PDF (user rule, Aug 2026); the papers stay .xlsx
-  const fileName = report ? `Audit_Report_ICFR_${eng.code}.pdf`
+  const fileName = report ? `Internal_Controls_Status_Report_${eng.code}.pdf`
     : control ? `Working_Paper_${control.id}.xlsx`
     : `Working_Paper_ICFR_${eng.code}.xlsx`;
 
@@ -296,7 +296,7 @@ export default function WorkingPaperModal({ eng, control, controls, report, onCl
               papers as a workbook */}
           <h3 className="text-[14px] font-bold text-ink-900 inline-flex items-center gap-2">
             {report ? <FileText size={15} className="text-brand-600" /> : <FileSpreadsheet size={15} className="text-brand-600" />}
-            {report ? 'Audit report — preview' : 'Working paper — preview'}
+            {report ? 'Internal Controls Status Report — preview' : 'Working paper — preview'}
           </h3>
           <button onClick={onClose} className="h-8 w-8 inline-flex items-center justify-center rounded-lg text-ink-400 hover:text-ink-800 hover:bg-paper-50 cursor-pointer"><X size={16} /></button>
         </div>

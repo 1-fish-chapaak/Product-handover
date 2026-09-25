@@ -1583,6 +1583,107 @@ export const DEFAULT_SOP_PROMPT = `You are extracting a SOX / ICFR risk and cont
 6. Cite the SOP section every row came from (for example "§ 4.2").
 7. Where the SOP is silent but a control is clearly expected for the risk, add it separately and mark it "Suggested", so a reviewer can accept or reject it.`;
 
+/**
+ * WHAT THE PROMPT ACTUALLY DOES (25 Sep).
+ *
+ * Until now `draftRowsFromSop` opened with `void prompt` — the draft read the
+ * same whatever you typed. That was honest while the prompt was scenery, but
+ * the prompt is now the one place a reviewer shapes the extraction: edit it,
+ * re-extract, and the rows AND the flowchart follow. A box that invites an
+ * instruction and then ignores it is worse than no box.
+ *
+ * There is no model behind this and no document to read, so the prompt is read
+ * against a vocabulary that is small, exact and stated on screen. Two kinds of
+ * instruction count:
+ *
+ *   WHAT IS STILL ASKED FOR — the default prompt's own numbered points. Delete
+ *   point 7 and no "Suggested" rows are drafted; delete point 6 and no § refs
+ *   are cited; delete point 5 and no attributes or evidence come across. The
+ *   prompt already said these things, so honouring their absence costs the
+ *   reader nothing to learn.
+ *
+ *   WHAT IS NARROWED — "only key controls", "preventive only", "manual only",
+ *   "at most 6 controls". Each needs a narrowing word (only / just / at most /
+ *   exclude / skip), never a bare mention: the default prompt lists
+ *   "(Preventive / Detective)" as the field's values, and a rule that read that
+ *   as a filter would empty the draft the first time anybody pressed Continue.
+ *
+ * Anything else is left alone and `read` stays quiet about it, so Review can
+ * say what was honoured rather than implying everything was.
+ */
+export interface PromptRules {
+  /** Point 7 still asked for: draft the controls the SOP implies but omits. */
+  suggestExtras: boolean;
+  /** Point 6 still asked for: cite "§ 4.2" against every row. */
+  citeSections: boolean;
+  /** Point 5 still asked for: test attributes and the evidence each needs. */
+  listAttributes: boolean;
+  /** Key controls alone. */
+  keyOnly: boolean;
+  /** Empty means every type / nature. */
+  types: ControlType[];
+  natures: Nature[];
+  /** A cap on how many controls are drafted. */
+  limit: number | null;
+  /** What was honoured, in the reader's words — for Review to print back. */
+  read: string[];
+  /** The prompt was edited but nothing in it could be read. */
+  editedButUnread: boolean;
+}
+
+/** `only|just|exclusively <term>` or `<term> only` — a narrowing, not a mention. */
+const narrowedTo = (p: string, term: string): boolean =>
+  new RegExp(`\\b(?:only|just|exclusively)\\b[^.\n]{0,24}\\b${term}\\b`, 'i').test(p)
+  || new RegExp(`\\b${term}\\b[^.\n]{0,16}\\b(?:only|alone)\\b`, 'i').test(p);
+
+/** `exclude|skip|without|omit|no|don't <term>` — the other direction. */
+const ruledOut = (p: string, term: string): boolean =>
+  new RegExp(`\\b(?:exclude|excluding|skip|without|omit|no|not|don'?t|do not|never)\\b[^.\n]{0,24}\\b${term}\\b`, 'i').test(p);
+
+/** Still asked for: mentioned, and not mentioned in order to refuse it. */
+const stillAsked = (p: string, term: string): boolean =>
+  new RegExp(`\\b${term}`, 'i').test(p) && !ruledOut(p, term);
+
+export function readPromptRules(prompt: string): PromptRules {
+  const p = String(prompt ?? '');
+  const read: string[] = [];
+
+  const suggestExtras = stillAsked(p, 'suggest');
+  if (!suggestExtras) read.push('no suggested controls');
+  const citeSections = stillAsked(p, 'section');
+  if (!citeSections) read.push('no SOP section refs');
+  const listAttributes = stillAsked(p, 'attribute');
+  if (!listAttributes) read.push('no test attributes');
+
+  const keyOnly = narrowedTo(p, 'key');
+  if (keyOnly) read.push('key controls only');
+
+  const types = CONTROL_TYPES.filter(t => narrowedTo(p, t) || (ruledOut(p, other(t)) && !narrowedTo(p, other(t))));
+  if (types.length === 1) read.push(`${types[0]!.toLowerCase()} controls only`);
+
+  const natures = NATURES.filter(n => narrowedTo(p, n.replace('-', '.?')));
+  if (natures.length && natures.length < NATURES.length) read.push(`${natures.map(n => n.toLowerCase()).join(' and ')} controls only`);
+
+  // "6 controls", "at most 6 controls", "no more than 6 controls". A bare digit
+  // never counts — the prompt's own points are numbered.
+  const cap = /\b(?:at most|no more than|up to|draft|give me|extract)?\s*(\d{1,2})\s+controls?\b/i.exec(p);
+  const limit = cap ? Number(cap[1]) : null;
+  if (limit) read.push(`at most ${limit} controls`);
+
+  return {
+    suggestExtras, citeSections, listAttributes, keyOnly,
+    types: types.length === 1 ? types : [],
+    natures: natures.length && natures.length < NATURES.length ? natures : [],
+    limit,
+    read,
+    editedButUnread: p.trim() !== DEFAULT_SOP_PROMPT.trim() && read.length === 0,
+  };
+}
+
+const CONTROL_TYPES: ControlType[] = ['Preventive', 'Detective'];
+const NATURES: Nature[] = ['Manual', 'Automated', 'IT-dependent'];
+const other = (t: ControlType): ControlType => (t === 'Preventive' ? 'Detective' : 'Preventive');
+
 /** Draft review rows for `process` from its template once the prompt is
  *  validated: most rows `origin: 'sop'` with a section ref, roughly one in four
  *  `origin: 'suggested'`. Deterministic for the same process + file name. */
@@ -1596,8 +1697,16 @@ export const DEFAULT_SOP_PROMPT = `You are extracting a SOX / ICFR risk and cont
  * on it saying why.
  */
 export function draftRowsFromSop(process: string, fileName: string, prompt: string, existing: Control[], entity = ''): ImportRow[] {
-  void prompt; // validated upstream; the draft reads the same whatever it says
-  const template = racmTemplateForProcesses([process], 'fresh');
+  const rules = readPromptRules(prompt);
+  // What the prompt narrowed the draft to. Filtering BEFORE the walk rather
+  // than after it keeps the row numbers and the § refs consecutive: a draft
+  // that reads 1, 2, 5 says a row was lost, when in truth it was never asked
+  // for.
+  const template = racmTemplateForProcesses([process], 'fresh').filter(c =>
+    (!rules.keyOnly || c.isKey)
+    && (!rules.types.length || rules.types.includes(c.type))
+    && (!rules.natures.length || rules.natures.includes(c.nature)))
+    .slice(0, rules.limit ?? undefined);
   const seed = hashString(`${process}|${fileName}`);
   const offset = seed % 4;
   const firstSection = 2 + ((seed >>> 3) % 3);
@@ -1606,9 +1715,11 @@ export function draftRowsFromSop(process: string, fileName: string, prompt: stri
   const out: ImportRow[] = [];
 
   template.forEach((c, i) => {
-    const suggested = (i + offset) % 4 === 3;
+    // Point 7 of the prompt is what asks for these. Take it out and Ira stops
+    // offering controls the SOP never described.
+    const suggested = rules.suggestExtras && (i + offset) % 4 === 3;
     let sectionRef: string | undefined;
-    if (!suggested) {
+    if (!suggested && rules.citeSections) {
       const minor = (perSection.get(c.subProcess) ?? 0) + 1;
       perSection.set(c.subProcess, minor);
       sectionRef = `§ ${firstSection + subProcesses.indexOf(c.subProcess)}.${minor}`;
@@ -1643,8 +1754,10 @@ export function draftRowsFromSop(process: string, fileName: string, prompt: stri
       // different control, so these rows import rather than reading as repeats.
       // Every third row is left verbatim: those genuinely ARE already on file,
       // and catching them is the other half of the job.
-      attributes: [...steps.map(s => s.description), ...(saysMore ? [`The ${c.subProcess.toLowerCase()} record names who performed it and when${sectionRef ? ` (${sectionRef})` : ''}`] : [])].join('\n'),
-      controlEvidence: evidence.join('; '),
+      attributes: rules.listAttributes
+        ? [...steps.map(s => s.description), ...(saysMore ? [`The ${c.subProcess.toLowerCase()} record names who performed it and when${sectionRef ? ` (${sectionRef})` : ''}`] : [])].join('\n')
+        : '',
+      controlEvidence: rules.listAttributes ? evidence.join('; ') : '',
       // control-level checks only — attribute-level ones belong to their attribute
       designChecks: [...c.design.points.filter(p => !p.stepId).map(p => p.text),
         ...(saysMore ? [`The procedure requires the ${c.nature === 'Automated' ? 'system to enforce this without an override' : 'reviewer to be someone other than the preparer'}${sectionRef ? ` (${sectionRef})` : ''}`] : [])].join('\n'),

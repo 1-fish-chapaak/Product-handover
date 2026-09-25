@@ -8,7 +8,13 @@ import { periodLine, type IcfrSheet, type PaperBlock } from './icfrWorkingPaper'
 import type { Control, Deficiency, IcfrEngagement } from './types';
 
 /**
- * The audit report — the deliverable, which the working paper is not.
+ * The Internal Controls Status Report — the deliverable, which the working
+ * paper is not.
+ *
+ * Named on 25 Sep. The file and its exports still read `auditReport`: the
+ * symbols are internal, the two live call sites are named here, and a rename
+ * would churn a shared worktree for no reader outside this module. The toolbar
+ * button says only "Reports" — the full name belongs to the document.
  *
  * The working paper is the evidence: what was tested, on what, and what it
  * showed — written for a reviewer and a regulator. This is the same testing
@@ -365,7 +371,7 @@ export function buildAuditReport(eng: IcfrEngagement, controls: Control[] = eng.
 
   const contents: IcfrSheet = {
     name: 'Contents', blocks: [
-      { kind: 'heading', text: `Audit report — ${eng.entity}`, sub: `${eng.name} (${eng.code}) · ${eng.framework} · ${periodLine(eng)}` },
+      { kind: 'heading', text: `Internal Controls Status Report — ${eng.entity}`, sub: `${eng.name} (${eng.code}) · ${eng.framework} · ${periodLine(eng)}` },
       {
         kind: 'table', title: 'Contents',
         note: `${body.length} sections — the report reads in this order`,
@@ -404,7 +410,7 @@ export function downloadAuditReport(eng: IcfrEngagement, controls: Control[] = e
     // sheet names cannot exceed 31 chars in xlsx
     XLSX.utils.book_append_sheet(wb, ws, sheet.name.slice(0, 31));
   }
-  XLSX.writeFile(wb, `Audit_Report_ICFR_${eng.code}.xlsx`);
+  XLSX.writeFile(wb, `Internal_Controls_Status_Report_${eng.code}.xlsx`);
 }
 
 function colWidths(rows: (string | number)[][], max = 90): XLSX.ColInfo[] {

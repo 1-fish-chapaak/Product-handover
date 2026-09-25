@@ -20,6 +20,7 @@ folder per tested control, each holding a **TOD** and a **TOE** folder.
 | Materiality | `altura-infra-group-trial-balance-fy26.xlsx` | 443 account rows, 8 companies — ties to the register |
 | Materiality | `altura-infra-group-general-ledger-fy26.xlsx` | 1,274 journal lines behind those captions |
 | Scope | `altura-p2p-racm-fy26.xlsx` | **10 P2P controls**, all 22 required columns, TOD checks + attributes on every row |
+| Population | `P2P_invoice_population_FY26.xlsx` | **3,286 invoices** — the population the sample is drawn from |
 | TOD / TOE | `<control>/TOD/` and `<control>/TOE/` | 32 evidence documents for the three tested controls |
 
 ### The three controls that get tested
@@ -112,11 +113,33 @@ Answer each design check, then conclude **Design effective**.
 > Steps ②–④ stay locked until a **reviewer approves** the design. Switch persona to the
 > reviewer and approve, or TOE cannot start.
 
-### 4 · Population and sample
+### 4 · Population
 
-Step ② Population → step ③ Sample drawing. Draw the sample.
+Step ② **Population**. The sample has to come out of something, so give the control a
+source file first.
 
-### 5 · Test of operating effectiveness
+- Press **Add a source file** and upload `P2P_invoice_population_FY26.xlsx`.
+- Answer **where it came from** — *System-generated report* — or it cannot be picked.
+- Filter it with something like:
+  `PO-based vendor invoices posted in FY 2025-26`
+- Extract. The population is now defined and the sample can be drawn off it.
+
+> The file is built so the number on screen and the number in the file agree: the app
+> states a source file's size from its **name**, and this one is exactly 3,286 rows.
+> Rename it and the two stop matching.
+
+It carries all 3,286 invoices for the year across the 8 companies — 3,018 of them
+PO-based — and the **25 invoices that appear in the TOE evidence are inside it**, so the
+sample traces back to the population it came from.
+
+Every other P2P control can draw on the same file once it is on the audit, which is what
+a real engagement does — one invoice register, many controls.
+
+### 5 · Sample
+
+Step ③ **Sample drawing**. Draw the sample off the population just defined.
+
+### 6 · Test of operating effectiveness
 
 Step ④. Each attribute lists the evidence it needs. Press **Upload several** and select
 **all** the files for that attribute from `C069 - Three-way match (automated, effective)/TOE/`.
@@ -132,7 +155,7 @@ mapping to do and no button to press afterwards.
 
 Pass each attribute, then conclude. **C069 is effective.**
 
-### 6 · The one that fails
+### 7 · The one that fails
 
 Repeat for **C070** using `C070 - Duplicate detection (FAILS - deficiency)/`.
 
@@ -144,7 +167,7 @@ it into deficiency management.
 The config extract shows why: `DUP-04 — normalise reference before compare: Off`. The
 duplicate check compares the invoice number as keyed, so a re-keyed reference slips past.
 
-### 7 · C065 if you want a manual control too
+### 8 · C065 if you want a manual control too
 
 `C065 - Invoice validation (manual, effective)/` — same shape, manual control, reviewer sign-off
 rather than system configuration.
