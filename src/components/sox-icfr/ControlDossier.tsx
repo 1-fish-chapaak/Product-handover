@@ -580,7 +580,11 @@ export function QAResultsModal({ title, validation, control, step, evidence, onC
                 return (
                   <div key={i} className={cn('flex items-start gap-3 rounded-lg -mx-2 px-2 py-1.5 transition-colors',
                     showEvidence && item.cite && 'cursor-pointer hover:bg-paper-50',
-                    on && 'bg-brand-50/70')}
+                    // Evidence blue, matching the mark on the document — the
+                    // selected answer and the passage it points at have to be
+                    // the same colour or the pairing reads as two unrelated
+                    // highlights (user, 25 Sep).
+                    on && 'bg-evidence-50')}
                     onClick={() => { if (showEvidence && item.cite) setActiveCite(on ? undefined : item.cite); }}>
                     <Tickmark result={item.pass ? 'Pass' : 'Fail'} size={18} />
                     <div className="min-w-0">
@@ -589,7 +593,7 @@ export function QAResultsModal({ title, validation, control, step, evidence, onC
                       {/* The citation, in the shape a working paper uses: what
                           was read, and where to look for it. */}
                       {showEvidence && item.cite && (
-                        <div className="mt-1 inline-flex items-center gap-1 text-[0.65625rem] font-semibold text-brand-700">
+                        <div className="mt-1 inline-flex items-center gap-1 text-[0.65625rem] font-semibold text-evidence-700">
                           <Quote size={9} />
                           {/* The citation names the document, never the search
                               wording — that is machinery, and printing it would
@@ -621,7 +625,7 @@ export function QAResultsModal({ title, validation, control, step, evidence, onC
         )}
         </div>
         <div className="flex items-center justify-between px-5 py-3.5 border-t border-canvas-border">
-          <span className="text-[0.71875rem] text-ink-500">{passed}/{qa.length} checks passed</span>
+          <span className="text-[0.71875rem] text-ink-500">{passed}/{qa.length} {qa.length === 1 ? 'check' : 'checks'} passed</span>
           <button onClick={onClose} className="h-9 px-4 rounded-lg bg-brand-600 text-white text-[0.78125rem] font-semibold hover:bg-brand-700 cursor-pointer">Close</button>
         </div>
       </motion.div>

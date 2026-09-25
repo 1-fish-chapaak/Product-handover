@@ -2600,6 +2600,100 @@ export function validationQA(text: string, fail: boolean): ValidationQA[] {
   ];
 }
 
+/**
+ * WHAT ONE DESIGN CHECK ASKS — its own question, not the whole standard set.
+ *
+ * A design check is a single proposition about how the control is built. Its
+ * result used to be `validationQA`, which returns the four standard design
+ * attributes and ignores the check it was handed — `text` sat in the signature
+ * and was never read. So every check in a control produced an identical list,
+ * and opening "Control addresses the stated risk and assertion" re-asked the
+ * precision question that is the NEXT design check in the same list. The result
+ * of one check was showing the whole set (user, 25 Sep — "yaha design checks
+ * kyu aa rahe h when i am looking at result of 1 design check in particular").
+ *
+ * The industry's wording is kept exactly as it was: these ARE design checks and
+ * the terminology is the standard one (user's correction — the earlier plan to
+ * rename them was wrong). What changed is only which of them a given check is
+ * answered against.
+ *
+ * Two checks are matched to the standard questions they were written as. Every
+ * other check — an attribute's own design check, or one the auditor added —
+ * asks about ITSELF and cites its own distinctive wording, because a check that
+ * says "exceptions are followed through to resolution" is not answered by a
+ * question about precision.
+ *
+ * TOE keeps `validationQA`: an attribute's AI validation is a different surface
+ * and was not in scope here.
+ */
+export function designCheckQA(text: string, fail: boolean): ValidationQA[] {
+  const cites = qaCites();
+  const t = text.toLowerCase();
+  if (/addresses the stated risk|risk and assertion/.test(t)) {
+    return [{ q: 'Does the control as described address the stated risk and assertion?', a: fail ? 'No — what is on file does not tie the control to the risk it is recorded against.' : 'Yes — traced to the risk register and the relevant assertion in the narrative.', pass: !fail, cite: cites.risk }];
+  }
+  if (/sufficient precision|operates at sufficient/.test(t)) {
+    return [{ q: 'Is the control performed at sufficient precision to catch a material error?', a: fail ? 'No — the review occurs after the entry is posted, so a material error could already be recorded before detection.' : 'Yes — it operates before the transaction completes and the threshold is below performance materiality.', pass: !fail, cite: cites.precision }];
+  }
+  return [selfQA(text, fail)];
+}
+
+/** Wording to look for, per subject a check can be about. Ordered — the first
+ *  that recognises the check wins, so the specific subjects lead. The strings
+ *  are alternatives for the annotator, the same shape as `qaCites`.
+ *
+ *  A function for the same reason `qaCites` is one: mockData builds every
+ *  seeded check's Q&A from its own module body, while helpers is only
+ *  part-initialised, and a module-level const read from there is in its
+ *  temporal dead zone. */
+function checkCites(): [RegExp, string][] {
+  return [
+    [/independen|segregat|prepares what it checks|four eyes|second person/, 'independent|other than the person|segregat|cannot be bypassed'],
+    [/authorit|competen|delegation/, 'authority|authorised|delegation|competen'],
+    [/threshold|toleran|\blimit/, 'tolerance|threshold|limit'],
+    [/exception|escalat|resolution|investigat|differen/, 'exception|escalat|investigat|unexplained|difference|held'],
+    [/evidence that it operated|evidenc|retain|audit trail|\blog\b/, 'audit trail|evidenced|retained|log'],
+    [/complete population|population|routes around/, 'population|every|complete'],
+    [/cut-?off|correct period|month-?end|timel/, 'period|month-end|cut-off|timely'],
+    [/change control|configur/, 'configuration|change control|under change'],
+    [/reliab|performed against/, 'report|reliable|extracted|source'],
+    [/often enough|frequen/, 'monthly|each month|frequency'],
+    [/approv|authoris|sign-?off/, 'approv|authoris|sign-off|signed'],
+    [/reconcil/, 'reconcil|agreed|difference'],
+    [/review/, 'review|reviewed|checked'],
+    [/match|compar/, 'match|compared|agrees'],
+    [/performed|operate|described/, 'performed|operates|described|carried out'],
+  ];
+}
+
+/** A check answered against itself. The question is the check put as one, so a
+ *  reader who clicked "Exceptions handled per policy" is asked about exceptions
+ *  and nothing else. */
+function selfQA(text: string, fail: boolean): ValidationQA {
+  // "Exceptions handled per policy — designed to happen, at per exception."
+  //  → the proposition, and the cadence it is designed to happen at.
+  const m = text.match(/^(.*?)\s*—\s*designed to happen,?\s*at\s+(.*?)\.?$/i);
+  const core = (m ? m[1]! : text).replace(/\.$/, '').trim();
+  const at = m ? m[2]!.replace(/\.$/, '').trim() : '';
+  const t = core.toLowerCase();
+  const hit = checkCites().find(([re]) => re.test(t));
+  // Nothing recognised — the check's own significant words, so the passage
+  // marked is still the wording this answer rests on rather than a guess. No
+  // words worth citing means no citation, and the document renders unmarked.
+  const stop = new Set(['the', 'and', 'that', 'this', 'with', 'from', 'control', 'controls', 'person', 'performing', 'designed', 'happen', 'before', 'after', 'each', 'every', 'their', 'there', 'which', 'what', 'when', 'into', 'over', 'been', 'does', 'must']);
+  const words = hit ? [] : t.replace(/[^a-z\s]/g, ' ').split(/\s+/).filter(w => w.length > 4 && !stop.has(w)).slice(0, 3);
+  return {
+    // A check that already carries an em-dash cannot take another one and stay
+    // readable, so it is asked with a colon instead.
+    q: core.includes('—') ? `Does the design provide for this: ${core}?` : `${core} — is that provided for in the design?`,
+    a: fail
+      ? `No — what is on file does not describe this${at ? ` operating ${at}` : ''}.`
+      : `Yes — the documents on file describe it and who performs it${at ? `, operating ${at}` : ''}.`,
+    pass: !fail,
+    ...(hit ? { cite: hit[1] } : words.length ? { cite: words.join('|') } : {}),
+  };
+}
+
 // ── deterministic "real" results — every run reads like an actual test, and two
 //    different attributes never return the same numbers/documents ───────────────
 const hnum = (s: string): number => { let h = 0; for (let i = 0; i < s.length; i++) h = (h * 31 + s.charCodeAt(i)) >>> 0; return h; };

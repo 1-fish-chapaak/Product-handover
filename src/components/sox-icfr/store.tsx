@@ -1,6 +1,6 @@
 import { createContext, useCallback, useContext, useMemo, useState, type ReactNode } from 'react';
 import { racmTemplateForProcesses, requiredDatasetsFor, sampleRefs, seedIcfrEngagement, type SeedMeta } from './mockData';
-import { assessSeverity, attestationOverruled, designApproved, designFilesOf, iraCannotTest, designRetestChecks, designOutstanding, fmtDateTime, requiredFilesOf, requiredFilesReady, canExtendToe, canRedrawToe, controlConclusion, reconcileConfirmations, formatINR, gradeException, icfrConclusion, inquiryOnlyAttributes, passedWithoutFiles, isControlLocked, isControlLockedIn, isEngagementLocked, itgcHolds, parseLooseDate, samePerson, samplingOf, populationSources, previewRegrades, sampleSizeGuide, samplesFor, sourceTotals, staleSteps, stepResult, TOE_MAX_ROUNDS, toeRoundFailed, toeRoundNo, toeRounds, trackResult, validationQA, validationSummary, validationTable, wfRunRef, dealSample, samplesTestedCount, sampleHome, spreadPhrase, workingAudit, yearEndPending, LEGACY_SOURCE_ID, type RulesPatch } from './helpers';
+import { assessSeverity, attestationOverruled, designApproved, designFilesOf, iraCannotTest, designRetestChecks, designOutstanding, fmtDateTime, requiredFilesOf, requiredFilesReady, canExtendToe, canRedrawToe, controlConclusion, reconcileConfirmations, formatINR, gradeException, icfrConclusion, inquiryOnlyAttributes, passedWithoutFiles, isControlLocked, isControlLockedIn, isEngagementLocked, itgcHolds, parseLooseDate, samePerson, samplingOf, populationSources, previewRegrades, sampleSizeGuide, samplesFor, sourceTotals, staleSteps, stepResult, designCheckQA, TOE_MAX_ROUNDS, toeRoundFailed, toeRoundNo, toeRounds, trackResult, validationQA, validationSummary, validationTable, wfRunRef, dealSample, samplesTestedCount, sampleHome, spreadPhrase, workingAudit, yearEndPending, LEGACY_SOURCE_ID, type RulesPatch } from './helpers';
 import type {
   Assertion, Attestation, AuditArchive, AuditFileRecord, AuditorProof, AuditRecord, Control, ControlClass, Deficiency, DesignDoc, DesignDocKind, DesignPoint, DiscussionAnchor, DocStatus, FileOrigin,
   DesignJudgements, DesignWaiverReason, EvidenceFile, EvidenceMode, ExceptionStatus, ExecKind, ExecutionEvent, Frequency, HandoffTask, IcfrEngagement,
@@ -1165,7 +1165,7 @@ export function IcfrProvider({ children, initialRole = 'auditor', seedMeta }: { 
         .flatMap(d => d.files ?? []);
       const read = proof ?? cited[0];
       return { ...p, result: willFail ? 'Fail' : 'Pass', override: undefined, workflowRunRef: 'run · validated · just now',
-        validation: { qa: validationQA(p.text, willFail), at: 'just now', ...(read ? { fileName: read.name } : {}) } };
+        validation: { qa: designCheckQA(p.text, willFail), at: 'just now', ...(read ? { fileName: read.name } : {}) } };
     }) } }));
     pushExec(prev => { const p = prev.controls.find(c => c.id === controlId)?.design.points.find(pt => pt.id === pointId); return p ? { controlId, track: 'design', kind: 'validate', verb: 'validated', target: short(p.text), result: p.result } : null; });
   }, [patchControl, pushExec, role]);
@@ -2363,7 +2363,7 @@ export function IcfrProvider({ children, initialRole = 'auditor', seedMeta }: { 
         const stoodLine = { q: IRA_STOOD_FAILED_Q, a: 'Yes — it was marked failed before Ira ran.', pass: false };
         const qa = missing.length > 0
           ? [{ q: IRA_ON_FILE_Q, a: `No — ${list(missing)} ${missing.length === 1 ? 'isn’t' : 'aren’t'} on file yet.`, pass: false }, ...(stoodFailed ? [stoodLine] : [])]
-          : [{ q: IRA_ON_FILE_Q, a: 'Yes — every required element is on file or accounted for.', pass: true }, ...validationQA(p.text, willFail)];
+          : [{ q: IRA_ON_FILE_Q, a: 'Yes — every required element is on file or accounted for.', pass: true }, ...designCheckQA(p.text, willFail)];
         const summary = missing.length > 0
           ? `${cap(the(missing))} ${missing.length === 1 ? 'isn’t' : 'aren’t'} on file yet, so Ira couldn’t confirm this check.`
           : willFail
@@ -2636,7 +2636,7 @@ export function IcfrProvider({ children, initialRole = 'auditor', seedMeta }: { 
         if (!ids.has(c.id)) return c;
         const points = c.design.points.map(p => {
           const willFail = (p.override ? p.override.result : p.result) === 'Fail';
-          return { ...p, result: (willFail ? 'Fail' : 'Pass') as TestResult, override: undefined, workflowRunRef: 'run · validated · just now', validation: { qa: validationQA(p.text, willFail), at: 'just now' } };
+          return { ...p, result: (willFail ? 'Fail' : 'Pass') as TestResult, override: undefined, workflowRunRef: 'run · validated · just now', validation: { qa: designCheckQA(p.text, willFail), at: 'just now' } };
         });
         const steps = c.operating.steps.map(s => {
           const fail = s.result === 'Fail' || s.override?.result === 'Fail';
@@ -3503,7 +3503,7 @@ export function IcfrProvider({ children, initialRole = 'auditor', seedMeta }: { 
         const qa = [
           { q: RETEST_FIX_ON_FILE_Q, a: `Yes — ${list}.`, pass: true },
           ...(stoodFailed ? [{ q: IRA_STOOD_FAILED_Q, a: 'Yes — it was marked failed before Ira ran.', pass: false }] : []),
-          ...validationQA(x.text, stoodFailed),
+          ...designCheckQA(x.text, stoodFailed),
         ];
         const summary = stoodFailed
           ? 'Ira read the fix evidence, and the design still falls short on this check — the answers below say where.'

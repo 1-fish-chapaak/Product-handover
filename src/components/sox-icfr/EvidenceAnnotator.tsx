@@ -224,10 +224,17 @@ function PdfAnnotator({ file, quotes, active }: Props) {
                     on ? 'opacity-100' : 'opacity-25')}
                   style={{
                     left: m.x - 2, top: m.y - 2, width: m.w + 4, height: m.h + 4,
-                    // A dashed brand outline over a wash — readable on a white
-                    // page without hiding the words underneath it.
-                    outline: `2px dashed ${on ? 'rgb(109 40 217)' : 'rgb(148 163 184)'}`,
-                    background: on ? 'rgba(139, 92, 246, 0.16)' : 'transparent',
+                    // EVIDENCE BLUE, not the brand's violet (user, 25 Sep — a
+                    // purple mark on a purple product does not read as a mark).
+                    // `--color-evidence` is the design system's own token for
+                    // "Sources / Info-blue", which is exactly what a citation
+                    // is; amber and green are ruled out because in a SOX
+                    // product they already mean deficiency and effective, and a
+                    // neutral "this is the passage" must not look like a
+                    // verdict. Dashed outline over a light wash, so the words
+                    // underneath stay readable.
+                    outline: `2px dashed ${on ? 'rgb(2 132 199)' : 'rgb(148 163 184)'}`,
+                    background: on ? 'rgba(14, 165, 233, 0.22)' : 'transparent',
                   }}
                 />
               );
@@ -315,7 +322,7 @@ function SheetAnnotator({ file, quotes, active }: Props) {
                   <td key={ci} data-hit={mark ? '1' : undefined}
                     className={cn('px-2 py-1 border border-canvas-border/60 whitespace-nowrap max-w-[16rem] truncate',
                       ri === 0 ? 'font-semibold text-ink-700 bg-paper-50/80' : 'text-ink-700 bg-white',
-                      on && 'outline outline-2 outline-dashed outline-brand-600 bg-brand-50 font-semibold relative z-[1]',
+                      on && 'outline outline-2 outline-dashed outline-evidence-600 bg-evidence-100 font-semibold relative z-[1]',
                       hit && !on && 'bg-paper-100')}
                     title={cell}>
                     {cell}
