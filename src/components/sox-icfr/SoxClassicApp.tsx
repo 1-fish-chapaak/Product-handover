@@ -241,9 +241,27 @@ export default function SoxClassicInner({ onBack, backLabel = 'Back to Engagemen
 
   return (
     <div className={cn('sox-book-ui h-full bg-canvas',
-      // overflow-x-hidden lets the control page's full-bleed header band
-      // overshoot the centred container without opening a sideways scrollbar.
-      dossierPanes ? 'overflow-hidden flex flex-col' : 'overflow-y-auto overflow-x-hidden')}>
+      // CLIP, not hidden (25 Sep). The control page's header band is drawn
+      // `left-[-50vw] right-[-50vw]` so the white runs to both screen edges,
+      // which leaves this box ~700px of overflow it must not show. `hidden`
+      // hides the scrollbar but still lets the browser scroll the box sideways
+      // to reveal something it has just focused — a modal closing, a field
+      // opening — and with no scrollbar to put it back, the page stays shunted
+      // with its left edge cut off: the breadcrumb reading "ents /" and the
+      // control's name starting mid-word. `clip` refuses the scroll itself, so
+      // there is nothing to come back from.
+      // `overflow-clip` on BOTH axes, not `overflow-x-clip` alone: per CSS
+      // Overflow 3, `clip` on one axis degrades to `hidden` unless the other
+      // axis is also clip/visible — so `overflow-x-clip overflow-y-hidden`
+      // computes to plain hidden and changes nothing. This box never scrolled
+      // on either axis (it was `overflow-hidden`); its children own the
+      // scrolling, so clipping both is the exact non-scrolling equivalent.
+      //
+      // The scrolling branch below has to stay `hidden` for the same spec
+      // reason — `overflow-y: auto` forces `overflow-x: clip` back to hidden —
+      // so a full-bleed band on a page that scrolls vertically can still be
+      // shunted. No page in that branch carries one today.
+      dossierPanes ? 'overflow-clip flex flex-col' : 'overflow-y-auto overflow-x-hidden')}>
       {/* The control detail page and the RACM matrix stand alone — no engagement
           header, no role switcher; the persona is fixed until you go back to the
           engagement. */}

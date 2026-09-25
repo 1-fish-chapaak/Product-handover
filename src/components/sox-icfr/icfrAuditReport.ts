@@ -181,39 +181,75 @@ export function buildAuditReport(eng: IcfrEngagement, controls: Control[] = eng.
     ],
   };
 
+  // ── The rollup, filed by COMPANY and then PROCESS (user, 25 Sep) ─────────
+  // It used to be one flat list of every control in the engagement, which reads
+  // as a control register rather than a status report: the people acting on this
+  // ask "how does Company X stand" first, and a flat list makes them do the
+  // sorting in their head. Company, then the processes inside it, then the
+  // controls — so the answer is the shape of the page.
+  //
+  // The Entity column is gone with it: repeating the company on every row under
+  // a heading that already names it is noise.
+  const ROLLUP_HEADERS = ['Control ID', 'Control', 'Country', 'Testing strategy', 'Readiness', 'Test items', 'Testing', 'Failed checks', 'Review', 'Conclusion', 'Severity', 'Finalized by'];
+  /** A control answering for several companies is filed under EACH of them —
+   *  a reader looking at one company has to find every control covering it, and
+   *  filing it under the first name only would hide it from the rest. The
+   *  conclusion is still one conclusion; the note under the table says so. */
+  const entitiesOf = (c: Control): string[] => (c.entities?.length ? c.entities : [c.entity ?? '—']);
+  const filed = new Map<string, Map<string, { c: Control; k: (typeof counts)[number] }[]>>();
+  controls.forEach((c, i) => {
+    entitiesOf(c).forEach(ent => {
+      const procs = filed.get(ent) ?? new Map<string, { c: Control; k: (typeof counts)[number] }[]>();
+      const key = c.process || '—';
+      procs.set(key, [...(procs.get(key) ?? []), { c, k: counts[i]! }]);
+      filed.set(ent, procs);
+    });
+  });
+  const rollupRows: string[][] = [];
+  const rollupGroups: Record<number, 1 | 2> = {};
+  const heading = (label: string, level: 1 | 2) => {
+    rollupGroups[rollupRows.length] = level;
+    rollupRows.push([label, ...ROLLUP_HEADERS.slice(1).map(() => '')]);
+  };
+  const plural = (n: number) => `${n} control${n === 1 ? '' : 's'}`;
+  Array.from(filed.keys()).sort((x, y) => x.localeCompare(y)).forEach(ent => {
+    const procs = filed.get(ent)!;
+    heading(`${ent} · ${plural(Array.from(procs.values()).reduce((s, l) => s + l.length, 0))}`, 1);
+    Array.from(procs.keys()).sort((x, y) => x.localeCompare(y)).forEach(proc => {
+      const list = procs.get(proc)!;
+      heading(`${proc} · ${plural(list.length)}`, 2);
+      list.forEach(({ c, k }) => rollupRows.push([
+        c.id,
+        c.description,
+        countryFor(eng.id, c).value,
+        c.testingStrategy ?? '—',
+        readiness(c),
+        String(k.items),
+        testingCell(k),
+        String(k.fails),
+        reviewCell(c),
+        conclusionOf(eng, c),
+        worstGrade(defs.filter(d => d.controlId === c.id), eng),
+        c.wpSignoff?.reviewer?.by ?? '—',
+      ]));
+    });
+  });
+  const sharedCount = controls.filter(c => (c.entities?.length ?? 0) > 1).length;
+
   const rollup: IcfrSheet = {
     name: 'Control Rollup', blocks: [
       {
         kind: 'table', title: 'Control rollup',
-        note: `${controls.length} control${controls.length === 1 ? '' : 's'} — one row per control, from readiness to conclusion`,
-        // Header and row are written in the same order. Where and how a control
-        // was tested reads next to its name because the people acting on this
-        // report ask which company a finding lands in before anything else.
-        headers: ['Control ID', 'Control', 'Entity', 'Country', 'Testing strategy', 'Readiness', 'Test items', 'Testing', 'Failed checks', 'Review', 'Conclusion', 'Severity', 'Finalized by'],
-        rows: controls.map((c, i) => {
-          const k = counts[i];
-          return [
-            c.id,
-            c.description,
-            // A shared control is tested at several entities, so all of them
-            // are named rather than the first one standing for the rest.
-            c.entities?.length ? c.entities.join(', ') : (c.entity ?? '—'),
-            countryFor(eng.id, c).value,
-            c.testingStrategy ?? '—',
-            readiness(c),
-            String(k.items),
-            testingCell(k),
-            String(k.fails),
-            reviewCell(c),
-            conclusionOf(eng, c),
-            worstGrade(defs.filter(d => d.controlId === c.id), eng),
-            c.wpSignoff?.reviewer?.by ?? '—',
-          ];
-        }),
+        note: `${plural(controls.length)} across ${filed.size} compan${filed.size === 1 ? 'y' : 'ies'} — filed by company, then process, from readiness to conclusion`,
+        headers: ROLLUP_HEADERS,
+        rows: rollupRows,
+        groups: rollupGroups,
       },
       {
         kind: 'note', label: 'Reading this', tone: 'neutral',
-        text: 'Readiness is the design test: a control whose design has not held up is not ready to be operated on a sample. Testing is the share of attribute checks completed across the drawn items. Review is where the control’s working paper stands with the reviewer, and Finalized by names the reviewer who countersigned it. Severity is the worst grade among the control’s deficiencies.',
+        // The shared-control sentence is only printed when there IS one —
+        // explaining a duplication the reader cannot see would just puzzle them.
+        text: `Controls are filed under the company they answer for, then the process they belong to.${sharedCount > 0 ? ` ${sharedCount === 1 ? 'One control answers' : `${sharedCount} controls answer`} for more than one company and so appear under each of them — that is one conclusion shown in several places, not several tests, which is why the rows outnumber the controls.` : ''} Readiness is the design test: a control whose design has not held up is not ready to be operated on a sample. Testing is the share of attribute checks completed across the drawn items. Review is where the control’s working paper stands with the reviewer, and Finalized by names the reviewer who countersigned it. Severity is the worst grade among the control’s deficiencies.`,
       },
     ],
   };
@@ -354,7 +390,9 @@ export function buildAuditReport(eng: IcfrEngagement, controls: Control[] = eng.
    */
   const body: { sheet: IcfrSheet; covers: string }[] = [
     { sheet: summary, covers: 'The opinion, who the audit was for and over what period, and testing at a glance' },
-    { sheet: rollup, covers: `${controls.length} control${controls.length === 1 ? '' : 's'} — one row each, from readiness to conclusion` },
+    // The contents line has to describe the section as it now reads — "one row
+    // each" survived the regrouping and contradicted the page it pointed at.
+    { sheet: rollup, covers: `${plural(controls.length)} filed under ${filed.size === 1 ? 'their company' : `the ${filed.size} companies`}, then their process` },
     { sheet: exceptions, covers: [
       exceptionRows.length
         ? `${exceptionRows.length} failed check${exceptionRows.length === 1 ? '' : 's'} — one row per failed attribute per sampled item`
