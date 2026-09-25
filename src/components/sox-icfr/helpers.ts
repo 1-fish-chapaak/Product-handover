@@ -2571,20 +2571,32 @@ export function designBlocked(c: Control): DesignPoint[] {
  *  Alternatives separated by a pipe, tried in order. One document says
  *  "independent of the preparer" where another says "someone other than the
  *  person who keyed it"; both are the same point, and a single fixed word finds
- *  only one of them. */
-const QA_CITES = {
-  risk: 'risk|assertion|address the',
-  precision: 'tolerance|threshold|precision|limit',
-  segregation: 'independent|other than the person|segregat|cannot be bypassed|authority',
-  evidence: 'audit trail|evidenced|retained|log',
-} as const;
+ *  only one of them.
+ *
+ *  A FUNCTION, not a `const` object, and that is load-bearing. mockData calls
+ *  validationQA from its own module body (every seeded point carries its Q&A),
+ *  and helpers is reached through an import cycle — helpers → racmImport → …
+ *  → mockData → helpers — so mockData's body can run while helpers is still
+ *  part-initialised. A module-level const read from here is then in its
+ *  temporal dead zone and the whole module graph dies on load with "Cannot
+ *  access 'QA_CITES' before initialization". A function declaration is hoisted,
+ *  so it is callable whenever mockData gets there. */
+function qaCites() {
+  return {
+    risk: 'risk|assertion|address the',
+    precision: 'tolerance|threshold|precision|limit',
+    segregation: 'independent|other than the person|segregat|cannot be bypassed|authority',
+    evidence: 'audit trail|evidenced|retained|log',
+  } as const;
+}
 
 export function validationQA(text: string, fail: boolean): ValidationQA[] {
+  const cites = qaCites();
   return [
-    { q: 'Does the control as described address the stated risk and assertion?', a: 'Yes — traced to the risk register and the relevant assertion in the narrative.', pass: true, cite: QA_CITES.risk },
-    { q: 'Is the control performed at sufficient precision to catch a material error?', a: fail ? 'No — the review occurs after the entry is posted, so a material error could already be recorded before detection.' : 'Yes — it operates before the transaction completes and the threshold is below performance materiality.', pass: !fail, cite: QA_CITES.precision },
-    { q: 'Is the performer segregated from the activity being controlled?', a: 'Yes — distinct system roles were confirmed in the walkthrough.', pass: true, cite: QA_CITES.segregation },
-    { q: 'Is the control’s operation evidenced and retained for the period?', a: fail ? 'Partially — sign-off is retained but does not evidence the pre-posting review.' : 'Yes — evidenced and retained for the full period.', pass: !fail, cite: QA_CITES.evidence },
+    { q: 'Does the control as described address the stated risk and assertion?', a: 'Yes — traced to the risk register and the relevant assertion in the narrative.', pass: true, cite: cites.risk },
+    { q: 'Is the control performed at sufficient precision to catch a material error?', a: fail ? 'No — the review occurs after the entry is posted, so a material error could already be recorded before detection.' : 'Yes — it operates before the transaction completes and the threshold is below performance materiality.', pass: !fail, cite: cites.precision },
+    { q: 'Is the performer segregated from the activity being controlled?', a: 'Yes — distinct system roles were confirmed in the walkthrough.', pass: true, cite: cites.segregation },
+    { q: 'Is the control’s operation evidenced and retained for the period?', a: fail ? 'Partially — sign-off is retained but does not evidence the pre-posting review.' : 'Yes — evidenced and retained for the full period.', pass: !fail, cite: cites.evidence },
   ];
 }
 

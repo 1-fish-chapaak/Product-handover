@@ -2217,9 +2217,19 @@ function seedEngagementBody(meta?: SeedMeta): IcfrEngagement {
   // Picked from the RACM tab at creation (S11): the copies the engagement took,
   // already carrying their companies and IDs.
   const picked = meta.controls ? structuredClone(meta.controls) : null;
+  // Both branches build through the SAME builder (25 Sep). `racmTemplate` alone
+  // returns bare shells — `design: designTrack('Not tested', [], [])` — so the
+  // classic single-process engagements (ENG-002 O2C, ENG-010 R2R) arrived with
+  // no design elements, no attributes and no design checks: a Test of Design
+  // step with nothing in it to test, and a Test of Operating Effectiveness with
+  // nothing to sample. That is not a "fresh" state, it is an empty one, and it
+  // made those two engagements the only SOX engagements a walkthrough could not
+  // be started in. Scoping-derived engagements already got the full body from
+  // racmTemplateForProcesses; routing the default through it gives the classic
+  // ones the same register, untested, which is what fresh should mean.
   const built = picked ?? (meta.processes
     ? (meta.processes.length ? racmTemplateForProcesses(meta.processes, meta.seedMode, rich) : [])
-    : racmTemplate(proc));
+    : racmTemplateForProcesses([proc], meta.seedMode, rich));
   // Every control gets the company it is performed at, plus — where its process
   // reaches further — the companies its one conclusion answers for. One row per
   // control either way. Only Altura's scoping actually spans companies today, so

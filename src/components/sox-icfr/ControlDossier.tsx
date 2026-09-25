@@ -959,8 +959,15 @@ function PointRow({ control, point, canEdit, checking = false }: { control: Cont
       <AnimatePresence>{showQA && point.validation && (
         <QAResultsModal title={point.text} validation={point.validation}
           /* The file the check was validated against — its own proof first,
-             then the elements it cites, matching what the validator read. */
-          evidence={point.auditorProof?.file ?? linked.flatMap(d => d.files ?? [])[0]}
+             then the elements it cites, matching what the validator read.
+             Among the cited elements, one the reader can actually OPEN wins
+             (25 Sep). Ira links every element that has a file, and a seeded
+             engagement's planning documents are file records with no bytes
+             behind them, so taking the first link blindly put a "this file
+             isn't on this machine" panel next to a check that had just been
+             answered off the walkthrough the auditor uploaded a minute ago. */
+          evidence={point.auditorProof?.file
+            ?? (f => f.find(x => !!x.url) ?? f[0])(linked.flatMap(d => d.files ?? []))}
           onClose={() => setShowQA(false)} />
       )}</AnimatePresence>
     </div>
