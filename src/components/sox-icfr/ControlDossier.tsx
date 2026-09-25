@@ -6,9 +6,9 @@ import {
   Send, Lock, ClipboardCheck, FileCheck2, FlaskConical, CheckCircle2, XCircle,
   CornerDownRight, Pencil, RotateCcw, Cpu, ChevronRight, Scale, Paperclip, Plus, Trash2,
   Mail, X, Loader2, ChevronDown, Check, PlayCircle, Link2, ListChecks, Gavel, UserCheck, History, FileUp, ArrowLeft, Footprints, BadgeCheck, Star,
-  Database, Circle, PenLine, Eye, ChevronUp, AlertCircle, FileWarning, StickyNote, Filter,
-} from 'lucide-react';
+  Database, Circle, PenLine, Eye, ChevronUp, AlertCircle, FileWarning, StickyNote, Filter, Quote} from 'lucide-react';
 import { useIcfr } from './store';
+import EvidenceAnnotator from './EvidenceAnnotator';
 import { useAuditLog } from '../../context/AdminDataContext';
 import {
   // PARKED (Aug 2026) — `formatINR` came in only to price the exposure strip in
@@ -511,9 +511,17 @@ function SampleResultsTable({ control, step }: { control: Control; step: Operati
 
 // Exported for the design-track retest (extraViews), whose checks carry the same
 // validation shape and read out the same way.
-export function QAResultsModal({ title, validation, control, step, onClose }: { title: string; validation: ValidationResult; control?: Control; step?: OperatingStep; onClose: () => void }) {
+export function QAResultsModal({ title, validation, control, step, evidence, onClose }: { title: string; validation: ValidationResult; control?: Control; step?: OperatingStep; evidence?: EvidenceFile; onClose: () => void }) {
   const { qa, summary, table, result, fileName, blocked } = validation;
   const passed = qa.filter(x => x.pass).length;
+  // ── the evidence, beside the answer it produced ──────────────────────────
+  // A verdict with nothing to check it against is an assertion. When the check
+  // was validated against a file that is still on this machine, the document is
+  // shown next to the answers and the passage each answer rests on is boxed in
+  // it. Clicking an answer moves the mark (user ask, 25 Sep).
+  const quotes = qa.map(x => x.cite).filter((q): q is string => !!q);
+  const showEvidence = !!evidence && quotes.length > 0;
+  const [activeCite, setActiveCite] = useState<string | undefined>(undefined);
   // An operating attribute is tested against the drawn sample, so its real
   // item-level answer is the sample table. The generated evidence table is the
   // fallback for design considerations, which aren't sampled at all.
@@ -534,7 +542,9 @@ export function QAResultsModal({ title, validation, control, step, onClose }: { 
           </div>
         </div>
         <div className="px-5 py-2.5 border-b border-canvas-border bg-paper-50/40 flex items-center gap-2 flex-wrap"><p className="text-[0.75rem] text-ink-600"><b className="text-ink-800">Validated —</b> {title}</p>{fileName && <span className="inline-flex items-center gap-1 text-[0.65625rem] font-semibold text-ink-600 bg-canvas-elevated border border-canvas-border rounded-md px-1.5 h-[20px]"><Paperclip size={9} />{fileName}</span>}</div>
-        <div className="px-5 py-4 space-y-4 max-h-[58vh] overflow-y-auto">
+        <div className={cn('flex min-h-0', showEvidence && 'max-h-[64vh]')}>
+        <div className={cn('px-5 py-4 space-y-4 overflow-y-auto',
+          showEvidence ? 'w-[44%] shrink-0 border-r border-canvas-border max-h-[64vh]' : 'flex-1 max-h-[58vh]')}>
           {summary && (
             <div className="rounded-lg border border-canvas-border bg-paper-50/50 px-3.5 py-3">
               <div className="text-[0.65625rem] font-bold uppercase tracking-wide text-ink-400 mb-1">Summary</div>
@@ -565,14 +575,50 @@ export function QAResultsModal({ title, validation, control, step, onClose }: { 
           <div>
             <div className="text-[0.65625rem] font-bold uppercase tracking-wide text-ink-400 mb-1.5">Checks</div>
             <div className="space-y-3">
-              {qa.map((item, i) => (
-                <div key={i} className="flex items-start gap-3">
-                  <Tickmark result={item.pass ? 'Pass' : 'Fail'} size={18} />
-                  <div><div className="text-[0.78125rem] font-semibold text-ink-900">{item.q}</div><div className="text-[0.75rem] text-ink-600 mt-0.5 leading-relaxed">{item.a}</div></div>
-                </div>
-              ))}
+              {qa.map((item, i) => {
+                const on = showEvidence && !!item.cite && activeCite === item.cite;
+                return (
+                  <div key={i} className={cn('flex items-start gap-3 rounded-lg -mx-2 px-2 py-1.5 transition-colors',
+                    showEvidence && item.cite && 'cursor-pointer hover:bg-paper-50',
+                    on && 'bg-brand-50/70')}
+                    onClick={() => { if (showEvidence && item.cite) setActiveCite(on ? undefined : item.cite); }}>
+                    <Tickmark result={item.pass ? 'Pass' : 'Fail'} size={18} />
+                    <div className="min-w-0">
+                      <div className="text-[0.78125rem] font-semibold text-ink-900">{item.q}</div>
+                      <div className="text-[0.75rem] text-ink-600 mt-0.5 leading-relaxed">{item.a}</div>
+                      {/* The citation, in the shape a working paper uses: what
+                          was read, and where to look for it. */}
+                      {showEvidence && item.cite && (
+                        <div className="mt-1 inline-flex items-center gap-1 text-[0.65625rem] font-semibold text-brand-700">
+                          <Quote size={9} />
+                          {/* The citation names the document, never the search
+                              wording — that is machinery, and printing it would
+                              read like a quote nobody wrote. */}
+                          <span>Read in {evidence!.name}</span>
+                          <span className="text-ink-400 font-normal">{on ? '· marked on the right' : '· show me'}</span>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                );
+              })}
             </div>
           </div>
+        </div>
+        {showEvidence && (
+          <div className="flex-1 min-w-0 flex flex-col">
+            <div className="px-4 py-2 border-b border-canvas-border bg-canvas-elevated flex items-center gap-2">
+              <Paperclip size={11} className="text-ink-400 shrink-0" />
+              <span className="text-[0.71875rem] font-semibold text-ink-700 truncate">{evidence!.name}</span>
+              <span className="text-[0.65625rem] text-ink-400 ml-auto shrink-0">
+                {activeCite ? 'showing the passage behind that answer' : 'every cited passage marked'}
+              </span>
+            </div>
+            <div className="flex-1 min-h-0">
+              <EvidenceAnnotator file={evidence!} quotes={quotes} active={activeCite} />
+            </div>
+          </div>
+        )}
         </div>
         <div className="flex items-center justify-between px-5 py-3.5 border-t border-canvas-border">
           <span className="text-[0.71875rem] text-ink-500">{passed}/{qa.length} checks passed</span>
@@ -910,7 +956,13 @@ function PointRow({ control, point, canEdit, checking = false }: { control: Cont
               label: `Override · ${r}`,
               onClick: (n: string) => { overrideDesignPoint(control.id, point.id, { result: r, by: me, at: 'just now', rationale: n }); setOver(false); },
             }))} />)}
-      <AnimatePresence>{showQA && point.validation && <QAResultsModal title={point.text} validation={point.validation} onClose={() => setShowQA(false)} />}</AnimatePresence>
+      <AnimatePresence>{showQA && point.validation && (
+        <QAResultsModal title={point.text} validation={point.validation}
+          /* The file the check was validated against — its own proof first,
+             then the elements it cites, matching what the validator read. */
+          evidence={point.auditorProof?.file ?? linked.flatMap(d => d.files ?? [])[0]}
+          onClose={() => setShowQA(false)} />
+      )}</AnimatePresence>
     </div>
   );
 }

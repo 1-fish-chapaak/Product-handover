@@ -114,7 +114,17 @@ export interface DesignDoc {
   at?: string;
 }
 /** The Q&A a validation workflow produced — reviewable after it runs. */
-export interface ValidationQA { q: string; a: string; pass: boolean; }
+export interface ValidationQA {
+  q: string;
+  a: string;
+  pass: boolean;
+  /** THE WORDING IN THE EVIDENCE THIS ANSWER RESTS ON — a phrase to find in the
+   *  attached file, not a coordinate. The viewer locates it in the document and
+   *  boxes it, so a marked passage is one that is genuinely there rather than a
+   *  rectangle somebody drew (25 Sep). Absent where the answer came from the
+   *  matrix rather than from a file. */
+  cite?: string;
+}
 /** An optional evidence table the AI returns (e.g. per-item check results). */
 export interface ValidationTable { columns: string[]; rows: string[][]; }
 export interface ValidationResult {

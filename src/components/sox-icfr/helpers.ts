@@ -2563,12 +2563,28 @@ export function designBlocked(c: Control): DesignPoint[] {
 }
 
 /** Deterministic Q&A a design-validation workflow returns for a consideration. */
+/** Wording to look for in the attached evidence, per question. Short and
+ *  common on purpose: these are matched against whatever document the client
+ *  uploaded, so a phrase of two or three ordinary words finds the passage where
+ *  a sentence copied from our own samples would find nothing.
+ *
+ *  Alternatives separated by a pipe, tried in order. One document says
+ *  "independent of the preparer" where another says "someone other than the
+ *  person who keyed it"; both are the same point, and a single fixed word finds
+ *  only one of them. */
+const QA_CITES = {
+  risk: 'risk|assertion|address the',
+  precision: 'tolerance|threshold|precision|limit',
+  segregation: 'independent|other than the person|segregat|cannot be bypassed|authority',
+  evidence: 'audit trail|evidenced|retained|log',
+} as const;
+
 export function validationQA(text: string, fail: boolean): ValidationQA[] {
   return [
-    { q: 'Does the control as described address the stated risk and assertion?', a: 'Yes — traced to the risk register and the relevant assertion in the narrative.', pass: true },
-    { q: 'Is the control performed at sufficient precision to catch a material error?', a: fail ? 'No — the review occurs after the entry is posted, so a material error could already be recorded before detection.' : 'Yes — it operates before the transaction completes and the threshold is below performance materiality.', pass: !fail },
-    { q: 'Is the performer segregated from the activity being controlled?', a: 'Yes — distinct system roles were confirmed in the walkthrough.', pass: true },
-    { q: 'Is the control’s operation evidenced and retained for the period?', a: fail ? 'Partially — sign-off is retained but does not evidence the pre-posting review.' : 'Yes — evidenced and retained for the full period.', pass: !fail },
+    { q: 'Does the control as described address the stated risk and assertion?', a: 'Yes — traced to the risk register and the relevant assertion in the narrative.', pass: true, cite: QA_CITES.risk },
+    { q: 'Is the control performed at sufficient precision to catch a material error?', a: fail ? 'No — the review occurs after the entry is posted, so a material error could already be recorded before detection.' : 'Yes — it operates before the transaction completes and the threshold is below performance materiality.', pass: !fail, cite: QA_CITES.precision },
+    { q: 'Is the performer segregated from the activity being controlled?', a: 'Yes — distinct system roles were confirmed in the walkthrough.', pass: true, cite: QA_CITES.segregation },
+    { q: 'Is the control’s operation evidenced and retained for the period?', a: fail ? 'Partially — sign-off is retained but does not evidence the pre-posting review.' : 'Yes — evidenced and retained for the full period.', pass: !fail, cite: QA_CITES.evidence },
   ];
 }
 

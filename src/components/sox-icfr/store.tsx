@@ -1155,7 +1155,17 @@ export function IcfrProvider({ children, initialRole = 'auditor', seedMeta }: { 
     patchControl(controlId, c => ({ ...c, design: { ...c.design, points: c.design.points.map(p => {
       if (p.id !== pointId) return p;
       const willFail = (p.override ? p.override.result : p.result) === 'Fail';
-      return { ...p, result: willFail ? 'Fail' : 'Pass', override: undefined, workflowRunRef: 'run · validated · just now', validation: { qa: validationQA(p.text, willFail), at: 'just now' } };
+      // WHAT IT READ. The check's own proof first — that file was attached to
+      // answer this very check — then the elements it cites. Named here so the
+      // result can show the document beside the verdict instead of a verdict
+      // with nothing to check it against (25 Sep).
+      const proof = p.auditorProof?.file;
+      const cited = c.design.documents
+        .filter(d => p.evidencedBy?.includes(d.id))
+        .flatMap(d => d.files ?? []);
+      const read = proof ?? cited[0];
+      return { ...p, result: willFail ? 'Fail' : 'Pass', override: undefined, workflowRunRef: 'run · validated · just now',
+        validation: { qa: validationQA(p.text, willFail), at: 'just now', ...(read ? { fileName: read.name } : {}) } };
     }) } }));
     pushExec(prev => { const p = prev.controls.find(c => c.id === controlId)?.design.points.find(pt => pt.id === pointId); return p ? { controlId, track: 'design', kind: 'validate', verb: 'validated', target: short(p.text), result: p.result } : null; });
   }, [patchControl, pushExec, role]);
