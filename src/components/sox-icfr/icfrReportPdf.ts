@@ -125,7 +125,22 @@ function tableBlock(b: Extract<PaperBlock, { kind: 'table' }>): Content[] {
         dontBreakRows: true,
         body: [
           b.headers.map(h => ({ text: safe(h), fontSize: 7, bold: true, color: BRAND, fillColor: BRAND_WASH, margin: [4, 4, 4, 4] })),
-          ...b.rows.map(r => b.headers.map((_, i) => ({ text: safe(r[i] ?? ''), fontSize: 7, color: INK, margin: [4, 3, 4, 3] }))),
+          // A group heading is one cell spanning the width — the company, then
+          // the process under it. Every other cell in that row must still be
+          // emitted as a placeholder or pdfmake mis-counts the columns.
+          ...b.rows.map((r, ri) => {
+            const level = b.groups?.[ri];
+            if (!level) return b.headers.map((_, i) => ({ text: safe(r[i] ?? ''), fontSize: 7, color: INK, margin: [4, 3, 4, 3] }));
+            const head = {
+              text: safe(r[0] ?? ''), colSpan: b.headers.length, bold: true,
+              fontSize: level === 1 ? 7.5 : 7,
+              color: level === 1 ? INK : MUTED,
+              fillColor: level === 1 ? PAPER : undefined,
+              characterSpacing: level === 1 ? 0.6 : 0,
+              margin: [level === 1 ? 4 : 12, level === 1 ? 5 : 4, 4, level === 1 ? 4 : 3],
+            };
+            return [head, ...b.headers.slice(1).map(() => ({ text: '' }))];
+          }),
         ],
       },
       layout: {

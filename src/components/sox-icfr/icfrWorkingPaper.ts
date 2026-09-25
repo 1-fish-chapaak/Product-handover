@@ -21,7 +21,13 @@ export type PaperBlock =
   | { kind: 'kv'; title?: string; rows: [string, string][] }
   // tickFrom..tickTo (exclusive) mark the tick columns; tickTo is only needed
   // where a text column (Remarks) follows the ticks.
-  | { kind: 'table'; title: string; note?: string; headers: string[]; rows: string[][]; tickFrom?: number; tickTo?: number }
+  | { kind: 'table'; title: string; note?: string; headers: string[]; rows: string[][]; tickFrom?: number; tickTo?: number;
+      /** Rows that are a HEADING over the rows beneath, not data: row index →
+       *  nesting level (1 outermost). The row carries its label in cell 0 and
+       *  nothing else, and every renderer spans it across the table. Used by the
+       *  status report, which files controls under their company and then their
+       *  process (user, 25 Sep) instead of listing them flat. */
+      groups?: Record<number, 1 | 2> }
   | { kind: 'note'; label: string; text: string; tone: 'good' | 'bad' | 'neutral' };
 
 export const SIGNOFF_TITLE = 'Sign-off — audit record';

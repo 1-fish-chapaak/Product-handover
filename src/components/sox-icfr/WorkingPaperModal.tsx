@@ -59,7 +59,23 @@ function Block({ b }: { b: PaperBlock }) {
               </tr>
             </thead>
             <tbody className="divide-y divide-canvas-border">
-              {b.rows.map((r, ri) => (
+              {b.rows.map((r, ri) => {
+                // A group heading spans the table: a company, then a process.
+                // Level 1 is the heavier of the two, so the eye finds the
+                // company first and the processes read as its children.
+                const level = b.groups?.[ri];
+                if (level) return (
+                  <tr key={ri}>
+                    <td colSpan={b.headers.length}
+                      className={cn('px-2.5 align-middle',
+                        level === 1
+                          ? 'py-2 bg-paper-100 text-ink-800 font-semibold uppercase tracking-wide text-[10.5px]'
+                          : 'py-1.5 pl-5 bg-paper-50/70 text-ink-600 font-semibold text-[11px]')}>
+                      {r[0]}
+                    </td>
+                  </tr>
+                );
+                return (
                 <tr key={ri}>
                   {r.map((cell, ci) => (
                     <td key={ci} className={cn('px-2.5 py-1.5 align-top text-ink-700',
@@ -70,7 +86,8 @@ function Block({ b }: { b: PaperBlock }) {
                       ci > 0 && isFormattedControlId(cell) && 'whitespace-nowrap')}>{cell}</td>
                   ))}
                 </tr>
-              ))}
+                );
+              })}
               {b.rows.length === 0 && <tr><td colSpan={b.headers.length} className="px-2.5 py-2 text-ink-400">—</td></tr>}
             </tbody>
           </table>
