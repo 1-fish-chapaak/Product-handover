@@ -17,8 +17,8 @@
  * would buy that a border and an arrow do not. It matches the process flow the
  * audit module already draws (`audit/SopProcessFlow`).
  */
-import { Fragment, useMemo, useState } from 'react';
-import { AlertTriangle, ChevronDown, ShieldCheck, Sparkles, Star, Undo2 } from 'lucide-react';
+import { Fragment, useCallback, useMemo, useRef, useState } from 'react';
+import { AlertTriangle, ChevronDown, Minus, Plus, ShieldCheck, Sparkles, Star, Undo2 } from 'lucide-react';
 import { Pill } from '../shared/StatusBadge';
 import { buildNarrative, type NarrativeControl, type NarrativeRisk, type NarrativeOptions } from './sopNarrative';
 import type { ImportRow } from './racmImport';
@@ -35,9 +35,20 @@ interface SopFlowchartViewProps extends NarrativeOptions {
    *  title the stage grouping was worked out from. */
   onRenameControl: (sourceId: string, to: string, was: string) => void;
   /** Drawn beside the prompt rather than on its own step: narrower boxes, and
-   *  no header of its own — the prompt step has one. */
+   *  no header of its own — the prompt step has one. Compact also means the
+   *  chart is framed by a pane of a fixed height, which is what makes Fit
+   *  mean something. */
   compact?: boolean;
 }
+
+/** Zoom stops. A process runs long before it runs wide, so the floor is low
+ *  enough to get a twenty-control chart into one pane (user ask, 27 Sep:
+ *  "so that user can look at the complete flowchart in one go") — small, but
+ *  the shape is what you are reading at that size, not the words. */
+const ZOOM_MIN = 0.3;
+const ZOOM_MAX = 1.5;
+const ZOOM_STEP = 0.1;
+const clampZoom = (z: number) => Math.min(ZOOM_MAX, Math.max(ZOOM_MIN, Math.round(z * 100) / 100));
 
 /**
  * A name on the chart that can be typed over.
@@ -177,6 +188,26 @@ export default function SopFlowchartView({
   const grouped = narrative.stages.some(s => s.inferred);
   const width = compact ? 'w-[13rem]' : 'w-[15rem]';
 
+  // Drawn with CSS `zoom` rather than a transform, because zoom reflows: the
+  // pane's scrollbars shrink with the chart instead of guarding empty space
+  // where the full-size drawing used to be.
+  const [zoom, setZoom] = useState(1);
+  const viewRef = useRef<HTMLDivElement>(null);
+  const drawnRef = useRef<HTMLDivElement>(null);
+
+  /** The scale at which the whole chart lands inside the pane. Measured from
+   *  what is on screen and divided back out by the zoom already applied, so it
+   *  is right whatever the chart is currently sitting at. Never zooms past 1:1
+   *  — a chart that already fits is not made bigger by asking to see all of it. */
+  const fitToPane = useCallback(() => {
+    const view = viewRef.current, drawn = drawnRef.current;
+    if (!view || !drawn) return;
+    const box = drawn.getBoundingClientRect();
+    const w = box.width / zoom, h = box.height / zoom;
+    if (!w || !h) return;
+    setZoom(clampZoom(Math.min(view.clientWidth / w, view.clientHeight / h, 1)));
+  }, [zoom]);
+
   if (!narrative.stages.length) {
     return (
       <div className="rounded-xl border border-dashed border-canvas-border py-14 text-center text-[0.78125rem] text-ink-500">
@@ -186,10 +217,15 @@ export default function SopFlowchartView({
   }
 
   return (
-    <section aria-label="Process flowchart">
+    <section aria-label="Process flowchart" className={compact ? 'h-full relative' : undefined}>
       {/* Beside the prompt the pane has its own heading and count, so all this
-          row carries there is the way out of Ira's grouping. */}
-      <div className={`flex flex-wrap items-center gap-x-3 gap-y-2 ${compact ? 'mb-2 empty:mb-0' : 'mb-4'}`}>
+          row carries there is the zoom and the way out of Ira's grouping.
+          There it floats over the top-right corner rather than taking a strip
+          of its own (user ask, 27 Sep: "remove the bg of the buttons section
+          from the flowchart window so that i can view the flowchart there as
+          well") — the chart is drawn down the middle, so the corner it covers
+          is the corner it was never using, and the pane is that much taller. */}
+      <div className={`flex flex-wrap items-center gap-x-3 gap-y-2 ${compact ? 'absolute top-0 right-0 z-10' : 'mb-4'}`}>
         {!compact && (
           <p className="text-[0.75rem] text-ink-500">
             {narrative.staged ? `${narrative.stages.length} stages · ` : ''}
@@ -198,9 +234,37 @@ export default function SopFlowchartView({
           </p>
         )}
         <div className="flex-1" />
+        {/* One cluster, read left to right as smaller · where you are · bigger.
+            The percentage is the way back to 1:1, so the reading and the reset
+            are the same control rather than a fourth button. */}
+        <div className="inline-flex items-center rounded-lg border border-canvas-border">
+          <button type="button" onClick={() => setZoom(z => clampZoom(z - ZOOM_STEP))} disabled={zoom <= ZOOM_MIN}
+            aria-label="Zoom out" title="Zoom out"
+            className="h-8 w-8 inline-flex items-center justify-center rounded-l-lg text-ink-500 enabled:hover:text-ink-800 disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer">
+            <Minus size={13} aria-hidden />
+          </button>
+          <button type="button" onClick={() => setZoom(1)} disabled={zoom === 1}
+            title="Back to full size" aria-label={`Zoom ${Math.round(zoom * 100)} per cent — back to full size`}
+            className="h-8 w-[3.25rem] text-[0.71875rem] font-semibold text-ink-600 tabular-nums border-x border-canvas-border enabled:hover:text-ink-900 disabled:cursor-default cursor-pointer">
+            {Math.round(zoom * 100)}%
+          </button>
+          <button type="button" onClick={() => setZoom(z => clampZoom(z + ZOOM_STEP))} disabled={zoom >= ZOOM_MAX}
+            aria-label="Zoom in" title="Zoom in"
+            className="h-8 w-8 inline-flex items-center justify-center rounded-r-lg text-ink-500 enabled:hover:text-ink-800 disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer">
+            <Plus size={13} aria-hidden />
+          </button>
+        </div>
+        {/* Only where there is a frame to fit into. On its own step the chart
+            runs down the page, so "fit" would have nothing to measure against. */}
+        {compact && (
+          <button type="button" onClick={fitToPane} title="Scale the chart down until the whole process is in view"
+            className="h-8 px-3 inline-flex items-center gap-1.5 rounded-lg border border-canvas-border text-[0.75rem] font-semibold text-ink-600 hover:border-ink-400 hover:text-ink-800 transition-colors cursor-pointer">
+            Fit
+          </button>
+        )}
         {narrative.groupable && (
           <button type="button" onClick={() => onUngroup(grouped)}
-            className="h-8 px-3 inline-flex items-center gap-1.5 rounded-lg border border-canvas-border bg-canvas text-[0.75rem] font-semibold text-ink-600 hover:border-ink-400 hover:text-ink-800 transition-colors cursor-pointer"
+            className="h-8 px-3 inline-flex items-center gap-1.5 rounded-lg border border-canvas-border text-[0.75rem] font-semibold text-ink-600 hover:border-ink-400 hover:text-ink-800 transition-colors cursor-pointer"
             title={grouped ? 'Drop the stages Ira worked out' : 'Let Ira group the controls into stages by what each one does'}>
             {grouped ? <><Undo2 size={13} aria-hidden /> Ungroup</> : <><Sparkles size={13} className="text-brand-600" aria-hidden /> Group into stages</>}
           </button>
@@ -216,8 +280,8 @@ export default function SopFlowchartView({
 
       {/* A stage with several risks lays them side by side, so a wide process
           can outrun the dialog. It scrolls rather than squeezing the boxes. */}
-      <div className="overflow-x-auto">
-        <div className="flex flex-col items-center gap-2 py-2 min-w-max mx-auto">
+      <div ref={viewRef} className={compact ? 'h-full overflow-auto' : 'overflow-x-auto'}>
+        <div ref={drawnRef} style={{ zoom }} className="flex flex-col items-center gap-2 py-2 min-w-max mx-auto">
           {narrative.stages.map((stage, i) => (
             <Fragment key={stage.name}>
               {i > 0 && <Connector tall />}

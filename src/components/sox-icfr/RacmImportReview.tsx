@@ -156,6 +156,11 @@ const primaryBtn = 'h-9 px-3.5 inline-flex items-center gap-1.5 rounded-lg bg-br
 const secondaryBtn = 'h-9 px-3.5 inline-flex items-center gap-1.5 rounded-lg border border-canvas-border text-[0.78125rem] font-semibold text-ink-600 hover:text-ink-900 transition-colors cursor-pointer';
 const quietBtn = 'h-7 px-2 inline-flex items-center gap-1 rounded-md border border-canvas-border bg-canvas-elevated text-[0.71875rem] font-semibold text-ink-600 hover:text-ink-900 hover:border-ink-300 disabled:opacity-40 disabled:cursor-not-allowed transition-colors cursor-pointer';
 
+// The prompt and the chart it draws stand side by side, so they are one height
+// (user ask, 27 Sep). A short box next to a tall one reads as two unrelated
+// panels; the same height reads as a thing and its read-out.
+const PROMPT_PANE_H = 'h-[30rem]';
+
 /**
  * Which column in the file, picked by name.
  *
@@ -1666,14 +1671,19 @@ export default function RacmImportReview({ mode, file, process, entity, existing
                         <RotateCcw size={11} /> Reset to default
                       </button>
                     </div>
+                    {/* The standing line sits above the box, not below it, so this
+                        column has the same one line of copy over its box that the
+                        chart's column does and the two start and finish level
+                        (user ask, 27 Sep). It is a fixed slot: the error takes the
+                        hint's place rather than adding to it, so nothing shifts. */}
+                    {promptTooShort
+                      ? <p id="sop-prompt-error" role="alert" className="text-[0.71875rem] text-risk-700 mb-3">Write what Ira should extract — the prompt is too short to run.</p>
+                      : <p id="sop-prompt-hint" className="text-[0.71875rem] text-ink-500 mb-3">Ira extracts only after you validate this prompt.</p>}
                     <textarea id="sop-prompt" rows={16} value={prompt}
                       onChange={e => { setPrompt(e.target.value); if (promptTooShort) setPromptTooShort(false); }}
                       aria-invalid={promptTooShort || undefined} aria-describedby={promptTooShort ? 'sop-prompt-error' : 'sop-prompt-hint'}
                       className={cn('w-full rounded-lg border bg-canvas-elevated p-3 text-[0.78125rem] leading-relaxed text-ink-800 focus:outline-none focus:ring-2 focus:ring-brand-200 resize-y',
-                        promptTooShort ? 'border-risk-300' : 'border-canvas-border')} />
-                    {promptTooShort
-                      ? <p id="sop-prompt-error" role="alert" className="text-[0.71875rem] text-risk-700 mt-1.5">Write what Ira should extract — the prompt is too short to run.</p>
-                      : <p id="sop-prompt-hint" className="text-[0.71875rem] text-ink-500 mt-1.5">Ira extracts only after you validate this prompt.</p>}
+                        PROMPT_PANE_H, promptTooShort ? 'border-risk-300' : 'border-canvas-border')} />
                     {extract.phase === 'failed' && (
                       <p role="alert" className="mt-4 text-[0.75rem] text-risk-700 flex items-center gap-1.5"><AlertTriangle size={13} /> Ira couldn't draft a RACM from {file.name} — try again.</p>
                     )}
@@ -1691,9 +1701,13 @@ export default function RacmImportReview({ mode, file, process, entity, existing
                     <p className="text-[0.71875rem] text-ink-500 mb-3">
                       Edit the prompt to change what Ira extracts. To change only a name, click it on the chart.
                     </p>
-                    <div className="rounded-xl border border-canvas-border bg-paper-50/40 px-3 py-3 max-h-[30rem] overflow-y-auto">
+                    {/* The chart owns its own scrolling now that it zooms, so the
+                        pane is a frame of a fixed height and nothing more. */}
+                    <div className={cn('rounded-xl border border-canvas-border bg-paper-50/40 px-3 py-3 overflow-hidden', PROMPT_PANE_H)}>
                       {liveDraft.length === 0 ? (
-                        <p className="py-10 text-center text-[0.75rem] text-ink-500">This prompt draws no controls. Widen it to see something here.</p>
+                        /* The pane is a fixed height now, so an empty one sits its
+                           message in the middle rather than stranding it at the top. */
+                        <p className="h-full flex items-center justify-center text-center text-[0.75rem] text-ink-500">This prompt draws no controls. Widen it to see something here.</p>
                       ) : (
                         <SopFlowchartView compact rows={liveDraft} process={process} entity={entity} source={file.name}
                           idFor={r => cell(r.values.controlId) || r.key} omitted={0}
