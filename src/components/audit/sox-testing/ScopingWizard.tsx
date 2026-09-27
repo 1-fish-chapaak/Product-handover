@@ -104,6 +104,30 @@ const basicsLabelCls = 'text-[0.6875rem] font-bold text-ink-500 uppercase tracki
 /** The same label without its own spacing — for a header row that carries the
  *  margin itself, so the label and the control beside it sit on one baseline. */
 const basicsLabelInlineCls = 'text-[0.6875rem] font-bold text-ink-500 uppercase tracking-wider';
+
+/**
+ * A FILE NAME IN A CHIP, truncated so the EXTENSION survives.
+ *
+ * Plain `truncate` cuts from the right, which eats the one part of a file name
+ * that says what the file IS: "altura-infra-group-org-chart.xlsx" became
+ * "altura-infra-group-org-ch…" and the reader lost the .xlsx. Here the stem
+ * shrinks and the extension is pinned beside it, so a squeezed chip still reads
+ * "altura-infra-gro….xlsx" — you can always tell a spreadsheet from a PDF, which
+ * on this control is the difference between a chart that could be read and one
+ * that could not. The whole name stays on the tooltip either way.
+ */
+function FileChipName({ name, className }: { name: string; className?: string }) {
+  const dot = name.lastIndexOf('.');
+  // A leading dot is the whole name of a dotfile, not an extension.
+  const stem = dot > 0 ? name.slice(0, dot) : name;
+  const ext = dot > 0 ? name.slice(dot) : '';
+  return (
+    <span className={cn('min-w-0 flex items-baseline text-[11px]', className)} title={name}>
+      <span className="truncate">{stem}</span>
+      {ext && <span className="shrink-0">{ext}</span>}
+    </span>
+  );
+}
 /** The New audit wizard's field, for the Materiality & TB step brought over
  *  from it — the two scoping screens set the same rule with the same fields. */
 const matInputCls = 'w-full px-3 py-2 text-[0.8125rem] border border-canvas-border rounded-lg bg-white text-ink-900 outline-none focus:border-brand-400 focus:ring-2 focus:ring-brand-500/10 transition-all';
@@ -646,8 +670,39 @@ export default function ScopingWizard({ onCancel, onCreated, typePreselected, on
   const [noteDrafts, setNoteDrafts] = useState<Record<string, string>>({});
   /** In scope after the user has had their say. A company the trial balance
    *  never mentioned can't be overruled in — there is nothing to test it on. */
-  const companyInScope = (r: DerivedScopeRow) =>
+  /** What the company's OWN line says — the derivation, or the user's override
+   *  of it. Says nothing about the group above it. */
+  const ownInScope = (r: DerivedScopeRow) =>
     r.status === 'absent' ? false : overrides[r.id] ?? (r.status === 'tb' || r.status === 'coverage');
+  /**
+   * THE COMPANY ABOVE THIS ONE THAT TAKES IT OUT WITH IT, if any (user, 27 Sep
+   * — "jab humne upar wali entity ko hataya to neeche wali automatically hat
+   * jani chahiye thi from the scoping").
+   *
+   * Taking a company out of scope takes everything it holds out too: you cannot
+   * audit a subsidiary through a parent you have decided not to look at, and
+   * leaving the child ticked left the scope claiming coverage it did not have.
+   * `splitFromParent` already flagged the mirror case — a child left out while
+   * its parent is in — and this closes the other direction.
+   *
+   * DERIVED, never written into `overrides`. Writing the descendants out would
+   * forge decisions the user never made, and every one of them would then demand
+   * its own why-note — turning "this sub-group is out" into a note-writing
+   * exercise. One note on the company actually taken out covers the branch.
+   * It also means re-ticking the parent restores the branch untouched, while a
+   * child the user took out on its own stays out on its own reason.
+   */
+  const outByAncestor = (r: DerivedScopeRow): DerivedScopeRow | undefined => {
+    let cur = r;
+    for (let i = 0; i < 8; i++) {
+      const parent = cur.parentId ? scope.rows.find(x => x.id === cur.parentId) : undefined;
+      if (!parent) return undefined;
+      if (!ownInScope(parent)) return parent;
+      cur = parent;
+    }
+    return undefined;
+  };
+  const companyInScope = (r: DerivedScopeRow) => ownInScope(r) && !outByAncestor(r);
   const scopedEntities = scope.rows.filter(companyInScope);
 
   /**
@@ -850,9 +905,15 @@ export default function ScopingWizard({ onCancel, onCreated, typePreselected, on
     setOverrides(prev => { const out = { ...prev }; delete out[r.id]; return out; });
   };
   const scopeChanges = useMemo(
+    // A company carried out by the one holding it is NOT a change of its own,
+    // even if it carries an override from before the parent went out: that
+    // override is dormant, the row is out either way, and its note box is
+    // hidden. Counting it here would hold Continue on a note with nowhere to
+    // write it — and would record a decision the user never made.
     () => scope.rows
-      .filter(r => r.status !== 'absent' && overrides[r.id] !== undefined)
+      .filter(r => r.status !== 'absent' && overrides[r.id] !== undefined && !outByAncestor(r))
       .map(r => ({ entityId: r.id, name: r.name, inScope: !!overrides[r.id], note: (scopeNotes[r.id] ?? '').trim() })),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
     [scope.rows, overrides, scopeNotes],
   );
   const notesOutstanding = scopeChanges.filter(c => !c.note).length;
@@ -2005,7 +2066,7 @@ export default function ScopingWizard({ onCancel, onCreated, typePreselected, on
                     header, not buried under it. Hidden once the company is
                     the single entity: there is no structure left to read. */}
                 <div className="flex items-center justify-between gap-3 mb-1.5">
-                  <div className={basicsLabelInlineCls}>
+                  <div className={cn(basicsLabelInlineCls, 'min-w-0')}>
                     {soloEntity ? 'Entity in scope' : 'Entities in scope of the group audit'}
                   </div>
                   {/* Both ways to fill the table sit together on its header —
@@ -2042,9 +2103,9 @@ export default function ScopingWizard({ onCancel, onCreated, typePreselected, on
                         <Loader2 size={11} className="animate-spin" /> Reading the chart…
                       </span>
                     ) : orgChart.state === 'unreadable' ? (
-                      <span className="inline-flex items-center gap-1.5 pl-2 pr-1 py-0.5 rounded-md border border-high-100 bg-high-50 max-w-[15rem] min-w-0 shrink-0">
+                      <span className="inline-flex items-center gap-1.5 pl-2 pr-1 py-0.5 rounded-md border border-high-100 bg-high-50 max-w-[15rem] min-w-0">
                         <AlertTriangle size={11} className="text-high-700 shrink-0" />
-                        <span className="text-[11px] text-high-700 truncate" title={orgChart.name}>{orgChart.name}</span>
+                        <FileChipName name={orgChart.name} className="text-high-700" />
                         <button
                           onClick={() => setOrgChart(null)}
                           aria-label="Remove org chart"
@@ -2054,9 +2115,9 @@ export default function ScopingWizard({ onCancel, onCreated, typePreselected, on
                         </button>
                       </span>
                     ) : (
-                      <span className="inline-flex items-center gap-1.5 pl-2 pr-1 py-0.5 rounded-md border border-border-light bg-white max-w-[15rem] min-w-0 shrink-0">
+                      <span className="inline-flex items-center gap-1.5 pl-2 pr-1 py-0.5 rounded-md border border-border-light bg-white max-w-[15rem] min-w-0">
                         <FileText size={11} className="text-text-muted shrink-0" />
-                        <span className="text-[11px] text-text truncate" title={orgChart.name}>{orgChart.name}</span>
+                        <FileChipName name={orgChart.name} className="text-text" />
                         <button
                           onClick={() => setOrgChart(null)}
                           aria-label="Remove org chart"
@@ -2787,12 +2848,20 @@ export default function ScopingWizard({ onCancel, onCreated, typePreselected, on
                       ) : scope.rows.map(row => {
                         const on = companyInScope(row);
                         const absent = row.status === 'absent';
+                        /** Out because the company holding it is out. Its own tick
+                         *  cannot change that, so the row is read-only and says so
+                         *  rather than offering a control that does nothing. */
+                        const heldOut = absent ? undefined : outByAncestor(row);
                         const depth = chainDepth(row, scope.rows);
-                        const changed = !absent && overrides[row.id] !== undefined;
+                        // A row carried out by its parent has no decision of its
+                        // own to explain, so no note box — the parent's note is
+                        // the reason, and asking again would ask twice.
+                        const changed = !absent && !heldOut && overrides[row.id] !== undefined;
                         const editing = noteDrafts[row.id] !== undefined;
                         /** Only the exceptions get a line — "clears performance
                          *  materiality" is what the tick already says. */
                         const exception = absent ? 'Not in the trial balance'
+                          : heldOut ? `Out of scope with ${heldOut.name}, which holds it`
                           : row.status === 'coverage' ? `Added to reach ${COVERAGE_TARGET}% coverage`
                           : row.status === 'out' ? 'Below performance materiality'
                           : null;
@@ -2802,15 +2871,17 @@ export default function ScopingWizard({ onCancel, onCreated, typePreselected, on
                               type="button"
                               role="checkbox"
                               aria-checked={on}
-                              aria-label={absent ? `${row.name} — not in the trial balance` : row.name}
-                              disabled={absent}
+                              aria-label={absent ? `${row.name} — not in the trial balance`
+                                : heldOut ? `${row.name} — out of scope with ${heldOut.name}, which holds it`
+                                : row.name}
+                              disabled={absent || !!heldOut}
                               onClick={() => flipEntity(row)}
                               className={cn(
                                 'group w-full flex items-center gap-3 px-4 py-2 text-left transition-colors',
-                                absent ? 'cursor-not-allowed' : 'cursor-pointer hover:bg-brand-50/40',
+                                absent || heldOut ? 'cursor-not-allowed' : 'cursor-pointer hover:bg-brand-50/40',
                               )}
                             >
-                              <TickBox state={on} disabled={absent} />
+                              <TickBox state={on} disabled={absent || !!heldOut} />
                               {/* Only the name indents — the ticks stay one straight
                                   column however deep an entity sits. */}
                               {depth > 0 && <span aria-hidden className="shrink-0" style={{ width: `${depth * 0.75}rem` }} />}
@@ -2818,7 +2889,7 @@ export default function ScopingWizard({ onCancel, onCreated, typePreselected, on
                                 <span aria-hidden className="text-[0.6875rem] text-ink-300 leading-none shrink-0 -mr-1.5">↳</span>
                               )}
                               <span className="flex-1 min-w-0">
-                                <span className={cn('block text-[0.8125rem] truncate', absent ? 'text-ink-400' : 'text-ink-900')} title={row.name}>
+                                <span className={cn('block text-[0.8125rem] truncate', absent || heldOut ? 'text-ink-400' : 'text-ink-900')} title={row.name}>
                                   {row.name}
                                 </span>
                                 {exception && <span className="block text-[0.6875rem] text-ink-500 mt-0.5">{exception}</span>}

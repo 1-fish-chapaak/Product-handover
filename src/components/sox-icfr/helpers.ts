@@ -3153,10 +3153,58 @@ const STOPWORDS = new Set(['the', 'a', 'an', 'is', 'are', 'of', 'to', 'and', 'or
 function keyWords(s: string): Set<string> {
   return new Set(s.toLowerCase().replace(/[^a-z\s]/g, ' ').split(/\s+/).filter(w => w.length > 3 && !STOPWORDS.has(w)));
 }
-function alreadyCovered(existing: Set<string>[], candidate: string): boolean {
+
+/**
+ * The same consideration, said the way a client's document says it.
+ *
+ * Shared words alone are not enough to recognise a repeat. The SOP writes "the
+ * reviewer is someone other than the preparer" where the library writes "the
+ * person performing the control is independent of the person who prepares what
+ * it checks" — one consideration, two sentences, and not a significant word
+ * between them. Counting words offered it back as a suggestion, which is the
+ * opposite of what a suggestion is for (user ask, 27 Sep: "ira will only
+ * suggest the data that is required but is missing in the uploaded documents").
+ *
+ * So each library check carries how else it gets said. Where an entry holds two
+ * patterns, one check must satisfy **both** — "limit" on its own is a limit, not
+ * a documented one, and a single loose word must not be able to retire a whole
+ * consideration. Keyed by the library's own text so the two cannot drift apart.
+ */
+const CHECK_SAID_ANOTHER_WAY: Record<string, RegExp[]> = {
+  'The person performing the control is independent of the person who prepares what it checks.':
+    [/\bindependen|\bsegregat|\bother than\b|\bsomeone else\b|\bseparate (?:person|individual)|\bfour[- ]eyes\b|\bmaker[- ]?checker\b|\bnot .{0,24}\bprepar/i],
+  'The threshold or tolerance the control operates at is documented and approved.':
+    [/\bthreshold|\btoleranc|\blimit|\bmaterialit|\bde ?minimis/i, /\bdocument|\bapprov|\bdefin|\bagreed|\bauthoris|\bauthoriz/i],
+  'Exceptions the control raises are followed through to resolution, not just noted.':
+    [/\bexception|\bdifferenc|\bdiscrepanc|\bvarianc|\bmismatch|\bfail/i, /\bresolv|\bfollow|\bclear|\bescalat|\binvestigat|\bheld\b|\bcorrect/i],
+  'The control leaves evidence that it operated — a reviewer can tell it ran on a given date.':
+    [/\bevidenc|\bsign(?:-|\s)?off|\bsigned\b|\baudit trail|\binitial(?:led|s)\b|\blog(?:ged)?\b|\bretain/i],
+  'The person performing the control has the authority and competence to do so.':
+    [/\bauthorit|\bcompeten|\bdelegat|\bmandate|\bqualifi|\btrained|\bskill/i],
+  'The control operates over a complete population — nothing routes around it.':
+    [/\bcomplete|\bpopulation|\ball (?:transactions|items|entries)|\bbypass|\broutes? around/i],
+  'Transactions are captured in the correct period.':
+    [/\bcut[- ]?off|\bcorrect period|\bproper period|\bperiod[- ]end\b/i],
+  'The inputs to the calculation are independently verified before it runs.':
+    [/\binput|\bsource data|\bdata used|\bassumption|\bfeed/i, /\bverif|\bindependen|\bagreed|\bchecked|\breconcil|\bvalidat/i],
+  'The system configuration behind the control is under change control.':
+    [/\bconfigurat|\bsystem setting|\bchange control|\bchange management|\bparameter/i, /\bchange|\bauthoris|\bauthoriz|\bapprov/i],
+  'The report the control is performed against is itself reliable.':
+    [/\breport|\bipe\b|\binformation produced/i, /\breliab|\baccurat|\bcomplete|\bverif|\bvalidat/i],
+  'The control runs often enough to catch a misstatement before it reaches the accounts.':
+    [/\bfrequen|\bhow often|\btimely|\bin time\b|\bbefore the (?:accounts|ledger|close|books)/i],
+};
+
+function alreadyCovered(existing: string[], candidate: string): boolean {
+  // Said another way, by one check on its own. Tested check by check rather than
+  // against all of them joined, so a pair cannot be satisfied half by one line
+  // and half by another — that is two considerations, not one.
+  const said = CHECK_SAID_ANOTHER_WAY[candidate];
+  if (said && existing.some(text => said.every(re => re.test(text)))) return true;
   const cand = keyWords(candidate);
   if (cand.size === 0) return false;
-  return existing.some(have => {
+  return existing.some(text => {
+    const have = keyWords(text);
     let hits = 0;
     cand.forEach(w => { if (have.has(w)) hits++; });
     return hits / cand.size >= 0.5;
@@ -3255,7 +3303,7 @@ export function suggestedDesignChecks(c: Control): string[] {
   // a coincidence of wording. An attribute check reading "…exceptions handled
   // per policy…" would silently retire the library's own exceptions check, which
   // is a different question about a different thing.
-  const existing = c.design.points.filter(p => !p.stepId).map(p => keyWords(p.text));
+  const existing = c.design.points.filter(p => !p.stepId).map(p => p.text);
   return CHECK_LIBRARY
     .filter(x => x.when(c))
     .map(x => x.text)
