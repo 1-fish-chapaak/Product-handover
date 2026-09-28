@@ -866,7 +866,7 @@ function PointRow({ control, point, canEdit, checking = false }: { control: Cont
                     onDragOver={e => { e.preventDefault(); setDragOver(true); }}
                     onDragLeave={() => setDragOver(false)}
                     onDrop={e => { e.preventDefault(); setDragOver(false); const f = e.dataTransfer.files?.[0]; if (f) setProofFile(f); }}
-                    className={cn('block cursor-pointer rounded-md border border-dashed px-3 py-4 text-center transition-colors',
+                    className={cn('block cursor-pointer rounded-md border border-dashed px-3 py-4 text-center transition-colors focus-within:ring-2 focus-within:ring-brand-200',
                       dragOver ? 'border-brand-400 bg-brand-50/50' : 'border-canvas-border bg-canvas-elevated hover:border-brand-300 hover:bg-brand-50/30')}>
                     <input type="file" accept=".pdf,.png,.jpg,.jpeg,.xlsx,.xls,.csv,.doc,.docx" className="sr-only"
                       aria-label="Choose the file that proves this check"

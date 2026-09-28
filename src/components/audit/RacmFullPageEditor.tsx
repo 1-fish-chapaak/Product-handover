@@ -1653,8 +1653,12 @@ function DetailSection({ label, children }: { label: string; children: React.Rea
 
 function DetailField({ label, value, onChange, multiLine, readOnly }: { label: string; value: string; onChange: (v: string) => void; multiLine?: boolean; readOnly?: boolean }) {
   // Read-only keeps the field selectable and scrollable — a published control is
-  // still something people come here to read and copy out of.
-  const tone = readOnly ? 'bg-surface-2/50 text-text-muted' : 'bg-white text-text focus:border-primary/40';
+  // still something people come here to read and copy out of. Because it stays in
+  // the tab order for that reason, it needs the same focus border as an editable
+  // one: `outline-none` below removes the browser's ring, and nothing globally
+  // replaces it for inputs (index.css gives the 4px ring to buttons only), so
+  // without this a keyboard user landing here saw no indication at all.
+  const tone = readOnly ? 'bg-surface-2/50 text-text-muted focus:border-primary/40' : 'bg-white text-text focus:border-primary/40';
   return (
     <div>
       <label className="text-[0.5625rem] font-semibold text-text-muted uppercase tracking-wider block mb-1">{label}</label>

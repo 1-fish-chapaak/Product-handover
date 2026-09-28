@@ -261,7 +261,7 @@ function ColumnPicker({ id, label, value, options, onPick }: {
       {open && at && createPortal(
         <div ref={pop} style={{ left: at.left, width: at.width, [at.up ? 'bottom' : 'top']: at.y }}
           className="fixed z-[120] rounded-lg border border-canvas-border bg-canvas-elevated shadow-[0_12px_32px_-12px_rgba(15,8,30,0.28)] overflow-hidden">
-          <div className="flex items-center gap-1.5 px-2 h-8 border-b border-canvas-border">
+          <div className="flex items-center gap-1.5 px-2 h-8 border-b border-canvas-border focus-within:border-brand-400">
             <Search size={12} className="shrink-0 text-ink-400" />
             <input ref={mountSearch} value={q} onChange={e => setQ(e.target.value)}
               onKeyDown={e => {
