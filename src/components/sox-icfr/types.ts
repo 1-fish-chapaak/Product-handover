@@ -1799,7 +1799,54 @@ export const AUDIT_ROUNDS: { id: AuditRound; label: string; hint: string }[] = [
  * clearly trivial finding is archived as Clearly Trivial — the same grade the
  * register showed it under — never folded into Deficiency.
  */
+/**
+ * WHAT THE MATRIX SAID, at the moment a cycle closed.
+ *
+ * The archive's `conclusions` record how each control *finished* — effective,
+ * ineffective, how many items were tested. They say nothing about what the
+ * control WAS: its risk, its owner, how often it ran, whether it was key. And
+ * `controls` is one register carried across years and edited in place, so once
+ * this year's SOP is read in, last year's wording is gone.
+ *
+ * That is the gap this closes. From the second year onward the auditor's first
+ * question about a process is "what changed?", and it cannot be answered
+ * against a register that only ever holds the present.
+ *
+ * Deliberately the RACM's own columns and nothing else — no design or operating
+ * track, no evidence, no samples. Those are testing, and testing already has an
+ * archive. This is the matrix.
+ */
+export interface ArchivedRacmRow {
+  controlId: string;
+  /** The number the client knows, where it differs from `controlId`. */
+  code?: string;
+  wpRef: string;
+  process: string;
+  subProcess: string;
+  riskId: string;
+  riskTitle?: string;
+  /** The one-line control statement the register shows. */
+  description: string;
+  /** Who does what, to which record, when and how — the column the auditor
+   *  tests against, and the one most likely to be reworded year on year. */
+  controlActivity?: string;
+  objective?: string;
+  owner: string;
+  nature: Nature;
+  type: ControlType;
+  frequency: Frequency;
+  isKey: boolean;
+  clazz?: ControlClass;
+  /** The company this row was tested at, on an engagement scoped by entity. */
+  entity?: string;
+  assertions: Assertion[];
+}
+
 export interface AuditArchive {
+  /** The register as it stood when this cycle closed. Optional because archives
+   *  written before the snapshot existed have none — a comparison against one of
+   *  those has to say it cannot answer rather than report everything as new. */
+  racm?: ArchivedRacmRow[];
   conclusions: {
     controlId: string;
     wpRef: string;

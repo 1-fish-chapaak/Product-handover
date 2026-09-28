@@ -130,7 +130,7 @@ const stampSamples = (c: Control, s: OperatingStep, res: TestResult): OperatingS
 // PARKED (Aug 2026): `defaultGapType` — the exception no longer carries a gap type.
 import { ipeChecklist, ROLE_LABEL, spreadLabel } from './types';
 import { auditCovers, captionsFor, countryOf, entitiesFor, inScopeEntityNames, isOwnerOf, normaliseProcess, ownersOf, peopleForProcess, processesForAudit, racmAuditUse, scopedForDraw } from './auditScope';
-import { rootCauseReady, seedKeyOf, suggestRootCause, suggestSizing, type ExposureContext } from './helpers';
+import { racmRowOf, rootCauseReady, seedKeyOf, suggestRootCause, suggestSizing, type ExposureContext } from './helpers';
 import { entityCodeFor, processCodeFor, riskIdOf } from './racmIds';
 import { controlIdClashes, copyRacmControls, findLibraryRacm, markRacmsUsed } from './racmLibrary';
 import { findEngagement, registerEngagement } from '../../data/engagements';
@@ -1992,6 +1992,12 @@ export function IcfrProvider({ children, initialRole = 'auditor', seedMeta }: { 
       const liveIdx = prev.audits.findIndex(a => !a.archive);
       const live = liveIdx >= 0 ? prev.audits[liveIdx] : undefined;
       const archive: AuditArchive | undefined = live && resetIds.size ? {
+        // The register as it reads RIGHT NOW, before the new cycle edits it.
+        // Taken from the whole register rather than only the controls this
+        // cycle reset: a control the outgoing year carried but did not test is
+        // still part of what the matrix said, and a comparison that skipped it
+        // would report it next year as newly arrived.
+        racm: prev.controls.map(racmRowOf),
         conclusions: prev.controls.filter(c => resetIds.has(c.id)).map(c => ({
           controlId: c.id,
           wpRef: c.wpRef,

@@ -1,11 +1,11 @@
 import { entityShort } from '../audit/sox-testing/soxTestingData';
 import { normaliseProcess, programmeFor } from './auditScope';
 import { NEW_FLOW_ENGAGEMENT_ID } from './flow';
-import { designCheckQA, requiredFilesOf, requiredFilesReady, stepResult, titleFromRisk } from './helpers';
+import { designCheckQA, racmRowOf, requiredFilesOf, requiredFilesReady, stepResult, titleFromRisk } from './helpers';
 import { entityCodeFor, processCodeFor, renameEngagementIds } from './racmIds';
 import { defaultSamplingMethodology, FIVE_W_1H, ipeChecklist, ROUND_TAG, ROUND_WINDOW_LABEL } from './types';
 import type {
-  Assertion, Attestation, AuditArchive, AuditRecord, Control, DesignDoc, DesignPoint, DesignTrack, DesignWaiverReason, Deficiency, Discussion, DocStatus,
+  ArchivedRacmRow, Assertion, Attestation, AuditArchive, AuditRecord, Control, DesignDoc, DesignPoint, DesignTrack, DesignWaiverReason, Deficiency, Discussion, DocStatus,
   // PARKED (Aug 2026) — `GapType` went with the Gap type field; see types.ts.
   // GapType,
   EvidenceFile, ExceptionStatus, ExecKind, ExecutionEvent, Frequency, HandoffTask, IcfrEngagement, IpeTest, Nature, OperatingStep, OperatingTrack,
@@ -1129,8 +1129,71 @@ function libraryAudits(processes: string[], controls: Control[]): AuditRecord[] 
   // ITS conclusions, not this cycle's: two controls failed and were remediated.
   const priorScope = controls.filter(c => first.includes(c.process));
   const failedIds = priorScope.slice(0, 2).map(c => c.id);
+
+  // ── CY 2025's own matrix ───────────────────────────────────────────────────
+  // From the second year onward the first question asked of a process is "what
+  // changed?", and it can only be answered against a record of what the matrix
+  // said before. So the prior cycle archives its register, not just its results.
+  //
+  // Seeded with real movement in it, because a comparison that finds nothing
+  // demonstrates nothing. Four kinds, one of each:
+  //
+  //   arrived   one control in this year's register did not exist in CY 2025
+  //   retired   one control CY 2025 had and this year's SOP no longer describes
+  //   changed   four rows whose wording, owner, frequency or key status moved
+  //   the rest  untouched, so the changes stand out rather than drown
+  //
+  // The control that arrived this year is also absent from the prior
+  // CONCLUSIONS below: a control that did not exist cannot have been tested.
+  const arrived = priorScope[2];
+  const priorTested = priorScope.filter(c => c.id !== arrived?.id);
+
+  /** One realistic year-on-year movement each, by position in the register.
+   *  Every one is written to differ from whatever this year holds rather than
+   *  to a fixed value, so the seed cannot quietly stop demonstrating anything
+   *  when the register underneath it is edited. */
+  const priorEdits: ((row: ArchivedRacmRow) => ArchivedRacmRow)[] = [
+    // Ran quarterly last year; the SOP has it monthly now.
+    row => ({ ...row, frequency: row.frequency === 'Quarterly' ? 'Monthly' : 'Quarterly' }),
+    // Owned by someone who has since left.
+    row => ({ ...row, owner: row.owner === 'K. Raghavan' ? 'S. Menon' : 'K. Raghavan' }),
+    // Same control, reworded when the SOP was rewritten — the commonest change
+    // of all, and the one a reader is least likely to spot unaided.
+    row => ({ ...row, controlActivity: row.controlActivity ? `${row.controlActivity} The reviewer initials the printed report and files it with the pack.` : row.controlActivity }),
+    // Not a key control last year; this year's scoping made it one.
+    row => ({ ...row, isKey: !row.isKey }),
+  ];
+
+  const priorRacm: ArchivedRacmRow[] = [
+    ...priorTested.map((c, i) => (priorEdits[i] ?? ((r: ArchivedRacmRow) => r))(racmRowOf(c))),
+    // The control that left. A manual call-back retired once the ERP began
+    // enforcing the bank detail itself — a good reason, and exactly the kind of
+    // change that should still be seen and signed for rather than noticed a
+    // year later. This is the case the whole comparison exists for.
+    {
+      controlId: 'CY25-C-RETIRED',
+      wpRef: 'WP-CY25-R01',
+      process: first[0]!,
+      subProcess: 'Vendor master',
+      riskId: priorTested[0]?.riskId ?? 'R-001',
+      riskTitle: 'Payment is made to a bank account the vendor does not own.',
+      description: 'Vendor bank details are confirmed by call-back before the first payment.',
+      controlActivity: 'Before a new vendor is paid, the accounts payable clerk telephones the vendor on the number held in the approved vendor file — never a number supplied with the invoice — and reads back the account details for confirmation. The call is logged with the date, the name of the person spoken to and the clerk who made it.',
+      objective: 'Money reaches the vendor, and only the vendor.',
+      owner: 'K. Raghavan',
+      nature: 'Manual',
+      type: 'Preventive',
+      frequency: 'Recurring',
+      isKey: true,
+      clazz: 'Fraud',
+      entity: priorTested[0]?.entity,
+      assertions: ['Existence / Occurrence'],
+    },
+  ];
+
   const archive: AuditArchive = {
-    conclusions: priorScope.map(c => ({
+    racm: priorRacm,
+    conclusions: priorTested.map(c => ({
       controlId: c.id,
       wpRef: c.wpRef,
       process: c.process,

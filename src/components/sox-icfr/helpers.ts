@@ -4,7 +4,7 @@ import type {
   AuditorProofKind, Conclusion, Control, Court, Deficiency, DesignDoc, DesignDocKind, DesignTrack, ExceptionGrade, HandoffTask, IcfrEngagement,
   FileOrigin, IpeCheck, Likelihood, MaterialityRules, OperatingTrack, Population, PopulationBasis, PopulationSource, ReviewNote, RiskRating, Role,
   Sample, SamplingMethod, SamplingMethodology, SamplingSpread, Severity, TestingStrategy, ToeRound, TrackConclusion, DeficiencyGroup, ExceptionStatus,
-  ControlType, Nature,
+  ControlType, Nature, ArchivedRacmRow,
 } from './types';
 
 // ─── Severity (handbook §9.5) ────────────────────────────────────────────────────
@@ -1877,6 +1877,41 @@ export function dataWindow(c: Control): { from: string; to: string } | null {
   return {
     from: `${fy}-${String(fm).padStart(2, '0')}-01`,
     to: `${end.getFullYear()}-${String(end.getMonth() + 1).padStart(2, '0')}-${String(end.getDate()).padStart(2, '0')}`,
+  };
+}
+
+/**
+ * A control, reduced to the RACM columns worth comparing a year later.
+ *
+ * A hoisted declaration on purpose: `mockData` calls this from its own module
+ * body while `helpers` is still initialising, and anything that reads a
+ * module-level const from there dies on the temporal dead zone. This reads only
+ * its argument.
+ */
+export function racmRowOf(c: Control): ArchivedRacmRow {
+  return {
+    controlId: c.id,
+    code: c.code,
+    wpRef: c.wpRef,
+    process: c.process,
+    subProcess: c.subProcess,
+    riskId: c.riskId,
+    // The same fallback the register itself gets (`withRacmFields`). Without it
+    // a snapshot taken before that pass runs holds no title while the live row
+    // holds one, and every untouched control reads as "risk renamed" — noise
+    // that would cost the comparison its credibility on the first screen.
+    riskTitle: c.riskTitle ?? (titleFromRisk(c.riskDescription) || undefined),
+    description: c.description,
+    controlActivity: c.controlActivity,
+    objective: c.objective,
+    owner: c.owner,
+    nature: c.nature,
+    type: c.type,
+    frequency: c.frequency,
+    isKey: c.isKey,
+    clazz: c.clazz,
+    entity: c.entity,
+    assertions: c.assertions,
   };
 }
 
