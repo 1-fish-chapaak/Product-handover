@@ -3381,6 +3381,27 @@ const CYCLE_DAYS: Record<Frequency, number> = { Daily: 1, Weekly: 7, Monthly: 30
 // time. Nothing new is set on the control: Annual is the whole rule. A year-end
 // round, and quarter and custom audits (one-off checks with no rounds), hold
 // nothing back.
+/**
+ * THE OPERATING TEST IS HELD, and why — the one question the three operating
+ * steps each need answered before they render anything.
+ *
+ * Two reasons, and the rule outranks the judgement: an Annual control in an
+ * interim could not have run whatever the auditor thinks, so `yearEndPending`
+ * is checked first. Otherwise it is the auditor's own park.
+ *
+ * Returning one shape for both means Population, Sample and Test of
+ * effectiveness ask once and say the same thing, instead of each growing its
+ * own second branch.
+ */
+export function operatingHeld(
+  c: Control, audit?: AuditRecord | null,
+): { kind: 'year-end'; until: string } | { kind: 'parked'; until: string; reason: string; by: string } | null {
+  const ye = yearEndPending(c, audit);
+  if (ye) return { kind: 'year-end', until: ye.until };
+  const p = c.operating.parked;
+  return p ? { kind: 'parked', until: p.expectedFrom, reason: p.reason, by: p.by } : null;
+}
+
 /** The date an Annual control's operating work is pending until in this audit —
  *  the last day of the audit's cycle — or null when nothing is held back. */
 export function yearEndPending(c: Control, audit?: AuditRecord | null): { until: string } | null {
@@ -3425,8 +3446,10 @@ export function testDueDisplay(c: Control, opApplies = true, audit?: AuditRecord
   if (concl === 'Ineffective') return { label: 'Retest after remediation', cls: 'text-risk-700' };
   const d = testDueInDays(c);
   if (concl === 'Effective') return { label: `Next test in ${d}d`, cls: '' };
-  const pending = yearEndPending(c, audit);
-  if (pending) return { label: `Pending until ${pending.until}`, cls: '' };
+  // Held reads as held, never as due or overdue — a control nobody could have
+  // tested yet has not been neglected, and colouring it red would say it had.
+  const held = operatingHeld(c, audit);
+  if (held) return { label: held.kind === 'parked' ? `Parked until ${held.until}` : `Pending until ${held.until}`, cls: '' };
   if (d < 0) return { label: `Overdue ${-d}d`, cls: 'text-risk-700 font-semibold' };
   if (d === 0) return { label: 'Due today', cls: 'text-mitigated-700 font-semibold' };
   return { label: testDueLabel(d), cls: '' };
@@ -3435,7 +3458,7 @@ export function testDueDisplay(c: Control, opApplies = true, audit?: AuditRecord
 /** Same `audit` as testDueDisplay: a control the open audit holds back until year
  *  end is not due in it, so it is never counted as due now or overdue. */
 export function isTestDueNow(c: Control, audit?: AuditRecord | null): boolean {
-  return !isConcluded(c) && !yearEndPending(c, audit) && testDueInDays(c) <= 0;
+  return !isConcluded(c) && !operatingHeld(c, audit) && testDueInDays(c) <= 0;
 }
 
 export function testsDueNow(controls: Control[], audit?: AuditRecord | null): Control[] {

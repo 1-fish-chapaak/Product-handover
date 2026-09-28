@@ -6,7 +6,7 @@ import {
   Send, Lock, ClipboardCheck, FileCheck2, FlaskConical, CheckCircle2, XCircle,
   CornerDownRight, Pencil, RotateCcw, Cpu, ChevronRight, Scale, Paperclip, Plus, Trash2,
   Mail, X, Loader2, ChevronDown, Check, PlayCircle, Link2, ListChecks, Gavel, UserCheck, History, FileUp, ArrowLeft, Footprints, BadgeCheck, Star,
-  Database, Circle, PenLine, Eye, ChevronUp, AlertCircle, FileWarning, StickyNote, Filter, Quote} from 'lucide-react';
+  Database, Circle, PenLine, Eye, ChevronUp, AlertCircle, FileWarning, StickyNote, Filter, Quote, CalendarClock} from 'lucide-react';
 import { useIcfr } from './store';
 import EvidenceAnnotator from './EvidenceAnnotator';
 import { useAuditLog } from '../../context/AdminDataContext';
@@ -23,7 +23,7 @@ import {
   requiredFilesOf, requiredFilesCount, requiredFilesReady, passedWithoutFiles, designFilesOf,
   evidenceKindOf,
   designApproved, isEngagementLocked, samePerson, documentSystemRows,
-  dealSample, NO_COUNTRY, sampleDate, sampleHome, sampleSplit, spreadPhrase, workingAudit, yearSampleRounds, LEGACY_SOURCE_ID, type SampleSplit, type YearRound, yearEndPending,
+  dealSample, NO_COUNTRY, sampleDate, sampleHome, sampleSplit, spreadPhrase, workingAudit, yearSampleRounds, LEGACY_SOURCE_ID, type SampleSplit, type YearRound, yearEndPending, operatingHeld,
   draftSamplePrompt, readSamplePrompt,
   populationInstances, sampleAmount, seedKeyOf,
   narrowedCount, populationFrom, readRowCount,
@@ -3310,13 +3310,8 @@ function PopulationSection({ control, canEdit, locked: gated = false }: { contro
     const concluded = trackResult(control.design) !== 'Not tested';
     // Pending until year end (A29) outranks the approval: it is the reason that
     // decides this audit, and TOD's state has nothing to do with it.
-    const pending = yearEndPending(control, audit);
-    if (pending) return (
-      <div className="p-5">
-        <EmptyState icon={<Lock size={18} />} title={`Pending until ${pending.until} — tested in the year-end audit`}
-          hint={`This control runs once a year, so there is nothing to pull for it before the year closes.${pop ? ' What was already extracted stays as it is.' : ''}`} />
-      </div>
-    );
+    const held = operatingHeld(control, audit);
+    if (held) return <HeldState held={held} yearEndHint={`This control runs once a year, so there is nothing to pull for it before the year closes.${pop ? ' What was already extracted stays as it is.' : ''}`} />;
     return (
       <div className="p-5">
         <EmptyState icon={<Lock size={18} />} title="Population is locked"
@@ -4290,13 +4285,8 @@ function SampleExtractSection({ control, canEdit, locked }: { control: Control; 
   // includes the reviewer's approval of TOD (S6, A36). A year-end control in an
   // interim or roll-forward audit (A29) is held ahead of both, and says only that.
   if (locked) {
-    const pending = yearEndPending(control, eng.audits.find(a => a.id === openAuditId));
-    if (pending) return (
-      <div className="p-5">
-        <EmptyState icon={<Lock size={18} />} title={`Pending until ${pending.until}`}
-          hint="This control runs once a year. Its sample is drawn in the year-end audit, once the year has closed." />
-      </div>
-    );
+    const held = operatingHeld(control, eng.audits.find(a => a.id === openAuditId));
+    if (held) return <HeldState held={held} yearEndHint="This control runs once a year. Its sample is drawn in the year-end audit, once the year has closed." />;
     const awaitingApproval = trackResult(control.design) === 'Effective' && !designApproved(control);
     const designBlocked = trackResult(control.design) !== 'Effective' || awaitingApproval;
     return (
@@ -5120,13 +5110,8 @@ function OperatingSection({ control, canEdit, locked }: { control: Control; canE
   if (locked) {
     // A29 — a year-end control in an interim or roll-forward audit waits for the
     // year-end audit whatever TOD's state, so that is the one reason given.
-    const pending = yearEndPending(control, eng.audits.find(a => a.id === openAuditId));
-    if (pending) return (
-      <div className="p-5">
-        <EmptyState icon={<Lock size={18} />} title={`Pending until ${pending.until}`}
-          hint="This control runs once a year. It is tested for operation in the year-end audit, once the year has closed." />
-      </div>
-    );
+    const held = operatingHeld(control, eng.audits.find(a => a.id === openAuditId));
+    if (held) return <HeldState held={held} yearEndHint="This control runs once a year. It is tested for operation in the year-end audit, once the year has closed." />;
     return (
       <div className="p-5">
         <EmptyState icon={<Lock size={18} />} title="TOE is locked" hint={trackResult(control.design) === 'Effective' && !designApproved(control)
@@ -5544,6 +5529,107 @@ function RailSpine({ control, running, onOpen }: { control: Control; running: bo
  *  point the control genuinely could not be evidenced as operating, so it
  *  concludes ineffective and runs the ordinary ladder, carrying this reason across
  *  so the paper says why rather than merely that. */
+/**
+ * The operating steps' shared "nothing to do here yet" state.
+ *
+ * Population, Sample and Test of effectiveness are all held by the same two
+ * reasons, so they say it in the same words. The year-end wording is each
+ * step's own (the rule differs in what it means for that step); the parked
+ * wording is written once here, because the auditor's reason is the message
+ * and it should not be paraphrased three ways.
+ */
+function HeldState({ held, yearEndHint }: {
+  held: NonNullable<ReturnType<typeof operatingHeld>>; yearEndHint: string;
+}) {
+  return (
+    <div className="p-5">
+      <EmptyState icon={<Lock size={18} />}
+        title={held.kind === 'parked' ? `Parked until ${held.until} — not yet operated` : `Pending until ${held.until} — tested in the year-end audit`}
+        hint={held.kind === 'parked'
+          ? `${held.reason} Parked by ${held.by}. This is not a finding — the control has not been shown to have failed, it has not run yet.`
+          : yearEndHint} />
+    </div>
+  );
+}
+
+/**
+ * PARK THE OPERATING TEST — the control has not run yet.
+ *
+ * A sibling of UnableToTestBanner above, and deliberately the quieter of the
+ * two: that one is a request to a person, this one is a statement of fact about
+ * the calendar. Neither is a finding, and both say so.
+ *
+ * Offered only once the design is concluded and approved. Before that the
+ * design gate already holds the operating steps shut, so a second lock would
+ * only add noise — and it should not be possible to park a control whose design
+ * nobody has checked.
+ */
+function ParkOperatingBanner({ control }: { control: Control }) {
+  const { eng, role, parkOperating, resumeOperating } = useIcfr();
+  const [asking, setAsking] = useState(false);
+  const [reason, setReason] = useState('');
+  const [from, setFrom] = useState('');
+  const parked = control.operating.parked;
+  const eligible = role === 'auditor' && !isControlLockedIn(eng, control)
+    && trackResult(control.design) === 'Effective' && designApproved(control);
+
+  if (parked) {
+    return (
+      <div className="rounded-xl border border-evidence-200 bg-evidence-50/40 p-4">
+        <div className="flex items-start justify-between gap-3 flex-wrap">
+          <div className="min-w-0">
+            <h3 className="text-[0.8125rem] font-bold text-evidence-700 inline-flex items-center gap-1.5">
+              <CalendarClock size={15} /> Operating test parked until {parked.expectedFrom}
+            </h3>
+            <p className="text-[0.75rem] text-ink-700 mt-1">{parked.reason}</p>
+            <p className="text-[0.6875rem] text-ink-400 mt-1">
+              Parked by {parked.by} · {parked.at}. The design is tested; the control has not run yet, so it cannot be
+              concluded effective — nobody has watched it operate. This is not a finding.
+            </p>
+          </div>
+          {role === 'auditor' && !isControlLockedIn(eng, control) && (
+            <button onClick={() => resumeOperating(control.id)}
+              className="shrink-0 h-8 px-3 rounded-lg bg-brand-600 text-white text-[0.75rem] font-semibold hover:bg-brand-700 cursor-pointer">
+              It has operated — resume testing
+            </button>
+          )}
+        </div>
+      </div>
+    );
+  }
+
+  if (!eligible || control.unableToTest) return null;
+
+  return asking ? (
+    <div className="rounded-xl border border-evidence-200 bg-evidence-50/40 p-4 space-y-2">
+      <h3 className="text-[0.8125rem] font-bold text-evidence-700 inline-flex items-center gap-1.5"><CalendarClock size={15} /> Park the operating test</h3>
+      <p className="text-[0.75rem] text-ink-600">
+        For a control that has not run yet — implemented mid-year, or a system that went live after the period began.
+        It stays off the overdue list until you say it has operated, and it is not a finding.
+      </p>
+      <input value={reason} onChange={e => setReason(e.target.value)}
+        placeholder="Why it cannot be tested yet — e.g. the control went live with the new AP system in August"
+        className="w-full h-8 px-2.5 rounded-md border border-canvas-border bg-canvas-elevated text-[0.78125rem] focus:outline-none focus:border-brand-300" />
+      <input value={from} onChange={e => setFrom(e.target.value)}
+        placeholder="Testable from — e.g. 30 Nov 2026"
+        className="w-full h-8 px-2.5 rounded-md border border-canvas-border bg-canvas-elevated text-[0.78125rem] focus:outline-none focus:border-brand-300" />
+      <div className="flex items-center gap-2">
+        <button disabled={!reason.trim() || !from.trim()}
+          onClick={() => { parkOperating(control.id, reason.trim(), from.trim()); setAsking(false); setReason(''); setFrom(''); }}
+          className="h-8 px-3 rounded-lg bg-evidence-600 text-white text-[0.75rem] font-semibold enabled:hover:bg-evidence-700 disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer">Park it</button>
+        <button onClick={() => setAsking(false)} className="h-8 px-2.5 rounded-lg border border-canvas-border text-[0.75rem] font-semibold text-ink-600 cursor-pointer">Cancel</button>
+        {(!reason.trim() || !from.trim()) && (
+          <span className="text-[0.6875rem] text-ink-500">A reason and a date, both — a park with no date is an excuse.</span>
+        )}
+      </div>
+    </div>
+  ) : (
+    <button onClick={() => setAsking(true)} className="text-[0.75rem] font-semibold text-ink-500 hover:text-evidence-700 cursor-pointer inline-flex items-center gap-1.5">
+      <CalendarClock size={13} /> Hasn't operated yet — park the operating test
+    </button>
+  );
+}
+
 function UnableToTestBanner({ control }: { control: Control }) {
   const { eng, role, markUnableToTest, resolveUnableToTest, escalateUnableToTest } = useIcfr();
   const [asking, setAsking] = useState(false);
@@ -6062,6 +6148,7 @@ export default function ControlDossier() {
 
       {/* Blocked testing sits above the steps, because it is the reason none of
           them can run — not a finding underneath them. */}
+      <ParkOperatingBanner control={control} />
       <UnableToTestBanner control={control} />
 
       {/* the stepper — the whole of the left column below the header */}

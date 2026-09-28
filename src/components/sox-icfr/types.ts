@@ -804,7 +804,39 @@ export interface IpeTest {
   testedAt: string | null;
 }
 
+/**
+ * THE OPERATING TEST, PARKED — the control has not run yet.
+ *
+ * Distinct from `UnableToTest`, which is an evidence chase: that one asks what
+ * the owner must produce, goes to them as a request, and at period end becomes
+ * an exception. A control implemented in August has no owner to chase and owes
+ * nothing — and it must never become a finding for failing to do something it
+ * never had the chance to do.
+ *
+ * Distinct too from `yearEndPending`, which is the same idea arrived at by rule
+ * rather than judgement (an Annual control cannot have run inside an interim).
+ * That one needs no reason because the frequency is the reason. This one is the
+ * auditor's call, so it costs a reason and a date.
+ *
+ * It never concludes anything. `controlConclusion` already refuses Effective
+ * unless both tracks are effective, so a parked control simply cannot be called
+ * effective — which is the point: nobody watched it run.
+ */
+export interface OperatingPark {
+  /** Why it cannot be tested yet, in the auditor's words. */
+  reason: string;
+  /** When it is expected to become testable. What makes this a park rather than
+   *  an excuse — and what lets the control resurface instead of going quiet. */
+  expectedFrom: string;
+  by: string;
+  at: string;
+}
+
 export interface OperatingTrack {
+  /** Set while the operating test is parked — see OperatingPark. Lives on the
+   *  track, not the control, so it clears when a new round resets it: every
+   *  round decides afresh whether the control has run yet. */
+  parked?: OperatingPark;
   method: OperatingMethod;        // dominant evidence mode — informational; each attribute is evidenced independently
   /** The report the population is drawn from, and its validation — IPE gate 1.
    *  Lives on the operating track because the sample it feeds does, but it is
@@ -1703,7 +1735,10 @@ export type ExecKind =
   | 'override' | 'request-docs' | 'receive-doc' | 'waive-doc' | 'walkthrough' | 'ipe' | 'population' | 'sample' | 'reopen' | 'wp-signoff' | 'review-return' | 'exception' | 'challenge'
   // TOD's own trail (S6): elements, files and checks coming and going, Ira's
   // read of the checks, and the design approval after TOD concludes.
-  | 'add-element' | 'remove-element' | 'remove-file' | 'add-check' | 'remove-check' | 'ai-review' | 'design-approval';
+  | 'add-element' | 'remove-element' | 'remove-file' | 'add-check' | 'remove-check' | 'ai-review' | 'design-approval'
+  // The operating test parked because the control has not run yet, and lifted
+  // again once it has. Its own kind: it is neither a conclusion nor a chase.
+  | 'park-operating';
 export interface ExecutionEvent {
   id: string;
   controlId: string;
