@@ -100,6 +100,9 @@ const selectCls = inputCls + ' cursor-pointer appearance-none';
 /** Compact FormSelect for a table row — the sheet's dropdown look at row scale,
  *  so the entity type matches Owner instead of falling back to a raw <select>. */
 const rowSelectCls = 'w-full text-[12px] text-text-secondary bg-white border border-border rounded-md px-2 py-1 outline-none hover:border-primary/40 transition-colors';
+/** "3 accounts" / "1 company" — the count and its noun, agreeing. */
+const plural = (n: number, one: string, many = `${one}s`) => `${n} ${n === 1 ? one : many}`;
+
 const basicsLabelCls = 'text-[0.6875rem] font-bold text-ink-500 uppercase tracking-wider mb-1.5 block';
 /** The same label without its own spacing — for a header row that carries the
  *  margin itself, so the label and the control beside it sit on one baseline. */
@@ -604,7 +607,22 @@ export default function ScopingWizard({ onCancel, onCreated, typePreselected, on
     input.multiple = true;
     input.onchange = () => {
       const picked = Array.from(input.files ?? []);
-      if (picked.length) setScopeFiles(prev => [...prev, ...picked.map(f => ({ name: f.name, kind }))]);
+      if (!picked.length) return;
+      setScopeFiles(prev => [...prev, ...picked.map(f => ({ name: f.name, kind }))]);
+      // READ THE FILE, don't just log its name (28 Sep). This step promises the
+      // material accounts decide which processes the engagement covers, and
+      // until now it attached the trial balance and scoped off invented
+      // figures instead — every company came out at the same ₹249 Cr, so
+      // materiality could not tell one from another, which is the entire point
+      // of the step. The parser already existed; nothing called it from here.
+      //
+      // One file, like the other ledger paths: a trial balance is normally one
+      // workbook covering the whole group. A file we cannot open still lands in
+      // the list above, and `ledgerError` says why in its own words.
+      const first = picked.find(f => isReadableLedger(f.name)) ?? picked[0]!;
+      if (kind === 'tb') void ingestTrialBalance(first);
+      else if (isReadableLedger(first.name)) void ingestGeneralLedger(first);
+      else setLedgerError({ kind: 'gl', name: first.name, reason: 'not-a-spreadsheet' });
     };
     input.click();
   };
@@ -2505,6 +2523,20 @@ export default function ScopingWizard({ onCancel, onCreated, typePreselected, on
             <p className="text-[0.75rem] text-ink-500 mb-4 leading-relaxed">
               Upload the trial balance to continue — its material accounts decide which processes this engagement covers. The general ledger can be added later.
             </p>
+
+            {/* What was actually read, the way the org chart already says
+                "Read 8 companies off the chart". Its absence is how a file that
+                was only ever attached went unnoticed for so long: with nothing
+                claiming a number, nothing looked wrong. */}
+            {tbParse && (
+              <div className="mb-3 rounded-md border border-compliant-200 bg-compliant-50/60 px-2.5 py-2">
+                <p className="text-[0.71875rem] text-compliant-700 leading-relaxed">
+                  Read <span className="font-semibold">{plural(tbParse.captions.length, 'account')}</span> across{' '}
+                  <span className="font-semibold">{plural(new Set(tbParse.captions.map(c => c.entityId)).size, 'company', 'companies')}</span>.
+                  {tbAddedIds.size > 0 && <> {plural(tbAddedIds.size, 'company', 'companies')} the chart didn’t name {tbAddedIds.size === 1 ? 'was' : 'were'} added from it.</>}
+                </p>
+              </div>
+            )}
 
             {/* A ledger we could not read says so, and says what to do about
                 it — the same rule the org chart follows. */}
