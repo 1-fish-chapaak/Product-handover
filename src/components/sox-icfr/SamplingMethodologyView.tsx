@@ -287,8 +287,8 @@ export default function SamplingMethodologyView() {
 
       {/* ── the table ───────────────────────────────────────────────────────────── */}
       <section className="rounded-xl border border-canvas-border bg-canvas-elevated p-5">
-        <h2 className="text-[0.8125rem] font-bold text-ink-800 inline-flex items-center gap-1.5"><Table2 size={15} className="text-brand-600" /> Sample sizes</h2>
-        <p className="text-[0.71875rem] text-ink-500 mt-0.5 mb-3">How many items to test, by how often the control runs and how it is rated. A control with no rating yet is sized at Medium.</p>
+        <h2 className="font-display text-[1.0625rem] leading-tight text-ink-900 inline-flex items-center gap-2"><Table2 size={15} className="text-brand-600" /> Sample sizes</h2>
+        <p className="text-[0.71875rem] text-ink-500 mt-1 mb-3">How many items to test, by how often the control runs and how it is rated. A control with no rating yet is sized at Medium.</p>
         <table className="w-full">
           <thead>
             <tr className="border-b border-canvas-border">
@@ -339,8 +339,8 @@ export default function SamplingMethodologyView() {
 
       {/* ── how the items are picked ───────────────────────────────────────────── */}
       <section className="rounded-xl border border-canvas-border bg-canvas-elevated p-5">
-        <h2 className="text-[0.8125rem] font-bold text-ink-800 inline-flex items-center gap-1.5"><Shuffle size={15} className="text-brand-600" /> Selection method</h2>
-        <p className="text-[0.71875rem] text-ink-500 mt-0.5 mb-3">How the items are picked out of the population, on every control.</p>
+        <h2 className="font-display text-[1.0625rem] leading-tight text-ink-900 inline-flex items-center gap-2"><Shuffle size={15} className="text-brand-600" /> Selection method</h2>
+        <p className="text-[0.71875rem] text-ink-500 mt-1 mb-3">How the items are picked out of the population, on every control.</p>
         <div className="grid grid-cols-3 gap-2.5" role="radiogroup" aria-label="Selection method">
           {SAMPLING_METHODS.map(opt => (
             <OptionCard
@@ -360,8 +360,8 @@ export default function SamplingMethodologyView() {
           Any, all or none — a tick group, not a choice of one, which is why it is
           its own section rather than three more cards under the method. */}
       <section className="rounded-xl border border-canvas-border bg-canvas-elevated p-5">
-        <h2 className="text-[0.8125rem] font-bold text-ink-800 inline-flex items-center gap-1.5"><Layers size={15} className="text-brand-600" /> Spread across</h2>
-        <p className="text-[0.71875rem] text-ink-500 mt-0.5 mb-3">Each group ticked gets items of its own in every control's draw, so a sample cannot land entirely in one quarter or one company.</p>
+        <h2 className="font-display text-[1.0625rem] leading-tight text-ink-900 inline-flex items-center gap-2"><Layers size={15} className="text-brand-600" /> Spread across</h2>
+        <p className="text-[0.71875rem] text-ink-500 mt-1 mb-3">Each group ticked gets items of its own in every control's draw, so a sample cannot land entirely in one quarter or one company.</p>
         <div className="grid grid-cols-3 gap-2.5" role="group" aria-label="Spread across">
           {SAMPLING_SPREADS.map(opt => (
             <OptionCard
@@ -385,8 +385,8 @@ export default function SamplingMethodologyView() {
           The consequence sentence is on screen for whatever is currently chosen
           (user ask): this is a choice people make by its effect, not by its name. */}
       <section className="rounded-xl border border-canvas-border bg-canvas-elevated p-5">
-        <h2 className="text-[0.8125rem] font-bold text-ink-800 inline-flex items-center gap-1.5"><CalendarRange size={15} className="text-brand-600" /> Across rounds</h2>
-        <p className="text-[0.71875rem] text-ink-500 mt-0.5 mb-3">A year is tested in rounds — interim first, then roll-forward. This says whether each round draws its own sample or the year is drawn once.</p>
+        <h2 className="font-display text-[1.0625rem] leading-tight text-ink-900 inline-flex items-center gap-2"><CalendarRange size={15} className="text-brand-600" /> Across rounds</h2>
+        <p className="text-[0.71875rem] text-ink-500 mt-1 mb-3">A year is tested in rounds — interim first, then roll-forward. This says whether each round draws its own sample or the year is drawn once.</p>
         <div className="grid grid-cols-2 gap-2.5" role="radiogroup" aria-label="Across rounds">
           {(Object.keys(BASIS_LABEL) as SamplingRoundBasis[]).map(opt => (
             <OptionCard
@@ -410,8 +410,8 @@ export default function SamplingMethodologyView() {
           always the numbers?" — is asked here, looking at them. */}
       {log.length > 0 && (
         <section className="rounded-xl border border-canvas-border bg-canvas-elevated p-5">
-          <h2 className="text-[0.8125rem] font-bold text-ink-800 inline-flex items-center gap-1.5"><History size={15} className="text-brand-600" /> Changes to the methodology</h2>
-          <p className="text-[0.71875rem] text-ink-500 mt-0.5 mb-3">Every revision since the engagement opened, newest first. An audit stays on the version it was created under.</p>
+          <h2 className="font-display text-[1.0625rem] leading-tight text-ink-900 inline-flex items-center gap-2"><History size={15} className="text-brand-600" /> Changes to the methodology</h2>
+          <p className="text-[0.71875rem] text-ink-500 mt-1 mb-3">Every revision since the engagement opened, newest first. An audit stays on the version it was created under.</p>
           <div className="space-y-2.5">
             {log.map(entry => (
               <div key={entry.id} className="rounded-xl border border-canvas-border bg-paper-50/50 px-3.5 py-3">

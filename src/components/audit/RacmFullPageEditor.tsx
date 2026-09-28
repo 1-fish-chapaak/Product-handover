@@ -1594,7 +1594,7 @@ function DetailPanel({
             <span className={`px-1.5 h-4 rounded text-[0.5rem] font-bold inline-flex items-center border ${deriveControlTypeClass(row.controlType)}`}>{row.controlType}</span>
             <span className={`px-1.5 h-4 rounded text-[0.5rem] font-bold inline-flex items-center border ${deriveControlNatureClass(row.controlNature)}`}>{row.controlNature}</span>
           </div>
-          <h2 className="text-[0.8125rem] font-bold text-text truncate">{row.controlObjective || row.controlActivity?.slice(0, 80) || '(No objective)'}</h2>
+          <h2 className="text-[0.9375rem] font-semibold text-text truncate">{row.controlObjective || row.controlActivity?.slice(0, 80) || '(No objective)'}</h2>
           <p className="text-[0.625rem] text-text-muted mt-0.5 truncate">{row.subProcess}</p>
         </div>
         <button ref={closeRef} onClick={onClose} aria-label="Close detail panel" className="p-1.5 rounded-lg text-ink-500 hover:text-ink-800 hover:bg-surface-2 transition-colors cursor-pointer shrink-0 -mr-1"><X size={16} /></button>
