@@ -146,7 +146,9 @@ export default function SamplingMethodologyView() {
 
   return (
     <div className="w-full space-y-4 pb-8">
-      <p className="text-[0.78125rem] text-ink-500 leading-relaxed max-w-[52rem]">
+      {/* Runs the full width of the tab (user ask, 28 Sep) — it used to stop at
+          52rem, which left it visibly short of the cards below it. */}
+      <p className="text-[0.78125rem] text-ink-500 leading-relaxed">
         How this engagement samples — agreed once, for every control. A control's sample step reads its number off
         the table below instead of asking the auditor to decide again, so there is one answer when a reviewer or an
         external auditor asks what the sampling approach is.
