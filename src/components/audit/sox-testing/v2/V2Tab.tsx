@@ -208,7 +208,7 @@ function FlowModal({ label, widthCls = 'w-[800px]', onClose, children }: {
           >
             <X size={16} />
           </button>
-          <div className="flex-1 overflow-y-auto p-6 pb-0">
+          <div className="flex-1 overflow-y-auto overscroll-contain p-6 pb-0">
             {children}
           </div>
         </motion.div>
