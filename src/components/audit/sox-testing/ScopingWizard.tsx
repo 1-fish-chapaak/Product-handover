@@ -2477,7 +2477,7 @@ export default function ScopingWizard({ onCancel, onCreated, typePreselected, on
                           <span className="inline-flex items-center gap-1.5 pl-2 pr-1 h-7 rounded-md border border-border-light bg-white max-w-full min-w-0">
                             <FileText size={11} className="text-text-muted shrink-0" />
                             <span className="text-[11px] text-text truncate">{racm.name}</span>
-                            <span className="px-1.5 py-0.5 rounded bg-brand-50 text-brand-700 text-[9.5px] font-bold uppercase tracking-wide shrink-0">RACM</span>
+                            <span className="px-1.5 py-0.5 rounded bg-brand-50 text-brand-700 text-[10px] font-bold uppercase tracking-wide shrink-0">RACM</span>
                             {racm.state === 'parsing' ? (
                               <Loader2 size={11} className="animate-spin text-text-muted shrink-0 mr-1" />
                             ) : (
@@ -3454,7 +3454,7 @@ export default function ScopingWizard({ onCancel, onCreated, typePreselected, on
                       <span key={a.id} className="flex items-center gap-1.5 pl-2.5 pr-1.5 h-9 rounded-lg border border-border-light bg-white min-w-0">
                         <FileText size={12} className="text-text-muted shrink-0" />
                         <span className="text-[12px] text-text truncate">{a.name}</span>
-                        <span className="px-1.5 py-0.5 rounded bg-brand-50 text-brand-700 text-[9.5px] font-bold uppercase tracking-wide whitespace-nowrap shrink-0">{REQ_TAG[a.req]}</span>
+                        <span className="px-1.5 py-0.5 rounded bg-brand-50 text-brand-700 text-[10px] font-bold uppercase tracking-wide whitespace-nowrap shrink-0">{REQ_TAG[a.req]}</span>
                         <button
                           onClick={() => removeAttached(a.id)}
                           aria-label={`Remove ${a.name}`}

@@ -240,7 +240,7 @@ export default function BulkTestModal({ controlIds, onClose }: { controlIds: str
                             <span className="wp-ref">{c.wpRef}</span>
                             {c.isKey && <Star size={11} className="text-mitigated-500 fill-mitigated-100 shrink-0" />}
                             <span className="text-[12.5px] font-semibold text-ink-900 truncate">{c.description}</span>
-                            {locked && <span className="px-1.5 h-[17px] inline-flex items-center rounded border border-canvas-border bg-paper-50 text-[9.5px] font-bold uppercase tracking-wide text-ink-500 shrink-0">Concluded — locked</span>}
+                            {locked && <span className="px-1.5 h-[17px] inline-flex items-center rounded border border-canvas-border bg-paper-50 text-[10px] font-bold uppercase tracking-wide text-ink-500 shrink-0">Concluded — locked</span>}
                           </span>
                           <span className="block text-[11px] text-ink-400 mt-0.5">{checksOf(c)} checks · {evidenceSummary(c)} · {c.owner}</span>
                         </span>
@@ -274,7 +274,7 @@ export default function BulkTestModal({ controlIds, onClose }: { controlIds: str
                       <div className="min-w-0 flex-1">
                         <div className="flex items-center gap-2">
                           <span className="text-[13px] font-semibold text-ink-900">{dataset.name}</span>
-                          <span className={cn('px-1.5 h-[17px] inline-flex items-center rounded border text-[9.5px] font-bold', FORMAT_TONE[dataset.format])}>{dataset.format}</span>
+                          <span className={cn('px-1.5 h-[17px] inline-flex items-center rounded border text-[10px] font-bold', FORMAT_TONE[dataset.format])}>{dataset.format}</span>
                         </div>
                         <div className="text-[11.5px] text-ink-500 mt-0.5">{dataset.description}</div>
                         <div className="flex items-center gap-1 mt-1.5 flex-wrap">

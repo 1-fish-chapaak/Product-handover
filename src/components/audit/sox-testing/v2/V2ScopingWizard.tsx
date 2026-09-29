@@ -917,7 +917,7 @@ export default function V2ScopingWizard({ onCancel, onCreated }: Props) {
                       <div className="flex items-center gap-1.5 min-w-0">
                         <span className="text-[12.5px] text-text truncate">{row.caption}</span>
                         {!on && coverageIds.has(row.id) && (
-                          <span className="inline-flex items-center px-1.5 h-4 rounded text-[9px] font-bold uppercase tracking-wide bg-mitigated-50 text-mitigated-700 shrink-0" title="Already in scope — its entity was pulled in by the coverage rule">
+                          <span className="inline-flex items-center px-1.5 h-4 rounded text-[10px] font-bold uppercase tracking-wide bg-mitigated-50 text-mitigated-700 shrink-0" title="Already in scope — its entity was pulled in by the coverage rule">
                             In via coverage
                           </span>
                         )}
@@ -999,12 +999,12 @@ export default function V2ScopingWizard({ onCancel, onCreated }: Props) {
                       <div className="flex items-center gap-1.5 min-w-0">
                         <span className="text-[12.5px] text-text truncate">{row.caption}</span>
                         {qualIds.has(row.id) && (
-                          <span className="inline-flex items-center px-1.5 h-4 rounded text-[9px] font-bold uppercase tracking-wide bg-evidence-50 text-evidence-700 shrink-0" title="Scoped in qualitatively">
+                          <span className="inline-flex items-center px-1.5 h-4 rounded text-[10px] font-bold uppercase tracking-wide bg-evidence-50 text-evidence-700 shrink-0" title="Scoped in qualitatively">
                             Qual
                           </span>
                         )}
                         {coverageIds.has(row.id) && (
-                          <span className="inline-flex items-center px-1.5 h-4 rounded text-[9px] font-bold uppercase tracking-wide bg-mitigated-50 text-mitigated-700 shrink-0" title="Its entity was pulled in by the coverage rule">
+                          <span className="inline-flex items-center px-1.5 h-4 rounded text-[10px] font-bold uppercase tracking-wide bg-mitigated-50 text-mitigated-700 shrink-0" title="Its entity was pulled in by the coverage rule">
                             Coverage
                           </span>
                         )}
@@ -1139,7 +1139,7 @@ export default function V2ScopingWizard({ onCancel, onCreated }: Props) {
                     <div className="pt-1 min-w-0">
                       <div className="text-[12.5px] font-semibold text-text truncate">{r.process}</div>
                       {r.workstream && (
-                        <span className="inline-flex items-center px-1.5 h-4 rounded text-[9px] font-bold uppercase tracking-wide bg-surface-2 text-text-muted mt-1">
+                        <span className="inline-flex items-center px-1.5 h-4 rounded text-[10px] font-bold uppercase tracking-wide bg-surface-2 text-text-muted mt-1">
                           Workstream
                         </span>
                       )}
@@ -1257,7 +1257,7 @@ export default function V2ScopingWizard({ onCancel, onCreated }: Props) {
                     <div key={r.process} className="rounded-lg p-3 bg-surface-2/60">
                       <div className="flex items-center gap-1.5">
                         <div className="text-[12.5px] font-semibold text-text">{r.process}</div>
-                        <span className="inline-flex items-center px-1.5 h-4 rounded text-[9px] font-bold uppercase tracking-wide bg-surface-2 text-text-muted shrink-0">
+                        <span className="inline-flex items-center px-1.5 h-4 rounded text-[10px] font-bold uppercase tracking-wide bg-surface-2 text-text-muted shrink-0">
                           Workstream
                         </span>
                       </div>

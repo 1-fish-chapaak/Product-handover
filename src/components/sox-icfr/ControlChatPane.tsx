@@ -1104,7 +1104,7 @@ export default function ControlChatPane({ control }: { control: Control }) {
         {!working && draw?.refs && (
           <div>
             <div className="rounded-lg border border-canvas-border overflow-hidden mb-2">
-              <div className="grid grid-cols-[1.1fr_1fr] gap-2 px-2.5 py-1.5 bg-paper-50/70 border-b border-canvas-border text-[0.5625rem] font-bold uppercase tracking-wide text-ink-400">
+              <div className="grid grid-cols-[1.1fr_1fr] gap-2 px-2.5 py-1.5 bg-paper-50/70 border-b border-canvas-border text-[0.625rem] font-bold uppercase tracking-wide text-ink-400">
                 <span>Reference</span><span className="text-right">Drawn from</span>
               </div>
               <div className="max-h-[11rem] overflow-y-auto">

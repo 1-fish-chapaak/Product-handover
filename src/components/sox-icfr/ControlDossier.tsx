@@ -1855,7 +1855,7 @@ function DesignSection({ control, canEdit: canEditIn, locked = false }: { contro
                     <div className="min-w-0 flex-1">
                       <div className="flex items-center gap-1.5">
                         <span className="text-[0.75rem] font-semibold text-ink-800">{docLabel(doc)}</span>
-                        <span className={cn('text-[0.5625rem] font-bold uppercase tracking-wide px-1 h-[15px] inline-flex items-center rounded', doc.required !== false ? 'bg-brand-50 text-brand-700' : 'bg-paper-100 text-ink-400')}>{doc.required !== false ? 'Required' : 'Optional'}</span>
+                        <span className={cn('text-[0.625rem] font-bold uppercase tracking-wide px-1 h-[15px] inline-flex items-center rounded', doc.required !== false ? 'bg-brand-50 text-brand-700' : 'bg-paper-100 text-ink-400')}>{doc.required !== false ? 'Required' : 'Optional'}</span>
                       </div>
                       {doc.description && <div className="text-[0.6875rem] text-ink-500 mt-0.5">{doc.description}</div>}
                       {files.length > 0 ? (
@@ -2728,7 +2728,7 @@ function CountContext({ control, canWrite, locked }: { control: Control; canWrit
                 const spike = spikes.has(m.key);
                 return (
                   <div key={m.key} className="flex-1 min-w-0 flex flex-col items-center gap-1" title={`${m.label} · ${m.n.toLocaleString()} instances`}>
-                    <span className={cn('text-[0.5625rem] font-bold tabular-nums leading-none shrink-0', zero ? 'text-risk-700' : spike ? 'text-mitigated-800' : 'text-ink-400')}>{m.n.toLocaleString()}</span>
+                    <span className={cn('text-[0.625rem] font-bold tabular-nums leading-none shrink-0', zero ? 'text-risk-700' : spike ? 'text-mitigated-800' : 'text-ink-400')}>{m.n.toLocaleString()}</span>
                     <div className="flex-1 w-full flex items-end">
                       <div className={cn('w-full rounded-sm', zero ? 'bg-risk-200' : spike ? 'bg-mitigated-400' : 'bg-brand-200')}
                         style={{ height: zero ? 3 : `${Math.max(8, Math.round((m.n / Math.max(1, peak)) * 100))}%` }} />
@@ -2738,7 +2738,7 @@ function CountContext({ control, canWrite, locked }: { control: Control; canWrit
               })}
             </div>
             <div className="mt-1 flex items-center gap-1">
-              {months.map(m => <span key={m.key} className={cn('flex-1 min-w-0 text-center text-[0.5625rem] font-semibold uppercase tracking-wide', m.n === 0 ? 'text-risk-700' : 'text-ink-400')}>{m.label}</span>)}
+              {months.map(m => <span key={m.key} className={cn('flex-1 min-w-0 text-center text-[0.625rem] font-semibold uppercase tracking-wide', m.n === 0 ? 'text-risk-700' : 'text-ink-400')}>{m.label}</span>)}
             </div>
           </>
         )}
@@ -3109,14 +3109,14 @@ function SourcePickerForm({ control, exclude, submitLabel, onSubmit, seedFile, s
                 {/* Which attributes read it. The reason a file is at the top of
                     the list belongs on the row, not in a paragraph above it. */}
                 {wanted && (
-                  <span className="shrink-0 inline-flex items-center gap-1 px-1.5 py-0.5 rounded bg-brand-50 text-brand-700 text-[0.59375rem] font-bold whitespace-nowrap">
+                  <span className="shrink-0 inline-flex items-center gap-1 px-1.5 py-0.5 rounded bg-brand-50 text-brand-700 text-[0.625rem] font-bold whitespace-nowrap">
                     <Paperclip size={9} /> {wanted.attributes.join(', ')}
                   </span>
                 )}
                 {f.system && <span className="shrink-0 text-[0.6875rem] text-ink-400 hidden lg:inline">{f.system}</span>}
                 {/* provenance, inherited — stated on every file so the choice of
                     source is made knowing what it is */}
-                <span className={cn('shrink-0 px-1.5 py-0.5 rounded text-[0.59375rem] font-bold uppercase tracking-wide whitespace-nowrap',
+                <span className={cn('shrink-0 px-1.5 py-0.5 rounded text-[0.625rem] font-bold uppercase tracking-wide whitespace-nowrap',
                   !usable ? 'bg-mitigated-50 text-mitigated-800' : f.origin === 'Client-prepared' ? 'bg-paper-100 text-ink-600' : 'bg-compliant-50 text-compliant-700')}>
                   {originLabel(f)}
                 </span>
@@ -3423,7 +3423,7 @@ function PopulationSection({ control, canEdit, locked: gated = false }: { contro
                       {rec?.systemFetched ? <Database size={13} className="shrink-0 text-ink-400" /> : <FileText size={13} className="shrink-0 text-ink-400" />}
                       <span className="text-[0.78125rem] font-semibold text-ink-800 truncate min-w-0">{s.file}</span>
                       {rec && (
-                        <span className={cn('shrink-0 px-1.5 py-0.5 rounded text-[0.59375rem] font-bold uppercase tracking-wide whitespace-nowrap',
+                        <span className={cn('shrink-0 px-1.5 py-0.5 rounded text-[0.625rem] font-bold uppercase tracking-wide whitespace-nowrap',
                           !fileUsable(rec) ? 'bg-mitigated-50 text-mitigated-800' : rec.origin === 'Client-prepared' ? 'bg-paper-100 text-ink-600' : 'bg-compliant-50 text-compliant-700')}>
                           {originLabel(rec)}
                         </span>
@@ -3459,7 +3459,7 @@ function PopulationSection({ control, canEdit, locked: gated = false }: { contro
                           <option value="assisting">Assisting</option>
                         </select>
                       ) : (
-                        <span className={cn('px-1.5 py-0.5 rounded text-[0.59375rem] font-bold uppercase tracking-wide',
+                        <span className={cn('px-1.5 py-0.5 rounded text-[0.625rem] font-bold uppercase tracking-wide',
                           isAssisting(s) ? 'bg-paper-100 text-ink-600' : 'bg-brand-50 text-brand-700')}>
                           {isAssisting(s) ? 'Assisting' : 'Population'}
                         </span>
@@ -5443,10 +5443,10 @@ function RailSpine({ control, running, onOpen }: { control: Control; running: bo
   // the hierarchy is the point: one thing in this column does the work.
   const tile = 'group w-full rounded-xl py-2 flex flex-col items-center gap-1.5 transition-colors cursor-pointer';
   const quietFace = 'relative inline-flex items-center justify-center size-9 rounded-xl border border-canvas-border bg-paper-50 text-ink-500 transition-colors group-hover:border-brand-100 group-hover:bg-brand-50 group-hover:text-brand-700';
-  const cap = 'text-[0.5625rem] font-bold uppercase tracking-[0.08em]';
+  const cap = 'text-[0.625rem] font-bold uppercase tracking-[0.08em]';
   // The count rides the tile's corner rather than sharing a line with the icon:
   // at this size a numeral beside a glyph reads as part of the glyph.
-  const badge = 'absolute -top-1 -right-1 min-w-[15px] h-[15px] px-1 rounded-full inline-flex items-center justify-center text-[0.5rem] font-bold tabular-nums';
+  const badge = 'absolute -top-1 -right-1 min-w-[15px] h-[15px] px-1 rounded-full inline-flex items-center justify-center text-[0.625rem] font-bold tabular-nums';
   return (
     <div className="panel absolute inset-0 bottom-6 flex flex-col overflow-hidden">
       {/* The fold control sits where it sits in the open rail — top right of

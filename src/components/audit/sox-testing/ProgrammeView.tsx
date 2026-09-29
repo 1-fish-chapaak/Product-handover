@@ -241,7 +241,7 @@ export function SourceChips({ sources, max }: {
         }`}>
           {caption}
           {u.count > 1 && <span className="tabular-nums text-text-muted">×{u.count}</span>}
-          {u.qualitative && <span className="font-bold uppercase text-[8.5px]">Qual</span>}
+          {u.qualitative && <span className="font-bold uppercase text-[10px]">Qual</span>}
         </span>
       ))}
       {rows.length > max && (

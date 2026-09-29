@@ -772,14 +772,14 @@ function SeverityConclusion({ result, showMateriality }: { result: ExceptionGrad
         <span className="text-[10.5px] uppercase tracking-wide font-semibold text-ink-400">Conclusion</span>
         <SeverityPill s={result.grade} />
         <button onClick={() => setShowWorking(w => !w)} className="ml-auto inline-flex items-center gap-1 text-[11px] font-semibold text-brand-700 hover:text-brand-800 cursor-pointer">
-          {showWorking ? 'Hide working' : 'Show working'} <span className="text-[9px] leading-none">{showWorking ? '▾' : '▸'}</span>
+          {showWorking ? 'Hide working' : 'Show working'} <span className="text-[10px] leading-none">{showWorking ? '▾' : '▸'}</span>
         </button>
       </div>
       {showWorking && (
         <ol className="mt-2 space-y-1">
           {shown.map((w, i) => (
             <li key={`${w.n}-${i}`} className="flex items-start gap-2 text-[0.71875rem] leading-relaxed">
-              <span className={cn('mt-[3px] shrink-0 w-[18px] h-[18px] rounded-full inline-flex items-center justify-center text-[0.59375rem] font-bold tabular-nums',
+              <span className={cn('mt-[3px] shrink-0 w-[18px] h-[18px] rounded-full inline-flex items-center justify-center text-[0.625rem] font-bold tabular-nums',
                 w.fired ? 'bg-brand-600 text-white' : 'bg-paper-100 text-ink-400')}>{w.n}</span>
               <span className={cn('min-w-0', w.fired ? 'text-ink-800' : 'text-ink-400')}>
                 <b className="font-semibold">{w.rule}</b> — {w.detail}

@@ -208,7 +208,7 @@ export default function RunsView() {
                 <span className="min-w-0 flex-1">
                   <span className="flex items-center gap-2 flex-wrap">
                     <span className="text-[13px] font-semibold text-ink-900">{r.label}</span>
-                    <span className={cn('px-1.5 h-[17px] inline-flex items-center rounded text-[9.5px] font-bold uppercase tracking-wide', meta.chip)}>{meta.label}</span>
+                    <span className={cn('px-1.5 h-[17px] inline-flex items-center rounded text-[10px] font-bold uppercase tracking-wide', meta.chip)}>{meta.label}</span>
                   </span>
                   <span className="block text-[11.5px] text-ink-500 mt-0.5 truncate">{r.by} · {r.at}{r.detail ? ` · ${r.detail}` : ''}</span>
                 </span>

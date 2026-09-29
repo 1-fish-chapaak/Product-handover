@@ -112,7 +112,7 @@ function ScoreBadge({ l, i }: { l: number; i: number }) {
       <span className="w-6 h-6 rounded-md inline-flex items-center justify-center text-[11px] font-bold text-white tabular-nums" style={{ background: b.color }}>{l * i}</span>
       <span className="flex flex-col leading-none">
         <span className="text-[11px] font-semibold text-ink-700">{b.label}</span>
-        <span className="text-[9.5px] text-ink-400 mt-0.5">L{l} × I{i}</span>
+        <span className="text-[10px] text-ink-400 mt-0.5">L{l} × I{i}</span>
       </span>
     </span>
   );
@@ -196,11 +196,11 @@ function Heatmap({ title, subtitle, risks, kind, sel, onSelect }: {
       <div className="flex gap-1.5">
         {/* impact axis title — rotated, centred on the grid */}
         <div className="flex items-center justify-center shrink-0 w-4">
-          <span className="text-[9px] font-bold uppercase tracking-wider text-ink-500 -rotate-90 whitespace-nowrap">Impact</span>
+          <span className="text-[10px] font-bold uppercase tracking-wider text-ink-500 -rotate-90 whitespace-nowrap">Impact</span>
         </div>
         {/* impact tick labels — severe (top) → minimal (bottom) */}
         <div className="flex flex-col gap-1 pr-1 text-right shrink-0 w-[64px]">
-          {[...I_LABELS].reverse().map(lb => <span key={lb} className="h-11 flex items-center justify-end text-[9.5px] font-semibold text-ink-400 leading-tight">{lb}</span>)}
+          {[...I_LABELS].reverse().map(lb => <span key={lb} className="h-11 flex items-center justify-end text-[10px] font-semibold text-ink-400 leading-tight">{lb}</span>)}
         </div>
         <div className="flex-1 min-w-0 grid grid-cols-5 gap-1">
           {[5, 4, 3, 2, 1].map(i => [1, 2, 3, 4, 5].map(l => {
@@ -225,9 +225,9 @@ function Heatmap({ title, subtitle, risks, kind, sel, onSelect }: {
         <div className="shrink-0 w-[64px]" aria-hidden />
         <div className="flex-1 min-w-0">
           <div className="grid grid-cols-5 gap-1 mt-1">
-            {L_LABELS.map(lb => <span key={lb} className="text-center text-[9.5px] font-semibold text-ink-400 leading-tight">{lb}</span>)}
+            {L_LABELS.map(lb => <span key={lb} className="text-center text-[10px] font-semibold text-ink-400 leading-tight">{lb}</span>)}
           </div>
-          <div className="text-center text-[9px] font-bold uppercase tracking-wider text-ink-500 mt-1.5">Likelihood</div>
+          <div className="text-center text-[10px] font-bold uppercase tracking-wider text-ink-500 mt-1.5">Likelihood</div>
         </div>
       </div>
     </div>
@@ -342,7 +342,7 @@ export default function RiskLibrary() {
                       <span className="inline-flex flex-col items-start gap-1">
                         <ScoreBadge l={r.rl} i={r.ri} />
                         {moved && (
-                          <span className="inline-flex items-center gap-0.5 text-[9px] font-semibold text-compliant-600 whitespace-nowrap" title="Residual risk reduced by effective controls">
+                          <span className="inline-flex items-center gap-0.5 text-[10px] font-semibold text-compliant-600 whitespace-nowrap" title="Residual risk reduced by effective controls">
                             <MoveRight size={10} className="rotate-90" aria-hidden /> reduced by controls
                           </span>
                         )}

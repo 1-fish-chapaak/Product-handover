@@ -381,7 +381,7 @@ export default function V2ProgrammeView({ programme, onBack, onOpenWorkspace }: 
                   <div className="text-[13.5px] font-semibold text-text">
                     {r.area}
                     {r.kind === 'workstream' && (
-                      <span className="text-[9px] font-bold uppercase tracking-wide text-brand-700 bg-brand-50 px-1.5 h-4 rounded inline-flex items-center ml-1.5 align-middle">WS</span>
+                      <span className="text-[10px] font-bold uppercase tracking-wide text-brand-700 bg-brand-50 px-1.5 h-4 rounded inline-flex items-center ml-1.5 align-middle">WS</span>
                     )}
                   </div>
                   {areaControls.length > 0 ? (
@@ -770,7 +770,7 @@ function ControlsTable({ rows }: { rows: V2Control[] }) {
           <div className="text-[11.5px] text-text-muted">{c.area}</div>
           <div><ClassChip clazz={c.clazz} /></div>
           <div>{c.key
-            ? <span className="inline-flex items-center px-1.5 h-4 rounded text-[9px] font-bold uppercase tracking-wide bg-brand-50 text-brand-700">Key</span>
+            ? <span className="inline-flex items-center px-1.5 h-4 rounded text-[10px] font-bold uppercase tracking-wide bg-brand-50 text-brand-700">Key</span>
             : <span className="text-[10.5px] text-text-muted">Non-key</span>}
           </div>
           <div><ResultChip r={c.tod} /></div>
