@@ -18,22 +18,37 @@
  *
  * ── THE RULES, AND THE SENTENCE BEHIND EACH ONE ──────────────────────────────
  *
- * Two rounds of a 95-phrase probe wrote this list. Every rule is here because a
- * real phrasing broke the version before it, and the first fix for four of them
- * broke something else. Do not relax one without re-running that probe.
+ * Eight rounds of a ~200-phrase probe wrote this list. Every rule is here
+ * because a real phrasing broke the version before it, and the first fix for
+ * four of them broke something else. `tests/sop-chart-edits.spec.ts` is that
+ * probe written down — one describe block per rule below, and it needs no
+ * browser. Do not relax a rule without running it.
  *
  *   A NEGATIVE OBSERVATION IS NOT AN INSTRUCTION. "Control 7 does not run
  *   monthly", "Risk 2 has no owner", "preventive controls are not optional" all
  *   used to change the chart, because `no` / `not` / `never` counted as removal
- *   words. They appear in NEITHER vocabulary now — not for a box, not for a
- *   class. A box beside a chart is where a reviewer writes what is WRONG with a
- *   control, and almost every such note is phrased negatively. "no manual
- *   controls" no longer narrows either; "exclude manual controls" and "manual
- *   controls hata do" do, and the box says so when it cannot read something.
+ *   words. They are out of both vocabularies — not for a box, not for a class.
+ *   A box beside a chart is where a reviewer writes what is WRONG with a
+ *   control, and almost every such note is phrased negatively.
+ *
+ *   …EXCEPT WHERE THE NEGATION IS THE WHOLE INSTRUCTION. Two shapes earn it
+ *   back, because in both the negative word is doing the asking rather than
+ *   describing. "no manual controls" narrows, when the negation sits directly
+ *   on the class, the phrase ends there, and no box is named in the sentence —
+ *   see `ruledOutPlainly`. And a negation immediately in front of a removal
+ *   verb CANCELS it: "do not remove control 9, remove control 4" once took out
+ *   Control 9, the box the sentence is protecting in as many words.
  *
  *   THE VERB PICKS THE BOX, NOT THE WORD ORDER. "Control 9 is fine, but remove
  *   Control 4" used to take out Control 9 — the first number won. The box
- *   nearest the removal verb is the one that goes.
+ *   nearest the removal verb is the one that goes; the same walk picks the box
+ *   for a rename, and "X ko … kar do" carries its own mark so that the
+ *   commonest rename phrasing of all does not fall back to the first number.
+ *
+ *   A CAP IS ABOUT WHAT IS LEFT. "control 4 hata do aur at most 6 controls"
+ *   asks for six and left five: the cap kept the first six of all nine and the
+ *   removal came off the top of that. Narrowing halves are read last, against
+ *   the rows still standing, whichever end of the message they were typed at.
  *
  *   A QUOTED NAME IS A NAME, WHATEVER IS IN IT. `rename Control 4 to "Remove
  *   duplicate check"` used to DELETE Control 4, and `rename risk 1 to "Vendor
@@ -102,6 +117,22 @@ const ONLY = "only|just|exclusively|alone|sirf|keval|kewal|bas";
  *  only: see the file header on why `no` / `not` / `never` are not here. */
 const NOT = "exclude|excluding|skip|without|omit|drop|remove|delete|hata\\w*|hta\\w*|nikaal\\w*|nikal\\w*|chhod\\w*|chod\\w*|mat";
 
+/**
+ * A negation sitting directly in front of a removal verb CANCELS it.
+ *
+ * "do not remove control 9, remove control 4" used to take out Control 9: the
+ * `remove` inside "do not remove" is a real marker sitting right against that
+ * box, and nothing read the word that undoes it. This is the one place `not`
+ * belongs in the vocabulary — it is not being read as an instruction here, it
+ * is being read as the cancellation of one, which is the opposite job.
+ *
+ * `nahi chahiye` and `mat rakho` are whole removal verbs in their own right, so
+ * their negative word is INSIDE the match and never in front of it — "control 4
+ * nahi chahiye" is still a removal. "mat hatao" is not: there the `mat` sits in
+ * front of `hatao` and cancels it, which is exactly what it means.
+ */
+const NEGATION = "do\\s+not|does\\s+not|don'?t|doesn'?t|dont|never|not|nahin?|mat|kabhi\\s+nahin?";
+
 /** What takes ONE box off the chart. Imperatives only, same reason. */
 const REMOVE_VERBS =
   "remove|delete|drop|exclude|omit|take\\s+[^.\\n]{0,30}?\\bout|"
@@ -140,6 +171,30 @@ const narrowedTo = (p: string, term: string): boolean =>
 const ruledOut = (p: string, term: string): boolean =>
   new RegExp(`\\b(?:${NOT})\\b[^.\n]{0,24}\\b(?:${term})\\b`, 'i').test(p)
   || new RegExp(`\\b(?:${term})\\b[^.\n]{0,24}\\b(?:${NOT})\\b`, 'i').test(p);
+
+/**
+ * "no manual controls" — the one negative that IS an instruction.
+ *
+ * `no` and `not` are out of the vocabulary because a box beside a chart is
+ * where a reviewer writes what is WRONG with a control, and almost every such
+ * note is phrased negatively: "Risk 2 has no owner", "Control 7 does not run
+ * monthly", "preventive controls are not optional" all used to edit the chart.
+ * Losing this phrasing with them was a real cost — it is how people actually
+ * ask for a class to go.
+ *
+ * It comes back under three conditions together, which is what tells the ask
+ * from the note. The negation sits DIRECTLY on the class, so "…are not
+ * optional" — where the negation lands on a predicate instead — is untouched.
+ * The phrase ENDS there, so "no manual controls have been tested yet" stays an
+ * observation. And `readNarrowing`'s caller requires no box number anywhere in
+ * the sentence, because a negative about one box is a note about that box.
+ */
+const ruledOutPlainly = (p: string, term: string): boolean =>
+  new RegExp(
+    `\\b(?:no|not|koi)\\s+(?:${term})\\s+controls?\\s*`
+    + `(?:[.,;!?]|$|\\b(?:please|plz|pls|at\\s+all|thanks?|chahiye|rakhna|rakho|hone?\\s*chahiye)\\b)`,
+    'i',
+  ).test(p);
 
 // ── names ─────────────────────────────────────────────────────────────────────
 
@@ -248,9 +303,38 @@ function candidates(raw: string, facts: ChartFacts): { hits: Cand[]; miss: OutOf
 const REMOVE_RE = new RegExp(`\\b(?:${REMOVE_VERBS})\\b`, 'gi');
 const RENAME_MARK = /\b(?:rename|re-?name|naam|name|title|call\s+it|kehlaye)\b|→|->|=>/gi;
 
+/**
+ * The `ko` of "X ko … kar do", as a rename marker in its own right.
+ *
+ * The rename branch picks its box by walking out from the nearest rename mark,
+ * exactly as the removal branch does — but this phrasing, the commonest rename
+ * there is, carries no `rename` / `naam` / `→` for that walk to measure from,
+ * so it used to fall through to "the first box named". The first box named is
+ * almost always the one being PROTECTED: `Control 9 theek hai, Control 4 ko "X"
+ * kar do` renamed Control 9. A wrong removal is one tick away on the Matrix; a
+ * wrong rename has only Undo.
+ *
+ * The mark is the `ko` alone — a lookahead, so the span does not swallow the
+ * tail of the sentence — and Hindi puts the object in front of it, which
+ * `nearestTo` already knows how to score.
+ */
+const HINDI_RENAME_MARK =
+  /\bko\b(?=[^\n]{0,80}\b(?:kar\s*do|kardo|karo|bana\s*do|banado|bana\s*dijiye|rakh\s*do|likh\s*do)\b)/gi;
+
 /** Where each instance of a marker sits, as [start, end]. */
 const marksOf = (raw: string, re: RegExp): [number, number][] =>
   [...raw.matchAll(new RegExp(re.source, 'gi'))].map(m => [m.index, m.index + m[0].length]);
+
+/**
+ * Removal verbs the message actually means — see `NEGATION`.
+ *
+ * A short window is enough: the negation has to sit AGAINST the verb to cancel
+ * it. "I would not want to remove Control 4 without asking" is not covered and
+ * should not be; that is a sentence for a person, not this vocabulary.
+ */
+const NEGATED = new RegExp(`\\b(?:${NEGATION})\\s*$`, 'i');
+const removalMarks = (raw: string): [number, number][] =>
+  marksOf(raw, REMOVE_RE).filter(([s]) => !NEGATED.test(raw.slice(Math.max(0, s - 16), s)));
 
 /**
  * A verb reaches FORWARD in English and BACKWARD in Hindi.
@@ -305,7 +389,7 @@ function boxList(raw: string, hits: Cand[]): Cand[] | null {
     if (chain && prev && /^\s*(?:,|;|&|\+|\baur\b|\band\b)\s*$/i.test(raw.slice(prev.end, here.at))) chain.push(here);
     else chains.push([here]);
   }
-  const verbs = marksOf(raw, REMOVE_RE);
+  const verbs = removalMarks(raw);
   // Only whitespace and punctuation may stand between the verb and the list.
   // The side checks come FIRST. `slice(a, b)` with a > b returns '', and an
   // empty string passes `/^\W*$/` — so without them every verb anywhere in the
@@ -327,7 +411,7 @@ function boxList(raw: string, hits: Cand[]): Cand[] | null {
     // the "clause" is the whole message, and one "rakho" at the end trimmed
     // every member — "control 4 aur control 5 ko hata do control 9 rakho" did
     // nothing at all. Both readings of PROTECTED now agree.
-    const keep = c.filter(m => !(PROTECTED.test(clauseAround(raw, m)) && bounded(raw, m)));
+    const keep = c.filter(m => !(protectedIn(clauseAround(raw, m)) && bounded(raw, m)));
     return keep.length === c.length ? c : keep;
   });
   return trimmed.find(c => c.length > 1 && touching(c)) ?? null;
@@ -347,6 +431,11 @@ export function readNarrowing(raw: string): Narrowing {
   const p = ` ${raw} `;
   const said: string[] = [];
 
+  // A sentence that names a box is a note ABOUT that box, so the plain negative
+  // stands down in it entirely. See `ruledOutPlainly`.
+  const aboutOneBox = /\b(?:risk|control)\s*#?\s*\d{1,2}\b/i.test(raw);
+  const out = (term: string) => ruledOut(p, term) || (!aboutOneBox && ruledOutPlainly(p, term));
+
   const keyOnly = narrowedTo(p, 'key') || ruledOut(p, 'non[\\s-]?key');
   if (keyOnly) said.push('key controls only');
 
@@ -354,13 +443,13 @@ export function readNarrowing(raw: string): Narrowing {
   // round made "only preventive controls, no exceptions" keep the detective
   // ones — see the file header.
   const onlyNatures = NATURES.filter(n => narrowedTo(p, NATURE_TERM[n]));
-  const outNatures = NATURES.filter(n => !onlyNatures.includes(n) && ruledOut(p, NATURE_TERM[n]));
+  const outNatures = NATURES.filter(n => !onlyNatures.includes(n) && out(NATURE_TERM[n]));
   const keptNatures = onlyNatures.length ? onlyNatures : NATURES.filter(n => !outNatures.includes(n));
   if (onlyNatures.length && onlyNatures.length < NATURES.length) said.push(`${onlyNatures.map(n => n.toLowerCase()).join(' and ')} controls only`);
   else if (outNatures.length && outNatures.length < NATURES.length) said.push(`no ${outNatures.map(n => n.toLowerCase()).join(' or ')} controls`);
 
   const onlyTypes = TYPES.filter(t => narrowedTo(p, TYPE_TERM[t]!));
-  const outTypes = TYPES.filter(t => !onlyTypes.includes(t) && ruledOut(p, TYPE_TERM[t]!));
+  const outTypes = TYPES.filter(t => !onlyTypes.includes(t) && out(TYPE_TERM[t]!));
   const types = onlyTypes.length === 1 ? [onlyTypes[0]!]
     : outTypes.length === 1 ? [TYPES.find(t => t !== outTypes[0])!]
       : [];
@@ -380,17 +469,27 @@ export function readNarrowing(raw: string): Narrowing {
   };
 }
 
-/** Which rows a narrowing puts out of the import. Reads the PARSED fields, not
- *  the file's raw cells: a client whose type column says "P" and "D" would
- *  otherwise have every row dropped by "preventive only". */
-function rowsFailing(rows: ImportRow[], n: Narrowing): string[] {
-  const kept = rows.filter(r =>
+/**
+ * Which rows a narrowing puts out of the import.
+ *
+ * Reads the PARSED fields, not the file's raw cells: a client whose type column
+ * says "P" and "D" would otherwise have every row dropped by "preventive only".
+ *
+ * `gone` is what the REST of the message already took out. A cap is a statement
+ * about what is left on the chart, so it has to be counted against the rows
+ * still standing — "control 4 hata do aur at most 6 controls" asks for six and
+ * used to leave five, because the cap kept the first six of all nine and the
+ * removal was then taken off the top of that.
+ */
+function rowsFailing(rows: ImportRow[], n: Narrowing, gone: ReadonlySet<string>): string[] {
+  const live = rows.filter(r => !gone.has(r.key));
+  const kept = live.filter(r =>
     (!n.keyOnly || r.isKey)
     && (!n.natures.length || (r.nature !== null && n.natures.includes(r.nature)))
     && (!n.types.length || (r.type !== null && n.types.includes(r.type))));
   const capped = n.limit === null ? kept : kept.slice(0, n.limit);
   const keep = new Set(capped.map(r => r.key));
-  return rows.filter(r => !keep.has(r.key)).map(r => r.key);
+  return live.filter(r => !keep.has(r.key)).map(r => r.key);
 }
 
 // ── the reader ────────────────────────────────────────────────────────────────
@@ -424,13 +523,20 @@ const bounded = (text: string, h: Cand): boolean => clauseAround(text, h).length
 /** Said of a box the reader is keeping, not asking about. */
 const PROTECTED = /\b(?:fine|ok|okay|correct|right|good|stay|stays|keep|keeping|leave|theek|thik|sahi|rakho|rakhna|rehne\s*do|rehne|chhod\s*do|dekh\s*lo|dekho|mat\s*hatao|agrees?|questioned)\b/i;
 
+/** A removal verb that was cancelled protects its box exactly as "keep" does —
+ *  "do not remove Control 9" is a protection written as a negated imperative,
+ *  and the word list above has no shape for that. */
+const NEGATED_REMOVE = new RegExp(`\\b(?:${NEGATION})\\s+(?:${REMOVE_VERBS})\\b`, 'i');
+
+const protectedIn = (clause: string): boolean => PROTECTED.test(clause) || NEGATED_REMOVE.test(clause);
+
 const leaveOut = (c: Cand): ChartEdit => ({
   kind: 'leave-out',
   rowKeys: c.node.rowKeys,
   said: [`${noun(c.what)} ${c.node.no} left out${c.what === 'risk' ? ' with its controls' : ''}`],
 });
 
-function readOne(raw: string, facts: ChartFacts): ChartEdit[] {
+function readOne(raw: string, facts: ChartFacts, gone: ReadonlySet<string>): ChartEdit[] {
   const text = raw.trim();
   if (!text) return [{ kind: 'nothing', text: CAPABILITIES }];
 
@@ -438,11 +544,14 @@ function readOne(raw: string, facts: ChartFacts): ChartEdit[] {
   const explicitRename = RENAME_WORDS.test(text) || /(?:→|->|=>)/.test(text);
   const asked = explicitRename || HINDI_RENAME.test(text);
 
-  const removal = nearestTo(hits, marksOf(text, REMOVE_RE));
+  const removal = nearestTo(hits, removalMarks(text));
   // The rename branch picks its own box the same way the removal branch does.
   // Taking `hits[0]` renamed Control 9 in "Control 9 is fine, rename Control 4
   // to …" — and a wrong rename, unlike a wrong removal, has no tick to undo it.
-  const renaming = nearestTo(hits, marksOf(text, RENAME_MARK)) ?? hits[0];
+  // "X ko … kar do" carries its own mark, or this walk has nothing to measure
+  // from and falls back to the first box named, which is the protected one.
+  const renaming = nearestTo(hits, [...marksOf(text, RENAME_MARK), ...marksOf(text, HINDI_RENAME_MARK)])
+    ?? hits[0];
 
   // 1 — rename. Read before the removal so a quoted name wins: `rename Control
   //     4 to "Remove duplicate check"` is a name, not a request to remove it.
@@ -475,8 +584,11 @@ function readOne(raw: string, facts: ChartFacts): ChartEdit[] {
       }];
     }
     if (got) return [{ kind: 'nothing', text: got.refuse }];
-    // Nothing that could be a name at all. "Control 4 ka naam hata do" is the
-    // imperative and nothing else.
+    // Nothing that could be a name at all — no quotes, and nothing after a
+    // rename marker to read as one. "Control 4 ka naam badal do" reaches here
+    // and is the imperative; "Control 4 ka naam hata do" does NOT, because
+    // "hata do" is itself a candidate name carrying an instruction, so the
+    // ambiguity branch above asks the question first. Both answers are right.
     if (removal) return [leaveOut(removal)];
     return [{ kind: 'nothing', text: `I can see ${noun(renaming.what)} ${renaming.node.no}, but not what to call it. Put the new name in quotes, or after "to".` }];
   }
@@ -488,8 +600,9 @@ function readOne(raw: string, facts: ChartFacts): ChartEdit[] {
   // 4 — narrow the whole chart.
   const narrowing = readNarrowing(text);
   if (narrowing.said.length) {
-    const out = rowsFailing(facts.rows, narrowing);
-    if (facts.rows.length > 0 && out.length === facts.rows.length) {
+    const out = rowsFailing(facts.rows, narrowing, gone);
+    const live = facts.rows.length - gone.size;
+    if (live > 0 && out.length === live) {
       return [{ kind: 'nothing', text: `That would take every control off the chart — ${narrowing.said.join(', ')} leaves nothing. Narrow it less, or say which boxes to take out.` }];
     }
     return [{ kind: 'leave-out', rowKeys: out, said: narrowing.said, whole: true }];
@@ -510,6 +623,39 @@ const readable = (s: string, facts: ChartFacts): boolean =>
   /\b(?:risk|control)\s*#?\s*\d{1,2}\b/i.test(s)
   || [...facts.risks, ...facts.controls].some(n => n.id && s.toLowerCase().includes(n.id.toLowerCase()))
   || readNarrowing(s).said.length > 0;
+
+/**
+ * A half that narrows the WHOLE chart rather than naming a box.
+ *
+ * Told apart the same way `readable` tells a readable half from an unreadable
+ * one: a narrowing word, and no box named anywhere in it.
+ */
+const isWholeChart = (s: string, facts: ChartFacts): boolean =>
+  readNarrowing(s).said.length > 0
+  && !/\b(?:risk|control)\s*#?\s*\d{1,2}\b/i.test(s)
+  && ![...facts.risks, ...facts.controls].some(n => n.id && s.toLowerCase().includes(n.id.toLowerCase()));
+
+/**
+ * The halves, read one after another, each told what the ones before it took.
+ *
+ * NARROWINGS GO LAST, whatever order they were typed in. A cap is a statement
+ * about what is LEFT on the chart, so it cannot be settled until the rest of
+ * the message has had its say — "at most 6 controls aur control 4 hata do"
+ * means the same six as "control 4 hata do aur at most 6 controls", and both
+ * used to leave five. The receipts come back in this order too, which is also
+ * the order they happened in.
+ */
+function readInTurn(parts: string[], facts: ChartFacts): ChartEdit[] {
+  const ordered = [...parts.filter(p => !isWholeChart(p, facts)), ...parts.filter(p => isWholeChart(p, facts))];
+  const gone = new Set<string>();
+  const out: ChartEdit[] = [];
+  for (const p of ordered) {
+    const got = readOne(p, facts, gone);
+    for (const e of got) if (e.kind === 'leave-out') for (const k of e.rowKeys) gone.add(k);
+    out.push(...got);
+  }
+  return out;
+}
 
 /** Split on a conjunction, but never inside a quoted run — a name may contain
  *  one, and cutting there would refuse a perfectly good rename. */
@@ -553,8 +699,8 @@ export function readChartEdits(raw: string, facts: ChartFacts): ChartEdit[] {
   // had cost only a re-type. Doing nothing is a worse answer than the right
   // one and a far better answer than the wrong one.
   const edits = parts.length > 1 && parts.every(p => readable(p, facts))
-    ? parts.flatMap(p => readOne(p, facts))
-    : readOne(text, facts);
+    ? readInTurn(parts, facts)
+    : readOne(text, facts, new Set());
 
   const blocking = edits.find(e => e.kind === 'nothing' && !e.benign);
   if (blocking) return [blocking];
@@ -604,7 +750,7 @@ export function readChartEdits(raw: string, facts: ChartFacts): ChartEdit[] {
     // control 9 rakho" silenced the notice for the removal that was skipped.
     // With no punctuation to divide them, the word belongs to whichever box it
     // sits beside, and the others are owed their notice.
-    && !(PROTECTED.test(clauseAround(text, h)) && (bounded(text, h) || hits.length === 1)));
+    && !(protectedIn(clauseAround(text, h)) && (bounded(text, h) || hits.length === 1)));
   if (ignored.length) {
     const names = ignored.map(h => `${noun(h.what)} ${h.node.no}`);
     const list = names.length === 1 ? names[0]! : `${names.slice(0, -1).join(', ')} and ${names[names.length - 1]!}`;
