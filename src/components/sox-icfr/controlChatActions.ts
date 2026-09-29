@@ -161,7 +161,7 @@ export function actionsFor(s: Situation, role: Role): ChatAction[] {
     // leave a seven-chip cloud sitting under every line Ira says for the rest
     // of the step.
     const picks: ChatAction[] = s.elementsOnFile === 0 && s.designResult === 'Not tested' && !s.locked
-      ? DESIGN_DOC_KINDS.filter(k => !s.elementKinds.includes(k)).map(k => ({
+      ? DESIGN_DOC_KINDS.filter(k => !s.elementKinds.includes(k) && !s.naKinds.includes(k)).map(k => ({
         id: 'add-element' as const, arg: k, label: k, group: 'pick' as const,
         said: `Add ${k.charAt(0).toLowerCase()}${k.slice(1)}.`,
         does: `add ${k.charAt(0).toLowerCase()}${k.slice(1)} to the design step`,

@@ -4,7 +4,7 @@ import { ArrowLeft, ArrowRight, Building2, ChevronDown, ChevronRight, ChevronUp,
 import { useIcfr } from './store';
 import { defWord } from './flow';
 import { useToast } from '../shared/Toast';
-import { groupKeysFor, groupsFor, joinsNoDerivedGroup, likelihoodNeedsConfirming, stepResult, courtForException, exceptionCourtDetail, formatINR, gradeException, isClearlyTrivial, isEngagementLocked, previewRegrades, retestReadiness, samePerson, type ExceptionGradeResult, type RetestReadiness, type RulesPatch } from './helpers';
+import { sameFlawElsewhere, groupKeysFor, groupsFor, joinsNoDerivedGroup, likelihoodNeedsConfirming, stepResult, courtForException, exceptionCourtDetail, formatINR, gradeException, isClearlyTrivial, isEngagementLocked, previewRegrades, retestReadiness, samePerson, type ExceptionGradeResult, type RetestReadiness, type RulesPatch } from './helpers';
 import { CourtBadge, SeverityPill, Toggle } from './parts';
 import { FormSelect, HeaderFilter } from '../shared/FilterSelect';
 import MaterialityWorksheet from './MaterialityWorksheet';
@@ -17,14 +17,16 @@ import { cn } from '../../lib/cn';
 import RemediationBriefModal from './RemediationBriefModal';
 import { auditCovers, captionsFor, entitiesFor, isOwnerOf, normaliseProcess } from './auditScope';
 import { exposureFromData, fmtDay, sampleHome, workingAudit, type DataExposure } from './helpers';
+// The version reads — a rebuilt control's retest is its new design test, see `ControlVersion`.
+import { awaitsNewVersion, isVersionRetest, versionFrom, versionNo, pointResult, formatDueDate } from './helpers';
 import type { ReactNode } from 'react';
 // The design-track retest reads its checks out the way the TOD's own do.
 import { AnimatePresence } from 'motion/react';
-import { ListChecks, Loader2 } from 'lucide-react';
+import { ListChecks, Loader2, GitBranch } from 'lucide-react';
 import { QAResultsModal, VALIDATE_MS } from './ControlDossier';
 import { designRetestChecks, rootCauseReady } from './helpers';
 import type { RetestCheck } from './types';
-import { CHALLENGED_INPUT_LABEL, EXCEPTION_STEPS, gapNature, GRADE_RANK, MW_INDICATOR_CATALOGUE, SEVERITY_URGENCY, type Assertion, type ChallengedInput, type Court, type Deficiency, type DeficiencyGroup, type ExceptionGrade, type ExceptionStatus, type IcfrEngagement, type RetestRound, type Severity, type SignificantAccount, type TaskType } from './types';
+import { CHALLENGED_INPUT_LABEL, DESIGN_GAP_KINDS, PLAN_FIX_HINT, PLAN_FIX_KINDS, PLAN_FIX_LABEL, type PlanFixKind, EXCEPTION_STEPS, GAP_KIND_HINT, GAP_KIND_LABEL, GAP_KIND_PLAN_PROMPT, gapNature, GRADE_RANK, MW_INDICATOR_CATALOGUE, SEVERITY_URGENCY, type Assertion, type ChallengedInput, type Court, type Deficiency, type DeficiencyGroup, type ExceptionGrade, type ExceptionStatus, type IcfrEngagement, type RetestRound, type Severity, type SignificantAccount, type TaskType } from './types';
 
 const fmt = (n: number) => formatINR(n);
 const fmtFull = (n: number) => '₹' + Math.round(n).toLocaleString('en-IN');
@@ -714,8 +716,12 @@ function PlanBlock({ d, isOwner, locked = false, onPatch, onAttach }: { d: Defic
 
       {editable ? (
         <div className="space-y-1.5">
+          {/* The generic prompt is written for an operating failure and is the wrong
+              question for a design gap: you do not fix a badly-built control by
+              running it more carefully. Where the gap's kind is known, ask the
+              question that kind actually needs answering. */}
           <input value={r.action} onChange={e => onPatch({ action: e.target.value })}
-            placeholder="What fixes the root cause — not the symptom (e.g. normalise the match key, not recover the 4 invoices)"
+            placeholder={d.track === 'design' && d.gapKind ? GAP_KIND_PLAN_PROMPT[d.gapKind] : 'What fixes the root cause — not the symptom (e.g. normalise the match key, not recover the 4 invoices)'}
             className="w-full h-8 px-2.5 rounded-md border border-canvas-border bg-canvas-elevated text-[12.5px] text-ink-800 focus:outline-none focus:border-brand-300" />
           <div className="flex items-center gap-2 flex-wrap text-[11.5px]">
             <span className="text-ink-400">Responsible person</span>
@@ -735,7 +741,16 @@ function PlanBlock({ d, isOwner, locked = false, onPatch, onAttach }: { d: Defic
 
       {/* The auditor's verdict on the plan, once given — their whole say in it. */}
       {d.planReview?.decision === 'Accepted' && (
-        <p className="text-[0.71875rem] text-compliant-700 font-semibold mt-1.5 inline-flex items-center gap-1"><CheckCircle2 size={11} /> Addresses the root cause — accepted by {d.planReview.by}</p>
+        <>
+          <p className="text-[0.71875rem] text-compliant-700 font-semibold mt-1.5 inline-flex items-center gap-1"><CheckCircle2 size={11} /> Addresses the root cause — accepted by {d.planReview.by}</p>
+          {/* A workaround accepted as a fix has to keep saying it is a workaround,
+              or the record reads remediated on a control nobody rebuilt. */}
+          {d.planReview.fix && (
+            <p className={cn('text-[0.65625rem] mt-1', d.planReview.fix === 'workaround' ? 'text-mitigated-700' : 'text-ink-500')}>
+              <b className="font-semibold">{PLAN_FIX_LABEL[d.planReview.fix]}</b> — {PLAN_FIX_HINT[d.planReview.fix]}
+            </p>
+          )}
+        </>
       )}
 
       {/* ④ Evidence. Only once the plan is accepted and the fix is being done —
@@ -900,11 +915,24 @@ function DesignRetestPanel({ d }: { d: Deficiency }) {
   const [rationale, setRationale] = useState('');
   const [iraRunning, setIraRunning] = useState(false);
   const [viewing, setViewing] = useState<string | null>(null);
-  const draft = d.retestDraft?.checks?.length ? d.retestDraft : undefined;
+  const control = eng.controls.find(c => c.id === d.controlId);
+  // ── A REBUILT control changes what "retest" means here ──────────────────────
+  // The plan was accepted as a REDESIGN, so the answer is a different control,
+  // not more evidence about this one. Until the auditor records it there is
+  // nothing to test; once they have, the retest IS the new version's design test
+  // and its marks are read off that, never typed here. A workaround reaches
+  // neither branch — it leaves the control as it was, so re-reading the checks it
+  // failed against the new manual step is a genuine retest.
+  const awaitingVersion = !!control && awaitsNewVersion(control, d);
+  const onVersion = !!control && isVersionRetest(control, d);
+  const rebuilt = onVersion ? versionFrom(control!, d.id) : undefined;
+  const draft = !onVersion && d.retestDraft?.checks?.length ? d.retestDraft : undefined;
   // Before the first mark there is no round yet — the list it will start with is
   // shown as it will be copied onto the round.
-  const checks: RetestCheck[] = draft?.checks
-    ?? designRetestChecks(d, eng.controls.find(c => c.id === d.controlId)).map(x => ({ ...x, result: 'Not tested' }));
+  const checks: RetestCheck[] = onVersion
+    ? control!.design.points.map(p => ({ pointId: p.id, text: p.text, result: pointResult(p) }))
+    : draft?.checks
+      ?? designRetestChecks(d, control).map(x => ({ ...x, result: 'Not tested' }));
   const n = draft?.n ?? (d.retests?.length ?? 0) + 1;
   const files = d.remediation.evidence ?? [];
   const marked = checks.filter(x => x.result !== 'Not tested').length;
@@ -920,14 +948,34 @@ function DesignRetestPanel({ d }: { d: Deficiency }) {
   };
   const shown = checks.find(x => x.pointId === viewing);
 
+  if (awaitingVersion) {
+    return (
+      <div className="rounded-lg border border-brand-200 bg-brand-50/40 px-3 py-3">
+        <div className="flex items-start gap-2">
+          <GitBranch size={14} className="text-brand-700 mt-0.5 shrink-0" />
+          <p className="text-[0.75rem] text-ink-700 leading-relaxed min-w-0">
+            <b className="font-semibold text-ink-900">Record the rebuilt control first.</b> This plan was accepted as a
+            redesign, so the control itself is different now — re-reading the checks the old wording failed would be
+            testing a control that no longer runs. Open <b className="font-semibold text-ink-800">Test of design</b> above
+            and record what it says and the day it started running; its design test then becomes this retest.
+          </p>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="rounded-lg border border-canvas-border bg-paper-50/40 px-3 py-3 space-y-2.5">
       <div className="flex items-center gap-2 flex-wrap">
         <span className="text-[0.6875rem] uppercase tracking-wide font-semibold text-ink-500">Retest — {d.id} (TOD)</span>
         <span className="ml-auto text-[0.6875rem] font-semibold tabular-nums text-ink-500">{marked} / {checks.length} marked</span>
       </div>
-      <p className="text-[0.75rem] text-ink-600">Re-check the design checks that failed — against the fix evidence.</p>
-      <div className="flex items-start gap-2 flex-wrap">
+      <p className="text-[0.75rem] text-ink-600">
+        {onVersion
+          ? <>These are <b className="font-semibold text-ink-800">v{versionNo(control!)}</b>&apos;s own design checks, live from the test of design above — running since {formatDueDate(rebuilt!.supersededAt)}. They are read here, not marked here, so this retest can never say passed while that design test has not.</>
+          : 'Re-check the design checks that failed — against the fix evidence.'}
+      </p>
+      {!onVersion && <div className="flex items-start gap-2 flex-wrap">
         <p className="min-w-0 flex-1 text-[0.71875rem] text-ink-500">
           <span className="font-semibold text-ink-600">Fix evidence:</span> {files.length ? files.map(f => f.name).join(', ') : 'none attached'}
         </p>
@@ -938,7 +986,7 @@ function DesignRetestPanel({ d }: { d: Deficiency }) {
               className="h-7 px-2.5 inline-flex items-center gap-1.5 rounded-md bg-brand-600 text-white text-[0.71875rem] font-semibold enabled:hover:bg-brand-700 disabled:opacity-40 disabled:cursor-not-allowed transition-colors cursor-pointer">
               <Sparkles size={12} /> Run Ira on these checks
             </button>}
-      </div>
+      </div>}
 
       {checks.length ? (
         <ol className="rounded-md border border-canvas-border bg-canvas-elevated divide-y divide-canvas-border">
@@ -949,6 +997,17 @@ function DesignRetestPanel({ d }: { d: Deficiency }) {
               {iraRunning
                 ? <span className="mt-[4px] shrink-0 text-[0.6875rem] font-semibold text-evidence-600">Checking…</span>
                 : (
+                  onVersion ? (
+                  // Read off the design test, not entered. Two places that can say
+                  // different things about one check is the bug this closes.
+                  <span className={cn('mt-[3px] shrink-0 h-6 px-2 inline-flex items-center gap-1 rounded-md text-[0.6875rem] font-semibold border',
+                    x.result === 'Pass' ? 'bg-compliant-50 border-compliant-200 text-compliant-700'
+                      : x.result === 'Fail' ? 'bg-risk-50 border-risk-200 text-risk-700'
+                        : 'bg-canvas-elevated border-canvas-border text-ink-400')}>
+                    {x.result === 'Pass' ? <Check size={12} /> : x.result === 'Fail' ? <X size={12} /> : null}
+                    {x.result === 'Not tested' ? 'Not tested yet' : x.result}
+                  </span>
+                  ) : (
                   <div className="flex items-center gap-1.5 shrink-0">
                     {x.validation && <button onClick={() => setViewing(x.pointId)} className="h-7 px-2.5 inline-flex items-center gap-1 rounded-md border border-canvas-border bg-canvas-elevated text-[0.71875rem] font-semibold text-ink-600 hover:border-brand-300 hover:text-brand-700 cursor-pointer"><ListChecks size={12} /> View results</button>}
                     <button onClick={() => setRetestCheck(d.id, x.pointId, 'Pass')} title="Mark this check passed" aria-label={`Check ${i + 1} passed`}
@@ -962,14 +1021,18 @@ function DesignRetestPanel({ d }: { d: Deficiency }) {
                       <X size={13} />
                     </button>
                   </div>
-                )}
+                  ))}
             </li>
           ))}
         </ol>
       ) : (
         <p className="text-[0.75rem] text-ink-500">This control has no design checks to re-check. Add them on the control’s design test first.</p>
       )}
-      <p className="text-[0.6875rem] text-ink-400">Same design checks that failed — a retest that invents its own is not a retest of anything.</p>
+      <p className="text-[0.6875rem] text-ink-400">
+        {onVersion
+          ? `Conclude v${versionNo(control!)}'s design test above and this records itself from it.`
+          : 'Same design checks that failed — a retest that invents its own is not a retest of anything.'}
+      </p>
 
       {done && willFail && (
         <textarea value={rationale} onChange={e => setRationale(e.target.value)} rows={2}
@@ -986,7 +1049,11 @@ function DesignRetestPanel({ d }: { d: Deficiency }) {
             {willFail ? <><XCircle size={13} /> Record retest {n} — failed</> : <><CheckCircle2 size={13} /> Record retest {n} — passed</>}
           </button>
         ) : checks.length ? (
-          <span className="text-[0.71875rem] text-ink-400">Mark every check — the verdict comes off the checks, not a button.</span>
+          <span className="text-[0.71875rem] text-ink-400">
+            {onVersion
+              ? 'Finish the design test above — the verdict comes off it.'
+              : 'Mark every check — the verdict comes off the checks, not a button.'}
+          </span>
         ) : null}
       </div>
 
@@ -1034,12 +1101,27 @@ function RetestHistory({ rounds }: { rounds: RetestRound[] }) {
  *  lands after the books close, the warning that says so NOW rather than in March. */
 function RetestReadyLine({ readiness }: { readiness: RetestReadiness }) {
   return (
-    <div className={cn('rounded-lg border px-3 py-2 text-[0.75rem] flex items-start gap-2',
-      readiness.beyondPeriodEnd ? 'border-high-200 bg-high-50/60 text-high-800' : 'border-canvas-border bg-paper-50/40 text-ink-600')}>
-      {readiness.beyondPeriodEnd ? <AlertTriangle size={13} className="mt-[2px] shrink-0" /> : <History size={13} className="mt-[2px] shrink-0 text-ink-400" />}
-      <span className="min-w-0">
-        <b className="font-semibold">Retestable from {readiness.label}</b> — {readiness.reason}
-      </span>
+    <div className="space-y-1.5">
+      <div className={cn('rounded-lg border px-3 py-2 text-[0.75rem] flex items-start gap-2',
+        readiness.beyondPeriodEnd ? 'border-high-200 bg-high-50/60 text-high-800' : 'border-canvas-border bg-paper-50/40 text-ink-600')}>
+        {readiness.beyondPeriodEnd ? <AlertTriangle size={13} className="mt-[2px] shrink-0" /> : <History size={13} className="mt-[2px] shrink-0 text-ink-400" />}
+        <span className="min-w-0">
+          {/* A design retest waits for nothing, so "Retestable from" is the wrong
+              sentence for it — it is ready when the fix is. */}
+          <b className="font-semibold">{readiness.retestNeedsNoRun ? `Design re-checkable ${readiness.date ? `from ${readiness.label}` : '— as soon as the fix lands'}` : `Retestable from ${readiness.label}`}</b> — {readiness.reason}
+        </span>
+      </div>
+      {/* The second clock, design track only: the redesigned control has to RUN
+          before its operation can be tested, and that is what runs out of time. */}
+      {readiness.firstOperating && (
+        <div className={cn('rounded-lg border px-3 py-2 text-[0.75rem] flex items-start gap-2',
+          readiness.firstOperating.beyondPeriodEnd ? 'border-high-200 bg-high-50/60 text-high-800' : 'border-canvas-border bg-paper-50/40 text-ink-600')}>
+          {readiness.firstOperating.beyondPeriodEnd ? <AlertTriangle size={13} className="mt-[2px] shrink-0" /> : <History size={13} className="mt-[2px] shrink-0 text-ink-400" />}
+          <span className="min-w-0">
+            <b className="font-semibold">First operating test {readiness.firstOperating.label}</b> — {readiness.firstOperating.reason}
+          </span>
+        </div>
+      )}
     </div>
   );
 }
@@ -1362,6 +1444,55 @@ export function DeficienciesView() {
  *  The KEY chip and the ASSERTION chip are styled apart on purpose. Assertion is
  *  not a grouping key any more; it is context about the failure. Two chips in
  *  the same clothes read as two keys. */
+/** "Who else did we build this way" — see `sameFlawElsewhere`.
+ *
+ *  Its own component so the scan runs only when a card is expanded: DeficiencyCard is
+ *  rendered once per row in the register, and a walk over the register from every
+ *  collapsed row would run on every keystroke in any sibling input.
+ *
+ *  Untested peers by name, because that is where the auditor can still act. The ones
+ *  already tested are a count, not a list — a control concluded effective on this very
+ *  check is evidence against the flaw being systemic, so it belongs in the sentence
+ *  rather than in the queue. */
+function SameFlawElsewhere({ d, eng, onOpen }: { d: Deficiency; eng: IcfrEngagement; onOpen: (id: string) => void }) {
+  const { untested, tested, check } = useMemo(() => sameFlawElsewhere(eng, d), [eng, d]);
+  if (!check) {
+    return (
+      <p className="text-[0.65625rem] text-ink-400">
+        {d.gapKind === 'no-control'
+          ? 'Nothing to scan — "no control at all" is a judgement about this control, not a pattern another row can be matched against.'
+          : 'Name the design gap first — the scan looks for controls built the same way.'}
+      </p>
+    );
+  }
+  const process = eng.controls.find(c => c.id === d.controlId)?.process;
+  return (
+    <div className="space-y-1">
+      {untested.length > 0 ? (
+        <>
+          <p className="text-[0.65625rem] font-semibold text-mitigated-700">Not yet looked at</p>
+          <div className="space-y-0.5">
+            {untested.map(c => (
+              <button key={c.id} onClick={() => onOpen(c.id)}
+                className="group w-full text-left flex items-start gap-1.5 text-[0.6875rem] text-ink-600 hover:text-ink-900 cursor-pointer">
+                <span className="font-mono text-[0.65625rem] font-semibold text-ink-500 shrink-0 mt-[1px]">{c.wpRef}</span>
+                <span className="min-w-0 flex-1 group-hover:underline">{c.description}</span>
+              </button>
+            ))}
+          </div>
+        </>
+      ) : (
+        <p className="text-[0.65625rem] text-ink-500">Every other control in {process} that could be built this way has already been looked at.</p>
+      )}
+      <p className="text-[0.65625rem] text-ink-500">
+        {tested.length > 0
+          ? `+ ${tested.length} more in ${process} with no check for this, already tested — their results are the evidence on whether the habit is wider.`
+          : untested.length > 0 ? `Matched on ${process} and on how each control is described and classified — a prompt to look, not a finding.` : ''}
+      </p>
+    </div>
+  );
+}
+
 function AggregationKeys({ d, eng }: { d: Deficiency; eng: IcfrEngagement }) {
   const keys = groupKeysFor(d, eng);
   const c = eng.controls.find(x => x.id === d.controlId);
@@ -1690,6 +1821,7 @@ export function DeficiencyCard({ d, defaultOpen = false, showControlLink = true,
   // a rejection — of the rating or of the plan — never commits without a reason
   const [rejecting, setRejecting] = useState<null | 'rating' | 'plan'>(null);
   const [rejectReason, setRejectReason] = useState('');
+  const [planFix, setPlanFix] = useState<PlanFixKind | null>(null);
   // the owner's disagreement: which input, why, and optionally what proves it
   const [challenging, setChallenging] = useState(false);
   const [challengeInput, setChallengeInput] = useState<ChallengedInput>('exposure');
@@ -1803,6 +1935,14 @@ export function DeficiencyCard({ d, defaultOpen = false, showControlLink = true,
           {d.failedSamples && d.failedSamples.length > 0 && (
             <p className="text-[0.6875rem] text-ink-400 mt-1.5">Found in {d.failedSamples.slice(0, 6).join(', ')}{d.failedSamples.length > 6 ? ` +${d.failedSamples.length - 6} more` : ''}</p>
           )}
+          {/* The design twin of "Found in {samples}": not WHICH instances failed —
+              a design gap has no instances — but HOW the control is built wrong.
+              Shown to the owner too, because their plan is judged against it. */}
+          {d.track === 'design' && d.gapKind && (
+            <p className="text-[0.6875rem] text-ink-500 mt-1.5">
+              <b className="font-semibold text-risk-700">{GAP_KIND_LABEL[d.gapKind]}</b> — {GAP_KIND_HINT[d.gapKind]}
+            </p>
+          )}
           {d.unableToTestReason && (
             <p className="text-[0.6875rem] text-high-700 mt-1.5"><b className="font-semibold">Never evidenced</b> — {d.unableToTestReason}</p>
           )}
@@ -1846,6 +1986,22 @@ export function DeficiencyCard({ d, defaultOpen = false, showControlLink = true,
               <div className="rounded-md border border-high-200 bg-high-50/60 px-2.5 py-2 text-[0.75rem] text-high-800">
                 <b className="font-semibold">Sent back by {d.ratingReturn.by}</b> — {d.ratingReturn.reason}
               </div>
+            )}
+            {/* Design track only — an operating failure has no design gap to name.
+                Ira reads it off the failed check; the auditor is the one who says
+                it, and "No control at all" is only ever theirs: it is a judgement
+                about the whole control, not about any one check. */}
+            {d.track === 'design' && (
+              <>
+                <div className="flex items-center gap-2 flex-wrap text-[12px]">
+                  <span className="text-ink-500 w-[120px]">Design gap</span>
+                  {DESIGN_GAP_KINDS.map(k => (
+                    <button key={k} onClick={() => updateDeficiency(d.id, { gapKind: k })} className={cn('h-7 px-2.5 rounded-md border text-[11.5px] font-semibold cursor-pointer transition-colors', d.gapKind === k ? 'bg-brand-50 border-brand-200 text-brand-700' : 'border-canvas-border text-ink-600 hover:bg-paper-50')}>{GAP_KIND_LABEL[k]}</button>
+                  ))}
+                </div>
+                <IraTag reason={d.iraSuggested?.gapKind} />
+                <p className="text-[10.5px] text-ink-400 pl-[128px] -mt-1">{d.gapKind ? GAP_KIND_HINT[d.gapKind] : 'Name how the control is built wrong — the owner is asked to fix that, and the plan is judged against it.'}</p>
+              </>
             )}
             <div className="flex items-center gap-2 flex-wrap text-[12px]">
               <span className="text-ink-500 w-[120px]">Likelihood</span>
@@ -1896,6 +2052,14 @@ export function DeficiencyCard({ d, defaultOpen = false, showControlLink = true,
                 aggregation is for. What used to sit here was two chips and a
                 dropdown reading "Not linked": it named the keys and never once
                 said what the group came to. */}
+            {/* Same flaw elsewhere — design track only, and only the auditor's to read:
+                it is a lead to follow, not something the owner is answerable for. */}
+            {d.track === 'design' && (
+              <div className="flex items-start gap-2 text-[0.75rem] flex-wrap">
+                <span className="text-ink-500 w-[120px] mt-1.5">Same flaw elsewhere</span>
+                <div className="flex-1 min-w-[260px]"><SameFlawElsewhere d={d} eng={eng} onOpen={openControl} /></div>
+              </div>
+            )}
             <div className="flex items-start gap-2 text-[0.75rem] flex-wrap">
               <span className="text-ink-500 w-[120px] mt-1.5">Aggregation</span>
               <div className="flex-1 min-w-[260px] space-y-2">
@@ -2192,7 +2356,24 @@ export function DeficiencyCard({ d, defaultOpen = false, showControlLink = true,
                 </div>
               ) : <>
                 <span className="text-[0.71875rem] text-ink-500 w-full">Does this address the root cause? You judge the plan — you never write or execute it.</span>
-                <button onClick={() => reviewPlan(d.id, 'Accepted')} className="h-8 px-3 rounded-lg bg-compliant-600 text-white text-[0.75rem] font-semibold hover:bg-compliant-700 cursor-pointer inline-flex items-center gap-1.5"><CheckCircle2 size={13} /> Accept the plan</button>
+                {/* The design track asks one more thing before it can be accepted:
+                    has the control been rebuilt, or has someone been put behind it?
+                    Only the first ends a design gap, and a plan accepted without
+                    the answer lets the second be filed as the first. */}
+                {d.track === 'design' && (
+                  <div className="w-full">
+                    <span className="text-[0.71875rem] text-ink-500">Real redesign, or a manual workaround?</span>
+                    <div className="flex items-center gap-2 flex-wrap mt-1.5">
+                      {PLAN_FIX_KINDS.map(k => (
+                        <button key={k} onClick={() => setPlanFix(k)} className={cn('h-7 px-2.5 rounded-md border text-[11.5px] font-semibold cursor-pointer transition-colors', planFix === k ? 'bg-brand-50 border-brand-200 text-brand-700' : 'border-canvas-border text-ink-600 hover:bg-paper-50')}>{PLAN_FIX_LABEL[k]}</button>
+                      ))}
+                    </div>
+                    {planFix && <p className="text-[10.5px] text-ink-400 mt-1">{PLAN_FIX_HINT[planFix]}</p>}
+                  </div>
+                )}
+                <button onClick={() => reviewPlan(d.id, 'Accepted', undefined, planFix ?? undefined)} disabled={d.track === 'design' && !planFix}
+                  title={d.track === 'design' && !planFix ? 'Say which of the two this is first — a workaround accepted as a redesign reads as remediated when nothing was rebuilt' : 'Accepts the plan and hands the work back to the owner'}
+                  className="h-8 px-3 rounded-lg bg-compliant-600 text-white text-[0.75rem] font-semibold enabled:hover:bg-compliant-700 disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer inline-flex items-center gap-1.5"><CheckCircle2 size={13} /> Accept the plan</button>
                 <button onClick={() => { setRejecting('plan'); setRejectReason(''); }} className="h-8 px-3 rounded-lg border border-high-300 text-high-700 text-[0.75rem] font-semibold hover:bg-high-50 cursor-pointer inline-flex items-center gap-1.5"><RotateCcw size={13} /> Reject — reason required</button>
               </>
             ) : null

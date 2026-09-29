@@ -9,6 +9,7 @@ import type { Assertion, ControlClass, ControlType, Frequency, Nature, TestingSt
 import { peekEntityCode, peekProcessCode, riskIdOf } from './racmIds';
 import { draftAttributes, draftControlDescription, draftRiskCategory, draftRiskDescription } from './racmImport';
 import { draftDesignChecks } from './helpers';
+import { canonicalProcess } from './auditScope';
 
 /**
  * New control — one focused form. The control lands in the library and the RACM
@@ -291,7 +292,7 @@ export default function NewControlPanel({ onClose }: { onClose: () => void }) {
     const id = addControl({
       description: description.trim(),
       controlActivity: controlActivity.trim(),
-      process: process === NEW_PROCESS ? newProcess.trim() : process, subProcess,
+      process: process === NEW_PROCESS ? canonicalProcess(newProcess) : process, subProcess,
       type, nature, frequency, owner: ownerName,
       // undefined, not the control owner's name — the store then falls back to
       // whoever the scoping wizard recorded for this process, and only reaches

@@ -75,9 +75,68 @@ export interface RequiredFile {
 export type DesignDocKind =
   | 'Process narrative' | 'Flowchart' | 'Walkthrough' | 'Control description' | 'Policy / SOP'
   | 'Precision & thresholds' | 'Segregation of duties'
+  // The technical specification behind an automated or IT-dependent control —
+  // transaction code, field group, the role that releases, whether a bypass
+  // exists, where the change log lands. It comes from IT, not from the business,
+  // which is why it is its own element and not a second use of 'Control
+  // description': that one is the business's prose and has its own row below.
+  | 'System configuration'
   // an element the auditor named themselves — its title is `name`, not the kind
   | 'Custom';
 export type DocStatus = 'Received' | 'Requested' | 'Missing';
+
+/* ── What each class of control actually has to show ──────────────────────────
+ *
+ * Until now every control was offered the same flat list, so an ITGC carried a
+ * Process narrative and a Flowchart as requirements. Those documents are not
+ * produced for ITGCs at all — their evidence is access lists, change tickets,
+ * approval records and job logs. The control could therefore never reach 100%,
+ * and the auditor cleared it by waiving the two, one at a time.
+ *
+ * Those waivers were noise. A waiver says "we decided not to obtain this". For
+ * an ITGC narrative there is nothing to decide: the document does not exist for
+ * that kind of control. Recording it as a waiver puts a judgement on the working
+ * paper that nobody ever made.
+ *
+ * Hence three states, not two:
+ *   Required  — gates the design conclusion; must be evidenced or waived.
+ *   Optional  — strengthens the file, never gates; stays attachable.
+ *   Not applicable — never chased, never waived, and OUT of the completeness
+ *                    denominator. Still attachable if somebody happens to have one.
+ */
+export type DesignDocRequirement = 'Required' | 'Optional' | 'Not applicable';
+
+/** Which column of DOC_REQUIREMENTS a control reads. Note this is two fields, not
+ *  one: ITGC is a `clazz`, while Manual / Automated / IT-dependent are `nature`.
+ *  Class wins where it is set — an ITGC is an ITGC however it is performed. */
+export type DocClassColumn = 'Manual' | 'Automated' | 'IT-dependent' | 'ITGC';
+
+/** The table. Every standard kind has a row for every column, so nothing is
+ *  derived by omission. `Custom` is deliberately absent: an auditor-named element
+ *  is not a standard kind and keeps its own `required` flag. */
+export const DOC_REQUIREMENTS: Record<DocClassColumn, Record<Exclude<DesignDocKind, 'Custom'>, DesignDocRequirement>> = {
+  Manual: {
+    'Process narrative': 'Required', 'Flowchart': 'Optional', 'Control description': 'Required',
+    'Walkthrough': 'Required', 'System configuration': 'Not applicable',
+    'Segregation of duties': 'Optional', 'Policy / SOP': 'Optional', 'Precision & thresholds': 'Optional',
+  },
+  Automated: {
+    'Process narrative': 'Optional', 'Flowchart': 'Optional', 'Control description': 'Required',
+    'Walkthrough': 'Required', 'System configuration': 'Required',
+    'Segregation of duties': 'Optional', 'Policy / SOP': 'Optional', 'Precision & thresholds': 'Optional',
+  },
+  'IT-dependent': {
+    'Process narrative': 'Required', 'Flowchart': 'Optional', 'Control description': 'Required',
+    'Walkthrough': 'Required', 'System configuration': 'Required',
+    'Segregation of duties': 'Optional', 'Policy / SOP': 'Optional', 'Precision & thresholds': 'Optional',
+  },
+  ITGC: {
+    'Process narrative': 'Not applicable', 'Flowchart': 'Not applicable', 'Control description': 'Required',
+    'Walkthrough': 'Required', 'System configuration': 'Required',
+    // the access / role extract — who holds which role, out of the system itself
+    'Segregation of duties': 'Required', 'Policy / SOP': 'Optional', 'Precision & thresholds': 'Optional',
+  },
+};
 
 /** Why a required design element will never arrive. Three things actually happen
  *  in the field: the audit team writes the narrative and flowchart itself off the
@@ -945,6 +1004,115 @@ export const RISK_CATEGORY_TINT: Record<ControlClass, string> = {
 
 // ─── Control ─────────────────────────────────────────────────────────────────────
 
+// ─── Control versions — the control the owner rebuilt ───────────────────────────
+//
+// A failed DESIGN test says the control cannot work as written. The answer to it
+// is not more evidence, it is a different control: a second approver added, a
+// threshold lowered, a step moved to before the posting instead of after. That is
+// a NEW VERSION of the control, and the two versions are not interchangeable —
+// the old wording is what failed, the new wording is what has to be tested, and a
+// paper that quietly overwrites the first with the second has destroyed the
+// finding it existed to record.
+//
+// So the superseded version is kept in full, beside the live one. `Control` itself
+// is ALWAYS the live version: every screen, every helper and every date function
+// goes on reading `c.description`, `c.design` and `c.operating` exactly as before.
+// The old versions sit in `priorVersions`, oldest first, each carrying the tracks
+// it concluded under. Nothing was moved beneath a version wrapper, deliberately —
+// that would have rewritten several hundred call sites to say the same thing.
+//
+// Because `DesignApproval`, the rationale and the walkthrough all live INSIDE
+// `DesignTrack`, a version keeps its own reviewer approval and its own walkthrough
+// with no extra field. `wpSignoff` is the one exception: it signs the control's
+// PAPER rather than one version's track, so the snapshot carries whatever
+// signature that paper had reached and the live control starts unsigned.
+//
+// Only a `redesign` gets here. A `workaround` leaves the control itself untouched
+// — someone checks behind it — so there is no second wording to test and no
+// version to record. That is the whole distinction `PlanFixKind` draws, and it is
+// why the fix kind is asked before a plan can be accepted.
+export interface ControlVersion {
+  /** 1 for the control as first written. The LIVE version's number is never
+   *  stored — it is `priorVersions.length + 1`, so there is one place to be
+   *  wrong rather than two that can disagree. */
+  no: number;
+  /** THE WORDING THIS VERSION RAN UNDER — only the fields a redesign can move.
+   *  Everything else about a control (its owner, its risk, its account, its
+   *  assertions) is the same control either way, and re-stating it per version
+   *  would invite two copies to drift apart. */
+  description: string;
+  controlActivity?: string;
+  objective?: string;
+  precision: string;
+  nature: Nature;
+  type: ControlType;
+  frequency: Frequency;
+  isMrc?: boolean;
+  mrcThreshold?: number;
+  /** THE DAY THIS VERSION STOPPED BEING THE CONTROL — the day the next one went
+   *  live. The two windows MEET rather than overlap, so no occurrence can be
+   *  claimed as evidence for both versions.
+   *
+   *  ISO `YYYY-MM-DD`, and it has to be: this is the only date on a control that
+   *  is COMPARED rather than printed, and every other loose date in the product
+   *  ('1 Apr 2026', 'Mar 2026') sorts wrong as a string. `recordNewVersion`
+   *  normalises whatever the auditor typed; the screens run it back through
+   *  `formatDueDate` to show it.
+   *
+   *  When this version STARTED is deliberately not stored: it is the version
+   *  before it being superseded, or the start of the window for version 1. See
+   *  `versionWindow`. Storing it as well would be a second place to be wrong,
+   *  and the two could then disagree about which side of a day an occurrence
+   *  falls on. */
+  supersededAt: string;
+  /** The tracks as they stood when this version was superseded: its conclusion,
+   *  its rationale, its reviewer approval, its walkthrough, its population and
+   *  its sample. Nothing here is ever written again. */
+  design: DesignTrack;
+  operating: OperatingTrack;
+  /** The signature that version's paper had reached, if it had reached one. */
+  wpSignoff?: { preparer?: SignoffEntry; reviewer?: SignoffEntry };
+  /** WHY it was superseded — the exception whose accepted plan replaced it, the
+   *  kind of fix that plan was, and what the auditor said changed. The exception
+   *  is named rather than described so the finding and the version it produced
+   *  can always be read back against each other. */
+  replaced: { defId: string; fix: PlanFixKind; note: string; by: string };
+}
+
+/** WHAT THE AUDITOR RECORDS when a rebuilt control is put in front of them.
+ *
+ *  Only the fields a redesign can actually move, and only `description`,
+ *  `liveFrom` and `note` are required: the rest are left out when they did not
+ *  change, and the live control keeps what it had. A blank field would otherwise
+ *  read as "this was removed", which is not what leaving it alone means. */
+export interface NewVersionDraft {
+  /** The control as it now reads — the sentence the next design test is against. */
+  description: string;
+  controlActivity?: string;
+  precision?: string;
+  /** A redesign moves these as often as it moves the wording: a monthly review
+   *  made weekly, a manual check automated, a detective control put before the
+   *  posting instead of after. Each of them changes what the next test looks
+   *  like, so each of them is offered. */
+  nature?: Nature;
+  type?: ControlType;
+  frequency?: Frequency;
+  mrcThreshold?: number;
+  /** THE DAY THE REBUILT CONTROL STARTED RUNNING. Required, and the reason this
+   *  is a recorded event rather than an edit: everything the new version can be
+   *  tested on begins here, and a version with no start date has no population.
+   *
+   *  Read loosely — a date input gives ISO, a typed '1 Apr 2026' also parses —
+   *  and normalised to ISO before it is stored. An unreadable date is refused
+   *  rather than kept as prose: a window that cannot be compared is worse than
+   *  no window, because the draw would silently fall back to the whole period. */
+  liveFrom: string;
+  /** What the auditor saw change, in their words — read back beside the old
+   *  wording, so "what is different about v2" is answered on the paper rather
+   *  than by diffing two sentences. */
+  note: string;
+}
+
 export interface Control {
   id: string;
   /** THE CONTROL NUMBER THE CLIENT KNOWS — set only when `id` had to be made
@@ -1116,6 +1284,13 @@ export interface Control {
   racmReview?: RacmReview;
   design: DesignTrack;
   operating: OperatingTrack;
+  /** THE VERSIONS OF THIS CONTROL THAT NO LONGER RUN, oldest first.
+   *
+   *  A peer of the two tracks above rather than a wrapper around them: the fields
+   *  on this interface are always the LIVE version, so nothing that reads a
+   *  control had to change to gain versions. Absent on the ordinary control,
+   *  which has only ever been written one way. See `ControlVersion`. */
+  priorVersions?: ControlVersion[];
   /** Audit-side sign-off on THIS working paper — the preparer (auditor hat) signs
    *  once the control is concluded; the reviewer countersigns. Separate from the
    *  engagement-level opinion sign-off. */
@@ -1225,6 +1400,80 @@ export const gapNature = (track: 'design' | 'operating', nature: Nature): string
     ? (nature === 'Manual' ? 'Design gap — manual control' : 'Design gap — IT-dependent control')
     : (nature === 'Manual' ? 'Operating failure — manual control' : 'Operating failure — IT-dependent control');
 
+/** Accepting a plan for a DESIGN gap answers one more question than accepting one
+ *  for an operating failure: has the control actually been rebuilt, or has a manual
+ *  step been bolted on around it?
+ *
+ *  It matters because only one of the two ends the deficiency. A redesign means the
+ *  control that failed no longer exists in that form — its design has to be tested
+ *  again from scratch. A workaround leaves the original design exactly as it was
+ *  and adds a person checking after it, which is a compensating control wearing a
+ *  remediation's clothes: it can reduce what the failure is worth, it cannot make
+ *  the design effective. An auditor who never asks lets the second pass as the
+ *  first, and the register reads remediated when nothing was redesigned. */
+export type PlanFixKind = 'redesign' | 'workaround';
+
+export const PLAN_FIX_KINDS: PlanFixKind[] = ['redesign', 'workaround'];
+
+export const PLAN_FIX_LABEL: Record<PlanFixKind, string> = {
+  redesign: 'The control itself changes',
+  workaround: 'A manual step added around it',
+};
+
+export const PLAN_FIX_HINT: Record<PlanFixKind, string> = {
+  redesign: 'The way the control works is different now, so its design is tested again from scratch. This is what closes a design gap.',
+  workaround: 'The control is unchanged and someone checks behind it. That can cap what the failure is worth, but the design it was built with is still the design that failed.',
+};
+
+/** The six ways a control's DESIGN can be wrong.
+ *
+ *  An operating failure means the control was run badly; a design failure means it
+ *  could never have worked, and the six kinds are the six reasons why. They matter
+ *  because the fix follows the kind: a segregation gap moves a task to a different
+ *  person, a precision gap moves a number, a placement gap moves the control itself.
+ *  Ira reads the kind off the design check that failed (`suggestGapKind`). */
+export type DesignGapKind =
+  | 'sod'          // one person does and checks the same thing
+  | 'precision'    // the threshold is too loose to catch the misstatement
+  | 'placement'    // the control sits where it cannot stop the error
+  | 'bypassable'   // work can route around it
+  | 'frequency'    // it runs too rarely to catch the error in time
+  | 'no-control';  // there is effectively nothing there
+
+export const DESIGN_GAP_KINDS: DesignGapKind[] = ['sod', 'precision', 'placement', 'bypassable', 'frequency', 'no-control'];
+
+export const GAP_KIND_LABEL: Record<DesignGapKind, string> = {
+  sod: 'No segregation of duties',
+  precision: 'Insufficient precision',
+  placement: 'Wrong place in the process',
+  bypassable: 'Can be bypassed',
+  frequency: 'Runs too rarely',
+  'no-control': 'No control at all',
+};
+
+/** What the auditor is saying when they pick it — shown under the picker. */
+export const GAP_KIND_HINT: Record<DesignGapKind, string> = {
+  sod: 'The same person performs the control and prepares what it checks, so it cannot be an independent check.',
+  precision: 'The threshold or tolerance is loose enough that a misstatement large enough to matter would pass it.',
+  placement: 'The control sits after the point where the error arises, so it can only find the error, never stop it.',
+  bypassable: 'Transactions can reach the accounts without passing through the control.',
+  frequency: 'The control runs less often than the risk occurs, so an error can reach the accounts between runs.',
+  'no-control': 'There is a row in the RACM, but nothing in the process actually does what it describes.',
+};
+
+/** What the OWNER is asked for at step ③, per kind. The generic prompt is written
+ *  for an operating failure ("normalise the match key, not recover the 4 invoices")
+ *  and is the wrong question for every one of these: a design gap is fixed by
+ *  changing the control, not by doing it more carefully. */
+export const GAP_KIND_PLAN_PROMPT: Record<DesignGapKind, string> = {
+  sod: 'Which task moves to a different person, and who takes it?',
+  precision: 'What does the threshold become, and who approved the new one?',
+  placement: 'Where does the control move to, and what stops the transaction there?',
+  bypassable: 'What closes the route around the control?',
+  frequency: 'How often will it run instead, and from when?',
+  'no-control': 'What control is being put in, who performs it, and from when?',
+};
+
 // ─── PARKED (Aug 2026) — Gap type ────────────────────────────────────────────────
 // Removed from the exception screen: derivable from the control's nature and the
 // failed track, so it was a question with a knowable answer. Superseded by
@@ -1321,6 +1570,19 @@ export interface Deficiency {
   // PARKED (Aug 2026) — see the Gap type / Priced impact banners above.
   // gapType?: GapType;
   // exposure?: Exposure;
+  /** HOW the design is wrong — design track only. See DESIGN_GAP_KINDS.
+   *
+   *  Not a revival of the parked `gapType`. That one asked which KIND OF CONTROL
+   *  had failed (manual / IT / testing), which was derivable from nature and track
+   *  and so was rightly removed as a question with a knowable answer. This asks
+   *  something the nature cannot answer: WHY the design could never have worked.
+   *  A control can be manual and fail because one person does the whole thing, or
+   *  because the threshold is too loose, or because it runs too late — three
+   *  different findings needing three different fixes, all 'manual design gap'.
+   *
+   *  Ira fills it from the design check that failed and tags it in `iraSuggested`;
+   *  the auditor can change it, and the tag goes when they do. */
+  gapKind?: DesignGapKind;
   /** Where this lands in the report — the source RACM's report reference number. */
   reportRef?: string;
   description: string;
@@ -1349,7 +1611,7 @@ export interface Deficiency {
    *  `rootCause` (17 Sep dev call) is different in one way: while its tag is on,
    *  the root cause is Ira's draft and step 1 is not done — the auditor edits it
    *  or takes it ("Use this"), and either removes the tag (rootCauseReady). */
-  iraSuggested?: Partial<Record<'likelihood' | 'magnitude' | 'compensatingControlId' | 'rootCause', string>>;
+  iraSuggested?: Partial<Record<'likelihood' | 'magnitude' | 'compensatingControlId' | 'rootCause' | 'gapKind', string>>;
   aggregationGroup?: string;
   /** PARKED (13 Aug 2026) — the single "same root cause as" link. Superseded by
    *  `rootCauseGroupIds`: one exception can share a mechanism with several
@@ -1387,7 +1649,7 @@ export interface Deficiency {
   /** The auditor's verdict on the plan — does it address the root cause? A
    *  rejection carries the reason back to the owner. The auditor never writes
    *  or executes the fix; this is the whole of their say in it. */
-  planReview?: { decision: 'Accepted' | 'Rejected'; reason?: string; by: string; at: string };
+  planReview?: { decision: 'Accepted' | 'Rejected'; reason?: string; fix?: PlanFixKind; by: string; at: string };
   /** The auditor's stated retest-ready date. Normally there is none: the date is
    *  DERIVED from the fix date plus the control's operating period, so storing it
    *  would just be a second copy that drifts. It is set only where the derivation
@@ -1738,7 +2000,11 @@ export type ExecKind =
   | 'add-element' | 'remove-element' | 'remove-file' | 'add-check' | 'remove-check' | 'ai-review' | 'design-approval'
   // The operating test parked because the control has not run yet, and lifted
   // again once it has. Its own kind: it is neither a conclusion nor a chase.
-  | 'park-operating';
+  | 'park-operating'
+  // The control was rebuilt after a design gap and a new version recorded. Not a
+  // 'reopen': a reopen undoes a conclusion about THIS control, this puts the
+  // conclusion beyond reach by replacing the control it was about.
+  | 'new-version';
 export interface ExecutionEvent {
   id: string;
   controlId: string;
@@ -1890,6 +2156,32 @@ export interface AuditArchive {
     design: TrackConclusion;
     operating: TrackConclusion;
     conclusion: Conclusion;
+    /** WHICH VERSION OF THE CONTROL these verdicts are about — 1 unless it was
+     *  rebuilt. The roll-forward carry reads it: an interim that tested v1 says
+     *  nothing about a v2, so a carry across a version change is refused rather
+     *  than asserting "retest only if the control changed" about a control that
+     *  did. Absent on archives written before versions existed, which is read as
+     *  version 1 because that is what they were. */
+    versionNo?: number;
+    /** THE VERSIONS SUPERSEDED DURING THIS CYCLE, oldest first — the failed design
+     *  and the control it was about, kept so the closed cycle still answers what
+     *  went wrong before the fix.
+     *
+     *  NESTED rather than one archive row per version, deliberately. The rows are
+     *  counted as controls in six places (the portfolio rollups, the archive view's
+     *  tally, the wizard's carry list) and looked up by `controlId` with `.find()`
+     *  in three more. One row per version would turn every one of those counts into
+     *  a version count and make each of those lookups return whichever version
+     *  happened to be written first. */
+    versions?: {
+      no: number;
+      description: string;
+      supersededAt: string;
+      design: TrackConclusion;
+      operating: TrackConclusion;
+      /** The exception whose accepted redesign replaced it. */
+      defId: string;
+    }[];
     /** Items with a result recorded against them when the audit closed — what
      *  the control's yearly running total reads for this round (A28). Optional
      *  because archives written before the count existed have none. */
@@ -2085,7 +2377,10 @@ export interface IcfrEngagement {
   fileRegistry?: AuditFileRecord[];
 }
 
-export const DESIGN_DOC_KINDS: DesignDocKind[] = ['Process narrative', 'Flowchart', 'Walkthrough', 'Control description', 'Policy / SOP', 'Precision & thresholds', 'Segregation of duties'];
+/** The menu, deliberately NOT branched by class: an auditor who has a document
+ *  can always attach it, whatever the table says about whether it is chased.
+ *  Only the requirement changes per class — see DOC_REQUIREMENTS. */
+export const DESIGN_DOC_KINDS: DesignDocKind[] = ['Process narrative', 'Flowchart', 'Walkthrough', 'Control description', 'System configuration', 'Policy / SOP', 'Precision & thresholds', 'Segregation of duties'];
 
 // PARKED (Aug 2026) — the exception no longer carries a gap type. `gapNature`
 // derives the same sentence read-only from the track and the control's nature.

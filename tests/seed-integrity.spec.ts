@@ -21,7 +21,7 @@ import { expect, test } from '@playwright/test';
 import { libraryEngagements, type Engagement } from '../src/data/engagements';
 import { seedIcfrEngagement, type SeedMeta } from '../src/components/sox-icfr/mockData';
 import {
-  designCompleteness, inquiryOnlyAttributes, passedWithoutFiles, stepResult, toeRoundFailed,
+  applyDocRequirements, designCompleteness, inquiryOnlyAttributes, passedWithoutFiles, stepResult, toeRoundFailed,
 } from '../src/components/sox-icfr/helpers';
 import type { Control, IcfrEngagement } from '../src/components/sox-icfr/types';
 
@@ -40,7 +40,11 @@ const metaFor = (e: Engagement): SeedMeta => ({
 function seeded(): { eng: Engagement; ws: IcfrEngagement }[] {
   return libraryEngagements()
     .filter(e => e.type === 'SOX / ICFR')
-    .map(e => ({ eng: e, ws: seedIcfrEngagement(metaFor(e)) }));
+    // Wrapped exactly as the app boots (`store.tsx`): applyDocRequirements adds the
+    // required kinds a control's class expects and is missing. Seeding raw asserted
+    // against a shape the product never shows, which is how 40 signed-Effective
+    // controls sat at 33–67% complete with this spec green.
+    .map(e => ({ eng: e, ws: applyDocRequirements(seedIcfrEngagement(metaFor(e))).eng }));
 }
 
 /** `ENG-001/C001 — Payment runs approved by two authorisers.` */

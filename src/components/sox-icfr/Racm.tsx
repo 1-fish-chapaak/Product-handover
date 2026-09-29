@@ -4,7 +4,7 @@ import {
   MoreHorizontal, Paperclip, Plus, Search, Sparkles, Star, Table2, Trash2, UploadCloud, X, Check, MessageSquarePlus, RotateCcw,
 } from 'lucide-react';
 import { useAuditControls } from './useAuditControls';
-import { entitiesFor, racmAuditUse } from './auditScope';
+import { canonicalProcess, entitiesFor, racmAuditUse, SOX_PROCESS_NAMES } from './auditScope';
 import { extraLabel, useRacmConfig } from './racmConfig';
 import { racmSetupKeyFor } from './racmLibrary';
 import { defWord } from './flow';
@@ -28,10 +28,6 @@ import type { Control, IcfrEngagement } from './types';
  *  plus the two cycles it doesn't scope from the trial balance. A process
  *  already in scope is filtered out at the picker, since the landing lists
  *  exactly one RACM per process; anything outside the list is named by hand. */
-const SOX_PROCESSES = [
-  'Order to Cash', 'Procure to Pay', 'Record to Report', 'Inventory', 'Fixed Assets',
-  'Payroll (Hire to Retire)', 'Treasury', 'Tax', 'IT General Controls',
-];
 
 /** Sentinel for the picker's "name it yourself" option — mirrors the New
  *  control form's "＋ Add new process…". */
@@ -107,7 +103,7 @@ function NewRacmModal({ available, inScope, entities, onClose, onPick }: {
     return () => document.removeEventListener('keydown', onKey);
   }, [onClose]);
 
-  const process = choice === NEW_PROCESS ? custom.trim() : choice;
+  const process = choice === NEW_PROCESS ? canonicalProcess(custom) : choice;
   const taken = !!process && inScope.some(p => p.toLowerCase() === process.toLowerCase());
   const ready = !!process && !taken;
   const cardCls = 'text-left rounded-xl border border-canvas-border p-4 transition-colors cursor-pointer hover:border-brand-300 hover:bg-brand-50/40 disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:border-canvas-border disabled:hover:bg-transparent';
@@ -349,7 +345,7 @@ export function RacmLanding() {
   const inScope = useMemo(() => processes.map(p => p.name), [processes]);
   const available = useMemo(() => {
     const have = new Set(inScope);
-    return SOX_PROCESSES.filter(p => !have.has(p));
+    return SOX_PROCESS_NAMES.filter(p => !have.has(p));
   }, [inScope]);
   /** The companies the engagement was created with — the Entity picker's list. */
   const racmEntities = useMemo(() => entitiesFor(eng.id).map(e => e.name), [eng.id]);

@@ -4,7 +4,7 @@ import { ArrowRight, ArrowUp, Paperclip, Plus, Sparkles, Square } from 'lucide-r
 import { useIcfr } from './store';
 import { useAuditLog } from '../../context/AdminDataContext';
 import {
-  concludeRationale, designOutstanding, designSuggestion, draftSamplePrompt, extractionCriteria,
+  concludeRationale, designOutstanding, designOutstandingRequired, designSuggestion, draftSamplePrompt, extractionCriteria,
   evidenceKindOf, fileUsable, guessFileKind, itgcHolds, narrowedCount, operatingSuggestion, populationFrom, populationSources,
   readRowCount, readSamplePrompt, sampleSizeGuide, samplingOf, sampledSources, seedKeyOf, trackResult, workingAudit,
 } from './helpers';
@@ -633,7 +633,7 @@ export default function ControlChatPane({ control }: { control: Control }) {
         // than at the moment of asking — including the required element that
         // may have been removed while I was reading, which now stops the run
         // outright instead of failing every check on its absence.
-        const gone = designOutstanding(now).filter(doc => doc.required !== false);
+        const gone = designOutstandingRequired(now);
         if (now.design.conclusion !== 'Not tested' || now.design.points.length === 0) {
           say(now.id, 'ira', 'The design was concluded while I was reading, so I stopped — there is nothing left for me to assess.');
           return;

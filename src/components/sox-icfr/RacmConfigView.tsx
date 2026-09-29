@@ -24,7 +24,7 @@ import { useAuditLog } from '../../context/AdminDataContext';
 import { useToast } from '../shared/Toast';
 import { FormSelect } from '../shared/FilterSelect';
 import { RACM_FIELDS, isAlwaysRequired, type RacmFieldKey } from './racmImport';
-import { DEFAULT_CORE, extraLabel, racmConfig, resetRacmConfig, savedSetupKeys, setRacmConfig, useRacmConfig, type ExtraColumn, type ExtraKind } from './racmConfig';
+import { defaultCore, extraLabel, racmConfig, resetRacmConfig, savedSetupKeys, setRacmConfig, useRacmConfig, type ExtraColumn, type ExtraKind } from './racmConfig';
 import { knownCompanies } from './racmLibrary';
 
 const FIELD_LABEL: Record<string, string> = Object.fromEntries(RACM_FIELDS.map(f => [f.key, f.label]));
@@ -547,8 +547,8 @@ export default function RacmConfigView({ canManage }: {
               {confirming === 'reset' ? (
                 <>
                   <p className="text-[0.78125rem] text-ink-600 leading-relaxed">
-                    Required columns for {label} go back to the {DEFAULT_CORE.length} the product ships with
-                    — {DEFAULT_CORE.map(k => FIELD_LABEL[k]).join(', ')}. Every column kept from their file and
+                    Required columns for {label} go back to the {defaultCore().length} the product ships with
+                    — {defaultCore().map(k => FIELD_LABEL[k]).join(', ')}. Every column kept from their file and
                     every remembered heading is dropped. No other client is touched.
                   </p>
                   <p className="mt-3 text-[0.75rem] text-ink-500 leading-relaxed">

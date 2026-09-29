@@ -1,6 +1,6 @@
-import { controlCode, formatDueDate, formatINR, gradeException, parseLooseDate } from './helpers';
+import { controlCode, designOutstanding, formatDueDate, versionFrom, versionNo, formatINR, gradeException, parseLooseDate } from './helpers';
 import { isOwnerOf, ownersOf } from './auditScope';
-import { SEVERITY_URGENCY } from './types';
+import { PLAN_FIX_HINT, PLAN_FIX_LABEL, SEVERITY_URGENCY } from './types';
 import type { Control, Deficiency, DesignDoc, EvidenceFile, ExceptionStatus, HandoffTask, IcfrEngagement } from './types';
 
 // ─── The remediation brief — the risk owner's own copy ───────────────────────────
@@ -119,9 +119,12 @@ export function openExceptionsFor(eng: IcfrEngagement, owner: string): Deficienc
 
 /** The design elements still being asked for on a control — the owner's side of
  *  the request. A waived element is not outstanding: the audit team accounted for
- *  it themselves, so chasing the owner for it would be chasing a closed item. */
-const outstandingDocs = (c: Control): DesignDoc[] =>
-  c.design.documents.filter(d => d.status !== 'Received' && !d.waiver);
+ *  it themselves, so chasing the owner for it would be chasing a closed item.
+ *  Nor is one that does not apply to this class of control: an ITGC has no process
+ *  narrative to send, and putting it on the owner's brief invites them to invent
+ *  something. Optional elements DO stay — they are worth asking for, they just do
+ *  not gate the conclusion (`designOutstandingRequired`). */
+const outstandingDocs = (c: Control): DesignDoc[] => designOutstanding(c);
 
 /** The open handoffs sitting with this person. `isOwnerTask` in helpers.ts matches
  *  on `c.owner` alone, which drops every task riding a control this person runs as
@@ -256,6 +259,22 @@ export function buildRemediationBrief(eng: IcfrEngagement, owner: string, defId?
       planRows.push(['Reviewed by the audit team', d.planReview.decision === 'Accepted'
         ? `Accepted — ${d.planReview.by}, ${d.planReview.at}`
         : `Sent back — ${d.planReview.reason ?? 'no reason recorded'} (${d.planReview.by}, ${d.planReview.at})`]);
+      // On a design gap the audit team also recorded WHICH kind of fix this is, and
+      // the owner should read it in their own copy: a workaround leaves the control
+      // as it was, so the finding does not go away when the workaround is in place.
+      if (d.planReview.fix) planRows.push(['What kind of fix', `${PLAN_FIX_LABEL[d.planReview.fix]} — ${PLAN_FIX_HINT[d.planReview.fix]}`]);
+      // Once the rebuilt control has been recorded, the owner is entitled to see
+      // WHAT the audit team wrote down as the control they now run, and from when.
+      // Their evidence for the rest of the year is judged against this sentence and
+      // this date, and an owner still sending the old month's approvals has not
+      // been told. A redesign the team has not recorded yet says so instead — the
+      // silence would otherwise read as agreement.
+      if (d.planReview.fix === 'redesign' && d.planReview.decision === 'Accepted' && c) {
+        const v = versionFrom(c, d.id);
+        planRows.push(['The control you now run', v
+          ? `v${versionNo(c)}, running since ${formatDueDate(v.supersededAt)} — "${c.description}". Recorded by ${v.replaced.by}: ${v.replaced.note}`
+          : 'The audit team has not recorded the rebuilt control yet. Until they do, the design test cannot start again.']);
+      }
     }
     blocks.push({ kind: 'kv', title: 'Your remediation plan', rows: planRows });
 
