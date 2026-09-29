@@ -169,7 +169,7 @@ function Section({ icon: Icon, title, sub, children }: {
 }) {
   return (
     <section className="rounded-xl border border-canvas-border bg-white p-5">
-      <h2 className="text-[13px] font-bold text-ink-800 inline-flex items-center gap-1.5">
+      <h2 className="font-display text-[1.0625rem] leading-tight text-ink-900 inline-flex items-center gap-2">
         <Icon size={15} className="text-brand-600" /> {title}
       </h2>
       <p className="text-[11.5px] text-ink-500 mt-0.5 mb-4">{sub}</p>

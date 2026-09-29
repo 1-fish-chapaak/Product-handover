@@ -84,7 +84,7 @@ export default function DashboardView({ onNewAudit, onRollForward }: {
     <div className="space-y-5">
       <div>
       <div className="flex items-center justify-between gap-3 mb-3">
-        <h2 className="text-[13px] font-bold text-ink-800">Audits</h2>
+        <h2 className="font-display text-[1.0625rem] leading-tight text-ink-900">Audits</h2>
         <div className="flex items-center gap-2.5">
           {noRacm && <span className="text-[11.5px] text-ink-400">Add a RACM first — an audit with no controls has nothing to test.</span>}
           <button
@@ -163,13 +163,13 @@ export default function DashboardView({ onNewAudit, onRollForward }: {
       </div>
 
       <div className="rounded-2xl border border-canvas-border bg-canvas-elevated p-4">
-        <h2 className="text-[13px] font-bold text-ink-800 inline-flex items-center gap-1.5 mb-3"><ShieldCheck size={15} className="text-brand-600" /> Engagement health</h2>
+        <h2 className="font-display text-[1.0625rem] leading-tight text-ink-900 inline-flex items-center gap-2 mb-3"><ShieldCheck size={15} className="text-brand-600" /> Engagement health</h2>
         <RagStrip meters={ragMeters} />
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
         <div className="rounded-2xl border border-canvas-border bg-canvas-elevated p-4">
-          <h2 className="text-[13px] font-bold text-ink-800 inline-flex items-center gap-1.5 mb-3"><AlertTriangle size={15} className="text-risk-600" /> {W.Many}</h2>
+          <h2 className="font-display text-[1.0625rem] leading-tight text-ink-900 inline-flex items-center gap-2 mb-3"><AlertTriangle size={15} className="text-risk-600" /> {W.Many}</h2>
           <div className="flex items-baseline gap-2">
             <span className="text-[20px] font-bold tabular-nums text-ink-900">{sev.open}</span>
             <span className="text-[12.5px] text-ink-500">open of {eng.deficiencies.length}</span>
@@ -185,7 +185,7 @@ export default function DashboardView({ onNewAudit, onRollForward }: {
         </div>
 
         <div className="rounded-2xl border border-canvas-border bg-canvas-elevated p-4">
-          <h2 className="text-[13px] font-bold text-ink-800 inline-flex items-center gap-1.5 mb-3"><Inbox size={15} className="text-evidence-600" /> Handoffs</h2>
+          <h2 className="font-display text-[1.0625rem] leading-tight text-ink-900 inline-flex items-center gap-2 mb-3"><Inbox size={15} className="text-evidence-600" /> Handoffs</h2>
           <div className="space-y-1.5">
             {([['pbc', 'Document requests'], ['query', 'Queries'], ['remediation', 'Remediations']] as const).map(([k, label]) => (
               <div key={k} className="flex items-center gap-2">
