@@ -28,11 +28,17 @@ import type { ImportRow } from '../src/components/sox-icfr/racmImport';
  * server and no login gate, which is why `@playwright/test` is imported rather
  * than the repo's `./_helpers` wrapper.
  *
- * WHAT IS ASSERTED IS WHAT THE READER DOES TODAY, not what it ought to do. Two
- * places where the module's header over-promises are marked `// HEADER
- * OVER-PROMISES` below and assert the real behaviour; four defects that are
- * knowingly open are recorded as `test.fixme` at the foot of the file, so they
- * are written down without failing the suite.
+ * WHAT IS ASSERTED IS WHAT THE READER DOES, not what it ought to do. Where the
+ * module's header over-promises, the test asserts the real behaviour and says
+ * so under `// HEADER OVER-PROMISES` rather than being written to the claim.
+ *
+ * This file shipped with four defects recorded as `test.fixme` — a wish beside
+ * a live test pinning the wrong behaviour, so closing one meant flipping both
+ * halves in a single edit. All four were closed on 29 Sep and the pairs are
+ * gone with them: "no manual controls" now narrows, a cap counts what the rest
+ * of the message already took out, a negation cancels the removal verb it sits
+ * against, and a Hindi "ko … kar do" rename lands on the box beside the "ko".
+ * Each now sits as an ordinary test under the rule it belongs to.
  */
 
 // ── the chart these tests talk about ─────────────────────────────────────────
@@ -158,14 +164,33 @@ test.describe('a negative observation is not an instruction', () => {
     expect(refusal(es)).toContain("I couldn't place that");
   });
 
-  test('"no manual controls" is knowingly unsupported and narrows nothing', () => {
-    // This one is a deliberate loss, not an oversight: `no` had to go so the
-    // three notes above would stop firing, and it took this phrasing with it.
-    // The imperatives below are what a reviewer is pointed at instead.
+  test('"no manual controls" narrows, because the negation sits on the class', () => {
+    // The one negative that IS an instruction, and for a while the deliberate
+    // cost of the rule above: `no` had to go so the three notes would stop
+    // firing, and it took the commonest way of asking for a class to go with
+    // it. It is back under conditions the three notes cannot meet — the
+    // negation lands directly on the class, and the phrase ends there.
     const es = read('no manual controls');
-    expect(kinds(es)).toEqual(['nothing']);
-    expect(leftOut(es)).toEqual([]);
-    expect(readNarrowing('no manual controls').said).toEqual([]);
+    expect(kinds(es)).toEqual(['leave-out']);
+    expect(leftOut(es)).toEqual(rows(1, 4, 6, 7, 8));
+    expect(readNarrowing('no manual controls').natures).toEqual(['Automated', 'IT-dependent']);
+  });
+
+  test('"no detective controls please" narrows too', () => {
+    // A closing politeness is not the sentence continuing.
+    expect(readNarrowing('no detective controls please').types).toEqual(['Preventive']);
+  });
+
+  test('"no manual controls have been tested" is still an observation', () => {
+    // The phrase has to END at the class. Anything said ABOUT those controls
+    // afterwards makes it a note, which is the whole reason `no` was dropped.
+    expect(readNarrowing('no manual controls have been tested').said).toEqual([]);
+  });
+
+  test('"Control 7 has no manual steps" does not narrow the chart', () => {
+    // A negative in a sentence that names a box is a note about that box, so
+    // the plain negative stands down in it entirely.
+    expect(readNarrowing('Control 7 has no manual controls').said).toEqual([]);
   });
 
   test('"exclude manual controls" does narrow', () => {
@@ -205,6 +230,41 @@ test.describe('the verb picks the box, not the word order', () => {
     // simply preferred the nearest box either way would take out Control 9.
     const es = read('control 5 hata do, control 9 rakho');
     expect(leftOut(es)).toEqual(rows(5));
+  });
+
+  test('"do not remove control 9, remove control 4" removes Control 4', () => {
+    // A negation sitting against a removal verb cancels it. Before that, the
+    // `remove` inside "do not remove" was a real marker right beside Control 9
+    // and took it out — the worst failure this reader had, because the
+    // sentence says the opposite in as many words.
+    const es = read('do not remove control 9, remove control 4');
+    expect(leftOut(es)).toEqual(rows(4));
+    // And a box protected by a cancelled verb is protected for the notice too,
+    // so nothing is announced about Control 9 either.
+    expect(kinds(es)).toEqual(['leave-out']);
+  });
+
+  test('"control 4 nahi chahiye" is still a removal', () => {
+    // The negative word is INSIDE this verb rather than in front of it, so the
+    // cancellation rule must not reach it.
+    expect(leftOut(read('control 4 nahi chahiye'))).toEqual(rows(4));
+  });
+
+  test('"control 9 mat hatao, control 4 hata do" removes Control 4', () => {
+    // The Hindi shape of the same thing.
+    expect(leftOut(read('control 9 mat hatao, control 4 hata do'))).toEqual(rows(4));
+  });
+
+  test('a Hindi "ko … kar do" rename lands on the box beside "ko"', () => {
+    // The rename branch walks out from the nearest rename mark, and this
+    // phrasing — the commonest rename there is — used to carry none, so it
+    // fell back to the FIRST box named. The first box named is almost always
+    // the one being protected, and a wrong rename has only Undo.
+    const es = read('Control 9 theek hai, Control 4 ko "Duplicate invoice review" kar do');
+    expect(renames(es)).toHaveLength(1);
+    expect(renames(es)[0]!.ref).toBe('ALT-P2P-R02-C04');
+    expect(renames(es)[0]!.to).toBe('Duplicate invoice review');
+    expect(leftOut(es)).toEqual([]);
   });
 
   test('a box named by its full ID is removed like a numbered one', () => {
@@ -366,6 +426,19 @@ test.describe('two instructions in one message', () => {
     expect(leftOut(read('control 4 aur control 5 ko hata do control 9 rakho'))).toEqual(rows(4, 5));
   });
 
+  test('a cap counts what the rest of the message already took out', () => {
+    // "at most 6" means six left on the chart. The cap used to be computed
+    // over all nine rows and keep the first six, with the removal then taken
+    // off the top of that — so a message asking for six delivered five.
+    expect(leftOut(read('control 4 hata do aur at most 6 controls'))).toEqual(rows(4, 8, 9));
+  });
+
+  test('a cap means the same thing whichever end of the message it is typed at', () => {
+    // A cap is a statement about what is LEFT, so it is settled after the rest
+    // of the message has had its say, whatever order it was written in.
+    expect(leftOut(read('at most 6 controls aur control 4 hata do'))).toEqual(rows(4, 8, 9));
+  });
+
   test('if a half cannot be read, NEITHER half is applied', () => {
     // Half an edit, silently, is worse than none: the reviewer who asked for
     // two things and got one has no way to see which.
@@ -504,76 +577,15 @@ test.describe('refusing beats guessing', () => {
     expect(leftOut(es)).toEqual([]);
     expect(refusal(es)).toContain('Did you want Control 4 renamed, or taken out?');
   });
-});
 
-// ── the four that are knowingly open ─────────────────────────────────────────
-
-test.describe('known gaps', () => {
-  /**
-   * Each gap is written twice: a live test that pins TODAY'S behaviour, so the
-   * suite stays a true description of the reader, and a `test.fixme` holding
-   * the behaviour we would want. Playwright does not run a `fixme` body, so the
-   * wish is recorded without failing anything. Closing a gap means flipping
-   * both halves in one edit — the live test failing is the signal that it was
-   * fixed, not that something broke.
-   */
-
-  test('today: "no manual controls" narrows nothing', () => {
-    expect(readNarrowing('no manual controls').said).toEqual([]);
-  });
-
-  test.fixme('"no manual controls" should narrow like "exclude manual controls"', () => {
-    // `no` cannot simply go back into the vocabulary — it is what made "Risk 2
-    // has no owner" edit the chart. A fix has to tell a CLASS phrase from a
-    // note about one box, probably by requiring the class word and no box
-    // number in the same sentence.
-    expect(readNarrowing('no manual controls').natures).toEqual(['Automated', 'IT-dependent']);
-  });
-
-  test('today: a cap after a removal under-delivers — 6 asked, 5 left', () => {
-    // The cap is computed over ALL nine rows and keeps the first six; the
-    // removal of Control 4 is then counted on top, so eight rows go in as five.
-    const es = read('control 4 hata do aur at most 6 controls');
-    expect(leftOut(es)).toEqual(rows(4, 7, 8, 9));
-  });
-
-  test.fixme('a cap should count what the rest of the message already took out', () => {
-    // "control 4 hata do aur at most 6 controls" should leave SIX controls on
-    // the chart, not five: rows 1, 2, 3, 5, 6, 7.
-    const es = read('control 4 hata do aur at most 6 controls');
-    expect(leftOut(es)).toEqual(rows(4, 8, 9));
-  });
-
-  test('today: "do not remove control 9, remove control 4" acts on Control 9', () => {
-    // The worst of the four. `do not remove` is a negative observation, but the
-    // removal verb inside it is a real marker sitting right beside Control 9,
-    // and nothing reads the "not" that cancels it — the protect list has no
-    // word for a negated verb.
-    const es = read('do not remove control 9, remove control 4');
-    expect(leftOut(es)).toEqual(rows(9));
-    expect(refusal(es)).toContain("I didn't do anything with Control 4");
-  });
-
-  test.fixme('"do not remove control 9, remove control 4" should remove Control 4', () => {
-    const es = read('do not remove control 9, remove control 4');
-    expect(leftOut(es)).toEqual(rows(4));
-  });
-
-  test('today: a Hindi "ko … kar do" rename falls back to the FIRST box named', () => {
-    // The rename branch picks its box with the same nearest-marker walk the
-    // removal branch uses — but "ko … kar do" leaves no rename MARK for that
-    // walk to measure from, so it falls through to `hits[0]`, which is the box
-    // the sentence was protecting. A wrong rename, unlike a wrong removal, has
-    // no tick to undo it.
-    const es = read('Control 9 theek hai, Control 4 ko "Duplicate invoice review" kar do');
-    expect(renames(es)).toHaveLength(1);
-    expect(renames(es)[0]!.ref).toBe('ALT-P2P-R04-C09');
-    expect(refusal(es)).toContain("I didn't do anything with Control 4");
-  });
-
-  test.fixme('a Hindi rename should land on the box beside "ko"', () => {
-    const es = read('Control 9 theek hai, Control 4 ko "Duplicate invoice review" kar do');
-    expect(renames(es)[0]!.ref).toBe('ALT-P2P-R02-C04');
-    expect(renames(es)[0]!.to).toBe('Duplicate invoice review');
+  test('"Control 4 ka naam badal do" asks what to call it', () => {
+    // The contrast that makes the test above make sense: same shape, but with
+    // no instruction hiding in the candidate name, so the reader gets as far
+    // as "I can see the box, I just have no name for it".
+    const es = read('Control 4 ka naam badal do');
+    expect(kinds(es)).toEqual(['nothing']);
+    expect(leftOut(es)).toEqual([]);
+    expect(renames(es)).toHaveLength(0);
+    expect(refusal(es)).toContain('I can see Control 4, but not what to call it');
   });
 });
