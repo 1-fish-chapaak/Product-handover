@@ -3,14 +3,13 @@ import { motion, AnimatePresence } from 'motion/react';
 import {
   ClipboardCheck, Calendar, ArrowUpRight, Search, Plus,
   Trash2, AlertTriangle, X, LayoutDashboard, List,
-  Pencil, UserPlus, CheckCircle2, GitBranch, Sparkles,
+  GitBranch, Sparkles,
 } from 'lucide-react';
 import Orb from '../shared/Orb';
 import { findEngagement, libraryEngagements, registerEngagement, type AutomationSubtype, type Engagement, type EngStatus, type EngType, type ProcessCode } from '../../data/engagements';
 import { useCreatedEngagements } from '../../data/createdEngagementsStore';
 import ConfirmationModal from '../shared/ConfirmationModal';
 import { FilterSelect } from '../shared/FilterSelect';
-import { OWNER_NAMES } from '../../data/grc-domain';
 import CreateEngagementWizard from './CreateEngagementWizard';
 import ScopingWizard from './sox-testing/ScopingWizard';
 import { FlowModal } from './sox-testing/SoxTestingTab';
@@ -20,7 +19,6 @@ import { useCan } from '../../context/CurrentUserContext';
 import { useToast } from '../shared/Toast';
 import { useAuditLog } from '../../context/AdminDataContext';
 import { useNotify } from '../../notifications/NotificationContext';
-import { ROSTER } from '../../notifications/triggers/caseTriggers';
 import { useInsightStackRun } from '../shared/useInsightStackRun';
 import InsightLauncherPill from '../shared/InsightLauncherPill';
 import InsightStackDrawer from '../shared/InsightStackDrawer';
@@ -156,8 +154,6 @@ export default function EngagementsView({ onOpenEngagement, onOpenAuditPlanning,
       return missing.length ? [...missing, ...prev] : prev;
     });
   }, [createdEngagements]);
-  /** Row id whose "Assign owner" popover is open. */
-  const [assignFor, setAssignFor] = useState<string | null>(null);
   /** Row pending delete confirmation. */
   const [deleteTarget, setDeleteTarget] = useState<Engagement | null>(null);
 
@@ -243,52 +239,6 @@ export default function EngagementsView({ onOpenEngagement, onOpenAuditPlanning,
 
   const anyFilterActive = typeFilter !== 'All' || statusFilter !== 'All' || processFilter !== 'All';
   const clearFilters = () => { setTypeFilter('All'); setStatusFilter('All'); setProcessFilter('All'); };
-
-  /** Close / finalize — flips to Closed with an undo toast. */
-  const handleClose = (eng: Engagement) => {
-    const prevStatus = eng.status;
-    patchEngagement(eng.id, { status: 'Closed' });
-    const openIssues = eng.openIssues ?? 0;
-    const engFacts = [{ label: 'Engagement', value: `${eng.code} · ${eng.name}` }, { label: 'New status', value: 'Closed' }, { label: 'Closed by', value: 'You' }];
-    // ENG-04 to everyone on it; ENG-05 on top when findings are still open.
-    notify({
-      eventId: 'ENG-04', title: `${eng.code} moved to Closed`, actor: 'You',
-      message: `${eng.name} is Closed.${openIssues ? ` ${openIssues} issue${openIssues === 1 ? '' : 's'} remain open.` : ' Nothing remains open.'}`,
-      facts: [...engFacts, { label: 'Remaining open', value: openIssues ? String(openIssues) : 'None' }],
-      recipients: [{ name: eng.owner, role: 'Participant' }, ...(eng.team?.auditors ?? []).map(n => ({ name: n, role: 'Participant' })), ...(eng.team?.riskOwners ?? []).map(n => ({ name: n, role: 'Participant' }))],
-      link: { view: 'engagement-overview', ref: { kind: 'engagement', id: eng.id } }, linkLabel: 'Open engagement', operationKey: `close-${eng.id}`,
-    });
-    if (openIssues > 0) {
-      notify({
-        eventId: 'ENG-05', title: `${eng.code} closed with ${openIssues} unresolved exception${openIssues === 1 ? '' : 's'}`, actor: 'You',
-        message: `${eng.name} was Completed while ${openIssues} exception${openIssues === 1 ? '' : 's'} remain open. Closing over open findings is a reportable control weakness.`,
-        facts: [...engFacts, { label: 'Open exceptions', value: String(openIssues) }],
-        recipients: [{ name: eng.owner, role: 'Engagement owner' }, ROSTER.engagementAuditor], watchers: [ROSTER.compliance],
-        link: { view: 'engagement-overview', ref: { kind: 'engagement', id: eng.id } }, linkLabel: 'Open engagement',
-      });
-    }
-    addToast({
-      message: `"${eng.name}" closed`,
-      type: 'success',
-      secondaryAction: { label: 'Undo', onClick: () => patchEngagement(eng.id, { status: prevStatus }) },
-    });
-  };
-
-  /** Assign a new owner from the row popover. */
-  const handleAssignOwner = (eng: Engagement, newOwner: string) => {
-    setAssignFor(null);
-    if (newOwner === eng.owner) return;
-    patchEngagement(eng.id, { owner: newOwner });
-    addToast({ message: `"${eng.name}" reassigned to ${newOwner}`, type: 'success' });
-    notify({
-      eventId: 'ENG-03', title: `You are now the owner of ${eng.code}`, actor: 'You',
-      message: `Ownership of ${eng.name} moved from ${eng.owner} to ${newOwner}. ${eng.openIssues ?? 0} exception${(eng.openIssues ?? 0) === 1 ? '' : 's'} open.`,
-      facts: [{ label: 'Engagement', value: `${eng.code} · ${eng.name}` }, { label: 'Previous owner', value: eng.owner }, { label: 'Open exceptions', value: String(eng.openIssues ?? 0) }],
-      recipients: [{ name: newOwner, role: 'New owner' }, { name: eng.owner, role: 'Previous owner' }], watchers: [ROSTER.engagementAuditor],
-      link: { view: 'engagement-overview', ref: { kind: 'engagement', id: eng.id } }, linkLabel: 'Open engagement',
-    });
-    logEvent({ action: 'Update', description: `Reassigned "${eng.name}" to ${newOwner}`, module: 'Engagements', entity: 'Engagement' });
-  };
 
   /** Confirmed delete — removes from the session list with an undo toast. */
   const handleDeleteConfirmed = () => {
@@ -414,14 +364,11 @@ export default function EngagementsView({ onOpenEngagement, onOpenAuditPlanning,
           </div>
         ) : (
           <div>
-            {/* Column headers — label row above the cards */}
-            <div className="grid grid-cols-[2.6fr_1fr_1.7fr_80px] gap-5 px-6 pb-2 text-[0.65625rem] uppercase tracking-wider font-semibold text-text-muted/80">
-              <div>Engagement</div>
-              <div>Type</div>
-              <div>Health</div>
-              <div className="text-right">Actions</div>
-            </div>
-
+            {/* No column headers (user ask, 28 Sep). These are cards, not table
+                rows: every value already says what it is — the type is a pill,
+                health is a percentage over a bar — so the labels named what was
+                legible without them, and the last one named a column that has
+                since come down to a single icon. */}
             <div className="space-y-2">
             {filtered.map((eng, i) => {
               const health = healthTier(eng.health);
@@ -527,63 +474,13 @@ export default function EngagementsView({ onOpenEngagement, onOpenAuditPlanning,
                   </div>
 
                   {/* Actions column — no ▶ Open icon (feedback #9): it read as
-                      "run", and the whole card already opens the engagement. */}
+                      "run", and the whole card already opens the engagement.
+                      Edit, Assign owner and Close / finalize have gone too (user
+                      ask, 28 Sep): four icons on a row made the list look like a
+                      control panel when it is a way in, and each of the three
+                      changed the engagement from a screen that shows none of its
+                      detail. They belong where the engagement is open. */}
                   <div className="flex items-start justify-end gap-1">
-                    {can('eng_edit') && (
-                      <IconAction
-                        label="Edit engagement"
-                        onClick={(e) => { e.stopPropagation(); setWizardInitialType(undefined); setEditTarget(eng); setWizardOpen(true); }}
-                        className="text-text-muted hover:text-text-secondary hover:bg-canvas"
-                      >
-                        <Pencil size={14} />
-                      </IconAction>
-                    )}
-                    {can('eng_assign') && (
-                      <div className="relative">
-                        <IconAction
-                          label="Assign owner"
-                          hideTip={assignFor === eng.id}
-                          onClick={(e) => { e.stopPropagation(); setAssignFor(prev => prev === eng.id ? null : eng.id); }}
-                          className={assignFor === eng.id ? 'text-primary bg-primary/10' : 'text-text-muted hover:text-primary hover:bg-primary/10'}
-                        >
-                          <UserPlus size={14} />
-                        </IconAction>
-                        {assignFor === eng.id && (
-                          <>
-                            {/* click-away layer */}
-                            <div
-                              className="fixed inset-0 z-20"
-                              onClick={(e) => { e.stopPropagation(); setAssignFor(null); }}
-                            />
-                            <div
-                              className="absolute right-0 top-full mt-1 z-30 w-48 rounded-lg border border-border bg-white shadow-lg py-1"
-                              onClick={(e) => e.stopPropagation()}
-                            >
-                              <div className="px-3 py-1.5 text-[0.6875rem] font-bold text-text-muted uppercase tracking-wider">Assign owner</div>
-                              {OWNER_NAMES.map(n => (
-                                <button
-                                  key={n}
-                                  onClick={(e) => { e.stopPropagation(); handleAssignOwner(eng, n); }}
-                                  className={`w-full flex items-center justify-between gap-2 px-3 py-1.5 text-left text-[0.75rem] transition-colors cursor-pointer ${n === eng.owner ? 'text-primary font-semibold bg-primary/5' : 'text-text-secondary hover:bg-primary/5 hover:text-text'}`}
-                                >
-                                  {n}
-                                  {n === eng.owner && <CheckCircle2 size={12} className="shrink-0" />}
-                                </button>
-                              ))}
-                            </div>
-                          </>
-                        )}
-                      </div>
-                    )}
-                    {can('eng_close') && eng.status !== 'Closed' && (
-                      <IconAction
-                        label="Close / finalize"
-                        onClick={(e) => { e.stopPropagation(); handleClose(eng); }}
-                        className="text-text-muted hover:text-evidence-700 hover:bg-evidence-50"
-                      >
-                        <CheckCircle2 size={14} />
-                      </IconAction>
-                    )}
                     {can('eng_delete') && (
                       <IconAction
                         label="Delete engagement"

@@ -339,7 +339,7 @@ export default function Overview() {
           tests as a whole; a cycle is what these meters are actually about. */}
       {!isOwner && inAudit && (
         <div className="rounded-2xl border border-canvas-border bg-canvas-elevated p-4">
-          <h2 className="text-[13px] font-bold text-ink-800 inline-flex items-center gap-1.5 mb-3"><ShieldCheck size={15} className="text-brand-600" /> Audit health</h2>
+          <h2 className="font-display text-[1.0625rem] leading-tight text-ink-900 inline-flex items-center gap-2 mb-3"><ShieldCheck size={15} className="text-brand-600" /> Audit health</h2>
           <RagStrip meters={ragMeters} />
         </div>
       )}
@@ -349,7 +349,7 @@ export default function Overview() {
         {/* exceptions */}
         <div className="rounded-2xl border border-canvas-border bg-canvas-elevated p-4 flex flex-col">
           <div className="flex items-center justify-between mb-3">
-            <h2 className="text-[13px] font-bold text-ink-800 inline-flex items-center gap-1.5"><AlertTriangle size={15} className="text-risk-600" /> {W.Many}</h2>
+            <h2 className="font-display text-[1.0625rem] leading-tight text-ink-900 inline-flex items-center gap-2"><AlertTriangle size={15} className="text-risk-600" /> {W.Many}</h2>
             <span className="text-[11px] font-semibold text-ink-400">{sev.open} open · {scopedDefs.length} total</span>
           </div>
           <div className="space-y-2 flex-1">
@@ -367,7 +367,7 @@ export default function Overview() {
         {/* handoffs */}
         <div className="rounded-2xl border border-canvas-border bg-canvas-elevated p-4 flex flex-col">
           <div className="flex items-center justify-between mb-3">
-            <h2 className="text-[13px] font-bold text-ink-800 inline-flex items-center gap-1.5"><Inbox size={15} className="text-evidence-600" /> Handoffs</h2>
+            <h2 className="font-display text-[1.0625rem] leading-tight text-ink-900 inline-flex items-center gap-2"><Inbox size={15} className="text-evidence-600" /> Handoffs</h2>
             <span className="text-[11px] font-semibold text-ink-400">{openTasks.length} open</span>
           </div>
           <div className="space-y-2 flex-1">
@@ -390,7 +390,7 @@ export default function Overview() {
         {/* materiality */}
         <div className="rounded-2xl border border-canvas-border bg-canvas-elevated p-4 flex flex-col">
           <div className="flex items-center justify-between mb-3">
-            <h2 className="text-[13px] font-bold text-ink-800 inline-flex items-center gap-1.5"><Scale size={15} className="text-brand-600" /> Materiality</h2>
+            <h2 className="font-display text-[1.0625rem] leading-tight text-ink-900 inline-flex items-center gap-2"><Scale size={15} className="text-brand-600" /> Materiality</h2>
           </div>
           <div className="space-y-2 flex-1">
             {[
@@ -457,7 +457,7 @@ export default function Overview() {
             {!isConcluded && <>
               <div className="flex items-center gap-2 flex-wrap">
                 <Hourglass size={15} className={past || sev.mwOpen ? 'text-high-700' : 'text-brand-600'} />
-                <h2 className="text-[13px] font-bold text-ink-800">
+                <h2 className="font-display text-[1.0625rem] leading-tight text-ink-900">
                   {days === null ? `Year-end — ${endLabel}`
                     : past ? `Period ended ${endLabel} — the opinion clock is running`
                     : `${days} day${days === 1 ? '' : 's'} to year-end (${endLabel})`}
@@ -484,7 +484,7 @@ export default function Overview() {
             {/* the closure moment — the checklist's final step, not a separate card */}
             <div className={cn('flex items-start justify-between gap-4 flex-wrap', !isConcluded && 'mt-3 pt-3.5 border-t border-canvas-border/70')}>
               <div className="min-w-0 flex-1">
-                <h2 className="text-[13px] font-bold text-ink-800 inline-flex items-center gap-1.5"><PenLine size={15} className="text-brand-600" /> Audit sign-off</h2>
+                <h2 className="font-display text-[1.0625rem] leading-tight text-ink-900 inline-flex items-center gap-2"><PenLine size={15} className="text-brand-600" /> Audit sign-off</h2>
                 <p className="text-[12px] text-ink-500 mt-1">
                   {isConcluded
                     ? 'Signed and countersigned — this audit is concluded.'

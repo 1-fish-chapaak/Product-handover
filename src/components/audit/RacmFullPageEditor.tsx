@@ -746,7 +746,7 @@ export default function RacmFullPageEditor({ onBack, backView, backLabel, racmNa
                       </div>
                       <div className="p-3 space-y-3">
                         <div>
-                          <label htmlFor="racm-bulk-column" className="text-[0.5625rem] font-semibold text-text-muted uppercase tracking-wider block mb-1">Column</label>
+                          <label htmlFor="racm-bulk-column" className="text-[0.625rem] font-semibold text-text-muted uppercase tracking-wider block mb-1">Column</label>
                           <select id="racm-bulk-column" autoFocus value={bulkCol}
                             onChange={e => { setBulkCol(e.target.value as RacmColumnKey | ''); setBulkValue(''); }}
                             className="w-full h-7 px-2 border border-border rounded-lg text-xs text-text bg-white outline-none focus:border-primary/40 focus-visible:ring-2 focus-visible:ring-primary/20 cursor-pointer">
@@ -756,7 +756,7 @@ export default function RacmFullPageEditor({ onBack, backView, backLabel, racmNa
                         </div>
                         {bulkCol && (
                           <div>
-                            <label htmlFor="racm-bulk-value" className="text-[0.5625rem] font-semibold text-text-muted uppercase tracking-wider block mb-1">Value</label>
+                            <label htmlFor="racm-bulk-value" className="text-[0.625rem] font-semibold text-text-muted uppercase tracking-wider block mb-1">Value</label>
                             {bulkOptions ? (
                               <select id="racm-bulk-value" value={bulkValue} onChange={e => setBulkValue(e.target.value)}
                                 className="w-full h-7 px-2 border border-border rounded-lg text-xs text-text bg-white outline-none focus:border-primary/40 focus-visible:ring-2 focus-visible:ring-primary/20 cursor-pointer">
@@ -1209,7 +1209,7 @@ function RacmGrid({
       <div className="sticky top-0 z-20 flex bg-surface-2 border-b border-border">
         {/* checkbox column */}
         <div className="sticky left-0 bg-surface-2 border-r border-border-light h-9 w-10 flex items-center justify-center z-10">
-          <span className="text-[0.5625rem] text-ink-400 font-bold">#</span>
+          <span className="text-[0.625rem] text-ink-400 font-bold">#</span>
         </div>
         {visibleColumns.map(c => {
           const pinned = pinnedKeys.has(c.key);
@@ -1219,7 +1219,7 @@ function RacmGrid({
           return (
             <div key={c.key}
               style={{ width: c.width, minWidth: c.width, left: pinned ? left : undefined }}
-              className={`relative h-9 px-3 flex items-center justify-between gap-1 text-[0.5625rem] font-bold text-text-muted uppercase tracking-wider border-r border-border-light ${pinned ? 'sticky bg-surface-2 z-10' : ''} ${isLastPinned ? 'shadow-[2px_0_3px_-2px_rgba(0,0,0,0.08)]' : ''}`}>
+              className={`relative h-9 px-3 flex items-center justify-between gap-1 text-[0.625rem] font-bold text-text-muted uppercase tracking-wider border-r border-border-light ${pinned ? 'sticky bg-surface-2 z-10' : ''} ${isLastPinned ? 'shadow-[2px_0_3px_-2px_rgba(0,0,0,0.08)]' : ''}`}>
               <span className="truncate">{c.label}</span>
               {filterMode && (
                 <ColumnFilterControl colKey={c.key as string} label={c.label}
@@ -1481,7 +1481,7 @@ function CellContent({
         disabled={locked}
         aria-label={`Key control — ${row.controlId}`}
         title={locked ? LOCKED_ROW_TITLE : on ? 'Key control — click to unmark' : 'Not a key control — click to mark'}
-        className={`group/key h-6 px-2 inline-flex items-center gap-1.5 rounded-full border text-[0.5625rem] font-bold uppercase tracking-wider ${locked ? 'cursor-default' : 'cursor-pointer'} transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40 focus-visible:ring-inset ${
+        className={`group/key h-6 px-2 inline-flex items-center gap-1.5 rounded-full border text-[0.625rem] font-bold uppercase tracking-wider ${locked ? 'cursor-default' : 'cursor-pointer'} transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40 focus-visible:ring-inset ${
           on
             ? 'bg-mitigated-50 text-mitigated-700 border-mitigated-700/15 hover:bg-mitigated-100'
             : 'border-transparent text-ink-400 hover:text-mitigated-700 hover:bg-mitigated-50/60'
@@ -1521,7 +1521,7 @@ function CellContent({
     return (
       <button onDoubleClick={onEdit} disabled={locked} title={locked ? LOCKED_ROW_TITLE : undefined}
         onKeyDown={(e) => { if (e.key === 'Enter' || e.key === 'F2') { e.preventDefault(); onEdit(); } }}
-        className={`px-2 h-5 rounded-full text-[0.5625rem] font-bold inline-flex items-center border ${cls} ${locked ? 'cursor-default' : 'cursor-pointer'} focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40 focus-visible:ring-inset`}>
+        className={`px-2 h-5 rounded-full text-[0.625rem] font-bold inline-flex items-center border ${cls} ${locked ? 'cursor-default' : 'cursor-pointer'} focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40 focus-visible:ring-inset`}>
         {val || '—'}
       </button>
     );
@@ -1539,7 +1539,7 @@ function CellContent({
       <button onClick={onEdit} disabled={locked} title={locked ? LOCKED_ROW_TITLE : undefined}
         className={`flex flex-wrap gap-1 py-0.5 -mx-1 px-1 ${locked ? 'cursor-default' : 'cursor-pointer hover:bg-white/60'} rounded transition-colors w-full text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40 focus-visible:ring-inset`}>
         {items.map((attr, idx) => (
-          <span key={idx} className="inline-flex items-center px-1.5 py-0.5 rounded text-[0.5625rem] font-medium bg-purple-50 text-purple-700 border border-purple-100 whitespace-nowrap">
+          <span key={idx} className="inline-flex items-center px-1.5 py-0.5 rounded text-[0.625rem] font-medium bg-purple-50 text-purple-700 border border-purple-100 whitespace-nowrap">
             {attr}
           </span>
         ))}
@@ -1590,11 +1590,11 @@ function DetailPanel({
         <div className="min-w-0">
           <div className="flex items-center gap-2 mb-1">
             <span className="text-[0.625rem] font-mono text-ink-400">{row.riskId} · {row.controlId}</span>
-            <span className={`px-1.5 h-4 rounded text-[0.5rem] font-bold inline-flex items-center border ${deriveRiskRatingClass(row.riskRating)}`}>{row.riskRating}</span>
-            <span className={`px-1.5 h-4 rounded text-[0.5rem] font-bold inline-flex items-center border ${deriveControlTypeClass(row.controlType)}`}>{row.controlType}</span>
-            <span className={`px-1.5 h-4 rounded text-[0.5rem] font-bold inline-flex items-center border ${deriveControlNatureClass(row.controlNature)}`}>{row.controlNature}</span>
+            <span className={`px-1.5 h-4 rounded text-[0.625rem] font-bold inline-flex items-center border ${deriveRiskRatingClass(row.riskRating)}`}>{row.riskRating}</span>
+            <span className={`px-1.5 h-4 rounded text-[0.625rem] font-bold inline-flex items-center border ${deriveControlTypeClass(row.controlType)}`}>{row.controlType}</span>
+            <span className={`px-1.5 h-4 rounded text-[0.625rem] font-bold inline-flex items-center border ${deriveControlNatureClass(row.controlNature)}`}>{row.controlNature}</span>
           </div>
-          <h2 className="text-[0.8125rem] font-bold text-text truncate">{row.controlObjective || row.controlActivity?.slice(0, 80) || '(No objective)'}</h2>
+          <h2 className="text-[0.9375rem] font-semibold text-text truncate">{row.controlObjective || row.controlActivity?.slice(0, 80) || '(No objective)'}</h2>
           <p className="text-[0.625rem] text-text-muted mt-0.5 truncate">{row.subProcess}</p>
         </div>
         <button ref={closeRef} onClick={onClose} aria-label="Close detail panel" className="p-1.5 rounded-lg text-ink-500 hover:text-ink-800 hover:bg-surface-2 transition-colors cursor-pointer shrink-0 -mr-1"><X size={16} /></button>
@@ -1653,11 +1653,15 @@ function DetailSection({ label, children }: { label: string; children: React.Rea
 
 function DetailField({ label, value, onChange, multiLine, readOnly }: { label: string; value: string; onChange: (v: string) => void; multiLine?: boolean; readOnly?: boolean }) {
   // Read-only keeps the field selectable and scrollable — a published control is
-  // still something people come here to read and copy out of.
-  const tone = readOnly ? 'bg-surface-2/50 text-text-muted' : 'bg-white text-text focus:border-primary/40';
+  // still something people come here to read and copy out of. Because it stays in
+  // the tab order for that reason, it needs the same focus border as an editable
+  // one: `outline-none` below removes the browser's ring, and nothing globally
+  // replaces it for inputs (index.css gives the 4px ring to buttons only), so
+  // without this a keyboard user landing here saw no indication at all.
+  const tone = readOnly ? 'bg-surface-2/50 text-text-muted focus:border-primary/40' : 'bg-white text-text focus:border-primary/40';
   return (
     <div>
-      <label className="text-[0.5625rem] font-semibold text-text-muted uppercase tracking-wider block mb-1">{label}</label>
+      <label className="text-[0.625rem] font-semibold text-text-muted uppercase tracking-wider block mb-1">{label}</label>
       {multiLine ? (
         <textarea defaultValue={value} readOnly={readOnly} onBlur={readOnly ? undefined : e => onChange(e.target.value)}
           rows={Math.min(6, Math.max(2, Math.ceil((value || '').length / 50)))}

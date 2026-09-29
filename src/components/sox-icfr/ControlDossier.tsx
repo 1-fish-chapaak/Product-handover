@@ -6,7 +6,7 @@ import {
   Send, Lock, ClipboardCheck, FileCheck2, FlaskConical, CheckCircle2, XCircle,
   CornerDownRight, Pencil, RotateCcw, Cpu, ChevronRight, Scale, Paperclip, Plus, Trash2,
   Mail, X, Loader2, ChevronDown, Check, PlayCircle, Link2, ListChecks, Gavel, UserCheck, History, FileUp, ArrowLeft, Footprints, BadgeCheck, Star,
-  Database, Circle, PenLine, Eye, ChevronUp, AlertCircle, FileWarning, StickyNote, Filter, Quote} from 'lucide-react';
+  Database, Circle, PenLine, Eye, ChevronUp, AlertCircle, FileWarning, StickyNote, Filter, Quote, CalendarClock} from 'lucide-react';
 import { useIcfr } from './store';
 import EvidenceAnnotator from './EvidenceAnnotator';
 import { useAuditLog } from '../../context/AdminDataContext';
@@ -23,7 +23,7 @@ import {
   requiredFilesOf, requiredFilesCount, requiredFilesReady, passedWithoutFiles, designFilesOf,
   evidenceKindOf,
   designApproved, isEngagementLocked, samePerson, documentSystemRows,
-  dealSample, NO_COUNTRY, sampleDate, sampleHome, sampleSplit, spreadPhrase, workingAudit, yearSampleRounds, LEGACY_SOURCE_ID, type SampleSplit, type YearRound, yearEndPending,
+  dealSample, NO_COUNTRY, sampleDate, sampleHome, sampleSplit, spreadPhrase, workingAudit, yearSampleRounds, LEGACY_SOURCE_ID, type SampleSplit, type YearRound, yearEndPending, operatingHeld,
   draftSamplePrompt, readSamplePrompt,
   populationInstances, sampleAmount, seedKeyOf,
   narrowedCount, populationFrom, readRowCount,
@@ -866,7 +866,7 @@ function PointRow({ control, point, canEdit, checking = false }: { control: Cont
                     onDragOver={e => { e.preventDefault(); setDragOver(true); }}
                     onDragLeave={() => setDragOver(false)}
                     onDrop={e => { e.preventDefault(); setDragOver(false); const f = e.dataTransfer.files?.[0]; if (f) setProofFile(f); }}
-                    className={cn('block cursor-pointer rounded-md border border-dashed px-3 py-4 text-center transition-colors',
+                    className={cn('block cursor-pointer rounded-md border border-dashed px-3 py-4 text-center transition-colors focus-within:ring-2 focus-within:ring-brand-200',
                       dragOver ? 'border-brand-400 bg-brand-50/50' : 'border-canvas-border bg-canvas-elevated hover:border-brand-300 hover:bg-brand-50/30')}>
                     <input type="file" accept=".pdf,.png,.jpg,.jpeg,.xlsx,.xls,.csv,.doc,.docx" className="sr-only"
                       aria-label="Choose the file that proves this check"
@@ -1855,7 +1855,7 @@ function DesignSection({ control, canEdit: canEditIn, locked = false }: { contro
                     <div className="min-w-0 flex-1">
                       <div className="flex items-center gap-1.5">
                         <span className="text-[0.75rem] font-semibold text-ink-800">{docLabel(doc)}</span>
-                        <span className={cn('text-[0.5625rem] font-bold uppercase tracking-wide px-1 h-[15px] inline-flex items-center rounded', doc.required !== false ? 'bg-brand-50 text-brand-700' : 'bg-paper-100 text-ink-400')}>{doc.required !== false ? 'Required' : 'Optional'}</span>
+                        <span className={cn('text-[0.625rem] font-bold uppercase tracking-wide px-1 h-[15px] inline-flex items-center rounded', doc.required !== false ? 'bg-brand-50 text-brand-700' : 'bg-paper-100 text-ink-400')}>{doc.required !== false ? 'Required' : 'Optional'}</span>
                       </div>
                       {doc.description && <div className="text-[0.6875rem] text-ink-500 mt-0.5">{doc.description}</div>}
                       {files.length > 0 ? (
@@ -2728,7 +2728,7 @@ function CountContext({ control, canWrite, locked }: { control: Control; canWrit
                 const spike = spikes.has(m.key);
                 return (
                   <div key={m.key} className="flex-1 min-w-0 flex flex-col items-center gap-1" title={`${m.label} · ${m.n.toLocaleString()} instances`}>
-                    <span className={cn('text-[0.5625rem] font-bold tabular-nums leading-none shrink-0', zero ? 'text-risk-700' : spike ? 'text-mitigated-800' : 'text-ink-400')}>{m.n.toLocaleString()}</span>
+                    <span className={cn('text-[0.625rem] font-bold tabular-nums leading-none shrink-0', zero ? 'text-risk-700' : spike ? 'text-mitigated-800' : 'text-ink-400')}>{m.n.toLocaleString()}</span>
                     <div className="flex-1 w-full flex items-end">
                       <div className={cn('w-full rounded-sm', zero ? 'bg-risk-200' : spike ? 'bg-mitigated-400' : 'bg-brand-200')}
                         style={{ height: zero ? 3 : `${Math.max(8, Math.round((m.n / Math.max(1, peak)) * 100))}%` }} />
@@ -2738,7 +2738,7 @@ function CountContext({ control, canWrite, locked }: { control: Control; canWrit
               })}
             </div>
             <div className="mt-1 flex items-center gap-1">
-              {months.map(m => <span key={m.key} className={cn('flex-1 min-w-0 text-center text-[0.5625rem] font-semibold uppercase tracking-wide', m.n === 0 ? 'text-risk-700' : 'text-ink-400')}>{m.label}</span>)}
+              {months.map(m => <span key={m.key} className={cn('flex-1 min-w-0 text-center text-[0.625rem] font-semibold uppercase tracking-wide', m.n === 0 ? 'text-risk-700' : 'text-ink-400')}>{m.label}</span>)}
             </div>
           </>
         )}
@@ -3109,14 +3109,14 @@ function SourcePickerForm({ control, exclude, submitLabel, onSubmit, seedFile, s
                 {/* Which attributes read it. The reason a file is at the top of
                     the list belongs on the row, not in a paragraph above it. */}
                 {wanted && (
-                  <span className="shrink-0 inline-flex items-center gap-1 px-1.5 py-0.5 rounded bg-brand-50 text-brand-700 text-[0.59375rem] font-bold whitespace-nowrap">
+                  <span className="shrink-0 inline-flex items-center gap-1 px-1.5 py-0.5 rounded bg-brand-50 text-brand-700 text-[0.625rem] font-bold whitespace-nowrap">
                     <Paperclip size={9} /> {wanted.attributes.join(', ')}
                   </span>
                 )}
                 {f.system && <span className="shrink-0 text-[0.6875rem] text-ink-400 hidden lg:inline">{f.system}</span>}
                 {/* provenance, inherited — stated on every file so the choice of
                     source is made knowing what it is */}
-                <span className={cn('shrink-0 px-1.5 py-0.5 rounded text-[0.59375rem] font-bold uppercase tracking-wide whitespace-nowrap',
+                <span className={cn('shrink-0 px-1.5 py-0.5 rounded text-[0.625rem] font-bold uppercase tracking-wide whitespace-nowrap',
                   !usable ? 'bg-mitigated-50 text-mitigated-800' : f.origin === 'Client-prepared' ? 'bg-paper-100 text-ink-600' : 'bg-compliant-50 text-compliant-700')}>
                   {originLabel(f)}
                 </span>
@@ -3310,13 +3310,8 @@ function PopulationSection({ control, canEdit, locked: gated = false }: { contro
     const concluded = trackResult(control.design) !== 'Not tested';
     // Pending until year end (A29) outranks the approval: it is the reason that
     // decides this audit, and TOD's state has nothing to do with it.
-    const pending = yearEndPending(control, audit);
-    if (pending) return (
-      <div className="p-5">
-        <EmptyState icon={<Lock size={18} />} title={`Pending until ${pending.until} — tested in the year-end audit`}
-          hint={`This control runs once a year, so there is nothing to pull for it before the year closes.${pop ? ' What was already extracted stays as it is.' : ''}`} />
-      </div>
-    );
+    const held = operatingHeld(control, audit);
+    if (held) return <HeldState held={held} yearEndHint={`This control runs once a year, so there is nothing to pull for it before the year closes.${pop ? ' What was already extracted stays as it is.' : ''}`} />;
     return (
       <div className="p-5">
         <EmptyState icon={<Lock size={18} />} title="Population is locked"
@@ -3428,7 +3423,7 @@ function PopulationSection({ control, canEdit, locked: gated = false }: { contro
                       {rec?.systemFetched ? <Database size={13} className="shrink-0 text-ink-400" /> : <FileText size={13} className="shrink-0 text-ink-400" />}
                       <span className="text-[0.78125rem] font-semibold text-ink-800 truncate min-w-0">{s.file}</span>
                       {rec && (
-                        <span className={cn('shrink-0 px-1.5 py-0.5 rounded text-[0.59375rem] font-bold uppercase tracking-wide whitespace-nowrap',
+                        <span className={cn('shrink-0 px-1.5 py-0.5 rounded text-[0.625rem] font-bold uppercase tracking-wide whitespace-nowrap',
                           !fileUsable(rec) ? 'bg-mitigated-50 text-mitigated-800' : rec.origin === 'Client-prepared' ? 'bg-paper-100 text-ink-600' : 'bg-compliant-50 text-compliant-700')}>
                           {originLabel(rec)}
                         </span>
@@ -3464,7 +3459,7 @@ function PopulationSection({ control, canEdit, locked: gated = false }: { contro
                           <option value="assisting">Assisting</option>
                         </select>
                       ) : (
-                        <span className={cn('px-1.5 py-0.5 rounded text-[0.59375rem] font-bold uppercase tracking-wide',
+                        <span className={cn('px-1.5 py-0.5 rounded text-[0.625rem] font-bold uppercase tracking-wide',
                           isAssisting(s) ? 'bg-paper-100 text-ink-600' : 'bg-brand-50 text-brand-700')}>
                           {isAssisting(s) ? 'Assisting' : 'Population'}
                         </span>
@@ -4290,13 +4285,8 @@ function SampleExtractSection({ control, canEdit, locked }: { control: Control; 
   // includes the reviewer's approval of TOD (S6, A36). A year-end control in an
   // interim or roll-forward audit (A29) is held ahead of both, and says only that.
   if (locked) {
-    const pending = yearEndPending(control, eng.audits.find(a => a.id === openAuditId));
-    if (pending) return (
-      <div className="p-5">
-        <EmptyState icon={<Lock size={18} />} title={`Pending until ${pending.until}`}
-          hint="This control runs once a year. Its sample is drawn in the year-end audit, once the year has closed." />
-      </div>
-    );
+    const held = operatingHeld(control, eng.audits.find(a => a.id === openAuditId));
+    if (held) return <HeldState held={held} yearEndHint="This control runs once a year. Its sample is drawn in the year-end audit, once the year has closed." />;
     const awaitingApproval = trackResult(control.design) === 'Effective' && !designApproved(control);
     const designBlocked = trackResult(control.design) !== 'Effective' || awaitingApproval;
     return (
@@ -5120,13 +5110,8 @@ function OperatingSection({ control, canEdit, locked }: { control: Control; canE
   if (locked) {
     // A29 — a year-end control in an interim or roll-forward audit waits for the
     // year-end audit whatever TOD's state, so that is the one reason given.
-    const pending = yearEndPending(control, eng.audits.find(a => a.id === openAuditId));
-    if (pending) return (
-      <div className="p-5">
-        <EmptyState icon={<Lock size={18} />} title={`Pending until ${pending.until}`}
-          hint="This control runs once a year. It is tested for operation in the year-end audit, once the year has closed." />
-      </div>
-    );
+    const held = operatingHeld(control, eng.audits.find(a => a.id === openAuditId));
+    if (held) return <HeldState held={held} yearEndHint="This control runs once a year. It is tested for operation in the year-end audit, once the year has closed." />;
     return (
       <div className="p-5">
         <EmptyState icon={<Lock size={18} />} title="TOE is locked" hint={trackResult(control.design) === 'Effective' && !designApproved(control)
@@ -5458,10 +5443,10 @@ function RailSpine({ control, running, onOpen }: { control: Control; running: bo
   // the hierarchy is the point: one thing in this column does the work.
   const tile = 'group w-full rounded-xl py-2 flex flex-col items-center gap-1.5 transition-colors cursor-pointer';
   const quietFace = 'relative inline-flex items-center justify-center size-9 rounded-xl border border-canvas-border bg-paper-50 text-ink-500 transition-colors group-hover:border-brand-100 group-hover:bg-brand-50 group-hover:text-brand-700';
-  const cap = 'text-[0.5625rem] font-bold uppercase tracking-[0.08em]';
+  const cap = 'text-[0.625rem] font-bold uppercase tracking-[0.08em]';
   // The count rides the tile's corner rather than sharing a line with the icon:
   // at this size a numeral beside a glyph reads as part of the glyph.
-  const badge = 'absolute -top-1 -right-1 min-w-[15px] h-[15px] px-1 rounded-full inline-flex items-center justify-center text-[0.5rem] font-bold tabular-nums';
+  const badge = 'absolute -top-1 -right-1 min-w-[15px] h-[15px] px-1 rounded-full inline-flex items-center justify-center text-[0.625rem] font-bold tabular-nums';
   return (
     <div className="panel absolute inset-0 bottom-6 flex flex-col overflow-hidden">
       {/* The fold control sits where it sits in the open rail — top right of
@@ -5544,6 +5529,107 @@ function RailSpine({ control, running, onOpen }: { control: Control; running: bo
  *  point the control genuinely could not be evidenced as operating, so it
  *  concludes ineffective and runs the ordinary ladder, carrying this reason across
  *  so the paper says why rather than merely that. */
+/**
+ * The operating steps' shared "nothing to do here yet" state.
+ *
+ * Population, Sample and Test of effectiveness are all held by the same two
+ * reasons, so they say it in the same words. The year-end wording is each
+ * step's own (the rule differs in what it means for that step); the parked
+ * wording is written once here, because the auditor's reason is the message
+ * and it should not be paraphrased three ways.
+ */
+function HeldState({ held, yearEndHint }: {
+  held: NonNullable<ReturnType<typeof operatingHeld>>; yearEndHint: string;
+}) {
+  return (
+    <div className="p-5">
+      <EmptyState icon={<Lock size={18} />}
+        title={held.kind === 'parked' ? `Parked until ${held.until} — not yet operated` : `Pending until ${held.until} — tested in the year-end audit`}
+        hint={held.kind === 'parked'
+          ? `${held.reason} Parked by ${held.by}. This is not a finding — the control has not been shown to have failed, it has not run yet.`
+          : yearEndHint} />
+    </div>
+  );
+}
+
+/**
+ * PARK THE OPERATING TEST — the control has not run yet.
+ *
+ * A sibling of UnableToTestBanner above, and deliberately the quieter of the
+ * two: that one is a request to a person, this one is a statement of fact about
+ * the calendar. Neither is a finding, and both say so.
+ *
+ * Offered only once the design is concluded and approved. Before that the
+ * design gate already holds the operating steps shut, so a second lock would
+ * only add noise — and it should not be possible to park a control whose design
+ * nobody has checked.
+ */
+function ParkOperatingBanner({ control }: { control: Control }) {
+  const { eng, role, parkOperating, resumeOperating } = useIcfr();
+  const [asking, setAsking] = useState(false);
+  const [reason, setReason] = useState('');
+  const [from, setFrom] = useState('');
+  const parked = control.operating.parked;
+  const eligible = role === 'auditor' && !isControlLockedIn(eng, control)
+    && trackResult(control.design) === 'Effective' && designApproved(control);
+
+  if (parked) {
+    return (
+      <div className="rounded-xl border border-evidence-200 bg-evidence-50/40 p-4">
+        <div className="flex items-start justify-between gap-3 flex-wrap">
+          <div className="min-w-0">
+            <h3 className="text-[0.8125rem] font-bold text-evidence-700 inline-flex items-center gap-1.5">
+              <CalendarClock size={15} /> Operating test parked until {parked.expectedFrom}
+            </h3>
+            <p className="text-[0.75rem] text-ink-700 mt-1">{parked.reason}</p>
+            <p className="text-[0.6875rem] text-ink-400 mt-1">
+              Parked by {parked.by} · {parked.at}. The design is tested; the control has not run yet, so it cannot be
+              concluded effective — nobody has watched it operate. This is not a finding.
+            </p>
+          </div>
+          {role === 'auditor' && !isControlLockedIn(eng, control) && (
+            <button onClick={() => resumeOperating(control.id)}
+              className="shrink-0 h-8 px-3 rounded-lg bg-brand-600 text-white text-[0.75rem] font-semibold hover:bg-brand-700 cursor-pointer">
+              It has operated — resume testing
+            </button>
+          )}
+        </div>
+      </div>
+    );
+  }
+
+  if (!eligible || control.unableToTest) return null;
+
+  return asking ? (
+    <div className="rounded-xl border border-evidence-200 bg-evidence-50/40 p-4 space-y-2">
+      <h3 className="text-[0.8125rem] font-bold text-evidence-700 inline-flex items-center gap-1.5"><CalendarClock size={15} /> Park the operating test</h3>
+      <p className="text-[0.75rem] text-ink-600">
+        For a control that has not run yet — implemented mid-year, or a system that went live after the period began.
+        It stays off the overdue list until you say it has operated, and it is not a finding.
+      </p>
+      <input value={reason} onChange={e => setReason(e.target.value)}
+        placeholder="Why it cannot be tested yet — e.g. the control went live with the new AP system in August"
+        className="w-full h-8 px-2.5 rounded-md border border-canvas-border bg-canvas-elevated text-[0.78125rem] focus:outline-none focus:border-brand-300" />
+      <input value={from} onChange={e => setFrom(e.target.value)}
+        placeholder="Testable from — e.g. 30 Nov 2026"
+        className="w-full h-8 px-2.5 rounded-md border border-canvas-border bg-canvas-elevated text-[0.78125rem] focus:outline-none focus:border-brand-300" />
+      <div className="flex items-center gap-2">
+        <button disabled={!reason.trim() || !from.trim()}
+          onClick={() => { parkOperating(control.id, reason.trim(), from.trim()); setAsking(false); setReason(''); setFrom(''); }}
+          className="h-8 px-3 rounded-lg bg-evidence-600 text-white text-[0.75rem] font-semibold enabled:hover:bg-evidence-700 disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer">Park it</button>
+        <button onClick={() => setAsking(false)} className="h-8 px-2.5 rounded-lg border border-canvas-border text-[0.75rem] font-semibold text-ink-600 cursor-pointer">Cancel</button>
+        {(!reason.trim() || !from.trim()) && (
+          <span className="text-[0.6875rem] text-ink-500">A reason and a date, both — a park with no date is an excuse.</span>
+        )}
+      </div>
+    </div>
+  ) : (
+    <button onClick={() => setAsking(true)} className="text-[0.75rem] font-semibold text-ink-500 hover:text-evidence-700 cursor-pointer inline-flex items-center gap-1.5">
+      <CalendarClock size={13} /> Hasn't operated yet — park the operating test
+    </button>
+  );
+}
+
 function UnableToTestBanner({ control }: { control: Control }) {
   const { eng, role, markUnableToTest, resolveUnableToTest, escalateUnableToTest } = useIcfr();
   const [asking, setAsking] = useState(false);
@@ -6062,6 +6148,7 @@ export default function ControlDossier() {
 
       {/* Blocked testing sits above the steps, because it is the reason none of
           them can run — not a finding underneath them. */}
+      <ParkOperatingBanner control={control} />
       <UnableToTestBanner control={control} />
 
       {/* the stepper — the whole of the left column below the header */}

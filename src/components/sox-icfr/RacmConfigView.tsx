@@ -86,7 +86,7 @@ function Section({ icon, title, blurb, count, action, children }: {
     <section className="rounded-xl border border-canvas-border bg-canvas-elevated p-5">
       <div className="flex items-start justify-between gap-4 mb-4">
         <div className="min-w-0">
-          <h2 className="text-[0.8125rem] font-bold text-ink-800 inline-flex items-center gap-1.5">{icon} {title}</h2>
+          <h2 className="font-display text-[1.0625rem] leading-tight text-ink-900 inline-flex items-center gap-2">{icon} {title}</h2>
           <p className="text-[0.71875rem] text-ink-500 mt-1 leading-relaxed max-w-[62ch]">{blurb}</p>
         </div>
         <div className="flex items-center gap-3 shrink-0">

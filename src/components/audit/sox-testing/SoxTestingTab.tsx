@@ -286,7 +286,7 @@ export function FlowModal({ label, widthCls = 'w-[800px]', variant = 'modal', en
           className={`fixed right-0 top-0 bottom-0 z-50 ${widthCls} bg-canvas border-l border-border-light shadow-2xl overflow-hidden flex flex-col`}
         >
           {closeBtn}
-          <div className="flex-1 overflow-y-auto p-6 pb-0">
+          <div className="flex-1 overflow-y-auto overscroll-contain p-6 pb-0">
             {children}
           </div>
         </motion.div>
@@ -301,7 +301,7 @@ export function FlowModal({ label, widthCls = 'w-[800px]', variant = 'modal', en
             className={`pointer-events-auto relative ${widthCls} h-[800px] max-w-full max-h-full bg-canvas rounded-[1.25rem] border border-border-light shadow-[0_24px_64px_-16px_rgba(15,8,30,0.28)] overflow-hidden flex flex-col`}
           >
             {closeBtn}
-            <div className="flex-1 overflow-y-auto p-6 pb-0">
+            <div className="flex-1 overflow-y-auto overscroll-contain p-6 pb-0">
               {children}
             </div>
           </motion.div>

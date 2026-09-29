@@ -4,7 +4,7 @@ import { assessSeverity, attestationOverruled, designApproved, designFilesOf, ir
 import type {
   Assertion, Attestation, AuditArchive, AuditFileRecord, AuditorProof, AuditRecord, Control, ControlClass, Deficiency, DesignDoc, DesignDocKind, DesignPoint, DiscussionAnchor, DocStatus, FileOrigin,
   DesignJudgements, DesignWaiverReason, EvidenceFile, EvidenceMode, ExceptionStatus, ExecKind, ExecutionEvent, Frequency, HandoffTask, IcfrEngagement,
-  DesignBasis, DesignTrack, EvidenceType, ExceptionKind, IpeConclusion, PopulationChecks, IpeTest, MaterialityRules, Walkthrough, Nature, OperatingStep, Override, Population, PopulationDefinition, RacmReview, Role, RulesChangeEntry, RunControlOutcome, RunRecord, ScopeArchiveEntry,
+  DesignBasis, DesignTrack, EvidenceType, ExceptionKind, IpeConclusion, PopulationChecks, IpeTest, MaterialityRules, Walkthrough, Nature, OperatingPark, OperatingStep, Override, Population, PopulationDefinition, RacmReview, Role, RulesChangeEntry, RunControlOutcome, RunRecord, ScopeArchiveEntry,
   PopulationSource, RequiredFile, Sample, Sampling, SamplingChangeEntry, SamplingMethodology, SamplingRoundBasis, SignificantAccount, SourceRole, TestingStrategy, TestResult, ToeRound, TrackConclusion, RetestRound, UnableToTest, ChallengedInput, SeverityChallenge,
 } from './types';
 
@@ -130,7 +130,7 @@ const stampSamples = (c: Control, s: OperatingStep, res: TestResult): OperatingS
 // PARKED (Aug 2026): `defaultGapType` — the exception no longer carries a gap type.
 import { ipeChecklist, ROLE_LABEL, spreadLabel } from './types';
 import { auditCovers, captionsFor, countryOf, entitiesFor, inScopeEntityNames, isOwnerOf, normaliseProcess, ownersOf, peopleForProcess, processesForAudit, racmAuditUse, scopedForDraw } from './auditScope';
-import { rootCauseReady, seedKeyOf, suggestRootCause, suggestSizing, type ExposureContext } from './helpers';
+import { racmRowOf, rootCauseReady, seedKeyOf, suggestRootCause, suggestSizing, type ExposureContext } from './helpers';
 import { entityCodeFor, processCodeFor, riskIdOf } from './racmIds';
 import { controlIdClashes, copyRacmControls, findLibraryRacm, markRacmsUsed } from './racmLibrary';
 import { findEngagement, registerEngagement } from '../../data/engagements';
@@ -516,6 +516,11 @@ interface IcfrCtx {
    *  the engine re-grades off that edit like any other. */
   respondToChallenge: (id: string, challengeId: string, decision: 'Accepted' | 'Declined', reason: string) => void;
   /** Blocked testing — a status on the control, not an exception. See UnableToTest. */
+  /** Park the operating test on a control that has not run yet — reason and the
+   *  date it is expected to become testable, both required. */
+  parkOperating: (controlId: string, reason: string, expectedFrom: string) => void;
+  /** It has run — lift the park and reopen the operating steps. */
+  resumeOperating: (controlId: string) => void;
   markUnableToTest: (controlId: string, track: 'design' | 'operating', reason: string, needed: string) => void;
   resolveUnableToTest: (controlId: string) => void;
   escalateUnableToTest: (controlId: string) => void;
@@ -1992,6 +1997,12 @@ export function IcfrProvider({ children, initialRole = 'auditor', seedMeta }: { 
       const liveIdx = prev.audits.findIndex(a => !a.archive);
       const live = liveIdx >= 0 ? prev.audits[liveIdx] : undefined;
       const archive: AuditArchive | undefined = live && resetIds.size ? {
+        // The register as it reads RIGHT NOW, before the new cycle edits it.
+        // Taken from the whole register rather than only the controls this
+        // cycle reset: a control the outgoing year carried but did not test is
+        // still part of what the matrix said, and a comparison that skipped it
+        // would report it next year as newly arrived.
+        racm: prev.controls.map(racmRowOf),
         conclusions: prev.controls.filter(c => resetIds.has(c.id)).map(c => ({
           controlId: c.id,
           wpRef: c.wpRef,
@@ -3729,6 +3740,59 @@ export function IcfrProvider({ children, initialRole = 'auditor', seedMeta }: { 
   // failed. Exposure and likelihood do not apply, so a severity would be invented.
   // It sits in the owner's court like any other document request until testing can
   // resume, and only becomes an exception if the period closes with it still open.
+  /**
+   * PARK THE OPERATING TEST — the control has not run yet.
+   *
+   * Deliberately NOT a handoff task, unlike `markUnableToTest` below: there is
+   * nobody to chase. A control implemented in August owes nothing, and sending
+   * its owner a request would be asking them for something that does not exist.
+   *
+   * Only after the design is concluded AND approved. Before that the design gate
+   * already holds the operating steps shut, so parking would be a second lock on
+   * a door that is closed — and the auditor could park a control whose design
+   * nobody has checked, which is the ordering this module refuses everywhere.
+   */
+  const parkOperating = useCallback<IcfrCtx['parkOperating']>((controlId, reason, expectedFrom) => {
+    if (role !== 'auditor' || !reason.trim() || !expectedFrom.trim()) return;
+    setEng(prev => {
+      if (isEngagementLocked(prev)) return prev;
+      const c = prev.controls.find(x => x.id === controlId);
+      if (!c || c.operating.parked || isControlLockedIn(prev, c)) return prev;
+      if (trackResult(c.design) !== 'Effective' || !designApproved(c)) return prev;
+      const parked: OperatingPark = { reason: reason.trim(), expectedFrom: expectedFrom.trim(), by: me, at: 'just now' };
+      const event: ExecutionEvent = {
+        id: uid('ex'), controlId, track: 'operating', kind: 'park-operating',
+        verb: `parked the operating test until ${parked.expectedFrom} — not yet operated`,
+        rationale: parked.reason, by: me, role, at: 'just now',
+      };
+      return {
+        ...prev,
+        controls: prev.controls.map(x => (x.id === controlId ? { ...x, operating: { ...x.operating, parked } } : x)),
+        executions: [event, ...prev.executions],
+      };
+    });
+  }, [me, role]);
+
+  /** It has run — the park lifts and the operating steps open where they were.
+   *  Nothing was concluded while it was parked, so there is nothing to undo. */
+  const resumeOperating = useCallback<IcfrCtx['resumeOperating']>((controlId) => {
+    if (role !== 'auditor') return;
+    setEng(prev => {
+      if (isEngagementLocked(prev)) return prev;
+      const c = prev.controls.find(x => x.id === controlId);
+      if (!c?.operating.parked) return prev;
+      const event: ExecutionEvent = {
+        id: uid('ex'), controlId, track: 'operating', kind: 'park-operating',
+        verb: 'the control has operated — the operating test resumes', by: me, role, at: 'just now',
+      };
+      return {
+        ...prev,
+        controls: prev.controls.map(x => (x.id === controlId ? { ...x, operating: { ...x.operating, parked: undefined } } : x)),
+        executions: [event, ...prev.executions],
+      };
+    });
+  }, [me, role]);
+
   const markUnableToTest = useCallback<IcfrCtx['markUnableToTest']>((controlId, track, reason, needed) => {
     if (role !== 'auditor' || !reason.trim() || !needed.trim()) return;
     setEng(prev => {
@@ -4087,10 +4151,10 @@ export function IcfrProvider({ children, initialRole = 'auditor', seedMeta }: { 
     createAudit, updateAudit, openAuditId, openAudit, closeAudit, racmDocs, addRacmDoc, createRacm, deleteRacm, addLibraryRacms,
     addComment, resolveDiscussion,
     submitTask, clearTask, raiseQuery, requestDesignDocs,
-    updateRules, applyRules, updateMateriality, reconcileScope, updateDeficiency, linkRootCause, unlinkRootCause, setGroupConclusion, updateAccount, setExceptionStatus, completeSizing, confirmRating, returnRating, submitPlan, reviewPlan, drawRetestSample, setRetestResult, setRetestCheck, runRetestIra, recordRetest, signOffException, reopenException, updateRemediation, addRemediationEvidence, raiseChallenge, respondToChallenge, markUnableToTest, resolveUnableToTest, escalateUnableToTest,
+    updateRules, applyRules, updateMateriality, reconcileScope, updateDeficiency, linkRootCause, unlinkRootCause, setGroupConclusion, updateAccount, setExceptionStatus, completeSizing, confirmRating, returnRating, submitPlan, reviewPlan, drawRetestSample, setRetestResult, setRetestCheck, runRetestIra, recordRetest, signOffException, reopenException, updateRemediation, addRemediationEvidence, raiseChallenge, respondToChallenge, parkOperating, resumeOperating, markUnableToTest, resolveUnableToTest, escalateUnableToTest,
     addControl, proposeSampling, signSampling, reviseSampling, signOffAudit, reopenControl, signOffControlWp, returnControl,
     raiseReviewNote, resolveReviewNote, verifyReviewNote, reopenReviewNote,
-  }), [eng, role, tab, view, selectedControlId, racmEditor, me, meOwner, racmProcess, changeRole, setTab, openRacmMatrix, openRacmEditor, openControl, focusStep, clearFocusStep, openDeficiency, focusDefId, clearFocusDef, back, returnView, registerPreset, openRegister, clearRegisterPreset, racmCreateOpen, openRacmCreate, clearRacmCreate, setDocStatus, setDesignPoint, concludeDesign, overrideDesign, approveDesign, returnDesign, addDesignDoc, attachDesignEvidence, removeDesignDoc, waiveDesignDoc, clearDesignWaiver, updateControlMeta, setControlKey, setDesignJudgements, startWalkthrough, setWalkthroughAttribute, setWalkthroughMeta, addDesignPoint, removeDesignPoint, validateDesignPoint, overrideDesignPoint, removeDesignFile, runDesignIra, linkDesignPointEvidence, setDesignPointProof, requestDataByEmail, setPointEvidenceType, setStepEvidenceType, setDesignBasis, setPopulation, setPopulationDefinition, clearPopulation, setPopulationCheck, setPopulationFacts, addPopulationSource, removePopulationSource, setSourceRole, drawSourceSample, approveSource, redrawSource, remindOwnerForFiles, registerFile, setFileOrigin, lockPopulation, lockAttributes, confirmExtraction, recordException, addEvidenceReport, removeEvidenceReport, proveEvidenceReport, registerIpe, setIpeCheck, concludeIpe, clearIpe, setMrc, setSampling, extendSample, resizeSample, setSampleResult, setStepResult, overrideStep, pullStepRun, attestStep, addStepEvidence, setStepInputFile, concludeOperating, overrideOperating, startToeRound, addAttribute, removeAttribute, mapStepWorkflow, setStepEvidenceMode, toggleStepAttest, toggleStepAI, runStepValidation, testAllAttributes, addRequiredFile, renameRequiredFile, removeRequiredFile, uploadRequiredFile, clearRequiredFile, validateReadyAttributes, approveRacmRows, remarkRacmRow, clearRacmReview, bulkTestControls, createAudit, updateAudit, openAuditId, openAudit, closeAudit, racmDocs, addRacmDoc, createRacm, deleteRacm, addLibraryRacms, addComment, resolveDiscussion, submitTask, clearTask, raiseQuery, requestDesignDocs, updateRules, applyRules, updateMateriality, reconcileScope, updateDeficiency, linkRootCause, unlinkRootCause, setGroupConclusion, updateAccount, setExceptionStatus, completeSizing, confirmRating, returnRating, submitPlan, reviewPlan, drawRetestSample, setRetestResult, setRetestCheck, runRetestIra, recordRetest, signOffException, reopenException, updateRemediation, addRemediationEvidence, raiseChallenge, respondToChallenge, markUnableToTest, resolveUnableToTest, escalateUnableToTest, addControl, proposeSampling, signSampling, reviseSampling, signOffAudit, reopenControl, signOffControlWp, returnControl, raiseReviewNote, resolveReviewNote, verifyReviewNote, reopenReviewNote]);
+  }), [eng, role, tab, view, selectedControlId, racmEditor, me, meOwner, racmProcess, changeRole, setTab, openRacmMatrix, openRacmEditor, openControl, focusStep, clearFocusStep, openDeficiency, focusDefId, clearFocusDef, back, returnView, registerPreset, openRegister, clearRegisterPreset, racmCreateOpen, openRacmCreate, clearRacmCreate, setDocStatus, setDesignPoint, concludeDesign, overrideDesign, approveDesign, returnDesign, addDesignDoc, attachDesignEvidence, removeDesignDoc, waiveDesignDoc, clearDesignWaiver, updateControlMeta, setControlKey, setDesignJudgements, startWalkthrough, setWalkthroughAttribute, setWalkthroughMeta, addDesignPoint, removeDesignPoint, validateDesignPoint, overrideDesignPoint, removeDesignFile, runDesignIra, linkDesignPointEvidence, setDesignPointProof, requestDataByEmail, setPointEvidenceType, setStepEvidenceType, setDesignBasis, setPopulation, setPopulationDefinition, clearPopulation, setPopulationCheck, setPopulationFacts, addPopulationSource, removePopulationSource, setSourceRole, drawSourceSample, approveSource, redrawSource, remindOwnerForFiles, registerFile, setFileOrigin, lockPopulation, lockAttributes, confirmExtraction, recordException, addEvidenceReport, removeEvidenceReport, proveEvidenceReport, registerIpe, setIpeCheck, concludeIpe, clearIpe, setMrc, setSampling, extendSample, resizeSample, setSampleResult, setStepResult, overrideStep, pullStepRun, attestStep, addStepEvidence, setStepInputFile, concludeOperating, overrideOperating, startToeRound, addAttribute, removeAttribute, mapStepWorkflow, setStepEvidenceMode, toggleStepAttest, toggleStepAI, runStepValidation, testAllAttributes, addRequiredFile, renameRequiredFile, removeRequiredFile, uploadRequiredFile, clearRequiredFile, validateReadyAttributes, approveRacmRows, remarkRacmRow, clearRacmReview, bulkTestControls, createAudit, updateAudit, openAuditId, openAudit, closeAudit, racmDocs, addRacmDoc, createRacm, deleteRacm, addLibraryRacms, addComment, resolveDiscussion, submitTask, clearTask, raiseQuery, requestDesignDocs, updateRules, applyRules, updateMateriality, reconcileScope, updateDeficiency, linkRootCause, unlinkRootCause, setGroupConclusion, updateAccount, setExceptionStatus, completeSizing, confirmRating, returnRating, submitPlan, reviewPlan, drawRetestSample, setRetestResult, setRetestCheck, runRetestIra, recordRetest, signOffException, reopenException, updateRemediation, addRemediationEvidence, raiseChallenge, respondToChallenge, parkOperating, resumeOperating, markUnableToTest, resolveUnableToTest, escalateUnableToTest, addControl, proposeSampling, signSampling, reviseSampling, signOffAudit, reopenControl, signOffControlWp, returnControl, raiseReviewNote, resolveReviewNote, verifyReviewNote, reopenReviewNote]);
 
   return <Ctx.Provider value={value}>{children}</Ctx.Provider>;
 }

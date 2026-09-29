@@ -99,7 +99,7 @@ export default function RiskOwnerPortal() {
         <section className={cn('rounded-2xl border p-4', anyOverdue ? 'border-high-200 bg-high-50/30' : 'border-mitigated-300 bg-mitigated-50/20')}>
           <div className="flex items-center gap-2 flex-wrap">
             <ListChecks size={15} className={anyOverdue ? 'text-high-700' : 'text-brand-600'} />
-            <h2 className="text-[13px] font-bold text-ink-800">{headline}</h2>
+            <h2 className="font-display text-[1.0625rem] leading-tight text-ink-900">{headline}</h2>
             <span className="text-[11.5px] text-ink-500">— what needs doing, and by when</span>
           </div>
           <div className="mt-3 space-y-0.5">

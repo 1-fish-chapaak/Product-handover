@@ -182,7 +182,7 @@ export function MaterialityGroundRules({ sharedWith }: { sharedWith?: string[] }
       {/* materiality — the worksheet, locked once the engagement went live */}
       <section className="rounded-2xl border border-canvas-border bg-canvas-elevated p-5">
         <div className="flex items-center justify-between gap-3 mb-3">
-          <h2 className="text-[13px] font-bold text-ink-800 inline-flex items-center gap-1.5"><Target size={15} className="text-brand-600" /> Materiality</h2>
+          <h2 className="font-display text-[1.0625rem] leading-tight text-ink-900 inline-flex items-center gap-2"><Target size={15} className="text-brand-600" /> Materiality</h2>
           {locked && <span className="inline-flex items-center gap-1 text-[10.5px] font-bold uppercase tracking-wide text-ink-500 bg-paper-50 border border-canvas-border rounded-full px-2 h-5"><Lock size={10} /> Locked at go-live</span>}
         </div>
         {eng.materialityBasis ? (
@@ -222,7 +222,7 @@ export function MaterialityGroundRules({ sharedWith }: { sharedWith?: string[] }
       {/* severity ladder */}
       <section className="rounded-lg border border-canvas-border bg-canvas-elevated p-5">
         <div className="flex items-center justify-between gap-3 mb-3 flex-wrap">
-          <h2 className="text-[0.8125rem] font-bold text-ink-800 inline-flex items-center gap-1.5"><Scale size={15} className="text-brand-600" /> Exception severity ladder</h2>
+          <h2 className="font-display text-[1.0625rem] leading-tight text-ink-900 inline-flex items-center gap-2"><Scale size={15} className="text-brand-600" /> Exception severity ladder</h2>
           <label className="inline-flex items-center gap-2 text-[0.75rem] text-ink-600"><Sliders size={13} /> Significant-deficiency band
             {canEditRules
               ? <input type="number" min={1} max={100} value={draft.band} onChange={e => setDraft(d => ({ ...d, band: Math.max(1, Math.min(100, +e.target.value || 0)) }))} className="h-8 w-16 px-2 rounded-lg border border-canvas-border text-[0.78125rem] tabular-nums focus:outline-none focus:ring-2 focus:ring-brand-200" />
@@ -266,7 +266,7 @@ export function MaterialityGroundRules({ sharedWith }: { sharedWith?: string[] }
 
       {/* MW indicators */}
       <section className="rounded-lg border border-canvas-border bg-canvas-elevated p-5">
-        <h2 className="text-[0.8125rem] font-bold text-ink-800 inline-flex items-center gap-1.5 mb-1"><AlertTriangle size={15} className="text-risk-600" /> Material-weakness indicators</h2>
+        <h2 className="font-display text-[1.0625rem] leading-tight text-ink-900 inline-flex items-center gap-2 mb-1"><AlertTriangle size={15} className="text-risk-600" /> Material-weakness indicators</h2>
         <p className="text-[0.75rem] text-ink-500 mb-3">If any in-force indicator is present on an exception, it is a material weakness regardless of magnitude.</p>
         <div className="space-y-1.5">
           {/* Same rule as the toggles above: only the auditor gets a control.
@@ -299,7 +299,7 @@ export function MaterialityGroundRules({ sharedWith }: { sharedWith?: string[] }
           question it answers — "was this always the number?" — is asked here. */}
       {eng.rulesLog.length > 0 && (
         <section className="rounded-2xl border border-canvas-border bg-canvas-elevated p-5">
-          <h2 className="text-[0.8125rem] font-bold text-ink-800 inline-flex items-center gap-1.5 mb-1"><History size={15} className="text-brand-600" /> Changes to the ground rules</h2>
+          <h2 className="font-display text-[1.0625rem] leading-tight text-ink-900 inline-flex items-center gap-2 mb-1"><History size={15} className="text-brand-600" /> Changes to the ground rules</h2>
           <p className="text-[0.75rem] text-ink-500 mb-3">Every threshold change since the engagement opened, and the exceptions each one re-graded.</p>
           <div className="space-y-2.5">
             {eng.rulesLog.map(entry => (
@@ -336,7 +336,7 @@ export function MaterialityGroundRules({ sharedWith }: { sharedWith?: string[] }
 
       {/* significant accounts */}
       <section className="rounded-2xl border border-canvas-border bg-canvas-elevated overflow-hidden">
-        <header className="px-4 py-3 border-b border-canvas-border flex items-center justify-between"><h2 className="text-[0.8125rem] font-bold text-ink-800 inline-flex items-center gap-1.5"><ShieldCheck size={15} className="text-brand-600" /> Significant accounts &amp; disclosures</h2><span className="text-[0.71875rem] text-ink-400">{eng.accounts.filter(a => a.inScope).length} in scope</span></header>
+        <header className="px-4 py-3 border-b border-canvas-border flex items-center justify-between"><h2 className="font-display text-[1.0625rem] leading-tight text-ink-900 inline-flex items-center gap-2"><ShieldCheck size={15} className="text-brand-600" /> Significant accounts &amp; disclosures</h2><span className="text-[0.71875rem] text-ink-400">{eng.accounts.filter(a => a.inScope).length} in scope</span></header>
         <table className="w-full text-[0.78125rem]">
           <thead><tr className="text-ink-500 border-b border-canvas-border">{['Account', 'Balance', 'In scope', 'Assertions'].map(h => <th key={h} className="text-left font-semibold uppercase tracking-wide text-[0.625rem] px-4 py-2">{h}</th>)}</tr></thead>
           <tbody>
@@ -373,7 +373,7 @@ export function ScopeView() {
 
       {/* entity & source */}
       <section className="rounded-lg border border-canvas-border bg-canvas-elevated p-5">
-        <h2 className="text-[0.8125rem] font-bold text-ink-800 inline-flex items-center gap-1.5 mb-3"><Building2 size={15} className="text-brand-600" /> Entity</h2>
+        <h2 className="font-display text-[1.0625rem] leading-tight text-ink-900 inline-flex items-center gap-2 mb-3"><Building2 size={15} className="text-brand-600" /> Entity</h2>
         <div className="flex items-start gap-3.5">
           <span className="w-10 h-10 rounded-xl bg-brand-600 text-white inline-flex items-center justify-center shrink-0"><Building2 size={18} /></span>
           <div className="min-w-0 flex-1">
@@ -772,14 +772,14 @@ function SeverityConclusion({ result, showMateriality }: { result: ExceptionGrad
         <span className="text-[10.5px] uppercase tracking-wide font-semibold text-ink-400">Conclusion</span>
         <SeverityPill s={result.grade} />
         <button onClick={() => setShowWorking(w => !w)} className="ml-auto inline-flex items-center gap-1 text-[11px] font-semibold text-brand-700 hover:text-brand-800 cursor-pointer">
-          {showWorking ? 'Hide working' : 'Show working'} <span className="text-[9px] leading-none">{showWorking ? '▾' : '▸'}</span>
+          {showWorking ? 'Hide working' : 'Show working'} <span className="text-[10px] leading-none">{showWorking ? '▾' : '▸'}</span>
         </button>
       </div>
       {showWorking && (
         <ol className="mt-2 space-y-1">
           {shown.map((w, i) => (
             <li key={`${w.n}-${i}`} className="flex items-start gap-2 text-[0.71875rem] leading-relaxed">
-              <span className={cn('mt-[3px] shrink-0 w-[18px] h-[18px] rounded-full inline-flex items-center justify-center text-[0.59375rem] font-bold tabular-nums',
+              <span className={cn('mt-[3px] shrink-0 w-[18px] h-[18px] rounded-full inline-flex items-center justify-center text-[0.625rem] font-bold tabular-nums',
                 w.fired ? 'bg-brand-600 text-white' : 'bg-paper-100 text-ink-400')}>{w.n}</span>
               <span className={cn('min-w-0', w.fired ? 'text-ink-800' : 'text-ink-400')}>
                 <b className="font-semibold">{w.rule}</b> — {w.detail}
@@ -1079,7 +1079,7 @@ export function HandoffsView() {
           <section key={g.type} className="rounded-2xl border border-canvas-border bg-canvas-elevated p-4">
             <div className="flex items-center gap-2 mb-2">
               <g.Icon size={15} className={g.tone} />
-              <h2 className="text-[13px] font-bold text-ink-800">{g.label}</h2>
+              <h2 className="font-display text-[1.0625rem] leading-tight text-ink-900">{g.label}</h2>
               <span className="ml-auto text-[11px] font-semibold text-ink-400">{rows.length} open</span>
             </div>
             <div className="space-y-0.5">

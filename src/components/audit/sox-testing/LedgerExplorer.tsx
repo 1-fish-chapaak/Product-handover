@@ -142,7 +142,7 @@ function GlLines({ lines, money }: { lines: GlLine[]; money: (v: number) => stri
         </span>
       </div>
       <div className="rounded-lg border border-canvas-border bg-white overflow-hidden">
-        <div className="grid grid-cols-[6rem_7rem_minmax(0,1.5fr)_7rem_minmax(0,0.8fr)] gap-2 px-2.5 py-1.5 border-b border-canvas-border text-[0.5625rem] font-bold text-ink-400 uppercase tracking-wider">
+        <div className="grid grid-cols-[6rem_7rem_minmax(0,1.5fr)_7rem_minmax(0,0.8fr)] gap-2 px-2.5 py-1.5 border-b border-canvas-border text-[0.625rem] font-bold text-ink-400 uppercase tracking-wider">
           <span>Date</span><span>Document</span><span>Description</span><span className="text-right">Amount</span><span>Posted by</span>
         </div>
         {shown.map((l, i) => (

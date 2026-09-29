@@ -266,7 +266,17 @@
 .stamp-flash { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; pointer-events: none; z-index: 8; }
 
 /* ── Modal ──────────────────────────────────────────────────────────────────────── */
-.modal-backdrop { position: fixed; inset: 0; background: color-mix(in srgb, var(--color-ink-900) 42%, transparent); backdrop-filter: blur(2px); z-index: 50; display: flex; align-items: flex-start; justify-content: center; padding: 64px 20px; overflow-y: auto; }
+/* `overscroll-behavior: contain` is the whole scroll lock, and it belongs here
+   rather than on the body. #root is height:100vh/overflow:hidden (index.css),
+   so the body has no scrollbar to lock — every `document.body.style.overflow =
+   'hidden'` in the repo is inert. The page's real scroller is .sox-book-ui (or,
+   on the control dossier, a pane inside it), and since 24 of these backdrops are
+   portalled to document.body, that scroller isn't even an ancestor: no
+   body-level or :has() rule can reach it. The backdrop is already its own
+   scroller (overflow-y: auto below), so the only leak was chaining past its
+   scroll end into the page behind. Containing the chain fixes that for portalled
+   and inline backdrops alike, with nothing wired per modal. */
+.modal-backdrop { position: fixed; inset: 0; background: color-mix(in srgb, var(--color-ink-900) 42%, transparent); backdrop-filter: blur(2px); z-index: 50; display: flex; align-items: flex-start; justify-content: center; padding: 64px 20px; overflow-y: auto; overscroll-behavior: contain; }
 /* `margin: auto 0` centres the dialog when it fits and top-anchors it when it
    doesn't. `align-items: center` would look the same until a modal grew past the
    viewport, then clip its head off the top with no way to scroll up to it. */

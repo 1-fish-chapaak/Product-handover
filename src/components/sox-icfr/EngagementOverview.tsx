@@ -291,7 +291,7 @@ function CoverageBody({ audits, range }: { audits: AuditRecord[]; range: Range }
             <span
               key={m.key}
               className={cn(
-                'text-[0.5625rem] font-semibold uppercase tracking-[0.02em] text-center py-0.5 rounded-sm',
+                'text-[0.625rem] font-semibold uppercase tracking-[0.02em] text-center py-0.5 rounded-sm',
                 covered.has(m.key) ? 'text-ink-500' : 'text-mitigated-700 bg-mitigated-50',
               )}
             >

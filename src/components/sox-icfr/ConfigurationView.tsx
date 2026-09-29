@@ -251,8 +251,8 @@ function ConfigInner({ prog, engId, reconcileScope }: {
 
       {/* ── Testing period ─────────────────────────────────────────────── */}
       <section className="rounded-xl border border-canvas-border bg-white p-5">
-        <h2 className="text-[13px] font-bold text-ink-800 inline-flex items-center gap-1.5"><CalendarRange size={15} className="text-brand-600" /> Testing period</h2>
-        <p className="text-[11.5px] text-ink-500 mt-0.5 mb-4">An annual cycle, not a dated project — the cycle is named by the year the group reports on.</p>
+        <h2 className="font-display text-[1.0625rem] leading-tight text-ink-900 inline-flex items-center gap-2"><CalendarRange size={15} className="text-brand-600" /> Testing period</h2>
+        <p className="text-[11.5px] text-ink-500 mt-1 mb-4">An annual cycle, not a dated project — the cycle is named by the year the group reports on.</p>
         <div className="flex items-end gap-4 flex-wrap">
           <div>
             <Label>Year type</Label>
@@ -287,8 +287,8 @@ function ConfigInner({ prog, engId, reconcileScope }: {
 
       {/* ── Group & entities ───────────────────────────────────────────── */}
       <section className="rounded-xl border border-canvas-border bg-white p-5">
-        <h2 className="text-[13px] font-bold text-ink-800 inline-flex items-center gap-1.5"><Building2 size={15} className="text-brand-600" /> Group &amp; entities</h2>
-        <p className="text-[11.5px] text-ink-500 mt-0.5 mb-4">Add or remove entities and their trial balances — then re-derive so scoping catches up.</p>
+        <h2 className="font-display text-[1.0625rem] leading-tight text-ink-900 inline-flex items-center gap-2"><Building2 size={15} className="text-brand-600" /> Group &amp; entities</h2>
+        <p className="text-[11.5px] text-ink-500 mt-1 mb-4">Add or remove entities and their trial balances — then re-derive so scoping catches up.</p>
         <div className="max-w-md mb-4">
           <Label>Group (listed / holding)</Label>
           <input value={groupName} onChange={e => { setGroupName(e.target.value); prog.groupName = e.target.value; }} className={inputCls} />
@@ -386,8 +386,8 @@ function ConfigInner({ prog, engId, reconcileScope }: {
 
       {/* ── Materiality rules ──────────────────────────────────────────── */}
       <section className="rounded-xl border border-canvas-border bg-white p-5">
-        <h2 className="text-[13px] font-bold text-ink-800 inline-flex items-center gap-1.5"><Scale size={15} className="text-brand-600" /> Materiality rules</h2>
-        <p className="text-[11.5px] text-ink-500 mt-0.5 mb-4">
+        <h2 className="font-display text-[1.0625rem] leading-tight text-ink-900 inline-flex items-center gap-2"><Scale size={15} className="text-brand-600" /> Materiality rules</h2>
+        <p className="text-[11.5px] text-ink-500 mt-1 mb-4">
           The group default drives scoping; add rules and assign them to entities for component-level thresholds.
         </p>
         <div className="space-y-2.5">

@@ -92,7 +92,7 @@ export default function TestBench({ control, chase, owner, defaultEffective, onC
           animate={{ opacity: 1, y: 0, scale: 1 }}
           transition={{ duration: 0.18 }}
           role="dialog" aria-modal="true" aria-label="Test bench"
-          className="pointer-events-auto relative w-[760px] max-w-full max-h-full bg-canvas rounded-[1.25rem] border border-border-light shadow-[0_24px_64px_-16px_rgba(15,8,30,0.28)] overflow-y-auto p-6"
+          className="pointer-events-auto relative w-[760px] max-w-full max-h-full bg-canvas rounded-[1.25rem] border border-border-light shadow-[0_24px_64px_-16px_rgba(15,8,30,0.28)] overflow-y-auto overscroll-contain p-6"
         >
           <button onClick={onClose} aria-label="Close" className="absolute top-3.5 right-3.5 p-1.5 rounded-md text-text-muted hover:text-text hover:bg-surface-2 transition-colors cursor-pointer">
             <X size={16} />

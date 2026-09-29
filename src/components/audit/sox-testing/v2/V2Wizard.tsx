@@ -771,7 +771,7 @@ export default function V2Wizard({ onCancel, onCreated }: Props) {
                 ))}
                 {wsRacms.map(r => (
                   <div key={r.area} className="rounded-lg p-3 bg-brand-50/40">
-                    <div className="text-[12.5px] font-semibold text-text">{r.area} <span className="text-[9.5px] font-bold uppercase tracking-wide text-brand-700 ml-1">workstream</span></div>
+                    <div className="text-[12.5px] font-semibold text-text">{r.area} <span className="text-[10px] font-bold uppercase tracking-wide text-brand-700 ml-1">workstream</span></div>
                     <div className="text-[10.5px] text-text-muted mt-0.5">
                       {r.systems ? r.systems.join(' · ') : 'Group level'}
                     </div>
@@ -832,7 +832,7 @@ export function EntityStatusChip({ status, small }: { status: string; small?: bo
     : status === 'revision' ? 'In — revision'
     : 'Out of scope';
   return (
-    <span className={`inline-flex items-center shrink-0 rounded-full font-semibold ${cls} ${small ? 'px-1.5 h-4 text-[9px]' : 'px-2 h-5 text-[10px]'}`}>
+    <span className={`inline-flex items-center shrink-0 rounded-full font-semibold ${cls} ${small ? 'px-1.5 h-4 text-[10px]' : 'px-2 h-5 text-[10px]'}`}>
       {label}
     </span>
   );

@@ -804,7 +804,39 @@ export interface IpeTest {
   testedAt: string | null;
 }
 
+/**
+ * THE OPERATING TEST, PARKED — the control has not run yet.
+ *
+ * Distinct from `UnableToTest`, which is an evidence chase: that one asks what
+ * the owner must produce, goes to them as a request, and at period end becomes
+ * an exception. A control implemented in August has no owner to chase and owes
+ * nothing — and it must never become a finding for failing to do something it
+ * never had the chance to do.
+ *
+ * Distinct too from `yearEndPending`, which is the same idea arrived at by rule
+ * rather than judgement (an Annual control cannot have run inside an interim).
+ * That one needs no reason because the frequency is the reason. This one is the
+ * auditor's call, so it costs a reason and a date.
+ *
+ * It never concludes anything. `controlConclusion` already refuses Effective
+ * unless both tracks are effective, so a parked control simply cannot be called
+ * effective — which is the point: nobody watched it run.
+ */
+export interface OperatingPark {
+  /** Why it cannot be tested yet, in the auditor's words. */
+  reason: string;
+  /** When it is expected to become testable. What makes this a park rather than
+   *  an excuse — and what lets the control resurface instead of going quiet. */
+  expectedFrom: string;
+  by: string;
+  at: string;
+}
+
 export interface OperatingTrack {
+  /** Set while the operating test is parked — see OperatingPark. Lives on the
+   *  track, not the control, so it clears when a new round resets it: every
+   *  round decides afresh whether the control has run yet. */
+  parked?: OperatingPark;
   method: OperatingMethod;        // dominant evidence mode — informational; each attribute is evidenced independently
   /** The report the population is drawn from, and its validation — IPE gate 1.
    *  Lives on the operating track because the sample it feeds does, but it is
@@ -1703,7 +1735,10 @@ export type ExecKind =
   | 'override' | 'request-docs' | 'receive-doc' | 'waive-doc' | 'walkthrough' | 'ipe' | 'population' | 'sample' | 'reopen' | 'wp-signoff' | 'review-return' | 'exception' | 'challenge'
   // TOD's own trail (S6): elements, files and checks coming and going, Ira's
   // read of the checks, and the design approval after TOD concludes.
-  | 'add-element' | 'remove-element' | 'remove-file' | 'add-check' | 'remove-check' | 'ai-review' | 'design-approval';
+  | 'add-element' | 'remove-element' | 'remove-file' | 'add-check' | 'remove-check' | 'ai-review' | 'design-approval'
+  // The operating test parked because the control has not run yet, and lifted
+  // again once it has. Its own kind: it is neither a conclusion nor a chase.
+  | 'park-operating';
 export interface ExecutionEvent {
   id: string;
   controlId: string;
@@ -1799,7 +1834,54 @@ export const AUDIT_ROUNDS: { id: AuditRound; label: string; hint: string }[] = [
  * clearly trivial finding is archived as Clearly Trivial — the same grade the
  * register showed it under — never folded into Deficiency.
  */
+/**
+ * WHAT THE MATRIX SAID, at the moment a cycle closed.
+ *
+ * The archive's `conclusions` record how each control *finished* — effective,
+ * ineffective, how many items were tested. They say nothing about what the
+ * control WAS: its risk, its owner, how often it ran, whether it was key. And
+ * `controls` is one register carried across years and edited in place, so once
+ * this year's SOP is read in, last year's wording is gone.
+ *
+ * That is the gap this closes. From the second year onward the auditor's first
+ * question about a process is "what changed?", and it cannot be answered
+ * against a register that only ever holds the present.
+ *
+ * Deliberately the RACM's own columns and nothing else — no design or operating
+ * track, no evidence, no samples. Those are testing, and testing already has an
+ * archive. This is the matrix.
+ */
+export interface ArchivedRacmRow {
+  controlId: string;
+  /** The number the client knows, where it differs from `controlId`. */
+  code?: string;
+  wpRef: string;
+  process: string;
+  subProcess: string;
+  riskId: string;
+  riskTitle?: string;
+  /** The one-line control statement the register shows. */
+  description: string;
+  /** Who does what, to which record, when and how — the column the auditor
+   *  tests against, and the one most likely to be reworded year on year. */
+  controlActivity?: string;
+  objective?: string;
+  owner: string;
+  nature: Nature;
+  type: ControlType;
+  frequency: Frequency;
+  isKey: boolean;
+  clazz?: ControlClass;
+  /** The company this row was tested at, on an engagement scoped by entity. */
+  entity?: string;
+  assertions: Assertion[];
+}
+
 export interface AuditArchive {
+  /** The register as it stood when this cycle closed. Optional because archives
+   *  written before the snapshot existed have none — a comparison against one of
+   *  those has to say it cannot answer rather than report everything as new. */
+  racm?: ArchivedRacmRow[];
   conclusions: {
     controlId: string;
     wpRef: string;
