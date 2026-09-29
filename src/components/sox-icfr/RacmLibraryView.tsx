@@ -13,11 +13,13 @@
  * Internal Audit and Compliance keep their own RACM screens; this tab is SOX only.
  */
 import { useLayoutEffect, useMemo, useRef, useState, type ReactNode } from 'react';
+import { AnimatePresence } from 'motion/react';
 import { CheckCircle2, FileSpreadsheet, FileText, History, Lock, MoreHorizontal, Search, Table2, Trash2, Workflow, X } from 'lucide-react';
 import './register.css';
 import { useAuditLog } from '../../context/AdminDataContext';
 import { useCurrentUser } from '../../context/CurrentUserContext';
 import { useToast } from '../shared/Toast';
+import Drawer from '../shared/Drawer';
 import { FilterSelect } from '../shared/FilterSelect';
 import { Pill } from '../shared/StatusBadge';
 import { Dropdown, menuItem } from './ControlDossier';
@@ -451,38 +453,41 @@ export default function RacmLibraryView({ canManage, creating, setCreating }: {
       {/* A published RACM is something engagements are tested against, so what
           happened to it is part of the audit trail rather than housekeeping.
           Newest first — the question is almost always "what changed last". */}
-      {historyFor && (
-        <div className="modal-backdrop" onClick={() => setHistoryFor(null)}>
-          <div className="modal" onClick={e => e.stopPropagation()} role="dialog" aria-modal="true" aria-labelledby="racm-history-title"
-            onKeyDown={e => { if (e.key === 'Escape') setHistoryFor(null); }}>
-            <div className="px-5 pt-4 pb-3 border-b border-canvas-border">
-              <div className="flex items-center justify-between gap-3">
-                <h2 id="racm-history-title" className="text-[0.9375rem] font-semibold text-ink-900">{historyFor.name}</h2>
-                <button onClick={() => setHistoryFor(null)} className="h-7 w-7 inline-flex items-center justify-center rounded-md text-ink-400 hover:text-ink-700 cursor-pointer" aria-label="Close"><X size={15} /></button>
-              </div>
-              <p className="mt-0.5 text-[0.71875rem] text-ink-500">Everything that has happened to this matrix.</p>
-            </div>
-            <div className="p-5 max-h-[24rem] overflow-y-auto">
-              <ol className="space-y-3">
-                {[...historyFor.history].reverse().map((h, i) => (
-                  <li key={`${h.at}-${h.kind}-${i}`} className="flex items-baseline gap-3">
-                    <span className="shrink-0 w-9 font-mono text-[0.71875rem] text-ink-400 tabular-nums">
-                      {h.version > 0 ? `v${h.version}` : '—'}
-                    </span>
-                    <span className="min-w-0">
-                      <span className="block text-[0.78125rem] text-ink-800 leading-snug">{h.what}</span>
-                      <span className="block text-[0.6875rem] text-ink-400">{h.by} · {h.at}</span>
-                    </span>
-                  </li>
-                ))}
-              </ol>
-              {historyFor.history.length === 0 && (
-                <p className="text-[0.78125rem] text-ink-500">Nothing has happened to this matrix yet.</p>
-              )}
-            </div>
-          </div>
-        </div>
-      )}
+      {/* A SIDE SHEET, NOT A MODAL (user ask, 29 Sep). A modal says "answer me
+          before you do anything else", and a history answers nothing — it is
+          something you read alongside the list you came from, often against the
+          card next to it. The shared `Drawer` is the platform's one drawer
+          shell, so this reads the same as every other detail surface; it brings
+          its own header, Escape handling and scroll, which is why none of that
+          is written here any more. */}
+      <AnimatePresence>
+        {historyFor && (
+          <Drawer
+            title={historyFor.name}
+            subtitle="Everything that has happened to this matrix."
+            onClose={() => setHistoryFor(null)}
+          >
+            {/* Newest first — the question is almost always "what changed
+                last". */}
+            <ol className="space-y-3">
+              {[...historyFor.history].reverse().map((h, i) => (
+                <li key={`${h.at}-${h.kind}-${i}`} className="flex items-baseline gap-3">
+                  <span className="shrink-0 w-9 font-mono text-[0.71875rem] text-ink-400 tabular-nums">
+                    {h.version > 0 ? `v${h.version}` : '—'}
+                  </span>
+                  <span className="min-w-0">
+                    <span className="block text-[0.78125rem] text-ink-800 leading-snug">{h.what}</span>
+                    <span className="block text-[0.6875rem] text-ink-400">{h.by} · {h.at}</span>
+                  </span>
+                </li>
+              ))}
+            </ol>
+            {historyFor.history.length === 0 && (
+              <p className="text-[0.78125rem] text-ink-500">Nothing has happened to this matrix yet.</p>
+            )}
+          </Drawer>
+        )}
+      </AnimatePresence>
 
       {/* Publishing is the moment a matrix stops being editable, so it is asked
           for once, plainly, with the count it will fix. The Process Hub's Freeze

@@ -13,7 +13,10 @@
  * setting is only findable next to the thing it governs.
  */
 import { useState } from 'react';
-import { motion } from 'framer-motion';
+// `motion/react`, not `framer-motion` — the latter is only in node_modules as a
+// transitive dep of `motion` and is not declared in package.json, so an import
+// of it works today by luck. Every other file in the repo imports from here.
+import { motion } from 'motion/react';
 import { Plus, SlidersHorizontal, Table2 } from 'lucide-react';
 import FloatingLines from '../shared/FloatingLines';
 import RacmLibraryView from './RacmLibraryView';
