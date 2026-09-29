@@ -4,14 +4,16 @@
  * What used to be each SOX engagement's RACM tab, moved up a level: Create RACM
  * (upload a matrix, or an SOP → prompt → extract), the import review, the list,
  * the spreadsheet editor in a new tab, and the ⋯ menu with View SOP and Delete.
- * One flat table (user ask, 15 Sep): a Process column says whose RACM each row
- * is, and the process filter narrows the same table rather than hiding groups.
+ * One flat list (user ask, 15 Sep): every RACM sits at the same level whoever
+ * owns it, and the process filter narrows that list rather than hiding groups.
+ * Cards, not rows (user ask, 29 Sep) — a RACM is a thing you open, not a record
+ * you scan across eight columns, so each one is a card you click to open.
  *
  * Pre-testing review is not here — it belongs to each engagement's copy.
  * Internal Audit and Compliance keep their own RACM screens; this tab is SOX only.
  */
-import { useLayoutEffect, useMemo, useRef, useState } from 'react';
-import { CheckCircle2, ExternalLink, FileSpreadsheet, FileText, History, Lock, MoreHorizontal, Plus, Search, Table2, Trash2, X } from 'lucide-react';
+import { useLayoutEffect, useMemo, useRef, useState, type ReactNode } from 'react';
+import { CheckCircle2, FileSpreadsheet, FileText, History, Lock, MoreHorizontal, Search, Table2, Trash2, Workflow, X } from 'lucide-react';
 import './register.css';
 import { useAuditLog } from '../../context/AdminDataContext';
 import { useCurrentUser } from '../../context/CurrentUserContext';
@@ -20,6 +22,8 @@ import { FilterSelect } from '../shared/FilterSelect';
 import { Pill } from '../shared/StatusBadge';
 import { Dropdown, menuItem } from './ControlDossier';
 import CreateRacmFlow from './CreateRacmFlow';
+import SopFlowchartView from './SopFlowchartView';
+import { chartRowsFromControls } from './sopChartFromRacm';
 import { currentVersion, deleteLibraryRacm, publishRacm, racmInUse, racmStatus, useRacmLibrary, writeEditorHandoff, type LibraryRacm } from './racmLibrary';
 
 /** The spreadsheet editor opens in its own tab, handed this RACM's rows first —
@@ -61,13 +65,102 @@ function StatusCell({ racm }: { racm: LibraryRacm }) {
         <Pill tone="compliant">Published</Pill>
         {/* The version is only meaningful once something has been published,
             which is why a draft never shows one. */}
-        {v > 0 && <span className="font-mono text-[11px] text-ink-400 tabular-nums">v{v}</span>}
+        {v > 0 && <span className="font-mono text-[0.6875rem] text-ink-400 tabular-nums">v{v}</span>}
       </span>
       {status === 'Published · additions' && (
-        <span className="text-[11px] text-ink-500" title={`${publishedCount} published, ${draftCount} still draft`}>
+        <span className="text-[0.6875rem] text-ink-500" title={`${publishedCount} published, ${draftCount} still draft`}>
           +{draftCount} draft
         </span>
       )}
+    </span>
+  );
+}
+
+/**
+ * THE TWO THINGS AN EXTRACTED RACM HAS THAT AN UPLOADED ONE DOES NOT.
+ *
+ * The user (29 Sep): "Jo bhi RCMs SOP se extract hongi, usmein RCM library wali
+ * row mein View SOP, View Flowchart do button aayenge."
+ *
+ * View SOP was already here, buried in the ⋯ menu — a menu nobody opens to find
+ * out what a row can do. It comes out onto the row and leaves the menu, so it is
+ * offered once. View flowchart is new: until now the chart could be seen while
+ * the RACM was being imported and never again.
+ *
+ * Only on `source === 'sop'` cards. A workbook has no procedure behind it and
+ * nothing to draw a process from, so neither button would have an answer.
+ *
+ * Icon-only (user ask, 29 Sep): on a card the click that matters is the card
+ * itself, so these two stay quiet and sit in the footer. Every one of them
+ * carries an `aria-label` as well as its `title` — an icon button whose only
+ * name is a tooltip has no name at all to a screen reader.
+ */
+const sopBtnCls = 'h-7 w-7 inline-flex items-center justify-center rounded-md border border-canvas-border bg-canvas '
+  + 'text-ink-500 transition-colors cursor-pointer '
+  + 'enabled:hover:border-brand-300 enabled:hover:text-brand-700 enabled:hover:bg-brand-50 '
+  + 'disabled:text-ink-400 disabled:cursor-not-allowed';
+
+/**
+ * An icon button that says what it is on hover (user ask, 29 Sep).
+ *
+ * Written here rather than reached for: the repo has no shared tooltip, and
+ * `group-hover` is the idiom it already uses for this kind of reveal.
+ *
+ * The `group` sits on the WRAPPER, not the button, because the SOP button is
+ * disabled whenever the file has gone with the session — and a disabled button
+ * is exactly when the reader most needs to be told why. Hover on a disabled
+ * button does not fire reliably; hover on the span around it does.
+ *
+ * `title` is deliberately absent. With both, the browser draws its own tooltip
+ * a second later on top of this one, which reads as a bug. The accessible name
+ * comes from `aria-label`, so nothing is lost by dropping it.
+ */
+function IconButtonWithTip({ tip, label, disabled, onClick, children }: {
+  tip: string;
+  label: string;
+  disabled?: boolean;
+  onClick: () => void;
+  children: ReactNode;
+}) {
+  return (
+    <span className="relative inline-flex group">
+      <button type="button" className={sopBtnCls} disabled={disabled} aria-label={label} onClick={onClick}>
+        {children}
+      </button>
+      <span role="tooltip"
+        className="pointer-events-none absolute bottom-full left-1/2 z-20 mb-1.5 -translate-x-1/2 whitespace-nowrap rounded-md bg-ink-900 px-2 py-1 text-[0.6875rem] font-medium text-white opacity-0 transition-opacity duration-150 group-hover:opacity-100">
+        {tip}
+      </span>
+    </span>
+  );
+}
+
+function SopRowButtons({ racm, onFlowchart }: { racm: LibraryRacm; onFlowchart: () => void }) {
+  const logEvent = useAuditLog();
+  return (
+    // The card itself opens the spreadsheet editor, so anything sitting on it
+    // has to stop the click going through.
+    <span className="inline-flex items-center gap-1.5" onClick={e => e.stopPropagation()} onKeyDown={e => e.stopPropagation()}>
+      {/* `sopUrl` is an object URL minted when the file was read, so it dies
+          with the session while the RACM outlives it. Saying that plainly beats
+          a button that does nothing. */}
+      <IconButtonWithTip
+        disabled={!racm.sopUrl}
+        label={`View the SOP behind ${racm.name}`}
+        tip={racm.sopUrl ? `Open ${racm.fileName}` : "The SOP file isn't available in this session"}
+        onClick={() => {
+          if (!racm.sopUrl) return;
+          window.open(racm.sopUrl, '_blank', 'noopener');
+          logEvent({ action: 'Export', description: `Opened "${racm.fileName}", the SOP behind ${racm.name}`, module: 'SOX ICFR', entity: 'RACM' });
+        }}>
+        <FileText size={13} />
+      </IconButtonWithTip>
+      <IconButtonWithTip
+        label={`View the flowchart for ${racm.name}`}
+        tip="View the process flowchart"
+        onClick={onFlowchart}>
+        <Workflow size={13} />
+      </IconButtonWithTip>
     </span>
   );
 }
@@ -80,7 +173,6 @@ function RowActions({ racm, canManage, onDelete, onPublish, onHistory }: { racm:
   }, [racm.name]);
   const blocker = racmInUse(racm);
   const { draftCount } = racmStatus(racm);
-  const logEvent = useAuditLog();
   return (
     <span ref={wrap} className="inline-flex" onClick={e => e.stopPropagation()} onKeyDown={e => e.stopPropagation()}>
       <Dropdown
@@ -92,18 +184,9 @@ function RowActions({ racm, canManage, onDelete, onPublish, onHistory }: { racm:
             <button type="button" className={menuRowCls} onClick={() => { close(); openEditorTab(racm); }}>
               <FileSpreadsheet size={13} className="text-ink-400 mt-0.5 shrink-0" /> Open in spreadsheet editor
             </button>
-            {racm.source === 'sop' && (
-              <button type="button" className={menuRowCls} disabled={!racm.sopUrl}
-                title={racm.sopUrl ? `Opens ${racm.fileName} in a new tab` : "The SOP file isn't available in this session"}
-                onClick={() => {
-                  close();
-                  if (!racm.sopUrl) return;
-                  window.open(racm.sopUrl, '_blank', 'noopener');
-                  logEvent({ action: 'Export', description: `Opened "${racm.fileName}", the SOP behind ${racm.name}`, module: 'SOX ICFR', entity: 'RACM' });
-                }}>
-                <FileText size={13} className="text-ink-400 mt-0.5 shrink-0" /> View SOP
-              </button>
-            )}
+            {/* View SOP used to sit here. It is on the row now — see
+                `SopRowButtons` — and offering it twice would just make the menu
+                longer for no new answer. */}
             <button type="button" className={menuRowCls} onClick={() => { close(); onHistory(); }}>
               <History size={13} className="text-ink-400 mt-0.5 shrink-0" /> View history
             </button>
@@ -136,9 +219,14 @@ function RowActions({ racm, canManage, onDelete, onPublish, onHistory }: { racm:
   );
 }
 
-export default function RacmLibraryView({ canManage }: {
+export default function RacmLibraryView({ canManage, creating, setCreating }: {
   /** Create and delete — the same permission that creates engagements. */
   canManage: boolean;
+  /** The wizard's open flag. It is owned by `RacmPage`, because the button
+   *  that sets it now sits on that page's tab row — but the wizard itself
+   *  renders here, where finishing one can clear this view's filters. */
+  creating: boolean;
+  setCreating: (open: boolean) => void;
 }) {
   const racms = useRacmLibrary();
   const { addToast } = useToast();
@@ -146,10 +234,10 @@ export default function RacmLibraryView({ canManage }: {
   const { currentUser } = useCurrentUser();
   const [search, setSearch] = useState('');
   const [process, setProcess] = useState('All');
-  const [creating, setCreating] = useState(false);
   const [deleting, setDeleting] = useState<LibraryRacm | null>(null);
   const [publishing, setPublishing] = useState<LibraryRacm | null>(null);
   const [historyFor, setHistoryFor] = useState<LibraryRacm | null>(null);
+  const [chartFor, setChartFor] = useState<LibraryRacm | null>(null);
   const [status, setStatus] = useState('All');
 
   const processes = useMemo(() => Array.from(new Set(racms.map(r => r.process))).sort((a, b) => a.localeCompare(b)), [racms]);
@@ -204,22 +292,19 @@ export default function RacmLibraryView({ canManage }: {
             className="w-full pl-10 pr-3.5 py-2 text-[0.8125rem] border border-border rounded-lg bg-white text-text placeholder:text-text-muted outline-none focus:border-primary/40 focus:ring-2 focus:ring-primary/10 transition-all"
           />
         </div>
-        <FilterSelect value={process} options={['All', ...processes]} allLabel="All processes" onChange={setProcess} ariaLabel="Filter by process" />
-        <FilterSelect value={status} options={['All', 'Draft', 'Published']} allLabel="Any status" onChange={setStatus} ariaLabel="Filter by status" />
+        {/* The filters take the right edge Create RACM used to hold (user ask,
+            29 Sep) — search reads from the left, what narrows it from the
+            right. Clear grows leftwards from them, so the two selects stay put
+            whether or not anything is filtered. */}
+        <div className="flex-1" />
         {(search || process !== 'All' || status !== 'All') && (
           <button onClick={() => { setSearch(''); setProcess('All'); setStatus('All'); }}
             className="inline-flex items-center gap-1 text-[0.75rem] font-semibold text-text-muted hover:text-primary px-2 py-1.5 rounded-md hover:bg-primary/5 transition-colors cursor-pointer">
             <X size={12} /> Clear
           </button>
         )}
-        <div className="flex-1" />
-        {canManage && (
-          <button onClick={() => setCreating(true)}
-            title="Create a RACM — import a matrix, or extract one from an SOP"
-            className="flex items-center gap-2 px-4 py-2 bg-primary hover:bg-primary-hover text-white rounded-lg text-[0.8125rem] font-semibold transition-colors cursor-pointer">
-            <Plus size={14} />Create RACM
-          </button>
-        )}
+        <FilterSelect value={process} options={['All', ...processes]} allLabel="All processes" onChange={setProcess} ariaLabel="Filter by process" />
+        <FilterSelect value={status} options={['All', 'Draft', 'Published']} allLabel="Any status" onChange={setStatus} ariaLabel="Filter by status" />
       </div>
 
       {shown.length === 0 ? (
@@ -230,61 +315,74 @@ export default function RacmLibraryView({ canManage }: {
         </div>
       ) : (
         <>
-          <div className="reg-wrap">
-            <table className="w-full border-collapse" style={{ minWidth: 1020 }}>
-              <thead className="reg-head">
-                <tr>
-                  <th>RACM</th>
-                  <th style={{ width: 132 }} title="Only published rows can be scoped into an engagement">Status</th>
-                  <th style={{ width: 170 }}>Process</th>
-                  <th style={{ width: 200 }}>Company</th>
-                  <th style={{ width: 64 }}>Risks</th>
-                  <th style={{ width: 76 }}>Controls</th>
-                  <th style={{ width: 190 }}>Used by</th>
-                  <th style={{ width: 190 }} aria-label="Actions" />
-                </tr>
-              </thead>
-              <tbody>
-                {shown.map(r => {
-                  const risks = new Set(r.controls.map(c => c.riskId)).size;
-                  return (
-                    <tr key={r.id} className="reg-row" role="button" tabIndex={0}
-                      aria-label={`Open ${r.name} in the spreadsheet editor — opens in a new tab`}
-                      onClick={() => openEditorTab(r)} onKeyDown={e => { if (e.key === 'Enter') openEditorTab(r); }}>
-                      <td>
-                        <span className="flex items-center gap-2.5 min-w-0">
-                          <span className="w-8 h-8 rounded-lg bg-brand-50 text-brand-700 flex items-center justify-center shrink-0"><Table2 size={15} /></span>
-                          <span className="min-w-0">
-                            <span className="block text-[13px] font-semibold text-ink-900 truncate">{r.name}</span>
-                            <span className="block text-[11.5px] text-ink-400 truncate">{sourceLine(r)}</span>
-                          </span>
+          {/* One card per RACM, one column on a narrow window and three on a
+              wide one. The card is flat and the whole of it is the door to the
+              spreadsheet editor — which is why the ⋯ menu and the two SOP
+              buttons each stop the click before it reaches the card. */}
+          <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
+            {shown.map(r => {
+              const risks = new Set(r.controls.map(c => c.riskId)).size;
+              return (
+                <div key={r.id} role="button" tabIndex={0}
+                  aria-label={`Open ${r.name} in the spreadsheet editor — opens in a new tab`}
+                  onClick={() => openEditorTab(r)} onKeyDown={e => { if (e.key === 'Enter') openEditorTab(r); }}
+                  className="rounded-xl border border-canvas-border bg-canvas-elevated p-4 flex flex-col gap-3 cursor-pointer transition-colors hover:border-brand-300">
+                  <div className="flex items-start gap-2.5">
+                    <span className="w-8 h-8 rounded-lg bg-brand-50 text-brand-700 flex items-center justify-center shrink-0"><Table2 size={15} /></span>
+                    <div className="min-w-0 flex-1">
+                      <span className="line-clamp-2 text-[0.8125rem] font-semibold text-ink-900 leading-snug" title={r.name}>{r.name}</span>
+                      {/* WHAT IT IS SITS UNDER THE NAME, WHERE IT CAME FROM
+                          BELOW (user ask, 29 Sep — the two were the other way
+                          round). Whether a matrix can be scoped from, and for
+                          which process and company, is what a reader is
+                          scanning this grid for; the file it was extracted
+                          from is what they check once they have found it. */}
+                      <div className="mt-1 flex items-center gap-2 min-w-0">
+                        <span className="shrink-0" title="Only published RACMs can be scoped into an engagement"><StatusCell racm={r} /></span>
+                        <span className="min-w-0 truncate text-[0.75rem] text-ink-600" title={`${r.process} · ${r.entity || 'No company'}`}>
+                          {r.process}<span className="text-ink-300"> · </span>{r.entity || '—'}
                         </span>
-                      </td>
-                      <td><StatusCell racm={r} /></td>
-                      <td><span className="text-[12.5px] text-ink-700">{r.process}</span></td>
-                      <td><span className="text-[12.5px] text-ink-700">{r.entity || '—'}</span></td>
-                      <td><span className="tabular-nums font-medium text-ink-600">{risks}</span></td>
-                      <td><span className="tabular-nums font-medium text-ink-600">{r.controls.length}</span></td>
-                      <td>
-                        {r.usedBy.length
-                          ? <span className="block text-[12px] text-ink-700 leading-snug" title={r.usedBy.map(u => u.name).join('\n')}>
-                              {r.usedBy[0]!.name}{r.usedBy.length > 1 && <span className="text-ink-400"> +{r.usedBy.length - 1}</span>}
-                            </span>
-                          : <span className="text-[12px] text-ink-400">Not used yet</span>}
-                      </td>
-                      <td>
-                        <span className="flex items-center justify-end gap-2 whitespace-nowrap">
-                          <span className="flex items-center gap-1.5 text-[12px] font-semibold text-ink-500">
-                            <FileSpreadsheet size={13} className="text-ink-400" /> Spreadsheet editor <ExternalLink size={12} className="text-ink-400" />
-                          </span>
-                          <RowActions racm={r} canManage={canManage} onDelete={() => setDeleting(r)} onPublish={() => setPublishing(r)} onHistory={() => setHistoryFor(r)} />
-                        </span>
-                      </td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
+                      </div>
+                    </div>
+                    <RowActions racm={r} canManage={canManage} onDelete={() => setDeleting(r)} onPublish={() => setPublishing(r)} onHistory={() => setHistoryFor(r)} />
+                  </div>
+
+                  {/* A card has no column headings, so a value that is not
+                      self-evident has to say what it is — which is why the
+                      counts are spelled out rather than sitting bare. */}
+                  <p className="line-clamp-2 text-[0.71875rem] text-ink-400 leading-snug" title={sourceLine(r)}>{sourceLine(r)}</p>
+
+                  {/* The SOP buttons ride the counts row (user ask, 29 Sep)
+                      rather than a footer of their own — with the editor hint
+                      gone the footer held two icons and a border, which is a
+                      lot of card for very little. `min-h` keeps the line the
+                      same height whether or not the buttons are there, so a row
+                      of mixed cards still lines up.
+                      "Used by" is gone from here too (user ask, 29 Sep): which
+                      engagements copied a matrix is what the ⋯ menu's history
+                      and the delete blocker are for, and on a card it was a
+                      whole line spent on a question nobody scans a grid to
+                      answer. */}
+                  <div className="flex items-center gap-2 min-h-7">
+                    <p className="text-[0.75rem] text-ink-500">
+                      <span className="tabular-nums font-semibold text-ink-700">{risks}</span> {risks === 1 ? 'risk' : 'risks'}
+                      <span className="text-ink-300"> · </span>
+                      <span className="tabular-nums font-semibold text-ink-700">{r.controls.length}</span> {r.controls.length === 1 ? 'control' : 'controls'}
+                    </p>
+                    {r.source === 'sop' && (
+                      <span className="ml-auto"><SopRowButtons racm={r} onFlowchart={() => setChartFor(r)} /></span>
+                    )}
+                  </div>
+
+                  {/* No footer. The "Spreadsheet editor" hint went first (user
+                      ask, 29 Sep) — the whole card opens it, the card's own
+                      aria-label says so and the ⋯ menu spells it out, so a line
+                      on every card was the third telling. That left a bordered
+                      strip holding two icons, and those moved up to the counts
+                      row, which is where the strip ended too. */}
+                </div>
+              );
+            })}
           </div>
           <p className="mt-3 px-1 text-[0.6875rem] text-text-muted tabular-nums">{shown.length} of {racms.length} RACMs</p>
         </>
@@ -293,6 +391,61 @@ export default function RacmLibraryView({ canManage }: {
       {creating && (
         <CreateRacmFlow onClose={() => setCreating(false)}
           onCreated={r => { setCreating(false); setProcess('All'); setSearch(''); addToast({ type: 'success', title: 'Saved to the RACM tab', message: `${r.name} — ${r.controls.length} control${r.controls.length === 1 ? '' : 's'}` }); }} />
+      )}
+
+      {/* The chart, redrawn from the controls — see `sopChartFromRacm` on why it
+          is drawn again rather than stored. Read-only: the place to change what
+          a box says is the matrix the box is drawn from. */}
+      {chartFor && (
+        <div className="modal-backdrop" style={{ padding: '6vh 20px' }} onClick={() => setChartFor(null)}>
+          <div className="modal modal-wide flex flex-col" style={{ maxWidth: 1100, height: '82vh' }}
+            onClick={e => e.stopPropagation()} role="dialog" aria-modal="true" aria-labelledby="racm-chart-title"
+            onKeyDown={e => { if (e.key === 'Escape') setChartFor(null); }}>
+            <div className="px-5 pt-4 pb-3 border-b border-canvas-border shrink-0">
+              <div className="flex items-center justify-between gap-3">
+                <h2 id="racm-chart-title" className="text-[0.9375rem] font-semibold text-ink-900">{chartFor.name}</h2>
+                <button onClick={() => setChartFor(null)} className="h-7 w-7 inline-flex items-center justify-center rounded-md text-ink-400 hover:text-ink-700 cursor-pointer" aria-label="Close"><X size={15} /></button>
+              </div>
+              {/* In a framed pane the chart drops its own status line — the
+                  wizard's Flowchart step carries one instead. There is no such
+                  heading here, so the modal says it, and saying it once is why
+                  the sentence below no longer repeats the count. */}
+              <p className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-1 text-[0.75rem] text-ink-500">
+                <Pill tone="draft">
+                  SOP-derived · {chartFor.flowchart?.status === 'confirmed'
+                    ? `confirmed by ${chartFor.flowchart.confirmedBy ?? 'the auditor'}`
+                    : 'unconfirmed'}
+                </Pill>
+                <span>
+                  {new Set(chartFor.controls.map(c => c.riskId)).size} risks · {chartFor.controls.length}{' '}
+                  {chartFor.controls.length === 1 ? 'control' : 'controls'}
+                </span>
+              </p>
+              <p className="mt-1 text-[0.71875rem] text-ink-500">
+                Read out of {chartFor.flowchart?.source ?? chartFor.fileName ?? 'the SOP'} when this RACM was extracted,
+                and drawn again from its rows each time you open it.
+              </p>
+            </div>
+            <div className="flex-1 min-h-0 p-4">
+              <SopFlowchartView
+                rows={chartRowsFromControls(chartFor.controls)}
+                process={chartFor.process}
+                entity={chartFor.entity}
+                source={chartFor.flowchart?.source ?? chartFor.fileName ?? 'the SOP'}
+                idFor={row => row.values.controlId ?? row.key}
+                omitted={0}
+                classifyBy={row => row.values.controlTitle ?? ''}
+                onRenameRisk={() => {}}
+                onRenameControl={() => {}}
+                editable={false}
+                // A fixed-height frame, so Fit has something to measure against
+                // — without it a twelve-rib process opens scrolled off its own
+                // right-hand edge with no way back but dragging.
+                compact
+              />
+            </div>
+          </div>
+        </div>
       )}
 
       {/* A published RACM is something engagements are tested against, so what
