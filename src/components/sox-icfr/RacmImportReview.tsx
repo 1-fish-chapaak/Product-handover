@@ -49,6 +49,7 @@ import SopFlowchartView, { SopFlowchartStructure } from './SopFlowchartView';
 import SopChartChat from './SopChartChat';
 import type { ChartFacts } from './sopChartEdits';
 import { buildSpine, riskKeyOf, risksAcrossStages } from './sopSpine';
+import { draftSopRows } from './sopProcurementSeed';
 import { racmTemplateForProcesses } from './mockData';
 import {
   CODE_OK, assignRacmIds, cleanCode, entityCodeTakenBy, peekEntityCode, peekProcessCode, processCodeTakenBy,
@@ -65,7 +66,7 @@ import type { Control, ControlType, Frequency, Nature } from './types';
 import {
   RACM_FIELDS, DEFAULT_SOP_PROMPT, CORE_BLANK_LABEL, CORE_BLANK_ORDER, ASSERTION_ORDER,
   readRacmWorkbook, guessHeaderRow, matchColumns, needsAttention, normaliseHeader,
-  buildImportRows, rowFromValues, proposeBlankFills, iraCanFill, suggestForRow, importRowsToControls, draftRowsFromSop,
+  buildImportRows, rowFromValues, proposeBlankFills, iraCanFill, suggestForRow, importRowsToControls,
   coreBlanks, extraBlanks, extraLabel, extraValue, rowBlocked, rowRepeats, setRowExtra, headerMapping,
   DUPLICATE_FIELDS, controlDuplicateValues, duplicateValues,
   type BlankFill, type ColumnMatch, type CoreBlank, type DuplicateValues, type ExtraColumn, type ImportRow,
@@ -130,12 +131,23 @@ const RACM_STEPS: { key: Step; label: string }[] = [{ key: 'columns', label: 'Co
  * abhi pata hi nahi chalega ki flowchart pe jaana kahan se aur validate karna
  * kahan se hai."
  *
- * It sits AFTER the rows rather than before them because the chart is drawn
- * from whatever is still ticked. Shown first, it would be a picture of a draft
- * the next screen then changes; shown last, what you looked at is what goes in.
+ * THE CHART COMES BEFORE THE ROWS (29 Sep, second pass). It was the other way
+ * round for a day, on the reasoning that the chart is drawn from whatever is
+ * still ticked and so ought to be the last thing seen. The user, having walked
+ * it: "Pipeline mein pehle flowchart aana chahiye, validation of prompt ke
+ * baad; phir controls ka validation aana chahiye, jahan pe hum risk owner
+ * wagairah daal rahe hain."
+ *
+ * Which is the right way round, because the two screens ask different
+ * questions. The chart asks whether Ira UNDERSTOOD the document — the shape of
+ * the process, what the risks are, which control answers which. Review asks
+ * whether each row is fit to import — its owner, its frequency, the blanks. You
+ * cannot sensibly fill in twelve rows before deciding whether the twelve are the
+ * right twelve, and an edit made on the chart lands in Review as a row already
+ * left out. Shape first, then detail.
  */
 const SOP_STEPS: { key: Step; label: string }[] = [
-  { key: 'prompt', label: 'Prompt' }, { key: 'review', label: 'Review' }, { key: 'flowchart', label: 'Flowchart' },
+  { key: 'prompt', label: 'Prompt' }, { key: 'flowchart', label: 'Flowchart' }, { key: 'review', label: 'Review' },
 ];
 
 /** Never "Continuous" — a control that runs all the time is tested at the
@@ -1061,7 +1073,7 @@ export default function RacmImportReview({ mode, file, process, entity, existing
     setPromptTooShort(false);
     // the same prompt already produced the draft under review — go back to it
     // rather than throwing away what the reviewer decided there
-    if (builtFrom.current === prompt) { setStep('review'); return; }
+    if (builtFrom.current === prompt) { setStep('flowchart'); return; }
     const used = prompt;
     setExtract({ phase: 'running', done: 0 });
     timers.current = EXTRACT_STEPS.map((_, i) => window.setTimeout(() => setExtract({ phase: 'running', done: i + 1 }), (i + 1) * EXTRACT_STEP_MS));
@@ -1073,7 +1085,9 @@ export default function RacmImportReview({ mode, file, process, entity, existing
         resetReview(drafted);
         builtFrom.current = used;
         setExtract({ phase: 'idle' });
-        setStep('review');
+        // Straight to the chart: the first question after an extraction is
+        // whether Ira read the document right, not whether row 7 has an owner.
+        setStep('flowchart');
       } catch {
         setExtract({ phase: 'failed' });
       }
@@ -1088,7 +1102,7 @@ export default function RacmImportReview({ mode, file, process, entity, existing
    * preview of a draft that then lands different.
    */
   const draftWithNames = useCallback((text: string): ImportRow[] => {
-    const draft = draftRowsFromSop(process, file.name, text, existing, entity);
+    const draft = draftSopRows(process, file.name, text, existing, entity);
     const patches = new Map<string, Partial<Record<RacmFieldKey, string>>>();
     draft.forEach(r => {
       const patch: Partial<Record<RacmFieldKey, string>> = {};
@@ -2284,10 +2298,11 @@ export default function RacmImportReview({ mode, file, process, entity, existing
                   </div>
                 </div>
                 <p className="mt-1 text-[0.75rem] leading-snug text-ink-500 max-w-[52rem]">
-                  {plural(included.length, 'control')} going in, drawn against{' '}
+                  {plural(included.length, 'control')} drafted, drawn against{' '}
                   {plural(chartFacts.risks.length, 'risk')}. Correct anything the SOP says differently — click a name,
-                  or open Edit and tell Ira. It stays <span className="font-semibold text-ink-700">unconfirmed</span> either
-                  way: an SOP cannot say where a control actually sits, so the walkthrough is what makes this count.
+                  or open Edit and tell Ira. Next you check the rows themselves. It stays{' '}
+                  <span className="font-semibold text-ink-700">unconfirmed</span> either way: an SOP cannot say where a
+                  control actually sits, so the walkthrough is what makes this count.
                 </p>
               </div>
 
@@ -2329,7 +2344,7 @@ export default function RacmImportReview({ mode, file, process, entity, existing
         {/* footer — always in view: the way back, and the one thing this step is for */}
         <div className="shrink-0 border-t border-canvas-border px-5 py-3 flex items-center gap-3">
           {step === 'review' || step === 'flowchart' ? (
-            <button type="button" onClick={() => { setFillOpen(false); setStep(step === 'flowchart' ? 'review' : mode === 'racm' ? 'columns' : 'prompt'); }} className={secondaryBtn}><ArrowLeft size={13} /> Back</button>
+            <button type="button" onClick={() => { setFillOpen(false); setStep(step === 'flowchart' ? 'prompt' : mode === 'racm' ? 'columns' : 'flowchart'); }} className={secondaryBtn}><ArrowLeft size={13} /> Back</button>
           ) : (
             <button type="button" onClick={onClose} disabled={extracting} className={cn(secondaryBtn, 'disabled:opacity-40 disabled:cursor-not-allowed')}>Cancel</button>
           )}
@@ -2394,26 +2409,25 @@ export default function RacmImportReview({ mode, file, process, entity, existing
                     : `Includes ${duplicatesIncluded} duplicates — those controls will be written a second time`}
                 </span>
               )}
-              {/* An SOP has one more thing to show before it writes anything.
-                  A workbook does not — there is no chart to read out of a
-                  matrix that was already a matrix. */}
-              {mode === 'sop'
-                ? <button type="button" onClick={() => { setFillOpen(false); setStep('flowchart'); }} disabled={!canImport} className={primaryBtn}>Continue</button>
-                : <button type="button" onClick={doImport} disabled={!canImport} className={primaryBtn}>Import {plural(included.length, 'control')}</button>}
+              {/* The last station either way. An SOP saw its chart one step
+                  earlier; a workbook never had one, there being no chart to
+                  read out of a matrix that was already a matrix. */}
+              <button type="button" onClick={doImport} disabled={!canImport} className={primaryBtn}>Import {plural(included.length, 'control')}</button>
             </>
           )}
 
           {step === 'flowchart' && (
             <>
-              {/* The chart is drawn from what is ticked, so the edit box can
-                  empty it from here — and then the reader needs the same
-                  account of why the button is off that Review gives them. */}
+              {/* The edit box can empty the chart from here, and then the
+                  reader needs an account of why the button is off. */}
               {included.length === 0 && (
-                <span className="text-[0.71875rem] text-mitigated-700">Nothing left to import — put a row back on Review, or undo the last edit.</span>
+                <span className="text-[0.71875rem] text-mitigated-700">Nothing left on the chart — undo the last edit, or go back and change the prompt.</span>
               )}
-              <button type="button" onClick={doImport} disabled={!canImport} className={primaryBtn}>
-                <Check size={14} aria-hidden /> Confirm &amp; import {plural(included.length, 'control')}
-              </button>
+              {/* Not gated on `canImport`. The blanks it counts — an owner, a
+                  frequency — are the next screen's question, and holding this
+                  button for them would ask the reviewer to fill in twelve rows
+                  before being allowed to say the twelve are wrong. */}
+              <button type="button" onClick={() => setStep('review')} disabled={included.length === 0} className={primaryBtn}>Continue</button>
             </>
           )}
         </div>
