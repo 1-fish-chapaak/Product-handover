@@ -1,25 +1,41 @@
 /**
- * The flowchart view of an SOP draft — the third of the three things an SOP
- * upload produces, and the one the user named the aim of: "you will map out the
- * risks on the flowchart, and then your corresponding controls."
+ * The flowchart of an SOP draft — the risks mapped onto the process, with the
+ * controls standing against them.
  *
- * So that is what it draws, as a tree from the SOP outwards (29 Sep):
+ * DRAWN AS A FISHBONE (29 Sep, user: "fishbone wala structure chahiye is
+ * flowchart mein"). The spine runs left to right, from the document it was read
+ * out of to the process itself; every risk is a rib off that spine, and its
+ * controls hang along the rib:
  *
- *                       ┌───────────────┐
- *                       │   SOP name    │      the initiation point
- *                       └───────┬───────┘
- *                  ┌────────────┼────────────┐
- *               [risk]       [risk]       [risk]
- *              ┌───┴───┐        │        ┌───┴───┐
- *           [ctrl] [ctrl]    [ctrl]   [ctrl] [ctrl]
+ *        Risk 1                    Risk 3
+ *           ╲                         ╲
+ *    Ctrl 1 ─╲                 Ctrl 4 ─╲
+ *    Ctrl 2 ─ ╲                         ╲
+ *  P2P-SOP ════╪═══════════════════════════╪═══▶  Procure to Pay
+ *              ╱                         ╱
+ *    Ctrl 3 ─ ╱                 Ctrl 5 ─╱
+ *           ╱                         ╱
+ *        Risk 2                    Risk 4
  *
- * Each risk appears once, however many stages its controls fall across — a
- * tree has one node per thing, and a risk drawn twice would read as two risks.
- * Stages have no boxes here; they decide the left-to-right order and keep
- * their own headings on the Spine.
+ * Why this shape and not the tree it used to be: a process HAPPENS in an order,
+ * and a fishbone has a direction where a tree has only a depth. Reading left to
+ * right you are walking the process; each rib is a place something can go wrong
+ * and what is in place there. Risks alternate above and below the spine, which
+ * is what keeps a wide process readable — twelve risks stacked in one row would
+ * run off any dialog.
  *
- * It reads `buildSpine` rather than grouping the rows itself, so the chart and
- * the Matrix beside it can never be two different accounts of one draft.
+ * Note this is the SHAPE only. It is not a cause-and-effect fishbone, which is
+ * a root-cause tool and belongs after a retest has failed twice — see
+ * `project_sop_three_artefacts`. Nothing here diagnoses anything.
+ *
+ * Each risk appears once, however many stages its controls fall across: a
+ * diagram has one node per thing, and a risk drawn twice would read as two
+ * risks. It reads `buildSpine` rather than grouping the rows itself, so the
+ * chart and the Matrix can never be two different accounts of one draft.
+ *
+ * Two things are drawn in this file, from one `buildSpine` and one set of ribs:
+ * the chart itself, and `SopFlowchartStructure` — its shape with the names taken
+ * off, which is all the prompt step shows until the prompt has been validated.
  *
  * WHAT IT DRAWS IS A DRAFT (29 Sep). An SOP gives the order of steps, the roles,
  * the systems and the decision points. It does NOT give where the control
@@ -29,18 +45,8 @@
  * exceptions and people use routinely. So the chart says `SOP-derived,
  * unconfirmed` on its face, and the auditor confirms or corrects it after the
  * walkthrough. Until then it satisfies no document requirement.
- *
- * Two things are drawn in this file, from one `buildSpine` and one set of
- * rails: the chart itself, and `SopFlowchartStructure` — its shape with the
- * names taken off, which is all the prompt step shows until the prompt has been
- * validated. See that component for why.
- *
- * Drawn with stacked boxes and chevrons rather than measured SVG edges: the
- * shape is a tree that only ever flows one way, so there is nothing a bezier
- * would buy that a border and an arrow do not. It matches the process flow the
- * audit module already draws (`audit/SopProcessFlow`).
  */
-import { useCallback, useMemo, useRef, useState } from 'react';
+import { useCallback, useMemo, useRef, useState, type ReactNode } from 'react';
 import { AlertTriangle, FileText, Minus, Plus, ShieldCheck, Star } from 'lucide-react';
 import { Pill } from '../shared/StatusBadge';
 import { buildSpine, risksAcrossStages, type SpineControl, type SpineRisk, type SpineOptions } from './sopSpine';
@@ -56,10 +62,9 @@ interface SopFlowchartViewProps extends SpineOptions {
    *  name on screen before the edit — kept so the first rename can record the
    *  title the stage grouping was worked out from. */
   onRenameControl: (sourceId: string, to: string, was: string) => void;
-  /** Drawn beside the prompt rather than on its own step: narrower boxes, and
-   *  no header of its own — the prompt step has one. Compact also means the
-   *  chart is framed by a pane of a fixed height, which is what makes Fit
-   *  mean something. */
+  /** Drawn beside the edit box rather than on its own: narrower boxes, and no
+   *  header of its own — the step has one. Compact also means the chart is
+   *  framed by a pane of a fixed height, which is what makes Fit mean something. */
   compact?: boolean;
   /** Preview draws the same chart with its names not offering to be typed
    *  over (user ask, 29 Sep: "there will be a preview and an edit option").
@@ -67,8 +72,8 @@ interface SopFlowchartViewProps extends SpineOptions {
   editable?: boolean;
 }
 
-/** Zoom stops. A process runs long before it runs wide, so the floor is low
- *  enough to get a twenty-control chart into one pane (user ask, 27 Sep:
+/** Zoom stops. A fishbone runs wide long before it runs tall, so the floor is
+ *  low enough to get a twenty-control chart into one pane (user ask, 27 Sep:
  *  "so that user can look at the complete flowchart in one go") — small, but
  *  the shape is what you are reading at that size, not the words. */
 const ZOOM_MIN = 0.3;
@@ -112,45 +117,129 @@ function EditableName({ value, onSave, label, className, editable }: {
   );
 }
 
-/** The stub of line that leaves a box on its way down to the fan below it. */
-const Trunk = () => <span className="h-4 w-px bg-canvas-border shrink-0" aria-hidden />;
+// ── the bones ─────────────────────────────────────────────────────────────────
+
+/** How far each box leans along its rib, in pixels per step out from the spine.
+ *  It has to match `RIB_DEG` or the boxes drift off the bone they hang on:
+ *  a box one step further out sits one box-height higher, so it sits
+ *  `height × tan(deg)` further back. */
+const LEAN = 18;
+const RIB_DEG = 22;
+
+/** The rib itself: the bone a risk and its controls hang on, leaning the way
+ *  the process flows so a branch above the spine and one below both point
+ *  downstream rather than at each other. */
+const Rib = ({ side }: { side: 'top' | 'bottom' }) => (
+  <span className="block h-9 w-0.5 bg-ink-300 shrink-0 rounded-full"
+    // `skewX` pushes the LOWER end of a line rightwards for a positive angle,
+    // and the boxes lean the other way as they descend — so a top rib is
+    // positive (its foot, at the spine, is the rightmost point) and a bottom
+    // rib negative. Signed the other way round they crossed their own stack.
+    style={{ transform: `skewX(${side === 'top' ? RIB_DEG : -RIB_DEG}deg)` }} aria-hidden />
+);
+
+/** Where the spine starts: the document everything on it was read out of. */
+const SourceNode = ({ source }: { source: string }) => (
+  <div className="w-[13rem] shrink-0 rounded-xl border border-ink-300 bg-canvas-elevated px-3.5 py-2.5">
+    <p className="flex items-center gap-1.5 text-[0.78125rem] font-semibold text-ink-900 leading-snug">
+      <FileText size={13} className="text-ink-400 shrink-0" aria-hidden />
+      <span className="min-w-0 break-words">{source}</span>
+    </p>
+  </div>
+);
+
+/** Where it ends: the process the whole diagram is about. A fishbone points at
+ *  its subject, and here the subject is the process, not a failure. */
+const ProcessNode = ({ process, entity }: { process: string; entity: string }) => (
+  <div className="w-[11rem] shrink-0 rounded-xl border border-ink-400 bg-ink-900 px-3.5 py-2.5">
+    <p className="text-[0.78125rem] font-semibold text-white leading-snug break-words">{process}</p>
+    {entity && <p className="mt-0.5 text-[0.6875rem] text-paper-200 break-words">{entity}</p>}
+  </div>
+);
+
+/** The spine's own arrowhead, so the direction is stated rather than implied. */
+const Arrow = () => (
+  <span className="w-0 h-0 shrink-0 border-y-[5px] border-y-transparent border-l-[9px] border-l-ink-300" aria-hidden />
+);
 
 /**
- * The join above ONE child of a fan.
+ * ONE BRANCH — a risk, what stands against it, and the rib carrying them to the
+ * spine.
  *
- * Drawn the way an org chart draws one: a horizontal rail that reaches toward
- * the siblings — rightwards from the first, leftwards from the last, both ways
- * from the ones between — and a drop into the box. The rails of neighbouring
- * children meet because each spans its whole column, padding included.
- *
- * An only child gets the drop and no rail: there is nothing to reach for, and
- * a stub of line hanging in the air reads as an edge to something missing.
+ * Above the spine the risk is furthest out and its controls sit between it and
+ * the spine; below, it is mirrored. So on both sides the reading runs outward
+ * from the process to the risk, through the controls that answer it.
  */
-function Elbow({ i, n }: { i: number; n: number }) {
-  const rail = n < 2 ? null
-    : i === 0 ? 'left-1/2 right-0'
-      : i === n - 1 ? 'left-0 right-1/2'
-        : 'left-0 right-0';
+function Branch({ side, children }: { side: 'top' | 'bottom'; children: ReactNode[] }) {
+  const n = children.length;
+  // Each box a step further from the spine sits a step further BACK, so the
+  // stack leans along the rib instead of hanging square off it. Without this
+  // they read as a column that happens to have a line under it.
+  const lean = (i: number) => (side === 'top' ? i : n - 1 - i) * LEAN;
+  const boxes = children.map((c, i) => (
+    <div key={i} style={{ transform: `translateX(${lean(i)}px)` }}>{c}</div>
+  ));
+  const rib = <div key="rib" style={{ transform: `translateX(${n * LEAN}px)` }}><Rib side={side} /></div>;
   return (
-    <div className="relative h-5 w-full shrink-0" aria-hidden>
-      {rail && <span className={`absolute top-0 h-px bg-canvas-border ${rail}`} />}
-      <span className="absolute top-0 left-1/2 h-full w-px -translate-x-1/2 bg-canvas-border" />
+    <div className="flex flex-col items-center gap-1.5 px-3" style={{ paddingRight: n * LEAN }}>
+      {side === 'top' ? <>{boxes}{rib}</> : <>{rib}{boxes}</>}
     </div>
   );
 }
 
-/** Where the whole chart starts: the document everything below was read out of. */
-function RootNode({ source, process, entity }: { source: string; process: string; entity: string }) {
+/**
+ * THE DIAGRAM.
+ *
+ * A three-row grid — branches above, the spine, branches below — with each risk
+ * given a column and put on the row its index says. `1fr auto 1fr` makes the
+ * two branch rows equal, which is what puts the spine down the middle and lets
+ * the source and process boxes beside it line up with it.
+ */
+function Fishbone({ n, source, process, entity, branch }: {
+  n: number; source: string; process: string; entity: string;
+  branch: (i: number, side: 'top' | 'bottom') => ReactNode;
+}) {
+  // The source and the process sit IN the grid, on the spine's own row, rather
+  // than in a flex row beside it. Centring them against the grid only lines
+  // them up when the branches above and below are the same height, which they
+  // never are — the spine drifted halfway down the diagram.
+  const cols = `max-content repeat(${n}, max-content) max-content`;
   return (
-    <div className="w-[19rem] rounded-xl border border-ink-300 bg-canvas-elevated px-4 py-3 text-center">
-      <p className="flex items-center justify-center gap-1.5 text-[0.8125rem] font-semibold text-ink-900 leading-snug">
-        <FileText size={13} className="text-ink-400 shrink-0" aria-hidden />
-        <span className="min-w-0 break-words">{source}</span>
-      </p>
-      <p className="mt-0.5 text-[0.6875rem] text-ink-500">{process}{entity ? ` · ${entity}` : ''}</p>
+    <div className="grid min-w-max py-2"
+      // The spine's row is the LINE and nothing else. The source and process
+      // boxes are centred on it and allowed to overflow, so the branch rows
+      // touch the bone directly — sized to the boxes instead, the row opened a
+      // gap between the last control and the spine its rib was pointing at.
+      style={{ gridTemplateColumns: cols, gridTemplateRows: n < 2 ? 'auto 2px 0' : '1fr 2px 1fr' }}>
+      <div style={{ gridColumn: 1, gridRow: 2 }} className="self-center">
+        <SourceNode source={source} />
+      </div>
+
+      {Array.from({ length: n }, (_, i) => {
+        const side = i % 2 === 0 ? 'top' : 'bottom';
+        return (
+          <div key={i} style={{ gridColumn: i + 2, gridRow: side === 'top' ? 1 : 3 }}
+            className={`flex ${side === 'top' ? 'items-end' : 'items-start'}`}>
+            {branch(i, side)}
+          </div>
+        );
+      })}
+
+      {/* Drawn across every branch column at once rather than per branch, so it
+          is one bone and not a row of touching dashes. */}
+      <div style={{ gridColumn: `2 / ${n + 2}`, gridRow: 2 }} className="flex items-center min-w-[3rem]">
+        <span className="h-0.5 flex-1 bg-ink-300" aria-hidden />
+        <Arrow />
+      </div>
+
+      <div style={{ gridColumn: n + 2, gridRow: 2 }} className="self-center">
+        <ProcessNode process={process} entity={entity} />
+      </div>
     </div>
   );
 }
+
+// ── the named chart ───────────────────────────────────────────────────────────
 
 function RiskNode({ risk, width, onRename, editable }: {
   risk: SpineRisk; width: string; onRename: (key: string, to: string) => void; editable: boolean;
@@ -173,7 +262,7 @@ function ControlNode({ c, width, onRename, editable }: {
   c: SpineControl; width: string; onRename: (sourceId: string, to: string, was: string) => void; editable: boolean;
 }) {
   return (
-    <div className={`${width} rounded-xl border border-brand-200 bg-brand-50 px-3.5 py-2.5`}>
+    <div className={`${width} rounded-xl border border-brand-200 bg-brand-50 px-3.5 py-2`}>
       <p className="flex flex-wrap items-center gap-x-1.5 gap-y-0.5 text-[0.65625rem] font-semibold text-brand-700">
         <ShieldCheck size={11} aria-hidden />
         <span className="font-mono">{c.id}</span>
@@ -195,44 +284,7 @@ function ControlNode({ c, width, onRename, editable }: {
   );
 }
 
-/** A risk and everything standing against it — one branch of the tree. Its
- *  controls fan out beneath it rather than stacking, so two controls against
- *  one risk read as two answers to it and not as one after the other. */
-function RiskBranch({ risk, i, n, width, onRenameRisk, onRenameControl, editable }: {
-  risk: SpineRisk; i: number; n: number; width: string;
-  onRenameRisk: (key: string, to: string) => void;
-  onRenameControl: (sourceId: string, to: string, was: string) => void;
-  editable: boolean;
-}) {
-  const controls = risk.controls;
-  return (
-    <div className="flex flex-col items-center">
-      <Elbow i={i} n={n} />
-      <RiskNode risk={risk} width={width} onRename={onRenameRisk} editable={editable} />
-      {controls.length === 0 ? (
-        <>
-          <Trunk />
-          {/* The one thing this chart exists to make impossible to miss. */}
-          <div className={`${width} rounded-xl border border-dashed border-risk-300 px-3.5 py-2.5 text-center text-[0.75rem] font-semibold text-risk-700`}>
-            No control against this risk
-          </div>
-        </>
-      ) : (
-        <>
-          <Trunk />
-          <div className="flex items-start justify-center">
-            {controls.map((c, j) => (
-              <div key={c.id} className="flex flex-col items-center">
-                <Elbow i={j} n={controls.length} />
-                <ControlNode c={c} width={width} onRename={onRenameControl} editable={editable} />
-              </div>
-            ))}
-          </div>
-        </>
-      )}
-    </div>
-  );
-}
+// ── the structure, for the prompt step ────────────────────────────────────────
 
 interface SopFlowchartStructureProps extends SpineOptions {
   rows: ImportRow[];
@@ -246,20 +298,15 @@ interface SopFlowchartStructureProps extends SpineOptions {
  * complete flowchart. Once we have validated the prompt, then only the user
  * will be able to see the flowchart."
  *
- * So the boxes are numbered rather than named — Risk 1, Control 1 — and the
- * only words on the page are the SOP's own file name at the top. Blank boxes
- * were ruled out ("box mein blank nahi rakhna hai"): a grey rectangle says
- * nothing about what it stands for, and a reader cannot tell a risk from a
- * control by shape alone.
+ * Same bones, numbered rather than named — Risk 1, Control 1 — with the SOP's
+ * own file name at the head. Blank boxes were ruled out ("box mein blank nahi
+ * rakhna hai"): a grey rectangle says nothing about what it stands for, and a
+ * reader cannot tell a risk from a control by shape alone.
  *
- * What is being read here is the COUNT and the FAN, which is exactly what a
+ * What is being read here is the COUNT and the SPREAD, which is exactly what a
  * prompt changes: does this wording find four risks or one, do the controls
  * spread across them, and is any risk left standing on its own. The names are
  * the chart, and the chart is what validating the prompt earns.
- *
- * It goes through `buildSpine` like the chart does, so the shape shown here is
- * the shape that arrives — never a flattering sketch of a draft that then
- * lands different.
  */
 export function SopFlowchartStructure({
   rows, process, entity, source, idFor, omitted, classifyBy,
@@ -278,12 +325,7 @@ export function SopFlowchartStructure({
     [risks],
   );
 
-  // The horizontal gap between columns is a MARGIN on the box, never padding
-  // on the column: `Elbow` is `w-full` of its column, so padding there would
-  // hold the rails apart and five boxes would read as five loose ticks rather
-  // than one fan. With a margin the column is box+gap wide and the rails of
-  // neighbouring columns meet exactly.
-  const box = 'w-[7.5rem] mx-1.5 rounded-lg px-2.5 py-2 text-center';
+  const box = 'w-[7.5rem] rounded-lg px-2.5 py-1.5 text-center';
   const boxLabel = 'flex items-center justify-center gap-1 text-[0.75rem] font-semibold';
 
   if (!risks.length) {
@@ -296,52 +338,33 @@ export function SopFlowchartStructure({
 
   return (
     <section aria-label="Flowchart structure" className="h-full overflow-auto">
-      <div className="flex flex-col items-center py-2 min-w-max mx-auto">
-        {/* The one real name on the structure — everything below is read out
-            of this document, and without it the shape belongs to nothing. */}
-        <div className="w-[15rem] rounded-xl border border-ink-300 bg-canvas-elevated px-4 py-2.5 text-center">
-          <p className="flex items-center justify-center gap-1.5 text-[0.78125rem] font-semibold text-ink-900 leading-snug">
-            <FileText size={12} className="text-ink-400 shrink-0" aria-hidden />
-            <span className="min-w-0 break-words">{source}</span>
-          </p>
-        </div>
-        <Trunk />
-        <div className="flex items-start justify-center">
-          {risks.map((risk, i) => (
-            <div key={risk.key} className="flex flex-col items-center">
-              <Elbow i={i} n={risks.length} />
-              <div className={`${box} border border-risk-300 bg-risk-50`}>
-                <p className={`${boxLabel} text-risk-700`}>
-                  <AlertTriangle size={11} aria-hidden /> Risk {i + 1}
-                </p>
-              </div>
-              <Trunk />
-              {risk.controls.length === 0 ? (
-                /* The one thing worth reading off a shape with no names on it. */
-                <div className={`${box} border border-dashed border-risk-300`}>
-                  <p className={`${boxLabel} text-risk-700`}>No control</p>
+      <Fishbone n={risks.length} source={source} process={process} entity={entity}
+        branch={(i, side) => {
+          const risk = risks[i]!;
+          const nodes = [
+            <div key="r" className={`${box} border border-risk-300 bg-risk-50`}>
+              <p className={`${boxLabel} text-risk-700`}><AlertTriangle size={11} aria-hidden /> Risk {i + 1}</p>
+            </div>,
+            ...(risk.controls.length === 0
+              /* The one thing worth reading off a shape with no names on it. */
+              ? [<div key="none" className={`${box} border border-dashed border-risk-300`}>
+                <p className={`${boxLabel} text-risk-700`}>No control</p>
+              </div>]
+              : risk.controls.map((c, j) => (
+                <div key={c.id} className={`${box} border border-brand-200 bg-brand-50`}>
+                  <p className={`${boxLabel} text-brand-700`}>
+                    <ShieldCheck size={11} aria-hidden /> Control {firstControlNo[i]! + j + 1}
+                  </p>
                 </div>
-              ) : (
-                <div className="flex items-start justify-center">
-                  {risk.controls.map((c, j) => (
-                    <div key={c.id} className="flex flex-col items-center">
-                      <Elbow i={j} n={risk.controls.length} />
-                      <div className={`${box} border border-brand-200 bg-brand-50`}>
-                        <p className={`${boxLabel} text-brand-700`}>
-                          <ShieldCheck size={11} aria-hidden /> Control {firstControlNo[i]! + j + 1}
-                        </p>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              )}
-            </div>
-          ))}
-        </div>
-      </div>
+              ))),
+          ];
+          return <Branch side={side}>{side === 'top' ? nodes : [...nodes].reverse()}</Branch>;
+        }} />
     </section>
   );
 }
+
+// ── the chart ─────────────────────────────────────────────────────────────────
 
 export default function SopFlowchartView({
   rows, process, entity, source, idFor, omitted, classifyBy,
@@ -353,11 +376,7 @@ export default function SopFlowchartView({
   );
   /** One node per risk, in the order the work happens. */
   const risks = useMemo(() => risksAcrossStages(spine), [spine]);
-  // The gap between branches rides on the node as a margin, so `Elbow`
-  // (w-full of its column) spans the whole column and neighbouring rails
-  // touch. As padding on the column it did not, and the fan read as a row of
-  // detached stubs.
-  const width = compact ? 'w-[13rem] mx-2' : 'w-[15rem] mx-2';
+  const width = compact ? 'w-[12rem]' : 'w-[14rem]';
 
   // Drawn with CSS `zoom` rather than a transform, because zoom reflows: the
   // pane's scrollbars shrink with the chart instead of guarding empty space
@@ -376,7 +395,11 @@ export default function SopFlowchartView({
     const box = drawn.getBoundingClientRect();
     const w = box.width / zoom, h = box.height / zoom;
     if (!w || !h) return;
-    setZoom(clampZoom(Math.min(view.clientWidth / w, view.clientHeight / h, 1)));
+    // A hair under, because the frame this sits in has padding of its own and
+    // `clientHeight` counts it: fitted exactly, the spine came to rest a few
+    // pixels under the bottom edge — the one line the diagram hangs on, cut off
+    // by the button that was supposed to bring it into view.
+    setZoom(clampZoom(Math.min(view.clientWidth / w, view.clientHeight / h, 1) * 0.94));
   }, [zoom]);
 
   if (!risks.length) {
@@ -389,13 +412,11 @@ export default function SopFlowchartView({
 
   return (
     <section aria-label="Process flowchart" className={compact ? 'h-full relative' : undefined}>
-      {/* Beside the prompt the pane has its own heading and count, so all this
-          row carries there is the zoom and the way out of Ira's grouping.
-          There it floats over the top-right corner rather than taking a strip
-          of its own (user ask, 27 Sep: "remove the bg of the buttons section
-          from the flowchart window so that i can view the flowchart there as
-          well") — the chart is drawn down the middle, so the corner it covers
-          is the corner it was never using, and the pane is that much taller. */}
+      {/* Beside the edit box the pane has its own heading and count, so all this
+          row carries there is the zoom. It floats over the top-right corner
+          rather than taking a strip of its own (user ask, 27 Sep: "remove the bg
+          of the buttons section from the flowchart window so that i can view the
+          flowchart there as well"). */}
       <div className={`flex flex-wrap items-center gap-x-3 gap-y-2 ${compact ? 'absolute top-0 right-0 z-10' : 'mb-4'}`}>
         {!compact && (
           <p className="flex flex-wrap items-center gap-x-2 gap-y-1 text-[0.75rem] text-ink-500">
@@ -428,7 +449,7 @@ export default function SopFlowchartView({
           </button>
         </div>
         {/* Only where there is a frame to fit into. On its own step the chart
-            runs down the page, so "fit" would have nothing to measure against. */}
+            runs across the page, so "fit" would have nothing to measure against. */}
         {compact && (
           <button type="button" onClick={fitToPane} title="Scale the chart down until the whole process is in view"
             className="h-8 px-3 inline-flex items-center gap-1.5 rounded-lg border border-canvas-border bg-canvas text-[0.75rem] font-semibold text-ink-600 hover:border-ink-400 hover:text-ink-800 transition-colors cursor-pointer">
@@ -437,22 +458,26 @@ export default function SopFlowchartView({
         )}
       </div>
 
-      {/* A stage with several risks lays them side by side, so a wide process
-          can outrun the dialog. It scrolls rather than squeezing the boxes. */}
+      {/* A fishbone grows sideways, so a long process outruns the dialog. It
+          scrolls rather than squeezing the boxes, and Fit puts it all in view. */}
       <div ref={viewRef} className={compact ? 'h-full overflow-auto' : 'overflow-x-auto'}>
-        <div ref={drawnRef} style={{ zoom }} className="flex flex-col items-center py-2 min-w-max mx-auto">
-          <RootNode source={source} process={process} entity={entity} />
-          <Trunk />
-          {/* Every risk on one rail. They arise out of the same document, not
-              one after another, and a column each is what says so. Nothing
-              wraps: a wrapped branch would sit under a risk it does not belong
-              to. The pane scrolls, and Fit puts the whole tree in view. */}
-          <div className="flex items-start justify-center">
-            {risks.map((risk, i) => (
-              <RiskBranch key={risk.key} risk={risk} i={i} n={risks.length} width={width} editable={editable}
-                onRenameRisk={onRenameRisk} onRenameControl={onRenameControl} />
-            ))}
-          </div>
+        <div ref={drawnRef} style={{ zoom }} className="min-w-max">
+          <Fishbone n={risks.length} source={source} process={process} entity={entity}
+            branch={(i, side) => {
+              const risk = risks[i]!;
+              const nodes = [
+                <RiskNode key="r" risk={risk} width={width} onRename={onRenameRisk} editable={editable} />,
+                ...(risk.controls.length === 0
+                  /* The one thing this chart exists to make impossible to miss. */
+                  ? [<div key="none" className={`${width} rounded-xl border border-dashed border-risk-300 px-3.5 py-2 text-center text-[0.75rem] font-semibold text-risk-700`}>
+                    No control against this risk
+                  </div>]
+                  : risk.controls.map(c => (
+                    <ControlNode key={c.id} c={c} width={width} onRename={onRenameControl} editable={editable} />
+                  ))),
+              ];
+              return <Branch side={side}>{side === 'top' ? nodes : [...nodes].reverse()}</Branch>;
+            }} />
         </div>
       </div>
 
