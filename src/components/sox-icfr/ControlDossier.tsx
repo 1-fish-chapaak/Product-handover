@@ -6,7 +6,7 @@ import {
   Send, Lock, ClipboardCheck, FileCheck2, FlaskConical, CheckCircle2, XCircle,
   CornerDownRight, Pencil, RotateCcw, Cpu, ChevronRight, Scale, Paperclip, Plus, Trash2,
   Mail, X, Loader2, ChevronDown, Check, PlayCircle, Link2, ListChecks, Gavel, UserCheck, History, FileUp, ArrowLeft, Footprints, BadgeCheck, Star,
-  Database, Circle, PenLine, Eye, ChevronUp, AlertCircle, FileWarning, StickyNote, Filter, Quote, CalendarClock} from 'lucide-react';
+  Database, Circle, PenLine, Eye, ChevronUp, AlertCircle, FileWarning, StickyNote, Filter, Quote, CalendarClock, GitBranch} from 'lucide-react';
 import { useIcfr } from './store';
 import EvidenceAnnotator from './EvidenceAnnotator';
 import { useAuditLog } from '../../context/AdminDataContext';
@@ -14,8 +14,8 @@ import {
   // PARKED (Aug 2026) — `formatINR` came in only to price the exposure strip in
   // the deficiency banner below. Both go back together.
   // formatINR,
-  concludeRationale, controlCode, controlConclusion, courtFor, operatingApplies, designCompleteness, designOutstanding, discussionsFor, extractionCriteria,
-  isControlLocked, isControlLockedIn, itgcHolds, failedItgcs, isItgcDependent, operatingProgress, operatingSuggestion, TOE_MAX_ROUNDS, toeRoundFailed, toeRoundNo, toeRounds, toeSpent, canRedrawToe, canExtendToe, populationLocked, sampleSizeGuide, samplingOf, trackResult, pointResult, stepResult, attestationOverruled, inquiryOnlyAttributes, restsOnStatementAlone,
+  concludeRationale, controlCode, controlConclusion, courtFor, operatingApplies, designCompleteness, designOutstanding, designOutstandingRequired, discussionsFor, extractionCriteria,
+  isControlLocked, isControlLockedIn, itgcHolds, failedItgcs, isItgcDependent, docRequirement, docColumnOf, docNotApplicable, operatingProgress, operatingSuggestion, TOE_MAX_ROUNDS, toeRoundFailed, toeRoundNo, toeRounds, toeSpent, canRedrawToe, canExtendToe, populationLocked, sampleSizeGuide, samplingOf, trackResult, pointResult, stepResult, attestationOverruled, inquiryOnlyAttributes, restsOnStatementAlone,
   countVerdict, coverageVerdict, derivedRunCount, populationReady, designBasis, designSuggestion, auditorProvenChecks, suggestedDesignChecks, suggestPopulationFile, fmtDay, parseDay,
   iraCannotTest, designBlocked,
   monthlyBreakdown, spikeMonths, priorRoundCount, fileUsable, originLabel, guessFileKind, populationSources, ipeChecksFor, samplesFor,
@@ -27,6 +27,7 @@ import {
   draftSamplePrompt, readSamplePrompt,
   populationInstances, sampleAmount, seedKeyOf,
   narrowedCount, populationFrom, readRowCount,
+  versionWindow, versionAudit, versionNo, versionCollapse, hasVersions, awaitsNewVersion, formatDueDate, conclusionOf,
 } from './helpers';
 import { useAuditFiles, type AuditFile } from './useAuditFiles';
 import { evidenceSlots, mapEvidence, type EvidenceMatch } from './controlChatEvidence';
@@ -52,7 +53,7 @@ import { extraLabel, useRacmConfig } from './racmConfig';
 import { racmSetupKeyFor } from './racmLibrary';
 import type {
   AuditRound, Control, DesignDoc, DesignDocKind, DesignPoint, DesignWaiverReason, DiscussionAnchor, DocStatus, EvidenceFile, OperatingStep,
-  AuditorProofKind, FileOrigin, IpeCheck, IpeConclusion, PopulationSource, Role, Sampling, SamplingMethodology, SourceRole, TestResult, ToeRound, TrackConclusion, ValidationResult,
+  AuditorProofKind, FileOrigin, Frequency, IpeCheck, IpeConclusion, PopulationSource, Role, Sampling, SamplingMethodology, SourceRole, TestResult, ToeRound, TrackConclusion, ValidationResult,
 } from './types';
 
 // Short button labels for the waiver reasons — the stored reason is the full
@@ -205,8 +206,11 @@ function RequestDataModal({ control, onClose }: { control: Control; onClose: () 
   const { requestDataByEmail } = useIcfr();
   const logEvent = useAuditLog();
   const { addToast } = useToast();
+  // Only what this class of control actually has: an element that does not apply
+  // is not listed at all, so nobody is asked for an ITGC's flowchart.
+  const askable = control.design.documents.filter(d => !docNotApplicable(control, d));
   // pre-select what's genuinely outstanding — a waived element isn't chased
-  const [sel, setSel] = useState<Set<string>>(() => new Set(control.design.documents.filter(d => d.status !== 'Received' && !d.waiver).map(d => d.id)));
+  const [sel, setSel] = useState<Set<string>>(() => new Set(askable.filter(d => d.status !== 'Received' && !d.waiver).map(d => d.id)));
   // Addressed to the process owner, copying the control owner. The person who
   // can actually produce the file is not usually the person accountable for the
   // control, and a request sent only to the accountable name is a request that
@@ -231,8 +235,8 @@ function RequestDataModal({ control, onClose }: { control: Control; onClose: () 
           <div>
             <div className="text-[0.6875rem] font-bold uppercase tracking-wide text-ink-400 mb-2">Documents to request</div>
             <div className="space-y-1.5">
-              {control.design.documents.length === 0 && <p className="text-[0.75rem] text-ink-400">No documents defined yet — add documents to TOD first.</p>}
-              {control.design.documents.map(d => {
+              {askable.length === 0 && <p className="text-[0.75rem] text-ink-400">Nothing to request — no design element applies to this control.</p>}
+              {askable.map(d => {
                 const on = sel.has(d.id);
                 return (
                   <button key={d.id} onClick={() => toggle(d.id)} className={cn('w-full flex items-center gap-2.5 px-3 py-2 rounded-lg border text-left transition-colors cursor-pointer', on ? 'border-brand-300 bg-brand-50/50' : 'border-canvas-border hover:border-ink-300')}>
@@ -1729,7 +1733,7 @@ function DesignSection({ control, canEdit: canEditIn, locked = false }: { contro
   // store refuses it now, so this names the reason rather than offering a
   // button that would do nothing. Worded as the thing to do, with the elements
   // named, because "cannot start" without a list sends the reader hunting.
-  const iraMissing = designOutstanding(control).filter(doc => doc.required !== false)
+  const iraMissing = designOutstandingRequired(control)
     .map(doc => (doc.kind === 'Custom' ? doc.name : doc.kind));
   const iraBlocked = d.points.length === 0 ? 'This control’s RACM lists no design checks — there is nothing to assess'
     : iraMissing.length > 0 ? `Attach ${iraMissing.join(', ')} first — the design checks are read against the evidence, and that is not on file yet`
@@ -1762,7 +1766,10 @@ function DesignSection({ control, canEdit: canEditIn, locked = false }: { contro
   // one definition, used by both the empty state and the section header
   const addElementMenu = (
     <Dropdown trigger={<><Plus size={12} /> Add element</>}>{close => <>
-      {DESIGN_DOC_KINDS.map(k => <button key={k} className={menuItem} onClick={() => { addStandard(k); close(); }}><FileText size={12} className="text-brand-600" />{k}</button>)}
+      {/* Only the kinds this class of control actually has — offering an ITGC a
+          process narrative invites the auditor to file something that will then sit
+          on the paper as evidence of a design the control does not work that way. */}
+      {DESIGN_DOC_KINDS.filter(k => !docNotApplicable(control, { kind: k })).map(k => <button key={k} className={menuItem} onClick={() => { addStandard(k); close(); }}><FileText size={12} className="text-brand-600" />{k}</button>)}
       <div className="my-1 border-t border-canvas-border" />
       <button className={menuItem} onClick={() => { setAddingCustom(true); close(); }}><Plus size={12} className="text-brand-600" />Custom…</button>
     </>}</Dropdown>
@@ -1805,7 +1812,12 @@ function DesignSection({ control, canEdit: canEditIn, locked = false }: { contro
   // rule itself now lives in helpers.ts: the chat rail concludes too, and two
   // copies of it would be two products disagreeing about one paper.
   const suggestion: TrackConclusion = designSuggestion(control);
-  const empty = d.documents.length === 0 && d.points.length === 0;
+  // Keyed on the CHECKS alone. Documents are now seeded from the class table the
+  // moment a control exists, so an empty document list stopped meaning "nobody has
+  // set this up" — it broke the deliberately-incomplete RACM row, which showed
+  // three "to provide" rows instead of its empty state. What still means nobody
+  // has set it up is that the RACM row lists no design checks.
+  const empty = d.points.length === 0 && d.documents.every(x => x.status !== 'Received');
 
   // ── the checks, filed under what they are about (dev call, Aug 2026) ────────
   // Design and operating already test the SAME attributes — see Walkthrough in
@@ -1847,6 +1859,9 @@ function DesignSection({ control, canEdit: canEditIn, locked = false }: { contro
             <div className="mb-5 space-y-1.5">
               {d.documents.map(doc => {
                 const files = designFilesOf(doc);
+                // Required / Optional / Not applicable, read off the control's class
+                // rather than a flag on the element — see DOC_REQUIREMENTS.
+                const docReq = docRequirement(control, doc);
                 return (
                   <div key={doc.id}>
                   <div className={cn('doc-row', doc.status === 'Received' && '!border-compliant-200', doc.waiver && doc.status !== 'Received' && '!border-evidence-200')}>
@@ -1855,7 +1870,8 @@ function DesignSection({ control, canEdit: canEditIn, locked = false }: { contro
                     <div className="min-w-0 flex-1">
                       <div className="flex items-center gap-1.5">
                         <span className="text-[0.75rem] font-semibold text-ink-800">{docLabel(doc)}</span>
-                        <span className={cn('text-[0.625rem] font-bold uppercase tracking-wide px-1 h-[15px] inline-flex items-center rounded', doc.required !== false ? 'bg-brand-50 text-brand-700' : 'bg-paper-100 text-ink-400')}>{doc.required !== false ? 'Required' : 'Optional'}</span>
+                        <span className={cn('text-[0.625rem] font-bold uppercase tracking-wide px-1 h-[15px] inline-flex items-center rounded',
+                          docReq === 'Required' ? 'bg-brand-50 text-brand-700' : 'bg-paper-100 text-ink-400')}>{docReq}</span>
                       </div>
                       {doc.description && <div className="text-[0.6875rem] text-ink-500 mt-0.5">{doc.description}</div>}
                       {files.length > 0 ? (
@@ -1886,12 +1902,18 @@ function DesignSection({ control, canEdit: canEditIn, locked = false }: { contro
                           <span><span className="font-semibold">{doc.waiver.reason}</span> — {doc.waiver.note} <span className="text-ink-400">· {doc.waiver.by}, {doc.waiver.at}</span></span>
                         </div>
                       ) : (
-                        <div className="text-[0.6875rem] text-ink-400 mt-0.5 truncate">{doc.status === 'Requested' ? 'Requested from the control owner' : 'No evidence attached yet'}</div>
+                        <div className="text-[0.6875rem] text-ink-400 mt-0.5 truncate">{
+                          docReq === 'Not applicable' ? `Not produced for ${docColumnOf(control) === 'ITGC' ? 'an IT general control' : `a ${docColumnOf(control).toLowerCase()} control`} — not chased, not counted`
+                            : doc.status === 'Requested' ? 'Requested from the control owner' : 'No evidence attached yet'}</div>
                       )}
                     </div>
-                    <Pill tone={doc.status === 'Received' ? 'compliant' : doc.waiver ? 'evidence' : doc.status === 'Requested' ? 'mitigated' : 'draft'}>{doc.status === 'Received' ? 'Evidenced' : doc.waiver ? 'Waived' : doc.status}</Pill>
+                    {/* An element this class of control does not have shows no chase
+                        status — there is nothing outstanding to report. It still
+                        says "Evidenced" if somebody attached one anyway. */}
+                    {(docReq !== 'Not applicable' || doc.status === 'Received') &&
+                      <Pill tone={doc.status === 'Received' ? 'compliant' : doc.waiver ? 'evidence' : doc.status === 'Requested' ? 'mitigated' : 'draft'}>{doc.status === 'Received' ? 'Evidenced' : doc.waiver ? 'Waived' : doc.status}</Pill>}
                     {canEdit && <div className="flex items-center gap-1">
-                      {doc.status !== 'Received' && !doc.waiver && <button onClick={() => setWaiving(x => x === doc.id ? null : doc.id)} title="Account for this element without a file" className="h-7 px-2.5 text-[0.71875rem] font-semibold rounded-md border border-canvas-border bg-canvas-elevated text-ink-600 hover:text-evidence-700 hover:border-evidence-300 disabled:opacity-50 inline-flex items-center gap-1 cursor-pointer"><BadgeCheck size={11} /> Not applicable</button>}
+                      {docReq !== 'Not applicable' && doc.status !== 'Received' && !doc.waiver && <button onClick={() => setWaiving(x => x === doc.id ? null : doc.id)} title="Account for this element without a file" className="h-7 px-2.5 text-[0.71875rem] font-semibold rounded-md border border-canvas-border bg-canvas-elevated text-ink-600 hover:text-evidence-700 hover:border-evidence-300 disabled:opacity-50 inline-flex items-center gap-1 cursor-pointer"><BadgeCheck size={11} /> Not applicable</button>}
                       {doc.waiver && <button onClick={() => clearDesignWaiver(control.id, doc.id)} title="Remove the waiver — the element is required again, and can take evidence" aria-label={`Remove the waiver on ${docLabel(doc)}`} className="h-7 w-7 inline-flex items-center justify-center rounded-md border border-canvas-border bg-canvas-elevated text-ink-400 hover:border-brand-300 hover:text-brand-700 cursor-pointer"><RotateCcw size={12} /></button>}
                       {/* a waived element offers no upload. Waiving it settled
                           that there is no file to give; the way back is to lift
@@ -2152,7 +2174,10 @@ function IpeCheckRow({ control, check, canWrite, reportCount }: { control: Contr
   // Only read for the Period coverage check — the same two helpers the parked
   // "Period covered" row used, so the auditor sees exactly what it showed.
   const audit = eng.audits.find(a => a.id === openAuditId);
-  const cover = check.dimension === 'Period coverage' ? coverageVerdict(control, audit?.windowFrom, audit?.windowTo) : null;
+  // The version's window, not the audit's — see `versionWindow`. On a rebuilt
+  // control the two differ, and only the first is a fair test of coverage.
+  const cwin = audit ? versionWindow(control, audit) : undefined;
+  const cover = check.dimension === 'Period coverage' ? coverageVerdict(control, cwin?.from, cwin?.to) : null;
   const emptyMonths = check.dimension === 'Period coverage' ? monthlyBreakdown(control).filter(m => m.n === 0).map(m => m.label) : [];
   const [draft, setDraft] = useState(check.note ?? '');
   const [counted, setCounted] = useState('');
@@ -3204,8 +3229,14 @@ function PopulationSection({ control, canEdit, locked: gated = false }: { contro
   // The window the audit actually tests, as real dates. The coverage check
   // measures the filter against this, and prose like 'Jan 2026' cannot be
   // measured — so the filter asks for dates rather than a label.
-  const winFrom = audit?.windowFrom ?? '';
-  const winTo = audit?.windowTo ?? '';
+  // Narrowed to the LIVE VERSION's window. A control rebuilt in November is not
+  // tested on April's transactions, and a population extracted across the whole
+  // year would be pulling from months this version of the control did not exist —
+  // which is exactly what `effectiveDate` has been warning about in prose since
+  // before there was anywhere to act on it. Unchanged on a control never rebuilt.
+  const vWin = audit ? versionWindow(control, audit) : null;
+  const winFrom = vWin?.from ?? '';
+  const winTo = vWin?.to ?? '';
 
   const [withdrawing, setWithdrawing] = useState(false);
   const [previewing, setPreviewing] = useState(false);
@@ -3982,10 +4013,12 @@ function SourceDrawRow({ control, source, canDraw, single, isOpen, onToggle, onA
   const [prompt, setPrompt] = useState(drafted);
   const [promptSeed, setPromptSeed] = useState(drafted);
   if (promptSeed !== drafted) { setPromptSeed(drafted); setPrompt(drafted); }
-  const plan = readSamplePrompt(prompt, source, guide.suggested, audit, methodology);
+  // Every month the ask can reach is a month this version of the control ran in.
+  const vAudit = versionAudit(control, audit);
+  const plan = readSamplePrompt(prompt, source, guide.suggested, vAudit, methodology);
   // The stretch the items are dealt inside — the months the ask named, else the
   // audit's whole window — and the round any undated item already here was drawn in.
-  const stretch = audit && plan.months ? { ...audit, windowFrom: plan.months.from, windowTo: plan.months.to } : audit;
+  const stretch = versionAudit(control, vAudit && plan.months ? { ...vAudit, windowFrom: plan.months.from, windowTo: plan.months.to } : vAudit);
   const home = sampleHome(eng, a => auditCovers(a, control, eng.id));
   const seed = useMemo(
     () => 10000 + (`${seedKeyOf(control)}·${source.id}·${openAuditId ?? ''}`.split('').reduce((a, ch) => (a * 31 + ch.charCodeAt(0)) >>> 0, 17) % 89999),
@@ -4694,6 +4727,203 @@ function ReviewNotesBlock({ control }: { control: Control }) {
  * is the same act, earlier. Absent for the control owner: how the auditor's design
  * test went is not theirs to read.
  */
+// ── The control the owner rebuilt ─────────────────────────────────────────────────
+const REBUILD_FREQUENCIES: Frequency[] = ['Annual', 'Quarterly', 'Monthly', 'Weekly', 'Daily', 'Recurring', 'Ad-hoc'];
+
+/** RECORDING THE REBUILT CONTROL, inside the design step where the failure is.
+ *
+ *  Deliberately not behind the header's Reopen button, though both end with an
+ *  untested control. They say opposite things: a reopen says "this conclusion was
+ *  reached wrongly", a new version says "this conclusion was right, and the control
+ *  it was about no longer exists". Offering them together would invite an auditor to
+ *  undo a finding they meant to keep.
+ *
+ *  Shown only where an accepted REDESIGN is waiting for it. A control that merely
+ *  concluded ineffective does not offer it — nobody has agreed to rebuild anything
+ *  yet — and a workaround never does, because a workaround leaves the control as it
+ *  was and its retest genuinely is the old checks read again.
+ *
+ *  Only the wording, the date and the frequency are asked for. The frequency because
+ *  it moves both clocks that matter — how many occurrences the new version can
+ *  produce before period end, and how large its sample has to be. The rest of the
+ *  control's attributes are edited the ordinary way: recording the version unlocks
+ *  the control, so the attribute fields open with it. */
+function RebuildBlock({ control }: { control: Control }) {
+  const { eng, role, recordNewVersion } = useIcfr();
+  const logEvent = useAuditLog();
+  const [open, setOpen] = useState(false);
+  const [wording, setWording] = useState(control.description);
+  const [liveFrom, setLiveFrom] = useState('');
+  const [note, setNote] = useState('');
+  const [freq, setFreq] = useState<Frequency>(control.frequency);
+
+  // The fix has to have reached the auditor — the owner declares it done, which is
+  // what moves the exception to Retest. Before that there is nothing to look at.
+  const def = eng.deficiencies.find(d => d.controlId === control.id && d.status === 'Retest' && awaitsNewVersion(control, d));
+  if (role !== 'auditor' || !def) return null;
+
+  const ready = wording.trim() && liveFrom.trim() && note.trim();
+  const fieldCls = 'w-full px-2.5 py-2 rounded-lg border border-canvas-border bg-canvas-elevated text-[0.75rem] text-ink-800 placeholder:text-ink-400 focus:outline-none focus:ring-2 focus:ring-brand-200';
+  const labelCls = 'block text-[0.65625rem] font-bold uppercase tracking-wider text-ink-400 mb-1';
+
+  return (
+    <div className="px-5 pb-5">
+      <div className="rounded-xl border border-brand-200 bg-brand-50/40 px-3.5 py-3">
+        <div className="flex items-start gap-2.5">
+          <GitBranch size={15} className="text-brand-700 mt-0.5 shrink-0" />
+          <div className="min-w-0 flex-1">
+            <h4 className="text-[0.8125rem] font-bold text-ink-900">The owner says the control has been rebuilt</h4>
+            <p className="text-[0.75rem] text-ink-600 leading-relaxed mt-1">
+              {def.id}&apos;s plan was accepted as a redesign, so the control itself is different now. Record what it
+              says and the day it started running: the wording that failed is kept as <b className="font-semibold text-ink-800">v{versionNo(control)}</b>,
+              and the design test reopens against the new one. Its population and sample will come from the new date
+              onwards — transactions from before it cannot evidence a control that did not yet exist.
+            </p>
+            {!open && (
+              <button onClick={() => setOpen(true)}
+                className="mt-2.5 h-8 px-3 inline-flex items-center gap-1.5 rounded-lg bg-brand-600 text-white text-[0.75rem] font-semibold hover:bg-brand-700 transition-colors cursor-pointer">
+                <GitBranch size={13} /> Record the rebuilt control
+              </button>
+            )}
+          </div>
+        </div>
+        {open && (
+          <div className="mt-3.5 space-y-3">
+            <label className="block">
+              <span className={labelCls}>The control as it now reads</span>
+              <textarea autoFocus rows={2} value={wording} onChange={e => setWording(e.target.value)} className={`${fieldCls} resize-none`} />
+            </label>
+            <div className="grid grid-cols-2 gap-3">
+              <label className="block">
+                <span className={labelCls}>Running since</span>
+                <input type="date" value={liveFrom} onChange={e => setLiveFrom(e.target.value)} className={fieldCls} />
+              </label>
+              <label className="block">
+                <span className={labelCls}>How often it runs</span>
+                <select value={freq} onChange={e => setFreq(e.target.value as Frequency)} className={fieldCls}>
+                  {REBUILD_FREQUENCIES.map(f => <option key={f} value={f}>{f}</option>)}
+                </select>
+              </label>
+            </div>
+            <label className="block">
+              <span className={labelCls}>What changed — recorded on the paper beside the old wording</span>
+              <textarea rows={2} value={note} onChange={e => setNote(e.target.value)}
+                placeholder="e.g. a second authoriser was added above ₹5 lakh, and the release moved to before the posting"
+                className={`${fieldCls} resize-none`} />
+            </label>
+            <div className="flex items-center justify-end gap-2">
+              <button onClick={() => setOpen(false)} className="h-8 px-3 text-[0.75rem] font-semibold text-ink-600 hover:text-ink-900 cursor-pointer">Cancel</button>
+              <button disabled={!ready}
+                title={ready ? undefined : 'The wording, the date it started and what changed are all needed'}
+                onClick={() => {
+                  recordNewVersion(control.id, def.id, { description: wording, liveFrom, note, frequency: freq });
+                  logEvent({ action: 'Update', description: `Recorded v${versionNo(control) + 1} of ${control.id} — live from ${liveFrom} (${def.id})`, module: 'SOX ICFR', entity: 'Control' });
+                  setOpen(false);
+                }}
+                className="h-8 px-3.5 inline-flex items-center gap-1.5 rounded-lg bg-brand-600 text-white text-[0.75rem] font-semibold enabled:hover:bg-brand-700 disabled:opacity-40 disabled:cursor-not-allowed transition-colors cursor-pointer">
+                <GitBranch size={13} /> Record v{versionNo(control) + 1}
+              </button>
+            </div>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+/** THE COLLAPSE RULE, at the moment of signing.
+ *
+ *  The sign-off step is where a person puts their name to "Effective", and on a
+ *  rebuilt control that word alone is not the whole truth — an earlier version of
+ *  this same control failed its design test inside this same period. The rule and
+ *  the disclosure therefore sit above the signature, not only in the version list
+ *  further up the page and not only in the exported paper: a reader who has
+ *  scrolled to the bottom to sign has scrolled past both.
+ *
+ *  It states the verdict rather than gating the button. The two outcomes are
+ *  already enforced where they are computed — a rebuild that cannot be operating
+ *  tested in time keeps its exception open, which keeps the control off Effective
+ *  on its own. Blocking here as well would be the same rule asserted twice, in a
+ *  place that could drift from the first. */
+function VersionVerdict({ control }: { control: Control }) {
+  const { eng } = useIcfr();
+  const collapse = versionCollapse(eng, control);
+  if (!collapse) return null;
+  const tone = collapse.outcome === 'effective-disclosed'
+    ? 'border-compliant-200 bg-compliant-50/40 text-compliant-800'
+    : collapse.outcome === 'in-progress'
+      ? 'border-canvas-border bg-paper-50/60 text-ink-700'
+      : 'border-high-200 bg-high-50/40 text-high-800';
+  return (
+    <div className="px-5 pt-5">
+      <div className={cn('rounded-xl border px-3.5 py-3', tone)}>
+        <div className="flex items-start gap-2.5">
+          <GitBranch size={15} className="mt-0.5 shrink-0 opacity-70" />
+          <div className="min-w-0">
+            <h4 className="text-[0.8125rem] font-bold">{collapse.verdict}</h4>
+            <p className="text-[0.75rem] leading-relaxed mt-1 opacity-90">{collapse.reason}</p>
+            {/* The earlier failure, in the same box as the conclusion it qualifies.
+                Separating them is how a disclosure stops being read. */}
+            <p className="text-[0.71875rem] leading-relaxed mt-2 pt-2 border-t border-current/10 opacity-80">{collapse.disclosure}</p>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/** WHAT THIS CONTROL HAS BEEN — the live version, then the superseded ones newest
+ *  first. Follows the audit-runs pattern rather than the trail's: a version is a
+ *  state the control was IN, not an event that happened to it, and it carries a
+ *  conclusion of its own that belongs in a column. */
+function VersionHistory({ control }: { control: Control }) {
+  const { eng, openAuditId, role } = useIcfr();
+  const audit = eng.audits.find(a => a.id === openAuditId);
+  const prior = control.priorVersions ?? [];
+  // The owner is not shown the audit's conclusions anywhere else on this page, and a
+  // version table is a table of conclusions.
+  if (!prior.length || role === 'risk-owner') return null;
+  const collapse = versionCollapse(eng, control);
+  return (
+    <div className="mb-5">
+      <div className="flex items-center gap-2 mb-2">
+        <History size={14} className="text-ink-400" />
+        <h3 className="text-[0.71875rem] font-bold uppercase tracking-wider text-ink-500">What this control has been</h3>
+      </div>
+      <div className="rounded-xl border border-canvas-border bg-canvas-elevated divide-y divide-canvas-border overflow-hidden">
+        {/* The live version first — it IS the control, and the rest is history. */}
+        <div className="px-4 py-3 flex items-center gap-3">
+          <span className="shrink-0 font-mono text-[0.71875rem] font-semibold text-brand-700">v{versionNo(control)}</span>
+          <div className="min-w-0 flex-1">
+            <p className="text-[0.78125rem] text-ink-800 truncate">{control.description}</p>
+            <p className="text-[0.6875rem] text-ink-400 mt-0.5">
+              Running since {formatDueDate(audit ? versionWindow(control, audit).from : prior[prior.length - 1].supersededAt)} · this is the control
+            </p>
+          </div>
+          <ConclusionPill c={conclusionOf(eng, control)} />
+        </div>
+        {[...prior].reverse().map(v => (
+          <div key={v.no} className="px-4 py-3 flex items-center gap-3 bg-paper-50/40">
+            <span className="shrink-0 font-mono text-[0.71875rem] font-semibold text-ink-400">v{v.no}</span>
+            <div className="min-w-0 flex-1">
+              <p className="text-[0.78125rem] text-ink-600 truncate">{v.description}</p>
+              <p className="text-[0.6875rem] text-ink-400 mt-0.5">
+                {audit ? `${formatDueDate(versionWindow(control, audit, v.no).from)} – ` : ''}superseded {formatDueDate(v.supersededAt)} · {v.replaced.defId} · {v.replaced.note}
+              </p>
+            </div>
+            <span className="shrink-0 text-[0.6875rem] font-semibold text-ink-500">TOD {v.design.conclusion.toLowerCase()}</span>
+          </div>
+        ))}
+      </div>
+      {collapse && (
+        <p className="text-[0.71875rem] text-ink-500 leading-relaxed mt-2">
+          <b className="font-semibold text-ink-700">{collapse.verdict}.</b> {collapse.reason}
+        </p>
+      )}
+    </div>
+  );
+}
+
 function DesignApprovalBlock({ control }: { control: Control }) {
   const { eng, role, me, openAuditId, approveDesign, returnDesign } = useIcfr();
   const logEvent = useAuditLog();
@@ -5909,6 +6139,9 @@ export default function ControlDossier() {
               {/* The control's own number, plain — it is a reference, not a
                   judgement, so it does not wear a chip like one. */}
               <span className="font-mono text-[0.71875rem] text-ink-400 ml-1">{control.wpRef ?? control.id}</span>
+              {/* Only on a control that has actually been rebuilt — a lone "v1" on
+                  every other control would be noise claiming to be information. */}
+              {hasVersions(control) && <HeadChip>v{versionNo(control)}</HeadChip>}
             </div>
             {/* whose court it is, right-aligned. The W/P stamp that used to sit
                 beside it is gone: a working-paper reference is an audit output,
@@ -6126,6 +6359,8 @@ export default function ControlDossier() {
       {/* Same reasoning, the auditor's own way back in: a reopened control is
           open because somebody said why, and that sentence belongs where the
           work restarts rather than only in the history rail. */}
+      <VersionHistory control={control} />
+
       {control.reopened && !isOwner && !controlLocked && (
         <div className="rounded-xl border border-canvas-border bg-paper-50/60 p-4 mb-4 flex items-start gap-3">
           <RotateCcw size={16} className="text-ink-500 mt-0.5 shrink-0" />
@@ -6189,6 +6424,7 @@ export default function ControlDossier() {
             )}
             <DesignSection control={control} canEdit={canEdit} locked={todApproved} />
             <DesignApprovalBlock control={control} />
+            <RebuildBlock control={control} />
           </VStep>
           {/* An automated control stops here while its ITGCs hold — see
               operatingApplies. The steps are not rendered locked, they are not
@@ -6265,6 +6501,7 @@ export default function ControlDossier() {
                 : controlLocked
                   ? <span className="text-[0.6875rem] font-semibold text-ink-400">Ready to sign</span>
                   : <span className="text-[0.6875rem] font-semibold text-ink-400 inline-flex items-center gap-1"><Lock size={11} /> Unlocks once {opApplies ? 'both tracks conclude' : 'the design concludes'}</span>}>
+            <VersionVerdict control={control} />
             <SignOffSection control={control} />
           </VStep>}
           {/* `id` on the card below so the rail can bring the reader here — the

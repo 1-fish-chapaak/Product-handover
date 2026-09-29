@@ -470,6 +470,57 @@ const PROCESS_ALIAS: Record<string, string> = {
 };
 export const normaliseProcess = (p: string): string => PROCESS_ALIAS[p] ?? p;
 
+/** The nine business processes a SOX RACM is filed under. Every picker offers
+ *  these; `canonicalProcess` is what brings a hand-typed name back to one. */
+export const SOX_PROCESS_NAMES = [
+  'Order to Cash', 'Procure to Pay', 'Record to Report', 'Inventory', 'Fixed Assets',
+  'Payroll (Hire to Retire)', 'Treasury', 'Tax', 'IT General Controls',
+];
+
+/** The names clients actually use for these — in a file name, or typed into
+ *  "＋ Name another process…". */
+export const PROCESS_TYPED_ALIASES: [RegExp, string][] = [
+  [/\bo2c\b|\border to cash\b|\brevenue\b/, 'Order to Cash'],
+  [/\bp2p\b|\bprocure to pay\b|\bpurchase to pay\b/, 'Procure to Pay'],
+  [/\br2r\b|\brecord to report\b|\bfinancial close\b/, 'Record to Report'],
+  [/\bh2r\b|\bhire to retire\b|\bpayroll\b/, 'Payroll (Hire to Retire)'],
+  [/\bitgcs?\b|\bit general control/, 'IT General Controls'],
+  [/\binventor(y|ies)\b/, 'Inventory'],
+  [/\bfixed assets?\b/, 'Fixed Assets'],
+  [/\btreasury\b/, 'Treasury'],
+  [/\btax\b/, 'Tax'],
+];
+
+/** A hand-typed process name, brought back to the spelling the product knows.
+ *
+ *  This is NOT `normaliseProcess` above. That one reconciles two spellings the
+ *  product itself already uses — a TB caption says "Payroll (Hire to Retire)",
+ *  the register says "Payroll" — for the purpose of COMPARING them, and its
+ *  output is never written onto a control. This one canonicalises free human
+ *  input at the moment it is captured, so a name nothing downstream recognises
+ *  never enters the register in the first place.
+ *
+ *  It matters most for ITGCs. `docColumnOf` decides which design documents a
+ *  control has to show by exact equality on 'IT General Controls', so a RACM
+ *  created as "ITGC" would be asked for a process narrative and a flowchart it
+ *  will never have, and never asked for its system configuration or its access
+ *  extract. The three places a process can be typed rather than picked —
+ *  `Racm.tsx`, `CreateRacmFlow.tsx` and `NewControlPanel.tsx` — all come here.
+ *
+ *  A name that matches nothing is returned as typed, only tidied: a client
+ *  genuinely can run a process outside the nine, and inventing a spelling for
+ *  theirs would be worse than keeping it. */
+export function canonicalProcess(typed: string): string {
+  // Non-breaking spaces arrive from pasted spreadsheet cells and would defeat
+  // every comparison below.
+  const clean = typed.replace(/[\s ]+/g, ' ').trim();
+  if (!clean) return clean;
+  const lower = clean.toLowerCase();
+  return SOX_PROCESS_NAMES.find(p => p.toLowerCase() === lower)
+    ?? PROCESS_TYPED_ALIASES.find(([re]) => re.test(lower))?.[1]
+    ?? clean;
+}
+
 /** The reverse trip: a control's process name back to the key the scoping
  *  wizard files its people under. Only the pairs PROCESS_ALIAS doesn't already
  *  cover in the other direction, plus the two the register spells differently

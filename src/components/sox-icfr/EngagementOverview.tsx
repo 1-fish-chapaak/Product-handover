@@ -762,7 +762,7 @@ export default function EngagementOverview() {
               <CalendarClock size={13} /> Period end
             </span>
             <h2 className="font-display text-[1.0625rem] leading-snug text-ink-900">
-              Fixes that cannot be retested before period end
+              Fixes that cannot be tested before period end
             </h2>
           </div>
           <p className="mt-1 text-[0.8125rem] text-ink-600">
@@ -774,6 +774,11 @@ export default function EngagementOverview() {
           <div className="mt-2 -mx-4 px-4 divide-y divide-high-100">
             {atRisk.map(({ d, readiness }) => {
               const c = eng.controls.find(x => x.id === d.controlId);
+              // Say WHICH clock ran out. On a design gap the retest itself is never
+              // late — it needs no occurrence — so the row has to report the
+              // redesigned control's first operating test instead, or it would
+              // print a reassuring sentence under an amber warning.
+              const late = readiness.beyondPeriodEnd ? readiness : readiness.firstOperating!;
               return (
                 <button
                   key={d.id}
@@ -787,9 +792,9 @@ export default function EngagementOverview() {
                       <span className="font-mono text-[0.75rem] text-ink-500">{c?.wpRef ?? d.controlId}</span>
                       <span className="min-w-0 truncate font-medium">{c?.description ?? d.description}</span>
                     </span>
-                    <span className="block text-[0.75rem] text-ink-500 mt-0.5">{readiness.reason}</span>
+                    <span className="block text-[0.75rem] text-ink-500 mt-0.5">{late.reason}</span>
                   </span>
-                  <span className="shrink-0 text-[0.75rem] font-semibold text-high-700 tabular-nums">{readiness.label}</span>
+                  <span className="shrink-0 text-[0.75rem] font-semibold text-high-700 tabular-nums">{late.label}</span>
                   <ArrowRight size={14} className="shrink-0 mt-0.5 text-high-300 group-hover:text-high-700 transition-colors" />
                 </button>
               );

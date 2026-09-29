@@ -240,7 +240,11 @@ export default function Overview() {
         const ineff = myControls.filter(c => conclusionOf(eng, c) === 'Ineffective').length;
         const due = testsDueNow(myControls, eng.audits.find(a => a.id === openAuditId)).length;
         const openDefs = myDefs.filter(d => d.status !== 'Closed');
-        const inRem = openDefs.filter(d => d.status === 'Identified' || d.status === 'Remediation').length;
+        // The owner's two courts are Planning and Remediation — the same pair the
+        // portal filters on. 'Identified' is the AUDIT TEAM's court, so counting it
+        // told the owner to act on findings that were not yet theirs, while
+        // 'Planning' — the plan they genuinely owed — was left out entirely.
+        const inRem = openDefs.filter(d => d.status === 'Planning' || d.status === 'Remediation').length;
         const inRetest = openDefs.filter(d => d.status === 'Retest').length;
         return (
           <div className="grid sm:grid-cols-2 gap-4">

@@ -1,10 +1,11 @@
 import {
-  designApproved, designBlocked, designCompleteness, designFilesOf, designOutstanding, designSuggestion, isControlLocked, isEngagementLocked,
+  designApproved, designBlocked, designCompleteness, designFilesOf, designOutstanding, designOutstandingRequired, designSuggestion, docNotApplicable, isControlLocked, isEngagementLocked,
   exceptionCourtDetail,
   inquiryOnlyAttributes, operatingApplies, operatingProgress, passedWithoutFiles, pendingReviewNoteCount, pointResult,
   populationLocked, populationSources, requiredFilesCount, requiredFilesReady, sampledSources, samePerson, stepResult, toeRoundFailed, trackResult, yearEndPending,
 } from './helpers';
 import { evidenceOwed } from './controlChatEvidence';
+import { DESIGN_DOC_KINDS } from './types';
 import type { AuditRecord, Control, DesignDoc, DesignDocKind, IcfrEngagement, IpeConclusion, Role, TestResult, TrackConclusion } from './types';
 
 /**
@@ -77,6 +78,10 @@ export interface Situation {
   /** The element kinds already on this control, so Ira's Add-element offer is
    *  the page's own menu minus what is there — never a duplicate. */
   elementKinds: DesignDocKind[];
+  /** Kinds this class of control never has, so Ira does not offer to add one.
+   *  Situation is a flat snapshot and carries no Control, so the class question
+   *  has to be answered here where the control is still in hand. */
+  naKinds: DesignDocKind[];
   missing: DesignDoc[];
   checksTotal: number;
   checksUnmarked: number;
@@ -207,7 +212,7 @@ export function situationOf({ eng, control, role, me, audit, files }: ChatCtx): 
   const completeness = designCompleteness(control);
   // designOutstanding ignores `required` on purpose (it feeds the conclude
   // suggestion); Ira talks about obligations, so it is filtered here.
-  const missing = designOutstanding(control).filter(doc => doc.required !== false);
+  const missing = designOutstandingRequired(control);
   const requested = missing.filter(doc => doc.status === 'Requested');
   const elementsOnFile = d.documents.filter(doc => designFilesOf(doc).length > 0).length;
 
@@ -280,6 +285,7 @@ export function situationOf({ eng, control, role, me, audit, files }: ChatCtx): 
     designResult, todApproved,
     elementsTotal: completeness.total, elementsOnFile, missing,
     elementKinds: d.documents.map(doc => doc.kind),
+    naKinds: DESIGN_DOC_KINDS.filter(k => docNotApplicable(control, { kind: k })),
     complete: completeness.total > 0 && completeness.pct === 100,
     ownConclusion: samePerson(preparedBy, me),
     ownPaper: samePerson(control.wpSignoff?.preparer, me),

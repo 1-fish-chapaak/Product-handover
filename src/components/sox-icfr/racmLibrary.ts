@@ -25,6 +25,37 @@ import { applyEditorRows, lockedEditorIds, RACM_LOCKED_KEY, RACM_ROWS_KEY, racmE
 import { seedIcfrEngagement, type SeedMeta } from './mockData';
 import type { Control } from './types';
 
+/**
+ * The ONE flowchart a process has.
+ *
+ * Kept on the RACM rather than on each control (user, 29 Sep: "ek hi chart
+ * process level pe rahe, controls uspe point karein"). A chart per control
+ * would be the same drawing copied N times, and N copies of one picture cannot
+ * be confirmed once — which is the only way a walkthrough of the process can
+ * confirm it.
+ *
+ * It is born `unconfirmed` and stays there. An SOP gives the order of steps,
+ * the roles, the systems and the decision points; it does not give WHERE THE
+ * CONTROL ACTUALLY SITS — before the entry is posted or after it — which is the
+ * single question the design test answers, and a deficiency invisible in an
+ * SOP. Nor does it give the workarounds the process has grown since, nor the
+ * override routes it lists as exceptions and people use routinely. So until an
+ * auditor has walked the process and said this is right, it satisfies no
+ * control's Flowchart element.
+ */
+export interface ProcessFlowchart {
+  /** The SOP it was read from. */
+  source: string;
+  drawnAt: string;
+  status: 'unconfirmed' | 'confirmed';
+  confirmedBy?: string;
+  confirmedAt?: string;
+  /** What the auditor changed when they confirmed it, in their words. The gap
+   *  between the written process and the real one is itself a finding, so it is
+   *  recorded rather than silently absorbed into the drawing. */
+  corrections?: { note: string; by: string; at: string }[];
+}
+
 export interface LibraryRacm {
   id: string;
   /** What the list calls it — "Treasury — Altura Infra Holdings Ltd", or the file's name. */
@@ -38,6 +69,9 @@ export interface LibraryRacm {
   fileName?: string;
   /** The SOP behind an extracted RACM, viewable for the session. */
   sopUrl?: string;
+  /** The process flowchart drawn from that SOP. Only ever set on an extracted
+   *  RACM — there is nothing to draw one from otherwise. */
+  flowchart?: ProcessFlowchart;
   /** The rows, IDs already ENTITY/PROCESS/R001/C001. */
   controls: Control[];
   createdBy: string;

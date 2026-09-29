@@ -30,11 +30,17 @@ function openEditorTab(r: LibraryRacm): void {
   window.open(`${window.location.origin}${window.location.pathname}?${params.toString()}`, '_blank', 'noopener');
 }
 
-/** Where a RACM came from, in a line. */
+/** Where a RACM came from, in a line. An extracted one also carries a flowchart
+ *  drawn off the same SOP, and whether that has been walked is part of where it
+ *  came from — an unconfirmed chart is the SOP's account of the process, not the
+ *  auditor's. */
 function sourceLine(r: LibraryRacm): string {
   if (r.source === 'engagement') return `From ${r.usedBy[0]?.name ?? 'an existing engagement'}`;
   const how = r.source === 'sop' ? 'Extracted from' : 'Imported from';
-  return `${how} ${r.fileName ?? 'a file'} · ${r.createdBy} · ${r.createdAt}`;
+  const chart = r.flowchart
+    ? ` · flowchart ${r.flowchart.status === 'confirmed' ? `confirmed by ${r.flowchart.confirmedBy ?? 'the auditor'}` : 'unconfirmed'}`
+    : '';
+  return `${how} ${r.fileName ?? 'a file'} · ${r.createdBy} · ${r.createdAt}${chart}`;
 }
 
 // Menu rows that can be disabled keep a readable reason line under them, and the

@@ -1,7 +1,7 @@
 import { entityShort } from '../audit/sox-testing/soxTestingData';
 import { normaliseProcess, programmeFor } from './auditScope';
 import { NEW_FLOW_ENGAGEMENT_ID } from './flow';
-import { designCheckQA, racmRowOf, requiredFilesOf, requiredFilesReady, stepResult, titleFromRisk } from './helpers';
+import { applyDocRequirements, designCheckQA, docColumnOf, docRequirement, racmRowOf, requiredFilesOf, requiredFilesReady, requiredKindsFor, stepResult, titleFromRisk } from './helpers';
 import { entityCodeFor, processCodeFor, renameEngagementIds } from './racmIds';
 import { defaultSamplingMethodology, FIVE_W_1H, ipeChecklist, ROUND_TAG, ROUND_WINDOW_LABEL } from './types';
 import type {
@@ -396,7 +396,10 @@ const DETAILED: Control[] = [
       doc('Process narrative', 'P2P vendor-master narrative v3.pdf', 'Received'),
       doc('Flowchart', 'Vendor onboarding flowchart.pdf', 'Received'),
       doc('Walkthrough', 'Walkthrough — 11 Apr (R. Khanna).pdf', 'Received'),
-      doc('Control description', 'SAP config — dual control MM.pdf', 'Received'),
+      doc('Control description', 'Vendor bank-detail control description.pdf', 'Received'),
+      // Filed as a control description until 'System configuration' existed as a
+      // kind of its own. It is IT's specification, not the business's prose.
+      doc('System configuration', 'SAP config — dual control MM.pdf', 'Received'),
     ], [
       point('Second-authoriser role is segregated from the requester in SAP roles.'),
       point('Block cannot be bypassed by the requester (tested in config).'),
@@ -430,6 +433,7 @@ const DETAILED: Control[] = [
       doc('Process narrative', 'Purchasing narrative v2.pdf', 'Received'),
       doc('Flowchart', 'PO approval flowchart.pdf', 'Received'),
       doc('Walkthrough', 'Walkthrough — 10 Apr.pdf', 'Received'),
+      doc('Control description', 'PO release-strategy control description.pdf', 'Received'),
       doc('Policy / SOP', 'Delegation-of-authority matrix FY26.xlsx', 'Received'),
       // The client has no segregation matrix for the release strategy, so there is
       // no file to chase — the audit team derived it on the walkthrough call and
@@ -485,7 +489,9 @@ const DETAILED: Control[] = [
       doc('Process narrative', 'AP three-way match narrative.pdf', 'Received'),
       doc('Flowchart', '3-way match flowchart.pdf', 'Received'),
       doc('Walkthrough', 'Walkthrough — 09 Apr.pdf', 'Received'),
-      doc('Control description', 'Tolerance config — MM.pdf', 'Requested'),
+      doc('Control description', 'Three-way match control description.pdf', 'Received'),
+      // Still outstanding, which is what the row's review remark says.
+      doc('System configuration', 'Tolerance config — MM.pdf', 'Requested'),
     ], [
       point('Tolerances are set centrally and changes are controlled (GITC reliance).'),
       point('Held items cannot be released to pay without buyer clearance.', 'Not tested'),
@@ -518,7 +524,8 @@ const DETAILED: Control[] = [
     wpSignoff: { preparer: { by: 'A. Mehta', at: '16 Apr' } },
     design: designTrack('Effective', [
       doc('Process narrative', 'Duplicate-block narrative.pdf', 'Received'),
-      doc('Control description', 'SAP duplicate-check config.pdf', 'Received'),
+      doc('Control description', 'Duplicate-invoice control description.pdf', 'Received'),
+      doc('System configuration', 'SAP duplicate-check config.pdf', 'Received'),
       doc('Walkthrough', 'Walkthrough — 09 Apr.pdf', 'Received'),
     ], [
       point('Match key includes vendor, reference and amount.'),
@@ -813,10 +820,25 @@ function generate(): Control[] {
       const design: TrackConclusion = pat === 4 || pat === 5 ? 'Not tested' : 'Effective';
       const operating: TrackConclusion = pat <= 1 || pat === 6 ? 'Effective' : 'Not tested';
       const designConcluded = design === 'Effective';
+      const clazz = classOf(sp.process, `${title} ${desc}`);
+      // The elements this class of control actually has, off DOC_REQUIREMENTS —
+      // an ITGC gets its configuration and access extract, not a narrative and a
+      // flowchart. Seeding the old flat three left every ITGC short of the
+      // requirements it was then measured against.
+      const fileFor: Record<string, string> = {
+        'Process narrative': `${sp.prefix} narrative.pdf`,
+        'Control description': `${sp.prefix} control description.pdf`,
+        'Walkthrough': `Walkthrough — ${sp.process}.pdf`,
+        'System configuration': `${sp.prefix} configuration export.pdf`,
+        'Segregation of duties': `${sp.prefix} role assignments.xlsx`,
+      };
       const docs: DesignDoc[] = [
-        doc('Process narrative', `${sp.prefix} narrative.pdf`, designConcluded ? 'Received' : pat === 5 ? 'Received' : 'Requested'),
-        doc('Flowchart', `${sp.prefix} flowchart.pdf`, designConcluded ? 'Received' : 'Requested'),
-        doc('Walkthrough', `Walkthrough — ${sp.process}.pdf`, designConcluded ? 'Received' : pat === 5 ? 'Requested' : 'Missing'),
+        ...requiredKindsFor(docColumnOf({ process: sp.process, nature })).map(kind =>
+          doc(kind, fileFor[kind] ?? `${sp.prefix} ${kind.toLowerCase()}.pdf`,
+            designConcluded ? 'Received' : kind === 'Walkthrough' ? (pat === 5 ? 'Requested' : 'Missing') : pat === 5 ? 'Received' : 'Requested')),
+        // Optional, and only where it is a thing this class has at all — it
+        // strengthens the file without gating the conclusion.
+        ...(docColumnOf({ process: sp.process, nature }) === 'ITGC' ? [] : [doc('Flowchart', `${sp.prefix} flowchart.pdf`, designConcluded ? 'Received' : 'Requested')]),
       ];
       const points: DesignPoint[] = [point('Control addresses the stated risk and assertion.', designConcluded ? 'Pass' : 'Not tested'), point('Control operates at sufficient precision.', designConcluded ? 'Pass' : 'Not tested')];
       const evidenced = operating === 'Effective';
@@ -835,7 +857,7 @@ function generate(): Control[] {
         id: `${sp.prefix}-C-${String(idx + 1).padStart(2, '0')}`, wpRef: `${sp.wp}-${String(idx + 1).padStart(2, '0')}`,
         description: desc + '.', process: sp.process, subProcess: sp.subs[i % sp.subs.length],
         nature, type: i % 3 === 0 ? 'Detective' : 'Preventive', frequency: nature === 'Automated' ? 'Recurring' : (['Daily', 'Monthly', 'Quarterly'] as const)[i % 3],
-        isKey: i % 4 !== 0, clazz: classOf(sp.process, `${title} ${desc}`), precision: `${title} — operates to prevent or detect the risk at transaction level.`,
+        isKey: i % 4 !== 0, clazz, precision: `${title} — operates to prevent or detect the risk at transaction level.`,
         // The rating tracks the key judgement: the row that isn't key is the one
         // whose failure the group can absorb, so it sizes at the bottom of the band.
         riskRating: (i % 4 === 0 ? 'Low' : i % 3 === 0 ? 'Medium' : 'High') as RiskRating,
@@ -1598,6 +1620,61 @@ function alturaDeficiencies(controls: Control[]): Deficiency[] {
     const cnFailedChecks = creditNotes.design.points
       .filter(p => p.result === 'Fail')
       .map(p => ({ pointId: p.id, text: p.text }));
+
+    // ── The one control in the seed that has been REBUILT ────────────────────
+    // Everything above is v1: credit notes approved per note, which is the design
+    // DEF-A-04 says can never work. The owner's accepted plan moved the threshold
+    // to a rolling monthly total, so on 30 Jun the control itself changed — and a
+    // changed control is a new version, not an edited row (see `ControlVersion`).
+    //
+    // The rebuild then MISSED. Retest round 1 below reads: the rule groups on the
+    // customer CODE, so one customer under two codes is measured twice and still
+    // clears the threshold. So v2 is what is running now, it is what failed its
+    // own design test, and the exception is back with the auditor waiting for a
+    // third wording. That is the whole loop this seed exists to show, and the
+    // dates line up with round 1's own window (30 Jun → 05 Aug).
+    creditNotes.priorVersions = [{
+      no: 1,
+      description: creditNotes.description,
+      controlActivity: creditNotes.controlActivity,
+      objective: creditNotes.objective,
+      precision: creditNotes.precision,
+      nature: creditNotes.nature,
+      type: creditNotes.type,
+      frequency: creditNotes.frequency,
+      supersededAt: '2026-06-30',
+      // The failed design track, kept whole — this is the finding, and the live
+      // control's own track no longer holds it.
+      design: creditNotes.design,
+      operating: creditNotes.operating,
+      replaced: {
+        defId: 'DEF-A-04', fix: 'redesign',
+        note: 'The approval threshold moved from each note on its own to a rolling monthly total, so a series of small notes to one customer can no longer pass unapproved.',
+        by: 'A. Mehta',
+      },
+    }];
+    // v2 — the control as it now reads, and as it was tested in round 1.
+    creditNotes.description = 'Credit notes are held for approval once a customer\u2019s rolling monthly total passes \u20B92 L.';
+    creditNotes.design = {
+      ...creditNotes.design,
+      // Its OWN elements, not v1's. Two things turn on this. The narrative and the
+      // matrix describing a per-note threshold describe a control that no longer
+      // runs, so the owner resent them with the change ticket — which is what the
+      // fix evidence on the exception is. And the ids have to differ: sharing one
+      // array between the version and the live track would mean the door adding an
+      // element to v2 silently editing v1's concluded paper.
+      documents: creditNotes.design.documents.map(d => ({ ...d, id: `${d.id}-v2`, files: d.files?.map(f => ({ ...f, id: `${f.id}-v2` })) })),
+      // Its own checks, against its own wording — re-suggested rather than carried,
+      // and the first of them is what round 1 found wanting.
+      points: creditNotes.design.points.map((p, i) => (i === 0
+        ? { ...p, text: 'The rolling total is measured against the customer, not against a customer code, so one customer cannot be counted twice.', result: 'Fail' as TestResult }
+        : { ...p, result: 'Pass' as TestResult })),
+      conclusion: 'Ineffective',
+      rationale: 'The rolling monthly total works. The key it groups on does not: a customer set up under a second code is measured twice and clears the threshold with nobody approving it.',
+      testedBy: 'A. Mehta', testedAt: '05 Aug 2026',
+      // A carry is a statement about a control that did not change. This one did.
+      carriedFrom: undefined,
+    };
     // PARKED (C11) — the credit-note sample the round used to carry. A TOD
     // exception has no sample to redraw; kept so the old seed restores whole:
     //   const cnAttrs = creditNotes.operating.steps.map(s => ({ code: s.code, description: s.description }));
@@ -1622,7 +1699,10 @@ function alturaDeficiencies(controls: Control[]): Deficiency[] {
       // The auditor's whole say in the fix: does it address the mechanism? A
       // rolling total measured per customer sees the thing the old threshold
       // could not, so it was accepted and the owner went and built it.
-      planReview: { decision: 'Accepted', reason: 'The rolling monthly total is measured per customer, which is exactly what the per-note threshold could not see. Accepted.', by: 'A. Mehta', at: '20 Jun 2026' },
+      // A REDESIGN, not a workaround: the threshold itself moves, so the control
+      // that comes back is a different control and has to be tested as one. This is
+      // what makes the rebuild below a version rather than an edit.
+      planReview: { decision: 'Accepted', fix: 'redesign', reason: 'The rolling monthly total is measured per customer, which is exactly what the per-note threshold could not see. Accepted.', by: 'A. Mehta', at: '20 Jun 2026' },
       remediation: {
         action: 'Move the approval threshold to a rolling monthly total per customer and hold issue until it is approved.',
         date: '30 Jun', owner: 'P. Sharma', status: 'Done',
@@ -2145,7 +2225,18 @@ const PROC_LABEL: Record<string, string> = { P2P: 'Procure to Pay', O2C: 'Order 
  * engagement's own.
  */
 export function seedIcfrEngagement(meta?: SeedMeta): IcfrEngagement {
-  const eng = withConcludedEvidence(withRacmFields(seedEngagementBody(meta)));
+  // applyDocRequirements runs BEFORE withConcludedEvidence, not after.
+  //
+  // Several seeds override a control's nature after its documents were derived —
+  // the Fixed Assets capitalisation control is flipped Automated → Manual further
+  // up so it can carry a population — which leaves the document list describing
+  // the class the control used to be. Reconciling here, ahead of the evidence
+  // back-fill, means the kinds that get added are then evidenced like any other,
+  // so a seed that says "design Effective, signed" is actually complete.
+  //
+  // The store re-runs this same pass on every write. This call is not that: it is
+  // so the SEED is honest before anything reads it.
+  const eng = withConcludedEvidence(applyDocRequirements(withRacmFields(seedEngagementBody(meta))).eng);
   return renameEngagementIds(eng, processCodeFor, e => entityCodeFor(e || eng.entity));
 }
 
@@ -2190,7 +2281,10 @@ function withConcludedEvidence(eng: IcfrEngagement): IcfrEngagement {
       // evidenced nor waived, so an effective design cannot have one open.
       if (c.design.conclusion === 'Effective') {
         next = { ...next, design: { ...next.design, documents: next.design.documents.map(d => (
-          d.required === false || d.status === 'Received' || d.waiver ? d : {
+          // Only a REQUIRED element is force-evidenced. This read `d.required === false`,
+          // the legacy per-element flag, which is undefined on anything the class table
+          // added — so an element the control does not even have was handed a file.
+          docRequirement(next, d) !== 'Required' || d.status === 'Received' || d.waiver ? d : {
             ...d, status: 'Received' as DocStatus, uploadedBy: 'Risk Owner', at: '12 Apr',
             files: [{ id: `ddf-${d.id}`, name: d.name, kind: (d.name.toLowerCase().endsWith('.xlsx') ? 'XLSX' : 'PDF') as EvidenceFile['kind'], uploadedBy: 'Risk Owner', uploadedAt: '12 Apr' }],
           }
@@ -2626,10 +2720,25 @@ export function racmTemplateForProcesses(names: string[], mode: 'fresh' | 'live'
       // no Population step, no IPE test and no Sample. The fresh one is Manual.
       const nature: Nature = i % 3 === 1 && !last ? 'Automated' : 'Manual';
       const title = c.description.replace(/\.$/, '');
+      // The elements this class of control actually has, off DOC_REQUIREMENTS —
+      // the same shape `generate()` uses. It was a hardcoded three (narrative,
+      // flowchart, walkthrough) for every nature and every process, which is why
+      // 40 live-mode controls concluded design Effective and then read 33–67%
+      // complete the moment applyDocRequirements added the kinds they were short
+      // of. `carried` mode concludes off the same array and had the same defect.
+      const col = docColumnOf({ process: name, nature });
+      const fileFor: Partial<Record<DesignDoc['kind'], string>> = {
+        'Process narrative': `${name} narrative.pdf`,
+        'Control description': `${name} control description.pdf`,
+        'Walkthrough': `Walkthrough — ${name}.pdf`,
+        'System configuration': `${name} configuration export.pdf`,
+        'Segregation of duties': `${name} role assignments.xlsx`,
+      };
       const docs: DesignDoc[] = [
-        doc('Process narrative', `${name} narrative.pdf`, 'Received'),
-        doc('Flowchart', `${name} flowchart.pdf`, 'Received'),
-        doc('Walkthrough', `Walkthrough — ${name}.pdf`, designDone ? 'Received' : 'Requested'),
+        ...requiredKindsFor(col).map(kind => doc(kind, fileFor[kind] ?? `${name} ${kind.toLowerCase()}.pdf`,
+          kind === 'Walkthrough' ? (designDone ? 'Received' : 'Requested') : 'Received')),
+        // Optional, and only where the class has one at all.
+        ...(col === 'ITGC' ? [] : [doc('Flowchart', `${name} flowchart.pdf`, 'Received')]),
       ];
       // How many attributes this control carries, and how many of them a
       // workflow evidences. An automated control is fully instrumented; a manual

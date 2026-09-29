@@ -29,13 +29,9 @@ import { FormSelect, type SelectOption } from '../shared/FilterSelect';
 import RacmImportReview, { type RacmImportMeta } from './RacmImportReview';
 import { guessHeaderRow, matchColumns, readRacmWorkbook } from './racmImport';
 import { addLibraryRacm, knownCompanies, racmLibrary, type LibraryRacm } from './racmLibrary';
+import { canonicalProcess, PROCESS_TYPED_ALIASES, SOX_PROCESS_NAMES } from './auditScope';
 import type { Control } from './types';
 
-/** The processes a SOX RACM is usually written for; anything else is named by hand. */
-export const SOX_RACM_PROCESSES = [
-  'Order to Cash', 'Procure to Pay', 'Record to Report', 'Inventory', 'Fixed Assets',
-  'Payroll (Hire to Retire)', 'Treasury', 'Tax', 'IT General Controls',
-];
 
 const NEW_OPTION = '__new__';
 const labelCls = 'text-[11px] font-semibold uppercase tracking-wide text-ink-400 mb-1.5 block';
@@ -54,18 +50,6 @@ function uniqueRacmName(base: string): string {
 
 // ── What Ira can tell from the file itself ──────────────────────────────────
 
-/** The names clients actually give these processes in a file name. */
-const PROCESS_ALIASES: [RegExp, string][] = [
-  [/\bo2c\b|\border to cash\b|\brevenue\b/, 'Order to Cash'],
-  [/\bp2p\b|\bprocure to pay\b|\bpurchase to pay\b/, 'Procure to Pay'],
-  [/\br2r\b|\brecord to report\b|\bfinancial close\b/, 'Record to Report'],
-  [/\bh2r\b|\bhire to retire\b|\bpayroll\b/, 'Payroll (Hire to Retire)'],
-  [/\bitgc\b|\bit general control/, 'IT General Controls'],
-  [/\binventor(y|ies)\b/, 'Inventory'],
-  [/\bfixed assets?\b/, 'Fixed Assets'],
-  [/\btreasury\b/, 'Treasury'],
-  [/\btax\b/, 'Tax'],
-];
 
 /** Punctuation, case and separators thrown away — "Altura-O2C_v3" reads the
  *  same as "altura o2c v3", which is what matching a file name needs. */
@@ -97,7 +81,7 @@ export async function detectPlacement(mode: 'racm' | 'sop', file: File, companie
   const out: Placement = {};
 
   const name = squash(file.name);
-  const alias = PROCESS_ALIASES.find(([re]) => re.test(name));
+  const alias = PROCESS_TYPED_ALIASES.find(([re]) => re.test(name));
   if (alias) { out.process = alias[1]; out.processFrom = 'name'; }
 
   // An SOP is a procedure document — there is no entity column to read, so the
@@ -202,10 +186,13 @@ export default function CreateRacmFlow({ fixedProcess, defaultEntity, publishOnC
     return list;
   }, [groups, allCompanies, defaultEntity]);
 
-  const processOptions = useMemo(() => SOX_RACM_PROCESSES.map(p => ({ value: p, label: p })), []);
+  // Read inside the memo, never as a module-level const. `auditScope` sits in an
+  // import cycle with this file, so a top-level `= SOX_PROCESS_NAMES` evaluates
+  // before auditScope has initialised and throws at load — it did, once.
+  const processOptions = useMemo(() => SOX_PROCESS_NAMES.map(p => ({ value: p, label: p })), []);
 
   const entity = entityChoice === NEW_OPTION ? typedEntity.trim() : entityChoice;
-  const process = fixedProcess ?? (processChoice === NEW_OPTION ? typedProcess.trim() : processChoice);
+  const process = fixedProcess ?? (processChoice === NEW_OPTION ? canonicalProcess(typedProcess) : processChoice);
   const ready = !!entity && !!process;
   const sameProcess = useMemo(
     () => (process ? racmLibrary().filter(r => r.process.toLowerCase() === process.toLowerCase()).length : 0),
@@ -252,6 +239,10 @@ export default function CreateRacmFlow({ fixedProcess, defaultEntity, publishOnC
       source: meta.source,
       fileName: meta.fileName,
       ...(meta.url ? { sopUrl: meta.url } : {}),
+      // Drawn from the SOP, so it arrives unconfirmed — see `ProcessFlowchart`.
+      ...(meta.source === 'sop'
+        ? { flowchart: { source: meta.fileName, drawnAt: 'just now', status: 'unconfirmed' as const } }
+        : {}),
       controls,
       createdBy: currentUser?.name ?? 'You',
       ...(publishOnCreate

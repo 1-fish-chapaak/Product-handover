@@ -11,6 +11,7 @@ import { defWord } from './flow';
 import {
   conclusionOf, controlCode, courtFor, operatingApplies, designProgress, designStarted, failedItgcs, isAwaitingReview, isControlFinal, isEngagementLocked, isItgcDependent, openDiscussionCount,
   operatingProgress, operatingStarted, isTestDueNow, pendingReviewNoteCount, testDueDisplay, testsDueNow, trackResult, entityCell,
+  hasVersions, versionNo,
 } from './helpers';
 import { ConclusionPill, ItgcCascadeBanner, NatureChip, Th, Tickmark } from './parts';
 import NewControlPanel from './NewControlPanel';
@@ -497,6 +498,10 @@ export default function ControlRegister() {
                             them twice on the same row is noise. */}
                         <div className="text-[11px] text-ink-400 mt-0.5">
                           {controlCode(c)}{c.subProcess ? ` · ${c.subProcess}` : ''} ·{' '}
+                          {/* A rebuilt control's row reads as an ordinary one otherwise,
+                              and its conclusion is about a different control from the one
+                              the reader last looked at. Only where there IS a rebuild. */}
+                          {hasVersions(c) && <><span className="font-semibold text-brand-700">v{versionNo(c)}</span> ·{' '}</>}
                           {(() => { const dd = testDueDisplay(c, true, openAudit); return <span className={dd.cls}>{dd.label}</span>; })()}
                         </div>
                       </td>
