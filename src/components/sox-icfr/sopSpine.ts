@@ -1,38 +1,41 @@
 /**
- * The SOP, told back as a process narrative.
+ * THE PROCESS SPINE READ OUT OF AN SOP — sub-processes, their order, the risks
+ * in each and the controls against them.
  *
- * An SOP upload produces THREE things, not one (25 Sep): a narrative, a
- * flowchart, and the matrix. All three are read off the same draft rows, so
- * they can never disagree — edit the prompt, and all three change together.
+ * WHAT THIS FILE MUST NEVER DO IS WRITE A PROCESS NARRATIVE (29 Sep). It used
+ * to. The rule that stopped it is worth keeping in front of whoever reads this
+ * next:
  *
- * This file holds the spine they share:
+ *   A difference between the SOP and the actual process is itself a finding.
+ *   Either the process changed and the SOP was never updated, or people are not
+ *   following the SOP. Both are reportable.
  *
- *   `groupRows`      stage → risk → controls, in the order the draft read them.
- *                    The narrative prints it as prose; the flowchart draws it.
- *                    The aim the user stated for the flowchart — "map out the
- *                    risks, and then your corresponding controls" — is this
- *                    grouping, so both views are the same shape in the end.
+ * A narrative generated from the SOP can never differ from it, so that finding
+ * can never surface, and the walkthrough stops proving anything — it would be
+ * checking a document against the source it was copied from. The narrative's
+ * source is the interview and the walkthrough, with the SOP only a reference
+ * during that conversation. There is no such input here, so there is no
+ * narrative here.
  *
- *   `buildNarrative` puts sentences on that spine. Every sentence is built from
- *                    a field on the row: nothing is invented, and a row with a
- *                    field missing simply says less rather than guessing. That
- *                    is the whole rule this file follows — if the draft does
- *                    not say it, the narrative does not either.
+ * What an SOP CAN be read for, and what this file returns:
  *
- * `narrativeText` renders the same structure as plain text, so what a reviewer
- * copies out is what they were reading.
+ *   the spine       the sub-process list, in order. Structural, stated by the
+ *                   document, stable year to year — generated outright.
+ *   the flowchart   a DRAFT only. An SOP gives the order of steps, the roles,
+ *                   the systems and the decision points; it does not give where
+ *                   the control actually sits, the workarounds the process has
+ *                   grown, or the override routes used routinely. So what is
+ *                   drawn off this spine is marked SOP-derived and unconfirmed,
+ *                   and the auditor confirms or corrects it after the
+ *                   walkthrough.
+ *
+ * Nothing below invents prose. Every field comes off a draft row, and a row
+ * missing a field yields less rather than a guess.
  */
 import type { ImportRow, RacmFieldKey } from './racmImport';
-import type { Frequency } from './types';
 
 const cell = (row: ImportRow, key: RacmFieldKey) => String(row.values[key] ?? '').trim();
 
-/** Ends a fragment as a sentence without doubling punctuation the field already has. */
-function sentence(text: string): string {
-  const t = text.trim();
-  if (!t) return '';
-  return /[.!?]$/.test(t) ? t : `${t}.`;
-}
 
 /** The first sentence of a longer statement — a heading for a risk whose only
  *  text is its description. */
@@ -44,17 +47,6 @@ function firstSentence(text: string): string {
   return head.length > 90 ? `${head.slice(0, 89).trimEnd()}…` : head;
 }
 
-/** How often, said the way a narrative says it rather than the way a matrix
- *  column does. */
-const FREQUENCY_PHRASE: Record<Frequency, string> = {
-  Annual: 'once a year',
-  Quarterly: 'each quarter',
-  Monthly: 'every month',
-  Weekly: 'every week',
-  Daily: 'every day',
-  Recurring: 'every time the transaction arises',
-  'Ad-hoc': 'as occasions arise',
-};
 
 // ─── The shared spine ────────────────────────────────────────────────────────
 
@@ -83,8 +75,6 @@ export interface StageGroup {
   inferred: boolean;
   /** SOP sections the rows in this stage were read from, in order. */
   sections: string[];
-  /** Process owners named on this stage's rows. */
-  runBy: string[];
   risks: RiskGroup[];
 }
 
@@ -113,13 +103,11 @@ export function groupRows(rows: ImportRow[], stageOf?: (row: ImportRow) => strin
     const stageName = stageOf ? stageOf(row) : cell(row, 'subProcess') || 'The process';
     let stage = stages.get(stageName);
     if (!stage) {
-      stage = { name: stageName, inferred: !!stageOf, sections: [], runBy: [], risks: [] };
+      stage = { name: stageName, inferred: !!stageOf, sections: [], risks: [] };
       stages.set(stageName, stage);
     }
     const section = row.sectionRef ?? cell(row, 'sopSectionRef');
     if (section && !stage.sections.includes(section)) stage.sections.push(section);
-    const po = cell(row, 'processOwner');
-    if (po && !stage.runBy.includes(po)) stage.runBy.push(po);
 
     const key = `${stageName}|${riskKeyOf(row)}`;
     let risk = risks.get(key);
@@ -150,8 +138,8 @@ export function groupRows(rows: ImportRow[], stageOf?: (row: ImportRow) => strin
  * exactly one sub-process called "General"; this is what stops it becoming a
  * stage of its own.
  *
- * Both readings ask this before drawing: the narrative skips its headings, and
- * the flowchart skips its lane.
+ * The flowchart asks this before drawing, and skips its lane when the answer
+ * is no.
  */
 export const isStaged = (stages: StageGroup[]): boolean => stages.length > 1;
 
@@ -226,9 +214,8 @@ export function inferStages(rows: ImportRow[], titleOf?: (row: ImportRow) => str
 
 /**
  * The stages to show for a draft: the SOP's own where it has them, else Ira's
- * reading of the controls, else none. The narrative prints these and the
- * flowchart will draw them, so both tell the same story about where each
- * heading came from.
+ * reading of the controls, else none. Whatever draws them has to say which
+ * of the two it is looking at.
  */
 export function stagesFor(rows: ImportRow[], titleOf?: (row: ImportRow) => string): StageGroup[] {
   const own = groupRows(rows);
@@ -236,9 +223,9 @@ export function stagesFor(rows: ImportRow[], titleOf?: (row: ImportRow) => strin
   return inferStages(rows, titleOf) ?? own;
 }
 
-// ─── The narrative ───────────────────────────────────────────────────────────
+// ─── What gets drawn ─────────────────────────────────────────────────────────
 
-export interface NarrativeControl {
+export interface SpineControl {
   /** The ID this control will import under. */
   id: string;
   /** What a rename is stored against — see `RiskGroup.key`. Not the same as
@@ -251,27 +238,20 @@ export interface NarrativeControl {
   section: string;
   /** True when Ira proposed the control and the SOP never described it. */
   suggested: boolean;
-  /** Complete sentences, in reading order. Never empty. */
-  sentences: string[];
-  /** What the control leaves behind, as the draft lists it. '' when it lists none. */
-  evidence: string;
 }
 
-export interface NarrativeRisk extends Omit<RiskGroup, 'rows'> {
-  controls: NarrativeControl[];
+export interface SpineRisk extends Omit<RiskGroup, 'rows'> {
+  controls: SpineControl[];
 }
 
-export interface NarrativeStage extends Omit<StageGroup, 'risks'> {
+export interface SpineStage extends Omit<StageGroup, 'risks'> {
   /** What to print. Differs from `name` once the reviewer has renamed it —
    *  `name` stays the key a rename is stored against. */
   label: string;
-  /** One sentence introducing the stage, or '' when the draft says nothing to
-   *  introduce it with. */
-  opening: string;
-  risks: NarrativeRisk[];
+  risks: SpineRisk[];
 }
 
-export interface Narrative {
+export interface Spine {
   process: string;
   entity: string;
   /** The SOP this was read from. */
@@ -279,98 +259,29 @@ export interface Narrative {
   /** False when the draft names no stages — then `stages` holds exactly one
    *  entry whose name means nothing and must not be printed. See `isStaged`. */
   staged: boolean;
-  /** The SOP names no stages but the controls can be grouped into some. Stays
-   *  true after the reviewer ungroups, which is what gives them the way back. */
-  groupable: boolean;
-  stages: NarrativeStage[];
+  stages: SpineStage[];
   controlCount: number;
   riskCount: number;
   /** Draft rows the reviewer is leaving out. Stated rather than hidden — a
-   *  narrative silently shorter than the draft would be the worst of both. */
+   *  chart silently shorter than the draft would be the worst of both. */
   omitted: number;
 }
 
-/** How a control activity spells a frequency when it mentions one at all. Used
- *  to keep the narrative from saying "every month" about a sentence that has
- *  just said "each month" — the qualifier states what the prose LEFT OUT. */
-const FREQUENCY_SAID: Record<Frequency, RegExp> = {
-  Annual: /\bannual|\byearly\b|\b(?:each|every|once a|per) year\b/i,
-  Quarterly: /\bquarter/i,
-  Monthly: /\bmonthly\b|\b(?:each|every|per|a) month\b/i,
-  Weekly: /\bweekly\b|\b(?:each|every|per|a) week\b/i,
-  Daily: /\bdaily\b|\b(?:each|every|per|a) day\b/i,
-  Recurring: /\b(?:each|every) (?:time|transaction|occurrence|item)\b|\bper transaction\b|\bas (?:it is|they are) raised\b/i,
-  'Ad-hoc': /\bad[-\s]?hoc\b|\bas (?:and when|required|needed)\b|\boccasions? aris/i,
-};
 
-/** Names are compared loosely enough that "S. Iyer" in the activity counts as
- *  the owner being named, and strictly enough that it has to be that name. */
-const namesOwner = (activity: string, owner: string) =>
-  !!owner && activity.toLowerCase().includes(owner.toLowerCase());
-
-const CLASS_WORD: Record<string, string> = { Manual: 'manual', Automated: 'automated', 'IT-dependent': 'IT-dependent' };
-
-/**
- * The one sentence a narrative adds to a control activity: what the activity
- * did NOT already say.
- *
- * The first draft of this said "S. Iyer performs it every month" under an
- * activity that opened "S. Iyer performs this control … each month", and
- * followed it with "It is designed to catch the error after it has happened" —
- * a claim invented to dress up a field. Both are gone. What is left states the
- * classification, which the prose almost never carries, and names the owner and
- * the frequency only when the prose is silent about them.
- */
-function qualifier(row: ImportRow): string {
-  const activity = cell(row, 'controlActivity');
-  const owner = cell(row, 'owner');
-  const showOwner = !!owner && !namesOwner(activity, owner);
-  const showFreq = !!row.frequency && !FREQUENCY_SAID[row.frequency].test(activity);
-  const freq = row.frequency ? FREQUENCY_PHRASE[row.frequency] : '';
-
-  const words = [row.nature ? CLASS_WORD[row.nature] : '', row.type ? row.type.toLowerCase() : ''].filter(Boolean);
-  const lead = words.length ? `${/^[aeiou]/i.test(words[0]!) ? 'An' : 'A'} ${words.join(' ')} control` : '';
-
-  const bits: string[] = [];
-  if (row.nature === 'Automated') {
-    if (showFreq) bits.push(`applied by the system ${freq}`);
-    if (showOwner) bits.push(`answered for by ${owner}`);
-  } else if (showOwner && showFreq) bits.push(`performed by ${owner} ${freq}`);
-  else if (showOwner) bits.push(`performed by ${owner}`);
-  else if (showFreq) bits.push(`performed ${freq}`);
-
-  if (!lead) return bits.length ? sentence(bits.join(', ').replace(/^./, c => c.toUpperCase())) : '';
-  return sentence(bits.length ? `${lead}, ${bits.join(', ')}` : lead);
-}
-
-function narrativeControl(row: ImportRow, id: string): NarrativeControl {
+function spineControl(row: ImportRow, id: string): SpineControl {
   const title = cell(row, 'controlTitle');
-  const activity = cell(row, 'controlActivity');
-  // The activity IS the narrative of the control. Where the draft has none, the
-  // title is all there is to say, and saying it once beats padding it out.
-  const sentences = [sentence(activity) || sentence(title), qualifier(row)].filter(Boolean);
   return {
     id,
     sourceId: cell(row, 'controlId') || row.key,
-    title: title || firstSentence(activity) || 'Untitled control',
+    title: title || firstSentence(cell(row, 'controlActivity')) || 'Untitled control',
     isKey: row.isKey,
     section: row.sectionRef ?? cell(row, 'sopSectionRef'),
     suggested: row.origin === 'suggested',
-    sentences: sentences.length ? sentences : ['The draft carries no description for this control.'],
-    evidence: cell(row, 'controlEvidence'),
   };
 }
 
-/** "Run by Priya Nair." — the only thing true of a stage as a whole. */
-function stageOpening(stage: StageGroup): string {
-  if (!stage.runBy.length) return '';
-  const names = stage.runBy.length === 1
-    ? stage.runBy[0]!
-    : `${stage.runBy.slice(0, -1).join(', ')} and ${stage.runBy[stage.runBy.length - 1]}`;
-  return `Run by ${names}.`;
-}
 
-export interface NarrativeOptions {
+export interface SpineOptions {
   process: string;
   entity: string;
   source: string;
@@ -378,36 +289,24 @@ export interface NarrativeOptions {
   idFor: (row: ImportRow) => string;
   /** Rows the reviewer has left out of the import. */
   omitted: number;
-  /** The reviewer has turned Ira's grouping down. Only ever set when the stages
-   *  were inferred — the SOP's own stages are not ours to switch off. */
-  ungrouped?: boolean;
-  /** What the reviewer renamed a stage to, given the name it was grouped under. */
-  nameFor?: (name: string) => string;
   /** A control's title before any rename, used only to work out which stage it
    *  belongs to. See `inferStages`. */
   classifyBy?: (row: ImportRow) => string;
 }
 
-export function buildNarrative(rows: ImportRow[], opts: NarrativeOptions): Narrative {
-  // Spelled out rather than calling `stagesFor`, because the narrative needs to
-  // know that a grouping WAS available even when the reviewer turned it down —
-  // that is the difference between an Ungroup button and a dead end.
-  const own = groupRows(rows);
-  const inferred = isStaged(own) ? null : inferStages(rows, opts.classifyBy);
-  const groups = inferred && !opts.ungrouped ? inferred : own;
-  const stages = groups.map<NarrativeStage>(stage => ({
+export function buildSpine(rows: ImportRow[], opts: SpineOptions): Spine {
+  const groups = stagesFor(rows, opts.classifyBy);
+  const stages = groups.map<SpineStage>(stage => ({
     name: stage.name,
-    label: opts.nameFor?.(stage.name) || stage.name,
+    label: stage.name,
     inferred: stage.inferred,
     sections: stage.sections,
-    runBy: stage.runBy,
-    opening: stageOpening(stage),
     risks: stage.risks.map(risk => ({
       key: risk.key,
       riskId: risk.riskId,
       title: risk.title,
       statement: risk.statement,
-      controls: risk.rows.map(row => narrativeControl(row, opts.idFor(row))),
+      controls: risk.rows.map(row => spineControl(row, opts.idFor(row))),
     })),
   }));
   return {
@@ -415,41 +314,42 @@ export function buildNarrative(rows: ImportRow[], opts: NarrativeOptions): Narra
     entity: opts.entity,
     source: opts.source,
     staged: isStaged(groups),
-    groupable: !!inferred,
     stages,
     controlCount: rows.length,
-    riskCount: stages.reduce((n, s) => n + s.risks.length, 0),
+    // DISTINCT risks, not risks per stage (29 Sep). One risk whose controls
+    // fall across four sub-processes used to be counted four times, which was
+    // right while the chart drew a risk box inside every stage — and became a
+    // lie the moment it started drawing each risk once (`risksAcrossStages`).
+    // A header saying "4 risks" over a drawing of one is worse than no header.
+    riskCount: new Set(stages.flatMap(s => s.risks.map(r => r.key))).size,
     omitted: opts.omitted,
   };
 }
 
-/** The same narrative as plain text, for copying into a working paper. */
-export function narrativeText(n: Narrative): string {
-  const out: string[] = [];
-  out.push(`${n.process} — process narrative`);
-  if (n.entity) out.push(n.entity);
-  out.push(`Read from ${n.source}`);
-  out.push('');
-  n.stages.forEach((stage, i) => {
-    // No stage heading where the SOP named no stages — see `isStaged`.
-    if (n.staged) {
-      const where = stage.inferred ? '  [grouped by Ira]' : stage.sections.length ? `  (${stage.sections.join(', ')})` : '';
-      out.push(`${i + 1}. ${stage.label}${where}`);
+
+/**
+ * Every risk in the draft, once, with all of its controls.
+ *
+ * The flowchart draws a tree from the SOP outwards (user, 29 Sep: "ek box jo
+ * initiation point hoga with sop name written. That will have multiple risks
+ * branching out and each risk will have its subsequent controls branching
+ * out"), and a tree has one node per thing. A risk whose controls fall in two
+ * stages is still ONE risk: drawing it twice, once per stage, would say the
+ * process carries two of them.
+ *
+ * Stages are what decides the order and nothing else — the risks come out in
+ * the order the work happens, which is the only thing the flowchart still
+ * needs them for. They keep their boxes on the Spine.
+ */
+export function risksAcrossStages(n: Spine): SpineRisk[] {
+  const byKey = new Map<string, SpineRisk>();
+  for (const stage of n.stages) {
+    for (const risk of stage.risks) {
+      const seen = byKey.get(risk.key);
+      if (!seen) { byKey.set(risk.key, { ...risk, controls: [...risk.controls] }); continue; }
+      // Same control reached through two stages is still one control.
+      for (const c of risk.controls) if (!seen.controls.some(x => x.sourceId === c.sourceId)) seen.controls.push(c);
     }
-    if (stage.opening) out.push(`   ${stage.opening}`);
-    stage.risks.forEach(risk => {
-      out.push('');
-      out.push(`   Risk${risk.riskId ? ` ${risk.riskId}` : ''}: ${risk.title}`);
-      if (risk.statement && risk.statement !== risk.title) out.push(`   ${sentence(risk.statement)}`);
-      risk.controls.forEach(c => {
-        out.push(`     ${c.id} — ${c.title}${c.isKey ? '  [key control]' : ''}${c.section ? `  (${c.section})` : ''}`);
-        c.sentences.forEach(s => out.push(`       ${s}`));
-        if (c.evidence) out.push(`       Evidence: ${c.evidence}`);
-        if (c.suggested) out.push('       Not described in the SOP — suggested by Ira.');
-      });
-    });
-    out.push('');
-  });
-  if (n.omitted > 0) out.push(`${n.omitted} draft row${n.omitted === 1 ? '' : 's'} left out of the import, and out of this narrative.`);
-  return out.join('\n').replace(/\n{3,}/g, '\n\n').trim();
+  }
+  return [...byKey.values()];
 }

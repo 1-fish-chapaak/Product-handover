@@ -239,6 +239,10 @@ export default function CreateRacmFlow({ fixedProcess, defaultEntity, publishOnC
       source: meta.source,
       fileName: meta.fileName,
       ...(meta.url ? { sopUrl: meta.url } : {}),
+      // Drawn from the SOP, so it arrives unconfirmed — see `ProcessFlowchart`.
+      ...(meta.source === 'sop'
+        ? { flowchart: { source: meta.fileName, drawnAt: 'just now', status: 'unconfirmed' as const } }
+        : {}),
       controls,
       createdBy: currentUser?.name ?? 'You',
       ...(publishOnCreate

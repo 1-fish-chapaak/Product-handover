@@ -5,11 +5,17 @@
  *   Upload a RACM (A5):  Columns (match the file's columns to our fields) → Review → Import
  *   Upload an SOP (A6):  Prompt (read it, edit it, validate it) → extraction → Review → Import
  *
- * An SOP produces more than a matrix (25 Sep): the same draft rows are read
- * back as a process NARRATIVE as well, on a toggle inside Review, and the
- * prompt on the step before drives both. A RACM workbook has no toggle — it
- * arrived as a matrix. `SopNarrativeView` renders it; `sopNarrative.ts` holds
- * the stage → risk → control spine it is built on.
+ * An SOP produces a matrix and a FLOWCHART, on a toggle inside Review, both
+ * read off the same draft rows so the prompt on the step before drives both.
+ * A RACM workbook has no toggle — it arrived as a matrix.
+ *
+ * It does NOT produce a process narrative (29 Sep). A narrative copied out of
+ * the SOP can never differ from it, so the gap between the documented process
+ * and the real one — which is itself a finding — could never surface, and the
+ * walkthrough would be checking a document against its own source. That view
+ * was built on 25 Sep and has been taken out again; `sopSpine.ts` carries the
+ * reasoning. The flowchart stays, as a DRAFT the auditor confirms after the
+ * walkthrough.
  *
  * Review is the same screen for both, and it asks ONE question of every row:
  * does this control go into the RACM? The tick box is the answer, and it is the
@@ -36,12 +42,13 @@
 import { Fragment, useCallback, useDeferredValue, useEffect, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import {
-  AlertTriangle, AlignLeft, ArrowLeft, Check, CheckCircle2, ChevronDown, ChevronRight, Circle, Copy, FileSpreadsheet, FileText, FileWarning,
-  Loader2, Paperclip, RotateCcw, Search, Sparkles, Star, Table2, Undo2, Workflow, X,
+  AlertTriangle, ArrowLeft, Check, CheckCircle2, ChevronDown, ChevronRight, Circle, Copy, FileSpreadsheet, FileText, FileWarning,
+  Eye, Loader2, Paperclip, Pencil, RotateCcw, Search, Sparkles, Star, Table2, Undo2, Workflow, X,
 } from 'lucide-react';
-import SopNarrativeView from './SopNarrativeView';
-import SopFlowchartView from './SopFlowchartView';
-import { riskKeyOf } from './sopNarrative';
+import SopFlowchartView, { SopFlowchartStructure } from './SopFlowchartView';
+import SopChartChat from './SopChartChat';
+import type { ChartFacts } from './sopChartEdits';
+import { buildSpine, riskKeyOf, risksAcrossStages } from './sopSpine';
 import { racmTemplateForProcesses } from './mockData';
 import {
   CODE_OK, assignRacmIds, cleanCode, entityCodeTakenBy, peekEntityCode, peekProcessCode, processCodeTakenBy,
@@ -67,16 +74,34 @@ import {
 
 type Step = 'columns' | 'prompt' | 'review';
 
-/** The three readings of one SOP draft (25 Sep). Same rows, same prompt behind
- *  all of them — a narrative to read, a flowchart to follow, a matrix to work
- *  on. Edit the prompt and all three change together, because none of them
- *  holds any data of its own. */
-type ReviewView = 'narrative' | 'flowchart' | 'matrix';
-const REVIEW_VIEWS: { key: ReviewView; label: string; Icon: typeof AlignLeft; hint: string }[] = [
-  { key: 'narrative', label: 'Narrative', Icon: AlignLeft, hint: 'The process written out, stage by stage' },
+/** The two readings of one SOP draft. Same rows, same prompt behind both — a
+ *  flowchart to follow and a matrix to work on — so editing the prompt changes
+ *  both, because neither holds any data of its own. A third, the process
+ *  narrative, was here between 25 and 29 Sep; see the file header for why it
+ *  is not. */
+type ReviewView = 'flowchart' | 'matrix';
+const REVIEW_VIEWS: { key: ReviewView; label: string; Icon: typeof Workflow; hint: string }[] = [
   { key: 'flowchart', label: 'Flowchart', Icon: Workflow, hint: 'The risks mapped onto the process, with their controls' },
   { key: 'matrix', label: 'Matrix', Icon: Table2, hint: 'The rows, and what goes into the RACM' },
 ];
+
+/** Reading the chart, or changing it (user ask, 29 Sep). Preview is not a
+ *  lesser Edit: it is the chart with nothing on it offering to be typed over,
+ *  which is what somebody checking a draft against an SOP actually wants. */
+const CHART_MODES: { key: 'preview' | 'edit'; label: string; Icon: typeof Eye; hint: string }[] = [
+  { key: 'preview', label: 'Preview', Icon: Eye, hint: 'The chart as it stands' },
+  { key: 'edit', label: 'Edit', Icon: Pencil, hint: 'Tell Ira what to change, or click a name' },
+];
+
+/** The chat and the chart stand side by side, so they are one height — the
+ *  same reasoning as `PROMPT_PANE_H` one step earlier.
+ *
+ *  Shorter than the prompt step's pane, and deliberately: this step carries a
+ *  summary, a warning line and two rails above the panes, where the prompt step
+ *  carried one label. At 32rem the chat's own text box fell below the dialog's
+ *  footer and could not be reached at all — a box that invites typing and then
+ *  hides where you type is worse than no box. */
+const CHART_EDIT_H = 'h-[23rem]';
 
 export interface RacmImportMeta {
   source: 'racm' | 'sop';
@@ -819,14 +844,11 @@ export default function RacmImportReview({ mode, file, process, entity, existing
    *  boxes and the fix boxes live there, and they are what this step is for.
    *  The narrative is the same rows, read rather than worked on. */
   const [view, setView] = useState<ReviewView>('matrix');
-  /** What the reviewer renamed a stage Ira grouped, keyed by the name she gave
-   *  it. Held here rather than in the narrative because the flowchart shows the
-   *  same stages: a rename on one is a rename on both. */
-  const [stageNames, setStageNames] = useState<Record<string, string>>({});
-  /** Set when the reviewer turns Ira's grouping down. Never reached when the
-   *  SOP names its own stages — those are not ours to switch off. */
-  const [ungrouped, setUngrouped] = useState(false);
-  const stageNameFor = useCallback((name: string) => stageNames[name] ?? name, [stageNames]);
+  /** Reading the chart, or changing it (user ask, 29 Sep: "in the flowchart tab,
+   *  there will be a preview and an edit option"). Opens on Preview: the chart
+   *  is a thing to check first and a thing to correct second, and a screen that
+   *  opens mid-edit asks a question nobody has arrived with. */
+  const [chartMode, setChartMode] = useState<'preview' | 'edit'>('preview');
   /** Names typed straight onto the flowchart, instead of into the prompt (user
    *  ask, 25 Sep). Keyed by the DRAFT's own risk and control IDs, not by row
    *  key: the prompt beside the chart redraws the rows on every keystroke, and
@@ -1085,13 +1107,16 @@ export default function RacmImportReview({ mode, file, process, entity, existing
     return out;
   }, [process, file.name, existing, entity, riskNames, controlNames]);
 
-  /** The chart that sits beside the prompt. Deferred so a long prompt stays
-   *  smooth to type in — the chart catches up a frame later. */
+  /** The structure that sits beside the prompt. Deferred so a long prompt stays
+   *  smooth to type in — the shape catches up a frame later. */
   const livePrompt = useDeferredValue(prompt);
   const liveDraft = useMemo(
     () => (mode === 'sop' ? draftWithNames(livePrompt) : []),
     [mode, draftWithNames, livePrompt],
   );
+  /** Counted the way the structure draws it — one node per risk, however many
+   *  rows name it — so the heading and the boxes below can never disagree. */
+  const liveRiskCount = useMemo(() => new Set(liveDraft.map(riskKeyOf)).size, [liveDraft]);
 
   // ── Review derivations ────────────────────────────────────────────────────────
   const effective = useMemo(() => rows.map(r => withAccepted(r, acceptedSugg[r.key])), [rows, acceptedSugg]);
@@ -1274,6 +1299,56 @@ export default function RacmImportReview({ mode, file, process, entity, existing
   /** The ID a row will carry once imported — what every view should call it, so
    *  the narrative and the matrix never name the same control two ways. */
   const idFor = useCallback((row: ImportRow) => newIds.get(row.key) ?? idOf(row), [newIds]);
+
+  /**
+   * The chart as something that can be talked about.
+   *
+   * Built from the same `buildSpine` the drawing is, so "Risk 2" in the edit box
+   * and the box labelled Risk 2 on screen are the same thing — a second way of
+   * numbering the boxes would be a way of editing the wrong one.
+   */
+  const chartFacts = useMemo<ChartFacts>(() => {
+    const spine = buildSpine(included, {
+      process, entity, source: file.name, idFor,
+      omitted: effective.length - included.length, classifyBy,
+    });
+    const risks = risksAcrossStages(spine);
+    const sourceIdOf = (r: ImportRow) => cell(r.values.controlId) || r.key;
+    return {
+      risks: risks.map((r, i) => ({
+        no: i + 1, ref: r.key, id: r.riskId, title: r.title,
+        rowKeys: included.filter(row => riskKeyOf(row) === r.key).map(row => row.key),
+      })),
+      // Numbered straight through the chart, the way the boxes read.
+      controls: risks.flatMap((r, i) => {
+        const before = risks.slice(0, i).reduce((n, x) => n + x.controls.length, 0);
+        return r.controls.map((c, j) => ({
+          no: before + j + 1, ref: c.sourceId, id: c.id, title: c.title,
+          rowKeys: included.filter(row => sourceIdOf(row) === c.sourceId).map(row => row.key),
+        }));
+      }),
+      rows: included,
+    };
+  }, [included, effective.length, process, entity, file.name, idFor, classifyBy]);
+
+  /** What the edit box does when it is told to take something out: the row is
+   *  left OUT of the import, not deleted. It stays on the Matrix, greyed, and a
+   *  tick puts it back — so nothing said in that box is destructive and the way
+   *  back is the one the reviewer already knows. */
+  const leaveOutRows = useCallback((keys: string[]) => {
+    const moved = keys.filter(k => !leftOut.has(k) && included.some(r => r.key === k));
+    if (moved.length) setLeftOut(prev => { const n = new Set(prev); moved.forEach(k => n.add(k)); return n; });
+    return { moved, left: included.length - moved.length };
+  }, [leftOut, included]);
+
+  /** Undo, from the edit box — the Matrix's own tick, reached from the chart.
+   *  `askedFor` is what stops the duplicate sweep taking the row straight back
+   *  out again: a row the reviewer has deliberately asked for is never removed
+   *  from under them a second time. */
+  const restoreRows = useCallback((keys: string[]) => {
+    keys.forEach(k => askedFor.current.add(k));
+    setLeftOut(prev => { const n = new Set(prev); keys.forEach(k => n.delete(k)); return n; });
+  }, []);
 
   const canImport = included.length > 0 && needFix === 0 && codesOk;
 
@@ -1690,29 +1765,31 @@ export default function RacmImportReview({ mode, file, process, entity, existing
                   </div>
 
                   <div className="min-w-0">
-                    <div className="flex items-baseline gap-2 mb-1.5">
-                      <p className="text-[0.6875rem] font-semibold uppercase tracking-wide text-ink-400">What this prompt draws</p>
-                      <span className="text-[0.6875rem] text-ink-400 tabular-nums">{plural(liveDraft.length, 'control')}</span>
+                    {/* The SHAPE, not the chart (user ask, 29 Sep). What the
+                        prompt is being judged on here is how many risks it
+                        finds, how the controls spread across them, and whether
+                        any risk is left with nothing against it — all of which
+                        the numbered boxes say. The names, and the renaming that
+                        goes with them, wait for the Flowchart tab: they are
+                        what validating the prompt earns, and a reader who can
+                        already read the draft has no reason to validate it. */}
+                    <div className="flex flex-wrap items-baseline gap-x-2 gap-y-0.5 mb-3">
+                      <p className="text-[0.6875rem] font-semibold uppercase tracking-wide text-ink-400">Structure</p>
+                      <span className="text-[0.6875rem] text-ink-400 tabular-nums">{plural(liveRiskCount, 'risk')} · {plural(liveDraft.length, 'control')}</span>
+                      <span className="text-[0.6875rem] text-ink-300" aria-hidden>·</span>
+                      <span className="text-[0.6875rem] text-ink-500">the flowchart opens once you validate</span>
                     </div>
-                    {/* A name is faster to fix here than to describe in the
-                        prompt, so it can be typed straight onto the box — and it
-                        survives the next keystroke in the prompt, because it is
-                        stored against the draft's own IDs rather than the rows. */}
-                    <p className="text-[0.71875rem] text-ink-500 mb-3">
-                      Edit the prompt to change what Ira extracts. To change only a name, click it on the chart.
-                    </p>
-                    {/* The chart owns its own scrolling now that it zooms, so the
-                        pane is a frame of a fixed height and nothing more. */}
+                    {/* The structure owns its own scrolling, so the pane is a
+                        frame of a fixed height and nothing more. */}
                     <div className={cn('rounded-xl border border-canvas-border bg-paper-50/40 px-3 py-3 overflow-hidden', PROMPT_PANE_H)}>
                       {liveDraft.length === 0 ? (
                         /* The pane is a fixed height now, so an empty one sits its
                            message in the middle rather than stranding it at the top. */
                         <p className="h-full flex items-center justify-center text-center text-[0.75rem] text-ink-500">This prompt draws no controls. Widen it to see something here.</p>
                       ) : (
-                        <SopFlowchartView compact rows={liveDraft} process={process} entity={entity} source={file.name}
+                        <SopFlowchartStructure rows={liveDraft} process={process} entity={entity} source={file.name}
                           idFor={r => cell(r.values.controlId) || r.key} omitted={0}
-                          ungrouped={ungrouped} nameFor={stageNameFor} classifyBy={classifyBy} onUngroup={setUngrouped}
-                          onRenameRisk={renameRisk} onRenameControl={renameControl} />
+                          classifyBy={classifyBy} />
                       )}
                     </div>
                   </div>
@@ -1832,34 +1909,74 @@ export default function RacmImportReview({ mode, file, process, entity, existing
                   true of every view: how many rows are going in does not change
                   with the way you read them. */}
               {showViews && (
-                <div role="tablist" aria-label="How to read this draft" className="inline-flex items-center gap-0.5 rounded-lg border border-canvas-border bg-paper-50 p-0.5 mb-4">
-                  {REVIEW_VIEWS.map(({ key, label, Icon, hint }) => {
-                    const on = activeView === key;
-                    return (
-                      <button key={key} type="button" role="tab" aria-selected={on} title={hint} onClick={() => setView(key)}
-                        className={cn('h-7 px-3 inline-flex items-center gap-1.5 rounded-md text-[0.75rem] font-semibold transition-colors cursor-pointer',
-                          on ? 'bg-canvas text-ink-900 border border-canvas-border' : 'border border-transparent text-ink-500 hover:text-ink-800')}>
-                        <Icon size={13} aria-hidden /> {label}
-                      </button>
-                    );
-                  })}
+                <div className="flex flex-wrap items-center gap-x-3 gap-y-2 mb-4">
+                  <div role="tablist" aria-label="How to read this draft" className="inline-flex items-center gap-0.5 rounded-lg border border-canvas-border bg-paper-50 p-0.5">
+                    {REVIEW_VIEWS.map(({ key, label, Icon, hint }) => {
+                      const on = activeView === key;
+                      return (
+                        <button key={key} type="button" role="tab" aria-selected={on} title={hint} onClick={() => setView(key)}
+                          className={cn('h-7 px-3 inline-flex items-center gap-1.5 rounded-md text-[0.75rem] font-semibold transition-colors cursor-pointer',
+                            on ? 'bg-canvas text-ink-900 border border-canvas-border' : 'border border-transparent text-ink-500 hover:text-ink-800')}>
+                          <Icon size={13} aria-hidden /> {label}
+                        </button>
+                      );
+                    })}
+                  </div>
+                  <div className="flex-1" />
+                  {/* On the right, and only on the Flowchart, because this is
+                      not another way of reading the draft — it is what you are
+                      doing to the one already on screen. Two identical rails
+                      stacked would have read as one four-way choice. */}
+                  {activeView === 'flowchart' && (
+                    <div className="inline-flex items-center gap-0.5 rounded-lg border border-canvas-border bg-paper-50 p-0.5">
+                      {CHART_MODES.map(({ key, label, Icon, hint }) => {
+                        const on = chartMode === key;
+                        return (
+                          <button key={key} type="button" aria-pressed={on} title={hint} onClick={() => setChartMode(key)}
+                            className={cn('h-7 px-3 inline-flex items-center gap-1.5 rounded-md text-[0.75rem] font-semibold transition-colors cursor-pointer',
+                              on ? 'bg-canvas text-ink-900 border border-canvas-border' : 'border border-transparent text-ink-500 hover:text-ink-800')}>
+                            <Icon size={13} aria-hidden /> {label}
+                          </button>
+                        );
+                      })}
+                    </div>
+                  )}
                 </div>
               )}
 
-              {activeView === 'narrative' && (
-                <SopNarrativeView rows={included} process={process} entity={entity} source={file.name}
-                  idFor={idFor} omitted={effective.length - included.length}
-                  ungrouped={ungrouped} nameFor={stageNameFor} classifyBy={classifyBy}
-                  onRenameStage={(name, to) => setStageNames(prev => ({ ...prev, [name]: to }))}
-                  onUngroup={setUngrouped} />
-              )}
-
-              {activeView === 'flowchart' && (
+              {activeView === 'flowchart' && (chartMode === 'edit' ? (
+                /* The edit box takes the column the extraction prompt had one
+                   step earlier, and the chart takes the column the structure
+                   had — so both screens read as the same idea: you write on the
+                   left, and the thing on the right changes. What differs is
+                   that this one edits the draft that exists rather than
+                   re-extracting it, so nothing decided on the Matrix is lost. */
+                <div className="grid gap-4 lg:grid-cols-[minmax(0,20rem)_minmax(0,1fr)] items-start">
+                  <div className={CHART_EDIT_H}>
+                    <SopChartChat facts={chartFacts} onRenameRisk={renameRisk}
+                      onRenameControl={renameControl} onLeaveOut={leaveOutRows} onRestore={restoreRows} />
+                  </div>
+                  <div className="min-w-0">
+                    {/* Compact drops the chart's own caption, so the one thing
+                        that must never come off it is said here instead. */}
+                    <div className="flex flex-wrap items-center gap-x-2 gap-y-1 mb-2 text-[0.71875rem] text-ink-500">
+                      <Pill tone="draft">SOP-derived · unconfirmed</Pill>
+                      <span>click a name to rename it, or say it on the left</span>
+                    </div>
+                    <div className={cn('rounded-xl border border-canvas-border bg-paper-50/40 px-3 py-3 overflow-hidden', CHART_EDIT_H)}>
+                      <SopFlowchartView compact rows={included} process={process} entity={entity} source={file.name}
+                        idFor={idFor} omitted={effective.length - included.length}
+                        classifyBy={classifyBy}
+                        onRenameRisk={renameRisk} onRenameControl={renameControl} />
+                    </div>
+                  </div>
+                </div>
+              ) : (
                 <SopFlowchartView rows={included} process={process} entity={entity} source={file.name}
                   idFor={idFor} omitted={effective.length - included.length}
-                  ungrouped={ungrouped} nameFor={stageNameFor} classifyBy={classifyBy} onUngroup={setUngrouped}
+                  classifyBy={classifyBy} editable={false}
                   onRenameRisk={renameRisk} onRenameControl={renameControl} />
-              )}
+              ))}
 
               {activeView === 'matrix' && (<>
               {/* People a whole file may lack a column for — set once for every

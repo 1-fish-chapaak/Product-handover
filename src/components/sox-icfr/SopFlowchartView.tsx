@@ -3,34 +3,56 @@
  * upload produces, and the one the user named the aim of: "you will map out the
  * risks on the flowchart, and then your corresponding controls."
  *
- * So that is what it draws, top to bottom:
+ * So that is what it draws, as a tree from the SOP outwards (29 Sep):
  *
- *      stage  →  the risks that arise there  →  the controls against each risk
+ *                       ┌───────────────┐
+ *                       │   SOP name    │      the initiation point
+ *                       └───────┬───────┘
+ *                  ┌────────────┼────────────┐
+ *               [risk]       [risk]       [risk]
+ *              ┌───┴───┐        │        ┌───┴───┐
+ *           [ctrl] [ctrl]    [ctrl]   [ctrl] [ctrl]
  *
- * It reads `buildNarrative` — the very structure the Narrative prints — rather
- * than grouping the rows again. Two readings of one draft that did their own
- * grouping would eventually disagree, and a flowchart that disagreed with the
- * narrative beside it would be worse than having neither.
+ * Each risk appears once, however many stages its controls fall across — a
+ * tree has one node per thing, and a risk drawn twice would read as two risks.
+ * Stages have no boxes here; they decide the left-to-right order and keep
+ * their own headings on the Spine.
+ *
+ * It reads `buildSpine` rather than grouping the rows itself, so the chart and
+ * the Matrix beside it can never be two different accounts of one draft.
+ *
+ * WHAT IT DRAWS IS A DRAFT (29 Sep). An SOP gives the order of steps, the roles,
+ * the systems and the decision points. It does NOT give where the control
+ * actually sits — before the entry is posted or after it, which is the single
+ * question the design test exists to answer — nor the workarounds the process
+ * has grown since the SOP was written, nor the override routes the SOP lists as
+ * exceptions and people use routinely. So the chart says `SOP-derived,
+ * unconfirmed` on its face, and the auditor confirms or corrects it after the
+ * walkthrough. Until then it satisfies no document requirement.
+ *
+ * Two things are drawn in this file, from one `buildSpine` and one set of
+ * rails: the chart itself, and `SopFlowchartStructure` — its shape with the
+ * names taken off, which is all the prompt step shows until the prompt has been
+ * validated. See that component for why.
  *
  * Drawn with stacked boxes and chevrons rather than measured SVG edges: the
  * shape is a tree that only ever flows one way, so there is nothing a bezier
  * would buy that a border and an arrow do not. It matches the process flow the
  * audit module already draws (`audit/SopProcessFlow`).
  */
-import { Fragment, useCallback, useMemo, useRef, useState } from 'react';
-import { AlertTriangle, ChevronDown, Minus, Plus, ShieldCheck, Sparkles, Star, Undo2 } from 'lucide-react';
+import { useCallback, useMemo, useRef, useState } from 'react';
+import { AlertTriangle, FileText, Minus, Plus, ShieldCheck, Star } from 'lucide-react';
 import { Pill } from '../shared/StatusBadge';
-import { buildNarrative, type NarrativeControl, type NarrativeRisk, type NarrativeOptions } from './sopNarrative';
+import { buildSpine, risksAcrossStages, type SpineControl, type SpineRisk, type SpineOptions } from './sopSpine';
 import type { ImportRow } from './racmImport';
 
-interface SopFlowchartViewProps extends NarrativeOptions {
+interface SopFlowchartViewProps extends SpineOptions {
   rows: ImportRow[];
-  onUngroup: (off: boolean) => void;
-  /** Rename a risk, keyed by `NarrativeRisk.key`. The user's ask (25 Sep):
+  /** Rename a risk, keyed by `SpineRisk.key`. The user's ask (25 Sep):
    *  "agar user ko koi risk name change karna ho to wo kar sakta hai, instead
    *  of writing in prompt." */
   onRenameRisk: (key: string, to: string) => void;
-  /** The same for a control, keyed by `NarrativeControl.sourceId`. `was` is the
+  /** The same for a control, keyed by `SpineControl.sourceId`. `was` is the
    *  name on screen before the edit — kept so the first rename can record the
    *  title the stage grouping was worked out from. */
   onRenameControl: (sourceId: string, to: string, was: string) => void;
@@ -39,6 +61,10 @@ interface SopFlowchartViewProps extends NarrativeOptions {
    *  chart is framed by a pane of a fixed height, which is what makes Fit
    *  mean something. */
   compact?: boolean;
+  /** Preview draws the same chart with its names not offering to be typed
+   *  over (user ask, 29 Sep: "there will be a preview and an edit option").
+   *  Renaming belongs to Edit, beside the box that explains it. */
+  editable?: boolean;
 }
 
 /** Zoom stops. A process runs long before it runs wide, so the floor is low
@@ -58,10 +84,14 @@ const clampZoom = (z: number) => Math.min(ZOOM_MAX, Math.max(ZOOM_MIN, Math.roun
  * and the reader never loses where they were. A blank or unchanged value is
  * dropped rather than saved — an edit nobody made is not an edit.
  */
-function EditableName({ value, onSave, label, className }: {
-  value: string; onSave: (to: string) => void; label: string; className: string;
+function EditableName({ value, onSave, label, className, editable }: {
+  value: string; onSave: (to: string) => void; label: string; className: string; editable: boolean;
 }) {
   const [editing, setEditing] = useState(false);
+  // In Preview the names are not offering anything, so they must not look as
+  // though they are: a box that highlights under the cursor and then does
+  // nothing is a worse lie than a plain one.
+  if (!editable) return <p className={className}>{value}</p>;
   if (editing) {
     return (
       <input autoFocus defaultValue={value} aria-label={label}
@@ -82,41 +112,56 @@ function EditableName({ value, onSave, label, className }: {
   );
 }
 
-/** The line and arrow between one box and the next. */
-function Connector({ tall }: { tall?: boolean }) {
+/** The stub of line that leaves a box on its way down to the fan below it. */
+const Trunk = () => <span className="h-4 w-px bg-canvas-border shrink-0" aria-hidden />;
+
+/**
+ * The join above ONE child of a fan.
+ *
+ * Drawn the way an org chart draws one: a horizontal rail that reaches toward
+ * the siblings — rightwards from the first, leftwards from the last, both ways
+ * from the ones between — and a drop into the box. The rails of neighbouring
+ * children meet because each spans its whole column, padding included.
+ *
+ * An only child gets the drop and no rail: there is nothing to reach for, and
+ * a stub of line hanging in the air reads as an edge to something missing.
+ */
+function Elbow({ i, n }: { i: number; n: number }) {
+  const rail = n < 2 ? null
+    : i === 0 ? 'left-1/2 right-0'
+      : i === n - 1 ? 'left-0 right-1/2'
+        : 'left-0 right-0';
   return (
-    <div className="flex flex-col items-center" aria-hidden>
-      <span className={tall ? 'h-5 w-px bg-canvas-border' : 'h-3 w-px bg-canvas-border'} />
-      <ChevronDown size={12} className="text-ink-400 -mt-1.5" />
+    <div className="relative h-5 w-full shrink-0" aria-hidden>
+      {rail && <span className={`absolute top-0 h-px bg-canvas-border ${rail}`} />}
+      <span className="absolute top-0 left-1/2 h-full w-px -translate-x-1/2 bg-canvas-border" />
     </div>
   );
 }
 
-/** A stage of the process. Structural, so it carries no semantic colour — the
- *  only things on this chart that mean something are the risk and the control. */
-function StageNode({ n, label, inferred, sections, width }: {
-  n: number; label: string; inferred: boolean; sections: string[]; width: string;
-}) {
+/** Where the whole chart starts: the document everything below was read out of. */
+function RootNode({ source, process, entity }: { source: string; process: string; entity: string }) {
   return (
-    <div className={`${width} rounded-xl border border-ink-300 bg-canvas-elevated px-3.5 py-2.5 text-center`}>
-      <p className="text-[0.8125rem] font-semibold text-ink-900 leading-snug">
-        <span className="text-ink-400 tabular-nums mr-1.5">{String(n).padStart(2, '0')}</span>{label}
+    <div className="w-[19rem] rounded-xl border border-ink-300 bg-canvas-elevated px-4 py-3 text-center">
+      <p className="flex items-center justify-center gap-1.5 text-[0.8125rem] font-semibold text-ink-900 leading-snug">
+        <FileText size={13} className="text-ink-400 shrink-0" aria-hidden />
+        <span className="min-w-0 break-words">{source}</span>
       </p>
-      {inferred
-        ? <span className="mt-1 inline-block"><Pill tone="info">Grouped by Ira</Pill></span>
-        : sections.length > 0 && <p className="mt-0.5 text-[0.65625rem] font-mono text-ink-400">{sections.join(' · ')}</p>}
+      <p className="mt-0.5 text-[0.6875rem] text-ink-500">{process}{entity ? ` · ${entity}` : ''}</p>
     </div>
   );
 }
 
-function RiskNode({ risk, width, onRename }: { risk: NarrativeRisk; width: string; onRename: (key: string, to: string) => void }) {
+function RiskNode({ risk, width, onRename, editable }: {
+  risk: SpineRisk; width: string; onRename: (key: string, to: string) => void; editable: boolean;
+}) {
   return (
     <div className={`${width} rounded-xl border border-risk-300 bg-risk-50 px-3.5 py-2.5`}>
       <p className="flex items-center gap-1.5 text-[0.65625rem] font-semibold uppercase tracking-wide text-risk-700">
         <AlertTriangle size={11} aria-hidden /> Risk{risk.riskId ? ` · ${risk.riskId}` : ''}
       </p>
       <div className="mt-1">
-        <EditableName value={risk.title} label={`Rename the risk ${risk.title}`}
+        <EditableName value={risk.title} label={`Rename the risk ${risk.title}`} editable={editable}
           onSave={to => onRename(risk.key, to)}
           className="text-[0.78125rem] font-medium leading-snug text-ink-900" />
       </div>
@@ -124,8 +169,8 @@ function RiskNode({ risk, width, onRename }: { risk: NarrativeRisk; width: strin
   );
 }
 
-function ControlNode({ c, width, onRename }: {
-  c: NarrativeControl; width: string; onRename: (sourceId: string, to: string, was: string) => void;
+function ControlNode({ c, width, onRename, editable }: {
+  c: SpineControl; width: string; onRename: (sourceId: string, to: string, was: string) => void; editable: boolean;
 }) {
   return (
     <div className={`${width} rounded-xl border border-brand-200 bg-brand-50 px-3.5 py-2.5`}>
@@ -139,7 +184,7 @@ function ControlNode({ c, width, onRename }: {
         )}
       </p>
       <div className="mt-1">
-        <EditableName value={c.title} label={`Rename the control ${c.title}`}
+        <EditableName value={c.title} label={`Rename the control ${c.title}`} editable={editable}
           onSave={to => onRename(c.sourceId, to, c.title)}
           className="text-[0.78125rem] leading-snug text-ink-900" />
       </div>
@@ -150,43 +195,169 @@ function ControlNode({ c, width, onRename }: {
   );
 }
 
-/** A risk and everything standing against it — one column of the chart. */
-function RiskBranch({ risk, width, onRenameRisk, onRenameControl }: {
-  risk: NarrativeRisk; width: string;
+/** A risk and everything standing against it — one branch of the tree. Its
+ *  controls fan out beneath it rather than stacking, so two controls against
+ *  one risk read as two answers to it and not as one after the other. */
+function RiskBranch({ risk, i, n, width, onRenameRisk, onRenameControl, editable }: {
+  risk: SpineRisk; i: number; n: number; width: string;
   onRenameRisk: (key: string, to: string) => void;
   onRenameControl: (sourceId: string, to: string, was: string) => void;
+  editable: boolean;
 }) {
+  const controls = risk.controls;
   return (
     <div className="flex flex-col items-center">
-      <RiskNode risk={risk} width={width} onRename={onRenameRisk} />
-      {risk.controls.length === 0 ? (
+      <Elbow i={i} n={n} />
+      <RiskNode risk={risk} width={width} onRename={onRenameRisk} editable={editable} />
+      {controls.length === 0 ? (
         <>
-          <Connector />
+          <Trunk />
           {/* The one thing this chart exists to make impossible to miss. */}
           <div className={`${width} rounded-xl border border-dashed border-risk-300 px-3.5 py-2.5 text-center text-[0.75rem] font-semibold text-risk-700`}>
             No control against this risk
           </div>
         </>
-      ) : risk.controls.map(c => (
-        <Fragment key={c.id}>
-          <Connector />
-          <ControlNode c={c} width={width} onRename={onRenameControl} />
-        </Fragment>
-      ))}
+      ) : (
+        <>
+          <Trunk />
+          <div className="flex items-start justify-center">
+            {controls.map((c, j) => (
+              <div key={c.id} className="flex flex-col items-center">
+                <Elbow i={j} n={controls.length} />
+                <ControlNode c={c} width={width} onRename={onRenameControl} editable={editable} />
+              </div>
+            ))}
+          </div>
+        </>
+      )}
     </div>
   );
 }
 
-export default function SopFlowchartView({
-  rows, process, entity, source, idFor, omitted, ungrouped, nameFor,
-  onUngroup, onRenameRisk, onRenameControl, compact = false,
-}: SopFlowchartViewProps) {
-  const narrative = useMemo(
-    () => buildNarrative(rows, { process, entity, source, idFor, omitted, ungrouped, nameFor }),
-    [rows, process, entity, source, idFor, omitted, ungrouped, nameFor],
+interface SopFlowchartStructureProps extends SpineOptions {
+  rows: ImportRow[];
+}
+
+/**
+ * THE STRUCTURE — what a prompt draws, beside the prompt that draws it.
+ *
+ * The user's ask (29 Sep): "in the preview where we show the prompt on the
+ * left-hand side, we will just show the structure of the flowchart and not the
+ * complete flowchart. Once we have validated the prompt, then only the user
+ * will be able to see the flowchart."
+ *
+ * So the boxes are numbered rather than named — Risk 1, Control 1 — and the
+ * only words on the page are the SOP's own file name at the top. Blank boxes
+ * were ruled out ("box mein blank nahi rakhna hai"): a grey rectangle says
+ * nothing about what it stands for, and a reader cannot tell a risk from a
+ * control by shape alone.
+ *
+ * What is being read here is the COUNT and the FAN, which is exactly what a
+ * prompt changes: does this wording find four risks or one, do the controls
+ * spread across them, and is any risk left standing on its own. The names are
+ * the chart, and the chart is what validating the prompt earns.
+ *
+ * It goes through `buildSpine` like the chart does, so the shape shown here is
+ * the shape that arrives — never a flattering sketch of a draft that then
+ * lands different.
+ */
+export function SopFlowchartStructure({
+  rows, process, entity, source, idFor, omitted, classifyBy,
+}: SopFlowchartStructureProps) {
+  const spine = useMemo(
+    () => buildSpine(rows, { process, entity, source, idFor, omitted, classifyBy }),
+    [rows, process, entity, source, idFor, omitted, classifyBy],
   );
-  const grouped = narrative.stages.some(s => s.inferred);
-  const width = compact ? 'w-[13rem]' : 'w-[15rem]';
+  const risks = useMemo(() => risksAcrossStages(spine), [spine]);
+
+  /** Controls are numbered straight through the chart rather than restarting
+   *  under each risk: 1 to 9 reads as nine controls, where 1,2 · 1,2,3 · 1 has
+   *  to be added up before it says anything. */
+  const firstControlNo = useMemo(
+    () => risks.map((_, i) => risks.slice(0, i).reduce((n, r) => n + r.controls.length, 0)),
+    [risks],
+  );
+
+  // The horizontal gap between columns is a MARGIN on the box, never padding
+  // on the column: `Elbow` is `w-full` of its column, so padding there would
+  // hold the rails apart and five boxes would read as five loose ticks rather
+  // than one fan. With a margin the column is box+gap wide and the rails of
+  // neighbouring columns meet exactly.
+  const box = 'w-[7.5rem] mx-1.5 rounded-lg px-2.5 py-2 text-center';
+  const boxLabel = 'flex items-center justify-center gap-1 text-[0.75rem] font-semibold';
+
+  if (!risks.length) {
+    return (
+      <p className="h-full flex items-center justify-center text-center text-[0.75rem] text-ink-500">
+        This prompt finds no risks, so there is no shape to draw.
+      </p>
+    );
+  }
+
+  return (
+    <section aria-label="Flowchart structure" className="h-full overflow-auto">
+      <div className="flex flex-col items-center py-2 min-w-max mx-auto">
+        {/* The one real name on the structure — everything below is read out
+            of this document, and without it the shape belongs to nothing. */}
+        <div className="w-[15rem] rounded-xl border border-ink-300 bg-canvas-elevated px-4 py-2.5 text-center">
+          <p className="flex items-center justify-center gap-1.5 text-[0.78125rem] font-semibold text-ink-900 leading-snug">
+            <FileText size={12} className="text-ink-400 shrink-0" aria-hidden />
+            <span className="min-w-0 break-words">{source}</span>
+          </p>
+        </div>
+        <Trunk />
+        <div className="flex items-start justify-center">
+          {risks.map((risk, i) => (
+            <div key={risk.key} className="flex flex-col items-center">
+              <Elbow i={i} n={risks.length} />
+              <div className={`${box} border border-risk-300 bg-risk-50`}>
+                <p className={`${boxLabel} text-risk-700`}>
+                  <AlertTriangle size={11} aria-hidden /> Risk {i + 1}
+                </p>
+              </div>
+              <Trunk />
+              {risk.controls.length === 0 ? (
+                /* The one thing worth reading off a shape with no names on it. */
+                <div className={`${box} border border-dashed border-risk-300`}>
+                  <p className={`${boxLabel} text-risk-700`}>No control</p>
+                </div>
+              ) : (
+                <div className="flex items-start justify-center">
+                  {risk.controls.map((c, j) => (
+                    <div key={c.id} className="flex flex-col items-center">
+                      <Elbow i={j} n={risk.controls.length} />
+                      <div className={`${box} border border-brand-200 bg-brand-50`}>
+                        <p className={`${boxLabel} text-brand-700`}>
+                          <ShieldCheck size={11} aria-hidden /> Control {firstControlNo[i]! + j + 1}
+                        </p>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          ))}
+        </div>
+      </div>
+    </section>
+  );
+}
+
+export default function SopFlowchartView({
+  rows, process, entity, source, idFor, omitted, classifyBy,
+  onRenameRisk, onRenameControl, compact = false, editable = true,
+}: SopFlowchartViewProps) {
+  const spine = useMemo(
+    () => buildSpine(rows, { process, entity, source, idFor, omitted, classifyBy }),
+    [rows, process, entity, source, idFor, omitted, classifyBy],
+  );
+  /** One node per risk, in the order the work happens. */
+  const risks = useMemo(() => risksAcrossStages(spine), [spine]);
+  // The gap between branches rides on the node as a margin, so `Elbow`
+  // (w-full of its column) spans the whole column and neighbouring rails
+  // touch. As padding on the column it did not, and the fan read as a row of
+  // detached stubs.
+  const width = compact ? 'w-[13rem] mx-2' : 'w-[15rem] mx-2';
 
   // Drawn with CSS `zoom` rather than a transform, because zoom reflows: the
   // pane's scrollbars shrink with the chart instead of guarding empty space
@@ -208,7 +379,7 @@ export default function SopFlowchartView({
     setZoom(clampZoom(Math.min(view.clientWidth / w, view.clientHeight / h, 1)));
   }, [zoom]);
 
-  if (!narrative.stages.length) {
+  if (!risks.length) {
     return (
       <div className="rounded-xl border border-dashed border-canvas-border py-14 text-center text-[0.78125rem] text-ink-500">
         Nothing is going in, so there is no process to draw. Tick a row back in on the Matrix.
@@ -227,17 +398,19 @@ export default function SopFlowchartView({
           is the corner it was never using, and the pane is that much taller. */}
       <div className={`flex flex-wrap items-center gap-x-3 gap-y-2 ${compact ? 'absolute top-0 right-0 z-10' : 'mb-4'}`}>
         {!compact && (
-          <p className="text-[0.75rem] text-ink-500">
-            {narrative.staged ? `${narrative.stages.length} stages · ` : ''}
-            {narrative.riskCount} {narrative.riskCount === 1 ? 'risk' : 'risks'} · {narrative.controlCount}{' '}
-            {narrative.controlCount === 1 ? 'control' : 'controls'}
+          <p className="flex flex-wrap items-center gap-x-2 gap-y-1 text-[0.75rem] text-ink-500">
+            <Pill tone="draft">SOP-derived · unconfirmed</Pill>
+            <span>
+              {spine.riskCount} {spine.riskCount === 1 ? 'risk' : 'risks'} · {spine.controlCount}{' '}
+              {spine.controlCount === 1 ? 'control' : 'controls'}
+            </span>
           </p>
         )}
         <div className="flex-1" />
         {/* One cluster, read left to right as smaller · where you are · bigger.
             The percentage is the way back to 1:1, so the reading and the reset
             are the same control rather than a fourth button. */}
-        <div className="inline-flex items-center rounded-lg border border-canvas-border">
+        <div className="inline-flex items-center rounded-lg border border-canvas-border bg-canvas">
           <button type="button" onClick={() => setZoom(z => clampZoom(z - ZOOM_STEP))} disabled={zoom <= ZOOM_MIN}
             aria-label="Zoom out" title="Zoom out"
             className="h-8 w-8 inline-flex items-center justify-center rounded-l-lg text-ink-500 enabled:hover:text-ink-800 disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer">
@@ -258,56 +431,47 @@ export default function SopFlowchartView({
             runs down the page, so "fit" would have nothing to measure against. */}
         {compact && (
           <button type="button" onClick={fitToPane} title="Scale the chart down until the whole process is in view"
-            className="h-8 px-3 inline-flex items-center gap-1.5 rounded-lg border border-canvas-border text-[0.75rem] font-semibold text-ink-600 hover:border-ink-400 hover:text-ink-800 transition-colors cursor-pointer">
+            className="h-8 px-3 inline-flex items-center gap-1.5 rounded-lg border border-canvas-border bg-canvas text-[0.75rem] font-semibold text-ink-600 hover:border-ink-400 hover:text-ink-800 transition-colors cursor-pointer">
             Fit
           </button>
         )}
-        {narrative.groupable && (
-          <button type="button" onClick={() => onUngroup(grouped)}
-            className="h-8 px-3 inline-flex items-center gap-1.5 rounded-lg border border-canvas-border text-[0.75rem] font-semibold text-ink-600 hover:border-ink-400 hover:text-ink-800 transition-colors cursor-pointer"
-            title={grouped ? 'Drop the stages Ira worked out' : 'Let Ira group the controls into stages by what each one does'}>
-            {grouped ? <><Undo2 size={13} aria-hidden /> Ungroup</> : <><Sparkles size={13} className="text-brand-600" aria-hidden /> Group into stages</>}
-          </button>
-        )}
       </div>
-
-      {grouped && !compact && (
-        <p className="max-w-[46rem] mb-4 text-[0.75rem] leading-snug text-ink-500">
-          {source} names no stages, so Ira grouped the controls by what each one does. Rename them on the Narrative,
-          or drop the grouping here.
-        </p>
-      )}
 
       {/* A stage with several risks lays them side by side, so a wide process
           can outrun the dialog. It scrolls rather than squeezing the boxes. */}
       <div ref={viewRef} className={compact ? 'h-full overflow-auto' : 'overflow-x-auto'}>
-        <div ref={drawnRef} style={{ zoom }} className="flex flex-col items-center gap-2 py-2 min-w-max mx-auto">
-          {narrative.stages.map((stage, i) => (
-            <Fragment key={stage.name}>
-              {i > 0 && <Connector tall />}
-              {narrative.staged && (
-                <>
-                  <StageNode n={i + 1} label={stage.label} inferred={stage.inferred} sections={stage.sections} width={width} />
-                  <Connector />
-                </>
-              )}
-              {/* Risks of one stage sit beside each other: they arise together,
-                  not one after the other, and a column each says so. */}
-              <div className="flex flex-wrap justify-center items-start gap-x-6 gap-y-4">
-                {stage.risks.map(risk => (
-                  <RiskBranch key={risk.key} risk={risk} width={width}
-                    onRenameRisk={onRenameRisk} onRenameControl={onRenameControl} />
-                ))}
-              </div>
-            </Fragment>
-          ))}
+        <div ref={drawnRef} style={{ zoom }} className="flex flex-col items-center py-2 min-w-max mx-auto">
+          <RootNode source={source} process={process} entity={entity} />
+          <Trunk />
+          {/* Every risk on one rail. They arise out of the same document, not
+              one after another, and a column each is what says so. Nothing
+              wraps: a wrapped branch would sit under a risk it does not belong
+              to. The pane scrolls, and Fit puts the whole tree in view. */}
+          <div className="flex items-start justify-center">
+            {risks.map((risk, i) => (
+              <RiskBranch key={risk.key} risk={risk} i={i} n={risks.length} width={width} editable={editable}
+                onRenameRisk={onRenameRisk} onRenameControl={onRenameControl} />
+            ))}
+          </div>
         </div>
       </div>
 
-      {narrative.omitted > 0 && (
+      {/* An SOP cannot say where the control actually sits, which is the one
+          thing the design test turns on. So this counts for nothing until the
+          walkthrough, and what the auditor changes afterwards is itself the
+          evidence — the gap between the written process and the real one. */}
+      {!compact && (
+        <p className="mt-6 pt-3 border-t border-canvas-border text-[0.71875rem] leading-snug text-ink-500 max-w-[46rem]">
+          Read from {source}, so it shows the process as written. It does not satisfy the flowchart document
+          requirement and does not count towards control completeness until the auditor confirms or corrects it
+          against the walkthrough.
+        </p>
+      )}
+
+      {spine.omitted > 0 && (
         <p className="mt-6 pt-3 border-t border-canvas-border text-[0.71875rem] text-ink-500">
-          {narrative.omitted === 1 ? '1 draft row is' : `${narrative.omitted} draft rows are`} left out of the import,
-          so {narrative.omitted === 1 ? 'it is' : 'they are'} not drawn here. The Matrix says which.
+          {spine.omitted === 1 ? '1 draft row is' : `${spine.omitted} draft rows are`} left out of the import,
+          so {spine.omitted === 1 ? 'it is' : 'they are'} not drawn here. The Matrix says which.
         </p>
       )}
     </section>
