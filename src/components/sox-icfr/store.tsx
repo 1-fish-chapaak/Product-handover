@@ -1,6 +1,6 @@
 import { createContext, useCallback, useContext, useMemo, useState, type Dispatch, type ReactNode, type SetStateAction } from 'react';
 import { racmTemplateForProcesses, requiredDatasetsFor, sampleRefs, seedIcfrEngagement, type SeedMeta } from './mockData';
-import { assessSeverity, attestationOverruled, suggestGapKind, designApproved, designFilesOf, docColumnOf, docNotApplicable, applyDocRequirements, requiredKindsFor, iraCannotTest, designRetestChecks, designOutstanding, designOutstandingRequired, fmtDateTime, requiredFilesOf, requiredFilesReady, canExtendToe, canRedrawToe, controlConclusion, reconcileConfirmations, formatINR, gradeException, icfrConclusion, inquiryOnlyAttributes, passedWithoutFiles, isControlLocked, isControlLockedIn, isEngagementLocked, itgcHolds, parseLooseDate, samePerson, samplingOf, populationSources, previewRegrades, sampleSizeGuide, samplesFor, sourceTotals, staleSteps, stepResult, designCheckQA, TOE_MAX_ROUNDS, toeRoundFailed, toeRoundNo, toeRounds, trackResult, validationQA, validationSummary, validationTable, wfRunRef, dealSample, samplesTestedCount, sampleHome, spreadPhrase, workingAudit, yearEndPending, versionAudit, versionNo, versionFrom, isVersionRetest, pointResult, LEGACY_SOURCE_ID, type RulesPatch } from './helpers';
+import { assessSeverity, attestationOverruled, buildFlawScan, designCloseBlock, likelihoodForGap, suggestGapKind, designApproved, designFilesOf, docColumnOf, docNotApplicable, applyDocRequirements, requiredKindsFor, iraCannotTest, designRetestChecks, designOutstanding, designOutstandingRequired, fmtDateTime, requiredFilesOf, requiredFilesReady, canExtendToe, canRedrawToe, controlConclusion, reconcileConfirmations, formatINR, gradeException, icfrConclusion, inquiryOnlyAttributes, passedWithoutFiles, isControlLocked, isControlLockedIn, isEngagementLocked, itgcHolds, parseLooseDate, samePerson, samplingOf, populationSources, previewRegrades, sampleSizeGuide, samplesFor, sourceTotals, staleSteps, stepResult, designCheckQA, TOE_MAX_ROUNDS, toeRoundFailed, toeRoundNo, toeRounds, trackResult, validationQA, validationSummary, validationTable, wfRunRef, dealSample, samplesTestedCount, sampleHome, spreadPhrase, workingAudit, yearEndPending, versionAudit, versionNo, versionFrom, isVersionRetest, pointResult, LEGACY_SOURCE_ID, type RulesPatch } from './helpers';
 import type { PlanFixKind, ControlVersion, NewVersionDraft,
   Assertion, Attestation, AuditArchive, AuditFileRecord, AuditorProof, AuditRecord, Control, ControlClass, Deficiency, DesignDoc, DesignDocKind, DesignPoint, DiscussionAnchor, DocStatus, FileOrigin,
   DesignJudgements, DesignWaiverReason, EvidenceFile, EvidenceMode, ExceptionStatus, ExecKind, ExecutionEvent, Frequency, HandoffTask, IcfrEngagement,
@@ -153,7 +153,7 @@ const stampSamples = (c: Control, s: OperatingStep, res: TestResult): OperatingS
   return { ...s, sampleResults: m };
 };
 // PARKED (Aug 2026): `defaultGapType` — the exception no longer carries a gap type.
-import { GAP_KIND_LABEL, ipeChecklist, ROLE_LABEL, spreadLabel } from './types';
+import { GAP_KIND_LABEL, ipeChecklist, MW_INDICATOR_BY_ID, ROLE_LABEL, spreadLabel, type MwIndicatorId } from './types';
 import { auditCovers, captionsFor, countryOf, entitiesFor, inScopeEntityNames, isOwnerOf, normaliseProcess, ownersOf, peopleForProcess, processesForAudit, racmAuditUse, scopedForDraw } from './auditScope';
 import { racmRowOf, rootCauseReady, seedKeyOf, suggestRootCause, suggestSizing, type ExposureContext } from './helpers';
 import { entityCodeFor, processCodeFor, riskIdOf } from './racmIds';
@@ -492,6 +492,12 @@ interface IcfrCtx {
   requestDesignDocs: (controlIds: string[]) => void;
   // materiality rules
   updateRules: (patch: Partial<MaterialityRules>) => void;
+  /** Conclude on one company-level MW indicator. `present` with no basis is
+   *  refused — this drives the ICFR opinion, so it costs a reason and a name. */
+  concludeEntityMw: (id: MwIndicatorId, present: boolean, basis: string) => void;
+  /** Run the "same flaw elsewhere" check and STORE what it found. Auditor only,
+   *  design track only; re-running replaces the record — the panel warns first. */
+  runFlawScan: (id: string) => void;
   applyRules: (patch: RulesPatch, reason: string) => void;
   updateMateriality: (patch: { materiality?: number; performanceMateriality?: number }) => void;
   /** Configuration tab — after a scope re-derive, reconcile the live control
@@ -601,7 +607,10 @@ function iraSizingEvent(d: Deficiency, role: Role): ExecutionEvent {
   const why = d.iraSuggested ?? {};
   return {
     id: uid('ex'), controlId: d.controlId, track: d.track, kind: 'exception',
-    verb: `suggested the sizing for ${d.id} — ${d.likelihood.toLowerCase()}, exposure ${formatINR(d.magnitude)}, ${d.compensatingControlId ? `compensating control ${d.compensatingControlId}` : 'no compensating control'}`,
+    // Ira leaves the exposure unsized when there is nothing to work it out
+    // from, and the trail says that rather than printing ₹0 — which is what
+    // this used to do, and what made an unanswered question look answered.
+    verb: `suggested the sizing for ${d.id} — ${d.likelihood.toLowerCase()}, exposure ${d.magnitude === null ? 'not sized' : formatINR(d.magnitude)}, ${d.compensatingControlId ? `compensating control ${d.compensatingControlId}` : 'no compensating control'}`,
     rationale: [why.likelihood && `Likelihood: ${why.likelihood}.`, why.magnitude && `Exposure: ${why.magnitude}.`, why.compensatingControlId && `Compensating control: ${why.compensatingControlId}.`].filter(Boolean).join(' '),
     by: 'Ira', role, at: 'just now',
   };
@@ -882,7 +891,10 @@ export function IcfrProvider({ children, initialRole = 'auditor', seedMeta }: { 
         rootCause: '',
         failedSamples,
         likelihood: 'Reasonably possible',
-        magnitude: 0,
+        // Unsized, not ₹0. A freshly raised exception has been sized by nobody,
+        // and ₹0 is under every de-minimis line — so this literal alone used to
+        // grade every new finding Clearly Trivial the instant it was raised.
+        magnitude: null,
         mwIndicators: [],
         compensatingControlId: undefined,
         aggregationGroup: c.process,
@@ -909,7 +921,7 @@ export function IcfrProvider({ children, initialRole = 'auditor', seedMeta }: { 
         // Nothing is stamped when no check matches: a wrong kind is worse than
         // none here, because the owner's plan prompt follows it.
         const gk = suggestGapKind(c);
-        if (gk) { def.gapKind = gk.kind; def.iraSuggested = { ...def.iraSuggested, gapKind: gk.reason }; }
+        if (gk) { def.gapKinds = gk.kinds; def.iraSuggested = { ...def.iraSuggested, gapKinds: gk.reason }; }
       }
       // Ira's first sizing (S9, A31): likelihood, exposure and compensating
       // control filled in from the evidence, each tagged with why. No accept
@@ -918,7 +930,10 @@ export function IcfrProvider({ children, initialRole = 'auditor', seedMeta }: { 
       def.likelihood = sized.likelihood;
       def.magnitude = sized.magnitude;
       def.compensatingControlId = sized.compensatingControlId;
-      def.iraSuggested = sized.iraSuggested;
+      // MERGED, not assigned. `suggestSizing` builds its tags from an empty
+      // object, so assigning wiped the gap-kind reason written just above —
+      // and the tag under the Design gap picker had never once rendered.
+      def.iraSuggested = { ...def.iraSuggested, ...sized.iraSuggested };
       const drafted = suggestRootCause(c, track, failedSamples, onSecondRound);
       if (drafted) {
         def.rootCause = drafted.text;
@@ -1132,11 +1147,13 @@ export function IcfrProvider({ children, initialRole = 'auditor', seedMeta }: { 
     // with the finding rather than with the verb: "No segregation of duties" tells
     // them what has to change, "Redesign the control" does not.
     const title = def.track === 'design'
-      ? `${def.gapKind ? GAP_KIND_LABEL[def.gapKind] : 'Design gap'} — ${def.id}`
+      // One truncated line, so the first gap plus a count — the full list is in
+      // `detail`, which has room for it.
+      ? `${def.gapKinds?.length ? `${GAP_KIND_LABEL[def.gapKinds[0]!]}${def.gapKinds.length > 1 ? ` +${def.gapKinds.length - 1}` : ''}` : 'Design gap'} — ${def.id}`
       : `Fix the control — ${def.id}`;
     // The design twin names the gap, because that is what the owner has to change.
     const detail = def.track === 'design'
-      ? `${def.gapKind ? `${GAP_KIND_LABEL[def.gapKind]}. ` : ''}Write the plan for what changes in the control itself — the auditor judges it against the root cause.`
+      ? `${def.gapKinds?.length ? `${def.gapKinds.map(k => GAP_KIND_LABEL[k]).join('; ')}. ` : ''}Write the plan for what changes in the control itself — the auditor judges it against the root cause.`
       : 'Write the plan for what stops this happening again — the auditor judges it against the root cause.';
     if (existing) return prev.tasks.map(t => t.id === existing.id ? { ...t, status: 'open' as const, title, detail } : t);
     return [{
@@ -2160,7 +2177,9 @@ export function IcfrProvider({ children, initialRole = 'auditor', seedMeta }: { 
         // cap against the live engagement, and that engagement is about to change.
         // All four grades — a clearly trivial finding archives as Clearly Trivial.
         deficiencies: prev.deficiencies.filter(d => hit(d.controlId))
-          .map(d => ({ ...d, severity: assessSeverity(d, prev).final })),
+          // An unsized finding archives as unsized. Inventing a grade on the way
+          // into the archive would make the prior year read as settled.
+          .map(d => ({ ...d, severity: assessSeverity(d, prev).final ?? 'Not sized' })),
         concludedAt: 'just now',
       } : undefined;
 
@@ -3048,8 +3067,31 @@ export function IcfrProvider({ children, initialRole = 'auditor', seedMeta }: { 
       // taken as written.
       if (before.iraSuggested && !('iraSuggested' in patch)) {
         const tags = { ...before.iraSuggested };
-        (['likelihood', 'magnitude', 'compensatingControlId', 'rootCause', 'gapKind'] as const).forEach(k => { if (k in patch && patch[k] !== before[k]) delete tags[k]; });
+        (['likelihood', 'magnitude', 'compensatingControlId', 'rootCause', 'gapKinds'] as const).forEach(k => { if (k in patch && patch[k] !== before[k]) delete tags[k]; });
         after.iraSuggested = Object.keys(tags).length ? tags : undefined;
+      }
+      /**
+       * THE LIKELIHOOD TAG IS A CITATION — "because the gap is X, it is Y". Change
+       * X and the citation no longer stands, so the figure it justified is re-read
+       * off the new kind. Leaving it put is worse than the generic tag it replaced:
+       * generic was vague, this would be WRONG, and wrong in Ira's voice.
+       *
+       * Only while it is still Ira's. The tag's presence is this module's own
+       * record that nobody has overruled the field — it is deleted the moment they
+       * do — so once the auditor has set the likelihood themselves, a re-fire would
+       * walk their judgement back on the strength of a different field.
+       *
+       * Likelihood only. A different gap kind is not new evidence about the
+       * exposure, and re-deriving that would overwrite a figure they may have typed.
+       */
+      // Arrays compare by reference, so any `gapKinds` patch counts as a change —
+      // including a no-op re-click. Right here (any click is the auditor speaking),
+      // but written down rather than inherited by accident.
+      if ('gapKinds' in patch && patch.gapKinds !== before.gapKinds
+          && after.track === 'design' && before.iraSuggested?.likelihood) {
+        const g = likelihoodForGap(after.gapKinds);
+        after.likelihood = g.likelihood;
+        after.iraSuggested = { ...after.iraSuggested, likelihood: g.reason };
       }
       const next = { ...prev, deficiencies: prev.deficiencies.map(d => (d.id === id ? after : d)) };
       const g0 = gradeException(before, prev).grade;
@@ -3057,7 +3099,9 @@ export function IcfrProvider({ children, initialRole = 'auditor', seedMeta }: { 
       if (g0 === g1) return next;
       const event: ExecutionEvent = {
         id: uid('ex'), controlId: before.controlId, track: before.track, kind: 'exception',
-        verb: `re-graded ${id}`, from: g0, to: g1, by: me, role, at: 'just now',
+        // 'not sized' rather than a blank: the trail is read to find out what
+        // changed, and "it had no grade" is the change on the first sizing.
+        verb: `re-graded ${id}`, from: g0 ?? 'not sized', to: g1 ?? 'not sized', by: me, role, at: 'just now',
         rationale: 'Severity inputs changed — the engine recomputed.',
       };
       // A grade that has moved is no longer the one the reviewer confirmed —
@@ -3140,6 +3184,11 @@ export function IcfrProvider({ children, initialRole = 'auditor', seedMeta }: { 
       if (!target || target.status !== 'Identified') return prev;
       if (ownsIt(prev, target.controlId, me)) return prev;
       if (!rootCauseReady(target)) return prev;               // step 1 is not done — unwritten, or Ira's draft unchecked
+      // The exposure is the question this step exists to answer, so it cannot
+      // be carried past unanswered. Nil is an answer — and costs a reason,
+      // because nil is the value a blank used to pass itself off as.
+      if (target.magnitude === null) return prev;
+      if (target.magnitude === 0 && !target.magnitudeZeroReason?.trim()) return prev;
       const grade = gradeException(target, prev).grade;
       // A confirmation already standing (a re-size after the reviewer sent it
       // back on something other than the grade) is not asked for twice.
@@ -3173,6 +3222,9 @@ export function IcfrProvider({ children, initialRole = 'auditor', seedMeta }: { 
       if (ownsIt(prev, target.controlId, me)) return prev;
       if (samePerson(target.sized, me)) return prev;   // agreeing with your own rating is not a review
       const grade = gradeException(target, prev).grade;
+      // There is no grade to agree with. `completeSizing` should never have let
+      // it get here, and if it did the reviewer is not the one to paper over it.
+      if (grade === null) return prev;
       const event: ExecutionEvent = {
         id: uid('ex'), controlId: target.controlId, track: target.track, kind: 'exception',
         verb: `confirmed ${id} as ${grade}`, from: 'Rating review', to: 'Planning', by: me, role, at: 'just now',
@@ -3275,6 +3327,62 @@ export function IcfrProvider({ children, initialRole = 'auditor', seedMeta }: { 
     if (role !== 'auditor') return;
     setEng(prev => isEngagementLocked(prev) ? prev : ({ ...prev, rules: { ...prev.rules, ...patch } }));
   }, [role]);
+  /**
+   * A company-level indicator, concluded. Replaces any earlier answer on the
+   * same one — this is the engagement's current position, not a log; the trail
+   * keeps every act separately.
+   *
+   * `present` without a basis is refused rather than saved blank. It is the one
+   * thing on this screen that can turn the whole opinion adverse, and an adverse
+   * opinion whose reason lives in somebody's memory is the failure this module
+   * exists to prevent.
+   */
+  const concludeEntityMw = useCallback<IcfrCtx['concludeEntityMw']>((id, present, basis) => {
+    if (role !== 'auditor') return;
+    if (present && !basis.trim()) return;
+    setEng(prev => {
+      if (isEngagementLocked(prev)) return prev;
+      const rest = (prev.entityMwConclusions ?? []).filter(c => c.id !== id);
+      const event: ExecutionEvent = {
+        id: uid('ex'), controlId: '', track: 'design', kind: 'exception',
+        verb: `concluded ${MW_INDICATOR_BY_ID[id].label} — ${present ? 'present' : 'not present'}`,
+        rationale: present ? basis.trim() : undefined,
+        by: me, role, at: 'just now',
+      };
+      return {
+        ...prev,
+        entityMwConclusions: [...rest, { id, present, basis: basis.trim(), by: me, at: 'just now' }],
+        executions: [event, ...prev.executions],
+      };
+    });
+  }, [me, role]);
+
+  /**
+   * The systemic check, run and written down. It was computed on every render of
+   * the sizing panel and thrown away, so the one thing nobody could tell later
+   * was whether a person had ever looked.
+   */
+  const runFlawScan = useCallback<IcfrCtx['runFlawScan']>((id) => {
+    if (role !== 'auditor') return;
+    setEng(prev => {
+      if (isEngagementLocked(prev)) return prev;
+      const target = prev.deficiencies.find(d => d.id === id);
+      if (!target || ownsIt(prev, target.controlId, me)) return prev;
+      const scan = buildFlawScan(prev, target, me);
+      if (!scan) return prev;
+      const event: ExecutionEvent = {
+        id: uid('ex'), controlId: target.controlId, track: 'design', kind: 'exception',
+        verb: `checked ${scan.process} for the same design gap — ${scan.examined.length} control${scan.examined.length === 1 ? '' : 's'} examined, ${scan.carrying} could be built the same way`,
+        by: me, role, at: 'just now',
+      };
+      return {
+        ...prev,
+        deficiencies: prev.deficiencies.map(d => (d.id === id ? { ...d, flawScan: scan } : d)),
+        executions: [event, ...prev.executions],
+      };
+    });
+  }, [me, role]);
+
   const updateMateriality = useCallback<IcfrCtx['updateMateriality']>((patch) => {
     if (role !== 'auditor') return;
     setEng(prev => isEngagementLocked(prev) ? prev : ({ ...prev, ...patch }));
@@ -3829,7 +3937,9 @@ export function IcfrProvider({ children, initialRole = 'auditor', seedMeta }: { 
         : undefined;
       const challenge: SeverityChallenge = {
         id: uid('ch'), input, reasoning: reasoning.trim(), evidence,
-        by: meOwner, at: 'just now', gradeAtRaise: gradeException(target, prev).grade,
+        // The grade the owner is arguing with, or 'not sized' if they got here
+        // first — a challenge still records what it was raised against.
+        by: meOwner, at: 'just now', gradeAtRaise: gradeException(target, prev).grade ?? 'Not sized',
       };
       const event: ExecutionEvent = {
         id: uid('ex'), controlId: target.controlId, track: target.track, kind: 'challenge',
@@ -3883,6 +3993,13 @@ export function IcfrProvider({ children, initialRole = 'auditor', seedMeta }: { 
       const target = prev.deficiencies.find(d => d.id === id);
       if (!target || target.status !== 'Awaiting reviewer' || samePerson(target.retest, me)) return prev;
       if (ownsIt(prev, target.controlId, me)) return prev;
+      // A DESIGN FAILURE DOES NOT CLOSE ON A PASSED DESIGN RE-CHECK ALONE.
+      // The fix makes a new control, and a new control has not been watched
+      // operating just because someone read it again. There was no track branch
+      // here at all, so a rebuild that cannot run before the books close — a
+      // verdict this module already computes — closed as remediated anyway.
+      const blockC = prev.controls.find(x => x.id === target.controlId);
+      if (designCloseBlock(target, blockC, prev)?.blocks) return prev;
       const event: ExecutionEvent = {
         id: uid('ex'), controlId: target.controlId, track: target.track, kind: 'exception',
         verb: `closed ${id} — reviewer sign-off`, by: me, role, at: 'just now',
@@ -4047,7 +4164,10 @@ export function IcfrProvider({ children, initialRole = 'auditor', seedMeta }: { 
         description: `${c.wpRef} could not be evidenced as operating — ${short(block.needed, 80)} was never produced.`,
         rootCause: '',
         failedSamples: [],
-        likelihood: 'Reasonably possible', magnitude: 0, mwIndicators: [],
+        // Unsized — and this one doubly so: the comment on this whole action
+        // already says exposure and likelihood do not apply here, so a figure
+        // would be invented.
+        likelihood: 'Reasonably possible', magnitude: null, mwIndicators: [],
         aggregationGroup: c.process,
         remediation: { action: '', date: null, owner: c.owner, status: 'Open' },
         status: 'Identified',
@@ -4058,7 +4178,10 @@ export function IcfrProvider({ children, initialRole = 'auditor', seedMeta }: { 
       def.likelihood = sized.likelihood;
       def.magnitude = sized.magnitude;
       def.compensatingControlId = sized.compensatingControlId;
-      def.iraSuggested = sized.iraSuggested;
+      // MERGED, not assigned. `suggestSizing` builds its tags from an empty
+      // object, so assigning wiped the gap-kind reason written just above —
+      // and the tag under the Design gap picker had never once rendered.
+      def.iraSuggested = { ...def.iraSuggested, ...sized.iraSuggested };
       const event: ExecutionEvent = {
         id: uid('ex'), controlId, track: block.track, kind: 'exception',
         verb: `raised ${defId} — never evidenced, scope limitation at period end`,
@@ -4453,10 +4576,10 @@ export function IcfrProvider({ children, initialRole = 'auditor', seedMeta }: { 
     createAudit, updateAudit, openAuditId, openAudit, closeAudit, racmDocs, addRacmDoc, createRacm, deleteRacm, addLibraryRacms,
     addComment, resolveDiscussion,
     submitTask, clearTask, raiseQuery, requestDesignDocs,
-    updateRules, applyRules, updateMateriality, reconcileScope, updateDeficiency, linkRootCause, unlinkRootCause, setGroupConclusion, updateAccount, setExceptionStatus, completeSizing, confirmRating, returnRating, submitPlan, reviewPlan, drawRetestSample, setRetestResult, setRetestCheck, runRetestIra, recordRetest, signOffException, reopenException, updateRemediation, addRemediationEvidence, raiseChallenge, respondToChallenge, parkOperating, resumeOperating, markUnableToTest, resolveUnableToTest, escalateUnableToTest,
+    updateRules, concludeEntityMw, runFlawScan, applyRules, updateMateriality, reconcileScope, updateDeficiency, linkRootCause, unlinkRootCause, setGroupConclusion, updateAccount, setExceptionStatus, completeSizing, confirmRating, returnRating, submitPlan, reviewPlan, drawRetestSample, setRetestResult, setRetestCheck, runRetestIra, recordRetest, signOffException, reopenException, updateRemediation, addRemediationEvidence, raiseChallenge, respondToChallenge, parkOperating, resumeOperating, markUnableToTest, resolveUnableToTest, escalateUnableToTest,
     addControl, proposeSampling, signSampling, reviseSampling, signOffAudit, reopenControl, recordNewVersion, signOffControlWp, returnControl,
     raiseReviewNote, resolveReviewNote, verifyReviewNote, reopenReviewNote,
-  }), [eng, role, tab, view, selectedControlId, racmEditor, me, meOwner, racmProcess, changeRole, setTab, openRacmMatrix, openRacmEditor, openControl, focusStep, clearFocusStep, openDeficiency, focusDefId, clearFocusDef, back, returnView, registerPreset, openRegister, clearRegisterPreset, racmCreateOpen, openRacmCreate, clearRacmCreate, setDocStatus, setDesignPoint, concludeDesign, overrideDesign, approveDesign, returnDesign, addDesignDoc, attachDesignEvidence, removeDesignDoc, waiveDesignDoc, clearDesignWaiver, updateControlMeta, setControlKey, setDesignJudgements, startWalkthrough, setWalkthroughAttribute, setWalkthroughMeta, addDesignPoint, removeDesignPoint, validateDesignPoint, overrideDesignPoint, removeDesignFile, runDesignIra, linkDesignPointEvidence, setDesignPointProof, requestDataByEmail, setPointEvidenceType, setStepEvidenceType, setDesignBasis, setPopulation, setPopulationDefinition, clearPopulation, setPopulationCheck, setPopulationFacts, addPopulationSource, removePopulationSource, setSourceRole, drawSourceSample, approveSource, redrawSource, remindOwnerForFiles, registerFile, setFileOrigin, lockPopulation, lockAttributes, confirmExtraction, recordException, addEvidenceReport, removeEvidenceReport, proveEvidenceReport, registerIpe, setIpeCheck, concludeIpe, clearIpe, setMrc, setSampling, extendSample, resizeSample, setSampleResult, setStepResult, overrideStep, pullStepRun, attestStep, addStepEvidence, setStepInputFile, concludeOperating, overrideOperating, startToeRound, addAttribute, removeAttribute, mapStepWorkflow, setStepEvidenceMode, toggleStepAttest, toggleStepAI, runStepValidation, testAllAttributes, addRequiredFile, renameRequiredFile, removeRequiredFile, uploadRequiredFile, clearRequiredFile, validateReadyAttributes, approveRacmRows, remarkRacmRow, clearRacmReview, bulkTestControls, createAudit, updateAudit, openAuditId, openAudit, closeAudit, racmDocs, addRacmDoc, createRacm, deleteRacm, addLibraryRacms, addComment, resolveDiscussion, submitTask, clearTask, raiseQuery, requestDesignDocs, updateRules, applyRules, updateMateriality, reconcileScope, updateDeficiency, linkRootCause, unlinkRootCause, setGroupConclusion, updateAccount, setExceptionStatus, completeSizing, confirmRating, returnRating, submitPlan, reviewPlan, drawRetestSample, setRetestResult, setRetestCheck, runRetestIra, recordRetest, signOffException, reopenException, updateRemediation, addRemediationEvidence, raiseChallenge, respondToChallenge, parkOperating, resumeOperating, markUnableToTest, resolveUnableToTest, escalateUnableToTest, addControl, proposeSampling, signSampling, reviseSampling, signOffAudit, reopenControl, recordNewVersion, signOffControlWp, returnControl, raiseReviewNote, resolveReviewNote, verifyReviewNote, reopenReviewNote]);
+  }), [eng, role, tab, view, selectedControlId, racmEditor, me, meOwner, racmProcess, changeRole, setTab, openRacmMatrix, openRacmEditor, openControl, focusStep, clearFocusStep, openDeficiency, focusDefId, clearFocusDef, back, returnView, registerPreset, openRegister, clearRegisterPreset, racmCreateOpen, openRacmCreate, clearRacmCreate, setDocStatus, setDesignPoint, concludeDesign, overrideDesign, approveDesign, returnDesign, addDesignDoc, attachDesignEvidence, removeDesignDoc, waiveDesignDoc, clearDesignWaiver, updateControlMeta, setControlKey, setDesignJudgements, startWalkthrough, setWalkthroughAttribute, setWalkthroughMeta, addDesignPoint, removeDesignPoint, validateDesignPoint, overrideDesignPoint, removeDesignFile, runDesignIra, linkDesignPointEvidence, setDesignPointProof, requestDataByEmail, setPointEvidenceType, setStepEvidenceType, setDesignBasis, setPopulation, setPopulationDefinition, clearPopulation, setPopulationCheck, setPopulationFacts, addPopulationSource, removePopulationSource, setSourceRole, drawSourceSample, approveSource, redrawSource, remindOwnerForFiles, registerFile, setFileOrigin, lockPopulation, lockAttributes, confirmExtraction, recordException, addEvidenceReport, removeEvidenceReport, proveEvidenceReport, registerIpe, setIpeCheck, concludeIpe, clearIpe, setMrc, setSampling, extendSample, resizeSample, setSampleResult, setStepResult, overrideStep, pullStepRun, attestStep, addStepEvidence, setStepInputFile, concludeOperating, overrideOperating, startToeRound, addAttribute, removeAttribute, mapStepWorkflow, setStepEvidenceMode, toggleStepAttest, toggleStepAI, runStepValidation, testAllAttributes, addRequiredFile, renameRequiredFile, removeRequiredFile, uploadRequiredFile, clearRequiredFile, validateReadyAttributes, approveRacmRows, remarkRacmRow, clearRacmReview, bulkTestControls, createAudit, updateAudit, openAuditId, openAudit, closeAudit, racmDocs, addRacmDoc, createRacm, deleteRacm, addLibraryRacms, addComment, resolveDiscussion, submitTask, clearTask, raiseQuery, requestDesignDocs, updateRules, concludeEntityMw, runFlawScan, applyRules, updateMateriality, reconcileScope, updateDeficiency, linkRootCause, unlinkRootCause, setGroupConclusion, updateAccount, setExceptionStatus, completeSizing, confirmRating, returnRating, submitPlan, reviewPlan, drawRetestSample, setRetestResult, setRetestCheck, runRetestIra, recordRetest, signOffException, reopenException, updateRemediation, addRemediationEvidence, raiseChallenge, respondToChallenge, parkOperating, resumeOperating, markUnableToTest, resolveUnableToTest, escalateUnableToTest, addControl, proposeSampling, signSampling, reviseSampling, signOffAudit, reopenControl, recordNewVersion, signOffControlWp, returnControl, raiseReviewNote, resolveReviewNote, verifyReviewNote, reopenReviewNote]);
 
   return <Ctx.Provider value={value}>{children}</Ctx.Provider>;
 }

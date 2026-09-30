@@ -209,12 +209,14 @@ export function buildRemediationBrief(eng: IcfrEngagement, owner: string, defId?
       // The mechanism, not the count. It sits above the plan because the plan is
       // judged against it — a fix that does not change this is not a fix.
       ['Root cause', d.rootCause],
-      ['Classification', grade],
-      ['What that means', URGENCY[grade] ?? '—'],
+      ['Classification', grade ?? 'Not sized yet'],
+      ['What that means', (grade && URGENCY[grade]) ?? '—'],
       // Read-only, and here because an owner arguing for budget needs a number to
       // argue with. Stated as what could have slipped through — never as a
       // distance from a threshold, which is the ruler by another name.
-      ['Exposure', `${formatINR(d.magnitude)} — what could have slipped through`],
+      // '₹0' here would be an actively harmful number: the owner reads this to
+      // argue for budget, and nought is the strongest argument against them.
+      ['Exposure', d.magnitude === null ? 'Not sized yet' : `${formatINR(d.magnitude)} — what could have slipped through`],
       ['Likelihood', d.likelihood],
     ];
     if (d.compensatingControlId) {

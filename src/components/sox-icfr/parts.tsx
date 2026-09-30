@@ -5,7 +5,7 @@ import { ArrowLeft, Gavel, UserCheck, ShieldCheck, CheckCircle2, XCircle, Circle
 // too, which is what makes the ITGC banner read as being about the same thing.
 import { Pill, type Tone } from '../shared/StatusBadge';
 import { cn } from '../../lib/cn';
-import type { Conclusion, Court, ExceptionGrade, FileOrigin, Nature, Role, TestResult, TrackConclusion } from './types';
+import type { ArchivedSeverity, Conclusion, Court, ExceptionGrade, FileOrigin, Nature, Role, TestResult, TrackConclusion } from './types';
 
 const CONCLUSION_TONE: Record<Conclusion, Tone> = { Effective: 'compliant', Ineffective: 'risk', 'In progress': 'evidence', 'Not started': 'draft' };
 // one word for one state: the 'Not started' conclusion WEARS "Not tested" — the
@@ -21,7 +21,15 @@ export function TrackPill({ c }: { c: TrackConclusion }) { return <Pill tone={TR
 // exposure sits under the de-minimis floor, and it reads as its own grade because
 // the ladder stopped there — it was never evaluated down to a deficiency.
 const SEVERITY_TONE: Record<ExceptionGrade, Tone> = { 'Material Weakness': 'risk', 'Significant Deficiency': 'high', Deficiency: 'mitigated', 'Clearly Trivial': 'draft' };
-export function SeverityPill({ s }: { s: ExceptionGrade }) { return <Pill tone={SEVERITY_TONE[s]}>{s}</Pill>; }
+/** `null` is a FIFTH thing on screen, and the most important one to show: the
+ *  exception has not been sized, so the engine refused to grade it. It reads as
+ *  its own pill rather than an empty cell — the pill column is how a register is
+ *  scanned, and a blank there looks like a rendering fault, not an open question. */
+export function SeverityPill({ s }: { s: ArchivedSeverity | null }) {
+  // `null` live, 'Not sized' once archived — the same state, spelled two ways
+  // because an archive stores strings and a live grade is computed.
+  return s === null || s === 'Not sized' ? <Pill tone="high">Not sized</Pill> : <Pill tone={SEVERITY_TONE[s]}>{s}</Pill>;
+}
 
 /** The house switch. Lifted here because the control page, the rules editor and
  *  the scope table all need the same one. `disabled` matters on a locked control:

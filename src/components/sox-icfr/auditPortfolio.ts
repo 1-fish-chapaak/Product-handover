@@ -1,6 +1,6 @@
 import { assessSeverity, conclusionOf } from './helpers';
 import { auditCovers } from './auditScope';
-import type { AuditRecord, AuditRound, Conclusion, Control, Deficiency, ExceptionGrade, IcfrEngagement } from './types';
+import type { ArchivedSeverity, AuditRecord, AuditRound, Conclusion, Control, Deficiency, ExceptionGrade, IcfrEngagement } from './types';
 
 /**
  * The engagement's audit portfolio — everything the engagement-level Overview
@@ -160,14 +160,16 @@ export function auditProgress(a: AuditRecord, eng: IcfrEngagement): AuditProgres
 /** An audit's deficiencies with severity resolved — archived ones carry theirs.
  *  All four grades: a clearly trivial finding counts as Clearly Trivial here,
  *  exactly as the register shows it, not as a Deficiency. */
-export function auditDeficiencies(a: AuditRecord, eng: IcfrEngagement): (Deficiency & { severity: ExceptionGrade })[] {
+export function auditDeficiencies(a: AuditRecord, eng: IcfrEngagement): (Deficiency & { severity: ArchivedSeverity })[] {
   if (a.archive) return a.archive.deficiencies;
   // Same reason as auditProgress: a planned round has raised nothing.
   if (!isLiveAudit(a, eng)) return [];
   const covered = new Set(eng.controls.filter(c => auditCovers(a, c, eng.id)).map(c => c.id));
   return eng.deficiencies
     .filter(d => covered.has(d.controlId))
-    .map(d => ({ ...d, severity: assessSeverity(d, eng).final }));
+    // Same reading as the archive: unsized travels as unsized, so a rollup
+    // cannot quietly bucket an unanswered question as a graded finding.
+    .map(d => ({ ...d, severity: assessSeverity(d, eng).final ?? 'Not sized' as const }));
 }
 
 // ── Cross-audit ──────────────────────────────────────────────────────────────
@@ -185,23 +187,29 @@ const emptyCount = (): SeverityCount => ({ 'Material Weakness': 0, 'Significant 
  */
 export function yearSeverityRollup(eng: IcfrEngagement, audits: AuditRecord[]): {
   counts: SeverityCount; open: number; total: number; mwOpen: number;
+  /** Findings nobody has sized — kept out of the four grade buckets, because an
+   *  unanswered question is not a small one. */
+  unsized: number;
 } {
   const counts = emptyCount();
+  // Unsized is counted apart from the four grades. Folding it into any of them
+  // would make the year read as more settled than it is.
+  let unsized = 0;
   let open = 0; let total = 0; let mwOpen = 0;
   audits.forEach(a => {
     auditDeficiencies(a, eng).forEach(d => {
-      counts[d.severity] += 1;
+      if (d.severity === 'Not sized') unsized += 1; else counts[d.severity] += 1;
       total += 1;
       if (d.status !== 'Closed') { open += 1; if (d.severity === 'Material Weakness') mwOpen += 1; }
     });
   });
-  return { counts, open, total, mwOpen };
+  return { counts, open, total, mwOpen, unsized };
 }
 
 /** Open material weaknesses anywhere on the engagement, with the audit that
  *  raised each one. One of these puts the whole entity's conclusion at risk, so
  *  it belongs above any single audit. */
-export function mwWatchlist(eng: IcfrEngagement): { audit: AuditRecord; deficiency: Deficiency & { severity: ExceptionGrade } }[] {
+export function mwWatchlist(eng: IcfrEngagement): { audit: AuditRecord; deficiency: Deficiency & { severity: ArchivedSeverity } }[] {
   return eng.audits.flatMap(a => auditDeficiencies(a, eng)
     .filter(d => d.severity === 'Material Weakness' && d.status !== 'Closed')
     .map(deficiency => ({ audit: a, deficiency })));
@@ -224,7 +232,9 @@ export function crossAuditAggregation(eng: IcfrEngagement, audits: AuditRecord[]
       const g = groups.get(key)!;
       g.audits.add(`${a.period} · ${a.round}`);
       g.count += 1;
-      g.combined += d.magnitude;
+      // Skipped, never added as 0 — a total silently short a member is a
+      // number that looks complete and is not.
+      if (d.magnitude !== null) g.combined += d.magnitude;
     });
   });
   return Array.from(groups, ([group, g]) => ({ group, audits: Array.from(g.audits), count: g.count, combined: g.combined }))
@@ -260,7 +270,7 @@ export function materialityConsistency(audits: AuditRecord[]): { consistent: boo
  * standing question, not history.
  */
 export function priorYearDeficiencies(eng: IcfrEngagement, currentYear: number): {
-  audit: AuditRecord; deficiency: Deficiency & { severity: ExceptionGrade }; verified: boolean;
+  audit: AuditRecord; deficiency: Deficiency & { severity: ArchivedSeverity }; verified: boolean;
 }[] {
   return eng.audits
     .filter(a => a.fiscalYear < currentYear)

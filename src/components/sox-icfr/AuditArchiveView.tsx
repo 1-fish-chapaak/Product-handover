@@ -224,7 +224,9 @@ export default function AuditArchiveView({ audit, tab }: { audit: AuditRecord; t
                   <div className="mt-2 pt-2 border-t border-canvas-border grid sm:grid-cols-2 gap-x-4 gap-y-1 text-[0.75rem]">
                     <span className="text-ink-600">
                       <span className="text-ink-400">Magnitude </span>
-                      <span className="tabular-nums font-medium text-ink-900">{formatINR(d.magnitude)}</span>
+                      {/* An archive showing ₹0 for a finding nobody sized is a false record of
+                          what last year knew. */}
+                      <span className="tabular-nums font-medium text-ink-900">{d.magnitude === null ? 'Not sized' : formatINR(d.magnitude)}</span>
                     </span>
                     <span className="text-ink-600 truncate">
                       <span className="text-ink-400">Remediation </span>

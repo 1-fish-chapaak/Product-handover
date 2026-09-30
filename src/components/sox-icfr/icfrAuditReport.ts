@@ -5,7 +5,8 @@ import {
 } from './helpers';
 import { countryFor } from './auditScope';
 import { periodLine, type IcfrSheet, type PaperBlock } from './icfrWorkingPaper';
-import type { Control, Deficiency, IcfrEngagement } from './types';
+import { MW_INDICATOR_BY_ID, mwIndicatorIds, mwSourceLabel } from './types';
+import type { Control, Deficiency, ExceptionGrade, IcfrEngagement } from './types';
 
 /**
  * The Internal Controls Status Report — the deliverable, which the working
@@ -85,6 +86,9 @@ const GRADE_RANK: Record<string, number> = {
 /** The grade as the report states it, with the reason for any adjustment. */
 function gradeLabel(d: Deficiency, eng: IcfrEngagement): string {
   const g = gradeException(d, eng);
+  // Said in words. A report that printed nothing here would read as a grade
+  // somebody forgot to type rather than a question nobody has answered.
+  if (g.grade === null) return 'Not sized — not graded';
   return g.bumped ? `${g.grade} (raised on judgement)`
     : g.cap ? `${g.grade} (capped from ${g.cap.from})`
     : g.grade;
@@ -93,9 +97,11 @@ function gradeLabel(d: Deficiency, eng: IcfrEngagement): string {
 /** The worst grade among a control's deficiencies — the rollup's Severity cell. */
 function worstGrade(defs: Deficiency[], eng: IcfrEngagement): string {
   if (!defs.length) return '—';
-  return defs
-    .map(d => gradeException(d, eng).grade)
-    .reduce((a, b) => (GRADE_RANK[b] > GRADE_RANK[a] ? b : a));
+  // '—' means "no deficiencies". A control whose only findings are unsized has
+  // findings, so it must not borrow that dash — it says so in its own words.
+  const graded = defs.map(d => gradeException(d, eng).grade).filter((g): g is ExceptionGrade => g !== null);
+  if (!graded.length) return 'Not sized';
+  return graded.reduce((a, b) => (GRADE_RANK[b] > GRADE_RANK[a] ? b : a));
 }
 
 /** Plain-English standing of one observation, for a reader who doesn't know the
@@ -326,9 +332,9 @@ export function buildAuditReport(eng: IcfrEngagement, controls: Control[] = eng.
           d.controlId,
           gradeLabel(d, eng),
           d.likelihood,
-          formatINR(d.magnitude),
+          d.magnitude === null ? 'Not sized' : formatINR(d.magnitude),
           formatINR(eng.materiality),
-          d.mwIndicators.length ? d.mwIndicators.join('; ') : '—',
+          d.mwIndicators.length ? mwIndicatorIds(d.mwIndicators).map(i => `${MW_INDICATOR_BY_ID[i].label} (${mwSourceLabel(MW_INDICATOR_BY_ID[i].source)})`).join('; ') : '—',
           d.rootCause,
           d.ratingConfirm?.by ?? d.sized?.by ?? '—',
           d.ratingConfirm?.at ?? d.sized?.at ?? '—',

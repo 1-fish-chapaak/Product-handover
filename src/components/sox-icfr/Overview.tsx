@@ -10,7 +10,7 @@ import AddRacmModal from './AddRacmModal';
 import { defWord } from './flow';
 import { useToast } from '../shared/Toast';
 import {
-  assessSeverity, conclusionOf, controlCode, engagementCompleteness, engagementProgress, failedItgcs, formatINR, isEngagementLocked, isItgcDependent, signoffControls, testsDueNow, trackResult,
+  assessSeverity, conclusionOf, controlCode, engagementCompleteness, engagementProgress, failedItgcs, formatINR, icfrConclusion, isEngagementLocked, isItgcDependent, signoffControls, testsDueNow, trackResult,
 } from './helpers';
 import { cn } from '../../lib/cn';
 import { ItgcCascadeBanner, RagStrip, type RagMeterDef } from './parts';
@@ -131,19 +131,25 @@ export default function Overview() {
 
   const sev = useMemo(() => {
     const c: Record<ExceptionGrade, number> = { 'Material Weakness': 0, 'Significant Deficiency': 0, Deficiency: 0, 'Clearly Trivial': 0 };
-    let open = 0; let mwOpen = 0;
+    let open = 0; let mwOpen = 0; let unsized = 0;
     scopedDefs.forEach(d => {
       // assessed severity — a validly-capped MW counts as an SD everywhere
       const s = assessSeverity(d, eng).final;
+      // An unsized exception is in no severity bucket — it is the bucket this
+      // whole change exists to make visible, and it is counted on its own.
+      if (s === null) { unsized += 1; if (d.status !== 'Closed') open += 1; return; }
       c[s] += 1;
       if (d.status !== 'Closed') { open += 1; if (s === 'Material Weakness') mwOpen += 1; }
     });
-    return { c, open, mwOpen };
+    return { c, open, mwOpen, unsized };
   }, [eng, M, scopedDefs]);
 
   // An open MW never blocks signing — it flips what the signature concludes.
   // Once signed, the stamped conclusion wins over the live derivation.
-  const signsEffective = so.icfrConclusion ? so.icfrConclusion !== 'Not effective' : sev.mwOpen === 0;
+  // Through `icfrConclusion`, NOT the MW count. Counting only material
+  // weaknesses on controls missed the other road to an adverse opinion — a
+  // company-level indicator — and this screen is where the audit is signed.
+  const signsEffective = so.icfrConclusion ? so.icfrConclusion !== 'Not effective' : icfrConclusion(eng) === 'Effective';
   // An interim's signature concludes the ROUND, never the year — its window
   // stops short of the year end, so no ICFR verdict is stamped or claimed
   // (user ask). The opinion arrives with the roll-forward or year-end.

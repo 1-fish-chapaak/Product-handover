@@ -1239,7 +1239,10 @@ function libraryAudits(processes: string[], controls: Control[]): AuditRecord[] 
         : 'Quarterly reconciliation for Q3 was signed a month after the close deadline.',
       rootCause: i === 0 ? 'Approval matrix not enforced in the payment run.' : 'No calendar reminder on the close checklist.',
       likelihood: 'Reasonably possible' as const,
-      magnitude: i === 0 ? 4.2 : 1.1,
+      // ₹ Cr written as rupees. These read '4.2' and '1.1' and meant ₹4.2 Cr
+      // and ₹1.1 Cr — but the field is whole rupees everywhere else, so the
+      // engine saw four rupees and graded both Clearly Trivial.
+      magnitude: i === 0 ? 42_000_000 : 11_000_000,
       mwIndicators: [],
       aggregationGroup: first[i % first.length]!,
       remediation: {
@@ -1571,7 +1574,14 @@ function alturaDeficiencies(controls: Control[]): Deficiency[] {
       likelihood: 'Probable', magnitude: 132_000_000,
       // An indicator, not a number — this is a control-environment failure, so
       // the compensating-control cap is blocked outright and it stays an MW.
-      mwIndicators: ['Ineffective control environment / oversight'],
+      // The old welded 'Ineffective control environment / oversight' lived HERE,
+      // on one exception, and forced it to Material Weakness. It is a fact about
+      // the company, so it has moved to `entityMwConclusions` on the engagement
+      // (see below) where it makes ICFR not effective without pretending the
+      // weakness belongs to one vendor-master control.
+      // This exception grades Material Weakness on its own arithmetic anyway —
+      // ₹13.2 Cr against ₹12 Cr materiality — so the register reads the same.
+      mwIndicators: [],
       aggregationGroup: 'Procure to Pay',
       // Deliberately NOT confirmed yet — this is the reviewer's gate, waiting.
       remediation: {
@@ -2196,7 +2206,8 @@ function rfDemoDeficiencies(controls: Control[]): Deficiency[] {
       ? 'Post-approval edits are not routed back for re-approval.'
       : 'The approval matrix is not enforced in the release run.',
     likelihood: 'Reasonably possible' as const,
-    magnitude: i === 0 ? 3.4 : 1.6,
+    // Rupees, not crores — see the archive seeds above for what this cost.
+    magnitude: i === 0 ? 34_000_000 : 16_000_000,
     mwIndicators: [],
     // Freshly raised — no fix planned yet; that is the roll-forward's opening state.
     remediation: { action: '', date: null, owner: 'R. Iyer', status: 'Open' as const },
@@ -2467,6 +2478,15 @@ function seedEngagementBody(meta?: SeedMeta): IcfrEngagement {
     preparer: meta.owner ?? base.preparer,
     controls,
     deficiencies,
+    // The company-level indicator that used to be stapled to DEF-A-02. It is a
+    // fact about Altura, not about one vendor-master control, and this is where
+    // it makes ICFR not effective on its own. Altura only — this is the
+    // engagement that demonstrates the adverse road.
+    entityMwConclusions: rich ? [{
+      id: 'control-environment' as const, present: true,
+      basis: 'Segregation is enforced by convention rather than by the system across the purchase-to-pay estate; three of the five exceptions this year turn on the same absent separation.',
+      by: 'A. Mehta', at: '14 Feb 2026',
+    }] : undefined,
     tasks: [],
     discussions: [],
     reviewNotes: rich ? alturaReviewNotes(controls) : [],
