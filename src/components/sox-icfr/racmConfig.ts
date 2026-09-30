@@ -92,6 +92,31 @@ function setups(): Record<string, RacmConfig> {
   if (!SETUPS) SETUPS = load();
   return SETUPS;
 }
+
+/**
+ * WHAT `useSyncExternalStore` IS ALLOWED TO SEE — one cached object per key.
+ *
+ * `racmConfig()` hands back a FRESH object for a key nobody has configured, on
+ * purpose: `defaultConfig()` says so above, so that a caller spreading the
+ * built-in shape can never reach the copy everyone else reads. `getSnapshot`
+ * needs the opposite promise — the same object until something actually
+ * changes, or React compares the two, finds them different, and re-renders
+ * forever.
+ *
+ * It did. The full-page RACM editor calls `useRacmConfig` and crashed with
+ * "Maximum update depth exceeded" for every client group that had never been
+ * through the Config tab — which is every RACM on the day it is created. The
+ * error surfaced as a React minified #185 with no hint of this file in the
+ * stack; what names it is the warning beside it, "The result of getSnapshot
+ * should be cached to avoid an infinite loop".
+ *
+ * A Map rather than a shared frozen default, because the entry for a key that
+ * IS configured has to be cached too, and this way the rule is one rule.
+ * Cleared by `emit`, which is the only moment a set-up can change — nothing
+ * else in this module assigns `SETUPS`.
+ */
+const SNAPSHOTS = new Map<string, RacmConfig>();
+
 const listeners = new Set<() => void>();
 
 /** Extras as they may have been stored — bare headers before 22 Sep, defined
@@ -128,7 +153,7 @@ function load(): Record<string, RacmConfig> {
 function save(): void {
   try { localStorage.setItem(STORE_KEY, JSON.stringify(setups())); } catch { /* nothing to do about it */ }
 }
-const emit = () => { save(); listeners.forEach(l => l()); };
+const emit = () => { save(); SNAPSHOTS.clear(); listeners.forEach(l => l()); };
 const subscribe = (l: () => void) => { listeners.add(l); return () => { listeners.delete(l); }; };
 
 /** The 22 Sep list is always in `core`, whoever asks to take it out — the
@@ -139,8 +164,25 @@ function withLocked(core: RacmFieldKey[]): RacmFieldKey[] {
 
 /** One client group's set-up. Unsaved keys read as the built-in shape. */
 export const racmConfig = (key: string): RacmConfig => setups()[key] ?? defaultConfig();
+/**
+ * The same set-up, as ONE object that stays the same object until it changes.
+ *
+ * This is what React is given; `racmConfig` above is what everyone else gets.
+ * The two differ only in that promise, and the promise is the whole fix — see
+ * the note on `SNAPSHOTS`. Exported so it can be tested without a renderer,
+ * because the failure it prevents is invisible until a page dies.
+ */
+export function racmConfigSnapshot(key: string): RacmConfig {
+  const cached = SNAPSHOTS.get(key);
+  if (cached) return cached;
+  const fresh = racmConfig(key);
+  SNAPSHOTS.set(key, fresh);
+  return fresh;
+}
+
 export function useRacmConfig(key: string): RacmConfig {
-  const read = useCallback(() => racmConfig(key), [key]);
+  // Through the snapshot, never `racmConfig` directly.
+  const read = useCallback(() => racmConfigSnapshot(key), [key]);
   return useSyncExternalStore(subscribe, read, read);
 }
 /** The keys that have been set up, for the Config tab to list beside the client
