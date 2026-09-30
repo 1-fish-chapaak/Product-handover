@@ -10,7 +10,7 @@ import AddRacmModal from './AddRacmModal';
 import { defWord } from './flow';
 import { useToast } from '../shared/Toast';
 import {
-  assessSeverity, conclusionOf, controlCode, engagementCompleteness, engagementProgress, failedItgcs, formatINR, isEngagementLocked, isItgcDependent, signoffControls, testsDueNow, trackResult,
+  assessSeverity, conclusionOf, controlCode, engagementCompleteness, engagementProgress, failedItgcs, formatINR, icfrConclusion, isEngagementLocked, isItgcDependent, signoffControls, testsDueNow, trackResult,
 } from './helpers';
 import { cn } from '../../lib/cn';
 import { ItgcCascadeBanner, RagStrip, type RagMeterDef } from './parts';
@@ -131,19 +131,25 @@ export default function Overview() {
 
   const sev = useMemo(() => {
     const c: Record<ExceptionGrade, number> = { 'Material Weakness': 0, 'Significant Deficiency': 0, Deficiency: 0, 'Clearly Trivial': 0 };
-    let open = 0; let mwOpen = 0;
+    let open = 0; let mwOpen = 0; let unsized = 0;
     scopedDefs.forEach(d => {
       // assessed severity — a validly-capped MW counts as an SD everywhere
       const s = assessSeverity(d, eng).final;
+      // An unsized exception is in no severity bucket — it is the bucket this
+      // whole change exists to make visible, and it is counted on its own.
+      if (s === null) { unsized += 1; if (d.status !== 'Closed') open += 1; return; }
       c[s] += 1;
       if (d.status !== 'Closed') { open += 1; if (s === 'Material Weakness') mwOpen += 1; }
     });
-    return { c, open, mwOpen };
+    return { c, open, mwOpen, unsized };
   }, [eng, M, scopedDefs]);
 
   // An open MW never blocks signing — it flips what the signature concludes.
   // Once signed, the stamped conclusion wins over the live derivation.
-  const signsEffective = so.icfrConclusion ? so.icfrConclusion !== 'Not effective' : sev.mwOpen === 0;
+  // Through `icfrConclusion`, NOT the MW count. Counting only material
+  // weaknesses on controls missed the other road to an adverse opinion — a
+  // company-level indicator — and this screen is where the audit is signed.
+  const signsEffective = so.icfrConclusion ? so.icfrConclusion !== 'Not effective' : icfrConclusion(eng) === 'Effective';
   // An interim's signature concludes the ROUND, never the year — its window
   // stops short of the year end, so no ICFR verdict is stamped or claimed
   // (user ask). The opinion arrives with the roll-forward or year-end.
@@ -245,7 +251,13 @@ export default function Overview() {
         // told the owner to act on findings that were not yet theirs, while
         // 'Planning' — the plan they genuinely owed — was left out entirely.
         const inRem = openDefs.filter(d => d.status === 'Planning' || d.status === 'Remediation').length;
-        const inRetest = openDefs.filter(d => d.status === 'Retest').length;
+        // The other half of the same split. This used to count only the retest
+        // step, which has gone (30 Sep) — and even while it lived it was too
+        // narrow: a finding being sized, waiting on the rating gate or sitting
+        // with the reviewer appeared in neither number, so the card quietly
+        // under-reported. Anything open that is not in the owner's two courts is
+        // with the audit team, whichever of their hats is holding it.
+        const withAudit = openDefs.length - inRem;
         return (
           <div className="grid sm:grid-cols-2 gap-4">
             <button onClick={() => setTab('controls')} className="text-left rounded-2xl border border-canvas-border bg-canvas-elevated p-4 hover:border-brand-300 transition-colors cursor-pointer">
@@ -263,7 +275,7 @@ export default function Overview() {
               <div className="flex items-center gap-x-4 gap-y-1 flex-wrap mt-2.5 text-[12.5px] text-ink-600">
                 <span><b className="text-[17px] font-bold tabular-nums text-ink-900">{openDefs.length}</b> open</span>
                 {inRem > 0 && <span><b className="font-bold text-high-700">{inRem}</b> on you to remediate</span>}
-                {inRetest > 0 && <span><b className="font-bold text-evidence-700">{inRetest}</b> with the auditor</span>}
+                {withAudit > 0 && <span><b className="font-bold text-evidence-700">{withAudit}</b> with the audit team</span>}
               </div>
               <span className="mt-2.5 inline-flex items-center gap-1 text-[12px] font-semibold text-brand-700">Manage {W.mine.toLowerCase()} <ArrowRight size={13} /></span>
             </button>
@@ -447,7 +459,9 @@ export default function Overview() {
           { key: 'mw', show: sev.mwOpen > 0, onClick: () => openDeficiencies(), icon: <AlertTriangle size={13} className="text-risk-600" />,
             label: <><b className="font-semibold text-risk-700">{sev.mwOpen}</b> material weakness{sev.mwOpen === 1 ? '' : 'es'} open — {past ? 'ICFR ineffective, open past year-end' : 'ICFR ineffective if still open at year-end'}</> },
           { key: 'other', show: openOther > 0, onClick: () => openDeficiencies(), icon: <Circle size={11} className="text-high-600" />,
-            label: <><b className="font-semibold text-ink-900">{openOther}</b> {openOther === 1 ? W.one : W.many} still working through remediation → retest → close</> },
+            // The journey as it now runs: the retest left the exception flow on
+            // 30 Sep, so naming it here promised a step nobody will ever see.
+            label: <><b className="font-semibold text-ink-900">{openOther}</b> {openOther === 1 ? W.one : W.many} still working through plan → fix → close</> },
           { key: 'unconcluded', show: unconcluded > 0, onClick: () => openRegister({ view: 'open' }), icon: <Circle size={11} className="text-ink-400" />,
             label: <><b className="font-semibold text-ink-900">{unconcluded}</b> control{unconcluded === 1 ? '' : 's'} not concluded</> },
           { key: 'papers-rev', show: papersWithReviewer > 0, onClick: () => openRegister({ view: 'review' }), icon: <Circle size={11} className="text-evidence-600" />,

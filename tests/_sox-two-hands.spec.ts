@@ -82,10 +82,15 @@ test('the same pair of hands cannot take two rungs in a row', async ({ page }) =
   await expect(page.getByRole('button', { name: /^Confirm / }).first()).toBeVisible({ timeout: 15_000 });
   await expect(page.getByText('A different person must confirm — you sized this one.')).toHaveCount(0);
 
-  // And the rung that already had this rule keeps stating it in the same voice:
-  // DEF-A-04's retest was recorded by the auditor, so the close waits on someone
-  // who did not run it.
+  // And the rung at the other end of the ladder keeps the same rule in the same
+  // voice — only its anchor moved. It used to be "you ran this retest"; the
+  // retest left the flow on 30 Sep, so the last judgement before the close is
+  // the auditor's acceptance of the plan, and that is what the close now refuses
+  // to be taken by. DEF-A-04's plan was accepted by A. Mehta, and the reviewer
+  // here is J. Fernandes, so — as above — the gate does NOT fire.
   await page.getByText('DEF-A-04').first().click();
   await page.waitForTimeout(800);
-  await expect(page.getByText(/retesting on a post-fix sample|Retest/).first()).toBeVisible();
+  await expect(page.getByText(/Step \d of 5 · /).first()).toBeVisible();
+  await expect(page.getByText('A different person must close — you recorded this retest.')).toHaveCount(0);
+  await expect(page.getByRole('button', { name: /Draw post-fix sample|Record retest/ })).toHaveCount(0);
 });

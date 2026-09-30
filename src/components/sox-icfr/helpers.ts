@@ -1,7 +1,7 @@
 import { riskCategoryOf } from './racmImport';
-import { DEFAULT_SAMPLE_SIZES, defaultSamplingMethodology, isInquiryOnly, ipeReliable, GRADE_RANK, SAMPLING_SPREADS, TESTING_STRATEGIES, DOC_REQUIREMENTS, GAP_KIND_LABEL } from './types';
+import { DEFAULT_SAMPLE_SIZES, defaultSamplingMethodology, isInquiryOnly, ipeReliable, GRADE_RANK, sortGapKinds, SAMPLING_SPREADS, TESTING_STRATEGIES, DOC_REQUIREMENTS, GAP_KIND_LABEL } from './types';
 import type { DesignGapKind,
-  AuditorProofKind, Conclusion, Control, Court, Deficiency, DesignDoc, DesignDocKind, DesignTrack, ExceptionGrade, HandoffTask, IcfrEngagement,
+  AuditorProofKind, Conclusion, Control, Court, Deficiency, DesignDoc, EntityMwConclusion, DesignDocKind, DesignTrack, ExceptionGrade, HandoffTask, IcfrEngagement,
   DesignDocRequirement, DocClassColumn,
   FileOrigin, IpeCheck, Likelihood, MaterialityRules, OperatingTrack, Population, PopulationBasis, PopulationSource, ReviewNote, RiskRating, Role,
   Sample, SamplingMethod, SamplingMethodology, SamplingSpread, Severity, TestingStrategy, ToeRound, TrackConclusion, DeficiencyGroup, ExceptionStatus,
@@ -58,8 +58,10 @@ export function isClearlyTrivial(magnitude: number, rules: MaterialityRules): bo
 // exception — capBlocked says why a chosen control had no effect.
 export const SEVERITY_RANK: Record<Severity, number> = { Deficiency: 0, 'Significant Deficiency': 1, 'Material Weakness': 2 };
 export interface SeverityAssessment {
-  raw: ExceptionGrade;
-  final: ExceptionGrade;
+  /** Both `null` while the exception is unsized — there is no grade to shorten.
+   *  See `ExceptionGradeResult.grade`. */
+  raw: ExceptionGrade | null;
+  final: ExceptionGrade | null;
   capped: boolean;
   capBlocked?: 'not-effective' | 'mw-indicator';
   bumped?: boolean;   // prudent-official judgment raised the grade above the math
@@ -109,9 +111,18 @@ export interface GradeStep {
 }
 
 export interface ExceptionGradeResult {
-  grade: ExceptionGrade;
-  /** Where rule 5's ladder landed, before cap, aggregation or judgment. */
-  ladderGrade: ExceptionGrade;
+  /**
+   * `null` when the exception has not been sized — see `Deficiency.magnitude`.
+   *
+   * Nullable rather than a stand-in grade, because every grade in the union is
+   * a claim about the exception and there is no honest one to make yet. It also
+   * puts the compiler to work: every reader of a grade now has to say what it
+   * shows when there is none, which is the whole point of the change.
+   */
+  grade: ExceptionGrade | null;
+  /** Where rule 5's ladder landed, before cap, aggregation or judgment.
+   *  `null` alongside `grade` when the ladder was never reached. */
+  ladderGrade: ExceptionGrade | null;
   working: GradeStep[];
   cap?: { from: ExceptionGrade; to: ExceptionGrade; by: string };
   capBlocked?: 'not-effective' | 'mw-indicator' | 'none-chosen';
@@ -186,7 +197,16 @@ export function joinsNoDerivedGroup(d: Deficiency, eng: IcfrEngagement): boolean
  *  trivial never aggregates — the de-minimis rule stopped it before aggregation
  *  was reached — and a closed one has been remediated. */
 export const aggregable = (d: Deficiency, eng: IcfrEngagement): boolean =>
-  d.status !== 'Closed' && !isClearlyTrivial(d.magnitude, eng.rules);
+  // An unsized exception STAYS IN. It is not trivial — nobody has said what it
+  // is — and dropping it would hide it from the group that should be asking
+  // about it. It contributes no figure (see `combinedExposure`), which makes
+  // the total provisional rather than smaller, and the group says so.
+  d.status !== 'Closed' && (d.magnitude === null || !isClearlyTrivial(d.magnitude, eng.rules));
+
+/** Members of a group nobody has sized. A total missing a member is not a
+ *  total, and the screen has to be able to name which ones are missing. */
+export const unsizedIn = (members: Deficiency[]): Deficiency[] =>
+  members.filter(d => d.magnitude === null);
 
 /** The keys this exception groups on. */
 export function groupKeysFor(d: Deficiency, eng: IcfrEngagement): { kind: 'account' | 'root cause'; key: string; name: string }[] {
@@ -251,6 +271,10 @@ export function combinedExposure(members: Deficiency[], eng: IcfrEngagement): { 
     // Unplaceable figures each get a partition of their own, keyed so they can
     // never merge with anything — including each other.
     const key = id ?? `\u0000unplaced:${d.id}:${i}`;
+    // An unsized member contributes nothing and makes the total unprovable —
+    // the same hole `unverified` already exists to declare. Silently adding 0
+    // would hand back a number that looks complete and is not.
+    if (d.magnitude === null) { unverified = true; return; }
     partitions.set(key, Math.max(partitions.get(key) ?? 0, d.magnitude));
   });
   return { total: Array.from(partitions.values()).reduce((a, b) => a + b, 0), unverified };
@@ -395,6 +419,21 @@ export function gradeException(d: Deficiency, eng: IcfrEngagement, ownGradeOnly 
     }
   }
 
+  // ── not sized ── the question has not been answered, so there is no answer.
+  //
+  // AFTER rule 1 and rule 2 on purpose. An indicator is a material weakness
+  // "whatever the amount", so it settles an unsized exception exactly as it
+  // settles a sized one — refusing to grade there would lose a finding the
+  // standard says is already made. Everything BELOW this line reads the figure,
+  // and a figure nobody entered is not a small figure.
+  if (d.magnitude === null) {
+    working.push({
+      n: 3, rule: 'Exposure', fired: true,
+      detail: 'Not sized yet — nothing below this can be evaluated. Enter what could have slipped through, or record nil with a reason.',
+    });
+    return { grade: null, ladderGrade: null, working, capBlocked };
+  }
+
   // ── 3 ── below the de-minimis line nothing further is evaluated.
   if (isClearlyTrivial(d.magnitude, eng.rules)) {
     working.push({ n: 3, rule: 'Clearly trivial', fired: true, detail: `${RUPEE(d.magnitude)} is at or under ${RUPEE(eng.rules.clearlyTrivial)} — logged, not evaluated further.` });
@@ -454,12 +493,19 @@ export function gradeException(d: Deficiency, eng: IcfrEngagement, ownGradeOnly 
 
   // ── 7 ── judgment, upward only.
   let bumped: ExceptionGradeResult['bumped'];
-  if (d.prudentOverride && GRADE_RANK[d.prudentOverride.to] > GRADE_RANK[grade]) {
+  if (d.prudentOverride?.to && GRADE_RANK[d.prudentOverride.to] > GRADE_RANK[grade]) {
     bumped = { from: grade, to: d.prudentOverride.to, rationale: d.prudentOverride.rationale };
     working.push({ n: 7, rule: 'Prudent official', fired: true, detail: `Raised to ${d.prudentOverride.to} by ${d.prudentOverride.by} — ${d.prudentOverride.rationale}` });
     grade = d.prudentOverride.to;
   } else {
-    working.push({ n: 7, rule: 'Prudent official', fired: false, detail: d.prudentOverride ? 'Recorded, but it does not sit above the calculated grade.' : 'No judgment applied.' });
+    // Three answers, not two. "Considered, and the grade stands" is a judgement
+    // somebody made and signed, and the working says so — it is not the same as
+    // nobody having looked, which is what the old two-branch line implied.
+    working.push({ n: 7, rule: 'Prudent official', fired: false,
+      detail: d.prudentOverride?.to === null
+        ? `Considered — the grade stands. ${d.prudentOverride.by}: “${d.prudentOverride.rationale}”`
+        : d.prudentOverride ? 'Recorded, but it does not sit above the calculated grade.'
+          : 'Not yet considered.' });
   }
 
   return { grade, ladderGrade, working, cap, capBlocked, aggregate, bumped };
@@ -472,12 +518,12 @@ export function gradeException(d: Deficiency, eng: IcfrEngagement, ownGradeOnly 
 // so the threshold helper it needed is gone.)
 
 // ─── No two rungs in a row by the same hands ─────────────────────────────────────
-// A finding travels through eight steps, and at every handoff the point is that
+// A finding travels through seven states, and at every handoff the point is that
 // somebody ELSE looks. Roles alone do not guarantee that: one person can hold two
 // hats, and on a small team usually does. So each rung stamps who did it, and the
 // next one is refused to that name — sized-then-confirmed, submitted-then-judged,
-// fixed-then-retested, retested-then-closed. Checked by NAME for the same reason
-// the own-control prohibition is: changing hats must not change the answer.
+// judged-then-closed. Checked by NAME for the same reason the own-control
+// prohibition is: changing hats must not change the answer.
 //
 // An absent stamp (a finding seeded mid-ladder, or raised before the field
 // existed) reads as "no clash known" rather than blocking — a rule that fires on
@@ -497,8 +543,7 @@ export function courtForException(d: Deficiency): Court {
     case 'Planning': return 'risk-owner';       // ③ writing the plan
     case 'Plan review': return 'auditor';       // ③ judging it against the root cause
     case 'Remediation': return 'risk-owner';    // ④ doing the work
-    case 'Retest': return 'auditor';            // ⑤ retesting the fix
-    case 'Awaiting reviewer': return 'reviewer';// ⑥ reading the evidence and closing
+    case 'Awaiting reviewer': return 'reviewer';// ⑤ reading the evidence and closing
     case 'Closed': return 'none';
   }
 }
@@ -507,6 +552,15 @@ export function courtForException(d: Deficiency): Court {
  *  Ira draft nobody has looked at yet (17 Sep dev call). */
 export function rootCauseReady(d: Pick<Deficiency, 'rootCause' | 'iraSuggested'>): boolean {
   return !!d.rootCause.trim() && !d.iraSuggested?.rootCause;
+}
+
+/** Has the exposure been ANSWERED? The twin of `rootCauseReady`, and the other
+ *  half of what step 2 exists to settle. Nil is an answer; nil without a reason
+ *  is the blank wearing a number's clothes, and is not. */
+export function sizingReady(d: Pick<Deficiency, 'magnitude' | 'magnitudeZeroReason'>): boolean {
+  if (d.magnitude === null) return false;
+  if (d.magnitude === 0) return !!d.magnitudeZeroReason?.trim();
+  return true;
 }
 
 /**
@@ -535,13 +589,24 @@ const GAP_KIND_PATTERNS: [RegExp, DesignGapKind][] = [
   [/often enough|frequen(cy|t enough)|between runs|once a (year|quarter) is not/i, 'frequency'],
 ];
 
-export function suggestGapKind(c: Control): { kind: DesignGapKind; reason: string } | null {
+export function suggestGapKind(c: Control): { kinds: DesignGapKind[]; reason: string } | null {
+  // EVERY failed check, not the first. This returned on the first pattern that
+  // matched and silently dropped the rest, so a control failing both the
+  // threshold check and the placement check was recorded as one of the two,
+  // picked by the order of `design.points`. That was a defect before the field
+  // could even hold two.
   const failed = c.design.points.filter(p => (p.override?.result ?? p.result) === 'Fail').map(p => p.text);
+  const hits: { kind: DesignGapKind; text: string }[] = [];
   for (const text of failed) {
     const hit = GAP_KIND_PATTERNS.find(([re]) => re.test(text));
-    if (hit) return { kind: hit[1], reason: `from the failed design check "${text.replace(/[.\s]+$/, '')}"` };
+    if (hit && !hits.some(h => h.kind === hit[1])) hits.push({ kind: hit[1], text });
   }
-  return null;
+  if (!hits.length) return null;
+  const quoted = hits.map(h => `"${h.text.replace(/[.\s]+$/, '')}"`);
+  return {
+    kinds: sortGapKinds(hits.map(h => h.kind)),
+    reason: `from the failed design check${hits.length > 1 ? 's' : ''} ${quoted.length > 1 ? `${quoted.slice(0, -1).join(', ')} and ${quoted[quoted.length - 1]}` : quoted[0]}`,
+  };
 }
 
 export function suggestRootCause(
@@ -649,8 +714,7 @@ export function exceptionCourtDetail(d: Deficiency, eng: IcfrEngagement): { who:
     : d.status === 'Planning' ? (d.planReview?.decision === 'Rejected' ? 'rewriting the plan' : 'writing the plan')
     : d.status === 'Plan review' ? 'checking the plan against the root cause'
     : d.status === 'Remediation' ? 'implementing the fix and attaching evidence'
-    : d.status === 'Retest' ? (d.track === 'design' ? 're-checking the failed design checks against the fix' : 'retesting on a post-fix sample')
-    : d.status === 'Awaiting reviewer' ? 'reading the retest evidence and closing'
+    : d.status === 'Awaiting reviewer' ? 'reading the fix evidence and closing'
     : 'closed';
   return { who: court === 'none' ? (d.signoff?.by ?? who) : who, doing };
 }
@@ -659,6 +723,11 @@ export function exceptionCourtDetail(d: Deficiency, eng: IcfrEngagement): { who:
 // A repaired control has to RUN before it can be sampled again — you cannot retest
 // a monthly control the week after it was fixed and call the result evidence. The
 // wait comes off the control's own frequency.
+//
+// This is the arithmetic behind the whole reason the retest left the exception
+// flow (30 Sep): the fix is agreed now and the proof of it is gathered when there
+// is something to gather. Closing an exception raises `Control.retestDue`, and
+// this says when the auditor can honestly answer it.
 
 export const OPERATING_PERIOD: Record<Frequency, { months: number | null; label: string }> = {
   Daily: { months: 1, label: 'about a month of daily runs' },
@@ -714,6 +783,134 @@ function parsePeriodEnd(label: string): Date | null {
   return hasDay ? d : new Date(d.getFullYear(), d.getMonth() + 1, 0, 23, 59, 59);
 }
 
+/** Rewriting the control, versioning the RACM row and re-running the design test,
+ *  before the rebuilt control has run even once. One month, deliberately coarse:
+ *  the answer this drives is "this year or not", and half-month precision would
+ *  only invite an argument about the wrong thing. */
+const REDESIGN_LEAD_MONTHS = 1;
+
+export interface RemediationRunway {
+  /** Whole days from today to period end. Negative once the books have closed. */
+  daysLeft: number;
+  /** Months the whole chain needs — the rebuild, then an operating period. Null
+   *  when the control cannot produce a testable occurrence this period at all. */
+  monthsNeeded: number | null;
+  /** When a first operating test could finish if the rebuild started today. */
+  earliest: Date | null;
+  verdict: 'fits' | 'tight' | 'cannot-close';
+  /** The sentence for the panel, written for the auditor rather than about the
+   *  computation. */
+  line: string;
+}
+
+/**
+ * HOW MUCH OF THE YEAR IS LEFT — asked while the exception is being SIZED.
+ *
+ * Fixing a design failure is a long chain: redesign, version the RACM row, a
+ * fresh design test, then a period during which the rebuilt control actually
+ * runs, then a first operating test. Two to three months at the fast end. If
+ * year end is close the control cannot be concluded effective as at year end
+ * however good the plan is — and that changes what the plan can honestly
+ * promise, which is why it belongs beside the sizing rather than after the plan
+ * is written.
+ *
+ * NOT a second copy of `retestReadiness.firstOperating`. That clock starts at
+ * `remediation.date`, so it is silent through the whole of sizing — there is no
+ * plan and no date yet — and on every Daily/Weekly/Monthly/Quarterly control it
+ * reads "not at risk" for want of a date to count from. This one starts TODAY
+ * and asks whether the chain could finish even if the owner began this
+ * afternoon. Same table, same period-end parse, so the line shown at sizing and
+ * the verdict reached at sign-off cannot disagree.
+ *
+ * Design track only: on the operating track the retest IS the sample, and
+ * `retestReadiness` is already the whole answer.
+ */
+/**
+ * CAN THIS DESIGN EXCEPTION BE CLOSED? — and if not, why not.
+ *
+ * A design failure means the control was built wrong and could never have
+ * worked. Fixing it makes a NEW control, and a new control has not been watched
+ * operating just because its design re-check passed. Closing on the design
+ * alone says "this works now" on the strength of reading it, which is exactly
+ * the evidence a design test is not.
+ *
+ * Two things this refuses, both of which were closable:
+ *
+ *   A REDESIGN WHOSE NEW VERSION CANNOT BE WATCHED IN TIME. `versionCollapse`
+ *   already computes that verdict — 'ineffective-carries' — and it was read by
+ *   the working paper and the control page and by nothing that could act on it.
+ *   Closing there files a finding as fixed in a year that never saw it run.
+ *
+ *   A WORKAROUND CLOSED AS IF IT WERE A REBUILD. `workaround` leaves the control
+ *   itself untouched — `PLAN_FIX_HINT` says so — so the design that failed is
+ *   still the design. The retest re-reads the OLD failed checks against a new
+ *   manual step beside it, which is worth knowing and is not the same as the
+ *   flaw being gone. It closes, but it is named for what it is.
+ *
+ * Returns null when there is nothing to say — the operating track, or a design
+ * exception that has earned its close.
+ */
+export function designCloseBlock(d: Deficiency, c: Control | undefined, eng: IcfrEngagement): {
+  blocks: boolean; reason: string;
+} | null {
+  if (d.track !== 'design') return null;
+  const fix = d.planReview?.fix;
+
+  if (fix === 'redesign') {
+    const collapse = c ? versionCollapse(eng, c) : null;
+    if (collapse?.outcome === 'ineffective-carries') {
+      return {
+        blocks: true,
+        reason: `The rebuilt control cannot run enough times to be tested before ${eng.periodEnd}, so nothing this year shows it operating. The design is not the problem — the absence of a period to test it in is. This finding carries to the next cycle rather than closing in this one.`,
+      };
+    }
+    return null;
+  }
+
+  if (fix === 'workaround') {
+    return {
+      blocks: false,
+      reason: 'Closed on a workaround: the control itself was not rebuilt, so the design that failed is still the design. What was re-checked is the manual step put beside it.',
+    };
+  }
+  return null;
+}
+
+export function remediationRunway(
+  d: Deficiency, c: Control | undefined, periodEnd: string, today: Date = new Date(),
+): RemediationRunway | null {
+  if (d.track !== 'design') return null;
+  const end = parsePeriodEnd(periodEnd);
+  if (!end) return null;
+
+  const period = OPERATING_PERIOD[c?.frequency ?? 'Monthly'];
+  const daysLeft = Math.ceil((end.getTime() - today.getTime()) / 86_400_000);
+  const monthsNeeded = period.months === null ? null : REDESIGN_LEAD_MONTHS + period.months;
+
+  let earliest: Date | null = null;
+  if (monthsNeeded !== null) {
+    earliest = new Date(today);
+    earliest.setMonth(earliest.getMonth() + monthsNeeded);
+  }
+
+  const verdict: RemediationRunway['verdict'] =
+    earliest === null || earliest > end ? 'cannot-close'
+      : Math.ceil((end.getTime() - earliest.getTime()) / 86_400_000) <= 30 ? 'tight'
+        : 'fits';
+
+  const endLabel = shortDate(end);
+  const line =
+    monthsNeeded === null
+      ? `Too late to close this year. ${period.label[0]!.toUpperCase()}${period.label.slice(1)}, so a rebuilt version cannot be watched operating before the year ends on ${endLabel} — this finding carries forward however quickly the redesign lands.`
+      : verdict === 'cannot-close'
+        ? `Too late to close this year. Even starting the rebuild today, the control would not have run long enough to test until ${shortDate(earliest!)} — after the year ends on ${endLabel}. Whatever the plan promises, this cannot be signed off as working this year.`
+        : verdict === 'tight'
+          ? `Only just enough time. Starting now, the control could be tested by ${shortDate(earliest!)}, ${Math.ceil((end.getTime() - earliest!.getTime()) / 86_400_000)} days before the year ends on ${endLabel} — any slip and it stays open.`
+          : `There is time. Starting now, the control could be tested by ${shortDate(earliest!)}, comfortably before the year ends on ${endLabel}.`;
+
+  return { daysLeft, monthsNeeded, earliest, verdict, line };
+}
+
 export function retestReadiness(d: Deficiency, c: Control | undefined, periodEnd: string): RetestReadiness {
   const period = OPERATING_PERIOD[c?.frequency ?? 'Monthly'];
   const end = parsePeriodEnd(periodEnd);
@@ -722,9 +919,9 @@ export function retestReadiness(d: Deficiency, c: Control | undefined, periodEnd
 
   // ── The design track has a different clock, and used to be given the wrong one.
   //
-  // A TOD retest re-reads the design checks against the fix — `drawRetestSample`
-  // refuses a design draw outright — so it needs no occurrence and is ready the day
-  // the fix lands. This line used to tell a design exception "Retestable from {fix
+  // A TOD retest re-reads the design checks against the fix — there is no sample
+  // in it at all — so it needs no occurrence and is ready the day the fix lands.
+  // This line used to tell a design exception "Retestable from {fix
   // date + three to four monthly closes}", and on an Annual control "Not retestable
   // this period", both counted off an operating frequency that has nothing to do
   // with re-reading a design. Both were false.
@@ -818,7 +1015,8 @@ export function retestAtRisk(eng: IcfrEngagement): { d: Deficiency; readiness: R
 
 /** The design checks a TOD retest re-checks — the ones whose failure raised the
  *  exception, never a list written for the retest. First answer wins:
- *    · a round already started or run — every round re-checks the same list;
+ *    · a round already started or run — only ever a record raised back when the
+ *      retest was a step in this flow, and every round re-checked the same list;
  *    · the list stamped on the exception when it was raised;
  *    · the control's design checks reading Fail now — for an exception raised
  *      before the stamp existed;
@@ -866,7 +1064,7 @@ export function versionFrom(c: Control, defId: string): ControlVersion | undefin
  *  auditor has not already concluded on.
  *
  *  Counted against the RETEST ROUNDS rather than simply asking whether any version
- *  exists, because a rebuild can miss. Round 1 fails, the exception goes back to
+ *  exists, because a rebuild could miss: round 1 fails, the exception goes back to
  *  the owner, they rebuild a second time — and the auditor has to record that
  *  second rebuild too. One version per round run, and the step asks for the next
  *  one whenever the count has fallen behind:
@@ -875,8 +1073,15 @@ export function versionFrom(c: Control, defId: string): ControlVersion | undefin
  *    version recorded     1 version,  0 rounds  ⇒ does not ask
  *    round 1 failed       1 version,  1 round   ⇒ asks again
  *
- *  A workaround never gets here: it leaves the control as it was, so its retest
- *  genuinely is the old checks read again against the new compensating step. */
+ *  SINCE THE RETEST LEFT THE FLOW (30 Sep) only the first two rows can occur —
+ *  nothing writes `retests` any more, so the count is always nil and this reads
+ *  "no version recorded yet". That is the same answer it always gave on a live
+ *  exception, and the third row stays because a record from an earlier year can
+ *  still carry rounds. A second rebuild is now the auditor's own act on the
+ *  control (`recordNewVersion`), not something a failed round demands.
+ *
+ *  A workaround never gets here: it leaves the control as it was, so what would be
+ *  re-checked is the old checks read again against the new compensating step. */
 export function awaitsNewVersion(c: Control, d: Deficiency): boolean {
   return d.track === 'design'
     && d.planReview?.decision === 'Accepted'
@@ -930,7 +1135,7 @@ export function versionCollapse(eng: IcfrEngagement, c: Control): VersionCollaps
   const late = !!(def && retestReadiness(def, c, eng.periodEnd).firstOperating?.beyondPeriodEnd);
   const d = trackResult(c.design);
   const o = trackResult(c.operating);
-  const disclosure = `v${prior.no} was concluded ${prior.design.conclusion.toLowerCase()} on its design${def ? ` (${def.id}${def.gapKind ? ` — ${GAP_KIND_LABEL[def.gapKind]}` : ''})` : ''}, and superseded on ${formatDueDate(prior.supersededAt)}. v${no} is the control from that day: ${prior.replaced.note}`;
+  const disclosure = `v${prior.no} was concluded ${prior.design.conclusion.toLowerCase()} on its design${def ? ` (${def.id}${def.gapKinds?.length ? ` — ${def.gapKinds.map(k => GAP_KIND_LABEL[k]).join(', ')}` : ''})` : ''}, and superseded on ${formatDueDate(prior.supersededAt)}. v${no} is the control from that day: ${prior.replaced.note}`;
 
   // The rebuild failed as well. Nothing to collapse — the finding is live, on a
   // second wording, and the ladder treats it as the more serious thing it is.
@@ -1018,9 +1223,14 @@ export function versionAudit<T extends Pick<AuditRecord, 'windowFrom' | 'windowT
 }
 
 /** The retest of a REBUILT control is its new version's design test, not a re-read
- *  of the old checks. True once the version for THIS round has been recorded — from
- *  which point the round's marks are READ off the live TOD rather than hand-entered,
- *  so the exception can never say passed while the design test it rests on has not. */
+ *  of the old checks. True once the rebuild has been recorded — from which point
+ *  the marks are READ off the live TOD rather than hand-entered, so nothing can say
+ *  passed while the design test it rests on has not.
+ *
+ *  With the retest off the exception flow the `!awaitsNewVersion` clause is now
+ *  implied by the one before it — a recorded version is exactly what that asks
+ *  about. Left standing because it is the clause that would carry the weight again
+ *  the moment rounds come back, and it changes no answer in the meantime. */
 export function isVersionRetest(c: Control, d: Deficiency): boolean {
   return d.track === 'design'
     && d.planReview?.fix === 'redesign'
@@ -1055,7 +1265,10 @@ export function previewRegrades(eng: IcfrEngagement, patch: RulesPatch): { defId
   return eng.deficiencies
     .filter(d => d.status !== 'Closed')
     .map(d => ({ defId: d.id, from: assessSeverity(d, eng).final, to: assessSeverity(d, next).final }))
-    .filter(x => x.from !== x.to);
+    // A change to the ground rules cannot re-grade what has no grade. An
+    // unsized exception is null on both sides and simply is not a re-grade.
+    .filter((x): x is { defId: string; from: ExceptionGrade; to: ExceptionGrade } =>
+      x.from !== null && x.to !== null && x.from !== x.to);
 }
 
 // ─── Engagement-level ICFR conclusion ────────────────────────────────────────────
@@ -1065,8 +1278,40 @@ export function previewRegrades(eng: IcfrEngagement, patch: RulesPatch): { defId
 export function openMaterialWeaknesses(eng: IcfrEngagement): Deficiency[] {
   return eng.deficiencies.filter(d => d.status !== 'Closed' && assessSeverity(d, eng).final === 'Material Weakness');
 }
+/** The company-level indicators the auditor has concluded ARE present. */
+export const entityMwPresent = (eng: IcfrEngagement): EntityMwConclusion[] =>
+  (eng.entityMwConclusions ?? []).filter(c => c.present);
+
+/**
+ * EVERYTHING THAT MAKES ICFR NOT EFFECTIVE, AND WHY — read once.
+ *
+ * Two roads, not one. An open material weakness on a control is the obvious
+ * one. The other is a company-level indicator: a restatement, the audit
+ * committee, the control environment, the period-end process. AS 2201 .69 calls
+ * each an indicator that A material weakness exists — which makes ICFR not
+ * effective — without making any individual control's exception one.
+ *
+ * Five surfaces used to work the verdict out for themselves, from the MW count
+ * alone. They ask this instead, so the dashboard, the paper, the report and the
+ * signature cannot reach four different answers about the same engagement.
+ */
+export function mwBasis(eng: IcfrEngagement): {
+  openMw: Deficiency[]; entity: EntityMwConclusion[]; notEffective: boolean;
+} {
+  const openMw = openMaterialWeaknesses(eng);
+  const entity = entityMwPresent(eng);
+  return { openMw, entity, notEffective: openMw.length > 0 || entity.length > 0 };
+}
+
+/** Why ICFR is not effective, in a phrase — for a paper, a modal or a report.
+ *  Both roads, so a reader is never told the verdict without the reason. */
+export const mwReason = (openMw: number, entity: readonly EntityMwConclusion[]): string =>
+  [openMw ? `${openMw} material weakness${openMw === 1 ? '' : 'es'} open` : '',
+    entity.length ? `${entity.length} company-level indicator${entity.length === 1 ? '' : 's'} present` : '']
+    .filter(Boolean).join(' · ');
+
 export function icfrConclusion(eng: IcfrEngagement): 'Effective' | 'Not effective' {
-  return openMaterialWeaknesses(eng).length ? 'Not effective' : 'Effective';
+  return mwBasis(eng).notEffective ? 'Not effective' : 'Effective';
 }
 
 // ─── ITGC cascade — a failed ITGC invalidates "test of one" downstream ───────────
@@ -1544,17 +1789,61 @@ export function exposureFromData(d: Deficiency, eng: IcfrEngagement, x: Exposure
 //    Reasonably possible below that. NEVER Remote: Remote caps the grade at a
 //    deficiency, and arguing a grade down is the auditor's call to make, not a
 //    default to accept by not looking.
-//  Exposure — the figure worked out from the data above. Left at ₹0 and untagged
-//    when there is nothing to work it out from.
+//  Exposure — the figure worked out from the data above. Left UNSIZED (null) and
+//    untagged when there is nothing to work it out from. It was left at ₹0, and
+//    ₹0 is below every de-minimis line, so the engine graded the exception
+//    Clearly Trivial before a person had answered anything.
 //  Compensating control — another control concluded effective on the same risk,
 //    else in the same process; the first in register order. None qualifying is
 //    still an answer, and is tagged as one.
 export interface SizingSuggestion {
   likelihood: Likelihood;
-  magnitude: number;
+  /** `null` when there was nothing to work a figure out from — see below. */
+  magnitude: number | null;
   compensatingControlId?: string;
   iraSuggested: NonNullable<Deficiency['iraSuggested']>;
 }
+
+/**
+ * WHAT EACH DESIGN GAP MEANS FOR LIKELIHOOD.
+ *
+ * 'Probable' was stamped on every design failure, with one reason: "built wrong,
+ * so it fails every time it runs". That is true of two of the six. A control
+ * nobody segregated, and a control that is not there, cannot work at all — every
+ * run fails. The other four fail on a SUBSET of what passes through them: what
+ * falls between two runs, what sits under the threshold, what already cleared
+ * the earlier step, what took the route around it. A subset is 'Reasonably
+ * possible', and saying otherwise overstates the finding in Ira's voice.
+ *
+ * Never 'Remote' — Remote caps the grade at a deficiency, and arguing a grade
+ * DOWN is the auditor's call to make, not a default to accept by not looking.
+ */
+const GAP_KIND_LIKELIHOOD: Record<DesignGapKind, { likelihood: Likelihood; reason: string }> = {
+  sod: { likelihood: 'Probable', reason: 'no segregation of duties — one hand does it and checks it, so no run is independent' },
+  precision: { likelihood: 'Reasonably possible', reason: 'insufficient precision — only what sits under the threshold gets through' },
+  placement: { likelihood: 'Reasonably possible', reason: 'wrong place in the process — it cannot stop what the earlier step let through' },
+  bypassable: { likelihood: 'Reasonably possible', reason: 'can be bypassed — it only fails on what took the route around it' },
+  frequency: { likelihood: 'Reasonably possible', reason: 'runs too rarely — only what falls between two runs gets through' },
+  'no-control': { likelihood: 'Probable', reason: 'no control at all — nothing in the process does this, so nothing is ever caught' },
+};
+
+/** No kind named: the failed check matched no pattern. The design failed, but
+ *  nothing on the record says HOW, so the every-run claim cannot be made for it. */
+const GAP_KIND_UNNAMED = {
+  likelihood: 'Reasonably possible' as Likelihood,
+  reason: 'design failure with no gap named — nothing says yet that it fails every time it runs',
+};
+
+/** The likelihood a design gap argues for. Exported so `updateDeficiency` can
+ *  re-read it when the auditor changes the gap kind. */
+export const likelihoodForGap = (ks?: readonly DesignGapKind[]) => {
+  // The LIKELIEST of the selected kinds carries it. Two flaws do not make a
+  // failure rarer, and taking the gentlest would let adding a finding argue the
+  // suggestion down — the same one-way rule aggregation already follows.
+  const picked = (ks ?? []).map(k => GAP_KIND_LIKELIHOOD[k]);
+  if (!picked.length) return GAP_KIND_UNNAMED;
+  return picked.find(g => g.likelihood === 'Probable') ?? picked[0]!;
+};
 
 export function suggestSizing(d: Deficiency, eng: IcfrEngagement, x: ExposureContext, secondRound = false): SizingSuggestion {
   const c = eng.controls.find(k => k.id === d.controlId);
@@ -1568,8 +1857,9 @@ export function suggestSizing(d: Deficiency, eng: IcfrEngagement, x: ExposureCon
     likelihood = 'Probable';
     tag.likelihood = 'never evidenced — nothing shows the control ran at all';
   } else if (d.track === 'design') {
-    likelihood = 'Probable';
-    tag.likelihood = 'design failure — built wrong, so it fails every time it runs';
+    const g = likelihoodForGap(d.gapKinds);
+    likelihood = g.likelihood;
+    tag.likelihood = g.reason;
   } else if (secondRound) {
     likelihood = 'Probable';
     tag.likelihood = f ? `failed again on the redrawn sample — ${f} of ${n} items` : 'failed again on the redrawn sample';
@@ -1582,7 +1872,10 @@ export function suggestSizing(d: Deficiency, eng: IcfrEngagement, x: ExposureCon
     tag.likelihood = `${f} of ${n} items failed (${pct}%) — under 1 in 10, no pattern`;
   }
 
-  let magnitude = 0;
+  // NULL, not ₹0. Ira sizes what it can work out and leaves the rest alone —
+  // and "I could not work this out" has to reach the record as an unanswered
+  // question, or the first thing the engine does is call it clearly trivial.
+  let magnitude: number | null = null;
   const ex = exposureFromData(d, eng, x);
   if (ex.kind === 'population' && ex.value > 0) {
     magnitude = ex.value;
@@ -1592,6 +1885,14 @@ export function suggestSizing(d: Deficiency, eng: IcfrEngagement, x: ExposureCon
   } else if (ex.kind === 'trial-balance' && ex.value > 0) {
     magnitude = ex.value;
     tag.magnitude = 'whole period from the trial balance, see working';
+  } else {
+    // TAGGED, even though there is no figure. Untagged ₹0 was the bug's whole
+    // disguise: nothing on screen said nobody had looked. Ira saying "I could
+    // not work this out" is the opposite of silence, and it is what sends the
+    // auditor to the question instead of past it.
+    tag.magnitude = ex.kind === 'trial-balance'
+      ? `no material account maps to ${ex.process} — nothing on the trial balance to price the whole period from`
+      : 'nothing in the data to size this from — the figure has to be judged';
   }
 
   let compensatingControlId: string | undefined;
@@ -3823,11 +4124,65 @@ export function draftDesignChecks(input: {
  *  points: the kind is what the auditor stated, and a later edit to the TOD must not
  *  quietly change who this names.
  */
+/** The scan as a RECORD — what `runFlawScan` stores. Built from the live scan,
+ *  so the stored answer and the screen's answer can never be two computations. */
+export function buildFlawScan(eng: IcfrEngagement, d: Deficiency, by: string): NonNullable<Deficiency['flawScan']> | null {
+  if (d.track !== 'design' || !d.gapKinds?.length) return null;
+  const c = eng.controls.find(x => x.id === d.controlId);
+  if (!c) return null;
+  // One scan over the process, but each peer remembers WHICH of the searched
+  // flaws it could carry — a merged list that could not say which flaw it
+  // matched would be a worse record than the two separate ones it replaced.
+  const searched = d.gapKinds.map(k => ({ k, check: GAP_KIND_CHECK[k] })).filter((x): x is { k: DesignGapKind; check: string } => !!x.check);
+  const check = searched.map(x => x.check).join(' · ') || null;
+  const peers = eng.controls.filter(x => x.id !== c.id && x.process === c.process);
+  // `no-control` maps to no check on purpose — it is a judgement about a whole
+  // control that no predicate over a register row can spot elsewhere. The record
+  // is still written: "we asked and there was nothing to ask" is the answer a
+  // reviewer needs, and an absent field cannot give it.
+  const examined = check
+    ? peers.map(x => {
+      const own = suggestedDesignChecks(x);
+      const kinds = searched.filter(y => own.includes(y.check)).map(y => y.k);
+      return { controlId: x.id, carries: kinds.length > 0, tested: designStarted(x), kinds };
+    })
+    : [];
+  return {
+    gapKinds: d.gapKinds,
+    check,
+    ...(check ? {} : { notScanned: 'judgement-about-this-control' as const }),
+    process: c.process,
+    examined,
+    carrying: examined.filter(x => x.carries).length,
+    by, at: 'just now',
+  };
+}
+
+/** Has the register moved under a stored scan? Counts only, because the answer
+ *  a reader needs is "is this still true", not a diff to reconcile in their head. */
+export function flawScanDrift(eng: IcfrEngagement, d: Deficiency): { gapChanged: boolean; moved: number } | null {
+  const stored = d.flawScan;
+  if (!stored) return null;
+  const same = (d.gapKinds ?? []).length === stored.gapKinds.length && (d.gapKinds ?? []).every(k => stored.gapKinds.includes(k));
+  if ((d.gapKinds?.length ?? 0) > 0 && !same) return { gapChanged: true, moved: 0 };
+  const live = buildFlawScan(eng, d, stored.by);
+  if (!live) return null;
+  const was = new Map(stored.examined.map(x => [x.controlId, x]));
+  const moved = live.examined.filter(x => {
+    const before = was.get(x.controlId);
+    return !before || before.carries !== x.carries || before.tested !== x.tested;
+  }).length + stored.examined.filter(x => !live.examined.some(y => y.controlId === x.controlId)).length;
+  return { gapChanged: false, moved };
+}
+
 export function sameFlawElsewhere(eng: IcfrEngagement, d: Deficiency): { untested: Control[]; tested: Control[]; check: string | null } {
   const c = eng.controls.find(x => x.id === d.controlId);
-  const check = d.track === 'design' && d.gapKind ? GAP_KIND_CHECK[d.gapKind] : null;
+  // Every check the selected gaps map to. A peer matches on ANY of them, and
+  // `buildFlawScan` keeps which — this view only needs "is it worth a look".
+  const checks = d.track === 'design' ? (d.gapKinds ?? []).map(k => GAP_KIND_CHECK[k]).filter((x): x is string => !!x) : [];
+  const check = checks.join(' · ') || null;
   if (!c || !check) return { untested: [], tested: [], check: null };
-  const peers = eng.controls.filter(x => x.id !== c.id && x.process === c.process && suggestedDesignChecks(x).includes(check));
+  const peers = eng.controls.filter(x => x.id !== c.id && x.process === c.process && checks.some(ck => suggestedDesignChecks(x).includes(ck)));
   return { untested: peers.filter(x => !designStarted(x)), tested: peers.filter(x => designStarted(x)), check };
 }
 

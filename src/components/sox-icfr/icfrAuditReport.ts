@@ -5,7 +5,8 @@ import {
 } from './helpers';
 import { countryFor } from './auditScope';
 import { periodLine, type IcfrSheet, type PaperBlock } from './icfrWorkingPaper';
-import type { Control, Deficiency, IcfrEngagement } from './types';
+import { MW_INDICATOR_BY_ID, mwIndicatorIds, mwSourceLabel } from './types';
+import type { Control, Deficiency, ExceptionGrade, IcfrEngagement } from './types';
 
 /**
  * The Internal Controls Status Report — the deliverable, which the working
@@ -85,6 +86,9 @@ const GRADE_RANK: Record<string, number> = {
 /** The grade as the report states it, with the reason for any adjustment. */
 function gradeLabel(d: Deficiency, eng: IcfrEngagement): string {
   const g = gradeException(d, eng);
+  // Said in words. A report that printed nothing here would read as a grade
+  // somebody forgot to type rather than a question nobody has answered.
+  if (g.grade === null) return 'Not sized — not graded';
   return g.bumped ? `${g.grade} (raised on judgement)`
     : g.cap ? `${g.grade} (capped from ${g.cap.from})`
     : g.grade;
@@ -93,17 +97,18 @@ function gradeLabel(d: Deficiency, eng: IcfrEngagement): string {
 /** The worst grade among a control's deficiencies — the rollup's Severity cell. */
 function worstGrade(defs: Deficiency[], eng: IcfrEngagement): string {
   if (!defs.length) return '—';
-  return defs
-    .map(d => gradeException(d, eng).grade)
-    .reduce((a, b) => (GRADE_RANK[b] > GRADE_RANK[a] ? b : a));
+  // '—' means "no deficiencies". A control whose only findings are unsized has
+  // findings, so it must not borrow that dash — it says so in its own words.
+  const graded = defs.map(d => gradeException(d, eng).grade).filter((g): g is ExceptionGrade => g !== null);
+  if (!graded.length) return 'Not sized';
+  return graded.reduce((a, b) => (GRADE_RANK[b] > GRADE_RANK[a] ? b : a));
 }
 
 /** Plain-English standing of one observation, for a reader who doesn't know the
  *  exception lifecycle's vocabulary. */
 function observationStatus(d: Deficiency): string {
-  if (d.status === 'Closed') return 'Closed — retested and accepted';
-  if (d.status === 'Awaiting reviewer') return 'Retested, awaiting reviewer close';
-  if (d.status === 'Retest') return 'Fix submitted — retest in progress';
+  if (d.status === 'Closed') return 'Closed — fix accepted and signed off';
+  if (d.status === 'Awaiting reviewer') return 'Fix delivered with its proof — awaiting reviewer sign-off';
   if (d.status === 'Remediation') return 'Action agreed — fix in progress';
   return 'Open — action not yet agreed';
 }
@@ -326,9 +331,9 @@ export function buildAuditReport(eng: IcfrEngagement, controls: Control[] = eng.
           d.controlId,
           gradeLabel(d, eng),
           d.likelihood,
-          formatINR(d.magnitude),
+          d.magnitude === null ? 'Not sized' : formatINR(d.magnitude),
           formatINR(eng.materiality),
-          d.mwIndicators.length ? d.mwIndicators.join('; ') : '—',
+          d.mwIndicators.length ? mwIndicatorIds(d.mwIndicators).map(i => `${MW_INDICATOR_BY_ID[i].label} (${mwSourceLabel(MW_INDICATOR_BY_ID[i].source)})`).join('; ') : '—',
           d.rootCause,
           d.ratingConfirm?.by ?? d.sized?.by ?? '—',
           d.ratingConfirm?.at ?? d.sized?.at ?? '—',
@@ -349,22 +354,37 @@ export function buildAuditReport(eng: IcfrEngagement, controls: Control[] = eng.
     name: MAP_TITLE, blocks: [
       {
         kind: 'note', label: MAP_TITLE, tone: 'neutral',
-        text: 'The actions below are management’s, not the audit team’s: each is the fix the control owner has committed to, with the date they committed to. The audit team retests the fix and states the outcome in the last column — a fix is not closed because it was delivered, it is closed because a retest proved it: a fresh sample for an operating failure, the failed design checks re-checked against the fix for a design one.',
+        text: 'The actions below are management’s, not the audit team’s: each is the fix the control owner has committed to, with the date they committed to. The audit team reads the plan against the root cause before the work starts, and the reviewer signs the finding off once the fix is delivered with its proof. The retest is not skipped — it is separate, and it happens on the CONTROL: a control that has been rebuilt is tested again in its own right, once it has had a chance to run, on the audit’s own timetable. That is what the Retest column reports: a fresh sample for an operating failure, the failed design checks re-read against the new wording for a design one.',
       },
       {
         kind: 'table', title: 'Agreed actions',
         note: defs.length ? `${actionable.length} open of ${defs.length} observation${defs.length === 1 ? '' : 's'}` : 'Nothing to remediate',
-        headers: ['Report ref', 'Observation', 'Agreed action', 'Owner', 'Committed date', 'Progress', 'Retest', 'Standing'],
-        rows: defs.map(d => [
-          d.reportRef ?? '—',
-          d.description,
-          d.remediation.action?.trim() || 'NOT YET AGREED',
-          d.remediation.owner || byControl(d.controlId)?.owner || '—',
-          formatDueDate(d.remediation.date),
-          d.remediation.status,
-          d.retest ? `${d.retest.result} — ${d.retest.by}, ${d.retest.at}` : 'Not retested',
-          observationStatus(d),
-        ]),
+        headers: ['Report ref', 'Observation', 'Agreed action', 'Owner', 'Committed date', 'Progress', 'Retest of the control', 'Standing'],
+        rows: defs.map(d => {
+          // The retest lives on the CONTROL now, not inside the finding — so this
+          // cell reads the flag the close raised there, and only where that flag
+          // was raised by THIS finding. A control can carry a retest owed by a
+          // different exception, and reporting somebody else's under this row
+          // would be a plain untruth. `d.retest` is the pre-30-Sep mirror: still
+          // read, so a finding retested under the old flow keeps its answer.
+          const owed = byControl(d.controlId)?.retestDue;
+          const mine = owed && owed.defId === d.id ? owed : undefined;
+          const retestCell = mine
+            ? (mine.cleared ? `Settled — ${mine.cleared.by}, ${mine.cleared.at}` : `Owed — the control changed ${mine.at}`)
+            : d.retest ? `${d.retest.result} — ${d.retest.by}, ${d.retest.at}`
+            : d.status === 'Closed' ? 'Not recorded'
+            : 'Not due until the fix is in';
+          return [
+            d.reportRef ?? '—',
+            d.description,
+            d.remediation.action?.trim() || 'NOT YET AGREED',
+            d.remediation.owner || byControl(d.controlId)?.owner || '—',
+            formatDueDate(d.remediation.date),
+            d.remediation.status,
+            retestCell,
+            observationStatus(d),
+          ];
+        }),
       },
       ...(mwOpen > 0 ? [{
         kind: 'note', label: 'Material weakness', tone: 'bad',

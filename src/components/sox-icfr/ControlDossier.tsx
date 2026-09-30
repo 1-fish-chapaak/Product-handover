@@ -4757,9 +4757,16 @@ function RebuildBlock({ control }: { control: Control }) {
   const [note, setNote] = useState('');
   const [freq, setFreq] = useState<Frequency>(control.frequency);
 
-  // The fix has to have reached the auditor — the owner declares it done, which is
-  // what moves the exception to Retest. Before that there is nothing to look at.
-  const def = eng.deficiencies.find(d => d.controlId === control.id && d.status === 'Retest' && awaitsNewVersion(control, d));
+  // The fix has to have been declared done. The owner submitting it is what hands
+  // the exception to the reviewer, and from that moment there is something to look
+  // at: a rebuilt control that is actually running. It stays offered after the
+  // close too, because closing an exception does not write the new wording —
+  // recording the version is what tells the register what this control now says,
+  // and a control whose row still reads the old sentence is a register that is
+  // simply wrong about what is in place.
+  const def = eng.deficiencies.find(d => d.controlId === control.id
+    && (d.status === 'Awaiting reviewer' || d.status === 'Closed')
+    && awaitsNewVersion(control, d));
   if (role !== 'auditor' || !def) return null;
 
   const ready = wording.trim() && liveFrom.trim() && note.trim();
@@ -5422,7 +5429,8 @@ function OperatingSection({ control, canEdit, locked }: { control: Control; canE
 
       {/* No sample, no opinion — and no effective call while any attribute is
           still untested. A failing attribute concludes ineffective and the
-          exception is raised — remediation and retest happen outside this flow. */}
+          exception is raised — remediation happens outside this flow, and the
+          retest comes back HERE once the fixed control has run (Control.retestDue). */}
       {o.steps.length > 0 && <ConcludeFooter control={control} which="operating" suggestion={suggestion} canEdit={canEdit}
         disableEffective={!o.sampling || untested > 0 || unbacked > 0}
         disableEffectiveNote={!o.sampling ? 'Locked — draw the sample in step ③ first'
@@ -5857,6 +5865,100 @@ function ParkOperatingBanner({ control }: { control: Control }) {
     <button onClick={() => setAsking(true)} className="text-[0.75rem] font-semibold text-ink-500 hover:text-evidence-700 cursor-pointer inline-flex items-center gap-1.5">
       <CalendarClock size={13} /> Hasn't operated yet — park the operating test
     </button>
+  );
+}
+
+/**
+ * THE CONTROL CHANGED — AND IT IS OWED A RETEST.
+ *
+ * A remediation closed against this control, so the thing this paper tested is
+ * not the thing running now. The retest is deliberately NOT part of the exception
+ * flow (30 Sep): a fix agreed in July cannot be proved in July, because the fixed
+ * control has not run yet. So closing the exception raises this flag and the retest
+ * happens here, on the audit's own timetable, once there is something to test.
+ *
+ * It sits above the steps for the same reason the return and reopen notices do —
+ * it is the reason to look at this control again — and it deliberately does NOT
+ * hide behind the lock. A concluded, countersigned paper about a control that has
+ * since been rebuilt is exactly the case this exists to catch, and a banner that
+ * vanished at sign-off would only ever appear on papers nobody had finished.
+ *
+ * Clearing it is the auditor's, and it takes a reason either way: "retested" points
+ * at the round, "not needed" is a judgement, and a judgement nobody wrote down did
+ * not happen. Cleared, it stops shouting and stays on the page — the fact that a
+ * change was noticed and answered is working paper, not housekeeping.
+ */
+function RetestDueBanner({ control }: { control: Control }) {
+  const { eng, role, clearRetestDue } = useIcfr();
+  const [asking, setAsking] = useState(false);
+  const [reason, setReason] = useState('');
+  const due = control.retestDue;
+  if (!due) return null;
+
+  const def = eng.deficiencies.find(d => d.id === due.defId);
+  const trackWord = due.track === 'design' ? 'design' : 'operating';
+
+  if (due.cleared) {
+    return (
+      <div className="rounded-xl border border-canvas-border bg-paper-50/60 p-4 mb-4 flex items-start gap-3">
+        <CheckCircle2 size={16} className="text-compliant-600 mt-0.5 shrink-0" />
+        <div className="min-w-0">
+          <h3 className="text-[0.8125rem] font-bold text-ink-800">Retest settled</h3>
+          <p className="text-[0.75rem] text-ink-700 leading-relaxed mt-1">{due.cleared.reason}</p>
+          <p className="text-[0.6875rem] text-ink-400 mt-1.5">
+            {due.cleared.by} · {due.cleared.at}. Raised when {due.defId} closed — {due.note}
+          </p>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="rounded-xl border border-mitigated-200 bg-mitigated-50/40 p-4 mb-4">
+      <div className="flex items-start justify-between gap-3 flex-wrap">
+        <div className="min-w-0 flex-1">
+          <h3 className="text-[0.8125rem] font-bold text-mitigated-800 inline-flex items-center gap-1.5">
+            <RotateCcw size={15} /> Changed since it was tested — a retest is owed
+          </h3>
+          <p className="text-[0.75rem] text-ink-700 leading-relaxed mt-1">{due.note}</p>
+          <p className="text-[0.6875rem] text-ink-500 mt-1.5">
+            {due.defId}{def ? ` — ${def.description}` : ''} closed on {due.at} by {due.by}. The {trackWord} track is the one
+            that failed and was rebuilt, so it is the one to read again
+            {due.fix === 'redesign' ? ' — and a redesign means a new version to record before it can be tested' : ''}.
+          </p>
+          {/* The conclusions are untouched on purpose. Wiping somebody's signed
+              work because a third party closed a remediation would delete it
+              without the auditor asking; Reopen is how that is done deliberately. */}
+          <p className="text-[0.6875rem] text-ink-400 mt-1">
+            Nothing on this paper has been undone — the conclusions still say what they said. This is the note that they
+            are about an earlier version of the control.
+          </p>
+        </div>
+        {role === 'auditor' && !isEngagementLocked(eng) && !asking && (
+          <button onClick={() => setAsking(true)}
+            className="shrink-0 h-8 px-3 rounded-lg bg-mitigated-700 text-white text-[0.75rem] font-semibold hover:bg-mitigated-800 transition-colors cursor-pointer">
+            Settle the retest
+          </button>
+        )}
+      </div>
+      {asking && (
+        <div className="mt-3 space-y-2">
+          <textarea autoFocus rows={2} value={reason} onChange={e => setReason(e.target.value)}
+            placeholder="What you did — e.g. re-read the failed design checks against the new wording on 12 Oct, all three hold; or why no retest is needed"
+            className="w-full px-2.5 py-2 rounded-md border border-canvas-border bg-canvas-elevated text-[0.78125rem] text-ink-800 placeholder:text-ink-400 resize-none focus:outline-none focus:border-brand-300" />
+          <div className="flex items-center gap-2 flex-wrap">
+            <button disabled={!reason.trim()}
+              onClick={() => { clearRetestDue(control.id, reason.trim()); setAsking(false); setReason(''); }}
+              className="h-8 px-3 rounded-lg bg-mitigated-700 text-white text-[0.75rem] font-semibold enabled:hover:bg-mitigated-800 disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer">Record it</button>
+            <button onClick={() => { setAsking(false); setReason(''); }}
+              className="h-8 px-2.5 rounded-lg border border-canvas-border text-[0.75rem] font-semibold text-ink-600 cursor-pointer">Cancel</button>
+            {!reason.trim() && (
+              <span className="text-[0.6875rem] text-ink-500">A retest and a decision not to retest are both judgements — either way, say which and why.</span>
+            )}
+          </div>
+        </div>
+      )}
+    </div>
   );
 }
 
@@ -6373,6 +6475,14 @@ export default function ControlDossier() {
           </div>
         </div>
       )}
+
+      {/* ── the control changed under a closed remediation ───────────────────────
+          Alongside the two notices above, and for the same reason: it is why this
+          control wants looking at again. Unlike them it survives the lock — a
+          signed paper about a control that has since been rebuilt is precisely
+          the case it exists to catch. Audit-side: the owner's view of their own
+          fix is the exception, not the audit's testing plan. */}
+      {!isOwner && <RetestDueBanner control={control} />}
 
       {/* ── the ITGC cascade, named ──────────────────────────────────────────────
           Same reasoning as the return above: these steps are open because

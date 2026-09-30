@@ -33,6 +33,9 @@ export type Severity = 'Deficiency' | 'Significant Deficiency' | 'Material Weakn
  *  outcome: logged, never evaluated further, and it stops the ladder dead. The
  *  conclusion shown on an exception is always this, never a hand-set field. */
 export type ExceptionGrade = 'Clearly Trivial' | Severity;
+/** A grade as it is STORED on an archive or a rollup, where the exception may
+ *  never have been sized. See `Deficiency.magnitude`. */
+export type ArchivedSeverity = ExceptionGrade | 'Not sized';
 export const EXCEPTION_GRADES: ExceptionGrade[] = ['Clearly Trivial', 'Deficiency', 'Significant Deficiency', 'Material Weakness'];
 export const GRADE_RANK: Record<ExceptionGrade, number> = {
   'Clearly Trivial': -1, Deficiency: 0, 'Significant Deficiency': 1, 'Material Weakness': 2,
@@ -1306,6 +1309,38 @@ export interface Control {
    *  has been shown to have failed, so exposure and likelihood do not apply and
    *  a severity would be a fabrication. See `UnableToTest`. */
   unableToTest?: UnableToTest;
+  /** A remediation closed against this control, so the thing that was tested is
+   *  not the thing that is there now. The retest is NOT part of the exception
+   *  flow (see `ExceptionStatus`) — it happens on the audit's own timetable, on
+   *  a control that has had a chance to run. This is the flag that says one is
+   *  owed, and it is the auditor's to clear, by testing or by judging that the
+   *  change did not touch what they tested.
+   *
+   *  Deliberately does NOT reset the conclusion. Wiping a signed conclusion
+   *  because somebody else closed a remediation would delete the auditor's work
+   *  without the auditor asking; `reopenControl` is how that is done on purpose.
+   *  A redesign is the one case where the control's own wording changes too, and
+   *  that goes through `recordNewVersion`, which resets both tracks by design. */
+  retestDue?: RetestDue;
+}
+
+/** "This control changed — it is owed a retest." Raised by a reviewer closing a
+ *  remediation, cleared by the auditor. */
+export interface RetestDue {
+  /** The exception whose close raised it. */
+  defId: string;
+  /** Which track failed and was remediated — that is the one to retest first. */
+  track: 'design' | 'operating';
+  /** Only design plans name one; a redesign also expects a new version recorded. */
+  fix?: PlanFixKind;
+  /** What was done, in the plan's own words, so the auditor knows what changed. */
+  note: string;
+  by: string;
+  at: string;
+  /** The auditor's answer. Absent while it is still owed. A reason is required
+   *  either way — "retested" points at the round, "not needed" is a judgement
+   *  and a judgement that is not written down did not happen. */
+  cleared?: { reason: string; by: string; at: string };
 }
 
 /** "Unable to test — waiting on owner". A status on the CONTROL, not a second
@@ -1441,6 +1476,12 @@ export type DesignGapKind =
   | 'no-control';  // there is effectively nothing there
 
 export const DESIGN_GAP_KINDS: DesignGapKind[] = ['sod', 'precision', 'placement', 'bypassable', 'frequency', 'no-control'];
+
+/** Selected kinds, normalised: register order, and `no-control` alone if it is
+ *  in there at all. Used at every write, so the stored order never depends on
+ *  which chip somebody happened to press first. */
+export const sortGapKinds = (ks: readonly DesignGapKind[]): DesignGapKind[] =>
+  ks.includes('no-control') ? ['no-control'] : DESIGN_GAP_KINDS.filter(k => ks.includes(k));
 
 export const GAP_KIND_LABEL: Record<DesignGapKind, string> = {
   sod: 'No segregation of duties',
@@ -1582,7 +1623,18 @@ export interface Deficiency {
    *
    *  Ira fills it from the design check that failed and tags it in `iraSuggested`;
    *  the auditor can change it, and the tag goes when they do. */
-  gapKind?: DesignGapKind;
+  /** RENAMED FROM `gapKind` (30 Sep). A control can be insufficiently precise
+   *  AND in the wrong place — two different findings needing two different
+   *  fixes, and the scalar made the auditor pick one and lose the other.
+   *  `suggestGapKind` was already dropping the second on the floor: it returned
+   *  on the first pattern that matched.
+   *
+   *  Held in `DESIGN_GAP_KINDS` order, not click order, so two auditors doing
+   *  identical work produce identical paper. `no-control` is exclusive — "there
+   *  is nothing here" and "its threshold is too loose" cannot both be true of
+   *  one control — and the picker enforces that rather than leaving the paper
+   *  to read as nonsense. */
+  gapKinds?: DesignGapKind[];
   /** Where this lands in the report — the source RACM's report reference number. */
   reportRef?: string;
   description: string;
@@ -1599,7 +1651,28 @@ export interface Deficiency {
    *  retest of anything. */
   failedChecks?: { pointId: string; text: string }[];
   likelihood: Likelihood;
-  magnitude: number;
+  /**
+   * THE EXPOSURE — and `null` until somebody has actually answered the question.
+   *
+   * It was a plain `number` starting at 0, and that read a blank as a figure.
+   * `isClearlyTrivial` is `magnitude <= clearlyTrivial`, so every exception
+   * nobody had sized yet graded Clearly Trivial the moment it was raised — a
+   * design failure that ran the whole period, filed as not worth evaluating,
+   * on a number no person ever typed.
+   *
+   * Three states, and they are three different sentences:
+   *   null            — not sized. `gradeException` refuses to grade at all.
+   *   0 + a reason    — the auditor concluded there is no exposure. Grades.
+   *   a figure        — grades.
+   *
+   * Zero costs a reason (`magnitudeZeroReason`) precisely because zero is the
+   * value a blank used to masquerade as: if it is going to clear an exception,
+   * somebody says why in their own words.
+   */
+  magnitude: number | null;
+  /** Why the exposure is nil — required when `magnitude` is 0, meaningless
+   *  otherwise. What separates a deliberate nil from an unanswered question. */
+  magnitudeZeroReason?: string;
   mwIndicators: string[];
   compensatingControlId?: string;
   /** What Ira pre-filled when the exception was raised (S9, A31) — one line of
@@ -1611,7 +1684,7 @@ export interface Deficiency {
    *  `rootCause` (17 Sep dev call) is different in one way: while its tag is on,
    *  the root cause is Ira's draft and step 1 is not done — the auditor edits it
    *  or takes it ("Use this"), and either removes the tag (rootCauseReady). */
-  iraSuggested?: Partial<Record<'likelihood' | 'magnitude' | 'compensatingControlId' | 'rootCause' | 'gapKind', string>>;
+  iraSuggested?: Partial<Record<'likelihood' | 'magnitude' | 'compensatingControlId' | 'rootCause' | 'gapKinds', string>>;
   aggregationGroup?: string;
   /** PARKED (13 Aug 2026) — the single "same root cause as" link. Superseded by
    *  `rootCauseGroupIds`: one exception can share a mechanism with several
@@ -1669,7 +1742,50 @@ export interface Deficiency {
   signoff?: { by: string; at: string };
   // Prudent-official judgment: severity can be argued UP (never down) with a
   // recorded rationale — the handbook's judgment floor over the pure math.
-  prudentOverride?: { to: Severity; rationale: string; by: string; at: string };
+  /** The prudent-official test — PCAOB AS 2201 .70, which calls its answer an
+   *  indicator of a material weakness in its own right. `to` raises the grade;
+   *  `to: null` records the OTHER answer, that it was considered and the grade
+   *  stands. A required judgement that leaves no record is a hole in the file,
+   *  and "we thought about it and disagreed" is a finding too. */
+  prudentOverride?: { to: Severity | null; rationale: string; by: string; at: string };
+  /**
+   * THE SYSTEMIC CHECK, AS IT WAS ACTUALLY RUN.
+   *
+   * The scan itself is derived and costs nothing to recompute. What is NOT
+   * derivable afterwards is that somebody ran it, when, and what the register
+   * said at that moment — and therefore what the grade was argued from. A lead
+   * nobody followed and a lead that was followed and came back empty are the
+   * same empty list on screen and two completely different audit trails.
+   *
+   * Captured and never edited. The peers' own test results move under it, and a
+   * record that silently kept up with them would stop being evidence of
+   * anything. A newer answer is a NEW scan, and the panel says when the two have
+   * drifted rather than quietly swapping one for the other.
+   */
+  flawScan?: {
+    /** The gap searched for, as it stood when the scan ran. A later edit to
+     *  `gapKinds` does not rewrite this — it makes the record stale, which is a
+     *  thing worth saying out loud. */
+    gapKinds: DesignGapKind[];
+    /** The library design check the gap maps to, or null when the gap has none
+     *  and nothing could be searched for — see `notScanned`. */
+    check: string | null;
+    /** Why there was nothing to search for. Absent on a scan that ran. */
+    notScanned?: 'judgement-about-this-control';
+    /** Scoped to the process, never the engagement: a segregation flaw matches
+     *  most of the register engagement-wide, which is noise, not a finding. */
+    process: string;
+    /** Every other control in the process, with what was true of it then — the
+     *  denominator, which is what turns a list into a check with a result.
+     *  `carries` means no design check on that control covers this flaw, so it
+     *  COULD be built the same way: a prompt to look, not a finding. */
+    examined: { controlId: string; carries: boolean; tested: boolean; kinds: DesignGapKind[] }[];
+    /** How many of `examined` carry it — stored rather than recounted, so the
+     *  record and the sentence written from it cannot drift apart. */
+    carrying: number;
+    by: string;
+    at: string;
+  };
   /** Carried across when a control that could never be tested converts to an
    *  exception at period end — the working paper has to say why it was never
    *  evidenced, not just that it failed. */
@@ -1728,28 +1844,35 @@ export interface SeverityChallenge {
   response?: { decision: 'Accepted' | 'Declined'; reason: string; by: string; at: string };
 }
 
-// The six steps, as eight states — two of the steps have a handoff inside them.
+// The five steps, as seven states — two of the steps have a handoff inside them.
 // Sizing parks for the reviewer when it lands on Significant Deficiency or worse;
 // planning parks for the auditor to judge the plan against the root cause. A
-// passed retest parks at 'Awaiting reviewer' — only the reviewer closes (four-eyes).
+// submitted fix parks at 'Awaiting reviewer' — only the reviewer closes (four-eyes).
+//
+// THE RETEST IS NOT A STEP HERE (30 Sep, user's call). It used to sit between
+// the fix and the close, which forced the auditor to test a repair the day it
+// landed — often before the fixed control had run even once. A retest happens on
+// the CONTROL, on the audit's own timetable, and the close no longer waits on it:
+// the exception records what was found, what was planned, what was built, and who
+// signed it off. Closing marks the control as changed and tells the auditor it is
+// owed a retest (`Control.retestDue`), which is the honest sequence — the fix is
+// agreed now, the proof of it is gathered when there is something to gather.
 export type ExceptionStatus =
   | 'Identified'          // ① raised + ② the auditor sizes it
   | 'Rating review'       // ② reviewer confirms Significant Deficiency or worse — blocking
   | 'Planning'            // ③ risk owner writes the plan
   | 'Plan review'         // ③ auditor judges it against the root cause
   | 'Remediation'         // ④ risk owner implements and attaches evidence
-  | 'Retest'              // ⑤ auditor retests — a post-fix sample (TOE), or the failed design checks against the fix (TOD)
-  | 'Awaiting reviewer'   // ⑥ reviewer reads the retest evidence
-  | 'Closed';             // ⑥ reviewer has signed off
+  | 'Awaiting reviewer'   // ⑤ reviewer reads the plan, the fix and its evidence
+  | 'Closed';             // ⑤ reviewer has signed off
 
-/** The six steps as the screen shows them, and where each state sits. */
+/** The five steps as the screen shows them, and where each state sits. */
 export const EXCEPTION_STEPS: { n: number; title: string; role: Role; states: ExceptionStatus[] }[] = [
   { n: 1, title: 'Exception raised', role: 'auditor', states: ['Identified'] },
   { n: 2, title: 'Size it', role: 'auditor', states: ['Identified', 'Rating review'] },
   { n: 3, title: 'Plan the fix', role: 'risk-owner', states: ['Planning', 'Plan review'] },
   { n: 4, title: 'Fix and submit', role: 'risk-owner', states: ['Remediation'] },
-  { n: 5, title: 'Retest', role: 'auditor', states: ['Retest'] },
-  { n: 6, title: 'Close', role: 'reviewer', states: ['Awaiting reviewer', 'Closed'] },
+  { n: 5, title: 'Close', role: 'reviewer', states: ['Awaiting reviewer', 'Closed'] },
 ];
 
 /* ── Deficiency aggregation ───────────────────────────────────────────────────
@@ -1833,14 +1956,141 @@ export interface SignificantAccount {
   wcgw?: string[];
 }
 
-/** The engagement-level "ground rules" that drive how every exception is evaluated and routed. */
-export const MW_INDICATOR_CATALOGUE = [
-  'Restatement of previously issued financial statements',
-  'Material misstatement identified by audit, not the control',
-  'Fraud of any magnitude by senior management',
-  'Ineffective control environment / oversight',
-  'Ineffective period-end financial reporting process',
-] as const;
+/* ── Material-weakness indicators ──────────────────────────────────────────────
+ *
+ * SOME OF THESE ARE ABOUT THIS EXCEPTION. MOST ARE ABOUT THE COMPANY.
+ *
+ * The list was five flat strings, all asked on every exception's sizing panel.
+ * Three of them are not facts about an exception at all — a restatement, the
+ * audit committee's oversight, the period-end reporting process — they are facts
+ * about the company and the audit, true or false once, for everything. Asking
+ * them on each exception invites the same question to be answered several ways
+ * on one engagement, and says nothing about the control in front of the reader.
+ * `scope` is what records the difference.
+ *
+ * AND THE FOURTH WAS TWO THINGS WELDED TOGETHER. "Ineffective control
+ * environment / oversight" covered AS 2201 .69's audit-committee bullet AND a
+ * house rule about the control environment generally. One tick could not say
+ * which had been concluded, and they are different findings against different
+ * people. They are two entries now.
+ *
+ * `source` is on every row because a reader has to be able to tell a standard
+ * from this firm's own addition, and a named paragraph from a vague appeal to
+ * "the standard". Two of the six are ours and say so.
+ */
+export type MwIndicatorId =
+  | 'auditor-found-misstatement'
+  | 'senior-management-fraud'
+  | 'restatement'
+  | 'audit-committee-oversight'
+  | 'control-environment'
+  | 'period-end-reporting';
+
+/** 'exception' — a fact about THIS exception, answered while sizing it.
+ *  'entity'    — a fact about the company or the audit, concluded once. */
+export type MwIndicatorScope = 'exception' | 'entity';
+
+/** Who says so. `.69` is the indicators paragraph; `.70` is the prudent-official
+ *  test, which the standard also calls an indicator. */
+export type MwIndicatorSource =
+  | { kind: 'standard'; standard: 'PCAOB AS 2201'; paragraph: '.69' | '.70' }
+  | { kind: 'house' };
+
+export interface MwIndicatorDef {
+  id: MwIndicatorId;
+  /** What the auditor reads. Kept close to the standard's own words. */
+  label: string;
+  /** What ticking it actually asserts — the scope of the claim, in one line. */
+  hint: string;
+  scope: MwIndicatorScope;
+  source: MwIndicatorSource;
+}
+
+const AS2201_69: MwIndicatorSource = { kind: 'standard', standard: 'PCAOB AS 2201', paragraph: '.69' };
+
+export const MW_INDICATOR_CATALOGUE: readonly MwIndicatorDef[] = [
+  { id: 'auditor-found-misstatement', scope: 'exception', source: AS2201_69,
+    label: 'Material misstatement identified by the audit, not the control',
+    hint: 'The audit found a material misstatement in this period, in circumstances showing this control would not have caught it.' },
+  { id: 'senior-management-fraud', scope: 'exception', source: AS2201_69,
+    label: 'Fraud of any magnitude by senior management',
+    hint: 'Fraud on the part of senior management — material or not.' },
+  { id: 'restatement', scope: 'entity', source: AS2201_69,
+    label: 'Restatement of previously issued financial statements',
+    hint: 'Previously issued statements were restated to correct a material misstatement. True of the company, not of any one control.' },
+  { id: 'audit-committee-oversight', scope: 'entity', source: AS2201_69,
+    label: 'Ineffective audit-committee oversight of external financial reporting and ICFR',
+    hint: 'The audit committee’s oversight is ineffective. The audit committee specifically — not the control environment generally.' },
+  { id: 'control-environment', scope: 'entity', source: { kind: 'house' },
+    label: 'Ineffective control environment',
+    hint: 'Tone at the top, control consciousness, management override. Not an AS 2201 .69 indicator — this firm treats it as one.' },
+  { id: 'period-end-reporting', scope: 'entity', source: { kind: 'house' },
+    label: 'Ineffective period-end financial reporting process',
+    hint: 'AS 2201 .26–.27 require this process to be evaluated but do not list its failure as an indicator. This firm does.' },
+];
+
+/* The derived lookups live HERE, immediately under the array they read. A
+ * module-level const in another sox-icfr file reading a sox-icfr export throws
+ * at load and `npm run build` never catches it. */
+export const MW_INDICATOR_BY_ID = Object.fromEntries(
+  MW_INDICATOR_CATALOGUE.map(i => [i.id, i]),
+) as Record<MwIndicatorId, MwIndicatorDef>;
+
+/** The two asked on an exception's sizing panel. */
+export const EXCEPTION_MW_INDICATORS = MW_INDICATOR_CATALOGUE.filter(i => i.scope === 'exception');
+/** The four concluded once for the engagement. */
+export const ENTITY_MW_INDICATORS = MW_INDICATOR_CATALOGUE.filter(i => i.scope === 'entity');
+
+/** The attribution, for a screen, a column or a paper. */
+export const mwSourceLabel = (s: MwIndicatorSource): string =>
+  s.kind === 'standard' ? `${s.standard} ${s.paragraph}` : 'House rule';
+
+/* The stored value USED to be the label itself, so anything written before this
+ * change carries a sentence where an id belongs. Read through `mwIndicatorIds`
+ * rather than trusting the array — the exports write these into deliverables,
+ * and a kept .xlsx is the one place an old string can come back.
+ *
+ * The welded row is a JUDGEMENT, not a lookup: the old tick covered both halves,
+ * so either mapping asserts something nobody separately concluded. It reads as
+ * the control environment, which is the conservative half — it does not put an
+ * AS 2201 .69 finding against a named audit committee into an auditor's mouth. */
+const MW_LEGACY_LABELS: Record<string, MwIndicatorId> = {
+  'Restatement of previously issued financial statements': 'restatement',
+  'Material misstatement identified by audit, not the control': 'auditor-found-misstatement',
+  'Fraud of any magnitude by senior management': 'senior-management-fraud',
+  'Ineffective control environment / oversight': 'control-environment',
+  'Ineffective period-end financial reporting process': 'period-end-reporting',
+};
+
+/**
+ * THE AUDITOR'S CONCLUSION ON ONE COMPANY-LEVEL INDICATOR.
+ *
+ * A restatement, the audit committee's oversight, the control environment, the
+ * period-end process — each is true or false once, for the whole engagement,
+ * and each on its own means ICFR is not effective. That is why this is a
+ * CONCLUSION and not a switch: it carries a basis, a name and a date, the same
+ * as every other judgement in this module that moves an outcome
+ * (`prudentOverride`, `ratingConfirm`, `planReview`). A boolean that drives an
+ * adverse opinion with nobody's name on it is below the bar set everywhere else.
+ *
+ * A missing id means NOT YET ASKED, which is not the same as concluded absent —
+ * and the opinion is entitled to say which.
+ */
+export interface EntityMwConclusion {
+  /** Always a `scope: 'entity'` id. The other two are facts about one exception. */
+  id: MwIndicatorId;
+  present: boolean;
+  /** What was found. Required when `present` — an adverse opinion needs its reason
+   *  on the same record, not in somebody's memory. */
+  basis: string;
+  by: string;
+  at: string;
+}
+
+export const mwIndicatorIds = (stored: readonly string[] = []): MwIndicatorId[] =>
+  stored
+    .map(s => (s in MW_INDICATOR_BY_ID ? (s as MwIndicatorId) : MW_LEGACY_LABELS[s]))
+    .filter((x): x is MwIndicatorId => !!x);
 // ─── Materiality basis — the benchmark worksheet behind the number ───────────────
 // Set in the engagement drawer, locked at go-live: the benchmark, its annualized
 // amount (from the uploaded one-month GL), the chosen %, and how performance
@@ -1986,7 +2236,14 @@ export interface MaterialityRules {
   sdBandPct: number;             // significant-deficiency lower band, as % of overall materiality (e.g. 20)
   aggregate: boolean;            // aggregate individually-minor deficiencies by commonality
   autoRoute: boolean;            // auto-route an exception to the owner/reviewer by computed severity
-  mwIndicators: string[];        // MW indicators in force for this engagement (from the catalogue)
+  /** PARKED (30 Sep 2026) — "which indicators does this engagement use at all".
+   *  It was written by one screen, read by that same screen to redraw its own
+   *  ticks, and consulted by nothing else: the grading engine has only ever read
+   *  the per-exception array. A switch nobody reads is not a rule, and the
+   *  question it was really being asked to answer — IS a restatement true here —
+   *  is a conclusion, so it lives on `entityMwConclusions` instead.
+   *  Still typed so a seeded engagement does not break on load. */
+  mwIndicators: string[];
 }
 
 // ─── Execution history (shared audit trail) ──────────────────────────────────────
@@ -2187,7 +2444,9 @@ export interface AuditArchive {
      *  because archives written before the count existed have none. */
     samplesTested?: number;
   }[];
-  deficiencies: (Deficiency & { severity: ExceptionGrade })[];
+  /** 'Not sized' is a real archived state — a prior-year finding nobody sized
+   *  travels as unsized rather than borrowing a grade it never had. */
+  deficiencies: (Deficiency & { severity: ArchivedSeverity })[];
   concludedAt: string;
 }
 
@@ -2340,6 +2599,11 @@ export interface IcfrEngagement {
   wentLiveAt?: string;
   entityDetected?: EntityDetection;
   materialityBasis?: MaterialityBasis;
+  /** What the auditor concluded about the company-level material-weakness
+   *  indicators. One entry per `scope: 'entity'` indicator that has been asked;
+   *  absent means not asked yet. Any one of them `present` makes ICFR not
+   *  effective on its own — see `icfrConclusion`. */
+  entityMwConclusions?: EntityMwConclusion[];
   rules: MaterialityRules;
   /** How this engagement samples — agreed once, before testing starts, and the
    *  thing every sample size traces back to (#22). Optional only so engagements

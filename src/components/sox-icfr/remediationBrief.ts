@@ -61,8 +61,11 @@ const STAGE: Record<ExceptionStatus, string> = {
   'Planning': 'WITH YOU — write the plan: what will change, who does it, and by when.',
   'Plan review': 'With the audit team — they are reading your plan against the root cause.',
   'Remediation': 'WITH YOU — make the change, then attach the proof and submit it.',
-  'Retest': 'With the audit team — they are testing the fixed control again.',
-  'Awaiting reviewer': 'With the audit team — your evidence is being read.',
+  // The retest step is gone (30 Sep) — a submitted fix goes straight to the
+  // reviewer. The control itself is tested again later, on the audit's own
+  // timetable, and that is the audit team's work rather than a step the owner
+  // is waiting on, so the brief does not promise it here.
+  'Awaiting reviewer': 'With the audit team — the plan, the fix and your proof are being read before it is signed off.',
   'Closed': 'Closed. Nothing further is needed from you on this one.',
 };
 
@@ -209,12 +212,14 @@ export function buildRemediationBrief(eng: IcfrEngagement, owner: string, defId?
       // The mechanism, not the count. It sits above the plan because the plan is
       // judged against it — a fix that does not change this is not a fix.
       ['Root cause', d.rootCause],
-      ['Classification', grade],
-      ['What that means', URGENCY[grade] ?? '—'],
+      ['Classification', grade ?? 'Not sized yet'],
+      ['What that means', (grade && URGENCY[grade]) ?? '—'],
       // Read-only, and here because an owner arguing for budget needs a number to
       // argue with. Stated as what could have slipped through — never as a
       // distance from a threshold, which is the ruler by another name.
-      ['Exposure', `${formatINR(d.magnitude)} — what could have slipped through`],
+      // '₹0' here would be an actively harmful number: the owner reads this to
+      // argue for budget, and nought is the strongest argument against them.
+      ['Exposure', d.magnitude === null ? 'Not sized yet' : `${formatINR(d.magnitude)} — what could have slipped through`],
       ['Likelihood', d.likelihood],
     ];
     if (d.compensatingControlId) {
@@ -294,6 +299,13 @@ export function buildRemediationBrief(eng: IcfrEngagement, owner: string, defId?
     // paper and stay in the audit file. A PASSED round is deliberately absent too:
     // a pass is the audit team's conclusion, and the owner hears it when the
     // exception closes, not from a brief that would be announcing it early.
+    //
+    // HISTORIC from 30 Sep: the retest left the exception flow, so no new round
+    // is ever appended and this only ever quotes a miss recorded before the
+    // change. Kept, because a written miss is still the clearest thing the owner
+    // can be told about a fix that did not work. What is deliberately NOT here is
+    // the retest now owed on the CONTROL (`Control.retestDue`) — that is the
+    // audit's own testing plan, and this file is owner-safe by field.
     (d.retests ?? []).filter(x => x.result === 'Fail').forEach(x => {
       blocks.push({
         kind: 'note', label: `Retest ${x.n} — did not hold`, tone: 'bad',

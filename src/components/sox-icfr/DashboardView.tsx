@@ -180,7 +180,7 @@ export default function DashboardView({ onNewAudit, onRollForward }: {
             </p>
           )}
           <p className="text-[11.5px] text-ink-400 mt-2 leading-relaxed">
-            Remediation, retest and close happen inside the audit that raised them.
+            Sizing, the plan, the fix and the close happen inside the audit that raised them.
           </p>
         </div>
 

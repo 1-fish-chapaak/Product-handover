@@ -495,7 +495,11 @@ export default function EngagementOverview() {
   // contributes nothing to any read-out on the board.
   const ids = useMemo(() => new Set(inRange.map(a => a.id)), [inRange]);
   const mw = useMemo(() => mwWatchlist(eng).filter(x => ids.has(x.audit.id)), [eng, ids]);
-  // Fixes whose retest lands after the books close. Not filtered by the applied
+  // Fixes whose retest lands after the books close. The retest is no longer a step
+  // inside the exception (30 Sep) — it happens on the CONTROL, once the fix has had
+  // a chance to run — which is exactly why this card matters more than it did: the
+  // maths is still the fix date plus the control's operating period, and it is the
+  // only thing that says in advance there will be nothing to test. Not filtered by the applied
   // range: these are the live cycle's open exceptions, which is the only cycle
   // anyone can still move a date in — and the whole value of the card is saying
   // so while there is still room to move it.
@@ -1027,7 +1031,7 @@ export default function EngagementOverview() {
                     <div className="mt-1.5 flex items-center gap-2 flex-wrap">
                       <SeverityPill s={deficiency.severity} />
                       <span className="text-[0.75rem] text-ink-400 tabular-nums">
-                        {audit.period} · {verified ? 'verified on retest' : 'not yet verified'}
+                        {audit.period} · {verified ? 'closed and signed off' : 'still open'}
                       </span>
                     </div>
                   </div>

@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from 'react';
 import {
   FileSpreadsheet,
   Search, Plus, Building2, Rows3, MessageSquare,
-  Star, FileText, X, Send, LayoutGrid, List, StickyNote, Table2,
+  Star, FileText, X, Send, LayoutGrid, List, RotateCcw, StickyNote, Table2,
 } from 'lucide-react';
 import { FilterSelect, HeaderFilter, triggerCls } from '../shared/FilterSelect';
 import { useAuditControls } from './useAuditControls';
@@ -104,6 +104,12 @@ function ControlCard({ c, concl, discN, noteN, onOpen, selectable, selected, onT
           {c.isKey && <Star size={11} className="text-mitigated-500 fill-mitigated-100" />}
           {discN > 0 && <span className="inline-flex items-center gap-0.5 text-[10px] font-bold text-brand-700"><MessageSquare size={9} />{discN}</span>}
           {noteN > 0 && <span title={`${noteN} review note${noteN === 1 ? '' : 's'} pending`} className="inline-flex items-center gap-0.5 text-[10px] font-bold text-high-700"><StickyNote size={9} />{noteN}</span>}
+          {/* A remediation closed against it, so the conclusion below is about an
+              earlier version of this control. No count — it is one fact, not a
+              queue — and it goes once the auditor settles it on the control. */}
+          {c.retestDue && !c.retestDue.cleared && (
+            <span title="Changed by a closed remediation — a retest is owed" className="inline-flex items-center text-mitigated-700"><RotateCcw size={10} /></span>
+          )}
         </span>
       </div>
       <h3 className="ac-title mt-2">{c.description}</h3>
@@ -493,6 +499,14 @@ export default function ControlRegister() {
                           <span className="font-semibold text-ink-900 text-[12.5px] truncate min-w-0">{c.description}</span>
                           {discN > 0 && <span className="inline-flex items-center gap-0.5 text-[10.5px] font-bold text-brand-700 bg-brand-50 px-1.5 h-[17px] rounded-full"><MessageSquare size={9} />{discN}</span>}
                           {noteN > 0 && <span title={`${noteN} review note${noteN === 1 ? '' : 's'} pending`} className="inline-flex items-center gap-0.5 text-[10.5px] font-bold text-high-700 bg-high-50 px-1.5 h-[17px] rounded-full"><StickyNote size={9} />{noteN}</span>}
+                          {/* Same shelf as the note pill, and read in the same
+                              glance as the conclusion two columns along — which
+                              is the point: that conclusion is about the control
+                              as it was, not as it now reads. */}
+                          {c.retestDue && !c.retestDue.cleared && (
+                            <span title={`Changed by a closed remediation (${c.retestDue.defId}) — a retest is owed`}
+                              className="inline-flex items-center gap-0.5 text-[0.65625rem] font-bold text-mitigated-800 bg-mitigated-50 px-1.5 h-[17px] rounded-full shrink-0"><RotateCcw size={9} />Retest</span>
+                          )}
                         </div>
                         {/* process and owner have their own columns now — saying
                             them twice on the same row is noise. */}

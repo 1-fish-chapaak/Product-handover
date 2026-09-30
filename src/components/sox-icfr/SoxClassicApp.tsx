@@ -347,7 +347,8 @@ export default function SoxClassicInner({ onBack, backLabel = 'Back to Engagemen
              notifications — so the arrow returns to context, not a pinned page.
              The persona switcher rides along here (it does not on the other
              drill-ins): this page IS the three-lines handoff, walked by switching
-             hats — owner remediates, auditor retests, reviewer closes. */
+             hats — the auditor sizes it and judges the plan, the owner remediates,
+             the reviewer closes. */
           <div className="flex items-center justify-between gap-4 flex-wrap">
             <SoxBreadcrumb onBack={back} items={[
               ...(onBack ? [{ label: backCrumb, onClick: onBack }] : []),

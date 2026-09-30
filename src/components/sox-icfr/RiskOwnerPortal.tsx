@@ -19,10 +19,10 @@ export default function RiskOwnerPortal() {
   const mine = eng.tasks.filter(t => isOwnerTask(eng, t, meOwner));
   const dueNow = (t: HandoffTask) => t.overdue || /today/i.test(t.dueLabel);
 
-  // The exception flow is six steps and only two of them are the owner's: ③ write
+  // The exception flow is five steps and only two of them are the owner's: ③ write
   // the plan, ④ do the fix and show the proof. Everything else — sizing, the
-  // rating confirmation, the auditor's read of the plan, the retest, the close —
-  // sits in someone else's court, and a reminder for work you cannot do is worse
+  // rating confirmation, the auditor's read of the plan, the close — sits in
+  // someone else's court, and a reminder for work you cannot do is worse
   // than no reminder. So a remediation row appears while the exception is at one
   // of those two states, and disappears while it is away.
   const OWNER_STATES: ExceptionStatus[] = ['Planning', 'Remediation'];
@@ -31,7 +31,7 @@ export default function RiskOwnerPortal() {
   const inMyCourt = (t: HandoffTask) => t.type !== 'remediation' || !!exceptionFor(t);
   // The two steps ask for different things, so the row's call to action says
   // which one it is: at ③ there is nothing to submit yet — the plan has to be
-  // written first, and only ④ ends in "submit for retest".
+  // written first, and only ④ ends in handing the fix over for sign-off.
   const remediationCta = (t: HandoffTask): { label: string; Icon: typeof Upload } => {
     const def = exceptionFor(t);
     return def?.status === 'Planning'
@@ -65,8 +65,12 @@ export default function RiskOwnerPortal() {
           return;
         }
         if ((def.remediation.evidence?.length ?? 0) > 0) {
-          setExceptionStatus(def.id, 'Retest'); // clears this reminder with it
-          addToast({ type: 'success', title: 'Submitted for retest', message: `${def.id} is with the auditor — your evidence rides along.` });
+          // Straight to the reviewer (30 Sep). The plan was approved before the
+          // work started and the proof is attached now, so there is nothing left
+          // to wait for: the retest happens on the CONTROL, on the audit's own
+          // timetable, once the fixed control has had a chance to run.
+          setExceptionStatus(def.id, 'Awaiting reviewer'); // clears this reminder with it
+          addToast({ type: 'success', title: 'Submitted for sign-off', message: `${def.id} is with the reviewer — your evidence rides along.` });
         } else {
           setView('deficiencies');
           addToast({ type: 'warning', title: 'Evidence first', message: `Attach proof of the fix on ${def.id}, then submit — “done” needs proof.` });

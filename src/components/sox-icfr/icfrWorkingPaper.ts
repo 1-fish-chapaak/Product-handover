@@ -1,6 +1,6 @@
 import * as XLSX from 'xlsx';
-import { GAP_KIND_HINT, GAP_KIND_LABEL, PLAN_FIX_HINT, PLAN_FIX_LABEL } from './types';
-import { assessSeverity, attestationOverruled, requiredFilesOf, restsOnStatementAlone, auditorProvenChecks, combinedSample, conclusionOf, controlConclusion, designBasis, operatingApplies, countVerdict, coverageVerdict, fileOriginOf, designOutstanding, designOutstandingRequired, docRequirement, formatDueDate, formatINR, icfrConclusion, isControlLocked, itgcHolds, openMaterialWeaknesses, populationSources, sampleSizeGuide, samplingOf, spreadPhrase, trackResult, designProgress, hasRowCount, isAssisting, toeRounds, versionWindow, versionNo, versionCollapse, LEGACY_SOURCE_ID } from './helpers';
+import { GAP_KIND_HINT, GAP_KIND_LABEL, MW_INDICATOR_BY_ID, mwIndicatorIds, mwSourceLabel, PLAN_FIX_HINT, PLAN_FIX_LABEL } from './types';
+import { assessSeverity, attestationOverruled, entityMwPresent, mwReason, requiredFilesOf, restsOnStatementAlone, auditorProvenChecks, combinedSample, conclusionOf, controlConclusion, designBasis, operatingApplies, countVerdict, coverageVerdict, fileOriginOf, designOutstanding, designOutstandingRequired, docRequirement, formatDueDate, formatINR, icfrConclusion, isControlLocked, itgcHolds, openMaterialWeaknesses, populationSources, sampleSizeGuide, samplingOf, spreadPhrase, trackResult, designProgress, hasRowCount, isAssisting, toeRounds, versionWindow, versionNo, versionCollapse, LEGACY_SOURCE_ID } from './helpers';
 import { FIVE_W_1H, gapNature } from './types';
 import { countryFor, ownersOf } from './auditScope';
 import { extraLabel, racmConfig, type ExtraColumn } from './racmConfig';
@@ -51,6 +51,18 @@ export const VERSION_TOD_PREFIX = 'TOD — v';
 /** How the drawn sample falls across the quarters. A quarterly-or-less control is
  *  stated as its own cadence; anything sampled gets an even spread, which is what
  *  the reviewer's workbook shows and what a reader checks the coverage against. */
+/** The severity as the PAPER states it — one function, so the control paper and
+ *  the register sheet can never describe the same exception two different ways.
+ *  `null` prints "Not sized" in words: a working paper must not leave a blank
+ *  where a grade belongs, and a reader a year later cannot tell a blank from an
+ *  oversight. */
+function severityCell(a: ReturnType<typeof assessSeverity>): string {
+  if (a.final === null) return 'Not sized';
+  if (a.bumped) return `${a.final} (prudent-official override)`;
+  if (a.capped) return `${a.final} (capped from ${a.raw})`;
+  return a.final;
+}
+
 function quarterlySplit(c: Control): string {
   const n = c.operating.sampling?.samples.length ?? 0;
   if (!n) return 'No sample drawn';
@@ -736,12 +748,15 @@ export function buildControlPaper(eng: IcfrEngagement, c: Control): PaperBlock[]
         // ['Gap type', def.gapType ? `${def.gapType} — ${GAP_LABEL[def.gapType]}` : '—'],
         // Not the parked 'Gap type' above, which restated the control's nature.
         // This says HOW the design is wrong, which the paper could not say before.
-        ...(def.track === 'design' && def.gapKind ? [['Design gap', `${GAP_KIND_LABEL[def.gapKind]} — ${GAP_KIND_HINT[def.gapKind]}`] as [string, string]] : []),
+        // ONE 'Design gap' row however many were recorded — a reader scanning a
+        // key/value table expects one, not two rows wearing the same label.
+        ...(def.track === 'design' && def.gapKinds?.length
+          ? [['Design gap', def.gapKinds.map(k => `${GAP_KIND_LABEL[k]} — ${GAP_KIND_HINT[k]}`).join('; ')] as [string, string]] : []),
         // Redesign or workaround. On the paper because a reader a year later cannot
         // tell the two apart from the plan text alone, and only one of them means
         // the design that failed has stopped being the design.
         ...(def.planReview?.fix ? [['Kind of fix', `${PLAN_FIX_LABEL[def.planReview.fix]} — ${PLAN_FIX_HINT[def.planReview.fix]}`] as [string, string]] : []),
-        ['Severity', a.bumped ? `${a.final} (prudent-official override)` : a.capped ? `${a.final} (capped from ${a.raw})` : a.final],
+        ['Severity', severityCell(a)],
         // ─── PARKED (Aug 2026) — Priced impact ───────────────────────────────
         // What the gap is worth, split the way the source RACM splits it — an
         // internal-audit value metric, not an ICFR misstatement number.
@@ -811,6 +826,9 @@ function signoffRows(eng: IcfrEngagement): [string, string][] {
   const live = eng.audits.find(a => !a.archive);
   const so = live?.signoff ?? {};
   const mwOpen = openMaterialWeaknesses(eng).length;
+  // The OTHER road to an adverse opinion. Narrating the MW count alone left a
+  // paper that said 'Not effective' and gave no reason a reader could see.
+  const entityMw = entityMwPresent(eng);
   return [
     ['Prepared by', so.preparer ? `${so.preparer.by} — signed off ${so.preparer.at}` : `${eng.preparer} — NOT YET SIGNED`],
     ['Countersigned by', so.reviewer ? `${so.reviewer.by} — countersigned ${so.reviewer.at}` : `${eng.reviewer} — NOT YET COUNTERSIGNED`],
@@ -818,7 +836,7 @@ function signoffRows(eng: IcfrEngagement): [string, string][] {
     // the year end, so the paper says so instead of printing a live verdict.
     ['ICFR conclusion', live?.round === 'interim'
       ? 'Not given at interim — the opinion is as of the year end, stamped by the roll-forward or year-end round'
-      : so.icfrConclusion ? `${so.icfrConclusion} (stamped at sign-off)` : `${icfrConclusion(eng)} (live — not yet signed; ${mwOpen} material weakness${mwOpen === 1 ? '' : 'es'} open)`],
+      : so.icfrConclusion ? `${so.icfrConclusion} (stamped at sign-off)` : `${icfrConclusion(eng)} (live — not yet signed; ${mwReason(mwOpen, entityMw) || 'nothing open'})`],
     ['Audit status', so.preparer && so.reviewer ? 'Concluded — record locked' : 'In progress'],
   ];
 }
@@ -980,7 +998,7 @@ export function buildIcfrPaper(eng: IcfrEngagement, controls: Control[] = eng.co
       ],
       rows: defs.map(d => {
         const a = assessSeverity(d, eng);
-        const sev = a.bumped ? `${a.final} (prudent-official override)` : a.capped ? `${a.final} (capped from ${a.raw})` : a.final;
+        const sev = severityCell(a);
         const ctl = controls.find(x => x.id === d.controlId);
         // ─── PARKED (Aug 2026) — Priced impact ─────────────────────────────
         // const ex = d.exposure;
@@ -992,9 +1010,15 @@ export function buildIcfrPaper(eng: IcfrEngagement, controls: Control[] = eng.co
           // found to answer it already. Superseded by the derived cell above.
           //
           // d.gapType ? `${d.gapType} — ${GAP_LABEL[d.gapType]}` : '—',
-          d.track === 'design' ? (d.gapKind ? GAP_KIND_LABEL[d.gapKind] : 'Not stated') : '—',
-          d.description, d.rootCause, d.likelihood, String(d.magnitude),
-          formatINR(eng.materiality), d.mwIndicators.join('; ') || 'None',
+          // Joined with '; ', matching the MW-indicator column two cells along.
+          d.track === 'design' ? (d.gapKinds?.length ? d.gapKinds.map(k => GAP_KIND_LABEL[k]).join('; ') : 'Not stated') : '—',
+          // NOT `String(d.magnitude)` — that printed the literal "null" into a
+          // signed working paper the moment the figure became nullable, and no
+          // compiler would have said a word about it.
+          d.description, d.rootCause, d.likelihood, d.magnitude === null ? 'Not sized' : String(d.magnitude),
+          // Words plus attribution, never the stored id — this is a client
+          // deliverable, and 'senior-management-fraud' is not a sentence.
+          formatINR(eng.materiality), mwIndicatorIds(d.mwIndicators).map(i => `${MW_INDICATOR_BY_ID[i].label} (${mwSourceLabel(MW_INDICATOR_BY_ID[i].source)})`).join('; ') || 'None',
           d.compensatingControlId ?? 'None', sev,
           // ─── PARKED (Aug 2026) — Priced impact ───────────────────────────
           // ex ? formatINR(ex.recovery) : '—',

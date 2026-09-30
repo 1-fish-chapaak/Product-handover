@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { CheckCircle2, Circle, Download, Eye, FileSpreadsheet, FileText, Hourglass, PenLine, X } from 'lucide-react';
-import { controlConclusion, icfrConclusion, isControlFinal, isControlLocked, isEngagementLocked, openMaterialWeaknesses, signoffControls, trackResult } from './helpers';
+import { controlConclusion, entityMwPresent, icfrConclusion, mwReason, isControlFinal, isControlLocked, isEngagementLocked, openMaterialWeaknesses, signoffControls, trackResult } from './helpers';
 import { buildIcfrPaper, controlPaperSections, downloadControlWorkingPaper, downloadIcfrWorkingPaper, ENG_SIGNOFF_TITLE, SIGNOFF_TITLE, type PaperBlock } from './icfrWorkingPaper';
 import { buildAuditReport, downloadAuditReport } from './icfrAuditReport';
 import { downloadAuditReportPdf } from './icfrReportPdf';
@@ -164,6 +164,7 @@ function EngagementSignoff({ eng, onAttest }: { eng: IcfrEngagement; onAttest: (
   const stamped = !!so.icfrConclusion;
   const effective = conclusion !== 'Not effective';
   const mwOpen = openMaterialWeaknesses(eng).length;
+  const entityMw = entityMwPresent(eng);
   // same gate as Overview: every paper concluded AND countersigned by the reviewer —
   // bar the year-end controls an interim or roll-forward holds back, which can't
   // finish in it and are listed instead of waited on (signoffControls)
@@ -213,7 +214,7 @@ function EngagementSignoff({ eng, onAttest }: { eng: IcfrEngagement; onAttest: (
         ) : (
           <>
             <span className={cn('font-bold', effective ? 'text-compliant-700' : 'text-risk-700')}>{effective ? 'Effective' : 'Not effective'}</span>
-            <span className="text-[11px] text-ink-400">{stamped ? 'stamped at sign-off' : `live — not yet signed${mwOpen ? ` · ${mwOpen} material weakness${mwOpen === 1 ? '' : 'es'} open` : ''}`}</span>
+            <span className="text-[11px] text-ink-400">{stamped ? 'stamped at sign-off' : `live — not yet signed${mwReason(mwOpen, entityMw) ? ` · ${mwReason(mwOpen, entityMw)}` : ''}`}</span>
           </>
         )}
       </div>
