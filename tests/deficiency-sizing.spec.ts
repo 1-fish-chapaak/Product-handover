@@ -272,7 +272,11 @@ test.describe('a design gap can be more than one thing', () => {
   });
 });
 
-test.describe('a design exception does not close on a re-read alone', () => {
+// The old title said "on a re-read alone" — the design re-check the auditor ran
+// at the retest step. That step left the flow on 30 Sep 2026; the rule did not,
+// and what it guards against is now the plainer version: a rebuild that exists is
+// not a rebuild that has been seen to run.
+test.describe('a design exception does not close on the fix having been built', () => {
   test('a workaround closes, but is named for what it is', () => {
     const d = def({ planReview: { decision: 'Accepted', fix: 'workaround', by: 'A', at: 'x' } } as Partial<Deficiency>);
     const b = designCloseBlock(d, undefined, eng());

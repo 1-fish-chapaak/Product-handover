@@ -17,15 +17,15 @@ import { cn } from '../../lib/cn';
 import RemediationBriefModal from './RemediationBriefModal';
 import { auditCovers, captionsFor, entitiesFor, isOwnerOf, normaliseProcess } from './auditScope';
 import { exposureFromData, fmtDay, sampleHome, workingAudit, type DataExposure } from './helpers';
-// The version reads — a rebuilt control's retest is its new design test, see `ControlVersion`.
-import { awaitsNewVersion, isVersionRetest, versionFrom, versionNo, pointResult, formatDueDate } from './helpers';
+// PARKED (30 Sep 2026): the retest panels' own imports, read by nobody while those
+// two are parked further down — awaitsNewVersion, isVersionRetest, versionFrom,
+// versionNo, pointResult, formatDueDate (the version reads: a rebuilt control's
+// retest is its new design test, see `ControlVersion`); AnimatePresence; the
+// ListChecks / Loader2 / GitBranch icons; QAResultsModal and VALIDATE_MS;
+// designRetestChecks, dropped from the './helpers' line below; and the RetestCheck
+// type. They come back with the panels.
 import type { ReactNode } from 'react';
-// The design-track retest reads its checks out the way the TOD's own do.
-import { AnimatePresence } from 'motion/react';
-import { ListChecks, Loader2, GitBranch } from 'lucide-react';
-import { QAResultsModal, VALIDATE_MS } from './ControlDossier';
-import { designCloseBlock, designRetestChecks, flawScanDrift, remediationRunway, rootCauseReady, sizingReady } from './helpers';
-import type { RetestCheck } from './types';
+import { designCloseBlock, flawScanDrift, remediationRunway, rootCauseReady, sizingReady } from './helpers';
 import { CHALLENGED_INPUT_LABEL, DESIGN_GAP_KINDS, sortGapKinds, PLAN_FIX_HINT, PLAN_FIX_KINDS, PLAN_FIX_LABEL, type PlanFixKind, EXCEPTION_STEPS, GAP_KIND_HINT, GAP_KIND_LABEL, GAP_KIND_PLAN_PROMPT, gapNature, GRADE_RANK, ENTITY_MW_INDICATORS, EXCEPTION_MW_INDICATORS, MW_INDICATOR_BY_ID, mwIndicatorIds, mwSourceLabel, SEVERITY_URGENCY, type Assertion, type ChallengedInput, type Court, type Deficiency, type EntityMwConclusion, type MwIndicatorDef, type DeficiencyGroup, type ExceptionGrade, type ExceptionStatus, type IcfrEngagement, type RetestRound, type Severity, type SignificantAccount, type TaskType } from './types';
 
 const fmt = (n: number) => formatINR(n);
@@ -839,7 +839,7 @@ function PlanBlock({ d, isOwner, locked = false, onPatch, onAttach }: { d: Defic
             <button onClick={() => onAttach(`${d.id.toLowerCase()}-fix-evidence${files.length ? `-${files.length + 1}` : ''}.pdf`)}
               className="h-6 px-2 rounded-md border border-dashed border-canvas-border text-[0.65625rem] font-semibold text-ink-500 hover:text-brand-700 hover:border-brand-300 cursor-pointer inline-flex items-center gap-1 transition-colors"><Paperclip size={10} /> Attach evidence</button>
           )}
-          {editable && files.length === 0 && <span className="text-[0.65625rem] text-mitigated-700">required before you can submit for retest</span>}
+          {editable && files.length === 0 && <span className="text-[0.65625rem] text-mitigated-700">required before you can submit for sign-off</span>}
         </div>
       )}
     </div>
@@ -880,7 +880,19 @@ function SeverityConclusion({ result, showMateriality }: { result: ExceptionGrad
   );
 }
 
-// ─── ⑤ The retest ────────────────────────────────────────────────────────────────
+// PARKED (30 Sep 2026) — the two retest panels, operating and design. The retest
+// left the exception flow: there is no 'Retest' state left for either to be shown
+// in, and the five store mutators they drive (drawRetestSample, setRetestResult,
+// setRetestCheck, runRetestIra, recordRetest) are parked in store.tsx, so leaving
+// these two live would not even type. The retest now happens on the CONTROL, on
+// the audit's own timetable — closing an exception leaves one owed there.
+//
+// Restore by un-commenting this whole block, the mount branch inside the exception
+// body, and the store's own parked block. Everything these two READ is still live
+// and still correct — `isVersionRetest`, `designRetestChecks`, `Deficiency.retests`
+// / `retestDraft` — because a round already run is still a round worth showing.
+/*
+// ─── The retest ─────────────────────────────────────────────────────────────────
 // A fresh sample off the period SINCE THE FIX, marked against the SAME attributes
 // the original test used, item by item. The verdict is derived from the grid and
 // never typed — a retest whose result can be asserted independently of its marks
@@ -978,7 +990,7 @@ function RetestPanel({ d }: { d: Deficiency }) {
   );
 }
 
-// ─── ⑤ The retest, design track ──────────────────────────────────────────────────
+// ─── The retest, design track ────────────────────────────────────────────────────
 // A TOD failure has no sample to redraw — the design is what failed. So the retest
 // re-checks the design checks that failed, one row each, against the evidence the
 // owner attached to the fix. The verdict still comes off the marks, never a
@@ -1134,6 +1146,8 @@ function DesignRetestPanel({ d }: { d: Deficiency }) {
     </div>
   );
 }
+*/
+/* ── end of the parked retest panels ─────────────────────────────────────────── */
 
 /** Every retest that has already run. Two failures put it in front of the reviewer:
  *  a fix that has missed twice is not a remediation problem any more. */
@@ -1171,7 +1185,13 @@ function RetestHistory({ rounds }: { rounds: RetestRound[] }) {
 }
 
 /** When the fix will have run long enough to be worth sampling — and, when that
- *  lands after the books close, the warning that says so NOW rather than in March. */
+ *  lands after the books close, the warning that says so NOW rather than in March.
+ *
+ *  Not a step marker, and never was: it is the clock on whether the repair can be
+ *  PROVEN inside the year. That question outlived the retest step — the retest
+ *  still happens, on the control — and on the operating track this is the only
+ *  place it is asked, which is why `remediationRunway` beside the sizing is design
+ *  track only. */
 function RetestReadyLine({ readiness }: { readiness: RetestReadiness }) {
   return (
     <div className="space-y-1.5">
@@ -1260,21 +1280,25 @@ export function HandoffsView() {
   );
 }
 
-// ─── Exceptions — the six steps ──────────────────────────────────────────────────
-// Eight states, six steps: sizing parks for the reviewer when it lands on
+// ─── Exceptions — the five steps ─────────────────────────────────────────────────
+// Seven states, five steps: sizing parks for the reviewer when it lands on
 // significant or worse, and planning parks for the auditor to judge the plan. Both
-// handoffs happen INSIDE a step, so the stepper stays six wide.
+// handoffs happen INSIDE a step, so the stepper stays five wide.
+//
+// The retest is NOT one of them any more (30 Sep). It used to sit between the fix
+// and the close, which made the auditor test a repair the day it landed. It now
+// happens on the CONTROL, on the audit's own timetable — closing the exception
+// marks the control as owed one. See the note above `ExceptionStatus`.
 const STATUS_TONE: Record<ExceptionStatus, Tone> = {
   Identified: 'high',
   'Rating review': 'info',
   Planning: 'mitigated',
   'Plan review': 'info',
   Remediation: 'mitigated',
-  Retest: 'evidence',
   'Awaiting reviewer': 'info',
   Closed: 'compliant',
 };
-/** Which of the six steps this exception is standing on. 'Identified' spans steps
+/** Which of the five steps this exception is standing on. 'Identified' spans steps
  *  ① and ②: it is still being raised until the root cause is written, and being
  *  sized once it is. */
 function currentStep(d: Deficiency): number {
@@ -1299,7 +1323,7 @@ const DEF_COLS = 9;
  *  first (it is a ladder), stage in lifecycle order, court in the order the
  *  baton passes — never alphabetically, which would scatter both. */
 const SEVERITY_ORDER = ['Material Weakness', 'Significant Deficiency', 'Deficiency', 'Clearly Trivial'] as const;
-const STAGE_ORDER = ['Identified', 'Rating review', 'Planning', 'Plan review', 'Remediation', 'Retest', 'Awaiting reviewer', 'Closed'] as const;
+const STAGE_ORDER = ['Identified', 'Rating review', 'Planning', 'Plan review', 'Remediation', 'Awaiting reviewer', 'Closed'] as const;
 const COURT_ORDER = ['auditor', 'risk-owner', 'reviewer', 'none'] as const;
 const COURT_LABEL: Record<Court, string> = { auditor: 'Auditor', 'risk-owner': 'Risk owner', reviewer: 'Reviewer', none: 'Closed' };
 
@@ -1310,7 +1334,7 @@ const COURT_LABEL: Record<Court, string> = { auditor: 'Auditor', 'risk-owner': '
  *  and a name nobody has committed to would read as an assignment. Every stage
  *  past Planning is only reachable through a submitted plan, which covers seeds
  *  written before the submission was stamped. */
-const PLAN_SUBMITTED_STAGES: readonly ExceptionStatus[] = ['Plan review', 'Remediation', 'Retest', 'Awaiting reviewer', 'Closed'];
+const PLAN_SUBMITTED_STAGES: readonly ExceptionStatus[] = ['Plan review', 'Remediation', 'Awaiting reviewer', 'Closed'];
 function riskOwnerOf(d: Deficiency, eng: IcfrEngagement): string | null {
   return eng.controls.find(c => c.id === d.controlId)?.owner?.trim() || null;
 }
@@ -1322,7 +1346,7 @@ function deficiencyOwnerOf(d: Deficiency): string | null {
 /** The Stage cell's second line — when the fix is due, from the stage a plan can
  *  carry a date. Before Planning nobody has been handed the fix yet, and a closed
  *  finding's date is spent, so neither gets a line. */
-const DUE_STAGES: readonly ExceptionStatus[] = ['Planning', 'Plan review', 'Remediation', 'Retest', 'Awaiting reviewer'];
+const DUE_STAGES: readonly ExceptionStatus[] = ['Planning', 'Plan review', 'Remediation', 'Awaiting reviewer'];
 function stageDue(d: Deficiency): { label: string; overdue: boolean } | null {
   if (!DUE_STAGES.includes(d.status)) return null;
   const r = d.remediation;
@@ -1459,7 +1483,7 @@ export function DeficienciesView() {
                   <HeaderFilter label="Deficiency owner" value={defOwner} options={defOwnerOpts} allLabel="Anyone" onChange={setDefOwner} ariaLabel="Filter by deficiency owner" />
                 </th>
                 <th title="Where it stands, and when the fix is due"><HeaderFilter label="Stage" value={stage} options={stageOpts} allLabel="All stages" onChange={setStage} ariaLabel="Filter by stage" /></th>
-                <th title="Whose move it is — the owner remediates, the auditor evaluates and retests, the reviewer closes">
+                <th title="Whose move it is — the auditor sizes it and judges the plan, the owner remediates, the reviewer closes">
                   <HeaderFilter label="Court" value={court} options={courtOpts} allLabel="Any court" onChange={setCourt} ariaLabel="Filter by court" />
                 </th>
               </tr>
@@ -1896,7 +1920,7 @@ function ExposureWorking({ x, current, onUse }: { x: DataExposure; current: numb
 
 export function DeficiencyCard({ d, defaultOpen = false, showControlLink = true, layout = 'card' }: { d: Deficiency; defaultOpen?: boolean; showControlLink?: boolean; layout?: 'card' | 'row' }) {
   const {
-    eng, role, me, openControl, updateDeficiency, runFlawScan, setExceptionStatus, completeSizing, confirmRating, returnRating,
+    eng, role, me, openControl, updateDeficiency, setExceptionStatus, completeSizing, confirmRating, returnRating,
     submitPlan, reviewPlan, signOffException, reopenException, updateRemediation, addRemediationEvidence,
     raiseChallenge, respondToChallenge, meOwner, focusDefId, clearFocusDef, openAuditId,
   } = useIcfr();
@@ -2058,16 +2082,26 @@ export function DeficiencyCard({ d, defaultOpen = false, showControlLink = true,
           )}
         </div>
 
-        {/* the six steps */}
+        {/* the five steps — the rail is drawn FROM `EXCEPTION_STEPS`, never from a
+            count written out here, so the day a step comes or goes the rail and
+            the "Step n of m" line below it move together.
+
+            'Awaiting reviewer' and 'Closed' share the last step, so "done" cannot
+            be `n < step` alone: a closed exception would leave its own final step
+            sitting in the live tint, reading as work still to do. A signed-off
+            record is finished, and the rail says so. */}
         <div className="flex items-center gap-1.5 my-3">
-          {EXCEPTION_STEPS.map((s, i) => (
+          {EXCEPTION_STEPS.map((s, i) => {
+            const done = s.n < step || d.status === 'Closed';
+            return (
             <div key={s.n} className="flex items-center gap-1.5 flex-1 last:flex-none">
-              <span className={cn('inline-flex items-center gap-1.5 h-7 px-2.5 rounded-full text-[0.6875rem] font-semibold whitespace-nowrap', s.n < step ? 'bg-compliant-50 text-compliant-700' : s.n === step ? 'bg-brand-600 text-white' : 'bg-paper-100 text-ink-400')}>
-                {s.n < step ? <CheckCircle2 size={12} /> : <span className="w-[14px] text-center">{s.n}</span>}{s.title}
+              <span className={cn('inline-flex items-center gap-1.5 h-7 px-2.5 rounded-full text-[0.6875rem] font-semibold whitespace-nowrap', done ? 'bg-compliant-50 text-compliant-700' : s.n === step ? 'bg-brand-600 text-white' : 'bg-paper-100 text-ink-400')}>
+                {done ? <CheckCircle2 size={12} /> : <span className="w-[14px] text-center">{s.n}</span>}{s.title}
               </span>
-              {i < EXCEPTION_STEPS.length - 1 && <span className={cn('h-px flex-1', s.n < step ? 'bg-compliant-300' : 'bg-paper-200')} />}
+              {i < EXCEPTION_STEPS.length - 1 && <span className={cn('h-px flex-1', done ? 'bg-compliant-300' : 'bg-paper-200')} />}
             </div>
-          ))}
+            );
+          })}
         </div>
 
         {/* ─── Current state — whose court, and what they are doing with it ─────
@@ -2082,7 +2116,7 @@ export function DeficiencyCard({ d, defaultOpen = false, showControlLink = true,
           {d.status === 'Closed'
             ? <span className="text-[0.75rem] text-ink-600">Signed off by <b className="font-semibold text-ink-800">{court.who}</b></span>
             : <span className="text-[0.75rem] text-ink-600"><b className="font-semibold text-ink-800">{court.who}</b> — {court.doing}</span>}
-          <span className="ml-auto text-[0.71875rem] font-semibold text-ink-400">Step {step} of 6 · {d.status}</span>
+          <span className="ml-auto text-[0.71875rem] font-semibold text-ink-400">Step {step} of {EXCEPTION_STEPS.length} · {d.status}</span>
         </div>
 
         {/* severity + the fix — the owner's card leads with THEIR work (visual reverse) */}
@@ -2266,14 +2300,19 @@ export function DeficiencyCard({ d, defaultOpen = false, showControlLink = true,
                 </ul>
               </div>
             )}
-            {/* Same flaw elsewhere — design track only, and only the auditor's to read:
-                it is a lead to follow, not something the owner is answerable for. */}
-            {d.track === 'design' && (
+            {/* PARKED — "Same flaw elsewhere" (design track only). The scan itself is
+                untouched: SameFlawElsewhere, sameFlawElsewhere(), buildFlawScan(),
+                flawScanDrift() and the runFlawScan store action are all still live,
+                and a scan already recorded stays on the exception. To restore, put
+                this block back and add `runFlawScan` to the useIcfr() destructure
+                at the top of this component. Nothing gates on it — designCloseBlock
+                never read the scan, so closing a design finding is unaffected. */}
+            {/* {d.track === 'design' && (
               <div className="flex items-start gap-2 text-[0.75rem] flex-wrap">
                 <span className="text-ink-500 w-[120px] mt-1.5">Same flaw elsewhere</span>
                 <div className="flex-1 min-w-[260px]"><SameFlawElsewhere d={d} eng={eng} onOpen={openControl} onRun={() => runFlawScan(d.id)} /></div>
               </div>
-            )}
+            )} */}
             <div className="flex items-start gap-2 text-[0.75rem] flex-wrap">
               <span className="text-ink-500 w-[120px] mt-1.5">Aggregation</span>
               <div className="flex-1 min-w-[260px] space-y-2">
@@ -2503,18 +2542,32 @@ export function DeficiencyCard({ d, defaultOpen = false, showControlLink = true,
           <PlanBlock d={d} isOwner={isOwner} locked={locked} onPatch={patch => updateRemediation(d.id, patch)} onAttach={name => addRemediationEvidence(d.id, name)} />
         )}
 
-        {/* When it can actually be retested — and the warning when that is after the
-            books close, raised now while a date can still be moved. */}
+        {/* When the fix can actually be retested ON THE CONTROL — and the warning
+            when that is after the books close, raised now while the date can still
+            be moved. Kept even though the retest is no longer a step here: a
+            remediation nobody can prove before year end is a planning problem, and
+            the plan is being written on this screen. */}
         {step >= 3 && d.status !== 'Closed' && <RetestReadyLine readiness={readiness} />}
 
-        {/* ⑤ The retest itself — the auditor's grid, in their hat only. A design
-            failure re-checks its failed design checks instead of drawing a sample. */}
-        {!locked && d.status === 'Retest' && isAuditor && (
+        {/* PARKED (30 Sep 2026) — the retest grid, operating and design. The retest
+            is no longer a step in this flow, so no exception can reach the state
+            this branch guarded on: once the plan is accepted and the owner has
+            attached evidence, the reviewer signs off. The retest itself happens on
+            the CONTROL, later, on the audit's own timetable — closing an exception
+            leaves one owed there (`Control.retestDue`).
+
+            Restore by un-commenting this block, the two panel components above and
+            the five store mutators they call, which are parked together in
+            store.tsx. It would also need 'Retest' back in `ExceptionStatus` and its
+            step back in `EXCEPTION_STEPS`. */}
+        {/* {!locked && d.status === 'Retest' && isAuditor && (
           samePerson(d.fixSubmitted, me)
             ? <span className="text-[0.75rem] font-semibold text-high-700 inline-flex items-center gap-1.5"><XCircle size={14} /> A different person must retest this — you declared the fix done.</span>
             : d.track === 'design' ? <DesignRetestPanel d={d} /> : <RetestPanel d={d} />
-        )}
+        )} */}
 
+        {/* Stays. A retest may not be a step any more, but an exception carried
+            over from an earlier year still has rounds on it, and this only reads. */}
         <RetestHistory rounds={rounds} />
         </div>
 
@@ -2620,25 +2673,25 @@ export function DeficiencyCard({ d, defaultOpen = false, showControlLink = true,
               ? (() => {
                   const hasEvidence = (d.remediation.evidence?.length ?? 0) > 0;
                   return (
-                    <button onClick={() => setExceptionStatus(d.id, 'Retest')} disabled={!hasEvidence}
-                      title={hasEvidence ? 'Marks your fix as done and hands it to the auditor' : 'Attach evidence of the fix first — "done" needs proof'}
-                      className="h-8 px-3 rounded-lg bg-evidence-600 text-white text-[0.75rem] font-semibold enabled:hover:bg-evidence-700 disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer inline-flex items-center gap-1.5">Fixed — submit for retest</button>
+                    <button onClick={() => setExceptionStatus(d.id, 'Awaiting reviewer')} disabled={!hasEvidence}
+                      title={hasEvidence ? 'Marks your fix as done and hands it to the reviewer to sign off' : 'Attach evidence of the fix first — "done" needs proof'}
+                      className="h-8 px-3 rounded-lg bg-evidence-600 text-white text-[0.75rem] font-semibold enabled:hover:bg-evidence-700 disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer inline-flex items-center gap-1.5">Fixed — submit for sign-off</button>
                   );
                 })()
               : null
           )}
 
-          {/* ⑤ the retest is the auditor's; the panel above carries its actions */}
-          {!locked && d.status === 'Retest' && isOwner && (
-            <span className="text-[0.75rem] text-ink-500 inline-flex items-center gap-1.5"><Target size={14} className="text-ink-400" /> You never test your own fix — the auditor retests it.</span>
-          )}
-
-          {/* ⑥ four-eyes: only the reviewer hat closes, and never the person who ran the retest */}
+          {/* ⑤ four-eyes: only the reviewer hat closes, and never the person who
+              accepted the plan as auditor — one human can wear both hats here, and
+              the hand that agreed the fix cannot also be the hand that declares it
+              good. The anchor used to be whoever ran the retest; there is no retest
+              in this flow any more, so it moved to the last real judgement left
+              before the close, which is the plan review. Same test in the store. */}
           {!locked && d.status === 'Awaiting reviewer' && (
             !isReviewer ? (
-              <span className="text-[12px] text-ink-500 inline-flex items-center gap-1.5"><ShieldCheck size={14} className="text-ink-400" /> Awaiting reviewer — only the reviewer closes{d.retest ? ` (retest ${d.retest.result} · ${d.retest.by})` : ''}</span>
-            ) : d.retest && d.retest.by === me ? (
-              <span className="text-[12px] font-semibold text-high-700 inline-flex items-center gap-1.5"><XCircle size={14} /> A different person must close — you recorded this retest.</span>
+              <span className="text-[0.75rem] text-ink-500 inline-flex items-center gap-1.5"><ShieldCheck size={14} className="text-ink-400" /> Awaiting reviewer — only the reviewer closes{d.planReview?.decision === 'Accepted' ? ` (plan accepted by ${d.planReview.by})` : ''}</span>
+            ) : samePerson(d.planReview, me) ? (
+              <span className="text-[0.75rem] font-semibold text-high-700 inline-flex items-center gap-1.5"><XCircle size={14} /> A different person must close — you accepted this plan.</span>
             ) : (
               <button onClick={() => setClosing(true)} className="h-8 px-3 rounded-lg bg-compliant-600 text-white text-[12px] font-semibold hover:bg-compliant-700 cursor-pointer inline-flex items-center gap-1.5"><ShieldCheck size={13} /> Close — reviewer sign-off</button>
             )
@@ -2706,7 +2759,7 @@ export function DeficiencyCard({ d, defaultOpen = false, showControlLink = true,
               </div>
             </div>
             <div className="p-5">
-              <p className="text-[12.5px] text-ink-600 leading-relaxed"><span className="font-mono font-semibold text-ink-800">{d.id}</span> returns to Remediation — the reviewer sign-off and retest clear, and your reason goes on the trail with your name.</p>
+              <p className="text-[12.5px] text-ink-600 leading-relaxed"><span className="font-mono font-semibold text-ink-800">{d.id}</span> returns to Remediation — the reviewer sign-off clears, and your reason goes on the trail with your name.</p>
               <textarea autoFocus value={reopenReason} onChange={e => setReopenReason(e.target.value)} rows={2}
                 placeholder="Why it comes back — e.g. the fix regressed, or new occurrences surfaced"
                 className="mt-3 w-full px-3 py-2 rounded-lg border border-canvas-border bg-canvas-elevated text-[12.5px] resize-none focus:outline-none focus:border-brand-300 focus:ring-2 focus:ring-brand-50" />

@@ -84,7 +84,7 @@ test('only the reviewer reopens what the reviewer closed', async ({ page }) => {
   await page.goto('/');
   await openAlturaDeficiencies(page);
 
-  // DEF-A-05 is closed — retested clean and signed off by the reviewer.
+  // DEF-A-05 is closed — the fix was submitted and the reviewer signed it off.
   await page.getByText('DEF-A-05').first().click();
   await page.waitForTimeout(700);
   await expect(page.getByText('Closed —', { exact: false }).first()).toBeVisible({ timeout: 15_000 });

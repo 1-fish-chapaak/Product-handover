@@ -251,7 +251,13 @@ export default function Overview() {
         // told the owner to act on findings that were not yet theirs, while
         // 'Planning' — the plan they genuinely owed — was left out entirely.
         const inRem = openDefs.filter(d => d.status === 'Planning' || d.status === 'Remediation').length;
-        const inRetest = openDefs.filter(d => d.status === 'Retest').length;
+        // The other half of the same split. This used to count only the retest
+        // step, which has gone (30 Sep) — and even while it lived it was too
+        // narrow: a finding being sized, waiting on the rating gate or sitting
+        // with the reviewer appeared in neither number, so the card quietly
+        // under-reported. Anything open that is not in the owner's two courts is
+        // with the audit team, whichever of their hats is holding it.
+        const withAudit = openDefs.length - inRem;
         return (
           <div className="grid sm:grid-cols-2 gap-4">
             <button onClick={() => setTab('controls')} className="text-left rounded-2xl border border-canvas-border bg-canvas-elevated p-4 hover:border-brand-300 transition-colors cursor-pointer">
@@ -269,7 +275,7 @@ export default function Overview() {
               <div className="flex items-center gap-x-4 gap-y-1 flex-wrap mt-2.5 text-[12.5px] text-ink-600">
                 <span><b className="text-[17px] font-bold tabular-nums text-ink-900">{openDefs.length}</b> open</span>
                 {inRem > 0 && <span><b className="font-bold text-high-700">{inRem}</b> on you to remediate</span>}
-                {inRetest > 0 && <span><b className="font-bold text-evidence-700">{inRetest}</b> with the auditor</span>}
+                {withAudit > 0 && <span><b className="font-bold text-evidence-700">{withAudit}</b> with the audit team</span>}
               </div>
               <span className="mt-2.5 inline-flex items-center gap-1 text-[12px] font-semibold text-brand-700">Manage {W.mine.toLowerCase()} <ArrowRight size={13} /></span>
             </button>
@@ -453,7 +459,9 @@ export default function Overview() {
           { key: 'mw', show: sev.mwOpen > 0, onClick: () => openDeficiencies(), icon: <AlertTriangle size={13} className="text-risk-600" />,
             label: <><b className="font-semibold text-risk-700">{sev.mwOpen}</b> material weakness{sev.mwOpen === 1 ? '' : 'es'} open — {past ? 'ICFR ineffective, open past year-end' : 'ICFR ineffective if still open at year-end'}</> },
           { key: 'other', show: openOther > 0, onClick: () => openDeficiencies(), icon: <Circle size={11} className="text-high-600" />,
-            label: <><b className="font-semibold text-ink-900">{openOther}</b> {openOther === 1 ? W.one : W.many} still working through remediation → retest → close</> },
+            // The journey as it now runs: the retest left the exception flow on
+            // 30 Sep, so naming it here promised a step nobody will ever see.
+            label: <><b className="font-semibold text-ink-900">{openOther}</b> {openOther === 1 ? W.one : W.many} still working through plan → fix → close</> },
           { key: 'unconcluded', show: unconcluded > 0, onClick: () => openRegister({ view: 'open' }), icon: <Circle size={11} className="text-ink-400" />,
             label: <><b className="font-semibold text-ink-900">{unconcluded}</b> control{unconcluded === 1 ? '' : 's'} not concluded</> },
           { key: 'papers-rev', show: papersWithReviewer > 0, onClick: () => openRegister({ view: 'review' }), icon: <Circle size={11} className="text-evidence-600" />,

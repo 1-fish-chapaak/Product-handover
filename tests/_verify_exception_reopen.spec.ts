@@ -14,8 +14,11 @@ import { openFromLibrary } from './_sox_helpers';
  *    starting with the owner submitting a fix. That route no longer exists: the
  *    flagship renders the classic shell, where the owner's tab bar has no
  *    deficiencies tab at all (a known gap, parked). Altura is the engagement the
- *    current flow is built on, and its DEF-A-05 is already closed — retested
- *    clean and signed off — which is exactly the state this test is about.
+ *    current flow is built on, and its DEF-A-05 is already closed — the fix was
+ *    submitted and the reviewer signed it off — which is exactly the state this
+ *    test is about. (It also carries a recorded round, from back when the retest
+ *    was a step in this flow. That history still reads; reopening is unaffected
+ *    by it either way, and the stamp clears with the reopen.)
  *
  * Reopening is the REVIEWER's alone (RBAC spec): they signed it closed, so
  * undoing that signature is theirs. `_sox-severity-custody.spec.ts` pins the

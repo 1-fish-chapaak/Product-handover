@@ -518,12 +518,12 @@ export function gradeException(d: Deficiency, eng: IcfrEngagement, ownGradeOnly 
 // so the threshold helper it needed is gone.)
 
 // ─── No two rungs in a row by the same hands ─────────────────────────────────────
-// A finding travels through eight steps, and at every handoff the point is that
+// A finding travels through seven states, and at every handoff the point is that
 // somebody ELSE looks. Roles alone do not guarantee that: one person can hold two
 // hats, and on a small team usually does. So each rung stamps who did it, and the
 // next one is refused to that name — sized-then-confirmed, submitted-then-judged,
-// fixed-then-retested, retested-then-closed. Checked by NAME for the same reason
-// the own-control prohibition is: changing hats must not change the answer.
+// judged-then-closed. Checked by NAME for the same reason the own-control
+// prohibition is: changing hats must not change the answer.
 //
 // An absent stamp (a finding seeded mid-ladder, or raised before the field
 // existed) reads as "no clash known" rather than blocking — a rule that fires on
@@ -543,8 +543,7 @@ export function courtForException(d: Deficiency): Court {
     case 'Planning': return 'risk-owner';       // ③ writing the plan
     case 'Plan review': return 'auditor';       // ③ judging it against the root cause
     case 'Remediation': return 'risk-owner';    // ④ doing the work
-    case 'Retest': return 'auditor';            // ⑤ retesting the fix
-    case 'Awaiting reviewer': return 'reviewer';// ⑥ reading the evidence and closing
+    case 'Awaiting reviewer': return 'reviewer';// ⑤ reading the evidence and closing
     case 'Closed': return 'none';
   }
 }
@@ -715,8 +714,7 @@ export function exceptionCourtDetail(d: Deficiency, eng: IcfrEngagement): { who:
     : d.status === 'Planning' ? (d.planReview?.decision === 'Rejected' ? 'rewriting the plan' : 'writing the plan')
     : d.status === 'Plan review' ? 'checking the plan against the root cause'
     : d.status === 'Remediation' ? 'implementing the fix and attaching evidence'
-    : d.status === 'Retest' ? (d.track === 'design' ? 're-checking the failed design checks against the fix' : 'retesting on a post-fix sample')
-    : d.status === 'Awaiting reviewer' ? 'reading the retest evidence and closing'
+    : d.status === 'Awaiting reviewer' ? 'reading the fix evidence and closing'
     : 'closed';
   return { who: court === 'none' ? (d.signoff?.by ?? who) : who, doing };
 }
@@ -725,6 +723,11 @@ export function exceptionCourtDetail(d: Deficiency, eng: IcfrEngagement): { who:
 // A repaired control has to RUN before it can be sampled again — you cannot retest
 // a monthly control the week after it was fixed and call the result evidence. The
 // wait comes off the control's own frequency.
+//
+// This is the arithmetic behind the whole reason the retest left the exception
+// flow (30 Sep): the fix is agreed now and the proof of it is gathered when there
+// is something to gather. Closing an exception raises `Control.retestDue`, and
+// this says when the auditor can honestly answer it.
 
 export const OPERATING_PERIOD: Record<Frequency, { months: number | null; label: string }> = {
   Daily: { months: 1, label: 'about a month of daily runs' },
@@ -916,9 +919,9 @@ export function retestReadiness(d: Deficiency, c: Control | undefined, periodEnd
 
   // ── The design track has a different clock, and used to be given the wrong one.
   //
-  // A TOD retest re-reads the design checks against the fix — `drawRetestSample`
-  // refuses a design draw outright — so it needs no occurrence and is ready the day
-  // the fix lands. This line used to tell a design exception "Retestable from {fix
+  // A TOD retest re-reads the design checks against the fix — there is no sample
+  // in it at all — so it needs no occurrence and is ready the day the fix lands.
+  // This line used to tell a design exception "Retestable from {fix
   // date + three to four monthly closes}", and on an Annual control "Not retestable
   // this period", both counted off an operating frequency that has nothing to do
   // with re-reading a design. Both were false.
@@ -1012,7 +1015,8 @@ export function retestAtRisk(eng: IcfrEngagement): { d: Deficiency; readiness: R
 
 /** The design checks a TOD retest re-checks — the ones whose failure raised the
  *  exception, never a list written for the retest. First answer wins:
- *    · a round already started or run — every round re-checks the same list;
+ *    · a round already started or run — only ever a record raised back when the
+ *      retest was a step in this flow, and every round re-checked the same list;
  *    · the list stamped on the exception when it was raised;
  *    · the control's design checks reading Fail now — for an exception raised
  *      before the stamp existed;
@@ -1060,7 +1064,7 @@ export function versionFrom(c: Control, defId: string): ControlVersion | undefin
  *  auditor has not already concluded on.
  *
  *  Counted against the RETEST ROUNDS rather than simply asking whether any version
- *  exists, because a rebuild can miss. Round 1 fails, the exception goes back to
+ *  exists, because a rebuild could miss: round 1 fails, the exception goes back to
  *  the owner, they rebuild a second time — and the auditor has to record that
  *  second rebuild too. One version per round run, and the step asks for the next
  *  one whenever the count has fallen behind:
@@ -1069,8 +1073,15 @@ export function versionFrom(c: Control, defId: string): ControlVersion | undefin
  *    version recorded     1 version,  0 rounds  ⇒ does not ask
  *    round 1 failed       1 version,  1 round   ⇒ asks again
  *
- *  A workaround never gets here: it leaves the control as it was, so its retest
- *  genuinely is the old checks read again against the new compensating step. */
+ *  SINCE THE RETEST LEFT THE FLOW (30 Sep) only the first two rows can occur —
+ *  nothing writes `retests` any more, so the count is always nil and this reads
+ *  "no version recorded yet". That is the same answer it always gave on a live
+ *  exception, and the third row stays because a record from an earlier year can
+ *  still carry rounds. A second rebuild is now the auditor's own act on the
+ *  control (`recordNewVersion`), not something a failed round demands.
+ *
+ *  A workaround never gets here: it leaves the control as it was, so what would be
+ *  re-checked is the old checks read again against the new compensating step. */
 export function awaitsNewVersion(c: Control, d: Deficiency): boolean {
   return d.track === 'design'
     && d.planReview?.decision === 'Accepted'
@@ -1212,9 +1223,14 @@ export function versionAudit<T extends Pick<AuditRecord, 'windowFrom' | 'windowT
 }
 
 /** The retest of a REBUILT control is its new version's design test, not a re-read
- *  of the old checks. True once the version for THIS round has been recorded — from
- *  which point the round's marks are READ off the live TOD rather than hand-entered,
- *  so the exception can never say passed while the design test it rests on has not. */
+ *  of the old checks. True once the rebuild has been recorded — from which point
+ *  the marks are READ off the live TOD rather than hand-entered, so nothing can say
+ *  passed while the design test it rests on has not.
+ *
+ *  With the retest off the exception flow the `!awaitsNewVersion` clause is now
+ *  implied by the one before it — a recorded version is exactly what that asks
+ *  about. Left standing because it is the clause that would carry the weight again
+ *  the moment rounds come back, and it changes no answer in the meantime. */
 export function isVersionRetest(c: Control, d: Deficiency): boolean {
   return d.track === 'design'
     && d.planReview?.fix === 'redesign'

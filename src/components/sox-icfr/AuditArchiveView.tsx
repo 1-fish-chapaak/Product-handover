@@ -233,11 +233,24 @@ export default function AuditArchiveView({ audit, tab }: { audit: AuditRecord; t
                       <span className="font-medium text-ink-900">{d.remediation.status}</span>
                       {d.remediation.owner && <span className="text-ink-400"> · {d.remediation.owner}</span>}
                     </span>
+                    {/* An archive frozen before 30 Sep carries a retest verdict
+                        inside the finding, because the exception flow had a retest
+                        step then. Newer ones will not: the retest moved onto the
+                        control and happens on the audit's own timetable, so what a
+                        close records is the sign-off. Both are shown where both
+                        exist — a closed cycle answers what it answered. */}
                     {d.retest && (
                       <span className="text-ink-600">
                         <span className="text-ink-400">Retest </span>
                         <span className={cn('font-medium', d.retest.result === 'Pass' ? 'text-compliant-700' : 'text-risk-700')}>{d.retest.result}</span>
                         <span className="text-ink-400"> · {d.retest.at}</span>
+                      </span>
+                    )}
+                    {d.signoff && (
+                      <span className="text-ink-600 truncate">
+                        <span className="text-ink-400">Signed off </span>
+                        <span className="font-medium text-ink-900">{d.signoff.by}</span>
+                        <span className="text-ink-400"> · {d.signoff.at}</span>
                       </span>
                     )}
                   </div>

@@ -65,7 +65,7 @@ test('exception lifecycle stamps named actors into the trail, four-eyes closes i
   test.setTimeout(180_000);
   await openSox(page);
 
-  // owner (M. Nair): evidence the fix, submit DEF-001 for retest
+  // owner (M. Nair): evidence the fix, submit DEF-001 for the reviewer's sign-off
   await page.getByRole('button', { name: 'Risk Owner', exact: true }).click();
   await page.waitForTimeout(600);
   await page.getByRole('button', { name: /Manage my exceptions/ }).click();
@@ -78,35 +78,17 @@ test('exception lifecycle stamps named actors into the trail, four-eyes closes i
   await page.waitForTimeout(600);
   await page.getByRole('button', { name: 'Attach evidence' }).first().click();
   await page.waitForTimeout(300);
-  await page.getByRole('button', { name: /Fixed — submit for retest/ }).click();
+  await page.getByRole('button', { name: /Fixed — submit for sign-off/ }).click();
   await page.waitForTimeout(400);
   // The exception's state is the "Current state" strip now — who has it and what
-  // they are doing — rather than a fixed sentence per status.
-  await expect(page.getByText(/retesting on a post-fix sample/)).toBeVisible();
+  // they are doing — rather than a fixed sentence per status. And the fix goes
+  // STRAIGHT to the reviewer: the retest left the flow on 30 Sep, so there is no
+  // auditor rung between the owner declaring it done and the close.
+  await expect(page.getByText(/reading the fix evidence and closing/)).toBeVisible();
 
-  // auditor (A. Mehta): record the retest pass
-  await page.getByRole('button', { name: 'Auditor', exact: true }).click();
-  await page.waitForTimeout(600);
-  // Switching hats returns to the engagement root, and the register lives inside
-  // the audit — so go back in, then to its Deficiency management tab.
-  await ensureInAudit(page);
-  await page.getByRole('button', { name: 'Deficiency management', exact: true }).first().click();
-  await page.waitForTimeout(800);
-  await page.getByRole('button', { name: /^Expand DEF-001/ }).first().click();
-  await page.waitForTimeout(600);
-  // The retest is a drawn sample now, not a single verdict button: draw it, mark
-  // every item, then record the round.
-  await page.getByRole('button', { name: /Draw post-fix sample/ }).click();
-  await page.waitForTimeout(900);
-  // Every item against every attribute — the Record button only appears once the
-  // whole grid is marked, because the verdict comes off the grid, not a button.
-  const passCells = page.getByRole('button', { name: / Pass$/ });
-  const n = await passCells.count();
-  for (let i = 0; i < n; i++) { await passCells.nth(i).click(); await page.waitForTimeout(100); }
-  await page.getByRole('button', { name: /Record retest \d+ — passed/ }).click();
-  await page.waitForTimeout(500);
-
-  // reviewer (J. Fernandes): close — four-eyes passes because people differ
+  // reviewer (J. Fernandes): close — four-eyes passes because people differ.
+  // The anchor is the accepted plan now, not a recorded retest; DEF-001 was
+  // seeded past that rung with nobody's name on it, so nothing can clash.
   await page.getByRole('button', { name: 'Reviewer', exact: true }).click();
   await page.waitForTimeout(600);
   await ensureInAudit(page);
@@ -133,9 +115,16 @@ test('exception lifecycle stamps named actors into the trail, four-eyes closes i
   await page.waitForTimeout(600);
   await page.getByRole('button', { name: /^Open P2P-C-04/ }).first().click();
   await page.waitForTimeout(900);
-  await expect(page.getByText(/submitted the fix for retest/)).toBeVisible();
-  await expect(page.getByText(/recorded retest 1 — pass on DEF-001/)).toBeVisible();
+  await expect(page.getByText(/submitted the fix for sign-off/)).toBeVisible();
   await expect(page.getByText(/closed DEF-001 — reviewer sign-off/)).toBeVisible();
+  // The close's second line: the control is not the control that was tested any
+  // more, so the trail says so on its own row rather than as a rider on the
+  // close — "what is outstanding on this control" is a different question from
+  // "what happened to that finding".
+  await expect(page.getByText(/the control changed under DEF-001 — a retest is owed/)).toBeVisible();
+  // And nothing recorded a retest, because nobody ran one: the retest is the
+  // control's now, on the audit's own timetable.
+  await expect(page.getByText(/recorded retest/)).toHaveCount(0);
 });
 
 test('the owner sees their classification, never the engagement thresholds', async ({ page }) => {

@@ -1309,6 +1309,38 @@ export interface Control {
    *  has been shown to have failed, so exposure and likelihood do not apply and
    *  a severity would be a fabrication. See `UnableToTest`. */
   unableToTest?: UnableToTest;
+  /** A remediation closed against this control, so the thing that was tested is
+   *  not the thing that is there now. The retest is NOT part of the exception
+   *  flow (see `ExceptionStatus`) — it happens on the audit's own timetable, on
+   *  a control that has had a chance to run. This is the flag that says one is
+   *  owed, and it is the auditor's to clear, by testing or by judging that the
+   *  change did not touch what they tested.
+   *
+   *  Deliberately does NOT reset the conclusion. Wiping a signed conclusion
+   *  because somebody else closed a remediation would delete the auditor's work
+   *  without the auditor asking; `reopenControl` is how that is done on purpose.
+   *  A redesign is the one case where the control's own wording changes too, and
+   *  that goes through `recordNewVersion`, which resets both tracks by design. */
+  retestDue?: RetestDue;
+}
+
+/** "This control changed — it is owed a retest." Raised by a reviewer closing a
+ *  remediation, cleared by the auditor. */
+export interface RetestDue {
+  /** The exception whose close raised it. */
+  defId: string;
+  /** Which track failed and was remediated — that is the one to retest first. */
+  track: 'design' | 'operating';
+  /** Only design plans name one; a redesign also expects a new version recorded. */
+  fix?: PlanFixKind;
+  /** What was done, in the plan's own words, so the auditor knows what changed. */
+  note: string;
+  by: string;
+  at: string;
+  /** The auditor's answer. Absent while it is still owed. A reason is required
+   *  either way — "retested" points at the round, "not needed" is a judgement
+   *  and a judgement that is not written down did not happen. */
+  cleared?: { reason: string; by: string; at: string };
 }
 
 /** "Unable to test — waiting on owner". A status on the CONTROL, not a second
@@ -1812,28 +1844,35 @@ export interface SeverityChallenge {
   response?: { decision: 'Accepted' | 'Declined'; reason: string; by: string; at: string };
 }
 
-// The six steps, as eight states — two of the steps have a handoff inside them.
+// The five steps, as seven states — two of the steps have a handoff inside them.
 // Sizing parks for the reviewer when it lands on Significant Deficiency or worse;
 // planning parks for the auditor to judge the plan against the root cause. A
-// passed retest parks at 'Awaiting reviewer' — only the reviewer closes (four-eyes).
+// submitted fix parks at 'Awaiting reviewer' — only the reviewer closes (four-eyes).
+//
+// THE RETEST IS NOT A STEP HERE (30 Sep, user's call). It used to sit between
+// the fix and the close, which forced the auditor to test a repair the day it
+// landed — often before the fixed control had run even once. A retest happens on
+// the CONTROL, on the audit's own timetable, and the close no longer waits on it:
+// the exception records what was found, what was planned, what was built, and who
+// signed it off. Closing marks the control as changed and tells the auditor it is
+// owed a retest (`Control.retestDue`), which is the honest sequence — the fix is
+// agreed now, the proof of it is gathered when there is something to gather.
 export type ExceptionStatus =
   | 'Identified'          // ① raised + ② the auditor sizes it
   | 'Rating review'       // ② reviewer confirms Significant Deficiency or worse — blocking
   | 'Planning'            // ③ risk owner writes the plan
   | 'Plan review'         // ③ auditor judges it against the root cause
   | 'Remediation'         // ④ risk owner implements and attaches evidence
-  | 'Retest'              // ⑤ auditor retests — a post-fix sample (TOE), or the failed design checks against the fix (TOD)
-  | 'Awaiting reviewer'   // ⑥ reviewer reads the retest evidence
-  | 'Closed';             // ⑥ reviewer has signed off
+  | 'Awaiting reviewer'   // ⑤ reviewer reads the plan, the fix and its evidence
+  | 'Closed';             // ⑤ reviewer has signed off
 
-/** The six steps as the screen shows them, and where each state sits. */
+/** The five steps as the screen shows them, and where each state sits. */
 export const EXCEPTION_STEPS: { n: number; title: string; role: Role; states: ExceptionStatus[] }[] = [
   { n: 1, title: 'Exception raised', role: 'auditor', states: ['Identified'] },
   { n: 2, title: 'Size it', role: 'auditor', states: ['Identified', 'Rating review'] },
   { n: 3, title: 'Plan the fix', role: 'risk-owner', states: ['Planning', 'Plan review'] },
   { n: 4, title: 'Fix and submit', role: 'risk-owner', states: ['Remediation'] },
-  { n: 5, title: 'Retest', role: 'auditor', states: ['Retest'] },
-  { n: 6, title: 'Close', role: 'reviewer', states: ['Awaiting reviewer', 'Closed'] },
+  { n: 5, title: 'Close', role: 'reviewer', states: ['Awaiting reviewer', 'Closed'] },
 ];
 
 /* ── Deficiency aggregation ───────────────────────────────────────────────────

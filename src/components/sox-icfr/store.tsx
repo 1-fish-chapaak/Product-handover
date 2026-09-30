@@ -1,12 +1,17 @@
 import { createContext, useCallback, useContext, useMemo, useState, type Dispatch, type ReactNode, type SetStateAction } from 'react';
 import { racmTemplateForProcesses, requiredDatasetsFor, sampleRefs, seedIcfrEngagement, type SeedMeta } from './mockData';
-import { assessSeverity, attestationOverruled, buildFlawScan, designCloseBlock, likelihoodForGap, suggestGapKind, designApproved, designFilesOf, docColumnOf, docNotApplicable, applyDocRequirements, requiredKindsFor, iraCannotTest, designRetestChecks, designOutstanding, designOutstandingRequired, fmtDateTime, requiredFilesOf, requiredFilesReady, canExtendToe, canRedrawToe, controlConclusion, reconcileConfirmations, formatINR, gradeException, icfrConclusion, inquiryOnlyAttributes, passedWithoutFiles, isControlLocked, isControlLockedIn, isEngagementLocked, itgcHolds, parseLooseDate, samePerson, samplingOf, populationSources, previewRegrades, sampleSizeGuide, samplesFor, sourceTotals, staleSteps, stepResult, designCheckQA, TOE_MAX_ROUNDS, toeRoundFailed, toeRoundNo, toeRounds, trackResult, validationQA, validationSummary, validationTable, wfRunRef, dealSample, samplesTestedCount, sampleHome, spreadPhrase, workingAudit, yearEndPending, versionAudit, versionNo, versionFrom, isVersionRetest, pointResult, LEGACY_SOURCE_ID, type RulesPatch } from './helpers';
+import { assessSeverity, attestationOverruled, buildFlawScan, designCloseBlock, likelihoodForGap, suggestGapKind, designApproved, designFilesOf, docColumnOf, docNotApplicable, applyDocRequirements, requiredKindsFor, iraCannotTest, designOutstanding, designOutstandingRequired, fmtDateTime, requiredFilesOf, requiredFilesReady, canExtendToe, canRedrawToe, controlConclusion, reconcileConfirmations, formatINR, gradeException, icfrConclusion, inquiryOnlyAttributes, passedWithoutFiles, isControlLocked, isControlLockedIn, isEngagementLocked, itgcHolds, parseLooseDate, samePerson, samplingOf, populationSources, previewRegrades, sampleSizeGuide, samplesFor, sourceTotals, staleSteps, stepResult, designCheckQA, TOE_MAX_ROUNDS, toeRoundFailed, toeRoundNo, toeRounds, trackResult, validationQA, validationSummary, validationTable, wfRunRef, dealSample, samplesTestedCount, sampleHome, spreadPhrase, workingAudit, yearEndPending, versionAudit, versionNo, LEGACY_SOURCE_ID, type RulesPatch } from './helpers';
 import type { PlanFixKind, ControlVersion, NewVersionDraft,
   Assertion, Attestation, AuditArchive, AuditFileRecord, AuditorProof, AuditRecord, Control, ControlClass, Deficiency, DesignDoc, DesignDocKind, DesignPoint, DiscussionAnchor, DocStatus, FileOrigin,
   DesignJudgements, DesignWaiverReason, EvidenceFile, EvidenceMode, ExceptionStatus, ExecKind, ExecutionEvent, Frequency, HandoffTask, IcfrEngagement,
   DesignBasis, DesignTrack, EvidenceType, ExceptionKind, IpeConclusion, PopulationChecks, IpeTest, MaterialityRules, Walkthrough, Nature, OperatingPark, OperatingStep, Override, Population, PopulationDefinition, RacmReview, Role, RulesChangeEntry, RunControlOutcome, RunRecord, ScopeArchiveEntry,
-  PopulationSource, RequiredFile, Sample, Sampling, SamplingChangeEntry, SamplingMethodology, SamplingRoundBasis, SignificantAccount, SourceRole, TestingStrategy, TestResult, ToeRound, TrackConclusion, RetestRound, UnableToTest, ChallengedInput, SeverityChallenge,
+  PopulationSource, RequiredFile, Sample, Sampling, SamplingChangeEntry, SamplingMethodology, SamplingRoundBasis, SignificantAccount, SourceRole, TestingStrategy, TestResult, ToeRound, TrackConclusion, UnableToTest, ChallengedInput, SeverityChallenge,
 } from './types';
+// PARKED WITH THE RETEST (30 Sep) — these five came in only for the retest
+// mutators and `designRetestDraft`, all commented out below. Restore them to
+// the imports above if that block ever comes back:
+//   from './helpers':  designRetestChecks, versionFrom, isVersionRetest, pointResult
+//   from './types':    type RetestRound
 
 let _uid = 0;
 const uid = (p: string) => `${p}-${(++_uid).toString(36)}`;
@@ -98,13 +103,26 @@ const IRA_ON_FILE_Q = 'Is every required design element on file?';
 const IRA_STOOD_FAILED_Q = 'Was this check already marked failed?';
 const IRA_COULD_TEST_Q = 'Is there anything on file that answers this check?';
 
-/** The design-track retest round in progress, started if there is none — there
- *  is no sample to draw, so the first mark or Ira run is the start. A sampled
- *  draft sitting on a design exception was never the right retest and never
- *  recorded, so it is replaced rather than kept. Null when there is nothing to
- *  re-check (a control with no design checks at all). */
-/** A Date as 'YYYY-MM-DD'. The one format every window comparison in the product
- *  relies on — see `ControlVersion.supersededAt`. */
+/* PARKED (30 Sep 2026) — `designRetestDraft`, and `isoDay`, which only it used.
+   The retest left the exception flow: there is no 'Retest' state for a draft to
+   sit in, so nothing can reach this. It built the design-track round in progress
+   — the live TOD's checks on a rebuilt control, the old failed checks otherwise.
+
+   Restore by un-commenting this block AND the five mutators it feeds, parked
+   together further down (drawRetestSample, setRetestResult, setRetestCheck,
+   runRetestIra, recordRetest). It would also need 'Retest' back in
+   `ExceptionStatus` and its step back in `EXCEPTION_STEPS`. Everything it READ
+   is still live and still correct — `isVersionRetest`, `designRetestChecks`,
+   `Deficiency.retests` / `retestDraft` — because a closed exception from an
+   earlier year still has rounds worth showing.
+
+// The design-track retest round in progress, started if there is none — there
+// is no sample to draw, so the first mark or Ira run is the start. A sampled
+// draft sitting on a design exception was never the right retest and never
+// recorded, so it is replaced rather than kept. Null when there is nothing to
+// re-check (a control with no design checks at all).
+// A Date as 'YYYY-MM-DD'. The one format every window comparison in the product
+// relies on — see `ControlVersion.supersededAt`.
 const isoDay = (dt: Date) => `${dt.getFullYear()}-${String(dt.getMonth() + 1).padStart(2, '0')}-${String(dt.getDate()).padStart(2, '0')}`;
 function designRetestDraft(state: IcfrEngagement, target: Deficiency, by: string): RetestRound | null {
   const rebuilt = state.controls.find(x => x.id === target.controlId);
@@ -141,6 +159,7 @@ function designRetestDraft(state: IcfrEngagement, target: Deficiency, by: string
     result: 'Fail', by, at: 'just now',
   };
 }
+*/
 
 // When a flow concludes an attribute wholesale (workflow pull, AI validation,
 // attestation, test-all, bulk), stamp the per-sample grain to match: pass ⇒ every
@@ -504,7 +523,7 @@ interface IcfrCtx {
    *  set: keep controls of still-in-scope processes, seed fresh shells for
    *  newly-scoped ones, drop the rest. */
   reconcileScope: (processes: string[]) => void;
-  // deficiencies / exception lifecycle — the six steps
+  // deficiencies / exception lifecycle — the five steps
   /** Put an exception in a root-cause group — an existing one, or a new one
    *  named here with the exceptions it is being linked to. */
   linkRootCause: (id: string, target: { groupId: string } | { name: string; withIds: string[] }) => void;
@@ -527,17 +546,25 @@ interface IcfrCtx {
    *  the design track — see PlanFixKind. Ignored on an operating exception, where
    *  the question does not arise. */
   reviewPlan: (id: string, decision: 'Accepted' | 'Rejected', reason?: string, fix?: PlanFixKind) => void;
-  /** ⑤ a fresh sample off the post-fix period, marked against the original
-   *  attributes, item by item. The verdict is derived from the grid, never typed. */
+  /* PARKED (30 Sep 2026) — the five retest mutators. The retest is no longer a
+     step in this flow, so no exception can reach the state they all guard on.
+     Restore alongside the `designRetestDraft` block at the top of this file and
+     the implementations further down.
+
+  // ⑤ a fresh sample off the post-fix period, marked against the original
+  // attributes, item by item. The verdict is derived from the grid, never typed.
   drawRetestSample: (id: string) => void;
   setRetestResult: (id: string, sampleId: string, attrCode: string, result: TestResult) => void;
-  /** ⑤ on a design-track (TOD) exception there is no sample: the auditor marks
-   *  each design check that failed again, against the fix evidence. The first
-   *  mark starts the round. */
+  // ⑤ on a design-track (TOD) exception there is no sample: the auditor marks
+  // each design check that failed again, against the fix evidence. The first
+  // mark starts the round.
   setRetestCheck: (id: string, pointId: string, result: TestResult) => void;
-  /** ⑤ TOD — Ira reads just the retest's checks against the fix evidence. */
+  // ⑤ TOD — Ira reads just the retest's checks against the fix evidence.
   runRetestIra: (id: string) => void;
   recordRetest: (id: string, rationale?: string) => void;
+  */
+  /** ⑤ the reviewer closes it. Four-eyes against the auditor who accepted the
+   *  plan, and it leaves a retest owed on the control — see `clearRetestDue`. */
   signOffException: (id: string) => void;
   reopenException: (id: string, reason: string) => void;
   updateRemediation: (id: string, patch: Partial<Deficiency['remediation']>) => void;
@@ -576,6 +603,11 @@ interface IcfrCtx {
    *  old wording and its failed tracks are kept as a version; the live control
    *  takes the new wording and goes back to untested, which is what unlocks it. */
   recordNewVersion: (controlId: string, defId: string, next: NewVersionDraft) => void;
+  /** Answer the retest a closed remediation left owed on this control — auditor
+   *  only, reason required. "Retested, round 3 passed" and "the change did not
+   *  touch what I tested" are both answers; neither is allowed to be silent,
+   *  because the flag exists precisely so nobody can forget it was raised. */
+  clearRetestDue: (controlId: string, reason: string) => void;
   // per-working-paper sign-off — auditor signs a concluded control's paper, reviewer countersigns
   signOffControlWp: (controlId: string, step: 'preparer' | 'reviewer') => void;
   // the reviewer's other verb — send the concluded paper back with a note instead of countersigning
@@ -910,8 +942,8 @@ export function IcfrProvider({ children, initialRole = 'auditor', seedMeta }: { 
         remediation: { action: '', date: null, owner: c.owner, status: 'Open' },
         status: 'Identified',
       };
-      // The design twin of failedSamples: which checks failed, stamped now so a
-      // TOD retest re-checks exactly these however the TOD moves afterwards.
+      // The design twin of failedSamples: which checks failed, stamped now so the
+      // exception still names exactly these however the TOD moves afterwards.
       if (track === 'design') {
         const failedChecks = c.design.points.filter(p => (p.override?.result ?? p.result) === 'Fail').map(p => ({ pointId: p.id, text: p.text }));
         if (failedChecks.length) def.failedChecks = failedChecks;
@@ -1135,9 +1167,10 @@ export function IcfrProvider({ children, initialRole = 'auditor', seedMeta }: { 
    *  again whenever the exception leaves those two states, so this only has to
    *  open it; it never has to track the rest of the flow.
    *
-   *  One task per control, reopened rather than duplicated: an exception that
-   *  fails its retest comes back to Planning, and a second row for the same
-   *  control would read as a second finding. */
+   *  One task per control, reopened rather than duplicated: a rejected plan sends
+   *  the exception back to Planning and a reopened close sends it back to
+   *  Remediation, and a second row for the same control would read as a second
+   *  finding. */
   const withRemediationTask = useCallback((prev: IcfrEngagement, def: Deficiency): HandoffTask[] => {
     const c = prev.controls.find(x => x.id === def.controlId);
     if (!c) return prev.tasks;
@@ -3654,11 +3687,11 @@ export function IcfrProvider({ children, initialRole = 'auditor', seedMeta }: { 
     });
   }, [me, role]);
   // The one lifecycle move that is not somebody's named act elsewhere: the owner
-  // declaring their fix done and ready to be tested. Everything else on the ladder
-  // has its own gated mutator, so this stays narrow — a generic status setter with
-  // no legal-move check is a back door around every rung the ladder describes.
+  // declaring their fix done and handing it to the reviewer. Everything else on the
+  // ladder has its own gated mutator, so this stays narrow — a generic status setter
+  // with no legal-move check is a back door around every rung the ladder describes.
   const setExceptionStatus = useCallback<IcfrCtx['setExceptionStatus']>((id, status) => {
-    if (status !== 'Retest' || role !== 'risk-owner') return;
+    if (status !== 'Awaiting reviewer' || role !== 'risk-owner') return;
     setEng(prev => {
       if (isEngagementLocked(prev)) return prev;
       const target = prev.deficiencies.find(d => d.id === id);
@@ -3673,7 +3706,7 @@ export function IcfrProvider({ children, initialRole = 'auditor', seedMeta }: { 
       // every lifecycle move carries its actor + time into the shared trail
       const event: ExecutionEvent = {
         id: uid('ex'), controlId: target.controlId, track: target.track, kind: 'exception',
-        verb: `submitted the fix for retest (${id})`,
+        verb: `submitted the fix for sign-off (${id})`,
         by: me, role, at: 'just now',
       };
       return {
@@ -3690,6 +3723,24 @@ export function IcfrProvider({ children, initialRole = 'auditor', seedMeta }: { 
       };
     });
   }, [me, role, meOwner]);
+  /* PARKED (30 Sep 2026) — the retest moved OFF the exception and ONTO the control.
+     Testing a repair the day it is declared done asks the auditor to prove a fix
+     that has not run yet; the retest now happens on the control, on the audit's
+     own timetable, and closing the exception raises `Control.retestDue` to say one
+     is owed. So nothing can reach 'Retest' any more, and every mutator below
+     guards on it.
+
+     What comes back with them, if the retest ever returns to this flow: 'Retest'
+     in `ExceptionStatus`, its row in `EXCEPTION_STEPS`, the 'Retest' arm of
+     `courtForException` and `exceptionCourtDetail`, `designRetestDraft` and
+     `isoDay` at the top of this file, their entries in the `IcfrCtx` interface,
+     the returned object and the dependency array — and `signOffException`'s
+     four-eyes anchor would go back to `target.retest` from `target.planReview`.
+
+     The READING side is untouched and still live: `Deficiency.retest`, `retests`
+     and `retestDraft` stay on the type, because a closed exception from an
+     earlier year still has rounds worth showing.
+
   // ─── Step 5 · the retest ──────────────────────────────────────────────────────
   // The control is tested AGAIN, not re-read. A fresh sample comes off the period
   // SINCE THE FIX LANDED — items from before it prove nothing about the repair —
@@ -3887,6 +3938,7 @@ export function IcfrProvider({ children, initialRole = 'auditor', seedMeta }: { 
       };
     });
   }, [me, role]);
+  */
 
   // The remediation plan is the owner's commitment — the action on the root
   // cause, who does it, by when, and the evidence behind "done". The auditor
@@ -3896,8 +3948,8 @@ export function IcfrProvider({ children, initialRole = 'auditor', seedMeta }: { 
     setEng(prev => isEngagementLocked(prev) ? prev : ({ ...prev, deficiencies: prev.deficiencies.map(d => {
       if (d.id !== id) return d;
       // Writable while the owner still holds it: step 3 before it goes up for
-      // review, and step 4 while the fix is being done. Once it is with the
-      // auditor — for the plan or for the retest — it is frozen.
+      // review, and step 4 while the fix is being done. Once it has gone up —
+      // to the auditor for the plan, to the reviewer to close — it is frozen.
       if (d.status !== 'Planning' && d.status !== 'Remediation') return d;
       // And it has to be YOUR control: the hat says risk owner, the name says
       // which one. Writing somebody else's commitment is not a plan.
@@ -3985,36 +4037,68 @@ export function IcfrProvider({ children, initialRole = 'auditor', seedMeta }: { 
       };
     });
   }, [me, role]);
-  // Four-eyes: only the reviewer hat closes, and never the person who ran the retest.
+  // Four-eyes: only the reviewer hat closes, and never the auditor who accepted
+  // the plan being closed.
+  //
+  // THE ANCHOR MOVED (30 Sep). It used to be the person who ran the retest — the
+  // last pair of eyes before this one. With the retest off the flow nobody writes
+  // `d.retest` any more, so that test could never fire again and the rung would
+  // have quietly stopped being a rung. The accepted plan is now the last
+  // judgement before the close, and judging the plan then signing off that the
+  // plan worked is one person marking their own homework.
   const signOffException = useCallback<IcfrCtx['signOffException']>((id) => {
     if (role !== 'reviewer') return;
     setEng(prev => {
       if (isEngagementLocked(prev)) return prev;
       const target = prev.deficiencies.find(d => d.id === id);
-      if (!target || target.status !== 'Awaiting reviewer' || samePerson(target.retest, me)) return prev;
+      if (!target || target.status !== 'Awaiting reviewer' || samePerson(target.planReview, me)) return prev;
       if (ownsIt(prev, target.controlId, me)) return prev;
-      // A DESIGN FAILURE DOES NOT CLOSE ON A PASSED DESIGN RE-CHECK ALONE.
+      // A DESIGN FAILURE DOES NOT CLOSE ON THE FIX HAVING BEEN BUILT.
       // The fix makes a new control, and a new control has not been watched
-      // operating just because someone read it again. There was no track branch
-      // here at all, so a rebuild that cannot run before the books close — a
-      // verdict this module already computes — closed as remediated anyway.
+      // operating just because it exists. There was no track branch here at all,
+      // so a rebuild that cannot run before the books close — a verdict this
+      // module already computes — closed as remediated anyway.
       const blockC = prev.controls.find(x => x.id === target.controlId);
       if (designCloseBlock(target, blockC, prev)?.blocks) return prev;
       const event: ExecutionEvent = {
         id: uid('ex'), controlId: target.controlId, track: target.track, kind: 'exception',
         verb: `closed ${id} — reviewer sign-off`, by: me, role, at: 'just now',
       };
+      // The close is the moment the control stopped being the control that was
+      // tested — so it is also the moment somebody has to be told. Its own line in
+      // the trail rather than a rider on the one above: the dossier's History pane
+      // is read control-first by an auditor asking "what is outstanding on this
+      // one", and a retest owed is not the same fact as an exception closed.
+      const owed: ExecutionEvent = {
+        id: uid('ex'), controlId: target.controlId, track: target.track, kind: 'exception',
+        verb: `the control changed under ${id} — a retest is owed`,
+        rationale: target.remediation.action, by: me, role, at: 'just now',
+      };
       return {
         ...prev,
         deficiencies: prev.deficiencies.map(d => d.id === id ? { ...d, signoff: { by: me, at: 'just now' }, status: 'Closed' } : d),
-        executions: [event, ...prev.executions],
+        // The flag, and DELIBERATELY NOTHING ELSE. Wiping the control's
+        // conclusions here would delete a signed piece of the auditor's work
+        // because somebody else finished a remediation — and the reviewer closing
+        // an exception has not read the testing they would be undoing.
+        // `reopenControl` is how a conclusion is taken back, by the auditor, with
+        // a reason, on purpose.
+        controls: prev.controls.map(c => c.id === target.controlId ? {
+          ...c,
+          retestDue: {
+            defId: target.id, track: target.track, fix: target.planReview?.fix,
+            note: target.remediation.action, by: me, at: 'just now',
+          },
+        } : c),
+        executions: [owed, event, ...prev.executions],
       };
     });
   }, [me, role]);
 
   // A closed exception can come back, and only the reviewer can bring it — they
   // signed it closed, so undoing that signature is theirs. Reason required. It
-  // returns to Remediation (the fix must be re-proven); the stale retest clears.
+  // returns to Remediation (the fix must be re-proven); a legacy retest stamp,
+  // on a record raised back when the retest was a step here, clears with it.
   const reopenException = useCallback<IcfrCtx['reopenException']>((id, reason) => {
     if (role !== 'reviewer') return;
     setEng(prev => {
@@ -4352,6 +4436,40 @@ export function IcfrProvider({ children, initialRole = 'auditor', seedMeta }: { 
     });
   }, [me, role]);
 
+  // ── Answering the retest a closed remediation left owed ──────────────────────
+  // The reviewer raised it by closing an exception; the auditor is the only one
+  // who can put it down, because it is a testing judgement and nobody else's.
+  //
+  // Two honest answers, and the store cannot tell them apart: the control was
+  // retested, or the change did not touch what was tested — a workaround bolted
+  // beside a control whose own wording never moved, most often. So it asks for a
+  // reason instead of a verdict. An answer nobody wrote down is the same as no
+  // answer at all, which is exactly what the flag exists to prevent.
+  //
+  // It clears rather than deletes: the record that a retest was owed, and what was
+  // said about it, is the part a reviewer reads next year.
+  const clearRetestDue = useCallback<IcfrCtx['clearRetestDue']>((controlId, reason) => {
+    if (role !== 'auditor' || !reason.trim()) return;
+    setEng(prev => {
+      if (isEngagementLocked(prev)) return prev;
+      const c = prev.controls.find(x => x.id === controlId);
+      // Nothing owed, or already answered — there is no second answer to give.
+      if (!c?.retestDue || c.retestDue.cleared) return prev;
+      const event: ExecutionEvent = {
+        id: uid('ex'), controlId, track: c.retestDue.track, kind: 'exception',
+        verb: `cleared the retest owed under ${c.retestDue.defId}`,
+        rationale: reason.trim(), by: me, role, at: 'just now',
+      };
+      return {
+        ...prev,
+        controls: prev.controls.map(x => x.id === controlId && x.retestDue
+          ? { ...x, retestDue: { ...x.retestDue, cleared: { reason: reason.trim(), by: me, at: 'just now' } } }
+          : x),
+        executions: [event, ...prev.executions],
+      };
+    });
+  }, [me, role]);
+
   // Per-working-paper sign-off: the auditor signs a control's paper once that
   // control is concluded; the reviewer countersigns after. Reopening clears both.
   const signOffControlWp = useCallback<IcfrCtx['signOffControlWp']>((controlId, step) => {
@@ -4576,10 +4694,10 @@ export function IcfrProvider({ children, initialRole = 'auditor', seedMeta }: { 
     createAudit, updateAudit, openAuditId, openAudit, closeAudit, racmDocs, addRacmDoc, createRacm, deleteRacm, addLibraryRacms,
     addComment, resolveDiscussion,
     submitTask, clearTask, raiseQuery, requestDesignDocs,
-    updateRules, concludeEntityMw, runFlawScan, applyRules, updateMateriality, reconcileScope, updateDeficiency, linkRootCause, unlinkRootCause, setGroupConclusion, updateAccount, setExceptionStatus, completeSizing, confirmRating, returnRating, submitPlan, reviewPlan, drawRetestSample, setRetestResult, setRetestCheck, runRetestIra, recordRetest, signOffException, reopenException, updateRemediation, addRemediationEvidence, raiseChallenge, respondToChallenge, parkOperating, resumeOperating, markUnableToTest, resolveUnableToTest, escalateUnableToTest,
-    addControl, proposeSampling, signSampling, reviseSampling, signOffAudit, reopenControl, recordNewVersion, signOffControlWp, returnControl,
+    updateRules, concludeEntityMw, runFlawScan, applyRules, updateMateriality, reconcileScope, updateDeficiency, linkRootCause, unlinkRootCause, setGroupConclusion, updateAccount, setExceptionStatus, completeSizing, confirmRating, returnRating, submitPlan, reviewPlan, /* PARKED — drawRetestSample, setRetestResult, setRetestCheck, runRetestIra, recordRetest: the retest is no longer a step in this flow. */ signOffException, reopenException, updateRemediation, addRemediationEvidence, raiseChallenge, respondToChallenge, parkOperating, resumeOperating, markUnableToTest, resolveUnableToTest, escalateUnableToTest,
+    addControl, proposeSampling, signSampling, reviseSampling, signOffAudit, reopenControl, recordNewVersion, clearRetestDue, signOffControlWp, returnControl,
     raiseReviewNote, resolveReviewNote, verifyReviewNote, reopenReviewNote,
-  }), [eng, role, tab, view, selectedControlId, racmEditor, me, meOwner, racmProcess, changeRole, setTab, openRacmMatrix, openRacmEditor, openControl, focusStep, clearFocusStep, openDeficiency, focusDefId, clearFocusDef, back, returnView, registerPreset, openRegister, clearRegisterPreset, racmCreateOpen, openRacmCreate, clearRacmCreate, setDocStatus, setDesignPoint, concludeDesign, overrideDesign, approveDesign, returnDesign, addDesignDoc, attachDesignEvidence, removeDesignDoc, waiveDesignDoc, clearDesignWaiver, updateControlMeta, setControlKey, setDesignJudgements, startWalkthrough, setWalkthroughAttribute, setWalkthroughMeta, addDesignPoint, removeDesignPoint, validateDesignPoint, overrideDesignPoint, removeDesignFile, runDesignIra, linkDesignPointEvidence, setDesignPointProof, requestDataByEmail, setPointEvidenceType, setStepEvidenceType, setDesignBasis, setPopulation, setPopulationDefinition, clearPopulation, setPopulationCheck, setPopulationFacts, addPopulationSource, removePopulationSource, setSourceRole, drawSourceSample, approveSource, redrawSource, remindOwnerForFiles, registerFile, setFileOrigin, lockPopulation, lockAttributes, confirmExtraction, recordException, addEvidenceReport, removeEvidenceReport, proveEvidenceReport, registerIpe, setIpeCheck, concludeIpe, clearIpe, setMrc, setSampling, extendSample, resizeSample, setSampleResult, setStepResult, overrideStep, pullStepRun, attestStep, addStepEvidence, setStepInputFile, concludeOperating, overrideOperating, startToeRound, addAttribute, removeAttribute, mapStepWorkflow, setStepEvidenceMode, toggleStepAttest, toggleStepAI, runStepValidation, testAllAttributes, addRequiredFile, renameRequiredFile, removeRequiredFile, uploadRequiredFile, clearRequiredFile, validateReadyAttributes, approveRacmRows, remarkRacmRow, clearRacmReview, bulkTestControls, createAudit, updateAudit, openAuditId, openAudit, closeAudit, racmDocs, addRacmDoc, createRacm, deleteRacm, addLibraryRacms, addComment, resolveDiscussion, submitTask, clearTask, raiseQuery, requestDesignDocs, updateRules, concludeEntityMw, runFlawScan, applyRules, updateMateriality, reconcileScope, updateDeficiency, linkRootCause, unlinkRootCause, setGroupConclusion, updateAccount, setExceptionStatus, completeSizing, confirmRating, returnRating, submitPlan, reviewPlan, drawRetestSample, setRetestResult, setRetestCheck, runRetestIra, recordRetest, signOffException, reopenException, updateRemediation, addRemediationEvidence, raiseChallenge, respondToChallenge, parkOperating, resumeOperating, markUnableToTest, resolveUnableToTest, escalateUnableToTest, addControl, proposeSampling, signSampling, reviseSampling, signOffAudit, reopenControl, recordNewVersion, signOffControlWp, returnControl, raiseReviewNote, resolveReviewNote, verifyReviewNote, reopenReviewNote]);
+  }), [eng, role, tab, view, selectedControlId, racmEditor, me, meOwner, racmProcess, changeRole, setTab, openRacmMatrix, openRacmEditor, openControl, focusStep, clearFocusStep, openDeficiency, focusDefId, clearFocusDef, back, returnView, registerPreset, openRegister, clearRegisterPreset, racmCreateOpen, openRacmCreate, clearRacmCreate, setDocStatus, setDesignPoint, concludeDesign, overrideDesign, approveDesign, returnDesign, addDesignDoc, attachDesignEvidence, removeDesignDoc, waiveDesignDoc, clearDesignWaiver, updateControlMeta, setControlKey, setDesignJudgements, startWalkthrough, setWalkthroughAttribute, setWalkthroughMeta, addDesignPoint, removeDesignPoint, validateDesignPoint, overrideDesignPoint, removeDesignFile, runDesignIra, linkDesignPointEvidence, setDesignPointProof, requestDataByEmail, setPointEvidenceType, setStepEvidenceType, setDesignBasis, setPopulation, setPopulationDefinition, clearPopulation, setPopulationCheck, setPopulationFacts, addPopulationSource, removePopulationSource, setSourceRole, drawSourceSample, approveSource, redrawSource, remindOwnerForFiles, registerFile, setFileOrigin, lockPopulation, lockAttributes, confirmExtraction, recordException, addEvidenceReport, removeEvidenceReport, proveEvidenceReport, registerIpe, setIpeCheck, concludeIpe, clearIpe, setMrc, setSampling, extendSample, resizeSample, setSampleResult, setStepResult, overrideStep, pullStepRun, attestStep, addStepEvidence, setStepInputFile, concludeOperating, overrideOperating, startToeRound, addAttribute, removeAttribute, mapStepWorkflow, setStepEvidenceMode, toggleStepAttest, toggleStepAI, runStepValidation, testAllAttributes, addRequiredFile, renameRequiredFile, removeRequiredFile, uploadRequiredFile, clearRequiredFile, validateReadyAttributes, approveRacmRows, remarkRacmRow, clearRacmReview, bulkTestControls, createAudit, updateAudit, openAuditId, openAudit, closeAudit, racmDocs, addRacmDoc, createRacm, deleteRacm, addLibraryRacms, addComment, resolveDiscussion, submitTask, clearTask, raiseQuery, requestDesignDocs, updateRules, concludeEntityMw, runFlawScan, applyRules, updateMateriality, reconcileScope, updateDeficiency, linkRootCause, unlinkRootCause, setGroupConclusion, updateAccount, setExceptionStatus, completeSizing, confirmRating, returnRating, submitPlan, reviewPlan, /* PARKED — drawRetestSample, setRetestResult, setRetestCheck, runRetestIra, recordRetest: the retest is no longer a step in this flow. */ signOffException, reopenException, updateRemediation, addRemediationEvidence, raiseChallenge, respondToChallenge, parkOperating, resumeOperating, markUnableToTest, resolveUnableToTest, escalateUnableToTest, addControl, proposeSampling, signSampling, reviseSampling, signOffAudit, reopenControl, recordNewVersion, clearRetestDue, signOffControlWp, returnControl, raiseReviewNote, resolveReviewNote, verifyReviewNote, reopenReviewNote]);
 
   return <Ctx.Provider value={value}>{children}</Ctx.Provider>;
 }

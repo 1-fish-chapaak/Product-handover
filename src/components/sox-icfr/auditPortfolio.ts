@@ -277,7 +277,17 @@ export function priorYearDeficiencies(eng: IcfrEngagement, currentYear: number):
     .flatMap(a => auditDeficiencies(a, eng).map(deficiency => ({
       audit: a,
       deficiency,
-      // Retested and passed, or signed off as closed — anything else is open.
-      verified: deficiency.retest?.result === 'Pass' || deficiency.status === 'Closed',
+      // Signed off as closed — anything else is a standing question.
+      //
+      // The passed-retest half of this test is gone (30 Sep). It was always the
+      // weaker of the two — a round that passed but was never closed means the
+      // reviewer had not agreed it, so calling it verified answered a question
+      // nobody had signed — and now no new round is ever recorded at all, so it
+      // could only ever have fired on history. What "verified" honestly means for
+      // a prior-year finding is that the audit reached a conclusion on it and a
+      // second pair of eyes signed that conclusion: the close. Whether the CONTROL
+      // has since been retested is a different question, asked on the control
+      // (`Control.retestDue`), and it is not this list's to answer.
+      verified: deficiency.status === 'Closed',
     })));
 }

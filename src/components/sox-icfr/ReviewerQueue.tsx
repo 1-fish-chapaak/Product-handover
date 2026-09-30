@@ -9,8 +9,8 @@ import type { Deficiency } from './types';
 
 // The reviewer's desk — everything waiting on the reviewer hat, and nothing else:
 // ratings to confirm before any fix can start, concluded papers to countersign,
-// resolved notes to verify, retest-passed exceptions to close, fixes that have
-// missed twice, and the audit countersign. Reviewer role only.
+// resolved notes to verify, submitted fixes to close, controls that have been
+// fixed once and failed again, and the audit countersign. Reviewer role only.
 export default function ReviewerQueue() {
   const { eng, me, openAuditId, setView, openControl, openDeficiency } = useIcfr();
   const papers = eng.controls.filter(isAwaitingReview);
@@ -20,13 +20,27 @@ export default function ReviewerQueue() {
   // grade — the owner cannot start planning, so this blocks other people's work
   // in a way nothing else in this queue does. It leads the list for that reason.
   const ratings = eng.deficiencies.filter(d => d.status === 'Rating review');
-  // A fix that has been retested and missed twice is not a remediation problem
-  // any more: the plan is not addressing the root cause. Changing the plan, the
-  // person or the rating is the reviewer's call. Closed ones already carry a
-  // signature, and ones sitting in the close group above are not listed twice.
-  const failedRetests = (d: Deficiency) => (d.retests ?? []).filter(r => r.result === 'Fail').length;
+  // A control that has been fixed twice and is failing again is not a remediation
+  // problem any more: the plan is not addressing the root cause. Changing the
+  // plan, the person or the rating is the reviewer's call. Closed ones already
+  // carry a signature, and ones sitting in the close group above are not listed
+  // twice.
+  //
+  // RE-ANCHORED, not parked (30 Sep). This counted failed retest rounds inside
+  // the exception; the retest left that flow, so no new round is ever recorded
+  // and the count could only ever come from history seeded before the change —
+  // a signal that can never fire again is one people learn to ignore. The same
+  // fact lives one level up and is still reachable: a control that already has a
+  // remediation signed off AND a live exception open against it was fixed once
+  // and failed again. The auditor retests the control on the audit's own
+  // timetable, and a second failure raises a fresh exception, so the loop still
+  // shows up here. Rounds recorded before the change keep counting, so nothing
+  // already in the file stops being read.
+  const missedFixes = (d: Deficiency) =>
+    (d.retests ?? []).filter(r => r.result === 'Fail').length
+    + eng.deficiencies.filter(x => x.controlId === d.controlId && x.id !== d.id && x.status === 'Closed').length;
   const repeatFails = eng.deficiencies.filter(d =>
-    d.status !== 'Closed' && d.status !== 'Awaiting reviewer' && failedRetests(d) >= 2);
+    d.status !== 'Closed' && d.status !== 'Awaiting reviewer' && missedFixes(d) >= 2);
   // The countersign that concludes a cycle lives on the OPEN audit's record —
   // the engagement-level signoff field is never written. Outside an audit there
   // is no opinion to sign, so the row simply doesn't come up.
@@ -54,7 +68,7 @@ export default function ReviewerQueue() {
       <div className="pt-3">
       {count === 0 ? (
         <div className="flex items-center gap-2.5 rounded-lg border border-canvas-border bg-paper-50/40 px-3.5 py-3 text-[12.5px] text-ink-500">
-          <CheckCircle2 size={15} className="text-compliant-700 shrink-0" /> Nothing waiting on you — a significant rating lands here before any fix starts, concluded papers for countersign, resolved notes for verification, exceptions when a retest passes or when a fix has missed twice, and the audit countersign once the preparer signs.
+          <CheckCircle2 size={15} className="text-compliant-700 shrink-0" /> Nothing waiting on you — a significant rating lands here before any fix starts, concluded papers for countersign, resolved notes for verification, exceptions when the fix is in with its proof or when a control has been fixed twice and is failing again, and the audit countersign once the preparer signs.
         </div>
       ) : (
         <div className="space-y-2">
@@ -123,7 +137,11 @@ export default function ReviewerQueue() {
             );
           })}
           {awaiting.map(d => {
-            const mine = !!d.retest && d.retest.by === me;
+            // Four-eyes, re-pointed at the act that still happens: the owner
+            // declaring the fix done. Nobody signs off their own repair, and
+            // that stamp is the one this close is reading.
+            const mine = !!d.fixSubmitted && d.fixSubmitted.by === me;
+            const files = d.remediation.evidence?.length ?? 0;
             return (
               <button key={d.id} onClick={() => openDeficiency(d.id)}
                 className="w-full flex items-center gap-3 rounded-xl border border-canvas-border bg-canvas-elevated p-3 text-left hover:border-brand-300 transition-colors cursor-pointer">
@@ -136,20 +154,24 @@ export default function ReviewerQueue() {
                   </div>
                   <div className="text-[13px] text-ink-800 truncate mt-0.5">{d.description}</div>
                   <div className="text-[11.5px] text-ink-400 mt-0.5">
-                    Retest {d.retest?.result ?? '—'} · {d.retest?.by ?? '—'}{mine && <span className="text-high-700 font-semibold"> — a different person must close this one</span>}
+                    Fix submitted by {d.fixSubmitted?.by ?? (d.remediation.owner || '—')}{d.fixSubmitted?.at ? ` · ${d.fixSubmitted.at}` : ''} · {files} file{files === 1 ? '' : 's'} attached{mine && <span className="text-high-700 font-semibold"> — a different person must close this one</span>}
                   </div>
                 </div>
                 <ArrowRight size={15} className="text-ink-300 shrink-0" />
               </button>
             );
           })}
-          {/* the loop that isn't closing — two retests, two misses, same root
-              cause. Shown with the last tester's reason, because that is the
+          {/* the loop that isn't closing — fixed twice, failing again, same root
+              cause. Shown with the last written reason, because that is the
               sentence that says whether the plan or the rating is wrong. */}
           {repeatFails.map(d => {
             const c = eng.controls.find(x => x.id === d.controlId);
-            const n = failedRetests(d);
+            const n = missedFixes(d);
             const last = d.retests?.[d.retests.length - 1];
+            // The most recent remediation this control already signed off — the
+            // reason line falls back to it where there is no round to quote.
+            const settled = eng.deficiencies.filter(x => x.controlId === d.controlId && x.id !== d.id && x.status === 'Closed');
+            const prior = settled[settled.length - 1];
             return (
               <button key={`loop-${d.id}`} onClick={() => openDeficiency(d.id)}
                 className="w-full flex items-center gap-3 rounded-xl border border-canvas-border bg-canvas-elevated p-3 text-left hover:border-brand-300 transition-colors cursor-pointer">
@@ -158,13 +180,17 @@ export default function ReviewerQueue() {
                   <div className="flex items-center gap-2 flex-wrap">
                     <span className="font-mono text-[0.71875rem] font-semibold text-ink-600">{d.id}</span>
                     <span className="font-mono text-[0.71875rem] text-brand-700">{c?.wpRef ?? d.controlId}</span>
-                    <span className="text-[0.65625rem] font-bold uppercase tracking-wide text-risk-700">{n} retests failed</span>
+                    <span className="text-[0.65625rem] font-bold uppercase tracking-wide text-risk-700">Fixed {n}× — still failing</span>
                     <SeverityPill s={assessSeverity(d, eng).final} />
                   </div>
                   {/* the root cause, not the description — what the plan keeps missing */}
                   <div className="text-[0.8125rem] text-ink-800 truncate mt-0.5">{d.rootCause}</div>
                   <div className="text-[0.71875rem] text-ink-400 mt-0.5">
-                    {last?.rationale ? `Last miss · ${last.rationale}` : `Last retest ${last?.at ?? '—'} · ${last?.by ?? '—'}`} — the fix is not reaching the root cause. Change the plan, the owner or the rating.
+                    {last?.rationale
+                      ? `Last miss · ${last.rationale}`
+                      : prior
+                        ? `${prior.id} was signed off on this control and it has failed again`
+                        : 'The same root cause keeps coming back'} — the fix is not reaching the root cause. Change the plan, the owner or the rating.
                   </div>
                 </div>
                 <ArrowRight size={15} className="text-ink-300 shrink-0" />

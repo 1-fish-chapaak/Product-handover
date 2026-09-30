@@ -1224,8 +1224,8 @@ function libraryAudits(processes: string[], controls: Control[]): AuditRecord[] 
       operating: failedIds.includes(c.id) ? ('Ineffective' as const) : ('Effective' as const),
       conclusion: failedIds.includes(c.id) ? ('Ineffective' as const) : ('Effective' as const),
     })),
-    // One was verified on retest, one is still open — which is exactly the split
-    // the continuity section exists to show. Next year's audit starts here.
+    // One was closed and signed off, one is still open — which is exactly the
+    // split the continuity section exists to show. Next year's audit starts here.
     deficiencies: failedIds.map((controlId, i) => ({
       id: `def-cy25-0${i + 1}`,
       controlId,
@@ -1251,7 +1251,11 @@ function libraryAudits(processes: string[], controls: Control[]): AuditRecord[] 
         owner: 'R. Iyer',
         status: 'Done' as const,
       },
-      status: (i === 0 ? 'Closed' : 'Retest') as ExceptionStatus,
+      // The second one's fix is in with its proof and the reviewer has not signed
+      // it off — which is where an unfinished remediation sits now that the retest
+      // step is gone (30 Sep). Its recorded retest verdict is kept: this cycle
+      // closed before the change, and an archive reports what it reported.
+      status: (i === 0 ? 'Closed' : 'Awaiting reviewer') as ExceptionStatus,
       retest: i === 0 ? { result: 'Pass' as const, at: '12 Dec 2025', by: 'A. Mehta' } : undefined,
       severity: 'Significant Deficiency' as Severity,
     })),
@@ -1428,8 +1432,8 @@ function alturaPathControl(controls: Control[]): Control[] {
  *   DEF-A-01  Identified       raised, the auditor is still sizing it
  *   DEF-A-02  Rating review    graded, waiting on the reviewer to confirm it
  *   DEF-A-03  Plan review      plan submitted, auditor has not judged it yet
- *   DEF-A-04  Retest           plan accepted, fix in, ONE failed round on the clock
- *   DEF-A-05  Closed           passed its retest and countersigned
+ *   DEF-A-04  Remediation      plan accepted, the rebuild MISSED — back with the owner
+ *   DEF-A-05  Closed           fix accepted and countersigned; its control is owed a retest
  *   DEF-A-06  Planning         the ITGC — rating confirmed, owner writing the plan
  *   DEF-A-07  Identified       PP&E — being sized, and already raised by its group
  *   DEF-A-08  Rating review    PP&E
@@ -1637,12 +1641,12 @@ function alturaDeficiencies(controls: Control[]): Deficiency[] {
     // to a rolling monthly total, so on 30 Jun the control itself changed — and a
     // changed control is a new version, not an edited row (see `ControlVersion`).
     //
-    // The rebuild then MISSED. Retest round 1 below reads: the rule groups on the
-    // customer CODE, so one customer under two codes is measured twice and still
-    // clears the threshold. So v2 is what is running now, it is what failed its
-    // own design test, and the exception is back with the auditor waiting for a
-    // third wording. That is the whole loop this seed exists to show, and the
-    // dates line up with round 1's own window (30 Jun → 05 Aug).
+    // The rebuild then MISSED. The round recorded below reads: the rule groups on
+    // the customer CODE, so one customer under two codes is measured twice and
+    // still clears the threshold. So v2 is what is running now, it is what failed
+    // its own design test, and the exception is back with the OWNER for a third
+    // wording. That is the whole loop this seed exists to show, and the dates line
+    // up with the round's own window (30 Jun → 05 Aug).
     creditNotes.priorVersions = [{
       no: 1,
       description: creditNotes.description,
@@ -1715,15 +1719,23 @@ function alturaDeficiencies(controls: Control[]): Deficiency[] {
       planReview: { decision: 'Accepted', fix: 'redesign', reason: 'The rolling monthly total is measured per customer, which is exactly what the per-note threshold could not see. Accepted.', by: 'A. Mehta', at: '20 Jun 2026' },
       remediation: {
         action: 'Move the approval threshold to a rolling monthly total per customer and hold issue until it is approved.',
-        date: '30 Jun', owner: 'P. Sharma', status: 'Done',
+        // Back to in-progress: what was built did not do what the plan promised,
+        // so the fix is not done. The evidence from the first attempt stays —
+        // it is what the miss was found against, and deleting it would leave the
+        // record saying the rebuild never happened.
+        date: '30 Jun', owner: 'P. Sharma', status: 'In progress',
         evidence: [
           { id: 'cn-ev-1', name: 'Credit note approval rule — rolling monthly total.pdf', kind: 'PDF', uploadedBy: 'P. Sharma', uploadedAt: '30 Jun 2026' },
           { id: 'cn-ev-2', name: 'Change ticket CHG-4471.pdf', kind: 'PDF', uploadedBy: 'P. Sharma', uploadedAt: '30 Jun 2026' },
         ],
       },
-      // One round run and failed, which is the loop this counter exists to show.
-      // The round is never edited: round 2 will be appended alongside it, and
-      // `retests.length` is what the reviewer reads as "how many times now?".
+      // One round run and failed — the record of what the rebuild was tested
+      // against and why it did not hold. HISTORY from 30 Sep: the retest is no
+      // longer a step inside the exception, so nothing appends a round 2 here;
+      // the changed control is tested again on the audit's own timetable instead
+      // (see `Control.retestDue`). The round is kept whole because it is the
+      // sentence that tells the owner what to change, and it still counts toward
+      // "how many times now?" wherever that is asked.
       // The design checks that failed, as they stood when it was raised.
       failedChecks: cnFailedChecks,
       retests: [{
@@ -1740,10 +1752,14 @@ function alturaDeficiencies(controls: Control[]): Deficiency[] {
       }],
       // The latest round's verdict, mirrored for readers that only want the answer.
       retest: { result: 'Fail', at: '05 Aug 2026', by: 'A. Mehta' },
-      // The control is monthly, so a second round needs a full month off the
+      // The control is monthly, so the next look needs a full month off the
       // corrected grouping key — end of September at the earliest.
       expectedRetestReady: '30 Sep 2026',
-      status: 'Retest',
+      // Back in the owner's court. The plan was accepted and what they built was
+      // tested and found wanting, so a third wording is theirs to write — this is
+      // step ④ again, not a step of its own. The old 'Retest' state has gone
+      // (30 Sep): a fix waits on the reviewer, never on a test.
+      status: 'Remediation',
     });
   }
 
@@ -1791,6 +1807,23 @@ function alturaDeficiencies(controls: Control[]): Deficiency[] {
       signoff: { by: 'J. Fernandes', at: '19 Jul 2026' },
       status: 'Closed',
     });
+    // THE CONTROL CHANGED, SO IT IS OWED A RETEST (30 Sep).
+    //
+    // Closing DEF-A-05 accepted the fix and signed it off. It did not prove the
+    // fixed control — the proof of a fix is gathered later, on the audit's own
+    // timetable, once the changed control has had a chance to run. So the close
+    // stamps this flag, and the auditor meets it on the control rather than
+    // inside the finding: in the bell, on the control page, and as a marker in
+    // the Control Library and the register.
+    //
+    // Seeded UNCLEARED, because that is the state worth arriving on. Settling it
+    // is one recorded sentence — the July round on the exception above is exactly
+    // the sort of thing an auditor points at when they write it.
+    disposals.retestDue = {
+      defId: 'DEF-A-05', track: 'operating',
+      note: 'The disposal note now routes to finance on approval instead of travelling with the monthly asset run, so the run that was tested is not the run that happens now.',
+      by: 'J. Fernandes', at: '19 Jul 2026',
+    };
   }
 
   if (privilegedAccess) {

@@ -1,12 +1,13 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { AnimatePresence, motion, useReducedMotion } from 'motion/react';
 import {
-  Bell, CheckCircle2, ClipboardList, Clock, FileText, MessageSquareWarning, Table2, XCircle,
+  Bell, CheckCircle2, ClipboardList, Clock, FileText, MessageSquareWarning, RotateCcw, Table2, XCircle,
 } from 'lucide-react';
 import { useIcfr } from './store';
 import { conclusionOf, gradeException, isAwaitingReview, isOwnerTask, testDueInDays, testsDueNow, trackResult } from './helpers';
 import { isOwnerOf } from './auditScope';
 import { cn } from '../../lib/cn';
+import type { Deficiency } from './types';
 
 /**
  * The engagement's notification bell — everything pending on the person who is
@@ -22,7 +23,7 @@ import { cn } from '../../lib/cn';
 
 type Item = {
   id: string;
-  kind: 'ineffective' | 'due' | 'remark' | 'task' | 'review' | 'exception';
+  kind: 'ineffective' | 'due' | 'remark' | 'task' | 'review' | 'exception' | 'retest';
   title: string;
   detail: string;
   onOpen: () => void;
@@ -35,6 +36,9 @@ const KIND_META: Record<Item['kind'], { Icon: typeof Bell; cls: string }> = {
   task: { Icon: ClipboardList, cls: 'bg-brand-50 text-brand-700 border-brand-200' },
   review: { Icon: Table2, cls: 'bg-evidence-50 text-evidence-700 border-evidence-200' },
   exception: { Icon: FileText, cls: 'bg-high-50 text-high-700 border-high-200' },
+  // A changed control owed a retest. Mitigated rather than risk: nothing has
+  // failed, the thing that was tested simply is not the thing running now.
+  retest: { Icon: RotateCcw, cls: 'bg-mitigated-50 text-mitigated-700 border-mitigated-200' },
 };
 
 export default function NotificationsBell() {
@@ -65,10 +69,14 @@ export default function NotificationsBell() {
     // still the fallback for anything that names none.
     const goExceptions = () => { setOpen(false); setView('deficiencies'); };
     const goException = (id: string) => () => { setOpen(false); openDeficiency(id); };
-    // How many times this fix has already been tested and missed. A round is
-    // never edited — a failure appends the next one — so this is the loop count.
-    const failedRetests = (d: { retests?: { result: 'Pass' | 'Fail' }[] }) =>
-      (d.retests ?? []).filter(r => r.result === 'Fail').length;
+    // How many times this control has already been fixed and failed again. The
+    // retest left the exception flow (30 Sep), so no new round is ever recorded —
+    // the loop now shows as an earlier remediation signed off on the same control
+    // plus a live exception open against it. Rounds recorded before the change
+    // still count, so seeded history reads the same. Mirrors ReviewerQueue.
+    const missedFixes = (d: Deficiency) =>
+      (d.retests ?? []).filter(r => r.result === 'Fail').length
+      + eng.deficiencies.filter(x => x.controlId === d.controlId && x.id !== d.id && x.status === 'Closed').length;
 
     // ── the auditor's verdicts — shown to the risk owner first, unmissable.
     //    Person-lane: only this persona's controls, tasks and rows. ───────────────
@@ -132,8 +140,8 @@ export default function NotificationsBell() {
     }
 
     // ── the exception steps that are MINE to move ───────────────────────────────
-    //    Two of the six steps belong to the owner: write the plan (③) and do the
-    //    fix, then show the proof (④). The other four sit with the auditor or the
+    //    Two of the five steps belong to the owner: write the plan (③) and do the
+    //    fix, then show the proof (④). The other three sit with the auditor or the
     //    reviewer, so they are not listed at all — a row you cannot act on is a
     //    row that teaches you to ignore the bell.
     if (role === 'risk-owner') {
@@ -146,11 +154,11 @@ export default function NotificationsBell() {
         const planning = d.status === 'Planning';
         out.push({
           id: `def-mine-${d.id}`, kind: 'task',
-          title: planning ? `Write the plan for ${d.id}` : `Attach evidence and submit ${d.id} for retest`,
+          title: planning ? `Write the plan for ${d.id}` : `Attach evidence and submit ${d.id} for sign-off`,
           detail: planning
             // the plan is judged against the root cause, so the owner is told it up front
             ? `${d.rootCause} — say what fixes that, who does it and by when.${d.planReview?.decision === 'Rejected' ? ' Sent back once already.' : ''}`
-            : `${d.remediation.action || d.description} — “done” needs proof: attach it, then hand the fix to the auditor.`,
+            : `${d.remediation.action || d.description} — “done” needs proof: attach it, then hand the fix to the reviewer.`,
           onOpen: goException(d.id),
         });
       }
@@ -186,17 +194,17 @@ export default function NotificationsBell() {
           onOpen: goException(d.id),
         });
       }
-      // ── a fix that has missed twice is no longer a remediation problem. The
-      //    plan is being retested against the same root cause and failing, so
-      //    what needs changing is the plan, the person, or the rating — all three
-      //    are the reviewer's call, not the owner's.
+      // ── a control fixed twice and failing again is no longer a remediation
+      //    problem. The same root cause keeps coming back, so what needs changing
+      //    is the plan, the person, or the rating — all three are the reviewer's
+      //    call, not the owner's.
       for (const d of eng.deficiencies) {
         if (d.status === 'Closed') continue;   // already carries your signature
-        const n = failedRetests(d);
+        const n = missedFixes(d);
         if (n < 2) continue;
         out.push({
           id: `loop-${d.id}`, kind: 'exception',
-          title: `${d.id} · ${n} retests failed — the fix is not working`,
+          title: `${d.id} · fixed ${n}× and still failing`,
           detail: `${d.rootCause} — ${d.retests?.[d.retests.length - 1]?.rationale ?? 'the same root cause is still there'}. Two misses is a plan problem, not a deadline problem.`,
           onOpen: goException(d.id),
         });
@@ -221,8 +229,8 @@ export default function NotificationsBell() {
       for (const d of eng.deficiencies.filter(x => x.status === 'Awaiting reviewer')) {
         out.push({
           id: `close-${d.id}`, kind: 'exception',
-          title: `${d.id} · retest passed — yours to close`,
-          detail: d.description,
+          title: `${d.id} · fix submitted — yours to close`,
+          detail: `${d.description} — read the plan, the fix and its proof, then sign it off.`,
           onOpen: () => { setOpen(false); setView('deficiencies'); },
         });
       }
@@ -249,6 +257,23 @@ export default function NotificationsBell() {
           title: `Judge the plan on ${d.id} against its root cause`,
           detail: `${d.rootCause} — the plan says: ${d.remediation.action || 'nothing yet'}. Accept it or send it back with what it misses.`,
           onOpen: goException(d.id),
+        });
+      }
+      // ── the control changed under a closed remediation. The fix was agreed,
+      //    built and signed off by the reviewer, which means what this audit
+      //    tested is not what is running now. Nobody has failed anything — the
+      //    control is simply owed a fresh look, on the audit's own timetable and
+      //    once the changed control has had a chance to run. Clearing the flag is
+      //    the auditor's call, and it needs a reason either way, so the row lands
+      //    on the control's own page where that is recorded.
+      for (const c of eng.controls) {
+        const r = c.retestDue;
+        if (!r || r.cleared) continue;
+        out.push({
+          id: `retest-${c.id}`, kind: 'retest',
+          title: `${c.wpRef} changed — it is owed a retest`,
+          detail: `${r.note} — ${r.defId} closed ${r.at}, ${r.track} track. Retest it, or record why the change does not touch what you tested.`,
+          onOpen: () => go(c.id),
         });
       }
       // ── testing that never started. Not a finding — nothing has been shown to

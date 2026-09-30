@@ -139,6 +139,10 @@ const PRESET_LABEL: Record<string, string> = {
   exceptions: 'Not effective', review: 'Awaiting review', owner: 'Waiting on owner',
   open: 'Not concluded', papers: 'Awaiting sign-off', key: 'Key controls',
   itgc: 'Test-of-one withdrawn',
+  // Controls a closed remediation changed. Not a testing question like the rest —
+  // it is "what is no longer the thing we tested" — so it earns its own way in
+  // below rather than only arriving from another screen.
+  'retest-due': 'Owed a retest',
 };
 
 // ── card ────────────────────────────────────────────────────────────────────────
@@ -394,6 +398,10 @@ export default function ControlLibrary() {
     scoped.forEach(c => (runsBy.get(c.id) ?? []).forEach(r => runIds.add(r.id)));
     return { attrs, files, runs: runIds.size };
   }, [scoped, runsBy]);
+  // Controls a closed remediation changed and nobody has settled yet. Counted so
+  // the way in below can say how many there are — a link that turns out to open
+  // an empty list is a link people stop trusting.
+  const retestOwed = useMemo(() => scoped.filter(c => c.retestDue && !c.retestDue.cleared).length, [scoped]);
 
   // The parked testing lens owned these predicates; the preset chip borrows them.
   const matchesPreset = (c: Control): boolean => {
@@ -415,6 +423,10 @@ export default function ControlLibrary() {
       // The controls an ITGC failure landed on — same predicate as the testing
       // lens, so the banner lands on the same set from either screen.
       case 'itgc': return isItgcDependent(c) && failedItgcs(eng).length > 0;
+      // A remediation closed against it, so what the audit tested is not what is
+      // running now. Uncleared only — a settled one is a working-paper fact, not
+      // an outstanding job, and leaving it in the list would make the count lie.
+      case 'retest-due': return !!c.retestDue && !c.retestDue.cleared;
       default: return true;
     }
   };
@@ -558,10 +570,25 @@ export default function ControlLibrary() {
       )}
       */}
 
+      {/* ── controls that are no longer the thing we tested ──────────────────────
+          The one preset this lens offers from cold. Every other one is a testing
+          question that belongs to the parked register; this is a question about
+          the library itself — which of these rows describes a control that has
+          since been rebuilt — and the auditor has nowhere else to ask it. Quiet
+          line, not a banner: it is a job to pick up, not an alarm. Audit-side,
+          like the register and the control page. */}
+      {role !== 'risk-owner' && preset !== 'retest-due' && retestOwed > 0 && (
+        <button onClick={() => setPreset('retest-due')}
+          className="mb-3 inline-flex items-center gap-1.5 text-[0.71875rem] font-semibold text-mitigated-800 hover:text-mitigated-900 cursor-pointer">
+          <RotateCcw size={13} />
+          {retestOwed} control{retestOwed === 1 ? '' : 's'} changed since {retestOwed === 1 ? 'it was' : 'they were'} tested — show {retestOwed === 1 ? 'it' : 'them'}
+        </button>
+      )}
+
       {/* an Overview count sent us here with intent — say so, and let it go */}
       {preset && (
         <div className="flex items-center gap-2 mb-3 flex-wrap">
-          <span className="text-[0.71875rem] text-ink-500">Filtered from the Overview:</span>
+          <span className="text-[0.71875rem] text-ink-500">{preset === 'retest-due' ? 'Showing:' : 'Filtered from the Overview:'}</span>
           <button onClick={() => setPreset(null)}
             className="inline-flex items-center gap-1.5 h-7 pl-2.5 pr-2 rounded-full border border-brand-200 bg-brand-50 text-[0.71875rem] font-semibold text-brand-700 hover:border-brand-300 cursor-pointer transition-colors"
             aria-label={`Clear the ${PRESET_LABEL[preset] ?? preset} filter`}>
