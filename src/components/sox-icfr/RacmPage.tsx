@@ -17,10 +17,14 @@ import { useState } from 'react';
 // transitive dep of `motion` and is not declared in package.json, so an import
 // of it works today by luck. Every other file in the repo imports from here.
 import { motion } from 'motion/react';
-import { Plus, SlidersHorizontal, Table2 } from 'lucide-react';
+import { Plus, Table2 } from 'lucide-react';
 import FloatingLines from '../shared/FloatingLines';
 import RacmLibraryView from './RacmLibraryView';
-import RacmConfigView from './RacmConfigView';
+// PARKED (1 Oct, user ask) — the Config tab. `RacmConfigView` is untouched and
+// still holds the per-client-group column set-up; nothing else opens it, so that
+// screen is unreachable while this is off. Restore by un-commenting the import,
+// the tab row entry and the render below:
+// import RacmConfigView from './RacmConfigView';
 
 type RacmTab = 'library' | 'config';
 
@@ -40,7 +44,7 @@ export default function RacmPage({ canManage }: {
 
   const tabs: { id: RacmTab; label: string; Icon: typeof Table2 }[] = [
     { id: 'library', label: 'Library', Icon: Table2 },
-    { id: 'config', label: 'Config', Icon: SlidersHorizontal },
+    // PARKED — { id: 'config', label: 'Config', Icon: SlidersHorizontal },
   ];
 
   return (
@@ -156,7 +160,7 @@ export default function RacmPage({ canManage }: {
           whichever tab is open. */}
       <div className="flex-1 min-h-0 overflow-y-auto px-9 pt-6 pb-8">
         {tab === 'library' && <RacmLibraryView canManage={canManage} creating={creating} setCreating={setCreating} />}
-        {tab === 'config' && <RacmConfigView canManage={canManage} />}
+        {/* PARKED — {tab === 'config' && <RacmConfigView canManage={canManage} />} */}
       </div>
     </div>
   );
