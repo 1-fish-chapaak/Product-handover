@@ -14,8 +14,8 @@ import AddRacmModal from './AddRacmModal';
 import { formatINR, isEngagementLocked, retestAtRisk } from './helpers';
 import { entitiesFor, processesFor } from './auditScope';
 import {
-  auditDeficiencies, auditProgress, auditStatus, controlsInManyAudits, crossAuditAggregation,
-  liveAuditId, materialityConsistency, mwWatchlist, priorYearDeficiencies, type AuditStatus,
+  auditProgress, auditStatus, controlsInManyAudits, countedDeficiencies, crossAuditAggregation,
+  liveAuditId, materialityConsistency, mwWatchlist, newAuditBlock, priorYearDeficiencies, type AuditStatus,
 } from './auditPortfolio';
 import type { AuditRecord, AuditRound } from './types';
 import { cn } from '../../lib/cn';
@@ -59,10 +59,10 @@ import { cn } from '../../lib/cn';
  */
 
 const ROUND_LABEL: Record<AuditRound, string> = { interim: 'Interim', rollforward: 'Roll-forward', yearend: 'Year-end' };
-const STATUS_TONE: Record<AuditStatus, 'compliant' | 'evidence' | 'draft'> = {
-  concluded: 'compliant', active: 'evidence', planned: 'draft',
+const STATUS_TONE: Record<AuditStatus, 'compliant' | 'evidence'> = {
+  concluded: 'compliant', active: 'evidence',
 };
-const STATUS_LABEL: Record<AuditStatus, string> = { concluded: 'Concluded', active: 'Active', planned: 'Planned' };
+const STATUS_LABEL: Record<AuditStatus, string> = { concluded: 'Concluded', active: 'Active' };
 
 // ── Page furniture ───────────────────────────────────────────────────────────
 
@@ -306,7 +306,7 @@ function CoverageBody({ audits, range }: { audits: AuditRecord[]; range: Range }
 
       <div className="-mx-4 px-4 flex-1 flex flex-col divide-y divide-canvas-border">
         {audits.map(a => {
-          const status = auditStatus(a, eng);
+          const status = auditStatus(a);
           const from = a.windowFrom.slice(0, 7);
           const to = a.windowTo.slice(0, 7);
           return (
@@ -331,8 +331,7 @@ function CoverageBody({ audits, range }: { audits: AuditRecord[]; range: Range }
                         'h-4 rounded-[3px]',
                         !on ? 'bg-paper-50'
                           : status === 'concluded' ? 'bg-compliant-500'
-                          : status === 'active' ? 'bg-brand-500'
-                          : 'bg-ink-300',
+                          : 'bg-brand-500',
                       )}
                     />
                   );
@@ -426,6 +425,9 @@ export default function EngagementOverview() {
    * empty matrix.
    */
   const noRacm = eng.controls.length === 0;
+  /** One audit runs at a time — the running one is signed by both hands before
+   *  the next starts. The reason rides beside every create button it stops. */
+  const blocked = newAuditBlock(eng);
 
   /**
    * The widest range the engagement has anything in — the default, and what
@@ -492,7 +494,7 @@ export default function EngagementOverview() {
     [eng, current],
   );
   const consistency = useMemo(() => materialityConsistency(sameCycle), [sameCycle]);
-  const curStatus = current ? auditStatus(current, eng) : null;
+  const curStatus = current ? auditStatus(current) : null;
   const curInRange = !!current && overlaps(current, applied);
 
   // Everything below is scoped to the applied range — an audit outside it
@@ -520,7 +522,9 @@ export default function EngagementOverview() {
     [eng, currentYear, ids],
   );
   const rangeDefs = useMemo(
-    () => inRange.flatMap(a => auditDeficiencies(a, eng).map(d => ({ d, a }))),
+    // Counted once each: a weakness carried forward counts under the audit it
+    // was carried into, not again under the archive it was carried out of.
+    () => inRange.flatMap(a => countedDeficiencies(a, eng).map(d => ({ d, a }))),
     [inRange, eng],
   );
   const aggregated = useMemo(() => crossAuditAggregation(eng, inRange), [eng, inRange]);
@@ -538,10 +542,10 @@ export default function EngagementOverview() {
 
   const newAuditBtn = canCreate ? (
     <div className="flex items-center gap-2.5 shrink-0">
-      {noRacm && <span className="text-[0.75rem] text-ink-400">{RACM_FIRST}</span>}
+      {(noRacm || blocked) && <span className="text-[0.75rem] text-ink-400">{noRacm ? RACM_FIRST : blocked}</span>}
       <button
         onClick={() => setCreating(true)}
-        disabled={noRacm}
+        disabled={noRacm || !!blocked}
         className="h-9 px-3.5 shrink-0 inline-flex items-center gap-1.5 rounded-md bg-brand-600 text-white text-[0.8125rem] font-semibold shadow-sm shadow-brand-900/10 enabled:hover:bg-brand-500 enabled:active:bg-brand-800 disabled:opacity-40 disabled:shadow-none disabled:cursor-not-allowed transition-colors cursor-pointer"
       >
         <Plus size={15} /> New audit
@@ -852,8 +856,11 @@ export default function EngagementOverview() {
                 {canCreate && !current.archive && (current.yearBasis === 'fy' || current.yearBasis === 'cy') && (
                   <button
                     onClick={e => { e.stopPropagation(); setRolling(current); }}
-                    title={`Carry ${current.period} ${ROUND_LABEL[current.round].toLowerCase()} into the next round`}
-                    className="h-8 px-2.5 rounded-md border border-canvas-border bg-canvas-elevated text-[0.75rem] font-semibold text-ink-600 hover:border-brand-300 hover:text-brand-700 transition-colors cursor-pointer"
+                    // Rolling forward starts a new audit — the same gate as New
+                    // audit, whose line beside the toolbar button says why.
+                    disabled={!!blocked}
+                    title={blocked ?? `Carry ${current.period} ${ROUND_LABEL[current.round].toLowerCase()} into the next round`}
+                    className="h-8 px-2.5 rounded-md border border-canvas-border bg-canvas-elevated text-[0.75rem] font-semibold text-ink-600 enabled:hover:border-brand-300 enabled:hover:text-brand-700 disabled:opacity-40 disabled:cursor-not-allowed transition-colors cursor-pointer"
                   >
                     Roll forward
                   </button>

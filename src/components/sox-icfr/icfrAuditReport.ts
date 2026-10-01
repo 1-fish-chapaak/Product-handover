@@ -49,8 +49,11 @@ function checkCounts(c: Control): { items: number; done: number; total: number; 
   let done = 0, fails = 0;
   steps.forEach(s => samples.forEach(smp => {
     const r = s.sampleResults?.[smp.id];
-    if (r && r !== 'Not tested') done += 1;
-    if (r === 'Fail') fails += 1;
+    // A cell is done when the grid holds a verdict for it, OR the item carries
+    // its own result — items tested before the attribute grid record theirs on
+    // the item, and counting only the grid read them as untouched.
+    if ((r && r !== 'Not tested') || smp.result !== 'Not tested') done += 1;
+    if (r === 'Fail' || ((!r || r === 'Not tested') && smp.result === 'Fail')) fails += 1;
   }));
   return { items: samples.length, done, total: steps.length * samples.length, fails };
 }
@@ -113,16 +116,19 @@ function observationStatus(d: Deficiency): string {
   return 'Open — action not yet agreed';
 }
 
-export function buildAuditReport(eng: IcfrEngagement, controls: Control[] = eng.controls): IcfrSheet[] {
+export function buildAuditReport(eng: IcfrEngagement, controls: Control[] = eng.controls, auditId?: string | null): IcfrSheet[] {
   const ids = new Set(controls.map(c => c.id));
   const defs = eng.deficiencies.filter(d => ids.has(d.controlId));
   const concl = controls.map(c => conclusionOf(eng, c));
   const untested = concl.filter(x => x === 'Not started').length;
   const mwOpen = openMaterialWeaknesses(eng).length;
-  // Off the LIVE audit's record, like the working paper and the lock — the
-  // engagement-level signoff field is never written, so reading it kept this
-  // report a permanent draft whatever the reviewer had signed.
-  const liveSignoff = eng.audits.find(a => !a.archive)?.signoff ?? {};
+  // Off the OPEN audit's record — the report is that audit's deliverable, so
+  // its status and signatures are that audit's, not whichever one is live
+  // (Oct 2026: a report opened on one audit read another's sign-off). Falls back
+  // to the live audit only when no audit is named. The engagement-level signoff
+  // field is never written, so it is never read.
+  const liveSignoff = ((auditId ? eng.audits.find(a => a.id === auditId) : undefined)
+    ?? eng.audits.find(a => !a.archive))?.signoff ?? {};
   const opinion = liveSignoff.icfrConclusion ?? icfrConclusion(eng);
   const signed = !!liveSignoff.preparer && !!liveSignoff.reviewer;
   const byControl = (id: string): Control | undefined => controls.find(c => c.id === id);
@@ -451,9 +457,9 @@ export function buildAuditReport(eng: IcfrEngagement, controls: Control[] = eng.
 /** The report as a workbook — one sheet per section, same blocks the preview
  *  shows and the PDF pages. The .xlsx keeps this sheet-per-section format; the
  *  PDF (the primary issue format) turns each sheet into a page. */
-export function downloadAuditReport(eng: IcfrEngagement, controls: Control[] = eng.controls): void {
+export function downloadAuditReport(eng: IcfrEngagement, controls: Control[] = eng.controls, auditId?: string | null): void {
   const wb = XLSX.utils.book_new();
-  for (const sheet of buildAuditReport(eng, controls)) {
+  for (const sheet of buildAuditReport(eng, controls, auditId)) {
     const aoa: (string | number)[][] = [];
     sheet.blocks.forEach(b => {
       if (b.kind === 'heading') { aoa.push([b.text], [b.sub]); }

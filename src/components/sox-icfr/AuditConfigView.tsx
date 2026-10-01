@@ -1,14 +1,14 @@
-import { Building2, CalendarRange, Check, FileSpreadsheet, Grid3x3, Lock, Paperclip, Scale, Trash2 } from 'lucide-react';
+import { ArrowRight, Building2, CalendarRange, Check, FileSpreadsheet, Grid3x3, Lock, Paperclip, Scale, Trash2 } from 'lucide-react';
 import { useMemo, useState } from 'react';
 import { useIcfr } from './store';
 import { useToast } from '../shared/Toast';
 import { useAuditLog } from '../../context/AdminDataContext';
 import { FormSelect } from '../shared/FilterSelect';
-import { BASIS_OPTIONS, cycleYears, ruleOverall, type MaterialityBasis } from '../audit/sox-testing/soxTestingData';
+import { cycleYears } from '../audit/sox-testing/soxTestingData';
 import { entitiesFor, processesFor } from './auditScope';
 import { useAuditFiles } from './useAuditFiles';
 import { OriginPicker } from './parts';
-import { MaterialityGroundRules } from './extraViews';
+import { formatINR } from './helpers';
 
 import type { AuditRecord, AuditScopeKind, FileOrigin } from './types';
 import { cn } from '../../lib/cn';
@@ -16,10 +16,12 @@ import { cn } from '../../lib/cn';
 /**
  * Configuration — the open audit's own settings.
  *
- * The same four things the New audit wizard captured (period, scope, TB / GL,
- * materiality), now editable in place. It edits the AUDIT, not the programme:
- * changing materiality here re-prices this audit's threshold and leaves every
- * other audit on the engagement untouched.
+ * Period, scope and TB / GL, editable in place. It edits the AUDIT, not the
+ * programme. Materiality is NOT one of them (Oct 2026): it belongs to the
+ * engagement alone, so this page reads the engagement's three figures back and
+ * sends anyone who wants to change them to the engagement's own settings. An
+ * audit-level figure used to be editable here while the Dashboard, the report
+ * and severity grading all read the engagement's — two numbers, one shown.
  *
  * While the audit is open, edits save instantly — there is no draft state to
  * lose, and no Save button pretending otherwise. Once it is signed off or
@@ -179,19 +181,12 @@ function Section({ icon: Icon, title, sub, children }: {
 }
 
 export default function AuditConfigView({ audit }: { audit: AuditRecord }) {
-  const { eng, updateAudit, registerFile, me } = useIcfr();
+  const { eng, updateAudit, registerFile, me, setView } = useIcfr();
   const { addToast } = useToast();
   const logEvent = useAuditLog();
 
   const entities = useMemo(() => entitiesFor(eng.id), [eng.id]);
   const racms = useMemo(() => processesFor(eng.id), [eng.id]);
-
-  /** The other audits an engagement-level edit made here would also re-grade.
-   *  Empty means this is the only audit, and the ground rules edit directly. */
-  const otherAudits = useMemo(
-    () => eng.audits.filter(a => a.id !== audit.id).map(a => a.period),
-    [eng.audits, audit.id],
-  );
 
   /* A settled audit is a record, not a form (user ask, 23 Sep). Two ways an
    * audit settles, and both close this page for good: both signatures are on it,
@@ -206,8 +201,6 @@ export default function AuditConfigView({ audit }: { audit: AuditRecord }) {
   // custom audit falls back to 'fy' here rather than asserting a type the
   // field no longer guarantees.
   const cycleBasis: 'fy' | 'cy' = audit.yearBasis === 'cy' ? 'cy' : 'fy';
-  // The audit froze its rule as a label, not an id — match back to the option.
-  const basisOpt = BASIS_OPTIONS.find(b => b.label === audit.materiality.basisLabel) ?? BASIS_OPTIONS[0];
 
   /* Every writer below re-checks `frozen` on the way in. A frozen page renders
    * no control that can reach them, so this never fires today — it is here so
@@ -239,21 +232,6 @@ export default function AuditConfigView({ audit }: { audit: AuditRecord }) {
     updateAudit(audit.id, {
       scopeNames: names,
       scopeIds: audit.scopeKind === 'entity' ? next : [],
-    });
-  };
-
-  const setMateriality = (patch: Partial<{ basis: MaterialityBasis; benchmark: number; pct: number }>) => {
-    if (frozen) return;
-    const basis = patch.basis ?? (basisOpt.id as MaterialityBasis);
-    const opt = BASIS_OPTIONS.find(b => b.id === basis)!;
-    const benchmark = patch.basis ? opt.defaultBenchmark : patch.benchmark ?? audit.materiality.benchmark;
-    const pct = patch.basis ? opt.defaultPct : patch.pct ?? audit.materiality.pct;
-    updateAudit(audit.id, {
-      // Spread first: pmPct / ctPct are set on the creation wizard and not
-      // edited here, so rebuilding the object from scratch would silently drop
-      // them the first time the basis or benchmark is changed.
-      materiality: { ...audit.materiality, basisLabel: opt.label, benchmark, pct },
-      overall: ruleOverall({ id: 'a', name: 'a', basis, benchmark, pct }),
     });
   };
 
@@ -296,7 +274,7 @@ export default function AuditConfigView({ audit }: { audit: AuditRecord }) {
             <p className="text-[12px] text-ink-500 mt-0.5 leading-relaxed max-w-[46rem]">
               {audit.archive
                 ? 'This cycle is closed and kept as the record of what was tested. Its settings are read back here, not re-set.'
-                : 'Both signatures are on this audit. The period, scope, source files and materiality every control was tested against cannot move once the paper carrying them has been signed.'}
+                : 'Both signatures are on this audit. The period, scope and source files every control was tested against cannot move once the paper carrying them has been signed.'}
             </p>
           </div>
         </div>
@@ -405,61 +383,33 @@ export default function AuditConfigView({ audit }: { audit: AuditRecord }) {
 
       <FileRegistrySection audit={audit} frozen={frozen} addFile={addFile} />
 
-      <Section icon={Scale} title="Materiality rule" sub="The threshold this audit measures its exceptions against.">
-        <div className="flex gap-3 flex-wrap items-end">
-          <div className="min-w-[240px]">
-            <label className={labelCls}>Basis</label>
-            {frozen ? (
-              <span className={readCls}>{audit.materiality.basisLabel}</span>
-            ) : (
-              <FormSelect
-                value={basisOpt.id}
-                options={BASIS_OPTIONS.map(b => ({ value: b.id, label: b.label }))}
-                onChange={v => setMateriality({ basis: v as MaterialityBasis })}
-                className={selectCls}
-                ariaLabel="Materiality basis"
-                menuCls="w-full"
-              />
-            )}
+      {/* Materiality is the ENGAGEMENT's, read here and never set here (Oct 2026).
+          One figure grades every audit on the engagement — the Dashboard, the
+          report and severity grading all read it — so changing it is done once,
+          on the engagement's Materiality & scope page. The id keeps the
+          Dashboard's Materiality card landing on this block. */}
+      <div id="materiality-ground-rules">
+        <Section icon={Scale} title="Materiality" sub="Set once for the engagement — every audit on it is measured against the same figures.">
+          <div className="border border-canvas-border rounded-xl overflow-hidden max-w-[420px]">
+            {([
+              ['Overall materiality', eng.materiality],
+              ['Performance materiality', eng.performanceMateriality],
+              ['Clearly trivial', eng.rules.clearlyTrivial],
+            ] as const).map(([k, v]) => (
+              <div key={k} className="flex items-center gap-3 px-4 py-2.5 border-b border-canvas-border last:border-b-0">
+                <span className="text-[12.5px] text-ink-600">{k}</span>
+                <span className="ml-auto text-[13px] font-semibold text-ink-900 tabular-nums">{formatINR(v)}</span>
+              </div>
+            ))}
           </div>
-          <div className="w-40">
-            <label className={labelCls}>{basisOpt.id === 'custom' ? 'Amount (₹ Cr)' : 'Benchmark (₹ Cr)'}</label>
-            {frozen ? (
-              <span className={`${readCls} tabular-nums`}>{audit.materiality.benchmark}</span>
-            ) : (
-              <input
-                type="number" min={0} value={audit.materiality.benchmark}
-                onChange={e => setMateriality({ benchmark: Number(e.target.value) })}
-                className={`${inputCls} tabular-nums`}
-              />
-            )}
-          </div>
-          {basisOpt.id !== 'custom' && (
-            <div className="w-24">
-              <label className={labelCls}>%</label>
-              {frozen ? (
-                <span className={`${readCls} tabular-nums`}>{audit.materiality.pct}</span>
-              ) : (
-                <input
-                  type="number" min={0.1} max={100} step={0.1} value={audit.materiality.pct}
-                  onChange={e => setMateriality({ pct: Number(e.target.value) })}
-                  className={`${inputCls} tabular-nums`}
-                />
-              )}
-            </div>
-          )}
-          <p className="text-[11.5px] text-ink-500 pb-2.5">
-            Overall <span className="font-semibold text-ink-900 tabular-nums">₹{audit.overall} Cr</span>
-          </p>
-        </div>
-      </Section>
-
-      {/* The engagement's ground rules, inline (user ask) — the Dashboard's
-          Materiality card lands here now instead of opening a page of its own.
-          Two materiality blocks sit together on purpose: the one above is THIS
-          audit's own threshold, this one is the engagement's, and the banner
-          inside says so. */}
-      <MaterialityGroundRules sharedWith={otherAudits} />
+          <button
+            onClick={() => setView('scope')}
+            className="mt-3 inline-flex items-center gap-1 text-[12px] font-semibold text-brand-700 hover:text-brand-800 cursor-pointer transition-colors"
+          >
+            Change it in the engagement settings <ArrowRight size={13} />
+          </button>
+        </Section>
+      </div>
     </div>
   );
 }

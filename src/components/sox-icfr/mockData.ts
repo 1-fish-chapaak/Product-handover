@@ -1122,7 +1122,7 @@ function libraryRunHistory(controls: Control[]): RunRecord[] {
 /**
  * The cycles this engagement has run — the engagement Overview's primary content.
  *
- * Three, across two fiscal years, and each one earns its place:
+ * Two, across two fiscal years, and each one earns its place:
  *
  *   CY 2025 · year-end     concluded, and ARCHIVED. Its conclusions and the two
  *                          deficiencies it raised survive as a snapshot, which is
@@ -1131,12 +1131,14 @@ function libraryRunHistory(controls: Control[]): RunRecord[] {
  *                          controls. First in the array, because the array is
  *                          newest-created-first and the live audit is the newest
  *                          unarchived record (see liveAuditId).
- *   CY 2026 · roll-forward  planned, P2P + O2C only. Nothing tested under it yet.
+ *
+ * No planned rounds: an audit that exists is the one being tested, and the next
+ * one starts only once the running one is signed by both hands. (A planned
+ * CY 2026 roll-forward used to sit here and opened onto the live interim's
+ * results — removed 1 Oct 2026.)
  *
  * What that shape demonstrates: two-year grouping, a coverage timeline with
- * Oct–Dec 2026 visibly uncovered, a Treasury control that appears in two audits
- * (test once, rely many), prior-year deficiencies to carry forward, and the
- * materiality check reading ✓ because both CY 2026 rounds share ₹12 Cr.
+ * Jul–Dec 2026 visibly uncovered, and prior-year deficiencies to carry forward.
  *
  * Scoped by RACM rather than by entity so the record needs no entity lookup —
  * the entities live in another store.
@@ -1270,16 +1272,6 @@ function libraryAudits(processes: string[], controls: Control[]): AuditRecord[] 
       files: [{ name: 'altura-group-tb-2026.xlsx', kind: 'tb' }, { name: 'altura-group-gl-2026.csv', kind: 'gl' }],
       materiality: { basisLabel, benchmark: 240, pct: 5 }, overall: 12,
       by: 'A. Mehta', role: 'auditor', at: '02 Jan 2026',
-    },
-    {
-      id: 'audit-cy26-rf', period: 'CY 2026', yearBasis: 'cy', fiscalYear: 2026,
-      periodSpan: 'Jan 2026 – Dec 2026', round: 'rollforward', windowFrom: '2026-07-01', windowTo: '2026-09-30',
-      scopeKind: 'racm', scopeNames: first, scopeIds: [],
-      // Same threshold as the interim round on purpose: one opinion, one ruler.
-      // The consistency check on the engagement Overview is reading these two.
-      files: [], materiality: { basisLabel, benchmark: 240, pct: 5 }, overall: 12,
-      rolledFromId: 'audit-cy26-interim',
-      by: 'A. Mehta', role: 'auditor', at: '04 Jul 2026',
     },
     {
       id: 'audit-cy25', period: 'CY 2025', yearBasis: 'cy', fiscalYear: 2025,
@@ -2133,8 +2125,8 @@ function alturaAwaitingApproval(controls: Control[]): Control[] {
  * Every SOX engagement's Overview is the audit portfolio now, so an engagement
  * with no audits would show its testing nowhere — the work would sit behind an
  * audit that doesn't exist. One year-end round covering everything, holding
- * whatever the seed tested. Status derives itself: an engagement whose controls
- * are untested reads Planned without anything having to say so.
+ * whatever the seed tested. Status derives itself: it reads Active until the
+ * preparer and the reviewer have both signed it.
  */
 function singleAudit(meta: SeedMeta, controls: Control[]): AuditRecord[] {
   if (!controls.length) return [];
@@ -2527,7 +2519,7 @@ function seedEngagementBody(meta?: SeedMeta): IcfrEngagement {
     runs,
     // Every SOX engagement has at least one audit now: the Overview IS the audit
     // portfolio, so testing that belongs to no audit would be testing with no
-    // home. Altura has run three rounds across two years; the rest have one.
+    // home. Altura has run two rounds across two years; the rest have one.
     audits,
     signoff: {},
     rulesLog: [],

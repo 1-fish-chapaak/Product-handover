@@ -26,7 +26,7 @@ import {
   type ProcurementRacmRow, type ColumnGroup, type RacmColumnDef, type RacmColumnKey,
 } from '../../data/procurement-racm';
 import { useRacmConfig } from '../sox-icfr/racmConfig';
-import { racmSetupKeyFor } from '../sox-icfr/racmLibrary';
+import { racmSetupKeyFor, useRacmLibrary, currentVersion, nextVersion } from '../sox-icfr/racmLibrary';
 import { RACM_PUBLISH_KEY } from '../sox-icfr/helpers';
 import { useCurrentUser } from '../../context/CurrentUserContext';
 import { CONTROL_CLASSES, RISK_LIKELIHOODS } from '../sox-icfr/types';
@@ -255,6 +255,9 @@ export default function RacmFullPageEditor({ onBack, backView, backLabel, racmNa
   // the same storage channel the row edits already travel on.
   const [publishOpen, setPublishOpen] = useState(false);
   const [justPublished, setJustPublished] = useState(false);
+  // The version this tab's Publish will become, noted at the click so the label
+  // can show it before the library tab writes the publish back.
+  const [publishedAs, setPublishedAs] = useState<number | null>(null);
   const { currentUser } = useCurrentUser();
 
   // Header: inline-renamable title + a working status (mock lifecycle).
@@ -286,6 +289,18 @@ export default function RacmFullPageEditor({ onBack, backView, backLabel, racmNa
     : draftCount === 0 ? 'Published'
     : publishedCount === 0 ? 'Draft'
     : 'Published · additions';
+  // The same whole-number version the library card shows. The library persists
+  // to storage and adopts other tabs' writes, so this tab reads the card's number.
+  const library = useRacmLibrary();
+  const libRacm = inLibrary ? library.find(r => r.id === racmId) : undefined;
+  const versionNo = libRacm
+    ? Math.max(currentVersion(libRacm), justPublished ? (publishedAs ?? 0) : 0)
+    : null;
+  // No label at all off the library; "unpublished" until a first publish.
+  const versionLabel: string | null = !inLibrary ? null
+    : versionNo !== null ? (versionNo === 0 ? 'unpublished' : `v${versionNo}`)
+    : lifecycle === 'Draft' ? 'unpublished'
+    : null;
 
   const lockedRowKeys = useMemo(
     () => new Set(rows.filter(r => lockedControlIds.has(r.controlId)).map(r => `${r.riskId}-${r.controlId}`)),
@@ -599,7 +614,9 @@ export default function RacmFullPageEditor({ onBack, backView, backLabel, racmNa
   const detailRow = detailRowId ? rows.find(r => `${r.riskId}-${r.controlId}` === detailRowId) || null : null;
 
   // Cleaned, renamable display title — strip the leading "RACM ·" and any extension.
-  const baseName = (racmName ?? 'Procurement SOP: Budget to Payment RACM')
+  // A library RACM keeps the name the library gives it, casing and all; only a
+  // file-derived name is cleaned up.
+  const baseName = libRacm ? libRacm.name : (racmName ?? 'Procurement SOP: Budget to Payment RACM')
     .replace(/^RACM\s*·\s*/i, '')
     .replace(/\.(xlsx|xls|csv|pdf|docx?|json)$/i, '')
     .replace(/[-_]+/g, ' ')                              // separators → spaces
@@ -669,9 +686,9 @@ export default function RacmFullPageEditor({ onBack, backView, backLabel, racmNa
           {/* Inline meta — process tag(s), static status badge, version */}
           <div className="flex items-center gap-2 shrink-0">
             {processLabel && <span className="px-2 py-0.5 rounded text-xs font-bold bg-primary/10 text-primary">{processLabel}</span>}
-            {singleProcessArea && <span className="px-2 py-0.5 rounded text-xs font-semibold bg-paper-100 text-ink-600 whitespace-nowrap">{singleProcessArea}</span>}
+            {singleProcessArea && singleProcessArea.trim().toLowerCase() !== (processLabel ?? '').trim().toLowerCase() && <span className="px-2 py-0.5 rounded text-xs font-semibold bg-paper-100 text-ink-600 whitespace-nowrap">{singleProcessArea}</span>}
             <span className={`px-2 py-0.5 rounded text-xs font-bold ${STATUS_TONES[lifecycle ?? status]}`}>{lifecycle ?? status}</span>
-            <span className="text-xs text-text-muted font-mono">{lifecycle === 'Draft' ? 'unpublished' : 'v0.1'}</span>
+            {versionLabel && <span className="text-xs text-text-muted font-mono">{versionLabel}</span>}
           </div>
         </div>
         <div className="flex items-center gap-2 shrink-0">
@@ -982,6 +999,7 @@ export default function RacmFullPageEditor({ onBack, backView, backLabel, racmNa
                   // The library tab records it; this one only asks, and shows
                   // the answer it knows it will get.
                   try { localStorage.setItem(RACM_PUBLISH_KEY(racmId), JSON.stringify({ by: currentUser?.name ?? 'You', at: Date.now() })); } catch { /* the ask is lost, the rows are not */ }
+                  setPublishedAs(libRacm ? nextVersion(libRacm) : null);
                   setJustPublished(true);
                   logEvent({ action: 'Update', description: `Published ${n} control${n === 1 ? '' : 's'} in ${displayTitle}`, module: 'SOX ICFR', entity: 'RACM' });
                   addToast({

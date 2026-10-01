@@ -16,6 +16,7 @@ import { cn } from '../../lib/cn';
 import { ItgcCascadeBanner, RagStrip, type RagMeterDef } from './parts';
 import { PROGRAMMES } from '../audit/sox-testing/soxTestingData';
 import { isOwnerOf } from './auditScope';
+import { newAuditBlock } from './auditPortfolio';
 import RiskOwnerPortal from './RiskOwnerPortal';
 import ReviewerQueue from './ReviewerQueue';
 import type { Control, ExceptionGrade, IcfrEngagement, TaskType } from './types';
@@ -276,9 +277,12 @@ export default function Overview() {
               controls, so an empty library is an empty matrix. The reason rides
               beside the dead button; the fix is Add RACM. */}
           {racmMissing && <span className="text-[11.5px] text-ink-400">Add a RACM first — an audit with no controls has nothing to test.</span>}
+          {/* One audit runs at a time — the running one is signed by both hands
+              before the next starts. */}
+          {!racmMissing && newAuditBlock(eng) && <span className="text-[11.5px] text-ink-400">{newAuditBlock(eng)}</span>}
           <button
             onClick={() => setCreating(true)}
-            disabled={racmMissing}
+            disabled={racmMissing || !!newAuditBlock(eng)}
             className="h-9 px-3.5 inline-flex items-center gap-1.5 rounded-lg bg-brand-600 text-white text-[12.5px] font-semibold enabled:hover:bg-brand-700 disabled:opacity-40 disabled:cursor-not-allowed transition-colors cursor-pointer"
           >
             <Plus size={15} /> New audit
@@ -702,8 +706,10 @@ export default function Overview() {
 }
 
 /**
- * The engagement-wide RAG trio, read in order as one sentence: is the matrix
- * ready to test against → are the controls working → how far through are we.
+ * The engagement-wide RAG trio, read in order as one sentence: are the controls
+ * working → how much testing ground is covered → how far through are we. (RACM
+ * completeness was a fourth meter until Oct 2026 — it counted row approvals
+ * that are never given in practice, so it read 0% on every audit.)
  *
  * Exported because the Dashboard (engagement level) and the Overview tab (inside
  * an audit) both read it. One computation, so the two can never disagree about
@@ -717,8 +723,6 @@ export default function Overview() {
  */
 export function engagementRagMeters(eng: IcfrEngagement, controls: Control[]): RagMeterDef[] {
     const total = controls.length;
-    const approved = controls.filter(c => c.racmReview?.status === 'Approved').length;
-    const remarks = controls.filter(c => c.racmReview?.status === 'Remark').length;
     const concl = controls.map(c => conclusionOf(eng, c));
     const effective = concl.filter(x => x === 'Effective').length;
     const ineffective = concl.filter(x => x === 'Ineffective').length;
@@ -731,18 +735,13 @@ export function engagementRagMeters(eng: IcfrEngagement, controls: Control[]): R
       const samples = c.operating.sampling?.samples ?? [];
       checksTotal += samples.length ? samples.length * steps.length : steps.length;
       checksDone += samples.length
-        ? steps.reduce((n, s) => n + samples.filter(smp => { const r = s.sampleResults?.[smp.id]; return r && r !== 'Not tested'; }).length, 0)
+        // A cell is done when the grid holds a verdict for it, OR the item
+        // carries its own result — items tested before the attribute grid record
+        // theirs on the item, the same rule as sampleTested().
+        ? steps.reduce((n, s) => n + samples.filter(smp => { const r = s.sampleResults?.[smp.id]; return (!!r && r !== 'Not tested') || smp.result !== 'Not tested'; }).length, 0)
         : steps.filter(s => s.result !== 'Not tested').length;
     });
     return [
-      {
-        // One RACM row IS one control, so the denominator is the scope itself. A
-        // remark is a blocker with a named condition, never a half-approval —
-        // it rides beside the score and is not netted off it.
-        label: 'RACM completeness', pct: total ? Math.round((approved / total) * 100) : 0, empty: total === 0,
-        detail: `${approved}/${total} rows approved${remarks ? ` · ${remarks} remark${remarks === 1 ? '' : 's'} open` : ''}`,
-        formula: 'rows approved ÷ in-scope controls × 100',
-      },
       {
         // Effective needs BOTH tracks effective; either one ineffective sinks the
         // control. A short-form automated control concludes on design alone. Not
@@ -762,8 +761,8 @@ export function engagementRagMeters(eng: IcfrEngagement, controls: Control[]): R
         formula: 'operating checks run ÷ operating checks total, summed across the register × 100',
       },
       {
-        // Each control is worth 1.0 — RACM 0.10 · TOD 0.25 · TOE 0.30 ·
-        // countersign 0.25 · exceptions closed 0.10 — and credits on CONCLUSION,
+        // Each control is worth 1.0 — TOD 0.25 · TOE 0.25 · countersign 0.25 ·
+        // exceptions closed 0.25 — and credits on CONCLUSION,
         // whichever way it went. Completeness is not effectiveness: a 100%
         // engagement can still conclude ICFR not effective. See
         // engagementCompleteness in helpers.ts for the rest.

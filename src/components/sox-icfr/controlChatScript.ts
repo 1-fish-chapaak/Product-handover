@@ -279,7 +279,7 @@ export function situationOf({ eng, control, role, me, audit, files }: ChatCtx): 
     // look like. Without this it reported the first step it could not tick —
     // "② Population" on a control that was signed and countersigned months ago.
     locked ? 'signoff'
-    : designResult === 'Not tested' ? 'design'
+    : designResult === 'Not tested' || !todApproved ? 'design'
     : !opApplies ? 'signoff'
     : yePending ? 'population'
     : !popLocked ? 'population'
@@ -491,7 +491,11 @@ export function nextPrompt(ctx: ChatCtx): ChatPrompt {
     if (s.missing.length > 0) {
       return line(`${plural(s.missing.length, 'required document')} missing before the design can be tested — ${listOf(s.missing.map(docLabel))}. Ask the owner for ${s.missing.length === 1 ? 'it' : 'them'}, or attach ${s.missing.length === 1 ? 'it' : 'them'} yourself if you have ${s.missing.length === 1 ? 'it' : 'them'}.`);
     }
-    // The approval runs alongside now (user, 1 Oct) — nothing to wait for here.
+    // The reviewer's approval gates the population (product owner, 1 Oct), so a
+    // concluded design waits here and Ira offers nothing past it.
+    if (s.designResult !== 'Not tested' && !s.todApproved) {
+      return line('Design is concluded. The population opens once the reviewer approves it.');
+    }
     if (s.checksTotal === 0) {
       // Said plainly, and without offering a way past it. The design is
       // concluded on what the checks found, so a control with no checks is not
@@ -671,7 +675,7 @@ export function acknowledge(prev: Situation, next: Situation): string | null {
       : `Design concluded ${next.designResult.toLowerCase()}.`;
   }
   if (!prev.todApproved && next.todApproved) {
-    return `${next.approvedBy?.by ?? 'The reviewer'} approved the design.`;
+    return `${next.approvedBy?.by ?? 'The reviewer'} approved the design.${next.opApplies && !next.yePending ? ' Population is open.' : ''}`;
   }
 
   // ── ② → ⑤ ─────────────────────────────────────────────────────────────────

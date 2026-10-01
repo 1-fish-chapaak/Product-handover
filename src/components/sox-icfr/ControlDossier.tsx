@@ -507,6 +507,7 @@ function ConcludeFooter({ control, which, suggestion, canEdit, disabled, disable
  */
 // PARKED (S1, workflows removed from SOX)
 function RunResultsModal({ control, step, onClose }: { control: Control; step: OperatingStep; onClose: () => void }) {
+  const { eng } = useIcfr();
   const samples = control.operating.sampling?.samples ?? [];
   const passed = samples.filter(s => step.sampleResults?.[s.id] === 'Pass').length;
   const eff = stepResult(step);
@@ -530,7 +531,7 @@ function RunResultsModal({ control, step, onClose }: { control: Control; step: O
                 No sample has been extracted for this control yet, so the run has nothing to report per item — it recorded an overall result only.
                 Draw a sample in step ③ and re-pull the run to see it item by item.
               </p>
-            : <SampleResultsTable control={control} step={step} />}
+            : <SampleResultsTable control={control} step={step} home={sampleHome(eng, a => auditCovers(a, control, eng.id))} />}
         </div>
         {/* the pass count lives on the table's own header — not repeated here */}
         <div className="flex items-center justify-end px-5 py-3.5 border-t border-canvas-border">
@@ -1109,13 +1110,13 @@ function WalkthroughCard({ control, canEdit }: { control: Control; canEdit: bool
  *  stronger of the two. */
 // ── operating attribute — its required files + AI validation, and/or self-attestation ─
 function AttributeRow({ control, step, canEdit, testing }: { control: Control; step: OperatingStep; canEdit: boolean; testing: boolean }) {
-  const { me, role, confirmIra, setStepResult, overrideStep, attestStep, addStepEvidence, uploadRequiredFile, clearRequiredFile, toggleStepAttest, runStepValidation } = useIcfr();
+  const { eng, me, role, confirmIra, setStepResult, overrideStep, attestStep, addStepEvidence, uploadRequiredFile, clearRequiredFile, toggleStepAttest, runStepValidation } = useIcfr();
   const logEvent = useAuditLog();
   const [over, setOver] = useState(false);
   const [noteDraft, setNoteDraft] = useState(step.attestation?.note ?? '');
   const [validatingWf, setValidatingWf] = useState(false);
   const openDetail = useOpenRailDetail();
-  const seeWorking = () => step.validation && openDetail({ kind: 'working', title: `${step.code} · ${step.description}`, validation: step.validation, control, step, confKey: `${control.id}:${step.id}` });
+  const seeWorking = () => step.validation && openDetail({ kind: 'working', title: `${step.code} · ${step.description}`, validation: step.validation, control, step, confKey: `${control.id}:${step.id}`, home: sampleHome(eng, a => auditCovers(a, control, eng.id)) });
   const eff = stepResult(step);
   const att = step.attestation;
   const attestOn = step.attestEnabled ?? !!att;   // section 2 — separate toggle, default off (on if already attested)
@@ -3181,10 +3182,10 @@ function PopulationSection({ control, canEdit, locked: gated = false }: { contro
       <div className="p-5">
         <EmptyState icon={<Lock size={18} />} title="Population is locked"
           hint={`${isOwnerView
-            ? 'The auditor’s design test comes first. Uploading and filtering the data opens once it is concluded.'
+            ? 'The auditor’s design test comes first, and the reviewer approves it. Uploading and filtering the data opens after that.'
             : concluded
-              ? 'TOD is concluded — the population is open.'
-              : 'Finish TOD first — conclude the design — and the population opens. The reviewer’s approval runs alongside; only the countersign waits for it.'}${pop ? ' What was already extracted stays as it is.' : ''}`}>
+              ? `TOD is concluded. Waiting for ${eng.reviewer || 'the reviewer'} to approve the design — the population opens as soon as it is approved.`
+              : 'Finish TOD first — mark the design effective — then the reviewer approves it. Data is only worth pulling against a design someone has checked.'}${pop ? ' What was already extracted stays as it is.' : ''}`}>
           {!isOwnerView && <span className="inline-flex items-center gap-1.5 text-[0.75rem] text-ink-500"><span>TOD is currently</span><TrackPill c={trackResult(control.design)} /></span>}
         </EmptyState>
       </div>
@@ -4149,8 +4150,7 @@ function SampleExtractSection({ control, canEdit, locked }: { control: Control; 
   if (locked) {
     const held = operatingHeld(control, eng.audits.find(a => a.id === openAuditId));
     if (held) return <HeldState held={held} yearEndHint="This control runs once a year. Its sample is drawn in the year-end audit, once the year has closed." />;
-    // The reviewer's approval no longer holds the draw (user, 1 Oct).
-    const awaitingApproval = false;
+    const awaitingApproval = trackResult(control.design) === 'Effective' && !designApproved(control);
     const designBlocked = trackResult(control.design) !== 'Effective' || awaitingApproval;
     return (
       <div className="p-5">
@@ -4862,7 +4862,7 @@ function SignOffSection({ control }: { control: Control }) {
   const concluded = isControlLockedIn(eng, control);
   const notesPending = eng.reviewNotes.filter(n => n.controlId === control.id && n.status !== 'Closed').length;
   const canSign = role === 'auditor' && concluded && !so?.preparer;
-  // The design approval runs alongside testing (user, 1 Oct) — this is where it is owed.
+  // The countersign waits for the reviewer's design approval too.
   const designPending = !designApproved(control);
   const canCounter = role === 'reviewer' && !!so?.preparer && !so?.reviewer && notesPending === 0 && so.preparer.by !== me && !designPending;
   // Returning is NOT held by an open note. The two used to share one gate, which
@@ -5216,7 +5216,7 @@ function OperatingSection({ control, canEdit, locked }: { control: Control; canE
     if (held) return <HeldState held={held} yearEndHint="This control runs once a year. It is tested for operation in the year-end audit, once the year has closed." />;
     return (
       <div className="p-5">
-        <EmptyState icon={<Lock size={18} />} title="TOE is locked" hint={false
+        <EmptyState icon={<Lock size={18} />} title="TOE is locked" hint={trackResult(control.design) === 'Effective' && !designApproved(control)
           // S6, A36 — concluded, but the reviewer has not approved it yet
           ? 'TOD is marked Design effective and waiting for the reviewer’s approval. TOE opens once it is approved.'
           : 'Mark TOD as Design effective to unlock TOE. A control that isn’t designed effectively isn’t tested for operation.'}>
@@ -5269,7 +5269,7 @@ function OperatingSection({ control, canEdit, locked }: { control: Control; canE
           30 Sep): the files used to be listed again under every attribute that
           needed them, and the per-item answers only lived inside a popup. */}
       <ToeFiles control={control} canEdit={canEdit} onOpenFile={f => openDetail({ kind: 'file', file: f })} />
-      <ToeGrid control={control} onOpenWorking={st => st.validation && openDetail({ kind: 'working', title: `${st.code} · ${st.description}`, validation: st.validation, control, step: st, confKey: `${control.id}:${st.id}` })}  />
+      <ToeGrid control={control} onOpenWorking={st => st.validation && openDetail({ kind: 'working', title: `${st.code} · ${st.description}`, validation: st.validation, control, step: st, confKey: `${control.id}:${st.id}`, home: sampleHome(eng, a => auditCovers(a, control, eng.id)) })}  />
 
       {/* attributes */}
       <div className="flex items-center justify-between mb-3 gap-3 flex-wrap">
@@ -5749,7 +5749,7 @@ function ParkOperatingBanner({ control }: { control: Control }) {
   const [from, setFrom] = useState('');
   const parked = control.operating.parked;
   const eligible = role === 'auditor' && !isControlLockedIn(eng, control)
-    && trackResult(control.design) === 'Effective';
+    && trackResult(control.design) === 'Effective' && designApproved(control);
 
   if (parked) {
     return (
@@ -6114,15 +6114,16 @@ export default function ControlDossier() {
   // concluded and with the reviewer, or approved but ineffective — which still
   // keeps Sample and TOE shut, because a failed design is not tested for operation.
   const gateNote = yePending ? `Pending until ${yePending.until}`
-    : designResult === 'Not tested' ? 'Unlocks once TOD is concluded'
+    : designResult === 'Not tested' ? 'Unlocks after TOD is approved'
+    : !todApproved ? `Waiting for ${eng.reviewer || 'the reviewer'} to approve the design.`
     : 'Unlocks once TOD is effective';
   // Step ② is the one that says where the work went.
   const popNote = yePending ? `${gateNote} — tested in the year-end audit` : gateNote;
-  // The reviewer's design approval runs alongside (user, 1 Oct): the auditor
-  // goes on as soon as TOD is concluded, and only the countersign waits for it.
-  const toeLocked = designResult !== 'Effective' || !!yePending;
-  // Step ② waits on TOD being concluded, and on the year end for an Annual control.
-  const popGated = designResult === 'Not tested' || !!yePending;
+  // The reviewer's approval gates the population again (product owner, 1 Oct —
+  // reverses the "runs alongside" call made earlier that day).
+  const toeLocked = designResult !== 'Effective' || !todApproved || !!yePending;
+  // Step ② waits on the approval, and on the year end for an Annual control.
+  const popGated = !todApproved || !!yePending;
   const popLocked = populationLocked(control);
   // The draw sits behind both of those: an approved, effective design, and a
   // population that has cleared its own gate. Past the approval, an already-drawn

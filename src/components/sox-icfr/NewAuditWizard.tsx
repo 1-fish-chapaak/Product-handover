@@ -180,11 +180,11 @@ export default function NewAuditWizard({ onClose, prefillFrom }: {
   );
   const hasYearEnd = sameYearAudits.some(a => a.round === 'yearend');
   const yearInterims = sameYearAudits.filter(a => a.round === 'interim');
-  // Concluded = signed by preparer AND reviewer, or archived — auditStatus's
-  // meaning of the word (user ask). An unsigned interim is still someone's open
+  // Concluded = signed by preparer AND reviewer — auditStatus's meaning of the
+  // word (user ask); being archived is not enough. An unsigned interim is still someone's open
   // work, and a roll-forward can only extend an answer that has been given.
   const concludedInterims = useMemo(
-    () => sameYearAudits.filter(a => a.round === 'interim' && auditStatus(a, eng) === 'concluded'),
+    () => sameYearAudits.filter(a => a.round === 'interim' && auditStatus(a) === 'concluded'),
     [sameYearAudits, eng],
   );
 

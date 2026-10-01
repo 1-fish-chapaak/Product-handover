@@ -19,10 +19,12 @@ import { cn } from '../../lib/cn';
 import EvidenceAnnotator from './EvidenceAnnotator';
 import { Tickmark } from './parts';
 import { confidenceOf, documentSystemRows } from './helpers';
-import type { Control, EvidenceFile, OperatingStep, ValidationResult } from './types';
+import type { AuditRecord, Control, EvidenceFile, OperatingStep, ValidationResult } from './types';
 
 export type RailDetail =
-  | { kind: 'working'; title: string; validation: ValidationResult; control: Control; step?: OperatingStep; evidence?: EvidenceFile; confKey?: string }
+  | { kind: 'working'; title: string; validation: ValidationResult; control: Control; step?: OperatingStep; evidence?: EvidenceFile; confKey?: string;
+      /** The round the sample was drawn in (sampleHome) — dates each item the way the sample grid does. */
+      home?: AuditRecord }
   | { kind: 'file'; file: EvidenceFile; label?: string; quotes?: string[] };
 
 export const RailDetailContext = createContext<(d: RailDetail) => void>(() => {});
@@ -37,8 +39,8 @@ const EYEBROW = 'text-[0.65625rem] font-bold uppercase tracking-wide text-ink-40
  * verdict on top, field — document vs system underneath. Nothing when no sample
  * has been drawn; the caller says what that means in its own words.
  */
-export function SampleResultsTable({ control, step }: { control: Control; step: OperatingStep }) {
-  const rows = documentSystemRows(control, step);
+export function SampleResultsTable({ control, step, home }: { control: Control; step: OperatingStep; home?: AuditRecord }) {
+  const rows = documentSystemRows(control, step, home);
   if (rows.length === 0) return null;
   const matched = rows.filter(r => r.result === 'Pass').length;
   // a run from before the sample existed carries no per-item verdicts — say so
@@ -82,7 +84,7 @@ export function SampleResultsTable({ control, step }: { control: Control; step: 
  *  (agentic UI review #3, 30 Sep). The document sits BELOW the checks rather
  *  than beside them; clicking a check moves the mark in it. */
 function Working({ d }: { d: Extract<RailDetail, { kind: 'working' }> }) {
-  const { title, validation, control, step, evidence, confKey } = d;
+  const { title, validation, control, step, evidence, confKey, home } = d;
   const { qa, summary, table, result, blocked } = validation;
   const passed = qa.filter(x => x.pass).length;
   const conf = confidenceOf(validation, confKey ?? title);
@@ -105,7 +107,7 @@ function Working({ d }: { d: Extract<RailDetail, { kind: 'working' }> }) {
         </div>
         {blocked && !result && <p className="text-[0.75rem] text-mitigated-800 leading-relaxed">{blocked}</p>}
         {summary && <p className="text-[0.75rem] text-ink-700 leading-relaxed">{summary}</p>}
-        {sampled && <SampleResultsTable control={control} step={step!} />}
+        {sampled && <SampleResultsTable control={control} step={step!} home={home} />}
         {table && !sampled && (
           <div>
             <div className={cn(EYEBROW, 'mb-1.5')}>{table.columns.includes('System says') ? 'Document vs system data' : 'Evidence checked'}</div>

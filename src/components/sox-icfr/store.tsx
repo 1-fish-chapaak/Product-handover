@@ -228,6 +228,7 @@ import { controlIdClashes, copyRacmControls, findLibraryRacm, markRacmsUsed } fr
 import { findEngagement, registerEngagement } from '../../data/engagements';
 import { useInlineNote, type Note } from './InlineNote';
 import { defWord } from './flow';
+import { newAuditBlock } from './auditPortfolio';
 
 // ─── You cannot audit what you own ──────────────────────────────────────────────
 // The one prohibition that cannot be expressed as a role: the person who runs a
@@ -832,11 +833,9 @@ export function IcfrProvider({ children, initialRole = 'auditor', seedMeta }: { 
   // guard — every action S6 gated refuses for either reason.
   const awaitingDesignApproval = useCallback((controlId: string) => {
     const c = eng.controls.find(x => x.id === controlId);
-    // Concluded is enough (user, 1 Oct): the auditor does not wait on the
-    // reviewer's design approval to start the population — the approval runs
-    // alongside, from the Reviewer queue, and only the countersign waits for it.
-    // The name is kept so every caller reads the same gate.
-    return !c || trackResult(c.design) === 'Not tested' || !!yearEndPending(c, eng.audits.find(a => a.id === openAuditId));
+    // The reviewer's approval gates the population again (product owner, 1 Oct —
+    // reverses the earlier "runs alongside" call): concluded is not enough.
+    return !c || !designApproved(c) || !!yearEndPending(c, eng.audits.find(a => a.id === openAuditId));
   }, [eng.controls, eng.audits, openAuditId]);
 
   // Selecting a tab resets to that tab's root view; both personas share the same tabs.
@@ -1988,7 +1987,8 @@ export function IcfrProvider({ children, initialRole = 'auditor', seedMeta }: { 
   // them: what has to be proven about an entity-produced report is settled, and a
   // blank box would invite a shorter list than the standard.
   const registerIpe = useCallback<IcfrCtx['registerIpe']>((controlId, meta) => {
-    if (role !== 'auditor') return;
+    // The IPE test is part of the population, so it waits on the design approval too.
+    if (role !== 'auditor' || awaitingDesignApproval(controlId)) return;
     patchControl(controlId, c => ({
       ...c,
       operating: {
@@ -2012,12 +2012,12 @@ export function IcfrProvider({ children, initialRole = 'auditor', seedMeta }: { 
       },
     }));
     pushExec(() => ({ controlId, track: 'operating', kind: 'ipe', verb: `registered ${meta.reportName} as information produced by the entity`, target: meta.reportRef }));
-  }, [patchControl, pushExec, role]);
+  }, [patchControl, pushExec, role, awaitingDesignApproval]);
 
   // One dimension's finding. Recording a result reopens the conclusion — a report
   // concluded reliable on three passes cannot keep that conclusion once one flips.
   const setIpeCheck = useCallback<IcfrCtx['setIpeCheck']>((controlId, checkId, patch) => {
-    if (role !== 'auditor') return;
+    if (role !== 'auditor' || awaitingDesignApproval(controlId)) return;
     patchControl(controlId, c => {
       const ipe = c.operating.ipe;
       if (!ipe) return c;
@@ -2055,15 +2055,15 @@ export function IcfrProvider({ children, initialRole = 'auditor', seedMeta }: { 
         return k && last ? { controlId, track: 'operating', kind: 'ipe', verb: `attached proof of the report's ${k.dimension.toLowerCase()}`, target: last.name } : null;
       });
     }
-  }, [patchControl, pushExec, role]);
+  }, [patchControl, pushExec, role, awaitingDesignApproval]);
 
   const concludeIpe = useCallback<IcfrCtx['concludeIpe']>((controlId, conclusion) => {
-    if (role !== 'auditor') return;
+    if (role !== 'auditor' || awaitingDesignApproval(controlId)) return;
     patchControl(controlId, c => (c.operating.ipe
       ? { ...c, operating: { ...c.operating, ipe: { ...c.operating.ipe, conclusion, testedBy: me, testedAt: 'just now' } } }
       : c));
     pushExec(() => ({ controlId, track: 'operating', kind: 'ipe', verb: `concluded the report ${conclusion.toLowerCase()}` }));
-  }, [patchControl, me, pushExec, role]);
+  }, [patchControl, me, pushExec, role, awaitingDesignApproval]);
 
   // The wrong extract was registered. The checks proved THAT file, so they go too.
   const clearIpe = useCallback<IcfrCtx['clearIpe']>((controlId) => {
@@ -2291,7 +2291,13 @@ export function IcfrProvider({ children, initialRole = 'auditor', seedMeta }: { 
   // Only the controls in THIS audit's scope are reset — another audit scoped to
   // different entities keeps its own progress.
   const createAudit = useCallback((draft: Omit<AuditRecord, 'id' | 'by' | 'role' | 'at'>, opts?: { freshControlIds?: string[] }) => {
+    // One audit runs at a time. Starting the next archives the running one and
+    // resets its controls, so the running one must be signed by the preparer AND
+    // the reviewer first. The buttons already stop here; the store backs them.
+    const block = newAuditBlock(eng);
+    if (block) { refusalNote.show('info', block); return; }
     setEng(prev => {
+      if (newAuditBlock(prev)) return prev;
       // Stamped with the methodology in force right now, and it finishes on
       // that version however the methodology moves afterwards (#22).
       const audit: AuditRecord = { id: uid('audit'), by: me, role, at: 'just now', samplingVersion: samplingOf(prev).version, ...draft };
@@ -2424,7 +2430,10 @@ export function IcfrProvider({ children, initialRole = 'auditor', seedMeta }: { 
           return prev.controls.map(c => {
             if (!resetIds.has(c.id)) return c;
             const fresh = rolledForward(c, untested(c), lastRound);
-            if (rfParent && parentDesignOf(c.id) === 'Effective') {
+            // Only a countersigned interim carries: the approval below names the
+            // reviewer who actually countersigned it, and nobody else.
+            const countersign = rfParent?.signoff?.reviewer;
+            if (rfParent && countersign && parentDesignOf(c.id) === 'Effective') {
               const carriedFrom = `${rfParent.period} interim`;
               // The approval travels with the conclusion (S6, A36). The interim
               // had to be countersigned before it could be rolled forward, so its
@@ -2433,8 +2442,8 @@ export function IcfrProvider({ children, initialRole = 'auditor', seedMeta }: { 
               // asked to test again. An approval already on the live control is
               // kept as it was.
               const carriedApproval = (d: Control['design']) => (d.approval?.approvedBy ? d.approval : {
-                preparedBy: d.approval?.preparedBy ?? { by: d.testedBy ?? prev.preparer, at: d.testedAt ?? rfParent.signoff?.preparer?.at ?? carriedFrom },
-                approvedBy: { by: rfParent.signoff?.reviewer?.by ?? prev.reviewer, at: rfParent.signoff?.reviewer?.at ?? carriedFrom },
+                preparedBy: d.approval?.preparedBy ?? { by: d.testedBy ?? rfParent.signoff?.preparer?.by ?? prev.preparer, at: d.testedAt ?? rfParent.signoff?.preparer?.at ?? carriedFrom },
+                approvedBy: { by: countersign.by, at: countersign.at },
               });
               // The design carried whole, so there is no design set-up to
               // confirm — only the operating parts still ask (#13).
@@ -2481,7 +2490,7 @@ export function IcfrProvider({ children, initialRole = 'auditor', seedMeta }: { 
         runs: prev.runs.filter(r => !r.controls.every(rc => hit(rc.controlId))),
       };
     });
-  }, [me, role]);
+  }, [me, role, eng, refusalNote.show]);
 
   const updateAudit = useCallback((auditId: string, patch: Partial<AuditRecord>) => {
     setEng(prev => ({
@@ -3074,9 +3083,7 @@ export function IcfrProvider({ children, initialRole = 'auditor', seedMeta }: { 
         // here and goes to the reviewer, and TOE is left for after. An approved
         // design is left alone and TOE is tested behind it — re-concluding the
         // design would pull the approval out from under those results.
-        // A concluded design is left alone and TOE tested behind it — the
-        // reviewer's approval no longer holds TOE back (user, 1 Oct).
-        const approved = trackResult(c.design) !== 'Not tested';
+        const approved = designApproved(c);
         // Year-end controls (A29): TOE waits for the year-end audit, so behind an
         // approved design in an interim or roll-forward there is nothing to run.
         const pending = !!yearEndPending(c, prev.audits.find(a => a.id === openAuditId));
@@ -4338,7 +4345,7 @@ export function IcfrProvider({ children, initialRole = 'auditor', seedMeta }: { 
       if (isEngagementLocked(prev)) return prev;
       const c = prev.controls.find(x => x.id === controlId);
       if (!c || c.operating.parked || isControlLockedIn(prev, c)) return prev;
-      if (trackResult(c.design) !== 'Effective') return prev;
+      if (trackResult(c.design) !== 'Effective' || !designApproved(c)) return prev;
       const parked: OperatingPark = { reason: reason.trim(), expectedFrom: expectedFrom.trim(), by: me, at: 'just now' };
       const event: ExecutionEvent = {
         id: uid('ex'), controlId, track: 'operating', kind: 'park-operating',
@@ -4678,7 +4685,7 @@ export function IcfrProvider({ children, initialRole = 'auditor', seedMeta }: { 
       if (step === 'reviewer' && (!target.wpSignoff?.preparer || target.wpSignoff.reviewer)) return prev; // countersign follows the preparer
       if (step === 'reviewer' && prev.reviewNotes.some(n => n.controlId === controlId && n.status !== 'Closed')) return prev; // notes must clear before the countersign
       if (step === 'reviewer' && target.wpSignoff?.preparer?.by === me) return prev; // self-review guard: the paper's preparer never countersigns it
-      if (step === 'reviewer' && !designApproved(target)) return prev; // the design approval runs alongside testing, and the countersign is what waits for it
+      if (step === 'reviewer' && !designApproved(target)) return prev; // the countersign waits for the reviewer's design approval
       const event: ExecutionEvent = {
         id: uid('ex'), controlId, track: 'operating', kind: 'wp-signoff',
         verb: step === 'preparer' ? 'signed off the working paper' : 'countersigned the working paper',
@@ -4850,9 +4857,8 @@ export function IcfrProvider({ children, initialRole = 'auditor', seedMeta }: { 
       const idx = prev.audits.findIndex(a => a.id === openAuditId);
       if (idx < 0) return prev;
       const a = prev.audits[idx]!;
-      // Only the live cycle can be signed. An archived audit is history, and a
-      // planned round has tested nothing — a signature there would stamp the live
-      // cycle's numbers onto an empty record.
+      // Only the live cycle can be signed. An archived audit is history — a
+      // signature there would stamp the live cycle's numbers onto a closed record.
       if (prev.audits.find(x => !x.archive)?.id !== a.id) return prev;
       // The countersign follows the preparer, and each signature lands once.
       if (step === 'preparer' && a.signoff?.preparer) return prev;
