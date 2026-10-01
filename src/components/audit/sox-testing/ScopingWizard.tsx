@@ -34,6 +34,7 @@ import CreateRacmFlow from '../../sox-icfr/CreateRacmFlow';
 import { parseOrgChartFile } from './orgChartImport';
 import LedgerExplorer from './LedgerExplorer';
 import { parseTrialBalanceFile, parseGeneralLedgerFile, isReadableLedger, captionKey, type TbParseOk, type GlParseOk, type GlLine } from './ledgerImport';
+import { benchmarksFromTb } from './tbBenchmarks';
 // Upload RACM opens the RACM tab's own dialog, which is styled by the SOX
 // register sheet (.modal-backdrop / .modal). Imported here as well so the
 // dialog is dressed whichever screen opened this sheet.
@@ -563,6 +564,13 @@ export default function ScopingWizard({ onCancel, onCreated, typePreselected, on
   // New audit's "Materiality & files" step, adapted to creation. There is no
   // engagement yet, so nothing can be looked up by id: the companies are the
   // Basics table, and their trial-balance captions are `captions` above.
+
+  /** Ira's figure for each basis, added up from the uploaded TB only — never
+   *  from the seed captions (agentic UX #8). Offered, never written in. */
+  const tbCaptions = useMemo(() => (tbParse ? tbParse.captions.filter(c => entities.some(e => e.id === c.entityId)) : []), [tbParse, entities]);
+  const tbWorking = useMemo(() => benchmarksFromTb(tbCaptions), [tbCaptions]);
+  const tbCompanies = useMemo(() => new Set(tbCaptions.map(c => c.entityId)).size, [tbCaptions]);
+  const [workingOpen, setWorkingOpen] = useState(false);
 
   /** Picking a basis restarts its benchmark and % from that basis's defaults. */
   const changeBasis = (id: MaterialityBasis) => {
@@ -2663,6 +2671,62 @@ export default function ScopingWizard({ onCancel, onCreated, typePreselected, on
                   </div>
                 )}
               </div>
+
+              {/* ── Ira's figure from the TB (agentic UX #8) ───────────────────
+                  One line under the field, the working folded beneath it. The
+                  field is the auditor's: Ira's number only goes in on Use. */}
+              {basis !== 'custom' && tbParse && (() => {
+                const w = tbWorking[basis];
+                if (!w) return (
+                  <p className="-mt-2 mb-4 flex items-center gap-1.5 text-[0.71875rem] text-ink-500">
+                    <Sparkles size={11} className="text-brand-500 shrink-0" aria-hidden />
+                    {basis === 'pbt' && tbWorking.revenue && tbWorking.expenses
+                      ? 'Your TB shows a loss before tax — pick another basis, or type the figure.'
+                      : `Ira couldn’t find ${basisOpt.benchmarkLabel.toLowerCase().replace(/ \(consolidated\)$/, '')} in your TB — type it.`}
+                  </p>
+                );
+                const same = Math.abs(w.amount - benchmark) < 0.005;
+                return (
+                  <div className="-mt-2 mb-4">
+                    <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-[0.71875rem] text-ink-600">
+                      <Sparkles size={11} className="text-brand-500 shrink-0" aria-hidden />
+                      <span>{same ? 'Matches your TB' : <>From your TB: <span className="font-semibold text-ink-900 tabular-nums">{money(w.amount)}</span></>}</span>
+                      {!same && (
+                        <button type="button" onClick={() => setBenchmark(w.amount)}
+                          className="h-6 px-2 rounded-md border border-canvas-border bg-white text-[0.6875rem] font-semibold text-ink-700 hover:border-brand-300 hover:text-brand-700 transition-colors cursor-pointer">
+                          Use {money(w.amount)}
+                        </button>
+                      )}
+                      <button type="button" onClick={() => setWorkingOpen(o => !o)} aria-expanded={workingOpen}
+                        className="text-[0.6875rem] font-semibold text-brand-700 hover:underline cursor-pointer">
+                        {workingOpen ? 'Hide working' : 'Show working'}
+                      </button>
+                    </div>
+                    {workingOpen && (
+                      <div className="mt-2 rounded-lg border border-canvas-border bg-white px-3 py-2 text-[0.6875rem]">
+                        <ul className="space-y-0.5">
+                          {w.lines.map(l => (
+                            <li key={`${l.sign}${l.caption}`} className="flex items-baseline gap-2 text-ink-600">
+                              <span className="w-3 shrink-0 text-ink-400">{l.sign}</span>
+                              <span className="min-w-0 flex-1 truncate">{l.caption}</span>
+                              <span className="tabular-nums">{money(l.amount)}</span>
+                            </li>
+                          ))}
+                        </ul>
+                        <div className="mt-1.5 pt-1.5 border-t border-canvas-border flex items-baseline gap-2 font-semibold text-ink-900">
+                          <span className="w-3 shrink-0">=</span>
+                          <span className="flex-1">{basisOpt.benchmarkLabel.replace(/ \(consolidated\)$/, '')}</span>
+                          <span className="tabular-nums">{money(w.amount)}</span>
+                        </div>
+                        {w.leftOut.map(o => (
+                          <p key={o.caption} className="mt-1 text-ink-400">Left out: {o.caption} {money(o.amount)} — {o.why}.</p>
+                        ))}
+                        <p className="mt-1 text-ink-400">Added across {tbCompanies} {tbCompanies === 1 ? 'company' : 'companies'} in the file, before intercompany eliminations.</p>
+                      </div>
+                    )}
+                  </div>
+                );
+              })()}
 
               {/* The two thresholds testing runs against — asked as a share of
                   overall with the rupee figure shown back, so the two can't

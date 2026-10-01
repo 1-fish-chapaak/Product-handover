@@ -6,9 +6,14 @@ import {
   Send, Lock, ClipboardCheck, FileCheck2, FlaskConical, CheckCircle2, XCircle,
   CornerDownRight, Pencil, RotateCcw, Cpu, ChevronRight, Scale, Paperclip, Plus, Trash2,
   Mail, X, Loader2, ChevronDown, Check, PlayCircle, Link2, ListChecks, Gavel, UserCheck, History, FileUp, ArrowLeft, Footprints, BadgeCheck, Star,
-  Database, Circle, PenLine, Eye, ChevronUp, AlertCircle, FileWarning, StickyNote, Filter, Quote, CalendarClock, GitBranch} from 'lucide-react';
+  Database, Circle, PenLine, Eye, Inbox, ChevronUp, AlertCircle, FileWarning, StickyNote, Filter, Quote, CalendarClock, GitBranch} from 'lucide-react';
 import { useIcfr } from './store';
 import EvidenceAnnotator from './EvidenceAnnotator';
+import { IraState, IraDrafted, iraStateOfPoint, iraStateOfStep } from './IraState';
+import InlineWhy from './InlineWhy';
+import { ToeFiles, ToeGrid } from './ToeGrid';
+import NeedsYouPane, { needsYouItems } from './NeedsYouPane';
+import RailDetailPane, { RailDetailContext, SampleResultsTable, useOpenRailDetail, type RailDetail } from './RailDetail';
 import { useAuditLog } from '../../context/AdminDataContext';
 import {
   // PARKED (Aug 2026) — `formatINR` came in only to price the exposure strip in
@@ -17,7 +22,7 @@ import {
   concludeRationale, controlCode, controlConclusion, courtFor, operatingApplies, designCompleteness, designOutstanding, designOutstandingRequired, discussionsFor, extractionCriteria,
   isControlLocked, isControlLockedIn, itgcHolds, failedItgcs, isItgcDependent, docRequirement, docColumnOf, docNotApplicable, operatingProgress, operatingSuggestion, TOE_MAX_ROUNDS, toeRoundFailed, toeRoundNo, toeRounds, toeSpent, canRedrawToe, canExtendToe, populationLocked, sampleSizeGuide, samplingOf, trackResult, pointResult, stepResult, attestationOverruled, inquiryOnlyAttributes, restsOnStatementAlone,
   countVerdict, coverageVerdict, derivedRunCount, populationReady, designBasis, designSuggestion, auditorProvenChecks, suggestedDesignChecks, suggestPopulationFile, fmtDay, parseDay,
-  iraCannotTest, designBlocked,
+  iraCannotTest, designBlocked, confidenceOf, CONFIDENT_AT, awaitsConfirm, unconfirmedIra, ROLL_PART_LABEL, ROLL_PART_ANCHOR,
   monthlyBreakdown, spikeMonths, priorRoundCount, fileUsable, originLabel, guessFileKind, populationSources, ipeChecksFor, samplesFor,
   expectedInputsFor, hasRowCount, isAssisting, sampledSources, reviewNotesFor, isShared, entityCoverage, uncoveredEntities, hasPaths, pathCoverage, untouchedPaths, type PopVerdict,
   requiredFilesOf, requiredFilesCount, requiredFilesReady, passedWithoutFiles, designFilesOf,
@@ -30,7 +35,6 @@ import {
   versionWindow, versionAudit, versionNo, versionCollapse, hasVersions, awaitsNewVersion, formatDueDate, conclusionOf,
 } from './helpers';
 import { useAuditFiles, type AuditFile } from './useAuditFiles';
-import { evidenceSlots, mapEvidence, type EvidenceMatch } from './controlChatEvidence';
 import { auditCovers, countryFor, countryOf, inScopeEntityNames, ownersOf, programmeFor, scopedForDraw } from './auditScope';
 import { ConclusionPill, CourtBadge, NatureChip, OriginPicker, Toggle, TrackPill, Tickmark, Stamp, RagKpiRow, type RagMeterDef } from './parts';
 import { Pill } from '../shared/StatusBadge';
@@ -39,7 +43,7 @@ import { Sparkles, FileSpreadsheet } from 'lucide-react';
 import WorkingPaperModal from './WorkingPaperModal';
 import RemediationBriefModal from './RemediationBriefModal';
 import ControlChatPane from './ControlChatPane';
-import { DESIGN_RUN_STEPS, TOE_RUN_STEPS, endRun, startRun, railShown, useControlRun } from './controlChat';
+import { DESIGN_RUN_STEPS, TOE_RUN_STEPS, controlRun, endRun, runIsLive, startRun, railShown, useControlRun, useIraMode } from './controlChat';
 import { DeficiencyCard } from './extraViews';
 import DatePicker from '../shared/DatePicker';
 import { cn } from '../../lib/cn';
@@ -47,11 +51,11 @@ import { cn } from '../../lib/cn';
 // types.ts say why. The imports go back with the blocks that used them:
 //   EXPOSURE_LABEL, exposureTotal, GAP_LABEL   (values)
 //   Exposure                                    (type)
-import { AUDIT_ROUNDS, AUDITOR_PROOF_KINDS, DESIGN_DOC_KINDS, DESIGN_WAIVER_REASONS, FIVE_W_1H, ipeSuggestion, RISK_CATEGORY_TINT, ROLE_LABEL, ROUND_TAG, samplingAgreed } from './types';
+import { AUDIT_ROUNDS, AUDITOR_PROOF_KINDS, DESIGN_DOC_KINDS, DESIGN_WAIVER_REASONS, FIVE_W_1H, ipeSuggestion, ROLE_LABEL, ROUND_TAG, samplingAgreed } from './types';
 import { requiredDatasetsFor, sampleRefs } from './mockData';
 import { extraLabel, useRacmConfig } from './racmConfig';
 import { racmSetupKeyFor } from './racmLibrary';
-import type {
+import type { RollPart,
   AuditRound, Control, DesignDoc, DesignDocKind, DesignPoint, DesignWaiverReason, DiscussionAnchor, DocStatus, EvidenceFile, OperatingStep,
   AuditorProofKind, FileOrigin, Frequency, IpeCheck, IpeConclusion, PopulationSource, Role, Sampling, SamplingMethodology, SourceRole, TestResult, ToeRound, TrackConclusion, ValidationResult,
 } from './types';
@@ -150,6 +154,19 @@ function HeadField({ label, value }: { label: string; value?: string }) {
     </span>
   );
 }
+
+/** A column header folded to letters only, so "Sub-Process", "sub process" and
+ *  "SubProcess" compare equal. */
+const headKey = (s: string) => s.toLowerCase().replace(/[^a-z]/g, '');
+/** Every fact the control header already says, under the names a client's file
+ *  tends to give it. A leftover file column matching one of these is a repeat. */
+const HEAD_SHOWN_KEYS = new Set([
+  'controlid', 'controlref', 'controlreference', 'controlno', 'controlnumber', 'id', 'wpref',
+  'riskid', 'riskref', 'risk', 'risktitle', 'riskdescription', 'controltitle', 'controldescription', 'controlactivity',
+  'racm', 'process', 'entity', 'controlowner', 'owner', 'processowner', 'riskowner', 'subprocess',
+  'riskcategory', 'category', 'riskrating', 'nature', 'type', 'controltype', 'frequency', 'assertion', 'assertions',
+  'rootcause', 'objective', 'controlobjective', 'effectivedate', 'country', 'testingstrategy', 'keycontrol', 'key',
+].map(headKey));
 
 export function Dropdown({ trigger, children, triggerClass }: { trigger: React.ReactNode; children: (close: () => void) => React.ReactNode; triggerClass?: string }) {
   const [open, setOpen] = useState(false);
@@ -268,7 +285,7 @@ function RequestDataModal({ control, onClose }: { control: Control; onClose: () 
           <span className="text-[0.71875rem] text-ink-400">{sel.size} document{sel.size === 1 ? '' : 's'} · {emails.length} recipient{emails.length === 1 ? '' : 's'}</span>
           <div className="flex items-center gap-2">
             <button onClick={onClose} className="h-9 px-3.5 text-[0.78125rem] font-semibold text-ink-600 hover:text-ink-900 cursor-pointer">Cancel</button>
-            <button disabled={!canSend} onClick={() => { requestDataByEmail(control.id, Array.from(sel), emails); logEvent({ action: 'Share', description: `Requested ${sel.size} TOD document(s) for ${control.id} from ${emails.length} recipient(s)`, module: 'SOX ICFR', entity: 'Control' }); addToast({ type: 'success', title: 'Request sent', message: `${sel.size} document request${sel.size === 1 ? '' : 's'} emailed to ${emails.length === 1 ? emails[0] : `${emails.length} recipients`}.` }); onClose(); }} className="h-9 px-4 inline-flex items-center gap-1.5 rounded-lg bg-brand-600 text-white text-[0.78125rem] font-semibold disabled:opacity-40 enabled:hover:bg-brand-700 transition-colors cursor-pointer"><Send size={14} /> Send request</button>
+            <button disabled={!canSend} onClick={() => { requestDataByEmail(control.id, Array.from(sel), emails); logEvent({ action: 'Share', description: `Requested ${sel.size} TOD document(s) for ${control.id} from ${emails.length} recipient(s)`, module: 'SOX ICFR', entity: 'Control' });  onClose(); }} className="h-9 px-4 inline-flex items-center gap-1.5 rounded-lg bg-brand-600 text-white text-[0.78125rem] font-semibold disabled:opacity-40 enabled:hover:bg-brand-700 transition-colors cursor-pointer"><Send size={14} /> Send request</button>
           </div>
         </div>
       </motion.div>
@@ -400,6 +417,9 @@ function ConcludeFooter({ control, which, suggestion, canEdit, disabled, disable
   // refuses it; the button says so rather than looking live and doing nothing.
   // Ineffective stays open — that is the whole point of the round having failed.
   const roundFail = which === 'operating' && toeRoundFailed(control);
+  // Ira proposes, a person confirms (agentic UX #1, 1 Oct): the store refuses
+  // to conclude over unconfirmed results, so both buttons say so here.
+  const waiting = unconfirmedIra(control, which).length;
   if (!canEdit) return null;
   const apply = (target: TrackConclusion) => {
     const rationale = note.trim();
@@ -411,26 +431,41 @@ function ConcludeFooter({ control, which, suggestion, canEdit, disabled, disable
     const contradicts = suggestion !== 'Not tested' && target !== suggestion;
     if (contradicts) override(control.id, { result: target === 'Effective' ? 'Effective' : 'Ineffective', by: me, at: 'just now', rationale });
     else override(control.id, null);
-    addToast({ type: 'success', title: which === 'design' ? `TOD: design ${target.toLowerCase()}` : `${label} concluded ${target.toLowerCase()}`, message: contradicts ? 'Saved against the evidence — your rationale is on the paper.' : 'Saved to the working paper.' });
   };
   return (
-    <div className="mt-4 pt-4 border-t border-canvas-border">
+    <div id={`conclude-${which}`} className="mt-4 pt-4 border-t border-canvas-border scroll-mt-4">
       {suggestion !== 'Not tested' && <div className="text-[0.71875rem] text-ink-400 inline-flex items-center gap-1 mb-2"><Scale size={12} /> Evidence suggests <b className="font-semibold text-ink-600">{suggestion}</b></div>}
       {/* Drafted, not demanded: the words are already here and the buttons never
           wait on them, so a clean control concludes in one click and the paper
           still carries a sentence saying what was tested and what it showed. */}
       <label className="block">
-        <span className="text-[0.71875rem] font-semibold text-ink-500">Rationale</span>
-        <textarea value={note} onChange={e => { setNote(e.target.value); setTouched(true); }} rows={2}
+        <span className="flex items-center gap-2">
+          <span className="text-[0.71875rem] font-semibold text-ink-500">Rationale</span>
+          {/* A draft until a conclusion files it. Ira's own draft carries the
+              sparkle; once the auditor types, the words are theirs and the mark
+              goes — confirmed (filed) text carries no mark at all. */}
+          {!track.rationale && (
+            <span className="inline-flex items-center gap-1 text-[0.6875rem] text-ink-400">
+              {!touched && <Sparkles size={11} className="text-brand-500" />}
+              {touched ? 'draft' : 'Ira · draft'}
+            </span>
+          )}
+        </span>
+        <textarea value={note} onChange={e => { setNote(e.target.value); setTouched(true); }} rows={3}
           placeholder="Record your rationale — retained in the working paper."
           className="mt-1 w-full text-[0.75rem] rounded-lg border border-canvas-border bg-canvas-elevated px-2.5 py-2 text-ink-800 placeholder:text-ink-400 focus:outline-none focus:ring-2 focus:ring-brand-200 resize-none" />
       </label>
       <div className="flex items-center gap-2.5 flex-wrap mt-2.5">
-        <button disabled={disabled || disableEffective || staleRuns > 0 || onWordAlone > 0 || roundFail} title={disableEffective ? disableEffectiveNote : undefined} onClick={() => apply('Effective')} className="h-9 px-4 inline-flex items-center gap-1.5 rounded-lg bg-compliant-600 text-white text-[0.78125rem] font-semibold enabled:hover:bg-compliant-700 disabled:opacity-40 transition-colors cursor-pointer">{disableEffective ? <Lock size={14} /> : <CheckCircle2 size={15} />} {effectiveLabel}</button>
-        <button disabled={disabled || staleRuns > 0} onClick={() => apply('Ineffective')} className="h-9 px-4 inline-flex items-center gap-1.5 rounded-lg border border-risk-300 text-risk-700 text-[0.78125rem] font-semibold enabled:hover:bg-risk-50 disabled:opacity-40 transition-colors cursor-pointer"><XCircle size={15} /> {ineffectiveLabel}</button>
+        <button disabled={disabled || disableEffective || staleRuns > 0 || onWordAlone > 0 || roundFail || waiting > 0} title={disableEffective ? disableEffectiveNote : undefined} onClick={() => apply('Effective')} className="h-9 px-4 inline-flex items-center gap-1.5 rounded-lg bg-compliant-600 text-white text-[0.78125rem] font-semibold enabled:hover:bg-compliant-700 disabled:opacity-40 transition-colors cursor-pointer">{disableEffective ? <Lock size={14} /> : <CheckCircle2 size={15} />} {effectiveLabel}</button>
+        <button disabled={disabled || staleRuns > 0 || waiting > 0} onClick={() => apply('Ineffective')} className="h-9 px-4 inline-flex items-center gap-1.5 rounded-lg border border-risk-300 text-risk-700 text-[0.78125rem] font-semibold enabled:hover:bg-risk-50 disabled:opacity-40 transition-colors cursor-pointer"><XCircle size={15} /> {ineffectiveLabel}</button>
         {disabled && disabledNote
           ? <span className="text-[0.71875rem] text-mitigated-700 inline-flex items-center gap-1"><Lock size={11} /> {disabledNote}</span>
           : disableEffective && disableEffectiveNote && <span className="text-[0.71875rem] text-mitigated-700 inline-flex items-center gap-1"><Lock size={11} /> {disableEffectiveNote}</span>}
+        {waiting > 0 && (
+          <span className="text-[0.71875rem] text-ink-500 inline-flex items-center gap-1">
+            <Sparkles size={11} className="text-brand-500" /> Confirm Ira’s {waiting} result{waiting === 1 ? '' : 's'} above first.
+          </span>
+        )}
         {staleRuns > 0 && (
           <span className="text-[0.71875rem] text-mitigated-700 inline-flex items-center gap-1">
             <AlertTriangle size={11} /> {staleRuns} run{staleRuns === 1 ? ' predates' : 's predate'} the current draw — re-run before concluding.
@@ -459,184 +494,9 @@ function ConcludeFooter({ control, which, suggestion, canEdit, disabled, disable
   );
 }
 
-// ── validation results modal — what the AI concluded against the file ─────────────
-/**
- * Per-extracted-sample results for one attribute. Both read-outs — AI
- * validation and a pulled workflow run — test the attribute against every item
- * the sample step drew, so both show this same table. Renders nothing when no
- * sample has been extracted; the caller says what that means in its own words.
- */
-function SampleResultsTable({ control, step }: { control: Control; step: OperatingStep }) {
-  const rows = documentSystemRows(control, step);
-  if (rows.length === 0) return null;
-  const matched = rows.filter(r => r.result === 'Pass').length;
-  // a run pulled before the sample existed carries no per-item verdicts — say so
-  // rather than showing a table that reads as "everything untested"
-  const stale = rows.every(r => r.result === 'Not tested');
-  // Document against system (S7, A24): each drawn item, the field it was
-  // compared on, what the document says and what the system holds. It replaced
-  // the reference · date · amount · result list, which only restated a verdict.
-  return (
-    <div>
-      <div className="flex items-baseline justify-between gap-2 mb-1.5">
-        <div className="text-[0.65625rem] font-bold uppercase tracking-wide text-ink-400">Document vs system data — each sampled item</div>
-        {!stale && <span className="text-[0.6875rem] text-ink-400 tabular-nums">{matched}/{rows.length} match</span>}
-      </div>
-      {stale && (
-        <p className="text-[0.71875rem] text-mitigated-700 inline-flex items-start gap-1 mb-2">
-          <AlertTriangle size={11} className="mt-0.5 shrink-0" />
-          This ran before the sample was extracted — run it again to test each item.
-        </p>
-      )}
-      <div className="rounded-lg border border-canvas-border overflow-x-auto">
-        <div className="min-w-[36rem]">
-          <div className="grid grid-cols-[1.1fr_1.1fr_1fr_1fr_0.8fr] gap-2 px-3 py-1.5 bg-paper-50/70 border-b border-canvas-border text-[0.625rem] font-bold uppercase tracking-wide text-ink-400">
-            <span>Sample</span><span>Field</span><span>Document says</span><span>System says</span><span className="text-right">Result</span>
-          </div>
-          {rows.map(r => {
-            const miss = r.result === 'Fail';
-            return (
-              <div key={r.id} className="grid grid-cols-[1.1fr_1.1fr_1fr_1fr_0.8fr] gap-2 px-3 py-1.5 border-b border-canvas-border last:border-b-0 text-[0.71875rem] items-center">
-                <span className="font-mono text-ink-700 truncate" title={r.ref}>{r.ref}</span>
-                <span className="text-ink-500 truncate" title={r.field}>{r.field}</span>
-                <span className="text-ink-700 tabular-nums truncate" title={r.document}>{r.document}</span>
-                <span className={cn('tabular-nums truncate', miss ? 'text-risk-700 font-semibold' : 'text-ink-700')} title={r.system}>{r.system}</span>
-                <span className={cn('inline-flex items-center justify-end gap-1 font-bold', r.result === 'Pass' ? 'text-compliant-700' : miss ? 'text-risk-700' : 'text-ink-400')}>
-                  <Tickmark result={r.result} size={13} /> {r.result === 'Pass' ? 'Match' : miss ? 'Mismatch' : 'Not compared'}
-                </span>
-              </div>
-            );
-          })}
-        </div>
-      </div>
-    </div>
-  );
-}
-
-// Exported for the design-track retest (extraViews), whose checks carry the same
-// validation shape and read out the same way.
-export function QAResultsModal({ title, validation, control, step, evidence, onClose }: { title: string; validation: ValidationResult; control?: Control; step?: OperatingStep; evidence?: EvidenceFile; onClose: () => void }) {
-  const { qa, summary, table, result, fileName, blocked } = validation;
-  const passed = qa.filter(x => x.pass).length;
-  // ── the evidence, beside the answer it produced ──────────────────────────
-  // A verdict with nothing to check it against is an assertion. When the check
-  // was validated against a file that is still on this machine, the document is
-  // shown next to the answers and the passage each answer rests on is boxed in
-  // it. Clicking an answer moves the mark (user ask, 25 Sep).
-  const quotes = qa.map(x => x.cite).filter((q): q is string => !!q);
-  const showEvidence = !!evidence && quotes.length > 0;
-  const [activeCite, setActiveCite] = useState<string | undefined>(undefined);
-  // An operating attribute is tested against the drawn sample, so its real
-  // item-level answer is the sample table. The generated evidence table is the
-  // fallback for design considerations, which aren't sampled at all.
-  const sampled = !!control?.operating.sampling?.samples.length && !!step;
-  return createPortal(
-    <div className="modal-backdrop" onClick={onClose}>
-      {/* same width as the workflow-run read-out — both carry the per-sample table */}
-      <motion.div className="modal modal-wide" onClick={e => e.stopPropagation()} initial={{ opacity: 0, y: 14, scale: 0.98 }} animate={{ opacity: 1, y: 0, scale: 1 }} exit={{ opacity: 0, y: 10, scale: 0.98 }}>
-        <div className="flex items-center justify-between px-5 py-3.5 border-b border-canvas-border">
-          <div className="flex items-center gap-2"><Sparkles size={16} className="text-brand-600" /><h3 className="text-[0.875rem] font-bold text-ink-900">Ask IRA — validation results</h3></div>
-          <div className="flex items-center gap-2">
-            {result
-              ? <span className={cn('inline-flex items-center gap-1 text-[0.75rem] font-bold px-2 h-6 rounded-full', result === 'Pass' ? 'bg-compliant-50 text-compliant-700' : 'bg-risk-50 text-risk-700')}><Tickmark result={result} size={13} /> {result}</span>
-              /* No verdict, and the pill says which kind of no: amber, because
-                 the evidence fell short, not the control. */
-              : blocked && <span className="inline-flex items-center gap-1 text-[0.75rem] font-bold px-2 h-6 rounded-full bg-mitigated-50 text-mitigated-800"><AlertTriangle size={11} /> Could not test</span>}
-            <button onClick={onClose} className="h-8 w-8 inline-flex items-center justify-center rounded-lg text-ink-400 hover:text-ink-800 hover:bg-paper-50 cursor-pointer"><X size={16} /></button>
-          </div>
-        </div>
-        <div className="px-5 py-2.5 border-b border-canvas-border bg-paper-50/40 flex items-center gap-2 flex-wrap"><p className="text-[0.75rem] text-ink-600"><b className="text-ink-800">Validated —</b> {title}</p>{fileName && <span className="inline-flex items-center gap-1 text-[0.65625rem] font-semibold text-ink-600 bg-canvas-elevated border border-canvas-border rounded-md px-1.5 h-[20px]"><Paperclip size={9} />{fileName}</span>}</div>
-        <div className={cn('flex min-h-0', showEvidence && 'max-h-[64vh]')}>
-        <div className={cn('px-5 py-4 space-y-4 overflow-y-auto',
-          showEvidence ? 'w-[44%] shrink-0 border-r border-canvas-border max-h-[64vh]' : 'flex-1 max-h-[58vh]')}>
-          {summary && (
-            <div className="rounded-lg border border-canvas-border bg-paper-50/50 px-3.5 py-3">
-              <div className="text-[0.65625rem] font-bold uppercase tracking-wide text-ink-400 mb-1">Summary</div>
-              <p className="text-[0.78125rem] text-ink-700 leading-relaxed">{summary}</p>
-            </div>
-          )}
-          {sampled && <SampleResultsTable control={control!} step={step!} />}
-          {table && !sampled && (
-            <div>
-              <div className="text-[0.65625rem] font-bold uppercase tracking-wide text-ink-400 mb-1.5">{table.columns.includes('System says') ? 'Document vs system data' : 'Evidence checked'}</div>
-              <div className="rounded-lg border border-canvas-border overflow-hidden">
-                <table className="w-full text-[0.75rem]">
-                  <thead><tr className="bg-paper-50/60 border-b border-canvas-border">{table.columns.map(c => <th key={c} className="text-left font-semibold text-ink-600 px-3 py-1.5">{c}</th>)}</tr></thead>
-                  <tbody>
-                    {table.rows.map((row, ri) => (
-                      <tr key={ri} className="border-b border-canvas-border/60 last:border-0">
-                        {row.map((cell, ci) => {
-                          const isResult = ci === table.columns.length - 1;
-                          return <td key={ci} className={cn('px-3 py-1.5', isResult ? cn('font-bold', cell === 'Pass' || cell === 'Match' ? 'text-compliant-700' : cell === 'Fail' || cell === 'Mismatch' ? 'text-risk-700' : 'text-ink-600') : 'text-ink-700', ci === 0 && 'font-mono text-[0.6875rem] text-ink-500')}>{cell}</td>;
-                        })}
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            </div>
-          )}
-          <div>
-            <div className="text-[0.65625rem] font-bold uppercase tracking-wide text-ink-400 mb-1.5">Checks</div>
-            <div className="space-y-3">
-              {qa.map((item, i) => {
-                const on = showEvidence && !!item.cite && activeCite === item.cite;
-                return (
-                  <div key={i} className={cn('flex items-start gap-3 rounded-lg -mx-2 px-2 py-1.5 transition-colors',
-                    showEvidence && item.cite && 'cursor-pointer hover:bg-paper-50',
-                    // Evidence blue, matching the mark on the document — the
-                    // selected answer and the passage it points at have to be
-                    // the same colour or the pairing reads as two unrelated
-                    // highlights (user, 25 Sep).
-                    on && 'bg-evidence-50')}
-                    onClick={() => { if (showEvidence && item.cite) setActiveCite(on ? undefined : item.cite); }}>
-                    <Tickmark result={item.pass ? 'Pass' : 'Fail'} size={18} />
-                    <div className="min-w-0">
-                      <div className="text-[0.78125rem] font-semibold text-ink-900">{item.q}</div>
-                      <div className="text-[0.75rem] text-ink-600 mt-0.5 leading-relaxed">{item.a}</div>
-                      {/* The citation, in the shape a working paper uses: what
-                          was read, and where to look for it. */}
-                      {showEvidence && item.cite && (
-                        <div className="mt-1 inline-flex items-center gap-1 text-[0.65625rem] font-semibold text-evidence-700">
-                          <Quote size={9} />
-                          {/* The citation names the document, never the search
-                              wording — that is machinery, and printing it would
-                              read like a quote nobody wrote. */}
-                          <span>Read in {evidence!.name}</span>
-                          <span className="text-ink-400 font-normal">{on ? '· marked on the right' : '· show me'}</span>
-                        </div>
-                      )}
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
-          </div>
-        </div>
-        {showEvidence && (
-          <div className="flex-1 min-w-0 flex flex-col">
-            <div className="px-4 py-2 border-b border-canvas-border bg-canvas-elevated flex items-center gap-2">
-              <Paperclip size={11} className="text-ink-400 shrink-0" />
-              <span className="text-[0.71875rem] font-semibold text-ink-700 truncate">{evidence!.name}</span>
-              <span className="text-[0.65625rem] text-ink-400 ml-auto shrink-0">
-                {activeCite ? 'showing the passage behind that answer' : 'every cited passage marked'}
-              </span>
-            </div>
-            <div className="flex-1 min-h-0">
-              <EvidenceAnnotator file={evidence!} quotes={quotes} active={activeCite} />
-            </div>
-          </div>
-        )}
-        </div>
-        <div className="flex items-center justify-between px-5 py-3.5 border-t border-canvas-border">
-          <span className="text-[0.71875rem] text-ink-500">{passed}/{qa.length} {qa.length === 1 ? 'check' : 'checks'} passed</span>
-          <button onClick={onClose} className="h-9 px-4 rounded-lg bg-brand-600 text-white text-[0.78125rem] font-semibold hover:bg-brand-700 cursor-pointer">Close</button>
-        </div>
-      </motion.div>
-    </div>,
-    document.body,
-  );
-}
+// The validation read-out used to be a modal here (QAResultsModal). It is the
+// rail's layer 3 now — RailDetail.tsx — and SampleResultsTable moved with it
+// (agentic UI review #3, 30 Sep).
 
 /**
  * Workflow run results — the read-out behind a pulled run, the workflow twin of
@@ -684,15 +544,78 @@ function RunResultsModal({ control, step, onClose }: { control: Control; step: O
 // ── design consideration row — validated by its own workflow (Q&A) + override ─────
 export const VALIDATE_MS = 6000;
 
+/** Ira's run, said on hover only (agentic UI review: "run info … in History and
+ *  on hover only"; user ask, 1 Oct). It used to sit on every check's grey line
+ *  as "Ask IRA · checked · 3 Sep". Confirmed = the step was concluded. */
+function runInfo(v: ValidationResult | undefined, track: { conclusion: TrackConclusion; testedBy: string | null; testedAt: string | null }): string | undefined {
+  if (!v) return undefined;
+  const confirmed = track.conclusion !== 'Not tested' && track.testedBy
+    ? `confirmed by ${track.testedBy}${track.testedAt ? `, ${track.testedAt}` : ''}` : 'not confirmed yet';
+  return `Ira ran this ${v.at} · ${confirmed}`;
+}
+/** The tick's hover: how sure, then the run. */
+const tickTitle = (conf: number | undefined, run: string | undefined) =>
+  conf != null && run ? `Ira · ${Math.round(conf)}% sure · ${run.replace(/^Ira /, '')}` : undefined;
+
+/** The one thing on the page that says Ira is working (agentic UI review #13):
+ *  a thin line on the step being worked — "Reading 3 files · check 2 of 5" —
+ *  in place of the header spinner, a spinner on every row and a bar under each.
+ *  The count steps through the run's length so it reads as progress rather than
+ *  a wait; the rest of the page stays usable underneath it. */
+/** "Ira is sure on 7 — Confirm all 7" (agentic UX #1 / #4, 1 Oct). Sure results
+ *  are confirmed in one click; the less-sure ones each wait for their own
+ *  Confirm on the row (and sit in Needs you). Nothing here for anyone but the
+ *  tester — confirming is the testing pen. */
+function ConfirmSure({ control, which, rows }: { control: Control; which: 'design' | 'operating'; rows: (DesignPoint | OperatingStep)[] }) {
+  const { confirmIra, role } = useIcfr();
+  if (role !== 'auditor' || control[which].conclusion !== 'Not tested') return null;
+  const waiting = rows.filter(awaitsConfirm);
+  if (!waiting.length) return null;
+  const sure = waiting.filter(r => (confidenceOf(r.validation, `${control.id}:${r.id}`) ?? 0) >= CONFIDENT_AT);
+  const unsure = waiting.length - sure.length;
+  return (
+    <div className="mb-2.5 flex items-center gap-2 flex-wrap text-[0.71875rem] text-ink-600">
+      <Sparkles size={12} className="text-brand-500 shrink-0" aria-hidden />
+      {sure.length > 0 && <>
+        <span>Ira is sure on {sure.length}</span>
+        <button onClick={() => confirmIra(control.id, which, sure.map(r => r.id))}
+          className="h-6 px-2 rounded-md border border-brand-200 bg-brand-50 text-[0.6875rem] font-semibold text-brand-700 hover:bg-brand-100 transition-colors cursor-pointer">Confirm all {sure.length}</button>
+      </>}
+      {unsure > 0 && <span className="text-ink-500">{sure.length > 0 && '· '}{unsure} less sure — confirm each below</span>}
+    </div>
+  );
+}
+
+function RunLine({ files, total, noun, label, ms }: { files: number; total: number; noun: string; label?: string; ms: number }) {
+  const reduce = useReducedMotion();
+  const [at, setAt] = useState(1);
+  useEffect(() => {
+    if (total <= 1) return;
+    const t = window.setInterval(() => setAt(n => Math.min(total, n + 1)), ms / total);
+    return () => window.clearInterval(t);
+  }, [total, ms]);
+  const reading = `Reading ${files} file${files === 1 ? '' : 's'}`;
+  return (
+    <div role="status" aria-live="polite" className="mb-2.5">
+      <p className="text-[0.6875rem] text-ink-500 inline-flex items-center gap-1.5">
+        <Sparkles size={11} className="text-brand-500 shrink-0" />
+        {label ? `${reading} · ${label}` : `${reading} · ${noun} ${at} of ${total}`}
+      </p>
+      <div className="mt-1 h-0.5 rounded-full bg-paper-100 overflow-hidden">
+        <motion.div className="h-full bg-brand-500" initial={{ width: reduce ? '100%' : 0 }} animate={{ width: '100%' }} transition={{ duration: reduce ? 0 : ms / 1000, ease: 'linear' }} />
+      </div>
+    </div>
+  );
+}
 
 /** `checking` — Ira is running across every design check from the section header
  *  (S6, A17). The row wears the same busy state its own validation used to. */
 function PointRow({ control, point, canEdit, checking = false }: { control: Control; point: DesignPoint; canEdit: boolean; checking?: boolean }) {
-  const { me, setDesignPoint, validateDesignPoint, overrideDesignPoint, removeDesignPoint, linkDesignPointEvidence, setDesignPointProof } = useIcfr();
+  const { me, role, confirmIra, setDesignPoint, validateDesignPoint, overrideDesignPoint, removeDesignPoint, linkDesignPointEvidence, setDesignPointProof } = useIcfr();
   const [over, setOver] = useState(false);
   const [validatingOne, setValidating] = useState(false);
   const validating = validatingOne || checking;
-  const [showQA, setShowQA] = useState(false);
+  const openDetail = useOpenRailDetail();
   const [linking, setLinking] = useState(false);
   const [proving, setProving] = useState(false);
   // The attach form's draft — what the auditor did, the file itself, and why it
@@ -717,11 +640,32 @@ function PointRow({ control, point, canEdit, checking = false }: { control: Cont
   // apologising for it.
   const blocked = eff === 'Not tested' ? point.validation?.blocked : undefined;
   const blockKind = blocked ? iraCannotTest(point, control)?.kind ?? 'insufficient' : undefined;
+  // Who reached this row's answer, in one word (agentic UI review #1). Nothing
+  // once TOD is concluded — confirmed work carries no mark.
+  const rowState = iraStateOfPoint(point, control.design.conclusion !== 'Not tested');
+  // How sure Ira was — only where Ira's verdict is the one standing. An override
+  // or a hand mark is a person's answer and carries no percentage (review #2).
+  const conf = !point.override && point.validation?.result && point.validation.result === eff
+    ? confidenceOf(point.validation, `${control.id}:${point.id}`) : undefined;
+  const flipTo: 'Pass' | 'Fail' = eff === 'Pass' ? 'Fail' : 'Pass';
+  const iraVerdict = iraSaid === 'Pass' || iraSaid === 'Fail' ? iraSaid : undefined;
+  const run = runInfo(point.validation, control.design);
 
   // The elements this check points at. Resolved by id every render rather than
   // cached — an element that was removed must stop being cited, not linger as a
   // reference to a document nobody can open.
   const linked = control.design.documents.filter(d => point.evidencedBy?.includes(d.id));
+  // The file the check was validated against — its own proof first, then the
+  // elements it cites, matching what the validator read. Among the cited
+  // elements, one the reader can actually OPEN wins (25 Sep): a seeded
+  // engagement's planning documents are file records with no bytes behind them.
+  const workingEvidence = point.auditorProof?.file
+    ?? (f => f.find(x => !!x.url) ?? f[0])(linked.flatMap(d => d.files ?? []));
+  // Layer 2 (agentic UI review #3): Ira's reasons, on hover of the row's one line.
+  const reasons = point.validation?.qa.map(x => `${x.pass ? '✓' : '✗'} ${x.q} — ${x.a}`).join('\n');
+  const cites = point.validation?.qa.map(x => x.cite).filter((q): q is string => !!q) ?? [];
+  // Layer 3 lives in the rail, not a popup (agentic UI review #3).
+  const seeWorking = () => point.validation && openDetail({ kind: 'working', title: point.text, validation: point.validation, control, evidence: workingEvidence, confKey: `${control.id}:${point.id}` });
   const closeProof = () => { setProving(false); setProofFile(null); setProofNote(''); setProofKind(AUDITOR_PROOF_KINDS[0]); setDragOver(false); };
   const submitProof = () => {
     if (!proofFile) return;
@@ -734,36 +678,37 @@ function PointRow({ control, point, canEdit, checking = false }: { control: Cont
   };
 
   return (
-    <div className="subcard px-3.5 py-3">
+    <div id={`dp-${point.id}`} className="subcard px-3.5 py-3 scroll-mt-4">
       <div className="flex items-start gap-3">
-        {validating ? <span className="w-5 h-5 inline-flex items-center justify-center"><Loader2 size={15} className="animate-spin text-evidence-600" /></span> : <Tickmark result={eff} size={20} />}
+        {/* No spinner here any more — the section's one progress line says Ira
+            is working; the row only says "checking…" beneath its text. */}
+        {/* Clicking a recorded tick is how it is changed (review #8) — and it
+            always costs a reason: the click opens the "why?" line below. */}
+        {canEdit && eff !== 'Not tested' && !point.override
+          ? <button onClick={() => setOver(true)} aria-label={`Change this result to ${flipTo.toLowerCase()} — say why`} className="shrink-0 rounded cursor-pointer hover:opacity-80"><Tickmark result={eff} size={20} confidence={conf} title={tickTitle(conf, run)} /></button>
+          : <Tickmark result={eff} size={20} confidence={conf} blocked={!!blocked} title={tickTitle(conf, run)} />}
         <div className="min-w-0 flex-1">
-          <div className="flex items-center gap-2"><span className="text-[0.78125rem] font-medium text-ink-800">{point.text}</span>{point.override && <span className="override-tag"><Pencil size={9} /> Overridden</span>}</div>
-          <div className="text-[0.6875rem] text-ink-400 mt-1 inline-flex items-center gap-1.5"><WorkflowIcon size={11} /> {point.workflowName ?? 'Design walkthrough check'} · {checking ? 'checking…' : validating ? 'validating…' : (point.workflowRunRef ?? 'not validated')}</div>
-
-          {/* ── Ira read it and could not answer it (user ask, 22 Sep) ────────
-              Amber, not red: red is a finding about the control, and this is a
-              finding about the evidence. The check is still Not tested — the
-              tick on the left says so and the conclusion is still held — so
-              this line's whole job is to say WHY the assistant left it alone
-              and what would let it try again. It clears itself the moment the
-              check is marked or the missing element lands, because it is read
-              off the validation the next run overwrites. */}
-          {blocked && !validating && (
-            <div className="mt-1.5 rounded-md border border-mitigated-200 bg-mitigated-50/70 px-2.5 py-1.5 flex items-start gap-1.5">
-              <AlertTriangle size={11} className="text-mitigated-600 shrink-0 mt-[3px]" />
-              <p className="text-[0.6875rem] leading-snug text-mitigated-800 min-w-0">
-                <span className="font-semibold">Ira could not test this — {blockKind === 'missing' ? 'missing files' : 'not enough to go on'}.</span>{' '}
-                {blocked}
-              </p>
-            </div>
+          <div className="flex items-center gap-2"><span className="text-[0.78125rem] font-medium text-ink-800">{point.text}</span>{rowState && rowState !== 'couldnt' && <IraState state={rowState} title={rowState === 'review' ? run : undefined} />}</div>
+          <div className="text-[0.6875rem] text-ink-400 mt-1 inline-flex items-center gap-1.5"><WorkflowIcon size={11} /> {point.workflowName ?? 'Design walkthrough check'}{(checking || validating || blocked || !point.validation) && ' · '}{checking ? 'checking…' : validating ? 'validating…' : blocked ? (
+            /* ── Ira read it and could not answer it ─────────────────────────
+               Text on the row, not an amber banner (agentic UI review #7): the
+               check is still Not tested and the tick says so; this names who
+               left it and why, the reason on hover. It clears itself the moment
+               the check is marked or the missing element lands, because it is
+               read off the validation the next run overwrites. */
+            <IraState state="couldnt" className="cursor-help" title={`${blockKind === 'missing' ? 'Missing files' : 'Not enough to go on'} — ${blocked}`} />
+          ) : (point.validation ? null : 'not validated')}</div>
+          {/* Layer 1 — what Ira found, in one line; the reasons on hover (layer
+              2); the full working one click away in the rail (layer 3). */}
+          {point.validation?.summary && !point.validation.blocked && !validating && (
+            <button onClick={seeWorking} title={reasons} className="mt-1 block max-w-full truncate text-left text-[0.71875rem] text-ink-600 hover:text-ink-900 cursor-pointer">{point.validation.summary}</button>
           )}
           {/* The override stands when a file comes or goes after it — it is still
               the auditor's recorded judgement — but it says the evidence under it
               moved, so the reader knows to look again. */}
           {point.override && (
             <div className="text-[0.6875rem] text-high-700 mt-1 flex items-start gap-1 flex-wrap">
-              <CornerDownRight size={11} className="mt-0.5 shrink-0" /> <span className="min-w-0">{point.override.rationale}</span>
+              <CornerDownRight size={11} className="mt-0.5 shrink-0" /> <span className="min-w-0">{point.override.rationale}{point.override.evidence && <span className="text-ink-500"> · <Paperclip size={9} className="inline -mt-0.5" /> {point.override.evidence}</span>}</span>
               {point.overrideEvidenceChanged && <span className="inline-flex items-center gap-1 font-semibold text-mitigated-700"><AlertTriangle size={10} className="shrink-0" /> Evidence changed since override</span>}
             </div>
           )}
@@ -779,11 +724,21 @@ function PointRow({ control, point, canEdit, checking = false }: { control: Cont
             <div className="flex items-start gap-1.5 flex-wrap text-[0.6875rem]">
               <span className="text-ink-400 shrink-0">Evidenced by</span>
               {linked.length > 0
-                ? linked.map(d => (
-                  <span key={d.id} className="inline-flex items-center gap-1 rounded-md border border-canvas-border bg-canvas-elevated px-1.5 py-0.5 text-ink-600" title={d.files?.[0]?.name ?? 'no file attached to this element yet'}>
-                    <Link2 size={9} /> {docLabel(d)}
-                  </span>
-                ))
+                ? linked.map(d => {
+                  // The file name is the link (agentic UI review #4): it opens in
+                  // the rail at the passage Ira cited, not a chip that goes nowhere.
+                  const f = d.files?.find(x => !!x.url) ?? d.files?.[0];
+                  return f ? (
+                    <button key={d.id} onClick={() => openDetail({ kind: 'file', file: f, label: docLabel(d), quotes: cites })} title={`Open ${f.name}${cites.length ? ' at the passage Ira cited' : ''}`}
+                      className="inline-flex items-center gap-1 rounded-md border border-canvas-border bg-canvas-elevated px-1.5 py-0.5 text-ink-600 hover:text-brand-700 hover:underline underline-offset-2 cursor-pointer">
+                      <Link2 size={9} /> {docLabel(d)}
+                    </button>
+                  ) : (
+                    <span key={d.id} className="inline-flex items-center gap-1 rounded-md border border-canvas-border bg-canvas-elevated px-1.5 py-0.5 text-ink-400" title="no file attached to this element yet">
+                      <Link2 size={9} /> {docLabel(d)}
+                    </span>
+                  );
+                })
                 : <span className="text-ink-300">nothing linked</span>}
               {canEdit && <button onClick={() => setLinking(l => !l)} className="text-brand-600 font-semibold hover:underline cursor-pointer">{linked.length ? 'Change' : 'Link elements'}</button>}
             </div>
@@ -791,9 +746,10 @@ function PointRow({ control, point, canEdit, checking = false }: { control: Cont
             <div className="flex items-start gap-1.5 flex-wrap text-[0.6875rem]">
               <span className="text-ink-400 shrink-0">Auditor's proof</span>
               {point.auditorProof ? (
-                <span className="inline-flex items-center gap-1 rounded-md border border-evidence-200 bg-evidence-50/50 px-1.5 py-0.5 text-evidence-700" title={point.auditorProof.file.name}>
+                <button onClick={() => openDetail({ kind: 'file', file: point.auditorProof!.file, label: point.auditorProof!.kind, quotes: cites })} title={`Open ${point.auditorProof.file.name}`}
+                  className="inline-flex items-center gap-1 rounded-md border border-evidence-200 bg-evidence-50/50 px-1.5 py-0.5 text-evidence-700 hover:underline underline-offset-2 cursor-pointer">
                   <Paperclip size={9} /> {point.auditorProof.kind} · <span className="font-medium text-evidence-600 max-w-[16rem] truncate">{point.auditorProof.file.name}</span>
-                </span>
+                </button>
               ) : <span className="text-ink-300">none — taken on the documents</span>}
               {canEdit && (point.auditorProof
                 ? <button onClick={() => setDesignPointProof(control.id, point.id, null)} className="text-ink-400 font-semibold hover:text-risk-600 hover:underline cursor-pointer">Remove</button>
@@ -903,7 +859,12 @@ function PointRow({ control, point, canEdit, checking = false }: { control: Cont
         </div>
         {canEdit && !validating && (
           <div className="flex items-center gap-1.5 shrink-0">
-            {point.validation && <button onClick={() => setShowQA(true)} className="h-7 px-2.5 inline-flex items-center gap-1 rounded-md border border-canvas-border bg-canvas-elevated text-[0.71875rem] font-semibold text-ink-600 hover:border-brand-300 hover:text-brand-700 cursor-pointer"><ListChecks size={12} /> View results</button>}
+            {point.validation && <button onClick={seeWorking} className="h-7 px-2.5 inline-flex items-center gap-1 rounded-md border border-canvas-border bg-canvas-elevated text-[0.71875rem] font-semibold text-ink-600 hover:border-brand-300 hover:text-brand-700 cursor-pointer"><ListChecks size={12} /> See the working</button>}
+            {/* Ira proposes, the tester confirms (UX #1) — one row at a time. */}
+            {role === 'auditor' && control.design.conclusion === 'Not tested' && awaitsConfirm(point) && (
+              <button onClick={() => confirmIra(control.id, 'design', [point.id])}
+                className="h-7 px-2.5 inline-flex items-center rounded-md border border-brand-200 bg-brand-50 text-[0.71875rem] font-semibold text-brand-700 hover:bg-brand-100 cursor-pointer">Confirm</button>
+            )}
             {/* PARKED (Aug 2026, user ask) — the workflow Validate / Re-run button.
                 The tester can state the result themselves with the two buttons
                 below, and Ira now reads every check at once from the Design
@@ -947,37 +908,13 @@ function PointRow({ control, point, canEdit, checking = false }: { control: Cont
                 <button onClick={() => removeDesignPoint(control.id, point.id)} title="Remove" className="h-7 w-7 inline-flex items-center justify-center rounded-md border border-canvas-border bg-canvas-elevated text-ink-400 hover:border-risk-300 hover:text-risk-600 cursor-pointer"><Trash2 size={12} /></button> */}
           </div>
         )}
-        {validating && <span className="text-[0.6875rem] font-semibold text-evidence-600 shrink-0">{checking ? 'Checking…' : 'Validating…'}</span>}
       </div>
-      {validating && <div className="mt-2.5 ml-8 h-1.5 rounded-full bg-paper-100 overflow-hidden"><motion.div className="h-full bg-evidence-500" initial={{ width: 0 }} animate={{ width: '100%' }} transition={{ duration: VALIDATE_MS / 1000, ease: 'linear' }} /></div>}
       {over && (point.override
         ? <div className="mt-2 flex justify-end"><button onClick={() => { overrideDesignPoint(control.id, point.id, null); setOver(false); }} className="h-7 px-3 text-[0.75rem] font-semibold rounded-lg border border-canvas-border text-ink-600 hover:text-ink-900 inline-flex items-center gap-1.5 cursor-pointer"><RotateCcw size={12} /> Remove override</button></div>
         // The title names what is being contradicted, because that is the
         // question the reviewer will ask first.
-        : <RationaleForm
-            title={iraSaid ? `Ira found this ${iraSaid === 'Pass' ? 'passes' : 'fails'} — record why you disagree` : 'Override this consideration — record why'}
-            onCancel={() => setOver(false)}
-            buttons={(['Pass', 'Fail'] as TestResult[]).map(r => ({
-              // The override sits on top of the result — Ira's answer stays on
-              // the check underneath it, so a failed override no longer
-              // rewrites it.
-              label: `Override · ${r}`,
-              onClick: (n: string) => { overrideDesignPoint(control.id, point.id, { result: r, by: me, at: 'just now', rationale: n }); setOver(false); },
-            }))} />)}
-      <AnimatePresence>{showQA && point.validation && (
-        <QAResultsModal title={point.text} validation={point.validation}
-          /* The file the check was validated against — its own proof first,
-             then the elements it cites, matching what the validator read.
-             Among the cited elements, one the reader can actually OPEN wins
-             (25 Sep). Ira links every element that has a file, and a seeded
-             engagement's planning documents are file records with no bytes
-             behind them, so taking the first link blindly put a "this file
-             isn't on this machine" panel next to a check that had just been
-             answered off the walkthrough the auditor uploaded a minute ago. */
-          evidence={point.auditorProof?.file
-            ?? (f => f.find(x => !!x.url) ?? f[0])(linked.flatMap(d => d.files ?? []))}
-          onClose={() => setShowQA(false)} />
-      )}</AnimatePresence>
+        : <InlineWhy target={flipTo} iraSaid={iraVerdict} onCancel={() => setOver(false)}
+            onSave={(n, ev) => { overrideDesignPoint(control.id, point.id, { result: flipTo, by: me, at: 'just now', rationale: n, evidence: ev }); setOver(false); }} />)}
     </div>
   );
 }
@@ -1169,16 +1106,13 @@ function WalkthroughCard({ control, canEdit }: { control: Control; canEdit: bool
  *  stronger of the two. */
 // ── operating attribute — its required files + AI validation, and/or self-attestation ─
 function AttributeRow({ control, step, canEdit, testing }: { control: Control; step: OperatingStep; canEdit: boolean; testing: boolean }) {
-  const { me, setStepResult, overrideStep, attestStep, addStepEvidence, uploadRequiredFile, clearRequiredFile, toggleStepAttest, runStepValidation } = useIcfr();
+  const { me, role, confirmIra, setStepResult, overrideStep, attestStep, addStepEvidence, uploadRequiredFile, clearRequiredFile, toggleStepAttest, runStepValidation } = useIcfr();
   const logEvent = useAuditLog();
   const [over, setOver] = useState(false);
   const [noteDraft, setNoteDraft] = useState(step.attestation?.note ?? '');
   const [validatingWf, setValidatingWf] = useState(false);
-  const [showQA, setShowQA] = useState(false);
-  // A pile of files, mapped onto this attribute's lines but not yet written.
-  // Shown first, on purpose: the auditor signs a paper saying this evidence
-  // proves this attribute, so they see what went where before it is filed.
-  const [pile, setPile] = useState<EvidenceMatch[] | null>(null);
+  const openDetail = useOpenRailDetail();
+  const seeWorking = () => step.validation && openDetail({ kind: 'working', title: `${step.code} · ${step.description}`, validation: step.validation, control, step, confKey: `${control.id}:${step.id}` });
   const eff = stepResult(step);
   const att = step.attestation;
   const attestOn = step.attestEnabled ?? !!att;   // section 2 — separate toggle, default off (on if already attested)
@@ -1190,65 +1124,28 @@ function AttributeRow({ control, step, canEdit, testing }: { control: Control; s
   const { uploaded, total } = requiredFilesCount(step, control);
   const ready = requiredFilesReady(step, control);
   const busy = testing || validatingWf;
+  // One word for who reached this attribute's answer (agentic UI review #1).
+  const rowState = iraStateOfStep(step, control.operating.conclusion !== 'Not tested');
+  const conf = !step.override && step.validation?.result && step.validation.result === eff
+    ? confidenceOf(step.validation, `${control.id}:${step.id}`) : undefined;
+  // The "why?" line (review #8): open with the result the attribute would move
+  // TO. Going against Ira's own verdict opens it; so does the tick and the pencil.
+  const [why, setWhy] = useState<'Pass' | 'Fail' | null>(null);
+  const iraVerdict = step.validation?.result === 'Pass' || step.validation?.result === 'Fail' ? step.validation.result : undefined;
+  const run = runInfo(step.validation, control.operating);
   // One attribute's own run — narrated in the rail like every other, and named
   // so the reader can tell it from the one that reads them all.
   const runAI = () => {
     setValidatingWf(true);
-    startRun(control.id, `Reading the files behind attribute ${step.code}`, TOE_RUN_STEPS, 4000, true);
-    window.setTimeout(() => { endRun(control.id); runStepValidation(control.id, step.id); setValidatingWf(false); }, 4000);
+    const t = startRun(control.id, `Reading the files behind attribute ${step.code}`, TOE_RUN_STEPS, 4000, true);
+    // A Stop in the Ira tab (UX #15) ends the run; its result is then dropped.
+    window.setTimeout(() => { const live = runIsLive(control.id, t); endRun(control.id); setValidatingWf(false); if (live) runStepValidation(control.id, step.id); }, 4000);
   };
 
-  // ── a pile of files, sorted onto this attribute's lines ────────────────────
-  // Three required files is three pickers and three decisions about which line
-  // each one belongs to, made by a reader who is holding all three already.
-  // `mapEvidence` is the chat rail's own mapper, scoped to this attribute — one
-  // mapper in the product, so the page and the rail can never sort the same
-  // pile two ways. It scores; it does not guess silently.
-  const takePile = (list: FileList | null) => {
-    if (!list || list.length === 0) return;
-    setPile(mapEvidence(control, Array.from(list).map(f => f.name), step.id));
-  };
-  /** How many of the pile have a line, and which have none. */
-  const mapped = pile?.filter(m => m.slot).length ?? 0;
-  const spare = pile?.filter(m => !m.slot) ?? [];
-  /** Move a file onto a line, or clear the line.
-   *
-   *  One file, one line, both ways: taking a file that was sitting on another
-   *  line moves it rather than copying it, and the line it left goes back to
-   *  Not mapped. Anything else would let the same document prove two different
-   *  attributes on the same paper. */
-  const assignFile = (name: string | null, fileId: string) => {
-    setPile(prev => {
-      if (!prev) return prev;
-      const slot = evidenceSlots(control, step.id).find(x => x.fileId === fileId);
-      if (!slot) return prev;
-      return prev.map(m => {
-        if (m.slot?.fileId === fileId) return { ...m, slot: null, score: 0, chosen: undefined };
-        if (name && m.name === name) return { ...m, slot, score: 0, chosen: true };
-        return m;
-      });
-    });
-  };
-
-  const filePile = () => {
-    if (!pile) return;
-    const placed = pile.filter(m => m.slot);
-    setPile(null);
-    placed.forEach(m => {
-      uploadRequiredFile(control.id, m.slot!.stepId, m.slot!.fileId, m.name);
-      logEvent({ action: 'Upload', description: `Uploaded ${m.name} as "${m.slot!.label}" for attribute ${m.slot!.code} (${control.id})`, module: 'SOX ICFR', entity: 'Evidence' });
-    });
-  };
-
-  // Every file has a line, so there is nothing left to agree to — it goes on
-  // the record without a press (user ask, 23 Sep). The old "File 3 files" asked
-  // the reader to confirm what choosing the files had already decided, and read
-  // as a dead button beside a counter still insisting 0 of 3 were in. The one
-  // thing that genuinely still needs a person is a file with NO line to go on,
-  // and that keeps its button below.
-  useEffect(() => {
-    if (pile && pile.length > 0 && pile.every(m => m.slot)) filePile();
-  }, [pile]); // eslint-disable-line react-hooks/exhaustive-deps
+  // The per-attribute file checklist and its "upload several" pile left this
+  // row (agentic UI review #5, 30 Sep): the same file was listed once per
+  // attribute that needs it. Every file is listed ONCE now, above the
+  // attributes, in ToeFiles — each line says which attributes it serves.
 
   // No Pass without the evidence (17 Sep dev call) — the Pass button, an
   // override and an attestation all wait for every required file. Fail never does.
@@ -1256,29 +1153,39 @@ function AttributeRow({ control, step, canEdit, testing }: { control: Control; s
   const resultBtn = (target: TestResult, label: string, Icon: typeof CheckCircle2, on: boolean, tone: string) => {
     const locked = target === 'Pass' && !ready;
     return (
-      <button onClick={() => setStepResult(control.id, step.id, target)} disabled={locked} title={locked ? passLock : undefined}
+      <button onClick={() => {
+          // Contradicting what Ira found is an override, and an override says why.
+          if (iraVerdict && !step.override && target !== eff && (target === 'Pass' || target === 'Fail')) { setOver(false); setWhy(target); return; }
+          setStepResult(control.id, step.id, target);
+        }} disabled={locked} title={locked ? passLock : undefined}
         className={cn('h-8 px-2.5 inline-flex items-center gap-1 rounded-lg border text-[0.75rem] font-semibold transition-colors cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed', on ? tone : 'border-canvas-border bg-canvas-elevated text-ink-600 enabled:hover:border-ink-300 enabled:hover:text-ink-900')}>{locked ? <Lock size={12} /> : <Icon size={13} />}{label}</button>
     );
   };
 
   return (
-    <div className={cn('step-row', eff === 'Fail' && 'fail', eff === 'Pass' && 'pass')}>
+    <div id={`step-${step.id}`} className={cn('step-row scroll-mt-4', eff === 'Fail' && 'fail', eff === 'Pass' && 'pass')}>
       <div className="flex items-start gap-3.5">
-        {busy ? <span className="w-[22px] h-[22px] inline-flex items-center justify-center"><Loader2 size={16} className="animate-spin text-brand-500" /></span> : <Tickmark result={eff} size={22} />}
+        {canEdit && eff !== 'Not tested' && !step.override
+          ? <button onClick={() => { setOver(false); setWhy(eff === 'Pass' ? 'Fail' : 'Pass'); }} aria-label={`Change this result to ${eff === 'Pass' ? 'fail' : 'pass'} — say why`} className="shrink-0 rounded cursor-pointer hover:opacity-80"><Tickmark result={eff} size={22} confidence={conf} title={tickTitle(conf, run)} /></button>
+          : <Tickmark result={eff} size={22} confidence={conf} blocked={!!step.validation?.blocked && eff === 'Not tested'} title={tickTitle(conf, run)} />}
         <div className="min-w-0 flex-1">
           <div className="flex items-center gap-2 flex-wrap">
             <span className="font-mono text-[0.6875rem] font-bold text-ink-500">{step.code}</span>
             <span className="text-[0.8125rem] font-semibold text-ink-900">{step.description}</span>
-            {step.override && <span className="override-tag"><Pencil size={9} /> Overridden</span>}
+            {rowState && <IraState state={rowState} title={rowState === 'review' ? run : rowState === 'couldnt' ? step.validation?.blocked : undefined} />}
           </div>
           <div className="text-[0.6875rem] text-ink-400 mt-1">{[step.assertion, step.precision, step.procedures.join(' / ')].filter(Boolean).join(' · ')}</div>
-          {step.override && <div className="text-[0.6875rem] text-high-700 mt-1.5 flex items-start gap-1"><CornerDownRight size={11} className="mt-0.5 shrink-0" /> {step.override.rationale} <span className="text-ink-400">— {step.override.by}</span></div>}
+          {step.override && <div className="text-[0.6875rem] text-high-700 mt-1.5 flex items-start gap-1"><CornerDownRight size={11} className="mt-0.5 shrink-0" /> {step.override.rationale}{step.override.evidence && <span className="text-ink-500"> · <Paperclip size={9} className="inline -mt-0.5" /> {step.override.evidence}</span>} <span className="text-ink-400">— {step.override.by}</span></div>}
         </div>
         {canEdit && (
           <div className="flex items-center gap-1.5 shrink-0">
+            {role === 'auditor' && control.operating.conclusion === 'Not tested' && awaitsConfirm(step) && (
+              <button onClick={() => confirmIra(control.id, 'operating', [step.id])}
+                className="h-8 px-2.5 inline-flex items-center rounded-lg border border-brand-200 bg-brand-50 text-[0.75rem] font-semibold text-brand-700 hover:bg-brand-100 cursor-pointer">Confirm</button>
+            )}
             {resultBtn('Pass', 'Pass', CheckCircle2, eff === 'Pass', 'bg-compliant-50 border-compliant-300 text-compliant-700')}
             {resultBtn('Fail', 'Fail', XCircle, eff === 'Fail', 'bg-risk-50 border-risk-300 text-risk-700')}
-            <button onClick={() => setOver(o => !o)} title="Override result with rationale" className={cn('h-8 w-8 inline-flex items-center justify-center rounded-lg border cursor-pointer', step.override ? 'bg-high-50 border-high-300 text-high-700' : 'border-canvas-border bg-canvas-elevated text-ink-600 hover:border-high-300 hover:text-high-700')}><Pencil size={13} /></button>
+            <button onClick={() => { if (step.override) { setWhy(null); setOver(o => !o); } else setWhy(w => w ? null : eff === 'Pass' ? 'Fail' : 'Pass'); }} title={step.override ? 'Remove the override' : 'Override result — say why'} className={cn('h-8 w-8 inline-flex items-center justify-center rounded-lg border cursor-pointer', step.override ? 'bg-high-50 border-high-300 text-high-700' : 'border-canvas-border bg-canvas-elevated text-ink-600 hover:border-high-300 hover:text-high-700')}><Pencil size={13} /></button>
             {/* PARKED (22 Sep, user ask) — the bin, for the same reason the
                 design check lost its own: an attribute comes from the RACM and
                 is part of what every sampled item was tested against. Deleting
@@ -1295,7 +1202,7 @@ function AttributeRow({ control, step, canEdit, testing }: { control: Control; s
       <div className="mt-3 ml-[36px] space-y-2">
         <div className="rounded-lg border border-canvas-border px-3 py-2.5">
           <div className="mb-2">
-            <span className="text-[0.6875rem] font-bold text-ink-600">Required files &amp; AI validation</span>
+            <span className="text-[0.6875rem] font-bold text-ink-600">AI validation</span>
           </div>
           {/* The recorded run was made over a draw that no longer exists — the
               sample changed underneath it. Results that predate the sample were
@@ -1308,151 +1215,24 @@ function AttributeRow({ control, step, canEdit, testing }: { control: Control; s
             </div>
           )}
           <div className="rounded-md bg-brand-50/30 border border-brand-100 px-2.5 py-2.5 space-y-2">
-            {/* The required files, as a checklist — one line per file the AI
-                validation reads. The list itself is written on the engagement
-                control page; here each line only takes its upload. */}
-            <div>
-              <div className="flex items-center gap-2 flex-wrap">
-                <Upload size={13} className="text-brand-600 shrink-0" />
-                <span className="text-[0.6875rem] font-semibold text-ink-600">Required files</span>
-                {total > 0 && <span className="text-[0.6875rem] text-ink-400 tabular-nums">{uploaded} of {total} uploaded</span>}
-                {/* Several at once, sorted onto the lines below. Only where
-                    there is more than one line to sort onto — on a one-line
-                    checklist this is the line's own Upload button wearing a
-                    different word, and two buttons for one job is one too many. */}
-                {canEdit && !busy && total > 1 && (
-                  <label title="Choose several files at once — each one is matched to the line it proves and filed straight away; anything with no line to go on waits for you"
-                    className="ml-auto h-6 px-2 rounded-md border border-brand-200 bg-canvas-elevated text-brand-700 text-[0.6875rem] font-semibold hover:border-brand-400 hover:bg-brand-50 focus-within:ring-2 focus-within:ring-brand-200 inline-flex items-center gap-1 cursor-pointer">
-                    <input type="file" multiple className="sr-only" accept=".pdf,.png,.jpg,.jpeg,.xlsx,.xls,.csv,.doc,.docx"
-                      aria-label={`Upload several files for ${step.code}`}
-                      onChange={e => { takePile(e.target.files); e.target.value = ''; }} />
-                    <Upload size={10} /> {uploaded === 0 ? `Upload all ${total}` : 'Upload several'}
-                  </label>
-                )}
-              </div>
-
-              {total === 0 ? (
-                <p className="mt-1.5 text-[0.6875rem] text-ink-400">No required files listed — add them on the engagement control page.</p>
-              ) : (
-                <ul className="mt-1.5 space-y-1.5">
-                  {reqFiles.map(f => (
-                    <li key={f.id} className="flex items-start gap-2">
-                      {f.file
-                        ? <CheckCircle2 size={13} className="text-compliant-600 shrink-0 mt-0.5" />
-                        : <Circle size={13} className="text-ink-300 shrink-0 mt-0.5" />}
-                      <div className="min-w-0 flex-1">
-                        <div className="flex items-center gap-2 flex-wrap">
-                          <span className="text-[0.71875rem] font-medium text-ink-800">{f.label}</span>
-                          {f.file && <span title={f.file.name} className="inline-flex items-center gap-1 text-[0.65625rem] font-semibold text-ink-700 bg-canvas-elevated border border-canvas-border rounded-md px-1.5 h-[20px] max-w-[180px]"><Paperclip size={9} className="shrink-0" /><span className="truncate">{f.file.name}</span></span>}
-                        </div>
-                        {f.file && <div className="text-[0.65625rem] text-ink-400 mt-0.5">Uploaded by {f.file.uploadedBy} · {f.file.uploadedAt}</div>}
-                      </div>
-                      {/* ── while a pile is being mapped ────────────────────
-                          The per-slot uploader goes (user ask, 22 Sep): three
-                          Upload buttons beside a list of three files already
-                          chosen is the same job offered twice, and pressing one
-                          would have quietly dropped the mapping. What stands in
-                          its place is the workflow executor's own shape — the
-                          SLOT leads the row, the file it was matched to sits on
-                          it as a chip, and a dropdown moves it. */}
-                      {canEdit && !busy && pile && (() => {
-                        const m = pile.find(x => x.slot?.fileId === f.id);
-                        const tier = !m ? null : m.chosen ? 'chosen' : m.score >= 70 ? 'sure' : m.score >= 30 ? 'review' : 'guess';
-                        return (
-                          <div className="flex items-center gap-1.5 shrink-0">
-                            {m ? (
-                              <span className={cn('inline-flex items-center gap-1 h-6 pl-1.5 pr-1 rounded-md border text-[0.65625rem] font-semibold max-w-[180px]',
-                                tier === 'sure' || tier === 'chosen' ? 'border-compliant-200 bg-compliant-50 text-compliant-700' : 'border-mitigated-200 bg-mitigated-50 text-mitigated-800')}>
-                                <Paperclip size={9} className="shrink-0" />
-                                <span className="truncate" title={m.name}>{m.name}</span>
-                                <button onClick={() => assignFile(null, f.id)} aria-label={`Unmap ${m.name}`} title="Not this one"
-                                  className="shrink-0 text-ink-400 hover:text-risk-600 cursor-pointer"><X size={11} /></button>
-                              </span>
-                            ) : (
-                              <span className="inline-flex items-center gap-1 h-6 px-2 rounded-md border border-dashed border-canvas-border text-[0.65625rem] text-ink-400 italic"><Link2 size={10} /> Not mapped</span>
-                            )}
-                            {/* Which file goes here. Every file in the pile is
-                                offered, including one mapped elsewhere — picking
-                                it moves it, rather than making the reader unmap
-                                the other row first. */}
-                            <select value={m?.name ?? ''} onChange={e => assignFile(e.target.value || null, f.id)}
-                              aria-label={`Which file proves ${f.label}`}
-                              className="h-6 max-w-[7.5rem] rounded-md border border-canvas-border bg-canvas-elevated px-1 text-[0.65625rem] text-ink-600 cursor-pointer focus:outline-none focus:ring-2 focus:ring-brand-200">
-                              <option value="">Not mapped</option>
-                              {pile.map(x => <option key={x.name} value={x.name}>{x.name}</option>)}
-                            </select>
-                            <span className={cn('text-[0.625rem] font-bold whitespace-nowrap', tier === 'sure' || tier === 'chosen' ? 'text-compliant-700' : tier ? 'text-mitigated-700' : 'text-ink-300')}>
-                              {tier === 'chosen' ? 'You mapped it' : tier === 'sure' ? 'Auto-mapped' : tier === 'review' ? 'Auto · review' : tier === 'guess' ? 'A guess' : '—'}
-                            </span>
-                          </div>
-                        );
-                      })()}
-                      {canEdit && !busy && !pile && (
-                        <div className="flex items-center gap-1 shrink-0">
-                          <label className="h-6 px-2 rounded-md border border-canvas-border bg-canvas-elevated text-ink-600 text-[0.6875rem] font-semibold hover:border-brand-300 hover:text-brand-700 focus-within:ring-2 focus-within:ring-brand-200 inline-flex items-center gap-1 cursor-pointer">
-                            <input type="file" className="sr-only" aria-label={`Upload ${f.label} for ${step.code}`}
-                              onChange={e => {
-                                const file = e.target.files?.[0];
-                                if (file) {
-                                  uploadRequiredFile(control.id, step.id, f.id, file.name);
-                                  logEvent({ action: 'Upload', description: `Uploaded ${file.name} as "${f.label}" for attribute ${step.code} (${control.id})`, module: 'SOX ICFR', entity: 'Evidence' });
-                                }
-                                e.target.value = '';
-                              }} />
-                            <Upload size={10} /> {f.file ? 'Replace' : 'Upload'}
-                          </label>
-                          {f.file && <button onClick={() => { clearRequiredFile(control.id, step.id, f.id); logEvent({ action: 'Delete', description: `Removed the file uploaded as "${f.label}" for attribute ${step.code} (${control.id})`, module: 'SOX ICFR', entity: 'Evidence' }); }}
-                            aria-label={`Remove the uploaded file for ${f.label}`} title="Remove the uploaded file"
-                            className="h-6 w-6 inline-flex items-center justify-center rounded-md border border-canvas-border bg-canvas-elevated text-ink-400 hover:border-risk-300 hover:text-risk-600 cursor-pointer"><X size={11} /></button>}
-                        </div>
-                      )}
-                    </li>
-                  ))}
-                </ul>
-              )}
-
-              {/* ── the pile's own footer ──────────────────────────────────
-                  Nothing is written until this is pressed: the mapper is
-                  confident, not certain, and what it decides ends up on a
-                  working paper under the auditor's name. The files that found
-                  no line are named here rather than dropped — a file the reader
-                  handed over and never heard of again is a file they will
-                  assume went somewhere. */}
-              {pile && spare.length > 0 && (
-                <div className="mt-2.5 pt-2 border-t border-brand-100/70">
-                  <p className="mb-1.5 text-[0.65625rem] text-mitigated-700 flex items-start gap-1">
-                    <AlertTriangle size={10} className="shrink-0 mt-[2px]" />
-                    <span className="min-w-0">{spare.length === 1 ? 'This one has no line to go on' : `${spare.length} have no line to go on`} — {spare.map(m => m.name).join(', ')}. Put {spare.length === 1 ? 'it' : 'them'} on a line above{mapped > 0 ? `, or keep the ${mapped === 1 ? 'other one' : `other ${mapped}`} without ${spare.length === 1 ? 'it' : 'them'}` : ''}.</span>
-                  </p>
-                  <div className="flex items-center gap-1.5 flex-wrap">
-                    {/* The only decision left. The mapped ones are already on
-                        the record; this says what happens to the leftovers. */}
-                    {mapped > 0 && (
-                      <button onClick={filePile}
-                        className="h-7 px-2.5 rounded-md bg-brand-600 text-white text-[0.6875rem] font-semibold hover:bg-brand-700 inline-flex items-center gap-1 cursor-pointer">
-                        <Upload size={11} /> Keep the {mapped === 1 ? 'other one' : `other ${mapped}`}
-                      </button>
-                    )}
-                    <button onClick={() => setPile(null)}
-                      className="h-7 px-2.5 rounded-md border border-canvas-border bg-canvas-elevated text-ink-600 text-[0.6875rem] font-semibold hover:text-ink-900 hover:border-ink-300 cursor-pointer">
-                      {mapped > 0 ? 'Cancel' : 'Discard these'}
-                    </button>
-                  </div>
-                </div>
-              )}
-            </div>
+            {/* What this attribute reads — named, not listed again: the files
+                themselves are uploaded once, in the Files list above. */}
+            <p className="text-[0.6875rem] text-ink-500">
+              {total === 0 ? 'No required files listed — add them on the engagement control page.'
+                : <>Reads {reqFiles.map(f => f.label).join(', ')} · <span className={cn('tabular-nums', ready ? 'text-compliant-700' : 'text-ink-600')}>{uploaded} of {total} in</span></>}
+            </p>
             {/* run + result */}
             <div className="flex items-center gap-2.5 flex-wrap pt-2 border-t border-brand-100/70">
               <Sparkles size={14} className="text-brand-600 shrink-0" />
-              <span className="text-[0.71875rem] text-ink-600 flex-1 min-w-0">AI validation by Ask IRA · <span className="font-mono text-[0.65625rem] text-ink-400">{validatingWf ? 'checking the file…' : (step.validation ? 'done' : 'not run yet')}</span></span>
+              <span className="text-[0.71875rem] text-ink-600 flex-1 min-w-0">Ira · <span className="text-ink-400">{busy ? 'checking…' : (step.validation ? 'checked the files' : 'not run yet')}</span></span>
               {/* the verdict lives on the attribute's tickmark above — repeating
                   it here said the same thing twice */}
-              {canEdit && (validatingWf
-                ? <span className="text-[0.71875rem] font-semibold text-brand-600 inline-flex items-center gap-1.5"><Loader2 size={13} className="animate-spin" /> Validating…</span>
-                : <button onClick={runAI} disabled={!ready} title={ready ? undefined : total > 0 ? `Upload all ${total} required files first` : 'No required files listed for this attribute'} className="h-7 px-2.5 rounded-md bg-brand-600 text-white text-[0.71875rem] font-semibold enabled:hover:bg-brand-700 disabled:opacity-40 disabled:cursor-not-allowed inline-flex items-center gap-1 cursor-pointer"><Sparkles size={12} /> {step.validation ? 'Re-run' : 'Run AI validation'}</button>)}
-              {step.validation && <button onClick={() => setShowQA(true)} className="text-[0.71875rem] font-semibold text-brand-700 underline underline-offset-2 hover:text-brand-800 inline-flex items-center gap-1 cursor-pointer"><ListChecks size={12} /> View results</button>}
+              {canEdit && !busy && (
+                <button onClick={runAI} disabled={!ready} title={ready ? undefined : total > 0 ? `Upload all ${total} required files first` : 'No required files listed for this attribute'} className="h-7 px-2.5 rounded-md bg-brand-600 text-white text-[0.71875rem] font-semibold enabled:hover:bg-brand-700 disabled:opacity-40 disabled:cursor-not-allowed inline-flex items-center gap-1 cursor-pointer"><Sparkles size={12} /> {step.validation ? 'Re-run' : 'Run AI validation'}</button>)}
+              {step.validation && <button onClick={seeWorking} className="text-[0.71875rem] font-semibold text-brand-700 underline underline-offset-2 hover:text-brand-800 inline-flex items-center gap-1 cursor-pointer"><ListChecks size={12} /> See the working</button>}
             </div>
-            {step.validation?.summary && !validatingWf && <p className="text-[0.71875rem] text-ink-600 leading-snug">{step.validation.summary}</p>}
+            {validatingWf && <RunLine files={uploaded} total={1} noun="attribute" label={`attribute ${step.code}`} ms={4000} />}
+            {step.validation?.summary && !validatingWf && <p className="text-[0.71875rem] text-ink-600 leading-snug cursor-help" title={step.validation.qa.map(x => `${x.pass ? '✓' : '✗'} ${x.q} — ${x.a}`).join('\n')}>{step.validation.summary}</p>}
             {/* only for a list that exists — an empty one already says where to add files */}
             {canEdit && !ready && total > 0 && <p className="text-[0.65625rem] text-mitigated-700 inline-flex items-center gap-1"><AlertTriangle size={10} /> Upload every required file to pass this attribute or run AI validation — {uploaded} of {total} in.</p>}
           </div>
@@ -1509,11 +1289,47 @@ function AttributeRow({ control, step, canEdit, testing }: { control: Control; s
 
       {over && (step.override
         ? <div className="mt-2 flex justify-end"><button onClick={() => { overrideStep(control.id, step.id, null); setOver(false); }} className="h-7 px-3 text-[0.75rem] font-semibold rounded-lg border border-canvas-border text-ink-600 hover:text-ink-900 inline-flex items-center gap-1.5 cursor-pointer"><RotateCcw size={12} /> Remove override</button></div>
-        : <RationaleForm title="Override this result — record why" onCancel={() => setOver(false)} buttons={[
-            { label: 'Override · Pass', disabled: !ready, title: passLock, onClick: n => { overrideStep(control.id, step.id, { result: 'Pass', by: me, at: 'just now', rationale: n }); setOver(false); } },
-            { label: 'Override · Fail', onClick: n => { overrideStep(control.id, step.id, { result: 'Fail', by: me, at: 'just now', rationale: n }); setOver(false); } },
-          ]} />)}
-      <AnimatePresence>{showQA && step.validation && <QAResultsModal title={step.description} validation={step.validation} control={control} step={step} onClose={() => setShowQA(false)} />}</AnimatePresence>
+        : null)}
+      {why && !step.override && (
+        <InlineWhy target={why} iraSaid={iraVerdict} onCancel={() => setWhy(null)}
+          onSave={(n, ev) => { overrideStep(control.id, step.id, { result: why, by: me, at: 'just now', rationale: n, evidence: ev }); setWhy(null); }} />
+      )}
+    </div>
+  );
+}
+
+// ── TOE attributes, folded (user pick, 1 Oct) ─────────────────────────────────
+/** An attribute in one line: its tick, code, description, Ira's mark and how
+ *  many of its files are in. Click to open the full card. */
+function CompactAttributeLine({ control, step, onOpen, open }: { control: Control; step: OperatingStep; onOpen: () => void; open?: boolean }) {
+  const eff = stepResult(step);
+  const state = iraStateOfStep(step, control.operating.conclusion !== 'Not tested');
+  const conf = !step.override && step.validation?.result && step.validation.result === eff
+    ? confidenceOf(step.validation, `${control.id}:${step.id}`) : undefined;
+  const { uploaded, total } = requiredFilesCount(step, control);
+  const run = runInfo(step.validation, control.operating);
+  return (
+    <button id={`step-${step.id}`} onClick={onOpen} aria-expanded={open}
+      className="scroll-mt-4 w-full text-left flex items-center gap-2.5 rounded-lg border border-canvas-border bg-canvas-elevated px-3 py-2 hover:border-ink-300 transition-colors cursor-pointer">
+      <Tickmark result={eff} size={18} confidence={conf} blocked={!!step.validation?.blocked && eff === 'Not tested'} title={tickTitle(conf, run)} />
+      <span className="font-mono text-[0.6875rem] font-bold text-ink-500 shrink-0">{step.code}</span>
+      <span className="text-[0.78125rem] font-medium text-ink-900 truncate min-w-0 flex-1">{step.description}</span>
+      {state && <IraState state={state} title={state === 'review' ? run : state === 'couldnt' ? step.validation?.blocked : undefined} />}
+      {total > 0 && <span className="text-[0.65625rem] text-ink-400 tabular-nums shrink-0">{uploaded}/{total} files</span>}
+      {open !== undefined && (open ? <ChevronUp size={13} className="text-ink-400 shrink-0" /> : <ChevronDown size={13} className="text-ink-400 shrink-0" />)}
+    </button>
+  );
+}
+
+/** The attribute card, folded to its line until opened. */
+function FoldableAttribute({ control, step, canEdit, testing }: { control: Control; step: OperatingStep; canEdit: boolean; testing: boolean }) {
+  const [open, setOpen] = useState(false);
+  if (!open) return <CompactAttributeLine control={control} step={step} open={false} onOpen={() => setOpen(true)} />;
+  return (
+    <div className="space-y-1">
+      <button onClick={() => setOpen(false)} aria-expanded
+        className="inline-flex items-center gap-1 text-[0.6875rem] font-semibold text-ink-500 hover:text-ink-800 cursor-pointer"><ChevronUp size={12} /> Fold {step.code}</button>
+      <AttributeRow control={control} step={step} canEdit={canEdit} testing={testing} />
     </div>
   );
 }
@@ -1660,7 +1476,7 @@ function DesignSection({ control, canEdit: canEditIn, locked = false }: { contro
    *  goes through the reviewer's own send-back, which is the door that already
    *  exists for it (`returnDesign`). */
   locked?: boolean }) {
-  const { role, me, addDesignDoc, attachDesignEvidence, removeDesignFile, waiveDesignDoc, clearDesignWaiver, addDesignPoint, setDesignPoint, validateDesignPoint, runDesignIra } = useIcfr();
+  const { role, me, confirmIra, addDesignDoc, attachDesignEvidence, removeDesignFile, waiveDesignDoc, clearDesignWaiver, addDesignPoint, setDesignPoint, validateDesignPoint, runDesignIra } = useIcfr();
   // The owner keeps the evidence lane and loses the testing lane — see the note
   // on the dossier's own canEdit / canTest split.
   const isOwner = role === 'risk-owner';
@@ -1752,10 +1568,30 @@ function DesignSection({ control, canEdit: canEditIn, locked = false }: { contro
   // this on the left and would otherwise be watching the wrong column.
   const runIra = () => {
     setIraRunning(true);
-    startRun(control.id, 'Reading the evidence against each check', DESIGN_RUN_STEPS, VALIDATE_MS, true);
+    const t = startRun(control.id, 'Reading the evidence against each check', DESIGN_RUN_STEPS, VALIDATE_MS, true);
     logEvent({ action: 'Run', description: `Ran Ira on the design checks for ${control.id}`, module: 'SOX ICFR', entity: 'Test Result' });
-    window.setTimeout(() => { endRun(control.id); runDesignIra(control.id); setIraRunning(false); }, VALIDATE_MS);
+    window.setTimeout(() => { const live = runIsLive(control.id, t); endRun(control.id); setIraRunning(false); if (live) runDesignIra(control.id); }, VALIDATE_MS);
   };
+  // ── Automatic mode (agentic UX #3, user ask 1 Oct) ─────────────────────────
+  // Ira reads the design evidence itself the moment it can — once per state of
+  // the evidence, so a Stop or an Undo is not simply re-run over the top — and
+  // confirms its own SURE results in the tester's name. The less-sure wait for
+  // the tester; the conclusion is never Ira's.
+  const iraMode = useIraMode();
+  const autoKey = useRef('');
+  const autoDue = d.conclusion === 'Not tested' && (iraStale || d.points.some(p => !p.validation && !p.override && pointResult(p) === 'Not tested'));
+  useEffect(() => {
+    if (iraMode !== 'automatic' || !canTest || locked || iraRunning || iraBlocked || !autoDue || controlRun(control.id)) return;
+    const key = `${control.id}|${d.documents.map(x => designFilesOf(x).length).join(',')}|${iraStale}`;
+    if (autoKey.current === key) return;
+    autoKey.current = key;
+    runIra();
+  }); // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => {
+    if (iraMode !== 'automatic' || !canTest || locked || d.conclusion !== 'Not tested') return;
+    const sure = d.points.filter(p => awaitsConfirm(p) && (confidenceOf(p.validation, `${control.id}:${p.id}`) ?? 0) >= CONFIDENT_AT);
+    if (sure.length) confirmIra(control.id, 'design', sure.map(p => p.id));
+  }, [iraMode, canTest, locked, d.conclusion, d.points, control.id, confirmIra]);
   const addStandard = (k: DesignDocKind) => { addDesignDoc(control.id, k); logEvent({ action: 'Create', description: `Added design element to ${control.id}`, module: 'SOX ICFR', entity: 'Control' }); };
   const saveCustom = () => {
     if (!customName.trim()) return;
@@ -1996,13 +1832,13 @@ function DesignSection({ control, canEdit: canEditIn, locked = false }: { contro
           <div className="flex items-center justify-between mb-2.5 gap-2 flex-wrap">
             <h4 className="text-[0.78125rem] font-bold text-ink-700 inline-flex items-center gap-1.5 flex-wrap"><ClipboardCheck size={14} /> Design checks <span className="font-normal text-ink-400">· assessed against the evidence</span>
               {/* What the run left behind, said once at the top so it does not
-                  have to be found by scrolling. Amber, and a count rather than
-                  a warning: these are checks waiting for a person, which is an
-                  ordinary state, not an alarm. */}
+                  have to be found by scrolling. Plain text now, not an amber
+                  chip (agentic UI review #7): these are checks waiting for a
+                  person, an ordinary state, and amber is kept for outcomes. */}
               {iraCouldNot.length > 0 && !iraRunning && (
-                <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-md bg-mitigated-50 text-mitigated-800 text-[0.65625rem] font-bold whitespace-nowrap"
+                <span className="font-normal text-ink-500 whitespace-nowrap cursor-help"
                   title={`Ira read the evidence and could not reach a verdict on ${iraCouldNot.length === 1 ? 'this one' : 'these'} — mark ${iraCouldNot.length === 1 ? 'it' : 'them'} yourself, or attach what ${iraCouldNot.length === 1 ? 'it needs' : 'they need'}`}>
-                  <AlertTriangle size={9} /> {iraCouldNot.length} Ira couldn’t test
+                  · {iraCouldNot.length} Ira couldn’t test
                 </span>
               )}
             </h4>
@@ -2014,9 +1850,8 @@ function DesignSection({ control, canEdit: canEditIn, locked = false }: { contro
                   beside them. `markAll` is left above, so restoring them is:
                 <button onClick={() => markAll('Pass')} title="Mark every check passed" className="h-7 px-2.5 inline-flex items-center gap-1.5 rounded-md border border-compliant-300 bg-compliant-50 text-[0.71875rem] font-semibold text-compliant-700 hover:bg-compliant-100 transition-colors cursor-pointer"><CheckCircle2 size={12} /> Pass all</button>
                 <button onClick={() => markAll('Fail')} title="Mark every check failed" className="h-7 px-2.5 inline-flex items-center gap-1.5 rounded-md border border-canvas-border bg-canvas-elevated text-[0.71875rem] font-semibold text-ink-600 hover:border-risk-300 hover:text-risk-700 transition-colors cursor-pointer"><XCircle size={12} /> Fail all</button> */}
-              {canTest && (iraRunning
-                ? <span className="h-7 inline-flex items-center gap-1.5 text-[0.71875rem] font-semibold text-brand-600"><Loader2 size={12} className="animate-spin" /> Ira is checking {d.points.length} design check{d.points.length === 1 ? '' : 's'}…</span>
-                : <button onClick={runIra} disabled={!!iraBlocked}
+              {canTest && !iraRunning && (
+                <button onClick={runIra} disabled={!!iraBlocked}
                     title={iraBlocked ?? (iraStale
                       ? 'A design element’s files changed since Ira last ran — run it again to check against what is on file now'
                       : 'Ira reads every design check against the evidence on file and marks each one Pass or Fail')}
@@ -2055,6 +1890,8 @@ function DesignSection({ control, canEdit: canEditIn, locked = false }: { contro
               </div>
             );
           })()}
+          {iraRunning && <RunLine files={d.documents.reduce((n, doc) => n + designFilesOf(doc).length, 0)} total={d.points.length} noun="check" ms={VALIDATE_MS} />}
+          {!iraRunning && <ConfirmSure control={control} which="design" rows={d.points} />}
           {d.points.length === 0 ? <p className="text-[0.75rem] text-ink-400 mb-5">No considerations yet — add the design points you’ll assess in the walkthrough.</p> : (
             <div className="space-y-4 mb-5">
               {controlChecks.length > 0 && (
@@ -2499,10 +2336,10 @@ function IpeSection({ control, canWrite, isAuditor }: { control: Control; canWri
                 {canWrite && isAuditor && ipe.conclusion === 'Not tested' && (
                   <div className="flex items-center gap-2 shrink-0">
                     <button disabled={!allAnswered || suggestion !== 'Reliable'} title={!allAnswered ? `Work all ${ipe.checks.length} checks first.` : suggestion !== 'Reliable' ? 'A check failed — the report cannot be concluded reliable.' : undefined}
-                      onClick={() => { concludeIpe(control.id, 'Reliable'); setOpen(false); addToast({ type: 'success', title: 'Report reliable', message: `${ipe.reportName} — the population can be locked.` }); }}
+                      onClick={() => { concludeIpe(control.id, 'Reliable'); setOpen(false);  }}
                       className="h-9 px-4 inline-flex items-center gap-1.5 rounded-lg bg-compliant-600 text-white text-[0.78125rem] font-semibold enabled:hover:bg-compliant-700 disabled:opacity-40 disabled:cursor-not-allowed transition-colors cursor-pointer"><CheckCircle2 size={14} /> Reliable</button>
                     <button disabled={!allAnswered}
-                      onClick={() => { concludeIpe(control.id, 'Not reliable'); addToast({ type: 'error', title: 'Report not reliable', message: 'The population cannot be locked off this report.' }); }}
+                      onClick={() => { concludeIpe(control.id, 'Not reliable');  }}
                       className="h-9 px-4 inline-flex items-center gap-1.5 rounded-lg border border-risk-300 text-risk-700 text-[0.78125rem] font-semibold enabled:hover:bg-risk-50 disabled:opacity-40 disabled:cursor-not-allowed transition-colors cursor-pointer"><XCircle size={14} /> Not reliable</button>
                   </div>
                 )}
@@ -2909,7 +2746,6 @@ function AwaitingInputs({ control, canAsk }: { control: Control; canAsk: boolean
           const what = `Attribute${awaiting.length === 1 ? '' : 's'} ${awaiting.map(a => a.code).join(', ')} on ${control.id} ${awaiting.length === 1 ? 'is' : 'are'} still missing required files. Send them to the auditor, who attaches them on the attribute's checklist in TOE.`;
           remindOwnerForFiles(control.id, what);
           logEvent({ action: 'Update', description: `Asked the owner of ${control.id} to upload the source data`, module: 'SOX ICFR', entity: 'Evidence' });
-          addToast({ type: 'success', title: 'Owner asked', message: `${ownersOf(control).processOwner} has it on their list — due in 3 days.` });
         }}
           className="mt-1.5 h-7 px-2.5 inline-flex items-center gap-1.5 rounded-md border border-mitigated-300 bg-canvas-elevated text-[0.6875rem] font-semibold text-mitigated-800 hover:border-mitigated-400 transition-colors cursor-pointer"><Mail size={11} /> Ask the owner to upload</button>
       )}
@@ -3164,7 +3000,7 @@ function SourcePickerForm({ control, exclude, submitLabel, onSubmit, seedFile, s
             own, and calling it drafted would invite them to trust it as new. */}
         {seedCriteria
           ? <span className="inline-flex items-center gap-1 text-[0.65625rem] text-ink-400"><RotateCcw size={11} className="text-ink-400" /> as you wrote it</span>
-          : <span className="inline-flex items-center gap-1 text-[0.65625rem] text-ink-400"><Sparkles size={11} className="text-brand-500" /> drafted for you</span>}
+          : <IraDrafted />}
       </div>
       <textarea value={criteria} onChange={e => setCriteria(e.target.value)} rows={2}
         aria-label="Extraction criteria"
@@ -3202,7 +3038,6 @@ function SourcePickerForm({ control, exclude, submitLabel, onSubmit, seedFile, s
             // ones attached at creation, so it has to read like them.
             registerFile({ name, kind: guessFileKind(name), rows, from: `Uploaded on ${control.id}`, uploadedBy: me, uploadedAt: 'just now', origin, originBy: me, originAt: 'just now' });
             logEvent({ action: 'Upload', description: `Added "${name}" to the audit's files from ${control.id} — ${origin.toLowerCase()}, ${rows.toLocaleString()} rows`, module: 'SOX ICFR', entity: 'Evidence' });
-            addToast({ type: 'success', title: 'File added', message: `${name} — ${origin.toLowerCase()}. Every control on this audit can use it now.` });
             setPicked(name);
             setUploading(false);
           }} />
@@ -3290,7 +3125,6 @@ function PopulationSection({ control, canEdit, locked: gated = false }: { contro
     addPopulationSource(control.id, { file: chosen.name, rows: chosen.rows, count: narrowed, criteria });
     setAddingSource(false);
     logEvent({ action: 'Update', description: `Added ${chosen.name} to the population for ${control.id} — ${narrowed.toLocaleString()} instances from ${chosen.rows.toLocaleString()} rows`, module: 'SOX ICFR', entity: 'Evidence' });
-    addToast({ type: 'success', title: 'Source added', message: `${chosen.name} — prove it before the population can lock.` });
   };
 
 
@@ -3635,7 +3469,7 @@ function PopulationSection({ control, canEdit, locked: gated = false }: { contro
               to be true: the count and the period check what the FILTER did,
               this checks whether the thing filtered was worth filtering. */}
           {!isOwnerView && (
-            <div className="mt-4">
+            <div id="ipe-test" className="mt-4 scroll-mt-4">
               <IpeSection control={control} canWrite={canWrite && !locked} isAuditor={isAuditor} />
             </div>
           )}
@@ -3645,7 +3479,7 @@ function PopulationSection({ control, canEdit, locked: gated = false }: { contro
               line above, and it is changed on the file record — never on a
               control that happens to be reading the file today. */}
 
-          <div className="mt-3 flex items-center justify-between gap-3 flex-wrap">
+          <div id="lock-population" className="mt-3 scroll-mt-4 flex items-center justify-between gap-3 flex-wrap">
             <p className="text-[0.65625rem] text-ink-400 min-w-0">
               {/* The owner is told what happens next without being told what is
                   being looked for. "Locked" is a fact about their data; the
@@ -3660,7 +3494,7 @@ function PopulationSection({ control, canEdit, locked: gated = false }: { contro
             </p>
             {!locked && isAuditor && (
               <button disabled={!ready} title={ready ? undefined : missing}
-                onClick={() => { lockPopulation(control.id); logEvent({ action: 'Update', description: `Locked the population for ${control.id}`, module: 'SOX ICFR', entity: 'Evidence' }); addToast({ type: 'success', title: 'Population locked', message: `${pop.count.toLocaleString()} instances — the sample draws from this.` }); }}
+                onClick={() => { lockPopulation(control.id); logEvent({ action: 'Update', description: `Locked the population for ${control.id}`, module: 'SOX ICFR', entity: 'Evidence' });  }}
                 className="shrink-0 h-9 px-4 inline-flex items-center gap-1.5 rounded-lg bg-brand-600 text-white text-[0.78125rem] font-semibold enabled:hover:bg-brand-700 disabled:opacity-40 disabled:cursor-not-allowed transition-colors cursor-pointer"><Lock size={14} /> Lock the population</button>
             )}
             {locked && <span className="shrink-0 inline-flex items-center gap-1.5 text-[0.71875rem] font-bold text-compliant-700"><Lock size={13} /> Locked</span>}
@@ -3754,7 +3588,6 @@ function PopulationSection({ control, canEdit, locked: gated = false }: { contro
               <button onClick={() => {
                 setSourceRole(control.id, roleChange.source.id, 'assisting');
                 logEvent({ action: 'Update', description: `Marked ${roleChange.source.file} an assisting table on ${control.id}`, module: 'SOX ICFR', entity: 'Evidence' });
-                addToast({ type: 'success', title: 'Assisting table', message: `${roleChange.source.file} — proven, joined, never sampled.` });
                 setRoleChange(null);
               }}
                 className="h-9 px-4 inline-flex items-center gap-1.5 rounded-lg bg-mitigated-600 text-white text-[0.78125rem] font-semibold hover:bg-mitigated-700 transition-colors cursor-pointer">Make it assisting</button>
@@ -3790,7 +3623,6 @@ function PopulationSection({ control, canEdit, locked: gated = false }: { contro
               <button onClick={() => {
                 removePopulationSource(control.id, dropping.id);
                 logEvent({ action: 'Delete', description: `Dropped ${dropping.file} from the population for ${control.id}`, module: 'SOX ICFR', entity: 'Evidence' });
-                addToast({ type: 'success', title: 'Source dropped', message: `${dropping.file} — the other files kept their work.` });
                 setDropping(null);
               }}
                 className="h-9 px-4 inline-flex items-center gap-1.5 rounded-lg bg-risk-600 text-white text-[0.78125rem] font-semibold hover:bg-risk-700 transition-colors cursor-pointer"><Trash2 size={13} /> Drop the file</button>
@@ -3884,7 +3716,6 @@ function SampleSizeDeparture({ control, agreed, canEdit }: { control: Control; a
   const save = () => {
     resizeSample(control.id, n, why.trim());
     logEvent({ action: 'Update', description: `Departed from the agreed sample size on ${control.id} — ${n} items where the methodology gives ${agreed}: ${why.trim()}`, module: 'SOX ICFR', entity: 'Test Result' });
-    addToast({ type: 'success', title: 'Departure recorded', message: `${n} items against an agreed ${agreed} — the reason prints on the paper.` });
     setWhy(''); setOpen(false);
   };
 
@@ -4046,7 +3877,6 @@ function SourceDrawRow({ control, source, canDraw, single, isOpen, onToggle, onA
     // whether the auditor asked for two months and got twenty-five rows instead.
     drawSourceSample(control.id, source.id, { size: drawn.length, method, seed, prompt: prompt.trim() || undefined, ...(plan.months ? { months: plan.months } : {}) }, drawn);
     logEvent({ action: 'Update', description: `Approved the sample from ${source.file} for ${control.id} — ${drawn.length} items, ${method.toLowerCase()}, seed ${seed}`, module: 'SOX ICFR', entity: 'Test Result' });
-    addToast({ type: 'success', title: 'Sample drawn', message: `${drawn.length} items from ${source.file} — test them against the attributes.` });
     setStage('ready'); setDrawn([]);
   };
   const restart = () => {
@@ -4164,7 +3994,7 @@ function SourceDrawRow({ control, source, canDraw, single, isOpen, onToggle, onA
                   months — the method and spread above are the audit's (A28). */}
               <div className="flex items-center justify-between gap-3 mb-2">
                 <span className="block text-[0.65625rem] font-bold uppercase tracking-wider text-ink-400">Ask for the sample</span>
-                <span className="inline-flex items-center gap-1 text-[0.65625rem] text-ink-400"><Sparkles size={11} className="text-brand-500" /> drafted for you</span>
+                <IraDrafted />
               </div>
               <textarea value={prompt} onChange={e => setPrompt(e.target.value)} rows={2} disabled={stage !== 'ready'}
                 aria-label={`Ask for the sample from ${source.file}`}
@@ -4282,7 +4112,6 @@ function SourceDrawRow({ control, source, canDraw, single, isOpen, onToggle, onA
               <button onClick={() => {
                 redrawSource(control.id, source.id);
                 logEvent({ action: 'Delete', description: `Rejected the sample from ${source.file} on ${control.id} — the draw was reopened`, module: 'SOX ICFR', entity: 'Test Result' });
-                addToast({ type: 'success', title: 'Sample rejected', message: `${source.file} — draw it again. Every other file kept its own.` });
                 setRedrawing(false);
               }}
                 className="h-9 px-4 inline-flex items-center gap-1.5 rounded-lg bg-risk-600 text-white text-[0.78125rem] font-semibold hover:bg-risk-700 transition-colors cursor-pointer"><RotateCcw size={13} /> Reject and retry</button>
@@ -5242,7 +5071,6 @@ function RoundActions({ control, canEdit }: { control: Control; canEdit: boolean
                   <button onClick={() => {
                     extendSample(control.id, extra);
                     logEvent({ action: 'Update', description: `Extended the sample by ${extra} on ${control.id} after a failure`, module: 'SOX ICFR', entity: 'Test Result' });
-                    addToast({ type: 'success', title: 'Sample extended', message: `${extra} more items — test them before concluding.` });
                   }}
                     className="h-8 px-3 inline-flex items-center gap-1.5 rounded-lg border border-canvas-border bg-canvas-elevated text-[0.75rem] font-semibold text-ink-700 hover:border-brand-300 hover:text-brand-700 transition-colors cursor-pointer">
                     <Plus size={13} /> Extend the sample — draw {extra} more
@@ -5288,7 +5116,6 @@ function RoundActions({ control, canEdit }: { control: Control; canEdit: boolean
               <button disabled={!why.trim()} onClick={() => {
                 startToeRound(control.id, why.trim());
                 logEvent({ action: 'Update', description: `Set a TOE round aside on ${control.id} and reopened the draw`, module: 'SOX ICFR', entity: 'Test Result' });
-                addToast({ type: 'success', title: 'Round set aside', message: 'Draw the next sample in step ③ — it is the last one.' });
                 setWhy(''); setAsking(false);
               }}
                 className="h-9 px-4 inline-flex items-center gap-1.5 rounded-lg bg-brand-600 text-white text-[0.78125rem] font-semibold disabled:opacity-40 enabled:hover:bg-brand-700 transition-colors cursor-pointer">
@@ -5304,7 +5131,7 @@ function RoundActions({ control, canEdit }: { control: Control; canEdit: boolean
 
 // ── operating section (TOE) — locked until design effective ───────────────────────
 function OperatingSection({ control, canEdit, locked }: { control: Control; canEdit: boolean; locked: boolean }) {
-  const { eng, openAuditId, addAttribute, validateReadyAttributes } = useIcfr();
+  const { eng, role, openAuditId, addAttribute, validateReadyAttributes, confirmIra } = useIcfr();
   const logEvent = useAuditLog();
   const { addToast } = useToast();
   const o = control.operating; const prog = operatingProgress(control);
@@ -5312,6 +5139,7 @@ function OperatingSection({ control, canEdit, locked }: { control: Control; canE
   const allTested = o.steps.length > 0 && o.steps.every(s => stepResult(s) !== 'Not tested');
   const suggestion: TrackConclusion = operatingSuggestion(control);
   const [testing, setTesting] = useState(false);
+  const openDetail = useOpenRailDetail();
   const [newAttr, setNewAttr] = useState('');
   const [addingAttr, setAddingAttr] = useState(false);
   const attCount = o.steps.filter(s => s.attestEnabled || s.attestation).length;
@@ -5327,7 +5155,7 @@ function OperatingSection({ control, canEdit, locked }: { control: Control; canE
     // Same rule as the design run: the button is here, the narration is in the
     // rail, and the rail comes forward because the reader pressed this on the
     // left and would otherwise be watching the wrong column.
-    startRun(control.id, 'Reading the uploaded files against each attribute', TOE_RUN_STEPS, 2400, true);
+    const t = startRun(control.id, 'Reading the uploaded files against each attribute', TOE_RUN_STEPS, 2400, true);
     logEvent({ action: 'Run', description: `Ran AI validation on ${ready} ready attribute(s) for ${control.id}`, module: 'SOX ICFR', entity: 'Test Result' });
     const skipped = o.steps.filter(s => !requiredFilesReady(s, control)).map(s => {
       const { uploaded, total } = requiredFilesCount(s, control);
@@ -5336,13 +5164,34 @@ function OperatingSection({ control, canEdit, locked }: { control: Control; canE
       return total === 0 ? `${s.code}: no required files listed` : `${s.code}: ${missing} file${missing === 1 ? '' : 's'} missing`;
     });
     window.setTimeout(() => {
+      const live = runIsLive(control.id, t);
       endRun(control.id);
-      validateReadyAttributes(control.id);
       setTesting(false);
+      if (!live) return;   // stopped from the Ira tab — nothing is written
+      validateReadyAttributes(control.id);
       if (skipped.length) addToast({ type: 'warning', title: `AI validation ran on ${ready} attribute${ready === 1 ? '' : 's'}`, message: skipped.join(' · ') });
-      else addToast({ type: 'success', title: `AI validation ran on all ${ready} attributes`, message: 'The result is on each attribute.' });
     }, 2400);
   };
+  // ── Automatic mode (agentic UX #3, user ask 1 Oct) ─────────────────────────
+  // Attributes whose files are all in get read without a press, once per set of
+  // files; Ira's sure results are confirmed in the tester's name. Attributes
+  // still short a file are left alone here — the button run is what marks them
+  // "couldn't test", and that is the tester's call to make.
+  const iraMode = useIraMode();
+  const autoKey = useRef('');
+  const autoReady = o.steps.filter(s => requiredFilesReady(s, control) && !s.validation && !s.override && stepResult(s) === 'Not tested');
+  useEffect(() => {
+    if (iraMode !== 'automatic' || role !== 'auditor' || !canEdit || locked || testing || !autoReady.length || controlRun(control.id)) return;
+    const key = `${control.id}|${autoReady.map(s => s.id).join(',')}`;
+    if (autoKey.current === key) return;
+    autoKey.current = key;
+    runAll();
+  }); // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => {
+    if (iraMode !== 'automatic' || role !== 'auditor' || !canEdit || locked || o.conclusion !== 'Not tested') return;
+    const sure = o.steps.filter(s => awaitsConfirm(s) && (confidenceOf(s.validation, `${control.id}:${s.id}`) ?? 0) >= CONFIDENT_AT);
+    if (sure.length) confirmIra(control.id, 'operating', sure.map(s => s.id));
+  }, [iraMode, role, canEdit, locked, o.conclusion, o.steps, control.id, confirmIra]);
 
   if (locked) {
     // A29 — a year-end control in an interim or roll-forward audit waits for the
@@ -5400,15 +5249,23 @@ function OperatingSection({ control, canEdit, locked }: { control: Control; canE
         )}
       </div>
 
+      {/* Each file once, then the item × attribute grid (agentic UI review #5,
+          30 Sep): the files used to be listed again under every attribute that
+          needed them, and the per-item answers only lived inside a popup. */}
+      <ToeFiles control={control} canEdit={canEdit} onOpenFile={f => openDetail({ kind: 'file', file: f })} />
+      <ToeGrid control={control} onOpenWorking={st => st.validation && openDetail({ kind: 'working', title: `${st.code} · ${st.description}`, validation: st.validation, control, step: st, confKey: `${control.id}:${st.id}` })}  />
+
       {/* attributes */}
       <div className="flex items-center justify-between mb-3 gap-3 flex-wrap">
         <h4 className="text-[0.78125rem] font-bold text-ink-700 inline-flex items-center gap-1.5"><ClipboardCheck size={14} /> Test attributes <span className="font-normal text-ink-400">· each evidenced independently</span></h4>
         <div className="flex items-center gap-2">
           <span className="text-[0.6875rem] text-ink-400 tabular-nums hidden md:inline">{attCount} attested · {prog.passed} pass · {prog.failed} fail</span>
-          {canEdit && o.steps.length > 0 && <button disabled={testing || ready === 0} onClick={runAll} title={ready === 0 ? 'No attribute has all its required files uploaded yet' : undefined} className={cn('h-8 px-3 inline-flex items-center gap-1.5 rounded-lg bg-evidence-600 text-white text-[0.75rem] font-semibold enabled:hover:bg-evidence-700 transition-colors cursor-pointer', testing ? 'disabled:opacity-70' : 'disabled:opacity-40 disabled:cursor-not-allowed')}>{testing ? <><Loader2 size={13} className="animate-spin" /> Validating…</> : <><Sparkles size={14} /> {`Run AI validation on ready attributes (${ready} of ${o.steps.length})`}</>}</button>}
+          {canEdit && o.steps.length > 0 && !testing && <button disabled={ready === 0 && untested === 0} onClick={runAll} title={ready === 0 ? 'No attribute has its files yet — Ira will say which it could not test, and draft the ask' : undefined} className={cn('h-8 px-3 inline-flex items-center gap-1.5 rounded-lg bg-evidence-600 text-white text-[0.75rem] font-semibold enabled:hover:bg-evidence-700 transition-colors cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed')}><Sparkles size={14} /> {`Run AI validation on ready attributes (${ready} of ${o.steps.length})`}</button>}
           {canEdit && <button onClick={() => setAddingAttr(a => !a)} className="h-8 px-2.5 inline-flex items-center gap-1.5 rounded-lg border border-canvas-border bg-canvas-elevated text-[0.75rem] font-semibold text-ink-700 hover:border-brand-300 hover:text-brand-700 cursor-pointer"><Plus size={13} /> Add</button>}
         </div>
       </div>
+      {testing && <RunLine files={o.steps.filter(s => requiredFilesReady(s, control)).reduce((n, s) => n + requiredFilesCount(s, control).uploaded, 0)} total={ready || o.steps.length} noun="attribute" ms={2400} />}
+      {!testing && <ConfirmSure control={control} which="operating" rows={o.steps} />}
       {addingAttr && (
         <div className="flex items-center gap-2 mb-3">
           <input autoFocus value={newAttr} onChange={e => setNewAttr(e.target.value)} onKeyDown={e => { if (e.key === 'Enter' && newAttr.trim()) { addAttribute(control.id, newAttr.trim()); logEvent({ action: 'Create', description: `Added test attribute to ${control.id}`, module: 'SOX ICFR', entity: 'Control' }); setNewAttr(''); setAddingAttr(false); } }} placeholder="e.g. Approval evidenced before the transaction posts" className="flex-1 h-9 px-3 rounded-lg border border-canvas-border bg-canvas-elevated text-[0.78125rem] focus:outline-none focus:ring-2 focus:ring-brand-200" />
@@ -5420,7 +5277,9 @@ function OperatingSection({ control, canEdit, locked }: { control: Control; canE
           {canEdit && <button onClick={() => setAddingAttr(true)} className="h-8 px-3 inline-flex items-center gap-1.5 rounded-lg bg-brand-600 text-white text-[0.75rem] font-semibold hover:bg-brand-700 cursor-pointer"><Plus size={13} /> Add the first attribute</button>}
         </EmptyState>
       ) : (
-        <div className="space-y-3 mb-5">{o.steps.map(s => <AttributeRow key={s.id} control={control} step={s} canEdit={canEdit} testing={testing && requiredFilesReady(s, control)} />)}</div>
+        // Each attribute folded to one line until opened (user pick, 1 Oct: B of
+        // three trial layouts) — the grid above carries the per-item answers.
+        <div className="space-y-1.5 mb-5">{o.steps.map(st => <FoldableAttribute key={st.id} control={control} step={st} canEdit={canEdit} testing={testing && requiredFilesReady(st, control)} />)}</div>
       )}
 
       {/* What a failure opens — and, in the last round, what it closes. Directly
@@ -5444,6 +5303,54 @@ function OperatingSection({ control, canEdit, locked }: { control: Control; canE
 // ── vertical stepper step ─────────────────────────────────────────────────────────
 // `hideStatus` suppresses the default pill/stamp + flash — used by the sample step,
 // whose status drives the node visual only (a "Sample approved" chip rides in `right`).
+/**
+ * ── Last round's set-up, waiting on the auditor (agentic UX #13) ──────────────
+ * First thing in the step it holds. Each part says where it came from and
+ * offers the two moves: Confirm unchanged, or Edit. Until one is pressed every
+ * action in the step refuses (see `rollHeld` in the store). Once pressed it
+ * shrinks to one line of record. Never Ira's to press, in either mode.
+ */
+function RollForwardBar({ control, parts }: { control: Control; parts: RollPart[] }) {
+  const { role, confirmRollPart } = useIcfr();
+  const rf = control.rollForward;
+  const here = parts.filter(p => rf?.parts[p]);
+  if (!rf || !here.length || role !== 'auditor') return null;
+  const pending = here.filter(p => rf.parts[p]?.state === 'pending');
+  return (
+    <div id={ROLL_PART_ANCHOR[here[0]]} className="px-5 pt-5 scroll-mt-4">
+      <div className="rounded-xl border border-canvas-border bg-paper-50/60 px-3.5 py-3">
+        <p className="text-[0.75rem] text-ink-700 leading-relaxed">
+          <span className="font-semibold text-ink-900">From the {rf.from}</span>
+          {pending.length > 0 ? ' — check it still holds. Nothing in this step runs until you confirm it or edit it.' : ''}
+        </p>
+        <ul className="mt-2 space-y-1.5">
+          {here.map(p => {
+            const st = rf.parts[p]!;
+            return (
+              <li key={p} className="flex flex-wrap items-center gap-x-3 gap-y-1.5 text-[0.75rem]">
+                <span className="min-w-0 flex-1 text-ink-800">
+                  {ROLL_PART_LABEL[p]}
+                  {p === 'attributes' && rf.sampling && <span className="text-ink-500"> · last round drew {rf.sampling.size}, {rf.sampling.method.toLowerCase()}</span>}
+                </span>
+                {st.state === 'pending' ? (
+                  <span className="flex items-center gap-1.5">
+                    <button type="button" onClick={() => confirmRollPart(control.id, p, 'confirmed')}
+                      className="h-7 px-2.5 rounded-md bg-brand-600 text-white text-[0.71875rem] font-semibold hover:bg-brand-700 transition-colors cursor-pointer">Confirm unchanged</button>
+                    <button type="button" onClick={() => confirmRollPart(control.id, p, 'edited')}
+                      className="h-7 px-2.5 rounded-md border border-canvas-border bg-canvas-elevated text-[0.71875rem] font-semibold text-ink-700 hover:border-ink-300 transition-colors cursor-pointer">Edit</button>
+                  </span>
+                ) : (
+                  <span className="text-[0.6875rem] text-ink-500">{st.state === 'confirmed' ? 'Confirmed unchanged' : 'Taken to edit'} by {st.by} · {st.at}</span>
+                )}
+              </li>
+            );
+          })}
+        </ul>
+      </div>
+    </div>
+  );
+}
+
 function VStep({ n, title, subtitle, status, locked, right, children, defaultOpen = true, id, hideStatus, arrived }: { n: number; title: string; subtitle: string; status: TrackConclusion; locked?: boolean; right?: React.ReactNode; children: React.ReactNode; defaultOpen?: boolean; id?: string; hideStatus?: boolean; arrived?: boolean }) {
   const nodeClass = locked ? 'locked' : status === 'Effective' ? 'done' : status === 'Ineffective' ? 'fail' : 'active';
   const concluded = !hideStatus && (status === 'Effective' || status === 'Ineffective');
@@ -5617,43 +5524,58 @@ function DiscussionPane({ control }: { control: Control }) {
 // rail is 40px wider to carry three tabs without cramping them.
 /** Which of the rail's three panes is showing. Held by the page so the folded
  *  spine and the open rail agree about it. */
-type RailPane = 'chat' | 'history' | 'discussion';
+type RailPane = 'needs' | 'ask' | 'activity';
+type ActivityView = 'changes' | 'comments';
 
-function ActivityRail({ control, pane, onPane, onCollapse }: { control: Control; pane: RailPane; onPane: (p: RailPane) => void; onCollapse: () => void }) {
+/** History — what was done and what was said, in one tab (agentic UI review
+ *  #6, 30 Sep). History and Discussion were two tabs of their own; the rail is
+ *  three now — Needs you, Ira, History (the user kept the old names for the
+ *  last two, 30 Sep) — and both records live here, one switch apart. */
+function ActivityPane({ control, view, onView }: { control: Control; view: ActivityView; onView: (v: ActivityView) => void }) {
   const { eng } = useIcfr();
+  const openDisc = discussionsFor(eng, control.id).filter(d => !d.resolved).length;
+  const seg = (on: boolean) => cn('h-7 px-2.5 rounded-md text-[0.71875rem] font-semibold transition-colors cursor-pointer', on ? 'bg-paper-100 text-ink-900' : 'text-ink-500 hover:text-ink-800');
+  return (
+    <>
+      <div className="px-3 pb-1.5 flex items-center gap-1">
+        <button onClick={() => onView('changes')} className={seg(view === 'changes')}>Changes</button>
+        <button onClick={() => onView('comments')} className={seg(view === 'comments')}>Comments{openDisc > 0 && <span className="ml-1 tabular-nums text-high-700">{openDisc}</span>}</button>
+      </div>
+      {view === 'changes' ? <ExecutionTrail control={control} /> : <DiscussionPane control={control} />}
+    </>
+  );
+}
+
+function ActivityRail({ control, pane, onPane, onCollapse, detail, onCloseDetail, activityView, onActivityView }: {
+  control: Control; pane: RailPane; onPane: (p: RailPane) => void; onCollapse: () => void;
+  detail: RailDetail | null; onCloseDetail: () => void; activityView: ActivityView; onActivityView: (v: ActivityView) => void;
+}) {
+  const { eng, role, openAuditId } = useIcfr();
   // The pane belongs to the page, not to this component: the folded spine
   // picks one too, and a rail that forgot which tab was chosen the moment it
-  // was folded would make folding it destructive.
-  const setPane = onPane;
-  const execCount = eng.executions.filter(e => e.controlId === control.id).length;
-  const openDisc = discussionsFor(eng, control.id).filter(d => !d.resolved).length;
+  // was folded would make folding it destructive. Picking a tab also closes
+  // whatever detail (Ira's working, a file) was open over it.
+  const setPane = (p: RailPane) => { onCloseDetail(); onPane(p); };
+  // Ambient level (review #11): the count on the tab, never a toast.
+  const needs = needsYouItems(control, eng, role, openAuditId).length;
   const tabCls = (on: boolean) => cn('flex-1 min-w-0 h-8 rounded-lg text-[0.75rem] font-semibold inline-flex items-center justify-center gap-1.5 transition-colors cursor-pointer', on ? 'bg-canvas-elevated text-brand-700 shadow-[0_1px_4px_-1px_rgba(15,8,30,0.18)] ring-1 ring-canvas-border' : 'text-ink-500 hover:text-ink-800');
-  // No `sticky` any more — the rail is a pane, not a card that tries to keep
-  // up. It is as tall as the row it sits in and its own body scrolls, so there
-  // is nothing left for the page to carry it away from.
   return (
     <aside className="panel overflow-hidden h-full min-h-0 flex flex-col">
-      {/* The three scores stood here, above the tabs. They live in the control
-          header now (user ask, 22 Sep), beside the TOD → TOE status they are a
-          reading of — two columns of one screen stating the same three numbers
-          about the same control was one column too many. What is left in this
-          rail is the conversation, which is what to DO about them. */}
       <div className="flex items-center gap-2 m-3 mb-2">
         <div className="flex-1 min-w-0 flex items-center gap-1 p-1 rounded-xl bg-paper-50 border border-canvas-border">
-          <button onClick={() => setPane('chat')} className={tabCls(pane === 'chat')}><Sparkles size={13} /> Ira</button>
-          <button onClick={() => setPane('history')} className={tabCls(pane === 'history')}><History size={13} /> History{execCount > 0 && <span className="text-[0.625rem] tabular-nums opacity-70">{execCount}</span>}</button>
-          <button onClick={() => setPane('discussion')} className={tabCls(pane === 'discussion')}><MessageSquare size={13} /> Discussion{openDisc > 0 && <span className="text-[0.625rem] tabular-nums opacity-70">{openDisc}</span>}</button>
+          <button onClick={() => setPane('ask')} className={tabCls(pane === 'ask' && !detail)}><Sparkles size={13} /> Ira</button>
+          <button onClick={() => setPane('needs')} className={tabCls(pane === 'needs' && !detail)}><Inbox size={13} /> Needs you{needs > 0 && <span className="text-[0.625rem] tabular-nums opacity-70">{needs}</span>}</button>
+          <button onClick={() => setPane('activity')} className={tabCls(pane === 'activity' && !detail)}><History size={13} /> History</button>
         </div>
-        {/* Folding the rail away is a reading decision, so the control sits
-            with the reading — beside the tabs, not buried in a menu. */}
         <button onClick={onCollapse} title="Hide this rail" aria-label="Hide the Ira rail"
           className="shrink-0 w-8 h-8 rounded-lg text-ink-400 hover:text-ink-700 hover:bg-paper-50 inline-flex items-center justify-center transition-colors cursor-pointer">
           <PanelRightClose size={16} />
         </button>
       </div>
-      {pane === 'chat' ? <ControlChatPane key={control.id} control={control} />
-        : pane === 'history' ? <ExecutionTrail control={control} />
-        : <DiscussionPane control={control} />}
+      {detail ? <RailDetailPane detail={detail} onBack={onCloseDetail} />
+        : pane === 'needs' ? <NeedsYouPane control={control} onGoComments={() => { onActivityView('comments'); setPane('activity'); }} />
+        : pane === 'ask' ? <ControlChatPane key={control.id} control={control} />
+        : <ActivityPane control={control} view={activityView} onView={onActivityView} />}
     </aside>
   );
 }
@@ -5673,7 +5595,7 @@ function RailSpine({ control, running, onOpen }: { control: Control; running: bo
   const { eng, role, me, openAuditId } = useIcfr();
   const still = useReducedMotion();
   const execCount = eng.executions.filter(e => e.controlId === control.id).length;
-  const openDisc = discussionsFor(eng, control.id).filter(d => !d.resolved).length;
+  const needs = needsYouItems(control, eng, role, openAuditId).length;
   // One shape for all three (user ask, 23 Sep). History and Discussion were
   // naked 15px glyphs stacked under a 36px tile that plainly WAS a button, so
   // they read as leftovers rather than as the other two ways in. They take Ira's
@@ -5681,7 +5603,8 @@ function RailSpine({ control, running, onOpen }: { control: Control; running: bo
   // the hierarchy is the point: one thing in this column does the work.
   const tile = 'group w-full rounded-xl py-2 flex flex-col items-center gap-1.5 transition-colors cursor-pointer';
   const quietFace = 'relative inline-flex items-center justify-center size-9 rounded-xl border border-canvas-border bg-paper-50 text-ink-500 transition-colors group-hover:border-brand-100 group-hover:bg-brand-50 group-hover:text-brand-700';
-  const cap = 'text-[0.625rem] font-bold uppercase tracking-[0.08em]';
+  // Sentence case, not capitals (user ask, 30 Sep).
+  const cap = 'text-[0.6875rem] font-semibold';
   // The count rides the tile's corner rather than sharing a line with the icon:
   // at this size a numeral beside a glyph reads as part of the glyph.
   const badge = 'absolute -top-1 -right-1 min-w-[15px] h-[15px] px-1 rounded-full inline-flex items-center justify-center text-[0.625rem] font-bold tabular-nums';
@@ -5689,7 +5612,7 @@ function RailSpine({ control, running, onOpen }: { control: Control; running: bo
     <div className="panel absolute inset-0 bottom-6 flex flex-col overflow-hidden">
       {/* The fold control sits where it sits in the open rail — top right of
           the head — so it is in the same place in both states. */}
-      <button onClick={() => onOpen('chat')} title="Open the Ira rail" aria-label="Open the Ira rail"
+      <button onClick={() => onOpen('ask')} title="Open the Ira rail" aria-label="Open the Ira rail"
         className="shrink-0 h-7 mt-1 mx-1 rounded-lg text-ink-400 hover:text-ink-700 hover:bg-paper-50 inline-flex items-center justify-center transition-colors cursor-pointer">
         <PanelRightClose size={15} className="rotate-180" />
       </button>
@@ -5718,7 +5641,7 @@ function RailSpine({ control, running, onOpen }: { control: Control; running: bo
           ringed while a run is in flight so a validation started on the left is
           visible from a column this narrow. */}
       <div className="shrink-0 px-1.5 pt-0.5 pb-2 space-y-1">
-        <button onClick={() => onOpen('chat')} title="Ask Ira about this control" aria-label="Open the Ira chat"
+        <button onClick={() => onOpen('ask')} title="Ask Ira about this control" aria-label="Open the Ira chat"
           className={cn(tile, 'hover:bg-brand-50')}>
           <span className="relative inline-flex size-9">
             {running && !still && (
@@ -5732,23 +5655,23 @@ function RailSpine({ control, running, onOpen }: { control: Control; running: bo
           </span>
           <span className={cn(cap, 'text-brand-700')}>Ira</span>
         </button>
-        <button onClick={() => onOpen('history')} title={`History — ${execCount} run${execCount === 1 ? '' : 's'}`} aria-label="Open the run history"
+        {/* Needs you, after Ira (user ask, 30 Sep). The count is amber because
+            it is somebody's decision waiting. */}
+        <button onClick={() => onOpen('needs')} title={needs > 0 ? `Needs you — ${needs}` : 'Needs you'} aria-label="Open what needs you"
+          className={cn(tile, 'hover:bg-paper-50')}>
+          <span className={quietFace}>
+            <Inbox size={17} strokeWidth={2} />
+            {needs > 0 && <span className={cn(badge, 'bg-high-100 text-high-700')}>{needs}</span>}
+          </span>
+          <span className={cn(cap, 'text-ink-400 group-hover:text-brand-700')}>Needs you</span>
+        </button>
+        <button onClick={() => onOpen('activity')} title={`History — ${execCount} change${execCount === 1 ? '' : 's'}`} aria-label="Open the history"
           className={cn(tile, 'hover:bg-paper-50')}>
           <span className={quietFace}>
             <History size={17} strokeWidth={2} />
             {execCount > 0 && <span className={cn(badge, 'bg-paper-200 text-ink-600')}>{execCount}</span>}
           </span>
           <span className={cn(cap, 'text-ink-400 group-hover:text-brand-700')}>History</span>
-        </button>
-        <button onClick={() => onOpen('discussion')} title={openDisc > 0 ? `Discussion — ${openDisc} open` : 'Discussion'} aria-label="Open the discussion"
-          className={cn(tile, 'hover:bg-paper-50')}>
-          <span className={quietFace}>
-            <MessageSquare size={17} strokeWidth={2} />
-            {/* Amber, because an open thread is somebody waiting — the same
-                colour the row above spends on a score that needs reading. */}
-            {openDisc > 0 && <span className={cn(badge, 'bg-high-100 text-high-700')}>{openDisc}</span>}
-          </span>
-          <span className={cn(cap, 'text-ink-400 group-hover:text-brand-700')}>Discussion</span>
         </button>
       </div>
     </div>
@@ -6059,7 +5982,13 @@ export default function ControlDossier() {
   // Which pane is showing, held here rather than inside the rail: the folded
   // spine picks one too, and unfolding on the chat when the reader pressed
   // History would be the tool overruling them.
-  const [railPane, setRailPane] = useState<RailPane>('chat');
+  // Opens on Ira, the first tab (user ask, 1 Oct) — Needs you is one click away.
+  const [railPane, setRailPane] = useState<RailPane>('ask');
+  const [activityView, setActivityView] = useState<ActivityView>('changes');
+  // Layer 3 and file-at-passage views sit over the rail's tabs (review #3, #4).
+  const [railDetail, setRailDetail] = useState<RailDetail | null>(null);
+  const openRailDetail = useCallback((d: RailDetail) => { setRailDetail(d); setRailOpen(true); }, [setRailOpen]);
+  useEffect(() => { setRailDetail(null); }, [selectedControlId]);
   const control = eng.controls.find(c => c.id === selectedControlId);
   // This client's own columns, for the head block. Read above the early return
   // with the rest of the hooks, so it keys off the control when there is one and
@@ -6104,7 +6033,8 @@ export default function ControlDossier() {
   const run = useControlRun(selectedControlId ?? '');
   useEffect(() => {
     if (!run?.wantsRail || !selectedControlId) return;
-    setRailPane('chat');
+    setRailPane('ask');
+    setRailDetail(null);
     setRailOpen(true);
     railShown(selectedControlId);
   }, [run?.wantsRail, selectedControlId, setRailOpen]);
@@ -6185,6 +6115,7 @@ export default function ControlDossier() {
   const country = countryFor(eng.id, control);
 
   return (
+    <RailDetailContext.Provider value={openRailDetail}>
     <motion.div className="h-full min-h-0 flex flex-col" initial="hidden" animate="show" variants={{ hidden: {}, show: { transition: { staggerChildren: 0.08, delayChildren: 0.03 } } }}>
       {/* no local Back button — the breadcrumb above (always rendered by
           SoxIcfrApp for the dossier view) already carries ← and the trail */}
@@ -6232,12 +6163,19 @@ export default function ControlDossier() {
             <div className="flex items-center gap-1.5 flex-wrap min-w-0">
               {/* Key/non-key is agreed with management — it can never be read off
                   an SOP — so the auditor sets it here rather than reading it. */}
+              {/* Five facts up front, and only five (agentic UI review, 29 Sep):
+                  key, nature, frequency, owner, assertions. Category, type and
+                  rating moved behind "More" — each fact is said once, and the
+                  chips no longer repeat what the detail below lists. */}
               <KeyControlChip control={control} canEdit={canEdit} />
-              {control.clazz && <HeadChip tint={RISK_CATEGORY_TINT[control.clazz]}>{control.clazz}</HeadChip>}
               {control.nature && <HeadChip icon={control.nature === 'Automated' ? <WorkflowIcon size={11} /> : <Hand size={11} />}>{control.nature}</HeadChip>}
-              {control.type && <HeadChip>{control.type}</HeadChip>}
               {control.frequency && <HeadChip>{control.frequency}</HeadChip>}
-              {control.riskRating && <Pill tone={control.riskRating === 'High' ? 'risk' : control.riskRating === 'Medium' ? 'mitigated' : 'draft'}>{control.riskRating} risk</Pill>}
+              {headOwners.controlOwner && <HeadChip icon={<UserCheck size={11} />}><span className="text-ink-400">Owner</span> {headOwners.controlOwner}</HeadChip>}
+              {control.assertions.length > 0 && (
+                <span className="max-w-[18rem] truncate" title={control.assertions.join(', ')}>
+                  <HeadChip><span className="truncate">{control.assertions.join(', ')}</span></HeadChip>
+                </span>
+              )}
               {/* The control's own number, plain — it is a reference, not a
                   judgement, so it does not wear a chip like one. */}
               <span className="font-mono text-[0.71875rem] text-ink-400 ml-1">{control.wpRef ?? control.id}</span>
@@ -6312,14 +6250,13 @@ export default function ControlDossier() {
                         <HeadField label="Covers" value={control.entities!.join(', ')} />
                       </>
                     ) : <HeadField label="Entity" value={control.entity} />}
-                    <HeadField label="Control owner" value={headOwners.controlOwner} />
+                    {/* Owner, nature, frequency and assertions are on the chip
+                        row above — they are not repeated here. */}
                     {!headOwners.single && <HeadField label="Process owner" value={headOwners.processOwner} />}
                     <HeadField label="Sub-process" value={control.subProcess} />
                     <HeadField label="Risk category" value={control.clazz} />
-                    <HeadField label="Nature" value={control.nature} />
+                    <HeadField label="Risk rating" value={control.riskRating} />
                     <HeadField label="Type" value={control.type} />
-                    <HeadField label="Frequency" value={control.frequency} />
-                    <HeadField label="Assertions" value={control.assertions.join(', ')} />
                     {/* why the risk exists at all — a control aimed at the symptom
                         rather than the cause is the commonest design gap there is */}
                     <HeadField label="Root cause" value={control.rootCause} />
@@ -6339,8 +6276,12 @@ export default function ControlDossier() {
                     {clientColumns.map(col => (
                       <HeadField key={col.header} label={extraLabel(col)} value={control.extras?.[col.header]} />
                     ))}
+                    {/* Raw file columns that only repeat a field this header
+                        already shows ("Sub-Process", "Control ID") are dropped
+                        — the same fact twice under two spellings. */}
                     {Object.entries(control.extras ?? {})
                       .filter(([header]) => !clientColumns.some(col => col.header === header))
+                      .filter(([header]) => !HEAD_SHOWN_KEYS.has(headKey(header)))
                       .map(([header, value]) => <HeadField key={header} label={header} value={value} />)}
                   </div>
                 </motion.div>
@@ -6532,6 +6473,7 @@ export default function ControlDossier() {
                 </div>
               </div>
             )}
+            {!isOwner && <RollForwardBar control={control} parts={['design', 'checks']} />}
             <DesignSection control={control} canEdit={canEdit} locked={todApproved} />
             <DesignApprovalBlock control={control} />
             <RebuildBlock control={control} />
@@ -6583,6 +6525,7 @@ export default function ControlDossier() {
               : control.operating.population
                 ? <span className="text-[0.6875rem] font-semibold text-mitigated-800 inline-flex items-center gap-1"><AlertTriangle size={11} /> Extracted, not yet locked</span>
                 : <span className="text-[0.6875rem] font-semibold text-ink-400">Nothing extracted yet</span>}>
+            <RollForwardBar control={control} parts={['population']} />
             <PopulationSection control={control} canEdit={canEdit} locked={popGated} />
           </VStep>
           <VStep n={3} id="vstep-sample" title="Sample drawing" subtitle="Drawn off the locked population, sized by how often the control runs, with the selection method and its seed stored so anyone can reproduce the same items." hideStatus
@@ -6594,6 +6537,7 @@ export default function ControlDossier() {
                 : !popLocked
                   ? <span className="text-[0.6875rem] font-semibold text-ink-400 inline-flex items-center gap-1"><Lock size={11} /> Unlocks once the population locks</span>
                   : <span className="text-[0.6875rem] font-semibold text-ink-400">Awaiting the draw</span>}>
+            <RollForwardBar control={control} parts={['attributes']} />
             <SampleExtractSection control={control} canEdit={canEdit} locked={sampleLocked} />
           </VStep>
           <VStep n={4} id="vstep-toe" title="Test of effectiveness" subtitle="Each sampled item against each attribute, pass or fail, with the evidence attached. Concludes effective or ineffective." status={toeLocked ? 'Not tested' : opResult} locked={toeLocked}
@@ -6729,11 +6673,12 @@ export default function ControlDossier() {
           {/* `inert` so a folded rail cannot be tabbed into — it is clipped
               out of sight, not merely out of the way. */}
           <div className="h-full w-[400px]" inert={!railOpen}>
-            <ActivityRail control={control} pane={railPane} onPane={setRailPane} onCollapse={() => setRailOpen(false)} />
+            <ActivityRail control={control} pane={railPane} onPane={setRailPane} onCollapse={() => setRailOpen(false)}
+              detail={railDetail} onCloseDetail={() => setRailDetail(null)} activityView={activityView} onActivityView={setActivityView} />
           </div>
           {!railOpen && (
             <RailSpine control={control} running={!!run}
-              onOpen={p => { setRailPane(p); setRailOpen(true); }} />
+              onOpen={p => { setRailPane(p); setRailDetail(null); setRailOpen(true); }} />
           )}
         </motion.div>
       </div>
@@ -6774,5 +6719,6 @@ export default function ControlDossier() {
       )}
       {briefOpen && <RemediationBriefModal defId={def?.id} onClose={() => setBriefOpen(false)} />}
     </motion.div>
+    </RailDetailContext.Provider>
   );
 }

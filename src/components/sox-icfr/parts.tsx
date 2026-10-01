@@ -5,6 +5,7 @@ import { ArrowLeft, Gavel, UserCheck, ShieldCheck, CheckCircle2, XCircle, Circle
 // too, which is what makes the ITGC banner read as being about the same thing.
 import { Pill, type Tone } from '../shared/StatusBadge';
 import { cn } from '../../lib/cn';
+import { confidenceTier } from './helpers';
 import type { ArchivedSeverity, Conclusion, Court, ExceptionGrade, FileOrigin, Nature, Role, TestResult, TrackConclusion } from './types';
 
 const CONCLUSION_TONE: Record<Conclusion, Tone> = { Effective: 'compliant', Ineffective: 'risk', 'In progress': 'evidence', 'Not started': 'draft' };
@@ -55,16 +56,43 @@ export function ResultChip({ result }: { result: TestResult }) {
 }
 
 // ─── The tickmark — auditor's signature mark on a tested item ────────────────────
-export function Tickmark({ result, size = 18 }: { result: TestResult | 'Effective' | 'Ineffective'; size?: number }) {
-  const pass = result === 'Pass' || result === 'Effective';
-  const fail = result === 'Fail' || result === 'Ineffective';
+// Ira's certainty is carried by the tick's SHAPE, not by a second badge beside
+// it: solid = sure, outlined (same glyph, same tone, hollow) = the same verdict
+// held loosely, "?" = Ira couldn't reach one. Both props are optional, so every
+// mark set by hand — or by a caller that knows nothing of confidence — draws
+// exactly as it always has.
+//
+// The outlined look is Tailwind with `!`: register.css is unlayered and so
+// outranks the utilities layer, and it may not grow a modifier of its own here.
+const TICK_OUTLINE = {
+  ok: 'bg-compliant-50! text-compliant-700! border-compliant-600!',
+  ko: 'bg-risk-50! text-risk-700! border-risk-600!',
+};
+export function Tickmark({ result, size = 18, confidence, blocked, title: titleOverride }: {
+  result: TestResult | 'Effective' | 'Ineffective'; size?: number;
+  /** 0–100, how sure Ira was. Below CONFIDENT_AT the tick is drawn outlined. */
+  confidence?: number;
+  /** Ira couldn't test this — a neutral "?" in place of any verdict. */
+  blocked?: boolean;
+  /** Hover words in place of the "N% sure" line, for a tick that is not a
+   *  percentage (an SOP row: "Written in the SOP word for word"). */
+  title?: string;
+}) {
+  const pass = !blocked && (result === 'Pass' || result === 'Effective');
+  const fail = !blocked && (result === 'Fail' || result === 'Ineffective');
+  const unsure = confidence != null && confidenceTier(confidence) === 'medium';
+  const title = titleOverride ?? (blocked ? "Ira couldn't test this" : confidence != null ? `Ira · ${Math.round(confidence)}% sure` : undefined);
+  const label = typeof result === 'string' ? result : '';
   return (
     <span
-      className={cn('sox-tick inline-flex items-center justify-center font-mono font-bold select-none', pass ? 'sox-tick-ok' : fail ? 'sox-tick-ko' : 'sox-tick-none')}
+      className={cn('sox-tick inline-flex items-center justify-center font-mono font-bold select-none',
+        pass ? 'sox-tick-ok' : fail ? 'sox-tick-ko' : 'sox-tick-none',
+        unsure && pass && TICK_OUTLINE.ok, unsure && fail && TICK_OUTLINE.ko)}
       style={{ width: size, height: size, fontSize: size * 0.6 }}
-      aria-label={typeof result === 'string' ? result : ''}
+      title={title}
+      aria-label={blocked ? title : title ? `${label} — ${title}` : label}
     >
-      {pass ? '✓' : fail ? '✗' : '–'}
+      {blocked ? '?' : pass ? '✓' : fail ? '✗' : '–'}
     </span>
   );
 }

@@ -1,18 +1,19 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { motion, useReducedMotion } from 'motion/react';
-import { ArrowRight, ArrowUp, Paperclip, Plus, Sparkles, Square } from 'lucide-react';
+import { ArrowRight, ArrowUp, ChevronRight, Paperclip, Plus, Sparkles, Square, Undo2 } from 'lucide-react';
 import { useIcfr } from './store';
 import { useAuditLog } from '../../context/AdminDataContext';
 import {
-  concludeRationale, designOutstanding, designOutstandingRequired, designSuggestion, draftSamplePrompt, extractionCriteria,
+  concludeRationale, designFilesOf, designOutstanding, designOutstandingRequired, designSuggestion, draftSamplePrompt, extractionCriteria,
   evidenceKindOf, fileUsable, guessFileKind, itgcHolds, narrowedCount, operatingSuggestion, populationFrom, populationSources,
   readRowCount, readSamplePrompt, sampleSizeGuide, samplingOf, sampledSources, seedKeyOf, trackResult, workingAudit,
+  awaitsConfirm, operatingApplies, pointResult, populationLocked, stepResult,
 } from './helpers';
 import { useAuditFiles } from './useAuditFiles';
 import { OriginPicker } from './parts';
 import { ROUND_TAG } from './types';
 import { sampleRefs } from './mockData';
-import { DESIGN_RUN_STEPS, TOE_RUN_STEPS, endRun, say, sayOnce, startRun, useControlRun, useControlThread, type RunStep } from './controlChat';
+import { DESIGN_RUN_STEPS, TOE_RUN_STEPS, endRun, say, sayOnce, setIraMode, startRun, stopRun, useControlRun, useControlThread, useIraMode, type RunStep } from './controlChat';
 import { useTypewriter } from '../chat/reveal/useTypewriter';
 import { acknowledge, listOf, nextPrompt, type ChatStepId, type PopFile, type Situation } from './controlChatScript';
 import { actionsFor, type ChatAction, type ChatActionId } from './controlChatActions';
@@ -183,25 +184,123 @@ function WorkingTrail({ label, steps }: { label: string; steps: RunStep[] }) {
  *
  * The house typewriter (`chat/reveal/useTypewriter`) — the same per-character
  * pace, the same beat after a full stop, the same caret the flagship chat
- * blinks. Only the NEWEST line types; everything above it is history and
- * history does not re-perform itself every time the reader opens the tab.
+ * blinks — used ONLY for Ira's reply to something the reader typed (agentic
+ * UI review #6, 30 Sep). Everything else Ira says prints whole.
  *
  * The caret is `.ai-caret` — the 2px brand-600 bar DESIGN.md specifies by the
  * millimetre ("blinks once per 1.2s with steps(1) — square, not sine"). The
  * flagship renders a `▌` glyph instead because its prose goes through markdown;
  * this rail prints plain text, so it can use the real thing.
  */
-function IraText({ text, stream, onDone }: { text: string; stream: boolean; onDone?: (done: boolean) => void }) {
+function IraText({ text, stream }: { text: string; stream: boolean }) {
   // Half the flagship's 9ms. Its column is 66ch of prose the reader is meant
   // to sit and watch; this one is a 400px rail where the reader is waiting to
-  // press something, and the buttons below wait for the sentence to land.
+  // press something.
   const { shown, done } = useTypewriter(text, { enabled: stream, baseDelay: 4 });
-  // Whoever owns the turn decides what may appear once Ira has finished
-  // speaking — offering the buttons mid-sentence reads as a form, not a reply.
-  useEffect(() => { onDone?.(done); }, [done, onDone]);
+  // Streams ONLY when asked (agentic UI review #6, 30 Sep): a line that is not
+  // streaming prints whole, whatever the hook's counter says. The hook seeds
+  // its count once, so a line that stopped streaming mid-way (a newer message
+  // arrived) used to stay cut off where it was.
+  const body = stream ? shown : text;
+  const finished = !stream || done;
   return (
     <div className="text-[0.8125rem] leading-[1.65] text-ink-800 whitespace-pre-wrap break-words">
-      {shown}{!done && <span className="ai-caret" aria-hidden />}
+      {body}{!finished && <span className="ai-caret" aria-hidden />}
+    </div>
+  );
+}
+
+/**
+ * What Ira knows — the plain facts it is working from, one line, shut by
+ * default (agentic UI review #6, 30 Sep: "'What Ira knows' is a section in the
+ * Ask tab"). An agent that answers questions about a control should say what
+ * it can see before anyone asks it anything; otherwise "I can't find that" and
+ * "that isn't on file" read the same. Quiet text, no cards — it is context,
+ * not something to act on, and the Needs-you tab is where acting lives.
+ */
+/** What Ira can and cannot do on each step — the first line the Ira tab shows
+ *  for the step the control is on (agentic UI review, "capability notes per
+ *  step"; wording approved by the user, 1 Oct). Written to the tester: the
+ *  conclusions and the sign-off it names as theirs are the auditor's. */
+const CAPABILITY: Record<ChatStepId, string> = {
+  design: 'I read each design check against the evidence on file and mark it — I can’t judge a document that isn’t attached, and the conclusion is yours.',
+  population: 'I can read and count a population file you or the owner upload — I can’t pull data from your systems myself.',
+  sample: 'I draw the sample from the locked population using the agreed method — I can’t change the sample size.',
+  operating: 'I check each sampled item against its files; anything I can’t read I mark “couldn’t test” — you confirm the results.',
+  signoff: 'I can’t sign — sign-off is yours and the reviewer’s.',
+};
+
+/** Ira's plan for the control, posted when it opens (agentic UX #12, user ask
+ *  1 Oct): the steps in the paper's own order, each ticked off as it lands, and
+ *  one line on how it will go — stopping for you in Manual, running what it can
+ *  in Automatic. One control at a time; batch runs are parked. */
+function IraPlan({ control, mode }: { control: Control; mode: 'manual' | 'automatic' }) {
+  const { eng } = useIcfr();
+  const files = control.design.documents.reduce((n, d) => n + designFilesOf(d).length, 0);
+  const checks = control.design.points.length;
+  const steps = control.operating.steps;
+  const size = control.operating.sampling?.size ?? sampleSizeGuide(control, itgcHolds(eng, control), samplingOf(eng)).suggested;
+  const plan: { text: string; done: boolean }[] = [
+    { text: `Read the ${files} design file${files === 1 ? '' : 's'} against ${checks} check${checks === 1 ? '' : 's'}`, done: checks > 0 && control.design.points.every(p => pointResult(p) !== 'Not tested') },
+  ];
+  if (operatingApplies(eng, control)) {
+    plan.push(
+      { text: 'Wait for the population', done: populationLocked(control) },
+      { text: `Draft the request for ${size} sample item${size === 1 ? '' : 's'}`, done: !!control.operating.sampling },
+      { text: `Validate ${steps.length} attribute${steps.length === 1 ? '' : 's'}`, done: steps.length > 0 && steps.every(st => stepResult(st) !== 'Not tested') },
+    );
+  }
+  return (
+    <div className="mb-1.5 text-[0.71875rem] leading-snug text-ink-600">
+      <p className="flex items-center gap-1.5 font-semibold text-ink-700">
+        <Sparkles size={11} className="text-brand-500 shrink-0" aria-hidden /> My plan for {control.wpRef ?? control.id}
+      </p>
+      <ol className="mt-1 ml-[18px] space-y-0.5">
+        {plan.map((p, i) => (
+          <li key={i} className={cn('flex items-start gap-1.5', p.done && 'text-ink-400')}>
+            <span className="tabular-nums shrink-0">{p.done ? '✓' : `${i + 1}.`}</span>
+            <span className={p.done ? 'line-through decoration-ink-300' : undefined}>{p.text}</span>
+          </li>
+        ))}
+      </ol>
+      <p className="mt-1 ml-[18px] text-ink-500">
+        {mode === 'manual'
+          ? 'I’ll stop for you to confirm after each.'
+          : 'I’ll run these as soon as I can and confirm what I’m sure of — you confirm the rest, and I never conclude or sign.'}
+      </p>
+    </div>
+  );
+}
+
+function WhatIraKnows({ control }: { control: Control }) {
+  const [open, setOpen] = useState(false);
+  const facts = useMemo(() => {
+    const out: string[] = [];
+    const files = control.design.documents.flatMap(d => designFilesOf(d).map(f => f.name));
+    out.push(files.length
+      ? `Design evidence on file: ${listOf(files)}.`
+      : 'No design evidence on file yet.');
+    const pop = control.operating.population;
+    out.push(!pop
+      ? 'No population extracted yet.'
+      : `Population: ${pop.count.toLocaleString('en-IN')} instances${pop.sourceFile ? ` from ${pop.sourceFile}` : ''}${pop.locked ? ', locked' : ', not locked yet'}.`);
+    const s = control.operating.sampling;
+    if (s && s.size > 0) out.push(`Sample drawn: ${plural(s.size, 'item')}, ${s.method.toLowerCase()}.`);
+    out.push(`Comes from ${control.process}${control.subProcess ? ` · ${control.subProcess}` : ''}${control.sopSectionRef ? `, SOP ${control.sopSectionRef}` : ''}.`);
+    return out;
+  }, [control]);
+  return (
+    <div className="mb-4">
+      <button type="button" onClick={() => setOpen(o => !o)} aria-expanded={open}
+        className="inline-flex items-center gap-1 text-[0.6875rem] font-semibold text-ink-500 hover:text-ink-700 cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/30 rounded">
+        <ChevronRight size={12} className={cn('shrink-0 transition-transform duration-150', open && 'rotate-90')} aria-hidden />
+        What Ira knows
+      </button>
+      {open && (
+        <ul className="mt-1.5 pl-4 space-y-1 text-[0.75rem] leading-snug text-ink-500 list-disc marker:text-ink-300">
+          {facts.map(f => <li key={f}>{f}</li>)}
+        </ul>
+      )}
     </div>
   );
 }
@@ -209,7 +308,7 @@ function IraText({ text, stream, onDone }: { text: string; stream: boolean; onDo
 export default function ControlChatPane({ control }: { control: Control }) {
   const { eng, role, me, openAuditId, addDesignDoc, runDesignIra, concludeDesign, overrideDesign, approveDesign, setDesignPoint, overrideDesignPoint,
     setIpeCheck, concludeIpe, uploadRequiredFile, drawSourceSample, approveSource, lockPopulation, concludeOperating, overrideOperating, signOffControlWp,
-    setStepResult, overrideStep, validateReadyAttributes, registerFile, setPopulation, updateDeficiency, waiveDesignDoc, attachDesignEvidence } = useIcfr();
+    setStepResult, overrideStep, validateReadyAttributes, registerFile, setPopulation, updateDeficiency, waiveDesignDoc, attachDesignEvidence, undoIra, confirmIra } = useIcfr();
   const logEvent = useAuditLog();
   const audit = useMemo(() => eng.audits.find(a => a.id === openAuditId) ?? null, [eng.audits, openAuditId]);
   // The audit's own files, read exactly as the source picker on the left reads
@@ -234,6 +333,13 @@ export default function ControlChatPane({ control }: { control: Control }) {
   // and the reader's rule is that it narrates here (22 Sep). One run, one
   // place it is spoken about, whichever button started it.
   const liveRun = useControlRun(control.id);
+  const iraMode = useIraMode();
+  // What Undo would take back: Ira's unconfirmed verdicts and its "couldn't
+  // test" notes on tracks not yet concluded.
+  const unconfirmedCount = (control.design.conclusion === 'Not tested' ? control.design.points.filter(p => awaitsConfirm(p) || (!!p.validation?.blocked && !p.override && !p.confirmed && pointResult(p) === 'Not tested')).length : 0)
+    + (control.operating.conclusion === 'Not tested' ? control.operating.steps.filter(st => awaitsConfirm(st) || (!!st.validation?.blocked && !st.override && !st.confirmed && stepResult(st) === 'Not tested')).length : 0);
+  /** A typed instruction waiting for "Do it" (UX #14). */
+  const [preview, setPreview] = useState<{ what: string; run: () => void } | null>(null);
   const working = liveRun?.label ?? null;
   const [draft, setDraft] = useState('');
   // A check Ira has already answered cannot be flipped from here without a
@@ -322,22 +428,29 @@ export default function ControlChatPane({ control }: { control: Control }) {
     if (!settled) setAwaitingWhy(null);
   }
 
-  const latestIra = useRef<string | null>(null);
+  // Chat streams only when asked (agentic UI review #6, 30 Sep). The one line
+  // that may type itself out is Ira's REPLY to something the reader typed —
+  // the newest Ira line, arriving after this pane mounted, whose previous
+  // message is the reader's. Scripted prompts, acknowledgements and run
+  // endings print whole, and the buttons under the live prompt show at once:
+  // gating them on the typewriter left them missing with reduced motion (the
+  // child's "done" fired before the parent's reset) and made every turn wait.
+  // Seeded with the thread's last id so a line already on screen when the
+  // reader comes back from another tab does not re-perform itself.
   const lastMsg = thread[thread.length - 1];
-  if (lastMsg?.who === 'ira' && lastMsg.id !== latestIra.current) latestIra.current = lastMsg.id;
-
-  // Has Ira finished saying the live line? The buttons under it wait on this,
-  // so a turn reads as "it speaks, then it offers" rather than a sentence
-  // being typed beneath a row of controls that were already there.
-  const [saidIt, setSaidIt] = useState(false);
-  useEffect(() => { setSaidIt(false); }, [prompt.key]);
+  const seenIra = useRef<string | null>(lastMsg?.id ?? null);
+  const streamId = useRef<string | null>(null);
+  if (lastMsg?.who === 'ira' && lastMsg.id !== seenIra.current) {
+    seenIra.current = lastMsg.id;
+    streamId.current = thread[thread.length - 2]?.who === 'user' ? lastMsg.id : null;
+  }
 
   const scrollRef = useRef<HTMLDivElement>(null);
   useEffect(() => {
     const el = scrollRef.current;
     if (!el) return;
     requestAnimationFrame(() => el.scrollTo({ top: el.scrollHeight, behavior: 'smooth' }));
-  }, [thread, prompt.key, working, saidIt]);
+  }, [thread, prompt.key, working]);
 
   // A validation left running when the reader walks away must not come back
   // and write to a control they are no longer looking at.
@@ -353,6 +466,11 @@ export default function ControlChatPane({ control }: { control: Control }) {
   // sitting there with no answer and no error. It still cancels (the work is
   // the reader's to re-ask for), but it says so, and the thread outlives the
   // pane so the line is there when they come back.
+  //
+  // `timer.current` has to mean "a run is in flight", so every run's own
+  // callback nulls it on the way out. It used to be cleared only by stop(), so
+  // after ANY finished run each tab switch said "I stopped reading…" and ended
+  // a run that had already ended (agentic UI review #6, 30 Sep).
   useEffect(() => () => {
     if (!timer.current) return;
     window.clearTimeout(timer.current);
@@ -444,6 +562,7 @@ export default function ControlChatPane({ control }: { control: Control }) {
     timer.current = window.setTimeout(() => {
       const now = latest.current;
       endRun(now.id);
+      timer.current = null; // finished, not interrupted — see the unmount cleanup (agentic UI review, 30 Sep)
       // Six seconds is long enough for the left to move, and so is one and a
       // half: the form may have extracted while this was running, and a second
       // population written over the first would be a filter nobody agreed to.
@@ -492,7 +611,7 @@ export default function ControlChatPane({ control }: { control: Control }) {
   const perform = (a: ChatAction) => {
     if (a.id === 'show-step') {
       const step = a.focus ?? prompt.step;
-      document.getElementById(STEP_ANCHOR[step])?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      document.getElementById(a.anchor ?? STEP_ANCHOR[step])?.scrollIntoView({ behavior: 'smooth', block: 'center' });
       say(control.id, 'ira', `It’s on the left — ${STEP_NUM[step]} ${STEP_LABEL[step]}.`);
       return;
     }
@@ -629,6 +748,7 @@ export default function ControlChatPane({ control }: { control: Control }) {
         // when the button was pressed.
         const now = latest.current;
         endRun(now.id);
+        timer.current = null; // finished, not interrupted — see the unmount cleanup (agentic UI review, 30 Sep)
         // The store's own refusals, re-read at the moment of writing rather
         // than at the moment of asking — including the required element that
         // may have been removed while I was reading, which now stops the run
@@ -688,6 +808,7 @@ export default function ControlChatPane({ control }: { control: Control }) {
       timer.current = window.setTimeout(() => {
         const now = latest.current;
         endRun(now.id);
+        timer.current = null; // finished, not interrupted — see the unmount cleanup (agentic UI review, 30 Sep)
         if (trackResult(now.operating) !== 'Not tested') {
           say(now.id, 'ira', 'The testing was concluded while I was reading, so I stopped — the attributes are settled.');
           return;
@@ -730,6 +851,19 @@ export default function ControlChatPane({ control }: { control: Control }) {
     }
   };
 
+  // Automatic mode at the sample step (user ask, 1 Oct): Ira DRAFTS the request
+  // for the sample as soon as one is owed and leaves it in the chat — Send is
+  // still the tester's press. Nothing goes to the owner on its own. Once per
+  // source, so cancelling the draft is not undone by the next render.
+  const autoDrafted = useRef<string>('');
+  useEffect(() => {
+    if (iraMode !== 'automatic' || role !== 'auditor' || draw || working) return;
+    const offer = actions.find(a => a.id === 'draw-sample' && a.arg);
+    if (!offer || autoDrafted.current === offer.arg) return;
+    autoDrafted.current = offer.arg!;
+    perform(offer);
+  }); // eslint-disable-line react-hooks/exhaustive-deps
+
   const run = (a: ChatAction) => {
     if (working) return;
     say(control.id, 'user', a.said);
@@ -758,6 +892,7 @@ export default function ControlChatPane({ control }: { control: Control }) {
     timer.current = window.setTimeout(() => {
       const now = latest.current;
       endRun(now.id);
+      timer.current = null; // finished, not interrupted — see the unmount cleanup (agentic UI review, 30 Sep)
       const refs = sampleRefs(now.process, plan.size);
       setDraw(d => (d ? { ...d, refs } : d));
       say(now.id, 'ira', `${plan.reading}. Here they are — look them over before I file them.`);
@@ -1016,49 +1151,61 @@ export default function ControlChatPane({ control }: { control: Control }) {
     }
 
     const intent = readIntent(text, { control, s: prompt.situation, role, actions, promptText: prompt.text });
-    if (intent.kind === 'action') {
-      if (intent.note) say(control.id, 'ira', intent.note);
-      perform(intent.action);
-      return;
-    }
-    if (intent.kind === 'mark') {
-      // The page makes the same demand at the tick: contradicting Ira is a
-      // judgement, and a judgement on a working paper carries a reason. Asking
-      // for it here rather than writing silently is what keeps the two sides
-      // telling the reviewer the same story.
-      const point = control.design.points.find(p => p.id === intent.pointId);
-      const iraSaid = point?.validation?.result;
-      if (iraSaid && iraSaid !== intent.result) {
-        setAwaitingWhy({ kind: 'point', id: intent.pointId, label: intent.label, result: intent.result });
-        say(control.id, 'ira', `I read that one as ${iraSaid === 'Pass' ? 'a pass' : 'a fail'}. Marking it ${intent.result === 'Pass' ? 'passed' : 'failed'} goes against what I found, so tell me why and I will record both — your answer on the paper, mine underneath it.`);
+    const apply = () => {
+      if (intent.kind === 'action') {
+        if (intent.note) say(control.id, 'ira', intent.note);
+        perform(intent.action);
         return;
       }
-      setDesignPoint(control.id, intent.pointId, intent.result);
-      logEvent({ action: 'Update', description: `Marked a design check ${intent.result.toLowerCase()} on ${control.id} from the chat`, module: 'SOX ICFR', entity: 'Control' });
-      // This names WHICH check moved, because the reader named it and deserves
-      // to see the right one answered. The diff effect's generic "1 check
-      // marked" would only repeat it, so it stands down for this one change.
-      skipAck.current = true;
-      say(control.id, 'ira', `Marked ${intent.label} ${intent.result === 'Pass' ? 'passed' : 'failed'}.`);
-      return;
-    }
+      if (intent.kind === 'mark') {
+        // The page makes the same demand at the tick: contradicting Ira is a
+        // judgement, and a judgement on a working paper carries a reason. Asking
+        // for it here rather than writing silently is what keeps the two sides
+        // telling the reviewer the same story.
+        const point = control.design.points.find(p => p.id === intent.pointId);
+        const iraSaid = point?.validation?.result;
+        if (iraSaid && iraSaid !== intent.result) {
+          setAwaitingWhy({ kind: 'point', id: intent.pointId, label: intent.label, result: intent.result });
+          say(control.id, 'ira', `I read that one as ${iraSaid === 'Pass' ? 'a pass' : 'a fail'}. Marking it ${intent.result === 'Pass' ? 'passed' : 'failed'} goes against what I found, so tell me why and I will record both — your answer on the paper, mine underneath it.`);
+          return;
+        }
+        setDesignPoint(control.id, intent.pointId, intent.result);
+        logEvent({ action: 'Update', description: `Marked a design check ${intent.result.toLowerCase()} on ${control.id} from the chat`, module: 'SOX ICFR', entity: 'Control' });
+        // This names WHICH check moved, because the reader named it and deserves
+        // to see the right one answered. The diff effect's generic "1 check
+        // marked" would only repeat it, so it stands down for this one change.
+        skipAck.current = true;
+        say(control.id, 'ira', `Marked ${intent.label} ${intent.result === 'Pass' ? 'passed' : 'failed'}.`);
+        return;
+      }
 
-    // ── the same thing, one track later ──────────────────────────────────────
-    if (intent.kind === 'mark-step') {
-      const step = control.operating.steps.find(x => x.id === intent.stepId);
-      const iraSaid = step?.validation?.result;
-      if (iraSaid && iraSaid !== intent.result) {
-        setAwaitingWhy({ kind: 'attribute', id: intent.stepId, label: intent.label, result: intent.result });
-        say(control.id, 'ira', `I read that one as ${iraSaid === 'Pass' ? 'a pass' : 'a fail'}. Marking it ${intent.result === 'Pass' ? 'passed' : 'failed'} goes against what I found, so tell me why and I will record both — your answer on the paper, mine underneath it.`);
+      // ── the same thing, one track later ──────────────────────────────────────
+      if (intent.kind === 'mark-step') {
+        const step = control.operating.steps.find(x => x.id === intent.stepId);
+        const iraSaid = step?.validation?.result;
+        if (iraSaid && iraSaid !== intent.result) {
+          setAwaitingWhy({ kind: 'attribute', id: intent.stepId, label: intent.label, result: intent.result });
+          say(control.id, 'ira', `I read that one as ${iraSaid === 'Pass' ? 'a pass' : 'a fail'}. Marking it ${intent.result === 'Pass' ? 'passed' : 'failed'} goes against what I found, so tell me why and I will record both — your answer on the paper, mine underneath it.`);
+          return;
+        }
+        setStepResult(control.id, intent.stepId, intent.result);
+        logEvent({ action: 'Update', description: `Marked ${intent.label} ${intent.result.toLowerCase()} on ${control.id} from the chat`, module: 'SOX ICFR', entity: 'Test Result' });
+        skipAck.current = true;
+        say(control.id, 'ira', `Marked ${intent.label} ${intent.result === 'Pass' ? 'passed' : 'failed'}.`);
         return;
       }
-      setStepResult(control.id, intent.stepId, intent.result);
-      logEvent({ action: 'Update', description: `Marked ${intent.label} ${intent.result.toLowerCase()} on ${control.id} from the chat`, module: 'SOX ICFR', entity: 'Test Result' });
-      skipAck.current = true;
-      say(control.id, 'ira', `Marked ${intent.label} ${intent.result === 'Pass' ? 'passed' : 'failed'}.`);
+      say(control.id, 'ira', intent.text);
+    };
+    // A TYPED instruction shows what it will do first (agentic UX #14, user ask
+    // 1 Oct): nothing is written until "Do it". Ira's own buttons stay one
+    // click — the button already is the confirmation.
+    if (intent.kind === 'action' || intent.kind === 'mark' || intent.kind === 'mark-step') {
+      const what = intent.kind === 'action' ? (intent.action.does ?? intent.action.label.toLowerCase())
+        : `mark ${intent.label} ${intent.result === 'Pass' ? 'passed' : 'failed'}`;
+      setPreview({ what, run: apply });
       return;
     }
-    say(control.id, 'ira', intent.text);
+    apply();
   };
 
   // The owner does not test the design, so their step ① is called Documents —
@@ -1074,6 +1221,18 @@ export default function ControlChatPane({ control }: { control: Control }) {
           where the hands already are. A long one fills upward and scrolls as
           usual, because auto margins give up the moment there is no slack. */}
       <div ref={scrollRef} className="chat-canvas-mesh flex-1 min-h-0 overflow-y-auto px-3 pt-3 pb-4 flex flex-col">
+       {/* Pinned to the top of the thread, above the `mt-auto` slack, so it
+           stays where the reader looks first however short the chat is. */}
+       {role === 'auditor' && <IraPlan control={control} mode={iraMode} />}
+       <WhatIraKnows control={control} />
+       {/* The step's capability note, under what Ira knows — the tester's
+           only: it describes the testing pen, which the owner does not hold. */}
+       {role === 'auditor' && (
+         <p className="mt-1.5 flex items-start gap-1.5 text-[0.71875rem] leading-snug text-ink-500">
+           <Sparkles size={11} className="text-brand-500 shrink-0 mt-[3px]" aria-hidden />
+           <span>{CAPABILITY[prompt.step]}</span>
+         </p>
+       )}
        <div className="mt-auto space-y-5">
         {thread.map((m, i) => (
           m.who === 'user' ? (
@@ -1085,9 +1244,9 @@ export default function ControlChatPane({ control }: { control: Control }) {
               </div>
             </motion.div>
           ) : (
-            // Only the newest line types itself out. An older one re-performing
-            // every time the reader comes back from History would be theatre.
-            <IraText key={m.id} text={m.text} stream={i === thread.length - 1 && m.id === latestIra.current} />
+            // Only a reply to something typed types itself out (see streamId). An older
+            // line re-performing every time the reader comes back would be theatre.
+            <IraText key={m.id} text={m.text} stream={i === thread.length - 1 && m.id === streamId.current} />
           )
         ))}
 
@@ -1250,14 +1409,14 @@ export default function ControlChatPane({ control }: { control: Control }) {
                 {STEP_NUM[prompt.step]} {stepLabel}
               </span>
             </div>
-            <IraText key={prompt.key} text={prompt.text} stream onDone={setSaidIt} />
+            <IraText key={prompt.key} text={prompt.text} stream={false} />
             {/* The verdict, both faces on one line (user ask, 22 Sep). Stacked,
                 "Design ineffective" under "Design effective" read as a second,
                 lesser button; side by side they read as the two answers to one
                 question — which is what concluding a track is. Centred, and
                 without the row arrow: neither is a "next", they are the choice
                 itself. */}
-            {saidIt && pairs.length > 0 && (
+            {pairs.length > 0 && (
               <div className={cn('mt-3 grid gap-1.5', pairs.length === 2 ? 'grid-cols-2' : 'grid-cols-1')}>
                 {pairs.map((a, i) => (
                   <motion.button key={a.id + a.label} onClick={() => run(a)}
@@ -1274,7 +1433,7 @@ export default function ControlChatPane({ control }: { control: Control }) {
               </div>
             )}
 
-            {saidIt && rows.length > 0 && (
+            {rows.length > 0 && (
               <div className="mt-3 space-y-1.5">
                 {rows.map((a, i) => (
                   <motion.button key={a.id + a.label} onClick={() => run(a)}
@@ -1284,8 +1443,8 @@ export default function ControlChatPane({ control }: { control: Control }) {
                     // never gets to run — a background tab freezes rAF, and a
                     // button you cannot see is worse than one that just appears.
                     // The house follow-up cascade (DESIGN.md §7.1.10) — it can
-                    // run its full 0.13s-per-chip stagger now that the chips
-                    // wait for Ira to stop speaking rather than racing it.
+                    // run its full 0.13s-per-chip stagger; the prompt above prints
+                    // whole now, so there is no sentence for it to race.
                     initial={still ? false : { y: 6 }}
                     animate={{ y: 0 }}
                     transition={{ delay: i * 0.13, duration: 0.48, ease: [0.22, 1, 0.36, 1] }}
@@ -1313,7 +1472,7 @@ export default function ControlChatPane({ control }: { control: Control }) {
                 rows that each claim to be the thing to do. The shape says
                 "pick any, more than one is fine", which is exactly what
                 setting up a design step is. */}
-            {saidIt && picks.length > 0 && (
+            {picks.length > 0 && (
               <div className="mt-3.5">
                 <div className="mb-1.5 text-[0.6875rem] font-semibold text-ink-400">{PICK_CAPTION[picks[0].id] ?? 'Pick one'}</div>
                 <div className="flex flex-wrap gap-1.5">
@@ -1353,6 +1512,21 @@ export default function ControlChatPane({ control }: { control: Control }) {
         onChange={e => { pickedSource(e.target.files); e.target.value = ''; }} />
 
       <div className="p-3 border-t border-canvas-border">
+        {/* What a typed instruction will do, before it does it (UX #14). */}
+        {preview && (
+          <div role="status" className="mb-2 rounded-xl border border-canvas-border bg-canvas-elevated px-3 py-2.5">
+            <p className="text-[0.75rem] text-ink-700 flex items-start gap-1.5">
+              <Sparkles size={12} className="text-brand-500 shrink-0 mt-[3px]" aria-hidden />
+              <span>I’ll {preview.what}.</span>
+            </p>
+            <div className="mt-2 flex items-center gap-2">
+              <button type="button" onClick={() => { const run = preview.run; setPreview(null); run(); }}
+                className="h-7 px-3 rounded-lg bg-brand-600 text-white text-[0.71875rem] font-semibold hover:bg-brand-700 transition-colors cursor-pointer">Do it</button>
+              <button type="button" onClick={() => { setPreview(null); say(control.id, 'ira', 'Left it — nothing was changed.'); }}
+                className="h-7 px-3 rounded-lg border border-canvas-border text-[0.71875rem] font-semibold text-ink-600 hover:text-ink-900 cursor-pointer">Cancel</button>
+            </div>
+          </div>
+        )}
         <div className="ai-border">
           <textarea
             value={draft} onChange={e => setDraft(e.target.value)} rows={2}
@@ -1417,6 +1591,32 @@ export default function ControlChatPane({ control }: { control: Control }) {
             )}
           </div>
         </div>
+        {/* Under the box (user ask, 1 Oct): Manual / Automatic, and the way to
+            stop Ira or take back what it proposed (UX #3, #15). The tester's
+            only — the owner does not run Ira's testing. */}
+        {role === 'auditor' && (
+          <div className="mt-2 flex items-center gap-2 flex-wrap text-[0.6875rem]">
+            <div className="inline-flex items-center gap-0.5 rounded-lg border border-canvas-border bg-paper-50 p-0.5" role="group" aria-label="How Ira works">
+              {(['manual', 'automatic'] as const).map(m => (
+                <button key={m} type="button" aria-pressed={iraMode === m} onClick={() => setIraMode(m)}
+                  title={m === 'manual' ? 'Ira proposes; you press each step' : 'Ira runs the mechanical steps itself and confirms what it is sure of — never concludes or signs'}
+                  className={cn('h-6 px-2.5 rounded-md font-semibold transition-colors cursor-pointer', iraMode === m ? 'bg-canvas-elevated text-ink-900 border border-canvas-border' : 'border border-transparent text-ink-500 hover:text-ink-800')}>
+                  {m === 'manual' ? 'Manual' : 'Automatic'}
+                </button>
+              ))}
+            </div>
+            <div className="flex-1" />
+            {liveRun && !timer.current && (
+              <button type="button" onClick={() => { stopRun(control.id); say(control.id, 'ira', 'Stopped. Nothing from that run was written.'); }}
+                className="h-6 px-2 rounded-md border border-canvas-border font-semibold text-ink-700 hover:border-ink-300 cursor-pointer inline-flex items-center gap-1"><Square size={9} fill="currentColor" /> Stop</button>
+            )}
+            {!liveRun && unconfirmedCount > 0 && (
+              <button type="button" onClick={() => { undoIra(control.id); say(control.id, 'ira', `Took back ${unconfirmedCount === 1 ? 'my unconfirmed result' : `my ${unconfirmedCount} unconfirmed results`} — they read Not tested again.`); }}
+                title="Take every result Ira proposed that nobody confirmed back to Not tested"
+                className="h-6 px-2 rounded-md border border-canvas-border font-semibold text-ink-700 hover:border-ink-300 cursor-pointer inline-flex items-center gap-1"><Undo2 size={10} /> Undo Ira’s {unconfirmedCount}</button>
+            )}
+          </div>
+        )}
       </div>
     </>
   );

@@ -70,7 +70,6 @@ export default function RiskOwnerPortal() {
           // to wait for: the retest happens on the CONTROL, on the audit's own
           // timetable, once the fixed control has had a chance to run.
           setExceptionStatus(def.id, 'Awaiting reviewer'); // clears this reminder with it
-          addToast({ type: 'success', title: 'Submitted for sign-off', message: `${def.id} is with the reviewer — your evidence rides along.` });
         } else {
           setView('deficiencies');
           addToast({ type: 'warning', title: 'Evidence first', message: `Attach proof of the fix on ${def.id}, then submit — “done” needs proof.` });
@@ -79,7 +78,6 @@ export default function RiskOwnerPortal() {
       }
     }
     submitTask(t.id);
-    addToast({ type: 'success', title: 'Sent to audit', message: 'Submitted — we’ll let you know if more is needed.' });
   };
 
   // Inside an audit, a year-end control it holds back (A29) is not a test due.

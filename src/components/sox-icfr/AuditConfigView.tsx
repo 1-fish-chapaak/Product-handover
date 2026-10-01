@@ -269,7 +269,6 @@ export default function AuditConfigView({ audit }: { audit: AuditRecord }) {
       uploadedBy: me, uploadedAt: 'just now', origin, originBy: me, originAt: 'just now',
     });
     logEvent({ action: 'Upload', description: `Attached "${name}" to ${audit.period} — ${origin.toLowerCase()}`, module: 'SOX ICFR', entity: 'Evidence' });
-    addToast({ type: 'success', title: 'File attached', message: `${name} — ${origin.toLowerCase()}.` });
   };
 
   return (

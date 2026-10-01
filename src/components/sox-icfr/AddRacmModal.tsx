@@ -108,7 +108,6 @@ export default function AddRacmModal({ onClose }: { onClose: () => void }) {
       module: 'SOX ICFR',
       entity: 'RACM',
     });
-    addToast({ type: 'success', title: `${plural(picked.length, 'RACM')} added`, message: `${plural(added, 'control')} added to the Control library.` });
     close();
   };
 
@@ -122,7 +121,6 @@ export default function AddRacmModal({ onClose }: { onClose: () => void }) {
           setQ('');
           setProcess('All');
           setTicked(t => (t.includes(racm.id) ? t : [...t, racm.id]));
-          addToast({ type: 'success', title: 'Saved to the RACM tab', message: `${racm.name} is ticked — add it with the rest.` });
         }}
       />,
       document.body,

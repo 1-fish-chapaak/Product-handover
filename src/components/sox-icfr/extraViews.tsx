@@ -27,6 +27,7 @@ import { exposureFromData, fmtDay, sampleHome, workingAudit, type DataExposure }
 import type { ReactNode } from 'react';
 import { designCloseBlock, flawScanDrift, remediationRunway, rootCauseReady, sizingReady } from './helpers';
 import { CHALLENGED_INPUT_LABEL, DESIGN_GAP_KINDS, sortGapKinds, PLAN_FIX_HINT, PLAN_FIX_KINDS, PLAN_FIX_LABEL, type PlanFixKind, EXCEPTION_STEPS, GAP_KIND_HINT, GAP_KIND_LABEL, GAP_KIND_PLAN_PROMPT, gapNature, GRADE_RANK, ENTITY_MW_INDICATORS, EXCEPTION_MW_INDICATORS, MW_INDICATOR_BY_ID, mwIndicatorIds, mwSourceLabel, SEVERITY_URGENCY, type Assertion, type ChallengedInput, type Court, type Deficiency, type EntityMwConclusion, type MwIndicatorDef, type DeficiencyGroup, type ExceptionGrade, type ExceptionStatus, type IcfrEngagement, type RetestRound, type Severity, type SignificantAccount, type TaskType } from './types';
+import { IraDrafted } from './IraState';
 
 const fmt = (n: number) => formatINR(n);
 /** The same figure where it may not exist yet. `fmt` is left number-only on
@@ -449,7 +450,7 @@ export function ScopeView() {
             <div className="text-[0.875rem] font-semibold text-ink-900">{eng.entity}</div>
             <div className="text-[0.75rem] text-ink-500 mt-0.5">
               {eng.entityDetected
-                ? <><Sparkles size={11} className="inline -mt-0.5 text-brand-600" /> Detected from {eng.entityDetected.source} · company code <b className="font-mono">{eng.entityDetected.companyCode}</b></>
+                ? <><IraDrafted label="detected" title={`Detected from ${eng.entityDetected.source}`} /> · company code <b className="font-mono">{eng.entityDetected.companyCode}</b></>
                 : `${eng.framework} · ${eng.periodStart} – ${eng.periodEnd}`}
               {eng.live && <> · <span className="font-semibold text-compliant-700">Live{eng.wentLiveAt ? ` since ${eng.wentLiveAt}` : ''}</span></>}
             </div>
@@ -1825,10 +1826,7 @@ function RootCauseLink({ d, eng }: { d: Deficiency; eng: IcfrEngagement }) {
 function IraTag({ reason }: { reason?: string }) {
   if (!reason) return null;
   return (
-    <p className="text-[0.65625rem] leading-snug pl-[128px] -mt-1">
-      <span className="font-semibold text-brand-700">✦ Ira suggested</span>
-      <span className="text-ink-500"> — {reason}</span>
-    </p>
+    <p className="leading-snug pl-[128px] -mt-1"><IraDrafted title={reason} /></p>
   );
 }
 
@@ -2052,9 +2050,8 @@ export function DeficiencyCard({ d, defaultOpen = false, showControlLink = true,
                   or takes it as written — a draft nobody checked is not step 1. */}
               {d.iraSuggested?.rootCause && d.rootCause.trim() ? (
                 <div className="mt-1 flex items-start gap-2 flex-wrap">
-                  <p className="text-[0.65625rem] leading-snug min-w-0 flex-1">
-                    <span className="font-semibold text-brand-700">✦ Ira suggested</span>
-                    <span className="text-ink-500"> — {d.iraSuggested.rootCause}. Edit it or use it as written before this can be sized.</span>
+                  <p className="text-[0.65625rem] leading-snug min-w-0 flex-1 text-ink-500">
+                    <IraDrafted title={d.iraSuggested.rootCause} /> · Edit it or use it as written before this can be sized.
                   </p>
                   <button onClick={() => { const { rootCause: _drafted, ...rest } = d.iraSuggested!; updateDeficiency(d.id, { iraSuggested: Object.keys(rest).length ? rest : undefined }); }}
                     className="h-6 px-2 rounded-md border border-brand-200 bg-brand-50 text-[0.6875rem] font-semibold text-brand-700 hover:bg-brand-100 transition-colors cursor-pointer shrink-0">
@@ -2766,7 +2763,7 @@ export function DeficiencyCard({ d, defaultOpen = false, showControlLink = true,
               <div className="mt-4 flex items-center justify-end gap-2">
                 <button onClick={() => setReopening(false)} className="h-9 px-3.5 rounded-lg border border-canvas-border text-[12.5px] font-semibold text-ink-600 hover:text-ink-900 cursor-pointer">Cancel</button>
                 <button disabled={!reopenReason.trim()}
-                  onClick={() => { reopenException(d.id, reopenReason.trim()); setReopening(false); addToast({ type: 'warning', title: 'Reopened', message: `${d.id} is back in remediation — the trail records why.` }); }}
+                  onClick={() => { reopenException(d.id, reopenReason.trim()); setReopening(false);  }}
                   className="h-9 px-3.5 rounded-lg bg-high-600 text-white text-[12.5px] font-semibold enabled:hover:bg-high-700 disabled:opacity-40 disabled:cursor-not-allowed transition-colors cursor-pointer inline-flex items-center gap-1.5"><RotateCcw size={13} /> Reopen</button>
               </div>
             </div>

@@ -296,6 +296,10 @@ export interface ColumnMatch {
   column: number | null;
   /** 0–100. Below 70, or null column on a required field, is "needs attention". */
   confidence: number;
+  /** Matched on what the column HOLDS, its heading not being one we know
+   *  (agentic UX #7, 1 Oct: use every column first). Always below 70, so it
+   *  is listed under Needs attention to be checked. */
+  byValues?: boolean;
 }
 
 /** Read every sheet of an .xlsx / .xls / .csv into trimmed string cells. Rejects
@@ -338,7 +342,7 @@ export function guessHeaderRow(rows: string[][]): number {
 
 /** One ColumnMatch per RACM_FIELDS entry, in that order. Each column is used by
  *  at most one field (best confidence wins). */
-export function matchColumns(headers: string[], remembered: Record<string, RacmFieldKey | null> = {}): ColumnMatch[] {
+export function matchColumns(headers: string[], remembered: Record<string, RacmFieldKey | null> = {}, data: string[][] = []): ColumnMatch[] {
   const norm = headers.map(h => normaliseHeader(h));
   // What this header was taken to mean last time wins outright (B4). Matching
   // headers is work, and doing it again for every monthly upload of the same
@@ -372,10 +376,99 @@ export function matchColumns(headers: string[], remembered: Record<string, RacmF
     byField.set(p.field, { column: p.column, confidence: p.confidence });
     usedColumns.add(p.column);
   }
+  // What the headings left over, read by what is in them (#7). A column a
+  // person deliberately left unmapped (`spokenFor`) stays unmapped.
+  const byValues = new Set<RacmFieldKey>();
+  for (const v of readColumnsByValues(headers, data, usedColumns, spokenFor)) {
+    if (!v.field || byField.has(v.field)) continue;
+    byField.set(v.field, { column: v.column, confidence: VALUE_MATCH_CONFIDENCE });
+    usedColumns.add(v.column);
+    byValues.add(v.field);
+  }
   return RACM_FIELDS.map(f => {
     const hit = byField.get(f.key);
-    return { field: f.key, column: hit ? hit.column : null, confidence: hit ? hit.confidence : 0 };
+    return { field: f.key, column: hit ? hit.column : null, confidence: hit ? hit.confidence : 0, ...(byValues.has(f.key) ? { byValues: true } : {}) };
   });
+}
+
+// ─── Columns read by their values (agentic UX #7, 1 Oct) ─────────────────────────
+// A heading we don't know ("Periodicity", "Who performs") used to leave its
+// field unmatched, and Review then asked for what the file already held. Each
+// leftover column is now read: if nearly every cell is a frequency, a control
+// type, a nature, an assertion or a risk category, that is what the column is.
+// Two kinds of value can't say which field they are on their own — people's
+// names (which owner?) and High/Medium/Low (rating or likelihood?) — so for
+// those the heading has to hint; without a hint the column is NOT mapped and
+// the Columns step says which fields to pick between.
+
+export const VALUE_MATCH_CONFIDENCE = 65;
+
+export interface ValueRead {
+  column: number;
+  header: string;
+  /** The field it maps to, or null where the values fit more than one. */
+  field: RacmFieldKey | null;
+  /** The fields it could be, when `field` is null. */
+  choices: RacmFieldKey[];
+  /** What the values were, in words — "people's names", "High / Medium / Low". */
+  holds: string;
+}
+
+const HML = /^(very\s+)?(high|medium|med|low|h|m|l|critical|significant|moderate|minor|major)$/i;
+const OWNER_HINTS: [RegExp, RacmFieldKey][] = [
+  [/process/i, 'processOwner'],
+  [/accountab|risk/i, 'riskOwner'],
+  [/responsib|perform|execut|prepar|operat|doer|who|reviewer|approver|assignee/i, 'owner'],
+];
+const HML_HINTS: [RegExp, RacmFieldKey][] = [
+  [/probab|occur|likel|chance/i, 'likelihood'],
+  [/impact|severity|inherent|rating|level|signific|criticality/i, 'riskRating'],
+];
+
+function looksLikePerson(cell: string): boolean {
+  if (/\d/.test(cell) || cell.length > 48) return false;
+  const words = cell.split(/\s+/).filter(Boolean);
+  if (words.length < 1 || words.length > 5) return false;
+  const caps = words.filter(w => /^[A-Z(]/.test(w)).length;
+  return caps / words.length >= 0.6;
+}
+
+/** Most of a column's filled cells pass `test` — 80%, and at least two. */
+function mostly(cells: string[], test: (c: string) => boolean): boolean {
+  const hits = cells.filter(test).length;
+  return cells.length >= 2 && hits / cells.length >= 0.8;
+}
+
+export function readColumnsByValues(headers: string[], data: string[][], taken: Set<number> = new Set(), skip: Set<number> = new Set()): ValueRead[] {
+  const out: ValueRead[] = [];
+  headers.forEach((raw, column) => {
+    const header = String(raw ?? '').trim();
+    if (!header || taken.has(column) || skip.has(column) || PROCESS_HEADERS.has(normaliseHeader(header))) return;
+    const cells = data.slice(0, 60).map(r => String(r?.[column] ?? '').trim()).filter(Boolean);
+    if (cells.length < 2) return;
+    const one = (field: RacmFieldKey, holds: string) => out.push({ column, header, field, choices: [field], holds });
+    const hinted = (hints: [RegExp, RacmFieldKey][], choices: RacmFieldKey[], holds: string) => {
+      const hit = hints.find(([re]) => re.test(header));
+      out.push({ column, header, field: hit ? hit[1] : null, choices, holds });
+    };
+    if (mostly(cells, c => parseFrequency(c).frequency !== null)) return one('frequency', 'frequencies');
+    if (mostly(cells, c => /^(preventive|preventative|detective)\b/i.test(c))) return one('type', 'Preventive / Detective');
+    if (mostly(cells, c => /^(manual|automated|automatic|semi[- ]?automated|it[- ]dependent)\b/i.test(c))) return one('nature', 'Manual / Automated');
+    if (mostly(cells, c => parseAssertions(c).length > 0)) return one('assertions', 'assertions');
+    if (mostly(cells, c => HML.test(c))) return hinted(HML_HINTS, ['riskRating', 'likelihood'], 'High / Medium / Low');
+    if (mostly(cells, c => riskCategoryOf(c) !== null)) return one('riskCategory', 'risk categories');
+    if (mostly(cells, looksLikePerson)) return hinted(OWNER_HINTS, ['owner', 'processOwner', 'riskOwner'], 'people’s names');
+  });
+  return out;
+}
+
+/** Leftover columns whose values fit more than one field, for the Columns
+ *  step to name — "Your 'Name' column has people's names — pick which owner".
+ *  Only while every field it could be is still without a column. */
+export function unsureColumns(headers: string[], data: string[][], matches: ColumnMatch[]): ValueRead[] {
+  const taken = new Set(matches.flatMap(m => (m.column != null ? [m.column] : [])));
+  const open = (k: RacmFieldKey) => matches.some(m => m.field === k && m.column == null);
+  return readColumnsByValues(headers, data, taken).filter(v => !v.field && v.choices.some(open));
 }
 
 /** Needs attention = a required field with no column (controlTitle and
@@ -418,6 +511,15 @@ export interface ImportRow {
   origin: ImportOrigin;
   /** SOP section the row was read from, e.g. "§ 4.2". SOP rows only. */
   sectionRef?: string;
+  /** How surely Ira read an SOP row (agentic UI review #2, 1 Oct): written in
+   *  the SOP word for word, or read between its lines. Drives the tick's shape
+   *  on Review — solid or outlined. SOP rows only; never on a suggestion. */
+  sopRead?: 'verbatim' | 'inferred';
+  /** What Ira would put in a field the SOP does not state (agentic UX #6,
+   *  1 Oct: extract only what is written). The row arrives with the field
+   *  BLANK, so it lands in Missing values, and these are offered there as
+   *  "Use Ira's suggestions" — never written in on their own. */
+  iraGuesses?: Partial<Record<RacmFieldKey, string>>;
   /** Cell text per mapped field, after any accepted fills. Blank cells are ''. */
   values: Partial<Record<RacmFieldKey, string>>;
   /** THE FILE'S OWN COLUMNS WE HAVE NO FIELD FOR, by their header (B1).
@@ -883,7 +985,7 @@ export function headerMapping(rows: string[][], headerRow: number, matches: Colu
 /** Rebuild one row from edited `values` (after fills, or a frequency picked in
  *  review), re-deriving everything else the same way buildImportRows does.
  *  `earlier` is the rows that come before it in the same import. */
-export function rowFromValues(values: Partial<Record<RacmFieldKey, string>>, base: Pick<ImportRow, 'key' | 'rowNo' | 'origin' | 'sectionRef'> & { extras?: Record<string, string> }, existing: Control[], process: string, earlier: ImportRow[] = [], entity = ''): ImportRow {
+export function rowFromValues(values: Partial<Record<RacmFieldKey, string>>, base: Pick<ImportRow, 'key' | 'rowNo' | 'origin' | 'sectionRef' | 'sopRead' | 'iraGuesses'> & { extras?: Record<string, string> }, existing: Control[], process: string, earlier: ImportRow[] = [], entity = ''): ImportRow {
   const v: Partial<Record<RacmFieldKey, string>> = { ...values };
 
   const attributeTexts = splitList(v.attributes ?? '');
@@ -918,6 +1020,8 @@ export function rowFromValues(values: Partial<Record<RacmFieldKey, string>>, bas
     assertions: parseAssertions(v.assertions ?? ''),
   };
   if (base.sectionRef) row.sectionRef = base.sectionRef;
+  if (base.sopRead) row.sopRead = base.sopRead;
+  if (base.iraGuesses) row.iraGuesses = base.iraGuesses;
   if (freq.flag) row.frequencyFlag = freq.flag;
   if (nature.flag) row.natureFlag = nature.flag;
   if (type.flag) row.typeFlag = type.flag;
@@ -1256,7 +1360,9 @@ export function proposeBlankFills(row: ImportRow): BlankFill[] {
   }
 
   // Risk rating — only a starting point; the rating is agreed with management.
-  if (blank('riskRating') && risk) {
+  // Not on an SOP row (#6): a rating guessed off one word is not something the
+  // SOP wrote, so there it waits in Missing values as Ira's guess instead.
+  if (blank('riskRating') && risk && row.origin !== 'sop') {
     const m = /\bfraud\w*|\bmaterial\w*|\bmisstat\w*/i.exec(risk);
     if (m) fills.push({ field: 'riskRating', value: 'High', reason: `Risk mentions '${m[0].toLowerCase()}'` });
   }
@@ -1696,6 +1802,28 @@ const other = (t: ControlType): ControlType => (t === 'Preventive' ? 'Detective'
  * a screen of grey rows and a button reading "Import 0 controls", with nothing
  * on it saying why.
  */
+/**
+ * What an SOP does not state, held back off the row (agentic UX #6, 1 Oct).
+ *
+ * The review found SOP extraction inventing names and judgements. People
+ * (control, process and risk owner) and the risk's rating and likelihood are
+ * things a procedure rarely writes down, so an SOP row arrives with them
+ * blank — flagged in Missing values like any other gap — and Ira's guess is
+ * kept aside, offered there, never written in. Ira's own suggested controls
+ * keep theirs: the whole row is already marked as hers.
+ */
+export const SOP_UNSTATED: RacmFieldKey[] = ['owner', 'processOwner', 'riskOwner', 'riskRating', 'likelihood'];
+export function holdBackUnstated(values: Partial<Record<RacmFieldKey, string>>): { values: Partial<Record<RacmFieldKey, string>>; iraGuesses?: Partial<Record<RacmFieldKey, string>> } {
+  const read = { ...values };
+  const guesses: Partial<Record<RacmFieldKey, string>> = {};
+  for (const k of SOP_UNSTATED) {
+    const v = (read[k] ?? '').trim();
+    if (v) guesses[k] = v;
+    read[k] = '';
+  }
+  return { values: read, iraGuesses: Object.keys(guesses).length ? guesses : undefined };
+}
+
 export function draftRowsFromSop(process: string, fileName: string, prompt: string, existing: Control[], entity = ''): ImportRow[] {
   const rules = readPromptRules(prompt);
   // What the prompt narrowed the draft to. Filtering BEFORE the walk rather
@@ -1763,7 +1891,12 @@ export function draftRowsFromSop(process: string, fileName: string, prompt: stri
         ...(saysMore ? [`The procedure requires the ${c.nature === 'Automated' ? 'system to enforce this without an override' : 'reviewer to be someone other than the preparer'}${sectionRef ? ` (${sectionRef})` : ''}`] : [])].join('\n'),
       sopSectionRef: sectionRef ?? '',
     };
-    out.push(rowFromValues(values, { key: `sop-${i + 1}`, rowNo: i + 1, origin: suggested ? 'suggested' : 'sop', sectionRef }, existing, process, out, entity));
+    // MOCK (user approved, 1 Oct): a template-drafted SOP carries no real
+    // reading of the document, so how surely each row was read is invented —
+    // hashed, so a row keeps its answer; about one in four "between the lines".
+    const sopRead = suggested ? undefined : hashString(`${process}|${fileName}|${c.id}`) % 4 === 0 ? 'inferred' as const : 'verbatim' as const;
+    const { values: read, iraGuesses } = suggested ? { values, iraGuesses: undefined } : holdBackUnstated(values);
+    out.push(rowFromValues(read, { key: `sop-${i + 1}`, rowNo: i + 1, origin: suggested ? 'suggested' : 'sop', sectionRef, sopRead, iraGuesses }, existing, process, out, entity));
   });
   return out;
 }

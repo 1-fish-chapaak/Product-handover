@@ -324,16 +324,12 @@ export default function SoxClassicInner({ onBack, backLabel = 'Back to Engagemen
               { label: wpRef },
             ]} />
           );
-          // The library's control page carries a white header band that runs to
-          // both screen edges; the trail sits on the same white, so the two
-          // read as one region rather than a strip floating on the canvas.
-          // Both control pages carry that band now, so both trails sit on it.
-          return (
-            <div className="relative flow-root -mt-4 pt-4">
-              <div aria-hidden className="absolute inset-y-0 left-[-50vw] right-[-50vw] bg-canvas-elevated" />
-              <div className="relative">{trail}</div>
-            </div>
-          );
+          // The trail sits on the page's own canvas (user ask, 30 Sep). It used to
+          // sit on a full-width white band left over from when the control
+          // header was one too; the header is a card on the canvas now, so the
+          // white strip read as a second background above it. SoxIcfrApp
+          // dropped the same band on 22 Sep — the two now match.
+          return trail;
         })()}
         {isHandoffs && (
           <SoxBreadcrumb onBack={back} items={[

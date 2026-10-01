@@ -6,16 +6,21 @@
  * the spreadsheet editor in a new tab, and the ⋯ menu with View SOP and Delete.
  * One flat list (user ask, 15 Sep): every RACM sits at the same level whoever
  * owns it, and the process filter narrows that list rather than hiding groups.
- * Cards, not rows (user ask, 29 Sep) — a RACM is a thing you open, not a record
- * you scan across eight columns, so each one is a card you click to open.
+ * Cards OR rows (user ask, 1 Oct). Cards lead, because a RACM is a thing you
+ * open rather than a record you read across: the grid answers "which one" and
+ * every card is a door. The table answers the other question — comparing
+ * thirteen matrices on process, company and size, which a grid makes you do by
+ * memory. The toggle is the platform's own, in the place the Control Library
+ * keeps it, so the two libraries are worked the same way.
  *
  * Pre-testing review is not here — it belongs to each engagement's copy.
  * Internal Audit and Compliance keep their own RACM screens; this tab is SOX only.
  */
 import { useLayoutEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { AnimatePresence } from 'motion/react';
-import { CheckCircle2, FileSpreadsheet, FileText, History, Lock, MoreHorizontal, Search, Table2, Trash2, Workflow, X } from 'lucide-react';
+import { CheckCircle2, FileSpreadsheet, FileText, History, LayoutGrid, List, Lock, MoreHorizontal, Search, Table2, Trash2, Workflow, X } from 'lucide-react';
 import './register.css';
+import { cn } from '../../lib/cn';
 import { useAuditLog } from '../../context/AdminDataContext';
 import { useCurrentUser } from '../../context/CurrentUserContext';
 import { useToast } from '../shared/Toast';
@@ -221,6 +226,94 @@ function RowActions({ racm, canManage, onDelete, onPublish, onHistory }: { racm:
   );
 }
 
+/**
+ * THE SAME THIRTEEN RACMs, READ ACROSS INSTEAD OF DOWN.
+ *
+ * A card answers "which one"; a table answers "how do they compare" — which
+ * process, whose company, how big, and is it published. The grid makes that a
+ * memory exercise, because the facts sit in a different place on every card.
+ *
+ * Everything here is already on the card — this is the same record in a shape
+ * that lines up. The one addition is the column headings, which is what lets
+ * the counts drop their "risks"/"controls" labels and sit as bare figures.
+ *
+ * NO "where it came from" COLUMN (user ask, 1 Oct). Provenance is a sentence,
+ * and a sentence in a column is a paragraph thirteen times over — it was the
+ * widest thing here and the least scannable. It is also only worth reading on
+ * an extracted matrix: an uploaded workbook arrives with nothing to say about
+ * itself. What a scanner actually wants from it is the one bit, SOP or not, so
+ * that is the column — in front of the figures, because where a matrix came
+ * from is what decides how much they are worth. The sentence itself stays on
+ * the card, where there is room for it to be a sentence.
+ *
+ * The row is the door, like the card: `reg-row` carries the house hover and the
+ * whole of it opens the editor. The last cell is the exception, and stops the
+ * click, because those buttons go somewhere else.
+ */
+function RacmTable({ rows, canManage, onDelete, onPublish, onHistory, onFlowchart }: {
+  rows: LibraryRacm[];
+  canManage: boolean;
+  onDelete: (r: LibraryRacm) => void;
+  onPublish: (r: LibraryRacm) => void;
+  onHistory: (r: LibraryRacm) => void;
+  onFlowchart: (r: LibraryRacm) => void;
+}) {
+  return (
+    <div className="reg-wrap">
+      <table className="w-full border-collapse">
+        <thead className="reg-head">
+          <tr>
+            <th>RACM</th>
+            <th style={{ width: 136 }}>Status</th>
+            <th style={{ width: 150 }}>Process</th>
+            <th style={{ width: 180 }}>Company</th>
+            <th style={{ width: 84 }}>Source</th>
+            <th className="num" style={{ width: 72 }}>Risks</th>
+            <th className="num" style={{ width: 86 }}>Controls</th>
+            <th style={{ width: 104 }}><span className="sr-only">Actions</span></th>
+          </tr>
+        </thead>
+        <tbody>
+          {rows.map(r => {
+            const risks = new Set(r.controls.map(c => c.riskId)).size;
+            return (
+              <tr key={r.id} className="reg-row" tabIndex={0} role="button"
+                aria-label={`Open ${r.name} in the spreadsheet editor — opens in a new tab`}
+                onClick={() => openEditorTab(r)}
+                onKeyDown={e => { if (e.key === 'Enter') openEditorTab(r); }}>
+                <td>
+                  <span className="flex items-center gap-2.5 min-w-0">
+                    <span className="w-7 h-7 rounded-md bg-brand-50 text-brand-700 flex items-center justify-center shrink-0"><Table2 size={13} /></span>
+                    <span className="reg-clamp font-semibold text-ink-900" title={r.name}>{r.name}</span>
+                  </span>
+                </td>
+                <td title="Only published RACMs can be scoped into an engagement"><StatusCell racm={r} /></td>
+                <td className="truncate" title={r.process}>{r.process}</td>
+                <td className="truncate" title={r.entity || 'No company'}>{r.entity || <span className="text-ink-300">—</span>}</td>
+                <td>
+                  {r.source === 'sop'
+                    ? <span title="Drafted by reading an SOP — unconfirmed until the process is walked"><Pill tone="info">SOP</Pill></span>
+                    : <span className="text-ink-300">—</span>}
+                </td>
+                <td className="text-right tabular-nums font-semibold">{risks}</td>
+                <td className="text-right tabular-nums font-semibold">{r.controls.length}</td>
+                {/* The one cell that is not the door. */}
+                <td className="tight">
+                  <span className="flex items-center justify-end gap-1">
+                    {r.source === 'sop' && <SopRowButtons racm={r} onFlowchart={() => onFlowchart(r)} />}
+                    <RowActions racm={r} canManage={canManage}
+                      onDelete={() => onDelete(r)} onPublish={() => onPublish(r)} onHistory={() => onHistory(r)} />
+                  </span>
+                </td>
+              </tr>
+            );
+          })}
+        </tbody>
+      </table>
+    </div>
+  );
+}
+
 export default function RacmLibraryView({ canManage, creating, setCreating }: {
   /** Create and delete — the same permission that creates engagements. */
   canManage: boolean;
@@ -241,6 +334,9 @@ export default function RacmLibraryView({ canManage, creating, setCreating }: {
   const [historyFor, setHistoryFor] = useState<LibraryRacm | null>(null);
   const [chartFor, setChartFor] = useState<LibraryRacm | null>(null);
   const [status, setStatus] = useState('All');
+  /* Cards by default. The table is the second way of looking, and a reader who
+     has not asked for it should find the shape they left. */
+  const [layout, setLayout] = useState<'cards' | 'table'>('cards');
 
   const processes = useMemo(() => Array.from(new Set(racms.map(r => r.process))).sort((a, b) => a.localeCompare(b)), [racms]);
   /** The rows on screen — newest first, as the tab keeps them, so a RACM just
@@ -263,11 +359,6 @@ export default function RacmLibraryView({ canManage, creating, setCreating }: {
       return;
     }
     logEvent({ action: 'Update', description: `Published ${moved} control${moved === 1 ? '' : 's'} in ${r.name}`, module: 'SOX ICFR', entity: 'RACM' });
-    addToast({
-      type: 'success',
-      title: was === 'Draft' ? 'RACM published' : 'New controls published',
-      message: `${moved} control${moved === 1 ? '' : 's'} in ${r.name} ${moved === 1 ? 'is' : 'are'} now fixed, and engagements can scope from ${moved === 1 ? 'it' : 'them'}.`,
-    });
   };
 
   const confirmDelete = (r: LibraryRacm) => {
@@ -277,7 +368,6 @@ export default function RacmLibraryView({ canManage, creating, setCreating }: {
       return;
     }
     logEvent({ action: 'Delete', description: `Deleted ${r.name} from the RACM tab — ${r.controls.length} control${r.controls.length === 1 ? '' : 's'}`, module: 'SOX ICFR', entity: 'RACM' });
-    addToast({ type: 'success', title: 'RACM deleted', message: `${r.name} was removed from the RACM tab.` });
   };
 
   return (
@@ -305,6 +395,15 @@ export default function RacmLibraryView({ canManage, creating, setCreating }: {
             <X size={12} /> Clear
           </button>
         )}
+        {/* The platform's view toggle, list on the left — the same control in the
+            same shape as the Control Library's, so the two libraries are not two
+            different things to learn. */}
+        <div className="flex items-center gap-0.5 p-0.5 h-9 rounded-lg border border-canvas-border bg-canvas-elevated">
+          <button onClick={() => setLayout('table')} title="List view" aria-label="List view" aria-pressed={layout === 'table'}
+            className={cn('p-1.5 rounded-sm cursor-pointer transition-colors', layout === 'table' ? 'bg-paper-50 text-brand-700' : 'text-ink-400 hover:text-ink-600')}><List size={16} /></button>
+          <button onClick={() => setLayout('cards')} title="Grid view" aria-label="Grid view" aria-pressed={layout === 'cards'}
+            className={cn('p-1.5 rounded-sm cursor-pointer transition-colors', layout === 'cards' ? 'bg-paper-50 text-brand-700' : 'text-ink-400 hover:text-ink-600')}><LayoutGrid size={16} /></button>
+        </div>
         <FilterSelect value={process} options={['All', ...processes]} allLabel="All processes" onChange={setProcess} ariaLabel="Filter by process" />
         <FilterSelect value={status} options={['All', 'Draft', 'Published']} allLabel="Any status" onChange={setStatus} ariaLabel="Filter by status" />
       </div>
@@ -321,6 +420,7 @@ export default function RacmLibraryView({ canManage, creating, setCreating }: {
               wide one. The card is flat and the whole of it is the door to the
               spreadsheet editor — which is why the ⋯ menu and the two SOP
               buttons each stop the click before it reaches the card. */}
+          {layout === 'cards' ? (
           <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
             {shown.map(r => {
               const risks = new Set(r.controls.map(c => c.riskId)).size;
@@ -366,6 +466,17 @@ export default function RacmLibraryView({ canManage, creating, setCreating }: {
                       whole line spent on a question nobody scans a grid to
                       answer. */}
                   <div className="flex items-center gap-2 min-h-7">
+                    {/* SOP, before the counts (user ask, 1 Oct). Where a matrix
+                        came from changes how much the figures beside it are
+                        worth: an extracted one is a reading of a document, and
+                        until somebody has walked the process it is the SOP's
+                        word for it, not the auditor's. Saying so in front of
+                        the numbers is saying it before they are believed.
+                        `info`, not a status tone — this is a fact about the
+                        matrix's origin, not a verdict on it. */}
+                    {r.source === 'sop' && (
+                      <span title="Drafted by reading an SOP — unconfirmed until the process is walked"><Pill tone="info">SOP</Pill></span>
+                    )}
                     <p className="text-[0.75rem] text-ink-500">
                       <span className="tabular-nums font-semibold text-ink-700">{risks}</span> {risks === 1 ? 'risk' : 'risks'}
                       <span className="text-ink-300"> · </span>
@@ -386,13 +497,17 @@ export default function RacmLibraryView({ canManage, creating, setCreating }: {
               );
             })}
           </div>
+          ) : (
+            <RacmTable rows={shown} canManage={canManage}
+              onDelete={setDeleting} onPublish={setPublishing} onHistory={setHistoryFor} onFlowchart={setChartFor} />
+          )}
           <p className="mt-3 px-1 text-[0.6875rem] text-text-muted tabular-nums">{shown.length} of {racms.length} RACMs</p>
         </>
       )}
 
       {creating && (
         <CreateRacmFlow onClose={() => setCreating(false)}
-          onCreated={r => { setCreating(false); setProcess('All'); setSearch(''); addToast({ type: 'success', title: 'Saved to the RACM tab', message: `${r.name} — ${r.controls.length} control${r.controls.length === 1 ? '' : 's'}` }); }} />
+          onCreated={r => { setCreating(false); setProcess('All'); setSearch('');  }} />
       )}
 
       {/* The chart, redrawn from the controls — see `sopChartFromRacm` on why it

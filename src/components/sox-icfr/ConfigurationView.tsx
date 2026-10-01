@@ -123,7 +123,6 @@ function ConfigInner({ prog, engId, reconcileScope }: {
       e.endDate = basis === 'fy' ? `${end}-03-31` : `${end}-12-31`;
     }
     logEvent({ action: 'Update', description: `SOX testing period set to ${label} — as of ${asOf}`, module: 'SOX ICFR', entity: 'Engagement' });
-    addToast({ message: `Testing period set to ${label}`, type: 'success' });
   };
 
   const uploadTb = (ent: GroupEntity) => {
@@ -211,7 +210,6 @@ function ConfigInner({ prog, engId, reconcileScope }: {
     ].filter(Boolean).join('. ');
     setLastDerive(`${derived.length} processes in scope — ${quant.length} quantitative + ${qual.length} qualitative captions across ${entities.length} entities.${beyond}${moved ? ` ${moved}.` : ''}`);
     logEvent({ action: 'Update', description: `Scope re-derived from configuration — ${derived.length} in-scope processes${beyond ? `, ${declared.join(', ')} kept beyond the trial balance` : ''}, materiality ${fmtCr(groupOverall)}`, module: 'SOX ICFR', entity: 'Engagement' });
-    addToast({ message: `Scope re-derived — ${derived.length} processes in scope${toastTail}`, type: 'success' });
   };
 
   return (

@@ -386,7 +386,6 @@ export function RacmLanding() {
     if (blocker) { addToast({ type: 'warning', title: "Can't delete this RACM", message: `${blocker}.` }); return; }
     deleteRacm(process);
     logEvent({ action: 'Delete', description: `Deleted the ${process} RACM and its ${count} control${count === 1 ? '' : 's'}`, module: 'SOX ICFR', entity: 'RACM' });
-    addToast({ type: 'success', title: 'RACM deleted', message: `The ${process} RACM and its ${count} control${count === 1 ? '' : 's'} were removed.` });
   };
 
   return (
@@ -579,7 +578,6 @@ export default function Racm() {
     window.setTimeout(() => {
       addRacmDoc(f.name, proc);
       setImporting(null);
-      addToast({ type: 'success', title: 'Imported', message: `${f.name} attached to ${proc} — RACM. Rows and test attributes read from the document.` });
     }, 1600);
   };
   const myDocs = racmDocs.filter(d => !d.process || d.process === proc);

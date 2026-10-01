@@ -3039,7 +3039,7 @@ export function pendingReviewNoteCount(eng: IcfrEngagement, controlId: string): 
 
 // ─── Track progress ──────────────────────────────────────────────────────────────
 
-import type { DesignPoint, EvidenceFile, OperatingStep, RequiredFile, TestResult, ValidationQA, ValidationTable } from './types';
+import type { DesignPoint, EvidenceFile, OperatingStep, RequiredFile, TestResult, ValidationQA, ValidationResult, ValidationTable } from './types';
 export function pointResult(p: DesignPoint): TestResult { return p.override ? (p.override.result as TestResult) : p.result; }
 
 /** A validated file and a person's attestation reached opposite conclusions on
@@ -3054,6 +3054,17 @@ export function pointResult(p: DesignPoint): TestResult { return p.override ? (p
 export function attestationOverruled(s: OperatingStep): boolean {
   return !!(s.validation?.result && s.attestation?.result && s.validation.result !== s.attestation.result);
 }
+/** Ira's result standing on a row, waiting for a person to confirm it (agentic
+ *  UX #1, 1 Oct): a verdict Ira reached, not overridden, not yet confirmed. */
+export function awaitsConfirm(row: { validation?: ValidationResult; override?: unknown; confirmed?: unknown }): boolean {
+  return !!row.validation?.result && !row.validation.blocked && !row.override && !row.confirmed;
+}
+/** Every row on a track still waiting on that confirmation — what holds the
+ *  conclusion back. */
+export function unconfirmedIra(c: Control, which: 'design' | 'operating'): (DesignPoint | OperatingStep)[] {
+  return which === 'design' ? c.design.points.filter(awaitsConfirm) : c.operating.steps.filter(awaitsConfirm);
+}
+
 export function stepResult(s: OperatingStep): TestResult {
   // The auditor's own override stays supreme — it is a named judgment with a
   // recorded reason, not a second opinion sneaking past the evidence.
@@ -3061,6 +3072,35 @@ export function stepResult(s: OperatingStep): TestResult {
   if (attestationOverruled(s)) return s.validation!.result as TestResult;
   return s.result;
 }
+
+// ─── Ira's confidence — how sure the verdict is, drawn in the tick's shape ───────
+// A reviewer can't read every check twice, so the tick tells them which ones to
+// look at: a solid tick is a verdict Ira is sure of, an outlined one is the same
+// verdict held loosely. Two tiers, not a percentage on the page — the number is
+// on hover for whoever wants it.
+export type ConfidenceTier = 'high' | 'medium';
+/** At or above this, the tick is drawn solid. */
+export const CONFIDENT_AT = 80;
+
+/** How sure Ira was of this validation, or undefined where there is no verdict
+ *  (never validated, or blocked — nothing to be sure of).
+ *
+ *  MOCK: the prototype's validations carry no real confidence yet, so where
+ *  `v.confidence` is unset a number is invented from a hash of `key` (user
+ *  approved invented values). Hashed rather than random so a check keeps the
+ *  same number on every render — a tick that flickered between solid and
+ *  outlined would say the verdict itself was changing. Roughly three in four
+ *  land 85–98 and the rest 55–79, which is about the mix a reviewer should
+ *  expect: mostly sure, a handful worth a second look. */
+export function confidenceOf(v: ValidationResult | undefined, key: string): number | undefined {
+  if (!v || v.blocked) return undefined;
+  if (v.confidence != null) return v.confidence;
+  let h = 2166136261; // FNV-1a — cheap, stable, spreads short keys well
+  for (let i = 0; i < key.length; i++) { h ^= key.charCodeAt(i); h = Math.imul(h, 16777619); }
+  h >>>= 0;
+  return h % 4 === 0 ? 55 + ((h >>> 2) % 25) : 85 + ((h >>> 2) % 14);
+}
+export function confidenceTier(n: number): ConfidenceTier { return n >= CONFIDENT_AT ? 'high' : 'medium'; }
 
 // ─── Required files — the evidence an attribute's AI validation runs against ─────
 // The RACM's Control Evidence column names what proves a control; Ira splits it
@@ -3732,6 +3772,28 @@ export function operatingProgress(c: Control) {
   };
 }
 
+/** Who reached each result, in one line: "Ira checked 2 · you overrode 1 ·
+ *  1 not tested" (agentic UI review, 29 Sep). The rationale used to say "All N
+ *  passed" whether Ira read the evidence, the auditor ticked it by hand, or
+ *  nothing was tested at all. Only the parts that are non-zero are said. */
+function provenanceLine(items: { validated: boolean; blocked: boolean; overridden: boolean; result: TestResult }[]): string {
+  let ira = 0, overrode = 0, byHand = 0, couldNot = 0, untested = 0;
+  items.forEach(i => {
+    if (i.overridden) overrode += 1;
+    else if (i.blocked) couldNot += 1;
+    else if (i.result === 'Not tested') untested += 1;
+    else if (i.validated) ira += 1;
+    else byHand += 1;
+  });
+  return [
+    ira && `Ira checked ${ira}`,
+    byHand && `you marked ${byHand}`,
+    overrode && `you overrode ${overrode}`,
+    couldNot && `Ira couldn't test ${couldNot}`,
+    untested && `${untested} not tested`,
+  ].filter(Boolean).join(' · ');
+}
+
 /** The rationale the conclusion box opens with.
  *
  *  Every conclusion has to reach the working paper with words against it, but
@@ -3745,6 +3807,20 @@ export function operatingProgress(c: Control) {
  *  which one they would press would be putting words in their mouth. Disagreeing
  *  with it is exactly the case where they should be writing their own. */
 export function concludeRationale(c: Control, which: 'design' | 'operating'): string {
+  const body = rationaleBody(c, which);
+  const line = which === 'design'
+    ? provenanceLine(c.design.points.map(p => ({
+        validated: !!p.validation && !p.validation.blocked, blocked: !!p.validation?.blocked && pointResult(p) === 'Not tested',
+        overridden: !!p.override, result: pointResult(p),
+      })))
+    : provenanceLine(c.operating.steps.map(s => ({
+        validated: !!s.validation && !s.validation.blocked, blocked: !!s.validation?.blocked && stepResult(s) === 'Not tested',
+        overridden: !!s.override, result: stepResult(s),
+      })));
+  return line ? `${line}.\n${body}` : body;
+}
+
+function rationaleBody(c: Control, which: 'design' | 'operating'): string {
   if (which === 'design') {
     const { pointsPass, pointsTotal } = designProgress(c);
     const evidenced = c.design.documents
@@ -3755,7 +3831,10 @@ export function concludeRationale(c: Control, which: 'design' | 'operating'): st
       : '';
     if (!pointsTotal) return `No design checks were recorded for this control${against}.`;
     const failed = c.design.points.filter(p => pointResult(p) === 'Fail');
-    if (!failed.length) return `All ${pointsTotal} design check${pointsTotal === 1 ? '' : 's'} passed${against}.`;
+    // "All passed" only when every check actually has a result — a check nobody
+    // tested is not a pass, and the sentence used to count it as one.
+    if (!failed.length && pointsPass === pointsTotal) return `All ${pointsTotal} design check${pointsTotal === 1 ? '' : 's'} passed${against}.`;
+    if (!failed.length) return `${pointsPass} of ${pointsTotal} design checks passed${against}; the rest have no result yet.`;
     // A failed check is named WITH the attribute it belongs to. The rationale is
     // what the paper carries as the reason, and "exceptions handled per policy
     // failed" does not say which of the five things the control has to do.
@@ -3769,7 +3848,8 @@ export function concludeRationale(c: Control, which: 'design' | 'operating'): st
   const n = c.operating.sampling?.size;
   const across = n ? ` across ${n} sampled item${n === 1 ? '' : 's'}` : '';
   if (!total) return `No attributes were recorded for this control${across}.`;
-  if (!failed) return `All ${total} attribute${total === 1 ? '' : 's'} passed${across}.`;
+  if (!failed && passed === total) return `All ${total} attribute${total === 1 ? '' : 's'} passed${across}.`;
+  if (!failed) return `${passed} of ${total} attributes passed${across}; the rest have no result yet.`;
   return `${passed} of ${total} attributes passed${across}. ${failed} failed.`;
 }
 
@@ -4760,3 +4840,76 @@ export function titleFromRisk(text: string): string {
   const out = cut.length <= MAX ? cut : `${cut.slice(0, cut.lastIndexOf(' ', MAX)).replace(/[.;:,]+$/, '')}…`;
   return out[0]!.toUpperCase() + out.slice(1);
 }
+
+// ─── "Ira learned" — patterns in the overrides (agentic UX #9, 1 Oct) ─────────────
+// The same check, overridden the same way on 3+ controls, becomes a card the
+// reviewer rules on. Nothing is learned silently: until a reviewer approves,
+// Ira's answers stay exactly as they were.
+import type { IraLearnedRule } from './types';
+
+export const LEARN_AT = 3;
+
+export interface OverridePattern {
+  key: string;
+  which: 'design' | 'operating';
+  text: string;
+  from: TestResult;
+  to: TestResult;
+  controls: string[];
+  reasons: string[];
+}
+
+const learnText = (t: string) => t.trim().toLowerCase().replace(/\s+/g, ' ').replace(/[.]+$/, '');
+export const learnKey = (which: 'design' | 'operating', text: string, from: TestResult, to: TestResult) =>
+  `${which}|${learnText(text)}|${from}>${to}`;
+
+/** Patterns with enough controls behind them that no reviewer has ruled on yet
+ *  in this audit. Ira's verdict is read off `validation.result`, which an
+ *  override sits on top of and never clears. */
+export function overridePatterns(eng: IcfrEngagement, auditId?: string | null): OverridePattern[] {
+  const ruled = new Set((eng.iraLearned ?? []).filter(r => (r.auditId ?? null) === (auditId ?? null)).map(r => r.key));
+  const by = new Map<string, OverridePattern>();
+  const add = (which: 'design' | 'operating', text: string, from: TestResult | undefined, o: { result: string; rationale: string } | undefined, controlId: string) => {
+    if (!o || !from || from === 'Not tested') return;
+    const to = o.result as TestResult;
+    if ((to !== 'Pass' && to !== 'Fail') || to === from) return;
+    const key = learnKey(which, text, from, to);
+    if (ruled.has(key)) return;
+    const p = by.get(key) ?? { key, which, text, from, to, controls: [], reasons: [] };
+    if (!p.controls.includes(controlId)) p.controls.push(controlId);
+    if (o.rationale?.trim()) p.reasons.push(o.rationale.trim());
+    by.set(key, p);
+  };
+  for (const c of eng.controls) {
+    for (const p of c.design.points) add('design', p.text, p.validation?.result, p.override, c.id);
+    for (const s of c.operating.steps) add('operating', s.description, s.validation?.result, s.override, c.id);
+  }
+  return [...by.values()].filter(p => p.controls.length >= LEARN_AT);
+}
+
+/** The approved rule that turns Ira's `res` on this check into another answer. */
+export function learnedRuleFor(rules: IraLearnedRule[] | undefined, which: 'design' | 'operating', text: string, res: TestResult, auditId?: string | null): IraLearnedRule | undefined {
+  return (rules ?? []).find(r => r.status === 'approved' && (r.auditId ?? null) === (auditId ?? null) && r.key === learnKey(which, text, res, r.to));
+}
+
+export const learnedNote = (r: IraLearnedRule) =>
+  `Learned: auditors changed ${r.from} to ${r.to} on this check on ${r.count} controls, and ${r.by} approved it.`;
+
+// ─── Roll-forward — last round's set-up, confirmed before it is used (#13) ───────
+import type { RollPart } from './types';
+
+export const ROLL_PART_LABEL: Record<RollPart, string> = {
+  design: 'Design documents and walkthrough',
+  checks: 'Design checks',
+  population: 'Population set-up',
+  attributes: 'Test attributes',
+};
+/** Where on the control page each part's Confirm / Edit bar sits. */
+export const ROLL_PART_ANCHOR: Record<RollPart, string> = {
+  design: 'roll-design', checks: 'roll-design', population: 'roll-population', attributes: 'roll-attributes',
+};
+
+/** A part brought from last round that nobody has confirmed or edited yet. */
+export const rollPending = (c: Control, part: RollPart): boolean => c.rollForward?.parts[part]?.state === 'pending';
+export const rollPendingParts = (c: Control): RollPart[] =>
+  (['design', 'checks', 'population', 'attributes'] as RollPart[]).filter(p => rollPending(c, p));
