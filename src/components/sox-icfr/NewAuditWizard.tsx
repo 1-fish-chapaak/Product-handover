@@ -23,7 +23,7 @@ import { conclusionOf, isEngagementLocked, trackResult } from './helpers';
 import RacmImportReview from './RacmImportReview';
 import { useIcfr } from './store';
 import { useAuditLog } from '../../context/AdminDataContext';
-import { useToast } from '../shared/Toast';
+import { InlineNote, useInlineNote } from './InlineNote';
 import {
   AUDIT_ROUNDS,
   type AuditRecord, type AuditRound, type AuditScopeKind, type Control, type FileOrigin,
@@ -112,7 +112,10 @@ export default function NewAuditWizard({ onClose, prefillFrom }: {
 }) {
   const { eng, role, createAudit, createRacm, registerFile, addControl, addDesignPoint, setControlKey, me } = useIcfr();
   const logEvent = useAuditLog();
-  const { addToast } = useToast();
+  // Agentic UX #11: no toasts — a refused add-control is said under the RACM
+  // row whose + Control button started it (ctrlNoteFor names that row).
+  const ctrlNote = useInlineNote();
+  const [ctrlNoteFor, setCtrlNoteFor] = useState<string | null>(null);
   const [step, setStep] = useState(0);
 
   /** What the Roll forward button on `prefillFrom` means, resolved once. */
@@ -990,8 +993,12 @@ export default function NewAuditWizard({ onClose, prefillFrom }: {
       assertions: [],
     });
     // addControl returns '' on a locked engagement rather than throwing.
+    // The add-control sheet covers the wizard, so close it and say why under
+    // the RACM row it was opened from.
     if (!id) {
-      addToast({ type: 'error', title: 'Control not added', message: 'This engagement is locked.' });
+      setAddCtrlRacm(null);
+      setCtrlNoteFor(process);
+      ctrlNote.show('error', 'Control not added — this engagement is locked.');
       return;
     }
     // The attributes typed on the form become the control's design
@@ -2085,7 +2092,7 @@ export default function NewAuditWizard({ onClose, prefillFrom }: {
                           nesting a button inside a button isn't valid, and this
                           one must not expand the RACM. */}
                       <button
-                        onClick={() => setAddCtrlRacm(o.id)}
+                        onClick={() => { ctrlNote.clear(); setAddCtrlRacm(o.id); }}
                         title={`Add a control to ${o.primary}`}
                         aria-label={`Add a control to ${o.primary}`}
                         className="shrink-0 inline-flex items-center gap-1 h-6 pl-1.5 pr-2 rounded-md text-[11px] font-semibold text-brand-700 hover:bg-brand-50 transition-colors cursor-pointer"
@@ -2101,6 +2108,7 @@ export default function NewAuditWizard({ onClose, prefillFrom }: {
                         <ChevronDown size={14} className={cn('text-ink-400 transition-transform', expanded && 'rotate-180')} />
                       </button>
                     </div>
+                    {ctrlNoteFor === o.id && <InlineNote note={ctrlNote.note} className="px-4 pb-2 -mt-1 text-right" />}
 
                     {expanded && (
                       <div className="bg-canvas/60 border-t border-canvas-border">

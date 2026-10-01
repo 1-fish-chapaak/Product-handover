@@ -5,7 +5,7 @@ import {
   Grid3x3, Layers, Plus, Scale, ScrollText, ShieldAlert, SlidersHorizontal, Table2, Users,
 } from 'lucide-react';
 import { useIcfr } from './store';
-import { useToast } from '../shared/Toast';
+import { InlineNote, useInlineNote } from './InlineNote';
 import EmptyState from '../shared/EmptyState';
 import { Pill } from '../shared/StatusBadge';
 import { SeverityPill } from './parts';
@@ -396,7 +396,10 @@ function MasterRow({ icon: Icon, title, body, count, onClick }: {
 
 export default function EngagementOverview() {
   const { eng, role, openAudit, openDeficiency, setTab, setView } = useIcfr();
-  const { addToast } = useToast();
+  // Agentic UX #11: no toasts — a range mistake shows under the range inputs,
+  // the People & roles note under that card.
+  const rangeNote = useInlineNote();
+  const peopleNote = useInlineNote();
   const [creating, setCreating] = useState(false);
   // Add RACM (S11) — the picker over the Engagements page's RACM tab.
   const [addingRacm, setAddingRacm] = useState(false);
@@ -449,12 +452,13 @@ export default function EngagementOverview() {
   const narrowed = applied.from !== fullRange.from || applied.to !== fullRange.to;
 
   const apply = () => {
+    rangeNote.clear();
     if (draft.to < draft.from) {
-      addToast({ type: 'error', message: 'The end month cannot be before the start month.' });
+      rangeNote.show('error', 'The end month cannot be before the start month.');
       return;
     }
     if (spanMonths(draft) > MAX_SPAN_MONTHS) {
-      addToast({ type: 'error', message: `Pick a range of ${MAX_SPAN_MONTHS} months or less.` });
+      rangeNote.show('error', `Pick a range of ${MAX_SPAN_MONTHS} months or less.`);
       return;
     }
     setRange({ ...draft });
@@ -626,7 +630,7 @@ export default function EngagementOverview() {
             type="month"
             value={draft.from}
             max={draft.to}
-            onChange={e => setDraft(d => ({ ...d, from: e.target.value }))}
+            onChange={e => { rangeNote.clear(); setDraft(d => ({ ...d, from: e.target.value })); }}
             aria-label="Range start month"
             className={inputCls}
           />
@@ -635,7 +639,7 @@ export default function EngagementOverview() {
             type="month"
             value={draft.to}
             min={draft.from}
-            onChange={e => setDraft(d => ({ ...d, to: e.target.value }))}
+            onChange={e => { rangeNote.clear(); setDraft(d => ({ ...d, to: e.target.value })); }}
             aria-label="Range end month"
             className={inputCls}
           />
@@ -662,6 +666,8 @@ export default function EngagementOverview() {
           <span className="text-[0.75rem] text-ink-400 tabular-nums">
             {inRange.length} of {eng.audits.length} audit{eng.audits.length === 1 ? '' : 's'}
           </span>
+          {/* basis-full drops the note onto its own line under the inputs. */}
+          <InlineNote note={rangeNote.note} className="basis-full" />
         </div>
         {newAuditBtn}
       </div>
@@ -936,9 +942,10 @@ export default function EngagementOverview() {
               title="People & roles"
               body={`Preparer ${eng.preparer.split(' · ')[0]}, reviewer ${eng.reviewer.split(' · ')[0]}.`}
               count="Settings"
-              onClick={() => addToast({ type: 'info', message: 'People & roles is managed in platform settings.' })}
+              onClick={() => peopleNote.show('info', 'People & roles is managed in platform settings.')}
             />
           </div>
+          <InlineNote note={peopleNote.note} className="mt-1" />
         </Widget>
 
         <Widget

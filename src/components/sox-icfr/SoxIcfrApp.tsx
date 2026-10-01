@@ -1,4 +1,5 @@
 import { useEffect } from 'react';
+import { InlineNote } from './InlineNote';
 import { AnimatePresence, motion } from 'motion/react';
 import { ArrowLeft, BadgeCheck } from 'lucide-react';
 import './register.css';
@@ -129,7 +130,7 @@ const SOX_TABS: TabDef[] = [
 function Inner({ onBack, backLabel = 'Back to Engagements' }: { onBack?: () => void; backLabel?: string }) {
   // the breadcrumb names where ← actually lands — "Engagements" or "SOX Testing"
   const backCrumb = backLabel.replace(/^Back to /, '');
-  const { eng, role, tab, view, racmEditor, racmProcess, meOwner, selectedControlId, returnView, openAuditId, closeAudit, setMeOwner, setRole, setTab, setView, back } = useIcfr();
+  const { refusal, eng, role, tab, view, racmEditor, racmProcess, meOwner, selectedControlId, returnView, openAuditId, closeAudit, setMeOwner, setRole, setTab, setView, back } = useIcfr();
   // Engagement-level signoff is never written — cycles conclude on each audit's
   // own record, and the engagement outlives them, so the header pill stays Active.
   const concluded = !!(eng.signoff.preparer && eng.signoff.reviewer);
@@ -350,6 +351,8 @@ function Inner({ onBack, backLabel = 'Back to Engagements' }: { onBack?: () => v
             size="md"
           />
         )}
+        {/* A link this persona can't open says so here, in one line (#11). */}
+        <InlineNote note={refusal} className="mt-2" />
         {isRacmMatrix && (
           <SoxBreadcrumb onBack={() => setView('racm')} items={[
             ...(onBack ? [{ label: backCrumb, onClick: onBack }] : []),

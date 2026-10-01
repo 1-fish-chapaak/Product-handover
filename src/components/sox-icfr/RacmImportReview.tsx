@@ -56,7 +56,7 @@ import {
   CODE_OK, assignRacmIds, cleanCode, entityCodeTakenBy, peekEntityCode, peekProcessCode, processCodeTakenBy,
   setEntityCode, setProcessCode,
 } from './racmIds';
-import { useToast } from '../shared/Toast';
+import { InlineNote, useInlineNote } from './InlineNote';
 import { useAdminData, useAuditLog, type UserStatus } from '../../context/AdminDataContext';
 import { Pill } from '../shared/StatusBadge';
 import { cn } from '../../lib/cn';
@@ -822,7 +822,8 @@ function ConfidencePill({ match, missing }: { match: ColumnMatch; missing: boole
 }
 
 export default function RacmImportReview({ mode, file, process, entity, existing, onClose, onImport }: RacmImportReviewProps) {
-  const { addToast } = useToast();
+  // Agentic UX #11: no toasts — a failed import is said beside the Import button.
+  const importNote = useInlineNote();
   const logEvent = useAuditLog();
   // The people this tenant can actually assign. Read from the workspace's own
   // user list rather than from names seen in past matrices: an owner has to be
@@ -1549,12 +1550,13 @@ export default function RacmImportReview({ mode, file, process, entity, existing
   };
 
   const doImport = () => {
+    importNote.clear();
     if (!canImport) return;
     let controls: Control[];
     try {
       controls = importRowsToControls(included, process, cfg.core, cfg.extras);
     } catch {
-      addToast({ type: 'error', title: "Couldn't import", message: 'Fill every blank, or leave the row out, before importing.' });
+      importNote.show('error', "Couldn't import — fill every blank, or leave the row out.");
       return;
     }
     // the codes as reviewed become the register's, then every row takes its ID
@@ -2544,6 +2546,7 @@ export default function RacmImportReview({ mode, file, process, entity, existing
               {/* The last station either way. An SOP saw its chart one step
                   earlier; a workbook never had one, there being no chart to
                   read out of a matrix that was already a matrix. */}
+              <InlineNote note={importNote.note} />
               <button type="button" onClick={doImport} disabled={!canImport} className={primaryBtn}>Import {plural(included.length, 'control')}</button>
             </>
           )}

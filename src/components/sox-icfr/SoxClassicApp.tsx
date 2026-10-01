@@ -1,4 +1,5 @@
 import { AnimatePresence, motion } from 'motion/react';
+import { InlineNote } from './InlineNote';
 import { ArrowLeft, BadgeCheck } from 'lucide-react';
 import './register.css';
 import { cn } from '../../lib/cn';
@@ -89,7 +90,7 @@ const SOX_TABS: TabDef[] = [
 export default function SoxClassicInner({ onBack, backLabel = 'Back to Engagements' }: { onBack?: () => void; backLabel?: string }) {
   // the breadcrumb names where ← actually lands — "Engagements" or "SOX Testing"
   const backCrumb = backLabel.replace(/^Back to /, '');
-  const { eng, role, tab, view, racmEditor, racmProcess, meOwner, selectedControlId, returnView, openAuditId, closeAudit, setMeOwner, setRole, setTab, setView, back } = useIcfr();
+  const { refusal, eng, role, tab, view, racmEditor, racmProcess, meOwner, selectedControlId, returnView, openAuditId, closeAudit, setMeOwner, setRole, setTab, setView, back } = useIcfr();
   const concluded = !!(eng.signoff.preparer && eng.signoff.reviewer);
   /* Audits reached this shell with the portfolio Overview, so opening one has to
      work here too — a register row whose Open button did nothing would be worse
@@ -290,6 +291,8 @@ export default function SoxClassicInner({ onBack, backLabel = 'Back to Engagemen
         {isRoot && (
           <EngagementTabBar tabs={tabs} activeTab={tab} onSelect={(id) => setTab(id as SoxTab)} storageKey={inAudit ? `sox-audit-${eng.id}` : `sox-${eng.id}`} size="md" />
         )}
+        {/* A link this persona can't open says so here, in one line (#11). */}
+        <InlineNote note={refusal} className="mt-2" />
         {isRacmMatrix && (
           <SoxBreadcrumb onBack={() => setView('racm')} items={[
             ...(onBack ? [{ label: backCrumb, onClick: onBack }] : []),
