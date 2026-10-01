@@ -827,7 +827,11 @@ export function IcfrProvider({ children, initialRole = 'auditor', seedMeta }: { 
   // guard — every action S6 gated refuses for either reason.
   const awaitingDesignApproval = useCallback((controlId: string) => {
     const c = eng.controls.find(x => x.id === controlId);
-    return !c || !designApproved(c) || !!yearEndPending(c, eng.audits.find(a => a.id === openAuditId));
+    // Concluded is enough (user, 1 Oct): the auditor does not wait on the
+    // reviewer's design approval to start the population — the approval runs
+    // alongside, from the Reviewer queue, and only the countersign waits for it.
+    // The name is kept so every caller reads the same gate.
+    return !c || trackResult(c.design) === 'Not tested' || !!yearEndPending(c, eng.audits.find(a => a.id === openAuditId));
   }, [eng.controls, eng.audits, openAuditId]);
 
   // Selecting a tab resets to that tab's root view; both personas share the same tabs.
@@ -3070,7 +3074,9 @@ export function IcfrProvider({ children, initialRole = 'auditor', seedMeta }: { 
         // here and goes to the reviewer, and TOE is left for after. An approved
         // design is left alone and TOE is tested behind it — re-concluding the
         // design would pull the approval out from under those results.
-        const approved = designApproved(c);
+        // A concluded design is left alone and TOE tested behind it — the
+        // reviewer's approval no longer holds TOE back (user, 1 Oct).
+        const approved = trackResult(c.design) !== 'Not tested';
         // Year-end controls (A29): TOE waits for the year-end audit, so behind an
         // approved design in an interim or roll-forward there is nothing to run.
         const pending = !!yearEndPending(c, prev.audits.find(a => a.id === openAuditId));
@@ -4332,7 +4338,7 @@ export function IcfrProvider({ children, initialRole = 'auditor', seedMeta }: { 
       if (isEngagementLocked(prev)) return prev;
       const c = prev.controls.find(x => x.id === controlId);
       if (!c || c.operating.parked || isControlLockedIn(prev, c)) return prev;
-      if (trackResult(c.design) !== 'Effective' || !designApproved(c)) return prev;
+      if (trackResult(c.design) !== 'Effective') return prev;
       const parked: OperatingPark = { reason: reason.trim(), expectedFrom: expectedFrom.trim(), by: me, at: 'just now' };
       const event: ExecutionEvent = {
         id: uid('ex'), controlId, track: 'operating', kind: 'park-operating',
@@ -4672,6 +4678,7 @@ export function IcfrProvider({ children, initialRole = 'auditor', seedMeta }: { 
       if (step === 'reviewer' && (!target.wpSignoff?.preparer || target.wpSignoff.reviewer)) return prev; // countersign follows the preparer
       if (step === 'reviewer' && prev.reviewNotes.some(n => n.controlId === controlId && n.status !== 'Closed')) return prev; // notes must clear before the countersign
       if (step === 'reviewer' && target.wpSignoff?.preparer?.by === me) return prev; // self-review guard: the paper's preparer never countersigns it
+      if (step === 'reviewer' && !designApproved(target)) return prev; // the design approval runs alongside testing, and the countersign is what waits for it
       const event: ExecutionEvent = {
         id: uid('ex'), controlId, track: 'operating', kind: 'wp-signoff',
         verb: step === 'preparer' ? 'signed off the working paper' : 'countersigned the working paper',
