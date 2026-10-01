@@ -149,7 +149,7 @@ function SopRowButtons({ racm, onFlowchart }: { racm: LibraryRacm; onFlowchart: 
       <IconButtonWithTip
         disabled={!racm.sopUrl}
         label={`View the SOP behind ${racm.name}`}
-        tip={racm.sopUrl ? `Open ${racm.fileName}` : "The SOP file isn't available in this session"}
+        tip={racm.sopUrl ? 'View SOP' : "The SOP file isn't available in this session"}
         onClick={() => {
           if (!racm.sopUrl) return;
           window.open(racm.sopUrl, '_blank', 'noopener');
@@ -159,7 +159,7 @@ function SopRowButtons({ racm, onFlowchart }: { racm: LibraryRacm; onFlowchart: 
       </IconButtonWithTip>
       <IconButtonWithTip
         label={`View the flowchart for ${racm.name}`}
-        tip="View the process flowchart"
+        tip="View flowchart"
         onClick={onFlowchart}>
         <Workflow size={13} />
       </IconButtonWithTip>

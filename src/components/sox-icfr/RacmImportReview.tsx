@@ -43,7 +43,7 @@ import { Fragment, useCallback, useDeferredValue, useEffect, useMemo, useRef, us
 import { createPortal } from 'react-dom';
 import {
   AlertTriangle, ArrowLeft, Check, CheckCircle2, ChevronDown, ChevronRight, Circle, Copy, FileSpreadsheet, FileText, FileWarning,
-  Eye, Loader2, Paperclip, Pencil, RotateCcw, Search, Sparkles, Star, Undo2, X,
+  Loader2, Paperclip, Pencil, RotateCcw, Search, Sparkles, Star, Undo2, X,
 } from 'lucide-react';
 import SopFlowchartView, { SopFlowchartStructure } from './SopFlowchartView';
 import SopChartChat from './SopChartChat';
@@ -83,11 +83,6 @@ type Step = 'columns' | 'prompt' | 'review' | 'flowchart';
 /** Reading the chart, or changing it (user ask, 29 Sep). Preview is not a
  *  lesser Edit: it is the chart with nothing on it offering to be typed over,
  *  which is what somebody checking a draft against an SOP actually wants. */
-const CHART_MODES: { key: 'preview' | 'edit'; label: string; Icon: typeof Eye; hint: string }[] = [
-  { key: 'preview', label: 'Preview', Icon: Eye, hint: 'The chart as it stands' },
-  { key: 'edit', label: 'Edit', Icon: Pencil, hint: 'Tell Ira what to change, or click a name' },
-];
-
 /** The chart's frame, and the chat's beside it — one height, the same reasoning
  *  as `PROMPT_PANE_H` one step earlier.
  *
@@ -2284,20 +2279,25 @@ export default function RacmImportReview({ mode, file, process, entity, existing
                     This is what Ira read out of {file.name}
                   </p>
                   <div className="flex-1" />
-                  <div className="inline-flex items-center gap-0.5 rounded-lg border border-canvas-border bg-paper-50 p-0.5">
-                    {CHART_MODES.map(({ key, label, Icon, hint }) => {
-                      const on = chartMode === key;
-                      return (
-                        <button key={key} type="button" aria-pressed={on} title={hint} onClick={() => setChartMode(key)}
-                          className={cn('h-7 px-3 inline-flex items-center gap-1.5 rounded-md text-[0.75rem] font-semibold transition-colors cursor-pointer',
-                            on ? 'bg-canvas text-ink-900 border border-canvas-border' : 'border border-transparent text-ink-500 hover:text-ink-800')}>
-                          <Icon size={13} aria-hidden /> {label}
-                        </button>
-                      );
-                    })}
-                  </div>
+                  {/* One button, not a pair. Preview is not a mode the reader
+                      chooses — it is what this step already is, so a control
+                      offering it only ever re-selects what is on screen. Edit
+                      is the single move, and it toggles so the way back is the
+                      same button that got you here. */}
+                  <button type="button" aria-pressed={chartMode === 'edit'}
+                    title={chartMode === 'edit' ? 'Done — back to the chart as it stands' : 'Tell Ira what to change, or click a name'}
+                    onClick={() => setChartMode(m => (m === 'edit' ? 'preview' : 'edit'))}
+                    className={cn('h-7 px-3 inline-flex items-center gap-1.5 rounded-md border text-[0.75rem] font-semibold transition-colors cursor-pointer',
+                      chartMode === 'edit'
+                        ? 'border-brand-300 bg-brand-50 text-brand-700'
+                        : 'border-canvas-border bg-paper-50 text-ink-600 hover:border-brand-300 hover:text-brand-700')}>
+                    <Pencil size={13} aria-hidden /> Edit
+                  </button>
                 </div>
-                <p className="mt-1 text-[0.75rem] leading-snug text-ink-500 max-w-[52rem]">
+                {/* Full width. It was held to 52rem back when it shared the line
+                    with a two-up switch; against one button it only made the
+                    paragraph wrap early and leave a column of white beside it. */}
+                <p className="mt-1 text-[0.75rem] leading-snug text-ink-500">
                   {plural(included.length, 'control')} drafted, drawn against{' '}
                   {plural(chartFacts.risks.length, 'risk')}. Correct anything the SOP says differently — click a name,
                   or open Edit and tell Ira. Next you check the rows themselves. It stays{' '}

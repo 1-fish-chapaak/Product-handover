@@ -259,6 +259,32 @@ h1, h2, h3 { letter-spacing: 0; line-height: 1.2; }
   box-shadow: 0 0 0 4px rgba(106, 18, 205, 0.24);
 }
 
+/* ── A page header's one primary action ──
+ * Sits on the SUB-COPY's line, never the heading's.
+ *
+ * Level with a 2.125rem title, a button reads as a second heading: two heavy
+ * objects on the same baseline, each pulling at the other, and the page has no
+ * clear first thing to look at. Dropped one line it stops competing — the title
+ * keeps the top of the page to itself, and the button lands where the eye
+ * already is once it has read the subhead.
+ *
+ * Centred on that line rather than merely bottom-aligned. `align-self: flex-end`
+ * puts the button's BOTTOM on the sub-copy's, and since the button is the taller
+ * of the two it then rides high by half the difference; the negative margin is
+ * exactly that half, so the two centres meet.
+ *
+ * The sub-copy it answers to is 0.9375rem at 1.625 leading — the header subhead
+ * everywhere in this app. Change one and change the other.
+ */
+.page-header-action {
+  --subcopy-line: calc(0.9375rem * 1.625);
+  align-self: flex-end;
+  height: 2.25rem;
+  /* Negative by construction — subcopy minus button, not divided by -2, which
+     not every parser accepts. */
+  margin-bottom: calc((var(--subcopy-line) - 2.25rem) / 2);
+}
+
 /* ── Editorial card primitives ──
  * Editorial GRC: borders first, shadows sparingly, tints never.
  * Legacy class names kept so existing markup keeps working — but the

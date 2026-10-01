@@ -17,20 +17,23 @@ import { useState } from 'react';
 // transitive dep of `motion` and is not declared in package.json, so an import
 // of it works today by luck. Every other file in the repo imports from here.
 import { motion } from 'motion/react';
-import { Plus, SlidersHorizontal, Table2 } from 'lucide-react';
+import { Plus } from 'lucide-react';
 import FloatingLines from '../shared/FloatingLines';
 import RacmLibraryView from './RacmLibraryView';
-import RacmConfigView from './RacmConfigView';
+// PARKED (1 Oct, user ask) — the Config tab. `RacmConfigView` is untouched and
+// still holds the per-client-group column set-up; nothing else opens it, so that
+// screen is unreachable while this is off. Restore by un-commenting the import,
+// the tab row entry and the render below:
+// import RacmConfigView from './RacmConfigView';
 
-type RacmTab = 'library' | 'config';
+// PARKED with the row — type RacmTab = 'library' | 'config';
 
 export default function RacmPage({ canManage }: {
   /** Create, publish and delete — the same permission that creates engagements. */
   canManage: boolean;
 }) {
-  const [tab, setTab] = useState<RacmTab>('library');
   /**
-   * Create RACM sits on the tab row (user ask, 29 Sep), so the flag it opens
+   * Create RACM sits in the header (user ask, 1 Oct), so the flag it opens
    * lives up here with it. The wizard itself stays down in the library view:
    * finishing one clears that view's search and filter so the new matrix is
    * actually on screen when the toast names it, and that is the library's
@@ -38,18 +41,27 @@ export default function RacmPage({ canManage }: {
    */
   const [creating, setCreating] = useState(false);
 
+  /* PARKED (1 Oct, user ask) — the whole tab row. With Config gone there was
+     one screen left, and a tablist of one is a control that cannot do anything:
+     it names where you already are. The page now renders the library directly.
+     Restore this, the `RacmTab` type, the `tab`/`setTab` state, the `Table2`
+     and `SlidersHorizontal` imports and the row's own motion block in the
+     header the day a second screen earns its place here.
+
+  const [tab, setTab] = useState<RacmTab>('library');
   const tabs: { id: RacmTab; label: string; Icon: typeof Table2 }[] = [
     { id: 'library', label: 'Library', Icon: Table2 },
     { id: 'config', label: 'Config', Icon: SlidersHorizontal },
   ];
+  */
 
   return (
     /* THE HEADER IS PINNED (user ask, 29 Sep) — Knowledge Hub's layout, not
        just its look. The page is a column that does not scroll; the header
        block is `shrink-0` and the list below it owns the only scrollbar, so
-       the title, the tabs and Create RACM stay put however far down the
-       library you are. Before this the whole page scrolled as one and the
-       header was the first thing to go.
+       the title and Create RACM stay put however far down the library you
+       are. Before this the whole page scrolled as one and the header was the
+       first thing to go.
        The shell's <main> is overflow-hidden, so something here must own a
        scroll or everything past the fold is simply lost.
        `bg-canvas` under a `bg-canvas-elevated` strip is what makes the header
@@ -59,10 +71,10 @@ export default function RacmPage({ canManage }: {
       <div className="px-9 pt-8 shrink-0">
         {/* KNOWLEDGE HUB'S HEADER, TO THE LETTER (user ask, 29 Sep: "the header
             format of knowledge hub ko copy karo for racm library").
-            Title and tabs share ONE full-bleed elevated strip whose border-b is
-            also the track the active tab's indicator sits on — the reason the
-            tabs carry no border of their own. The strip reaches past this page's
-            px-9 / pt-8 inset with matching negative margins.
+            The title sits in ONE full-bleed elevated strip that reaches past
+            this page's px-9 / pt-8 inset with matching negative margins. Its
+            border-b used to be the track the active tab's indicator sat on;
+            with the row parked it simply closes the strip.
             The eyebrow is gone with it: Knowledge Hub has none, and "Risk and
             controls" only ever repeated the sidebar section the reader clicked. */}
         <div className="bg-canvas-elevated -mx-9 px-9 -mt-8 pt-8 border-b border-canvas-border relative overflow-hidden">
@@ -83,80 +95,45 @@ export default function RacmPage({ canManage }: {
             initial={{ opacity: 0, y: 8 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.4, ease: [0.22, 1, 0.36, 1] }}
-            className="mb-6"
+            className="mb-8"
           >
-            <div className="min-w-0">
-              <h1 className="text-[2.125rem] font-semibold tracking-tight text-ink-900 leading-[1.15]">
-                RACM Library
-              </h1>
-              {/* No max-width (user ask, 29 Sep) — Knowledge Hub's subhead is
-                  short enough that `max-w-2xl` never bites; this one wrapped
-                  mid-sentence at every window width, which the strip is wide
-                  enough not to need. */}
-              <p className="mt-2 text-[0.9375rem] text-ink-500 leading-relaxed">
-                Every risk-and-control matrix this team keeps. Engagements scope from what is published here.
-              </p>
-            </div>
-          </motion.div>
-
-          <motion.div
-            initial={{ opacity: 0, y: 6 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.4, delay: 0.08, ease: [0.22, 1, 0.36, 1] }}
-            className="-mb-px"
-          >
-            {/* Tabs left, the page's one primary action right (user ask, 29
-                Sep). `items-end` sits the button on the tabs' own baseline, and
-                the -mb keeps it clear of the strip's border without the pb-3
-                that gives each tab room for its indicator. */}
-            <div className="flex items-end justify-between gap-4">
-              <div className="flex gap-6" role="tablist" aria-label="RACM view">
-                {tabs.map(({ id, label, Icon }) => {
-                  const active = tab === id;
-                  return (
-                    <button
-                      key={id}
-                      role="tab"
-                      aria-selected={active}
-                      onClick={() => setTab(id)}
-                      className={`pb-3 text-[0.8125rem] font-semibold relative transition-colors cursor-pointer whitespace-nowrap ${
-                        active ? 'text-brand-700' : 'text-ink-500 hover:text-ink-700'
-                      }`}
-                    >
-                      <span className="flex items-center gap-2">
-                        <Icon size={14} /> {label}
-                      </span>
-                      {active && (
-                        <motion.div
-                          layoutId="racm-main-tab-underline"
-                          className="absolute bottom-0 left-0 right-0 h-[3px] bg-brand-600 rounded-full"
-                          transition={{ type: 'spring', stiffness: 380, damping: 32 }}
-                        />
-                      )}
-                    </button>
-                  );
-                })}
+            {/* Create RACM sits up here now that the tab row is gone (user ask,
+                1 Oct). It was on the tabs' baseline because that row existed;
+                with one screen left, the page's one primary action belongs
+                against the title it acts on — but on the SUB-COPY's line, not
+                the heading's, which is what `.page-header-action` is for and
+                why the reasoning lives in index.css rather than here. */}
+            <div className="flex items-start justify-between gap-6">
+              <div className="min-w-0">
+                <h1 className="text-[2.125rem] font-semibold tracking-tight text-ink-900 leading-[1.15]">
+                  RACM Library
+                </h1>
+                {/* No max-width (user ask, 29 Sep) — Knowledge Hub's subhead is
+                    short enough that `max-w-2xl` never bites; this one wrapped
+                    mid-sentence at every window width, which the strip is wide
+                    enough not to need. */}
+                <p className="mt-2 text-[0.9375rem] text-ink-500 leading-relaxed">
+                  Every risk-and-control matrix this team keeps. Engagements scope from what is published here.
+                </p>
               </div>
-              {/* Config has nothing to create, so the button belongs to Library
-                  alone rather than sitting greyed on the other tab. */}
-              {tab === 'library' && canManage && (
+              {canManage && (
                 <button onClick={() => setCreating(true)}
                   title="Create a RACM — import a matrix, or extract one from an SOP"
-                  className="mb-2 flex items-center gap-2 px-4 py-2 bg-primary hover:bg-primary-hover text-white rounded-lg text-[0.8125rem] font-semibold transition-colors cursor-pointer">
+                  className="page-header-action shrink-0 inline-flex items-center gap-2 px-4 bg-primary hover:bg-primary-hover text-white rounded-lg text-[0.8125rem] font-semibold transition-colors cursor-pointer">
                   <Plus size={14} />Create RACM
                 </button>
               )}
             </div>
           </motion.div>
+
         </div>
       </div>
 
       {/* The one scroll region on the page. Its own top padding replaces the
-          margin the strip used to carry, so the gap under the tabs is the same
-          whichever tab is open. */}
+          margin the strip used to carry. */}
       <div className="flex-1 min-h-0 overflow-y-auto px-9 pt-6 pb-8">
-        {tab === 'library' && <RacmLibraryView canManage={canManage} creating={creating} setCreating={setCreating} />}
-        {tab === 'config' && <RacmConfigView canManage={canManage} />}
+        <RacmLibraryView canManage={canManage} creating={creating} setCreating={setCreating} />
+        {/* PARKED — <RacmConfigView canManage={canManage} /> */}
       </div>
     </div>
   );
