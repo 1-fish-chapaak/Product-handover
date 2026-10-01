@@ -678,7 +678,7 @@ function PointRow({ control, point, canEdit, checking = false }: { control: Cont
   };
 
   return (
-    <div id={`dp-${point.id}`} className="subcard px-3.5 py-3 scroll-mt-4">
+    <div id={`dp-${point.id}`} className={cn('subcard px-3.5 py-3 scroll-mt-4', eff === 'Not tested' && 'subcard-todo')}>
       <div className="flex items-start gap-3">
         {/* No spinner here any more — the section's one progress line says Ira
             is working; the row only says "checking…" beneath its text. */}
@@ -691,11 +691,13 @@ function PointRow({ control, point, canEdit, checking = false }: { control: Cont
           <div className="flex items-center gap-2"><span className="text-[0.78125rem] font-medium text-ink-800">{point.text}</span>{rowState && rowState !== 'couldnt' && <IraState state={rowState} title={rowState === 'review' ? run : undefined} />}</div>
           <div className="text-[0.6875rem] text-ink-400 mt-1 inline-flex items-center gap-1.5"><WorkflowIcon size={11} /> {point.workflowName ?? 'Design walkthrough check'}{(checking || validating || blocked || !point.validation) && ' · '}{checking ? 'checking…' : validating ? 'validating…' : blocked ? (
             /* ── Ira read it and could not answer it ─────────────────────────
-               Text on the row, not an amber banner (agentic UI review #7): the
-               check is still Not tested and the tick says so; this names who
-               left it and why, the reason on hover. It clears itself the moment
-               the check is marked or the missing element lands, because it is
-               read off the validation the next run overwrites. */
+               Text on the row, not a banner of its own (agentic UI review #7):
+               the check is still Not tested, so the row already carries the
+               amber wash every unanswered check carries, and the tick says so
+               too. This only names who left it and why, the reason on hover.
+               It clears itself the moment the check is marked or the missing
+               element lands, because it is read off the validation the next run
+               overwrites. */
             <IraState state="couldnt" className="cursor-help" title={`${blockKind === 'missing' ? 'Missing files' : 'Not enough to go on'} — ${blocked}`} />
           ) : (point.validation ? null : 'not validated')}</div>
           {/* Layer 1 — what Ira found, in one line; the reasons on hover (layer
