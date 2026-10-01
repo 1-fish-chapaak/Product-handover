@@ -4238,6 +4238,16 @@ function SampleExtractSection({ control, canEdit, locked }: { control: Control; 
         <p className="text-[0.71875rem] text-ink-700">
           <span className="font-bold">Method: {methodology.method}</span> · {spreadPhrase(methodology.spread)} <span className="text-ink-400">(agreed for this engagement)</span>
         </p>
+        {/* Last round's draw, set beside this one (#13). The method is the
+            engagement's, so it is compared rather than reused: a control does
+            not get to keep a method the engagement has since moved off. */}
+        {control.rollForward?.sampling && (
+          <p className="mt-0.5 text-[0.6875rem] text-ink-500">
+            {control.rollForward.sampling.method === methodology.method
+              ? `Same method as last round (${methodology.method}).`
+              : `Last round drew ${control.rollForward.sampling.method} — this engagement now agrees ${methodology.method}.`}
+          </p>
+        )}
         {/* And how many, derived rather than chosen (#22). The method above and
             the size are settled together on the engagement, and this says which
             cell of the agreed table this control landed in. */}
