@@ -86,9 +86,9 @@ export function needsYouItems(control: Control, eng: IcfrEngagement, role: Role,
           done: checks.filter(k => k.result !== 'Not tested').length, total: checks.length,
           unreliable: ipe?.conclusion === 'Not reliable',
         });
-      } else if (designApproved(control)) {
-        // The store refuses the lock before design is approved, so the card
-        // waits for that too rather than offering a button that does nothing.
+      } else if (control.design.conclusion !== 'Not tested') {
+        // The store refuses the lock before TOD is concluded, so the card waits
+        // for that too rather than offering a button that does nothing.
         out.push({ kind: 'lock', id: 'lock', anchor: 'lock-population' });
       }
     }

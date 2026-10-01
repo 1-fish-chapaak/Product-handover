@@ -243,6 +243,25 @@
 .panel-locked { opacity: .62; }
 .subcard { border: 1px solid var(--paper-rule); border-radius: 11px; background: var(--color-canvas-elevated); }
 
+/* ── A design check nobody has answered yet ─────────────────────────────────────
+ * Amber on the row (user ask, 1 Oct). "What is left to do" is a question the
+ * reader asks of the LIST, not of one row: a tick read one at a time answers it
+ * slowly, and an unmarked check is exactly the one that looks like nothing.
+ * Tinting the rows that are still open turns the next step into something seen
+ * rather than counted.
+ *
+ * A wash and a border, not a stripe down the side. This step is already a column
+ * of cards, and a bar on some of them reads as a second kind of card rather than
+ * the same card in a different state.
+ *
+ * Weak on purpose: on a control nobody has started this is EVERY row, and a loud
+ * tint there would be the whole screen shouting. It has to still read as paper.
+ */
+.subcard-todo {
+  border-color: var(--color-high-300);
+  background: color-mix(in srgb, var(--color-high-50) 55%, var(--color-canvas-elevated));
+}
+
 /* ── Toggle switch ──────────────────────────────────────────────────────────────── */
 .toggle { width: 34px; height: 20px; border-radius: 999px; background: var(--color-paper-200); position: relative; transition: background .15s; cursor: pointer; border: none; flex-shrink: 0; padding: 0; }
 .toggle.on { background: var(--color-brand-600); }

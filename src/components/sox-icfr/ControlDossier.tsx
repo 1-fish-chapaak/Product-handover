@@ -678,7 +678,7 @@ function PointRow({ control, point, canEdit, checking = false }: { control: Cont
   };
 
   return (
-    <div id={`dp-${point.id}`} className="subcard px-3.5 py-3 scroll-mt-4">
+    <div id={`dp-${point.id}`} className={cn('subcard px-3.5 py-3 scroll-mt-4', eff === 'Not tested' && 'subcard-todo')}>
       <div className="flex items-start gap-3">
         {/* No spinner here any more — the section's one progress line says Ira
             is working; the row only says "checking…" beneath its text. */}
@@ -691,11 +691,13 @@ function PointRow({ control, point, canEdit, checking = false }: { control: Cont
           <div className="flex items-center gap-2"><span className="text-[0.78125rem] font-medium text-ink-800">{point.text}</span>{rowState && rowState !== 'couldnt' && <IraState state={rowState} title={rowState === 'review' ? run : undefined} />}</div>
           <div className="text-[0.6875rem] text-ink-400 mt-1 inline-flex items-center gap-1.5"><WorkflowIcon size={11} /> {point.workflowName ?? 'Design walkthrough check'}{(checking || validating || blocked || !point.validation) && ' · '}{checking ? 'checking…' : validating ? 'validating…' : blocked ? (
             /* ── Ira read it and could not answer it ─────────────────────────
-               Text on the row, not an amber banner (agentic UI review #7): the
-               check is still Not tested and the tick says so; this names who
-               left it and why, the reason on hover. It clears itself the moment
-               the check is marked or the missing element lands, because it is
-               read off the validation the next run overwrites. */
+               Text on the row, not a banner of its own (agentic UI review #7):
+               the check is still Not tested, so the row already carries the
+               amber wash every unanswered check carries, and the tick says so
+               too. This only names who left it and why, the reason on hover.
+               It clears itself the moment the check is marked or the missing
+               element lands, because it is read off the validation the next run
+               overwrites. */
             <IraState state="couldnt" className="cursor-help" title={`${blockKind === 'missing' ? 'Missing files' : 'Not enough to go on'} — ${blocked}`} />
           ) : (point.validation ? null : 'not validated')}</div>
           {/* Layer 1 — what Ira found, in one line; the reasons on hover (layer
@@ -3181,10 +3183,10 @@ function PopulationSection({ control, canEdit, locked: gated = false }: { contro
       <div className="p-5">
         <EmptyState icon={<Lock size={18} />} title="Population is locked"
           hint={`${isOwnerView
-            ? 'The auditor’s design test comes first, and the reviewer approves it. Uploading and filtering the data opens after that.'
+            ? 'The auditor’s design test comes first. Uploading and filtering the data opens once it is concluded.'
             : concluded
-              ? 'TOD is concluded and waiting for the reviewer’s approval. The population opens as soon as it is approved.'
-              : 'Finish TOD first — mark the design effective — then the reviewer approves it. Data is only worth pulling against a design someone has checked.'}${pop ? ' What was already extracted stays as it is.' : ''}`}>
+              ? 'TOD is concluded — the population is open.'
+              : 'Finish TOD first — conclude the design — and the population opens. The reviewer’s approval runs alongside; only the countersign waits for it.'}${pop ? ' What was already extracted stays as it is.' : ''}`}>
           {!isOwnerView && <span className="inline-flex items-center gap-1.5 text-[0.75rem] text-ink-500"><span>TOD is currently</span><TrackPill c={trackResult(control.design)} /></span>}
         </EmptyState>
       </div>
@@ -4149,7 +4151,8 @@ function SampleExtractSection({ control, canEdit, locked }: { control: Control; 
   if (locked) {
     const held = operatingHeld(control, eng.audits.find(a => a.id === openAuditId));
     if (held) return <HeldState held={held} yearEndHint="This control runs once a year. Its sample is drawn in the year-end audit, once the year has closed." />;
-    const awaitingApproval = trackResult(control.design) === 'Effective' && !designApproved(control);
+    // The reviewer's approval no longer holds the draw (user, 1 Oct).
+    const awaitingApproval = false;
     const designBlocked = trackResult(control.design) !== 'Effective' || awaitingApproval;
     return (
       <div className="p-5">
@@ -4861,7 +4864,9 @@ function SignOffSection({ control }: { control: Control }) {
   const concluded = isControlLockedIn(eng, control);
   const notesPending = eng.reviewNotes.filter(n => n.controlId === control.id && n.status !== 'Closed').length;
   const canSign = role === 'auditor' && concluded && !so?.preparer;
-  const canCounter = role === 'reviewer' && !!so?.preparer && !so?.reviewer && notesPending === 0 && so.preparer.by !== me;
+  // The design approval runs alongside testing (user, 1 Oct) — this is where it is owed.
+  const designPending = !designApproved(control);
+  const canCounter = role === 'reviewer' && !!so?.preparer && !so?.reviewer && notesPending === 0 && so.preparer.by !== me && !designPending;
   // Returning is NOT held by an open note. The two used to share one gate, which
   // dead-ended the reviewer: a paper they had questioned could be neither signed
   // nor sent back. A note says "answer this"; a return says "this needs rework" —
@@ -4916,6 +4921,7 @@ function SignOffSection({ control }: { control: Control }) {
                 : role === 'reviewer' && !so?.preparer ? 'Waits for the preparer’s signature.'
                 : notesPending > 0 ? `${notesPending} review note${notesPending === 1 ? '' : 's'} must close before the countersign — you can still return the paper.`
                 : so?.preparer?.by === me ? 'You prepared this paper, so you can’t countersign it — four-eyes.'
+                : role === 'reviewer' && designPending ? 'Approve the design on Test of design first — the countersign waits for it.'
                 : 'Waits for the reviewer.'}
             </p>
             {canSign && (
@@ -5210,7 +5216,7 @@ function OperatingSection({ control, canEdit, locked }: { control: Control; canE
     if (held) return <HeldState held={held} yearEndHint="This control runs once a year. It is tested for operation in the year-end audit, once the year has closed." />;
     return (
       <div className="p-5">
-        <EmptyState icon={<Lock size={18} />} title="TOE is locked" hint={trackResult(control.design) === 'Effective' && !designApproved(control)
+        <EmptyState icon={<Lock size={18} />} title="TOE is locked" hint={false
           // S6, A36 — concluded, but the reviewer has not approved it yet
           ? 'TOD is marked Design effective and waiting for the reviewer’s approval. TOE opens once it is approved.'
           : 'Mark TOD as Design effective to unlock TOE. A control that isn’t designed effectively isn’t tested for operation.'}>
@@ -5742,7 +5748,7 @@ function ParkOperatingBanner({ control }: { control: Control }) {
   const [from, setFrom] = useState('');
   const parked = control.operating.parked;
   const eligible = role === 'auditor' && !isControlLockedIn(eng, control)
-    && trackResult(control.design) === 'Effective' && designApproved(control);
+    && trackResult(control.design) === 'Effective';
 
   if (parked) {
     return (
@@ -6107,14 +6113,15 @@ export default function ControlDossier() {
   // concluded and with the reviewer, or approved but ineffective — which still
   // keeps Sample and TOE shut, because a failed design is not tested for operation.
   const gateNote = yePending ? `Pending until ${yePending.until}`
-    : designResult === 'Not tested' ? 'Unlocks after TOD is approved'
-    : !todApproved ? 'Waiting for design approval'
+    : designResult === 'Not tested' ? 'Unlocks once TOD is concluded'
     : 'Unlocks once TOD is effective';
   // Step ② is the one that says where the work went.
   const popNote = yePending ? `${gateNote} — tested in the year-end audit` : gateNote;
-  const toeLocked = designResult !== 'Effective' || !todApproved || !!yePending;
-  // Step ② waits on the approval, and on the year end for an Annual control.
-  const popGated = !todApproved || !!yePending;
+  // The reviewer's design approval runs alongside (user, 1 Oct): the auditor
+  // goes on as soon as TOD is concluded, and only the countersign waits for it.
+  const toeLocked = designResult !== 'Effective' || !!yePending;
+  // Step ② waits on TOD being concluded, and on the year end for an Annual control.
+  const popGated = designResult === 'Not tested' || !!yePending;
   const popLocked = populationLocked(control);
   // The draw sits behind both of those: an approved, effective design, and a
   // population that has cleared its own gate. Past the approval, an already-drawn

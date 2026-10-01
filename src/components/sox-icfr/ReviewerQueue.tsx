@@ -1,8 +1,8 @@
 import { useState } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
-import { ArrowRight, CheckCircle2, ChevronDown, ClipboardCheck, PenLine, RotateCcw, Scale, ShieldCheck, StickyNote } from 'lucide-react';
+import { ArrowRight, CheckCircle2, ChevronDown, ClipboardCheck, Lock, PenLine, RotateCcw, Scale, ShieldCheck, StickyNote } from 'lucide-react';
 import { useIcfr } from './store';
-import { assessSeverity, conclusionOf, gradeException, isAwaitingReview, pendingReviewNoteCount } from './helpers';
+import { assessSeverity, conclusionOf, gradeException, isAwaitingReview, isEngagementLocked, pendingReviewNoteCount, trackResult } from './helpers';
 import { SeverityPill, Stamp } from './parts';
 import { cn } from '../../lib/cn';
 import type { Deficiency } from './types';
@@ -14,6 +14,11 @@ import type { Deficiency } from './types';
 export default function ReviewerQueue() {
   const { eng, me, openAuditId, setView, openControl, openDeficiency } = useIcfr();
   const papers = eng.controls.filter(isAwaitingReview);
+  // Concluded designs not yet approved (agentic UX #10, 1 Oct). The auditor no
+  // longer waits on these — testing goes on — but the countersign does, so
+  // they were the gate that left this queue empty while work piled up behind it.
+  const designs = isEngagementLocked(eng) ? [] : eng.controls.filter(c =>
+    trackResult(c.design) !== 'Not tested' && !c.design.approval?.approvedBy && !c.wpSignoff?.reviewer);
   const notesToVerify = eng.reviewNotes.filter(n => n.status === 'Resolved');
   const awaiting = eng.deficiencies.filter(d => d.status === 'Awaiting reviewer');
   // A Significant Deficiency or worse is parked until the reviewer agrees the
@@ -46,7 +51,7 @@ export default function ReviewerQueue() {
   // is no opinion to sign, so the row simply doesn't come up.
   const so = eng.audits.find(a => a.id === openAuditId)?.signoff;
   const readyToCountersign = !!so?.preparer && !so.reviewer;
-  const count = ratings.length + papers.length + notesToVerify.length + awaiting.length + repeatFails.length + (readyToCountersign ? 1 : 0);
+  const count = ratings.length + designs.length + papers.length + notesToVerify.length + awaiting.length + repeatFails.length + (readyToCountersign ? 1 : 0);
   // Collapsible to save the scroll — the header keeps the count visible, so
   // nothing waiting on the reviewer is ever hidden without a number saying so.
   const [expanded, setExpanded] = useState(true);
@@ -68,7 +73,7 @@ export default function ReviewerQueue() {
       <div className="pt-3">
       {count === 0 ? (
         <div className="flex items-center gap-2.5 rounded-lg border border-canvas-border bg-paper-50/40 px-3.5 py-3 text-[12.5px] text-ink-500">
-          <CheckCircle2 size={15} className="text-compliant-700 shrink-0" /> Nothing waiting on you — a significant rating lands here before any fix starts, concluded papers for countersign, resolved notes for verification, exceptions when the fix is in with its proof or when a control has been fixed twice and is failing again, and the audit countersign once the preparer signs.
+          <CheckCircle2 size={15} className="text-compliant-700 shrink-0" /> Nothing waiting on you — a significant rating lands here before any fix starts, concluded designs to approve, concluded papers for countersign, resolved notes for verification, exceptions when the fix is in with its proof or when a control has been fixed twice and is failing again, and the audit countersign once the preparer signs.
         </div>
       ) : (
         <div className="space-y-2">
@@ -98,6 +103,23 @@ export default function ReviewerQueue() {
               </button>
             );
           })}
+          {designs.map(c => (
+            <button key={`tod-${c.id}`} onClick={() => openControl(c.id)}
+              className="w-full flex items-center gap-3 rounded-xl border border-canvas-border bg-canvas-elevated p-3 text-left hover:border-brand-300 transition-colors cursor-pointer">
+              <div className="w-9 h-9 rounded-lg bg-evidence-50 text-evidence-700 flex items-center justify-center shrink-0"><Lock size={16} /></div>
+              <div className="flex-1 min-w-0">
+                <div className="flex items-center gap-2 flex-wrap">
+                  <span className="font-mono text-[0.71875rem] font-semibold text-ink-600">{c.wpRef}</span>
+                  <span className="text-[0.65625rem] font-bold uppercase tracking-wide text-evidence-700">TOD to approve</span>
+                </div>
+                <div className="text-[0.8125rem] text-ink-800 truncate mt-0.5">{c.description}</div>
+                <div className="text-[0.71875rem] text-ink-400 mt-0.5">
+                  Design concluded {trackResult(c.design).toLowerCase()} by {c.design.testedBy ?? c.design.approval?.preparedBy?.by ?? '—'} — testing carries on; the countersign waits for your approval
+                </div>
+              </div>
+              <ArrowRight size={15} className="text-ink-300 shrink-0" />
+            </button>
+          ))}
           {papers.map(c => {
             const noteN = pendingReviewNoteCount(eng, c.id);
             return (
