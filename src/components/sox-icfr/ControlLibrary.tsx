@@ -470,7 +470,6 @@ export default function ControlLibrary() {
   const saveRemark = () => {
     if (!remarkFor || !remarkText.trim()) return;
     remarkRacmRow(remarkFor.id, remarkText.trim());
-    addToast({ type: 'success', title: 'Remark saved', message: `${controlCode(remarkFor)} — the owner sees it in their notifications.` });
     setRemarkFor(null);
   };
   const approvable = Array.from(sel).filter(id => { const c = scoped.find(x => x.id === id); return !!c && canReview(c); });
@@ -479,7 +478,6 @@ export default function ControlLibrary() {
     const remarked = approvable.filter(id => scoped.find(c => c.id === id)?.racmReview?.status === 'Remark').length;
     if (remarked > 0) { setBulkApproveIds(approvable); return; }
     approveRacmRows(approvable);
-    addToast({ type: 'success', title: `${approvable.length} control${approvable.length === 1 ? '' : 's'} ready to test`, message: 'Approved in pre-testing review.' });
     setSel(new Set());
   };
 
@@ -769,7 +767,7 @@ export default function ControlLibrary() {
           <span className="text-[0.78125rem] font-semibold">{sel.size} selected</span>
           <span className="w-px h-5 bg-white/20" />
           {approvable.length > 0 && <button onClick={approveSelected} className="h-8 px-3 inline-flex items-center gap-1.5 rounded-lg bg-white/10 hover:bg-white/20 text-[0.78125rem] font-semibold transition-colors cursor-pointer"><CheckCircle2 size={14} /> Approve {approvable.length}</button>}
-          {role === 'auditor' && <button onClick={() => { requestDesignDocs(Array.from(sel)); addToast({ type: 'success', title: 'Requests sent', message: `Document requests raised on ${sel.size} control${sel.size === 1 ? '' : 's'} — the owners see them as tasks.` }); setSel(new Set()); }} className="h-8 px-3 inline-flex items-center gap-1.5 rounded-lg bg-white/10 hover:bg-white/20 text-[0.78125rem] font-semibold transition-colors cursor-pointer"><FileText size={14} /> Request design documents</button>}
+          {role === 'auditor' && <button onClick={() => { requestDesignDocs(Array.from(sel));  setSel(new Set()); }} className="h-8 px-3 inline-flex items-center gap-1.5 rounded-lg bg-white/10 hover:bg-white/20 text-[0.78125rem] font-semibold transition-colors cursor-pointer"><FileText size={14} /> Request design documents</button>}
           <button onClick={() => { openControl(Array.from(sel)[0]); setSel(new Set()); }} className="h-8 px-3 inline-flex items-center gap-1.5 rounded-lg bg-white/10 hover:bg-white/20 text-[0.78125rem] font-semibold transition-colors cursor-pointer"><Send size={14} /> Open first</button>
           <button onClick={() => setSel(new Set())} className="h-8 w-8 inline-flex items-center justify-center rounded-lg hover:bg-white/15 transition-colors cursor-pointer" aria-label="Clear selection"><X size={15} /></button>
         </div>
@@ -803,7 +801,7 @@ export default function ControlLibrary() {
                 <p className="text-[0.78125rem] text-ink-600 leading-relaxed">{remarked} of them {remarked === 1 ? 'has an open remark' : 'have open remarks'} — approving clears {remarked === 1 ? 'it' : 'them'} from the record.</p>
                 <div className="mt-4 flex items-center justify-end gap-2">
                   <button onClick={() => setBulkApproveIds(null)} autoFocus className="h-9 px-3.5 rounded-lg border border-canvas-border text-[0.78125rem] font-semibold text-ink-600 hover:text-ink-900 cursor-pointer">Cancel</button>
-                  <button onClick={() => { approveRacmRows(bulkApproveIds); addToast({ type: 'success', title: `${bulkApproveIds.length} control${bulkApproveIds.length === 1 ? '' : 's'} ready to test`, message: 'Approved in pre-testing review.' }); setSel(new Set()); setBulkApproveIds(null); }}
+                  <button onClick={() => { approveRacmRows(bulkApproveIds);  setSel(new Set()); setBulkApproveIds(null); }}
                     className="h-9 px-3.5 rounded-lg bg-compliant-600 text-white text-[0.78125rem] font-semibold hover:bg-compliant-700 transition-colors cursor-pointer inline-flex items-center gap-1.5"><CheckCircle2 size={13} /> Approve anyway</button>
                 </div>
               </div>

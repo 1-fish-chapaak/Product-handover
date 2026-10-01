@@ -307,7 +307,6 @@ export default function NewControlPanel({ onClose }: { onClose: () => void }) {
       ...(effectiveDate.trim() ? { effectiveDate: effectiveDate.trim() } : {}),
       ...risk,
     });
-    addToast({ type: 'success', title: 'Control created', message: `Linked to ${risk.riskId} — now in the library and the RACM.` });
     onClose();
     openControl(id);
   };

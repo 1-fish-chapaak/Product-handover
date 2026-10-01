@@ -2763,7 +2763,7 @@ export function DeficiencyCard({ d, defaultOpen = false, showControlLink = true,
               <div className="mt-4 flex items-center justify-end gap-2">
                 <button onClick={() => setReopening(false)} className="h-9 px-3.5 rounded-lg border border-canvas-border text-[12.5px] font-semibold text-ink-600 hover:text-ink-900 cursor-pointer">Cancel</button>
                 <button disabled={!reopenReason.trim()}
-                  onClick={() => { reopenException(d.id, reopenReason.trim()); setReopening(false); addToast({ type: 'warning', title: 'Reopened', message: `${d.id} is back in remediation — the trail records why.` }); }}
+                  onClick={() => { reopenException(d.id, reopenReason.trim()); setReopening(false);  }}
                   className="h-9 px-3.5 rounded-lg bg-high-600 text-white text-[12.5px] font-semibold enabled:hover:bg-high-700 disabled:opacity-40 disabled:cursor-not-allowed transition-colors cursor-pointer inline-flex items-center gap-1.5"><RotateCcw size={13} /> Reopen</button>
               </div>
             </div>

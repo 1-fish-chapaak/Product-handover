@@ -44,7 +44,7 @@ import { Fragment, useCallback, useDeferredValue, useEffect, useMemo, useRef, us
 import { createPortal } from 'react-dom';
 import {
   AlertTriangle, ArrowLeft, Check, CheckCircle2, ChevronDown, ChevronRight, Circle, Copy, FileSpreadsheet, FileText, FileWarning,
-  Loader2, Paperclip, Pencil, Search, Sparkles, Star, Undo2, X,
+  Loader2, Paperclip, Pencil, Plus, Search, Sparkles, Star, Undo2, X,
 } from 'lucide-react';
 import SopFlowchartView, { SopFlowchartStructure } from './SopFlowchartView';
 import SopChartChat from './SopChartChat';
@@ -66,7 +66,7 @@ import { CONTROL_CLASSES, RISK_LIKELIHOODS, RISK_RATINGS, TESTING_STRATEGIES } f
 import type { Control, ControlType, Frequency, Nature } from './types';
 import {
   RACM_FIELDS, DEFAULT_SOP_PROMPT, CORE_BLANK_LABEL, CORE_BLANK_ORDER, ASSERTION_ORDER,
-  readRacmWorkbook, guessHeaderRow, matchColumns, needsAttention, normaliseHeader,
+  readRacmWorkbook, guessHeaderRow, matchColumns, needsAttention, normaliseHeader, unsureColumns,
   buildImportRows, rowFromValues, proposeBlankFills, iraCanFill, suggestForRow, importRowsToControls,
   coreBlanks, extraBlanks, extraLabel, extraValue, rowBlocked, rowRepeats, setRowExtra, headerMapping,
   DUPLICATE_FIELDS, controlDuplicateValues, duplicateValues,
@@ -860,6 +860,8 @@ export default function RacmImportReview({ mode, file, process, entity, existing
   const [dismissedSugg, setDismissedSugg] = useState<Record<string, string[]>>({});
   const [expanded, setExpanded] = useState<Set<string>>(new Set());
   const [fillOpen, setFillOpen] = useState(false);
+  /** Ira's extra controls, folded under the table (#6) until asked for. */
+  const [extrasOpen, setExtrasOpen] = useState(false);
   /** What Ira has already written into the rows, per row — the value and the
    *  reason it was read from. This is a record of work done, not a queue of
    *  proposals: the values are in the rows from the moment Review opens. */
@@ -959,7 +961,7 @@ export default function RacmImportReview({ mode, file, process, entity, existing
       if (ix < 0) { setRead({ status: 'failed' }); return; }
       const sheetRows = sheets[ix]!.rows;
       const h = guessHeaderRow(sheetRows);
-      setSheetIx(ix); setHeaderRow(h); setMatches(matchColumns(sheetRows[h] ?? [], cfg.mapping));
+      setSheetIx(ix); setHeaderRow(h); setMatches(matchColumns(sheetRows[h] ?? [], cfg.mapping, sheetRows.slice(h + 1)));
       setRead({ status: 'ready', sheets });
     }).catch(() => { if (alive) setRead({ status: 'failed' }); });
     return () => { alive = false; };
@@ -970,6 +972,8 @@ export default function RacmImportReview({ mode, file, process, entity, existing
   const sample = sheet ? firstDataRow(sheet.rows, headerRow) : undefined;
   const dataRowCount = sheet ? sheet.rows.slice(headerRow + 1).filter(r => !isBlankRow(r)).length : 0;
   const attention = useMemo(() => (matches.length ? needsAttention(matches) : []), [matches]);
+  // Leftover columns whose values fit more than one field — named, not mapped (#7).
+  const unsure = useMemo(() => (sheet && matches.length ? unsureColumns(headers, sheet.rows.slice(headerRow + 1), matches) : []), [sheet, headers, headerRow, matches]);
   /** Required fields nothing is mapped to. */
   const missingRequired = useMemo(
     () => matches.filter(m => m.column === null && !!FIELD_BY_KEY.get(m.field)?.required),
@@ -1033,19 +1037,19 @@ export default function RacmImportReview({ mode, file, process, entity, existing
     if (read.status !== 'ready') return;
     const sheetRows = read.sheets[ix]?.rows ?? [];
     const h = guessHeaderRow(sheetRows);
-    setSheetIx(ix); setHeaderRow(h); setMatches(matchColumns(sheetRows[h] ?? [], cfg.mapping));
+    setSheetIx(ix); setHeaderRow(h); setMatches(matchColumns(sheetRows[h] ?? [], cfg.mapping, sheetRows.slice(h + 1)));
   };
   const pickHeaderRow = (h: number) => {
     setHeaderRow(h);
-    setMatches(matchColumns(sheet?.rows[h] ?? [], cfg.mapping));
+    setMatches(matchColumns(sheet?.rows[h] ?? [], cfg.mapping, sheet?.rows.slice(h + 1) ?? []));
   };
   // A hand-picked column is certain, and a column feeds one field: taking it
   // here releases it from whichever field had it before.
   const setColumn = (field: RacmFieldKey, value: string) => {
     const col = value === '' ? null : Number(value);
     setMatches(prev => prev.map(m => {
-      if (m.field === field) return { ...m, column: col, confidence: col === null ? 0 : 100 };
-      if (col !== null && m.column === col) return { ...m, column: null, confidence: 0 };
+      if (m.field === field) return { ...m, column: col, confidence: col === null ? 0 : 100, byValues: undefined };
+      if (col !== null && m.column === col) return { ...m, column: null, confidence: 0, byValues: undefined };
       return m;
     }));
   };
@@ -1057,7 +1061,6 @@ export default function RacmImportReview({ mode, file, process, entity, existing
     const controls = assignRacmIds(template, { processCode: pc, entityCodeOf: e => codeForEntity(e), useFileNumbers: false });
     onImport(controls, { source: 'racm', fileName: file.name, fromTemplate: true });
     logEvent({ action: 'Create', description: `Created the ${process} RACM from its template — "${file.name}" had no rows to read`, module: 'SOX ICFR', entity: 'RACM' });
-    addToast({ type: 'success', title: 'RACM created', message: `The ${process} RACM starts from its template — "${file.name}" is kept as its source file.` });
     onClose();
   };
 
@@ -1183,9 +1186,15 @@ export default function RacmImportReview({ mode, file, process, entity, existing
     const twin = effective.find(x => x.key === id);
     return twin ? duplicateValues(twin) : undefined;
   }, [existing, effective]);
+  /** The table holds what was READ (agentic UX #6, 1 Oct). Ira's own
+   *  suggestions wait in their own list below it until one is added, and an
+   *  added one that is unticked goes back there. */
+  const tableRows = useMemo(() => effective.filter(r => r.origin !== 'suggested' || acceptedRows.has(r.key)), [effective, acceptedRows]);
+  const iraExtras = useMemo(() => effective.filter(r => r.origin === 'suggested' && !acceptedRows.has(r.key)), [effective, acceptedRows]);
+  // Ticks every row IN THE TABLE; it never pulls Ira's list in with it.
   const setAllIncluded = (on: boolean) => {
     setLeftOut(on ? new Set() : new Set(effective.map(r => r.key)));
-    setAcceptedRows(on ? new Set(effective.filter(r => r.origin === 'suggested').map(r => r.key)) : new Set());
+    if (!on) setAcceptedRows(new Set());
   };
   /**
    * A row that BECOMES a duplicate is left out, the same as one that arrived as
@@ -1300,7 +1309,10 @@ export default function RacmImportReview({ mode, file, process, entity, existing
           if (texts.length) ideas.set(r.key, { value: texts.join('\n'), shown: texts.join('; '), reason: 'read from the control description' });
           else if (!cell(r.values.controlActivity) && !cell(r.values.controlTitle)) notes.set(r.key, 'Add a control description and Ira can suggest some');
         } else {
-          const idea = fillIdea(r, BLANK_FIELD[b]);
+          // Ira's guess at a field the SOP doesn't state (#6) is offered here
+          // and only here — it never lands in the row on its own.
+          const guess = r.iraGuesses?.[BLANK_FIELD[b]];
+          const idea = fillIdea(r, BLANK_FIELD[b]) ?? (guess ? { value: guess, shown: guess, reason: 'Ira’s guess — the SOP doesn’t say' } : null);
           if (idea) ideas.set(r.key, idea);
         }
         if (b === 'nature' && r.natureFlag === 'unreadable') notes.set(r.key, `"${cell(r.values.nature)}" isn't a nature we know — pick one`);
@@ -1534,7 +1546,6 @@ export default function RacmImportReview({ mode, file, process, entity, existing
     if (!byRow.size) return;
     setRows(prev => rebuildRows(prev, byRow));
     setIraFilled({});
-    addToast({ type: 'info', title: `Cleared ${filledCount} value${filledCount === 1 ? '' : 's'}`, message: 'The rows read as the file wrote them. Nothing has been saved either way.' });
   };
 
   const doImport = () => {
@@ -1572,7 +1583,6 @@ export default function RacmImportReview({ mode, file, process, entity, existing
     logEvent(mode === 'sop'
       ? { action: 'Create', description: `Extracted the ${process} RACM from "${file.name}" — ${plural(n, 'control')}`, module: 'SOX ICFR', entity: 'RACM' }
       : { action: 'Upload', description: `Imported the ${process} RACM from "${file.name}" — ${plural(n, 'control')}`, module: 'SOX ICFR', entity: 'RACM' });
-    addToast({ type: 'success', title: mode === 'sop' ? 'RACM extracted' : 'RACM imported', message: `${plural(n, 'control')} imported for ${process}` });
   };
 
   // ── Dialog behaviour ──────────────────────────────────────────────────────────
@@ -1666,13 +1676,22 @@ export default function RacmImportReview({ mode, file, process, entity, existing
               </div>
 
               {/* what to look at before continuing — said once, above the table it refers to */}
-              {attention.length > 0 || extrasAtReview.length > 0 ? (
+              {attention.length > 0 || extrasAtReview.length > 0 || unsure.length > 0 ? (
                 <div className="rounded-lg border border-mitigated-200 bg-mitigated-50 px-3.5 py-2.5 mb-4">
                   <p className="text-[0.75rem] font-semibold text-mitigated-700 flex items-center gap-1.5"><AlertTriangle size={13} /> Needs attention</p>
                   <ul className="mt-1.5 space-y-0.5">
                     {attention.map(m => (
                       <li key={m.field} className="text-[0.75rem] text-ink-700">
-                        <span className="font-semibold text-ink-800">{fieldLabel(m.field)}</span> — {m.column === null ? 'No column found' : 'Low confidence — check it'}
+                        <span className="font-semibold text-ink-800">{fieldLabel(m.field)}</span> — {m.column === null ? 'No column found'
+                          : m.byValues ? <>matched by what your “{cell(headers[m.column])}” column holds — check it</>
+                            : 'Low confidence — check it'}
+                      </li>
+                    ))}
+                    {/* A column whose values fit more than one field (#7): named
+                        here, never guessed — the picker below is where it goes. */}
+                    {unsure.map(u => (
+                      <li key={`unsure-${u.column}`} className="text-[0.75rem] text-ink-700">
+                        Your <span className="font-semibold text-ink-800">“{u.header}”</span> column has {u.holds} — pick {u.choices.length === 2 ? `${fieldLabel(u.choices[0])} or ${fieldLabel(u.choices[1])}` : `which owner (${u.choices.map(fieldLabel).join(', ')})`}
                       </li>
                     ))}
                     {/* Their columns are named here too: a required one this
@@ -1733,7 +1752,13 @@ export default function RacmImportReview({ mode, file, process, entity, existing
                                 ? <span className="inline-flex items-center h-[22px] px-2 rounded-md bg-paper-100 text-ink-600 text-[0.65625rem] font-bold whitespace-nowrap" title="Not a column in this file — filled in at Review, row by row or once for every row">
                                     You'll fill at Review{previewRows.length > 0 ? ` · ${previewRows.length} rows` : ''}
                                   </span>
-                                : <ConfidencePill match={m} missing={blocking.some(x => x.field === m.field)} />}
+                                : m.byValues
+                                  ? <span className="inline-flex items-center gap-1" title="The heading isn't one we know — matched on what the column holds. Check it.">
+                                      <Sparkles size={10} className="text-brand-500 shrink-0" aria-hidden />
+                                      <ConfidencePill match={m} missing={false} />
+                                      <span className="text-[0.65625rem] text-ink-500 whitespace-nowrap">by its values</span>
+                                    </span>
+                                  : <ConfidencePill match={m} missing={blocking.some(x => x.field === m.field)} />}
                           </td>
                           <td><span className="block truncate text-ink-500" title={sampleValue || undefined}>{sampleValue || <span className="text-ink-300">—</span>}</span></td>
                         </tr>
@@ -2037,8 +2062,8 @@ export default function RacmImportReview({ mode, file, process, entity, existing
                         <th style={{ width: 76 }}>
                           <label className="inline-flex items-center gap-1.5 cursor-pointer" title="Import every row">
                             <input type="checkbox" aria-label="Import every row"
-                              checked={included.length === effective.length && effective.length > 0}
-                              ref={el => { if (el) el.indeterminate = included.length > 0 && included.length < effective.length; }}
+                              checked={included.length === tableRows.length && tableRows.length > 0}
+                              ref={el => { if (el) el.indeterminate = included.length > 0 && included.length < tableRows.length; }}
                               onChange={e => setAllIncluded(e.target.checked)} className="accent-brand-600 cursor-pointer" />
                             Import
                           </label>
@@ -2050,7 +2075,7 @@ export default function RacmImportReview({ mode, file, process, entity, existing
                       </tr>
                     </thead>
                     <tbody>
-                      {effective.map(row => {
+                      {tableRows.map(row => {
                         const open = expanded.has(row.key);
                         const sugg = suggestions.get(row.key) ?? [];
                         const checkSugg = sugg.filter(s => s.kind === 'check').length;
@@ -2325,6 +2350,38 @@ export default function RacmImportReview({ mode, file, process, entity, existing
                   </table>
                 </div>
               )}
+
+              {/* ── Ira's suggestions, kept apart from what was read (#6) ──
+                  Controls the SOP never describes. Folded, and nothing here
+                  imports until it is added — then it joins the table above,
+                  still marked Suggested by Ira. */}
+              {iraExtras.length > 0 && (
+                <section className="mt-3 rounded-xl border border-canvas-border bg-canvas-elevated">
+                  <button type="button" onClick={() => setExtrasOpen(o => !o)} aria-expanded={extrasOpen} aria-controls="racm-import-ira-extras"
+                    className="w-full flex items-center gap-1.5 px-3 py-2.5 text-left text-[0.75rem] font-semibold text-ink-800 cursor-pointer">
+                    <Sparkles size={12} className="text-brand-500 shrink-0" aria-hidden />
+                    Ira suggests {plural(iraExtras.length, 'more control')} the SOP doesn’t describe
+                    <span className="font-normal text-ink-500">· not imported unless you add them</span>
+                    <ChevronDown size={12} aria-hidden className={cn('ml-auto text-ink-400 transition-transform', extrasOpen && 'rotate-180')} />
+                  </button>
+                  {extrasOpen && (
+                    <ul id="racm-import-ira-extras" className="px-3 pb-2">
+                      {iraExtras.map(r => (
+                        <li key={r.key} className="py-2 border-t border-canvas-border flex items-start gap-3">
+                          <div className="min-w-0 flex-1">
+                            <p className="text-[0.78125rem] font-semibold text-ink-900 leading-snug">{cell(r.values.controlTitle) || cell(r.values.controlActivity)}</p>
+                            {cell(r.values.riskDescription) && <p className="mt-0.5 text-[0.71875rem] text-ink-500 leading-snug line-clamp-2">Risk · {cell(r.values.riskDescription)}</p>}
+                          </div>
+                          <button type="button" onClick={() => setIncluded(r, true)} className={cn(quietBtn, 'shrink-0')}
+                            aria-label={`Add ${cell(r.values.controlTitle) || 'this control'} to the import`}>
+                            <Plus size={12} aria-hidden /> Add
+                          </button>
+                        </li>
+                      ))}
+                    </ul>
+                  )}
+                </section>
+              )}
               </>
             </>
           )}
@@ -2350,7 +2407,7 @@ export default function RacmImportReview({ mode, file, process, entity, existing
                     <p className="basis-full order-last text-[0.75rem] text-ink-500">
                       {sopCoverage.cited} of {plural(sopCoverage.sop, 'control')} cite an SOP section
                       {sopCoverage.sop > sopCoverage.cited && <> · <span className="font-semibold text-ink-700">review {sopCoverage.sop - sopCoverage.cited}</span></>}
-                      {sopCoverage.suggested > 0 && <> · {plural(sopCoverage.suggested, 'Ira suggestion')}, marked Suggested</>}
+                      {sopCoverage.suggested > 0 && <> · {plural(sopCoverage.suggested, 'Ira suggestion')}, kept in a separate list</>}
                     </p>
                   )}
                   <div className="flex-1" />

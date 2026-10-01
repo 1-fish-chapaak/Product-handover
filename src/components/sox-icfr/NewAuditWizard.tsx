@@ -912,11 +912,6 @@ export default function NewAuditWizard({ onClose, prefillFrom }: {
         materiality: { basisLabel: engMat.basisLabel, benchmark: engMat.benchmark, pct: engMat.pct, pmPct: engMat.pmPct, ctPct: engMat.ctPct },
         overall: engMat.overall,
       });
-      addToast({
-        type: 'success',
-        title: 'Audit created',
-        message: `${periodLabel}${isRf ? ` roll-forward from the ${parent!.period} interim` : ''} — ${eng.controls.length} control${eng.controls.length === 1 ? '' : 's'} across ${libraryByProcess.length} process${libraryByProcess.length === 1 ? '' : 'es'}.`,
-      });
       onClose();
       return;
     }
@@ -973,15 +968,6 @@ export default function NewAuditWizard({ onClose, prefillFrom }: {
         uploadedBy: me, uploadedAt: 'just now', origin: f.origin, originBy: me, originAt: 'just now',
       });
     });
-    addToast({
-      type: 'success',
-      title: 'Audit created',
-      message: isRf
-        ? `${periodLabel} roll-forward — ${rfPicked.length} control${rfPicked.length === 1 ? '' : 's'} carried forward from the ${parent!.period} interim${rfFailed.length ? `, ${rfFailed.length} failed control${rfFailed.length === 1 ? '' : 's'} in for a full retest` : ''}.`
-        : scopeKind === 'entity'
-          ? `${periodLabel} — ${scopedEntities.length} entit${scopedEntities.length === 1 ? 'y' : 'ies'} in scope, ${coveragePct}% of the group.`
-          : `${periodLabel} — ${pickedControls.length} control${pickedControls.length === 1 ? '' : 's'} across ${picked.length} RACM${picked.length === 1 ? '' : 's'}.`,
-    });
     onClose();
   };
 
@@ -1023,7 +1009,6 @@ export default function NewAuditWizard({ onClose, prefillFrom }: {
     setPickedControls(prev => [...prev, id]);
     setOpenRacm(process);
     setAddCtrlRacm(null);
-    addToast({ type: 'success', title: 'Control added', message: `${description} — added to ${process} and put in scope.` });
   };
 
   return (

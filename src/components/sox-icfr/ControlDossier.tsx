@@ -22,7 +22,7 @@ import {
   concludeRationale, controlCode, controlConclusion, courtFor, operatingApplies, designCompleteness, designOutstanding, designOutstandingRequired, discussionsFor, extractionCriteria,
   isControlLocked, isControlLockedIn, itgcHolds, failedItgcs, isItgcDependent, docRequirement, docColumnOf, docNotApplicable, operatingProgress, operatingSuggestion, TOE_MAX_ROUNDS, toeRoundFailed, toeRoundNo, toeRounds, toeSpent, canRedrawToe, canExtendToe, populationLocked, sampleSizeGuide, samplingOf, trackResult, pointResult, stepResult, attestationOverruled, inquiryOnlyAttributes, restsOnStatementAlone,
   countVerdict, coverageVerdict, derivedRunCount, populationReady, designBasis, designSuggestion, auditorProvenChecks, suggestedDesignChecks, suggestPopulationFile, fmtDay, parseDay,
-  iraCannotTest, designBlocked, confidenceOf,
+  iraCannotTest, designBlocked, confidenceOf, CONFIDENT_AT, awaitsConfirm, unconfirmedIra,
   monthlyBreakdown, spikeMonths, priorRoundCount, fileUsable, originLabel, guessFileKind, populationSources, ipeChecksFor, samplesFor,
   expectedInputsFor, hasRowCount, isAssisting, sampledSources, reviewNotesFor, isShared, entityCoverage, uncoveredEntities, hasPaths, pathCoverage, untouchedPaths, type PopVerdict,
   requiredFilesOf, requiredFilesCount, requiredFilesReady, passedWithoutFiles, designFilesOf,
@@ -43,7 +43,7 @@ import { Sparkles, FileSpreadsheet } from 'lucide-react';
 import WorkingPaperModal from './WorkingPaperModal';
 import RemediationBriefModal from './RemediationBriefModal';
 import ControlChatPane from './ControlChatPane';
-import { DESIGN_RUN_STEPS, TOE_RUN_STEPS, endRun, startRun, railShown, useControlRun } from './controlChat';
+import { DESIGN_RUN_STEPS, TOE_RUN_STEPS, controlRun, endRun, runIsLive, startRun, railShown, useControlRun, useIraMode } from './controlChat';
 import { DeficiencyCard } from './extraViews';
 import DatePicker from '../shared/DatePicker';
 import { cn } from '../../lib/cn';
@@ -285,7 +285,7 @@ function RequestDataModal({ control, onClose }: { control: Control; onClose: () 
           <span className="text-[0.71875rem] text-ink-400">{sel.size} document{sel.size === 1 ? '' : 's'} · {emails.length} recipient{emails.length === 1 ? '' : 's'}</span>
           <div className="flex items-center gap-2">
             <button onClick={onClose} className="h-9 px-3.5 text-[0.78125rem] font-semibold text-ink-600 hover:text-ink-900 cursor-pointer">Cancel</button>
-            <button disabled={!canSend} onClick={() => { requestDataByEmail(control.id, Array.from(sel), emails); logEvent({ action: 'Share', description: `Requested ${sel.size} TOD document(s) for ${control.id} from ${emails.length} recipient(s)`, module: 'SOX ICFR', entity: 'Control' }); addToast({ type: 'success', title: 'Request sent', message: `${sel.size} document request${sel.size === 1 ? '' : 's'} emailed to ${emails.length === 1 ? emails[0] : `${emails.length} recipients`}.` }); onClose(); }} className="h-9 px-4 inline-flex items-center gap-1.5 rounded-lg bg-brand-600 text-white text-[0.78125rem] font-semibold disabled:opacity-40 enabled:hover:bg-brand-700 transition-colors cursor-pointer"><Send size={14} /> Send request</button>
+            <button disabled={!canSend} onClick={() => { requestDataByEmail(control.id, Array.from(sel), emails); logEvent({ action: 'Share', description: `Requested ${sel.size} TOD document(s) for ${control.id} from ${emails.length} recipient(s)`, module: 'SOX ICFR', entity: 'Control' });  onClose(); }} className="h-9 px-4 inline-flex items-center gap-1.5 rounded-lg bg-brand-600 text-white text-[0.78125rem] font-semibold disabled:opacity-40 enabled:hover:bg-brand-700 transition-colors cursor-pointer"><Send size={14} /> Send request</button>
           </div>
         </div>
       </motion.div>
@@ -417,6 +417,9 @@ function ConcludeFooter({ control, which, suggestion, canEdit, disabled, disable
   // refuses it; the button says so rather than looking live and doing nothing.
   // Ineffective stays open — that is the whole point of the round having failed.
   const roundFail = which === 'operating' && toeRoundFailed(control);
+  // Ira proposes, a person confirms (agentic UX #1, 1 Oct): the store refuses
+  // to conclude over unconfirmed results, so both buttons say so here.
+  const waiting = unconfirmedIra(control, which).length;
   if (!canEdit) return null;
   const apply = (target: TrackConclusion) => {
     const rationale = note.trim();
@@ -428,7 +431,6 @@ function ConcludeFooter({ control, which, suggestion, canEdit, disabled, disable
     const contradicts = suggestion !== 'Not tested' && target !== suggestion;
     if (contradicts) override(control.id, { result: target === 'Effective' ? 'Effective' : 'Ineffective', by: me, at: 'just now', rationale });
     else override(control.id, null);
-    addToast({ type: 'success', title: which === 'design' ? `TOD: design ${target.toLowerCase()}` : `${label} concluded ${target.toLowerCase()}`, message: contradicts ? 'Saved against the evidence — your rationale is on the paper.' : 'Saved to the working paper.' });
   };
   return (
     <div id={`conclude-${which}`} className="mt-4 pt-4 border-t border-canvas-border scroll-mt-4">
@@ -454,11 +456,16 @@ function ConcludeFooter({ control, which, suggestion, canEdit, disabled, disable
           className="mt-1 w-full text-[0.75rem] rounded-lg border border-canvas-border bg-canvas-elevated px-2.5 py-2 text-ink-800 placeholder:text-ink-400 focus:outline-none focus:ring-2 focus:ring-brand-200 resize-none" />
       </label>
       <div className="flex items-center gap-2.5 flex-wrap mt-2.5">
-        <button disabled={disabled || disableEffective || staleRuns > 0 || onWordAlone > 0 || roundFail} title={disableEffective ? disableEffectiveNote : undefined} onClick={() => apply('Effective')} className="h-9 px-4 inline-flex items-center gap-1.5 rounded-lg bg-compliant-600 text-white text-[0.78125rem] font-semibold enabled:hover:bg-compliant-700 disabled:opacity-40 transition-colors cursor-pointer">{disableEffective ? <Lock size={14} /> : <CheckCircle2 size={15} />} {effectiveLabel}</button>
-        <button disabled={disabled || staleRuns > 0} onClick={() => apply('Ineffective')} className="h-9 px-4 inline-flex items-center gap-1.5 rounded-lg border border-risk-300 text-risk-700 text-[0.78125rem] font-semibold enabled:hover:bg-risk-50 disabled:opacity-40 transition-colors cursor-pointer"><XCircle size={15} /> {ineffectiveLabel}</button>
+        <button disabled={disabled || disableEffective || staleRuns > 0 || onWordAlone > 0 || roundFail || waiting > 0} title={disableEffective ? disableEffectiveNote : undefined} onClick={() => apply('Effective')} className="h-9 px-4 inline-flex items-center gap-1.5 rounded-lg bg-compliant-600 text-white text-[0.78125rem] font-semibold enabled:hover:bg-compliant-700 disabled:opacity-40 transition-colors cursor-pointer">{disableEffective ? <Lock size={14} /> : <CheckCircle2 size={15} />} {effectiveLabel}</button>
+        <button disabled={disabled || staleRuns > 0 || waiting > 0} onClick={() => apply('Ineffective')} className="h-9 px-4 inline-flex items-center gap-1.5 rounded-lg border border-risk-300 text-risk-700 text-[0.78125rem] font-semibold enabled:hover:bg-risk-50 disabled:opacity-40 transition-colors cursor-pointer"><XCircle size={15} /> {ineffectiveLabel}</button>
         {disabled && disabledNote
           ? <span className="text-[0.71875rem] text-mitigated-700 inline-flex items-center gap-1"><Lock size={11} /> {disabledNote}</span>
           : disableEffective && disableEffectiveNote && <span className="text-[0.71875rem] text-mitigated-700 inline-flex items-center gap-1"><Lock size={11} /> {disableEffectiveNote}</span>}
+        {waiting > 0 && (
+          <span className="text-[0.71875rem] text-ink-500 inline-flex items-center gap-1">
+            <Sparkles size={11} className="text-brand-500" /> Confirm Ira’s {waiting} result{waiting === 1 ? '' : 's'} above first.
+          </span>
+        )}
         {staleRuns > 0 && (
           <span className="text-[0.71875rem] text-mitigated-700 inline-flex items-center gap-1">
             <AlertTriangle size={11} /> {staleRuns} run{staleRuns === 1 ? ' predates' : 's predate'} the current draw — re-run before concluding.
@@ -555,6 +562,30 @@ const tickTitle = (conf: number | undefined, run: string | undefined) =>
  *  in place of the header spinner, a spinner on every row and a bar under each.
  *  The count steps through the run's length so it reads as progress rather than
  *  a wait; the rest of the page stays usable underneath it. */
+/** "Ira is sure on 7 — Confirm all 7" (agentic UX #1 / #4, 1 Oct). Sure results
+ *  are confirmed in one click; the less-sure ones each wait for their own
+ *  Confirm on the row (and sit in Needs you). Nothing here for anyone but the
+ *  tester — confirming is the testing pen. */
+function ConfirmSure({ control, which, rows }: { control: Control; which: 'design' | 'operating'; rows: (DesignPoint | OperatingStep)[] }) {
+  const { confirmIra, role } = useIcfr();
+  if (role !== 'auditor' || control[which].conclusion !== 'Not tested') return null;
+  const waiting = rows.filter(awaitsConfirm);
+  if (!waiting.length) return null;
+  const sure = waiting.filter(r => (confidenceOf(r.validation, `${control.id}:${r.id}`) ?? 0) >= CONFIDENT_AT);
+  const unsure = waiting.length - sure.length;
+  return (
+    <div className="mb-2.5 flex items-center gap-2 flex-wrap text-[0.71875rem] text-ink-600">
+      <Sparkles size={12} className="text-brand-500 shrink-0" aria-hidden />
+      {sure.length > 0 && <>
+        <span>Ira is sure on {sure.length}</span>
+        <button onClick={() => confirmIra(control.id, which, sure.map(r => r.id))}
+          className="h-6 px-2 rounded-md border border-brand-200 bg-brand-50 text-[0.6875rem] font-semibold text-brand-700 hover:bg-brand-100 transition-colors cursor-pointer">Confirm all {sure.length}</button>
+      </>}
+      {unsure > 0 && <span className="text-ink-500">{sure.length > 0 && '· '}{unsure} less sure — confirm each below</span>}
+    </div>
+  );
+}
+
 function RunLine({ files, total, noun, label, ms }: { files: number; total: number; noun: string; label?: string; ms: number }) {
   const reduce = useReducedMotion();
   const [at, setAt] = useState(1);
@@ -580,7 +611,7 @@ function RunLine({ files, total, noun, label, ms }: { files: number; total: numb
 /** `checking` — Ira is running across every design check from the section header
  *  (S6, A17). The row wears the same busy state its own validation used to. */
 function PointRow({ control, point, canEdit, checking = false }: { control: Control; point: DesignPoint; canEdit: boolean; checking?: boolean }) {
-  const { me, setDesignPoint, validateDesignPoint, overrideDesignPoint, removeDesignPoint, linkDesignPointEvidence, setDesignPointProof } = useIcfr();
+  const { me, role, confirmIra, setDesignPoint, validateDesignPoint, overrideDesignPoint, removeDesignPoint, linkDesignPointEvidence, setDesignPointProof } = useIcfr();
   const [over, setOver] = useState(false);
   const [validatingOne, setValidating] = useState(false);
   const validating = validatingOne || checking;
@@ -829,6 +860,11 @@ function PointRow({ control, point, canEdit, checking = false }: { control: Cont
         {canEdit && !validating && (
           <div className="flex items-center gap-1.5 shrink-0">
             {point.validation && <button onClick={seeWorking} className="h-7 px-2.5 inline-flex items-center gap-1 rounded-md border border-canvas-border bg-canvas-elevated text-[0.71875rem] font-semibold text-ink-600 hover:border-brand-300 hover:text-brand-700 cursor-pointer"><ListChecks size={12} /> See the working</button>}
+            {/* Ira proposes, the tester confirms (UX #1) — one row at a time. */}
+            {role === 'auditor' && control.design.conclusion === 'Not tested' && awaitsConfirm(point) && (
+              <button onClick={() => confirmIra(control.id, 'design', [point.id])}
+                className="h-7 px-2.5 inline-flex items-center rounded-md border border-brand-200 bg-brand-50 text-[0.71875rem] font-semibold text-brand-700 hover:bg-brand-100 cursor-pointer">Confirm</button>
+            )}
             {/* PARKED (Aug 2026, user ask) — the workflow Validate / Re-run button.
                 The tester can state the result themselves with the two buttons
                 below, and Ira now reads every check at once from the Design
@@ -1070,7 +1106,7 @@ function WalkthroughCard({ control, canEdit }: { control: Control; canEdit: bool
  *  stronger of the two. */
 // ── operating attribute — its required files + AI validation, and/or self-attestation ─
 function AttributeRow({ control, step, canEdit, testing }: { control: Control; step: OperatingStep; canEdit: boolean; testing: boolean }) {
-  const { me, setStepResult, overrideStep, attestStep, addStepEvidence, uploadRequiredFile, clearRequiredFile, toggleStepAttest, runStepValidation } = useIcfr();
+  const { me, role, confirmIra, setStepResult, overrideStep, attestStep, addStepEvidence, uploadRequiredFile, clearRequiredFile, toggleStepAttest, runStepValidation } = useIcfr();
   const logEvent = useAuditLog();
   const [over, setOver] = useState(false);
   const [noteDraft, setNoteDraft] = useState(step.attestation?.note ?? '');
@@ -1101,8 +1137,9 @@ function AttributeRow({ control, step, canEdit, testing }: { control: Control; s
   // so the reader can tell it from the one that reads them all.
   const runAI = () => {
     setValidatingWf(true);
-    startRun(control.id, `Reading the files behind attribute ${step.code}`, TOE_RUN_STEPS, 4000, true);
-    window.setTimeout(() => { endRun(control.id); runStepValidation(control.id, step.id); setValidatingWf(false); }, 4000);
+    const t = startRun(control.id, `Reading the files behind attribute ${step.code}`, TOE_RUN_STEPS, 4000, true);
+    // A Stop in the Ira tab (UX #15) ends the run; its result is then dropped.
+    window.setTimeout(() => { const live = runIsLive(control.id, t); endRun(control.id); setValidatingWf(false); if (live) runStepValidation(control.id, step.id); }, 4000);
   };
 
   // The per-attribute file checklist and its "upload several" pile left this
@@ -1135,13 +1172,17 @@ function AttributeRow({ control, step, canEdit, testing }: { control: Control; s
           <div className="flex items-center gap-2 flex-wrap">
             <span className="font-mono text-[0.6875rem] font-bold text-ink-500">{step.code}</span>
             <span className="text-[0.8125rem] font-semibold text-ink-900">{step.description}</span>
-            {rowState && <IraState state={rowState} title={rowState === 'review' ? run : undefined} />}
+            {rowState && <IraState state={rowState} title={rowState === 'review' ? run : rowState === 'couldnt' ? step.validation?.blocked : undefined} />}
           </div>
           <div className="text-[0.6875rem] text-ink-400 mt-1">{[step.assertion, step.precision, step.procedures.join(' / ')].filter(Boolean).join(' · ')}</div>
           {step.override && <div className="text-[0.6875rem] text-high-700 mt-1.5 flex items-start gap-1"><CornerDownRight size={11} className="mt-0.5 shrink-0" /> {step.override.rationale}{step.override.evidence && <span className="text-ink-500"> · <Paperclip size={9} className="inline -mt-0.5" /> {step.override.evidence}</span>} <span className="text-ink-400">— {step.override.by}</span></div>}
         </div>
         {canEdit && (
           <div className="flex items-center gap-1.5 shrink-0">
+            {role === 'auditor' && control.operating.conclusion === 'Not tested' && awaitsConfirm(step) && (
+              <button onClick={() => confirmIra(control.id, 'operating', [step.id])}
+                className="h-8 px-2.5 inline-flex items-center rounded-lg border border-brand-200 bg-brand-50 text-[0.75rem] font-semibold text-brand-700 hover:bg-brand-100 cursor-pointer">Confirm</button>
+            )}
             {resultBtn('Pass', 'Pass', CheckCircle2, eff === 'Pass', 'bg-compliant-50 border-compliant-300 text-compliant-700')}
             {resultBtn('Fail', 'Fail', XCircle, eff === 'Fail', 'bg-risk-50 border-risk-300 text-risk-700')}
             <button onClick={() => { if (step.override) { setWhy(null); setOver(o => !o); } else setWhy(w => w ? null : eff === 'Pass' ? 'Fail' : 'Pass'); }} title={step.override ? 'Remove the override' : 'Override result — say why'} className={cn('h-8 w-8 inline-flex items-center justify-center rounded-lg border cursor-pointer', step.override ? 'bg-high-50 border-high-300 text-high-700' : 'border-canvas-border bg-canvas-elevated text-ink-600 hover:border-high-300 hover:text-high-700')}><Pencil size={13} /></button>
@@ -1273,7 +1314,7 @@ function CompactAttributeLine({ control, step, onOpen, open }: { control: Contro
       <Tickmark result={eff} size={18} confidence={conf} blocked={!!step.validation?.blocked && eff === 'Not tested'} title={tickTitle(conf, run)} />
       <span className="font-mono text-[0.6875rem] font-bold text-ink-500 shrink-0">{step.code}</span>
       <span className="text-[0.78125rem] font-medium text-ink-900 truncate min-w-0 flex-1">{step.description}</span>
-      {state && <IraState state={state} title={state === 'review' ? run : undefined} />}
+      {state && <IraState state={state} title={state === 'review' ? run : state === 'couldnt' ? step.validation?.blocked : undefined} />}
       {total > 0 && <span className="text-[0.65625rem] text-ink-400 tabular-nums shrink-0">{uploaded}/{total} files</span>}
       {open !== undefined && (open ? <ChevronUp size={13} className="text-ink-400 shrink-0" /> : <ChevronDown size={13} className="text-ink-400 shrink-0" />)}
     </button>
@@ -1435,7 +1476,7 @@ function DesignSection({ control, canEdit: canEditIn, locked = false }: { contro
    *  goes through the reviewer's own send-back, which is the door that already
    *  exists for it (`returnDesign`). */
   locked?: boolean }) {
-  const { role, me, addDesignDoc, attachDesignEvidence, removeDesignFile, waiveDesignDoc, clearDesignWaiver, addDesignPoint, setDesignPoint, validateDesignPoint, runDesignIra } = useIcfr();
+  const { role, me, confirmIra, addDesignDoc, attachDesignEvidence, removeDesignFile, waiveDesignDoc, clearDesignWaiver, addDesignPoint, setDesignPoint, validateDesignPoint, runDesignIra } = useIcfr();
   // The owner keeps the evidence lane and loses the testing lane — see the note
   // on the dossier's own canEdit / canTest split.
   const isOwner = role === 'risk-owner';
@@ -1527,10 +1568,30 @@ function DesignSection({ control, canEdit: canEditIn, locked = false }: { contro
   // this on the left and would otherwise be watching the wrong column.
   const runIra = () => {
     setIraRunning(true);
-    startRun(control.id, 'Reading the evidence against each check', DESIGN_RUN_STEPS, VALIDATE_MS, true);
+    const t = startRun(control.id, 'Reading the evidence against each check', DESIGN_RUN_STEPS, VALIDATE_MS, true);
     logEvent({ action: 'Run', description: `Ran Ira on the design checks for ${control.id}`, module: 'SOX ICFR', entity: 'Test Result' });
-    window.setTimeout(() => { endRun(control.id); runDesignIra(control.id); setIraRunning(false); }, VALIDATE_MS);
+    window.setTimeout(() => { const live = runIsLive(control.id, t); endRun(control.id); setIraRunning(false); if (live) runDesignIra(control.id); }, VALIDATE_MS);
   };
+  // ── Automatic mode (agentic UX #3, user ask 1 Oct) ─────────────────────────
+  // Ira reads the design evidence itself the moment it can — once per state of
+  // the evidence, so a Stop or an Undo is not simply re-run over the top — and
+  // confirms its own SURE results in the tester's name. The less-sure wait for
+  // the tester; the conclusion is never Ira's.
+  const iraMode = useIraMode();
+  const autoKey = useRef('');
+  const autoDue = d.conclusion === 'Not tested' && (iraStale || d.points.some(p => !p.validation && !p.override && pointResult(p) === 'Not tested'));
+  useEffect(() => {
+    if (iraMode !== 'automatic' || !canTest || locked || iraRunning || iraBlocked || !autoDue || controlRun(control.id)) return;
+    const key = `${control.id}|${d.documents.map(x => designFilesOf(x).length).join(',')}|${iraStale}`;
+    if (autoKey.current === key) return;
+    autoKey.current = key;
+    runIra();
+  }); // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => {
+    if (iraMode !== 'automatic' || !canTest || locked || d.conclusion !== 'Not tested') return;
+    const sure = d.points.filter(p => awaitsConfirm(p) && (confidenceOf(p.validation, `${control.id}:${p.id}`) ?? 0) >= CONFIDENT_AT);
+    if (sure.length) confirmIra(control.id, 'design', sure.map(p => p.id));
+  }, [iraMode, canTest, locked, d.conclusion, d.points, control.id, confirmIra]);
   const addStandard = (k: DesignDocKind) => { addDesignDoc(control.id, k); logEvent({ action: 'Create', description: `Added design element to ${control.id}`, module: 'SOX ICFR', entity: 'Control' }); };
   const saveCustom = () => {
     if (!customName.trim()) return;
@@ -1830,6 +1891,7 @@ function DesignSection({ control, canEdit: canEditIn, locked = false }: { contro
             );
           })()}
           {iraRunning && <RunLine files={d.documents.reduce((n, doc) => n + designFilesOf(doc).length, 0)} total={d.points.length} noun="check" ms={VALIDATE_MS} />}
+          {!iraRunning && <ConfirmSure control={control} which="design" rows={d.points} />}
           {d.points.length === 0 ? <p className="text-[0.75rem] text-ink-400 mb-5">No considerations yet — add the design points you’ll assess in the walkthrough.</p> : (
             <div className="space-y-4 mb-5">
               {controlChecks.length > 0 && (
@@ -2274,10 +2336,10 @@ function IpeSection({ control, canWrite, isAuditor }: { control: Control; canWri
                 {canWrite && isAuditor && ipe.conclusion === 'Not tested' && (
                   <div className="flex items-center gap-2 shrink-0">
                     <button disabled={!allAnswered || suggestion !== 'Reliable'} title={!allAnswered ? `Work all ${ipe.checks.length} checks first.` : suggestion !== 'Reliable' ? 'A check failed — the report cannot be concluded reliable.' : undefined}
-                      onClick={() => { concludeIpe(control.id, 'Reliable'); setOpen(false); addToast({ type: 'success', title: 'Report reliable', message: `${ipe.reportName} — the population can be locked.` }); }}
+                      onClick={() => { concludeIpe(control.id, 'Reliable'); setOpen(false);  }}
                       className="h-9 px-4 inline-flex items-center gap-1.5 rounded-lg bg-compliant-600 text-white text-[0.78125rem] font-semibold enabled:hover:bg-compliant-700 disabled:opacity-40 disabled:cursor-not-allowed transition-colors cursor-pointer"><CheckCircle2 size={14} /> Reliable</button>
                     <button disabled={!allAnswered}
-                      onClick={() => { concludeIpe(control.id, 'Not reliable'); addToast({ type: 'error', title: 'Report not reliable', message: 'The population cannot be locked off this report.' }); }}
+                      onClick={() => { concludeIpe(control.id, 'Not reliable');  }}
                       className="h-9 px-4 inline-flex items-center gap-1.5 rounded-lg border border-risk-300 text-risk-700 text-[0.78125rem] font-semibold enabled:hover:bg-risk-50 disabled:opacity-40 disabled:cursor-not-allowed transition-colors cursor-pointer"><XCircle size={14} /> Not reliable</button>
                   </div>
                 )}
@@ -2684,7 +2746,6 @@ function AwaitingInputs({ control, canAsk }: { control: Control; canAsk: boolean
           const what = `Attribute${awaiting.length === 1 ? '' : 's'} ${awaiting.map(a => a.code).join(', ')} on ${control.id} ${awaiting.length === 1 ? 'is' : 'are'} still missing required files. Send them to the auditor, who attaches them on the attribute's checklist in TOE.`;
           remindOwnerForFiles(control.id, what);
           logEvent({ action: 'Update', description: `Asked the owner of ${control.id} to upload the source data`, module: 'SOX ICFR', entity: 'Evidence' });
-          addToast({ type: 'success', title: 'Owner asked', message: `${ownersOf(control).processOwner} has it on their list — due in 3 days.` });
         }}
           className="mt-1.5 h-7 px-2.5 inline-flex items-center gap-1.5 rounded-md border border-mitigated-300 bg-canvas-elevated text-[0.6875rem] font-semibold text-mitigated-800 hover:border-mitigated-400 transition-colors cursor-pointer"><Mail size={11} /> Ask the owner to upload</button>
       )}
@@ -2977,7 +3038,6 @@ function SourcePickerForm({ control, exclude, submitLabel, onSubmit, seedFile, s
             // ones attached at creation, so it has to read like them.
             registerFile({ name, kind: guessFileKind(name), rows, from: `Uploaded on ${control.id}`, uploadedBy: me, uploadedAt: 'just now', origin, originBy: me, originAt: 'just now' });
             logEvent({ action: 'Upload', description: `Added "${name}" to the audit's files from ${control.id} — ${origin.toLowerCase()}, ${rows.toLocaleString()} rows`, module: 'SOX ICFR', entity: 'Evidence' });
-            addToast({ type: 'success', title: 'File added', message: `${name} — ${origin.toLowerCase()}. Every control on this audit can use it now.` });
             setPicked(name);
             setUploading(false);
           }} />
@@ -3065,7 +3125,6 @@ function PopulationSection({ control, canEdit, locked: gated = false }: { contro
     addPopulationSource(control.id, { file: chosen.name, rows: chosen.rows, count: narrowed, criteria });
     setAddingSource(false);
     logEvent({ action: 'Update', description: `Added ${chosen.name} to the population for ${control.id} — ${narrowed.toLocaleString()} instances from ${chosen.rows.toLocaleString()} rows`, module: 'SOX ICFR', entity: 'Evidence' });
-    addToast({ type: 'success', title: 'Source added', message: `${chosen.name} — prove it before the population can lock.` });
   };
 
 
@@ -3410,7 +3469,7 @@ function PopulationSection({ control, canEdit, locked: gated = false }: { contro
               to be true: the count and the period check what the FILTER did,
               this checks whether the thing filtered was worth filtering. */}
           {!isOwnerView && (
-            <div className="mt-4">
+            <div id="ipe-test" className="mt-4 scroll-mt-4">
               <IpeSection control={control} canWrite={canWrite && !locked} isAuditor={isAuditor} />
             </div>
           )}
@@ -3420,7 +3479,7 @@ function PopulationSection({ control, canEdit, locked: gated = false }: { contro
               line above, and it is changed on the file record — never on a
               control that happens to be reading the file today. */}
 
-          <div className="mt-3 flex items-center justify-between gap-3 flex-wrap">
+          <div id="lock-population" className="mt-3 scroll-mt-4 flex items-center justify-between gap-3 flex-wrap">
             <p className="text-[0.65625rem] text-ink-400 min-w-0">
               {/* The owner is told what happens next without being told what is
                   being looked for. "Locked" is a fact about their data; the
@@ -3435,7 +3494,7 @@ function PopulationSection({ control, canEdit, locked: gated = false }: { contro
             </p>
             {!locked && isAuditor && (
               <button disabled={!ready} title={ready ? undefined : missing}
-                onClick={() => { lockPopulation(control.id); logEvent({ action: 'Update', description: `Locked the population for ${control.id}`, module: 'SOX ICFR', entity: 'Evidence' }); addToast({ type: 'success', title: 'Population locked', message: `${pop.count.toLocaleString()} instances — the sample draws from this.` }); }}
+                onClick={() => { lockPopulation(control.id); logEvent({ action: 'Update', description: `Locked the population for ${control.id}`, module: 'SOX ICFR', entity: 'Evidence' });  }}
                 className="shrink-0 h-9 px-4 inline-flex items-center gap-1.5 rounded-lg bg-brand-600 text-white text-[0.78125rem] font-semibold enabled:hover:bg-brand-700 disabled:opacity-40 disabled:cursor-not-allowed transition-colors cursor-pointer"><Lock size={14} /> Lock the population</button>
             )}
             {locked && <span className="shrink-0 inline-flex items-center gap-1.5 text-[0.71875rem] font-bold text-compliant-700"><Lock size={13} /> Locked</span>}
@@ -3529,7 +3588,6 @@ function PopulationSection({ control, canEdit, locked: gated = false }: { contro
               <button onClick={() => {
                 setSourceRole(control.id, roleChange.source.id, 'assisting');
                 logEvent({ action: 'Update', description: `Marked ${roleChange.source.file} an assisting table on ${control.id}`, module: 'SOX ICFR', entity: 'Evidence' });
-                addToast({ type: 'success', title: 'Assisting table', message: `${roleChange.source.file} — proven, joined, never sampled.` });
                 setRoleChange(null);
               }}
                 className="h-9 px-4 inline-flex items-center gap-1.5 rounded-lg bg-mitigated-600 text-white text-[0.78125rem] font-semibold hover:bg-mitigated-700 transition-colors cursor-pointer">Make it assisting</button>
@@ -3565,7 +3623,6 @@ function PopulationSection({ control, canEdit, locked: gated = false }: { contro
               <button onClick={() => {
                 removePopulationSource(control.id, dropping.id);
                 logEvent({ action: 'Delete', description: `Dropped ${dropping.file} from the population for ${control.id}`, module: 'SOX ICFR', entity: 'Evidence' });
-                addToast({ type: 'success', title: 'Source dropped', message: `${dropping.file} — the other files kept their work.` });
                 setDropping(null);
               }}
                 className="h-9 px-4 inline-flex items-center gap-1.5 rounded-lg bg-risk-600 text-white text-[0.78125rem] font-semibold hover:bg-risk-700 transition-colors cursor-pointer"><Trash2 size={13} /> Drop the file</button>
@@ -3659,7 +3716,6 @@ function SampleSizeDeparture({ control, agreed, canEdit }: { control: Control; a
   const save = () => {
     resizeSample(control.id, n, why.trim());
     logEvent({ action: 'Update', description: `Departed from the agreed sample size on ${control.id} — ${n} items where the methodology gives ${agreed}: ${why.trim()}`, module: 'SOX ICFR', entity: 'Test Result' });
-    addToast({ type: 'success', title: 'Departure recorded', message: `${n} items against an agreed ${agreed} — the reason prints on the paper.` });
     setWhy(''); setOpen(false);
   };
 
@@ -3821,7 +3877,6 @@ function SourceDrawRow({ control, source, canDraw, single, isOpen, onToggle, onA
     // whether the auditor asked for two months and got twenty-five rows instead.
     drawSourceSample(control.id, source.id, { size: drawn.length, method, seed, prompt: prompt.trim() || undefined, ...(plan.months ? { months: plan.months } : {}) }, drawn);
     logEvent({ action: 'Update', description: `Approved the sample from ${source.file} for ${control.id} — ${drawn.length} items, ${method.toLowerCase()}, seed ${seed}`, module: 'SOX ICFR', entity: 'Test Result' });
-    addToast({ type: 'success', title: 'Sample drawn', message: `${drawn.length} items from ${source.file} — test them against the attributes.` });
     setStage('ready'); setDrawn([]);
   };
   const restart = () => {
@@ -4057,7 +4112,6 @@ function SourceDrawRow({ control, source, canDraw, single, isOpen, onToggle, onA
               <button onClick={() => {
                 redrawSource(control.id, source.id);
                 logEvent({ action: 'Delete', description: `Rejected the sample from ${source.file} on ${control.id} — the draw was reopened`, module: 'SOX ICFR', entity: 'Test Result' });
-                addToast({ type: 'success', title: 'Sample rejected', message: `${source.file} — draw it again. Every other file kept its own.` });
                 setRedrawing(false);
               }}
                 className="h-9 px-4 inline-flex items-center gap-1.5 rounded-lg bg-risk-600 text-white text-[0.78125rem] font-semibold hover:bg-risk-700 transition-colors cursor-pointer"><RotateCcw size={13} /> Reject and retry</button>
@@ -5017,7 +5071,6 @@ function RoundActions({ control, canEdit }: { control: Control; canEdit: boolean
                   <button onClick={() => {
                     extendSample(control.id, extra);
                     logEvent({ action: 'Update', description: `Extended the sample by ${extra} on ${control.id} after a failure`, module: 'SOX ICFR', entity: 'Test Result' });
-                    addToast({ type: 'success', title: 'Sample extended', message: `${extra} more items — test them before concluding.` });
                   }}
                     className="h-8 px-3 inline-flex items-center gap-1.5 rounded-lg border border-canvas-border bg-canvas-elevated text-[0.75rem] font-semibold text-ink-700 hover:border-brand-300 hover:text-brand-700 transition-colors cursor-pointer">
                     <Plus size={13} /> Extend the sample — draw {extra} more
@@ -5063,7 +5116,6 @@ function RoundActions({ control, canEdit }: { control: Control; canEdit: boolean
               <button disabled={!why.trim()} onClick={() => {
                 startToeRound(control.id, why.trim());
                 logEvent({ action: 'Update', description: `Set a TOE round aside on ${control.id} and reopened the draw`, module: 'SOX ICFR', entity: 'Test Result' });
-                addToast({ type: 'success', title: 'Round set aside', message: 'Draw the next sample in step ③ — it is the last one.' });
                 setWhy(''); setAsking(false);
               }}
                 className="h-9 px-4 inline-flex items-center gap-1.5 rounded-lg bg-brand-600 text-white text-[0.78125rem] font-semibold disabled:opacity-40 enabled:hover:bg-brand-700 transition-colors cursor-pointer">
@@ -5079,7 +5131,7 @@ function RoundActions({ control, canEdit }: { control: Control; canEdit: boolean
 
 // ── operating section (TOE) — locked until design effective ───────────────────────
 function OperatingSection({ control, canEdit, locked }: { control: Control; canEdit: boolean; locked: boolean }) {
-  const { eng, openAuditId, addAttribute, validateReadyAttributes } = useIcfr();
+  const { eng, role, openAuditId, addAttribute, validateReadyAttributes, confirmIra } = useIcfr();
   const logEvent = useAuditLog();
   const { addToast } = useToast();
   const o = control.operating; const prog = operatingProgress(control);
@@ -5103,7 +5155,7 @@ function OperatingSection({ control, canEdit, locked }: { control: Control; canE
     // Same rule as the design run: the button is here, the narration is in the
     // rail, and the rail comes forward because the reader pressed this on the
     // left and would otherwise be watching the wrong column.
-    startRun(control.id, 'Reading the uploaded files against each attribute', TOE_RUN_STEPS, 2400, true);
+    const t = startRun(control.id, 'Reading the uploaded files against each attribute', TOE_RUN_STEPS, 2400, true);
     logEvent({ action: 'Run', description: `Ran AI validation on ${ready} ready attribute(s) for ${control.id}`, module: 'SOX ICFR', entity: 'Test Result' });
     const skipped = o.steps.filter(s => !requiredFilesReady(s, control)).map(s => {
       const { uploaded, total } = requiredFilesCount(s, control);
@@ -5112,13 +5164,34 @@ function OperatingSection({ control, canEdit, locked }: { control: Control; canE
       return total === 0 ? `${s.code}: no required files listed` : `${s.code}: ${missing} file${missing === 1 ? '' : 's'} missing`;
     });
     window.setTimeout(() => {
+      const live = runIsLive(control.id, t);
       endRun(control.id);
-      validateReadyAttributes(control.id);
       setTesting(false);
+      if (!live) return;   // stopped from the Ira tab — nothing is written
+      validateReadyAttributes(control.id);
       if (skipped.length) addToast({ type: 'warning', title: `AI validation ran on ${ready} attribute${ready === 1 ? '' : 's'}`, message: skipped.join(' · ') });
-      else addToast({ type: 'success', title: `AI validation ran on all ${ready} attributes`, message: 'The result is on each attribute.' });
     }, 2400);
   };
+  // ── Automatic mode (agentic UX #3, user ask 1 Oct) ─────────────────────────
+  // Attributes whose files are all in get read without a press, once per set of
+  // files; Ira's sure results are confirmed in the tester's name. Attributes
+  // still short a file are left alone here — the button run is what marks them
+  // "couldn't test", and that is the tester's call to make.
+  const iraMode = useIraMode();
+  const autoKey = useRef('');
+  const autoReady = o.steps.filter(s => requiredFilesReady(s, control) && !s.validation && !s.override && stepResult(s) === 'Not tested');
+  useEffect(() => {
+    if (iraMode !== 'automatic' || role !== 'auditor' || !canEdit || locked || testing || !autoReady.length || controlRun(control.id)) return;
+    const key = `${control.id}|${autoReady.map(s => s.id).join(',')}`;
+    if (autoKey.current === key) return;
+    autoKey.current = key;
+    runAll();
+  }); // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => {
+    if (iraMode !== 'automatic' || role !== 'auditor' || !canEdit || locked || o.conclusion !== 'Not tested') return;
+    const sure = o.steps.filter(s => awaitsConfirm(s) && (confidenceOf(s.validation, `${control.id}:${s.id}`) ?? 0) >= CONFIDENT_AT);
+    if (sure.length) confirmIra(control.id, 'operating', sure.map(s => s.id));
+  }, [iraMode, role, canEdit, locked, o.conclusion, o.steps, control.id, confirmIra]);
 
   if (locked) {
     // A29 — a year-end control in an interim or roll-forward audit waits for the
@@ -5187,11 +5260,12 @@ function OperatingSection({ control, canEdit, locked }: { control: Control; canE
         <h4 className="text-[0.78125rem] font-bold text-ink-700 inline-flex items-center gap-1.5"><ClipboardCheck size={14} /> Test attributes <span className="font-normal text-ink-400">· each evidenced independently</span></h4>
         <div className="flex items-center gap-2">
           <span className="text-[0.6875rem] text-ink-400 tabular-nums hidden md:inline">{attCount} attested · {prog.passed} pass · {prog.failed} fail</span>
-          {canEdit && o.steps.length > 0 && !testing && <button disabled={ready === 0} onClick={runAll} title={ready === 0 ? 'No attribute has all its required files uploaded yet' : undefined} className={cn('h-8 px-3 inline-flex items-center gap-1.5 rounded-lg bg-evidence-600 text-white text-[0.75rem] font-semibold enabled:hover:bg-evidence-700 transition-colors cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed')}><Sparkles size={14} /> {`Run AI validation on ready attributes (${ready} of ${o.steps.length})`}</button>}
+          {canEdit && o.steps.length > 0 && !testing && <button disabled={ready === 0 && untested === 0} onClick={runAll} title={ready === 0 ? 'No attribute has its files yet — Ira will say which it could not test, and draft the ask' : undefined} className={cn('h-8 px-3 inline-flex items-center gap-1.5 rounded-lg bg-evidence-600 text-white text-[0.75rem] font-semibold enabled:hover:bg-evidence-700 transition-colors cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed')}><Sparkles size={14} /> {`Run AI validation on ready attributes (${ready} of ${o.steps.length})`}</button>}
           {canEdit && <button onClick={() => setAddingAttr(a => !a)} className="h-8 px-2.5 inline-flex items-center gap-1.5 rounded-lg border border-canvas-border bg-canvas-elevated text-[0.75rem] font-semibold text-ink-700 hover:border-brand-300 hover:text-brand-700 cursor-pointer"><Plus size={13} /> Add</button>}
         </div>
       </div>
-      {testing && <RunLine files={o.steps.filter(s => requiredFilesReady(s, control)).reduce((n, s) => n + requiredFilesCount(s, control).uploaded, 0)} total={ready} noun="attribute" ms={2400} />}
+      {testing && <RunLine files={o.steps.filter(s => requiredFilesReady(s, control)).reduce((n, s) => n + requiredFilesCount(s, control).uploaded, 0)} total={ready || o.steps.length} noun="attribute" ms={2400} />}
+      {!testing && <ConfirmSure control={control} which="operating" rows={o.steps} />}
       {addingAttr && (
         <div className="flex items-center gap-2 mb-3">
           <input autoFocus value={newAttr} onChange={e => setNewAttr(e.target.value)} onKeyDown={e => { if (e.key === 'Enter' && newAttr.trim()) { addAttribute(control.id, newAttr.trim()); logEvent({ action: 'Create', description: `Added test attribute to ${control.id}`, module: 'SOX ICFR', entity: 'Control' }); setNewAttr(''); setAddingAttr(false); } }} placeholder="e.g. Approval evidenced before the transaction posts" className="flex-1 h-9 px-3 rounded-lg border border-canvas-border bg-canvas-elevated text-[0.78125rem] focus:outline-none focus:ring-2 focus:ring-brand-200" />
@@ -5428,14 +5502,14 @@ function ActivityRail({ control, pane, onPane, onCollapse, detail, onCloseDetail
   control: Control; pane: RailPane; onPane: (p: RailPane) => void; onCollapse: () => void;
   detail: RailDetail | null; onCloseDetail: () => void; activityView: ActivityView; onActivityView: (v: ActivityView) => void;
 }) {
-  const { eng, role } = useIcfr();
+  const { eng, role, openAuditId } = useIcfr();
   // The pane belongs to the page, not to this component: the folded spine
   // picks one too, and a rail that forgot which tab was chosen the moment it
   // was folded would make folding it destructive. Picking a tab also closes
   // whatever detail (Ira's working, a file) was open over it.
   const setPane = (p: RailPane) => { onCloseDetail(); onPane(p); };
   // Ambient level (review #11): the count on the tab, never a toast.
-  const needs = needsYouItems(control, eng, role).length;
+  const needs = needsYouItems(control, eng, role, openAuditId).length;
   const tabCls = (on: boolean) => cn('flex-1 min-w-0 h-8 rounded-lg text-[0.75rem] font-semibold inline-flex items-center justify-center gap-1.5 transition-colors cursor-pointer', on ? 'bg-canvas-elevated text-brand-700 shadow-[0_1px_4px_-1px_rgba(15,8,30,0.18)] ring-1 ring-canvas-border' : 'text-ink-500 hover:text-ink-800');
   return (
     <aside className="panel overflow-hidden h-full min-h-0 flex flex-col">
@@ -5473,7 +5547,7 @@ function RailSpine({ control, running, onOpen }: { control: Control; running: bo
   const { eng, role, me, openAuditId } = useIcfr();
   const still = useReducedMotion();
   const execCount = eng.executions.filter(e => e.controlId === control.id).length;
-  const needs = needsYouItems(control, eng, role).length;
+  const needs = needsYouItems(control, eng, role, openAuditId).length;
   // One shape for all three (user ask, 23 Sep). History and Discussion were
   // naked 15px glyphs stacked under a 36px tile that plainly WAS a button, so
   // they read as leftovers rather than as the other two ways in. They take Ira's

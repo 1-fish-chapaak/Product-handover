@@ -294,6 +294,10 @@ export interface DesignPoint {
   auditorProof?: AuditorProof;
   result: TestResult;
   override?: Override;
+  /** A person accepted Ira's result as it stands (agentic UX #1, 1 Oct). Ira
+   *  proposes; until this is set the row reads "Ira · review" and the track
+   *  cannot be concluded. A new run of Ira clears it. */
+  confirmed?: { by: string; at: string };
   /** A file on a design element was added or removed after this override was
    *  recorded (S6, A17) — the override stands, flagged "Evidence changed since
    *  override". Cleared when the override is removed or recorded again. */
@@ -461,6 +465,10 @@ export interface OperatingStep {
   attestation?: Attestation;
   result: TestResult;
   override?: Override;
+  /** A person accepted Ira's result as it stands (agentic UX #1, 1 Oct). Ira
+   *  proposes; until this is set the row reads "Ira · review" and the track
+   *  cannot be concluded. A new run of Ira clears it. */
+  confirmed?: { by: string; at: string };
   // Per-drawn-sample results for THIS attribute (keyed by Sample.id) — the
   // handbook grain: every attribute is tested against every sampled item.
   sampleResults?: Record<string, TestResult>;
@@ -2596,6 +2604,26 @@ export interface SignoffEntry { by: string; at: string }
 // icfrConclusion is stamped at each signature from live state: open MW ⇒ 'Not effective'.
 export interface EngagementSignoff { preparer?: SignoffEntry; reviewer?: SignoffEntry; icfrConclusion?: 'Effective' | 'Not effective' }
 
+/** A pattern in the auditors' overrides that a reviewer has ruled on
+ *  (agentic UX #9, 1 Oct). The same check, on three or more controls, where
+ *  Ira said one thing and the auditor changed it to the other. Approved, Ira
+ *  answers `to` on that check from then on — still unconfirmed, still the
+ *  auditor's to confirm. Rejected, it is not offered again in this audit.
+ *  Nothing is learned without one of these. */
+export interface IraLearnedRule {
+  key: string;
+  which: 'design' | 'operating';
+  text: string;
+  from: TestResult;
+  to: TestResult;
+  /** How many controls the pattern stood on when it was ruled on. */
+  count: number;
+  status: 'approved' | 'rejected';
+  by: string;
+  at: string;
+  auditId?: string;
+}
+
 export interface IcfrEngagement {
   id: string; code: string; name: string; entity: string; framework: string;
   // No Interim / Year-end round here — the period comes from the newest record
@@ -2630,6 +2658,8 @@ export interface IcfrEngagement {
   groupConclusions?: GroupConclusion[];
   tasks: HandoffTask[];
   discussions: Discussion[];
+  /** "Ira learned" rulings — see `IraLearnedRule`. */
+  iraLearned?: IraLearnedRule[];
   reviewNotes: ReviewNote[];
   executions: ExecutionEvent[];
   runs: RunRecord[];

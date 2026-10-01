@@ -3054,6 +3054,17 @@ export function pointResult(p: DesignPoint): TestResult { return p.override ? (p
 export function attestationOverruled(s: OperatingStep): boolean {
   return !!(s.validation?.result && s.attestation?.result && s.validation.result !== s.attestation.result);
 }
+/** Ira's result standing on a row, waiting for a person to confirm it (agentic
+ *  UX #1, 1 Oct): a verdict Ira reached, not overridden, not yet confirmed. */
+export function awaitsConfirm(row: { validation?: ValidationResult; override?: unknown; confirmed?: unknown }): boolean {
+  return !!row.validation?.result && !row.validation.blocked && !row.override && !row.confirmed;
+}
+/** Every row on a track still waiting on that confirmation — what holds the
+ *  conclusion back. */
+export function unconfirmedIra(c: Control, which: 'design' | 'operating'): (DesignPoint | OperatingStep)[] {
+  return which === 'design' ? c.design.points.filter(awaitsConfirm) : c.operating.steps.filter(awaitsConfirm);
+}
+
 export function stepResult(s: OperatingStep): TestResult {
   // The auditor's own override stays supreme — it is a named judgment with a
   // recorded reason, not a second opinion sneaking past the evidence.
@@ -4829,3 +4840,57 @@ export function titleFromRisk(text: string): string {
   const out = cut.length <= MAX ? cut : `${cut.slice(0, cut.lastIndexOf(' ', MAX)).replace(/[.;:,]+$/, '')}…`;
   return out[0]!.toUpperCase() + out.slice(1);
 }
+
+// ─── "Ira learned" — patterns in the overrides (agentic UX #9, 1 Oct) ─────────────
+// The same check, overridden the same way on 3+ controls, becomes a card the
+// reviewer rules on. Nothing is learned silently: until a reviewer approves,
+// Ira's answers stay exactly as they were.
+import type { IraLearnedRule } from './types';
+
+export const LEARN_AT = 3;
+
+export interface OverridePattern {
+  key: string;
+  which: 'design' | 'operating';
+  text: string;
+  from: TestResult;
+  to: TestResult;
+  controls: string[];
+  reasons: string[];
+}
+
+const learnText = (t: string) => t.trim().toLowerCase().replace(/\s+/g, ' ').replace(/[.]+$/, '');
+export const learnKey = (which: 'design' | 'operating', text: string, from: TestResult, to: TestResult) =>
+  `${which}|${learnText(text)}|${from}>${to}`;
+
+/** Patterns with enough controls behind them that no reviewer has ruled on yet
+ *  in this audit. Ira's verdict is read off `validation.result`, which an
+ *  override sits on top of and never clears. */
+export function overridePatterns(eng: IcfrEngagement, auditId?: string | null): OverridePattern[] {
+  const ruled = new Set((eng.iraLearned ?? []).filter(r => (r.auditId ?? null) === (auditId ?? null)).map(r => r.key));
+  const by = new Map<string, OverridePattern>();
+  const add = (which: 'design' | 'operating', text: string, from: TestResult | undefined, o: { result: string; rationale: string } | undefined, controlId: string) => {
+    if (!o || !from || from === 'Not tested') return;
+    const to = o.result as TestResult;
+    if ((to !== 'Pass' && to !== 'Fail') || to === from) return;
+    const key = learnKey(which, text, from, to);
+    if (ruled.has(key)) return;
+    const p = by.get(key) ?? { key, which, text, from, to, controls: [], reasons: [] };
+    if (!p.controls.includes(controlId)) p.controls.push(controlId);
+    if (o.rationale?.trim()) p.reasons.push(o.rationale.trim());
+    by.set(key, p);
+  };
+  for (const c of eng.controls) {
+    for (const p of c.design.points) add('design', p.text, p.validation?.result, p.override, c.id);
+    for (const s of c.operating.steps) add('operating', s.description, s.validation?.result, s.override, c.id);
+  }
+  return [...by.values()].filter(p => p.controls.length >= LEARN_AT);
+}
+
+/** The approved rule that turns Ira's `res` on this check into another answer. */
+export function learnedRuleFor(rules: IraLearnedRule[] | undefined, which: 'design' | 'operating', text: string, res: TestResult, auditId?: string | null): IraLearnedRule | undefined {
+  return (rules ?? []).find(r => r.status === 'approved' && (r.auditId ?? null) === (auditId ?? null) && r.key === learnKey(which, text, res, r.to));
+}
+
+export const learnedNote = (r: IraLearnedRule) =>
+  `Learned: auditors changed ${r.from} to ${r.to} on this check on ${r.count} controls, and ${r.by} approved it.`;

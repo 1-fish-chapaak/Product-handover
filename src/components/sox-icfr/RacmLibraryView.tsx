@@ -237,18 +237,14 @@ function RowActions({ racm, canManage, onDelete, onPublish, onHistory }: { racm:
  * that lines up. The one addition is the column headings, which is what lets
  * the counts drop their "risks"/"controls" labels and sit as bare figures.
  *
- * NO PROVENANCE COLUMN (user ask, 1 Oct). "Where it came from" is a sentence,
+ * NO "where it came from" COLUMN (user ask, 1 Oct). Provenance is a sentence,
  * and a sentence in a column is a paragraph thirteen times over — it was the
  * widest thing here and the least scannable. It is also only worth reading on
  * an extracted matrix: an uploaded workbook arrives with nothing to say about
- * itself.
- *
- * What a scanner wants from it is the one bit, SOP or not, and that is not a
- * column either: a column of mostly em-dashes spends a heading and a width on
- * a fact that is true of three rows. It rides the name instead, in front of it,
- * where the eye is already going — the name and what it was read off are one
- * thought. The sentence stays on the card, where there is room for it to be a
- * sentence.
+ * itself. What a scanner actually wants from it is the one bit, SOP or not, so
+ * that is the column — in front of the figures, because where a matrix came
+ * from is what decides how much they are worth. The sentence itself stays on
+ * the card, where there is room for it to be a sentence.
  *
  * The row is the door, like the card: `reg-row` carries the house hover and the
  * whole of it opens the editor. The last cell is the exception, and stops the
@@ -271,6 +267,7 @@ function RacmTable({ rows, canManage, onDelete, onPublish, onHistory, onFlowchar
             <th style={{ width: 136 }}>Status</th>
             <th style={{ width: 150 }}>Process</th>
             <th style={{ width: 180 }}>Company</th>
+            <th style={{ width: 84 }}>Source</th>
             <th className="num" style={{ width: 72 }}>Risks</th>
             <th className="num" style={{ width: 86 }}>Controls</th>
             <th style={{ width: 104 }}><span className="sr-only">Actions</span></th>
@@ -287,15 +284,17 @@ function RacmTable({ rows, canManage, onDelete, onPublish, onHistory, onFlowchar
                 <td>
                   <span className="flex items-center gap-2.5 min-w-0">
                     <span className="w-7 h-7 rounded-md bg-brand-50 text-brand-700 flex items-center justify-center shrink-0"><Table2 size={13} /></span>
-                    {r.source === 'sop' && (
-                      <span className="shrink-0" title="Drafted by reading an SOP — unconfirmed until the process is walked"><Pill tone="info">SOP</Pill></span>
-                    )}
                     <span className="reg-clamp font-semibold text-ink-900" title={r.name}>{r.name}</span>
                   </span>
                 </td>
                 <td title="Only published RACMs can be scoped into an engagement"><StatusCell racm={r} /></td>
                 <td className="truncate" title={r.process}>{r.process}</td>
                 <td className="truncate" title={r.entity || 'No company'}>{r.entity || <span className="text-ink-300">—</span>}</td>
+                <td>
+                  {r.source === 'sop'
+                    ? <span title="Drafted by reading an SOP — unconfirmed until the process is walked"><Pill tone="info">SOP</Pill></span>
+                    : <span className="text-ink-300">—</span>}
+                </td>
                 <td className="text-right tabular-nums font-semibold">{risks}</td>
                 <td className="text-right tabular-nums font-semibold">{r.controls.length}</td>
                 {/* The one cell that is not the door. */}
@@ -360,11 +359,6 @@ export default function RacmLibraryView({ canManage, creating, setCreating }: {
       return;
     }
     logEvent({ action: 'Update', description: `Published ${moved} control${moved === 1 ? '' : 's'} in ${r.name}`, module: 'SOX ICFR', entity: 'RACM' });
-    addToast({
-      type: 'success',
-      title: was === 'Draft' ? 'RACM published' : 'New controls published',
-      message: `${moved} control${moved === 1 ? '' : 's'} in ${r.name} ${moved === 1 ? 'is' : 'are'} now fixed, and engagements can scope from ${moved === 1 ? 'it' : 'them'}.`,
-    });
   };
 
   const confirmDelete = (r: LibraryRacm) => {
@@ -374,7 +368,6 @@ export default function RacmLibraryView({ canManage, creating, setCreating }: {
       return;
     }
     logEvent({ action: 'Delete', description: `Deleted ${r.name} from the RACM tab — ${r.controls.length} control${r.controls.length === 1 ? '' : 's'}`, module: 'SOX ICFR', entity: 'RACM' });
-    addToast({ type: 'success', title: 'RACM deleted', message: `${r.name} was removed from the RACM tab.` });
   };
 
   return (
@@ -514,7 +507,7 @@ export default function RacmLibraryView({ canManage, creating, setCreating }: {
 
       {creating && (
         <CreateRacmFlow onClose={() => setCreating(false)}
-          onCreated={r => { setCreating(false); setProcess('All'); setSearch(''); addToast({ type: 'success', title: 'Saved to the RACM tab', message: `${r.name} — ${r.controls.length} control${r.controls.length === 1 ? '' : 's'}` }); }} />
+          onCreated={r => { setCreating(false); setProcess('All'); setSearch('');  }} />
       )}
 
       {/* The chart, redrawn from the controls — see `sopChartFromRacm` on why it

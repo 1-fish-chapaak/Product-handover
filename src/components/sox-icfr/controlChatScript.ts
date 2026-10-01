@@ -2,7 +2,7 @@ import {
   designApproved, designBlocked, designCompleteness, designFilesOf, designOutstanding, designOutstandingRequired, designSuggestion, docNotApplicable, isControlLocked, isEngagementLocked,
   exceptionCourtDetail,
   inquiryOnlyAttributes, operatingApplies, operatingProgress, passedWithoutFiles, pendingReviewNoteCount, pointResult,
-  populationLocked, populationSources, requiredFilesCount, requiredFilesReady, sampledSources, samePerson, stepResult, toeRoundFailed, trackResult, yearEndPending,
+  populationLocked, populationSources, requiredFilesCount, requiredFilesReady, sampledSources, samePerson, stepResult, toeRoundFailed, trackResult, unconfirmedIra, yearEndPending,
 } from './helpers';
 import { evidenceOwed } from './controlChatEvidence';
 import { DESIGN_DOC_KINDS } from './types';
@@ -85,6 +85,9 @@ export interface Situation {
   missing: DesignDoc[];
   checksTotal: number;
   checksUnmarked: number;
+  /** Ira's results on each track still waiting on a person's confirm (UX #1). */
+  designUnconfirmed: number;
+  toeUnconfirmed: number;
   checksPassed: number;
   checksFailed: number;
   iraRun: boolean;
@@ -290,6 +293,7 @@ export function situationOf({ eng, control, role, me, audit, files }: ChatCtx): 
     ownConclusion: samePerson(preparedBy, me),
     ownPaper: samePerson(control.wpSignoff?.preparer, me),
     checksTotal, checksUnmarked, checksPassed, checksFailed,
+    designUnconfirmed: unconfirmedIra(control, 'design').length, toeUnconfirmed: unconfirmedIra(control, 'operating').length,
     iraRun: !!d.ira, iraStale: !!d.ira?.evidenceChanged, iraBlocked,
     checksBlocked: designBlocked(control).map(p => ({ text: p.text, reason: p.validation!.blocked! })),
     designReturn: d.designReturn, designOverride: !!d.override, evidenceSuggested: designSuggestion(control),
@@ -329,7 +333,7 @@ export function situationOf({ eng, control, role, me, audit, files }: ChatCtx): 
   };
   s.key = [
     role, step, designResult, todApproved, missing.length, elementsOnFile, d.documents.length,
-    checksUnmarked, checksFailed, s.iraRun, s.iraStale, s.checksBlocked.length, !!d.designReturn,
+    checksUnmarked, checksFailed, s.iraRun, s.iraStale, s.checksBlocked.length, !!d.designReturn, s.designUnconfirmed, s.toeUnconfirmed,
     // The extract itself, which the key used to miss entirely: locking was in
     // here but the population landing was not, so a reader who extracted on the
     // left left Ira holding the sentence it had already typed.

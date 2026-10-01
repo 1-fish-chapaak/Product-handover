@@ -57,13 +57,14 @@ export function IraDrafted({ className, title, label = 'draft' }: { className?: 
 // finished check is Ira's until the control is concluded, after which it is
 // confirmed and unmarked.
 function stateOf(
-  row: { override?: unknown; validation?: { blocked?: string } },
+  row: { override?: unknown; validation?: { blocked?: string }; confirmed?: unknown },
   result: string,
   concluded: boolean,
 ): IraStateKind | null {
   if (row.override) return 'overridden';
   if (row.validation?.blocked && result === 'Not tested') return 'couldnt';
-  if (row.validation && !row.validation.blocked && !concluded) return 'review';
+  // Confirmed (UX #1, 1 Oct) or concluded: a person owns it now — no mark.
+  if (row.validation && !row.validation.blocked && !row.confirmed && !concluded) return 'review';
   return null;
 }
 

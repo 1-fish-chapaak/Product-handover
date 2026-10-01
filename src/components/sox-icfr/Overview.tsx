@@ -156,17 +156,9 @@ export default function Overview() {
   const isInterim = eng.audits.find(a => a.id === openAuditId)?.round === 'interim';
   const signPreparer = () => {
     signOffAudit('preparer');
-    addToast({ type: signsEffective ? 'success' : 'warning', title: 'Signed off', message: signsEffective || isInterim ? `Prepared by ${eng.preparer} — over to the reviewer.` : `Prepared by ${eng.preparer} as ICFR not effective — over to the reviewer.` });
   };
   const signReviewer = () => {
     signOffAudit('reviewer');
-    addToast({
-      type: signsEffective || isInterim ? 'success' : 'warning',
-      title: 'Countersigned',
-      message: isInterim
-        ? 'Interim concluded — roll-forward can now extend it. The year\'s ICFR opinion comes at year end.'
-        : signsEffective ? 'This audit is concluded — ICFR effective.' : 'This audit is concluded — ICFR not effective (material weakness open).',
-    });
   };
 
   const openTasks = eng.tasks.filter(t => t.status === 'open');

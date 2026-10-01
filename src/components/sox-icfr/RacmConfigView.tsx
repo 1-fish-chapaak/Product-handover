@@ -347,14 +347,12 @@ export default function RacmConfigView({ canManage }: {
     setConfirming(null);
     setRacmConfig(setupKey, { mapping: {} });
     logEvent({ action: 'Delete', description: `Forgot ${count} remembered RACM column heading${count === 1 ? '' : 's'} for ${label}`, module: 'SOX ICFR', entity: 'RACM' });
-    addToast({ type: 'success', title: 'Headings forgotten', message: `The next upload for ${label} matches its columns from scratch.` });
   };
 
   const confirmReset = () => {
     setConfirming(null);
     resetRacmConfig(setupKey);
     logEvent({ action: 'Update', description: `Reset the RACM shape for ${label} to the built-in columns`, module: 'SOX ICFR', entity: 'RACM' });
-    addToast({ type: 'success', title: 'Back to the built-in shape', message: `Required columns, kept columns and remembered headings for ${label} are all as they started.` });
   };
 
   const { Icon: SetUpIcon, text: setUpText } = cfg.configured

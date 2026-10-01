@@ -147,10 +147,6 @@ export default function BulkTestModal({ controlIds, onClose }: { controlIds: str
       bulkTestControls(active.map(c => c.id));
       setFinished(true);
       const ineffective = active.filter(c => predictOutcome(c) === 'Ineffective').length;
-      addToast({
-        type: ineffective ? 'error' : 'success',
-        message: `Bulk test complete — ${n - ineffective} effective, ${ineffective} ineffective across ${n} controls.`,
-      });
     }, runStepMs * n + 500));
   };
 
@@ -163,7 +159,6 @@ export default function BulkTestModal({ controlIds, onClose }: { controlIds: str
     timers.current = [];
     setRunning(false);
     setDoneCount(0);
-    addToast({ type: 'info', message: 'Bulk test stopped — no controls were changed.' });
   };
 
   const canClose = !running || finished;

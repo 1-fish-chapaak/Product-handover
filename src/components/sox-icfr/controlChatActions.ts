@@ -108,7 +108,8 @@ export function actionsFor(s: Situation, role: Role): ChatAction[] {
     // The page's own gate, to the letter: a paper prepared by somebody else,
     // not yet countersigned, with every review note closed.
     if (s.preparerSigned && !s.reviewerSigned && !s.ownPaper) {
-      if (s.notesPending === 0) out.push({ id: 'countersign', label: 'Countersign the paper', said: 'Countersign the paper.', primary: true, does: 'countersign the working paper' });
+      // Countersigning is on the page only (agentic UX #2, 1 Oct): sign-off is
+      // the one blocking moment, taken with the paper in front of you.
       out.push(show('Take me to the sign-off', 'Take me to the sign-off.', 'signoff'));
     }
     return out;
@@ -142,10 +143,8 @@ export function actionsFor(s: Situation, role: Role): ChatAction[] {
   if (s.locked) {
     return s.preparerSigned
       ? [show('Take me to the sign-off', 'Take me to the sign-off.', 'signoff')]
-      : [
-        { id: 'sign-paper', label: 'Sign off this paper', said: 'Sign off this paper.', primary: true, does: 'sign the working paper and send it to the reviewer' },
-        show('Show me what I am signing', 'Show me what I am signing.', 'signoff'),
-      ];
+      // Signing is on the page only (agentic UX #2, 1 Oct) — Ira takes you there.
+      : [show('Take me to sign it', 'Show me what I am signing.', 'signoff')];
   }
 
   if (s.step === 'design') {
@@ -241,6 +240,9 @@ export function actionsFor(s: Situation, role: Role): ChatAction[] {
     // Everything is marked. The page disables Effective until every required
     // element is accounted for and no check is unmarked; the same gate here.
     const out: ChatAction[] = [];
+    // Ira's results wait on a person first (UX #1): no conclusion offered while
+    // any is unconfirmed — the way to them instead.
+    if (s.designUnconfirmed > 0) return [show(`Confirm Ira's ${s.designUnconfirmed} result${s.designUnconfirmed === 1 ? '' : 's'} first`, 'Show me what to confirm.', 'design'), ...picks];
     if (s.complete && s.checksUnmarked === 0) {
       out.push({ id: 'conclude-effective', label: 'Design effective', said: 'Conclude the design effective.', primary: s.checksFailed === 0, group: 'pair', does: 'conclude the design effective' });
     }
@@ -378,7 +380,9 @@ export function actionsFor(s: Situation, role: Role): ChatAction[] {
         does: 'read the uploaded files and assess every attribute that has them',
       });
     }
-    if (s.toe.total > 0 && s.toe.tested === s.toe.total && !s.toeStale) {
+    if (s.toe.total > 0 && s.toe.tested === s.toe.total && !s.toeStale && s.toeUnconfirmed > 0) {
+      out.push(show(`Confirm Ira's ${s.toeUnconfirmed} result${s.toeUnconfirmed === 1 ? '' : 's'} first`, 'Show me what to confirm.', 'operating'));
+    } else if (s.toe.total > 0 && s.toe.tested === s.toe.total && !s.toeStale) {
       if (!s.toeHolds) out.push({ id: 'conclude-op-effective', label: 'Operating effective', said: 'Conclude the operating effectiveness effective.', primary: s.toe.failed === 0, group: 'pair', does: 'conclude the operating effectiveness effective' });
       out.push({ id: 'conclude-op-ineffective', label: 'Operating ineffective', said: 'Conclude the operating effectiveness ineffective.', primary: s.toe.failed > 0, group: 'pair', does: 'conclude the operating effectiveness ineffective' });
     }

@@ -52,7 +52,7 @@
  * every row arrives unticked.
  */
 import {
-  draftRowsFromSop, parseAssertions, parseFrequency, readPromptRules, rowFromValues,
+  draftRowsFromSop, holdBackUnstated, parseAssertions, parseFrequency, readPromptRules, rowFromValues,
   type ImportRow, type RacmFieldKey,
 } from './racmImport';
 import { PROCUREMENT_RACM_ROWS, type ProcurementRacmRow } from '../../data/procurement-racm';
@@ -187,15 +187,19 @@ export function draftProcurementSopRows(
       isKey: 'No',
       owner: r.controlOwner,
       processOwner: r.processOwner,
+      riskOwner: r.riskOwner ?? '',
       assertions: r.assertions,
       attributes: rules.listAttributes ? r.attributes : '',
       controlEvidence: rules.listAttributes ? r.controlEvidence : '',
       designChecks: r.designChecks,
       sopSectionRef: sectionRef ?? '',
     };
+    // Names and ratings the SOP does not state arrive blank (#6) — see
+    // `holdBackUnstated`. Ira's suggested controls keep theirs.
+    const { values: read, iraGuesses } = suggested ? { values, iraGuesses: undefined } : holdBackUnstated(values);
     out.push(rowFromValues(
-      values,
-      { key: `sop-${i + 1}`, rowNo: i + 1, origin: suggested ? 'suggested' : 'sop', sectionRef,
+      read,
+      { key: `sop-${i + 1}`, rowNo: i + 1, origin: suggested ? 'suggested' : 'sop', sectionRef, iraGuesses,
         // The workbook's own confidence: EXTRACTED is the SOP's words, INFERRED
         // is read between them. RECOMMENDED rows are suggestions — no tick.
         sopRead: suggested ? undefined : r.confidence === 'EXTRACTED' ? 'verbatim' : 'inferred' },

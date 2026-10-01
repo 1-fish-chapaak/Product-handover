@@ -24,19 +24,23 @@ import { cn } from '../../lib/cn';
 import { useIcfr } from './store';
 import { iraStateOfPoint, iraStateOfStep } from './IraState';
 import {
-  CONFIDENT_AT, confidenceOf, controlCode, designOutstandingRequired, discussionsFor, iraCannotTest,
-  isControlLockedIn, operatingApplies, pointResult, stepResult,
+  CONFIDENT_AT, confidenceOf, controlCode, designApproved, designOutstandingRequired, discussionsFor, iraCannotTest,
+  isControlLockedIn, operatingApplies, overridePatterns, pointResult, requiredFilesOf, stepResult, unconfirmedIra,
+  type OverridePattern,
 } from './helpers';
 import { ownersOf } from './auditScope';
 import { useOpenRailDetail } from './RailDetail';
 import type { Control, DesignPoint, IcfrEngagement, OperatingStep, Role } from './types';
 
 export type NeedsItem =
-  | { kind: 'couldnt'; id: string; point: DesignPoint; reason: string; what: string; request: string; owner: string }
+  | { kind: 'ipe'; id: string; report: string; done: number; total: number; unreliable: boolean; anchor: string }
+  | { kind: 'lock'; id: string; anchor: string }
+  | { kind: 'couldnt'; id: string; text: string; anchor: string; reason: string; what: string; request: string; owner: string }
   | { kind: 'unsure'; id: string; track: 'design' | 'operating'; text: string; confidence: number; anchor: string; point?: DesignPoint; step?: OperatingStep; confKey: string }
   | { kind: 'stale'; id: string; step: OperatingStep; anchor: string }
   | { kind: 'conclude'; id: string; track: 'design' | 'operating'; anchor: string }
-  | { kind: 'reply'; id: string; by: string; text: string };
+  | { kind: 'reply'; id: string; by: string; text: string }
+  | { kind: 'learned'; id: string; pattern: OverridePattern };
 
 const stepLabel = (s: OperatingStep) => `${s.code} ${s.description}`.trim();
 
@@ -49,7 +53,7 @@ const stepLabel = (s: OperatingStep) => `${s.code} ${s.description}`.trim();
  * gets only the discussions waiting on them, which is the one thing on this
  * control they are asked to do from here.
  */
-export function needsYouItems(control: Control, eng: IcfrEngagement, role: Role): NeedsItem[] {
+export function needsYouItems(control: Control, eng: IcfrEngagement, role: Role, auditId?: string | null): NeedsItem[] {
   const out: NeedsItem[] = [];
   const canTest = role === 'auditor' && !isControlLockedIn(eng, control);
   const opApplies = operatingApplies(eng, control);
@@ -57,6 +61,27 @@ export function needsYouItems(control: Control, eng: IcfrEngagement, role: Role)
   const opDone = control.operating.conclusion !== 'Not tested';
 
   if (canTest) {
+    // ⓪ The population's report, and then the lock (agentic UX #10, 1 Oct).
+    // IPE lives only in step ① — the card points there, it does not test.
+    // Upstream of everything else here, so it comes first.
+    const pop = control.operating.population;
+    if (opApplies && pop && !pop.locked) {
+      const ipe = control.operating.ipe;
+      if (ipe?.conclusion !== 'Reliable') {
+        const checks = ipe?.checks ?? [];
+        out.push({
+          kind: 'ipe', id: 'ipe', anchor: 'ipe-test',
+          report: ipe?.reportName ?? pop.sourceFile ?? 'the source report',
+          done: checks.filter(k => k.result !== 'Not tested').length, total: checks.length,
+          unreliable: ipe?.conclusion === 'Not reliable',
+        });
+      } else if (designApproved(control)) {
+        // The store refuses the lock before design is approved, so the card
+        // waits for that too rather than offering a button that does nothing.
+        out.push({ kind: 'lock', id: 'lock', anchor: 'lock-population' });
+      }
+    }
+
     // ① Checks Ira could not test — the reason, and the ask already written.
     const owner = ownersOf(control).processOwner;
     const outstanding = designOutstandingRequired(control);
@@ -69,10 +94,25 @@ export function needsYouItems(control: Control, eng: IcfrEngagement, role: Role)
       const what = doc ? (doc.kind === 'Custom' ? doc.name : doc.kind.toLowerCase())
         : block ? block.needs.toLowerCase() : 'supporting evidence';
       out.push({
-        kind: 'couldnt', id: `couldnt:${p.id}`, point: p, owner, what,
+        kind: 'couldnt', id: `couldnt:${p.id}`, text: p.text, anchor: `dp-${p.id}`, owner, what,
         reason: block?.reason ?? p.validation?.blocked ?? 'Nothing on file answers this check.',
         request: `Please send the ${what} for ${controlCode(control)} — needed to test “${p.text}”.`,
       });
+    }
+
+    // ①b TOE attributes Ira refused for having no file to quote (agentic UX #5,
+    // 1 Oct: no citation, no verdict) — same card, the files named in the ask.
+    if (operatingApplies(eng, control)) {
+      for (const st of control.operating.steps) {
+        if (iraStateOfStep(st, control.operating.conclusion !== 'Not tested') !== 'couldnt') continue;
+        const missing = requiredFilesOf(st, control).filter(f => !f.file).map(f => f.label.toLowerCase());
+        const what = missing.length ? missing.join(', ') : 'the files this attribute reads';
+        out.push({
+          kind: 'couldnt', id: `couldnt:${st.id}`, text: `${st.code} · ${st.description}`, anchor: `step-${st.id}`, owner, what,
+          reason: st.validation?.blocked ?? 'No file is behind this attribute.',
+          request: `Please upload ${what} for ${controlCode(control)} — needed to test ${st.code}.`,
+        });
+      }
     }
 
     // ② Results Ira holds loosely that nobody has concluded yet.
@@ -102,12 +142,20 @@ export function needsYouItems(control: Control, eng: IcfrEngagement, role: Role)
     const pts = control.design.points;
     // A required design element still missing holds the conclusion too, so the
     // card waits for it — offering "ready" the page would then refuse misleads.
-    if (!designDone && pts.length > 0 && pts.every(p => pointResult(p) !== 'Not tested') && designOutstandingRequired(control).length === 0) {
+    if (!designDone && pts.length > 0 && pts.every(p => pointResult(p) !== 'Not tested') && designOutstandingRequired(control).length === 0 && unconfirmedIra(control, 'design').length === 0) {
       out.push({ kind: 'conclude', id: 'conclude:design', track: 'design', anchor: 'conclude-design' });
     }
     const steps = control.operating.steps;
-    if (opApplies && !opDone && steps.length > 0 && steps.every(s => stepResult(s) !== 'Not tested') && !steps.some(s => s.staleRun)) {
+    if (opApplies && !opDone && steps.length > 0 && steps.every(s => stepResult(s) !== 'Not tested') && !steps.some(s => s.staleRun) && unconfirmedIra(control, 'operating').length === 0) {
       out.push({ kind: 'conclude', id: 'conclude:operating', track: 'operating', anchor: 'conclude-operating' });
+    }
+  }
+
+  // ⑥ "Ira learned" (agentic UX #9) — the reviewer rules on a pattern in the
+  // auditors' overrides, on any control the pattern stands on.
+  if (role === 'reviewer') {
+    for (const p of overridePatterns(eng, auditId)) {
+      if (p.controls.includes(control.id)) out.push({ kind: 'learned', id: `learned:${p.key}`, pattern: p });
     }
   }
 
@@ -141,9 +189,9 @@ function Card({ eyebrow, ira = false, children, actions }: { eyebrow: string; ir
 }
 
 export default function NeedsYouPane({ control, onGoComments }: { control: Control; onGoComments: () => void }) {
-  const { eng, role, remindOwnerForFiles } = useIcfr();
+  const { eng, role, openAuditId, remindOwnerForFiles, decideLearned } = useIcfr();
   const openDetail = useOpenRailDetail();
-  const items = useMemo(() => needsYouItems(control, eng, role), [control, eng, role]);
+  const items = useMemo(() => needsYouItems(control, eng, role, openAuditId), [control, eng, role, openAuditId]);
   // Which drafted requests went out from here. Local on purpose: the request
   // itself lands on the owner's task list, and this only stops the same card
   // offering to send it twice in one sitting.
@@ -156,12 +204,33 @@ export default function NeedsYouPane({ control, onGoComments }: { control: Contr
       )}
       {items.map(it => {
         switch (it.kind) {
+          case 'ipe':
+            return (
+              <Card key={it.id} eyebrow="IPE test"
+                actions={<button type="button" className={it.unreliable ? QUIET : PRIMARY} onClick={() => showMe(it.anchor)}>Go to IPE test</button>}>
+                <p className="text-[0.8125rem] leading-snug text-ink-800">{it.report}</p>
+                <p className={cn('mt-1 text-[0.75rem] leading-snug', it.unreliable ? 'text-risk-700' : 'text-ink-500')}>
+                  {it.unreliable
+                    ? 'Concluded not reliable — the population can’t be locked off it. Ask for a new extract, or withdraw and re-test.'
+                    : it.total > 0 && it.done === it.total
+                      ? 'All checks answered — conclude the report to unlock the population.'
+                      : `${it.done} of ${it.total || 4} checks done — the population locks once the report is reliable.`}
+                </p>
+              </Card>
+            );
+          case 'lock':
+            return (
+              <Card key={it.id} eyebrow="Population"
+                actions={<button type="button" className={PRIMARY} onClick={() => showMe(it.anchor)}>Go to lock</button>}>
+                <p className="text-[0.8125rem] leading-snug text-ink-800">The report is reliable. Lock the population so the sample can be drawn.</p>
+              </Card>
+            );
           case 'couldnt': {
             const first = it.owner.split(/\s+/)[0] || it.owner;
             const done = sent.has(it.id);
             return (
               <Card key={it.id} ira eyebrow="Ira couldn’t test">
-                <p className="text-[0.8125rem] leading-snug text-ink-800">{it.point.text}</p>
+                <p className="text-[0.8125rem] leading-snug text-ink-800">{it.text}</p>
                 <p className="mt-1 text-[0.75rem] leading-snug text-high-700">{it.reason}</p>
                 <blockquote className="mt-2 pl-2.5 border-l-2 border-canvas-border text-[0.75rem] leading-snug text-ink-600 italic">
                   {it.request}
@@ -175,7 +244,7 @@ export default function NeedsYouPane({ control, onGoComments }: { control: Contr
                         Send to {first}
                       </button>
                     )}
-                  <button type="button" className={QUIET} onClick={() => showMe(`dp-${it.point.id}`)}>Show me</button>
+                  <button type="button" className={QUIET} onClick={() => showMe(it.anchor)}>Show me</button>
                 </div>
               </Card>
             );
@@ -214,6 +283,31 @@ export default function NeedsYouPane({ control, onGoComments }: { control: Contr
                 </p>
               </Card>
             );
+          case 'learned': {
+            const p = it.pattern;
+            const thing = p.which === 'design' ? 'design check' : 'attribute';
+            const reasons = Array.from(new Set(p.reasons)).slice(0, 3);
+            return (
+              <Card key={it.id} ira eyebrow="Ira learned · needs your approval"
+                actions={<>
+                  <button type="button" className={PRIMARY} onClick={() => decideLearned(control.id, p, true)}>Approve</button>
+                  <button type="button" className={QUIET} onClick={() => decideLearned(control.id, p, false)}>Reject</button>
+                </>}>
+                <p className="text-[0.8125rem] leading-snug text-ink-800">{p.text}</p>
+                <p className="mt-1 text-[0.75rem] leading-snug text-ink-600">
+                  Auditors changed Ira’s {p.from} to {p.to} on this {thing} on {p.controls.length} controls.
+                </p>
+                {reasons.length > 0 && (
+                  <ul className="mt-1.5 space-y-0.5 pl-2.5 border-l-2 border-canvas-border text-[0.75rem] leading-snug text-ink-500 italic">
+                    {reasons.map(r => <li key={r}>{r}</li>)}
+                  </ul>
+                )}
+                <p className="mt-1.5 text-[0.75rem] leading-snug text-ink-500">
+                  Approve and Ira answers {p.to} here from its next run — the auditor still confirms it.
+                </p>
+              </Card>
+            );
+          }
           case 'reply':
             return (
               <Card key={it.id} eyebrow={`${it.by} is waiting on a reply`}
