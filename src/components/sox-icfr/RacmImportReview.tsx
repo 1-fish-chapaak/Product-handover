@@ -21,12 +21,13 @@
  * does this control go into the RACM? The tick box is the answer, and it is the
  * only thing that decides — nothing else on the screen sets a row's fate.
  *
- * Everything a row still needs is stated in ONE box directly beneath it, never
- * scattered across its cells (24 Sep rework). There are two kinds of box:
+ * What the rows still lack is asked for ONCE PER FIELD, above the matrix, in
+ * `MissingValuesPanel` ("Likelihood · 6 rows" → one picker → Apply to 6 rows;
+ * a title or description opens into one box per row). Until 30 Sep every
+ * blocked row carried its own form beneath it (`BlankFixRow`, 24 Sep rework) —
+ * ~30 inputs for six rows, the same question asked six times (agentic UI
+ * review #10). The only box left under a row is:
  *
- *   `BlankFixRow`     the row can go in, but something is missing — a value the
- *                     file left blank, or a frequency. Fill it here, take Ira's
- *                     reading of it, or leave the row out.
  *   `DuplicateBand`   the row is a duplicate: every field in `DUPLICATE_FIELDS`
  *                     matches a control already on file, so it starts left out.
  *                     It prints both sides field by field, so the reason is read
@@ -43,7 +44,7 @@ import { Fragment, useCallback, useDeferredValue, useEffect, useMemo, useRef, us
 import { createPortal } from 'react-dom';
 import {
   AlertTriangle, ArrowLeft, Check, CheckCircle2, ChevronDown, ChevronRight, Circle, Copy, FileSpreadsheet, FileText, FileWarning,
-  Loader2, Paperclip, Pencil, RotateCcw, Search, Sparkles, Star, Undo2, X,
+  Loader2, Paperclip, Pencil, Search, Sparkles, Star, Undo2, X,
 } from 'lucide-react';
 import SopFlowchartView, { SopFlowchartStructure } from './SopFlowchartView';
 import SopChartChat from './SopChartChat';
@@ -160,7 +161,18 @@ const EXTRACT_STEP_MS = 400;
 /** The header-row picker offers the first ten rows — a title block above the
  *  headers is common, ten rows of it is not. */
 const HEADER_ROW_CHOICES = 10;
-const MIN_PROMPT_CHARS = 40;
+/** The extraction prompt for each of the two choices. Point 7 of the default is
+ *  what asks Ira for controls the SOP never described, so "only what the SOP
+ *  says" is the default prompt without it. A function, not a module constant:
+ *  racmImport sits in this module's import graph, and a const reading one of
+ *  its exports at load is the TDZ trap this folder already fell into once. */
+function sopPromptFor(withSuggestions: boolean): string {
+  return withSuggestions ? DEFAULT_SOP_PROMPT : DEFAULT_SOP_PROMPT.split('\n').filter(l => !/^7\./.test(l)).join('\n');
+}
+const SOP_CHOICES: { suggest: boolean; title: string; hint: string }[] = [
+  { suggest: false, title: 'Only what the SOP says', hint: 'Every control the document describes, cited to its section. Nothing added.' },
+  { suggest: true, title: 'Also add Ira’s suggestions', hint: 'Plus controls the SOP is silent on but its risks call for — marked Suggested, for you to accept or leave out.' },
+];
 
 const FIELD_BY_KEY = new Map(RACM_FIELDS.map(f => [f.key, f]));
 const fieldLabel = (k: RacmFieldKey) => FIELD_BY_KEY.get(k)?.label ?? k;
@@ -419,236 +431,273 @@ const BLANK_OPTIONS: Partial<Record<CoreBlank, readonly string[]>> = {
 };
 
 /**
- * The values a row can't be imported without, asked for right under it (17 Sep
- * dev call). Each blank takes a typed value or Ira's suggestion — read off the
- * row's other cells, never a bare default — and the whole row can be left out
- * instead. A text value is written when the box loses focus (or on Enter), so
- * the row isn't rebuilt under the cursor.
+ * Blanks that belong to ONE control, so one value for every row would be
+ * wrong — a title, a description, a list of checks. These open into one small
+ * box per row; everything else is answered once for all the rows missing it.
  *
- * The client's own required columns are asked for underneath ours, in the same
- * boxes (22 Sep). Ira offers nothing beside them: a column that isn't ours has
- * no meaning she can read off the rest of the row.
+ * Sub-process and Country are deliberately NOT here: one import is one process
+ * for one company, so the same answer is normally right on every row — and
+ * "Row by row" is still there when it is not (agentic UI review #10, 30 Sep).
  */
-function BlankFixRow({ row, blanks, clientBlanks, fills, needsFrequency, frequencyNote: freqNote, frequencyIdea, attributeIdeas, checkIdeas, colSpan, people, onSet, onSetExtra, onLeaveOut }: {
-  row: ImportRow;
-  blanks: CoreBlank[];
-  /** This client's own required columns the row left blank, written by header. */
-  clientBlanks: ExtraColumn[];
-  fills: BlankFill[];
-  /** A frequency is required of every control (22 Sep) but is not a `CoreBlank`,
-   *  so it is passed in beside them. It used to be asked for out in the
-   *  Frequency column while the rest of the row's gaps were asked for here —
-   *  the same question in two places, in two shapes. It is asked here now. */
-  needsFrequency: boolean;
-  /** Why this row has no frequency: blank, unreadable, or "Continuous". */
-  frequencyNote: string;
-  /** What Ira read the frequency as, if she could read one. */
-  frequencyIdea?: string;
-  attributeIdeas: string[];
-  /** Ira's design checks for this row — offered when the row has none left. */
-  checkIdeas: string[];
-  colSpan: number;
-  /** The tenant's assignable users — an owner blank is picked, never typed. */
+const ROW_SPECIFIC_BLANKS: CoreBlank[] = [
+  'riskTitle', 'riskDescription', 'controlTitle', ...MULTILINE_BLANKS, 'sopSectionRef',
+];
+
+/** One line of the Missing values list: a field, and the rows still blank in it. */
+interface MissingField {
+  /** Stable key — the core blank, 'frequency', or `extra:<header>`. */
+  key: string;
+  label: string;
+  blank?: CoreBlank;
+  extra?: ExtraColumn;
+  frequency?: boolean;
+  /** Included rows still blank in this field, in table order. */
+  rows: ImportRow[];
+  /** The file has no column for it at all — said once, so nobody hunts for one. */
+  noColumn: boolean;
+  /** Ira's reading for a row, where she has one. */
+  ideas: Map<string, { value: string; shown: string; reason: string }>;
+  /** Why a row reads as blank when the file DID write something there. */
+  notes: Map<string, string>;
+}
+
+type InputKind =
+  | { type: 'select'; options: readonly string[]; placeholder: string }
+  | { type: 'date' } | { type: 'number' } | { type: 'assertions' }
+  | { type: 'text'; placeholder?: string } | { type: 'multiline'; placeholder?: string };
+
+function inputKindOf(f: MissingField, people: string[]): InputKind {
+  if (f.frequency) return { type: 'select', options: FREQUENCIES, placeholder: 'Pick a frequency' };
+  if (f.extra) {
+    const e = f.extra;
+    // A list nobody has given choices to is a list of nothing: it would offer a
+    // menu that can only be closed again, so it takes typing until the Config
+    // tab names its values.
+    if (e.kind === 'yesno') return { type: 'select', options: YES_NO, placeholder: 'Pick Yes or No' };
+    if (e.kind === 'list' && (e.options?.length ?? 0) > 0) return { type: 'select', options: e.options!, placeholder: `Pick a ${f.label.toLowerCase()}` };
+    if (e.kind === 'date') return { type: 'date' };
+    if (e.kind === 'number') return { type: 'number' };
+    return { type: 'text' };
+  }
+  const b = f.blank!;
+  // A person is picked from the tenant's users, never typed — an owner is
+  // somebody who can be asked for evidence.
+  if (isPersonField(BLANK_FIELD[b])) return { type: 'select', options: people, placeholder: `Pick a ${BLANK_TITLE[b].toLowerCase()}` };
+  if (BLANK_OPTIONS[b]) return { type: 'select', options: BLANK_OPTIONS[b]!, placeholder: `Pick a ${BLANK_TITLE[b].toLowerCase()}` };
+  if (b === 'effectiveDate') return { type: 'date' };
+  if (b === 'assertions') return { type: 'assertions' };
+  if (MULTILINE_BLANKS.includes(b)) return { type: 'multiline', placeholder: BLANK_PLACEHOLDER[b] };
+  return { type: 'text', placeholder: BLANK_PLACEHOLDER[b] };
+}
+
+/** Row-specific: one value for all would be wrong, so the line opens into rows. */
+const isRowSpecific = (f: MissingField) =>
+  f.blank ? ROW_SPECIFIC_BLANKS.includes(f.blank) : !!f.extra && (f.extra.kind === 'text' || f.extra.kind === 'number' || (f.extra.kind === 'list' && !(f.extra.options?.length)));
+
+// Inputs signal focus by their border, not a ring (house rule).
+const gapInputCls = 'h-8 px-2.5 rounded-lg border border-canvas-border bg-canvas-elevated text-[0.75rem] text-ink-800 placeholder:text-ink-400 focus:outline-none focus:border-brand-300 transition-colors';
+const iraBtn = 'shrink-0 h-7 px-1.5 inline-flex items-center gap-1 rounded-md text-[0.71875rem] font-semibold text-brand-700 hover:bg-brand-50 transition-colors cursor-pointer';
+
+/**
+ * WHAT IS MISSING, ONE LINE PER FIELD (agentic UI review #10, 30 Sep).
+ *
+ * Every blocked row used to open its own form under itself (`BlankFixRow`):
+ * six rows missing five values each was thirty inputs, most of them asking
+ * the same question — "Likelihood?" — six times in six places. The reviewer
+ * answers a FIELD, not a row: this import is one process, and a likelihood, a
+ * nature, an owner is usually the same answer everywhere it is blank.
+ *
+ * So the list is by field: "Likelihood · 6 rows", one picker, "Apply to 6
+ * rows". Where one value for all would be wrong — a title, a description, a
+ * list of checks — the line opens into one small box per row, each labelled
+ * with the control it belongs to. A field leaves the list the moment nothing
+ * is blank in it; the list leaves the screen when nothing is. The table below
+ * carries no forms at all any more — a row that is complete simply stops
+ * being counted, and leaving a row out is the row's own Import tick.
+ *
+ * Writes go through the same setters the per-row form used, so what holds a
+ * row back (`rowBlocked`) and what enables Import are unchanged.
+ */
+function MissingValuesPanel({ fields, people, rowLabel, onFill }: {
+  fields: MissingField[];
   people: string[];
-  onSet: (field: RacmFieldKey, value: string) => void;
-  onSetExtra: (header: string, value: string) => void;
-  /** Same state the row's tick box sets — offered here because this is where
-   *  the reader learns the row cannot go in as it stands. */
-  onLeaveOut: () => void;
+  /** The ID and title a row is known by on this screen. */
+  rowLabel: (row: ImportRow) => { id: string; title: string };
+  /** Write one value per row into this field. */
+  onFill: (field: MissingField, values: Map<string, string>) => void;
 }) {
-  const [drafts, setDrafts] = useState<Partial<Record<CoreBlank, string>>>({});
-  /** Kept apart from `drafts` because a client's header is their own spelling —
-   *  nothing stops one reading as the name of a field of ours. */
-  const [extraDrafts, setExtraDrafts] = useState<Record<string, string>>({});
-  const [pickedAssertions, setPickedAssertions] = useState<string[]>([]);
-  const commit = (b: CoreBlank) => {
-    const v = (drafts[b] ?? '').trim();
-    if (v) onSet(BLANK_FIELD[b], v);
+  /** The one-for-all answer being chosen, per field. Nothing is written until Apply. */
+  const [drafts, setDrafts] = useState<Record<string, string>>({});
+  const [assertionDrafts, setAssertionDrafts] = useState<Record<string, string[]>>({});
+  /** Per-row boxes, keyed `field|row` — written when the box loses focus or on
+   *  Enter, so a row isn't rebuilt under the cursor. */
+  const [rowDrafts, setRowDrafts] = useState<Record<string, string>>({});
+  const [open, setOpen] = useState<Set<string>>(new Set());
+  if (fields.length === 0) return null;
+
+  const toggle = (k: string) => setOpen(prev => { const n = new Set(prev); if (n.has(k)) n.delete(k); else n.add(k); return n; });
+  const applyAll = (f: MissingField, value: string) => {
+    const v = value.trim();
+    if (!v) return;
+    onFill(f, new Map(f.rows.map(r => [r.key, v])));
+    setDrafts(prev => { const n = { ...prev }; delete n[f.key]; return n; });
+    setAssertionDrafts(prev => { const n = { ...prev }; delete n[f.key]; return n; });
   };
-  const commitExtra = (e: ExtraColumn) => {
-    const v = (extraDrafts[e.header] ?? '').trim();
-    if (v) onSetExtra(e.header, v);
+  const commitRow = (f: MissingField, row: ImportRow) => {
+    const v = (rowDrafts[`${f.key}|${row.key}`] ?? '').trim();
+    if (v) onFill(f, new Map([[row.key, v]]));
   };
-  const ideaFor = (b: CoreBlank): { value: string; shown: string; reason: string } | null => {
-    if (b === 'attributes' || b === 'designChecks') {
-      const ideas = b === 'attributes' ? attributeIdeas : checkIdeas;
-      return ideas.length
-        ? { value: ideas.join('\n'), shown: ideas.join('; '), reason: 'read from the control description' }
-        : null;
-    }
-    const f = fills.find(x => x.field === BLANK_FIELD[b]);
-    return f ? { value: f.value, shown: f.value, reason: f.reason } : null;
-  };
-  const note = (b: CoreBlank) => {
-    if (b === 'nature' && row.natureFlag === 'unreadable') return `"${cell(row.values.nature)}" isn't a nature we know — pick one`;
-    if (b === 'type' && row.typeFlag === 'unreadable') return `"${cell(row.values.type)}" isn't a type we know — pick one`;
-    if ((b === 'attributes' || b === 'designChecks') && !cell(row.values.controlActivity) && !cell(row.values.controlTitle)) {
-      return 'Add a control description and Ira can suggest some';
-    }
-    return null;
-  };
-  /** No width here on purpose. `cn` only joins strings — it does not resolve
-   *  Tailwind conflicts — so a `w-full` baked in beat every `w-48` added beside
-   *  it, and a one-word Likelihood picker rendered as wide as the dialog. Each
-   *  branch below states the width it wants. */
-  const inputCls = 'h-8 px-2.5 rounded-lg border border-mitigated-300 bg-canvas-elevated text-[0.75rem] text-ink-800 placeholder:text-ink-400 focus:outline-none focus:ring-2 focus:ring-brand-200';
-  /** Everything this box is asking for, counted once — the heading says how much
-   *  work this row is, which is the thing a reviewer is deciding about. */
-  const gaps = blanks.length + clientBlanks.length + (needsFrequency ? 1 : 0);
+  /** Each row gets ITS OWN idea — never one row's reading copied to the rest. */
+  const takeIdeas = (f: MissingField) =>
+    onFill(f, new Map(f.rows.flatMap(r => { const i = f.ideas.get(r.key); return i ? [[r.key, i.value] as const] : []; })));
+
   return (
-    <tr className="def-detail">
-      <td colSpan={colSpan}>
-        <div className="my-2 rounded-lg border border-canvas-border bg-paper-50/60 px-3.5 py-3">
-          <div className="flex items-center gap-2 mb-2.5">
-            <AlertTriangle size={12} className="text-mitigated-700 shrink-0" aria-hidden />
-            <p className="text-[0.71875rem] font-semibold text-mitigated-700">
-              {gaps === 1 ? 'One value is missing' : `${gaps} values are missing`} — fill {gaps === 1 ? 'it' : 'them'} in to import this row
-            </p>
-            <div className="flex-1" />
-            {/* The way out, said where the problem is said (user ask, 24 Sep).
-                It sets the same one thing the row's tick box sets and says the
-                same word it says — not a second concept, a second door. */}
-            <button type="button" onClick={onLeaveOut} className={quietBtn}
-              aria-label={`Leave row ${row.rowNo} out of the import`}>Leave out</button>
-          </div>
-          <div className="space-y-2.5">
-            {needsFrequency && (
-              <div className="grid grid-cols-[8.5rem_minmax(0,1fr)] gap-x-3 items-start">
-                <label htmlFor={`racm-import-freq-${row.key}`} className="pt-1.5 text-[0.71875rem] font-semibold text-ink-600">Frequency</label>
-                <div className="min-w-0">
-                  <select id={`racm-import-freq-${row.key}`} value="" aria-describedby={`racm-import-freq-note-${row.key}`}
-                    onChange={e => { if (e.target.value) onSet('frequency', e.target.value); }}
-                    className={cn(inputCls, 'w-48 cursor-pointer')}>
-                    <option value="" disabled>Pick a frequency</option>
-                    {FREQUENCIES.map(f => <option key={f} value={f}>{f}</option>)}
-                  </select>
-                  <p id={`racm-import-freq-note-${row.key}`} className="mt-1 text-[0.65625rem] leading-snug text-mitigated-700">{freqNote}</p>
-                  {frequencyIdea && (
-                    <p className="mt-1 flex items-start gap-1.5 text-[0.6875rem] leading-snug text-ink-600">
-                      <Sparkles size={11} className="text-brand-600 mt-0.5 shrink-0" aria-hidden />
-                      <span className="min-w-0"><span className="font-semibold text-ink-800">Ira suggests:</span> {frequencyIdea}</span>
-                      <button type="button" onClick={() => onSet('frequency', frequencyIdea)}
-                        aria-label={`Use Ira's frequency (${frequencyIdea}) for row ${row.rowNo}`}
-                        className="shrink-0 h-5 px-1.5 -my-0.5 rounded font-semibold text-brand-700 hover:bg-brand-50 transition-colors cursor-pointer">
-                        Use
-                      </button>
-                    </p>
-                  )}
-                </div>
-              </div>
-            )}
-            {blanks.map(b => {
-              const id = `racm-import-fix-${row.key}-${b}`;
-              const idea = ideaFor(b);
-              const hint = note(b);
-              return (
-                <div key={b} className="grid grid-cols-[8.5rem_minmax(0,1fr)] gap-x-3 items-start">
-                  <label htmlFor={id} className="pt-1.5 text-[0.71875rem] font-semibold text-ink-600">{BLANK_TITLE[b]}</label>
-                  <div className="min-w-0">
-                    {/* A person is picked from the tenant's users, never typed —
-                        same rule as the Set-for-all box above, so the two can
-                        never disagree about who an owner may be. */}
-                    {isPersonField(BLANK_FIELD[b]) ? (
-                      <select id={id} value="" onChange={e => { if (e.target.value) onSet(BLANK_FIELD[b], e.target.value); }}
-                        className={cn(inputCls, 'w-48 cursor-pointer')}>
-                        <option value="" disabled>{`Pick a ${BLANK_TITLE[b].toLowerCase()}`}</option>
-                        {people.map(p => <option key={p} value={p}>{p}</option>)}
-                      </select>
-                    ) : BLANK_OPTIONS[b] ? (
-                      <select id={id} value="" onChange={e => { if (e.target.value) onSet(BLANK_FIELD[b], e.target.value); }}
-                        className={cn(inputCls, 'w-48 cursor-pointer')}>
-                        <option value="" disabled>{`Pick a ${BLANK_TITLE[b].toLowerCase()}`}</option>
-                        {BLANK_OPTIONS[b]!.map(o => <option key={o} value={o}>{o}</option>)}
-                      </select>
-                    ) : b === 'effectiveDate' ? (
-                      <input id={id} type="date" value={drafts[b] ?? ''}
-                        onChange={e => setDrafts(prev => ({ ...prev, [b]: e.target.value }))} onBlur={() => commit(b)}
-                        className={cn(inputCls, 'w-48')} />
-                    ) : b === 'assertions' ? (
-                      <div className="flex flex-wrap items-center gap-1.5" role="group" aria-label={`Assertions for row ${row.rowNo}`}>
+    <section aria-labelledby="racm-import-missing-title" className="rounded-xl border border-canvas-border bg-canvas-elevated px-4 py-2.5 mb-3">
+      <div className="flex flex-wrap items-baseline gap-x-2 gap-y-0.5">
+        <AlertTriangle size={12} className="self-center text-mitigated-700 shrink-0" aria-hidden />
+        <h3 id="racm-import-missing-title" className="text-[0.75rem] font-semibold text-ink-900">Missing values</h3>
+        <p className="text-[0.71875rem] text-ink-500">Answer each once — it goes on every row still blank in it.</p>
+      </div>
+      <ul className="mt-1.5">
+        {fields.map(f => {
+          const kind = inputKindOf(f, people);
+          const rowSpecific = isRowSpecific(f);
+          // Assertions are a set of chips — one set per row would be the very
+          // wall of inputs this list replaced, so they are answered once.
+          const canRowByRow = rowSpecific || (kind.type !== 'assertions' && f.rows.length > 1);
+          const isOpen = open.has(f.key) || (rowSpecific && f.rows.length === 1);
+          const n = f.rows.length;
+          const ideaCount = f.rows.filter(r => f.ideas.has(r.key)).length;
+          const unreadable = f.rows.filter(r => f.notes.has(r.key)).length;
+          const allId = `racm-import-missing-${f.key.replace(/\W+/g, '-')}`;
+          const draft = kind.type === 'assertions'
+            ? ASSERTION_ORDER.filter(a => (assertionDrafts[f.key] ?? []).includes(a)).join(', ')
+            : drafts[f.key] ?? '';
+          return (
+            <li key={f.key} className="py-2 border-t border-canvas-border first:border-t-0">
+              <div className="flex flex-wrap items-center gap-x-3 gap-y-1.5">
+                <label htmlFor={rowSpecific ? undefined : allId} className="w-[11rem] shrink-0 text-[0.75rem] leading-snug">
+                  <span className="font-semibold text-ink-800">{f.label}</span>
+                  <span className="text-ink-500 tabular-nums"> · {plural(n, 'row')}</span>
+                </label>
+                {!rowSpecific && (
+                  <>
+                    {kind.type === 'assertions' ? (
+                      <div className="flex flex-wrap items-center gap-1.5" role="group" aria-label={`Assertions for ${plural(n, 'row')}`}>
                         {ASSERTION_ORDER.map(a => {
-                          const on = pickedAssertions.includes(a);
+                          const on = (assertionDrafts[f.key] ?? []).includes(a);
                           return (
                             <button key={a} type="button" aria-pressed={on}
-                              onClick={() => setPickedAssertions(prev => on ? prev.filter(x => x !== a) : [...prev, a])}
+                              onClick={() => setAssertionDrafts(prev => {
+                                const cur = prev[f.key] ?? [];
+                                return { ...prev, [f.key]: on ? cur.filter(x => x !== a) : [...cur, a] };
+                              })}
                               className={cn('h-7 px-2 rounded-md border text-[0.6875rem] font-semibold transition-colors cursor-pointer',
                                 on ? 'border-brand-300 bg-brand-50 text-brand-700' : 'border-canvas-border bg-canvas-elevated text-ink-600 hover:border-ink-300')}>
                               {a}
                             </button>
                           );
                         })}
-                        <button type="button" disabled={pickedAssertions.length === 0}
-                          onClick={() => onSet('assertions', ASSERTION_ORDER.filter(a => pickedAssertions.includes(a)).join(', '))}
-                          className="h-7 px-2.5 rounded-md bg-brand-600 text-white text-[0.6875rem] font-semibold enabled:hover:bg-brand-700 disabled:opacity-40 disabled:cursor-not-allowed transition-colors cursor-pointer">
-                          Set
-                        </button>
                       </div>
-                    ) : MULTILINE_BLANKS.includes(b) ? (
-                      <textarea id={id} rows={2} value={drafts[b] ?? ''} placeholder={BLANK_PLACEHOLDER[b]}
-                        onChange={e => setDrafts(prev => ({ ...prev, [b]: e.target.value }))} onBlur={() => commit(b)}
-                        className={cn(inputCls, 'w-full h-auto py-1.5 resize-y leading-snug')} />
-                    ) : (
-                      <input id={id} value={drafts[b] ?? ''} placeholder={BLANK_PLACEHOLDER[b]}
-                        onChange={e => setDrafts(prev => ({ ...prev, [b]: e.target.value }))} onBlur={() => commit(b)}
-                        onKeyDown={e => { if (e.key === 'Enter') commit(b); }}
-                        className={cn(inputCls, 'w-full')} />
-                    )}
-                    {hint && <p className="mt-1 text-[0.65625rem] leading-snug text-mitigated-700">{hint}</p>}
-                    {idea && (
-                      <p className="mt-1 flex items-start gap-1.5 text-[0.6875rem] leading-snug text-ink-600">
-                        <Sparkles size={11} className="text-brand-600 mt-0.5 shrink-0" aria-hidden />
-                        <span className="min-w-0">
-                          <span className="font-semibold text-ink-800">Ira suggests:</span> {idea.shown}
-                          <span className="text-ink-400"> — {idea.reason}</span>
-                        </span>
-                        <button type="button" onClick={() => onSet(BLANK_FIELD[b], idea.value)}
-                          aria-label={`Use Ira's ${BLANK_TITLE[b].toLowerCase()} for row ${row.rowNo}`}
-                          className="shrink-0 h-5 px-1.5 -my-0.5 rounded font-semibold text-brand-700 hover:bg-brand-50 transition-colors cursor-pointer">
-                          Use
-                        </button>
-                      </p>
-                    )}
-                  </div>
-                </div>
-              );
-            })}
-            {/* Their columns, under ours, in the same boxes. The box a value is
-                typed into follows what the column was defined to hold on the
-                Config tab, so a date column can't take a sentence. */}
-            {clientBlanks.map((e, i) => {
-              const id = `racm-import-fix-${row.key}-extra-${i}`;
-              const label = extraLabel(e);
-              return (
-                <div key={e.header} className="grid grid-cols-[8.5rem_minmax(0,1fr)] gap-x-3 items-start">
-                  <label htmlFor={id} className="pt-1.5 text-[0.71875rem] font-semibold text-ink-600">{label}</label>
-                  <div className="min-w-0">
-                    {/* A list nobody has given choices to is a list of nothing:
-                        it would offer a menu that can only be closed again, so
-                        it takes typing until the Config tab names its values. */}
-                    {e.kind === 'yesno' || (e.kind === 'list' && (e.options?.length ?? 0) > 0) ? (
-                      <select id={id} value="" onChange={ev => { if (ev.target.value) onSetExtra(e.header, ev.target.value); }}
-                        className={cn(inputCls, 'w-48 cursor-pointer')}>
-                        <option value="" disabled>{e.kind === 'yesno' ? 'Pick Yes or No' : `Pick a ${label.toLowerCase()}`}</option>
-                        {(e.kind === 'yesno' ? YES_NO : e.options ?? []).map(o => <option key={o} value={o}>{o}</option>)}
+                    ) : kind.type === 'select' ? (
+                      <select id={allId} value={draft} onChange={e => setDrafts(prev => ({ ...prev, [f.key]: e.target.value }))}
+                        className={cn(gapInputCls, 'w-48 cursor-pointer')}>
+                        <option value="" disabled>{kind.placeholder}</option>
+                        {kind.options.map(o => <option key={o} value={o}>{o}</option>)}
                       </select>
-                    ) : e.kind === 'date' ? (
-                      <input id={id} type="date" value={extraDrafts[e.header] ?? ''}
-                        onChange={ev => setExtraDrafts(prev => ({ ...prev, [e.header]: ev.target.value }))} onBlur={() => commitExtra(e)}
-                        className={cn(inputCls, 'w-48')} />
                     ) : (
-                      <input id={id} type={e.kind === 'number' ? 'number' : 'text'} value={extraDrafts[e.header] ?? ''}
-                        onChange={ev => setExtraDrafts(prev => ({ ...prev, [e.header]: ev.target.value }))} onBlur={() => commitExtra(e)}
-                        onKeyDown={ev => { if (ev.key === 'Enter') commitExtra(e); }}
-                        className={cn(inputCls, e.kind === 'number' ? 'w-48' : 'w-full')} />
+                      <input id={allId} type={kind.type === 'date' ? 'date' : 'text'} value={draft}
+                        placeholder={kind.type === 'text' ? kind.placeholder : undefined}
+                        onChange={e => setDrafts(prev => ({ ...prev, [f.key]: e.target.value }))}
+                        onKeyDown={e => { if (e.key === 'Enter') applyAll(f, draft); }}
+                        className={cn(gapInputCls, 'w-48')} />
                     )}
-                  </div>
-                </div>
-              );
-            })}
-          </div>
-        </div>
-      </td>
-    </tr>
+                    <button type="button" onClick={() => applyAll(f, draft)} disabled={!draft.trim()}
+                      className="h-8 px-3 rounded-lg bg-brand-600 text-white text-[0.71875rem] font-semibold enabled:hover:bg-brand-700 disabled:opacity-40 disabled:cursor-not-allowed transition-colors cursor-pointer whitespace-nowrap">
+                      Apply to {plural(n, 'row')}
+                    </button>
+                  </>
+                )}
+                {ideaCount > 0 && (
+                  // Text, not a pill: it is an action, and Ira's mark is the icon.
+                  <button type="button" onClick={() => takeIdeas(f)} className={iraBtn}
+                    aria-label={`Use Ira's suggested ${f.label.toLowerCase()} on ${plural(ideaCount, 'row')}`}>
+                    <Sparkles size={12} className="text-brand-500 shrink-0" aria-hidden />
+                    Use Ira's suggestions{ideaCount < n ? ` (${ideaCount} of ${n})` : ''}
+                  </button>
+                )}
+                {canRowByRow && !(rowSpecific && n === 1) && (
+                  <button type="button" onClick={() => toggle(f.key)} aria-expanded={isOpen} aria-controls={`${allId}-rows`}
+                    className="h-7 px-1.5 inline-flex items-center gap-1 rounded-md text-[0.71875rem] font-semibold text-ink-600 hover:text-ink-900 hover:bg-paper-50 transition-colors cursor-pointer">
+                    {rowSpecific ? (isOpen ? 'Hide rows' : 'Fill row by row') : (isOpen ? 'Hide rows' : 'Row by row')}
+                    <ChevronDown size={12} aria-hidden className={cn('transition-transform', isOpen && 'rotate-180')} />
+                  </button>
+                )}
+              </div>
+              {(f.noColumn || unreadable > 0) && (
+                <p className="mt-1 ml-[11.75rem] text-[0.65625rem] leading-snug text-ink-500">
+                  {[f.noColumn && 'The file has no column for it',
+                    unreadable > 0 && `${plural(unreadable, 'row')} had a value we couldn't read`].filter(Boolean).join(' · ')}
+                </p>
+              )}
+              {isOpen && (
+                <ul id={`${allId}-rows`} className="mt-2 ml-[11.75rem] space-y-2">
+                  {f.rows.map(row => {
+                    const id = `${allId}-${row.key}`;
+                    const dk = `${f.key}|${row.key}`;
+                    const idea = f.ideas.get(row.key);
+                    const note = f.notes.get(row.key);
+                    const { id: cid, title } = rowLabel(row);
+                    return (
+                      <li key={row.key} className="min-w-0">
+                        <label htmlFor={id} className="flex items-baseline gap-1.5 text-[0.6875rem] leading-snug min-w-0">
+                          <span className="font-mono font-semibold text-ink-700 shrink-0">{cid}</span>
+                          <span className="text-ink-500 truncate" title={title}>{title}</span>
+                        </label>
+                        <div className="mt-1">
+                          {kind.type === 'select' ? (
+                            <select id={id} value="" onChange={e => { if (e.target.value) onFill(f, new Map([[row.key, e.target.value]])); }}
+                              className={cn(gapInputCls, 'w-48 cursor-pointer')}>
+                              <option value="" disabled>{kind.placeholder}</option>
+                              {kind.options.map(o => <option key={o} value={o}>{o}</option>)}
+                            </select>
+                          ) : kind.type === 'multiline' ? (
+                            <textarea id={id} rows={2} value={rowDrafts[dk] ?? ''} placeholder={kind.placeholder}
+                              onChange={e => setRowDrafts(prev => ({ ...prev, [dk]: e.target.value }))} onBlur={() => commitRow(f, row)}
+                              className={cn(gapInputCls, 'w-full h-auto py-1.5 resize-y leading-snug')} />
+                          ) : (
+                            <input id={id} type={kind.type === 'date' ? 'date' : kind.type === 'number' ? 'number' : 'text'}
+                              value={rowDrafts[dk] ?? ''} placeholder={kind.type === 'text' ? kind.placeholder : undefined}
+                              onChange={e => setRowDrafts(prev => ({ ...prev, [dk]: e.target.value }))} onBlur={() => commitRow(f, row)}
+                              onKeyDown={e => { if (e.key === 'Enter') commitRow(f, row); }}
+                              className={cn(gapInputCls, kind.type === 'text' ? 'w-full' : 'w-48')} />
+                          )}
+                        </div>
+                        {note && <p className="mt-1 text-[0.65625rem] leading-snug text-mitigated-700">{note}</p>}
+                        {idea && (
+                          <p className="mt-1 flex items-start gap-1.5 text-[0.6875rem] leading-snug text-ink-600">
+                            <Sparkles size={11} className="text-brand-500 mt-0.5 shrink-0" aria-hidden />
+                            <span className="min-w-0">
+                              <span className="font-semibold text-ink-800">Ira suggests:</span> {idea.shown}
+                              <span className="text-ink-400"> — {idea.reason}</span>
+                            </span>
+                            <button type="button" onClick={() => onFill(f, new Map([[row.key, idea.value]]))}
+                              aria-label={`Use Ira's ${f.label.toLowerCase()} for ${cid}`}
+                              className="shrink-0 h-5 px-1.5 -my-0.5 rounded font-semibold text-brand-700 hover:bg-brand-50 transition-colors cursor-pointer">
+                              Use
+                            </button>
+                          </p>
+                        )}
+                      </li>
+                    );
+                  })}
+                </ul>
+              )}
+            </li>
+          );
+        })}
+      </ul>
+    </section>
   );
 }
 
@@ -764,40 +813,6 @@ function StepRail({ steps, current }: { steps: { key: Step; label: string }[]; c
   );
 }
 
-/**
- * One person for every row still missing them (22 Sep). Rows stay held until
- * the field is filled; after Apply any single row is changed from its details.
- */
-function SetForAllBox({ label, count, noColumn, people, onApply }: {
-  label: string; count: number; noColumn: boolean; people: string[]; onApply: (value: string) => void;
-}) {
-  const [value, setValue] = useState('');
-  const id = `racm-import-all-${label.replace(/\W+/g, '-').toLowerCase()}`;
-  const apply = () => { if (value.trim()) { onApply(value); setValue(''); } };
-  return (
-    <div className="mb-3 flex flex-wrap items-center gap-x-3 gap-y-2 rounded-lg border border-mitigated-200 bg-mitigated-50/60 px-3.5 py-2.5">
-      <AlertTriangle size={12} className="text-mitigated-700 shrink-0" aria-hidden />
-      <p className="text-[0.71875rem] font-semibold text-mitigated-700">
-        {plural(count, 'row')} {count === 1 ? 'needs' : 'need'} a {label.toLowerCase()}
-        {noColumn && <span className="font-normal text-ink-600"> — the file has no column for it</span>}
-      </p>
-      <div className="flex-1" />
-      <label htmlFor={id} className="text-[0.71875rem] text-ink-600">Set for all rows</label>
-      {/* The tenant's own users, not a typed name: an owner is somebody who can
-          be asked for evidence, and a name nobody can route to is not one. */}
-      <select id={id} value={value} onChange={e => setValue(e.target.value)}
-        className="h-8 w-48 px-2 rounded-lg border border-canvas-border bg-canvas-elevated text-[0.75rem] text-ink-800 cursor-pointer focus:outline-none focus:ring-2 focus:ring-brand-200">
-        <option value="" disabled>{`Pick a ${label.toLowerCase()}`}</option>
-        {people.map(p => <option key={p} value={p}>{p}</option>)}
-      </select>
-      <button type="button" onClick={apply} disabled={!value.trim()}
-        className="h-8 px-3 rounded-lg bg-brand-600 text-white text-[0.71875rem] font-semibold enabled:hover:bg-brand-700 disabled:opacity-40 disabled:cursor-not-allowed transition-colors cursor-pointer">
-        Apply
-      </button>
-    </div>
-  );
-}
-
 /** How sure the match is. A required field with nothing matched is the only
  *  error; a low score is a prompt to look, not a block. */
 function ConfidencePill({ match, missing }: { match: ColumnMatch; missing: boolean }) {
@@ -834,6 +849,11 @@ export default function RacmImportReview({ mode, file, process, entity, existing
 
   // ── Review state (both modes) ─────────────────────────────────────────────────
   const [rows, setRows] = useState<ImportRow[]>([]);
+  // For the coverage line on the Flowchart step (agentic UI review #11).
+  const sopCoverage = useMemo(() => {
+    const own = rows.filter(r => r.origin === 'sop');
+    return { sop: own.length, cited: own.filter(r => !!r.sectionRef).length, suggested: rows.filter(r => r.origin === 'suggested').length };
+  }, [rows]);
   /** Ira-suggested rows (SOP mode) the reviewer ticked. Unticked ones don't import. */
   const [acceptedRows, setAcceptedRows] = useState<Set<string>>(new Set());
   const [acceptedSugg, setAcceptedSugg] = useState<Record<string, Accepted>>({});
@@ -1054,8 +1074,12 @@ export default function RacmImportReview({ mode, file, process, entity, existing
   };
 
   // ── Prompt step (SOP) ─────────────────────────────────────────────────────────
-  const [prompt, setPrompt] = useState(DEFAULT_SOP_PROMPT);
-  const [promptTooShort, setPromptTooShort] = useState(false);
+  // Two plain choices in place of the raw prompt box (agentic UI review #11,
+  // 30 Sep). The prompt still exists — it is what the draft is read from — but
+  // it is written from the choice, never typed. The default is the review's
+  // own rule: extract only what the SOP says; suggestions are opt-in.
+  const [withSuggestions, setWithSuggestions] = useState(false);
+  const prompt = useMemo(() => sopPromptFor(withSuggestions), [withSuggestions]);
   const [extract, setExtract] = useState<{ phase: 'idle' } | { phase: 'running'; done: number } | { phase: 'failed' }>({ phase: 'idle' });
   const extracting = extract.phase === 'running';
   const timers = useRef<number[]>([]);
@@ -1064,8 +1088,6 @@ export default function RacmImportReview({ mode, file, process, entity, existing
   useEffect(() => { if (extracting) progressRef.current?.scrollIntoView({ block: 'nearest' }); }, [extracting]);
 
   const validateAndExtract = () => {
-    if (prompt.trim().length < MIN_PROMPT_CHARS) { setPromptTooShort(true); return; }
-    setPromptTooShort(false);
     // the same prompt already produced the draft under review — go back to it
     // rather than throwing away what the reviewer decided there
     if (builtFrom.current === prompt) { setStep('flowchart'); return; }
@@ -1203,7 +1225,7 @@ export default function RacmImportReview({ mode, file, process, entity, existing
     return out;
   }, [effective, dismissedSugg, process]);
   /** Anything Ira could still read but hasn't — normally empty, since the effect
-   *  above writes them. It is what `BlankFixRow` offers beside a core blank she
+   *  above writes them. It is what the Missing values list offers beside a core blank she
    *  could not fill on her own. */
   const fills = useMemo(() => effective.map(row => ({ row, fills: proposeBlankFills(row) })).filter(g => g.fills.length > 0), [effective]);
   /** Ira's values, in row order, for the panel that lists what she did. */
@@ -1240,24 +1262,80 @@ export default function RacmImportReview({ mode, file, process, entity, existing
       ...(noFrequency ? ['a frequency'] : []),
     ];
   }, [included, cfg.core, cfg.extras]);
-  /** THE PEOPLE A WHOLE FILE MAY LACK A COLUMN FOR (22 Sep). Nothing in a row
-   *  says who owns its risk, so Ira can't read one — the reviewer sets it once
-   *  for every row still missing it, then changes any single row in its
-   *  details. Only rows still going in are counted. */
-  const peopleGaps = useMemo(
-    () => PEOPLE_FIELDS
-      .map(field => ({ field, rows: included.filter(r => !cell(r.values[field])).map(r => r.key) }))
-      .filter(g => g.rows.length > 0),
-    [included],
-  );
-  const setForAll = (field: RacmFieldKey, value: string) => {
-    const v = value.trim();
-    const gap = peopleGaps.find(g => g.field === field);
-    if (!v || !gap) return;
-    setRows(prev => rebuildRows(prev, new Map(gap.rows.map(k => [k, { [field]: v }]))));
-    addToast({ type: 'success', title: `${fieldLabel(field)} set on ${plural(gap.rows.length, 'row')}`, message: 'Change any single row from its details.' });
-  };
   const fillsByRow = useMemo(() => new Map(fills.map(g => [g.row.key, g.fills])), [fills]);
+  /**
+   * WHAT THE INCLUDED ROWS STILL LACK, BY FIELD (agentic UI review #10, 30 Sep).
+   *
+   * One entry per field with a blank among the rows going in — ours in
+   * `CORE_BLANK_ORDER`, then frequency, then the client's own required
+   * columns, the same order the footer names them in. It is read off the
+   * very `coreBlanks` / `extraBlanks` / frequency test that `rowBlocked` is, so
+   * the list and the Import gate can never disagree about what is missing.
+   * The people fields (22 Sep "set for all") are simply three of its lines now.
+   */
+  const missingFields = useMemo<MissingField[]>(() => {
+    const noColumn = (field: RacmFieldKey) => mode === 'racm' && !matches.some(m => m.field === field && m.column !== null);
+    const core = new Map<CoreBlank, ImportRow[]>();
+    const theirs = new Map<string, { extra: ExtraColumn; rows: ImportRow[] }>();
+    const noFrequency: ImportRow[] = [];
+    included.forEach(r => {
+      if (r.frequency === null) noFrequency.push(r);
+      coreBlanks(r, cfg.core).forEach(b => core.set(b, [...(core.get(b) ?? []), r]));
+      extraBlanks(r, cfg.extras).forEach(e => {
+        const k = normaliseHeader(e.header);
+        theirs.set(k, { extra: e, rows: [...(theirs.get(k)?.rows ?? []), r] });
+      });
+    });
+    const fillIdea = (r: ImportRow, field: RacmFieldKey) => {
+      const f = (fillsByRow.get(r.key) ?? []).find(x => x.field === field);
+      return f ? { value: String(f.value), shown: String(f.value), reason: f.reason } : null;
+    };
+    const coreFields = CORE_BLANK_ORDER.filter(b => core.has(b)).map((b): MissingField => {
+      const rs = core.get(b)!;
+      const ideas = new Map<string, { value: string; shown: string; reason: string }>();
+      const notes = new Map<string, string>();
+      rs.forEach(r => {
+        if (b === 'attributes' || b === 'designChecks') {
+          const texts = (suggestions.get(r.key) ?? []).filter(s => s.kind === (b === 'attributes' ? 'attribute' : 'check')).map(s => s.text);
+          if (texts.length) ideas.set(r.key, { value: texts.join('\n'), shown: texts.join('; '), reason: 'read from the control description' });
+          else if (!cell(r.values.controlActivity) && !cell(r.values.controlTitle)) notes.set(r.key, 'Add a control description and Ira can suggest some');
+        } else {
+          const idea = fillIdea(r, BLANK_FIELD[b]);
+          if (idea) ideas.set(r.key, idea);
+        }
+        if (b === 'nature' && r.natureFlag === 'unreadable') notes.set(r.key, `"${cell(r.values.nature)}" isn't a nature we know — pick one`);
+        if (b === 'type' && r.typeFlag === 'unreadable') notes.set(r.key, `"${cell(r.values.type)}" isn't a type we know — pick one`);
+      });
+      return { key: b, label: BLANK_TITLE[b], blank: b, rows: rs, noColumn: noColumn(BLANK_FIELD[b]), ideas, notes };
+    });
+    const frequencyField: MissingField[] = noFrequency.length ? [{
+      key: 'frequency', label: 'Frequency', frequency: true, rows: noFrequency, noColumn: noColumn('frequency'),
+      ideas: new Map(noFrequency.flatMap(r => { const i = fillIdea(r, 'frequency'); return i ? [[r.key, i] as const] : []; })),
+      // "Blank in the file" says nothing a count doesn't — only a value we
+      // couldn't read is worth a note.
+      notes: new Map(noFrequency.filter(r => r.frequencyFlag === 'continuous' || r.frequencyFlag === 'unreadable').map(r => [r.key, frequencyNote(r)] as const)),
+    }] : [];
+    const clientFields = [...theirs.values()].map(({ extra, rows: rs }): MissingField => ({
+      key: `extra:${normaliseHeader(extra.header)}`, label: extraLabel(extra), extra, rows: rs, noColumn: false,
+      // Ira offers nothing beside a client's column: a column that isn't ours
+      // has no meaning she can read off the rest of the row.
+      ideas: new Map(), notes: new Map(),
+    }));
+    return [...coreFields, ...frequencyField, ...clientFields];
+  }, [included, cfg.core, cfg.extras, fillsByRow, suggestions, matches, mode]);
+  /** Writes a field on the rows given — the core fields through `rebuildRows`,
+   *  a client's column through `setExtra` — exactly the writes the per-row
+   *  form made, so what holds a row back is unchanged. */
+  const fillIn = (f: MissingField, values: Map<string, string>) => {
+    if (values.size === 0) return;
+    if (f.extra) setExtra(values, f.extra.header);
+    else {
+      const field: RacmFieldKey = f.frequency ? 'frequency' : BLANK_FIELD[f.blank!];
+      setRows(prev => rebuildRows(prev, new Map([...values].map(([k, v]) => [k, { [field]: v }]))));
+    }
+    // No toast: the line leaving the Missing values list IS the confirmation,
+    // and routine agent/fill events stay off the toast layer (agentic UI review).
+  };
   /** Rows that say, field for field, what a control already on file says.
    *  Counted over every row under review, left out or not, so the summary can
    *  explain the gap between how many rows there are and how many are going in. */
@@ -1380,16 +1458,18 @@ export default function RacmImportReview({ mode, file, process, entity, existing
   /** Write one value into a row and rebuild it — a blank filled in review. */
   const setValue = (rowKey: string, field: RacmFieldKey, value: string) =>
     setRows(prev => rebuildRows(prev, new Map([[rowKey, { [field]: value }]])));
-  /** The same for one of the client's own columns. It can't go through
+  /** The same for one of the client's own columns, on one row or many (the
+   *  Missing values list writes a column across rows in one go). It can't go through
    *  `rebuildRows`, which patches fields: an extra has no field key, so the
    *  value is written on the row itself — and every row is still re-derived in
    *  order, for the reason `rebuildRows` gives. */
-  const setExtra = (rowKey: string, header: string, value: string) =>
+  const setExtra = (values: Map<string, string>, header: string) =>
     setRows(prev => {
       const next: ImportRow[] = [];
       for (const r of prev) {
-        next.push(r.key === rowKey
-          ? setRowExtra(r, header, value, existing, process, next, entity)
+        const v = values.get(r.key);
+        next.push(v !== undefined
+          ? setRowExtra(r, header, v, existing, process, next, entity)
           : rowFromValues(r.values, r, existing, process, next, entity));
       }
       return next;
@@ -1708,7 +1788,7 @@ export default function RacmImportReview({ mode, file, process, entity, existing
                 <div ref={progressRef} role="status" aria-live="polite"
                   className="rounded-xl border border-canvas-border bg-paper-50/50 px-5 py-5">
                   <p className="text-[0.71875rem] font-semibold text-compliant-700 flex items-center gap-1.5">
-                    <CheckCircle2 size={13} /> Prompt validated
+                    <CheckCircle2 size={13} /> {withSuggestions ? 'The SOP, plus Ira’s suggestions' : 'Only what the SOP says'}
                   </p>
                   <h3 className="mt-2 text-[0.9375rem] font-semibold text-ink-900 flex items-center gap-2">
                     <Sparkles size={15} className="text-brand-600 shrink-0" aria-hidden />
@@ -1749,26 +1829,28 @@ export default function RacmImportReview({ mode, file, process, entity, existing
                    prompt first, because the prompt is the thing being written. */
                 <div className="grid gap-5 lg:grid-cols-[minmax(0,21rem)_minmax(0,1fr)] items-start">
                   <div>
-                    <div className="flex items-end justify-between gap-3 mb-1.5">
-                      <label htmlFor="sop-prompt" className="text-[0.6875rem] font-semibold uppercase tracking-wide text-ink-400">Extraction prompt</label>
-                      <button type="button" onClick={() => { setPrompt(DEFAULT_SOP_PROMPT); setPromptTooShort(false); }} disabled={prompt === DEFAULT_SOP_PROMPT}
-                        className="inline-flex items-center gap-1 text-[0.71875rem] font-semibold text-brand-700 enabled:hover:text-brand-800 disabled:text-ink-300 disabled:cursor-not-allowed cursor-pointer">
-                        <RotateCcw size={11} /> Reset to default
-                      </button>
-                    </div>
-                    {/* The standing line sits above the box, not below it, so this
-                        column has the same one line of copy over its box that the
-                        chart's column does and the two start and finish level
-                        (user ask, 27 Sep). It is a fixed slot: the error takes the
-                        hint's place rather than adding to it, so nothing shifts. */}
-                    {promptTooShort
-                      ? <p id="sop-prompt-error" role="alert" className="text-[0.71875rem] text-risk-700 mb-3">Write what Ira should extract — the prompt is too short to run.</p>
-                      : <p id="sop-prompt-hint" className="text-[0.71875rem] text-ink-500 mb-3">Ira extracts only after you validate this prompt.</p>}
-                    <textarea id="sop-prompt" rows={16} value={prompt}
-                      onChange={e => { setPrompt(e.target.value); if (promptTooShort) setPromptTooShort(false); }}
-                      aria-invalid={promptTooShort || undefined} aria-describedby={promptTooShort ? 'sop-prompt-error' : 'sop-prompt-hint'}
-                      className={cn('w-full rounded-lg border bg-canvas-elevated p-3 text-[0.78125rem] leading-relaxed text-ink-800 focus:outline-none focus:ring-2 focus:ring-brand-200 resize-y',
-                        PROMPT_PANE_H, promptTooShort ? 'border-risk-300' : 'border-canvas-border')} />
+                    {/* Two plain choices, not a prompt (agentic UI review #11). The
+                        chart beside them redraws when the choice changes, the way
+                        it used to follow the typing. */}
+                    <fieldset>
+                      <legend className="text-[0.6875rem] font-semibold uppercase tracking-wide text-ink-400 mb-1.5">What should Ira extract?</legend>
+                      <p className="text-[0.71875rem] text-ink-500 mb-3">Ira reads {file.name} only after you press Extract.</p>
+                      <div className="space-y-2">
+                        {SOP_CHOICES.map(c => {
+                          const on = withSuggestions === c.suggest;
+                          return (
+                            <label key={c.title} className={cn('flex items-start gap-2.5 rounded-lg border px-3 py-2.5 cursor-pointer transition-colors',
+                              on ? 'border-brand-300 bg-brand-50/40' : 'border-canvas-border bg-canvas-elevated hover:border-ink-300')}>
+                              <input type="radio" name="sop-scope" checked={on} onChange={() => setWithSuggestions(c.suggest)} className="mt-0.5 accent-brand-600 cursor-pointer" />
+                              <span className="min-w-0">
+                                <span className="block text-[0.78125rem] font-semibold text-ink-900">{c.title}</span>
+                                <span className="block text-[0.71875rem] leading-snug text-ink-500 mt-0.5">{c.hint}</span>
+                              </span>
+                            </label>
+                          );
+                        })}
+                      </div>
+                    </fieldset>
                     {extract.phase === 'failed' && (
                       <p role="alert" className="mt-4 text-[0.75rem] text-risk-700 flex items-center gap-1.5"><AlertTriangle size={13} /> Ira couldn't draft a RACM from {file.name} — try again.</p>
                     )}
@@ -1860,8 +1942,7 @@ export default function RacmImportReview({ mode, file, process, entity, existing
                         <AlertTriangle size={12} className="mt-0.5 shrink-0" aria-hidden />
                         <span>
                           <span className="font-semibold">{needFix} {needFix === 1 ? 'row needs' : 'rows need'} a value from you</span>{' '}
-                          before {needFix === 1 ? 'it' : 'they'} can be imported — the box under{' '}
-                          {needFix === 1 ? 'that row' : 'each row'} asks for it.
+                          before {needFix === 1 ? 'it' : 'they'} can be imported — the Missing values list below asks for each once.
                         </span>
                       </p>
                     )}
@@ -1915,13 +1996,12 @@ export default function RacmImportReview({ mode, file, process, entity, existing
               )}
 
               <>
-              {/* People a whole file may lack a column for — set once for every
-                  row still missing one (22 Sep). */}
-              {peopleGaps.map(g => (
-                <SetForAllBox key={g.field} label={fieldLabel(g.field)} count={g.rows.length} people={tenantPeople}
-                  noColumn={mode === 'racm' ? !matches.some(m => m.field === g.field && m.column !== null) : false}
-                  onApply={v => setForAll(g.field, v)} />
-              ))}
+              {/* What the rows going in still lack, one line per field —
+                  answered once, not once per row (agentic UI review #10,
+                  30 Sep). It took over from the people-only "Set for all
+                  rows" boxes that sat here since 22 Sep. */}
+              <MissingValuesPanel fields={missingFields} people={tenantPeople} onFill={fillIn}
+                rowLabel={row => ({ id: idFor(row), title: titleOf(row) })} />
 
               {/* IDs (S11) — the short codes every row's ID is built from, in
                   the order they read (entity, then process). A band of three
@@ -2008,12 +2088,12 @@ export default function RacmImportReview({ mode, file, process, entity, existing
                         // we already hold, or a draft nobody ticked, is not worth a
                         // risk owner, a set of design checks and a frequency first —
                         // that is work collected and then thrown away.
-                        const blanks = isIn ? coreBlanks(row, cfg.core) : [];
-                        const clientBlanks = isIn ? extraBlanks(row, cfg.extras) : [];
-                        const rowFills = fillsByRow.get(row.key) ?? [];
-                        const freqIdea = row.frequency ? undefined : rowFills.find(f => f.field === 'frequency');
-                        /** Everything this row still needs, asked for in one box below it. */
-                        const needsFix = isIn && (blanks.length > 0 || clientBlanks.length > 0 || row.frequency === null);
+                        // Counted, not asked: the Missing values list above asks
+                        // for each field once (30 Sep), and the row only says how
+                        // much it is still waiting on.
+                        const gaps = isIn
+                          ? coreBlanks(row, cfg.core).length + extraBlanks(row, cfg.extras).length + (row.frequency === null ? 1 : 0)
+                          : 0;
                         return (
                           <Fragment key={row.key}>
                             {/* Not `opacity-50` any more: half-faded text is the one thing a
@@ -2061,6 +2141,13 @@ export default function RacmImportReview({ mode, file, process, entity, existing
                                   {row.origin === 'sop' && <Pill tone="evidence">From the SOP{row.sectionRef ? ` · ${row.sectionRef}` : ''}</Pill>}
                                   {row.origin === 'suggested' && <Pill tone="info">Suggested by Ira</Pill>}
                                   {row.origin === 'file' && <span className="font-mono text-[0.65625rem] text-ink-400">Row {row.rowNo}</span>}
+                                  {/* The only per-row trace of a gap now — words, not a
+                                      badge, and gone the moment the row is complete. */}
+                                  {gaps > 0 && (
+                                    <span className="text-[0.65625rem] font-semibold text-mitigated-700 tabular-nums">
+                                      {gaps === 1 ? '1 value missing' : `${gaps} values missing`}
+                                    </span>
+                                  )}
                                 </div>
                               </td>
                               <td className="tight">
@@ -2069,7 +2156,7 @@ export default function RacmImportReview({ mode, file, process, entity, existing
                                     lived in a 184px column while the row's OTHER
                                     missing values were asked for in a box below —
                                     two places, two shapes, one job. The cell now
-                                    reports; the box below asks. */}
+                                    reports; the Missing values list asks (30 Sep). */}
                                 {row.frequency
                                   ? <span className="text-ink-700">{row.frequency}</span>
                                   : (
@@ -2102,14 +2189,11 @@ export default function RacmImportReview({ mode, file, process, entity, existing
                             {row.duplicateOf && (
                               <DuplicateBand key={`dup-${row.key}`} row={row} twin={twinValues(row)} included={isIn} colSpan={reviewCols} />
                             )}
-                            {needsFix && (
-                              <BlankFixRow key={`fix-${row.key}`} row={row} blanks={blanks} clientBlanks={clientBlanks} fills={rowFills}
-                                needsFrequency={row.frequency === null} frequencyNote={frequencyNote(row)} frequencyIdea={freqIdea?.value}
-                                attributeIdeas={sugg.filter(x => x.kind === 'attribute').map(x => x.text)}
-                                checkIdeas={sugg.filter(x => x.kind === 'check').map(x => x.text)}
-                                colSpan={reviewCols} people={tenantPeople} onSet={(field, value) => setValue(row.key, field, value)}
-                                onSetExtra={(header, value) => setExtra(row.key, header, value)} onLeaveOut={() => setIncluded(row, false)} />
-                            )}
+                            {/* No fill box under the row any more (agentic UI review
+                                #10, 30 Sep): thirty inputs for six rows became one
+                                line per field in the Missing values list above. Its
+                                "Leave out" button went with it — the row's own Import
+                                tick was always the same switch. */}
                             {/* The "Left out — row N won't be imported. Put back" strip has gone
                                 (user ask, 24 Sep). It was a second table row under every excluded
                                 row, saying in a sentence what the tick box now says at a glance —
@@ -2120,7 +2204,7 @@ export default function RacmImportReview({ mode, file, process, entity, existing
                                 <td colSpan={reviewCols}>
                                   {/* The people on the row, editable — so a value set for
                                       every row at once can be changed on one (22 Sep). A
-                                      name cleared here puts the row back in its fill box. */}
+                                      name cleared here puts it back on the Missing values list. */}
                                   <div className="pt-2.5 flex flex-wrap items-center gap-x-5 gap-y-1.5 text-[0.71875rem]">
                                     {PEOPLE_FIELDS.map(f => (
                                       <label key={f} className="inline-flex items-center gap-1.5">
@@ -2278,6 +2362,17 @@ export default function RacmImportReview({ mode, file, process, entity, existing
                   <p className="text-[0.9375rem] font-semibold text-ink-900">
                     This is what Ira read out of {file.name}
                   </p>
+                  {/* Coverage, in one line (agentic UI review #11). The prototype
+                      holds no SOP text, so this counts what the rows can honestly
+                      show: how many of the SOP's own controls point back to a
+                      section of it. One that cites nothing is the one to check. */}
+                  {sopCoverage.sop > 0 && (
+                    <p className="basis-full order-last text-[0.75rem] text-ink-500">
+                      {sopCoverage.cited} of {plural(sopCoverage.sop, 'control')} cite an SOP section
+                      {sopCoverage.sop > sopCoverage.cited && <> · <span className="font-semibold text-ink-700">review {sopCoverage.sop - sopCoverage.cited}</span></>}
+                      {sopCoverage.suggested > 0 && <> · {plural(sopCoverage.suggested, 'Ira suggestion')}, marked Suggested</>}
+                    </p>
+                  )}
                   <div className="flex-1" />
                   {/* One button, not a pair. Preview is not a mode the reader
                       chooses — it is what this step already is, so a control
@@ -2375,7 +2470,7 @@ export default function RacmImportReview({ mode, file, process, entity, existing
           {step === 'prompt' && (
             <button type="button" onClick={validateAndExtract} disabled={extracting} className={primaryBtn}>
               {extracting ? <Loader2 size={14} className="animate-spin" /> : <Sparkles size={14} />}
-              {extracting ? 'Extracting…' : 'Validate prompt & extract'}
+              {extracting ? 'Extracting…' : 'Extract'}
             </button>
           )}
 

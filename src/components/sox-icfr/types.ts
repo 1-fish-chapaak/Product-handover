@@ -47,6 +47,9 @@ export interface Override {
   by: string;
   at: string;
   rationale: string;
+  /** An optional link or file name the auditor points at as the basis for the
+   *  override — the rationale says why, this says where to look. */
+  evidence?: string;
 }
 
 export interface EvidenceFile {
@@ -205,6 +208,10 @@ export interface ValidationResult {
    *  blocked check stays exactly what it was: not tested, and still the
    *  auditor's to mark by hand. Set together with `result` left undefined. */
   blocked?: string;
+  /** How sure Ira was of `result`, 0–100. A verdict is binary; the certainty
+   *  behind it is not, and the reviewer spends their attention on the unsure
+   *  ones. Absent on a blocked check — there is no verdict to be sure of. */
+  confidence?: number;
   at: string;
 }
 

@@ -206,6 +206,67 @@ export default function Overview() {
     { k: 'Waiting on owner', v: stats.waitingOnOwner, t: 'text-mitigated-700', view: 'owner' },
   ];
 
+  // The tiles and rings now sit behind "Show health detail" (agentic UI review
+  // #12, 30 Sep): the landing led with 6 counters, 4 rings and 3 cards before
+  // the one list that says what to DO. Collapsed by default — nothing deleted —
+  // and remembered per viewer. Browser storage can throw (private window,
+  // blocked site data), so every read and write is guarded; the page renders
+  // the same without it.
+  const [healthOpen, setHealthOpen] = useState<boolean>(() => {
+    try { return localStorage.getItem('sox-overview-health-detail') === 'open'; } catch { return false; }
+  });
+  const toggleHealth = () => setHealthOpen(o => {
+    const next = !o;
+    try { localStorage.setItem('sox-overview-health-detail', next ? 'open' : 'closed'); } catch { /* storage blocked — the toggle still works for this visit */ }
+    return next;
+  });
+
+  // year-end countdown + the needs-attention rows — hoisted out of the sign-off
+  // box so the rows can lead the page as "Needs you" (agentic UI review #12,
+  // 30 Sep) while the sign-off block stays where it was. Same rows, same
+  // destinations, same show-rules — only where they render changed.
+  const end = parsePeriodEnd(eng.periodEnd);
+  const endLabel = fmtPeriodEnd(eng.periodEnd);
+  const days = end ? Math.ceil((end.getTime() - Date.now()) / 86_400_000) : null;
+  const past = days !== null && days < 0;
+  const openOther = sev.open - sev.mwOpen;
+  const unconcluded = ready.total - concludedCount;
+  const papersAwaiting = ready.total - ready.reviewed - unconcluded;
+  // the 8-vs-9 truth: most await the reviewer's countersign, the rest the
+  // preparer's own signature — the row says the split instead of hiding it
+  const papersWithReviewer = ready.awaitingReview;
+  const papersWithPreparer = papersAwaiting - ready.awaitingReview;
+  // One row per outstanding item — each keeps the same filtered destination it linked to before.
+  // The exceptions count lives HERE and only here — the sign-off block never restates it.
+  const needsRows = [
+    { key: 'mw', show: sev.mwOpen > 0, onClick: () => openDeficiencies(), icon: <AlertTriangle size={13} className="text-risk-600" />,
+      label: <><b className="font-semibold text-risk-700">{sev.mwOpen}</b> material weakness{sev.mwOpen === 1 ? '' : 'es'} open — {past ? 'ICFR ineffective, open past year-end' : 'ICFR ineffective if still open at year-end'}</> },
+    { key: 'other', show: openOther > 0, onClick: () => openDeficiencies(), icon: <Circle size={11} className="text-high-600" />,
+      // The journey as it now runs: the retest left the exception flow on
+      // 30 Sep, so naming it here promised a step nobody will ever see.
+      label: <><b className="font-semibold text-ink-900">{openOther}</b> {openOther === 1 ? W.one : W.many} still working through plan → fix → close</> },
+    { key: 'unconcluded', show: unconcluded > 0, onClick: () => openRegister({ view: 'open' }), icon: <Circle size={11} className="text-ink-400" />,
+      label: <><b className="font-semibold text-ink-900">{unconcluded}</b> control{unconcluded === 1 ? '' : 's'} not concluded</> },
+    { key: 'papers-rev', show: papersWithReviewer > 0, onClick: () => openRegister({ view: 'review' }), icon: <Circle size={11} className="text-evidence-600" />,
+      label: <><b className="font-semibold text-ink-900">{papersWithReviewer}</b> paper{papersWithReviewer === 1 ? '' : 's'} awaiting countersign — with the reviewer</> },
+    { key: 'papers-prep', show: papersWithPreparer > 0, onClick: () => openRegister({ view: 'papers' }), icon: <Circle size={11} className="text-evidence-600" />,
+      label: <><b className="font-semibold text-ink-900">{papersWithPreparer}</b> paper{papersWithPreparer === 1 ? '' : 's'} awaiting the preparer's signature</> },
+  ].filter(r => r.show);
+  const rowCls = 'w-full flex items-center gap-2.5 py-1.5 px-2 -mx-1 rounded-lg text-left hover:bg-paper-100 transition-colors cursor-pointer group';
+
+  // The six tiles folded into one sentence (agentic UI review #12, 30 Sep).
+  // Each segment opens the register exactly as its tile did. TOD and TOE always
+  // show — they are the progress; the rest drop out at zero, since "0 waiting on
+  // owner" is not news. Text over chips: the number carries the tile's tone.
+  const progressSegs = [
+    { k: 'TOD', v: <>TOD <b className={cn('font-bold tabular-nums', tiles[0]!.t)}>{stats.designDone}/{stats.total}</b></>, show: true, view: tiles[0]!.view, title: tiles[0]!.k },
+    { k: 'TOE', v: <>TOE <b className={cn('font-bold tabular-nums', tiles[1]!.t)}>{stats.operatingDone}/{stats.total}</b></>, show: true, view: tiles[1]!.view, title: tiles[1]!.k },
+    { k: 'eff', v: <><b className={cn('font-bold tabular-nums', tiles[2]!.t)}>{stats.effective}</b> effective</>, show: stats.effective > 0, view: tiles[2]!.view, title: tiles[2]!.k },
+    { k: 'ineff', v: <><b className={cn('font-bold tabular-nums', tiles[3]!.t)}>{stats.ineffective}</b> ineffective</>, show: stats.ineffective > 0, view: tiles[3]!.view, title: tiles[3]!.k },
+    { k: 'review', v: <><b className={cn('font-bold tabular-nums', tiles[4]!.t)}>{stats.awaitingReview}</b> awaiting review</>, show: stats.awaitingReview > 0, view: tiles[4]!.view, title: tiles[4]!.k },
+    { k: 'owner', v: <><b className={cn('font-bold tabular-nums', tiles[5]!.t)}>{stats.waitingOnOwner}</b> waiting on owner</>, show: stats.waitingOnOwner > 0, view: tiles[5]!.view, title: tiles[5]!.k },
+  ].filter(s => s.show);
+
   return (
     <div className="space-y-5">
       {/* New audit — appended above the read-out rather than woven into it, so the
@@ -339,24 +400,85 @@ export default function Overview() {
       )}
       */}
 
-      {/* progress rail */}
-      {!isOwner && <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
-        {tiles.map(s => (
-          <button key={s.k} onClick={() => openRegister({ view: s.view })} title={`Open the Control Library — ${s.k}`} className="text-left rounded-xl border border-canvas-border bg-canvas-elevated px-4 py-3 hover:border-brand-300 transition-colors cursor-pointer">
-            <div className={cn('text-[20px] font-bold tabular-nums', s.t)}>{s.v}</div>
-            <div className="text-[11.5px] text-ink-500 font-medium mt-0.5">{s.k}</div>
-          </button>
-        ))}
-      </div>}
+      {/* Needs you — the page leads with what to DO (agentic UI review #12,
+          30 Sep). These are the rows that used to sit inside the sign-off box
+          under the year-end countdown; the countdown rides along as the
+          subtitle. Empty is one quiet line, not an empty box. Same tones as the
+          old box: amber once the period has ended or an MW is open. Gone once
+          the audit is concluded, as the old list was — nothing is left to do. */}
+      {!isOwner && !isConcluded && (
+        <section className={cn('rounded-2xl border p-4', past || sev.mwOpen > 0 ? 'border-high-200 bg-high-50/30' : 'border-canvas-border bg-canvas-elevated')}>
+          <div className="flex items-baseline gap-2 flex-wrap">
+            <h2 className="font-display text-[1.0625rem] leading-tight text-ink-900">Needs you</h2>
+            <span className={cn('inline-flex items-center gap-1 text-[0.71875rem]', past || sev.mwOpen ? 'text-high-700' : 'text-ink-500')}>
+              <Hourglass size={12} className="self-center" />
+              {days === null ? `Year-end — ${endLabel}`
+                : past ? `Period ended ${endLabel} — the opinion clock is running`
+                : `${days} day${days === 1 ? '' : 's'} to year-end (${endLabel})`}
+            </span>
+          </div>
+          <div className="mt-2.5 space-y-0.5">
+            {needsRows.map(r => (
+              <button key={r.key} onClick={r.onClick} className={rowCls}>
+                <span className="w-4 flex justify-center shrink-0">{r.icon}</span>
+                <span className="text-[0.78125rem] text-ink-700">{r.label}</span>
+                <ChevronRight size={14} className="ml-auto shrink-0 text-ink-300 group-hover:text-ink-500 transition-colors" />
+              </button>
+            ))}
+            {needsRows.length === 0 && (
+              <div className="flex items-center gap-2.5 py-1.5 px-2 -mx-1">
+                <span className="w-4 flex justify-center shrink-0"><CheckCircle2 size={14} className="text-compliant-600" /></span>
+                <span className="text-[0.78125rem] text-ink-600">
+                  Nothing needs you right now{signoffReady && !isConcluded ? ' — the audit is ready to conclude' : ''}
+                </span>
+              </div>
+            )}
+          </div>
+        </section>
+      )}
 
-      {/* Audit health — RAG roll-ups across the controls this AUDIT covers, and
-          only shown inside one (user ask). It was called Engagement health and
-          sat on the engagement's Overview, where it described a register nobody
-          tests as a whole; a cycle is what these meters are actually about. */}
-      {!isOwner && inAudit && (
-        <div className="rounded-2xl border border-canvas-border bg-canvas-elevated p-4">
-          <h2 className="font-display text-[1.0625rem] leading-tight text-ink-900 inline-flex items-center gap-2 mb-3"><ShieldCheck size={15} className="text-brand-600" /> Audit health</h2>
-          <RagStrip meters={ragMeters} />
+      {/* ONE progress line in place of the six-tile rail (agentic UI review #12,
+          30 Sep). The tiles and the Audit health rings are still here, exactly
+          as they rendered, behind "Show health detail" — collapsed by default. */}
+      {!isOwner && (
+        <div className="space-y-3">
+          <div className="flex items-center gap-x-1.5 gap-y-1 flex-wrap text-[0.78125rem] text-ink-600">
+            {progressSegs.map((s, i) => (
+              <span key={s.k} className="inline-flex items-center gap-1.5">
+                {i > 0 && <span className="text-ink-300" aria-hidden>·</span>}
+                <button onClick={() => openRegister({ view: s.view })} title={`Open the Control Library — ${s.title}`} className="hover:text-ink-900 hover:underline underline-offset-2 cursor-pointer transition-colors">
+                  {s.v}
+                </button>
+              </span>
+            ))}
+            <button onClick={toggleHealth} aria-expanded={healthOpen} className="ml-auto inline-flex items-center gap-1 text-[0.75rem] font-semibold text-brand-700 hover:text-brand-800 cursor-pointer transition-colors">
+              {healthOpen ? 'Hide health detail' : 'Show health detail'}
+              <ChevronRight size={13} className={cn('transition-transform', healthOpen && 'rotate-90')} />
+            </button>
+          </div>
+
+          {healthOpen && <>
+            {/* progress rail */}
+            <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
+              {tiles.map(s => (
+                <button key={s.k} onClick={() => openRegister({ view: s.view })} title={`Open the Control Library — ${s.k}`} className="text-left rounded-xl border border-canvas-border bg-canvas-elevated px-4 py-3 hover:border-brand-300 transition-colors cursor-pointer">
+                  <div className={cn('text-[20px] font-bold tabular-nums', s.t)}>{s.v}</div>
+                  <div className="text-[11.5px] text-ink-500 font-medium mt-0.5">{s.k}</div>
+                </button>
+              ))}
+            </div>
+
+            {/* Audit health — RAG roll-ups across the controls this AUDIT covers, and
+                only shown inside one (user ask). It was called Engagement health and
+                sat on the engagement's Overview, where it described a register nobody
+                tests as a whole; a cycle is what these meters are actually about. */}
+            {inAudit && (
+              <div className="rounded-2xl border border-canvas-border bg-canvas-elevated p-4">
+                <h2 className="font-display text-[1.0625rem] leading-tight text-ink-900 inline-flex items-center gap-2 mb-3"><ShieldCheck size={15} className="text-brand-600" /> Audit health</h2>
+                <RagStrip meters={ragMeters} />
+              </div>
+            )}
+          </>}
         </div>
       )}
 
@@ -438,69 +560,16 @@ export default function Overview() {
           hat sees it, and it collapses to save the scroll. */}
       {role === 'reviewer' && <ReviewerQueue />}
 
-      {/* year-end countdown + engagement sign-off — ONE box: the work that must
-          close, then the closure moment as its final step. Audit-side only. */}
+      {/* engagement sign-off — the closure moment. The year-end countdown and
+          the needs-attention rows that used to lead this box now lead the page
+          as "Needs you" (agentic UI review #12, 30 Sep); rendering them here too
+          would say every fact twice, so this box is the signature alone. Its
+          amber tone went with the rows — the warning belongs where the work is.
+          Audit-side only. */}
       {!isOwner && (() => {
-        const end = parsePeriodEnd(eng.periodEnd);
-        const endLabel = fmtPeriodEnd(eng.periodEnd);
-        const days = end ? Math.ceil((end.getTime() - Date.now()) / 86_400_000) : null;
-        const past = days !== null && days < 0;
-        const openOther = sev.open - sev.mwOpen;
-        const unconcluded = ready.total - concludedCount;
-        const papersAwaiting = ready.total - ready.reviewed - unconcluded;
-        // the 8-vs-9 truth: most await the reviewer's countersign, the rest the
-        // preparer's own signature — the row says the split instead of hiding it
-        const papersWithReviewer = ready.awaitingReview;
-        const papersWithPreparer = papersAwaiting - ready.awaitingReview;
-        const allClear = sev.mwOpen === 0 && openOther === 0 && unconcluded === 0 && ready.reviewed === ready.total;
-        // One row per outstanding item — each keeps the same filtered destination it linked to before.
-        // The exceptions count lives HERE and only here — the sign-off block below never restates it.
-        const rows = [
-          { key: 'mw', show: sev.mwOpen > 0, onClick: () => openDeficiencies(), icon: <AlertTriangle size={13} className="text-risk-600" />,
-            label: <><b className="font-semibold text-risk-700">{sev.mwOpen}</b> material weakness{sev.mwOpen === 1 ? '' : 'es'} open — {past ? 'ICFR ineffective, open past year-end' : 'ICFR ineffective if still open at year-end'}</> },
-          { key: 'other', show: openOther > 0, onClick: () => openDeficiencies(), icon: <Circle size={11} className="text-high-600" />,
-            // The journey as it now runs: the retest left the exception flow on
-            // 30 Sep, so naming it here promised a step nobody will ever see.
-            label: <><b className="font-semibold text-ink-900">{openOther}</b> {openOther === 1 ? W.one : W.many} still working through plan → fix → close</> },
-          { key: 'unconcluded', show: unconcluded > 0, onClick: () => openRegister({ view: 'open' }), icon: <Circle size={11} className="text-ink-400" />,
-            label: <><b className="font-semibold text-ink-900">{unconcluded}</b> control{unconcluded === 1 ? '' : 's'} not concluded</> },
-          { key: 'papers-rev', show: papersWithReviewer > 0, onClick: () => openRegister({ view: 'review' }), icon: <Circle size={11} className="text-evidence-600" />,
-            label: <><b className="font-semibold text-ink-900">{papersWithReviewer}</b> paper{papersWithReviewer === 1 ? '' : 's'} awaiting countersign — with the reviewer</> },
-          { key: 'papers-prep', show: papersWithPreparer > 0, onClick: () => openRegister({ view: 'papers' }), icon: <Circle size={11} className="text-evidence-600" />,
-            label: <><b className="font-semibold text-ink-900">{papersWithPreparer}</b> paper{papersWithPreparer === 1 ? '' : 's'} awaiting the preparer's signature</> },
-        ].filter(r => r.show);
-        const rowCls = 'w-full flex items-center gap-2.5 py-1.5 px-2 -mx-1 rounded-lg text-left hover:bg-paper-100 transition-colors cursor-pointer group';
         return (
-          <section id="eng-signoff" className={cn('rounded-2xl border p-4', !isConcluded && (past || sev.mwOpen > 0) ? 'border-high-200 bg-high-50/30' : 'border-canvas-border bg-canvas-elevated')}>
-            {!isConcluded && <>
-              <div className="flex items-center gap-2 flex-wrap">
-                <Hourglass size={15} className={past || sev.mwOpen ? 'text-high-700' : 'text-brand-600'} />
-                <h2 className="font-display text-[1.0625rem] leading-tight text-ink-900">
-                  {days === null ? `Year-end — ${endLabel}`
-                    : past ? `Period ended ${endLabel} — the opinion clock is running`
-                    : `${days} day${days === 1 ? '' : 's'} to year-end (${endLabel})`}
-                </h2>
-                <span className="text-[11.5px] text-ink-500">— what must close before the opinion date</span>
-              </div>
-              <div className="mt-3 space-y-0.5">
-                {rows.map(r => (
-                  <button key={r.key} onClick={r.onClick} className={rowCls}>
-                    <span className="w-4 flex justify-center shrink-0">{r.icon}</span>
-                    <span className="text-[12.5px] text-ink-700">{r.label}</span>
-                    <ChevronRight size={14} className="ml-auto shrink-0 text-ink-300 group-hover:text-ink-500 transition-colors" />
-                  </button>
-                ))}
-                {allClear && (
-                  <div className="flex items-center gap-2.5 py-1.5 px-2 -mx-1">
-                    <span className="w-4 flex justify-center shrink-0"><CheckCircle2 size={14} className="text-compliant-600" /></span>
-                    <span className="text-[12.5px] font-semibold text-compliant-700">Nothing outstanding — ready to conclude</span>
-                  </div>
-                )}
-              </div>
-            </>}
-
-            {/* the closure moment — the checklist's final step, not a separate card */}
-            <div className={cn('flex items-start justify-between gap-4 flex-wrap', !isConcluded && 'mt-3 pt-3.5 border-t border-canvas-border/70')}>
+          <section id="eng-signoff" className="rounded-2xl border border-canvas-border bg-canvas-elevated p-4">
+            <div className="flex items-start justify-between gap-4 flex-wrap">
               <div className="min-w-0 flex-1">
                 <h2 className="font-display text-[1.0625rem] leading-tight text-ink-900 inline-flex items-center gap-2"><PenLine size={15} className="text-brand-600" /> Audit sign-off</h2>
                 <p className="text-[12px] text-ink-500 mt-1">
@@ -508,7 +577,7 @@ export default function Overview() {
                     ? 'Signed and countersigned — this audit is concluded.'
                     : signoffReady
                       ? `Every control ${signScope.pending.length ? 'due in this audit ' : ''}is concluded and countersigned — the audit is ready for sign-off.`
-                      : 'Unlocks once everything above is closed. The preparer signs first; the reviewer countersigns to conclude.'}
+                      : 'Unlocks once everything in Needs you is closed. The preparer signs first; the reviewer countersigns to conclude.'}
                 </p>
                 {(signoffReady || !!so.preparer) && (
                   <div className={cn('inline-flex items-center gap-1.5 mt-2.5 px-2.5 py-1.5 rounded-lg border text-[12px] font-semibold',

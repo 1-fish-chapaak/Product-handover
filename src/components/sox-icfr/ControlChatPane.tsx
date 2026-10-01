@@ -1,10 +1,10 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { motion, useReducedMotion } from 'motion/react';
-import { ArrowRight, ArrowUp, Paperclip, Plus, Sparkles, Square } from 'lucide-react';
+import { ArrowRight, ArrowUp, ChevronRight, Paperclip, Plus, Sparkles, Square } from 'lucide-react';
 import { useIcfr } from './store';
 import { useAuditLog } from '../../context/AdminDataContext';
 import {
-  concludeRationale, designOutstanding, designOutstandingRequired, designSuggestion, draftSamplePrompt, extractionCriteria,
+  concludeRationale, designFilesOf, designOutstanding, designOutstandingRequired, designSuggestion, draftSamplePrompt, extractionCriteria,
   evidenceKindOf, fileUsable, guessFileKind, itgcHolds, narrowedCount, operatingSuggestion, populationFrom, populationSources,
   readRowCount, readSamplePrompt, sampleSizeGuide, samplingOf, sampledSources, seedKeyOf, trackResult, workingAudit,
 } from './helpers';
@@ -183,25 +183,69 @@ function WorkingTrail({ label, steps }: { label: string; steps: RunStep[] }) {
  *
  * The house typewriter (`chat/reveal/useTypewriter`) — the same per-character
  * pace, the same beat after a full stop, the same caret the flagship chat
- * blinks. Only the NEWEST line types; everything above it is history and
- * history does not re-perform itself every time the reader opens the tab.
+ * blinks — used ONLY for Ira's reply to something the reader typed (agentic
+ * UI review #6, 30 Sep). Everything else Ira says prints whole.
  *
  * The caret is `.ai-caret` — the 2px brand-600 bar DESIGN.md specifies by the
  * millimetre ("blinks once per 1.2s with steps(1) — square, not sine"). The
  * flagship renders a `▌` glyph instead because its prose goes through markdown;
  * this rail prints plain text, so it can use the real thing.
  */
-function IraText({ text, stream, onDone }: { text: string; stream: boolean; onDone?: (done: boolean) => void }) {
+function IraText({ text, stream }: { text: string; stream: boolean }) {
   // Half the flagship's 9ms. Its column is 66ch of prose the reader is meant
   // to sit and watch; this one is a 400px rail where the reader is waiting to
-  // press something, and the buttons below wait for the sentence to land.
+  // press something.
   const { shown, done } = useTypewriter(text, { enabled: stream, baseDelay: 4 });
-  // Whoever owns the turn decides what may appear once Ira has finished
-  // speaking — offering the buttons mid-sentence reads as a form, not a reply.
-  useEffect(() => { onDone?.(done); }, [done, onDone]);
+  // Streams ONLY when asked (agentic UI review #6, 30 Sep): a line that is not
+  // streaming prints whole, whatever the hook's counter says. The hook seeds
+  // its count once, so a line that stopped streaming mid-way (a newer message
+  // arrived) used to stay cut off where it was.
+  const body = stream ? shown : text;
+  const finished = !stream || done;
   return (
     <div className="text-[0.8125rem] leading-[1.65] text-ink-800 whitespace-pre-wrap break-words">
-      {shown}{!done && <span className="ai-caret" aria-hidden />}
+      {body}{!finished && <span className="ai-caret" aria-hidden />}
+    </div>
+  );
+}
+
+/**
+ * What Ira knows — the plain facts it is working from, one line, shut by
+ * default (agentic UI review #6, 30 Sep: "'What Ira knows' is a section in the
+ * Ask tab"). An agent that answers questions about a control should say what
+ * it can see before anyone asks it anything; otherwise "I can't find that" and
+ * "that isn't on file" read the same. Quiet text, no cards — it is context,
+ * not something to act on, and the Needs-you tab is where acting lives.
+ */
+function WhatIraKnows({ control }: { control: Control }) {
+  const [open, setOpen] = useState(false);
+  const facts = useMemo(() => {
+    const out: string[] = [];
+    const files = control.design.documents.flatMap(d => designFilesOf(d).map(f => f.name));
+    out.push(files.length
+      ? `Design evidence on file: ${listOf(files)}.`
+      : 'No design evidence on file yet.');
+    const pop = control.operating.population;
+    out.push(!pop
+      ? 'No population extracted yet.'
+      : `Population: ${pop.count.toLocaleString('en-IN')} instances${pop.sourceFile ? ` from ${pop.sourceFile}` : ''}${pop.locked ? ', locked' : ', not locked yet'}.`);
+    const s = control.operating.sampling;
+    if (s && s.size > 0) out.push(`Sample drawn: ${plural(s.size, 'item')}, ${s.method.toLowerCase()}.`);
+    out.push(`Comes from ${control.process}${control.subProcess ? ` · ${control.subProcess}` : ''}${control.sopSectionRef ? `, SOP ${control.sopSectionRef}` : ''}.`);
+    return out;
+  }, [control]);
+  return (
+    <div className="mb-4">
+      <button type="button" onClick={() => setOpen(o => !o)} aria-expanded={open}
+        className="inline-flex items-center gap-1 text-[0.6875rem] font-semibold text-ink-500 hover:text-ink-700 cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/30 rounded">
+        <ChevronRight size={12} className={cn('shrink-0 transition-transform duration-150', open && 'rotate-90')} aria-hidden />
+        What Ira knows
+      </button>
+      {open && (
+        <ul className="mt-1.5 pl-4 space-y-1 text-[0.75rem] leading-snug text-ink-500 list-disc marker:text-ink-300">
+          {facts.map(f => <li key={f}>{f}</li>)}
+        </ul>
+      )}
     </div>
   );
 }
@@ -322,22 +366,29 @@ export default function ControlChatPane({ control }: { control: Control }) {
     if (!settled) setAwaitingWhy(null);
   }
 
-  const latestIra = useRef<string | null>(null);
+  // Chat streams only when asked (agentic UI review #6, 30 Sep). The one line
+  // that may type itself out is Ira's REPLY to something the reader typed —
+  // the newest Ira line, arriving after this pane mounted, whose previous
+  // message is the reader's. Scripted prompts, acknowledgements and run
+  // endings print whole, and the buttons under the live prompt show at once:
+  // gating them on the typewriter left them missing with reduced motion (the
+  // child's "done" fired before the parent's reset) and made every turn wait.
+  // Seeded with the thread's last id so a line already on screen when the
+  // reader comes back from another tab does not re-perform itself.
   const lastMsg = thread[thread.length - 1];
-  if (lastMsg?.who === 'ira' && lastMsg.id !== latestIra.current) latestIra.current = lastMsg.id;
-
-  // Has Ira finished saying the live line? The buttons under it wait on this,
-  // so a turn reads as "it speaks, then it offers" rather than a sentence
-  // being typed beneath a row of controls that were already there.
-  const [saidIt, setSaidIt] = useState(false);
-  useEffect(() => { setSaidIt(false); }, [prompt.key]);
+  const seenIra = useRef<string | null>(lastMsg?.id ?? null);
+  const streamId = useRef<string | null>(null);
+  if (lastMsg?.who === 'ira' && lastMsg.id !== seenIra.current) {
+    seenIra.current = lastMsg.id;
+    streamId.current = thread[thread.length - 2]?.who === 'user' ? lastMsg.id : null;
+  }
 
   const scrollRef = useRef<HTMLDivElement>(null);
   useEffect(() => {
     const el = scrollRef.current;
     if (!el) return;
     requestAnimationFrame(() => el.scrollTo({ top: el.scrollHeight, behavior: 'smooth' }));
-  }, [thread, prompt.key, working, saidIt]);
+  }, [thread, prompt.key, working]);
 
   // A validation left running when the reader walks away must not come back
   // and write to a control they are no longer looking at.
@@ -353,6 +404,11 @@ export default function ControlChatPane({ control }: { control: Control }) {
   // sitting there with no answer and no error. It still cancels (the work is
   // the reader's to re-ask for), but it says so, and the thread outlives the
   // pane so the line is there when they come back.
+  //
+  // `timer.current` has to mean "a run is in flight", so every run's own
+  // callback nulls it on the way out. It used to be cleared only by stop(), so
+  // after ANY finished run each tab switch said "I stopped reading…" and ended
+  // a run that had already ended (agentic UI review #6, 30 Sep).
   useEffect(() => () => {
     if (!timer.current) return;
     window.clearTimeout(timer.current);
@@ -444,6 +500,7 @@ export default function ControlChatPane({ control }: { control: Control }) {
     timer.current = window.setTimeout(() => {
       const now = latest.current;
       endRun(now.id);
+      timer.current = null; // finished, not interrupted — see the unmount cleanup (agentic UI review, 30 Sep)
       // Six seconds is long enough for the left to move, and so is one and a
       // half: the form may have extracted while this was running, and a second
       // population written over the first would be a filter nobody agreed to.
@@ -629,6 +686,7 @@ export default function ControlChatPane({ control }: { control: Control }) {
         // when the button was pressed.
         const now = latest.current;
         endRun(now.id);
+        timer.current = null; // finished, not interrupted — see the unmount cleanup (agentic UI review, 30 Sep)
         // The store's own refusals, re-read at the moment of writing rather
         // than at the moment of asking — including the required element that
         // may have been removed while I was reading, which now stops the run
@@ -688,6 +746,7 @@ export default function ControlChatPane({ control }: { control: Control }) {
       timer.current = window.setTimeout(() => {
         const now = latest.current;
         endRun(now.id);
+        timer.current = null; // finished, not interrupted — see the unmount cleanup (agentic UI review, 30 Sep)
         if (trackResult(now.operating) !== 'Not tested') {
           say(now.id, 'ira', 'The testing was concluded while I was reading, so I stopped — the attributes are settled.');
           return;
@@ -758,6 +817,7 @@ export default function ControlChatPane({ control }: { control: Control }) {
     timer.current = window.setTimeout(() => {
       const now = latest.current;
       endRun(now.id);
+      timer.current = null; // finished, not interrupted — see the unmount cleanup (agentic UI review, 30 Sep)
       const refs = sampleRefs(now.process, plan.size);
       setDraw(d => (d ? { ...d, refs } : d));
       say(now.id, 'ira', `${plan.reading}. Here they are — look them over before I file them.`);
@@ -1074,6 +1134,9 @@ export default function ControlChatPane({ control }: { control: Control }) {
           where the hands already are. A long one fills upward and scrolls as
           usual, because auto margins give up the moment there is no slack. */}
       <div ref={scrollRef} className="chat-canvas-mesh flex-1 min-h-0 overflow-y-auto px-3 pt-3 pb-4 flex flex-col">
+       {/* Pinned to the top of the thread, above the `mt-auto` slack, so it
+           stays where the reader looks first however short the chat is. */}
+       <WhatIraKnows control={control} />
        <div className="mt-auto space-y-5">
         {thread.map((m, i) => (
           m.who === 'user' ? (
@@ -1085,9 +1148,9 @@ export default function ControlChatPane({ control }: { control: Control }) {
               </div>
             </motion.div>
           ) : (
-            // Only the newest line types itself out. An older one re-performing
-            // every time the reader comes back from History would be theatre.
-            <IraText key={m.id} text={m.text} stream={i === thread.length - 1 && m.id === latestIra.current} />
+            // Only a reply to something typed types itself out (see streamId). An older
+            // line re-performing every time the reader comes back would be theatre.
+            <IraText key={m.id} text={m.text} stream={i === thread.length - 1 && m.id === streamId.current} />
           )
         ))}
 
@@ -1250,14 +1313,14 @@ export default function ControlChatPane({ control }: { control: Control }) {
                 {STEP_NUM[prompt.step]} {stepLabel}
               </span>
             </div>
-            <IraText key={prompt.key} text={prompt.text} stream onDone={setSaidIt} />
+            <IraText key={prompt.key} text={prompt.text} stream={false} />
             {/* The verdict, both faces on one line (user ask, 22 Sep). Stacked,
                 "Design ineffective" under "Design effective" read as a second,
                 lesser button; side by side they read as the two answers to one
                 question — which is what concluding a track is. Centred, and
                 without the row arrow: neither is a "next", they are the choice
                 itself. */}
-            {saidIt && pairs.length > 0 && (
+            {pairs.length > 0 && (
               <div className={cn('mt-3 grid gap-1.5', pairs.length === 2 ? 'grid-cols-2' : 'grid-cols-1')}>
                 {pairs.map((a, i) => (
                   <motion.button key={a.id + a.label} onClick={() => run(a)}
@@ -1274,7 +1337,7 @@ export default function ControlChatPane({ control }: { control: Control }) {
               </div>
             )}
 
-            {saidIt && rows.length > 0 && (
+            {rows.length > 0 && (
               <div className="mt-3 space-y-1.5">
                 {rows.map((a, i) => (
                   <motion.button key={a.id + a.label} onClick={() => run(a)}
@@ -1284,8 +1347,8 @@ export default function ControlChatPane({ control }: { control: Control }) {
                     // never gets to run — a background tab freezes rAF, and a
                     // button you cannot see is worse than one that just appears.
                     // The house follow-up cascade (DESIGN.md §7.1.10) — it can
-                    // run its full 0.13s-per-chip stagger now that the chips
-                    // wait for Ira to stop speaking rather than racing it.
+                    // run its full 0.13s-per-chip stagger; the prompt above prints
+                    // whole now, so there is no sentence for it to race.
                     initial={still ? false : { y: 6 }}
                     animate={{ y: 0 }}
                     transition={{ delay: i * 0.13, duration: 0.48, ease: [0.22, 1, 0.36, 1] }}
@@ -1313,7 +1376,7 @@ export default function ControlChatPane({ control }: { control: Control }) {
                 rows that each claim to be the thing to do. The shape says
                 "pick any, more than one is fine", which is exactly what
                 setting up a design step is. */}
-            {saidIt && picks.length > 0 && (
+            {picks.length > 0 && (
               <div className="mt-3.5">
                 <div className="mb-1.5 text-[0.6875rem] font-semibold text-ink-400">{PICK_CAPTION[picks[0].id] ?? 'Pick one'}</div>
                 <div className="flex flex-wrap gap-1.5">
