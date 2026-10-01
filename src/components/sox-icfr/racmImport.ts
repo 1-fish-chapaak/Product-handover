@@ -425,8 +425,16 @@ const HML_HINTS: [RegExp, RacmFieldKey][] = [
   [/impact|severity|inherent|rating|level|signific|criticality/i, 'riskRating'],
 ];
 
+/** Words that name a team or a function, not a person or a role someone
+ *  holds — "Finance Ops", "Procurement", "Accounts Payable". A column of these
+ *  is a department column, and asking which owner it is would be a false alarm. */
+const TEAM_WORDS = /\b(ops|operations|finance|procurement|purchasing|accounts?|payable|receivable|treasury|tax|legal|hr|human resources|it|payroll|sales|marketing|logistics|warehouse|department|dept|team|division|function|unit|group|plant|branch|region|cell|desk)\b/i;
+/** Words that make a team name a role a person holds — "Finance Manager". */
+const ROLE_WORDS = /\b(manager|head|director|controller|officer|lead|supervisor|executive|analyst|accountant|clerk|cfo|ceo|coo|vp|president|partner|owner|admin|administrator|approver|reviewer|specialist|associate)\b/i;
+
 function looksLikePerson(cell: string): boolean {
   if (/\d/.test(cell) || cell.length > 48) return false;
+  if (TEAM_WORDS.test(cell) && !ROLE_WORDS.test(cell)) return false;
   const words = cell.split(/\s+/).filter(Boolean);
   if (words.length < 1 || words.length > 5) return false;
   const caps = words.filter(w => /^[A-Z(]/.test(w)).length;
