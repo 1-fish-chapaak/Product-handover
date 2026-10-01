@@ -21,7 +21,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { AlertTriangle, Plus, Search, UploadCloud, X } from 'lucide-react';
 import { useAuditLog } from '../../context/AdminDataContext';
-import { useToast } from '../shared/Toast';
+import { InlineNote, useInlineNote } from './InlineNote';
 import { cn } from '../../lib/cn';
 import { useIcfr } from './store';
 import { isEngagementLocked } from './helpers';
@@ -35,7 +35,8 @@ const plural = (n: number, one: string) => `${n} ${one}${n === 1 ? '' : 's'}`;
 export default function AddRacmModal({ onClose }: { onClose: () => void }) {
   const { eng, role, addLibraryRacms } = useIcfr();
   const racms = useRacmLibrary();
-  const { addToast } = useToast();
+  // A refused add is said in the footer, beside the button that was pressed.
+  const addNote = useInlineNote();
   const logEvent = useAuditLog();
 
   const [q, setQ] = useState('');
@@ -92,6 +93,7 @@ export default function AddRacmModal({ onClose }: { onClose: () => void }) {
   const toggle = (id: string) => setTicked(t => (t.includes(id) ? t.filter(x => x !== id) : [...t, id]));
 
   const add = () => {
+    addNote.clear();
     if (!picked.length) return;
     const added = addLibraryRacms(picked.map(r => r.id));
     if (added === 0) {
@@ -99,7 +101,7 @@ export default function AddRacmModal({ onClose }: { onClose: () => void }) {
         : isEngagementLocked(eng) ? 'This engagement is signed off, so nothing more can be added to it.'
         : clashes.length ? `${clashes[0]}. Untick one of them first.`
         : 'Those RACMs are no longer on the RACM tab.';
-      addToast({ type: 'error', title: "RACMs weren't added", message: why });
+      addNote.show('error', `RACMs weren't added. ${why}`);
       return;
     }
     logEvent({
@@ -222,6 +224,7 @@ export default function AddRacmModal({ onClose }: { onClose: () => void }) {
         )}
 
         <div className="px-5 py-3.5 border-t border-canvas-border bg-paper-50/40 flex items-center justify-end gap-2 flex-wrap">
+          <InlineNote note={addNote.note} className="mr-auto min-w-0 flex-1" />
           <button onClick={close} className="h-9 px-3.5 rounded-lg border border-canvas-border text-[0.78125rem] font-semibold text-ink-600 hover:text-ink-900 cursor-pointer">Cancel</button>
           <button onClick={add} disabled={!ready}
             className="h-9 px-3.5 inline-flex items-center gap-1.5 rounded-lg bg-brand-600 text-white text-[0.78125rem] font-semibold enabled:hover:bg-brand-700 disabled:opacity-40 disabled:cursor-not-allowed transition-colors cursor-pointer">

@@ -1,5 +1,6 @@
 import { Upload, CheckCircle2, MessageSquare, Circle, ChevronRight, FileWarning, Inbox, ListChecks, PenLine } from 'lucide-react';
-import { useToast } from '../shared/Toast';
+import { useState, Fragment } from 'react';
+import { InlineNote, useInlineNote } from './InlineNote';
 import { useIcfr } from './store';
 import { isOwnerTask, testDueInDays, testDueLabel, testsDueNow } from './helpers';
 import { isOwnerOf } from './auditScope';
@@ -14,7 +15,9 @@ const TASK_META: Record<TaskType, { label: string; Icon: typeof Upload; action: 
 
 export default function RiskOwnerPortal() {
   const { eng, meOwner, openAuditId, submitTask, openControl, openRegister, setTab, setView, setExceptionStatus } = useIcfr();
-  const { addToast } = useToast();
+  // a refusal is said on the row whose button was pressed (agentic UX #11)
+  const note = useInlineNote();
+  const [noteRow, setNoteRow] = useState<string | null>(null);
   // person-lane: only this persona's tasks and controls — never the whole engagement
   const mine = eng.tasks.filter(t => isOwnerTask(eng, t, meOwner));
   const dueNow = (t: HandoffTask) => t.overdue || /today/i.test(t.dueLabel);
@@ -44,6 +47,8 @@ export default function RiskOwnerPortal() {
   const submitted = mine.filter(t => t.status !== 'open');
 
   const act = (t: HandoffTask) => {
+    note.clear();
+    setNoteRow(t.id);
     // a remediation "done" goes through the same gate as the exceptions page:
     // proof first, then the submit — never a reminder cleared on its own
     if (t.type === 'remediation') {
@@ -51,17 +56,17 @@ export default function RiskOwnerPortal() {
       if (def) {
         // ③ nothing to submit yet — the plan is what the auditor judges against
         // the root cause, so this points at writing it rather than at finishing.
+        // The button says "Write the plan", so landing on the exceptions page is
+        // the action itself — no message needed (a line here would unmount with the page).
         if (def.status === 'Planning') {
           setView('deficiencies');
-          addToast({ type: 'info', title: 'Write the plan first', message: `${def.id} needs the action, who does it and a due date — the auditor judges it against the root cause.` });
           return;
         }
         // Only the fixing step submits. Anywhere else the finding is in somebody
         // else's hands, and a button that reports success while the store refuses
         // the move is worse than one that says where the thing actually is.
         if (def.status !== 'Remediation') {
-          setView('deficiencies');
-          addToast({ type: 'info', title: 'Not yours to submit yet', message: `${def.id} is at ${def.status.toLowerCase()} — it comes back to you when the work does.` });
+          note.show('info', `Not yours to submit yet — ${def.id} is at ${def.status.toLowerCase()} and comes back to you when the work does.`);
           return;
         }
         if ((def.remediation.evidence?.length ?? 0) > 0) {
@@ -71,8 +76,7 @@ export default function RiskOwnerPortal() {
           // timetable, once the fixed control has had a chance to run.
           setExceptionStatus(def.id, 'Awaiting reviewer'); // clears this reminder with it
         } else {
-          setView('deficiencies');
-          addToast({ type: 'warning', title: 'Evidence first', message: `Attach proof of the fix on ${def.id}, then submit — “done” needs proof.` });
+          note.show('warning', `Attach proof of the fix on ${def.id} in Exceptions first — “done” needs proof.`);
         }
         return;
       }
@@ -138,7 +142,8 @@ export default function RiskOwnerPortal() {
               // data that opens on the design documents is a row that made the
               // reader do the finding themselves.
               return (
-                <div key={t.id} role="button" tabIndex={0} onClick={() => openControl(t.controlId, t.focus)}
+                <Fragment key={t.id}>
+                <div role="button" tabIndex={0} onClick={() => openControl(t.controlId, t.focus)}
                   onKeyDown={e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); openControl(t.controlId, t.focus); } }}
                   className={rowCls}>
                   <span className="w-4 flex justify-center shrink-0"><Circle size={11} className={t.overdue ? 'text-risk-700' : urgent ? 'text-mitigated-700' : 'text-ink-400'} /></span>
@@ -152,6 +157,8 @@ export default function RiskOwnerPortal() {
                   </button>
                   {chevron}
                 </div>
+                {noteRow === t.id && <InlineNote note={note.note} className="mt-0.5 mb-1 pl-7 pr-2" />}
+                </Fragment>
               );
             })}
           </div>

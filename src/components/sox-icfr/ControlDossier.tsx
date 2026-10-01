@@ -39,6 +39,7 @@ import { auditCovers, countryFor, countryOf, inScopeEntityNames, ownersOf, progr
 import { ConclusionPill, CourtBadge, NatureChip, OriginPicker, Toggle, TrackPill, Tickmark, Stamp, RagKpiRow, type RagMeterDef } from './parts';
 import { Pill } from '../shared/StatusBadge';
 import { useToast } from '../shared/Toast';
+import { InlineNote, useInlineNote } from './InlineNote';
 import { Sparkles, FileSpreadsheet } from 'lucide-react';
 import WorkingPaperModal from './WorkingPaperModal';
 import RemediationBriefModal from './RemediationBriefModal';
@@ -1211,10 +1212,9 @@ function AttributeRow({ control, step, canEdit, testing }: { control: Control; s
               not testing these items, so the run is stale and the operating
               track refuses to conclude until it is re-run (or re-attested). */}
           {step.staleRun && (
-            <div className="rounded-md border border-mitigated-200 bg-mitigated-50/60 px-2.5 py-2 text-[0.71875rem] text-mitigated-800 flex items-start gap-1.5">
-              <AlertTriangle size={12} className="shrink-0 mt-0.5" />
-              <span>This run predates the current draw — the items it tested are no longer the sample. Re-run it before the operating test can conclude.</span>
-            </div>
+            <p className="mb-1.5 text-[0.71875rem] leading-snug" title="This run predates the current draw — the items it tested are no longer the sample. Re-run it before the operating test can conclude.">
+              <span className="font-semibold text-mitigated-800">Re-run needed</span> <span className="text-ink-500">— the sample changed since this ran.</span>
+            </p>
           )}
           <div className="rounded-md bg-brand-50/30 border border-brand-100 px-2.5 py-2.5 space-y-2">
             {/* What this attribute reads — named, not listed again: the files
@@ -1256,10 +1256,9 @@ function AttributeRow({ control, step, canEdit, testing }: { control: Control; s
                 answers to the evidence, so the validation is the result and this
                 says so rather than leaving two verdicts on one card. */}
             {overruled && (
-              <div className="mt-2 rounded-md border border-mitigated-200 bg-mitigated-50/60 px-2.5 py-2 text-[0.71875rem] text-mitigated-800 flex items-start gap-1.5">
-                <AlertTriangle size={12} className="shrink-0 mt-0.5" />
-                <span>The validation reached <b>{step.validation!.result}</b> on this attribute, and it stands — an attestation supports evidence, it does not overrule it. The note above is on the record, but the result is <b>{step.validation!.result}</b>. To depart from the file, use the auditor's override and say why.</span>
-              </div>
+              <p className="mt-2 text-[0.71875rem] leading-snug" title={`The validation reached ${step.validation!.result} on this attribute, and it stands — an attestation supports evidence, it does not overrule it. The note above is on the record, but the result is ${step.validation!.result}. To depart from the file, use the auditor's override and say why.`}>
+                <span className="font-semibold text-mitigated-800">Validation stands at {step.validation!.result}</span> <span className="text-ink-500">— the attestation doesn't overrule it.</span>
+              </p>
             )}
             {/* Inquiry. The attester wrote what they saw and attached nothing,
                 and nothing was validated behind them — so the whole of the
@@ -1267,10 +1266,9 @@ function AttributeRow({ control, step, canEdit, testing }: { control: Control; s
                 conclusion, because the fix belongs on this card: attach what the
                 visit produced, or run the validation. */}
             {wordAlone && (
-              <div className="mt-2 rounded-md border border-mitigated-200 bg-mitigated-50/60 px-2.5 py-2 text-[0.71875rem] text-mitigated-800 flex items-start gap-1.5">
-                <AlertTriangle size={12} className="shrink-0 mt-0.5" />
-                <span>This attribute rests on the statement alone — nothing was attached and nothing was validated behind it. An attribute proven by inquiry is not tested, so the control cannot be concluded <b>effective</b> while it stands. Attach what was inspected, or run the validation.</span>
-              </div>
+              <p className="mt-2 text-[0.71875rem] leading-snug" title="This attribute rests on the statement alone — nothing was attached and nothing was validated behind it. An attribute proven by inquiry is not tested, so the control cannot be concluded effective while it stands. Attach what was inspected, or run the validation.">
+                <span className="font-semibold text-mitigated-800">Statement only</span> <span className="text-ink-500">— nothing attached or validated, so this can't pass.</span>
+              </p>
             )}
             {att?.note && <p className="text-[0.75rem] text-ink-700 mt-1.5 italic">“{att.note}”</p>}
             {att && att.evidence.length > 0 && <div className="flex flex-wrap gap-1.5 mt-2">{att.evidence.map(f => <span key={f.id} className="inline-flex items-center gap-1 text-[0.65625rem] font-semibold text-ink-600 bg-paper-50 border border-canvas-border rounded-md px-1.5 h-[20px]"><Paperclip size={9} />{f.name}</span>)}</div>}
@@ -5149,7 +5147,8 @@ function RoundActions({ control, canEdit }: { control: Control; canEdit: boolean
 function OperatingSection({ control, canEdit, locked }: { control: Control; canEdit: boolean; locked: boolean }) {
   const { eng, role, openAuditId, addAttribute, validateReadyAttributes, confirmIra } = useIcfr();
   const logEvent = useAuditLog();
-  const { addToast } = useToast();
+  // what the run skipped is said under the run button (agentic UX #11)
+  const runNote = useInlineNote();
   const o = control.operating; const prog = operatingProgress(control);
   const anyFail = o.steps.some(s => stepResult(s) === 'Fail');
   const allTested = o.steps.length > 0 && o.steps.every(s => stepResult(s) !== 'Not tested');
@@ -5160,13 +5159,14 @@ function OperatingSection({ control, canEdit, locked }: { control: Control; canE
   const [addingAttr, setAddingAttr] = useState(false);
   const attCount = o.steps.filter(s => s.attestEnabled || s.attestation).length;
   // Only an attribute with every required file in can be validated; the rest
-  // are skipped, and the toast says which and how many files each is short.
+  // are skipped, and the line under the run button says which and how many files each is short.
   const ready = o.steps.filter(s => requiredFilesReady(s, control)).length;
   const untested = o.steps.filter(s => stepResult(s) === 'Not tested').length;
   /** Passing attributes the required files don't back yet (17 Sep). */
   const unbacked = passedWithoutFiles(control).length;
 
   const runAll = () => {
+    runNote.clear();
     setTesting(true);
     // Same rule as the design run: the button is here, the narration is in the
     // rail, and the rail comes forward because the reader pressed this on the
@@ -5185,7 +5185,7 @@ function OperatingSection({ control, canEdit, locked }: { control: Control; canE
       setTesting(false);
       if (!live) return;   // stopped from the Ira tab — nothing is written
       validateReadyAttributes(control.id);
-      if (skipped.length) addToast({ type: 'warning', title: `AI validation ran on ${ready} attribute${ready === 1 ? '' : 's'}`, message: skipped.join(' · ') });
+      if (skipped.length) runNote.show('warning', `Ran on ${ready} attribute${ready === 1 ? '' : 's'}; skipped ${skipped.join(' · ')}.`);
     }, 2400);
   };
   // ── Automatic mode (agentic UX #3, user ask 1 Oct) ─────────────────────────
@@ -5280,6 +5280,7 @@ function OperatingSection({ control, canEdit, locked }: { control: Control; canE
           {canEdit && <button onClick={() => setAddingAttr(a => !a)} className="h-8 px-2.5 inline-flex items-center gap-1.5 rounded-lg border border-canvas-border bg-canvas-elevated text-[0.75rem] font-semibold text-ink-700 hover:border-brand-300 hover:text-brand-700 cursor-pointer"><Plus size={13} /> Add</button>}
         </div>
       </div>
+      <InlineNote note={runNote.note} className="-mt-2 mb-3 text-right" />
       {testing && <RunLine files={o.steps.filter(s => requiredFilesReady(s, control)).reduce((n, s) => n + requiredFilesCount(s, control).uploaded, 0)} total={ready || o.steps.length} noun="attribute" ms={2400} />}
       {!testing && <ConfirmSure control={control} which="operating" rows={o.steps} />}
       {addingAttr && (

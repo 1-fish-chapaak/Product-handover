@@ -13,7 +13,7 @@ import { conclusionOf, controlCode, RACM_ROWS_KEY, racmEditorRows, trackResult }
 import { Dropdown, menuItem } from './ControlDossier';
 import RacmImportReview from './RacmImportReview';
 import { useAuditLog } from '../../context/AdminDataContext';
-import { useToast } from '../shared/Toast';
+import { InlineNote, useInlineNote } from './InlineNote';
 import { Pill } from '../shared/StatusBadge';
 import { NatureChip, Tickmark } from './parts';
 import { FilterSelect } from '../shared/FilterSelect';
@@ -302,7 +302,9 @@ export function RacmLanding() {
   // spreadsheet editor. The action stays on the store (parked, house
   // convention), and with it the drilled matrix page it used to reach.
   const { eng, role, deleteRacm, createRacm, racmDocs, racmCreateOpen, clearRacmCreate } = useIcfr();
-  const { addToast } = useToast();
+  // A refused delete is said under the name of the RACM it was for.
+  const rowNote = useInlineNote();
+  const [noteFor, setNoteFor] = useState<string | null>(null);
   const logEvent = useAuditLog();
 
   // The matrix shows what the OPEN audit covers — its entities' processes.
@@ -381,9 +383,10 @@ export function RacmLanding() {
   const confirmDelete = (process: string) => {
     const count = eng.controls.filter(c => c.process === process).length;
     setDeleting(null);
-    // the store refuses this too — say so rather than toast a delete that didn't happen
+    rowNote.clear();
+    // the store refuses this too — say so rather than claim a delete that didn't happen
     const blocker = racmDeleteBlocker(eng, process);
-    if (blocker) { addToast({ type: 'warning', title: "Can't delete this RACM", message: `${blocker}.` }); return; }
+    if (blocker) { setNoteFor(process); rowNote.show('warning', `Can't delete this RACM. ${blocker}.`); return; }
     deleteRacm(process);
     logEvent({ action: 'Delete', description: `Deleted the ${process} RACM and its ${count} control${count === 1 ? '' : 's'}`, module: 'SOX ICFR', entity: 'RACM' });
   };
@@ -471,6 +474,7 @@ export function RacmLanding() {
                     <span className="text-[13.5px] font-semibold text-ink-900 truncate" style={{ fontFamily: "'Source Serif 4', serif" }}>{name} — RACM</span>
                     <span className="font-mono text-[11px] text-ink-400 shrink-0">v1.0</span>
                   </span>
+                  {noteFor === name && <InlineNote note={rowNote.note} className="mt-1 pl-[3.75rem]" />}
                 </td>
                 <td><Pill tone={status.tone}>{status.label}</Pill></td>
                 <td><span className="tabular-nums font-medium text-ink-600">{risks}</span></td>
@@ -546,7 +550,6 @@ function ReviewCell({ c }: { c: Control }) {
  */
 export default function Racm() {
   const { eng, role, racmProcess, openControl, approveRacmRows, remarkRacmRow, clearRacmReview, racmDocs, addRacmDoc } = useIcfr();
-  const { addToast } = useToast();
   const [q, setQ] = useState('');
   const [review, setReview] = useState<ReviewFilter>('All');
   // column filters — empty array = column unfiltered

@@ -21,7 +21,7 @@ import { CheckCircle2, FileSpreadsheet, History, Info, ListChecks, Lock, Plus, R
 import './register.css';
 import { cn } from '../../lib/cn';
 import { useAuditLog } from '../../context/AdminDataContext';
-import { useToast } from '../shared/Toast';
+import { InlineNote, useInlineNote } from './InlineNote';
 import { FormSelect } from '../shared/FilterSelect';
 import { RACM_FIELDS, isAlwaysRequired, type RacmFieldKey } from './racmImport';
 import { defaultCore, extraLabel, racmConfig, resetRacmConfig, savedSetupKeys, setRacmConfig, useRacmConfig, type ExtraColumn, type ExtraKind } from './racmConfig';
@@ -279,7 +279,8 @@ export default function RacmConfigView({ canManage }: {
   // touched it, not a thing to edit on its own.
   const [setupKey, setSetupKey] = useState(() => knownCompanies()[0]?.group ?? savedSetupKeys()[0] ?? 'default');
   const cfg = useRacmConfig(setupKey);
-  const { addToast } = useToast();
+  // A refused heading is said under the box it was typed in, not in a toast.
+  const extraNote = useInlineNote();
   const logEvent = useAuditLog();
   const [draftExtra, setDraftExtra] = useState('');
   const [confirming, setConfirming] = useState<'reset' | 'forget-all' | null>(null);
@@ -310,10 +311,11 @@ export default function RacmConfigView({ canManage }: {
 
   const addExtra = (e: React.FormEvent) => {
     e.preventDefault();
+    extraNote.clear();
     const name = draftExtra.trim();
     if (!name) return;
     if (cfg.extras.some(x => x.header.toLowerCase() === name.toLowerCase())) {
-      addToast({ type: 'warning', title: 'Already kept', message: `"${name}" is already on the list of columns carried through for ${label}.` });
+      extraNote.show('warning', `"${name}" is already kept for ${label}.`);
       return;
     }
     // Plain text, and not compulsory, until someone says otherwise: all the
@@ -464,6 +466,7 @@ export default function RacmConfigView({ canManage }: {
             </button>
           </form>
         )}
+        {canManage && <InlineNote note={extraNote.note} className="mt-1" />}
       </Section>
 
       {/* ── 3 · what a heading meant last time ────────────────────────────── */}

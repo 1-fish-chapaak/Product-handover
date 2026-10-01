@@ -226,7 +226,7 @@ import { racmRowOf, rootCauseReady, seedKeyOf, suggestRootCause, suggestSizing, 
 import { entityCodeFor, processCodeFor, riskIdOf } from './racmIds';
 import { controlIdClashes, copyRacmControls, findLibraryRacm, markRacmsUsed } from './racmLibrary';
 import { findEngagement, registerEngagement } from '../../data/engagements';
-import { useToast } from '../shared/Toast';
+import { useInlineNote, type Note } from './InlineNote';
 import { defWord } from './flow';
 
 // ─── You cannot audit what you own ──────────────────────────────────────────────
@@ -484,6 +484,8 @@ interface IcfrCtx {
   confirmIra: (controlId: string, which: 'design' | 'operating', ids: string[]) => void;
   /** Take every result Ira holds that nobody confirmed back to Not tested (UX #15). */
   undoIra: (controlId: string) => void;
+  /** The store's last refusal, printed by the page shell as one line (#11). */
+  refusal: Note | null;
   /** Auditor only: last round's set-up part, confirmed unchanged or taken to edit (#13). */
   confirmRollPart: (controlId: string, part: RollPart, how: 'confirmed' | 'edited') => void;
   /** Reviewer only: rule on an "Ira learned" pattern (agentic UX #9). */
@@ -716,7 +718,10 @@ export function IcfrProvider({ children, initialRole = 'auditor', seedMeta }: { 
   // Navigation refused for a reason has to SAY the reason — a click that quietly
   // does nothing reads as a broken page. The app's toast provider sits above this
   // one, so the store can speak without owning a notice surface of its own.
-  const { addToast } = useToast();
+  // The store's own refusals (a link that is not this persona's to open) have
+  // no button to sit beside, so the page shell prints this line under its tab
+  // bar instead (agentic UX #11 — no toasts in SOX).
+  const refusalNote = useInlineNote();
   // The register is brought onto the class table on the way in, and kept there on
   // every write through `setEng` below: waivers against elements that do not apply
   // are lifted into the trail, and required kinds the control never listed are
@@ -872,10 +877,8 @@ export function IcfrProvider({ children, initialRole = 'auditor', seedMeta }: { 
     if (role === 'risk-owner') {
       const c = eng.controls.find(x => x.id === id);
       if (c && !isOwnerOf(c, meOwner)) {
-        addToast({
-          type: 'info', title: 'This control is not yours to open',
-          message: `${c.wpRef} sits with ${ownersOf(c).controlOwner}. Your Control Library lists the ones you answer for.`,
-        });
+        // Said as one line at the top of the page, not a toast (agentic UX #11).
+        refusalNote.show('info', `This control is not yours to open — ${c.wpRef} sits with ${ownersOf(c).controlOwner}. Your Control Library lists the ones you answer for.`);
         setTabState('controls'); setView('register'); setSelectedControlId(null); setReturnView(null);
         return;
       }
@@ -893,7 +896,7 @@ export function IcfrProvider({ children, initialRole = 'auditor', seedMeta }: { 
       if (owning) { setOpenAuditId(owning.id); setTabState('overview'); }
     }
     setSelectedControlId(id); setView('dossier');
-  }, [view, openAuditId, eng.controls, eng.audits, role, meOwner, addToast]);
+  }, [view, openAuditId, eng.controls, eng.audits, role, meOwner, refusalNote.show]);
   // A counted click on the Overview lands on the register showing exactly the
   // counted set — the register consumes the preset once, then owns its filters.
   const [registerPreset, setRegisterPreset] = useState<{ view?: string; process?: string } | null>(null);
@@ -2508,10 +2511,7 @@ export function IcfrProvider({ children, initialRole = 'auditor', seedMeta }: { 
       const c = eng.controls.find(x => x.id === target.controlId);
       if (c && !isOwnerOf(c, meOwner)) {
         const W = defWord(eng.id);
-        addToast({
-          type: 'info', title: `This ${W.one} is not yours to open`,
-          message: `${target.id} sits on ${c.wpRef}, which ${ownersOf(c).controlOwner} answers for.`,
-        });
+        refusalNote.show('info', `This ${W.one} is not yours to open — ${target.id} sits on ${c.wpRef}, which ${ownersOf(c).controlOwner} answers for.`);
         return;
       }
     }
@@ -2519,7 +2519,7 @@ export function IcfrProvider({ children, initialRole = 'auditor', seedMeta }: { 
     const owning = target && eng.audits.find(a => a.controlIds?.includes(target.controlId));
     if (owning && owning.id !== openAuditId) { openAudit(owning.id); setTabState('deficiencies'); return; }
     if (openAuditId) setTabState('deficiencies'); else setView('deficiencies');
-  }, [eng.id, eng.controls, eng.deficiencies, eng.audits, openAuditId, openAudit, role, meOwner, addToast]);
+  }, [eng.id, eng.controls, eng.deficiencies, eng.audits, openAuditId, openAudit, role, meOwner, refusalNote.show]);
   // Leaving an audit lands on the engagement's own Overview. Without the reset,
   // closing from the audit's Configuration or Deficiency management tab — neither
   // of which the engagement level has — left the tab bar with nothing active and
@@ -4891,9 +4891,9 @@ export function IcfrProvider({ children, initialRole = 'auditor', seedMeta }: { 
     addComment, resolveDiscussion,
     submitTask, clearTask, raiseQuery, requestDesignDocs,
     updateRules, concludeEntityMw, runFlawScan, applyRules, updateMateriality, reconcileScope, updateDeficiency, linkRootCause, unlinkRootCause, setGroupConclusion, updateAccount, setExceptionStatus, completeSizing, confirmRating, returnRating, submitPlan, reviewPlan, /* PARKED — drawRetestSample, setRetestResult, setRetestCheck, runRetestIra, recordRetest: the retest is no longer a step in this flow. */ signOffException, reopenException, updateRemediation, addRemediationEvidence, raiseChallenge, respondToChallenge, parkOperating, resumeOperating, markUnableToTest, resolveUnableToTest, escalateUnableToTest,
-    addControl, proposeSampling, signSampling, reviseSampling, signOffAudit, reopenControl, decideLearned, confirmRollPart, recordNewVersion, clearRetestDue, signOffControlWp, returnControl,
+    addControl, proposeSampling, signSampling, reviseSampling, signOffAudit, reopenControl, decideLearned, confirmRollPart, refusal: refusalNote.note, recordNewVersion, clearRetestDue, signOffControlWp, returnControl,
     raiseReviewNote, resolveReviewNote, verifyReviewNote, reopenReviewNote,
-  }), [eng, role, tab, view, selectedControlId, racmEditor, me, meOwner, racmProcess, changeRole, setTab, openRacmMatrix, openRacmEditor, openControl, focusStep, clearFocusStep, openDeficiency, focusDefId, clearFocusDef, back, returnView, registerPreset, openRegister, clearRegisterPreset, racmCreateOpen, openRacmCreate, clearRacmCreate, setDocStatus, setDesignPoint, concludeDesign, overrideDesign, approveDesign, returnDesign, addDesignDoc, attachDesignEvidence, removeDesignDoc, waiveDesignDoc, clearDesignWaiver, updateControlMeta, setControlKey, setDesignJudgements, startWalkthrough, setWalkthroughAttribute, setWalkthroughMeta, addDesignPoint, removeDesignPoint, validateDesignPoint, overrideDesignPoint, removeDesignFile, runDesignIra, linkDesignPointEvidence, setDesignPointProof, requestDataByEmail, setPointEvidenceType, setStepEvidenceType, setDesignBasis, setPopulation, setPopulationDefinition, clearPopulation, setPopulationCheck, setPopulationFacts, addPopulationSource, removePopulationSource, setSourceRole, drawSourceSample, approveSource, redrawSource, remindOwnerForFiles, registerFile, setFileOrigin, lockPopulation, lockAttributes, confirmExtraction, recordException, addEvidenceReport, removeEvidenceReport, proveEvidenceReport, registerIpe, setIpeCheck, concludeIpe, clearIpe, setMrc, setSampling, extendSample, resizeSample, setSampleResult, setStepResult, overrideStep, confirmIra, undoIra, pullStepRun, attestStep, addStepEvidence, setStepInputFile, concludeOperating, overrideOperating, startToeRound, addAttribute, removeAttribute, mapStepWorkflow, setStepEvidenceMode, toggleStepAttest, toggleStepAI, runStepValidation, testAllAttributes, addRequiredFile, renameRequiredFile, removeRequiredFile, uploadRequiredFile, clearRequiredFile, validateReadyAttributes, approveRacmRows, remarkRacmRow, clearRacmReview, bulkTestControls, createAudit, updateAudit, openAuditId, openAudit, closeAudit, racmDocs, addRacmDoc, createRacm, deleteRacm, addLibraryRacms, addComment, resolveDiscussion, submitTask, clearTask, raiseQuery, requestDesignDocs, updateRules, concludeEntityMw, runFlawScan, applyRules, updateMateriality, reconcileScope, updateDeficiency, linkRootCause, unlinkRootCause, setGroupConclusion, updateAccount, setExceptionStatus, completeSizing, confirmRating, returnRating, submitPlan, reviewPlan, /* PARKED — drawRetestSample, setRetestResult, setRetestCheck, runRetestIra, recordRetest: the retest is no longer a step in this flow. */ signOffException, reopenException, updateRemediation, addRemediationEvidence, raiseChallenge, respondToChallenge, parkOperating, resumeOperating, markUnableToTest, resolveUnableToTest, escalateUnableToTest, addControl, proposeSampling, signSampling, reviseSampling, signOffAudit, reopenControl, decideLearned, confirmRollPart, recordNewVersion, clearRetestDue, signOffControlWp, returnControl, raiseReviewNote, resolveReviewNote, verifyReviewNote, reopenReviewNote]);
+  }), [eng, role, tab, view, selectedControlId, racmEditor, me, meOwner, racmProcess, changeRole, setTab, openRacmMatrix, openRacmEditor, openControl, focusStep, clearFocusStep, openDeficiency, focusDefId, clearFocusDef, back, returnView, registerPreset, openRegister, clearRegisterPreset, racmCreateOpen, openRacmCreate, clearRacmCreate, setDocStatus, setDesignPoint, concludeDesign, overrideDesign, approveDesign, returnDesign, addDesignDoc, attachDesignEvidence, removeDesignDoc, waiveDesignDoc, clearDesignWaiver, updateControlMeta, setControlKey, setDesignJudgements, startWalkthrough, setWalkthroughAttribute, setWalkthroughMeta, addDesignPoint, removeDesignPoint, validateDesignPoint, overrideDesignPoint, removeDesignFile, runDesignIra, linkDesignPointEvidence, setDesignPointProof, requestDataByEmail, setPointEvidenceType, setStepEvidenceType, setDesignBasis, setPopulation, setPopulationDefinition, clearPopulation, setPopulationCheck, setPopulationFacts, addPopulationSource, removePopulationSource, setSourceRole, drawSourceSample, approveSource, redrawSource, remindOwnerForFiles, registerFile, setFileOrigin, lockPopulation, lockAttributes, confirmExtraction, recordException, addEvidenceReport, removeEvidenceReport, proveEvidenceReport, registerIpe, setIpeCheck, concludeIpe, clearIpe, setMrc, setSampling, extendSample, resizeSample, setSampleResult, setStepResult, overrideStep, confirmIra, undoIra, pullStepRun, attestStep, addStepEvidence, setStepInputFile, concludeOperating, overrideOperating, startToeRound, addAttribute, removeAttribute, mapStepWorkflow, setStepEvidenceMode, toggleStepAttest, toggleStepAI, runStepValidation, testAllAttributes, addRequiredFile, renameRequiredFile, removeRequiredFile, uploadRequiredFile, clearRequiredFile, validateReadyAttributes, approveRacmRows, remarkRacmRow, clearRacmReview, bulkTestControls, createAudit, updateAudit, openAuditId, openAudit, closeAudit, racmDocs, addRacmDoc, createRacm, deleteRacm, addLibraryRacms, addComment, resolveDiscussion, submitTask, clearTask, raiseQuery, requestDesignDocs, updateRules, concludeEntityMw, runFlawScan, applyRules, updateMateriality, reconcileScope, updateDeficiency, linkRootCause, unlinkRootCause, setGroupConclusion, updateAccount, setExceptionStatus, completeSizing, confirmRating, returnRating, submitPlan, reviewPlan, /* PARKED — drawRetestSample, setRetestResult, setRetestCheck, runRetestIra, recordRetest: the retest is no longer a step in this flow. */ signOffException, reopenException, updateRemediation, addRemediationEvidence, raiseChallenge, respondToChallenge, parkOperating, resumeOperating, markUnableToTest, resolveUnableToTest, escalateUnableToTest, addControl, proposeSampling, signSampling, reviseSampling, signOffAudit, reopenControl, decideLearned, confirmRollPart, refusalNote.note, recordNewVersion, clearRetestDue, signOffControlWp, returnControl, raiseReviewNote, resolveReviewNote, verifyReviewNote, reopenReviewNote]);
 
   return <Ctx.Provider value={value}>{children}</Ctx.Provider>;
 }

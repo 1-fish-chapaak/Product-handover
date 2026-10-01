@@ -23,7 +23,7 @@ import './register.css';
 import { cn } from '../../lib/cn';
 import { useAuditLog } from '../../context/AdminDataContext';
 import { useCurrentUser } from '../../context/CurrentUserContext';
-import { useToast } from '../shared/Toast';
+import { InlineNote, useInlineNote, type Note } from './InlineNote';
 import Drawer from '../shared/Drawer';
 import { FilterSelect } from '../shared/FilterSelect';
 import { Pill } from '../shared/StatusBadge';
@@ -250,9 +250,12 @@ function RowActions({ racm, canManage, onDelete, onPublish, onHistory }: { racm:
  * whole of it opens the editor. The last cell is the exception, and stops the
  * click, because those buttons go somewhere else.
  */
-function RacmTable({ rows, canManage, onDelete, onPublish, onHistory, onFlowchart }: {
+function RacmTable({ rows, canManage, note, noteFor, onDelete, onPublish, onHistory, onFlowchart }: {
   rows: LibraryRacm[];
   canManage: boolean;
+  /** A refused publish or delete, said under the name of the row it was for. */
+  note: Note | null;
+  noteFor: string | null;
   onDelete: (r: LibraryRacm) => void;
   onPublish: (r: LibraryRacm) => void;
   onHistory: (r: LibraryRacm) => void;
@@ -286,6 +289,7 @@ function RacmTable({ rows, canManage, onDelete, onPublish, onHistory, onFlowchar
                     <span className="w-7 h-7 rounded-md bg-brand-50 text-brand-700 flex items-center justify-center shrink-0"><Table2 size={13} /></span>
                     <span className="reg-clamp font-semibold text-ink-900" title={r.name}>{r.name}</span>
                   </span>
+                  {noteFor === r.id && <InlineNote note={note} className="mt-1 pl-[2.375rem]" />}
                 </td>
                 <td title="Only published RACMs can be scoped into an engagement"><StatusCell racm={r} /></td>
                 <td className="truncate" title={r.process}>{r.process}</td>
@@ -324,7 +328,10 @@ export default function RacmLibraryView({ canManage, creating, setCreating }: {
   setCreating: (open: boolean) => void;
 }) {
   const racms = useRacmLibrary();
-  const { addToast } = useToast();
+  /* A refused publish or delete is said on the card or row it was for, in one
+     line — `noteFor` says which one. */
+  const rowNote = useInlineNote();
+  const [noteFor, setNoteFor] = useState<string | null>(null);
   const logEvent = useAuditLog();
   const { currentUser } = useCurrentUser();
   const [search, setSearch] = useState('');
@@ -352,10 +359,12 @@ export default function RacmLibraryView({ canManage, creating, setCreating }: {
 
   const confirmPublish = (r: LibraryRacm) => {
     setPublishing(null);
+    rowNote.clear();
     const { status: was } = racmStatus(r);
     const moved = publishRacm(r.id, currentUser?.name ?? 'You');
     if (!moved) {
-      addToast({ type: 'warning', title: 'Nothing to publish', message: `Every row in ${r.name} is already published.` });
+      setNoteFor(r.id);
+      rowNote.show('warning', 'Nothing to publish — every row is already published.');
       return;
     }
     logEvent({ action: 'Update', description: `Published ${moved} control${moved === 1 ? '' : 's'} in ${r.name}`, module: 'SOX ICFR', entity: 'RACM' });
@@ -363,8 +372,10 @@ export default function RacmLibraryView({ canManage, creating, setCreating }: {
 
   const confirmDelete = (r: LibraryRacm) => {
     setDeleting(null);
+    rowNote.clear();
     if (!deleteLibraryRacm(r.id)) {
-      addToast({ type: 'warning', title: "Can't delete this RACM", message: `${racmInUse(r) ?? 'It is in use'}.` });
+      setNoteFor(r.id);
+      rowNote.show('warning', `Can't delete this RACM. ${racmInUse(r) ?? 'It is in use'}.`);
       return;
     }
     logEvent({ action: 'Delete', description: `Deleted ${r.name} from the RACM tab — ${r.controls.length} control${r.controls.length === 1 ? '' : 's'}`, module: 'SOX ICFR', entity: 'RACM' });
@@ -486,6 +497,7 @@ export default function RacmLibraryView({ canManage, creating, setCreating }: {
                       <span className="ml-auto"><SopRowButtons racm={r} onFlowchart={() => setChartFor(r)} /></span>
                     )}
                   </div>
+                  {noteFor === r.id && <InlineNote note={rowNote.note} className="-mt-1" />}
 
                   {/* No footer. The "Spreadsheet editor" hint went first (user
                       ask, 29 Sep) — the whole card opens it, the card's own
@@ -498,7 +510,7 @@ export default function RacmLibraryView({ canManage, creating, setCreating }: {
             })}
           </div>
           ) : (
-            <RacmTable rows={shown} canManage={canManage}
+            <RacmTable rows={shown} canManage={canManage} note={rowNote.note} noteFor={noteFor}
               onDelete={setDeleting} onPublish={setPublishing} onHistory={setHistoryFor} onFlowchart={setChartFor} />
           )}
           <p className="mt-3 px-1 text-[0.6875rem] text-text-muted tabular-nums">{shown.length} of {racms.length} RACMs</p>

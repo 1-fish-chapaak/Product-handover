@@ -7,7 +7,7 @@ import { buildAuditReport, downloadAuditReport } from './icfrAuditReport';
 import { downloadAuditReportPdf } from './icfrReportPdf';
 import { isFormattedControlId } from './racmIds';
 import { useIcfr } from './store';
-import { useToast } from '../shared/Toast';
+import { InlineNote, useInlineNote } from './InlineNote';
 import { cn } from '../../lib/cn';
 import type { Control, IcfrEngagement } from './types';
 
@@ -248,7 +248,8 @@ export default function WorkingPaperModal({ eng, control, controls, report, onCl
   // the engagement paper reads sheet by sheet, like the workbook it exports to
   const [sheetIx, setSheetIx] = useState(0);
   const bodyRef = useRef<HTMLDivElement>(null);
-  const { addToast } = useToast();
+  // Agentic UX #11: no toasts — a PDF that fails is said beside the footer buttons.
+  const pdfNote = useInlineNote();
 
   // Escape closes the preview — but while the attest confirm is open it only
   // dismisses that confirm, so a stray Esc can never walk out of a sign-off.
@@ -273,11 +274,12 @@ export default function WorkingPaperModal({ eng, control, controls, report, onCl
   // Each sheet of the report becomes a page of the PDF; the .xlsx export keeps
   // the same sheets as a workbook, so the three surfaces can never disagree.
   const issuePdf = async () => {
+    pdfNote.clear();
     try {
       await downloadAuditReportPdf(eng, included);
       onDownload?.(); onClose();
     } catch {
-      addToast({ type: 'error', title: 'PDF not generated', message: 'The PDF engine could not be loaded — try again.' });
+      pdfNote.show('error', 'PDF not generated — the PDF engine could not be loaded. Try again.');
     }
   };
   const sheets = report ? buildAuditReport(eng, included)
@@ -369,6 +371,8 @@ export default function WorkingPaperModal({ eng, control, controls, report, onCl
                 <Eye size={12} /> View only — {blockedWhy}
               </span>
             )}
+            {/* only the report's Download PDF ever sets this */}
+            <InlineNote note={pdfNote.note} />
             <button onClick={onClose} className="h-9 px-3.5 rounded-lg border border-canvas-border text-[12.5px] font-semibold text-ink-600 hover:bg-paper-50 cursor-pointer">Close</button>
             {report ? (
               <>
