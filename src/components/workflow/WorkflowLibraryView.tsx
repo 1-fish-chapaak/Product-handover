@@ -23,6 +23,7 @@ import { useToast } from '../shared/Toast';
 import { useCan } from '../../context/CurrentUserContext';
 import { useAuditLog } from '../../context/AdminDataContext';
 import { BulkExecuteModal, Checkbox } from './BulkExecuteModal';
+import { usePlanWorkflows } from '../../data/auditPlan';
 
 interface Props {
   onCreateWorkflow?: () => void;
@@ -31,6 +32,9 @@ interface Props {
   onRunWorkflow?: (id: string) => void;
   /** When set, filters workflows by tag matching this process abbreviation */
   processFilter?: string;
+  /** A plan check still in draft — build it with Ira (GRC agent). */
+  onBuildDraft?: (engagementId: string, checkId: string) => void;
+  onOpenEngagement?: (engagementId: string) => void;
 }
 
 export type LibraryWorkflow = {
@@ -44,6 +48,12 @@ export type LibraryWorkflow = {
   /** Single-execution-only workflows are hidden from the Bulk Run picker and
    *  cannot be bulk-selected — they run through their own dedicated executor. */
   singleRunOnly?: boolean;
+  /** Set for checks created by an audit plan (Audit with AI / a split prompt).
+   *  'draft' = recommended but not built yet — it can't run until Ira builds it. */
+  planStatus?: 'draft' | 'built';
+  engagementId?: string;
+  engagementName?: string;
+  checkId?: string;
 };
 
 export const LIBRARY_WORKFLOWS: LibraryWorkflow[] = [
@@ -191,7 +201,7 @@ export const LIBRARY_WORKFLOWS: LibraryWorkflow[] = [
   },
 ];
 
-export default function WorkflowLibraryView({ onCreateWorkflow, onSelectWorkflow, onRunWorkflow, processFilter }: Props) {
+export default function WorkflowLibraryView({ onCreateWorkflow, onSelectWorkflow, onRunWorkflow, processFilter, onBuildDraft, onOpenEngagement }: Props) {
   const { can } = useCan();
   const { addToast } = useToast();
   const logEvent = useAuditLog();
@@ -212,26 +222,48 @@ export default function WorkflowLibraryView({ onCreateWorkflow, onSelectWorkflow
     date: string;
   } | null>(null);
 
+  // Checks created by audit plans sit on top of the catalog — drafts until
+  // Ira builds them, then ordinary rows tagged with their engagement.
+  const planRows = usePlanWorkflows();
+  const allWorkflows = useMemo<LibraryWorkflow[]>(() => [
+    ...planRows.map(r => ({
+      id: r.id,
+      name: r.name,
+      description: r.description,
+      tags: r.tags,
+      businessProcess: r.businessProcess,
+      controlId: r.controlId,
+      live: r.status === 'built',
+      // A draft has nothing to run yet.
+      singleRunOnly: r.status === 'draft',
+      planStatus: r.status,
+      engagementId: r.engagementId,
+      engagementName: r.engagementName,
+      checkId: r.checkId,
+    })),
+    ...LIBRARY_WORKFLOWS,
+  ], [planRows]);
+
   const selectedWorkflows = useMemo(
-    () => LIBRARY_WORKFLOWS.filter(w => selectedIds.has(w.id)),
-    [selectedIds]
+    () => allWorkflows.filter(w => selectedIds.has(w.id)),
+    [selectedIds, allWorkflows]
   );
 
   const bpOptions = useMemo(() => {
     const s = new Set<string>();
-    LIBRARY_WORKFLOWS.forEach(w => s.add(w.businessProcess));
+    allWorkflows.forEach(w => s.add(w.businessProcess));
     return Array.from(s).sort((a, b) => a.localeCompare(b));
-  }, []);
+  }, [allWorkflows]);
 
   const tagOptions = useMemo(() => {
     const s = new Set<string>();
-    LIBRARY_WORKFLOWS.forEach(w => w.tags.forEach(t => s.add(t)));
+    allWorkflows.forEach(w => w.tags.forEach(t => s.add(t)));
     return Array.from(s).sort((a, b) => a.localeCompare(b));
-  }, []);
+  }, [allWorkflows]);
 
   const filtered = useMemo(() => {
     const q = search.trim().toLowerCase();
-    return LIBRARY_WORKFLOWS.filter(w => {
+    return allWorkflows.filter(w => {
       // Process filter — match by tag (P2P, O2C, etc.)
       if (processFilter && !w.tags.some(t => t.toUpperCase() === processFilter.toUpperCase())) return false;
       if (q && !w.name.toLowerCase().includes(q) && !w.description.toLowerCase().includes(q)) return false;
@@ -239,7 +271,7 @@ export default function WorkflowLibraryView({ onCreateWorkflow, onSelectWorkflow
       if (tagFilter.size > 0 && !w.tags.some(t => tagFilter.has(t))) return false;
       return true;
     });
-  }, [search, bpFilter, tagFilter]);
+  }, [search, bpFilter, tagFilter, allWorkflows, processFilter]);
 
   // Single-run-only workflows can't take part in bulk runs, so they're
   // excluded from select-all and ignored by individual selection.
@@ -249,7 +281,7 @@ export default function WorkflowLibraryView({ onCreateWorkflow, onSelectWorkflow
   const totalPages = Math.max(1, Math.ceil(filtered.length / rowsPerPage));
 
   const toggleSelect = (id: string) => {
-    const wf = LIBRARY_WORKFLOWS.find(w => w.id === id);
+    const wf = allWorkflows.find(w => w.id === id);
     if (wf?.singleRunOnly) return; // not bulk-selectable
     setSelectedIds(prev => {
       const next = new Set(prev);
@@ -319,9 +351,15 @@ export default function WorkflowLibraryView({ onCreateWorkflow, onSelectWorkflow
   const handleRowClick = (id: string) => {
     if (bulkMode) {
       toggleSelect(id);
-    } else {
-      onSelectWorkflow?.(id);
+      return;
     }
+    // A draft plan check has no detail page yet — building it is the next step.
+    const wf = allWorkflows.find(w => w.id === id);
+    if (wf?.planStatus === 'draft' && wf.engagementId && wf.checkId) {
+      onBuildDraft?.(wf.engagementId, wf.checkId);
+      return;
+    }
+    onSelectWorkflow?.(id);
   };
 
   if (auditRun) {
@@ -520,8 +558,7 @@ export default function WorkflowLibraryView({ onCreateWorkflow, onSelectWorkflow
                               className="group inline cursor-pointer text-[0.8125rem] text-text font-medium hover:text-[#6a12cd] hover:underline line-clamp-2 min-w-0"
                               onClick={e => {
                                 e.stopPropagation();
-                                if (bulkMode) toggleSelect(wf.id);
-                                else onSelectWorkflow?.(wf.id);
+                                handleRowClick(wf.id);
                               }}
                             >
                               {wf.name}
@@ -544,6 +581,21 @@ export default function WorkflowLibraryView({ onCreateWorkflow, onSelectWorkflow
                           <span className="self-start text-[0.6875rem] font-mono text-ink-500 tracking-tight">
                             {wf.controlId}
                           </span>
+                          {wf.engagementName && (
+                            <span className="self-start flex items-center gap-1.5 text-[0.6875rem] text-ink-500">
+                              {wf.planStatus === 'draft' && (
+                                <span className="inline-flex items-center px-1.5 h-5 rounded-full bg-draft-50 text-draft-700 font-medium">Draft</span>
+                              )}
+                              <button
+                                type="button"
+                                onClick={e => { e.stopPropagation(); if (wf.engagementId) onOpenEngagement?.(wf.engagementId); }}
+                                className="truncate max-w-[16rem] hover:text-brand-700 hover:underline cursor-pointer"
+                                title={`Open ${wf.engagementName}`}
+                              >
+                                {wf.engagementName}
+                              </button>
+                            </span>
+                          )}
                         </div>
                       </td>
                       <td className="px-4 py-4 align-top text-[0.8125rem] text-text-secondary max-w-[520px]">
@@ -566,6 +618,18 @@ export default function WorkflowLibraryView({ onCreateWorkflow, onSelectWorkflow
                         </div>
                       </td>
                       <td className={`px-4 py-4 align-top ${bulkMode ? 'pointer-events-none opacity-40' : ''}`}>
+                        {wf.planStatus === 'draft' ? (
+                          <div className="flex items-center justify-end">
+                            <button
+                              type="button"
+                              disabled={bulkMode}
+                              onClick={e => { e.stopPropagation(); handleRowClick(wf.id); }}
+                              className="inline-flex items-center gap-1.5 h-8 px-3 rounded-md bg-brand-50 text-brand-700 text-[0.75rem] font-semibold hover:bg-brand-100 transition-colors cursor-pointer whitespace-nowrap"
+                            >
+                              Build with Ira <ArrowRight size={12} />
+                            </button>
+                          </div>
+                        ) : (
                         <div className="flex items-center justify-end gap-1">
                           {can('wf_output') && (
                             <ActionIconButton
@@ -617,6 +681,7 @@ export default function WorkflowLibraryView({ onCreateWorkflow, onSelectWorkflow
                             </ActionIconButton>
                           )}
                         </div>
+                        )}
                       </td>
                     </tr>
                   );

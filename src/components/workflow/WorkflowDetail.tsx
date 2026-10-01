@@ -11,6 +11,7 @@ import {
 } from 'lucide-react';
 import { WORKFLOWS } from '../../data/mockData';
 import { LIBRARY_WORKFLOWS } from './WorkflowLibraryView';
+import { getEngagementPlan, getPlanWorkflows } from '../../data/auditPlan';
 import { useToast } from '../shared/Toast';
 import Gated from '../shared/Gated';
 import { useAuditLog } from '../../context/AdminDataContext';
@@ -891,6 +892,25 @@ function resolveWorkflow(workflowId: string): ResolvedWorkflow | null {
       lastRunError: null,
       lastRunErrorKind: null,
       linkedControls: [],
+    };
+  }
+  // Checks built from an audit plan (Audit with AI / a split chat prompt).
+  const planRow = getPlanWorkflows().find(w => w.id === workflowId);
+  if (planRow) {
+    const control = getEngagementPlan(planRow.engagementId)?.controls.find(c => c.check.id === planRow.checkId);
+    return {
+      id: planRow.id,
+      code: `WF-${planRow.controlId}`,
+      name: planRow.name,
+      desc: planRow.description,
+      steps: DEFAULT_STEPS,
+      runs: 0,
+      owner: 'You',
+      lastRun: null,
+      lastRunStatus: null,
+      lastRunError: null,
+      lastRunErrorKind: null,
+      linkedControls: [{ id: planRow.controlId, name: control?.title ?? planRow.controlId }],
     };
   }
   // Process Hub workflows

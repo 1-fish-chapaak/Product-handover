@@ -21,6 +21,9 @@ export type View =
   | 'workflow-library'
   | 'workflow-executor'
   | 'workflow-edit-in-chat'
+  // Workflow Builder — agent chooser (General / GRC) + Audit with AI
+  | 'workflow-builder'
+  | 'audit-with-ai'
   // Governance
   | 'business-processes'
   | 'bp-detail'
@@ -89,6 +92,21 @@ export type View =
   | 'engagement-config';
 
 export type ChatMode = 'chat' | 'workflow';
+
+/** The workflow agent a builder chat runs with. Fixed for the life of a chat
+ *  (mirrors production's WorkflowAgentChooser). General = explore and analyse;
+ *  GRC = test controls and find violations. */
+export type WorkflowAgent = 'general' | 'grc';
+
+/** Hand-off into a fresh workflow-builder chat. Consumed once by ChatView. */
+export interface WorkflowAgentSeed {
+  agent: WorkflowAgent;
+  /** Auto-send this prompt as the first message. */
+  prompt?: string;
+  /** Build a committed plan's draft checks one by one. `checkIds` narrows it
+   *  to specific drafts (e.g. one row from the Workflow Library). */
+  buildQueue?: { engagementId: string; checkIds?: string[] };
+}
 export type ExceptionRole = 'risk-owner' | 'auditor';
 export type ArtifactTab = 'plan' | 'code' | 'sources' | 'output' | 'flow' | 'preview' | 'history';
 export type ArtifactMode = 'query' | 'workflow';
@@ -157,6 +175,8 @@ export interface AppState {
   chatWorkflowContext: { templateId?: string; workflowId?: string } | null;
   /** Engagement name shown as a banner above the composer when building a workflow for a specific engagement. */
   workflowBuilderEngagementName: string | null;
+  /** Pending hand-off into a workflow-builder chat (agent + optional prompt / build queue). */
+  workflowAgentSeed: WorkflowAgentSeed | null;
   // Pre-fill text dropped into the chat composer (not auto-submitted). Used
   // when another surface — e.g. the workspace panel's "Edit assumptions"
   // action — wants to seed the textarea with a draft prompt.
@@ -349,6 +369,7 @@ const INITIAL_STATE: AppState = {
   chatComposerDraft: getInitialChatDraft(),
   chatWorkflowContext: null,
   workflowBuilderEngagementName: null,
+  workflowAgentSeed: null,
   workflowBuilderSeedPrompt: null,
   selectedChatId: null,
   queryAssumptions: [],
@@ -566,6 +587,27 @@ export function useAppState() {
     }));
   }, []);
 
+  /** Open a fresh workflow-builder chat with a chosen agent (Workflow Builder
+   *  chooser, Audit with AI's "Build checks with Ira", a draft row in the
+   *  Workflow Library). ChatView consumes the seed once. */
+  const startWorkflowAgent = useCallback((seed: WorkflowAgentSeed) => {
+    setState(prev => ({
+      ...prev,
+      view: 'chat' as View,
+      chatMode: 'workflow' as ChatMode,
+      artifactMode: 'workflow' as ArtifactMode,
+      chatWorkflowContext: null,
+      selectedChatId: null,
+      showChatHistory: false,
+      workflowBuilderEngagementName: null,
+      workflowAgentSeed: seed,
+    }));
+  }, []);
+
+  const clearWorkflowAgentSeed = useCallback(() => {
+    setState(prev => (prev.workflowAgentSeed ? { ...prev, workflowAgentSeed: null } : prev));
+  }, []);
+
   /** Enter the Ask IRA workflow-builder chat scoped to a specific engagement (shows a context banner). */
   const startWorkflowForEngagement = useCallback((engagementName: string) => {
     setState(prev => ({
@@ -766,6 +808,8 @@ export function useAppState() {
     setQueryAssumptions,
     enterWorkflowMode,
     startWorkflowForEngagement,
+    startWorkflowAgent,
+    clearWorkflowAgentSeed,
     openWorkflowExecutor,
     openAuditExecution,
     openEngagement,

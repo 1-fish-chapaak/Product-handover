@@ -15,6 +15,8 @@ import { Lock } from 'lucide-react';
 import { GENERATED_REPORTS, GENERATED_REPORTS_KEY } from './data/mockData';
 import Sidebar from './components/sidebar/Sidebar';
 import ChatView from './components/chat/ChatView';
+import WorkflowBuilderLanding from './components/workflow/WorkflowBuilderLanding';
+import AuditWithAiView from './components/audit-plan/AuditWithAiView';
 import ArtifactPanel from './components/artifacts/ArtifactPanel';
 import WorkflowTemplates from './components/workflow/WorkflowTemplates';
 import WorkflowDetail from './components/workflow/WorkflowDetail';
@@ -176,6 +178,8 @@ function AppInner() {
     setQueryAssumptions,
     enterWorkflowMode,
     startWorkflowForEngagement,
+    startWorkflowAgent,
+    clearWorkflowAgentSeed,
     openWorkflowExecutor,
     openChat,
     setSelectedChatId,
@@ -777,6 +781,9 @@ function AppInner() {
               onViewDashboard={(id) => openDashboard(id)}
               onViewReport={(id) => { setView('reports'); setFocusReportId(id); }}
               workflowEngagementContext={state.workflowBuilderEngagementName}
+              workflowAgentSeed={state.workflowAgentSeed}
+              onWorkflowAgentSeedConsumed={clearWorkflowAgentSeed}
+              onOpenEngagement={openEngagement}
             /></div>
             {state.showArtifacts && (
               <div
@@ -851,12 +858,32 @@ function AppInner() {
         );
       }
 
+      case 'workflow-builder':
+        return (
+          <WorkflowBuilderLanding
+            onSelectAgent={(agent) => startWorkflowAgent({ agent })}
+            onAuditWithAi={() => setView('audit-with-ai')}
+          />
+        );
+
+      case 'audit-with-ai':
+        return (
+          <AuditWithAiView
+            onBack={() => setView('workflow-builder')}
+            onOpenEngagement={openEngagement}
+            onBuildChecks={(engagementId) => startWorkflowAgent({ agent: 'grc', buildQueue: { engagementId } })}
+            onOpenLibrary={() => setView('workflow-library')}
+          />
+        );
+
       case 'workflow-library':
         return (
           <WorkflowLibraryView
-            onCreateWorkflow={() => enterWorkflowMode()}
+            onCreateWorkflow={() => setView('workflow-builder')}
             onSelectWorkflow={(id) => setSelectedWorkflow(id)}
             onRunWorkflow={(id) => openWorkflowExecutor(id)}
+            onBuildDraft={(engagementId, checkId) => startWorkflowAgent({ agent: 'grc', buildQueue: { engagementId, checkIds: [checkId] } })}
+            onOpenEngagement={openEngagement}
           />
         );
 

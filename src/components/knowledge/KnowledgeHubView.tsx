@@ -6,7 +6,6 @@ import DataSourcesView, {
 } from '../data-sources/DataSourcesView';
 import SmartLearnView from './SmartLearnView';
 import FloatingLines from '../shared/FloatingLines';
-import OneClickAuditModal from '../one-click-audit/OneClickAuditModal';
 import { SEED } from '../data-sources/sources';
 import { MEMORY_STORE } from '../../data/memoryStore';
 
@@ -89,7 +88,6 @@ export default function KnowledgeHubView({ initialTab = 'data', focusMemoryId = 
   // back).
   const [detailOpen, setDetailOpen] = useState(false);
   // One-Click Audit modal — surfaced because integrated DBs are connected.
-  const [auditWithAiOpen, setAuditWithAiOpen] = useState(false);
   const connectedDbs = SEED.filter(s => s.type === 'database').length;
   // Tab-aware subhead. Data Sources speaks to the live catalog; Smart Learn
   // to the memory registry it now hosts.
@@ -233,11 +231,13 @@ export default function KnowledgeHubView({ initialTab = 'data', focusMemoryId = 
                   </div>
                   <button
                     type="button"
-                    onClick={() => setAuditWithAiOpen(true)}
+                    // The One-Click modal is retired — Audit with AI is a full
+                    // page under the Workflow Builder now.
+                    onClick={() => window.dispatchEvent(new CustomEvent('app:navigate-view', { detail: { view: 'audit-with-ai' } }))}
                     className="relative shrink-0 h-9 px-4 rounded-lg bg-white text-brand-800 hover:bg-brand-50 text-[0.8125rem] font-semibold flex items-center gap-1.5 cursor-pointer transition-colors shadow-[0_4px_14px_-4px_rgba(0,0,0,0.4)]"
                   >
                     <Zap size={13} />
-                    One-Click Audit
+                    Plan my audit
                     <ArrowRight size={13} />
                   </button>
                 </motion.div>
@@ -260,9 +260,6 @@ export default function KnowledgeHubView({ initialTab = 'data', focusMemoryId = 
         </AnimatePresence>
       </div>
 
-      <AnimatePresence>
-        {auditWithAiOpen && <OneClickAuditModal onClose={() => setAuditWithAiOpen(false)} />}
-      </AnimatePresence>
     </div>
   );
 }
