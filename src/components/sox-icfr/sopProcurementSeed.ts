@@ -195,7 +195,10 @@ export function draftProcurementSopRows(
     };
     out.push(rowFromValues(
       values,
-      { key: `sop-${i + 1}`, rowNo: i + 1, origin: suggested ? 'suggested' : 'sop', sectionRef },
+      { key: `sop-${i + 1}`, rowNo: i + 1, origin: suggested ? 'suggested' : 'sop', sectionRef,
+        // The workbook's own confidence: EXTRACTED is the SOP's words, INFERRED
+        // is read between them. RECOMMENDED rows are suggestions — no tick.
+        sopRead: suggested ? undefined : r.confidence === 'EXTRACTED' ? 'verbatim' : 'inferred' },
       existing, PROCESS, out, entity,
     ));
   });

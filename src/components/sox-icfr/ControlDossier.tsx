@@ -537,6 +537,19 @@ function RunResultsModal({ control, step, onClose }: { control: Control; step: O
 // ── design consideration row — validated by its own workflow (Q&A) + override ─────
 export const VALIDATE_MS = 6000;
 
+/** Ira's run, said on hover only (agentic UI review: "run info … in History and
+ *  on hover only"; user ask, 1 Oct). It used to sit on every check's grey line
+ *  as "Ask IRA · checked · 3 Sep". Confirmed = the step was concluded. */
+function runInfo(v: ValidationResult | undefined, track: { conclusion: TrackConclusion; testedBy: string | null; testedAt: string | null }): string | undefined {
+  if (!v) return undefined;
+  const confirmed = track.conclusion !== 'Not tested' && track.testedBy
+    ? `confirmed by ${track.testedBy}${track.testedAt ? `, ${track.testedAt}` : ''}` : 'not confirmed yet';
+  return `Ira ran this ${v.at} · ${confirmed}`;
+}
+/** The tick's hover: how sure, then the run. */
+const tickTitle = (conf: number | undefined, run: string | undefined) =>
+  conf != null && run ? `Ira · ${Math.round(conf)}% sure · ${run.replace(/^Ira /, '')}` : undefined;
+
 /** The one thing on the page that says Ira is working (agentic UI review #13):
  *  a thin line on the step being worked — "Reading 3 files · check 2 of 5" —
  *  in place of the header spinner, a spinner on every row and a bar under each.
@@ -605,6 +618,7 @@ function PointRow({ control, point, canEdit, checking = false }: { control: Cont
     ? confidenceOf(point.validation, `${control.id}:${point.id}`) : undefined;
   const flipTo: 'Pass' | 'Fail' = eff === 'Pass' ? 'Fail' : 'Pass';
   const iraVerdict = iraSaid === 'Pass' || iraSaid === 'Fail' ? iraSaid : undefined;
+  const run = runInfo(point.validation, control.design);
 
   // The elements this check points at. Resolved by id every render rather than
   // cached — an element that was removed must stop being cited, not linger as a
@@ -640,11 +654,11 @@ function PointRow({ control, point, canEdit, checking = false }: { control: Cont
         {/* Clicking a recorded tick is how it is changed (review #8) — and it
             always costs a reason: the click opens the "why?" line below. */}
         {canEdit && eff !== 'Not tested' && !point.override
-          ? <button onClick={() => setOver(true)} aria-label={`Change this result to ${flipTo.toLowerCase()} — say why`} className="shrink-0 rounded cursor-pointer hover:opacity-80"><Tickmark result={eff} size={20} confidence={conf} /></button>
-          : <Tickmark result={eff} size={20} confidence={conf} blocked={!!blocked} />}
+          ? <button onClick={() => setOver(true)} aria-label={`Change this result to ${flipTo.toLowerCase()} — say why`} className="shrink-0 rounded cursor-pointer hover:opacity-80"><Tickmark result={eff} size={20} confidence={conf} title={tickTitle(conf, run)} /></button>
+          : <Tickmark result={eff} size={20} confidence={conf} blocked={!!blocked} title={tickTitle(conf, run)} />}
         <div className="min-w-0 flex-1">
-          <div className="flex items-center gap-2"><span className="text-[0.78125rem] font-medium text-ink-800">{point.text}</span>{rowState && rowState !== 'couldnt' && <IraState state={rowState} />}</div>
-          <div className="text-[0.6875rem] text-ink-400 mt-1 inline-flex items-center gap-1.5"><WorkflowIcon size={11} /> {point.workflowName ?? 'Design walkthrough check'} · {checking ? 'checking…' : validating ? 'validating…' : blocked ? (
+          <div className="flex items-center gap-2"><span className="text-[0.78125rem] font-medium text-ink-800">{point.text}</span>{rowState && rowState !== 'couldnt' && <IraState state={rowState} title={rowState === 'review' ? run : undefined} />}</div>
+          <div className="text-[0.6875rem] text-ink-400 mt-1 inline-flex items-center gap-1.5"><WorkflowIcon size={11} /> {point.workflowName ?? 'Design walkthrough check'}{(checking || validating || blocked || !point.validation) && ' · '}{checking ? 'checking…' : validating ? 'validating…' : blocked ? (
             /* ── Ira read it and could not answer it ─────────────────────────
                Text on the row, not an amber banner (agentic UI review #7): the
                check is still Not tested and the tick says so; this names who
@@ -652,7 +666,7 @@ function PointRow({ control, point, canEdit, checking = false }: { control: Cont
                the check is marked or the missing element lands, because it is
                read off the validation the next run overwrites. */
             <IraState state="couldnt" className="cursor-help" title={`${blockKind === 'missing' ? 'Missing files' : 'Not enough to go on'} — ${blocked}`} />
-          ) : (point.workflowRunRef ?? 'not validated')}</div>
+          ) : (point.validation ? null : 'not validated')}</div>
           {/* Layer 1 — what Ira found, in one line; the reasons on hover (layer
               2); the full working one click away in the rail (layer 3). */}
           {point.validation?.summary && !point.validation.blocked && !validating && (
@@ -1082,6 +1096,7 @@ function AttributeRow({ control, step, canEdit, testing }: { control: Control; s
   // TO. Going against Ira's own verdict opens it; so does the tick and the pencil.
   const [why, setWhy] = useState<'Pass' | 'Fail' | null>(null);
   const iraVerdict = step.validation?.result === 'Pass' || step.validation?.result === 'Fail' ? step.validation.result : undefined;
+  const run = runInfo(step.validation, control.operating);
   // One attribute's own run — narrated in the rail like every other, and named
   // so the reader can tell it from the one that reads them all.
   const runAI = () => {
@@ -1114,13 +1129,13 @@ function AttributeRow({ control, step, canEdit, testing }: { control: Control; s
     <div id={`step-${step.id}`} className={cn('step-row scroll-mt-4', eff === 'Fail' && 'fail', eff === 'Pass' && 'pass')}>
       <div className="flex items-start gap-3.5">
         {canEdit && eff !== 'Not tested' && !step.override
-          ? <button onClick={() => { setOver(false); setWhy(eff === 'Pass' ? 'Fail' : 'Pass'); }} aria-label={`Change this result to ${eff === 'Pass' ? 'fail' : 'pass'} — say why`} className="shrink-0 rounded cursor-pointer hover:opacity-80"><Tickmark result={eff} size={22} confidence={conf} /></button>
-          : <Tickmark result={eff} size={22} confidence={conf} blocked={!!step.validation?.blocked && eff === 'Not tested'} />}
+          ? <button onClick={() => { setOver(false); setWhy(eff === 'Pass' ? 'Fail' : 'Pass'); }} aria-label={`Change this result to ${eff === 'Pass' ? 'fail' : 'pass'} — say why`} className="shrink-0 rounded cursor-pointer hover:opacity-80"><Tickmark result={eff} size={22} confidence={conf} title={tickTitle(conf, run)} /></button>
+          : <Tickmark result={eff} size={22} confidence={conf} blocked={!!step.validation?.blocked && eff === 'Not tested'} title={tickTitle(conf, run)} />}
         <div className="min-w-0 flex-1">
           <div className="flex items-center gap-2 flex-wrap">
             <span className="font-mono text-[0.6875rem] font-bold text-ink-500">{step.code}</span>
             <span className="text-[0.8125rem] font-semibold text-ink-900">{step.description}</span>
-            {rowState && <IraState state={rowState} />}
+            {rowState && <IraState state={rowState} title={rowState === 'review' ? run : undefined} />}
           </div>
           <div className="text-[0.6875rem] text-ink-400 mt-1">{[step.assertion, step.precision, step.procedures.join(' / ')].filter(Boolean).join(' · ')}</div>
           {step.override && <div className="text-[0.6875rem] text-high-700 mt-1.5 flex items-start gap-1"><CornerDownRight size={11} className="mt-0.5 shrink-0" /> {step.override.rationale}{step.override.evidence && <span className="text-ink-500"> · <Paperclip size={9} className="inline -mt-0.5" /> {step.override.evidence}</span>} <span className="text-ink-400">— {step.override.by}</span></div>}
@@ -1251,13 +1266,14 @@ function CompactAttributeLine({ control, step, onOpen, open }: { control: Contro
   const conf = !step.override && step.validation?.result && step.validation.result === eff
     ? confidenceOf(step.validation, `${control.id}:${step.id}`) : undefined;
   const { uploaded, total } = requiredFilesCount(step, control);
+  const run = runInfo(step.validation, control.operating);
   return (
     <button id={`step-${step.id}`} onClick={onOpen} aria-expanded={open}
       className="scroll-mt-4 w-full text-left flex items-center gap-2.5 rounded-lg border border-canvas-border bg-canvas-elevated px-3 py-2 hover:border-ink-300 transition-colors cursor-pointer">
-      <Tickmark result={eff} size={18} confidence={conf} blocked={!!step.validation?.blocked && eff === 'Not tested'} />
+      <Tickmark result={eff} size={18} confidence={conf} blocked={!!step.validation?.blocked && eff === 'Not tested'} title={tickTitle(conf, run)} />
       <span className="font-mono text-[0.6875rem] font-bold text-ink-500 shrink-0">{step.code}</span>
       <span className="text-[0.78125rem] font-medium text-ink-900 truncate min-w-0 flex-1">{step.description}</span>
-      {state && <IraState state={state} />}
+      {state && <IraState state={state} title={state === 'review' ? run : undefined} />}
       {total > 0 && <span className="text-[0.65625rem] text-ink-400 tabular-nums shrink-0">{uploaded}/{total} files</span>}
       {open !== undefined && (open ? <ChevronUp size={13} className="text-ink-400 shrink-0" /> : <ChevronDown size={13} className="text-ink-400 shrink-0" />)}
     </button>

@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
-import { Check, Plus, Sparkles, Star, X } from 'lucide-react';
+import { Check, Plus, Star, X } from 'lucide-react';
 import { useIcfr } from './store';
 import { FormSelect } from '../shared/FilterSelect';
 import { useToast } from '../shared/Toast';
@@ -10,6 +10,7 @@ import { peekEntityCode, peekProcessCode, riskIdOf } from './racmIds';
 import { draftAttributes, draftControlDescription, draftRiskCategory, draftRiskDescription } from './racmImport';
 import { draftDesignChecks } from './helpers';
 import { canonicalProcess } from './auditScope';
+import { IraDrafted } from './IraState';
 
 /**
  * New control — one focused form. The control lands in the library and the RACM
@@ -56,8 +57,7 @@ function Field({ label, required = false, children, span2 = false }: { label: st
 function IraNote({ from, edited, what, onPutBack }: { from: string; edited: boolean; what: string; onPutBack: () => void }) {
   return (
     <p className="mt-1 flex items-center gap-1 text-[0.6875rem] leading-snug text-ink-500">
-      <Sparkles size={11} className="text-brand-600 shrink-0" aria-hidden />
-      <span>Drafted by Ira from the {from}{edited && ' · Edited'}</span>
+      <IraDrafted title={`Drafted from the ${from}${edited ? ' — you have edited it since' : ''}`} />
       <span aria-hidden="true">·</span>
       <button type="button" onClick={onPutBack} aria-label={`Put back — clear Ira's ${what}`}
         className="font-semibold text-brand-700 hover:text-brand-800 hover:underline cursor-pointer">Put back</button>

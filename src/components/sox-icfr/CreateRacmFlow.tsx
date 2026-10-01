@@ -31,6 +31,7 @@ import { guessHeaderRow, matchColumns, readRacmWorkbook } from './racmImport';
 import { addLibraryRacm, knownCompanies, racmLibrary, type LibraryRacm } from './racmLibrary';
 import { canonicalProcess, PROCESS_TYPED_ALIASES, SOX_PROCESS_NAMES } from './auditScope';
 import type { Control } from './types';
+import { IraDrafted } from './IraState';
 
 
 const NEW_OPTION = '__new__';
@@ -111,8 +112,7 @@ export async function detectPlacement(mode: 'racm' | 'sop', file: File, companie
 function ReadNote({ from, what, onPutBack }: { from: ReadFrom; what: string; onPutBack: () => void }) {
   return (
     <p className="mt-1.5 flex items-center gap-1 text-[0.6875rem] leading-snug text-ink-500">
-      <Sparkles size={11} className="text-brand-600 shrink-0" aria-hidden />
-      <span>Read by Ira from {from === 'column' ? "the file's Entity column" : 'the file name'}</span>
+      <IraDrafted title={`Read from ${from === 'column' ? "the file's Entity column" : 'the file name'}`} />
       <span aria-hidden="true">·</span>
       <button type="button" onClick={onPutBack} aria-label={`Put back — clear Ira's ${what}`}
         className="font-semibold text-brand-700 hover:text-brand-800 hover:underline cursor-pointer">Put back</button>

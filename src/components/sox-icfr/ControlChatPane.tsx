@@ -217,6 +217,18 @@ function IraText({ text, stream }: { text: string; stream: boolean }) {
  * "that isn't on file" read the same. Quiet text, no cards — it is context,
  * not something to act on, and the Needs-you tab is where acting lives.
  */
+/** What Ira can and cannot do on each step — the first line the Ira tab shows
+ *  for the step the control is on (agentic UI review, "capability notes per
+ *  step"; wording approved by the user, 1 Oct). Written to the tester: the
+ *  conclusions and the sign-off it names as theirs are the auditor's. */
+const CAPABILITY: Record<ChatStepId, string> = {
+  design: 'I read each design check against the evidence on file and mark it — I can’t judge a document that isn’t attached, and the conclusion is yours.',
+  population: 'I can read and count a population file you or the owner upload — I can’t pull data from your systems myself.',
+  sample: 'I draw the sample from the locked population using the agreed method — I can’t change the sample size.',
+  operating: 'I check each sampled item against its files; anything I can’t read I mark “couldn’t test” — you confirm the results.',
+  signoff: 'I can’t sign — sign-off is yours and the reviewer’s.',
+};
+
 function WhatIraKnows({ control }: { control: Control }) {
   const [open, setOpen] = useState(false);
   const facts = useMemo(() => {
@@ -1137,6 +1149,14 @@ export default function ControlChatPane({ control }: { control: Control }) {
        {/* Pinned to the top of the thread, above the `mt-auto` slack, so it
            stays where the reader looks first however short the chat is. */}
        <WhatIraKnows control={control} />
+       {/* The step's capability note, under what Ira knows — the tester's
+           only: it describes the testing pen, which the owner does not hold. */}
+       {role === 'auditor' && (
+         <p className="mt-1.5 flex items-start gap-1.5 text-[0.71875rem] leading-snug text-ink-500">
+           <Sparkles size={11} className="text-brand-500 shrink-0 mt-[3px]" aria-hidden />
+           <span>{CAPABILITY[prompt.step]}</span>
+         </p>
+       )}
        <div className="mt-auto space-y-5">
         {thread.map((m, i) => (
           m.who === 'user' ? (

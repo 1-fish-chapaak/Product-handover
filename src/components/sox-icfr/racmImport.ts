@@ -418,6 +418,10 @@ export interface ImportRow {
   origin: ImportOrigin;
   /** SOP section the row was read from, e.g. "§ 4.2". SOP rows only. */
   sectionRef?: string;
+  /** How surely Ira read an SOP row (agentic UI review #2, 1 Oct): written in
+   *  the SOP word for word, or read between its lines. Drives the tick's shape
+   *  on Review — solid or outlined. SOP rows only; never on a suggestion. */
+  sopRead?: 'verbatim' | 'inferred';
   /** Cell text per mapped field, after any accepted fills. Blank cells are ''. */
   values: Partial<Record<RacmFieldKey, string>>;
   /** THE FILE'S OWN COLUMNS WE HAVE NO FIELD FOR, by their header (B1).
@@ -883,7 +887,7 @@ export function headerMapping(rows: string[][], headerRow: number, matches: Colu
 /** Rebuild one row from edited `values` (after fills, or a frequency picked in
  *  review), re-deriving everything else the same way buildImportRows does.
  *  `earlier` is the rows that come before it in the same import. */
-export function rowFromValues(values: Partial<Record<RacmFieldKey, string>>, base: Pick<ImportRow, 'key' | 'rowNo' | 'origin' | 'sectionRef'> & { extras?: Record<string, string> }, existing: Control[], process: string, earlier: ImportRow[] = [], entity = ''): ImportRow {
+export function rowFromValues(values: Partial<Record<RacmFieldKey, string>>, base: Pick<ImportRow, 'key' | 'rowNo' | 'origin' | 'sectionRef' | 'sopRead'> & { extras?: Record<string, string> }, existing: Control[], process: string, earlier: ImportRow[] = [], entity = ''): ImportRow {
   const v: Partial<Record<RacmFieldKey, string>> = { ...values };
 
   const attributeTexts = splitList(v.attributes ?? '');
@@ -918,6 +922,7 @@ export function rowFromValues(values: Partial<Record<RacmFieldKey, string>>, bas
     assertions: parseAssertions(v.assertions ?? ''),
   };
   if (base.sectionRef) row.sectionRef = base.sectionRef;
+  if (base.sopRead) row.sopRead = base.sopRead;
   if (freq.flag) row.frequencyFlag = freq.flag;
   if (nature.flag) row.natureFlag = nature.flag;
   if (type.flag) row.typeFlag = type.flag;
@@ -1763,7 +1768,11 @@ export function draftRowsFromSop(process: string, fileName: string, prompt: stri
         ...(saysMore ? [`The procedure requires the ${c.nature === 'Automated' ? 'system to enforce this without an override' : 'reviewer to be someone other than the preparer'}${sectionRef ? ` (${sectionRef})` : ''}`] : [])].join('\n'),
       sopSectionRef: sectionRef ?? '',
     };
-    out.push(rowFromValues(values, { key: `sop-${i + 1}`, rowNo: i + 1, origin: suggested ? 'suggested' : 'sop', sectionRef }, existing, process, out, entity));
+    // MOCK (user approved, 1 Oct): a template-drafted SOP carries no real
+    // reading of the document, so how surely each row was read is invented —
+    // hashed, so a row keeps its answer; about one in four "between the lines".
+    const sopRead = suggested ? undefined : hashString(`${process}|${fileName}|${c.id}`) % 4 === 0 ? 'inferred' as const : 'verbatim' as const;
+    out.push(rowFromValues(values, { key: `sop-${i + 1}`, rowNo: i + 1, origin: suggested ? 'suggested' : 'sop', sectionRef, sopRead }, existing, process, out, entity));
   });
   return out;
 }

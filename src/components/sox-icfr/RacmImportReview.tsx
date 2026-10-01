@@ -73,6 +73,8 @@ import {
   type BlankFill, type ColumnMatch, type CoreBlank, type DuplicateValues, type ExtraColumn, type ImportRow,
   type RacmFieldKey, type SheetData,
 } from './racmImport';
+import { IraDrafted } from './IraState';
+import { Tickmark } from './parts';
 
 type Step = 'columns' | 'prompt' | 'review' | 'flowchart';
 
@@ -676,10 +678,8 @@ function MissingValuesPanel({ fields, people, rowLabel, onFill }: {
                         {note && <p className="mt-1 text-[0.65625rem] leading-snug text-mitigated-700">{note}</p>}
                         {idea && (
                           <p className="mt-1 flex items-start gap-1.5 text-[0.6875rem] leading-snug text-ink-600">
-                            <Sparkles size={11} className="text-brand-500 mt-0.5 shrink-0" aria-hidden />
                             <span className="min-w-0">
-                              <span className="font-semibold text-ink-800">Ira suggests:</span> {idea.shown}
-                              <span className="text-ink-400"> — {idea.reason}</span>
+                              <IraDrafted title={idea.reason} /> <span className="text-ink-800">{idea.shown}</span>
                             </span>
                             <button type="button" onClick={() => onFill(f, new Map([[row.key, idea.value]]))}
                               aria-label={`Use Ira's ${f.label.toLowerCase()} for ${cid}`}
@@ -1778,49 +1778,24 @@ export default function RacmImportReview({ mode, file, process, entity, existing
               cap elsewhere does not apply. */}
           {step === 'prompt' && (
             <div>
-              {/* While Ira runs, the run IS the screen (user ask, 24 Sep). The
-                  progress list used to sit under a 16-row textarea that was
-                  disabled and dimmed anyway — so the one thing actually happening
-                  was the smallest thing on the page, below the fold on a short
-                  window, under something nobody could use. The prompt steps
-                  aside and comes back untouched if the draft fails. */}
-              {extracting ? (
-                <div ref={progressRef} role="status" aria-live="polite"
-                  className="rounded-xl border border-canvas-border bg-paper-50/50 px-5 py-5">
-                  <p className="text-[0.71875rem] font-semibold text-compliant-700 flex items-center gap-1.5">
-                    <CheckCircle2 size={13} /> {withSuggestions ? 'The SOP, plus Ira’s suggestions' : 'Only what the SOP says'}
+              {/* While Ira runs: ONE thin line over the step, not a screen of its
+                  own (agentic UI review #13; user ask, 1 Oct — reverses the 24
+                  Sep "the run IS the screen"). The choices and the outline stay
+                  where they were, locked until the draft lands. */}
+              {extracting && (
+                <div ref={progressRef} role="status" aria-live="polite" className="mb-3">
+                  <p className="text-[0.71875rem] text-ink-600 flex items-center gap-1.5">
+                    <Sparkles size={12} className="text-brand-500 shrink-0" aria-hidden />
+                    Reading {file.name} · {extract.done >= EXTRACT_STEPS.length ? 'opening the draft…' : `${EXTRACT_STEPS[extract.done]!.toLowerCase()} · step ${extract.done + 1} of ${EXTRACT_STEPS.length}`}
                   </p>
-                  <h3 className="mt-2 text-[0.9375rem] font-semibold text-ink-900 flex items-center gap-2">
-                    <Sparkles size={15} className="text-brand-600 shrink-0" aria-hidden />
-                    Reading {file.name}
-                  </h3>
-                  <p className="mt-0.5 text-[0.75rem] text-ink-500">Drafting the {process} RACM — this takes a moment.</p>
                   {/* A quantity, not a verdict: how far through the four steps. */}
-                  <div className="mt-3.5 h-1 rounded-full bg-paper-200 overflow-hidden" role="presentation">
+                  <div className="mt-1 h-0.5 rounded-full bg-paper-100 overflow-hidden" role="presentation">
                     <div className="h-full rounded-full bg-brand-500 transition-[width] duration-300"
-                      style={{ width: `${Math.round((extract.done / EXTRACT_STEPS.length) * 100)}%` }} />
+                      style={{ width: `${Math.round((Math.min(extract.done + 1, EXTRACT_STEPS.length) / EXTRACT_STEPS.length) * 100)}%` }} />
                   </div>
-                  <ul className="mt-3.5 space-y-2.5">
-                    {EXTRACT_STEPS.map((s, i) => (
-                      <li key={s} className="flex items-center gap-2.5 text-[0.8125rem]">
-                        {i < extract.done
-                          ? <CheckCircle2 size={15} className="text-compliant-600 shrink-0" />
-                          : i === extract.done
-                            ? <Loader2 size={15} className="text-brand-600 animate-spin shrink-0" />
-                            : <Circle size={15} className="text-ink-300 shrink-0" />}
-                        <span className={i < extract.done ? 'text-ink-500' : i === extract.done ? 'text-ink-900 font-semibold' : 'text-ink-400'}>{s}</span>
-                      </li>
-                    ))}
-                  </ul>
-                  {/* The last beat used to be 300ms of four ticks and no spinner —
-                      a finished list that had not moved on, which reads as stuck. */}
-                  {extract.done >= EXTRACT_STEPS.length && (
-                    <p className="mt-3.5 text-[0.75rem] font-semibold text-brand-700 flex items-center gap-1.5">
-                      <Loader2 size={13} className="animate-spin shrink-0" /> Opening the draft…
-                    </p>
-                  )}
                 </div>
-              ) : (
+              )}
+              {(
                 /* The prompt and what it produces, side by side (user ask, 25
                    Sep): "flowchart mere prompt ke side mein aayega. Agar main
                    prompt change karungi, to flowchart bhi change ho jayega."
@@ -1839,9 +1814,9 @@ export default function RacmImportReview({ mode, file, process, entity, existing
                         {SOP_CHOICES.map(c => {
                           const on = withSuggestions === c.suggest;
                           return (
-                            <label key={c.title} className={cn('flex items-start gap-2.5 rounded-lg border px-3 py-2.5 cursor-pointer transition-colors',
+                            <label key={c.title} className={cn('flex items-start gap-2.5 rounded-lg border px-3 py-2.5 cursor-pointer transition-colors', extracting && 'opacity-60 pointer-events-none',
                               on ? 'border-brand-300 bg-brand-50/40' : 'border-canvas-border bg-canvas-elevated hover:border-ink-300')}>
-                              <input type="radio" name="sop-scope" checked={on} onChange={() => setWithSuggestions(c.suggest)} className="mt-0.5 accent-brand-600 cursor-pointer" />
+                              <input type="radio" name="sop-scope" checked={on} disabled={extracting} onChange={() => setWithSuggestions(c.suggest)} className="mt-0.5 accent-brand-600 cursor-pointer disabled:cursor-not-allowed" />
                               <span className="min-w-0">
                                 <span className="block text-[0.78125rem] font-semibold text-ink-900">{c.title}</span>
                                 <span className="block text-[0.71875rem] leading-snug text-ink-500 mt-0.5">{c.hint}</span>
@@ -1913,7 +1888,7 @@ export default function RacmImportReview({ mode, file, process, entity, existing
                       had already been dealt with. */}
                   <button type="button" onClick={() => setFillOpen(o => !o)} disabled={filledCount === 0} aria-expanded={fillOpen}
                     className="h-8 px-3 inline-flex items-center gap-1.5 rounded-lg border border-brand-200 bg-brand-50 text-[0.75rem] font-semibold text-brand-700 enabled:hover:border-brand-400 disabled:opacity-50 disabled:cursor-not-allowed transition-colors cursor-pointer">
-                    <Sparkles size={13} aria-hidden /> Ira filled {filledCount} {filledCount === 1 ? 'blank' : 'blanks'}
+                    <Sparkles size={13} aria-hidden /> Ira · draft · {plural(filledCount, 'value')}
                     <ChevronDown size={12} aria-hidden className={cn('transition-transform', fillOpen && 'rotate-180')} />
                   </button>
                 </div>
@@ -1959,7 +1934,7 @@ export default function RacmImportReview({ mode, file, process, entity, existing
                   rows below, with the reason and a way back to blank. Nothing
                   is saved until Import either way. */}
               {fillOpen && (
-                <section aria-label="Values Ira filled" className="rounded-xl border border-mitigated-200 bg-canvas-elevated mb-3">
+                <section aria-label="Values Ira filled" className="rounded-xl border border-canvas-border bg-canvas-elevated mb-3">
                   <div className="flex flex-wrap items-center gap-3 px-4 py-2.5 border-b border-canvas-border">
                     <div className="min-w-0">
                       <h3 className="text-[0.8125rem] font-semibold text-ink-900">Values Ira filled</h3>
@@ -2137,6 +2112,11 @@ export default function RacmImportReview({ mode, file, process, entity, existing
                                     <span className="inline-flex items-center gap-1 text-[0.65625rem] font-semibold text-mitigated-700" title="Key control">
                                       <Star size={11} className="fill-mitigated-200" aria-hidden /> Key
                                     </span>
+                                  )}
+                                  {row.origin === 'sop' && row.sopRead && (
+                                    // Solid = the SOP's own words, outlined = read between them (review #2).
+                                    <Tickmark result="Pass" size={15} confidence={row.sopRead === 'verbatim' ? 95 : 60}
+                                      title={row.sopRead === 'verbatim' ? 'Ira · written in the SOP word for word' : 'Ira · read between the lines of the SOP'} />
                                   )}
                                   {row.origin === 'sop' && <Pill tone="evidence">From the SOP{row.sectionRef ? ` · ${row.sectionRef}` : ''}</Pill>}
                                   {row.origin === 'suggested' && <Pill tone="info">Suggested by Ira</Pill>}

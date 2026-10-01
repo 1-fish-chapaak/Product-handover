@@ -39,12 +39,15 @@ export function IraState({ state, title, className }: { state: IraStateKind; tit
   );
 }
 
-/** Where Ira pre-wrote text the auditor has not yet confirmed. */
-export function IraDrafted({ className }: { className?: string }) {
+/** Where Ira pre-wrote or read a value the auditor has not yet confirmed — the
+ *  one mark for that on every SOX screen (user ask, 1 Oct). Why Ira put it
+ *  there goes on hover (`title`), not in a sentence beside the field. */
+export function IraDrafted({ className, title, label = 'draft' }: { className?: string; title?: string; label?: string }) {
   return (
-    <span className={cn('inline-flex items-center gap-1 whitespace-nowrap text-[0.6875rem] text-ink-500', className)}>
+    <span title={title} className={cn('inline-flex items-center gap-1 whitespace-nowrap text-[0.6875rem] text-ink-500', title && 'cursor-help', className)}>
       <Sparkles size={10} className="text-brand-500 shrink-0" aria-hidden />
-      Ira · draft
+      Ira · {label}
+      {title && <span className="sr-only">: {title}</span>}
     </span>
   );
 }

@@ -29,6 +29,7 @@ import {
   type AuditRecord, type AuditRound, type AuditScopeKind, type Control, type FileOrigin,
 } from './types';
 import { cn } from '../../lib/cn';
+import { IraDrafted } from './IraState';
 
 /**
  * New audit — the wizard behind the New audit button on the Overview and the
@@ -1493,7 +1494,7 @@ export default function NewAuditWizard({ onClose, prefillFrom }: {
                   <span className="font-normal text-ink-500"> · {materialRows.length} account{materialRows.length === 1 ? '' : 's'} ≥ {money(perf)} (PM)</span>
                 </h4>
                 <p className="text-[0.75rem] text-ink-500 mb-3 leading-relaxed">
-                  Ira suggested a process for each account — change any that landed on the wrong one.
+                  <IraDrafted title="Ira suggested a process for each account" /> · change any that landed on the wrong one.
                 </p>
                 {materialRows.length === 0 ? (
                   <p className="rounded-xl border border-dashed border-canvas-border bg-white text-[0.71875rem] text-ink-400 px-4 py-5 text-center">

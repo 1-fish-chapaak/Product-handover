@@ -68,17 +68,20 @@ const TICK_OUTLINE = {
   ok: 'bg-compliant-50! text-compliant-700! border-compliant-600!',
   ko: 'bg-risk-50! text-risk-700! border-risk-600!',
 };
-export function Tickmark({ result, size = 18, confidence, blocked }: {
+export function Tickmark({ result, size = 18, confidence, blocked, title: titleOverride }: {
   result: TestResult | 'Effective' | 'Ineffective'; size?: number;
   /** 0–100, how sure Ira was. Below CONFIDENT_AT the tick is drawn outlined. */
   confidence?: number;
   /** Ira couldn't test this — a neutral "?" in place of any verdict. */
   blocked?: boolean;
+  /** Hover words in place of the "N% sure" line, for a tick that is not a
+   *  percentage (an SOP row: "Written in the SOP word for word"). */
+  title?: string;
 }) {
   const pass = !blocked && (result === 'Pass' || result === 'Effective');
   const fail = !blocked && (result === 'Fail' || result === 'Ineffective');
   const unsure = confidence != null && confidenceTier(confidence) === 'medium';
-  const title = blocked ? "Ira couldn't test this" : confidence != null ? `Ira · ${Math.round(confidence)}% sure` : undefined;
+  const title = titleOverride ?? (blocked ? "Ira couldn't test this" : confidence != null ? `Ira · ${Math.round(confidence)}% sure` : undefined);
   const label = typeof result === 'string' ? result : '';
   return (
     <span
