@@ -100,8 +100,9 @@ export default function RacmPage({ canManage }: {
             {/* Create RACM sits up here now that the tab row is gone (user ask,
                 1 Oct). It was on the tabs' baseline because that row existed;
                 with one screen left, the page's one primary action belongs
-                against the title it acts on. `items-start` keeps it off the
-                subhead's baseline, which moves as the line wraps. */}
+                against the title it acts on — but on the SUB-COPY's line, not
+                the heading's, which is what `.page-header-action` is for and
+                why the reasoning lives in index.css rather than here. */}
             <div className="flex items-start justify-between gap-6">
               <div className="min-w-0">
                 <h1 className="text-[2.125rem] font-semibold tracking-tight text-ink-900 leading-[1.15]">
@@ -118,7 +119,7 @@ export default function RacmPage({ canManage }: {
               {canManage && (
                 <button onClick={() => setCreating(true)}
                   title="Create a RACM — import a matrix, or extract one from an SOP"
-                  className="shrink-0 mt-1.5 flex items-center gap-2 px-4 py-2 bg-primary hover:bg-primary-hover text-white rounded-lg text-[0.8125rem] font-semibold transition-colors cursor-pointer">
+                  className="page-header-action shrink-0 inline-flex items-center gap-2 px-4 bg-primary hover:bg-primary-hover text-white rounded-lg text-[0.8125rem] font-semibold transition-colors cursor-pointer">
                   <Plus size={14} />Create RACM
                 </button>
               )}
