@@ -237,6 +237,15 @@ function RowActions({ racm, canManage, onDelete, onPublish, onHistory }: { racm:
  * that lines up. The one addition is the column headings, which is what lets
  * the counts drop their "risks"/"controls" labels and sit as bare figures.
  *
+ * NO "where it came from" COLUMN (user ask, 1 Oct). Provenance is a sentence,
+ * and a sentence in a column is a paragraph thirteen times over — it was the
+ * widest thing here and the least scannable. It is also only worth reading on
+ * an extracted matrix: an uploaded workbook arrives with nothing to say about
+ * itself. What a scanner actually wants from it is the one bit, SOP or not, so
+ * that is the column — in front of the figures, because where a matrix came
+ * from is what decides how much they are worth. The sentence itself stays on
+ * the card, where there is room for it to be a sentence.
+ *
  * The row is the door, like the card: `reg-row` carries the house hover and the
  * whole of it opens the editor. The last cell is the exception, and stops the
  * click, because those buttons go somewhere else.
@@ -258,9 +267,9 @@ function RacmTable({ rows, canManage, onDelete, onPublish, onHistory, onFlowchar
             <th style={{ width: 136 }}>Status</th>
             <th style={{ width: 150 }}>Process</th>
             <th style={{ width: 180 }}>Company</th>
+            <th style={{ width: 84 }}>Source</th>
             <th className="num" style={{ width: 72 }}>Risks</th>
             <th className="num" style={{ width: 86 }}>Controls</th>
-            <th style={{ width: 250 }}>Where it came from</th>
             <th style={{ width: 104 }}><span className="sr-only">Actions</span></th>
           </tr>
         </thead>
@@ -281,9 +290,13 @@ function RacmTable({ rows, canManage, onDelete, onPublish, onHistory, onFlowchar
                 <td title="Only published RACMs can be scoped into an engagement"><StatusCell racm={r} /></td>
                 <td className="truncate" title={r.process}>{r.process}</td>
                 <td className="truncate" title={r.entity || 'No company'}>{r.entity || <span className="text-ink-300">—</span>}</td>
+                <td>
+                  {r.source === 'sop'
+                    ? <span title="Drafted by reading an SOP — unconfirmed until the process is walked"><Pill tone="info">SOP</Pill></span>
+                    : <span className="text-ink-300">—</span>}
+                </td>
                 <td className="text-right tabular-nums font-semibold">{risks}</td>
                 <td className="text-right tabular-nums font-semibold">{r.controls.length}</td>
-                <td><span className="reg-clamp text-ink-400" title={sourceLine(r)}>{sourceLine(r)}</span></td>
                 {/* The one cell that is not the door. */}
                 <td className="tight">
                   <span className="flex items-center justify-end gap-1">
