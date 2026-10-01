@@ -1,5 +1,6 @@
 import type { ChatStepId, Situation } from './controlChatScript';
-import { DESIGN_DOC_KINDS, type Role } from './types';
+import { DESIGN_DOC_KINDS, type Role, type RollPart } from './types';
+import { ROLL_PART_ANCHOR } from './helpers';
 
 /**
  * What Ira may offer, and when.
@@ -80,6 +81,9 @@ export interface ChatAction {
    *  sentence. Button labels address the reader ("Show me…"), which reads
    *  backwards inside "I can …". */
   does?: string;
+  /** For `show-step`: a specific element id to scroll to, finer than the
+   *  step's own anchor (e.g. last round's Confirm / Edit bar). */
+  anchor?: string;
 }
 
 const show = (label: string, said: string, focus: ChatStepId, does = 'show you where it is on the page'): ChatAction =>
@@ -87,7 +91,33 @@ const show = (label: string, said: string, focus: ChatStepId, does = 'show you w
 
 const plural = (n: number, one: string, many = `${one}s`) => `${n} ${n === 1 ? one : many}`;
 
+/** What the store refuses while each rolled-forward part is unconfirmed (#13).
+ *  Built inside a function, never at module load (sox-icfr TDZ rule). */
+const rollHeldIds = (parts: RollPart[]): Set<ChatActionId> => {
+  const held = new Set<ChatActionId>();
+  if (parts.includes('design') || parts.includes('checks')) (['ira-run', 'conclude-effective', 'conclude-ineffective'] as const).forEach(id => held.add(id));
+  if (parts.includes('population')) (['pick-source', 'upload-source', 'lock-population'] as const).forEach(id => held.add(id));
+  if (parts.includes('attributes')) (['draw-sample', 'file-sample', 'toe-run'] as const).forEach(id => held.add(id));
+  return held;
+};
+const ROLL_STEP = (p: RollPart): ChatStepId => (p === 'population' ? 'population' : p === 'attributes' ? 'operating' : 'design');
+
 export function actionsFor(s: Situation, role: Role): ChatAction[] {
+  const out = baseActionsFor(s, role);
+  // Last round's set-up waits on the auditor: nothing the store would refuse is
+  // offered, and the one way forward is the page's own Confirm / Edit bar. Ira
+  // never confirms it — not even in Automatic mode — so there is no action for it.
+  if (role !== 'auditor' || s.rollPending.length === 0 || s.sealed || (s.locked && s.reviewerSigned)) return out;
+  const held = rollHeldIds(s.rollPending);
+  const first = s.rollPending[0];
+  const go: ChatAction = {
+    ...show('Go to last round\'s set-up', 'Show me last round\'s set-up.', ROLL_STEP(first), 'show you last round\'s set-up on the page'),
+    anchor: ROLL_PART_ANCHOR[first], primary: true,
+  };
+  return [go, ...out.filter(a => !held.has(a.id)).map(a => (a.primary ? { ...a, primary: false } : a))];
+}
+
+function baseActionsFor(s: Situation, role: Role): ChatAction[] {
   // A sealed engagement or a countersigned paper is a record, not a workspace.
   if (s.sealed || (s.locked && s.reviewerSigned)) return [];
 

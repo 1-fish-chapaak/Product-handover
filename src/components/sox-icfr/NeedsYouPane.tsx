@@ -25,7 +25,7 @@ import { useIcfr } from './store';
 import { iraStateOfPoint, iraStateOfStep } from './IraState';
 import {
   CONFIDENT_AT, confidenceOf, controlCode, designApproved, designOutstandingRequired, discussionsFor, iraCannotTest,
-  isControlLockedIn, operatingApplies, overridePatterns, pointResult, requiredFilesOf, stepResult, unconfirmedIra,
+  isControlLockedIn, operatingApplies, overridePatterns, pointResult, requiredFilesOf, rollPendingParts, ROLL_PART_ANCHOR, ROLL_PART_LABEL, stepResult, unconfirmedIra,
   type OverridePattern,
 } from './helpers';
 import { ownersOf } from './auditScope';
@@ -33,6 +33,7 @@ import { useOpenRailDetail } from './RailDetail';
 import type { Control, DesignPoint, IcfrEngagement, OperatingStep, Role } from './types';
 
 export type NeedsItem =
+  | { kind: 'roll'; id: string; from: string; labels: string[]; anchor: string }
   | { kind: 'ipe'; id: string; report: string; done: number; total: number; unreliable: boolean; anchor: string }
   | { kind: 'lock'; id: string; anchor: string }
   | { kind: 'couldnt'; id: string; text: string; anchor: string; reason: string; what: string; request: string; owner: string }
@@ -61,6 +62,16 @@ export function needsYouItems(control: Control, eng: IcfrEngagement, role: Role,
   const opDone = control.operating.conclusion !== 'Not tested';
 
   if (canTest) {
+    // ⓪ Last round's set-up, waiting to be confirmed or edited (#13). It holds
+    // its steps, so it comes before everything those steps would produce.
+    const pendingRoll = rollPendingParts(control);
+    if (pendingRoll.length && control.rollForward) {
+      out.push({
+        kind: 'roll', id: 'roll', from: control.rollForward.from, anchor: ROLL_PART_ANCHOR[pendingRoll[0]],
+        labels: pendingRoll.map(p => ROLL_PART_LABEL[p]),
+      });
+    }
+
     // ⓪ The population's report, and then the lock (agentic UX #10, 1 Oct).
     // IPE lives only in step ① — the card points there, it does not test.
     // Upstream of everything else here, so it comes first.
@@ -204,6 +215,14 @@ export default function NeedsYouPane({ control, onGoComments }: { control: Contr
       )}
       {items.map(it => {
         switch (it.kind) {
+          case 'roll':
+            return (
+              <Card key={it.id} eyebrow="From last round"
+                actions={<button type="button" className={PRIMARY} onClick={() => showMe(it.anchor)}>Go to it</button>}>
+                <p className="text-[0.8125rem] leading-snug text-ink-800">{it.labels.join(', ')} came over from the {it.from}.</p>
+                <p className="mt-1 text-[0.75rem] leading-snug text-ink-500">Confirm each unchanged or edit it — its step waits until you do.</p>
+              </Card>
+            );
           case 'ipe':
             return (
               <Card key={it.id} eyebrow="IPE test"

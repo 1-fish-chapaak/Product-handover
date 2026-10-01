@@ -1131,6 +1131,17 @@ export interface NewVersionDraft {
   note: string;
 }
 
+/** The four parts of a control's set-up that carry between rounds. */
+export type RollPart = 'design' | 'checks' | 'population' | 'attributes';
+export type RollState = { state: 'pending' } | { state: 'confirmed' | 'edited'; by: string; at: string };
+export interface RollForward {
+  /** The round it came from, in words — "FY26 interim". */
+  from: string;
+  parts: Partial<Record<RollPart, RollState>>;
+  /** How last round drew, shown beside the attributes — not re-applied. */
+  sampling?: { method: string; size: number; basis: string };
+}
+
 export interface Control {
   id: string;
   /** THE CONTROL NUMBER THE CLIENT KNOWS — set only when `id` had to be made
@@ -1309,6 +1320,11 @@ export interface Control {
    *  control had to change to gain versions. Absent on the ordinary control,
    *  which has only ever been written one way. See `ControlVersion`. */
   priorVersions?: ControlVersion[];
+  /** Last round's set-up, brought into this one (agentic UX #13, 1 Oct). Each
+   *  part arrives PENDING and holds its own step until the auditor confirms it
+   *  unchanged or edits it — nothing is tested on last round's set-up by
+   *  accident, and Ira never confirms one, Automatic or not. */
+  rollForward?: RollForward;
   /** Audit-side sign-off on THIS working paper — the preparer (auditor hat) signs
    *  once the control is concluded; the reviewer countersigns. Separate from the
    *  engagement-level opinion sign-off. */

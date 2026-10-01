@@ -22,7 +22,7 @@ import {
   concludeRationale, controlCode, controlConclusion, courtFor, operatingApplies, designCompleteness, designOutstanding, designOutstandingRequired, discussionsFor, extractionCriteria,
   isControlLocked, isControlLockedIn, itgcHolds, failedItgcs, isItgcDependent, docRequirement, docColumnOf, docNotApplicable, operatingProgress, operatingSuggestion, TOE_MAX_ROUNDS, toeRoundFailed, toeRoundNo, toeRounds, toeSpent, canRedrawToe, canExtendToe, populationLocked, sampleSizeGuide, samplingOf, trackResult, pointResult, stepResult, attestationOverruled, inquiryOnlyAttributes, restsOnStatementAlone,
   countVerdict, coverageVerdict, derivedRunCount, populationReady, designBasis, designSuggestion, auditorProvenChecks, suggestedDesignChecks, suggestPopulationFile, fmtDay, parseDay,
-  iraCannotTest, designBlocked, confidenceOf, CONFIDENT_AT, awaitsConfirm, unconfirmedIra,
+  iraCannotTest, designBlocked, confidenceOf, CONFIDENT_AT, awaitsConfirm, unconfirmedIra, ROLL_PART_LABEL, ROLL_PART_ANCHOR,
   monthlyBreakdown, spikeMonths, priorRoundCount, fileUsable, originLabel, guessFileKind, populationSources, ipeChecksFor, samplesFor,
   expectedInputsFor, hasRowCount, isAssisting, sampledSources, reviewNotesFor, isShared, entityCoverage, uncoveredEntities, hasPaths, pathCoverage, untouchedPaths, type PopVerdict,
   requiredFilesOf, requiredFilesCount, requiredFilesReady, passedWithoutFiles, designFilesOf,
@@ -55,7 +55,7 @@ import { AUDIT_ROUNDS, AUDITOR_PROOF_KINDS, DESIGN_DOC_KINDS, DESIGN_WAIVER_REAS
 import { requiredDatasetsFor, sampleRefs } from './mockData';
 import { extraLabel, useRacmConfig } from './racmConfig';
 import { racmSetupKeyFor } from './racmLibrary';
-import type {
+import type { RollPart,
   AuditRound, Control, DesignDoc, DesignDocKind, DesignPoint, DesignWaiverReason, DiscussionAnchor, DocStatus, EvidenceFile, OperatingStep,
   AuditorProofKind, FileOrigin, Frequency, IpeCheck, IpeConclusion, PopulationSource, Role, Sampling, SamplingMethodology, SourceRole, TestResult, ToeRound, TrackConclusion, ValidationResult,
 } from './types';
@@ -5303,6 +5303,54 @@ function OperatingSection({ control, canEdit, locked }: { control: Control; canE
 // ── vertical stepper step ─────────────────────────────────────────────────────────
 // `hideStatus` suppresses the default pill/stamp + flash — used by the sample step,
 // whose status drives the node visual only (a "Sample approved" chip rides in `right`).
+/**
+ * ── Last round's set-up, waiting on the auditor (agentic UX #13) ──────────────
+ * First thing in the step it holds. Each part says where it came from and
+ * offers the two moves: Confirm unchanged, or Edit. Until one is pressed every
+ * action in the step refuses (see `rollHeld` in the store). Once pressed it
+ * shrinks to one line of record. Never Ira's to press, in either mode.
+ */
+function RollForwardBar({ control, parts }: { control: Control; parts: RollPart[] }) {
+  const { role, confirmRollPart } = useIcfr();
+  const rf = control.rollForward;
+  const here = parts.filter(p => rf?.parts[p]);
+  if (!rf || !here.length || role !== 'auditor') return null;
+  const pending = here.filter(p => rf.parts[p]?.state === 'pending');
+  return (
+    <div id={ROLL_PART_ANCHOR[here[0]]} className="px-5 pt-5 scroll-mt-4">
+      <div className="rounded-xl border border-canvas-border bg-paper-50/60 px-3.5 py-3">
+        <p className="text-[0.75rem] text-ink-700 leading-relaxed">
+          <span className="font-semibold text-ink-900">From the {rf.from}</span>
+          {pending.length > 0 ? ' — check it still holds. Nothing in this step runs until you confirm it or edit it.' : ''}
+        </p>
+        <ul className="mt-2 space-y-1.5">
+          {here.map(p => {
+            const st = rf.parts[p]!;
+            return (
+              <li key={p} className="flex flex-wrap items-center gap-x-3 gap-y-1.5 text-[0.75rem]">
+                <span className="min-w-0 flex-1 text-ink-800">
+                  {ROLL_PART_LABEL[p]}
+                  {p === 'attributes' && rf.sampling && <span className="text-ink-500"> · last round drew {rf.sampling.size}, {rf.sampling.method.toLowerCase()}</span>}
+                </span>
+                {st.state === 'pending' ? (
+                  <span className="flex items-center gap-1.5">
+                    <button type="button" onClick={() => confirmRollPart(control.id, p, 'confirmed')}
+                      className="h-7 px-2.5 rounded-md bg-brand-600 text-white text-[0.71875rem] font-semibold hover:bg-brand-700 transition-colors cursor-pointer">Confirm unchanged</button>
+                    <button type="button" onClick={() => confirmRollPart(control.id, p, 'edited')}
+                      className="h-7 px-2.5 rounded-md border border-canvas-border bg-canvas-elevated text-[0.71875rem] font-semibold text-ink-700 hover:border-ink-300 transition-colors cursor-pointer">Edit</button>
+                  </span>
+                ) : (
+                  <span className="text-[0.6875rem] text-ink-500">{st.state === 'confirmed' ? 'Confirmed unchanged' : 'Taken to edit'} by {st.by} · {st.at}</span>
+                )}
+              </li>
+            );
+          })}
+        </ul>
+      </div>
+    </div>
+  );
+}
+
 function VStep({ n, title, subtitle, status, locked, right, children, defaultOpen = true, id, hideStatus, arrived }: { n: number; title: string; subtitle: string; status: TrackConclusion; locked?: boolean; right?: React.ReactNode; children: React.ReactNode; defaultOpen?: boolean; id?: string; hideStatus?: boolean; arrived?: boolean }) {
   const nodeClass = locked ? 'locked' : status === 'Effective' ? 'done' : status === 'Ineffective' ? 'fail' : 'active';
   const concluded = !hideStatus && (status === 'Effective' || status === 'Ineffective');
@@ -6425,6 +6473,7 @@ export default function ControlDossier() {
                 </div>
               </div>
             )}
+            {!isOwner && <RollForwardBar control={control} parts={['design', 'checks']} />}
             <DesignSection control={control} canEdit={canEdit} locked={todApproved} />
             <DesignApprovalBlock control={control} />
             <RebuildBlock control={control} />
@@ -6476,6 +6525,7 @@ export default function ControlDossier() {
               : control.operating.population
                 ? <span className="text-[0.6875rem] font-semibold text-mitigated-800 inline-flex items-center gap-1"><AlertTriangle size={11} /> Extracted, not yet locked</span>
                 : <span className="text-[0.6875rem] font-semibold text-ink-400">Nothing extracted yet</span>}>
+            <RollForwardBar control={control} parts={['population']} />
             <PopulationSection control={control} canEdit={canEdit} locked={popGated} />
           </VStep>
           <VStep n={3} id="vstep-sample" title="Sample drawing" subtitle="Drawn off the locked population, sized by how often the control runs, with the selection method and its seed stored so anyone can reproduce the same items." hideStatus
@@ -6487,6 +6537,7 @@ export default function ControlDossier() {
                 : !popLocked
                   ? <span className="text-[0.6875rem] font-semibold text-ink-400 inline-flex items-center gap-1"><Lock size={11} /> Unlocks once the population locks</span>
                   : <span className="text-[0.6875rem] font-semibold text-ink-400">Awaiting the draw</span>}>
+            <RollForwardBar control={control} parts={['attributes']} />
             <SampleExtractSection control={control} canEdit={canEdit} locked={sampleLocked} />
           </VStep>
           <VStep n={4} id="vstep-toe" title="Test of effectiveness" subtitle="Each sampled item against each attribute, pass or fail, with the evidence attached. Concludes effective or ineffective." status={toeLocked ? 'Not tested' : opResult} locked={toeLocked}

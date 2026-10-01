@@ -611,7 +611,7 @@ export default function ControlChatPane({ control }: { control: Control }) {
   const perform = (a: ChatAction) => {
     if (a.id === 'show-step') {
       const step = a.focus ?? prompt.step;
-      document.getElementById(STEP_ANCHOR[step])?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      document.getElementById(a.anchor ?? STEP_ANCHOR[step])?.scrollIntoView({ behavior: 'smooth', block: 'center' });
       say(control.id, 'ira', `It’s on the left — ${STEP_NUM[step]} ${STEP_LABEL[step]}.`);
       return;
     }

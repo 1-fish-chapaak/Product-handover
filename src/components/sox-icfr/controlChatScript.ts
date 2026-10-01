@@ -3,10 +3,11 @@ import {
   exceptionCourtDetail,
   inquiryOnlyAttributes, operatingApplies, operatingProgress, passedWithoutFiles, pendingReviewNoteCount, pointResult,
   populationLocked, populationSources, requiredFilesCount, requiredFilesReady, sampledSources, samePerson, stepResult, toeRoundFailed, trackResult, unconfirmedIra, yearEndPending,
+  rollPendingParts, ROLL_PART_LABEL,
 } from './helpers';
 import { evidenceOwed } from './controlChatEvidence';
 import { DESIGN_DOC_KINDS } from './types';
-import type { AuditRecord, Control, DesignDoc, DesignDocKind, IcfrEngagement, IpeConclusion, Role, TestResult, TrackConclusion } from './types';
+import type { AuditRecord, Control, DesignDoc, DesignDocKind, IcfrEngagement, IpeConclusion, Role, RollPart, TestResult, TrackConclusion } from './types';
 
 /**
  * What Ira knows, and what Ira therefore says.
@@ -88,6 +89,9 @@ export interface Situation {
   /** Ira's results on each track still waiting on a person's confirm (UX #1). */
   designUnconfirmed: number;
   toeUnconfirmed: number;
+  /** Parts of last round's set-up still waiting on the auditor's Confirm /
+   *  Edit (#13). Each holds its step in the store, so Ira offers nothing in it. */
+  rollPending: RollPart[];
   checksPassed: number;
   checksFailed: number;
   iraRun: boolean;
@@ -294,6 +298,7 @@ export function situationOf({ eng, control, role, me, audit, files }: ChatCtx): 
     ownPaper: samePerson(control.wpSignoff?.preparer, me),
     checksTotal, checksUnmarked, checksPassed, checksFailed,
     designUnconfirmed: unconfirmedIra(control, 'design').length, toeUnconfirmed: unconfirmedIra(control, 'operating').length,
+    rollPending: rollPendingParts(control),
     iraRun: !!d.ira, iraStale: !!d.ira?.evidenceChanged, iraBlocked,
     checksBlocked: designBlocked(control).map(p => ({ text: p.text, reason: p.validation!.blocked! })),
     designReturn: d.designReturn, designOverride: !!d.override, evidenceSuggested: designSuggestion(control),
@@ -333,7 +338,7 @@ export function situationOf({ eng, control, role, me, audit, files }: ChatCtx): 
   };
   s.key = [
     role, step, designResult, todApproved, missing.length, elementsOnFile, d.documents.length,
-    checksUnmarked, checksFailed, s.iraRun, s.iraStale, s.checksBlocked.length, !!d.designReturn, s.designUnconfirmed, s.toeUnconfirmed,
+    checksUnmarked, checksFailed, s.iraRun, s.iraStale, s.checksBlocked.length, !!d.designReturn, s.designUnconfirmed, s.toeUnconfirmed, s.rollPending.join(','),
     // The extract itself, which the key used to miss entirely: locking was in
     // here but the population landing was not, so a reader who extracted on the
     // left left Ira holding the sentence it had already typed.
@@ -437,6 +442,15 @@ export function nextPrompt(ctx: ChatCtx): ChatPrompt {
   }
 
   // ── the auditor: the work itself ──────────────────────────────────────────
+  // ── last round's set-up, before anything runs ─────────────────────────────
+  // While a rolled-forward part is unconfirmed the store refuses every action
+  // in its step, so this leads. Only the auditor confirms it, on the page —
+  // Ira never does, not even in Automatic mode.
+  if (s.rollPending.length > 0) {
+    const parts = [...new Set(s.rollPending.map(p => ROLL_PART_LABEL[p].toLowerCase()))];
+    return line(`Before anything runs here, last round's set-up needs your eye — ${listOf(parts, parts.length)} came over from the ${control.rollForward?.from ?? 'last round'}. Confirm it unchanged or edit it on the page; I won't confirm it for you.`);
+  }
+
   // ── the exception's root cause, before anything else ──────────────────────
   // It leads every other branch because nothing about the exception moves
   // until it is settled: `completeSizing` refuses without it, the grade is

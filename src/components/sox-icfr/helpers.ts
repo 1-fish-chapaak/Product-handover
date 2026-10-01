@@ -4894,3 +4894,22 @@ export function learnedRuleFor(rules: IraLearnedRule[] | undefined, which: 'desi
 
 export const learnedNote = (r: IraLearnedRule) =>
   `Learned: auditors changed ${r.from} to ${r.to} on this check on ${r.count} controls, and ${r.by} approved it.`;
+
+// ─── Roll-forward — last round's set-up, confirmed before it is used (#13) ───────
+import type { RollPart } from './types';
+
+export const ROLL_PART_LABEL: Record<RollPart, string> = {
+  design: 'Design documents and walkthrough',
+  checks: 'Design checks',
+  population: 'Population set-up',
+  attributes: 'Test attributes',
+};
+/** Where on the control page each part's Confirm / Edit bar sits. */
+export const ROLL_PART_ANCHOR: Record<RollPart, string> = {
+  design: 'roll-design', checks: 'roll-design', population: 'roll-population', attributes: 'roll-attributes',
+};
+
+/** A part brought from last round that nobody has confirmed or edited yet. */
+export const rollPending = (c: Control, part: RollPart): boolean => c.rollForward?.parts[part]?.state === 'pending';
+export const rollPendingParts = (c: Control): RollPart[] =>
+  (['design', 'checks', 'population', 'attributes'] as RollPart[]).filter(p => rollPending(c, p));
