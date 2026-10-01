@@ -841,8 +841,10 @@ export default function ControlLibrary() {
 
       {creating && <NewControlPanel onClose={() => setCreating(false)} />}
       {addingRacm && <AddRacmModal onClose={() => setAddingRacm(false)} />}
-      {/* the paper and the report follow the filters — only the visible controls go in */}
-      {reportPreview && <WorkingPaperModal eng={eng} controls={filtered} report onClose={() => setReportPreview(false)} />}
+      {/* The report ignores the filters (Oct 2026): it is the audit's deliverable,
+          so it always covers the open audit's full scope. A filtered report
+          concluded on a slice — "Not effective" over 0 controls. */}
+      {reportPreview && <WorkingPaperModal eng={eng} controls={auditScoped} report onClose={() => setReportPreview(false)} />}
     </div>
   );
 }

@@ -12,23 +12,24 @@
  *  The general ledger is the layer beneath: journal lines that reference the
  *  same accounts, so a caption can be opened and read back to its postings.
  */
-import * as XLSX from 'xlsx';
 import type { GroupEntity, ProcessName, TbCaption } from './soxTestingData';
+import { readTableRows, isReadableTableFile, type ReadSheet } from './tableReader';
 
-/** Only a spreadsheet can be read honestly — same rule as the org chart. */
-const READABLE = /\.(xlsx|xlsm|xlsb|xls|csv|tsv)$/i;
-export const isReadableLedger = (fileName: string): boolean => READABLE.test(fileName.trim());
+/** Spreadsheets, PDFs, Word files and scans — the shared reader puts each into
+ *  rows (1 Oct). Before that, only a spreadsheet was read. */
+export const isReadableLedger = (fileName: string): boolean => isReadableTableFile(fileName);
 
 const norm = (text: string): string =>
   String(text ?? '').toLowerCase().replace(/&/g, ' and ').replace(/[^\p{L}\p{N}]+/gu, ' ').trim();
 
-async function readWorkbook(file: File): Promise<{ name: string; rows: string[][] }[]> {
-  const wb = XLSX.read(await file.arrayBuffer(), { type: 'array' });
-  return wb.SheetNames.map(name => {
-    const ws = wb.Sheets[name];
-    const raw = ws ? XLSX.utils.sheet_to_json<unknown[]>(ws, { header: 1, defval: '', raw: false, blankrows: true }) : [];
-    return { name, rows: raw.map(r => (Array.isArray(r) ? r : []).map(v => String(v ?? '').trim())) };
-  });
+/** A file, already read into rows — what the parsers below work on, so a
+ *  scan is read once however many times the trial balance is recombined. */
+export interface LedgerFileRead { name: string; sheets: ReadSheet[] }
+
+/** Reads any ledger file into rows. `onScan` fires when OCR starts. */
+export async function readLedgerFile(file: File, onScan?: () => void): Promise<{ ok: true; read: LedgerFileRead } | { ok: false; reason: string }> {
+  const r = await readTableRows(file, onScan);
+  return r.ok ? { ok: true, read: { name: file.name, sheets: r.sheets } } : { ok: false, reason: r.reason };
 }
 
 // ── Columns ────────────────────────────────────────────────────────────────
@@ -180,6 +181,9 @@ export interface TbParseOk {
    *  point of a TB in scoping: it finds what the org chart missed. */
   unmatched: TbEntityResult[];
   totalLines: number;
+  /** Distinct company + account pairs — the number of accounts the file holds,
+   *  as opposed to the statement lines (captions) they roll up into. */
+  accounts: number;
   period?: string;
 }
 export type TbParseResult = TbParseOk | { ok: false; reason: string };
@@ -202,63 +206,131 @@ function entityMatcher(entities: GroupEntity[]) {
     byName.get(squash(fileName)) ?? (fileId ? byIdTail.get(norm(fileId)) : undefined);
 }
 
-export async function parseTrialBalanceFile(file: File, entities: GroupEntity[]): Promise<TbParseResult> {
-  if (!isReadableLedger(file.name)) return { ok: false, reason: 'not-a-spreadsheet' };
+type Picked = { rows: string[][]; header: number; cols: Partial<Record<LedgerField, number>> };
 
-  let sheets: { name: string; rows: string[][] }[];
-  try { sheets = await readWorkbook(file); } catch { return { ok: false, reason: 'unreadable' }; }
-
-  let best: { rows: string[][]; header: number; cols: Partial<Record<LedgerField, number>> } | null = null;
+/** The sheet that looks most like a ledger — the one naming the most columns. */
+function pickSheet(sheets: ReadSheet[], usable: (cols: Partial<Record<LedgerField, number>>) => boolean): Picked | null {
+  let best: Picked | null = null;
   for (const s of sheets) {
     const header = findHeaderRow(s.rows);
     const cols = matchColumns(s.rows[header] ?? []);
-    const usable = cols.balance !== undefined || cols.debit !== undefined || cols.credit !== undefined;
-    if (!usable) continue;
+    if (!usable(cols)) continue;
     if (!best || Object.keys(cols).length > Object.keys(best.cols).length) best = { rows: s.rows, header, cols };
   }
-  if (!best) return { ok: false, reason: 'no-amount-column' };
+  return best;
+}
 
-  const { rows, header, cols } = best;
-  const at = (row: string[], k: LedgerField) => (cols[k] === undefined ? '' : String(row[cols[k]!] ?? '').trim());
+const hasAmount = (cols: Partial<Record<LedgerField, number>>) =>
+  cols.balance !== undefined || cols.debit !== undefined || cols.credit !== undefined;
+
+const cellAt = (cols: Partial<Record<LedgerField, number>>) =>
+  (row: string[], k: LedgerField) => (cols[k] === undefined ? '' : String(row[cols[k]!] ?? '').trim());
+
+/** A PDF or Word table repeats its header on every page; that row is not an
+ *  account. Compared loosely, so a re-typed header is still caught. */
+const sameAsHeader = (row: string[], header: string[]) =>
+  row.length > 0 && row.map(norm).join('|') === header.map(norm).join('|');
+
+/**
+ * IS THIS A GENERAL LEDGER IN THE TRIAL BALANCE SLOT? (1 Oct)
+ *
+ * Both carry an amount and an account, so the trial balance reader took a GL
+ * happily and summed its journal lines into captions — a year of postings
+ * reported as balances. A GL gives itself away twice over: it has the columns
+ * a journal line needs (a posting date or a document number), and the same
+ * company and account turn up on many rows, where a trial balance has one
+ * closing balance per account.
+ */
+function looksLikeGeneralLedger({ rows, header, cols }: Picked): boolean {
+  if (cols.date === undefined && cols.docNo === undefined) return false;
+  const at = cellAt(cols);
+  const perAccount = new Map<string, number>();
+  let lines = 0;
+  for (let r = header + 1; r < rows.length; r++) {
+    const row = rows[r] ?? [];
+    const account = at(row, 'accountCode') || at(row, 'accountName');
+    if (!account) continue;
+    const key = `${(at(row, 'entityId') || at(row, 'entityName')).toLowerCase()}::${account.toLowerCase()}`;
+    perAccount.set(key, (perAccount.get(key) ?? 0) + 1);
+    lines++;
+  }
+  return perAccount.size > 0 && lines / perAccount.size > 1.5;
+}
+
+export type TbFileCheck = { ok: true } | { ok: false; reason: 'no-amount-column' | 'no-rows' | 'looks-like-gl' };
+
+/** Whether one file, on its own, is a trial balance this step can use. */
+export function checkTrialBalance(read: LedgerFileRead): TbFileCheck {
+  const best = pickSheet(read.sheets, hasAmount);
+  if (!best) return { ok: false, reason: 'no-amount-column' };
+  if (looksLikeGeneralLedger(best)) return { ok: false, reason: 'looks-like-gl' };
+  const at = cellAt(best.cols);
+  const header = best.rows[best.header] ?? [];
+  const any = best.rows.slice(best.header + 1).some(row => (at(row, 'accountName') || at(row, 'caption')) && !sameAsHeader(row, header));
+  return any ? { ok: true } : { ok: false, reason: 'no-rows' };
+}
+
+/**
+ * Every trial-balance file the user attached, read as ONE trial balance (1 Oct).
+ * A group often files one per company, picked together or one after another;
+ * reading only the first left the rest attached and ignored. Captions with the
+ * same name for the same company add together across files.
+ */
+export function trialBalanceFrom(files: LedgerFileRead[], entities: GroupEntity[]): TbParseResult {
   const match = entityMatcher(entities);
 
   /** entity key → caption → running total */
-  const buckets = new Map<string, { fileName: string; fileId: string; lines: number; caps: Map<string, { balance: number; process: ProcessName }> }>();
+  const buckets = new Map<string, { fileName: string; fileId: string; files: Set<string>; lines: number; caps: Map<string, { balance: number; process: ProcessName }> }>();
+  const accounts = new Set<string>();
   let period: string | undefined;
   let total = 0;
+  let readable = 0;
 
-  for (let r = header + 1; r < rows.length; r++) {
-    const row = rows[r] ?? [];
-    const accountName = at(row, 'accountName');
-    const captionCell = at(row, 'caption');
-    if (!accountName && !captionCell) continue;
-    if (/^(?:total|grand total|sub ?total)\b/i.test(accountName || captionCell)) continue;
+  for (const file of files) {
+    const best = pickSheet(file.sheets, hasAmount);
+    if (!best || looksLikeGeneralLedger(best)) continue;
+    readable++;
+    const { rows, header, cols } = best;
+    const at = cellAt(cols);
+    const headerRow = rows[header] ?? [];
 
-    const fileEntityName = at(row, 'entityName');
-    const fileEntityId = at(row, 'entityId');
-    // A trial balance for a single company often names it once, in a title
-    // row, rather than on every line. Everything then belongs to one bucket.
-    const key = (fileEntityId || fileEntityName || '__single__').toLowerCase();
+    for (let r = header + 1; r < rows.length; r++) {
+      const row = rows[r] ?? [];
+      if (sameAsHeader(row, headerRow)) continue;
+      const accountName = at(row, 'accountName');
+      const captionCell = at(row, 'caption');
+      if (!accountName && !captionCell) continue;
+      if (/^(?:total|grand total|sub ?total)\b/i.test(accountName || captionCell)) continue;
 
-    const bal = cols.balance !== undefined
-      ? parseAmount(at(row, 'balance'))
-      : parseAmount(at(row, 'debit')) - parseAmount(at(row, 'credit'));
-    const caption = captionCell || accountName;
-    if (!caption) continue;
+      const fileEntityName = at(row, 'entityName');
+      const fileEntityId = at(row, 'entityId');
+      // A trial balance for a single company often names it once, in a title
+      // row, rather than on every line. Everything then belongs to one bucket.
+      const key = (fileEntityId || fileEntityName || '__single__').toLowerCase();
 
-    if (!period) period = at(row, 'period') || undefined;
-    let b = buckets.get(key);
-    if (!b) { b = { fileName: fileEntityName, fileId: fileEntityId, lines: 0, caps: new Map() }; buckets.set(key, b); }
-    b.lines++; total++;
-    const existing = b.caps.get(caption);
-    // Captions are read at their gross size. A trial balance signs a credit
-    // negative, and a revenue caption that reported as minus three thousand
-    // crore would sort below every cost line and fall out of scope.
-    const add = Math.abs(bal);
-    if (existing) existing.balance = Math.round((existing.balance + add) * 100) / 100;
-    else b.caps.set(caption, { balance: Math.round(add * 100) / 100, process: processFor(at(row, 'process'), caption) });
+      const bal = cols.balance !== undefined
+        ? parseAmount(at(row, 'balance'))
+        : parseAmount(at(row, 'debit')) - parseAmount(at(row, 'credit'));
+      const caption = captionCell || accountName;
+      if (!caption) continue;
+
+      if (!period) period = at(row, 'period') || undefined;
+      let b = buckets.get(key);
+      if (!b) { b = { fileName: fileEntityName, fileId: fileEntityId, files: new Set(), lines: 0, caps: new Map() }; buckets.set(key, b); }
+      b.files.add(file.name);
+      b.lines++; total++;
+      accounts.add(`${key}::${(at(row, 'accountCode') || accountName || caption).toLowerCase()}`);
+      const existing = b.caps.get(caption);
+      // Captions are read at their gross size. A trial balance signs a credit
+      // negative, and a revenue caption that reported as minus three thousand
+      // crore would sort below every cost line and fall out of scope.
+      const add = Math.abs(bal);
+      if (existing) existing.balance = Math.round((existing.balance + add) * 100) / 100;
+      else b.caps.set(caption, { balance: Math.round(add * 100) / 100, process: processFor(at(row, 'process'), caption) });
+    }
   }
 
+  if (!readable) return { ok: false, reason: 'no-amount-column' };
   if (!buckets.size) return { ok: false, reason: 'no-rows' };
 
   const captions: TbCaption[] = [];
@@ -279,7 +351,7 @@ export async function parseTrialBalanceFile(file: File, entities: GroupEntity[])
         process: v.process,
       }));
     if (matched) {
-      perEntity[matched] = { file: file.name, lines: b.lines };
+      perEntity[matched] = { file: [...b.files].join(', '), lines: b.lines };
       captions.push(...caps);
     } else {
       unmatched.push({ fileName: b.fileName || b.fileId, fileEntityId: b.fileId, lines: b.lines, captions: caps });
@@ -287,7 +359,16 @@ export async function parseTrialBalanceFile(file: File, entities: GroupEntity[])
   }
 
   if (!captions.length && !unmatched.length) return { ok: false, reason: 'no-rows' };
-  return { ok: true, captions, perEntity, unmatched, totalLines: total, period };
+  return { ok: true, captions, perEntity, unmatched, totalLines: total, accounts: accounts.size, period };
+}
+
+/** One file, read and parsed. A general ledger is refused, not summed. */
+export async function parseTrialBalanceFile(file: File, entities: GroupEntity[]): Promise<TbParseResult> {
+  const r = await readLedgerFile(file);
+  if (!r.ok) return { ok: false, reason: r.reason };
+  const check = checkTrialBalance(r.read);
+  if (!check.ok) return { ok: false, reason: check.reason };
+  return trialBalanceFrom([r.read], entities);
 }
 
 // ── General ledger ─────────────────────────────────────────────────────────
@@ -318,66 +399,62 @@ export type GlParseResult = GlParseOk | { ok: false; reason: string };
 
 export const captionKey = (entityId: string, caption: string) => `${entityId}::${caption.toLowerCase().trim()}`;
 
-export async function parseGeneralLedgerFile(file: File, entities: GroupEntity[]): Promise<GlParseResult> {
-  if (!isReadableLedger(file.name)) return { ok: false, reason: 'not-a-spreadsheet' };
-
-  let sheets: { name: string; rows: string[][] }[];
-  try { sheets = await readWorkbook(file); } catch { return { ok: false, reason: 'unreadable' }; }
-
-  let best: { rows: string[][]; header: number; cols: Partial<Record<LedgerField, number>> } | null = null;
-  for (const s of sheets) {
-    const header = findHeaderRow(s.rows);
-    const cols = matchColumns(s.rows[header] ?? []);
-    const usable = (cols.debit !== undefined || cols.credit !== undefined || cols.balance !== undefined)
-      && (cols.date !== undefined || cols.docNo !== undefined);
-    if (!usable) continue;
-    if (!best || Object.keys(cols).length > Object.keys(best.cols).length) best = { rows: s.rows, header, cols };
-  }
-  if (!best) return { ok: false, reason: 'not-a-ledger' };
-
-  const { rows, header, cols } = best;
-  const at = (row: string[], k: LedgerField) => (cols[k] === undefined ? '' : String(row[cols[k]!] ?? '').trim());
+/** Every general-ledger file attached, read as one ledger. A file that is
+ *  not a ledger adds nothing; if none is, the result says so. */
+export function generalLedgerFrom(files: LedgerFileRead[], entities: GroupEntity[]): GlParseResult {
   const match = entityMatcher(entities);
-
   const lines: GlLine[] = [];
   const unmatchedNames = new Set<string>();
   const matchedEntities = new Set<string>();
+  let readable = 0;
 
-  for (let r = header + 1; r < rows.length; r++) {
-    const row = rows[r] ?? [];
-    const accountName = at(row, 'accountName');
-    const captionCell = at(row, 'caption');
-    const docNo = at(row, 'docNo');
-    if (!accountName && !captionCell && !docNo) continue;
-    if (/^(?:total|grand total|sub ?total)\b/i.test(accountName || captionCell)) continue;
+  for (const file of files) {
+    const best = pickSheet(file.sheets, cols => hasAmount(cols) && (cols.date !== undefined || cols.docNo !== undefined));
+    if (!best) continue;
+    readable++;
 
-    const fileEntityName = at(row, 'entityName');
-    const fileEntityId = at(row, 'entityId');
-    const entityId = match(fileEntityName, fileEntityId);
-    if (!entityId) { if (fileEntityName || fileEntityId) unmatchedNames.add(fileEntityName || fileEntityId); continue; }
-    matchedEntities.add(entityId);
+    const { rows, header, cols } = best;
+    const at = cellAt(cols);
+    const headerRow = rows[header] ?? [];
 
-    const amount = cols.debit !== undefined || cols.credit !== undefined
-      ? Math.abs(parseAmount(at(row, 'debit'))) + Math.abs(parseAmount(at(row, 'credit')))
-      : Math.abs(parseAmount(at(row, 'balance')));
-    const entryType = norm(at(row, 'entryType'));
+    for (let r = header + 1; r < rows.length; r++) {
+      const row = rows[r] ?? [];
+      if (sameAsHeader(row, headerRow)) continue;
+      const accountName = at(row, 'accountName');
+      const captionCell = at(row, 'caption');
+      const docNo = at(row, 'docNo');
+      if (!accountName && !captionCell && !docNo) continue;
+      if (/^(?:total|grand total|sub ?total)\b/i.test(accountName || captionCell)) continue;
 
-    lines.push({
-      entityId,
-      date: normaliseDate(at(row, 'date')),
-      docNo,
-      accountCode: at(row, 'accountCode'),
-      accountName,
-      caption: captionCell || accountName,
-      description: at(row, 'description'),
-      amount,
-      // A manual journal is the one an auditor looks for first.
-      manual: /manual|journal entry|\bje\b|adjust/.test(entryType) || /^je[-\s]/i.test(docNo),
-      postedBy: at(row, 'postedBy'),
-      system: at(row, 'system'),
-    });
+      const fileEntityName = at(row, 'entityName');
+      const fileEntityId = at(row, 'entityId');
+      const entityId = match(fileEntityName, fileEntityId);
+      if (!entityId) { if (fileEntityName || fileEntityId) unmatchedNames.add(fileEntityName || fileEntityId); continue; }
+      matchedEntities.add(entityId);
+
+      const amount = cols.debit !== undefined || cols.credit !== undefined
+        ? Math.abs(parseAmount(at(row, 'debit'))) + Math.abs(parseAmount(at(row, 'credit')))
+        : Math.abs(parseAmount(at(row, 'balance')));
+      const entryType = norm(at(row, 'entryType'));
+
+      lines.push({
+        entityId,
+        date: normaliseDate(at(row, 'date')),
+        docNo,
+        accountCode: at(row, 'accountCode'),
+        accountName,
+        caption: captionCell || accountName,
+        description: at(row, 'description'),
+        amount,
+        // A manual journal is the one an auditor looks for first.
+        manual: /manual|journal entry|\bje\b|adjust/.test(entryType) || /^je[-\s]/i.test(docNo),
+        postedBy: at(row, 'postedBy'),
+        system: at(row, 'system'),
+      });
+    }
   }
 
+  if (!readable) return { ok: false, reason: 'not-a-ledger' };
   if (!lines.length) return { ok: false, reason: 'no-rows' };
 
   const byCaption = new Map<string, GlLine[]>();
@@ -389,4 +466,11 @@ export async function parseGeneralLedgerFile(file: File, entities: GroupEntity[]
   for (const bucket of byCaption.values()) bucket.sort((a, b) => (a.date < b.date ? -1 : a.date > b.date ? 1 : 0));
 
   return { ok: true, lines, byCaption, totalLines: lines.length, matchedEntities: matchedEntities.size, unmatchedNames: [...unmatchedNames] };
+}
+
+/** One file, read and parsed. */
+export async function parseGeneralLedgerFile(file: File, entities: GroupEntity[]): Promise<GlParseResult> {
+  const r = await readLedgerFile(file);
+  if (!r.ok) return { ok: false, reason: r.reason };
+  return generalLedgerFrom([r.read], entities);
 }

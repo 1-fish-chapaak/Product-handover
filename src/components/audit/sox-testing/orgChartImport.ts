@@ -3,18 +3,18 @@
  *  chart we had authored ourselves, which meant every upload produced the same
  *  twelve companies whatever the document said. This reads the file.
  *
- *  Only a spreadsheet can be read honestly. A PDF, a photo of a printed chart
- *  or a Visio drawing needs OCR and a diagram parser that this prototype does
- *  not have, so those are refused by name and the user fills the table the way
- *  they already can — rather than being handed invented companies and left to
- *  discover later that none of them came from their document.
+ *  A register kept as a spreadsheet, a PDF, a Word file or a scan is read
+ *  through the shared table reader (1 Oct) — the PDF, Word and image cases used
+ *  to be refused. A file with no table in it (a drawn chart, a blank scan) is
+ *  still refused, and the user fills the table the way they already can —
+ *  rather than being handed invented companies.
  *
  *  Structure only: who exists, who holds whom, how much of it, and where it is
  *  incorporated. An org chart says nothing about processes, so those cells stay
  *  the user's to fill.
  */
-import * as XLSX from 'xlsx';
 import type { GroupEntity, EntityType } from './soxTestingData';
+import { readTableRows, isReadableTableFile, type ReadSheet } from './tableReader';
 
 /** Deliberately not borrowed from the RACM importer. An org chart has nothing
  *  to do with a control matrix, and reaching into that module for two helpers
@@ -28,21 +28,8 @@ function normaliseHeader(text: string): string {
     .trim();
 }
 
-/** Every sheet of an .xlsx / .xls / .csv, as trimmed string cells. */
-async function readWorkbook(file: File): Promise<{ name: string; rows: string[][] }[]> {
-  const wb = XLSX.read(await file.arrayBuffer(), { type: 'array' });
-  return wb.SheetNames.map(name => {
-    const ws = wb.Sheets[name];
-    const raw = ws ? XLSX.utils.sheet_to_json<unknown[]>(ws, { header: 1, defval: '', raw: false, blankrows: true }) : [];
-    return { name, rows: raw.map(r => (Array.isArray(r) ? r : []).map(v => String(v ?? '').trim())) };
-  });
-}
-
-/** Formats a spreadsheet reader can actually open. Everything else the upload
- *  control accepts — PDF, image, Visio, PowerPoint, draw.io — lands here as
- *  "can't read this", which is the truth. */
-const READABLE = /\.(xlsx|xlsm|xlsb|xls|csv|tsv)$/i;
-export const isReadableOrgChart = (fileName: string): boolean => READABLE.test(fileName.trim());
+/** Spreadsheet, PDF, Word or image — whatever the shared reader can open. */
+export const isReadableOrgChart = (fileName: string): boolean => isReadableTableFile(fileName);
 
 /** A guard rather than a limit anyone should hit: a group register of this size
  *  is a different document from an org chart, and rendering it row by row would
@@ -140,18 +127,15 @@ const slug = (s: string) => s.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(
 /** Reads the sheet into the table's own shape. The ids are ours, not the
  *  file's: a client's "ALT-0001" has to survive alongside rows the user typed,
  *  and two uploads of two charts must not collide on a shared code. */
-export async function parseOrgChartFile(file: File): Promise<OrgChartResult> {
-  if (!isReadableOrgChart(file.name)) {
-    return { ok: false, reason: 'not-a-spreadsheet' };
-  }
+export async function parseOrgChartFile(file: File, onScan?: () => void): Promise<OrgChartResult> {
+  const read = await readTableRows(file, onScan);
+  if (!read.ok) return { ok: false, reason: read.reason };
+  return orgChartFromSheets(read.sheets);
+}
 
-  let sheets: { name: string; rows: string[][] }[];
-  try {
-    sheets = await readWorkbook(file);
-  } catch {
-    return { ok: false, reason: 'unreadable' };
-  }
-  if (!sheets.length) return { ok: false, reason: 'unreadable' };
+/** The same, from rows already read — any file type ends up here. */
+export function orgChartFromSheets(sheets: ReadSheet[]): OrgChartResult {
+  if (!sheets.length) return { ok: false, reason: 'no-table' };
 
   // The sheet that looks most like a register — the one naming the most of our
   // columns — rather than simply the first, which is often a cover page.
@@ -167,6 +151,8 @@ export async function parseOrgChartFile(file: File): Promise<OrgChartResult> {
   if (!best) return { ok: false, reason: 'no-entity-column' };
 
   const { rows, header, cols } = best;
+  /** A PDF or Word table repeats its header on every page — not a company. */
+  const headerKey = (rows[header] ?? []).map(normaliseHeader).join('|');
   const at = (row: string[], key: OrgChartFieldKey): string => {
     const i = cols[key];
     return i === undefined ? '' : String(row[i] ?? '').trim();
@@ -180,6 +166,7 @@ export async function parseOrgChartFile(file: File): Promise<OrgChartResult> {
     const row = rows[r] ?? [];
     const name = at(row, 'name');
     if (!name) continue;
+    if (row.map(normaliseHeader).join('|') === headerKey) continue;
     // A totals or notes line at the foot of a register is not a company.
     if (/^(?:total|grand total|notes?|source)\b/i.test(name)) continue;
 

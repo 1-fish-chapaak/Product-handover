@@ -14,9 +14,8 @@ import type { Deficiency } from './types';
 export default function ReviewerQueue() {
   const { eng, me, openAuditId, setView, openControl, openDeficiency } = useIcfr();
   const papers = eng.controls.filter(isAwaitingReview);
-  // Concluded designs not yet approved (agentic UX #10, 1 Oct). The auditor no
-  // longer waits on these — testing goes on — but the countersign does, so
-  // they were the gate that left this queue empty while work piled up behind it.
+  // Concluded designs not yet approved (agentic UX #10, 1 Oct). The auditor's
+  // population waits on each of these, and so does the countersign.
   const designs = isEngagementLocked(eng) ? [] : eng.controls.filter(c =>
     trackResult(c.design) !== 'Not tested' && !c.design.approval?.approvedBy && !c.wpSignoff?.reviewer);
   const notesToVerify = eng.reviewNotes.filter(n => n.status === 'Resolved');
@@ -114,7 +113,7 @@ export default function ReviewerQueue() {
                 </div>
                 <div className="text-[0.8125rem] text-ink-800 truncate mt-0.5">{c.description}</div>
                 <div className="text-[0.71875rem] text-ink-400 mt-0.5">
-                  Design concluded {trackResult(c.design).toLowerCase()} by {c.design.testedBy ?? c.design.approval?.preparedBy?.by ?? '—'} — testing carries on; the countersign waits for your approval
+                  Design concluded {trackResult(c.design).toLowerCase()} by {c.design.testedBy ?? c.design.approval?.preparedBy?.by ?? '—'} — the population opens once you approve it
                 </div>
               </div>
               <ArrowRight size={15} className="text-ink-300 shrink-0" />

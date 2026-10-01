@@ -233,6 +233,9 @@ export default function WorkingPaperModal({ eng, control, controls, report, onCl
    *  sheets — so the report renders as ONE continuous scroll, its sheets becoming
    *  sections of the deliverable in the order the PDF prints them. */
   report?: boolean; onClose: () => void; onDownload?: () => void }) {
+  // The report is the OPEN audit's deliverable — its sign-off is read off that
+  // audit, not whichever one happens to be live.
+  const { openAuditId } = useIcfr();
   // A control's paper is view-only until BOTH tracks have concluded. Not a
   // permission — a readiness gate: the document does not yet say anything, and a
   // downloaded file gets treated as final by whoever opens it next.
@@ -276,13 +279,13 @@ export default function WorkingPaperModal({ eng, control, controls, report, onCl
   const issuePdf = async () => {
     pdfNote.clear();
     try {
-      await downloadAuditReportPdf(eng, included);
+      await downloadAuditReportPdf(eng, included, openAuditId);
       onDownload?.(); onClose();
     } catch {
       pdfNote.show('error', 'PDF not generated — the PDF engine could not be loaded. Try again.');
     }
   };
-  const sheets = report ? buildAuditReport(eng, included)
+  const sheets = report ? buildAuditReport(eng, included, openAuditId)
     : control ? controlPaperSections(eng, control)
     : buildIcfrPaper(eng, included);
 
@@ -378,7 +381,7 @@ export default function WorkingPaperModal({ eng, control, controls, report, onCl
               <>
                 {/* the report is ISSUED as a PDF (each sheet a page); the .xlsx
                     is a secondary export of the same sheets */}
-                <button onClick={() => { downloadAuditReport(eng, included); onDownload?.(); onClose(); }}
+                <button onClick={() => { downloadAuditReport(eng, included, openAuditId); onDownload?.(); onClose(); }}
                   className="h-9 px-3.5 rounded-lg border border-canvas-border text-[12.5px] font-semibold text-ink-600 hover:bg-paper-50 cursor-pointer inline-flex items-center gap-1.5"><FileSpreadsheet size={14} /> Export .xlsx</button>
                 <button onClick={issuePdf}
                   className="h-9 px-4 rounded-lg bg-brand-600 text-white text-[12.5px] font-semibold hover:bg-brand-700 cursor-pointer inline-flex items-center gap-1.5"><Download size={14} /> Download PDF</button>

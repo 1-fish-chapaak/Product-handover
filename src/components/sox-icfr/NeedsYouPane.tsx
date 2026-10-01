@@ -76,7 +76,9 @@ export function needsYouItems(control: Control, eng: IcfrEngagement, role: Role,
     // IPE lives only in step ① — the card points there, it does not test.
     // Upstream of everything else here, so it comes first.
     const pop = control.operating.population;
-    if (opApplies && pop && !pop.locked) {
+    // Both wait on the reviewer's design approval, as the store does — the
+    // population's IPE and lock are refused before it (product owner, 1 Oct).
+    if (opApplies && pop && !pop.locked && designApproved(control)) {
       const ipe = control.operating.ipe;
       if (ipe?.conclusion !== 'Reliable') {
         const checks = ipe?.checks ?? [];
@@ -86,9 +88,7 @@ export function needsYouItems(control: Control, eng: IcfrEngagement, role: Role,
           done: checks.filter(k => k.result !== 'Not tested').length, total: checks.length,
           unreliable: ipe?.conclusion === 'Not reliable',
         });
-      } else if (control.design.conclusion !== 'Not tested') {
-        // The store refuses the lock before TOD is concluded, so the card waits
-        // for that too rather than offering a button that does nothing.
+      } else {
         out.push({ kind: 'lock', id: 'lock', anchor: 'lock-population' });
       }
     }

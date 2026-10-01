@@ -192,9 +192,9 @@ function blockContent(b: PaperBlock): Content[] {
  * Resolves once the browser has been handed the file. Throws if pdfmake fails
  * to load, so the caller can say so rather than silently doing nothing.
  */
-export async function downloadAuditReportPdf(eng: IcfrEngagement, controls: Control[] = eng.controls): Promise<void> {
+export async function downloadAuditReportPdf(eng: IcfrEngagement, controls: Control[] = eng.controls, auditId?: string | null): Promise<void> {
   const pdfMake = await loadPdfMake();
-  const sheets = buildAuditReport(eng, controls);
+  const sheets = buildAuditReport(eng, controls, auditId);
   const reportName = `Internal_Controls_Status_Report_${eng.code}`;
 
   const content: Content[] = [];

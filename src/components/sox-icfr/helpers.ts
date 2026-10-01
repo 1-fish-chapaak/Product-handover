@@ -1763,10 +1763,11 @@ export function exposureFromData(d: Deficiency, eng: IcfrEngagement, x: Exposure
     const { count, value } = populationValue(c, from, to, x.home ?? a);
     return { kind: 'population', value, count, population: pop.count, from, to, firstFailed, fixed };
   }
-  // The audit's own ruler decides what is material — the one its mapping was made
-  // against — and the mapping wins wherever one was made (S10, A34a).
+  // The ENGAGEMENT's performance materiality decides what is material (Oct 2026:
+  // materiality is the engagement's only — an audit no longer carries a ruler of
+  // its own) — and the mapping wins wherever one was made (S10, A34a).
   const process = x.normalise(c.process);
-  const pmCr = a.overall > 0 ? (a.overall * (a.materiality.pmPct ?? 75)) / 100 : eng.performanceMateriality / 1e7;
+  const pmCr = eng.performanceMateriality / 1e7;
   const mapped = a.accountProcesses
     ? x.captions.filter(k => a.accountProcesses![k.id] !== undefined && x.normalise(a.accountProcesses![k.id]!) === process)
     : x.captions.filter(k => k.balance >= pmCr && x.normalise(k.process) === process);
@@ -3396,8 +3397,15 @@ export function wfRunRef(key: string, fail: boolean): string {
 const APPROVERS = ['R. Iyer', 'S. Menon', 'A. Kapoor', 'P. Nair', 'D. Rao'];
 const BANKS = ['HDFC', 'ICICI', 'SBI', 'Axis'];
 const ROLES = ['AP clerk', 'AP approver', 'Treasury maker', 'Treasury checker'];
-const MONTHS_SHORT = ['Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec', 'Jan', 'Feb', 'Mar'];
-const onDay = (h: number) => `${(h % 27) + 1} ${MONTHS_SHORT[(h >>> 3) % 12]}`;
+/** A day off the hash, with its year, inside the same fallback stretch
+ *  sampleDate uses. Only the pre-sample table reads it — a drawn item is
+ *  compared on its own date (documentSystemRows), never on a made-up one. */
+const onDay = (h: number) => {
+  const from = dayOf(FALLBACK_WINDOW.windowFrom);
+  return fmtDay(isoOf(from + (h % (dayOf(FALLBACK_WINDOW.windowTo) - from + 1))));
+};
+/** Fields that are a date — compared on the sampled item's own date. */
+const DATE_FIELDS = new Set(['Hold release date', 'Review date', 'Posting date']);
 const COMPARE_FIELDS: [RegExp, string, (h: number) => string][] = [
   [/approval/i, 'Approver', h => APPROVERS[h % APPROVERS.length]!],
   [/vendor master/i, 'Vendor bank account', h => `${BANKS[h % BANKS.length]} …${String(1000 + ((h >>> 2) % 9000))}`],
@@ -3429,9 +3437,16 @@ export interface DocumentSystemRow { id: string; ref: string; field: string; doc
 /** One row per item: the document's value, the system's value, and whether they
  *  agree. Read off the verdicts already on the attribute, so this table and the
  *  sample grid can never disagree about which item failed. */
-function compareRow(key: string, id: string, ref: string, i: number, fields: [string, (h: number) => string][], result: TestResult): DocumentSystemRow {
+function compareRow(key: string, id: string, ref: string, i: number, fields: [string, (h: number) => string][], result: TestResult, date?: string): DocumentSystemRow {
   const [field, value] = fields[i % fields.length]!;
   const h = hnum(key + id);
+  // A date field reads the item's own date (the one the sample grid shows); a
+  // mismatch is the system holding a date a few days off it.
+  if (date && DATE_FIELDS.has(field)) {
+    const document = fmtDay(date);
+    const off = (2 + (h % 4)) * (h & 1 ? -1 : 1);
+    return { id, ref, field, document, system: result === 'Fail' ? fmtDay(isoOf(dayOf(date) + off)) : document, result };
+  }
   const document = value(h);
   // a mismatch has to actually differ — walk the hash until it does
   let system = document;
@@ -3439,10 +3454,10 @@ function compareRow(key: string, id: string, ref: string, i: number, fields: [st
   return { id, ref, field, document, system, result };
 }
 /** The drawn sample, compared item by item. Empty before a sample exists. */
-export function documentSystemRows(c: Control, s: OperatingStep): DocumentSystemRow[] {
+export function documentSystemRows(c: Control, s: OperatingStep, home?: Pick<AuditRecord, 'windowFrom' | 'windowTo'>): DocumentSystemRow[] {
   const fields = compareFieldsFor(c, s);
   return (c.operating.sampling?.samples ?? []).map((it, i) =>
-    compareRow(seedKeyOf(c) + s.id, it.id, it.ref, i, fields, s.sampleResults?.[it.id] ?? 'Not tested'));
+    compareRow(seedKeyOf(c) + s.id, it.id, it.ref, i, fields, s.sampleResults?.[it.id] ?? 'Not tested', sampleDate(it, home)));
 }
 
 /** Plain-language summary the AI returns after comparing the sampled items'
@@ -4437,10 +4452,12 @@ export function engagementProgress(eng: IcfrEngagement, controls?: Control[]) {
 /**
  * How much of the engagement is FINISHED — the third engagement score.
  *
- * Milestone-weighted, because "done" is not one event: a control travels RACM
- * approval → TOD → TOE → countersign, and an exception raised on the way has to
- * be closed before the control is off the table. Each control is worth exactly
- * 1.0, split across those five, and the engagement reads the average.
+ * Milestone-weighted, because "done" is not one event: a control travels TOD →
+ * TOE → countersign, and an exception raised on the way has to be closed before
+ * the control is off the table. Each control is worth exactly 1.0, split evenly
+ * across those four (0.25 each), and the engagement reads the average. RACM row
+ * approval is no longer a milestone (Oct 2026): it was never set in practice and
+ * cannot be set on a tested control, so it held every engagement below 90%.
  *
  * Weights sum to 1.0 per control, so `Σ credits ÷ control count` is the same
  * number as `Σ credits ÷ Σ maximum credits` — the control is the denominator
@@ -4451,7 +4468,7 @@ export function engagementProgress(eng: IcfrEngagement, controls?: Control[]) {
  * finished work, so every milestone credits on conclusion, whichever way it
  * went. An engagement can read 100% and still conclude ICFR not effective.
  */
-const MILESTONE = { racm: 0.10, tod: 0.25, toe: 0.30, countersign: 0.25, exceptions: 0.10 } as const;
+const MILESTONE = { tod: 0.25, toe: 0.25, countersign: 0.25, exceptions: 0.25 } as const;
 
 export function engagementCompleteness(eng: IcfrEngagement, controls?: Control[]) {
   const cs = controls ?? eng.controls;
@@ -4466,7 +4483,6 @@ export function engagementCompleteness(eng: IcfrEngagement, controls?: Control[]
     // time an ITGC conclusion changed, which is not progress.
     const shortForm = !operatingApplies(eng, c);
     let n = 0;
-    if (c.racmReview?.status === 'Approved') n += MILESTONE.racm;
     if (trackResult(c.design) !== 'Not tested') n += MILESTONE.tod + (shortForm ? MILESTONE.toe : 0);
     if (!shortForm && trackResult(c.operating) !== 'Not tested') n += MILESTONE.toe;
     if (isControlLockedIn(eng, c) && !!c.wpSignoff?.reviewer) n += MILESTONE.countersign;

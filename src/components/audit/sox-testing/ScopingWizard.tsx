@@ -17,7 +17,7 @@ import { defaultSamplingMethodology, FREQUENCY_ORDER, FREQUENCY_SAYS, ROUND_BASI
 import { cn } from '../../../lib/cn';
 import {
   BASIS_OPTIONS, BEYOND_TB, ENTITY_TYPES, QUAL_REASONS, SEED_ENTITIES,
-  SEED_GROUP_NAME, SEED_QUAL_PICKS, SEED_TB_FILES, captionsForEntities,
+  SEED_GROUP_NAME, SEED_QUAL_PICKS, SEED_TB_FILES,
   currentFyEnd, cycleYears, deriveRacms, entityShort, fmtCr, genCode,
   type DerivedRacm, type GroupEntity, type MaterialityBasis, type ProcessName, type QualPick,
   type SoxProgramme, type TbCaption,
@@ -33,7 +33,11 @@ import {
 import CreateRacmFlow from '../../sox-icfr/CreateRacmFlow';
 import { parseOrgChartFile } from './orgChartImport';
 import LedgerExplorer from './LedgerExplorer';
-import { parseTrialBalanceFile, parseGeneralLedgerFile, isReadableLedger, captionKey, type TbParseOk, type GlParseOk, type GlLine } from './ledgerImport';
+import {
+  parseTrialBalanceFile, parseGeneralLedgerFile, isReadableLedger, captionKey, readLedgerFile, checkTrialBalance,
+  trialBalanceFrom, generalLedgerFrom, type TbParseOk, type TbParseResult, type GlParseOk, type GlLine, type LedgerFileRead,
+} from './ledgerImport';
+import { TABLE_FILE_ACCEPT, isScanFile } from './tableReader';
 import { benchmarksFromTb } from './tbBenchmarks';
 // Upload RACM opens the RACM tab's own dialog, which is styled by the SOX
 // register sheet (.modal-backdrop / .modal). Imported here as well so the
@@ -290,10 +294,36 @@ const suggestEngagementName = (group: string, fyLbl: string) =>
 const yearLabel = (basis: 'fy' | 'cy', end: number) =>
   basis === 'fy' ? `FY ${end - 1}-${String(end).slice(-2)}` : `CY ${end}`;
 
-/** Formats an org chart is realistically kept in. Deliberately wide: whatever
- *  the client has is what we take — a spreadsheet of companies (Excel / CSV)
- *  as much as a drawn chart (image, Visio, PDF, PowerPoint, draw.io). */
-const ORG_CHART_ACCEPT = '.xlsx,.xls,.csv,.pdf,.png,.jpg,.jpeg,.webp,.gif,.svg,.vsd,.vsdx,.vsdm,.ppt,.pptx,.drawio,image/*,application/pdf,text/csv';
+/** Formats an org chart can be read from (1 Oct): a spreadsheet, a PDF, a
+ *  Word file or a scan — the same set the trial balance and ledger take. Visio,
+ *  PowerPoint, draw.io and SVG stay on offer (user, 1 Oct) and are refused
+ *  with a named reason when picked. */
+const ORG_CHART_ACCEPT = `${TABLE_FILE_ACCEPT},.svg,.vsd,.vsdx,.vsdm,.ppt,.pptx,.drawio`;
+
+/** A file on Materiality & TB, and how reading it went. `problem` says why a
+ *  failed one failed: no table Ira could use, or a general ledger in the
+ *  trial-balance slot. `scan` is true while OCR is running on it. */
+interface ScopeFile {
+  id: string;
+  name: string;
+  kind: 'tb' | 'gl';
+  origin?: FileOrigin;
+  read: 'pending' | 'ok' | 'failed';
+  problem?: ScopeFileProblem;
+  scan?: boolean;
+}
+type ScopeFileProblem = 'no-table' | 'unsupported' | 'no-amount-column' | 'no-rows' | 'not-a-ledger' | 'looks-like-gl';
+const asProblem = (reason: string): ScopeFileProblem =>
+  (['unsupported', 'no-amount-column', 'no-rows', 'not-a-ledger', 'looks-like-gl'] as const).find(r => r === reason) ?? 'no-table';
+/** Name what's missing when Ira knows it (user, 1 Oct); the general line otherwise. */
+const PROBLEM_LINE: Record<ScopeFileProblem, string> = {
+  'no-table': 'Ira couldn’t find a table in this file.',
+  unsupported: 'Ira can’t read this file type — upload Excel, CSV, PDF, Word or an image.',
+  'no-amount-column': 'Ira found a table but no amount column — a trial balance needs a balance, or debit and credit.',
+  'no-rows': 'Ira found the columns but no account rows under them.',
+  'not-a-ledger': 'Ira found a table but no posting date or document number — a general ledger lists journal lines.',
+  'looks-like-gl': 'This looks like a general ledger — a trial balance has one closing balance per account.',
+};
 
 const TYPE_TILES: { type: EngType; icon: JSX.Element; tagline: string; tint: string; ring: string; iconWrap: string }[] = [
   { type: 'SOX / ICFR',     icon: <ShieldCheck size={22} />,    tagline: 'SOX 404 / ICFR — scoping, materiality rules, design + operating effectiveness, deficiency evaluation', tint: 'bg-brand-50/70 hover:bg-brand-50 text-brand-700 border-brand-200',          ring: 'ring-brand-600 ring-offset-2 ring-offset-canvas-elevated',     iconWrap: 'bg-brand-600 text-white' },
@@ -530,17 +560,15 @@ export default function ScopingWizard({ onCancel, onCreated, typePreselected, on
    *  them: nobody drew them on the chart and nobody typed them. */
   const [tbAddedIds, setTbAddedIds] = useState<Set<string>>(new Set());
 
-  /** All captions for the current entity set. The uploaded trial balance wins
-   *  wherever it has something to say: before it existed every company the
-   *  seed did not know got the same four invented captions, which made one
-   *  company indistinguishable from the next and left materiality deciding
-   *  nothing (24 Sep). The seed still answers for rows the file never
-   *  mentioned, so a hand-typed company is not left blank. */
+  /** All captions for the current entity set — the uploaded trial balance's,
+   *  and nothing else (1 Oct). Until then a company the file never mentioned,
+   *  or every company before a file was read, was filled with four invented
+   *  captions worth ₹249 Cr, and those made-up figures reached Scope, Review
+   *  and the created engagement. A company the file does not mention now has
+   *  no figures; Scope says it is not in the trial balance. */
   const captions = useMemo<TbCaption[]>(() => {
-    if (!tbParse) return captionsForEntities(entities);
-    const spoken = new Set(tbParse.captions.map(c => c.entityId));
-    const silent = entities.filter(e => !spoken.has(e.id));
-    return [...tbParse.captions.filter(c => entities.some(e => e.id === c.entityId)), ...captionsForEntities(silent)];
+    if (!tbParse) return [];
+    return tbParse.captions.filter(c => entities.some(e => e.id === c.entityId));
   }, [entities, tbParse]);
 
   const captionProcess = (c: TbCaption): ProcessName => mapping[c.id] ?? c.process;
@@ -600,40 +628,107 @@ export default function ScopingWizard({ onCancel, onCreated, typePreselected, on
    *  generated or Client prepared — and Continue waits on every answer. It is
    *  saved on the programme's scoping record, which is where the engagement's
    *  file list reads it back (useAuditFiles), so no control asks it again. */
-  const [scopeFiles, setScopeFiles] = useState<{ name: string; kind: 'tb' | 'gl'; origin?: FileOrigin }[]>([]);
-  /** Files still waiting on their source. */
-  const unsourcedFiles = scopeFiles.filter(f => !f.origin).length;
+  const [scopeFiles, setScopeFiles] = useState<ScopeFile[]>([]);
+  /** What each file read into, by file id — kept so the trial balance can be
+   *  recombined (another file added, one removed) without reading a scan twice. */
+  const scopeReads = useRef(new Map<string, LedgerFileRead>());
+  /** Files still waiting on their source. One Ira could not read is not asked —
+   *  it can only be removed. */
+  const unsourcedFiles = scopeFiles.filter(f => !f.origin && f.read !== 'failed').length;
   /** Required before Materiality & TB will pass — the account mapping and Ira's
-   *  process recommendation both read it. The general ledger never is. */
-  const hasTb = scopeFiles.some(f => f.kind === 'tb');
+   *  process recommendation both read it. The general ledger never is. Only a
+   *  trial balance Ira actually READ counts: a file merely attached used to
+   *  pass, and the step then scoped off invented figures. */
+  const hasTb = scopeFiles.some(f => f.kind === 'tb' && f.read === 'ok');
+  /** Still reading, or could not be read — either holds Continue. */
+  const filesReading = scopeFiles.some(f => f.read === 'pending');
+  const filesFailed = scopeFiles.some(f => f.read === 'failed');
+  const glInTbSlot = scopeFiles.some(f => f.kind === 'tb' && f.problem === 'looks-like-gl');
+
+  const markScopeFile = (id: string, patch: Partial<ScopeFile>) =>
+    setScopeFiles(prev => prev.map(f => (f.id === id ? { ...f, ...patch } : f)));
+
+  /** Whether a file already read is usable in the slot it sits in. */
+  const settleScopeFile = (id: string, kind: 'tb' | 'gl', read: LedgerFileRead) => {
+    if (kind === 'tb') {
+      const check = checkTrialBalance(read);
+      markScopeFile(id, check.ok
+        ? { read: 'ok', problem: undefined }
+        : { read: 'failed', problem: asProblem(check.reason) });
+      return;
+    }
+    const gl = generalLedgerFrom([read], entitiesRef.current);
+    markScopeFile(id, gl.ok ? { read: 'ok', problem: undefined } : { read: 'failed', problem: asProblem(gl.reason) });
+  };
+
+  /** READ THE FILE, don't just log its name (28 Sep) — and every file, not
+   *  only the first one picked (1 Oct). Spreadsheet, PDF, Word or scan, the
+   *  same reader puts it into rows; a file it cannot find a table in stays
+   *  listed with the reason, and Continue waits until it is removed. */
+  const readScopeFile = async (id: string, kind: 'tb' | 'gl', file: File) => {
+    const r = await readLedgerFile(file, () => markScopeFile(id, { scan: true }));
+    if (!r.ok) { markScopeFile(id, { read: 'failed', problem: asProblem(r.reason), scan: false }); return; }
+    scopeReads.current.set(id, r.read);
+    markScopeFile(id, { scan: false });
+    settleScopeFile(id, kind, r.read);
+  };
+
   const addScopeFile = (kind: 'tb' | 'gl') => {
     const input = document.createElement('input');
     input.type = 'file';
-    input.accept = '.xlsx,.xls,.csv';
+    input.accept = TABLE_FILE_ACCEPT;
     // A group can file one trial balance per company, so several at once is
-    // normal — same as New audit.
+    // normal — same as New audit. All of them are read, and combined.
     input.multiple = true;
     input.onchange = () => {
       const picked = Array.from(input.files ?? []);
       if (!picked.length) return;
-      setScopeFiles(prev => [...prev, ...picked.map(f => ({ name: f.name, kind }))]);
-      // READ THE FILE, don't just log its name (28 Sep). This step promises the
-      // material accounts decide which processes the engagement covers, and
-      // until now it attached the trial balance and scoped off invented
-      // figures instead — every company came out at the same ₹249 Cr, so
-      // materiality could not tell one from another, which is the entire point
-      // of the step. The parser already existed; nothing called it from here.
-      //
-      // One file, like the other ledger paths: a trial balance is normally one
-      // workbook covering the whole group. A file we cannot open still lands in
-      // the list above, and `ledgerError` says why in its own words.
-      const first = picked.find(f => isReadableLedger(f.name)) ?? picked[0]!;
-      if (kind === 'tb') void ingestTrialBalance(first);
-      else if (isReadableLedger(first.name)) void ingestGeneralLedger(first);
-      else setLedgerError({ kind: 'gl', name: first.name, reason: 'not-a-spreadsheet' });
+      const added = picked.map((f, n) => ({
+        file: f,
+        entry: { id: `sf-${Date.now()}-${n}`, name: f.name, kind, read: 'pending' as const, scan: isScanFile(f.name) },
+      }));
+      setScopeFiles(prev => [...prev, ...added.map(a => a.entry)]);
+      added.forEach(a => { void readScopeFile(a.entry.id, kind, a.file); });
     };
     input.click();
   };
+
+  const removeScopeFile = (id: string) => {
+    scopeReads.current.delete(id);
+    setScopeFiles(prev => prev.filter(f => f.id !== id));
+  };
+
+  /** A general ledger dropped in the trial-balance slot, moved to where it
+   *  belongs and read there as a ledger. Its source answer goes with it. */
+  const moveToGeneralLedger = (id: string) => {
+    const read = scopeReads.current.get(id);
+    markScopeFile(id, { kind: 'gl', read: 'pending', problem: undefined });
+    if (read) settleScopeFile(id, 'gl', read);
+  };
+
+  // The trial balance is every readable TB file, combined — recomputed when
+  // one is added, removed or moved out. With none left, nothing it said stays.
+  const tbOkKey = scopeFiles.filter(f => f.kind === 'tb' && f.read === 'ok').map(f => f.id).join('|');
+  useEffect(() => {
+    const reads = tbOkKey ? tbOkKey.split('|').map(id => scopeReads.current.get(id)).filter((r): r is LedgerFileRead => !!r) : [];
+    if (!reads.length) {
+      setTbParse(null);
+      setUploads({});
+      setTbAddedIds(new Set());
+      setLedgerError(null);
+      return;
+    }
+    applyTbResult(trialBalanceFrom(reads, entitiesRef.current));
+    // Keyed on the files alone — entity edits never re-read the trial balance.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [tbOkKey]);
+  const glOkKey = scopeFiles.filter(f => f.kind === 'gl' && f.read === 'ok').map(f => f.id).join('|');
+  useEffect(() => {
+    const reads = glOkKey ? glOkKey.split('|').map(id => scopeReads.current.get(id)).filter((r): r is LedgerFileRead => !!r) : [];
+    const gl = reads.length ? generalLedgerFrom(reads, entitiesRef.current) : null;
+    setGlParse(gl?.ok ? gl : null);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [glOkKey]);
 
   // ── Material accounts → processes ────────────────────────────────────────
   // Only the accounts at or above performance materiality, so the list redraws
@@ -694,12 +789,13 @@ export default function ScopingWizard({ onCancel, onCreated, typePreselected, on
    *  the same Save / Cancel meaning as the process notes. */
   const [scopeNotes, setScopeNotes] = useState<Record<string, string>>({});
   const [noteDrafts, setNoteDrafts] = useState<Record<string, string>>({});
-  /** In scope after the user has had their say. A company the trial balance
-   *  never mentioned can't be overruled in — there is nothing to test it on. */
   /** What the company's OWN line says — the derivation, or the user's override
-   *  of it. Says nothing about the group above it. */
+   *  of it. Says nothing about the group above it. A company the trial balance
+   *  never mentioned starts out, and can be brought in with a written reason
+   *  (1 Oct): it then counts as a company in scope, with no figures and nothing
+   *  added to coverage. */
   const ownInScope = (r: DerivedScopeRow) =>
-    r.status === 'absent' ? false : overrides[r.id] ?? (r.status === 'tb' || r.status === 'coverage');
+    overrides[r.id] ?? (r.status === 'tb' || r.status === 'coverage');
   /**
    * THE COMPANY ABOVE THIS ONE THAT TAKES IT OUT WITH IT, if any (user, 27 Sep
    * — "jab humne upar wali entity ko hataya to neeche wali automatically hat
@@ -937,7 +1033,7 @@ export default function ScopingWizard({ onCancel, onCreated, typePreselected, on
     // hidden. Counting it here would hold Continue on a note with nowhere to
     // write it — and would record a decision the user never made.
     () => scope.rows
-      .filter(r => r.status !== 'absent' && overrides[r.id] !== undefined && !outByAncestor(r))
+      .filter(r => overrides[r.id] !== undefined && !outByAncestor(r))
       .map(r => ({ entityId: r.id, name: r.name, inScope: !!overrides[r.id], note: (scopeNotes[r.id] ?? '').trim() })),
     // eslint-disable-next-line react-hooks/exhaustive-deps
     [scope.rows, overrides, scopeNotes],
@@ -1196,7 +1292,7 @@ export default function ScopingWizard({ onCancel, onCreated, typePreselected, on
   }, [racmUploadFor]);
 
   // ── Gates ────────────────────────────────────────────────────────────────
-  const matTbReady = hasTb && unsourcedFiles === 0 && benchmark > 0 && (basis === 'custom' || pct > 0);
+  const matTbReady = hasTb && !!tbParse && !filesReading && !filesFailed && unsourcedFiles === 0 && benchmark > 0 && (basis === 'custom' || pct > 0);
   /** Moved companies, moved processes, RACMs and controls taken out still owed
    *  a note — one count for the footer. */
   const notesDue = notesOutstanding + procNotesOutstanding + racmNotesOutstanding + ctlNotesOutstanding;
@@ -1244,7 +1340,10 @@ export default function ScopingWizard({ onCancel, onCreated, typePreselected, on
    *  usually further up the scroll. A clash outranks a missing RACM (it names
    *  the thing to untick), which outranks a missing note. */
   const footerHint = step === MAT_TB_STEP
-    ? (!hasTb ? 'Upload a trial balance to continue'
+    ? (filesReading ? 'Ira is still reading the files'
+      : glInTbSlot ? 'Move the general ledger out of the trial balance to continue'
+      : filesFailed ? 'Remove the file Ira couldn’t read to continue'
+      : !hasTb ? 'Upload a trial balance to continue'
       : unsourcedFiles > 0 ? 'Answer the source of every file to continue' : null)
     : step === SCOPE_STEP
       ? (clashes.length > 0 ? 'Untick one of the RACMs whose control IDs clash'
@@ -1301,7 +1400,7 @@ export default function ScopingWizard({ onCancel, onCreated, typePreselected, on
    *  fill until a RACM or trial balance arrives with something to extract.
    *  Merged by name, so a row already typed never doubles up. */
   const [orgChart, setOrgChart] = useState<
-    | { name: string; state: 'parsing' }
+    | { name: string; state: 'parsing'; scan?: boolean }
     | { name: string; state: 'done'; found: number }
     | { name: string; state: 'unreadable'; reason: string }
     | null
@@ -1374,11 +1473,13 @@ export default function ScopingWizard({ onCancel, onCreated, typePreselected, on
     const file = list?.[0];
     if (!file) return;
     setClash(null);
-    setOrgChart({ name: file.name, state: 'parsing' });
+    setOrgChart({ name: file.name, state: 'parsing', scan: isScanFile(file.name) });
 
     // The document itself decides what lands (24 Sep). It used to be the
     // filename, which meant every chart but two extracted somebody else's group.
-    const result = await parseOrgChartFile(file);
+    // A PDF, Word file or scan is read too (1 Oct); OCR says it takes a moment.
+    const result = await parseOrgChartFile(file, () =>
+      setOrgChart(prev => (prev?.name === file.name && prev.state === 'parsing' ? { ...prev, scan: true } : prev)));
 
     // The user can tick "There are no separate entities" while this is still
     // reading. That answer wins: merging a whole group in underneath it would
@@ -1610,10 +1711,17 @@ export default function ScopingWizard({ onCancel, onCreated, typePreselected, on
   const ingestTrialBalance = async (file: File) => {
     setTbUpload('parsing');
     setLedgerError(null);
-    const result = await parseTrialBalanceFile(file, entitiesRef.current);
+    applyTbResult(await parseTrialBalanceFile(file, entitiesRef.current), file.name);
+  };
+
+  /** What a read trial balance changes — shared by the Materiality & TB upload
+   *  (every file combined) and the parked single-file path above. */
+  const applyTbResult = (result: TbParseResult, fileName = '') => {
     if (!result.ok) {
       setTbUpload('idle');
-      setLedgerError({ kind: 'tb', name: file.name, reason: result.reason });
+      setTbParse(null);
+      setUploads({});
+      setLedgerError({ kind: 'tb', name: fileName, reason: result.reason });
       return;
     }
     setTbParse(result);
@@ -2112,7 +2220,7 @@ export default function ScopingWizard({ onCancel, onCreated, typePreselected, on
                     {(
                     orgChart === null ? (
                       <label
-                        title="Excel, CSV, image, Visio or PDF — the structure is read off the chart"
+                        title="Excel, CSV, PDF, Word or an image — the companies are read off the register"
                         className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md border border-border-light bg-white hover:bg-surface-2 text-[11px] font-semibold text-text-secondary cursor-pointer transition-colors shrink-0"
                       >
                         <Upload size={11} /> Org Chart
@@ -2125,8 +2233,9 @@ export default function ScopingWizard({ onCancel, onCreated, typePreselected, on
                         />
                       </label>
                     ) : orgChart.state === 'parsing' ? (
-                      <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md border border-border-light bg-white text-[11px] font-semibold text-text-muted shrink-0">
-                        <Loader2 size={11} className="animate-spin" /> Reading the chart…
+                      <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md border border-border-light bg-white text-[11px] font-semibold text-text-muted min-w-0 max-w-[15rem]">
+                        <Loader2 size={11} className="animate-spin shrink-0" />
+                        <span className="truncate">{orgChart.scan ? 'Reading a scan — this takes a few seconds' : `Reading ${orgChart.name}…`}</span>
                       </span>
                     ) : orgChart.state === 'unreadable' ? (
                       <span className="inline-flex items-center gap-1.5 pl-2 pr-1 py-0.5 rounded-md border border-high-100 bg-high-50 max-w-[15rem] min-w-0">
@@ -2159,20 +2268,22 @@ export default function ScopingWizard({ onCancel, onCreated, typePreselected, on
                   )}
                 </div>
                 {/* A chart we cannot read says so, rather than quietly handing
-                    over somebody else's group. Only a spreadsheet can be read
-                    honestly here; a drawn chart needs OCR the prototype has
-                    not got, so the message points at the two ways forward —
-                    both of which are already on the row above. */}
+                    over somebody else's group. Spreadsheets, PDFs, Word files
+                    and scans are all read (1 Oct); a file with no table in it —
+                    a drawn chart, a blank scan — stays on the chip above with
+                    this one line, and is removed with its ✕. */}
                 {!soloEntity && orgChart?.state === 'unreadable' && (
                   <div className="mb-1.5 rounded-md border border-high-100 bg-high-50 px-2.5 py-2">
                     <p className="text-[11px] text-high-700 leading-relaxed">
-                      {orgChart.reason === 'not-a-spreadsheet'
-                        ? <>Couldn’t read <span className="font-semibold">{orgChart.name}</span>. Ira reads org charts kept as <span className="font-semibold">Excel or CSV</span> — a drawn chart, PDF or image can’t be extracted. Re-upload it as .xlsx / .csv, or add the companies with <span className="font-semibold">Add entity</span>.</>
+                      {orgChart.reason === 'unsupported'
+                        ? <>Ira can’t read this file type — save the chart as Excel, CSV, PDF, Word or an image.</>
+                        : orgChart.reason === 'no-table'
+                        ? <>Ira couldn’t find a table in this file.</>
                         : orgChart.reason === 'no-entity-column'
                           ? <>Read <span className="font-semibold">{orgChart.name}</span>, but no column names the companies. The sheet needs a <span className="font-semibold">legal entity name</span> column — a parent, ownership % and jurisdiction column are read too, if it has them.</>
                           : orgChart.reason === 'no-rows'
                             ? <>Read <span className="font-semibold">{orgChart.name}</span>, but it has no company rows under its header.</>
-                            : <>Couldn’t open <span className="font-semibold">{orgChart.name}</span> as a spreadsheet. Save it as .xlsx or .csv and upload it again.</>}
+                            : <>Ira couldn’t find a table in this file.</>}
                     </p>
                   </div>
                 )}
@@ -2539,30 +2650,19 @@ export default function ScopingWizard({ onCancel, onCreated, typePreselected, on
             {tbParse && (
               <div className="mb-3 rounded-md border border-compliant-200 bg-compliant-50/60 px-2.5 py-2">
                 <p className="text-[0.71875rem] text-compliant-700 leading-relaxed">
-                  Read <span className="font-semibold">{plural(tbParse.captions.length, 'account')}</span> across{' '}
+                  {/* Accounts are the rows of the file; statement lines are the
+                      captions they roll up into. This used to call the second
+                      number "accounts". */}
+                  Read <span className="font-semibold">{plural(tbParse.accounts, 'account')}</span>{' '}
+                  ({plural(tbParse.captions.length, 'statement line')}) across{' '}
                   <span className="font-semibold">{plural(new Set(tbParse.captions.map(c => c.entityId)).size, 'company', 'companies')}</span>.
                   {tbAddedIds.size > 0 && <> {plural(tbAddedIds.size, 'company', 'companies')} the chart didn’t name {tbAddedIds.size === 1 ? 'was' : 'were'} added from it.</>}
                 </p>
               </div>
             )}
 
-            {/* A ledger we could not read says so, and says what to do about
-                it — the same rule the org chart follows. */}
-            {ledgerError && (
-              <div className="mb-3 rounded-md border border-high-100 bg-high-50 px-2.5 py-2">
-                <p className="text-[0.71875rem] text-high-700 leading-relaxed">
-                  {ledgerError.reason === 'not-a-spreadsheet'
-                    ? <>Couldn’t read <span className="font-semibold">{ledgerError.name}</span>. Ira reads a {ledgerError.kind === 'tb' ? 'trial balance' : 'general ledger'} kept as <span className="font-semibold">Excel or CSV</span>. Save it in one of those and upload it again.</>
-                    : ledgerError.reason === 'no-amount-column'
-                      ? <>Read <span className="font-semibold">{ledgerError.name}</span>, but no column carries an amount. A trial balance needs a <span className="font-semibold">debit and credit</span>, or a closing balance.</>
-                      : ledgerError.reason === 'not-a-ledger'
-                        ? <>Read <span className="font-semibold">{ledgerError.name}</span>, but it doesn’t look like a general ledger — journal lines need a <span className="font-semibold">posting date or document number</span> alongside the amount.</>
-                        : ledgerError.reason === 'no-rows'
-                          ? <>Read <span className="font-semibold">{ledgerError.name}</span>, but it has no ledger rows under its header.</>
-                          : <>Couldn’t open <span className="font-semibold">{ledgerError.name}</span> as a spreadsheet. Save it as .xlsx or .csv and upload it again.</>}
-                </p>
-              </div>
-            )}
+            {/* A ledger Ira could not read says so on its own row in the box
+                below (1 Oct), rather than in one banner naming the last file. */}
 
             {/* Each kind owns its uploads: empty, the box is a dashed prompt
                 with a labelled Upload; once it holds a file it becomes a solid
@@ -2579,7 +2679,7 @@ export default function ScopingWizard({ onCancel, onCreated, typePreselected, on
                         <FileSpreadsheet size={16} className="text-brand-600 shrink-0" />
                         <span className="min-w-0 flex-1">
                           <span className="block text-[0.75rem] font-semibold text-ink-800 truncate">{title}</span>
-                          <span className="block text-[0.65625rem] text-ink-400">XLSX · CSV</span>
+                          <span className="block text-[0.65625rem] text-ink-400">Excel · CSV · PDF · Word · image</span>
                         </span>
                         <button
                           onClick={() => addScopeFile(kind)}
@@ -2603,12 +2703,12 @@ export default function ScopingWizard({ onCancel, onCreated, typePreselected, on
                           </button>
                         </div>
                         {mine.map(({ f, i }) => (
-                          <div key={`${f.name}-${i}`} className="px-3 py-2.5 border-b border-canvas-border last:border-b-0">
+                          <div key={f.id} className="px-3 py-2.5 border-b border-canvas-border last:border-b-0">
                             <div className="flex items-center gap-2">
                               <Paperclip size={12} className="text-ink-400 shrink-0" />
                               <span className="text-[0.75rem] text-ink-900 flex-1 min-w-0 truncate" title={f.name}>{f.name}</span>
                               <button
-                                onClick={() => setScopeFiles(prev => prev.filter((_, x) => x !== i))}
+                                onClick={() => removeScopeFile(f.id)}
                                 className="text-ink-400 hover:text-risk-700 transition-colors cursor-pointer shrink-0"
                                 aria-label={`Remove ${f.name}`}
                                 title="Remove"
@@ -2616,15 +2716,41 @@ export default function ScopingWizard({ onCancel, onCreated, typePreselected, on
                                 <Trash2 size={13} />
                               </button>
                             </div>
+                            {/* Ira's one line while the file is read, and the one
+                                red line if it could not be. */}
+                            {f.read === 'pending' && (
+                              <p className="flex items-center gap-1.5 mt-1 text-[0.6875rem] text-ink-500">
+                                <Loader2 size={11} className="animate-spin shrink-0" />
+                                {f.scan ? 'Reading a scan — this takes a few seconds' : `Reading ${f.name}…`}
+                              </p>
+                            )}
+                            {f.read === 'failed' && (
+                              <div className="flex items-center gap-2 mt-1">
+                                <p className="flex-1 min-w-0 text-[0.6875rem] text-risk-700">
+                                  {PROBLEM_LINE[f.problem ?? 'no-table']}
+                                </p>
+                                {f.problem === 'looks-like-gl' && (
+                                  <button
+                                    type="button"
+                                    onClick={() => moveToGeneralLedger(f.id)}
+                                    className="h-6 px-2 rounded-md border border-canvas-border bg-white text-[0.6875rem] font-semibold text-ink-700 hover:border-ink-300 transition-colors cursor-pointer shrink-0"
+                                  >
+                                    Move to general ledger
+                                  </button>
+                                )}
+                              </div>
+                            )}
                             {/* The source, asked as the file enters (user ask) —
                                 this step's wording; the rest of SOX keeps System
-                                export / Client-prepared for the same two answers. */}
-                            <div className="mt-2">
+                                export / Client-prepared for the same two answers.
+                                Not asked of a file Ira couldn't read — it can only
+                                be removed. */}
+                            {f.read !== 'failed' && <div className="mt-2">
                               <span className="block text-[0.65625rem] font-bold uppercase tracking-wider text-ink-400 mb-1">Source of the document</span>
                               <div className="grid grid-cols-2 gap-1.5" role="group" aria-label={`Source of ${f.name}`}>
                                 {([['System export', 'System generated'], ['Client-prepared', 'Client prepared']] as const).map(([o, label]) => (
                                   <button key={o} type="button" aria-pressed={f.origin === o}
-                                    onClick={() => setScopeFiles(prev => prev.map((x, n) => (n === i ? { ...x, origin: o } : x)))}
+                                    onClick={() => markScopeFile(f.id, { origin: o })}
                                     className={cn('h-7 px-2 rounded-md border text-[0.6875rem] font-semibold transition-colors cursor-pointer inline-flex items-center justify-center gap-1',
                                       f.origin === o ? 'border-brand-300 bg-brand-50 text-brand-700' : 'border-canvas-border bg-white text-ink-600 hover:border-ink-300')}>
                                     {f.origin === o && <Check size={11} className="shrink-0" />}{label}
@@ -2632,7 +2758,7 @@ export default function ScopingWizard({ onCancel, onCreated, typePreselected, on
                                 ))}
                               </div>
                               {!f.origin && <p className="text-[0.65625rem] text-high-700 font-semibold mt-1">Pick the source to continue</p>}
-                            </div>
+                            </div>}
                           </div>
                         ))}
                       </>
@@ -2947,17 +3073,17 @@ export default function ScopingWizard({ onCancel, onCreated, typePreselected, on
                         /** Out because the company holding it is out. Its own tick
                          *  cannot change that, so the row is read-only and says so
                          *  rather than offering a control that does nothing. */
-                        const heldOut = absent ? undefined : outByAncestor(row);
+                        const heldOut = outByAncestor(row);
                         const depth = chainDepth(row, scope.rows);
                         // A row carried out by its parent has no decision of its
                         // own to explain, so no note box — the parent's note is
                         // the reason, and asking again would ask twice.
-                        const changed = !absent && !heldOut && overrides[row.id] !== undefined;
+                        const changed = !heldOut && overrides[row.id] !== undefined;
                         const editing = noteDrafts[row.id] !== undefined;
                         /** Only the exceptions get a line — "clears performance
                          *  materiality" is what the tick already says. */
-                        const exception = absent ? 'Not in the trial balance'
-                          : heldOut ? `Out of scope with ${heldOut.name}, which holds it`
+                        const exception = heldOut ? `Out of scope with ${heldOut.name}, which holds it`
+                          : absent ? (on ? 'In scope · not in the trial balance' : 'Not in the trial balance — excluded')
                           : row.status === 'coverage' ? `Added to reach ${COVERAGE_TARGET}% coverage`
                           : row.status === 'out' ? 'Below performance materiality'
                           : null;
@@ -2967,17 +3093,17 @@ export default function ScopingWizard({ onCancel, onCreated, typePreselected, on
                               type="button"
                               role="checkbox"
                               aria-checked={on}
-                              aria-label={absent ? `${row.name} — not in the trial balance`
-                                : heldOut ? `${row.name} — out of scope with ${heldOut.name}, which holds it`
+                              aria-label={heldOut ? `${row.name} — out of scope with ${heldOut.name}, which holds it`
+                                : absent ? `${row.name} — not in the trial balance`
                                 : row.name}
-                              disabled={absent || !!heldOut}
+                              disabled={!!heldOut}
                               onClick={() => flipEntity(row)}
                               className={cn(
                                 'group w-full flex items-center gap-3 px-4 py-2 text-left transition-colors',
-                                absent || heldOut ? 'cursor-not-allowed' : 'cursor-pointer hover:bg-brand-50/40',
+                                heldOut ? 'cursor-not-allowed' : 'cursor-pointer hover:bg-brand-50/40',
                               )}
                             >
-                              <TickBox state={on} disabled={absent || !!heldOut} />
+                              <TickBox state={on} disabled={!!heldOut} />
                               {/* Only the name indents — the ticks stay one straight
                                   column however deep an entity sits. */}
                               {depth > 0 && <span aria-hidden className="shrink-0" style={{ width: `${depth * 0.75}rem` }} />}
@@ -2985,7 +3111,7 @@ export default function ScopingWizard({ onCancel, onCreated, typePreselected, on
                                 <span aria-hidden className="text-[0.6875rem] text-ink-300 leading-none shrink-0 -mr-1.5">↳</span>
                               )}
                               <span className="flex-1 min-w-0">
-                                <span className={cn('block text-[0.8125rem] truncate', absent || heldOut ? 'text-ink-400' : 'text-ink-900')} title={row.name}>
+                                <span className={cn('block text-[0.8125rem] truncate', (absent && !on) || heldOut ? 'text-ink-400' : 'text-ink-900')} title={row.name}>
                                   {row.name}
                                 </span>
                                 {exception && <span className="block text-[0.6875rem] text-ink-500 mt-0.5">{exception}</span>}

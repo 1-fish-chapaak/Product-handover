@@ -141,7 +141,9 @@ function refusal(id: ChatActionId, { s, role }: IntentCtx): string {
     if (s.step !== 'population') {
       return s.popStarted
         ? 'The population is already extracted — the source files are listed on step ② if one of them needs changing.'
-        : 'The source data is step ②’s, and this control is not there yet.';
+        : s.step === 'design' && s.designResult !== 'Not tested' && !s.todApproved
+          ? 'The source data is step ②’s, and the population opens once the reviewer approves the design.'
+          : 'The source data is step ②’s, and this control is not there yet.';
     }
     if (s.popStarted) return 'This control already has its population. Adding a second file to it is done on the left, because a joined-on table is not the same thing as the one being sampled.';
     if (id === 'pick-source') {
