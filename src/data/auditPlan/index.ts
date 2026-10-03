@@ -17,6 +17,7 @@ export {
   BOARD_PEOPLE, MILESTONES, type LiveWorkflow, type BoardRow, type ScoreWindow,
 } from './ledger';
 export {
-  createBatch, getBatch, useBatch, useAllBatches, pendingItems, useSession, findSession, ensureBatchRunning, answerSession, approveSession, reviseSession, answerMissingFile, nextPendingSession, itemHours,
+  createBatch, getBatch, useBatch, useAllBatches, pendingItems, useSession, findSession, ensureBatchRunning, answerSession, approveSession, reviseSession, answerMissingFile, nextPendingSession, itemHours, assignSession, withTeammates,
   itemsFromEntries, itemsFromPlanRows, sessionHref, type BuildBatch, type BatchItem, type BatchItemStatus,
 } from './batch';
+export { loadAuditDraft, saveAuditDraft, clearAuditDraft, type AuditDraft } from './drafts';

@@ -189,7 +189,7 @@ export default function Sidebar({ view, setView, expanded, toggleSidebar, unread
   // the same derivation as MyQueueView so the badge always matches the list.
   // Builds & reviews appears once there's something in it to answer or review.
   const allBatches = useAllBatches();
-  const buildsPending = pendingItems(allBatches);
+  const buildsPending = pendingItems(allBatches, currentUser?.name);
   const buildsCount = buildsPending.needsInput.length + buildsPending.toReview.length;
   const myQueueCount = useMemo(
     () => myQueueFor(ENGAGEMENT_EXCEPTIONS, personForUser(currentUser?.name)).length,

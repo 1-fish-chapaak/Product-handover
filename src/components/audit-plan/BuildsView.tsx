@@ -9,7 +9,8 @@
 import { useState } from 'react';
 import { ArrowUpRight, CircleDashed, Check, Loader2, Sparkles, Layers } from 'lucide-react';
 import { Button } from '../shared/Button';
-import { fmtHours, itemHours, pendingItems, sessionHref, useAllBatches } from '../../data/auditPlan';
+import { fmtHours, itemHours, pendingItems, sessionHref, useAllBatches, withTeammates } from '../../data/auditPlan';
+import { useCurrentUser } from '../../context/CurrentUserContext';
 import { BatchBuildCard } from '../chat/BatchBuildCards';
 
 interface Props {
@@ -21,11 +22,18 @@ interface Props {
 
 export default function BuildsView({ onOpenEngagement, onOpenLibrary, onOpenControls, onAuditWithAi }: Props) {
   const batches = useAllBatches();
-  const { needsInput, toReview, building } = pendingItems(batches);
-  const [tab, setTab] = useState<'needs' | 'all'>(needsInput.length + toReview.length > 0 ? 'needs' : 'all');
+  const { currentUser } = useCurrentUser();
+  const me = currentUser?.name ?? 'You';
+  const { needsInput, toReview, building } = pendingItems(batches, me);
+  const shared = withTeammates(batches, me);
+  const [tab, setTab] = useState<'needs' | 'shared' | 'all'>(needsInput.length + toReview.length > 0 ? 'needs' : 'all');
+  const mineOpen = (i: (typeof batches)[number]['items'][number]) =>
+    (!i.assignee || i.assignee === me) && (i.status === 'ready' || (i.status === 'needs-input' && !i.answer?.startsWith('Leave')));
   const shown = tab === 'all'
     ? batches
-    : batches.filter(b => b.items.some(i => i.status === 'ready' || (i.status === 'needs-input' && !i.answer?.startsWith('Leave'))));
+    : tab === 'shared'
+      ? batches.filter(b => shared.some(x => x.batch.id === b.id))
+      : batches.filter(b => b.items.some(mineOpen));
   const first = toReview[0] ?? needsInput[0];
   const reviewHours = toReview.reduce((s, x) => s + itemHours(x.item), 0);
 
@@ -67,7 +75,7 @@ export default function BuildsView({ onOpenEngagement, onOpenLibrary, onOpenCont
         </div>
 
         <div role="tablist" className="flex items-center gap-1 mb-4">
-          {([['needs', 'Needs you'], ['all', 'All builds']] as const).map(([id, label]) => (
+          {([['needs', 'Needs you'], ['shared', `With teammates${shared.length ? ` · ${shared.length}` : ''}`], ['all', 'All builds']] as const).map(([id, label]) => (
             <button
               key={id}
               role="tab"

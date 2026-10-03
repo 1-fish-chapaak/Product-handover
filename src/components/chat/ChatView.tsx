@@ -42,6 +42,7 @@ import type { ArtifactTab, WorkflowAgent, WorkflowAgentSeed } from '../../hooks/
 import { SplitPlanCard, AgentNudgeCard } from './SplitPlanCards';
 import { BatchBuildCard, ReviewSessionCard } from './BatchBuildCards';
 import type { SplitPlanData, NudgeData } from './splitPlan';
+import { readTabMessages, writeTabMessages } from './chatTabsStorage';
 import {
   commitPlan, createBatch, decomposePrompt, findSession, getPlanWorkflows, itemsFromPlanRows, planFromPrompt, reviseSession,
   type AuditPlan, type PlanWorkflowRow,
@@ -833,6 +834,9 @@ export interface ChatViewProps {
   onWorkflowAgentSeedConsumed?: () => void;
   /** Open an engagement workspace (split-plan cards link to it). */
   onOpenEngagement?: (engagementId: string) => void;
+  /** Keep this thread across navigation: restored when Ask IRA reopens,
+   *  unless the user arrives with something new to start. */
+  persistKey?: string;
   /** Tab mode: initial conversation for this tab (restored from storage, or
    *  pre-loaded from a saved chat). When provided, ChatView seeds messages from
    *  it and skips the selectedChatId auto-load (the tab manager owns loading). */
@@ -2039,6 +2043,8 @@ interface SaveAsWorkflowModalProps {
   defaultDescription: string;
   /** LLM-detected configurable keys to seed the Configuration section. */
   defaultConfigurables?: { key: string; type: ConfigurableKey['type']; value: string }[];
+  /** Business process to preselect (inferred from the workflow being built). */
+  defaultBpId?: string;
   /** Audit result data — drives the second-step "Choose what to add" picker. */
   resultData: import('./AddToDashboardModal').AuditResultData;
   onCancel: () => void;
@@ -2053,7 +2059,7 @@ interface SaveAsWorkflowModalProps {
   }) => void;
 }
 
-function SaveAsWorkflowModal({ open, defaultName, defaultDescription, defaultConfigurables, resultData, onCancel, onConfirm }: SaveAsWorkflowModalProps) {
+function SaveAsWorkflowModal({ open, defaultName, defaultDescription, defaultConfigurables, defaultBpId, resultData, onCancel, onConfirm }: SaveAsWorkflowModalProps) {
   // Two-step flow: 1) workflow metadata (name, BP, description, configurables,
   // frequency) → 2) "Choose what to add" granular widget picker (KPIs, charts,
   // table) — mirrors AddToDashboard / AddToReport so the user keeps the same
@@ -2108,8 +2114,9 @@ function SaveAsWorkflowModal({ open, defaultName, defaultDescription, defaultCon
       setStep('details');
       setName(defaultName);
       setDescription(defaultDescription);
-      setBpId('');
-      setSubProcessId('');
+      // Prefilled from what's being built — one less required field to hunt for.
+      setBpId(defaultBpId ?? '');
+      setSubProcessId(defaultBpId ? (SOPS.find(sop => sop.bpId === defaultBpId)?.id ?? '') : '');
       setBpOpen(false);
       setSubOpen(false);
       setFrequency('Daily');
@@ -3303,7 +3310,7 @@ ${transcriptHtml}
   );
 }
 
-export default function ChatView({ showChatHistory, toggleChatHistory, setShowArtifacts, showArtifacts, setActiveArtifactTab, setArtifactMode, setWorkflowType, initialQuery, onInitialQueryProcessed, workflowRunSeed, onWorkflowRunSeedConsumed, composerDraft, onComposerDraftConsumed, composerContextSeed, onComposerContextSeedConsumed, selectedChatId, onChatLoaded, setView, pendingDashboard, onAddToDashboard, onDismissPendingDashboard, onLaunchWorkflowBuilder, workflowBuilderSeedPrompt, onWorkflowBuilderSeedConsumed, availableDashboards, availableReports, onAddResultToDashboard, onAddResultToReport, onViewDashboard, onViewReport, workflowEngagementContext, workflowAgentSeed, onWorkflowAgentSeedConsumed, onOpenEngagement, initialMessages, onMessagesChange }: ChatViewProps) {
+export default function ChatView({ showChatHistory, toggleChatHistory, setShowArtifacts, showArtifacts, setActiveArtifactTab, setArtifactMode, setWorkflowType, initialQuery, onInitialQueryProcessed, workflowRunSeed, onWorkflowRunSeedConsumed, composerDraft, onComposerDraftConsumed, composerContextSeed, onComposerContextSeedConsumed, selectedChatId, onChatLoaded, setView, pendingDashboard, onAddToDashboard, onDismissPendingDashboard, onLaunchWorkflowBuilder, workflowBuilderSeedPrompt, onWorkflowBuilderSeedConsumed, availableDashboards, availableReports, onAddResultToDashboard, onAddResultToReport, onViewDashboard, onViewReport, workflowEngagementContext, workflowAgentSeed, onWorkflowAgentSeedConsumed, onOpenEngagement, persistKey, initialMessages, onMessagesChange }: ChatViewProps) {
   const { addToast } = useToast();
   const logEvent = useAuditLog();
   const { can } = useCan();
@@ -3322,7 +3329,19 @@ export default function ChatView({ showChatHistory, toggleChatHistory, setShowAr
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [workflowBuilderSeedPrompt]);
-  const [messages, setMessages] = useState<ChatMessage[]>(() => initialMessages ?? []);
+  // The thread the user left when they navigated away — so a batch card and
+  // its Review links are still there when they come back. Skipped when they
+  // arrive to start something (a seed, a saved chat, a query hand-off).
+  const [resumed] = useState<{ messages: ChatMessage[]; meta: { workflowMode?: boolean; agent?: WorkflowAgent } } | null>(() => {
+    if (!persistKey || initialMessages) return null;
+    if (workflowAgentSeed || selectedChatId || initialQuery || workflowRunSeed || workflowBuilderSeedPrompt != null) return null;
+    const msgs = readTabMessages(`resume-${persistKey}`);
+    if (!msgs || msgs.length === 0) return null;
+    let meta = {};
+    try { meta = JSON.parse(localStorage.getItem(`irame.chat.resume-meta.${persistKey}`) ?? '{}'); } catch { /* ignore */ }
+    return { messages: msgs, meta };
+  });
+  const [messages, setMessages] = useState<ChatMessage[]>(() => initialMessages ?? resumed?.messages ?? []);
   // Tab mode: report message changes up so the tab manager (ChatTabsView) can
   // persist this tab's conversation to localStorage.
   useEffect(() => { onMessagesChange?.(messages); }, [messages, onMessagesChange]);
@@ -3409,6 +3428,7 @@ export default function ChatView({ showChatHistory, toggleChatHistory, setShowAr
   // Workflow modal's "Create Workflow" button).
   const [buildWorkflowMode, setBuildWorkflowMode] = useState(
     !!workflowEngagementContext ||
+    !!resumed?.meta.workflowMode ||
     (typeof window !== 'undefined' && new URLSearchParams(window.location.search).get('compose') === 'workflow')
   );
 
@@ -3421,7 +3441,14 @@ export default function ChatView({ showChatHistory, toggleChatHistory, setShowAr
   // thread starts (production: "Start a new chat to choose another agent").
   // GRC splits complex prompts into control-linked checks; General builds one
   // analysis and only nudges toward GRC.
-  const [wfAgent, setWfAgent] = useState<WorkflowAgent>('grc');
+  const [wfAgent, setWfAgent] = useState<WorkflowAgent>(resumed?.meta.agent ?? 'grc');
+  // Save the thread (and its mode) as it changes, so leaving Ask IRA never
+  // loses it. "New chat" saves an empty thread, which restores as fresh.
+  useEffect(() => {
+    if (!persistKey) return;
+    writeTabMessages(`resume-${persistKey}`, messages);
+    try { localStorage.setItem(`irame.chat.resume-meta.${persistKey}`, JSON.stringify({ workflowMode: buildWorkflowMode, agent: wfAgent })); } catch { /* quota */ }
+  }, [persistKey, messages, buildWorkflowMode, wfAgent]);
   // Set when this chat is a batch-built workflow's review session (opened in
   // its own tab): typed messages become change requests for that workflow.
   const reviewSessionRef = useRef<string | null>(null);
@@ -8039,6 +8066,29 @@ export default function ChatView({ showChatHistory, toggleChatHistory, setShowAr
             // is open the composer is hidden and this card is the single input
             // surface (pick an option, or type your own answer in the card).
             <div className="mb-2">
+              {/* Same fast path as the build's questions — including the
+                  pre-save confirmation, the last stop before a workflow saves. */}
+              <div className="flex items-center justify-between gap-3 mb-1.5 px-1 text-[0.75rem] text-ink-500">
+                <span>Ira's standard defaults answer these for most audits — change any later.</span>
+                <button
+                  type="button"
+                  onClick={() => {
+                    const id = openClarification.id;
+                    setMessages(prev => prev.map(m => {
+                      if (m.id !== id || m.richType !== 'clarification') return m;
+                      const d = m.richData as unknown as QueryClarificationData;
+                      const answers = { ...d.answers };
+                      d.questions.forEach((q, qi) => { if (!answers[qi]?.length && q.options[0]) answers[qi] = [q.options[0]]; });
+                      return { ...m, richData: { ...d, answers } as unknown as Record<string, unknown> };
+                    }));
+                    // Queued after the fill above, so it submits the defaults.
+                    submitClarification(id);
+                  }}
+                  className="shrink-0 h-7 px-2.5 rounded-md text-[0.75rem] font-semibold text-brand-700 hover:bg-brand-50 cursor-pointer"
+                >
+                  Use standard defaults
+                </button>
+              </div>
               <QueryClarificationCard
                 data={openClarification.richData as unknown as QueryClarificationData}
                 onSetAnswer={(qi, ans) => updateClarificationAnswer(openClarification.id, qi, ans)}
@@ -8057,6 +8107,26 @@ export default function ChatView({ showChatHistory, toggleChatHistory, setShowAr
             // above. Answers are written without advancing; Done sets index to
             // the question count, which fires the build's continuation effect.
             <div className="mb-2">
+              {/* The fast path: every unanswered question takes its standard
+                  default (the first option), and the build moves on. */}
+              <div className="flex items-center justify-between gap-3 mb-1.5 px-1 text-[0.75rem] text-ink-500">
+                <span>Short on time? Ira's standard defaults cover most audits — you can change any of them later.</span>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setMessages(prev => prev.map(m => {
+                      if (m.id !== openWorkflowClarify.id || m.richType !== 'workflow-clarify') return m;
+                      const d = m.richData as { questions: ClarifyQuestion[]; answers: Record<string, string> };
+                      const answers = { ...d.answers };
+                      d.questions.forEach(q => { if (!answers[q.id] && q.options[0]) answers[q.id] = q.options[0]; });
+                      return { ...m, richData: { ...(m.richData as object), answers, index: d.questions.length } };
+                    }));
+                  }}
+                  className="shrink-0 h-7 px-2.5 rounded-md text-[0.75rem] font-semibold text-brand-700 hover:bg-brand-50 cursor-pointer"
+                >
+                  Use standard defaults
+                </button>
+              </div>
               <QueryClarificationCard
                 data={openWorkflowClarifyData}
                 onSetAnswer={(qi, ans) => {
@@ -8379,6 +8449,14 @@ export default function ChatView({ showChatHistory, toggleChatHistory, setShowAr
           return (
             <SaveAsWorkflowModal
               open={showSaveAsWfModal}
+              defaultBpId={(() => {
+                const hay = `${wfWorkflow?.name ?? ''} ${wfWorkflow?.category ?? ''} ${riskAns}`.toLowerCase();
+                return /reconcil|journal|ledger|gl\b|close/.test(hay) ? 'r2r'
+                  : /contract|sourcing|tender/.test(hay) ? 's2c'
+                  : /customer|sales|revenue|credit/.test(hay) ? 'o2c'
+                  : /invoice|vendor|payment|purchase|po\b|ap\b|duplicate/.test(hay) ? 'p2p'
+                  : undefined;
+              })()}
               defaultName={defaultName}
               defaultDescription={defaultDescription}
               defaultConfigurables={defaultConfigurables}

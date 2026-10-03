@@ -176,7 +176,7 @@ function BatchWatcher() {
     fresh.forEach(b => {
       const { needsInput, toReview } = pendingItems([b]);
       notify({
-        eventId: 'WFL-01',
+        eventId: 'WFL-13',
         title: `${b.items.length} workflow${b.items.length === 1 ? '' : 's'} built — ${toReview.length} ready to review`,
         message: `${b.title}.${needsInput.length ? ` ${needsInput.length} need${needsInput.length === 1 ? 's' : ''} a file from you.` : ''}`,
         recipients: [{ name: currentUser?.name ?? 'You' }],
@@ -844,6 +844,8 @@ function AppInner() {
               workflowAgentSeed={state.workflowAgentSeed}
               onWorkflowAgentSeedConsumed={clearWorkflowAgentSeed}
               onOpenEngagement={openEngagement}
+              // Main tab only — a review-session tab must never overwrite the thread.
+              persistKey={new URLSearchParams(window.location.search).has('session') ? undefined : 'main'}
             /></div>
             {state.showArtifacts && (
               <div
@@ -931,7 +933,7 @@ function AppInner() {
           <AuditWithAiView
             onBack={() => setView('workflow-builder')}
             onOpenEngagement={openEngagement}
-            onBuildChecks={(engagementId) => startWorkflowAgent({ agent: 'grc', buildQueue: { engagementId } })}
+            onBuildBatch={(batchId) => startWorkflowAgent({ agent: 'grc', batchId })}
             onOpenLibrary={() => setView('workflow-library')}
           />
         );
@@ -1312,6 +1314,7 @@ function AppInner() {
           <AdaptStandardView
             keys={state.adaptSeed.keys}
             choices={state.adaptSeed.choices}
+            onChangeChoices={(choices) => startAdaptStandard({ keys: state.adaptSeed!.keys, choices })}
             onBack={() => setView('governance-controls')}
             onBuild={(batchId) => { clearAdaptSeed(); startWorkflowAgent({ agent: 'grc', batchId }); }}
           />

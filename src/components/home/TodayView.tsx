@@ -30,7 +30,7 @@ import { useCreatedEngagements } from '../../data/createdEngagementsStore';
 import {
   CHECK_CATALOG, MILESTONES, PROCESS_LONG, allLive, catalogFor, filesForEntry, fmtHours, getEngagementPlan, hoursFor,
   hoursPerMonthFor, isNameHidden, isStdLive, itemHours, leaderboard, pendingItems, readinessOf, runRateAddedToday, runRateFor, setNameHidden,
-  streakFor, useAllBatches, useLedgerVersion, useStdState, type FileSourceChoice, type ScoreWindow,
+  streakFor, useAllBatches, useLedgerVersion, useStdState, loadAuditDraft, withTeammates, type FileSourceChoice, type ScoreWindow,
 } from '../../data/auditPlan';
 import type { AdaptSeed } from '../../hooks/useAppState';
 import AdaptDataModal from '../audit-plan/AdaptDataModal';
@@ -86,6 +86,7 @@ export default function TodayView(p: Props) {
   const [hidden, setHidden] = useState(isNameHidden());
   // One clock per render pass — the 30-day windows compare against it.
   const [now] = useState(() => Date.now());
+  const [auditDraft] = useState(loadAuditDraft);
   const [invited, setInvited] = useState(() => { try { return localStorage.getItem(INVITED_KEY) === '1'; } catch { return false; } });
 
   // ── Score ──
@@ -101,7 +102,8 @@ export default function TodayView(p: Props) {
   const nextMilestone = [50, 100, 250, 500].find(m => hoursAll < m) ?? 1000;
 
   // ── Work ──
-  const { needsInput, toReview, building } = pendingItems(batches);
+  const { needsInput, toReview, building } = pendingItems(batches, me);
+  const shared = withTeammates(batches, me);
   const reviewHours = toReview.reduce((s, x) => s + itemHours(x.item), 0);
   const missingCodes = Array.from(new Set(needsInput.map(x => x.item.files.find(f => !f.source)?.code).filter(Boolean)));
 
@@ -274,12 +276,21 @@ export default function TodayView(p: Props) {
           {/* Needs you */}
           <motion.section {...fade(0.09)} aria-label="Needs you">
             <SectionHead title="Needs you" count={needsInput.length + toReview.length} />
-            {needsInput.length + toReview.length + building.length === 0 && !p.adaptDraft ? (
+            {needsInput.length + toReview.length + building.length === 0 && !p.adaptDraft && !auditDraft ? (
               <div className="rounded-lg border border-dashed border-canvas-border px-4 py-5 text-[0.8125rem] text-ink-500">
                 You're clear. Pick a next best action below — Ira builds, you review.
               </div>
             ) : (
               <ul className="rounded-lg border border-canvas-border bg-canvas-elevated divide-y divide-canvas-border">
+                {auditDraft && (
+                  <NeedRow
+                    icon={<Layers size={14} className="text-brand-600" />}
+                    title={auditDraft.plan ? `Resume your audit plan — ${auditDraft.plan.engagements.filter(e => e.selected).length} engagements` : 'Resume planning an audit with AI'}
+                    sub={`Saved ${new Date(auditDraft.savedAt).toLocaleString('en-IN', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })} · picks up where you left`}
+                    cta="Resume"
+                    onClick={p.onAuditWithAi}
+                  />
+                )}
                 {p.adaptDraft && (
                   <NeedRow icon={<Sparkles size={14} className="text-brand-600" />} title={`Resume adapting ${p.adaptDraft.keys.length} standard workflow${p.adaptDraft.keys.length === 1 ? '' : 's'}`} sub="Your files are kept — pick up at Ira's plan" cta="Resume" onClick={p.onResumeAdapt} />
                 )}
@@ -288,6 +299,9 @@ export default function TodayView(p: Props) {
                 )}
                 {toReview.length > 0 && (
                   <NeedRow icon={<Check size={14} className="text-compliant-700" />} title={`${toReview.length} ready to review`} sub={`~${toReview.length * 2} min · +${fmtHours(reviewHours)}/mo once approved (est.)`} cta="Review" onClick={p.onOpenBuilds} />
+                )}
+                {shared.length > 0 && (
+                  <NeedRow icon={<Users size={14} className="text-ink-500" />} title={`${shared.length} with teammates`} sub={Array.from(new Set(shared.map(x => x.item.assignee!.split(' ')[0]))).join(', ') + ' reviewing — off your plate'} cta="Track" onClick={p.onOpenBuilds} />
                 )}
                 {building.length > 0 && (
                   <NeedRow icon={<Loader2 size={14} className="text-brand-600 animate-spin" />} title={`${building.length} building`} sub="Keeps going while you work — you'll get a notification" cta="Watch" onClick={p.onOpenBuilds} />

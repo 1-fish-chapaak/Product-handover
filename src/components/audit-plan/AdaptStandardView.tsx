@@ -19,10 +19,13 @@ import {
   type CatalogEntry, type FileSourceChoice, type PlanCoverage,
 } from '../../data/auditPlan';
 import { CoverageMeter, IraMark } from './PlanParts';
+import AdaptDataModal from './AdaptDataModal';
 
 interface Props {
   keys: string[];
   choices: Record<string, FileSourceChoice | null>;
+  /** New file choices from "Change files" — saved to the draft. */
+  onChangeChoices: (choices: Record<string, FileSourceChoice | null>) => void;
   onBack: () => void;
   onBuild: (batchId: string) => void;
 }
@@ -40,7 +43,7 @@ function coverageWith(process: ProcessCode, addedKeys: string[]): PlanCoverage {
   return { universe: universe.length, before, after, beforePct: pct(before), afterPct: pct(after), liftPts: pct(after) - pct(before) };
 }
 
-export default function AdaptStandardView({ keys, choices, onBack, onBuild }: Props) {
+export default function AdaptStandardView({ keys, choices, onChangeChoices, onBack, onBuild }: Props) {
   const logEvent = useAuditLog();
   const { currentUser } = useCurrentUser();
   const reduced = useReducedMotion();
@@ -51,6 +54,8 @@ export default function AdaptStandardView({ keys, choices, onBack, onBuild }: Pr
   const [stage, setStage] = useState<'analysing' | 'plan'>('analysing');
   const [included, setIncluded] = useState<Set<string>>(() => new Set(keys));
   const [open, setOpen] = useState<string | null>(null);
+  // "Change files" reopens the modal here with every upload and pick intact.
+  const [changing, setChanging] = useState(false);
   const scrollRef = useRef<HTMLDivElement>(null);
 
   const missingFor = (e: CatalogEntry) => filesForEntry(e).filter(f => !sourceOf(choices[f.id]));
@@ -88,7 +93,7 @@ export default function AdaptStandardView({ keys, choices, onBack, onBuild }: Pr
             </p>
           </div>
         </header>
-        <StepRail steps={STEPS} step={stage === 'analysing' ? 0 : 1} onStepClick={i => { if (i === 0) onBack(); }} />
+        <StepRail steps={STEPS} step={stage === 'analysing' ? 0 : 1} onStepClick={i => { if (i === 0) setChanging(true); }} />
 
         <AnimatePresence mode="wait">
           <motion.div
@@ -239,7 +244,7 @@ export default function AdaptStandardView({ keys, choices, onBack, onBuild }: Pr
               {chosen.length} workflow{chosen.length === 1 ? '' : 's'} · {covered.length} fully covered · each opens in its own review session
             </span>
             <div className="flex items-center gap-2 shrink-0">
-              <Button variant="outline" onClick={onBack}>Change files</Button>
+              <Button variant="outline" onClick={() => setChanging(true)}>Change files</Button>
               <button
                 type="button"
                 disabled={chosen.length === 0}
@@ -252,6 +257,21 @@ export default function AdaptStandardView({ keys, choices, onBack, onBuild }: Pr
           </div>
         </div>
       )}
+      <AnimatePresence>
+        {changing && (
+          <AdaptDataModal
+            keys={keys}
+            initialChoices={choices}
+            onClose={() => setChanging(false)}
+            onContinue={(next) => {
+              setChanging(false);
+              onChangeChoices(next);
+              // Re-read with the new files before showing the plan again.
+              setStage('analysing');
+            }}
+          />
+        )}
+      </AnimatePresence>
     </div>
   );
 }

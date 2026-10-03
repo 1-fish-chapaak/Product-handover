@@ -23,6 +23,8 @@ import { IraMark } from './PlanParts';
 
 interface Props {
   keys: string[];
+  /** Reopening to change files — start from what was chosen before. */
+  initialChoices?: Record<string, FileSourceChoice | null>;
   onClose: () => void;
   onContinue: (choices: Record<string, FileSourceChoice | null>) => void;
 }
@@ -30,16 +32,19 @@ interface Props {
 /** Sources a file can be pointed at: connected databases + uploaded files/folders. */
 const SOURCE_OPTIONS = SEED.filter(s => s.type === 'database' || s.type === 'file').map(s => s.name);
 
+/** Inputs that aren't SAP reports (spreadsheets, rule-sets, ITSM exports). */
+const NON_SAP = new Set(['DOA', 'SoD', 'ITSM']);
+
 type DropResult = { placed: { code: string; count: number }[]; unplaced: string[] };
 
-export default function AdaptDataModal({ keys, onClose, onContinue }: Props) {
+export default function AdaptDataModal({ keys, initialChoices, onClose, onContinue }: Props) {
   const entries = useMemo(
     () => keys.map(k => CHECK_CATALOG.find(e => e.key === k)).filter((e): e is CatalogEntry => !!e),
     [keys],
   );
   const required = useMemo(() => requiredFilesFor(entries), [entries]);
   const [choices, setChoices] = useState<Record<string, FileSourceChoice | null>>(
-    () => Object.fromEntries(required.map(r => [r.file.id, autoMatch(r.file)])),
+    () => Object.fromEntries(required.map(r => [r.file.id, initialChoices && r.file.id in initialChoices ? initialChoices[r.file.id] : autoMatch(r.file)])),
   );
   const [drop, setDrop] = useState<DropResult | null>(null);
   const [dragOver, setDragOver] = useState(false);
@@ -118,6 +123,25 @@ export default function AdaptDataModal({ keys, onClose, onContinue }: Props) {
             <X size={16} />
           </button>
         </div>
+
+        {/* Nothing connected for these? Point at the durable fix first: a
+            connected ERP refills these every month, uploads don't. */}
+        {missing.length >= 2 && (
+          <div className="mx-6 mt-4 flex items-center gap-3 rounded-lg border border-evidence-100 bg-evidence-50/60 px-4 py-2.5">
+            <Database size={15} className="text-evidence-700 shrink-0" aria-hidden />
+            <p className="min-w-0 flex-1 text-[0.75rem] text-ink-700">
+              {missing.some(r => !NON_SAP.has(r.file.code))
+                ? <>Most of these are standard SAP reports ({missing.filter(r => !NON_SAP.has(r.file.code)).slice(0, 3).map(r => r.file.code).join(', ')}{missing.length > 3 ? '…' : ''}). Connect SAP once and Ira pulls them itself every month — no re-uploading.</>
+                : <>Connect the system these come from and Ira refreshes them itself every month.</>}
+            </p>
+            <button
+              onClick={() => { onClose(); window.dispatchEvent(new CustomEvent('app:navigate-view', { detail: { view: 'knowledge-hub' } })); }}
+              className="shrink-0 h-7 px-2.5 rounded-md bg-white border border-evidence-100 text-[0.75rem] font-semibold text-evidence-700 hover:border-evidence-300 cursor-pointer whitespace-nowrap"
+            >
+              Connect a source
+            </button>
+          </div>
+        )}
 
         {/* Bulk drop — shown while anything is missing, or to resolve leftovers */}
         {(missing.length > 0 || (drop && drop.unplaced.length > 0)) && (

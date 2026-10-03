@@ -59,7 +59,7 @@ import { BulkExecuteModal, Checkbox } from '../workflow/BulkExecuteModal';
 import type { LibraryWorkflow } from '../workflow/WorkflowLibraryView';
 import LinkWorkflowModal from './LinkWorkflowModal';
 import { EngagementWorkspaceProvider, useEngagementWorkspace, baseControlsFor, type WorkspaceControl } from './engagementWorkspace';
-import { getEngagementPlan, useEngagementPlan, usePlanWorkflows, type PlanWorkflowRow } from '../../data/auditPlan';
+import { getEngagementPlan, isStdLive, useEngagementPlan, usePlanWorkflows, useStdState, type PlanWorkflowRow } from '../../data/auditPlan';
 import ActionTrailReportModal from './ActionTrailReportModal';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -229,8 +229,9 @@ interface MockWorkflow {
   inputs: InputSource[];
   cadence: Cadence;
   lastRun: string;
-  /** 'Draft' = an audit-plan check Ira hasn't built yet; 'Ready' = built, not run. */
-  status: 'Success' | 'Failed' | 'Running' | 'Draft' | 'Ready';
+  /** Plan checks: 'Needs data' (not built), 'Awaiting review' (built, not
+   *  approved), 'Live' (approved, not run yet) — the Control Library's words. */
+  status: 'Success' | 'Failed' | 'Running' | 'Needs data' | 'Awaiting review' | 'Live';
   /** Sub-process within the engagement's process. */
   subProcess: string;
   /** True positives / total fires over 90 days — for effectiveness scoring. */
@@ -260,7 +261,8 @@ function engagementWorkflows(eng: Engagement, planRows: PlanWorkflowRow[]): Mock
       const seeded = c.check.existingWorkflowId ? MOCK_WORKFLOWS.find(w => w.libraryId === c.check.existingWorkflowId) : undefined;
       if (seeded) return seeded;
       const row = planRows.find(r => r.checkId === c.check.id);
-      const built = c.check.kind === 'reuse' || row?.status === 'built';
+      const live = (c.check.kind === 'reuse' && !!c.check.existingWorkflowId) || isStdLive(c.key);
+      const built = live || c.check.kind === 'reuse' || row?.status === 'built';
       return {
         id: `pwf-${c.check.id}`,
         code: `WF-${c.controlId}`,
@@ -268,8 +270,8 @@ function engagementWorkflows(eng: Engagement, planRows: PlanWorkflowRow[]): Mock
         type: 'Detection',
         inputs: ['SQL'],
         cadence: { kind: 'Frequency', label: c.check.cadence },
-        lastRun: built ? 'Not run yet' : 'Not built',
-        status: built ? 'Ready' : 'Draft',
+        lastRun: live ? 'Not run yet' : built ? 'Waiting for review' : 'Not built',
+        status: live ? 'Live' : built ? 'Awaiting review' : 'Needs data',
         subProcess: c.subProcess,
         truePositives: 0,
         totalFires: 0,
@@ -359,10 +361,12 @@ export default function EngagementDetailView({ engagementId, onBack, onOpenExecu
   // check gets built or a plan extends this engagement.
   const planRows = usePlanWorkflows();
   const engagementPlan = useEngagementPlan(engagementId);
+  // A workflow approved in a review tab goes live — re-derive the list.
+  const stdState = useStdState();
   const engWorkflows = useMemo(
     () => (engagement ? engagementWorkflows(engagement, planRows) : MOCK_WORKFLOWS),
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [engagement, planRows, engagementPlan],
+    [engagement, planRows, engagementPlan, stdState],
   );
 
   // Default the tab to overview; pick the first tab for the type once we know
@@ -2938,8 +2942,9 @@ function WorkflowRow({
       <span className={`px-2.5 h-6 rounded-full text-[0.65625rem] font-semibold inline-flex items-center shrink-0 ${
         wf.status === 'Success' ? 'bg-compliant-50 text-compliant-700'
         : wf.status === 'Running' ? 'bg-evidence-50 text-evidence-700'
-        : wf.status === 'Draft' ? 'bg-draft-50 text-draft-700'
-        : wf.status === 'Ready' ? 'bg-brand-50 text-brand-700'
+        : wf.status === 'Needs data' ? 'bg-mitigated-50 text-mitigated-700'
+        : wf.status === 'Awaiting review' ? 'bg-evidence-50 text-evidence-700'
+        : wf.status === 'Live' ? 'bg-compliant-50 text-compliant-700'
         : 'bg-risk-50 text-risk-700'
       }`}>{wf.status}</span>
       {!bulkMode && (

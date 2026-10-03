@@ -17,9 +17,11 @@ import {
 } from 'lucide-react';
 import { Button } from '../shared/Button';
 import {
-  answerMissingFile, answerSession, approveSession, ensureBatchRunning, fmtHours, hash01, itemHours, nextPendingSession,
-  sessionHref, useBatch, useSession, type BatchItem, type BatchItemStatus,
+  BOARD_PEOPLE, answerMissingFile, answerSession, approveSession, assignSession, ensureBatchRunning, findSession, fmtHours, hash01, itemHours,
+  nextPendingSession, sessionHref, useBatch, useSession, type BatchItem, type BatchItemStatus,
 } from '../../data/auditPlan';
+import { useNotify } from '../../notifications/NotificationContext';
+import { useToast } from '../shared/Toast';
 import { useCan, useCurrentUser } from '../../context/CurrentUserContext';
 import { IraMark } from '../audit-plan/PlanParts';
 
@@ -149,6 +151,11 @@ export function BatchBuildCard({ batchId, onOpenEngagement, onOpenLibrary, onOpe
                   <span className="text-[0.8125rem] font-medium text-ink-900 truncate">{i.name}</span>
                   <span className="font-mono text-[0.6875rem] text-ink-400 shrink-0">{i.controlId}</span>
                 </button>
+                {i.assignee && (i.status === 'ready' || i.status === 'needs-input') && (
+                  <span className="inline-flex items-center h-5 px-1.5 rounded-full bg-paper-100 text-[0.6875rem] text-ink-600 shrink-0" title={`Assigned by ${i.assignedBy ?? 'a teammate'}`}>
+                    with {i.assignee.split(' ')[0]}
+                  </span>
+                )}
                 <span className={`text-[0.75rem] shrink-0 ${leftAsDraft(i) ? 'text-ink-400' : STATUS[i.status].cls}`}>
                   {leftAsDraft(i) ? 'Left as draft' : i.status === 'ready' && i.exceptions != null ? `${i.exceptions} exceptions · +${fmtHours(itemHours(i))}/mo` : STATUS[i.status].label}
                 </span>
@@ -202,9 +209,61 @@ export function BatchBuildCard({ batchId, onOpenEngagement, onOpenLibrary, onOpe
   );
 }
 
+/** Hand a review to a teammate (with a notification), or copy its link. */
+function AssignControl({ item: i, compact }: { item: BatchItem; compact?: boolean }) {
+  const { currentUser } = useCurrentUser();
+  const notify = useNotify();
+  const { addToast } = useToast();
+  const me = currentUser?.name ?? 'You';
+  if (i.status !== 'ready' && i.status !== 'needs-input') return null;
+  const link = `${window.location.origin}${sessionHref(i.sessionId)}`;
+  return (
+    <div className={`flex flex-wrap items-center gap-2 ${compact ? '' : 'pt-2 mt-1 border-t border-canvas-border'}`}>
+      <label className="flex items-center gap-1.5 text-[0.75rem] text-ink-500">
+        Reviewer
+        <select
+          value={i.assignee ?? ''}
+          onChange={e => {
+            const person = e.target.value || null;
+            assignSession(i.sessionId, person, me);
+            if (person && person !== me) {
+              notify({
+                eventId: 'WFL-14',
+                title: `${me} asked you to review ${i.name}`,
+                message: `${i.controlId} · ${i.status === 'needs-input' ? 'needs a file before it can be approved' : `${i.exceptions ?? 0} exceptions on the first run`}.`,
+                recipients: [{ name: person }],
+                link: { view: 'builds' },
+                linkLabel: 'Open review',
+                dedupKey: `${i.sessionId}-${person}`,
+              });
+              addToast({ message: `Sent to ${person} — it leaves your queue`, type: 'success' });
+            }
+          }}
+          className="h-7 rounded-md border border-canvas-border px-1.5 text-[0.75rem] text-ink-800 outline-none cursor-pointer max-w-[12rem]"
+        >
+          <option value="">Me (unassigned)</option>
+          {BOARD_PEOPLE.filter(p => p !== me).map(p => <option key={p} value={p}>{p}</option>)}
+        </select>
+      </label>
+      <button
+        type="button"
+        onClick={() => {
+          try { void navigator.clipboard?.writeText(link); } catch { /* ignore */ }
+          addToast({ message: 'Review link copied', type: 'success' });
+        }}
+        className="h-7 px-2 rounded-md text-[0.75rem] font-medium text-brand-700 hover:bg-brand-50 cursor-pointer"
+      >
+        Copy review link
+      </button>
+      {i.assignee && i.assignedBy && <span className="text-[0.6875rem] text-ink-400">assigned by {i.assignedBy}</span>}
+    </div>
+  );
+}
+
 function ItemDetail({ item: i }: { item: BatchItem }) {
   return (
-    <div className="px-4 pb-3 pl-[3.25rem] grid grid-cols-1 md:grid-cols-2 gap-4 text-[0.75rem]">
+    <div className="px-4 pb-3 pl-[3.25rem] text-[0.75rem]">
+    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
       <div>
         <div className="text-[0.625rem] font-semibold uppercase tracking-wider text-ink-400 mb-1">Data</div>
         <ul className="space-y-0.5">
@@ -243,6 +302,8 @@ function ItemDetail({ item: i }: { item: BatchItem }) {
           </>
         )}
       </div>
+    </div>
+    <AssignControl item={i} />
     </div>
   );
 }
@@ -284,6 +345,32 @@ export function ReviewSessionCard({ sessionId, onAskChange, onNext }: {
   // Approving puts a workflow live and starts its hours — builders only.
   const { can } = useCan();
   const canApprove = can('wf_create');
+  // Review at speed: A approves (and moves on), N skips to the next one.
+  // Ignored while typing in the composer or any field.
+  const keyRef = useRef<{ approve: () => void; skip: () => void }>({ approve: () => {}, skip: () => {} });
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      const t = e.target as HTMLElement | null;
+      if (e.metaKey || e.ctrlKey || e.altKey || t?.tagName === 'INPUT' || t?.tagName === 'TEXTAREA' || t?.tagName === 'SELECT' || t?.isContentEditable) return;
+      if (e.key === 'a' || e.key === 'A') { e.preventDefault(); keyRef.current.approve(); }
+      if (e.key === 'n' || e.key === 'N') { e.preventDefault(); keyRef.current.skip(); }
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, []);
+  // Point the shortcuts at the session currently shown (it changes in place).
+  useEffect(() => {
+    keyRef.current = {
+      approve: () => {
+        const h = findSession(sessionId);
+        if (!h || h.item.status !== 'ready' || !canApprove) return;
+        approveSession(sessionId, currentUser?.name ?? 'You');
+        const n = nextPendingSession(sessionId);
+        if (n && onNext) window.setTimeout(() => onNext(n), 450);
+      },
+      skip: () => { const n = nextPendingSession(sessionId); if (n && onNext) onNext(n); },
+    };
+  });
   if (!hit) {
     return (
       <div className="max-w-[44rem] rounded-lg border border-canvas-border bg-canvas-elevated p-4 text-[0.8125rem] text-ink-600">
@@ -296,6 +383,11 @@ export function ReviewSessionCard({ sessionId, onAskChange, onNext }: {
   const next = nextPendingSession(sessionId);
   const left = batch.items.filter(x => x.sessionId !== sessionId && (x.status === 'ready' || (x.status === 'needs-input' && !leftAsDraft(x)))).length;
   const me = currentUser?.name ?? 'You';
+  const approveAndNext = () => {
+    if (i.status !== 'ready' || !canApprove) return;
+    approveSession(i.sessionId, me);
+    if (next && onNext) window.setTimeout(() => onNext(next), 450);
+  };
   return (
     <div className="max-w-[48rem] rounded-lg border border-canvas-border bg-canvas-elevated">
       <div className="flex items-start gap-3 p-4">
@@ -311,6 +403,10 @@ export function ReviewSessionCard({ sessionId, onAskChange, onNext }: {
           <StatusIcon status={i.status} left={leftAsDraft(i)} /> {leftAsDraft(i) ? 'Left as draft' : STATUS[i.status].label}
         </span>
       </div>
+
+      {(i.status === 'ready' || i.status === 'needs-input') && (
+        <div className="mx-4 mb-3"><AssignControl item={i} compact /></div>
+      )}
 
       {(i.status === 'queued' || i.status === 'building') && (
         <div className="mx-4 mb-4 rounded-md bg-paper-50 border border-paper-300/60 px-3 py-2.5 text-[0.8125rem] text-ink-600 flex items-center gap-2">
@@ -409,16 +505,13 @@ export function ReviewSessionCard({ sessionId, onAskChange, onNext }: {
             <span className="text-[0.75rem] text-ink-500">
               {i.status === 'approved'
                 ? <>Live — runs {i.cadence.toLowerCase()} and returns <span className="font-semibold text-ink-800">{fmtHours(itemHours(i))}/mo</span> <span className="text-ink-400">est.</span> to {batch.owner === me || !batch.owner ? 'you' : batch.owner}.</>
-                : <>Approving puts it live: <span className="font-semibold text-ink-800">+{fmtHours(itemHours(i))}/mo</span> <span className="text-ink-400">est.</span>{left > 0 ? ` · ${left} more waiting in this batch` : ''}</>}
+                : <>Approving puts it live: <span className="font-semibold text-ink-800">+{fmtHours(itemHours(i))}/mo</span> <span className="text-ink-400">est.</span>{left > 0 ? ` · ${left} more waiting in this batch` : ''} <span className="text-ink-400">· <kbd className="font-mono">A</kbd> approve{next ? <> · <kbd className="font-mono">N</kbd> next</> : null}</span></>}
             </span>
             <span className="flex items-center gap-2">
               {i.status === 'ready' ? (
                 <>
                   {next && onNext && <Button variant="ghost" size="sm" onClick={() => onNext(next)}>Skip</Button>}
-                  <Button variant="primary" size="sm" leftIcon={<Check size={13} />} disabled={!canApprove} title={canApprove ? undefined : 'Your role can review but not approve workflows'} onClick={() => {
-                    approveSession(i.sessionId, me);
-                    if (next && onNext) window.setTimeout(() => onNext(next), 450);
-                  }}>
+                  <Button variant="primary" size="sm" leftIcon={<Check size={13} />} disabled={!canApprove} title={canApprove ? undefined : 'Your role can review but not approve workflows'} onClick={approveAndNext}>
                     {next && onNext ? 'Approve & next' : 'Approve workflow'}
                   </Button>
                 </>

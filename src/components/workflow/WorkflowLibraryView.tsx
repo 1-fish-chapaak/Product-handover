@@ -24,7 +24,7 @@ import { useCan } from '../../context/CurrentUserContext';
 import { useAuditLog } from '../../context/AdminDataContext';
 import { BulkExecuteModal, Checkbox } from './BulkExecuteModal';
 import {
-  CHECK_CATALOG, PROCESS_LONG, fmtHours, readinessOf, stdWorkflowName, usePlanWorkflows, useStdState, valueOfKey,
+  CHECK_CATALOG, PROCESS_LONG, fmtHours, isStdLive, readinessOf, stdWorkflowName, usePlanWorkflows, useStdState, valueOfKey,
   type FileSourceChoice, type StdReadiness,
 } from '../../data/auditPlan';
 import AdaptDataModal from '../audit-plan/AdaptDataModal';
@@ -257,21 +257,27 @@ export default function WorkflowLibraryView({ onCreateWorkflow, onSelectWorkflow
       };
     }), [std, planRows]);
   const allWorkflows = useMemo<LibraryWorkflow[]>(() => [
-    ...planRows.map(r => ({
+    ...planRows.map(r => {
+      // Built by a batch isn't live until someone approves it.
+      const live = r.status === 'built' && (!r.stdKey || isStdLive(r.stdKey));
+      return {
       id: r.id,
       name: r.name,
       description: r.description,
       tags: r.tags,
       businessProcess: r.businessProcess,
       controlId: r.controlId,
-      live: r.status === 'built',
+      live,
       // A draft has nothing to run yet.
-      singleRunOnly: r.status === 'draft',
+      singleRunOnly: !live,
       planStatus: r.status,
+      stdKey: r.stdKey,
+      stdReadiness: r.status === 'built' && !live ? 'awaiting-review' as const : undefined,
       engagementId: r.engagementId,
       engagementName: r.engagementName,
       checkId: r.checkId,
-    })),
+      };
+    }),
     ...LIBRARY_WORKFLOWS,
     ...stdRows,
   ], [planRows, stdRows]);
@@ -627,7 +633,7 @@ export default function WorkflowLibraryView({ onCreateWorkflow, onSelectWorkflow
                           {wf.engagementName && (
                             <span className="self-start flex items-center gap-1.5 text-[0.6875rem] text-ink-500">
                               {wf.planStatus === 'draft' && (
-                                <span className="inline-flex items-center px-1.5 h-5 rounded-full bg-draft-50 text-draft-700 font-medium">Draft</span>
+                                <span className="inline-flex items-center px-1.5 h-5 rounded-full bg-mitigated-50 text-mitigated-700 font-medium">Needs data</span>
                               )}
                               <button
                                 type="button"

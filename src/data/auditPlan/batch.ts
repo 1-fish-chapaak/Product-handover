@@ -50,6 +50,9 @@ export interface BatchItem {
   /** When it became ready to review — on-time reviews are within 48 h. */
   readyAt?: number;
   approvedBy?: string;
+  /** Teammate asked to review it. Unassigned = whoever opens it. */
+  assignee?: string;
+  assignedBy?: string;
   updatedAt: number;
 }
 
@@ -100,10 +103,12 @@ export function useAllBatches(): BuildBatch[] {
   return Object.values(snap).sort((a, b) => b.createdAt - a.createdAt);
 }
 
-/** Items that need the user: a question to answer, or a build to review. */
-export function pendingItems(list: BuildBatch[]) {
-  const needsInput = list.flatMap(b => b.items.filter(i => i.status === 'needs-input' && !i.answer?.startsWith('Leave')).map(i => ({ batch: b, item: i })));
-  const toReview = list.flatMap(b => b.items.filter(i => i.status === 'ready').map(i => ({ batch: b, item: i })));
+/** Items that need the user: a question to answer, or a build to review.
+ *  With `me`, anything assigned to someone else is theirs, not the user's. */
+export function pendingItems(list: BuildBatch[], me?: string) {
+  const mine = (i: BatchItem) => !me || !i.assignee || i.assignee === me;
+  const needsInput = list.flatMap(b => b.items.filter(i => i.status === 'needs-input' && !i.answer?.startsWith('Leave') && mine(i)).map(i => ({ batch: b, item: i })));
+  const toReview = list.flatMap(b => b.items.filter(i => i.status === 'ready' && mine(i)).map(i => ({ batch: b, item: i })));
   const building = list.flatMap(b => b.items.filter(i => i.status === 'building' || i.status === 'queued').map(i => ({ batch: b, item: i })));
   return { needsInput, toReview, building };
 }
@@ -177,8 +182,9 @@ export function itemsFromEntries(entries: CatalogEntry[], choices: Record<string
 }
 
 /** Items for plan checks (Audit with AI, a split prompt, a Library draft).
- *  No files were chosen, so each input auto-matches a connected source. */
-export function itemsFromPlanRows(rows: PlanWorkflowRow[]): BatchItem[] {
+ *  With `choices` (Audit with AI asks for files first) each input reads the
+ *  chosen source; without, it auto-matches a connected one. */
+export function itemsFromPlanRows(rows: PlanWorkflowRow[], choices?: Record<string, FileSourceChoice | null>): BatchItem[] {
   return rows.map(r => {
     const entry = CHECK_CATALOG.find(e => e.key === r.stdKey);
     return makeItem({
@@ -189,7 +195,11 @@ export function itemsFromPlanRows(rows: PlanWorkflowRow[]): BatchItem[] {
       cadence: entry?.cadence ?? 'Monthly',
       stdKey: r.stdKey,
       checkId: r.checkId,
-      files: filesForNeeds(r.dataNeeds).map(f => ({ code: f.code, name: f.name, source: f.matches ?? null })),
+      files: filesForNeeds(r.dataNeeds).map(f => {
+        if (!choices) return { code: f.code, name: f.name, source: f.matches ?? null };
+        const c = choices[f.id];
+        return { code: f.code, name: f.name, source: c && c.kind !== 'skip' ? c.name : null };
+      }),
     });
   });
 }
@@ -311,6 +321,20 @@ export function answerMissingFile(batchId: string, code: string, fileNames: stri
   };
   persist();
   ensureBatchRunning(batchId);
+}
+
+/** Hand a review to a teammate (null takes it back). */
+export function assignSession(sessionId: string, person: string | null, by: string): void {
+  const hit = findSession(sessionId);
+  if (!hit) return;
+  updateItem(hit.batch.id, hit.item.id, { assignee: person ?? undefined, assignedBy: person ? by : undefined });
+}
+
+/** Items assigned to someone other than `me`, still open. */
+export function withTeammates(list: BuildBatch[], me: string) {
+  return list.flatMap(b => b.items
+    .filter(i => i.assignee && i.assignee !== me && (i.status === 'ready' || i.status === 'needs-input'))
+    .map(i => ({ batch: b, item: i })));
 }
 
 /** Next item in the batch still waiting on the reviewer, after `sessionId`. */
