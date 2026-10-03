@@ -1,63 +1,98 @@
 /**
  * The standard library — preloaded into every account.
  *
- * Each catalog entry is a standard control with a standard workflow. A
- * workflow is 'ready' once it runs on this client's data (seeded ready where
- * the account already has a matching Workflow Library workflow), 'needs-data'
- * until it's adapted, and 'manual' for judgement controls that have no
- * workflow at all. Adapting keeps the control Standard — only its readiness
- * changes; editing its logic would fork a Custom copy.
+ * Each catalog entry is a standard control with a standard workflow, and
+ * moves through:
  *
- * Readiness persists in localStorage and syncs across tabs (a workflow
- * reviewed in its own session tab flips here too).
+ *   needs-data       → not yet adapted to this client's data
+ *   awaiting-review  → built on the client's data, nobody has approved it
+ *   live             → approved (or already running in the account)
+ *   manual           → judgement control, no workflow at all
+ *
+ * Only live workflows count towards coverage and hours returned — a built
+ * workflow nobody has looked at isn't evidence yet. Adapting keeps the
+ * control Standard; editing its logic would fork a Custom copy.
+ *
+ * Persisted in localStorage and synced across tabs (a workflow approved in
+ * its review-session tab goes live here too).
  */
 import { useSyncExternalStore } from 'react';
 import type { ControlRow } from '../../components/governance/controlTypes';
 import { CHECK_CATALOG, type CatalogEntry } from './catalog';
 
-export type StdReadiness = 'ready' | 'needs-data' | 'manual';
+export type StdReadiness = 'live' | 'awaiting-review' | 'needs-data' | 'manual';
 
-const KEY = 'irame.stdLibrary.adapted';
+export interface StdState {
+  built: string[];
+  live: string[];
+}
 
-function readAdapted(): string[] {
+const KEY = 'irame.stdLibrary.state';
+
+function readState(): StdState {
   try {
     const raw = localStorage.getItem(KEY);
-    const v = raw ? JSON.parse(raw) : [];
-    return Array.isArray(v) ? v : [];
-  } catch { return []; }
+    const v = raw ? JSON.parse(raw) : null;
+    return v && Array.isArray(v.built) && Array.isArray(v.live) ? v : { built: [], live: [] };
+  } catch { return { built: [], live: [] }; }
 }
 
-let adapted: string[] = readAdapted();
+let state: StdState = readState();
 const listeners = new Set<() => void>();
 const emit = () => listeners.forEach(fn => fn());
+// Listen for other tabs at module level, not per subscriber — an approval in
+// a review tab must land here even while no mounted component reads the store.
+if (typeof window !== 'undefined') {
+  window.addEventListener('storage', e => { if (e.key === KEY) { state = readState(); emit(); } });
+}
 const subscribe = (fn: () => void) => {
   listeners.add(fn);
-  const onStorage = (e: StorageEvent) => { if (e.key === KEY) { adapted = readAdapted(); fn(); } };
-  window.addEventListener('storage', onStorage);
-  return () => { listeners.delete(fn); window.removeEventListener('storage', onStorage); };
+  return () => { listeners.delete(fn); };
 };
-
-export function readinessOf(entry: CatalogEntry, adaptedKeys: string[] = adapted): StdReadiness {
-  if (!entry.automatable) return 'manual';
-  return entry.existingWorkflowId || adaptedKeys.includes(entry.key) ? 'ready' : 'needs-data';
-}
-
-/** True when the entry's workflow already runs on this client's data. */
-export function isStdLive(key: string): boolean {
-  const e = CHECK_CATALOG.find(x => x.key === key);
-  return !!e && readinessOf(e) === 'ready';
-}
-
-export function markStdAdapted(keys: string[]): void {
-  const next = Array.from(new Set([...adapted, ...keys]));
-  if (next.length === adapted.length) return;
-  adapted = next;
-  try { localStorage.setItem(KEY, JSON.stringify(adapted)); } catch { /* quota */ }
+function persist(next: StdState) {
+  state = next;
+  try { localStorage.setItem(KEY, JSON.stringify(state)); } catch { /* quota */ }
   emit();
 }
 
-export function useAdaptedKeys(): string[] {
-  return useSyncExternalStore(subscribe, () => adapted, () => adapted);
+export function readinessOf(entry: CatalogEntry, s: StdState = state): StdReadiness {
+  if (!entry.automatable) return 'manual';
+  if (entry.existingWorkflowId || s.live.includes(entry.key)) return 'live';
+  if (s.built.includes(entry.key)) return 'awaiting-review';
+  return 'needs-data';
+}
+
+const entryOf = (key: string) => CHECK_CATALOG.find(x => x.key === key);
+
+/** Live — approved and running on this client's data. Counts for coverage. */
+export function isStdLive(key: string): boolean {
+  const e = entryOf(key);
+  return !!e && readinessOf(e) === 'live';
+}
+
+/** Built or live — a workflow exists, so plans reuse it rather than build. */
+export function isStdBuilt(key: string): boolean {
+  const e = entryOf(key);
+  const r = e ? readinessOf(e) : 'needs-data';
+  return r === 'live' || r === 'awaiting-review';
+}
+
+/** A batch finished building these on the client's data. */
+export function markStdAdapted(keys: string[]): void {
+  const built = Array.from(new Set([...state.built, ...keys]));
+  if (built.length === state.built.length) return;
+  persist({ ...state, built });
+}
+
+/** A reviewer approved these — they go live. */
+export function markStdLive(keys: string[]): void {
+  const live = Array.from(new Set([...state.live, ...keys]));
+  if (live.length === state.live.length) return;
+  persist({ built: Array.from(new Set([...state.built, ...keys])), live });
+}
+
+export function useStdState(): StdState {
+  return useSyncExternalStore(subscribe, () => state, () => state);
 }
 
 /** The standard workflow's name for an entry — the library workflow it
@@ -65,9 +100,10 @@ export function useAdaptedKeys(): string[] {
 export const stdWorkflowName = (e: CatalogEntry) => e.existingWorkflowName ?? e.checkName;
 
 /** Standard controls as Control Library rows. */
-export function standardControlRows(adaptedKeys: string[]): ControlRow[] {
+export function standardControlRows(s: StdState): ControlRow[] {
   return CHECK_CATALOG.map(e => {
-    const readiness = readinessOf(e, adaptedKeys);
+    const readiness = readinessOf(e, s);
+    const exists = readiness === 'live' || readiness === 'awaiting-review';
     return {
       id: `STD-${e.controlId}`,
       controlId: e.controlId,
@@ -84,11 +120,11 @@ export function standardControlRows(adaptedKeys: string[]): ControlRow[] {
       assertions: [],
       mappedRisks: [],
       linkedWorkflows: e.automatable ? [stdWorkflowName(e)] : [],
-      linkedWorkflowIds: readiness === 'ready' ? [e.existingWorkflowId ?? `std-${e.key}`] : [],
+      linkedWorkflowIds: exists ? [e.existingWorkflowId ?? `std-${e.key}`] : [],
       usedInRACMs: 0,
       status: 'Active',
       createdAt: 'Preloaded',
-      updatedAt: readiness === 'ready' ? 'Adapted' : 'Preloaded',
+      updatedAt: readiness === 'live' ? 'Live' : readiness === 'awaiting-review' ? 'Built' : 'Preloaded',
       library: 'standard',
       stdKey: e.key,
     } satisfies ControlRow;

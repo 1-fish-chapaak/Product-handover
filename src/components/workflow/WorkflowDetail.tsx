@@ -11,7 +11,7 @@ import {
 } from 'lucide-react';
 import { WORKFLOWS } from '../../data/mockData';
 import { LIBRARY_WORKFLOWS } from './WorkflowLibraryView';
-import { getEngagementPlan, getPlanWorkflows } from '../../data/auditPlan';
+import { CHECK_CATALOG, getEngagementPlan, getPlanWorkflows, stdWorkflowName } from '../../data/auditPlan';
 import { useToast } from '../shared/Toast';
 import Gated from '../shared/Gated';
 import { useAuditLog } from '../../context/AdminDataContext';
@@ -893,6 +893,26 @@ function resolveWorkflow(workflowId: string): ResolvedWorkflow | null {
       lastRunErrorKind: null,
       linkedControls: [],
     };
+  }
+  // Standard library workflows (preloaded, adapted to the client's data).
+  if (workflowId.startsWith('std-')) {
+    const e = CHECK_CATALOG.find(x => x.key === workflowId.slice(4));
+    if (e) {
+      return {
+        id: workflowId,
+        code: `WF-${e.controlId}`,
+        name: stdWorkflowName(e),
+        desc: e.checkDescription,
+        steps: DEFAULT_STEPS,
+        runs: 0,
+        owner: 'Standard library',
+        lastRun: null,
+        lastRunStatus: null,
+        lastRunError: null,
+        lastRunErrorKind: null,
+        linkedControls: [{ id: e.controlId, name: e.controlTitle }],
+      };
+    }
   }
   // Checks built from an audit plan (Audit with AI / a split chat prompt).
   const planRow = getPlanWorkflows().find(w => w.id === workflowId);

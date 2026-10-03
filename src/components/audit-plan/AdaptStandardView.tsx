@@ -12,6 +12,7 @@ import { ArrowLeft, ArrowRight, Check, ChevronRight, CircleDashed, Database, Fil
 import { Button } from '../shared/Button';
 import { StepRail } from '../audit/sox-testing/ScopingWizard';
 import { useAuditLog } from '../../context/AdminDataContext';
+import { useCurrentUser } from '../../context/CurrentUserContext';
 import type { ProcessCode } from '../../data/engagements';
 import {
   CHECK_CATALOG, PROCESS_LONG, catalogFor, createBatch, filesForEntry, hash01, isStdLive, itemsFromEntries,
@@ -41,6 +42,7 @@ function coverageWith(process: ProcessCode, addedKeys: string[]): PlanCoverage {
 
 export default function AdaptStandardView({ keys, choices, onBack, onBuild }: Props) {
   const logEvent = useAuditLog();
+  const { currentUser } = useCurrentUser();
   const reduced = useReducedMotion();
   const entries = useMemo(
     () => keys.map(k => CHECK_CATALOG.find(e => e.key === k)).filter((e): e is CatalogEntry => !!e),
@@ -63,6 +65,7 @@ export default function AdaptStandardView({ keys, choices, onBack, onBuild }: Pr
     const batchId = createBatch({
       title: `Adapting ${items.length} standard workflow${items.length === 1 ? '' : 's'}`,
       origin: 'adapt',
+      owner: currentUser?.name ?? 'You',
       items,
     });
     logEvent({ action: 'Create', description: `Building ${items.length} adapted standard workflow(s)`, module: 'Control Library', entity: 'Workflow' });

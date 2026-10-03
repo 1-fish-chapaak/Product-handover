@@ -550,7 +550,7 @@ function PlanStep({ plan, expanded, setExpanded, updateEng }: {
               { v: selected.length, l: 'engagements' },
               { v: allControls.length, l: 'controls' },
               { v: allControls.filter(c => c.check.kind === 'reuse').length, l: 'reuse existing' },
-              { v: newChecks.length, l: 'new checks' },
+              { v: newChecks.length, l: 'need your data' },
             ].map(k => (
               <div key={k.l}>
                 <div className="font-mono tabular-nums text-[1.5rem] font-semibold text-ink-900 leading-none">{k.v}</div>
@@ -658,7 +658,7 @@ function EngagementCard({ eng, open, onToggleOpen, updateEng }: {
                 onClick={() => setFilter(k)}
                 className={`h-7 px-3 rounded-full text-[0.75rem] font-medium cursor-pointer transition-colors ${filter === k ? 'bg-ink-900 text-white' : 'text-ink-600 hover:bg-paper-100'}`}
               >
-                {{ all: 'All', new: 'New checks', reuse: 'Reuse existing', manual: 'Manual' }[k]} <span className="tabular-nums opacity-70">{count(k)}</span>
+                {{ all: 'All', new: 'Need data', reuse: 'Reuse existing', manual: 'Manual' }[k]} <span className="tabular-nums opacity-70">{count(k)}</span>
               </button>
             ))}
           </div>

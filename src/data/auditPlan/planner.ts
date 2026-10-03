@@ -7,7 +7,8 @@
 import { libraryEngagements, type ProcessCode } from '../engagements';
 import { ATR_LIBRARY } from '../atrLibrary';
 import { CHECK_CATALOG, PROCESS_LONG, catalogFor, type CatalogEntry } from './catalog';
-import { isStdLive, stdWorkflowName } from './standardLibrary';
+import { isStdBuilt, isStdLive, stdWorkflowName } from './standardLibrary';
+import { fmtHours, valueOf } from './score';
 import type {
   AuditPlan, AuditPlanContext, PlanCheck, PlanControl, PlanCoverage, PlanEngagement, PlanPhase, Rating,
 } from './types';
@@ -85,7 +86,7 @@ interface GroundOpts {
 
 function buildCheck(entry: CatalogEntry, universe: number, priorFinding: string | undefined, dataGaps: string[]): PlanCheck {
   // A standard workflow already adapted to this client's data is reused too.
-  const kind: PlanCheck['kind'] = !entry.automatable ? 'manual' : entry.existingWorkflowId || isStdLive(entry.key) ? 'reuse' : 'new';
+  const kind: PlanCheck['kind'] = !entry.automatable ? 'manual' : entry.existingWorkflowId || isStdBuilt(entry.key) ? 'reuse' : 'new';
   const lift = Math.round(100 / Math.max(1, universe));
   let impact: Rating;
   const reasons: string[] = [];
@@ -94,7 +95,7 @@ function buildCheck(entry: CatalogEntry, universe: number, priorFinding: string 
     reasons.push(`${entry.riskRating}-rated risk with no automated test today`);
     if (priorFinding) { score += 1; reasons.push(`Repeat finding: ${priorFinding}`); }
     if (dataGaps.length > 0) { score -= 1; reasons.push(`Needs ${dataGaps.join(', ')} — not connected yet`); }
-    reasons.push(`+${lift} pts ${PROCESS_LONG[entry.process]} coverage`);
+    reasons.push(`+${lift} pts ${PROCESS_LONG[entry.process]} coverage · returns ~${fmtHours(valueOf(entry).hoursPerMonth)} a month once live (est.)`);
     impact = scoreToRating(Math.max(1, Math.min(3, score)));
   } else if (kind === 'reuse') {
     impact = entry.riskRating;

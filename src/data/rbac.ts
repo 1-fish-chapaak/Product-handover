@@ -329,6 +329,7 @@ export const VIEW_PERMISSIONS: Partial<Record<View, PermissionKey | PermissionKe
   // engagements and workflows, so it needs workflow-create.
   'audit-with-ai': 'wf_create',
   'adapt-standard': 'wf_create',
+  // Builds & reviews is open to anyone who can be asked to review.
   // Process hub / business process
   'programs': 'bp_view',
   'business-processes': 'bp_view',

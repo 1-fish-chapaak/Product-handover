@@ -650,7 +650,9 @@ export default function EngagementDetailView({ engagementId, onBack, onOpenExecu
                 {notStarted ? '—' : `${eng.health}%`}
               </div>
               <div className="text-[0.625rem] text-text-muted uppercase tracking-wide mt-0.5">
-                {eng.type === 'Automation' ? 'Pass Rate' : concludesOnEffectiveness ? 'Effective' : 'Coverage'}
+                {/* Health is controls concluded satisfactory — not automated
+                    coverage, which "Coverage" means everywhere else. */}
+                {eng.type === 'Automation' ? 'Pass Rate' : concludesOnEffectiveness ? 'Effective' : 'Satisfactory'}
               </div>
               {!notStarted && (
                 <div className="mt-2 w-20 h-1.5 bg-surface-3 rounded-full overflow-hidden mx-auto">
@@ -748,7 +750,8 @@ export default function EngagementDetailView({ engagementId, onBack, onOpenExecu
                 {/* Where-you-left-off (memory kit §03): the saved position from
                     the last visit, resumable in one click. Flagship world only —
                     the seed row is scoped to the chargeback engagement. */}
-                {/p2p|procure|vendor|invoice|pricing|chargeback/i.test(`${eng.name} ${eng.process ?? ''} ${eng.subtype ?? ''}`) && eng.type !== 'Automation' && (
+                {/* Seeded demo memory — never on an engagement a plan just created. */}
+                {!engagementPlan && /p2p|procure|vendor|invoice|pricing|chargeback/i.test(`${eng.name} ${eng.process ?? ''} ${eng.subtype ?? ''}`) && eng.type !== 'Automation' && (
                   <SinceYouLeft
                     className="mb-4"
                     kicker="Since Friday"
@@ -1599,19 +1602,23 @@ export function HealthOverviewTab({
   const isAutomation = eng.type === 'Automation';
   const isCompliance = eng.type === 'Compliance';
   const isIA = eng.type === 'Internal Audit';
+  // An engagement a plan created links exactly its plan's checks.
+  const planRecord = getEngagementPlan(eng.id);
+  const planLinked = planRecord ? planRecord.controls.filter(c => c.check.kind !== 'manual').length : undefined;
   const issueWord = isAutomation ? 'exception' : 'finding';
   const issueWordCap = isAutomation ? 'Exceptions' : 'Findings';
   const labels = {
     kpi1Label: isAutomation ? 'Total Workflows' : 'Controls in Scope',
     kpi1Sub: isAutomation
       ? `${MOCK_WORKFLOWS.filter(wf => wf.cadence.kind === 'Frequency').length} live · ${MOCK_WORKFLOWS.filter(wf => wf.cadence.kind === 'Ad-hoc').length} ad-hoc`
-      : `${MOCK_WORKFLOWS.length} test workflows linked`,
+      : `${planLinked ?? MOCK_WORKFLOWS.length} test workflows linked`,
     // The same rows the header strip, the Controls tab and the Audit Report
     // count, rather than the seeded engagement.controls they disagreed with.
     kpi1Value: isAutomation ? MOCK_WORKFLOWS.length : isCompliance ? eng.controls : baseControlsFor(eng).length,
     kpi2Label: `Open ${issueWordCap}`,
     kpi3Label: isIA ? 'Action Plans Open' : 'In Progress',
-    kpi4Label: isAutomation ? 'Health' : (isCompliance ? 'Pass Rate' : 'Coverage'),
+    // Share of exceptions resolved — "Coverage" elsewhere means automated tests.
+    kpi4Label: isAutomation ? 'Health' : (isCompliance ? 'Pass Rate' : 'Resolved'),
     donutHeader: `${issueWordCap} by severity`,
     barHeader: isAutomation ? 'Exceptions by workflow' : `${issueWordCap} by workflow`,
     heatmapHeader: isAutomation ? 'Exception heatmap — last 14 days' : `${issueWordCap} activity — last 14 days`,

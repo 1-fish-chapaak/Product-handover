@@ -16,7 +16,9 @@ import { useSyncExternalStore } from 'react';
 import type { ProcessCode } from '../engagements';
 import { CHECK_CATALOG, type CatalogEntry } from './catalog';
 import { filesForEntry, filesForNeeds, hash01, type FileSourceChoice } from './stdFiles';
-import { markStdAdapted } from './standardLibrary';
+import { markStdAdapted, markStdLive } from './standardLibrary';
+import { recordApproval } from './ledger';
+import { COMPLEXITY_HOURS, valueOfKey } from './score';
 import { markCheckBuilt, type PlanWorkflowRow } from './store';
 
 export type BatchItemStatus = 'queued' | 'building' | 'ready' | 'needs-input' | 'approved';
@@ -45,6 +47,9 @@ export interface BatchItem {
   assumptions: string[];
   question?: { text: string; options: string[] };
   answer?: string;
+  /** When it became ready to review — on-time reviews are within 48 h. */
+  readyAt?: number;
+  approvedBy?: string;
   updatedAt: number;
 }
 
@@ -54,6 +59,8 @@ export interface BuildBatch {
   origin: 'adapt' | 'audit-plan' | 'split' | 'draft';
   engagementId?: string;
   engagementName?: string;
+  /** Who started the batch — owns the workflows it builds (and their hours). */
+  owner?: string;
   items: BatchItem[];
   createdAt: number;
 }
@@ -75,15 +82,31 @@ function persist() {
   try { localStorage.setItem(KEY, JSON.stringify(batches)); } catch { /* quota */ }
   emit();
 }
+// Another tab (a review session, or the main chat) wrote — re-read. Module
+// level, so nothing is missed while no component happens to be subscribed.
+if (typeof window !== 'undefined') {
+  window.addEventListener('storage', e => { if (e.key === KEY) { batches = read(); emit(); } });
+}
 const subscribe = (fn: () => void) => {
   listeners.add(fn);
-  // Another tab (a review session, or the main chat) wrote — re-read.
-  const onStorage = (e: StorageEvent) => { if (e.key === KEY) { batches = read(); fn(); } };
-  window.addEventListener('storage', onStorage);
-  return () => { listeners.delete(fn); window.removeEventListener('storage', onStorage); };
+  return () => { listeners.delete(fn); };
 };
 
 export const getBatch = (id: string): BuildBatch | undefined => batches[id];
+
+/** Every batch, newest first — the Builds & reviews inbox and Home read this. */
+export function useAllBatches(): BuildBatch[] {
+  const snap = useSyncExternalStore(subscribe, () => batches, () => batches);
+  return Object.values(snap).sort((a, b) => b.createdAt - a.createdAt);
+}
+
+/** Items that need the user: a question to answer, or a build to review. */
+export function pendingItems(list: BuildBatch[]) {
+  const needsInput = list.flatMap(b => b.items.filter(i => i.status === 'needs-input' && !i.answer?.startsWith('Leave')).map(i => ({ batch: b, item: i })));
+  const toReview = list.flatMap(b => b.items.filter(i => i.status === 'ready').map(i => ({ batch: b, item: i })));
+  const building = list.flatMap(b => b.items.filter(i => i.status === 'building' || i.status === 'queued').map(i => ({ batch: b, item: i })));
+  return { needsInput, toReview, building };
+}
 
 export function useBatch(id: string | undefined): BuildBatch | undefined {
   const snap = useSyncExternalStore(subscribe, () => batches, () => batches);
@@ -204,6 +227,7 @@ function finishItem(batchId: string, item: BatchItem) {
   updateItem(batchId, item.id, {
     status: 'ready',
     question: undefined,
+    readyAt: Date.now(),
     rowsScanned: rowsFor(item),
     exceptions: 2 + Math.round(hash01(item.controlId + item.name) * 38),
   });
@@ -248,10 +272,57 @@ export function answerSession(sessionId: string, answer: string): void {
   }, 1400);
 }
 
-export function approveSession(sessionId: string): void {
+/** Approve a built workflow: it goes live, and its owner starts earning its
+ *  hours. The approver earns a review (on time if within 48 h), not hours. */
+export function approveSession(sessionId: string, approver: string): void {
   const hit = findSession(sessionId);
-  if (hit && hit.item.status === 'ready') updateItem(hit.batch.id, hit.item.id, { status: 'approved' });
+  if (!hit || hit.item.status !== 'ready') return;
+  const { batch, item } = hit;
+  updateItem(batch.id, item.id, { status: 'approved', approvedBy: approver });
+  if (item.stdKey) markStdLive([item.stdKey]);
+  const v = valueOfKey(item.stdKey);
+  recordApproval({
+    name: item.name,
+    controlId: item.controlId,
+    process: item.process,
+    complexity: v?.complexity ?? 'mid',
+    hoursPerMonth: v?.hoursPerMonth ?? COMPLEXITY_HOURS.mid,
+    basis: v?.basis ?? 'est.',
+    owner: batch.owner ?? approver,
+    approvedBy: approver,
+  }, item.readyAt ?? Date.now());
 }
+
+/** One upload for a file several workflows in a batch are missing. */
+export function answerMissingFile(batchId: string, code: string, fileNames: string[]): void {
+  const b = batches[batchId];
+  if (!b) return;
+  const label = fileNames.length > 1 ? `${fileNames.length} files · ${fileNames[0]} (uploaded)` : `${fileNames[0] ?? `${code.toLowerCase()}_upload.xlsx`} (uploaded)`;
+  batches = {
+    ...batches,
+    [batchId]: {
+      ...b,
+      items: b.items.map(i => {
+        if (i.status !== 'needs-input' || !i.files.some(f => f.code === code && !f.source)) return i;
+        const files = i.files.map(f => (f.code === code && !f.source ? { ...f, source: label } : f));
+        return { ...i, files, status: 'queued' as const, question: undefined, answer: undefined, assumptions: assumptionsFor(files, i.cadence), updatedAt: Date.now() };
+      }),
+    },
+  };
+  persist();
+  ensureBatchRunning(batchId);
+}
+
+/** Next item in the batch still waiting on the reviewer, after `sessionId`. */
+export function nextPendingSession(sessionId: string): string | undefined {
+  const hit = findSession(sessionId);
+  if (!hit) return undefined;
+  const pending = hit.batch.items.filter(i => i.sessionId !== sessionId && (i.status === 'ready' || (i.status === 'needs-input' && !i.answer?.startsWith('Leave'))));
+  return pending[0]?.sessionId;
+}
+
+/** Hours/month an item returns once live (est. or timed). */
+export const itemHours = (i: BatchItem) => valueOfKey(i.stdKey)?.hoursPerMonth ?? COMPLEXITY_HOURS.mid;
 
 /** URL that opens a workflow's review session in a new tab. */
 export const sessionHref = (sessionId: string) => `${window.location.pathname}?view=chat&session=${sessionId}`;

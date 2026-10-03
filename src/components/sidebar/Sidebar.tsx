@@ -7,8 +7,9 @@ import {
   Shield, Search as SearchIcon, Settings, Clock, Check,
   Wand2, MoreHorizontal, LogOut, HelpCircle, ExternalLink,
   ClipboardCheck, FlaskConical, Layers, Inbox, BarChart3,
-  Brain, Table2,
+  Brain, Table2, ListChecks,
 } from 'lucide-react';
+import { pendingItems, useAllBatches } from '../../data/auditPlan';
 import PersonalMemoryDrawer from './PersonalMemoryDrawer';
 import NotificationBell from '../../notifications/NotificationBell';
 import type { View } from '../../hooks/useAppState';
@@ -186,6 +187,10 @@ export default function Sidebar({ view, setView, expanded, toggleSidebar, unread
 
   // Open items waiting on the signed-in user across every engagement — uses
   // the same derivation as MyQueueView so the badge always matches the list.
+  // Builds & reviews appears once there's something in it to answer or review.
+  const allBatches = useAllBatches();
+  const buildsPending = pendingItems(allBatches);
+  const buildsCount = buildsPending.needsInput.length + buildsPending.toReview.length;
   const myQueueCount = useMemo(
     () => myQueueFor(ENGAGEMENT_EXCEPTIONS, personForUser(currentUser?.name)).length,
     [currentUser?.name],
@@ -378,6 +383,9 @@ export default function Sidebar({ view, setView, expanded, toggleSidebar, unread
           {/* Workflow Builder — agent chooser (General / GRC) + Audit with AI.
               Open like Ask IRA; Audit with AI gates itself on wf_create. */}
           <NavItem icon={Workflow} label="Workflow Builder" active={view === 'workflow-builder' || view === 'audit-with-ai'} expanded={isExpanded} onClick={() => setView('workflow-builder')} />
+          {(allBatches.length > 0 || view === 'builds') && (
+            <NavItem icon={ListChecks} label="Builds & reviews" active={view === 'builds'} expanded={isExpanded} badge={buildsCount > 0 ? String(buildsCount) : undefined} onClick={() => setView('builds')} />
+          )}
 
           {/* Primary — always available */}
           <NavItem icon={Home} label="Home" active={view === 'home'} expanded={isExpanded} onClick={() => setView('home')} />

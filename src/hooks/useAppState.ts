@@ -26,6 +26,8 @@ export type View =
   | 'audit-with-ai'
   // Control Library → adapt standard workflows to the client's data
   | 'adapt-standard'
+  // Every batch build and what needs the user in them
+  | 'builds'
   // Governance
   | 'business-processes'
   | 'bp-detail'
@@ -278,8 +280,29 @@ const getInitialView = (): View => {
   if (v === 'knowledge-hub') return 'knowledge-hub';
   if (v === 'dev-configurable-engagement-v3') return 'dev-configurable-engagement-v3';
   if (v === 'home') return 'home';
+  if (v === 'builds') return 'builds';
+  // First-time users start on Home — its setup checklist is the way in. Once
+  // setup is done the app opens on Ask IRA again.
+  try { if (localStorage.getItem('irame.setup.done') !== '1') return 'home'; } catch { /* ignore */ }
   return 'chat';
 };
+
+/** An adapt the user started but hasn't built yet survives a reload — the
+ *  plan page reopens on it, and Home offers to resume it. */
+const ADAPT_DRAFT_KEY = 'irame.adaptDraft';
+function loadAdaptDraft(): AdaptSeed | null {
+  try {
+    const raw = localStorage.getItem(ADAPT_DRAFT_KEY);
+    const v = raw ? JSON.parse(raw) : null;
+    return v && Array.isArray(v.keys) ? v : null;
+  } catch { return null; }
+}
+export function saveAdaptDraft(seed: AdaptSeed | null): void {
+  try {
+    if (seed) localStorage.setItem(ADAPT_DRAFT_KEY, JSON.stringify(seed));
+    else localStorage.removeItem(ADAPT_DRAFT_KEY);
+  } catch { /* ignore */ }
+}
 
 /** ?view=chat&session=<id> — a batch-built workflow's review session. */
 function getInitialReviewSession(): WorkflowAgentSeed | null {
@@ -393,7 +416,7 @@ const INITIAL_STATE: AppState = {
   workflowBuilderEngagementName: null,
   // A batch card's "Review ↗" opens ?view=chat&session=<id> in a new tab.
   workflowAgentSeed: getInitialReviewSession(),
-  adaptSeed: null,
+  adaptSeed: loadAdaptDraft(),
   workflowBuilderSeedPrompt: null,
   selectedChatId: null,
   queryAssumptions: [],
@@ -629,7 +652,14 @@ export function useAppState() {
   }, []);
 
   const startAdaptStandard = useCallback((seed: AdaptSeed) => {
+    saveAdaptDraft(seed);
     setState(prev => ({ ...prev, view: 'adapt-standard' as View, adaptSeed: seed }));
+  }, []);
+
+  /** The adapt was built (or abandoned) — drop the draft. */
+  const clearAdaptSeed = useCallback(() => {
+    saveAdaptDraft(null);
+    setState(prev => ({ ...prev, adaptSeed: null }));
   }, []);
 
   const clearWorkflowAgentSeed = useCallback(() => {
@@ -839,6 +869,7 @@ export function useAppState() {
     startWorkflowAgent,
     clearWorkflowAgentSeed,
     startAdaptStandard,
+    clearAdaptSeed,
     openWorkflowExecutor,
     openAuditExecution,
     openEngagement,

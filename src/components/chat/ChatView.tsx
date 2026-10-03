@@ -5133,6 +5133,7 @@ export default function ChatView({ showChatHistory, toggleChatHistory, setShowAr
       origin,
       engagementId,
       engagementName,
+      owner: currentUser?.name ?? 'You',
       items,
     });
   };
@@ -5168,6 +5169,32 @@ export default function ChatView({ showChatHistory, toggleChatHistory, setShowAr
   };
 
   const updateSplitPlan = (msgId: string, plan: AuditPlan) => setRichData(msgId, { plan });
+
+  /** Show one batch-built workflow's review session in this thread. Used when
+   *  a session tab opens, and by "Approve & next" to move the same tab on to
+   *  the next workflow (the URL follows, so a reload lands on it). */
+  const openReviewSession = (sessionId: string) => {
+    reviewSessionRef.current = sessionId;
+    const hit = findSession(sessionId);
+    try {
+      const url = new URL(window.location.href);
+      url.searchParams.set('view', 'chat');
+      url.searchParams.set('session', sessionId);
+      window.history.replaceState(null, '', url.toString());
+    } catch { /* non-browser */ }
+    setMessages([
+      ...(hit ? [{ id: `msg-${Date.now()}`, role: 'user' as const, text: `Review ${hit.item.name} (${hit.item.controlId})`, timestamp: new Date() }] : []),
+      {
+        id: wfMakeId(),
+        role: 'assistant',
+        text: hit
+          ? `Here's **${hit.item.name}**, built as part of *${hit.batch.title}*. Check the result and what I assumed — ask for any change below, or approve it.`
+          : 'I couldn\'t find this review session.',
+        timestamp: new Date(),
+      },
+      { id: wfMakeId(), role: 'assistant', text: '', timestamp: new Date(), richType: 'workflow-review-session', richData: { sessionId } },
+    ]);
+  };
 
   /** Build an engagement's remaining draft checks as a batch (Audit with AI
    *  hand-off, or one draft row from the Workflow Library). */
@@ -6115,20 +6142,7 @@ export default function ChatView({ showChatHistory, toggleChatHistory, setShowAr
     setArtifactMode('workflow');
     if (seed.reviewSessionId) {
       const sessionId = seed.reviewSessionId;
-      reviewSessionRef.current = sessionId;
-      const hit = findSession(sessionId);
-      queueMicrotask(() => setMessages([
-        ...(hit ? [{ id: `msg-${Date.now()}`, role: 'user' as const, text: `Review ${hit.item.name} (${hit.item.controlId})`, timestamp: new Date() }] : []),
-        {
-          id: wfMakeId(),
-          role: 'assistant',
-          text: hit
-            ? `Here's **${hit.item.name}**, built as part of *${hit.batch.title}*. Check the result and what I assumed — ask for any change below, or approve it.`
-            : 'I couldn\'t find this review session.',
-          timestamp: new Date(),
-        },
-        { id: wfMakeId(), role: 'assistant', text: '', timestamp: new Date(), richType: 'workflow-review-session', richData: { sessionId } },
-      ]));
+      queueMicrotask(() => openReviewSession(sessionId));
     } else if (seed.batchId) {
       const batchId = seed.batchId;
       queueMicrotask(() => pushBatch(batchId, 'Building these on your data now. I won\'t stop to ask — anything I can\'t resolve waits as **Needs your input**. Open any workflow to review it in its own session.'));
@@ -7475,6 +7489,7 @@ export default function ChatView({ showChatHistory, toggleChatHistory, setShowAr
                     ) : msg.richType === 'workflow-review-session' ? (
                       <ReviewSessionCard
                         sessionId={String((msg.richData as { sessionId?: string }).sessionId ?? '')}
+                        onNext={openReviewSession}
                         onAskChange={(draft) => {
                           setInput(draft);
                           requestAnimationFrame(() => { textareaRef.current?.focus(); handleTextareaInput(); });

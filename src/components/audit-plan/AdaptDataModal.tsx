@@ -16,7 +16,7 @@ import { ArrowRight, Check, Database, FileUp, X, CircleDashed, Upload, Plus } fr
 import { Button } from '../shared/Button';
 import { SEED } from '../data-sources/sources';
 import {
-  CHECK_CATALOG, autoMatch, placeUpload, requiredFilesFor, uploadChoice,
+  CHECK_CATALOG, autoMatch, fmtHours, hoursPerMonthFor, placeUpload, requiredFilesFor, uploadChoice,
   type CatalogEntry, type FileSourceChoice, type StandardFile,
 } from '../../data/auditPlan';
 import { IraMark } from './PlanParts';
@@ -213,7 +213,7 @@ export default function AdaptDataModal({ keys, onClose, onContinue }: Props) {
                   <div className="text-[0.875rem] font-medium text-ink-900">{file.name}</div>
                   <div className="text-[0.75rem] text-ink-500 truncate" title={file.hint}>{file.hint}</div>
                   <div className="text-[0.6875rem] text-ink-400 mt-0.5 truncate" title={unlocks.map(nameOf).join(', ')}>
-                    Unlocks <span className="font-medium text-ink-600 tabular-nums">{unlocks.length}</span> workflow{unlocks.length === 1 ? '' : 's'} · {unlocks.slice(0, 2).map(nameOf).join(', ')}{unlocks.length > 2 ? ` +${unlocks.length - 2}` : ''}
+                    Unlocks <span className="font-medium text-ink-600 tabular-nums">{unlocks.length}</span> workflow{unlocks.length === 1 ? '' : 's'} · <span className="font-medium text-brand-700">+{fmtHours(hoursPerMonthFor(unlocks))}/mo</span> · {unlocks.slice(0, 2).map(nameOf).join(', ')}{unlocks.length > 2 ? ` +${unlocks.length - 2}` : ''}
                   </div>
                 </div>
                 <div className="min-w-0">
@@ -273,7 +273,8 @@ export default function AdaptDataModal({ keys, onClose, onContinue }: Props) {
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 px-6 py-4 border-t border-canvas-border bg-paper-50/60 rounded-b-xl">
           <div className="text-[0.8125rem] text-ink-600">
             <span className="font-semibold text-ink-900 tabular-nums">{readyFiles} of {required.length}</span> files ready ·{' '}
-            <span className="font-semibold text-ink-900 tabular-nums">{buildable} of {entries.length}</span> workflows fully covered
+            <span className="font-semibold text-ink-900 tabular-nums">{buildable} of {entries.length}</span> workflows fully covered ·{' '}
+            <span className="font-semibold text-brand-700 tabular-nums">+{fmtHours(hoursPerMonthFor(keys))}/mo</span> <span className="text-ink-400">once live, est.</span>
             {buildable < entries.length && (
               <div className="text-[0.75rem] text-ink-500">The rest are still built — they'll ask for the missing file in their own session.</div>
             )}

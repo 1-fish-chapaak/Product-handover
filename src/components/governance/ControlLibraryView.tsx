@@ -18,8 +18,8 @@ import { LinkWorkflowToControlDrawer, type ControlWorkflow } from '../audit/Racm
 import { type ControlRow, BP_COLORS } from './controlTypes';
 import { CONTROL_LIBRARY } from '../../data/controlLibrary';
 import {
-  CHECK_CATALOG, PROCESS_LONG, filesForEntry, standardControlRows, useAdaptedKeys, readinessOf,
-  type FileSourceChoice,
+  CHECK_CATALOG, PROCESS_LONG, filesForEntry, standardControlRows, useStdState, readinessOf, hoursPerMonthFor, fmtHours, valueOfKey,
+  type FileSourceChoice, type StdState,
 } from '../../data/auditPlan';
 import type { ProcessCode } from '../../data/engagements';
 import { Button } from '../shared/Button';
@@ -40,16 +40,19 @@ interface ControlLibraryProps {
   processFilter?: string;
   /** Adapt standard controls: the chosen keys and where each file comes from. */
   onAdapt?: (keys: string[], choices: Record<string, FileSourceChoice | null>) => void;
+  /** Built workflows waiting for review live in Builds & reviews. */
+  onOpenBuilds?: () => void;
 }
 
 type LibTab = 'all' | 'standard' | 'custom';
-type RowStatus = 'ready' | 'needs-data' | 'manual' | 'no-workflow' | 'draft';
+type RowStatus = 'live' | 'awaiting-review' | 'needs-data' | 'manual' | 'no-workflow' | 'draft';
 type StatusFilter = 'all' | RowStatus;
 
 const PROCESS_ORDER: ProcessCode[] = ['P2P', 'O2C', 'R2R', 'S2C', 'INV', 'ITGC'];
 
 const STATUS_META: Record<RowStatus, { label: string; cls: string; dot: string }> = {
-  ready:         { label: 'Ready',       cls: 'bg-compliant-50 text-compliant-700', dot: 'bg-compliant-500' },
+  live:              { label: 'Live',            cls: 'bg-compliant-50 text-compliant-700', dot: 'bg-compliant-500' },
+  'awaiting-review': { label: 'Awaiting review', cls: 'bg-evidence-50 text-evidence-700',   dot: 'bg-evidence-500' },
   'needs-data':  { label: 'Needs data',  cls: 'bg-mitigated-50 text-mitigated-700', dot: 'bg-mitigated-500' },
   manual:        { label: 'Manual test', cls: 'bg-paper-100 text-ink-600',          dot: 'bg-ink-300' },
   'no-workflow': { label: 'No workflow', cls: 'bg-high-50 text-high-700',           dot: 'bg-high-500' },
@@ -58,19 +61,19 @@ const STATUS_META: Record<RowStatus, { label: string; cls: string; dot: string }
 
 const isStd = (c: ControlRow) => c.library === 'standard';
 
-function statusOf(c: ControlRow, adapted: string[]): RowStatus {
+function statusOf(c: ControlRow, std: StdState): RowStatus {
   if (isStd(c)) {
     const e = CHECK_CATALOG.find(x => x.key === c.stdKey);
-    return e ? readinessOf(e, adapted) : 'needs-data';
+    return e ? readinessOf(e, std) : 'needs-data';
   }
   if (c.status === 'Draft') return 'draft';
-  return c.linkedWorkflows.length > 0 ? 'ready' : c.automation === 'Manual' ? 'manual' : 'no-workflow';
+  return c.linkedWorkflows.length > 0 ? 'live' : c.automation === 'Manual' ? 'manual' : 'no-workflow';
 }
 
 /** Grid shared by the column header and every row, so they line up. */
 const GRID = 'grid grid-cols-[1.75rem_1.25rem_5.5rem_minmax(0,1fr)_5.5rem_minmax(0,15rem)_7.5rem_6.5rem] items-center gap-x-3';
 
-export default function ControlLibraryView({ processFilter, onAdapt }: ControlLibraryProps) {
+export default function ControlLibraryView({ processFilter, onAdapt, onOpenBuilds }: ControlLibraryProps) {
   const { addToast } = useToast();
   const { can } = useCan();
   const { openShare } = useShare();
@@ -79,7 +82,7 @@ export default function ControlLibraryView({ processFilter, onAdapt }: ControlLi
 
   const [controls, setControls] = useState<ControlRow[]>(CONTROL_LIBRARY);
   const created = useCreatedControls();
-  const adapted = useAdaptedKeys();
+  const adapted = useStdState();
 
   // Controls created via the wizard (e.g. a risk's Link Control → Create Control)
   // are merged in — newest first — so they appear in the global library too.
@@ -212,7 +215,8 @@ export default function ControlLibraryView({ processFilter, onAdapt }: ControlLi
     setSelectedControlId(controlId);
   };
 
-  const readyCount = base.filter(c => statusOf(c, adapted) === 'ready').length;
+  const readyCount = base.filter(c => statusOf(c, adapted) === 'live').length;
+  const awaitingCount = base.filter(c => statusOf(c, adapted) === 'awaiting-review').length;
 
   return (
     <div className="h-full overflow-y-auto bg-white">
@@ -226,7 +230,10 @@ export default function ControlLibraryView({ processFilter, onAdapt }: ControlLi
             </p>
             <div className="mt-2.5 flex flex-wrap items-center gap-x-4 gap-y-1 text-[0.75rem] text-ink-500 tabular-nums">
               <span><span className="font-semibold text-ink-900">{base.length}</span> controls</span>
-              <span><span className="font-semibold text-ink-900">{readyCount}</span> ready</span>
+              <span><span className="font-semibold text-ink-900">{readyCount}</span> live</span>
+              {awaitingCount > 0 && (
+                <button onClick={onOpenBuilds} className="text-evidence-700 hover:underline cursor-pointer"><span className="font-semibold">{awaitingCount}</span> awaiting review</button>
+              )}
               {needsDataAll.length > 0 && <span className="text-mitigated-700"><span className="font-semibold">{needsDataAll.length}</span> standard workflows need your data</span>}
               <span><span className="font-semibold text-ink-900">{base.filter(c => c.classification === 'Key').length}</span> key</span>
             </div>
@@ -249,7 +256,7 @@ export default function ControlLibraryView({ processFilter, onAdapt }: ControlLi
             )}
             {needsDataAll.length > 0 && (
               <Button variant="primary" leftIcon={<Sparkles size={14} />} onClick={() => openAdapt(keysOf(needsDataAll))}>
-                Adapt {needsDataAll.length} with your data
+                Adapt {needsDataAll.length} with your data · +{fmtHours(hoursPerMonthFor(keysOf(needsDataAll)))}/mo
               </Button>
             )}
           </div>
@@ -288,7 +295,7 @@ export default function ControlLibraryView({ processFilter, onAdapt }: ControlLi
             />
           </div>
           <div className="flex items-center gap-1 flex-wrap" role="group" aria-label="Filter by status">
-            {(['all', 'ready', 'needs-data', 'manual', 'no-workflow', 'draft'] as StatusFilter[])
+            {(['all', 'live', 'awaiting-review', 'needs-data', 'manual', 'no-workflow', 'draft'] as StatusFilter[])
               .filter(s => s === 'all' || statusCount(s as RowStatus) > 0)
               .map(s => (
                 <button
@@ -348,7 +355,7 @@ export default function ControlLibraryView({ processFilter, onAdapt }: ControlLi
             const isCollapsed = collapsed.has(g.key);
             const gKeys = keysOf(g.rows);
             const gSel = gKeys.filter(k => selected.has(k)).length;
-            const gReady = g.rows.filter(c => statusOf(c, adapted) === 'ready').length;
+            const gReady = g.rows.filter(c => statusOf(c, adapted) === 'live').length;
             return (
               <section key={g.key} aria-label={g.label}>
                 {groupByProcess && (
@@ -373,14 +380,26 @@ export default function ControlLibraryView({ processFilter, onAdapt }: ControlLi
                       <span className="text-[0.8125rem] font-medium text-ink-800 truncate">{g.label}</span>
                     </button>
                     <span className="text-[0.75rem] text-ink-500 tabular-nums truncate">
-                      {g.rows.length} · {gReady} ready{gKeys.length > 0 ? ` · ${gKeys.length} need data` : ''}
+                      {g.rows.length} · {gReady} live{gKeys.length > 0 ? ` · ${gKeys.length} need data` : ''}
                     </span>
+                    {(() => {
+                      // Automated coverage: live workflows over automatable controls.
+                      const auto = g.rows.filter(c => c.automation !== 'Manual').length;
+                      if (auto === 0) return null;
+                      const pct = Math.round((g.rows.filter(c => c.automation !== 'Manual' && statusOf(c, adapted) === 'live').length / auto) * 100);
+                      return (
+                        <span className="hidden md:flex items-center gap-1.5 shrink-0" title="Automated controls with a live workflow">
+                          <span className="w-16 h-1.5 rounded-full bg-paper-100 overflow-hidden"><span className="block h-full bg-brand-600" style={{ width: `${pct}%` }} /></span>
+                          <span className="font-mono text-[0.6875rem] text-ink-600 tabular-nums">{pct}%</span>
+                        </span>
+                      );
+                    })()}
                     {gKeys.length > 0 && (
                       <button
                         onClick={() => openAdapt(gKeys)}
                         className="ml-auto inline-flex items-center gap-1 h-7 px-2.5 rounded-md text-[0.75rem] font-semibold text-brand-700 hover:bg-brand-50 cursor-pointer whitespace-nowrap"
                       >
-                        Adapt {gKeys.length} with your data <ArrowRight size={12} />
+                        Adapt {gKeys.length} · +{fmtHours(hoursPerMonthFor(gKeys))}/mo <ArrowRight size={12} />
                       </button>
                     )}
                   </div>
@@ -446,9 +465,17 @@ export default function ControlLibraryView({ processFilter, onAdapt }: ControlLi
                           {st === 'needs-data' ? (
                             <button
                               onClick={() => openAdapt([c.stdKey!])}
+                              title={`Returns about ${fmtHours(valueOfKey(c.stdKey)?.hoursPerMonth ?? 0)} a month once live (est.)`}
                               className="h-7 px-2 rounded-md text-[0.75rem] font-semibold text-brand-700 hover:bg-brand-50 cursor-pointer whitespace-nowrap"
                             >
                               Adapt
+                            </button>
+                          ) : st === 'awaiting-review' ? (
+                            <button
+                              onClick={() => onOpenBuilds?.()}
+                              className="h-7 px-2 rounded-md text-[0.75rem] font-semibold text-evidence-700 hover:bg-evidence-50 cursor-pointer whitespace-nowrap"
+                            >
+                              Review
                             </button>
                           ) : (
                             <span className="flex items-center gap-0.5 opacity-0 group-hover:opacity-100 focus-within:opacity-100 transition-opacity">
@@ -644,7 +671,7 @@ function ExpandedDetail({ control: c, status, entryFiles, onOpen, onAdapt, onLin
         {entryFiles.length > 0 ? (
           <>
             <div className="text-[0.625rem] font-semibold uppercase tracking-wider text-ink-400 mb-1.5">
-              {status === 'ready' ? 'Runs on' : 'Needs to adapt'}
+              {status === 'live' || status === 'awaiting-review' ? 'Runs on' : 'Needs to adapt'}
             </div>
             <ul className="space-y-1">
               {entryFiles.map(f => (

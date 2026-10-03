@@ -11,15 +11,16 @@
  * result and assumptions, any question Ira needs answered, and Approve.
  * Both read the shared batch store, which syncs across tabs.
  */
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import {
   ArrowUpRight, Check, CheckCheck, ChevronRight, CircleDashed, Clock, Database, ExternalLink, FileUp, Loader2, Workflow as WorkflowIcon,
 } from 'lucide-react';
 import { Button } from '../shared/Button';
 import {
-  answerSession, approveSession, ensureBatchRunning, hash01, sessionHref, useBatch, useSession,
-  type BatchItem, type BatchItemStatus,
+  answerMissingFile, answerSession, approveSession, ensureBatchRunning, fmtHours, hash01, itemHours, nextPendingSession,
+  sessionHref, useBatch, useSession, type BatchItem, type BatchItemStatus,
 } from '../../data/auditPlan';
+import { useCan, useCurrentUser } from '../../context/CurrentUserContext';
 import { IraMark } from '../audit-plan/PlanParts';
 
 const STATUS: Record<BatchItemStatus, { label: string; cls: string }> = {
@@ -49,6 +50,8 @@ export function BatchBuildCard({ batchId, onOpenEngagement, onOpenLibrary, onOpe
 }) {
   const batch = useBatch(batchId);
   const [open, setOpen] = useState<string | null>(null);
+  const missingInput = useRef<HTMLInputElement>(null);
+  const missingCode = useRef<string | null>(null);
   useEffect(() => { ensureBatchRunning(batchId); }, [batchId]);
   if (!batch) {
     return <div className="text-[0.8125rem] text-ink-500">This batch is no longer available.</div>;
@@ -56,6 +59,15 @@ export function BatchBuildCard({ batchId, onOpenEngagement, onOpenLibrary, onOpe
   const n = (s: BatchItemStatus) => batch.items.filter(i => i.status === s).length;
   const done = batch.items.filter(i => i.status === 'ready' || i.status === 'approved' || i.status === 'needs-input').length;
   const finished = done === batch.items.length;
+  // A file several workflows are missing is asked for once, not per workflow.
+  const missingByCode = new Map<string, { name: string; count: number }>();
+  batch.items.filter(i => i.status === 'needs-input' && !leftAsDraft(i)).forEach(i => {
+    const f = i.files.find(x => !x.source);
+    if (f) missingByCode.set(f.code, { name: f.name, count: (missingByCode.get(f.code)?.count ?? 0) + 1 });
+  });
+  const toReview = batch.items.filter(i => i.status === 'ready');
+  const reviewHours = toReview.reduce((sum, i) => sum + itemHours(i), 0);
+  const firstPending = toReview[0] ?? batch.items.find(i => i.status === 'needs-input' && !leftAsDraft(i));
 
   return (
     <div className="max-w-[46rem] rounded-lg border border-canvas-border bg-canvas-elevated">
@@ -85,6 +97,41 @@ export function BatchBuildCard({ batchId, onOpenEngagement, onOpenLibrary, onOpe
         </div>
       </div>
 
+      {(missingByCode.size > 0 || toReview.length > 0) && (
+        <div className="border-t border-canvas-border px-4 py-2.5 space-y-2 bg-paper-50/50">
+          {[...missingByCode.entries()].map(([code, m]) => (
+            <div key={code} className="flex items-center gap-2 text-[0.75rem]">
+              <CircleDashed size={13} className="text-mitigated-700 shrink-0" aria-hidden />
+              <span className="text-ink-700 min-w-0 flex-1">
+                <span className="font-mono font-semibold">{code}</span> ({m.name}) is missing for <span className="font-semibold">{m.count}</span> workflow{m.count === 1 ? '' : 's'}
+              </span>
+              <button
+                onClick={() => { missingCode.current = code; missingInput.current?.click(); }}
+                className="h-7 px-2.5 rounded-md border border-canvas-border bg-white text-[0.75rem] font-semibold text-brand-700 hover:border-brand-300 cursor-pointer whitespace-nowrap"
+              >
+                Upload once
+              </button>
+            </div>
+          ))}
+          {toReview.length > 0 && firstPending && (
+            <div className="flex items-center gap-2 text-[0.75rem]">
+              <Check size={13} className="text-compliant-700 shrink-0" aria-hidden />
+              <span className="text-ink-700 min-w-0 flex-1">
+                <span className="font-semibold">{toReview.length}</span> ready to review — approving adds <span className="font-semibold">{fmtHours(reviewHours)}/mo</span> <span className="text-ink-400">est.</span>
+              </span>
+              <a
+                href={sessionHref(firstPending.sessionId)}
+                target="_blank"
+                rel="noopener"
+                className="h-7 px-2.5 rounded-md bg-brand-600 text-white text-[0.75rem] font-semibold inline-flex items-center gap-1 hover:bg-brand-700 whitespace-nowrap"
+              >
+                Review next <ArrowUpRight size={12} />
+              </a>
+            </div>
+          )}
+        </div>
+      )}
+
       <ul className="border-t border-canvas-border divide-y divide-canvas-border">
         {batch.items.map(i => {
           const isOpen = open === i.id;
@@ -103,7 +150,7 @@ export function BatchBuildCard({ batchId, onOpenEngagement, onOpenLibrary, onOpe
                   <span className="font-mono text-[0.6875rem] text-ink-400 shrink-0">{i.controlId}</span>
                 </button>
                 <span className={`text-[0.75rem] shrink-0 ${leftAsDraft(i) ? 'text-ink-400' : STATUS[i.status].cls}`}>
-                  {leftAsDraft(i) ? 'Left as draft' : i.status === 'ready' && i.exceptions != null ? `${i.exceptions} exceptions` : STATUS[i.status].label}
+                  {leftAsDraft(i) ? 'Left as draft' : i.status === 'ready' && i.exceptions != null ? `${i.exceptions} exceptions · +${fmtHours(itemHours(i))}/mo` : STATUS[i.status].label}
                 </span>
                 {reviewable ? (
                   <a
@@ -137,6 +184,20 @@ export function BatchBuildCard({ batchId, onOpenEngagement, onOpenLibrary, onOpe
           </span>
         </div>
       )}
+      <input
+        ref={missingInput}
+        type="file"
+        multiple
+        className="hidden"
+        accept=".csv,.xlsx,.xls,.txt"
+        onChange={e => {
+          const code = missingCode.current;
+          const names = Array.from(e.target.files ?? []).map(f => f.name);
+          if (code && names.length > 0) answerMissingFile(batchId, code, names);
+          e.target.value = '';
+          missingCode.current = null;
+        }}
+      />
     </div>
   );
 }
@@ -212,8 +273,17 @@ function sampleRows(i: BatchItem) {
   });
 }
 
-export function ReviewSessionCard({ sessionId, onAskChange }: { sessionId: string; onAskChange: (draft: string) => void }) {
+export function ReviewSessionCard({ sessionId, onAskChange, onNext }: {
+  sessionId: string;
+  onAskChange: (draft: string) => void;
+  /** Move this tab on to the next workflow waiting for review. */
+  onNext?: (sessionId: string) => void;
+}) {
   const hit = useSession(sessionId);
+  const { currentUser } = useCurrentUser();
+  // Approving puts a workflow live and starts its hours — builders only.
+  const { can } = useCan();
+  const canApprove = can('wf_create');
   if (!hit) {
     return (
       <div className="max-w-[44rem] rounded-lg border border-canvas-border bg-canvas-elevated p-4 text-[0.8125rem] text-ink-600">
@@ -223,6 +293,9 @@ export function ReviewSessionCard({ sessionId, onAskChange }: { sessionId: strin
   }
   const { batch, item: i } = hit;
   const rows = sampleRows(i);
+  const next = nextPendingSession(sessionId);
+  const left = batch.items.filter(x => x.sessionId !== sessionId && (x.status === 'ready' || (x.status === 'needs-input' && !leftAsDraft(x)))).length;
+  const me = currentUser?.name ?? 'You';
   return (
     <div className="max-w-[48rem] rounded-lg border border-canvas-border bg-canvas-elevated">
       <div className="flex items-start gap-3 p-4">
@@ -255,6 +328,11 @@ export function ReviewSessionCard({ sessionId, onAskChange }: { sessionId: strin
               </button>
             ))}
           </div>
+          {next && onNext && (
+            <div className="mt-2 text-right">
+              <Button variant="ghost" size="sm" onClick={() => onNext(next)}>Come back to this · next →</Button>
+            </div>
+          )}
         </div>
       )}
 
@@ -327,13 +405,30 @@ export function ReviewSessionCard({ sessionId, onAskChange }: { sessionId: strin
               </ul>
             </div>
           </div>
-          <div className="flex items-center justify-between gap-2 px-4 py-3 border-t border-canvas-border">
+          <div className="flex flex-wrap items-center justify-between gap-2 px-4 py-3 border-t border-canvas-border">
             <span className="text-[0.75rem] text-ink-500">
-              {i.status === 'approved' ? `Approved — runs ${i.cadence.toLowerCase()}.` : 'Ask for a change below, or approve it as is.'}
+              {i.status === 'approved'
+                ? <>Live — runs {i.cadence.toLowerCase()} and returns <span className="font-semibold text-ink-800">{fmtHours(itemHours(i))}/mo</span> <span className="text-ink-400">est.</span> to {batch.owner === me || !batch.owner ? 'you' : batch.owner}.</>
+                : <>Approving puts it live: <span className="font-semibold text-ink-800">+{fmtHours(itemHours(i))}/mo</span> <span className="text-ink-400">est.</span>{left > 0 ? ` · ${left} more waiting in this batch` : ''}</>}
             </span>
-            {i.status === 'ready'
-              ? <Button variant="primary" size="sm" leftIcon={<Check size={13} />} onClick={() => approveSession(i.sessionId)}>Approve workflow</Button>
-              : <span className="inline-flex items-center gap-1 text-[0.8125rem] font-medium text-compliant-700"><CheckCheck size={14} /> Approved</span>}
+            <span className="flex items-center gap-2">
+              {i.status === 'ready' ? (
+                <>
+                  {next && onNext && <Button variant="ghost" size="sm" onClick={() => onNext(next)}>Skip</Button>}
+                  <Button variant="primary" size="sm" leftIcon={<Check size={13} />} disabled={!canApprove} title={canApprove ? undefined : 'Your role can review but not approve workflows'} onClick={() => {
+                    approveSession(i.sessionId, me);
+                    if (next && onNext) window.setTimeout(() => onNext(next), 450);
+                  }}>
+                    {next && onNext ? 'Approve & next' : 'Approve workflow'}
+                  </Button>
+                </>
+              ) : (
+                <>
+                  <span className="inline-flex items-center gap-1 text-[0.8125rem] font-medium text-compliant-700"><CheckCheck size={14} /> Approved</span>
+                  {next && onNext && <Button variant="outline" size="sm" onClick={() => onNext(next)}>Next to review</Button>}
+                </>
+              )}
+            </span>
           </div>
         </>
       )}
