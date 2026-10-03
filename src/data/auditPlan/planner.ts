@@ -7,6 +7,7 @@
 import { libraryEngagements, type ProcessCode } from '../engagements';
 import { ATR_LIBRARY } from '../atrLibrary';
 import { CHECK_CATALOG, PROCESS_LONG, catalogFor, type CatalogEntry } from './catalog';
+import { isStdLive, stdWorkflowName } from './standardLibrary';
 import type {
   AuditPlan, AuditPlanContext, PlanCheck, PlanControl, PlanCoverage, PlanEngagement, PlanPhase, Rating,
 } from './types';
@@ -83,7 +84,8 @@ interface GroundOpts {
 }
 
 function buildCheck(entry: CatalogEntry, universe: number, priorFinding: string | undefined, dataGaps: string[]): PlanCheck {
-  const kind: PlanCheck['kind'] = !entry.automatable ? 'manual' : entry.existingWorkflowId ? 'reuse' : 'new';
+  // A standard workflow already adapted to this client's data is reused too.
+  const kind: PlanCheck['kind'] = !entry.automatable ? 'manual' : entry.existingWorkflowId || isStdLive(entry.key) ? 'reuse' : 'new';
   const lift = Math.round(100 / Math.max(1, universe));
   let impact: Rating;
   const reasons: string[] = [];
@@ -104,11 +106,11 @@ function buildCheck(entry: CatalogEntry, universe: number, priorFinding: string 
   return {
     id: `chk-${entry.key}-${Math.random().toString(36).slice(2, 7)}`,
     kind,
-    name: kind === 'reuse' && entry.existingWorkflowName ? entry.existingWorkflowName : entry.checkName,
+    name: kind === 'reuse' ? stdWorkflowName(entry) : entry.checkName,
     description: entry.checkDescription,
     cadence: entry.cadence,
     existingWorkflowId: kind === 'reuse' ? entry.existingWorkflowId : undefined,
-    existingWorkflowName: kind === 'reuse' ? entry.existingWorkflowName : undefined,
+    existingWorkflowName: kind === 'reuse' ? stdWorkflowName(entry) : undefined,
     impact,
     impactReasons: reasons,
     dataNeeds: entry.dataNeeds,
@@ -156,7 +158,7 @@ function buildControl(entry: CatalogEntry, opts: GroundOpts): PlanControl {
 export function coverageFor(process: ProcessCode, controls: PlanControl[]): PlanCoverage {
   const processes = new Set<ProcessCode>([process, ...controls.map(c => c.process)]);
   const universe = CHECK_CATALOG.filter(e => processes.has(e.process));
-  const before = universe.filter(e => e.automatable && e.existingWorkflowId).length;
+  const before = universe.filter(e => e.automatable && (e.existingWorkflowId || isStdLive(e.key))).length;
   const added = new Set(controls.filter(c => c.selected && c.check.kind === 'new').map(c => c.key));
   const after = before + universe.filter(e => added.has(e.key)).length;
   const pct = (n: number) => Math.round((n / Math.max(1, universe.length)) * 100);

@@ -328,6 +328,7 @@ export const VIEW_PERMISSIONS: Partial<Record<View, PermissionKey | PermissionKe
   // Workflow Builder's chooser is open like Ask IRA; Audit with AI drafts
   // engagements and workflows, so it needs workflow-create.
   'audit-with-ai': 'wf_create',
+  'adapt-standard': 'wf_create',
   // Process hub / business process
   'programs': 'bp_view',
   'business-processes': 'bp_view',

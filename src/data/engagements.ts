@@ -7,7 +7,7 @@
 
 import type { Control as SoxControl, SamplingMethodology } from '../components/sox-icfr/types';
 
-export type ProcessCode = 'P2P' | 'O2C' | 'R2R' | 'S2C' | 'ITGC';
+export type ProcessCode = 'P2P' | 'O2C' | 'R2R' | 'S2C' | 'ITGC' | 'INV';
 export type EngStatus = 'Active' | 'In Progress' | 'Planned' | 'Review' | 'Draft' | 'Closed';
 export type EngType = 'Compliance' | 'Internal Audit' | 'Automation' | 'SOX / ICFR';
 /** Concrete project shape for Automation engagements — kept undefined for Compliance / Internal Audit. */
@@ -337,7 +337,7 @@ export const ENGAGEMENTS: Engagement[] = [
 ];
 
 export const PROCESS_COLORS: Record<ProcessCode, string> = {
-  P2P: '#6a12cd', O2C: '#0284c7', R2R: '#d97706', S2C: '#059669', ITGC: '#7c3aed',
+  P2P: '#6a12cd', O2C: '#0284c7', R2R: '#d97706', S2C: '#059669', ITGC: '#7c3aed', INV: '#0f766e',
 };
 
 /** Runtime registry for engagements created or edited during the session (the seed

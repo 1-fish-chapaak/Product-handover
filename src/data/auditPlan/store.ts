@@ -37,6 +37,8 @@ export interface PlanWorkflowRow {
   engagementName: string;
   /** Plan check id — lets the chat builder mark the right row built. */
   checkId: string;
+  /** Catalog key of the standard control this check comes from. */
+  stdKey?: string;
   buildPrompt: string;
   sampleId: string;
   dataNeeds: string[];

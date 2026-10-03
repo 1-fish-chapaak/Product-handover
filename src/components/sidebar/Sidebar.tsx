@@ -418,7 +418,7 @@ export default function Sidebar({ view, setView, expanded, toggleSidebar, unread
               matrix first, and published from there. */}
           {can('racm_view') && <NavItem icon={Table2} label="RACM Library" active={view === 'racm-library'} expanded={isExpanded} onClick={() => setView('racm-library')} />}
           {can('risk_view') && <NavItem icon={AlertTriangle} label="Risk Register" active={view === 'audit-risk-register'} expanded={isExpanded} onClick={() => setView('audit-risk-register')} />}
-          {can('ctrl_view') && <NavItem icon={Shield} label="Control Library" active={view === 'governance-controls' || view === 'governance-control-detail'} expanded={isExpanded} onClick={() => setView('governance-controls')} />}
+          {can('ctrl_view') && <NavItem icon={Shield} label="Control Library" active={view === 'governance-controls' || view === 'governance-control-detail' || view === 'adapt-standard'} expanded={isExpanded} onClick={() => setView('governance-controls')} />}
           {can('wf_view') && <NavItem icon={Workflow} label="Workflow Library" active={workflowViews.includes(view)} expanded={isExpanded} onClick={() => setView('workflow-library')} />}
           {can('concierge_use') && <NavItem icon={Wand2} label="AI Concierge" active={aiConciergeViews.includes(view)} expanded={isExpanded} onClick={() => setView('ai-concierge')} />}
 

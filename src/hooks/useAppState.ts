@@ -24,6 +24,8 @@ export type View =
   // Workflow Builder — agent chooser (General / GRC) + Audit with AI
   | 'workflow-builder'
   | 'audit-with-ai'
+  // Control Library → adapt standard workflows to the client's data
+  | 'adapt-standard'
   // Governance
   | 'business-processes'
   | 'bp-detail'
@@ -106,6 +108,16 @@ export interface WorkflowAgentSeed {
   /** Build a committed plan's draft checks one by one. `checkIds` narrows it
    *  to specific drafts (e.g. one row from the Workflow Library). */
   buildQueue?: { engagementId: string; checkIds?: string[] };
+  /** Show a batch build (created by Adapt / Audit with AI) and run it. */
+  batchId?: string;
+  /** Open one workflow's review session (a new tab from a batch card). */
+  reviewSessionId?: string;
+}
+
+/** Hand-off from the Control Library's adapt modal to the adapt plan page. */
+export interface AdaptSeed {
+  keys: string[];
+  choices: Record<string, import('../data/auditPlan').FileSourceChoice | null>;
 }
 export type ExceptionRole = 'risk-owner' | 'auditor';
 export type ArtifactTab = 'plan' | 'code' | 'sources' | 'output' | 'flow' | 'preview' | 'history';
@@ -177,6 +189,8 @@ export interface AppState {
   workflowBuilderEngagementName: string | null;
   /** Pending hand-off into a workflow-builder chat (agent + optional prompt / build queue). */
   workflowAgentSeed: WorkflowAgentSeed | null;
+  /** Pending Control Library adapt (keys + file choices) for the adapt page. */
+  adaptSeed: AdaptSeed | null;
   // Pre-fill text dropped into the chat composer (not auto-submitted). Used
   // when another surface — e.g. the workspace panel's "Edit assumptions"
   // action — wants to seed the textarea with a draft prompt.
@@ -266,6 +280,14 @@ const getInitialView = (): View => {
   if (v === 'home') return 'home';
   return 'chat';
 };
+
+/** ?view=chat&session=<id> — a batch-built workflow's review session. */
+function getInitialReviewSession(): WorkflowAgentSeed | null {
+  if (typeof window === 'undefined') return null;
+  const params = new URLSearchParams(window.location.search);
+  const session = params.get('session');
+  return params.get('view') === 'chat' && session ? { agent: 'grc', reviewSessionId: session } : null;
+}
 
 /** ?view=knowledge-hub&tab=learn lands on the Smart Learn tab. */
 export const getInitialKnowledgeHubTab = (): 'data' | 'learn' => {
@@ -369,7 +391,9 @@ const INITIAL_STATE: AppState = {
   chatComposerDraft: getInitialChatDraft(),
   chatWorkflowContext: null,
   workflowBuilderEngagementName: null,
-  workflowAgentSeed: null,
+  // A batch card's "Review ↗" opens ?view=chat&session=<id> in a new tab.
+  workflowAgentSeed: getInitialReviewSession(),
+  adaptSeed: null,
   workflowBuilderSeedPrompt: null,
   selectedChatId: null,
   queryAssumptions: [],
@@ -604,6 +628,10 @@ export function useAppState() {
     }));
   }, []);
 
+  const startAdaptStandard = useCallback((seed: AdaptSeed) => {
+    setState(prev => ({ ...prev, view: 'adapt-standard' as View, adaptSeed: seed }));
+  }, []);
+
   const clearWorkflowAgentSeed = useCallback(() => {
     setState(prev => (prev.workflowAgentSeed ? { ...prev, workflowAgentSeed: null } : prev));
   }, []);
@@ -810,6 +838,7 @@ export function useAppState() {
     startWorkflowForEngagement,
     startWorkflowAgent,
     clearWorkflowAgentSeed,
+    startAdaptStandard,
     openWorkflowExecutor,
     openAuditExecution,
     openEngagement,

@@ -17,6 +17,7 @@ import Sidebar from './components/sidebar/Sidebar';
 import ChatView from './components/chat/ChatView';
 import WorkflowBuilderLanding from './components/workflow/WorkflowBuilderLanding';
 import AuditWithAiView from './components/audit-plan/AuditWithAiView';
+import AdaptStandardView from './components/audit-plan/AdaptStandardView';
 import ArtifactPanel from './components/artifacts/ArtifactPanel';
 import WorkflowTemplates from './components/workflow/WorkflowTemplates';
 import WorkflowDetail from './components/workflow/WorkflowDetail';
@@ -180,6 +181,7 @@ function AppInner() {
     startWorkflowForEngagement,
     startWorkflowAgent,
     clearWorkflowAgentSeed,
+    startAdaptStandard,
     openWorkflowExecutor,
     openChat,
     setSelectedChatId,
@@ -1233,7 +1235,17 @@ function AppInner() {
 
       case 'governance-controls':
       case 'governance-control-detail':
-        return <ControlLibraryView />;
+        return <ControlLibraryView onAdapt={(keys, choices) => startAdaptStandard({ keys, choices })} />;
+
+      case 'adapt-standard':
+        return state.adaptSeed ? (
+          <AdaptStandardView
+            keys={state.adaptSeed.keys}
+            choices={state.adaptSeed.choices}
+            onBack={() => setView('governance-controls')}
+            onBuild={(batchId) => startWorkflowAgent({ agent: 'grc', batchId })}
+          />
+        ) : <ControlLibraryView onAdapt={(keys, choices) => startAdaptStandard({ keys, choices })} />;
 
       // Execution — new pages
       case 'execution-testing':

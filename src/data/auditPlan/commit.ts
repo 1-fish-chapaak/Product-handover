@@ -97,6 +97,7 @@ export function commitPlan(plan: AuditPlan): CommittedEngagement[] {
         engagementId,
         engagementName,
         checkId: c.check.id,
+        stdKey: c.key,
         buildPrompt: c.check.buildPrompt,
         sampleId: c.check.sampleId,
         dataNeeds: c.check.dataNeeds,
