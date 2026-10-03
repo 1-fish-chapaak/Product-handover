@@ -22,6 +22,53 @@ export interface StandardFile {
   rows?: string;
 }
 
+/** Words an uploaded file's name may use for each standard file — how a
+ *  bulk drop places "Sales_Orders_FY26.xlsx" into VA05 without asking. */
+const ALIASES: Record<string, string[]> = {
+  fbl1n: ['vendor line', 'ap invoice', 'invoice register', 'payment register', 'payments', 'accounts payable'],
+  me2n: ['purchase order', 'po list', 'po register', 'pos'],
+  mb51: ['material movement', 'material document', 'goods receipt', 'grn', 'movements', 'stock movement'],
+  mb5b: ['stock on posting', 'stock balance', 'closing stock', 'stock'],
+  mara: ['material master', 'materials'],
+  mi24: ['physical inventory', 'count', 'cycle count', 'stock take'],
+  lfa1: ['vendor master', 'supplier master', 'vendors'],
+  cdhdr: ['change document', 'change log', 'master data change'],
+  pa0001: ['employee', 'hr master', 'staff', 'leavers'],
+  doa: ['delegation', 'authority', 'approval matrix', 'doa'],
+  va05: ['sales order', 'orders'],
+  vf05: ['billing', 'sales invoice', 'credit note', 'invoices'],
+  vl06o: ['deliver', 'outbound', 'dispatch', 'shipment'],
+  kna1: ['customer master', 'customers', 'credit limit'],
+  vk13: ['pricing', 'price list', 'condition'],
+  fbl5n: ['customer line', 'receivable', 'receipts', 'collections', 'ar ledger'],
+  fagll03: ['gl line', 'journal', 'general ledger', 'je'],
+  f01: ['trial balance', 'tb'],
+  suim: ['user list', 'users', 'roles', 'user access'],
+  sm20: ['security audit', 'audit log', 'privileged', 'session log'],
+  sod: ['sod', 'segregation', 'rule set', 'ruleset', 'conflict'],
+  chg: ['change ticket', 'deployment', 'itsm', 'release', 'jira'],
+  me3n: ['contract', 'outline agreement', 'agreements'],
+  me4n: ['rfq', 'quotation', 'bids', 'sourcing'],
+};
+
+/** Best standard file for an uploaded file's name, among the candidates —
+ *  SAP code first (MB51_Jan.xlsx), then the plain-language aliases. */
+export function placeUpload(fileName: string, candidates: StandardFile[]): StandardFile | undefined {
+  const n = fileName.toLowerCase().replace(/\.[a-z0-9]+$/, '').replace(/[_\-.]+/g, ' ');
+  const tokens = new Set(n.split(/\s+/));
+  const byCode = candidates.find(f => tokens.has(f.code.toLowerCase().replace(/\./g, '')) || tokens.has(f.code.toLowerCase()));
+  if (byCode) return byCode;
+  let best: { f: StandardFile; score: number } | undefined;
+  for (const f of candidates) {
+    for (const a of ALIASES[f.id] ?? []) {
+      const hit = a.includes(' ') ? n.includes(a) : tokens.has(a) || tokens.has(`${a}s`);
+      // Longer aliases are more specific — "vendor master" beats "vendors".
+      if (hit && (!best || a.length > best.score)) best = { f, score: a.length };
+    }
+  }
+  return best?.f;
+}
+
 export const STANDARD_FILES: StandardFile[] = [
   { id: 'fbl1n', code: 'FBL1N', name: 'Vendor line items', hint: 'AP invoices and payments, with document and clearing dates', matches: 'SAP ERP: AP Module', rows: '1.2M rows' },
   { id: 'me2n', code: 'ME2N', name: 'Purchase orders', hint: 'PO lines with vendor, value, approver and release status', matches: 'SAP ERP: AP Module', rows: '1.2M rows' },
@@ -123,8 +170,15 @@ export function requiredFilesFor(entries: CatalogEntry[]): RequiredFile[] {
 /** Where a file comes from once the user has resolved it in the modal. */
 export type FileSourceChoice =
   | { kind: 'source'; name: string }
-  | { kind: 'upload'; name: string }
+  /** `name` is the display label; `files` every uploaded file behind it. */
+  | { kind: 'upload'; name: string; files?: string[] }
   | { kind: 'skip' };
+
+/** An upload choice for one or more files (appending to an earlier upload). */
+export function uploadChoice(names: string[], prev?: FileSourceChoice | null): FileSourceChoice {
+  const files = Array.from(new Set([...(prev?.kind === 'upload' ? prev.files ?? [prev.name] : []), ...names]));
+  return { kind: 'upload', name: files.length === 1 ? files[0] : `${files.length} files · ${files[0]}`, files };
+}
 
 /** Default resolution: the auto-match when there is one, else nothing yet. */
 export function autoMatch(file: StandardFile): FileSourceChoice | null {
