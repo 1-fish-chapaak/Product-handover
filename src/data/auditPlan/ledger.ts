@@ -17,6 +17,7 @@ import { ACTORS } from '../usage/seed';
 import type { ProcessCode } from '../engagements';
 import { hash01 } from './stdFiles';
 import { COMPLEXITY_HOURS, type Complexity } from './score';
+import { isFreshWorkspace, onWorkspaceChange, workspaceSuffix } from './workspace';
 
 export interface LiveWorkflow {
   id: string;
@@ -38,7 +39,8 @@ export interface ReviewRecord {
   onTime: boolean;
 }
 
-const KEY = 'irame.score.ledger';
+const BASE_KEY = 'irame.score.ledger';
+const key = () => BASE_KEY + workspaceSuffix();
 const HIDE_KEY = 'irame.score.hideName';
 const DAY = 86_400_000;
 
@@ -99,7 +101,7 @@ function seedReviews(today: number): ReviewRecord[] {
 interface Stored { live: LiveWorkflow[]; reviews: ReviewRecord[] }
 function read(): Stored {
   try {
-    const raw = localStorage.getItem(KEY);
+    const raw = localStorage.getItem(key());
     const v = raw ? JSON.parse(raw) : null;
     return v && Array.isArray(v.live) ? v : { live: [], reviews: [] };
   } catch { return { live: [], reviews: [] }; }
@@ -114,19 +116,23 @@ const listeners = new Set<() => void>();
 const emit = () => { version++; listeners.forEach(fn => fn()); };
 // Module-level so approvals made in another tab are never missed.
 if (typeof window !== 'undefined') {
-  window.addEventListener('storage', e => { if (e.key === KEY || e.key === HIDE_KEY) { stored = read(); emit(); } });
+  window.addEventListener('storage', e => { if (e.key === key() || e.key === HIDE_KEY) { stored = read(); emit(); } });
 }
+// Each workspace keeps its own ledger; a new client starts with none.
+onWorkspaceChange(() => { stored = read(); emit(); });
 const subscribe = (fn: () => void) => {
   listeners.add(fn);
   return () => { listeners.delete(fn); };
 };
 function persist() {
-  try { localStorage.setItem(KEY, JSON.stringify(stored)); } catch { /* quota */ }
+  try { localStorage.setItem(key(), JSON.stringify(stored)); } catch { /* quota */ }
   emit();
 }
 
-export const allLive = () => [...stored.live, ...SEED_LIVE];
-export const allReviews = () => [...stored.reviews, ...SEED_REVIEWS];
+// The seeded team history belongs to Platform. A fresh workspace has only
+// what happened in it.
+export const allLive = () => (isFreshWorkspace() ? stored.live : [...stored.live, ...SEED_LIVE]);
+export const allReviews = () => (isFreshWorkspace() ? stored.reviews : [...stored.reviews, ...SEED_REVIEWS]);
 
 /** Called when a reviewer approves a built workflow — it goes live. */
 export function recordApproval(row: Omit<LiveWorkflow, 'id' | 'liveSince'>, readyAt: number): void {
@@ -176,7 +182,7 @@ export interface BoardRow {
 }
 
 export function leaderboard(window: ScoreWindow, extraPeople: string[] = [], now = Date.now()): BoardRow[] {
-  const people = Array.from(new Set([...BOARD_PEOPLE, ...extraPeople]));
+  const people = Array.from(new Set([...(isFreshWorkspace() ? [] : BOARD_PEOPLE), ...extraPeople]));
   const since = window === '30d' ? now - 30 * DAY : 0;
   return people
     .map(person => ({

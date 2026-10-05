@@ -27,6 +27,9 @@ export function onWorkspaceChange(fn: () => void): void {
 
 export const isFreshWorkspace = () => current.fresh;
 
+/** The active workspace's id — records created in it are stamped with this. */
+export const currentWorkspaceId = () => current.id;
+
 /** localStorage key suffix — none for Platform, so its data stays put. */
 export const workspaceSuffix = () => (current.id === 'platform' ? '' : `.${current.id}`);
 

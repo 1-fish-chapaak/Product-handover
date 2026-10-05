@@ -9,7 +9,7 @@ import {
   ClipboardCheck, FlaskConical, Layers, Inbox, BarChart3,
   Brain, Table2, ListChecks,
 } from 'lucide-react';
-import { pendingItems, useAllBatches } from '../../data/auditPlan';
+import { pendingItems, useAllBatches, useFreshWorkspace } from '../../data/auditPlan';
 import PersonalMemoryDrawer from './PersonalMemoryDrawer';
 import NotificationBell from '../../notifications/NotificationBell';
 import type { View } from '../../hooks/useAppState';
@@ -191,9 +191,11 @@ export default function Sidebar({ view, setView, expanded, toggleSidebar, unread
   const allBatches = useAllBatches();
   const buildsPending = pendingItems(allBatches, currentUser?.name);
   const buildsCount = buildsPending.needsInput.length + buildsPending.toReview.length;
+  // A new client has no engagement exceptions yet — the queue starts empty.
+  const freshWs = useFreshWorkspace();
   const myQueueCount = useMemo(
-    () => myQueueFor(ENGAGEMENT_EXCEPTIONS, personForUser(currentUser?.name)).length,
-    [currentUser?.name],
+    () => (freshWs ? 0 : myQueueFor(ENGAGEMENT_EXCEPTIONS, personForUser(currentUser?.name)).length),
+    [currentUser?.name, freshWs],
   );
 
   const handleMouseEnter = () => {

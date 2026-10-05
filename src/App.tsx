@@ -21,7 +21,9 @@ import AdaptStandardView from './components/audit-plan/AdaptStandardView';
 import BuildsView from './components/audit-plan/BuildsView';
 import HomeHub from './components/home/HomeHub';
 import TodayView from './components/home/TodayView';
-import { ensureBatchRunning, pendingItems, setAuditWorkspace, useAllBatches } from './data/auditPlan';
+import { ensureBatchRunning, pendingItems, setAuditWorkspace, useAllBatches, useFreshWorkspace } from './data/auditPlan';
+import FirstRunState, { type FirstRunPage } from './components/shared/FirstRunState';
+import { libraryEngagements } from './data/engagements';
 import { WORKSPACES } from './data/workspaces';
 import { useNotify } from './notifications/NotificationContext';
 import ArtifactPanel from './components/artifacts/ArtifactPanel';
@@ -254,6 +256,8 @@ function AppInner() {
   useLayoutEffect(() => {
     setAuditWorkspace(activeWorkspaceId, !!WORKSPACES.find(w => w.id === activeWorkspaceId)?.fresh);
   }, [activeWorkspaceId]);
+  // A new client's workspace: pages with nothing of theirs yet say so.
+  const freshWs = useFreshWorkspace();
   const logEvent = useAuditLog();
 
   // Knowledge Hub deep-link state — which tab to land on and (optionally)
@@ -681,6 +685,9 @@ function AppInner() {
     );
   };
 
+  /** What a page says in a new client's workspace before anything has run. */
+  const firstRun = (page: FirstRunPage) => <FirstRunState page={page} onNavigate={(v) => setView(v as View)} />;
+
   /** A page with the standard-library banner above it. */
   const withStdBanner = (page: StdBannerPage, node: React.ReactNode) => (
     <div className="flex-1 flex flex-col min-h-0 overflow-hidden">
@@ -742,7 +749,7 @@ function AppInner() {
                 onConnectData={() => setView('knowledge-hub')}
               />
             }
-            insights={
+            insights={freshWs ? firstRun('insights') : (
               <HomeView
                 setView={setView}
                 notifications={notif.notifications}
@@ -754,7 +761,7 @@ function AppInner() {
                 setSelectedBP={setSelectedBP}
                 onLaunchWorkflowBuilder={launchWorkflowBuilderWithPrompt}
               />
-            }
+            )}
           />
         );
 
@@ -1047,6 +1054,10 @@ function AppInner() {
             onSelectBP={setSelectedBP}
             userProcesses={state.userProcesses}
             addUserProcess={addUserProcess}
+            onOpenProcessControls={(code) => {
+              try { window.sessionStorage.setItem('control-library.open-process', code); } catch { /* ignore */ }
+              setView('governance-controls');
+            }}
             onNavigateToExecution={(engId) => {
               setEngagementBackView('programs');
               openAuditExecution(engId);
@@ -1104,7 +1115,7 @@ function AppInner() {
         ));
 
       case 'audit-risk-register':
-        return withStdBanner('risk-register', (
+        return withStdBanner('risk-register', freshWs ? firstRun('risk-register') : (
           <RiskRegister
             onNavigate={(v) => setView(v as View)}
           />
@@ -1169,6 +1180,7 @@ function AppInner() {
 
       case 'reports':
       case 'report-history':
+        if (freshWs) return firstRun('reports');
         return (
           <ReportsView
             onOpenBuilder={() => openReportBuilder('new')}
@@ -1237,7 +1249,7 @@ function AppInner() {
         return <ComplianceEngagementApp engagementId={state.selectedEngagementId ?? undefined} onBack={backToEngagementList} />;
 
       case 'engagements':
-        return withStdBanner('engagements', (
+        return withStdBanner('engagements', freshWs && libraryEngagements().length === 0 ? firstRun('engagements') : (
           <EngagementsView
             onOpenAuditPlanning={() => setView('audit-planning')}
             onOpenEngagement={(id) => { setSoxFromTesting(false); openEngagement(id); }}
@@ -1293,6 +1305,7 @@ function AppInner() {
       }
 
       case 'my-queue':
+        if (freshWs) return firstRun('my-queue');
         return (
           <MyQueueView
             onOpenException={(engagementId) => openCaseManagement(engagementId)}
@@ -1307,6 +1320,7 @@ function AppInner() {
         return <EngagementCompareView onBack={() => setView('engagements')} />;
 
       case 'audit-planning':
+        if (freshWs) return firstRun('audit-planning');
         return <AuditPlanningPage
           onOpenEngagements={() => setView('engagements')}
           onNavigateToExecution={(engId) => {
