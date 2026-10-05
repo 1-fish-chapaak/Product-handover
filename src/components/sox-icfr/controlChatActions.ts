@@ -162,7 +162,7 @@ function baseActionsFor(s: Situation, role: Role): ChatAction[] {
     } else if (!ex.rootCause.trim()) {
       out.push({ id: 'rootcause-write', label: 'Tell me the mechanism', said: 'I’ll write the root cause.', primary: true, does: 'take the root cause in your own words' });
     }
-    out.push({ id: 'show-exception', label: ex.rootCause.trim() && !ex.drafted ? 'Take me to the exception' : 'Show me the exception', said: 'Take me to the exception.', does: 'show you the exception on the page' });
+    out.push({ id: 'show-exception', label: ex.rootCause.trim() && !ex.drafted ? 'Take me to the deficiency' : 'Show me the deficiency', said: 'Take me to the deficiency.', does: 'show you the deficiency on the page' });
     return out;
   }
 
@@ -243,13 +243,13 @@ function baseActionsFor(s: Situation, role: Role): ChatAction[] {
       // button that costs six seconds to tell you what it told you last time
       // is a button that teaches the reader to stop pressing them.
       const allBlocked = s.checksBlocked.length > 0 && s.checksBlocked.length === s.checksUnmarked;
-      if (!s.iraBlocked && !allBlocked) out.push({ id: 'ira-run', label: `Assess all ${s.checksTotal} checks for me`, said: 'Run the AI validation over the design checks.', primary: true, does: 'read the evidence and assess every design check' });
+      if (!s.iraBlocked && !allBlocked) out.push({ id: 'ira-run', label: `Assess all ${s.checksTotal} checks for me`, said: 'Read the evidence and assess the design checks.', primary: true, does: 'read the evidence and assess every design check' });
       out.push(show(allBlocked ? 'Show me the ones you couldn’t test' : 'I’ll mark them myself', 'Take me to the design checks.', 'design'));
       return out;
     }
     if (s.checksTotal > 0 && s.iraStale) {
       return [
-        { id: 'ira-run', label: 'Re-run the AI validation', said: 'Re-run the validation against the new evidence.', primary: true, does: 'read the new evidence and assess the checks again' },
+        { id: 'ira-run', label: 'Read the new evidence again', said: 'Read the new evidence and assess the checks again.', primary: true, does: 'read the new evidence and assess the checks again' },
         show('Conclude anyway', 'Take me to the conclusion.', 'design'),
       ];
     }
@@ -394,7 +394,9 @@ function baseActionsFor(s: Situation, role: Role): ChatAction[] {
       if (s.evidenceOwed.length > 1) {
         s.evidenceOwed.forEach(x => out.push({
           id: 'upload-evidence', arg: x.stepId, group: 'pick',
-          label: `${x.code} · ${x.missing} of ${x.total}`,
+          // The page's own reading, the same way round — "1/3 files" in — not
+          // the count still missing, which read as a different number (5 Oct).
+          label: `${x.code} · ${x.total - x.missing}/${x.total} files`,
           said: `Evidence for ${x.code}.`,
           does: `take the files for attribute ${x.code}`,
         }));
@@ -406,7 +408,7 @@ function baseActionsFor(s: Situation, role: Role): ChatAction[] {
         label: s.toeReady === s.toe.total - s.toe.tested
           ? `Assess ${plural(s.toeReady, 'attribute')} for me`
           : `Assess the ${plural(s.toeReady, 'attribute')} that ${s.toeReady === 1 ? 'has' : 'have'} its files`,
-        said: 'Run the AI validation over the ready attributes.',
+        said: 'Read the files and assess the ready attributes.',
         does: 'read the uploaded files and assess every attribute that has them',
       });
     }

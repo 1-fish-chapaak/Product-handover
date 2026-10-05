@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import SoxTestingTab from './SoxTestingTab';
 import V2Tab from './v2/V2Tab';
+import { tabKeys } from '../../shared/tabKeys';
 
 /** The "V2 · Call-aligned" tab is parked for now — flip to true to bring it back. */
 const SHOW_V2_TAB = false;
@@ -34,7 +35,7 @@ export default function SoxTestingView({ onOpenEngagement }: {
 
         {/* Tab strip — classic stays the default; a lone tab is dead chrome, so the strip only renders while V2 is live */}
         {SHOW_V2_TAB && (
-          <div role="tablist" aria-label="SOX Testing flows" className="flex items-center gap-1 border-b border-border-light mb-6">
+          <div role="tablist" aria-label="SOX Testing flows" onKeyDown={tabKeys} className="flex items-center gap-1 border-b border-border-light mb-6">
             {([
               { id: 'classic', label: 'Programmes' },
               { id: 'v2', label: 'V2 · Call-aligned' },
@@ -44,7 +45,7 @@ export default function SoxTestingView({ onOpenEngagement }: {
                 role="tab"
                 aria-selected={tab === t.id}
                 onClick={() => setTab(t.id)}
-                className={`px-3.5 py-2 text-[13px] font-semibold border-b-2 -mb-px transition-colors cursor-pointer ${
+                className={`px-3.5 py-2 text-[0.8125rem] font-semibold border-b-2 -mb-px transition-colors cursor-pointer ${
                   tab === t.id
                     ? 'border-primary text-primary'
                     : 'border-transparent text-text-muted hover:text-text-secondary'

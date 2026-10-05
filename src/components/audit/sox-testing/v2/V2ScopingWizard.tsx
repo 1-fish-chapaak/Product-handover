@@ -435,7 +435,7 @@ export default function V2ScopingWizard({ onCancel, onCreated }: Props) {
     <div className="flex flex-col min-h-full">
       {/* Modal header — same eyebrow pattern as the scoping summary; no
           breadcrumb or back affordance, close is X / Escape / Cancel. */}
-      <div className="text-[11px] font-bold text-text-muted uppercase tracking-wider mb-4">New engagement</div>
+      <div className="text-[0.6875rem] font-bold text-text-muted uppercase tracking-wider mb-4">New engagement</div>
 
       <StepRail steps={STEPS} step={step} onStepClick={setStep} />
 
@@ -486,13 +486,13 @@ export default function V2ScopingWizard({ onCancel, onCreated }: Props) {
               <div className="grid grid-cols-2 gap-3">
                 <div>
                   <label className={basicsLabelCls}>Code <span className="text-risk-700">*</span></label>
-                  <input type="text" value={code} onChange={e => setCode(e.target.value)} className={`${inputCls} font-mono uppercase`} />
+                  <input aria-label="Code" type="text" value={code} onChange={e => setCode(e.target.value)} className={`${inputCls} font-mono uppercase`} />
                   <p className="text-[0.6875rem] text-ink-500 mt-1">Auto-generated — edit if your team uses its own scheme.</p>
                   {code.trim().length === 0 && <Hint text="Code is required" />}
                 </div>
                 <div>
                   <label className={basicsLabelCls}>Owner <span className="text-risk-700">*</span></label>
-                  <select value={owner} onChange={e => setOwner(e.target.value)} className={selectCls}>
+                  <select aria-label="Owner" value={owner} onChange={e => setOwner(e.target.value)} className={selectCls}>
                     {OWNER_NAMES.map(o => <option key={o} value={o}>{o}</option>)}
                   </select>
                 </div>
@@ -506,7 +506,7 @@ export default function V2ScopingWizard({ onCancel, onCreated }: Props) {
               <div className="grid grid-cols-2 gap-3">
                 <div>
                   <label className={basicsLabelCls}>Fiscal year / audit period <span className="text-risk-700">*</span></label>
-                  <select value={fyEnd} onChange={e => setFyEnd(Number(e.target.value))} className={selectCls}>
+                  <select aria-label="Fiscal year / audit period" value={fyEnd} onChange={e => setFyEnd(Number(e.target.value))} className={selectCls}>
                     {FY_OPTIONS.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
                   </select>
                 </div>
@@ -546,10 +546,10 @@ export default function V2ScopingWizard({ onCancel, onCreated }: Props) {
           >
             <div className="max-w-xl mb-5">
               <FieldLabel>Group (listed / holding)</FieldLabel>
-              <input
+              <input aria-label="Group (listed / holding)"
                 value={groupName}
                 onChange={e => setGroupName(e.target.value)}
-                className="w-full px-3.5 py-2 text-[13px] border border-border rounded-lg bg-white text-text outline-none focus:border-primary/40 focus:ring-2 focus:ring-primary/10 transition-all"
+                className="w-full px-3.5 py-2 text-[0.8125rem] border border-border rounded-lg bg-white text-text outline-none focus:border-primary/40 focus:ring-2 focus:ring-primary/10 transition-all"
               />
             </div>
             <FieldLabel>Entities in the group</FieldLabel>
@@ -570,13 +570,13 @@ export default function V2ScopingWizard({ onCancel, onCreated }: Props) {
                     type="number" min={1} max={100}
                     value={ent.ownership}
                     onChange={e => setEntities(prev => prev.map((x, j) => j === i ? { ...x, ownership: Number(e.target.value) } : x))}
-                    className="w-14 text-[12px] tabular-nums text-text bg-white border border-border rounded-md px-2 py-1 outline-none focus:border-primary/40"
+                    className="w-14 text-[0.75rem] tabular-nums text-text bg-white border border-border rounded-md px-2 py-1 outline-none focus:border-primary/40"
                   />
-                  <span className="text-[11px] text-text-muted">%</span>
+                  <span className="text-[0.6875rem] text-text-muted">%</span>
                 </div>
             */}
             <div className="border border-border-light rounded-xl bg-white overflow-hidden">
-              <div className="grid grid-cols-[2.4fr_1fr_0.9fr_44px] gap-3 px-4 py-2 text-[10.5px] uppercase tracking-wider font-semibold text-text-muted/80 border-b border-border-light bg-surface-2/50">
+              <div className="grid grid-cols-[2.4fr_1fr_0.9fr_44px] gap-3 px-4 py-2 text-[0.6875rem] uppercase tracking-wider font-semibold text-text-muted/80 border-b border-border-light bg-surface-2/50">
                 <div>Entity</div><div>Type</div><div>Share of group</div><div />
               </div>
               {entities.map((ent, i) => (
@@ -585,21 +585,21 @@ export default function V2ScopingWizard({ onCancel, onCreated }: Props) {
                     {ent.type === 'Holding'
                       ? <Landmark size={14} className="text-brand-700 shrink-0" />
                       : <Building2 size={14} className="text-text-muted shrink-0" />}
-                    <input
+                    <input aria-label="Entity name"
                       value={ent.name}
                       onChange={e => setEntities(prev => prev.map((x, j) => j === i ? { ...x, name: e.target.value } : x))}
-                      className="w-full text-[13px] text-text bg-transparent outline-none border-b border-transparent focus:border-primary/40 transition-colors py-0.5"
+                      className="w-full text-[0.8125rem] text-text bg-transparent outline-none border-b border-transparent focus:border-primary/40 transition-colors py-0.5"
                     />
                   </div>
-                  <select
+                  <select aria-label="Entity type"
                     value={ent.type}
                     onChange={e => setEntities(prev => prev.map((x, j) => j === i ? { ...x, type: e.target.value as GroupEntity['type'] } : x))}
-                    className="text-[12px] text-text-secondary bg-white border border-border rounded-md px-2 py-1 outline-none focus:border-primary/40 cursor-pointer"
+                    className="text-[0.75rem] text-text-secondary bg-white border border-border rounded-md px-2 py-1 outline-none focus:border-primary/40 cursor-pointer"
                   >
                     <option>Holding</option>
                     <option>Subsidiary</option>
                   </select>
-                  <div className="text-[12px] tabular-nums text-text-muted">{shareOf(ent.id)}%</div>
+                  <div className="text-[0.75rem] tabular-nums text-text-muted">{shareOf(ent.id)}%</div>
                   <button
                     onClick={() => setEntities(prev => prev.filter((_, j) => j !== i))}
                     disabled={entities.length === 1}
@@ -612,7 +612,7 @@ export default function V2ScopingWizard({ onCancel, onCreated }: Props) {
               ))}
               <button
                 onClick={() => setEntities(prev => [...prev, { id: `ent-new-${prev.length}-${Date.now()}`, name: '', type: 'Subsidiary', ownership: 100 }])}
-                className="flex items-center gap-1.5 px-4 py-2.5 text-[12px] font-semibold text-primary hover:bg-primary/5 w-full transition-colors cursor-pointer"
+                className="flex items-center gap-1.5 px-4 py-2.5 text-[0.75rem] font-semibold text-primary hover:bg-primary/5 w-full transition-colors cursor-pointer"
               >
                 <Plus size={13} /> Add entity
               </button>
@@ -636,8 +636,8 @@ export default function V2ScopingWizard({ onCancel, onCreated }: Props) {
                       active ? 'border-primary/50 bg-primary/5 ring-1 ring-primary/20' : 'border-border-light bg-white hover:border-primary/30'
                     }`}
                   >
-                    <div className={`text-[12.5px] font-semibold ${active ? 'text-primary' : 'text-text'}`}>{b.label}</div>
-                    <div className="text-[11px] text-text-muted mt-1 leading-relaxed">{b.hint}</div>
+                    <div className={`text-[0.8125rem] font-semibold ${active ? 'text-primary' : 'text-text'}`}>{b.label}</div>
+                    <div className="text-[0.6875rem] text-text-muted mt-1 leading-relaxed">{b.hint}</div>
                   </button>
                 );
               })}
@@ -648,24 +648,24 @@ export default function V2ScopingWizard({ onCancel, onCreated }: Props) {
                 <div className="grid grid-cols-2 gap-4">
                   <div>
                     <FieldLabel>{basisOpt.benchmarkLabel} (₹ Cr)</FieldLabel>
-                    <input
+                    <input aria-label={`${basisOpt.benchmarkLabel} (₹ Cr)`}
                       type="number" min={0}
                       value={benchmark}
                       onChange={e => setBenchmark(Number(e.target.value))}
-                      className="w-full px-3 py-2 text-[13px] tabular-nums border border-border rounded-lg bg-white text-text outline-none focus:border-primary/40 focus:ring-2 focus:ring-primary/10"
+                      className="w-full px-3 py-2 text-[0.8125rem] tabular-nums border border-border rounded-lg bg-white text-text outline-none focus:border-primary/40 focus:ring-2 focus:ring-primary/10"
                     />
                   </div>
                   {basis !== 'custom' && (
                     <div>
                       <FieldLabel>Basis %</FieldLabel>
                       <div className="flex items-center gap-2">
-                        <input
+                        <input aria-label="Basis %"
                           type="number" min={0.1} max={100} step={0.1}
                           value={pct}
                           onChange={e => setPct(Number(e.target.value))}
-                          className="w-20 px-3 py-2 text-[13px] tabular-nums border border-border rounded-lg bg-white text-text outline-none focus:border-primary/40 focus:ring-2 focus:ring-primary/10"
+                          className="w-20 px-3 py-2 text-[0.8125rem] tabular-nums border border-border rounded-lg bg-white text-text outline-none focus:border-primary/40 focus:ring-2 focus:ring-primary/10"
                         />
-                        <span className="text-[12px] text-text-muted truncate">% of {basisOpt.benchmarkLabel.toLowerCase()}</span>
+                        <span className="text-[0.75rem] text-text-muted truncate">% of {basisOpt.benchmarkLabel.toLowerCase()}</span>
                       </div>
                     </div>
                   )}
@@ -674,46 +674,46 @@ export default function V2ScopingWizard({ onCancel, onCreated }: Props) {
                   <div>
                     <FieldLabel>Overall materiality (₹ Cr)</FieldLabel>
                     <div className="flex items-center gap-2">
-                      <div className="w-40 px-3 py-2 text-[13px] font-semibold tabular-nums border border-border-light rounded-lg bg-surface-2/60 text-text">
+                      <div className="w-40 px-3 py-2 text-[0.8125rem] font-semibold tabular-nums border border-border-light rounded-lg bg-surface-2/60 text-text">
                         {fmtCr(overallCr)}
                       </div>
-                      <span className="text-[12px] text-text-muted">= {pct}% × {fmtCr(benchmark)} — switch to Custom amount to set it directly</span>
+                      <span className="text-[0.75rem] text-text-muted">= {pct}% × {fmtCr(benchmark)} — switch to Custom amount to set it directly</span>
                     </div>
                   </div>
                 )}
                 <div>
                   <FieldLabel>Performance materiality (% of overall)</FieldLabel>
                   <div className="flex items-center gap-2">
-                    <input
+                    <input aria-label="Performance materiality (% of overall)"
                       type="number" min={50} max={75} step={5}
                       value={pmPct}
                       onChange={e => setPmPct(Number(e.target.value))}
-                      className="w-20 px-3 py-2 text-[13px] tabular-nums border border-border rounded-lg bg-white text-text outline-none focus:border-primary/40 focus:ring-2 focus:ring-primary/10"
+                      className="w-20 px-3 py-2 text-[0.8125rem] tabular-nums border border-border rounded-lg bg-white text-text outline-none focus:border-primary/40 focus:ring-2 focus:ring-primary/10"
                     />
-                    <span className="text-[12px] text-text-muted">% of overall — auditors typically set 50–75%</span>
+                    <span className="text-[0.75rem] text-text-muted">% of overall — auditors typically set 50–75%</span>
                   </div>
                 </div>
                 <div>
                   <FieldLabel>Clearly-trivial threshold (% of overall)</FieldLabel>
-                  <input
+                  <input aria-label="Clearly-trivial threshold (% of overall)"
                     type="number" min={1} max={10}
                     value={cttPct}
                     onChange={e => setCttPct(Number(e.target.value))}
-                    className="w-20 px-3 py-2 text-[13px] tabular-nums border border-border rounded-lg bg-white text-text outline-none focus:border-primary/40 focus:ring-2 focus:ring-primary/10"
+                    className="w-20 px-3 py-2 text-[0.8125rem] tabular-nums border border-border rounded-lg bg-white text-text outline-none focus:border-primary/40 focus:ring-2 focus:ring-primary/10"
                   />
                 </div>
               </div>
 
               {/* Computed ladder */}
               <div className="border border-border-light rounded-xl bg-white p-4">
-                <div className="text-[11px] font-bold text-text-muted uppercase tracking-wider mb-3">Computed thresholds</div>
+                <div className="text-[0.6875rem] font-bold text-text-muted uppercase tracking-wider mb-3">Computed thresholds</div>
                 <LadderRow label="Overall materiality" value={fmtCr(overallCr)}
                   note={basis === 'custom' ? 'Set directly' : `${pct}% × ${fmtCr(benchmark)}`} />
                 <LadderRow label="Performance materiality" value={fmtCr(pmCr)} strong note={`${pmPct}% of overall — the scoping threshold`} />
                 <LadderRow label="Clearly trivial" value={fmtCr(overallCr * cttPct / 100)} note={`${cttPct}% of overall — below this, differences are passed`} last />
                 <div className="flex items-start gap-2 mt-3 pt-3 border-t border-border-light">
                   <Info size={13} className="text-text-muted shrink-0 mt-0.5" />
-                  <p className="text-[11.5px] text-text-muted leading-relaxed">
+                  <p className="text-[0.75rem] text-text-muted leading-relaxed">
                     Materiality is locked before testing starts. Captions at or above performance
                     materiality ({fmtCr(pmCr)}) are flagged automatically once the trial balances are in.
                   </p>
@@ -728,14 +728,14 @@ export default function V2ScopingWizard({ onCancel, onCreated }: Props) {
             title="Trial balance — quantitative scoping"
             sub={`Upload each entity's trial balance — or all of them at once. Captions at or above performance materiality (${fmtCr(pmCr)}) are flagged automatically, and the entity verdicts derive from them: TB clears the bar, a qualitative pick pulls it in, or the coverage rule tops it up.`}
             action={bulkParsing ? (
-              <div className="flex items-center gap-1.5 px-3.5 py-2 text-[12.5px] text-text-muted">
+              <div className="flex items-center gap-1.5 px-3.5 py-2 text-[0.8125rem] text-text-muted">
                 <Loader2 size={13} className="animate-spin" /> Parsing {entities.length} files…
               </div>
             ) : (
               <button
                 onClick={simulateBulkUpload}
                 disabled={allUploaded}
-                className="flex items-center gap-1.5 px-3.5 py-2 rounded-lg border border-border bg-white hover:bg-primary-xlight/40 hover:border-primary/30 text-[12.5px] font-semibold text-text-secondary hover:text-primary transition-colors cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed"
+                className="flex items-center gap-1.5 px-3.5 py-2 rounded-lg border border-border bg-white hover:bg-primary-xlight/40 hover:border-primary/30 text-[0.8125rem] font-semibold text-text-secondary hover:text-primary transition-colors cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed"
               >
                 <Upload size={13} /> Bulk upload TBs
               </button>
@@ -750,8 +750,8 @@ export default function V2ScopingWizard({ onCancel, onCreated }: Props) {
                       ? <Landmark size={14} className="text-brand-700 shrink-0" />
                       : <Building2 size={14} className="text-text-muted shrink-0" />}
                     <div className="flex-1 min-w-0 flex items-baseline gap-2">
-                      <span className="text-[12.5px] font-semibold text-text truncate">{ent.name || 'Unnamed entity'}</span>
-                      <span className="text-[10.5px] text-text-muted shrink-0">{ent.type} · {ent.ownership}%</span>
+                      <span className="text-[0.8125rem] font-semibold text-text truncate">{ent.name || 'Unnamed entity'}</span>
+                      <span className="text-[0.6875rem] text-text-muted shrink-0">{ent.type} · {ent.ownership}%</span>
                     </div>
                     <div className="shrink-0">
                       {up === undefined && (
@@ -762,29 +762,29 @@ export default function V2ScopingWizard({ onCancel, onCreated }: Props) {
                               key={u.file}
                               onClick={() => assignFileTo(u, ent.id)}
                               title={`This file couldn't be matched to any entity by name — map it to ${ent.name || 'this entity'}`}
-                              className="flex items-center gap-1.5 px-3 py-1.5 rounded-md border border-mitigated-200 bg-mitigated-50/60 hover:bg-mitigated-50 text-[11.5px] font-semibold text-mitigated-700 transition-colors cursor-pointer"
+                              className="flex items-center gap-1.5 px-3 py-1.5 rounded-md border border-mitigated-200 bg-mitigated-50/60 hover:bg-mitigated-50 text-[0.75rem] font-semibold text-mitigated-700 transition-colors cursor-pointer"
                             >
                               <AlertCircle size={12} /> Map {u.file}
                             </button>
                           ))}
                           <button
                             onClick={() => simulateUpload(ent.id)}
-                            className="flex items-center gap-1.5 px-3 py-1.5 rounded-md border border-border bg-white hover:bg-primary-xlight/40 hover:border-primary/30 text-[11.5px] font-semibold text-text-secondary hover:text-primary transition-colors cursor-pointer"
+                            className="flex items-center gap-1.5 px-3 py-1.5 rounded-md border border-border bg-white hover:bg-primary-xlight/40 hover:border-primary/30 text-[0.75rem] font-semibold text-text-secondary hover:text-primary transition-colors cursor-pointer"
                           >
                             <Upload size={12} /> Upload trial balance
                           </button>
                         </div>
                       )}
                       {up === 'parsing' && (
-                        <div className="flex items-center gap-1.5 text-[11.5px] text-text-muted">
+                        <div className="flex items-center gap-1.5 text-[0.75rem] text-text-muted">
                           <Loader2 size={12} className="animate-spin" /> Parsing captions…
                         </div>
                       )}
                       {typeof up === 'object' && (
                         <div className="flex items-center gap-1.5 min-w-0">
                           <FileSpreadsheet size={13} className="text-compliant-700 shrink-0" />
-                          <span className="text-[11px] font-mono text-text-secondary truncate">{up.file}</span>
-                          <span className="text-[10.5px] text-text-muted tabular-nums shrink-0">· {up.lines} lines</span>
+                          <span className="text-[0.6875rem] font-mono text-text-secondary truncate">{up.file}</span>
+                          <span className="text-[0.6875rem] text-text-muted tabular-nums shrink-0">· {up.lines} lines</span>
                         </div>
                       )}
                     </div>
@@ -800,10 +800,10 @@ export default function V2ScopingWizard({ onCancel, onCreated }: Props) {
                   <div className="flex items-center justify-between gap-4 mb-3">
                     <div className="flex items-center gap-1.5">
                       <Sparkles size={13} className="text-brand-700" />
-                      <span className="text-[11px] font-bold text-text-muted uppercase tracking-wider">Entity scope — derived, not picked</span>
+                      <span className="text-[0.6875rem] font-bold text-text-muted uppercase tracking-wider">Entity scope — derived, not picked</span>
                     </div>
                     <div className="flex items-center gap-2.5 min-w-0">
-                      <span className="text-[11.5px] text-text-secondary whitespace-nowrap">
+                      <span className="text-[0.75rem] text-text-secondary whitespace-nowrap">
                         <span className="font-bold tabular-nums text-text">{entityScope.coveragePct}%</span> of the group covered · target {COVERAGE_TARGET}%
                       </span>
                       <div className="relative w-36 h-1.5 rounded-full bg-surface-2 overflow-hidden shrink-0">
@@ -826,10 +826,10 @@ export default function V2ScopingWizard({ onCancel, onCreated }: Props) {
                             : <Building2 size={13} className="text-text-muted shrink-0 mt-0.5" />}
                           <div className="flex-1 min-w-0">
                             <div className="flex items-center justify-between gap-2">
-                              <span className="text-[12px] font-semibold text-text truncate">{ent.name}</span>
-                              <span className={`inline-flex items-center px-2 h-5 rounded-full text-[10px] font-semibold shrink-0 ${pill.cls}`}>{pill.label}</span>
+                              <span className="text-[0.75rem] font-semibold text-text truncate">{ent.name}</span>
+                              <span className={`inline-flex items-center px-2 h-5 rounded-full text-[0.6875rem] font-semibold shrink-0 ${pill.cls}`}>{pill.label}</span>
                             </div>
-                            <div className="text-[10.5px] text-text-muted mt-0.5 leading-relaxed">
+                            <div className="text-[0.6875rem] text-text-muted mt-0.5 leading-relaxed">
                               {shareOf(ent.id)}% of group · {verdict?.reason ?? `No caption clears ${fmtCr(pmCr)}`}
                             </div>
                           </div>
@@ -840,17 +840,17 @@ export default function V2ScopingWizard({ onCancel, onCreated }: Props) {
                 </div>
 
                 <div className="flex items-center gap-2 mb-2">
-                  <span className="text-[12px] font-semibold text-text">
+                  <span className="text-[0.75rem] font-semibold text-text">
                     {quantScope.length} of {captions.length} captions flagged
                   </span>
-                  <span className="text-[11.5px] text-text-muted">across {entities.length} entities · threshold {fmtCr(pmCr)}</span>
+                  <span className="text-[0.75rem] text-text-muted">across {entities.length} entities · threshold {fmtCr(pmCr)}</span>
                 </div>
                 <div className="border border-border-light rounded-xl bg-white overflow-hidden">
                   {entities.map(ent => {
                     const rows = captions.filter(c => c.entityId === ent.id);
                     return (
                       <div key={ent.id}>
-                        <div className="px-4 py-2 bg-surface-2/60 border-b border-border-light text-[11px] font-semibold text-text-secondary flex items-center gap-2">
+                        <div className="px-4 py-2 bg-surface-2/60 border-b border-border-light text-[0.6875rem] font-semibold text-text-secondary flex items-center gap-2">
                           {ent.type === 'Holding' ? <Landmark size={12} /> : <Building2 size={12} />}
                           {ent.name}
                           <span className="text-text-muted font-normal">· {rows.filter(r => r.balance >= pmCr || coverageIds.has(r.id)).length}/{rows.length} in scope</span>
@@ -860,19 +860,19 @@ export default function V2ScopingWizard({ onCancel, onCreated }: Props) {
                           const viaCoverage = coverageIds.has(row.id);
                           return (
                             <div key={row.id} className="grid grid-cols-[1.9fr_0.9fr_1fr] gap-3 px-4 py-2 items-center border-b border-border-light last:border-b-0">
-                              <div className={`text-[12.5px] ${inQ || viaCoverage ? 'text-text' : 'text-text-muted'}`}>{row.caption}</div>
-                              <div className={`text-[12px] font-mono tabular-nums text-right ${inQ || viaCoverage ? 'text-text' : 'text-text-muted'}`}>{fmtCr(row.balance)}</div>
+                              <div className={`text-[0.8125rem] ${inQ || viaCoverage ? 'text-text' : 'text-text-muted'}`}>{row.caption}</div>
+                              <div className={`text-[0.75rem] font-mono tabular-nums text-right ${inQ || viaCoverage ? 'text-text' : 'text-text-muted'}`}>{fmtCr(row.balance)}</div>
                               <div className="justify-self-end">
                                 {inQ ? (
-                                  <span title="Above performance materiality" className="inline-flex items-center gap-1 px-2 h-5 rounded-full text-[10px] font-semibold bg-brand-50 text-brand-700">
+                                  <span title="Above performance materiality" className="inline-flex items-center gap-1 px-2 h-5 rounded-full text-[0.6875rem] font-semibold bg-brand-50 text-brand-700">
                                     <Check size={10} /> In scope
                                   </span>
                                 ) : viaCoverage ? (
-                                  <span title="Its entity was pulled in by the coverage rule" className="inline-flex items-center gap-1 px-2 h-5 rounded-full text-[10px] font-semibold bg-mitigated-50 text-mitigated-700">
+                                  <span title="Its entity was pulled in by the coverage rule" className="inline-flex items-center gap-1 px-2 h-5 rounded-full text-[0.6875rem] font-semibold bg-mitigated-50 text-mitigated-700">
                                     <Check size={10} /> Coverage
                                   </span>
                                 ) : (
-                                  <span className="inline-flex items-center px-2 h-5 rounded-full text-[10px] font-medium bg-surface-2 text-text-muted">
+                                  <span className="inline-flex items-center px-2 h-5 rounded-full text-[0.6875rem] font-medium bg-surface-2 text-text-muted">
                                     Below threshold
                                   </span>
                                 )}
@@ -897,15 +897,15 @@ export default function V2ScopingWizard({ onCancel, onCreated }: Props) {
             {belowThreshold.length === 0 && (
               <div className="border border-dashed border-border rounded-xl bg-white/60 px-6 py-10 text-center">
                 <Info size={18} className="mx-auto text-text-muted mb-2" />
-                <div className="text-[13px] font-semibold text-text">Nothing sits below {fmtCr(pmCr)}</div>
-                <p className="text-[12px] text-text-secondary mt-1 max-w-md mx-auto leading-relaxed">
+                <div className="text-[0.8125rem] font-semibold text-text">Nothing sits below {fmtCr(pmCr)}</div>
+                <p className="text-[0.75rem] text-text-secondary mt-1 max-w-md mx-auto leading-relaxed">
                   Every caption is already flagged quantitatively at this materiality, so there is nothing left to scope in by judgement. Continue to the mapping step.
                 </p>
               </div>
             )}
             {belowThreshold.length > 0 && (
             <div className="border border-border-light rounded-xl bg-white overflow-hidden">
-              <div className="grid grid-cols-[1.6fr_0.7fr_0.7fr_1.7fr] gap-3 px-4 py-2 text-[10.5px] uppercase tracking-wider font-semibold text-text-muted/80 border-b border-border-light bg-surface-2/50">
+              <div className="grid grid-cols-[1.6fr_0.7fr_0.7fr_1.7fr] gap-3 px-4 py-2 text-[0.6875rem] uppercase tracking-wider font-semibold text-text-muted/80 border-b border-border-light bg-surface-2/50">
                 <div>Caption (below {fmtCr(pmCr)})</div><div>Entity</div><div className="text-right">Balance</div><div>Scope in</div>
               </div>
               {belowThreshold.map(row => {
@@ -915,15 +915,15 @@ export default function V2ScopingWizard({ onCancel, onCreated }: Props) {
                   <div key={row.id} className={`border-b border-border-light last:border-b-0 ${on ? 'bg-brand-50/30' : ''}`}>
                     <div className="grid grid-cols-[1.6fr_0.7fr_0.7fr_1.7fr] gap-3 px-4 py-2.5 items-center">
                       <div className="flex items-center gap-1.5 min-w-0">
-                        <span className="text-[12.5px] text-text truncate">{row.caption}</span>
+                        <span className="text-[0.8125rem] text-text truncate">{row.caption}</span>
                         {!on && coverageIds.has(row.id) && (
-                          <span className="inline-flex items-center px-1.5 h-4 rounded text-[10px] font-bold uppercase tracking-wide bg-mitigated-50 text-mitigated-700 shrink-0" title="Already in scope — its entity was pulled in by the coverage rule">
+                          <span className="inline-flex items-center px-1.5 h-4 rounded text-[0.625rem] font-bold uppercase tracking-wide bg-mitigated-50 text-mitigated-700 shrink-0" title="Already in scope — its entity was pulled in by the coverage rule">
                             In via coverage
                           </span>
                         )}
                       </div>
-                      <div className="text-[11.5px] text-text-muted">{entityShort(row.entityId, entities)}</div>
-                      <div className="text-[12px] font-mono tabular-nums text-right text-text-secondary">{fmtCr(row.balance)}</div>
+                      <div className="text-[0.75rem] text-text-muted">{entityShort(row.entityId, entities)}</div>
+                      <div className="text-[0.75rem] font-mono tabular-nums text-right text-text-secondary">{fmtCr(row.balance)}</div>
                       <div className="flex items-center gap-2">
                         <button
                           role="switch"
@@ -935,15 +935,15 @@ export default function V2ScopingWizard({ onCancel, onCreated }: Props) {
                               ? { ...prev[row.id], on: false }
                               : { captionId: row.id, reason: prev[row.id]?.reason ?? QUAL_REASONS[0], note: prev[row.id]?.note ?? '', on: true },
                           }))}
-                          className={`relative w-8 h-[18px] rounded-full transition-colors cursor-pointer shrink-0 ${on ? 'bg-primary' : 'bg-surface-3'}`}
+                          className={`relative w-8 h-4.5 rounded-full transition-colors cursor-pointer shrink-0 ${on ? 'bg-primary' : 'bg-surface-3'}`}
                         >
-                          <span className={`absolute top-[2px] w-[14px] h-[14px] rounded-full bg-white shadow-sm transition-all ${on ? 'left-[18px]' : 'left-[2px]'}`} />
+                          <span className={`absolute top-0.5 w-3.5 h-3.5 rounded-full bg-white shadow-sm transition-all ${on ? 'left-4.5' : 'left-0.5'}`} />
                         </button>
                         {on && (
-                          <select
+                          <select aria-label="Qualitative reason"
                             value={q?.reason}
                             onChange={e => setQual(prev => ({ ...prev, [row.id]: { ...prev[row.id], reason: e.target.value as QualPick['reason'] } }))}
-                            className="text-[11.5px] text-text-secondary bg-white border border-border rounded-md px-2 py-1 outline-none focus:border-primary/40 cursor-pointer min-w-0"
+                            className="text-[0.75rem] text-text-secondary bg-white border border-border rounded-md px-2 py-1 outline-none focus:border-primary/40 cursor-pointer min-w-0"
                           >
                             {QUAL_REASONS.map(r => <option key={r}>{r}</option>)}
                           </select>
@@ -954,11 +954,11 @@ export default function V2ScopingWizard({ onCancel, onCreated }: Props) {
                       <div className="px-4 pb-2.5 -mt-1 flex items-start gap-2 flex-wrap">
                         {/* #6 — the pick doesn't just scope a caption, it pulls the whole entity */}
                         {scopeOf(row.entityId) === 'qualitative' && (
-                          <span className="inline-flex items-center gap-1 px-2 h-5 rounded-full text-[10px] font-semibold bg-evidence-50 text-evidence-700 shrink-0">
+                          <span className="inline-flex items-center gap-1 px-2 h-5 rounded-full text-[0.6875rem] font-semibold bg-evidence-50 text-evidence-700 shrink-0">
                             <ArrowRight size={10} /> Pulls {entityShort(row.entityId, entities)} into scope
                           </span>
                         )}
-                        {q?.note && <p className="text-[11.5px] text-text-muted leading-relaxed pl-0.5">{q.note}</p>}
+                        {q?.note && <p className="text-[0.75rem] text-text-muted leading-relaxed pl-0.5">{q.note}</p>}
                       </div>
                     )}
                   </div>
@@ -966,7 +966,7 @@ export default function V2ScopingWizard({ onCancel, onCreated }: Props) {
               })}
             </div>
             )}
-            <p className="text-[11.5px] text-text-muted mt-3">
+            <p className="text-[0.75rem] text-text-muted mt-3">
               {qualScope.length} caption{qualScope.length === 1 ? '' : 's'} scoped in qualitatively — they join the {quantScope.length} quantitative flags.
               {' '}Entity coverage {entityScope.coveragePct}% of the group · target {COVERAGE_TARGET}%.
             </p>
@@ -981,8 +981,8 @@ export default function V2ScopingWizard({ onCancel, onCreated }: Props) {
             {inScope.length === 0 && (
               <div className="border border-dashed border-border rounded-xl bg-white/60 px-6 py-10 text-center mb-4">
                 <AlertCircle size={18} className="mx-auto text-risk-700 mb-2" />
-                <div className="text-[13px] font-semibold text-text">Nothing is in scope at {fmtCr(pmCr)}</div>
-                <p className="text-[12px] text-text-secondary mt-1 max-w-md mx-auto leading-relaxed">
+                <div className="text-[0.8125rem] font-semibold text-text">Nothing is in scope at {fmtCr(pmCr)}</div>
+                <p className="text-[0.75rem] text-text-secondary mt-1 max-w-md mx-auto leading-relaxed">
                   No caption clears materiality and nothing is scoped in qualitatively — zero processes would derive, so there is no programme to create. Lower the threshold on the materiality step, or scope captions in on the qualitative step.
                 </p>
               </div>
@@ -990,30 +990,30 @@ export default function V2ScopingWizard({ onCancel, onCreated }: Props) {
             {inScope.length > 0 && (
             <div className="grid grid-cols-1 gap-4">
               <div className="border border-border-light rounded-xl bg-white overflow-hidden self-start">
-                <div className="grid grid-cols-[1.8fr_0.9fr_1.3fr] gap-3 px-4 py-2 text-[10.5px] uppercase tracking-wider font-semibold text-text-muted/80 border-b border-border-light bg-surface-2/50">
+                <div className="grid grid-cols-[1.8fr_0.9fr_1.3fr] gap-3 px-4 py-2 text-[0.6875rem] uppercase tracking-wider font-semibold text-text-muted/80 border-b border-border-light bg-surface-2/50">
                   <div>In-scope caption</div><div>Entity</div><div>Process</div>
                 </div>
-                <div className="max-h-[420px] overflow-y-auto">
+                <div className="max-h-105 overflow-y-auto">
                   {inScope.map(row => (
                     <div key={row.id} className="grid grid-cols-[1.8fr_0.9fr_1.3fr] gap-3 px-4 py-2 items-center border-b border-border-light last:border-b-0">
                       <div className="flex items-center gap-1.5 min-w-0">
-                        <span className="text-[12.5px] text-text truncate">{row.caption}</span>
+                        <span className="text-[0.8125rem] text-text truncate">{row.caption}</span>
                         {qualIds.has(row.id) && (
-                          <span className="inline-flex items-center px-1.5 h-4 rounded text-[10px] font-bold uppercase tracking-wide bg-evidence-50 text-evidence-700 shrink-0" title="Scoped in qualitatively">
+                          <span className="inline-flex items-center px-1.5 h-4 rounded text-[0.625rem] font-bold uppercase tracking-wide bg-evidence-50 text-evidence-700 shrink-0" title="Scoped in qualitatively">
                             Qual
                           </span>
                         )}
                         {coverageIds.has(row.id) && (
-                          <span className="inline-flex items-center px-1.5 h-4 rounded text-[10px] font-bold uppercase tracking-wide bg-mitigated-50 text-mitigated-700 shrink-0" title="Its entity was pulled in by the coverage rule">
+                          <span className="inline-flex items-center px-1.5 h-4 rounded text-[0.625rem] font-bold uppercase tracking-wide bg-mitigated-50 text-mitigated-700 shrink-0" title="Its entity was pulled in by the coverage rule">
                             Coverage
                           </span>
                         )}
                       </div>
-                      <div className="text-[11.5px] text-text-muted">{entityShort(row.entityId, entities)}</div>
-                      <select
+                      <div className="text-[0.75rem] text-text-muted">{entityShort(row.entityId, entities)}</div>
+                      <select aria-label={`Process for ${row.caption}`}
                         value={row.process}
                         onChange={e => setMapping(prev => ({ ...prev, [row.id]: e.target.value as ProcessName }))}
-                        className="text-[11.5px] text-text-secondary bg-white border border-border rounded-md px-2 py-1 outline-none focus:border-primary/40 cursor-pointer"
+                        className="text-[0.75rem] text-text-secondary bg-white border border-border rounded-md px-2 py-1 outline-none focus:border-primary/40 cursor-pointer"
                       >
                         {PROCESS_NAMES.map(p => <option key={p}>{p}</option>)}
                       </select>
@@ -1027,13 +1027,13 @@ export default function V2ScopingWizard({ onCancel, onCreated }: Props) {
                 <div className="border border-border-light rounded-xl bg-white p-4">
                   <div className="flex items-center gap-1.5 mb-3">
                     <Sparkles size={13} className="text-brand-700" />
-                    <span className="text-[11px] font-bold text-text-muted uppercase tracking-wider">Derived in-scope processes</span>
+                    <span className="text-[0.6875rem] font-bold text-text-muted uppercase tracking-wider">Derived in-scope processes</span>
                   </div>
                   <div className="space-y-2">
                     {derived.map(r => (
                       <div key={r.process} className="flex items-center justify-between gap-2">
-                        <span className="text-[12.5px] font-semibold text-text">{r.process}</span>
-                        <span className="text-[11px] text-text-muted tabular-nums">{r.sources.length} caption{r.sources.length === 1 ? '' : 's'} · {r.entities.length} entit{r.entities.length === 1 ? 'y' : 'ies'}</span>
+                        <span className="text-[0.8125rem] font-semibold text-text">{r.process}</span>
+                        <span className="text-[0.6875rem] text-text-muted tabular-nums">{r.sources.length} caption{r.sources.length === 1 ? '' : 's'} · {r.entities.length} entit{r.entities.length === 1 ? 'y' : 'ies'}</span>
                       </div>
                     ))}
                     {/* #7 — workstreams sit in the same RACM list, tagged */}
@@ -1041,14 +1041,14 @@ export default function V2ScopingWizard({ onCancel, onCreated }: Props) {
                       <div className="pt-2 border-t border-border-light space-y-2">
                         {wsRacms.map(r => (
                           <div key={r.process} className="flex items-center justify-between gap-2">
-                            <span className="text-[12.5px] font-semibold text-text-secondary">{r.process}</span>
-                            <span className="text-[11px] text-text-muted">Group-level workstream</span>
+                            <span className="text-[0.8125rem] font-semibold text-text-secondary">{r.process}</span>
+                            <span className="text-[0.6875rem] text-text-muted">Group-level workstream</span>
                           </div>
                         ))}
                       </div>
                     )}
                   </div>
-                  <p className="text-[11px] text-text-muted mt-3 pt-3 border-t border-border-light leading-relaxed">
+                  <p className="text-[0.6875rem] text-text-muted mt-3 pt-3 border-t border-border-light leading-relaxed">
                     Each of these — processes and workstreams alike — becomes one RACM when the programme is created.
                   </p>
                 </div>
@@ -1057,8 +1057,8 @@ export default function V2ScopingWizard({ onCancel, onCreated }: Props) {
                     (Jul 24) — see WS_CARD at the top of the file */}
                 {WS_CARD && (
                 <div className="border border-border-light rounded-xl bg-white p-4">
-                  <div className="text-[11px] font-bold text-text-muted uppercase tracking-wider mb-1">Beyond the trial balance — workstream RACMs</div>
-                  <p className="text-[11px] text-text-muted mb-3 leading-relaxed">They never appear as TB captions, but each one you keep becomes a real RACM — testable like any process register.</p>
+                  <div className="text-[0.6875rem] font-bold text-text-muted uppercase tracking-wider mb-1">Beyond the trial balance — workstream RACMs</div>
+                  <p className="text-[0.6875rem] text-text-muted mb-3 leading-relaxed">They never appear as TB captions, but each one you keep becomes a real RACM — testable like any process register.</p>
                   <div className="space-y-1.5">
                     {BEYOND_TB.map(b => {
                       const on = beyond[b.id];
@@ -1076,14 +1076,14 @@ export default function V2ScopingWizard({ onCancel, onCreated }: Props) {
                               {on && <Check size={10} />}
                             </span>
                             <span>
-                              <span className="block text-[12px] font-semibold text-text">{b.name}</span>
-                              <span className="block text-[11px] text-text-muted leading-relaxed mt-0.5">{b.why}</span>
+                              <span className="block text-[0.75rem] font-semibold text-text">{b.name}</span>
+                              <span className="block text-[0.6875rem] text-text-muted leading-relaxed mt-0.5">{b.why}</span>
                             </span>
                           </button>
                           {/* ITGC is never one blob — one RACM per system relied on */}
                           {b.id === 'itgc' && on && (
                             <div className="ml-7 mt-1.5 mb-1">
-                              <div className="text-[10px] font-bold uppercase tracking-wider text-text-muted mb-1">One RACM per system</div>
+                              <div className="text-[0.6875rem] font-bold uppercase tracking-wider text-text-muted mb-1">One RACM per system</div>
                               <div className="space-y-1">
                                 {V2C_ITGC_SYSTEMS.map(s => {
                                   const picked = !!itgcSystems[s.id];
@@ -1100,14 +1100,14 @@ export default function V2ScopingWizard({ onCancel, onCreated }: Props) {
                                       }`}>
                                         {picked && <Check size={9} />}
                                       </span>
-                                      <span className="text-[11.5px] font-semibold text-text">{s.name}</span>
-                                      <span className="text-[10.5px] text-text-muted">· {s.role}</span>
+                                      <span className="text-[0.75rem] font-semibold text-text">{s.name}</span>
+                                      <span className="text-[0.6875rem] text-text-muted">· {s.role}</span>
                                     </button>
                                   );
                                 })}
                               </div>
                               {!V2C_ITGC_SYSTEMS.some(s => itgcSystems[s.id]) && (
-                                <p className="text-[10.5px] text-risk-700 mt-1.5">No system picked — ITGC derives no RACM.</p>
+                                <p className="text-[0.6875rem] text-risk-700 mt-1.5">No system picked — ITGC derives no RACM.</p>
                               )}
                             </div>
                           )}
@@ -1129,7 +1129,7 @@ export default function V2ScopingWizard({ onCancel, onCreated }: Props) {
             sub="Most of the fieldwork is chasing evidence — and you can only chase named people. Every RACM gets a process owner (runs the area, gets chased) and a control owner (accountable that the controls operate). Suggestions are prefilled — adjust any."
           >
             <div className="border border-border-light rounded-xl bg-white overflow-hidden">
-              <div className="grid grid-cols-[1.1fr_1.4fr_1.4fr] gap-3 px-4 py-2 text-[10.5px] uppercase tracking-wider font-semibold text-text-muted/80 border-b border-border-light bg-surface-2/50">
+              <div className="grid grid-cols-[1.1fr_1.4fr_1.4fr] gap-3 px-4 py-2 text-[0.6875rem] uppercase tracking-wider font-semibold text-text-muted/80 border-b border-border-light bg-surface-2/50">
                 <div>RACM</div><div>Process owner</div><div>Control owner</div>
               </div>
               {allRacms.map(r => {
@@ -1137,9 +1137,9 @@ export default function V2ScopingWizard({ onCancel, onCreated }: Props) {
                 return (
                   <div key={r.process} className="grid grid-cols-[1.1fr_1.4fr_1.4fr] gap-3 px-4 py-2.5 items-start border-b border-border-light last:border-b-0">
                     <div className="pt-1 min-w-0">
-                      <div className="text-[12.5px] font-semibold text-text truncate">{r.process}</div>
+                      <div className="text-[0.8125rem] font-semibold text-text truncate">{r.process}</div>
                       {r.workstream && (
-                        <span className="inline-flex items-center px-1.5 h-4 rounded text-[10px] font-bold uppercase tracking-wide bg-surface-2 text-text-muted mt-1">
+                        <span className="inline-flex items-center px-1.5 h-4 rounded text-[0.625rem] font-bold uppercase tracking-wide bg-surface-2 text-text-muted mt-1">
                           Workstream
                         </span>
                       )}
@@ -1150,14 +1150,14 @@ export default function V2ScopingWizard({ onCancel, onCreated }: Props) {
                         onChange={e => setPerson(r.process, { processOwner: e.target.value })}
                         placeholder="Name"
                         aria-label={`Process owner for ${r.process}`}
-                        className="w-full px-2.5 py-1.5 text-[12px] border border-border rounded-md bg-white text-text outline-none focus:border-primary/40 focus:ring-2 focus:ring-primary/10"
+                        className="w-full px-2.5 py-1.5 text-[0.75rem] border border-border rounded-md bg-white text-text outline-none focus:border-primary/40 focus:ring-2 focus:ring-primary/10"
                       />
                       <input
                         value={p.poEmail}
                         onChange={e => setPerson(r.process, { poEmail: e.target.value })}
                         placeholder="email"
                         aria-label={`Process owner email for ${r.process}`}
-                        className="w-full px-2.5 py-1 text-[11px] font-mono border border-border-light rounded-md bg-surface-2/40 text-text-secondary outline-none focus:border-primary/40"
+                        className="w-full px-2.5 py-1 text-[0.6875rem] font-mono border border-border-light rounded-md bg-surface-2/40 text-text-secondary outline-none focus:border-primary/40"
                       />
                     </div>
                     <div className="space-y-1">
@@ -1166,14 +1166,14 @@ export default function V2ScopingWizard({ onCancel, onCreated }: Props) {
                         onChange={e => setPerson(r.process, { controlOwner: e.target.value })}
                         placeholder="Name"
                         aria-label={`Control owner for ${r.process}`}
-                        className="w-full px-2.5 py-1.5 text-[12px] border border-border rounded-md bg-white text-text outline-none focus:border-primary/40 focus:ring-2 focus:ring-primary/10"
+                        className="w-full px-2.5 py-1.5 text-[0.75rem] border border-border rounded-md bg-white text-text outline-none focus:border-primary/40 focus:ring-2 focus:ring-primary/10"
                       />
                       <input
                         value={p.coEmail}
                         onChange={e => setPerson(r.process, { coEmail: e.target.value })}
                         placeholder="email"
                         aria-label={`Control owner email for ${r.process}`}
-                        className="w-full px-2.5 py-1 text-[11px] font-mono border border-border-light rounded-md bg-surface-2/40 text-text-secondary outline-none focus:border-primary/40"
+                        className="w-full px-2.5 py-1 text-[0.6875rem] font-mono border border-border-light rounded-md bg-surface-2/40 text-text-secondary outline-none focus:border-primary/40"
                       />
                     </div>
                   </div>
@@ -1198,18 +1198,18 @@ export default function V2ScopingWizard({ onCancel, onCreated }: Props) {
           >
             <div className="grid grid-cols-1 gap-3 mb-4">
               <ReviewCard title="Entity scope — derived">
-                <div className="text-[13px] font-semibold text-text mb-1.5">{groupName}</div>
+                <div className="text-[0.8125rem] font-semibold text-text mb-1.5">{groupName}</div>
                 {entities.map(e => {
                   const pill = SCOPE_PILL[scopeOf(e.id)];
                   return (
-                    <div key={e.id} className="flex items-center gap-1.5 text-[11.5px] text-text-secondary py-0.5">
+                    <div key={e.id} className="flex items-center gap-1.5 text-[0.75rem] text-text-secondary py-0.5">
                       {e.type === 'Holding' ? <Landmark size={11} className="text-brand-700" /> : <Building2 size={11} className="text-text-muted" />}
                       <span className="flex-1 min-w-0 truncate">{e.name} <span className="text-text-muted">· {shareOf(e.id)}% of group</span></span>
-                      <span className={`inline-flex items-center px-2 h-5 rounded-full text-[10px] font-semibold shrink-0 ${pill.cls}`}>{pill.label}</span>
+                      <span className={`inline-flex items-center px-2 h-5 rounded-full text-[0.6875rem] font-semibold shrink-0 ${pill.cls}`}>{pill.label}</span>
                     </div>
                   );
                 })}
-                <p className="text-[11px] text-text-muted mt-2 pt-2 border-t border-border-light">
+                <p className="text-[0.6875rem] text-text-muted mt-2 pt-2 border-t border-border-light">
                   {inScopeEntityCount} of {entities.length} entities in scope — {entityScope.coveragePct}% of the group covered · target {COVERAGE_TARGET}%.
                 </p>
               </ReviewCard>
@@ -1230,7 +1230,7 @@ export default function V2ScopingWizard({ onCancel, onCreated }: Props) {
             </div>
 
             <div className="border border-border-light rounded-xl bg-white p-4">
-              <div className="text-[11px] font-bold text-text-muted uppercase tracking-wider mb-3">
+              <div className="text-[0.6875rem] font-bold text-text-muted uppercase tracking-wider mb-3">
                 RACMs to be generated — one per in-scope process{wsRacms.length > 0 ? ' and workstream' : ''}
               </div>
               <div className="grid grid-cols-2 gap-2.5">
@@ -1238,13 +1238,13 @@ export default function V2ScopingWizard({ onCancel, onCreated }: Props) {
                   const p = personFor(r.process);
                   return (
                     <div key={r.process} className="rounded-lg p-3 bg-surface-2/50">
-                      <div className="text-[12.5px] font-semibold text-text">{r.process}</div>
-                      <div className="text-[10.5px] text-text-muted mt-0.5 mb-2 tabular-nums">
+                      <div className="text-[0.8125rem] font-semibold text-text">{r.process}</div>
+                      <div className="text-[0.6875rem] text-text-muted mt-0.5 mb-2 tabular-nums">
                         {r.sources.length} source caption{r.sources.length === 1 ? '' : 's'} · {r.entities.join(', ')}
                       </div>
                       <SourceChips sources={r.sources} max={3} />
                       {/* #8 — the people the chase will run on */}
-                      <div className="text-[10.5px] text-text-secondary mt-2 pt-2 border-t border-border-light">
+                      <div className="text-[0.6875rem] text-text-secondary mt-2 pt-2 border-t border-border-light">
                         PO {ownerShort(p.processOwner)} · CO {ownerShort(p.controlOwner)}
                       </div>
                     </div>
@@ -1256,13 +1256,13 @@ export default function V2ScopingWizard({ onCancel, onCreated }: Props) {
                   return (
                     <div key={r.process} className="rounded-lg p-3 bg-surface-2/60">
                       <div className="flex items-center gap-1.5">
-                        <div className="text-[12.5px] font-semibold text-text">{r.process}</div>
-                        <span className="inline-flex items-center px-1.5 h-4 rounded text-[10px] font-bold uppercase tracking-wide bg-surface-2 text-text-muted shrink-0">
+                        <div className="text-[0.8125rem] font-semibold text-text">{r.process}</div>
+                        <span className="inline-flex items-center px-1.5 h-4 rounded text-[0.625rem] font-bold uppercase tracking-wide bg-surface-2 text-text-muted shrink-0">
                           Workstream
                         </span>
                       </div>
-                      <div className="text-[10.5px] text-text-muted mt-0.5">Group-level — scoped without a TB caption</div>
-                      <div className="text-[10.5px] text-text-secondary mt-2 pt-2 border-t border-border-light">
+                      <div className="text-[0.6875rem] text-text-muted mt-0.5">Group-level — scoped without a TB caption</div>
+                      <div className="text-[0.6875rem] text-text-secondary mt-2 pt-2 border-t border-border-light">
                         PO {ownerShort(p.processOwner)} · CO {ownerShort(p.controlOwner)}
                       </div>
                     </div>
@@ -1280,7 +1280,7 @@ export default function V2ScopingWizard({ onCancel, onCreated }: Props) {
       <div className="flex items-center justify-between py-4 border-t border-border-light sticky bottom-0 bg-canvas -mx-6 px-6">
         <button
           onClick={() => (step === 0 ? onCancel() : setStep(s => s - 1))}
-          className="flex items-center gap-1.5 px-3.5 py-2 rounded-lg border border-border bg-white hover:bg-surface-2 text-[12.5px] font-semibold text-text-secondary transition-colors cursor-pointer"
+          className="flex items-center gap-1.5 px-3.5 py-2 rounded-lg border border-border bg-white hover:bg-surface-2 text-[0.8125rem] font-semibold text-text-secondary transition-colors cursor-pointer"
         >
           <ArrowLeft size={13} /> {step === 0 ? 'Cancel' : 'Back'}
         </button>
@@ -1288,7 +1288,7 @@ export default function V2ScopingWizard({ onCancel, onCreated }: Props) {
           <button
             onClick={goNext}
             disabled={!canContinue}
-            className="flex items-center gap-1.5 px-4 py-2 bg-primary hover:bg-primary-hover text-white rounded-lg text-[13px] font-semibold transition-colors cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed"
+            className="flex items-center gap-1.5 px-4 py-2 bg-primary hover:bg-primary-hover text-white rounded-lg text-[0.8125rem] font-semibold transition-colors cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed"
           >
             Continue <ArrowRight size={13} />
           </button>
@@ -1296,7 +1296,7 @@ export default function V2ScopingWizard({ onCancel, onCreated }: Props) {
           <button
             onClick={create}
             disabled={derived.length === 0}
-            className="flex items-center gap-1.5 px-4 py-2 bg-primary hover:bg-primary-hover text-white rounded-lg text-[13px] font-semibold transition-colors cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed"
+            className="flex items-center gap-1.5 px-4 py-2 bg-primary hover:bg-primary-hover text-white rounded-lg text-[0.8125rem] font-semibold transition-colors cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed"
           >
             <Check size={13} /> Create {fy} programme
           </button>
@@ -1313,8 +1313,8 @@ function StepShell({ title, sub, action, children }: { title: string; sub: strin
     <div>
       <div className="flex items-start justify-between gap-4">
         <div className="min-w-0">
-          <h2 className="text-[18px] font-bold text-text">{title}</h2>
-          <p className="text-[12.5px] text-text-secondary mt-1 mb-5 max-w-2xl leading-relaxed">{sub}</p>
+          <h2 className="text-[1.125rem] font-bold text-text">{title}</h2>
+          <p className="text-[0.8125rem] text-text-secondary mt-1 mb-5 max-w-2xl leading-relaxed">{sub}</p>
         </div>
         {action && <div className="shrink-0 pt-1">{action}</div>}
       </div>
@@ -1344,14 +1344,14 @@ export function StepRail({ steps, step, onStepClick }: {
               disabled={!done}
               className={`flex flex-col items-center gap-1.5 shrink-0 ${done ? 'cursor-pointer group' : ''}`}
             >
-              <span className={`w-6 h-6 rounded-full inline-flex items-center justify-center text-[10.5px] font-bold tabular-nums transition-colors ${
+              <span className={`w-6 h-6 rounded-full inline-flex items-center justify-center text-[0.6875rem] font-bold tabular-nums transition-colors ${
                 active ? 'bg-primary text-white shadow-sm shadow-brand-900/10'
                 : done ? 'bg-brand-100 text-brand-700 group-hover:bg-brand-200'
                 : 'border border-border bg-white text-text-muted'
               }`}>
                 {done ? <Check size={11} /> : i + 1}
               </span>
-              <span className={`text-[11px] font-semibold whitespace-nowrap transition-colors ${
+              <span className={`text-[0.6875rem] font-semibold whitespace-nowrap transition-colors ${
                 active ? 'text-primary' : done ? 'text-brand-700' : 'text-text-muted'
               }`}>
                 {label}
@@ -1375,7 +1375,7 @@ function Hint({ text }: { text: string }) {
 }
 
 function FieldLabel({ children }: { children: React.ReactNode }) {
-  return <div className="text-[11px] font-bold text-text-muted uppercase tracking-wider mb-1.5">{children}</div>;
+  return <div className="text-[0.6875rem] font-bold text-text-muted uppercase tracking-wider mb-1.5">{children}</div>;
 }
 
 function LadderRow({ label, value, note, strong, last }: {
@@ -1384,10 +1384,10 @@ function LadderRow({ label, value, note, strong, last }: {
   return (
     <div className={`py-2 ${last ? '' : 'border-b border-border-light'}`}>
       <div className="flex items-baseline justify-between gap-3">
-        <span className={`text-[12px] ${strong ? 'font-semibold text-text' : 'text-text-secondary'}`}>{label}</span>
-        <span className={`font-mono tabular-nums ${strong ? 'text-[15px] font-bold text-text' : 'text-[13px] text-text'}`}>{value}</span>
+        <span className={`text-[0.75rem] ${strong ? 'font-semibold text-text' : 'text-text-secondary'}`}>{label}</span>
+        <span className={`font-mono tabular-nums ${strong ? 'text-[0.9375rem] font-bold text-text' : 'text-[0.8125rem] text-text'}`}>{value}</span>
       </div>
-      {note && <div className="text-[10.5px] text-text-muted mt-0.5">{note}</div>}
+      {note && <div className="text-[0.6875rem] text-text-muted mt-0.5">{note}</div>}
     </div>
   );
 }
@@ -1395,8 +1395,8 @@ function LadderRow({ label, value, note, strong, last }: {
 function FunnelRow({ label, value, last }: { label: string; value: number; last?: boolean }) {
   return (
     <div className={`flex items-center justify-between py-1.5 ${last ? '' : 'border-b border-border-light'}`}>
-      <span className="text-[12px] text-text-secondary">{label}</span>
-      <span className="text-[13px] font-bold tabular-nums text-text">{value}</span>
+      <span className="text-[0.75rem] text-text-secondary">{label}</span>
+      <span className="text-[0.8125rem] font-bold tabular-nums text-text">{value}</span>
     </div>
   );
 }
@@ -1404,7 +1404,7 @@ function FunnelRow({ label, value, last }: { label: string; value: number; last?
 function ReviewCard({ title, children }: { title: string; children: React.ReactNode }) {
   return (
     <div className="border border-border-light rounded-xl bg-white p-4">
-      <div className="text-[11px] font-bold text-text-muted uppercase tracking-wider mb-2.5">{title}</div>
+      <div className="text-[0.6875rem] font-bold text-text-muted uppercase tracking-wider mb-2.5">{title}</div>
       {children}
     </div>
   );

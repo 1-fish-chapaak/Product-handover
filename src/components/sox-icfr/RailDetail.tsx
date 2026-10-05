@@ -13,24 +13,52 @@
  * sox-icfr export at module load — only inside components — and it never
  * imports ControlDossier (which imports this).
  */
-import { createContext, useContext, useState } from 'react';
+import { createContext, useContext, useEffect, useRef, useState } from 'react';
 import { AlertTriangle, ArrowLeft, Paperclip, Quote } from 'lucide-react';
 import { cn } from '../../lib/cn';
 import EvidenceAnnotator from './EvidenceAnnotator';
 import { Tickmark } from './parts';
-import { confidenceOf, documentSystemRows } from './helpers';
-import type { AuditRecord, Control, EvidenceFile, OperatingStep, ValidationResult } from './types';
+import { confidenceOf, documentSystemRows, requiredFilesOf } from './helpers';
+import type { AuditRecord, Control, DesignPoint, EvidenceFile, OperatingStep, Sample, ValidationResult } from './types';
 
 export type RailDetail =
   | { kind: 'working'; title: string; validation: ValidationResult; control: Control; step?: OperatingStep; evidence?: EvidenceFile; confKey?: string;
       /** The round the sample was drawn in (sampleHome) — dates each item the way the sample grid does. */
-      home?: AuditRecord }
+      home?: AuditRecord;
+      /** Opens with this passage already boxed and scrolled to — the one a
+       *  clicked result rests on (a design check's cite, or a sampled item's
+       *  ref in its file). Absent: nothing picked, every passage marked. */
+      focusCite?: string }
   | { kind: 'file'; file: EvidenceFile; label?: string; quotes?: string[] };
 
 export const RailDetailContext = createContext<(d: RailDetail) => void>(() => {});
 export function useOpenRailDetail() { return useContext(RailDetailContext); }
 
-const EYEBROW = 'text-[0.65625rem] font-bold uppercase tracking-wide text-ink-400';
+const EYEBROW = 'text-[0.6875rem] font-bold uppercase tracking-wide text-ink-400';
+
+/** The passage a verdict rests on: on a Fail, the first failed answer's cite;
+ *  otherwise the first cited answer's. Nothing when Ira reached no verdict
+ *  (couldn't test) or no answer was read in a file (it came from the matrix). */
+export function verdictCite(v?: ValidationResult): string | undefined {
+  if (!v?.result) return undefined;
+  const cited = v.qa.filter(x => !!x.cite);
+  return (v.result === 'Fail' ? cited.find(x => !x.pass) : undefined)?.cite ?? cited[0]?.cite;
+}
+
+/** The file a design check's working opens on — the same rule PointRow uses:
+ *  its own proof first, then the first openable file of the elements it cites. */
+export function pointEvidence(c: Control, p: DesignPoint): EvidenceFile | undefined {
+  const linked = c.design.documents.filter(d => p.evidencedBy?.includes(d.id)).flatMap(d => d.files ?? []);
+  return p.auditorProof?.file ?? linked.find(x => !!x.url) ?? linked[0];
+}
+
+/** One sampled item × attribute: the file the attribute was run against, and
+ *  the item's ref to box in it — the row that item is in. */
+export function itemFocus(c: Control, s: OperatingStep, it: Sample): { evidence?: EvidenceFile; focusCite: string } {
+  const files = requiredFilesOf(s, c).map(f => f.file).filter((f): f is EvidenceFile => !!f);
+  const evidence = files.find(f => f.name === s.validation?.fileName) ?? files.find(f => !!f.url) ?? files[0];
+  return { evidence, focusCite: it.ref };
+}
 
 /**
  * Per-drawn-item results for one attribute, moved out of ControlDossier's modal
@@ -53,7 +81,7 @@ export function SampleResultsTable({ control, step, home }: { control: Control; 
         {!stale && <span className="text-[0.6875rem] text-ink-400 tabular-nums">{matched}/{rows.length} match</span>}
       </div>
       {stale && (
-        <p className="text-[0.71875rem] text-mitigated-700 inline-flex items-start gap-1 mb-2">
+        <p className="text-[0.75rem] text-mitigated-700 inline-flex items-start gap-1 mb-2">
           <AlertTriangle size={11} className="mt-0.5 shrink-0" />
           This ran before the sample was extracted — run it again to test each item.
         </p>
@@ -62,7 +90,7 @@ export function SampleResultsTable({ control, step, home }: { control: Control; 
         {rows.map(r => {
           const miss = r.result === 'Fail';
           return (
-            <div key={r.id} className="px-3 py-1.5 text-[0.71875rem]">
+            <div key={r.id} className="px-3 py-1.5 text-[0.75rem]">
               <div className="flex items-center gap-2">
                 <span className="font-mono text-ink-700 truncate min-w-0" title={r.ref}>{r.ref}</span>
                 <span className={cn('ml-auto shrink-0 inline-flex items-center gap-1 font-bold', r.result === 'Pass' ? 'text-compliant-700' : miss ? 'text-risk-700' : 'text-ink-400')}>
@@ -84,13 +112,26 @@ export function SampleResultsTable({ control, step, home }: { control: Control; 
  *  (agentic UI review #3, 30 Sep). The document sits BELOW the checks rather
  *  than beside them; clicking a check moves the mark in it. */
 function Working({ d }: { d: Extract<RailDetail, { kind: 'working' }> }) {
-  const { title, validation, control, step, evidence, confKey, home } = d;
-  const { qa, summary, table, result, blocked } = validation;
+  const { title, validation, control, step, evidence, confKey, home, focusCite } = d;
+  const { qa, summary, table, blocked } = validation;
   const passed = qa.filter(x => x.pass).length;
+  // The header states what the checks below actually came to. A run saved with
+  // its answers but no verdict on it read "Not tested" over "1/1 check passed"
+  // (click-through, 5 Oct) — so with no stored verdict, the answers decide it.
+  const result = validation.result ?? (blocked || qa.length === 0 ? undefined : passed === qa.length ? 'Pass' : 'Fail');
   const conf = confidenceOf(validation, confKey ?? title);
-  const quotes = qa.map(x => x.cite).filter((q): q is string => !!q);
+  const answerQuotes = qa.map(x => x.cite).filter((q): q is string => !!q);
+  // a sampled item's ref is not one of the answers' cites — add it so it is found
+  const quotes = focusCite && !answerQuotes.includes(focusCite) ? [...answerQuotes, focusCite] : answerQuotes;
   const showEvidence = !!evidence && quotes.length > 0;
-  const [activeCite, setActiveCite] = useState<string | undefined>(undefined);
+  const [activeCite, setActiveCite] = useState<string | undefined>(focusCite);
+  // Opened from a result (one click): bring the file into view, the passage
+  // already boxed in it — the annotator scrolls to the passage itself.
+  const fileBox = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    if (focusCite && showEvidence) fileBox.current?.scrollIntoView({ block: 'start', behavior: 'smooth' });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
   // an operating attribute's real item-level answer is the drawn sample; the
   // generated table is the fallback for design considerations (never sampled)
   const sampled = !!control.operating.sampling?.samples.length && !!step;
@@ -138,14 +179,18 @@ function Working({ d }: { d: Extract<RailDetail, { kind: 'working' }> }) {
                   showEvidence && item.cite && 'cursor-pointer hover:bg-paper-50',
                   // evidence blue, matching the mark on the document (25 Sep)
                   on && 'bg-evidence-50')}
-                  onClick={() => { if (showEvidence && item.cite) setActiveCite(on ? undefined : item.cite); }}>
+                  onClick={() => { if (showEvidence && item.cite) setActiveCite(on ? undefined : item.cite); }}
+                  {...(showEvidence && item.cite ? {
+                    role: 'button', tabIndex: 0, 'aria-pressed': on,
+                    onKeyDown: (e: React.KeyboardEvent) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); setActiveCite(on ? undefined : item.cite); } },
+                  } : {})}>
                   <Tickmark result={item.pass ? 'Pass' : 'Fail'} size={16} />
                   <div className="min-w-0">
                     <div className="text-[0.75rem] font-semibold text-ink-900">{item.q}</div>
-                    <div className="text-[0.71875rem] text-ink-600 mt-0.5 leading-relaxed">{item.a}</div>
+                    <div className="text-[0.75rem] text-ink-600 mt-0.5 leading-relaxed">{item.a}</div>
                     {/* names the document, never the search wording (25 Sep) */}
                     {showEvidence && item.cite && (
-                      <div className="mt-1 inline-flex items-center gap-1 text-[0.65625rem] font-semibold text-evidence-700">
+                      <div className="mt-1 inline-flex items-center gap-1 text-[0.6875rem] font-semibold text-evidence-700">
                         <Quote size={9} /><span className="truncate">Read in {evidence!.name}</span>
                         <span className="text-ink-400 font-normal shrink-0">{on ? '· marked below' : '· show me'}</span>
                       </div>
@@ -157,17 +202,17 @@ function Working({ d }: { d: Extract<RailDetail, { kind: 'working' }> }) {
           </div>
         </div>
         {showEvidence && (
-          <div className="rounded-lg border border-canvas-border overflow-hidden flex flex-col h-[28rem]">
+          <div ref={fileBox} className="rounded-lg border border-canvas-border overflow-hidden flex flex-col h-112 scroll-mt-3">
             <div className="px-3 py-1.5 border-b border-canvas-border bg-canvas-elevated flex items-center gap-2">
               <Paperclip size={11} className="text-ink-400 shrink-0" />
-              <span className="text-[0.71875rem] font-semibold text-ink-700 truncate">{evidence!.name}</span>
-              <span className="text-[0.625rem] text-ink-400 ml-auto shrink-0">{activeCite ? 'that answer’s passage' : 'every cited passage'}</span>
+              <span className="text-[0.75rem] font-semibold text-ink-700 truncate">{evidence!.name}</span>
+              <span className="text-[0.6875rem] text-ink-400 ml-auto shrink-0">{!activeCite ? 'every cited passage' : answerQuotes.includes(activeCite) ? 'that answer’s passage' : `${activeCite} marked`}</span>
             </div>
             <div className="flex-1 min-h-0"><EvidenceAnnotator file={evidence!} quotes={quotes} active={activeCite} /></div>
           </div>
         )}
       </div>
-      <div className="shrink-0 px-4 py-2 border-t border-canvas-border text-[0.71875rem] text-ink-500 tabular-nums">
+      <div className="shrink-0 px-4 py-2 border-t border-canvas-border text-[0.75rem] text-ink-500 tabular-nums">
         {passed}/{qa.length} {qa.length === 1 ? 'check' : 'checks'} passed
       </div>
     </>
@@ -179,20 +224,21 @@ export default function RailDetailPane({ detail, onBack }: { detail: RailDetail;
   return (
     <div className="flex-1 min-h-0 flex flex-col">
       <div className="shrink-0 flex items-center gap-2 px-4 py-2 border-b border-canvas-border">
-        <button onClick={onBack} className="inline-flex items-center gap-1 text-[0.71875rem] font-semibold text-ink-500 hover:text-ink-800 cursor-pointer shrink-0">
+        <button onClick={onBack} className="inline-flex items-center gap-1 text-[0.75rem] font-semibold text-ink-500 hover:text-ink-800 cursor-pointer shrink-0">
           <ArrowLeft size={12} /> Back
         </button>
         <span className="text-[0.75rem] font-semibold text-ink-800 truncate min-w-0" title={title}>{title}</span>
       </div>
       {detail.kind === 'working'
-        // keyed so a second "View results" starts with no check selected
-        ? <Working key={detail.confKey ?? detail.title} d={detail} />
+        // keyed so a second "View results" starts with no check selected — and a
+        // click on a different result starts on that result's passage
+        ? <Working key={`${detail.confKey ?? detail.title}|${detail.focusCite ?? ''}`} d={detail} />
         : (
           <>
             <div className="shrink-0 px-4 py-2 border-b border-canvas-border bg-canvas-elevated flex items-center gap-2">
               <Paperclip size={11} className="text-ink-400 shrink-0" />
-              <span className="text-[0.71875rem] font-semibold text-ink-700 truncate">{detail.file.name}</span>
-              <span className="ml-auto shrink-0 text-[0.625rem] font-bold text-ink-400">{detail.file.kind}</span>
+              <span className="text-[0.75rem] font-semibold text-ink-700 truncate">{detail.file.name}</span>
+              <span className="ml-auto shrink-0 text-[0.6875rem] font-bold text-ink-400">{detail.file.kind}</span>
             </div>
             {/* the file opened AT the passage: the first quote is the marked one */}
             <div className="flex-1 min-h-0">

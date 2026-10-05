@@ -223,14 +223,14 @@ export function buildRemediationBrief(eng: IcfrEngagement, owner: string, defId?
       ['Likelihood', d.likelihood],
     ];
     if (d.compensatingControlId) {
-      exceptionRows.push(['Compensating control', `${d.compensatingControlId} — it caps how far the grade can rise, and never clears the exception.`]);
+      exceptionRows.push(['Compensating control', `${d.compensatingControlId} — it caps how far the grade can rise, and never clears the deficiency.`]);
     }
     if (d.mwIndicators.length) {
       exceptionRows.push(['Escalated', 'A reportable condition was recorded against this control, which sets the grade whatever the exposure.']);
     }
     exceptionRows.push(['Where it stands', STAGE[d.status]]);
     exceptionRows.push(['Fix due by', dueUrgency(d.remediation.date)]);
-    blocks.push({ kind: 'kv', title: `Exception — ${d.id}`, rows: exceptionRows });
+    blocks.push({ kind: 'kv', title: `Deficiency — ${d.id}`, rows: exceptionRows });
 
     // ── The argument, if there was one ───────────────────────────────────────
     // Their own challenge and the answer to it. On the brief because "I disagreed
@@ -441,7 +441,7 @@ export function buildRemediationBrief(eng: IcfrEngagement, owner: string, defId?
   // reason `exceptionCourtDetail` names a person rather than a role.
   blocks.push({
     kind: 'note', label: 'If something here is wrong', tone: 'neutral',
-    text: `Reply to ${eng.preparer} rather than editing this document — dates, plans and evidence are recorded against the exception itself, and a change made here would not reach it.`,
+    text: `Reply to ${eng.preparer} rather than editing this document — dates, plans and evidence are recorded against the deficiency itself, and a change made here would not reach it.`,
   });
 
   return blocks;

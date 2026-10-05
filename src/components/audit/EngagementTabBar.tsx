@@ -9,7 +9,7 @@
  * tab experience stays consistent across all three.
  */
 
-import { useEffect, useMemo, useState, type ReactNode } from 'react';
+import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { motion, AnimatePresence, Reorder } from 'motion/react';
 import {
   LayoutDashboard, Table2, ShieldCheck, Workflow, FolderOpen, AlertTriangle,
@@ -105,6 +105,14 @@ function loadPrefs(key: string): TabPrefs {
 export function useTabLayout(key: string, tabIds: string[]): TabLayout {
   const idsKey = tabIds.join(',');
   const [prefs, setPrefs] = useState<TabPrefs>(() => loadPrefs(key));
+  // One bar instance can switch keys in place (the engagement bar becomes the
+  // audit bar on drill-in). Re-read that bar's own saved layout, otherwise the
+  // previous bar's order is shown — and then saved under the new key.
+  const [loadedKey, setLoadedKey] = useState(key);
+  if (loadedKey !== key) {
+    setLoadedKey(key);
+    setPrefs(loadPrefs(key));
+  }
 
   const order = useMemo(() => {
     const known = prefs.order.filter(id => tabIds.includes(id));
@@ -162,6 +170,20 @@ export function EngagementTabBar({
   const tabIds = tabs.map(t => t.id);
   const { ordered, hidden, reorder, toggleHidden } = useTabLayout(storageKey, tabIds);
   const [menuOpen, setMenuOpen] = useState(false);
+  const menuBtnRef = useRef<HTMLButtonElement>(null);
+
+  // Escape closes the show/hide menu and hands focus back to its button.
+  useEffect(() => {
+    if (!menuOpen) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key !== 'Escape') return;
+      e.stopPropagation();
+      setMenuOpen(false);
+      menuBtnRef.current?.focus();
+    };
+    document.addEventListener('keydown', onKey);
+    return () => document.removeEventListener('keydown', onKey);
+  }, [menuOpen]);
 
   const byId = useMemo(() => new Map(tabs.map(t => [t.id, t])), [tabs]);
   const visibleTabs = ordered.map(id => byId.get(id)).filter(Boolean) as TabDef[];
@@ -180,15 +202,27 @@ export function EngagementTabBar({
     <div className="border-b border-border-light mb-4">
       <div className="flex items-center">
         <div className="flex items-center gap-0.5 overflow-x-auto pb-px flex-1 min-w-0">
-        <Reorder.Group as="div" axis="x" values={ordered} onReorder={reorder} className="flex items-center gap-0.5">
-          {visibleTabs.map(tab => {
+        <Reorder.Group as="div" axis="x" values={ordered} onReorder={reorder} role="tablist" aria-orientation="horizontal" className="flex items-center gap-0.5">
+          {visibleTabs.map((tab, i) => {
             const meta = tabMetaFor(tab.id);
             const Icon = meta.icon;
             const active = activeTab === tab.id;
             return (
-              <Reorder.Item as="div" key={tab.id} value={tab.id} title="Drag to reorder" className="shrink-0 cursor-grab active:cursor-grabbing">
+              <Reorder.Item as="div" key={tab.id} value={tab.id} title="Drag to reorder" role="presentation" className="shrink-0 cursor-grab active:cursor-grabbing">
                 <button
+                  role="tab" aria-selected={active} tabIndex={active ? 0 : -1}
                   onClick={() => onSelect(tab.id)}
+                  onKeyDown={e => {
+                    // ← / → / Home / End move between tabs and select them (automatic activation)
+                    const n = visibleTabs.length;
+                    const to = e.key === 'ArrowRight' ? (i + 1) % n : e.key === 'ArrowLeft' ? (i - 1 + n) % n
+                      : e.key === 'Home' ? 0 : e.key === 'End' ? n - 1 : -1;
+                    if (to < 0) return;
+                    e.preventDefault();
+                    onSelect(visibleTabs[to]!.id);
+                    const list = e.currentTarget.closest('[role="tablist"]');
+                    (list?.querySelectorAll<HTMLElement>('[role="tab"]')[to])?.focus();
+                  }}
                   className={`group flex items-center gap-1.5 ${pad} font-semibold whitespace-nowrap border-b-2 transition-colors cursor-pointer select-none ${
                     active ? 'border-primary text-primary' : 'border-transparent text-ink-400 hover:text-text hover:border-canvas-border'
                   }`}
@@ -208,8 +242,9 @@ export function EngagementTabBar({
         {/* Show/hide menu — kept outside the horizontal scroller so its popover isn't clipped */}
         <div className="relative shrink-0 pl-2">
           <button
+            ref={menuBtnRef}
             onClick={() => setMenuOpen(o => !o)}
-            aria-label="Show or hide tabs"
+            aria-label="Show or hide tabs" aria-haspopup="dialog" aria-expanded={menuOpen}
             className={`inline-flex items-center gap-1 px-2 h-7 rounded-md border text-[0.6875rem] font-medium transition-colors cursor-pointer ${
               menuOpen ? 'bg-primary-xlight/50 border-primary/30 text-primary' : 'border-border-light bg-white text-text-muted hover:text-text hover:bg-surface-2'
             }`}

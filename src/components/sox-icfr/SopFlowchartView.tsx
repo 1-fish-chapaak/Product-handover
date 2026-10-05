@@ -4,18 +4,17 @@
  *
  * DRAWN AS A FISHBONE (29 Sep, user: "fishbone wala structure chahiye is
  * flowchart mein"). The spine runs left to right, from the document it was read
- * out of to the process itself; every risk is a rib off that spine, and its
- * controls hang along the rib:
+ * out of to the process itself; every risk is a rib off that spine, touching it
+ * directly, and its controls hang beyond the risk (5 Oct — swapped from controls
+ * nearest the spine):
  *
- *        Risk 1                    Risk 3
- *           ╲                         ╲
- *    Ctrl 1 ─╲                 Ctrl 4 ─╲
- *    Ctrl 2 ─ ╲                         ╲
- *  P2P-SOP ════╪═══════════════════════════╪═══▶  Procure to Pay
- *              ╱                         ╱
- *    Ctrl 3 ─ ╱                 Ctrl 5 ─╱
- *           ╱                         ╱
- *        Risk 2                    Risk 4
+ *        Ctrl 1                    Ctrl 4
+ *        Ctrl 2                       ╲
+ *        Risk 1 ─╲                 Risk 3 ─╲
+ *  P2P-SOP ══════╪═══════════════════════════╪═══▶  Procure to Pay
+ *        Risk 2 ─╱                 Risk 4 ─╱
+ *        Ctrl 3                       ╱
+ *                                  Ctrl 5
  *
  * Why this shape and not the tree it used to be: a process HAPPENS in an order,
  * and a fishbone has a direction where a tree has only a depth. Reading left to
@@ -140,8 +139,8 @@ const Rib = ({ side }: { side: 'top' | 'bottom' }) => (
 
 /** Where the spine starts: the document everything on it was read out of. */
 const SourceNode = ({ source }: { source: string }) => (
-  <div className="w-[13rem] shrink-0 rounded-xl border border-ink-300 bg-canvas-elevated px-3.5 py-2.5">
-    <p className="flex items-center gap-1.5 text-[0.78125rem] font-semibold text-ink-900 leading-snug">
+  <div className="w-52 shrink-0 rounded-xl border border-ink-300 bg-canvas-elevated px-3.5 py-2.5">
+    <p className="flex items-center gap-1.5 text-[0.8125rem] font-semibold text-ink-900 leading-snug">
       <FileText size={13} className="text-ink-400 shrink-0" aria-hidden />
       <span className="min-w-0 break-words">{source}</span>
     </p>
@@ -151,8 +150,8 @@ const SourceNode = ({ source }: { source: string }) => (
 /** Where it ends: the process the whole diagram is about. A fishbone points at
  *  its subject, and here the subject is the process, not a failure. */
 const ProcessNode = ({ process, entity }: { process: string; entity: string }) => (
-  <div className="w-[11rem] shrink-0 rounded-xl border border-ink-400 bg-ink-900 px-3.5 py-2.5">
-    <p className="text-[0.78125rem] font-semibold text-white leading-snug break-words">{process}</p>
+  <div className="w-44 shrink-0 rounded-xl border border-ink-400 bg-ink-900 px-3.5 py-2.5">
+    <p className="text-[0.8125rem] font-semibold text-white leading-snug break-words">{process}</p>
     {entity && <p className="mt-0.5 text-[0.6875rem] text-paper-200 break-words">{entity}</p>}
   </div>
 );
@@ -166,9 +165,11 @@ const Arrow = () => (
  * ONE BRANCH — a risk, what stands against it, and the rib carrying them to the
  * spine.
  *
- * Above the spine the risk is furthest out and its controls sit between it and
- * the spine; below, it is mirrored. So on both sides the reading runs outward
- * from the process to the risk, through the controls that answer it.
+ * The risk sits on the rib right against the spine, and its controls stack
+ * outward from it — above the risk on a top branch, below it on a bottom one
+ * (user ask, 5 Oct: risks connect to the fishbone directly, controls beyond).
+ * The caller passes the nodes nearest-the-spine LAST for a top branch and FIRST
+ * for a bottom one.
  */
 function Branch({ side, children }: { side: 'top' | 'bottom'; children: ReactNode[] }) {
   const n = children.length;
@@ -227,7 +228,7 @@ function Fishbone({ n, source, process, entity, branch }: {
 
       {/* Drawn across every branch column at once rather than per branch, so it
           is one bone and not a row of touching dashes. */}
-      <div style={{ gridColumn: `2 / ${n + 2}`, gridRow: 2 }} className="flex items-center min-w-[3rem]">
+      <div style={{ gridColumn: `2 / ${n + 2}`, gridRow: 2 }} className="flex items-center min-w-12">
         <span className="h-0.5 flex-1 bg-ink-300" aria-hidden />
         <Arrow />
       </div>
@@ -246,13 +247,13 @@ function RiskNode({ risk, width, onRename, editable }: {
 }) {
   return (
     <div className={`${width} rounded-xl border border-risk-300 bg-risk-50 px-3.5 py-2.5`}>
-      <p className="flex items-center gap-1.5 text-[0.65625rem] font-semibold uppercase tracking-wide text-risk-700">
+      <p className="flex items-center gap-1.5 text-[0.6875rem] font-semibold uppercase tracking-wide text-risk-700">
         <AlertTriangle size={11} aria-hidden /> Risk{risk.riskId ? ` · ${risk.riskId}` : ''}
       </p>
       <div className="mt-1">
         <EditableName value={risk.title} label={`Rename the risk ${risk.title}`} editable={editable}
           onSave={to => onRename(risk.key, to)}
-          className="text-[0.78125rem] font-medium leading-snug text-ink-900" />
+          className="text-[0.8125rem] font-medium leading-snug text-ink-900" />
       </div>
     </div>
   );
@@ -263,7 +264,7 @@ function ControlNode({ c, width, onRename, editable }: {
 }) {
   return (
     <div className={`${width} rounded-xl border border-brand-200 bg-brand-50 px-3.5 py-2`}>
-      <p className="flex flex-wrap items-center gap-x-1.5 gap-y-0.5 text-[0.65625rem] font-semibold text-brand-700">
+      <p className="flex flex-wrap items-center gap-x-1.5 gap-y-0.5 text-[0.6875rem] font-semibold text-brand-700">
         <ShieldCheck size={11} aria-hidden />
         <span className="font-mono">{c.id}</span>
         {c.isKey && (
@@ -275,11 +276,11 @@ function ControlNode({ c, width, onRename, editable }: {
       <div className="mt-1">
         <EditableName value={c.title} label={`Rename the control ${c.title}`} editable={editable}
           onSave={to => onRename(c.sourceId, to, c.title)}
-          className="text-[0.78125rem] leading-snug text-ink-900" />
+          className="text-[0.8125rem] leading-snug text-ink-900" />
       </div>
       {c.suggested
-        ? <p className="mt-1 text-[0.65625rem] text-ink-500">Not in the SOP — suggested by Ira</p>
-        : c.section && <p className="mt-1 text-[0.65625rem] font-mono text-ink-400">{c.section}</p>}
+        ? <p className="mt-1 text-[0.6875rem] text-ink-500">Not in the SOP — suggested by Ira</p>
+        : c.section && <p className="mt-1 text-[0.6875rem] font-mono text-ink-400">{c.section}</p>}
     </div>
   );
 }
@@ -325,7 +326,7 @@ export function SopFlowchartStructure({
     [risks],
   );
 
-  const box = 'w-[7.5rem] rounded-lg px-2.5 py-1.5 text-center';
+  const box = 'w-30 rounded-lg px-2.5 py-1.5 text-center';
   const boxLabel = 'flex items-center justify-center gap-1 text-[0.75rem] font-semibold';
 
   if (!risks.length) {
@@ -358,7 +359,7 @@ export function SopFlowchartStructure({
                 </div>
               ))),
           ];
-          return <Branch side={side}>{side === 'top' ? nodes : [...nodes].reverse()}</Branch>;
+          return <Branch side={side}>{side === 'top' ? [...nodes].reverse() : nodes}</Branch>;
         }} />
     </section>
   );
@@ -376,7 +377,7 @@ export default function SopFlowchartView({
   );
   /** One node per risk, in the order the work happens. */
   const risks = useMemo(() => risksAcrossStages(spine), [spine]);
-  const width = compact ? 'w-[12rem]' : 'w-[14rem]';
+  const width = compact ? 'w-48' : 'w-56';
 
   // Drawn with CSS `zoom` rather than a transform, because zoom reflows: the
   // pane's scrollbars shrink with the chart instead of guarding empty space
@@ -404,7 +405,7 @@ export default function SopFlowchartView({
 
   if (!risks.length) {
     return (
-      <div className="rounded-xl border border-dashed border-canvas-border py-14 text-center text-[0.78125rem] text-ink-500">
+      <div className="rounded-xl border border-dashed border-canvas-border py-14 text-center text-[0.8125rem] text-ink-500">
         Nothing is going in, so there is no process to draw. Tick a row back in on the Matrix.
       </div>
     );
@@ -439,7 +440,7 @@ export default function SopFlowchartView({
           </button>
           <button type="button" onClick={() => setZoom(1)} disabled={zoom === 1}
             title="Back to full size" aria-label={`Zoom ${Math.round(zoom * 100)} per cent — back to full size`}
-            className="h-8 w-[3.25rem] text-[0.71875rem] font-semibold text-ink-600 tabular-nums border-x border-canvas-border enabled:hover:text-ink-900 disabled:cursor-default cursor-pointer">
+            className="h-8 w-13 text-[0.75rem] font-semibold text-ink-600 tabular-nums border-x border-canvas-border enabled:hover:text-ink-900 disabled:cursor-default cursor-pointer">
             {Math.round(zoom * 100)}%
           </button>
           <button type="button" onClick={() => setZoom(z => clampZoom(z + ZOOM_STEP))} disabled={zoom >= ZOOM_MAX}
@@ -476,7 +477,7 @@ export default function SopFlowchartView({
                     <ControlNode key={c.id} c={c} width={width} onRename={onRenameControl} editable={editable} />
                   ))),
               ];
-              return <Branch side={side}>{side === 'top' ? nodes : [...nodes].reverse()}</Branch>;
+              return <Branch side={side}>{side === 'top' ? [...nodes].reverse() : nodes}</Branch>;
             }} />
         </div>
       </div>
@@ -486,7 +487,7 @@ export default function SopFlowchartView({
           walkthrough, and what the auditor changes afterwards is itself the
           evidence — the gap between the written process and the real one. */}
       {!compact && (
-        <p className="mt-6 pt-3 border-t border-canvas-border text-[0.71875rem] leading-snug text-ink-500 max-w-[46rem]">
+        <p className="mt-6 pt-3 border-t border-canvas-border text-[0.75rem] leading-snug text-ink-500 max-w-184">
           Read from {source}, so it shows the process as written. It does not satisfy the flowchart document
           requirement and does not count towards control completeness until the auditor confirms or corrects it
           against the walkthrough.
@@ -494,7 +495,7 @@ export default function SopFlowchartView({
       )}
 
       {spine.omitted > 0 && (
-        <p className="mt-6 pt-3 border-t border-canvas-border text-[0.71875rem] text-ink-500">
+        <p className="mt-6 pt-3 border-t border-canvas-border text-[0.75rem] text-ink-500">
           {spine.omitted === 1 ? '1 draft row is' : `${spine.omitted} draft rows are`} left out of the import,
           so {spine.omitted === 1 ? 'it is' : 'they are'} not drawn here. The Matrix says which.
         </p>

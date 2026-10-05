@@ -27,12 +27,18 @@ import { useIcfr } from './store';
 import { isEngagementLocked } from './helpers';
 import CreateRacmFlow from './CreateRacmFlow';
 import { clashSummary, controlIdClashes, racmStatus, useRacmLibrary, type LibraryRacm } from './racmLibrary';
+import DialogFocus from '../shared/DialogFocus';
 
 /** Already copied into this engagement — shown, but can't be ticked again. */
 const usedHere = (r: LibraryRacm, engId: string) => r.usedBy.some(u => u.id === engId);
 const plural = (n: number, one: string) => `${n} ${one}${n === 1 ? '' : 's'}`;
 
-export default function AddRacmModal({ onClose }: { onClose: () => void }) {
+export default function AddRacmModal({ onClose, onAdded }: {
+  onClose: () => void;
+  /** Told what was copied in, once the dialog is about to close — the caller
+   *  says it in one line where the reader lands (no toast). */
+  onAdded?: (text: string) => void;
+}) {
   const { eng, role, addLibraryRacms } = useIcfr();
   const racms = useRacmLibrary();
   // A refused add is said in the footer, beside the button that was pressed.
@@ -100,16 +106,17 @@ export default function AddRacmModal({ onClose }: { onClose: () => void }) {
       const why = role !== 'auditor' ? 'Only the auditor can add RACMs to an engagement.'
         : isEngagementLocked(eng) ? 'This engagement is signed off, so nothing more can be added to it.'
         : clashes.length ? `${clashes[0]}. Untick one of them first.`
-        : 'Those RACMs are no longer on the RACM tab.';
+        : 'Those RACMs are no longer in the RACM Library.';
       addNote.show('error', `RACMs weren't added. ${why}`);
       return;
     }
     logEvent({
       action: 'Create',
-      description: `Added ${picked.map(r => `"${r.name}"`).join(', ')} from the RACM tab to ${eng.name} — ${plural(added, 'control')}`,
+      description: `Added ${picked.map(r => `"${r.name}"`).join(', ')} from the RACM Library to ${eng.name} — ${plural(added, 'control')}`,
       module: 'SOX ICFR',
       entity: 'RACM',
     });
+    onAdded?.(`Added ${plural(picked.length, 'RACM')} · ${plural(added, 'control')}.`);
     close();
   };
 
@@ -133,13 +140,13 @@ export default function AddRacmModal({ onClose }: { onClose: () => void }) {
 
   return createPortal(
     <div className="modal-backdrop" onClick={close}>
-      <div className="modal" onClick={e => e.stopPropagation()} role="dialog" aria-modal="true" aria-labelledby="add-racm-title" aria-describedby="add-racm-desc">
+      <div className="modal" onClick={e => e.stopPropagation()} role="dialog" aria-modal="true" aria-labelledby="add-racm-title" aria-describedby="add-racm-desc"><DialogFocus />
         <div className="px-5 pt-4 pb-3 border-b border-canvas-border">
           <div className="flex items-start justify-between gap-3">
             <div className="min-w-0">
               <h2 id="add-racm-title" className="text-[0.9375rem] font-semibold text-ink-900">Add RACM</h2>
-              <p id="add-racm-desc" className="text-[0.78125rem] text-ink-500 mt-0.5">
-                Pick RACMs from the RACM tab on the Engagements page. Their controls are copied into this engagement's Control library.
+              <p id="add-racm-desc" className="text-[0.8125rem] text-ink-500 mt-0.5">
+                Pick RACMs from the RACM Library. Their controls are copied into this engagement's Control library.
               </p>
             </div>
             <button onClick={close} className="h-7 w-7 inline-flex items-center justify-center rounded-md text-ink-400 hover:text-ink-700 cursor-pointer shrink-0" aria-label="Close"><X size={15} /></button>
@@ -147,23 +154,23 @@ export default function AddRacmModal({ onClose }: { onClose: () => void }) {
         </div>
 
         <div className="px-5 pt-4 flex items-center gap-2 flex-wrap">
-          <div className="relative flex-1 min-w-[10rem]">
+          <div className="relative flex-1 min-w-40">
             <Search size={14} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-ink-400" />
             <input value={q} onChange={e => setQ(e.target.value)} autoFocus placeholder="Search RACMs or companies…" aria-label="Search RACMs"
-              className="w-full h-9 pl-8 pr-3 rounded-lg border border-canvas-border bg-canvas-elevated text-[0.78125rem] text-ink-800 placeholder:text-ink-400 focus:outline-none focus:ring-2 focus:ring-brand-200" />
+              className="w-full h-9 pl-8 pr-3 rounded-lg border border-canvas-border bg-canvas-elevated text-[0.8125rem] text-ink-800 placeholder:text-ink-400 focus:outline-none focus:ring-2 focus:ring-brand-200" />
           </div>
           <select value={process} onChange={e => setProcess(e.target.value)} aria-label="Filter by process"
-            className="h-9 max-w-full px-2.5 rounded-lg border border-canvas-border bg-canvas-elevated text-[0.78125rem] text-ink-800 cursor-pointer focus:outline-none focus:ring-2 focus:ring-brand-200">
+            className="h-9 max-w-full px-2.5 rounded-lg border border-canvas-border bg-canvas-elevated text-[0.8125rem] text-ink-800 cursor-pointer focus:outline-none focus:ring-2 focus:ring-brand-200">
             <option value="All">All processes</option>
             {processes.map(p => <option key={p} value={p}>{p}</option>)}
           </select>
-          <button onClick={() => setUploading(true)} title="Import a matrix, or extract one from an SOP — it's saved to the RACM tab, then ticked here"
-            className="h-9 px-3 inline-flex items-center gap-1.5 rounded-lg border border-canvas-border text-[0.78125rem] font-semibold text-ink-600 hover:text-ink-900 hover:border-ink-300 transition-colors cursor-pointer">
+          <button onClick={() => setUploading(true)} title="Import a matrix, or extract one from an SOP — it's saved to the RACM Library, then ticked here"
+            className="h-9 px-3 inline-flex items-center gap-1.5 rounded-lg border border-canvas-border text-[0.8125rem] font-semibold text-ink-600 hover:text-ink-900 hover:border-ink-300 transition-colors cursor-pointer">
             <UploadCloud size={14} /> Upload RACM
           </button>
         </div>
 
-        <ul className="px-5 py-3 max-h-[min(50vh,26rem)] overflow-y-auto space-y-1.5" aria-label="RACMs on the RACM tab">
+        <ul className="px-5 py-3 max-h-[min(50vh,26rem)] overflow-y-auto space-y-1.5" aria-label="RACMs in the RACM Library">
           {rows.map(r => {
             const here = usedHere(r, eng.id);
             const on = !here && ticked.includes(r.id);
@@ -177,7 +184,7 @@ export default function AddRacmModal({ onClose }: { onClose: () => void }) {
                     className="mt-0.5 shrink-0 accent-brand-600 cursor-pointer disabled:cursor-not-allowed" />
                   <span className="min-w-0 flex-1">
                     <span className={cn('block text-[0.8125rem] font-semibold truncate', here ? 'text-ink-500' : 'text-ink-900')} title={r.name}>{r.name}</span>
-                    <span className="mt-0.5 flex items-center gap-x-1.5 gap-y-0.5 flex-wrap text-[0.71875rem] text-ink-500">
+                    <span className="mt-0.5 flex items-center gap-x-1.5 gap-y-0.5 flex-wrap text-[0.75rem] text-ink-500">
                       <span>{r.process}</span>
                       <span aria-hidden className="text-ink-300">·</span>
                       <span>{r.entity || '—'}</span>
@@ -189,7 +196,7 @@ export default function AddRacmModal({ onClose }: { onClose: () => void }) {
                       {racmStatus(r).draftCount > 0 && (
                         <>
                           <span aria-hidden className="text-ink-300">·</span>
-                          <span title="Draft rows stay on the RACM tab until they are published">{racmStatus(r).draftCount} not published yet</span>
+                          <span title="Draft rows stay in the RACM Library until they are published">{racmStatus(r).draftCount} not published yet</span>
                         </>
                       )}
                       {r.usedBy.length > 0 && (
@@ -199,15 +206,15 @@ export default function AddRacmModal({ onClose }: { onClose: () => void }) {
                         </>
                       )}
                     </span>
-                    {here && <span className="block mt-1 text-[0.71875rem] font-medium text-ink-400">Already in this engagement</span>}
+                    {here && <span className="block mt-1 text-[0.75rem] font-medium text-ink-400">Already in this engagement</span>}
                   </span>
                 </label>
               </li>
             );
           })}
           {rows.length === 0 && (
-            <li className="py-10 text-center text-[0.78125rem] text-ink-400">
-              {racms.length ? 'No RACMs match. Clear the search or pick another process.' : 'No RACMs on the RACM tab yet. Upload one to start.'}
+            <li className="py-10 text-center text-[0.8125rem] text-ink-400">
+              {racms.length ? 'No RACMs match. Clear the search or pick another process.' : 'No RACMs in the RACM Library yet. Upload one to start.'}
             </li>
           )}
         </ul>
@@ -225,9 +232,9 @@ export default function AddRacmModal({ onClose }: { onClose: () => void }) {
 
         <div className="px-5 py-3.5 border-t border-canvas-border bg-paper-50/40 flex items-center justify-end gap-2 flex-wrap">
           <InlineNote note={addNote.note} className="mr-auto min-w-0 flex-1" />
-          <button onClick={close} className="h-9 px-3.5 rounded-lg border border-canvas-border text-[0.78125rem] font-semibold text-ink-600 hover:text-ink-900 cursor-pointer">Cancel</button>
+          <button onClick={close} className="h-9 px-3.5 rounded-lg border border-canvas-border text-[0.8125rem] font-semibold text-ink-600 hover:text-ink-900 cursor-pointer">Cancel</button>
           <button onClick={add} disabled={!ready}
-            className="h-9 px-3.5 inline-flex items-center gap-1.5 rounded-lg bg-brand-600 text-white text-[0.78125rem] font-semibold enabled:hover:bg-brand-700 disabled:opacity-40 disabled:cursor-not-allowed transition-colors cursor-pointer">
+            className="h-9 px-3.5 inline-flex items-center gap-1.5 rounded-lg bg-brand-600 text-white text-[0.8125rem] font-semibold enabled:hover:bg-brand-700 disabled:opacity-40 disabled:cursor-not-allowed transition-colors cursor-pointer">
             <Plus size={15} /> {addLabel}
           </button>
         </div>

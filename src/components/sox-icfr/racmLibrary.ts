@@ -310,11 +310,20 @@ function applyEditorWrite(key: string, raw: string | null): void {
     return;
   }
   if (!raw || !key.startsWith('sox-racm-rows:')) return;
-  const racm = findLibraryRacm(key.slice('sox-racm-rows:'.length));
-  if (!racm) return;
   let rows;
   try { rows = JSON.parse(raw); } catch { return; }
   if (!Array.isArray(rows)) return;
+  saveEditorRows(key.slice('sox-racm-rows:'.length), rows);
+}
+
+/** The spreadsheet editor's rows, written straight into the library. The
+ *  editor opened from the RACM Library runs in the SAME tab (5 Oct) and calls
+ *  this as its rows change; the storage listener below still routes an
+ *  editor in another tab through here too. Nothing changes when the rows
+ *  match what the library already holds, so a first render writes nothing. */
+export function saveEditorRows(racmId: string, rows: Parameters<typeof applyEditorRows>[2]): void {
+  const racm = findLibraryRacm(racmId);
+  if (!racm) return;
   const { controls, changed, added } = applyEditorRows(racm.controls, racm.process, rows, new Set(racm.published));
   if (!changed && !added) return;
   const what = [
@@ -347,6 +356,12 @@ if (typeof window !== 'undefined') {
  *  not let anyone change. Both go into storage under the RACM's own keys; the
  *  editor reads them when its tab opens, and writes the rows back to the first
  *  of them as they change. */
+/** The same handoff, in memory — for the editor opened in this tab, which
+ *  reads the library directly instead of through storage. */
+export function editorHandoff(r: LibraryRacm): { rows: ReturnType<typeof racmEditorRows>; lockedIds: string[] } {
+  return { rows: racmEditorRows(r.controls, r.process), lockedIds: lockedEditorIds(r.controls, r.process, r.published) };
+}
+
 export function writeEditorHandoff(r: LibraryRacm): void {
   try {
     window.localStorage.setItem(RACM_ROWS_KEY(r.id), JSON.stringify(racmEditorRows(r.controls, r.process)));
@@ -458,7 +473,7 @@ export function knownCompanies(): { group: string; companies: string[] }[] {
   });
   const named = new Set(Array.from(groups.values()).flatMap(s => Array.from(s)));
   racms.forEach(r => [r.entity, ...r.controls.map(c => c.entity)].forEach(c => {
-    if (c && !named.has(bare(c))) add('Added on the RACM tab', c);
+    if (c && !named.has(bare(c))) add('Added in the RACM Library', c);
   }));
   return Array.from(groups, ([group, set]) => ({ group, companies: Array.from(set).sort((a, b) => a.localeCompare(b)) }));
 }

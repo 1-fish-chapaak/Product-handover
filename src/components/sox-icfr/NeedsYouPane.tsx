@@ -18,30 +18,39 @@
  * sox-icfr export at module load — only inside functions — and it never
  * imports ControlDossier (which renders this).
  */
-import { useMemo, useState, type ReactNode } from 'react';
+import { useMemo, type ReactNode } from 'react';
 import { Sparkles } from 'lucide-react';
 import { cn } from '../../lib/cn';
 import { useIcfr } from './store';
+import { InlineNote, useInlineNote } from './InlineNote';
+import { useAuditLog } from '../../context/AdminDataContext';
 import { iraStateOfPoint, iraStateOfStep } from './IraState';
 import {
-  CONFIDENT_AT, confidenceOf, controlCode, designApproved, designOutstandingRequired, discussionsFor, iraCannotTest,
-  isControlLockedIn, operatingApplies, overridePatterns, pointResult, requiredFilesOf, rollPendingParts, ROLL_PART_ANCHOR, ROLL_PART_LABEL, stepResult, unconfirmedIra,
+  CONFIDENT_AT, confidenceOf, controlCode, couldntAskFor, dayMonth, designApproved, designOutstandingRequired, discussionsFor, iraCannotTest,
+  isControlLockedIn, isEngagementLocked, isOwnerTask, operatingApplies, overridePatterns, samePerson, trackResult, pointResult, requiredFilesOf, rollPendingParts, ROLL_PART_ANCHOR, ROLL_PART_LABEL, stepResult, unconfirmedIra,
   type OverridePattern,
 } from './helpers';
 import { ownersOf } from './auditScope';
-import { useOpenRailDetail } from './RailDetail';
-import type { Control, DesignPoint, IcfrEngagement, OperatingStep, Role } from './types';
+import { pointEvidence, useOpenRailDetail, verdictCite } from './RailDetail';
+import type { Control, DesignPoint, HandoffTask, IcfrEngagement, OperatingStep, Role } from './types';
 
 export type NeedsItem =
   | { kind: 'roll'; id: string; from: string; labels: string[]; anchor: string }
   | { kind: 'ipe'; id: string; report: string; done: number; total: number; unreliable: boolean; anchor: string }
   | { kind: 'lock'; id: string; anchor: string }
-  | { kind: 'couldnt'; id: string; text: string; anchor: string; reason: string; what: string; request: string; owner: string }
+  | { kind: 'docs'; id: string; names: string[]; anchor: string }
+  | { kind: 'couldnt'; id: string; text: string; anchor: string; reason: string; what: string; request: string; owner: string; checkId: string; track: 'design' | 'operating'; title: string }
   | { kind: 'unsure'; id: string; track: 'design' | 'operating'; text: string; confidence: number; anchor: string; point?: DesignPoint; step?: OperatingStep; confKey: string }
   | { kind: 'stale'; id: string; step: OperatingStep; anchor: string }
   | { kind: 'conclude'; id: string; track: 'design' | 'operating'; anchor: string }
   | { kind: 'reply'; id: string; by: string; text: string }
-  | { kind: 'learned'; id: string; pattern: OverridePattern };
+  | { kind: 'learned'; id: string; pattern: OverridePattern }
+  // The reviewer's own cards (5 Oct) — the page's two decisions, with its guards.
+  | { kind: 'approve'; id: string; result: string; preparedBy: string; anchor: string }
+  | { kind: 'countersign'; id: string; preparedBy: string; anchor: string }
+  | { kind: 'note'; id: string; by: string; answer: string; text: string; anchor: string }
+  // The risk owner's — what audit asked of them on this control.
+  | { kind: 'task'; id: string; task: HandoffTask; defId?: string; anchors: string[] };
 
 const stepLabel = (s: OperatingStep) => `${s.code} ${s.description}`.trim();
 
@@ -50,11 +59,13 @@ const stepLabel = (s: OperatingStep) => `${s.code} ${s.description}`.trim();
  * the rail's tab can print the same count the pane shows.
  *
  * The testing cards (1–4) follow the page's own canTest: auditor, and the
- * control not concluded. Everyone else — the risk owner and the reviewer —
- * gets only the discussions waiting on them, which is the one thing on this
- * control they are asked to do from here.
+ * control not concluded. The reviewer gets the design approval and the
+ * countersign when the page would let them do either, and the review-note
+ * answers waiting on them; the risk owner gets the requests audit sent them
+ * on this control (5 Oct). Everyone gets the discussions waiting on them.
+ * `me` is the viewer's own name, for the four-eyes and ownership checks.
  */
-export function needsYouItems(control: Control, eng: IcfrEngagement, role: Role, auditId?: string | null): NeedsItem[] {
+export function needsYouItems(control: Control, eng: IcfrEngagement, role: Role, auditId?: string | null, me?: string): NeedsItem[] {
   const out: NeedsItem[] = [];
   const canTest = role === 'auditor' && !isControlLockedIn(eng, control);
   const opApplies = operatingApplies(eng, control);
@@ -102,12 +113,25 @@ export function needsYouItems(control: Control, eng: IcfrEngagement, role: Role,
       const doc = block
         ? (outstanding.find(d => d.kind === block.needs) ?? control.design.documents.find(d => d.kind === block.needs))
         : outstanding[0];
-      const what = doc ? (doc.kind === 'Custom' ? doc.name : doc.kind.toLowerCase())
-        : block ? block.needs.toLowerCase() : 'supporting evidence';
+      // Named as the document is named, for the task title; lower-cased in the ask.
+      const named = doc ? (doc.kind === 'Custom' ? doc.name : doc.kind) : block ? block.needs : 'supporting evidence';
+      const what = doc?.kind === 'Custom' ? named : named.toLowerCase();
       out.push({
         kind: 'couldnt', id: `couldnt:${p.id}`, text: p.text, anchor: `dp-${p.id}`, owner, what,
+        checkId: p.id, track: 'design', title: `Share the ${named} — ${controlCode(control)}`,
         reason: block?.reason ?? p.validation?.blocked ?? 'Nothing on file answers this check.',
         request: `Please send the ${what} for ${controlCode(control)} — needed to test “${p.text}”.`,
+      });
+    }
+
+    // ①a A required design element not on file (click-through, 5 Oct). Ira asks
+    // for it in the chat and the page refuses to run or conclude without it, so
+    // "Nothing needs you" beside that was the rail contradicting both. Skipped
+    // when an "Ira couldn't test" card above already names what is missing.
+    if (!designDone && outstanding.length > 0 && !out.some(it => it.kind === 'couldnt' && it.track === 'design')) {
+      out.push({
+        kind: 'docs', id: 'docs', anchor: `doc-${outstanding[0].id}`,
+        names: outstanding.map(d => (d.kind === 'Custom' ? d.name : d.kind)),
       });
     }
 
@@ -120,6 +144,7 @@ export function needsYouItems(control: Control, eng: IcfrEngagement, role: Role,
         const what = missing.length ? missing.join(', ') : 'the files this attribute reads';
         out.push({
           kind: 'couldnt', id: `couldnt:${st.id}`, text: `${st.code} · ${st.description}`, anchor: `step-${st.id}`, owner, what,
+          checkId: st.id, track: 'operating', title: `Upload ${what} — ${controlCode(control)} ${st.code}`,
           reason: st.validation?.blocked ?? 'No file is behind this attribute.',
           request: `Please upload ${what} for ${controlCode(control)} — needed to test ${st.code}.`,
         });
@@ -164,6 +189,51 @@ export function needsYouItems(control: Control, eng: IcfrEngagement, role: Role,
 
   // ⑥ "Ira learned" (agentic UX #9) — the reviewer rules on a pattern in the
   // auditors' overrides, on any control the pattern stands on.
+  if (role === 'reviewer' && me) {
+    const sealed = isEngagementLocked(eng);
+    const so = control.wpSignoff;
+    // Approve the design — the guards DesignApprovalBlock and approveDesign use:
+    // concluded, not yet approved, paper not countersigned, and never your own.
+    const result = trackResult(control.design);
+    const approval = control.design.approval;
+    const preparedBy = approval?.preparedBy ?? (control.design.testedBy ? { by: control.design.testedBy, at: control.design.testedAt ?? '' } : undefined);
+    if (!sealed && result !== 'Not tested' && !approval?.approvedBy && !so?.reviewer && !samePerson(preparedBy, me)) {
+      out.push({ kind: 'approve', id: 'approve', result, preparedBy: preparedBy?.by ?? eng.preparer, anchor: 'design-approval' });
+    }
+    // Countersign — SignOffSection's canCounter: signed by the preparer, every
+    // review note closed, not your own paper, the design approved.
+    const notesOpen = eng.reviewNotes.some(n => n.controlId === control.id && n.status !== 'Closed');
+    if (!sealed && so?.preparer && !so.reviewer && !notesOpen && so.preparer.by !== me && designApproved(control)) {
+      out.push({ kind: 'countersign', id: 'countersign', preparedBy: so.preparer.by, anchor: 'wp-signoff' });
+    }
+    // Review notes the auditor has answered — closing or reopening is yours.
+    for (const n of eng.reviewNotes) {
+      if (n.controlId !== control.id || n.status !== 'Resolved' || !n.resolution) continue;
+      out.push({ kind: 'note', id: `note:${n.id}`, by: n.resolution.by, answer: n.resolution.text, text: n.text, anchor: `rn-${n.id}` });
+    }
+  }
+
+  // The risk owner's requests on this control — the same rows their task list
+  // shows, by the same rule: a remediation only while the exception is at one
+  // of the two steps that are theirs (Planning, Remediation).
+  if (role === 'risk-owner' && me) {
+    const tasks = eng.tasks
+      .filter(t => t.controlId === control.id && t.status === 'open' && isOwnerTask(eng, t, me))
+      .sort((a, b) => Number(b.overdue) - Number(a.overdue));
+    for (const t of tasks) {
+      const def = t.type === 'remediation'
+        ? eng.deficiencies.find(d => d.controlId === t.controlId && (d.status === 'Planning' || d.status === 'Remediation'))
+        : undefined;
+      if (t.type === 'remediation' && !def) continue;
+      const anchors = [
+        ...(def ? ['control-exception'] : []),
+        ...(t.checkId ? [`dp-${t.checkId}`] : []),
+        t.focus === 'population' ? 'vstep-population' : 'vstep-design',
+      ];
+      out.push({ kind: 'task', id: `task:${t.id}`, task: t, defId: def?.id, anchors });
+    }
+  }
+
   if (role === 'reviewer') {
     for (const p of overridePatterns(eng, auditId)) {
       if (p.controls.includes(control.id)) out.push({ kind: 'learned', id: `learned:${p.key}`, pattern: p });
@@ -181,6 +251,10 @@ export function needsYouItems(control: Control, eng: IcfrEngagement, role: Role,
 }
 
 const showMe = (id: string) => document.getElementById(id)?.scrollIntoView({ block: 'center', behavior: 'smooth' });
+/** The first of several places that is on the page — an owner's page shows
+ *  fewer steps than the auditor's, so a task falls back to its step. */
+const showFirst = (ids: string[]) => { const el = ids.map(i => document.getElementById(i)).find(Boolean); el?.scrollIntoView({ block: 'center', behavior: 'smooth' }); };
+const TASK_EYEBROW: Record<HandoffTask['type'], string> = { pbc: 'Asked of you', query: 'Question for you', remediation: 'Your fix' };
 
 const BTN = 'inline-flex items-center h-7 px-2.5 rounded-md text-[0.75rem] font-semibold transition-colors duration-150 cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/30';
 const PRIMARY = cn(BTN, 'bg-primary text-white hover:bg-brand-700');
@@ -200,16 +274,18 @@ function Card({ eyebrow, ira = false, children, actions }: { eyebrow: string; ir
 }
 
 export default function NeedsYouPane({ control, onGoComments }: { control: Control; onGoComments: () => void }) {
-  const { eng, role, openAuditId, remindOwnerForFiles, decideLearned } = useIcfr();
+  const { eng, role, me, openAuditId, remindOwnerForFiles, decideLearned, approveDesign, signOffControlWp, submitTask, openDeficiency } = useIcfr();
   const openDetail = useOpenRailDetail();
-  const items = useMemo(() => needsYouItems(control, eng, role, openAuditId), [control, eng, role, openAuditId]);
-  // Which drafted requests went out from here. Local on purpose: the request
-  // itself lands on the owner's task list, and this only stops the same card
-  // offering to send it twice in one sitting.
-  const [sent, setSent] = useState<Set<string>>(() => new Set());
+  const logEvent = useAuditLog();
+  // A sent request takes its card with it, so what happened is said here.
+  const sent = useInlineNote();
+  const items = useMemo(() => needsYouItems(control, eng, role, openAuditId, me), [control, eng, role, openAuditId, me]);
+  // Whether a drafted request already went out is read off the owner's task
+  // list (couldntAskFor), so "Sent to …" survives a reload or a new visit.
 
   return (
     <div className="flex-1 min-h-0 overflow-y-auto p-3 space-y-2.5">
+      <InlineNote note={sent.note} className="px-1" />
       {items.length === 0 && (
         <p className="px-1 py-2 text-[0.75rem] text-ink-500">Nothing needs you on this control.</p>
       )}
@@ -244,9 +320,19 @@ export default function NeedsYouPane({ control, onGoComments }: { control: Contr
                 <p className="text-[0.8125rem] leading-snug text-ink-800">The report is reliable. Lock the population so the sample can be drawn.</p>
               </Card>
             );
+          case 'docs':
+            return (
+              <Card key={it.id} eyebrow="Test of design"
+                actions={<button type="button" className={QUIET} onClick={() => showMe(it.anchor)}>Show me</button>}>
+                <p className="text-[0.8125rem] leading-snug text-ink-800">
+                  {it.names.length === 1 ? it.names[0] : `${it.names.slice(0, -1).join(', ')} and ${it.names[it.names.length - 1]}`} {it.names.length === 1 ? 'is' : 'are'} not on file yet.
+                </p>
+                <p className="mt-1 text-[0.75rem] leading-snug text-ink-500">Required before the design checks can run. Attach it, or mark it not applicable with a reason.</p>
+              </Card>
+            );
           case 'couldnt': {
             const first = it.owner.split(/\s+/)[0] || it.owner;
-            const done = sent.has(it.id);
+            const asked = couldntAskFor(eng, control.id, it.checkId);
             return (
               <Card key={it.id} ira eyebrow="Ira couldn’t test">
                 <p className="text-[0.8125rem] leading-snug text-ink-800">{it.text}</p>
@@ -255,11 +341,11 @@ export default function NeedsYouPane({ control, onGoComments }: { control: Contr
                   {it.request}
                 </blockquote>
                 <div className="mt-2.5 flex flex-wrap items-center gap-1.5">
-                  {done
-                    ? <span className="text-[0.75rem] font-semibold text-ink-500">Sent to {first}</span>
+                  {asked
+                    ? <span className="text-[0.75rem] font-semibold text-ink-500">Sent to {first}{asked.dueAt ? ` · due ${dayMonth(asked.dueAt)}` : ''}</span>
                     : (
                       <button type="button" className={PRIMARY}
-                        onClick={() => { remindOwnerForFiles(control.id, it.request); setSent(s => new Set(s).add(it.id)); }}>
+                        onClick={() => remindOwnerForFiles(control.id, it.request, { title: it.title, checkId: it.checkId, track: it.track })}>
                         Send to {first}
                       </button>
                     )}
@@ -275,7 +361,9 @@ export default function NeedsYouPane({ control, onGoComments }: { control: Contr
                 actions={<>
                   {validation && (
                     <button type="button" className={PRIMARY}
-                      onClick={() => openDetail({ kind: 'working', title: it.text, validation, control, step: it.step, confKey: it.confKey })}>
+                      onClick={() => openDetail({ kind: 'working', title: it.text, validation, control, step: it.step, confKey: it.confKey,
+                        // a card about one design check opens on its passage, in the file its row opens
+                        ...(it.point ? { evidence: pointEvidence(control, it.point), focusCite: verdictCite(it.point.validation) } : {}) })}>
                       See the working
                     </button>
                   )}
@@ -324,6 +412,57 @@ export default function NeedsYouPane({ control, onGoComments }: { control: Contr
                 <p className="mt-1.5 text-[0.75rem] leading-snug text-ink-500">
                   Approve and Ira answers {p.to} here from its next run — the auditor still confirms it.
                 </p>
+              </Card>
+            );
+          }
+          case 'approve':
+            return (
+              <Card key={it.id} eyebrow="Design approval"
+                actions={<>
+                  <button type="button" className={PRIMARY}
+                    onClick={() => { approveDesign(control.id); logEvent({ action: 'Update', description: `Approved TOD for ${control.id}`, module: 'SOX ICFR', entity: 'Control' }); }}>
+                    Approve
+                  </button>
+                  <button type="button" className={QUIET} onClick={() => showMe(it.anchor)}>Show me</button>
+                </>}>
+                <p className="text-[0.8125rem] leading-snug text-ink-800">{it.preparedBy} concluded TOD {it.result.toLowerCase()}.</p>
+                <p className="mt-1 text-[0.75rem] leading-snug text-ink-500">Approve it, or return it from the page with a note.</p>
+              </Card>
+            );
+          case 'countersign':
+            return (
+              <Card key={it.id} eyebrow="Final"
+                actions={<>
+                  <button type="button" className={PRIMARY}
+                    onClick={() => { signOffControlWp(control.id, 'reviewer'); logEvent({ action: 'Update', description: `Countersigned the working paper for ${control.id}`, module: 'SOX ICFR', entity: 'Control' }); }}>
+                    Countersign
+                  </button>
+                  <button type="button" className={QUIET} onClick={() => showMe(it.anchor)}>Show me</button>
+                </>}>
+                <p className="text-[0.8125rem] leading-snug text-ink-800">{it.preparedBy} signed the working paper. It is ready for your countersign.</p>
+              </Card>
+            );
+          case 'note':
+            return (
+              <Card key={it.id} eyebrow={`${it.by} answered your review note`}
+                actions={<button type="button" className={PRIMARY} onClick={() => showMe(it.anchor)}>Show me</button>}>
+                <p className="text-[0.8125rem] leading-snug text-ink-800 line-clamp-2">{it.answer}</p>
+                <p className="mt-1 text-[0.75rem] leading-snug text-ink-500 line-clamp-1">{it.text}</p>
+              </Card>
+            );
+          case 'task': {
+            const t = it.task;
+            const due = t.dueLabel && t.dueLabel !== 'Open' ? t.dueLabel.charAt(0).toLowerCase() + t.dueLabel.slice(1) : '';
+            const act = t.type === 'remediation'
+              ? <button type="button" className={PRIMARY} onClick={() => it.defId && openDeficiency(it.defId)}>Open</button>
+              : <button type="button" className={PRIMARY} onClick={() => { submitTask(t.id); sent.show('info', `“${t.title}” sent to the audit team.`); }}>{t.type === 'pbc' ? 'Upload' : 'Respond'}</button>;
+            return (
+              <Card key={it.id} eyebrow={TASK_EYEBROW[t.type]}
+                actions={<>{act}<button type="button" className={QUIET} onClick={() => showFirst(it.anchors)}>Show me</button></>}>
+                <p className="text-[0.8125rem] leading-snug text-ink-800">
+                  {t.title}{due && <span className={t.overdue ? 'text-risk-700' : 'text-ink-500'}> · {due}</span>}
+                </p>
+                {t.detail && <p className="mt-1 text-[0.75rem] leading-snug text-ink-500 line-clamp-2">{t.detail}</p>}
               </Card>
             );
           }

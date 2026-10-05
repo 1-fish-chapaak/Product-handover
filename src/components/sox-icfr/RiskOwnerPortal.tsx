@@ -1,5 +1,5 @@
 import { Upload, CheckCircle2, MessageSquare, Circle, ChevronRight, FileWarning, Inbox, ListChecks, PenLine } from 'lucide-react';
-import { useState, Fragment } from 'react';
+import { useEffect, useRef, useState, Fragment } from 'react';
 import { InlineNote, useInlineNote } from './InlineNote';
 import { useIcfr } from './store';
 import { isOwnerTask, testDueInDays, testDueLabel, testsDueNow } from './helpers';
@@ -14,7 +14,16 @@ const TASK_META: Record<TaskType, { label: string; Icon: typeof Upload; action: 
 };
 
 export default function RiskOwnerPortal() {
-  const { eng, meOwner, openAuditId, submitTask, openControl, openRegister, setTab, setView, setExceptionStatus } = useIcfr();
+  const { eng, meOwner, openAuditId, submitTask, openControl, openRegister, setTab, setView, setExceptionStatus, listLanding, clearListLanding } = useIcfr();
+  // Role landing (2 Oct): the owner lands on their tasks. They lead the owner's
+  // Dashboard already, so this only moves the page if something above has
+  // pushed them out of view.
+  const ref = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    if (!listLanding) return;
+    const t = window.setTimeout(() => { ref.current?.scrollIntoView({ block: 'nearest' }); clearListLanding(); }, 60);
+    return () => window.clearTimeout(t);
+  }, [listLanding, clearListLanding]);
   // a refusal is said on the row whose button was pressed (agentic UX #11)
   const note = useInlineNote();
   const [noteRow, setNoteRow] = useState<string | null>(null);
@@ -76,7 +85,7 @@ export default function RiskOwnerPortal() {
           // timetable, once the fixed control has had a chance to run.
           setExceptionStatus(def.id, 'Awaiting reviewer'); // clears this reminder with it
         } else {
-          note.show('warning', `Attach proof of the fix on ${def.id} in Exceptions first — “done” needs proof.`);
+          note.show('warning', `Attach proof of the fix on ${def.id} in Deficiencies first — “done” needs proof.`);
         }
         return;
       }
@@ -98,15 +107,15 @@ export default function RiskOwnerPortal() {
   const chevron = <ChevronRight size={14} className="shrink-0 text-ink-300 group-hover:text-ink-500 transition-colors" />;
 
   return (
-    <div className="space-y-5">
-      <h1 className="text-[22px] font-bold text-ink-900 tracking-tight" style={{ fontFamily: "'Source Serif 4', Georgia, serif" }}>Your control tasks</h1>
+    <div ref={ref} className="space-y-5 scroll-mt-4">
+      <h1 className="text-[1.375rem] font-bold text-ink-900 tracking-tight" style={{ fontFamily: "'Source Serif 4', Georgia, serif" }}>Your control tasks</h1>
 
       {hasWork ? (
         <section className={cn('rounded-2xl border p-4', anyOverdue ? 'border-high-200 bg-high-50/30' : 'border-mitigated-300 bg-mitigated-50/20')}>
           <div className="flex items-center gap-2 flex-wrap">
             <ListChecks size={15} className={anyOverdue ? 'text-high-700' : 'text-brand-600'} />
             <h2 className="font-display text-[1.0625rem] leading-tight text-ink-900">{headline}</h2>
-            <span className="text-[11.5px] text-ink-500">— what needs doing, and by when</span>
+            <span className="text-[0.75rem] text-ink-500">— what needs doing, and by when</span>
           </div>
           <div className="mt-3 space-y-0.5">
             {/* cycle testing — the owner's move is attesting & evidencing on the control */}
@@ -115,10 +124,10 @@ export default function RiskOwnerPortal() {
               return (
                 <button key={c.id} onClick={() => openControl(c.id)} className={rowCls}>
                   <span className="w-4 flex justify-center shrink-0"><Circle size={11} className={dd < 0 ? 'text-risk-700' : 'text-mitigated-700'} /></span>
-                  <span className="min-w-0 flex-1 truncate text-[12.5px] text-ink-700">
+                  <span className="min-w-0 flex-1 truncate text-[0.8125rem] text-ink-700">
                     <b className="font-semibold text-ink-900">{c.wpRef}</b> {c.description} <span className="text-ink-400">· {c.frequency} · attest &amp; evidence</span>
                   </span>
-                  <span className={cn('shrink-0 text-[11.5px] font-semibold', dd < 0 ? 'text-risk-700' : 'text-mitigated-700')}>{testDueLabel(dd)}</span>
+                  <span className={cn('shrink-0 text-[0.75rem] font-semibold', dd < 0 ? 'text-risk-700' : 'text-mitigated-700')}>{testDueLabel(dd)}</span>
                   {chevron}
                 </button>
               );
@@ -126,7 +135,7 @@ export default function RiskOwnerPortal() {
             {dueTests.length > 5 && (
               <button onClick={() => openRegister({ view: 'due' })} className={rowCls}>
                 <span className="w-4 shrink-0" />
-                <span className="text-[11.5px] text-ink-500">+{dueTests.length - 5} more control tests in the “Due now” view</span>
+                <span className="text-[0.75rem] text-ink-500">+{dueTests.length - 5} more control tests in the “Due now” view</span>
                 <span className="ml-auto" />
                 {chevron}
               </button>
@@ -147,12 +156,12 @@ export default function RiskOwnerPortal() {
                   onKeyDown={e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); openControl(t.controlId, t.focus); } }}
                   className={rowCls}>
                   <span className="w-4 flex justify-center shrink-0"><Circle size={11} className={t.overdue ? 'text-risk-700' : urgent ? 'text-mitigated-700' : 'text-ink-400'} /></span>
-                  <span className="min-w-0 flex-1 truncate text-[12.5px] text-ink-700">
+                  <span className="min-w-0 flex-1 truncate text-[0.8125rem] text-ink-700">
                     <b className="font-semibold text-ink-900">{t.title}</b> <span className="text-ink-400">· {t.controlId} · {m.label}</span>
                   </span>
-                  <span className={cn('shrink-0 text-[11.5px] font-semibold', t.overdue ? 'text-risk-700' : urgent ? 'text-mitigated-700' : 'text-ink-400')}>{t.dueLabel}</span>
+                  <span className={cn('shrink-0 text-[0.75rem] font-semibold', t.overdue ? 'text-risk-700' : urgent ? 'text-mitigated-700' : 'text-ink-400')}>{t.dueLabel}</span>
                   <button onClick={e => { e.stopPropagation(); act(t); }}
-                    className="shrink-0 inline-flex items-center gap-1 text-[11.5px] font-semibold text-brand-700 hover:text-brand-800 cursor-pointer">
+                    className="shrink-0 inline-flex items-center gap-1 text-[0.75rem] font-semibold text-brand-700 hover:text-brand-800 cursor-pointer">
                     <cta.Icon size={12} /> {cta.label}
                   </button>
                   {chevron}
@@ -166,20 +175,20 @@ export default function RiskOwnerPortal() {
       ) : (
         <div className="rounded-2xl border border-canvas-border bg-canvas-elevated p-12 flex flex-col items-center text-center gap-2">
           <div className="w-12 h-12 rounded-full bg-compliant-50 flex items-center justify-center"><CheckCircle2 size={22} className="text-compliant-700" /></div>
-          <p className="text-[15px] font-semibold text-ink-800">You’re all caught up</p>
-          <p className="text-[13px] text-ink-500">Nothing needs your attention right now.</p>
+          <p className="text-[0.9375rem] font-semibold text-ink-800">You’re all caught up</p>
+          <p className="text-[0.8125rem] text-ink-500">Nothing needs your attention right now.</p>
         </div>
       )}
 
       {submitted.length > 0 && (
         <div className="space-y-2">
-          <h2 className="text-[12px] font-semibold text-ink-500 uppercase tracking-wide inline-flex items-center gap-1.5"><Inbox size={13} /> With the audit team</h2>
+          <h2 className="text-[0.75rem] font-semibold text-ink-500 uppercase tracking-wide inline-flex items-center gap-1.5"><Inbox size={13} /> With the audit team</h2>
           {submitted.map(t => (
-            <div key={t.id} className="rounded-lg border border-canvas-border bg-paper-50/40 px-4 py-2.5 flex items-center gap-3 text-[12.5px]">
+            <div key={t.id} className="rounded-lg border border-canvas-border bg-paper-50/40 px-4 py-2.5 flex items-center gap-3 text-[0.8125rem]">
               <CheckCircle2 size={15} className="text-compliant-700 shrink-0" />
-              <span className="font-mono text-[11px] text-ink-500">{t.controlId}</span>
+              <span className="font-mono text-[0.6875rem] text-ink-500">{t.controlId}</span>
               <span className="text-ink-700">{t.title}</span>
-              <span className="ml-auto text-[11.5px] text-ink-400">Sent to audit</span>
+              <span className="ml-auto text-[0.75rem] text-ink-400">Sent to audit</span>
             </div>
           ))}
         </div>

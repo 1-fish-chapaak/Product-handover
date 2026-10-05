@@ -18,8 +18,10 @@ import { PROGRAMMES } from '../audit/sox-testing/soxTestingData';
 import { isOwnerOf } from './auditScope';
 import { newAuditBlock } from './auditPortfolio';
 import RiskOwnerPortal from './RiskOwnerPortal';
+import IraWorkSection from './IraWorkSection';
 import ReviewerQueue from './ReviewerQueue';
 import type { Control, ExceptionGrade, IcfrEngagement, TaskType } from './types';
+import DialogFocus from '../shared/DialogFocus';
 
 const fmt = (n: number) => formatINR(n);
 
@@ -276,14 +278,14 @@ export default function Overview() {
               ends in something testable — and a RACM here IS a process's set of
               controls, so an empty library is an empty matrix. The reason rides
               beside the dead button; the fix is Add RACM. */}
-          {racmMissing && <span className="text-[11.5px] text-ink-400">Add a RACM first — an audit with no controls has nothing to test.</span>}
+          {racmMissing && <span className="text-[0.75rem] text-ink-400">Add a RACM first — an audit with no controls has nothing to test.</span>}
           {/* One audit runs at a time — the running one is signed by both hands
               before the next starts. */}
-          {!racmMissing && newAuditBlock(eng) && <span className="text-[11.5px] text-ink-400">{newAuditBlock(eng)}</span>}
+          {!racmMissing && newAuditBlock(eng) && <span className="text-[0.75rem] text-ink-400">{newAuditBlock(eng)}</span>}
           <button
             onClick={() => setCreating(true)}
             disabled={racmMissing || !!newAuditBlock(eng)}
-            className="h-9 px-3.5 inline-flex items-center gap-1.5 rounded-lg bg-brand-600 text-white text-[12.5px] font-semibold enabled:hover:bg-brand-700 disabled:opacity-40 disabled:cursor-not-allowed transition-colors cursor-pointer"
+            className="h-9 px-3.5 inline-flex items-center gap-1.5 rounded-lg bg-brand-600 text-white text-[0.8125rem] font-semibold enabled:hover:bg-brand-700 disabled:opacity-40 disabled:cursor-not-allowed transition-colors cursor-pointer"
           >
             <Plus size={15} /> New audit
           </button>
@@ -293,6 +295,11 @@ export default function Overview() {
         {creating && <NewAuditWizard onClose={() => setCreating(false)} />}
       </AnimatePresence>
       {addingRacm && <AddRacmModal onClose={() => setAddingRacm(false)} />}
+
+      {/* Ira's work — what Ira has done across this audit that waits on the
+          auditor (product owner, 2 Oct). The auditor's only: confirming is the
+          testing pen. Inside an audit only, and gone once it is concluded. */}
+      {role === 'auditor' && inAudit && !isConcluded && <IraWorkSection controls={scoped} />}
 
       {/* Risk owner's actionable inbox leads — first-line owners act before they browse status. */}
       {isOwner && <RiskOwnerPortal />}
@@ -318,23 +325,23 @@ export default function Overview() {
         return (
           <div className="grid sm:grid-cols-2 gap-4">
             <button onClick={() => setTab('controls')} className="text-left rounded-2xl border border-canvas-border bg-canvas-elevated p-4 hover:border-brand-300 transition-colors cursor-pointer">
-              <h2 className="text-[13px] font-bold text-ink-800 inline-flex items-center gap-1.5"><ShieldCheck size={15} className="text-brand-600" /> My controls</h2>
-              <div className="flex items-center gap-x-4 gap-y-1 flex-wrap mt-2.5 text-[12.5px] text-ink-600">
-                <span><b className="text-[17px] font-bold tabular-nums text-ink-900">{myControls.length}</b> total</span>
+              <h2 className="text-[0.8125rem] font-bold text-ink-800 inline-flex items-center gap-1.5"><ShieldCheck size={15} className="text-brand-600" /> My controls</h2>
+              <div className="flex items-center gap-x-4 gap-y-1 flex-wrap mt-2.5 text-[0.8125rem] text-ink-600">
+                <span><b className="text-[1.0625rem] font-bold tabular-nums text-ink-900">{myControls.length}</b> total</span>
                 <span><b className="font-bold text-compliant-700">{eff}</b> effective</span>
                 {ineff > 0 && <span><b className="font-bold text-risk-700">{ineff}</b> ineffective</span>}
                 {due > 0 && <span><b className="font-bold text-mitigated-700">{due}</b> due now</span>}
               </div>
-              <span className="mt-2.5 inline-flex items-center gap-1 text-[12px] font-semibold text-brand-700">Open my controls <ArrowRight size={13} /></span>
+              <span className="mt-2.5 inline-flex items-center gap-1 text-[0.75rem] font-semibold text-brand-700">Open my controls <ArrowRight size={13} /></span>
             </button>
             <button onClick={() => openDeficiencies()} className="text-left rounded-2xl border border-canvas-border bg-canvas-elevated p-4 hover:border-brand-300 transition-colors cursor-pointer">
-              <h2 className="text-[13px] font-bold text-ink-800 inline-flex items-center gap-1.5"><AlertTriangle size={15} className="text-risk-600" /> {W.mine}</h2>
-              <div className="flex items-center gap-x-4 gap-y-1 flex-wrap mt-2.5 text-[12.5px] text-ink-600">
-                <span><b className="text-[17px] font-bold tabular-nums text-ink-900">{openDefs.length}</b> open</span>
+              <h2 className="text-[0.8125rem] font-bold text-ink-800 inline-flex items-center gap-1.5"><AlertTriangle size={15} className="text-risk-600" /> {W.mine}</h2>
+              <div className="flex items-center gap-x-4 gap-y-1 flex-wrap mt-2.5 text-[0.8125rem] text-ink-600">
+                <span><b className="text-[1.0625rem] font-bold tabular-nums text-ink-900">{openDefs.length}</b> open</span>
                 {inRem > 0 && <span><b className="font-bold text-high-700">{inRem}</b> on you to remediate</span>}
                 {withAudit > 0 && <span><b className="font-bold text-evidence-700">{withAudit}</b> with the audit team</span>}
               </div>
-              <span className="mt-2.5 inline-flex items-center gap-1 text-[12px] font-semibold text-brand-700">Manage {W.mine.toLowerCase()} <ArrowRight size={13} /></span>
+              <span className="mt-2.5 inline-flex items-center gap-1 text-[0.75rem] font-semibold text-brand-700">Manage {W.mine.toLowerCase()} <ArrowRight size={13} /></span>
             </button>
           </div>
         );
@@ -346,11 +353,11 @@ export default function Overview() {
         <div className="rounded-2xl border border-high-200 bg-high-50 p-4 flex items-start gap-3">
           <AlertTriangle size={16} className="text-high-700 shrink-0 mt-0.5" />
           <div className="flex-1 min-w-0">
-            <h2 className="text-[13px] font-bold text-ink-900">The RACM is missing</h2>
+            <h2 className="text-[0.8125rem] font-bold text-ink-900">The RACM is missing</h2>
             {/* The RACM tab is parked (S11) — the link opens Add RACM instead,
                 which picks from the Engagements page's RACM tab or uploads one.
                 It is the auditor's action, so everyone else is told whose it is. */}
-            <p className="text-[12.5px] text-ink-600 mt-1 leading-relaxed">
+            <p className="text-[0.8125rem] text-ink-600 mt-1 leading-relaxed">
               {role === 'auditor' && !isEngagementLocked(eng) ? (
                 <>
                   Add or generate the RACM with{' '}
@@ -406,7 +413,7 @@ export default function Overview() {
         <section className={cn('rounded-2xl border p-4', past || sev.mwOpen > 0 ? 'border-high-200 bg-high-50/30' : 'border-canvas-border bg-canvas-elevated')}>
           <div className="flex items-baseline gap-2 flex-wrap">
             <h2 className="font-display text-[1.0625rem] leading-tight text-ink-900">Needs you</h2>
-            <span className={cn('inline-flex items-center gap-1 text-[0.71875rem]', past || sev.mwOpen ? 'text-high-700' : 'text-ink-500')}>
+            <span className={cn('inline-flex items-center gap-1 text-[0.75rem]', past || sev.mwOpen ? 'text-high-700' : 'text-ink-500')}>
               <Hourglass size={12} className="self-center" />
               {days === null ? `Year-end — ${endLabel}`
                 : past ? `Period ended ${endLabel} — the opinion clock is running`
@@ -417,14 +424,14 @@ export default function Overview() {
             {needsRows.map(r => (
               <button key={r.key} onClick={r.onClick} className={rowCls}>
                 <span className="w-4 flex justify-center shrink-0">{r.icon}</span>
-                <span className="text-[0.78125rem] text-ink-700">{r.label}</span>
+                <span className="text-[0.8125rem] text-ink-700">{r.label}</span>
                 <ChevronRight size={14} className="ml-auto shrink-0 text-ink-300 group-hover:text-ink-500 transition-colors" />
               </button>
             ))}
             {needsRows.length === 0 && (
               <div className="flex items-center gap-2.5 py-1.5 px-2 -mx-1">
                 <span className="w-4 flex justify-center shrink-0"><CheckCircle2 size={14} className="text-compliant-600" /></span>
-                <span className="text-[0.78125rem] text-ink-600">
+                <span className="text-[0.8125rem] text-ink-600">
                   Nothing needs you right now{signoffReady && !isConcluded ? ' — the audit is ready to conclude' : ''}
                 </span>
               </div>
@@ -438,7 +445,7 @@ export default function Overview() {
           as they rendered, behind "Show health detail" — collapsed by default. */}
       {!isOwner && (
         <div className="space-y-3">
-          <div className="flex items-center gap-x-1.5 gap-y-1 flex-wrap text-[0.78125rem] text-ink-600">
+          <div className="flex items-center gap-x-1.5 gap-y-1 flex-wrap text-[0.8125rem] text-ink-600">
             {progressSegs.map((s, i) => (
               <span key={s.k} className="inline-flex items-center gap-1.5">
                 {i > 0 && <span className="text-ink-300" aria-hidden>·</span>}
@@ -458,8 +465,8 @@ export default function Overview() {
             <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
               {tiles.map(s => (
                 <button key={s.k} onClick={() => openRegister({ view: s.view })} title={`Open the Control Library — ${s.k}`} className="text-left rounded-xl border border-canvas-border bg-canvas-elevated px-4 py-3 hover:border-brand-300 transition-colors cursor-pointer">
-                  <div className={cn('text-[20px] font-bold tabular-nums', s.t)}>{s.v}</div>
-                  <div className="text-[11.5px] text-ink-500 font-medium mt-0.5">{s.k}</div>
+                  <div className={cn('text-[1.25rem] font-bold tabular-nums', s.t)}>{s.v}</div>
+                  <div className="text-[0.75rem] text-ink-500 font-medium mt-0.5">{s.k}</div>
                 </button>
               ))}
             </div>
@@ -484,25 +491,25 @@ export default function Overview() {
         <div className="rounded-2xl border border-canvas-border bg-canvas-elevated p-4 flex flex-col">
           <div className="flex items-center justify-between mb-3">
             <h2 className="font-display text-[1.0625rem] leading-tight text-ink-900 inline-flex items-center gap-2"><AlertTriangle size={15} className="text-risk-600" /> {W.Many}</h2>
-            <span className="text-[11px] font-semibold text-ink-400">{sev.open} open · {scopedDefs.length} total</span>
+            <span className="text-[0.6875rem] font-semibold text-ink-400">{sev.open} open · {scopedDefs.length} total</span>
           </div>
           <div className="space-y-2 flex-1">
             {SEV_META.map(s => (
               <div key={s.key} className="flex items-center gap-2">
                 <span className={cn('w-2 h-2 rounded-full', s.dot)} />
-                <span className="text-[12.5px] text-ink-600">{s.label}</span>
-                <span className={cn('ml-auto text-[15px] font-bold tabular-nums', s.text)}>{sev.c[s.key]}</span>
+                <span className="text-[0.8125rem] text-ink-600">{s.label}</span>
+                <span className={cn('ml-auto text-[0.9375rem] font-bold tabular-nums', s.text)}>{sev.c[s.key]}</span>
               </div>
             ))}
           </div>
-          <button onClick={() => openDeficiencies()} className="mt-3 inline-flex items-center gap-1 text-[12px] font-semibold text-brand-700 hover:text-brand-800 cursor-pointer transition-colors">Manage {W.many} <ArrowRight size={13} /></button>
+          <button onClick={() => openDeficiencies()} className="mt-3 inline-flex items-center gap-1 text-[0.75rem] font-semibold text-brand-700 hover:text-brand-800 cursor-pointer transition-colors">Manage {W.many} <ArrowRight size={13} /></button>
         </div>
 
         {/* handoffs */}
         <div className="rounded-2xl border border-canvas-border bg-canvas-elevated p-4 flex flex-col">
           <div className="flex items-center justify-between mb-3">
             <h2 className="font-display text-[1.0625rem] leading-tight text-ink-900 inline-flex items-center gap-2"><Inbox size={15} className="text-evidence-600" /> Handoffs</h2>
-            <span className="text-[11px] font-semibold text-ink-400">{openTasks.length} open</span>
+            <span className="text-[0.6875rem] font-semibold text-ink-400">{openTasks.length} open</span>
           </div>
           <div className="space-y-2 flex-1">
             {(Object.keys(HANDOFF_META) as TaskType[]).map(t => {
@@ -510,13 +517,13 @@ export default function Overview() {
               return (
                 <div key={t} className="flex items-center gap-2">
                   <m.Icon size={13} className={m.tone} />
-                  <span className="text-[12.5px] text-ink-600">{m.label}</span>
-                  <span className="ml-auto text-[15px] font-bold tabular-nums text-ink-800">{handoffs[t]}</span>
+                  <span className="text-[0.8125rem] text-ink-600">{m.label}</span>
+                  <span className="ml-auto text-[0.9375rem] font-bold tabular-nums text-ink-800">{handoffs[t]}</span>
                 </div>
               );
             })}
           </div>
-          <button onClick={() => setView('handoffs')} className="mt-3 inline-flex items-center gap-1 text-[12px] font-semibold text-brand-700 hover:text-brand-800 cursor-pointer transition-colors text-left">
+          <button onClick={() => setView('handoffs')} className="mt-3 inline-flex items-center gap-1 text-[0.75rem] font-semibold text-brand-700 hover:text-brand-800 cursor-pointer transition-colors text-left">
             Manage handoffs <ArrowRight size={13} />
           </button>
         </div>
@@ -533,8 +540,8 @@ export default function Overview() {
               { k: 'Clearly trivial', v: eng.rules.clearlyTrivial },
             ].map(r => (
               <div key={r.k} className="flex items-center gap-2">
-                <span className="text-[12.5px] text-ink-600">{r.k}</span>
-                <span className="ml-auto text-[13.5px] font-bold tabular-nums text-ink-800">{fmt(r.v)}</span>
+                <span className="text-[0.8125rem] text-ink-600">{r.k}</span>
+                <span className="ml-auto text-[0.875rem] font-bold tabular-nums text-ink-800">{fmt(r.v)}</span>
               </div>
             ))}
           </div>
@@ -545,7 +552,7 @@ export default function Overview() {
               setTab('config');
               setTimeout(() => document.getElementById('materiality-ground-rules')?.scrollIntoView({ behavior: 'smooth', block: 'start' }), 140);
             }}
-            className="mt-3 inline-flex items-center gap-1 text-[12px] font-semibold text-brand-700 hover:text-brand-800 cursor-pointer transition-colors"
+            className="mt-3 inline-flex items-center gap-1 text-[0.75rem] font-semibold text-brand-700 hover:text-brand-800 cursor-pointer transition-colors"
           >
             Materiality &amp; scope <ArrowRight size={13} />
           </button>
@@ -568,7 +575,7 @@ export default function Overview() {
             <div className="flex items-start justify-between gap-4 flex-wrap">
               <div className="min-w-0 flex-1">
                 <h2 className="font-display text-[1.0625rem] leading-tight text-ink-900 inline-flex items-center gap-2"><PenLine size={15} className="text-brand-600" /> Audit sign-off</h2>
-                <p className="text-[12px] text-ink-500 mt-1">
+                <p className="text-[0.75rem] text-ink-500 mt-1">
                   {isConcluded
                     ? 'Signed and countersigned — this audit is concluded.'
                     : signoffReady
@@ -576,7 +583,7 @@ export default function Overview() {
                       : 'Unlocks once everything in Needs you is closed. The preparer signs first; the reviewer countersigns to conclude.'}
                 </p>
                 {(signoffReady || !!so.preparer) && (
-                  <div className={cn('inline-flex items-center gap-1.5 mt-2.5 px-2.5 py-1.5 rounded-lg border text-[12px] font-semibold',
+                  <div className={cn('inline-flex items-center gap-1.5 mt-2.5 px-2.5 py-1.5 rounded-lg border text-[0.75rem] font-semibold',
                     signsEffective ? 'text-compliant-700 bg-compliant-50/50 border-compliant-200' : 'text-risk-700 bg-risk-50/50 border-risk-200')}>
                     {signsEffective ? <ShieldCheck size={13} /> : <ShieldAlert size={13} />}
                     {/* Interim wording never claims the year's opinion — the
@@ -594,7 +601,7 @@ export default function Overview() {
                           : `Signing concludes ICFR not effective — ${sev.mwOpen} material weakness${sev.mwOpen === 1 ? '' : 'es'} open`}
                   </div>
                 )}
-                <div className="flex items-center gap-4 mt-2.5 flex-wrap text-[12px]">
+                <div className="flex items-center gap-4 mt-2.5 flex-wrap text-[0.75rem]">
                   <span className={cn('inline-flex items-center gap-1.5 font-semibold', signoffReady ? 'text-compliant-700' : 'text-ink-500')}>
                     {signoffReady ? <CheckCircle2 size={13} /> : <Circle size={13} />} {concludedCount}/{ready.total} concluded · {ready.reviewed}/{ready.total} countersigned
                   </span>
@@ -610,31 +617,31 @@ export default function Overview() {
               <div className="flex flex-col gap-1.5 items-end shrink-0">
                 {/* each signature belongs to one hat: auditor prepares, reviewer countersigns */}
                 {so.preparer ? (
-                  <span className="inline-flex items-center gap-1.5 text-[12px] font-semibold text-compliant-700"><CheckCircle2 size={14} /> Prepared — {so.preparer.by} <span className="text-ink-400 font-medium">· {so.preparer.at}</span></span>
+                  <span className="inline-flex items-center gap-1.5 text-[0.75rem] font-semibold text-compliant-700"><CheckCircle2 size={14} /> Prepared — {so.preparer.by} <span className="text-ink-400 font-medium">· {so.preparer.at}</span></span>
                 ) : role === 'auditor' ? (
                   <button onClick={() => setConfirmSign('preparer')} disabled={!signoffReady} title={signoffReady ? `Sign off as ${eng.preparer}` : 'Every control must be concluded first'}
-                    className="h-9 px-4 inline-flex items-center justify-center gap-1.5 rounded-lg bg-brand-600 text-white text-[12.5px] font-semibold hover:bg-brand-700 disabled:opacity-40 disabled:cursor-not-allowed transition-colors cursor-pointer">
+                    className="h-9 px-4 inline-flex items-center justify-center gap-1.5 rounded-lg bg-brand-600 text-white text-[0.8125rem] font-semibold hover:bg-brand-700 disabled:opacity-40 disabled:cursor-not-allowed transition-colors cursor-pointer">
                     <PenLine size={14} /> Sign off as preparer
                   </button>
                 ) : (
-                  <span className="inline-flex items-center gap-1.5 text-[12px] text-ink-400"><Circle size={13} /> Awaiting preparer — {eng.preparer}</span>
+                  <span className="inline-flex items-center gap-1.5 text-[0.75rem] text-ink-400"><Circle size={13} /> Awaiting preparer — {eng.preparer}</span>
                 )}
                 {so.reviewer ? (
-                  <span className="inline-flex items-center gap-1.5 text-[12px] font-semibold text-compliant-700"><CheckCircle2 size={14} /> Reviewed — {so.reviewer.by} <span className="text-ink-400 font-medium">· {so.reviewer.at}</span></span>
+                  <span className="inline-flex items-center gap-1.5 text-[0.75rem] font-semibold text-compliant-700"><CheckCircle2 size={14} /> Reviewed — {so.reviewer.by} <span className="text-ink-400 font-medium">· {so.reviewer.at}</span></span>
                 ) : so.preparer ? (
                   role === 'reviewer' ? (
                     <button onClick={() => setConfirmSign('reviewer')} title={`Countersign as ${eng.reviewer}`}
-                      className="h-9 px-4 inline-flex items-center justify-center gap-1.5 rounded-lg border border-brand-200 bg-brand-50 text-brand-700 text-[12.5px] font-semibold hover:bg-brand-100 transition-colors cursor-pointer">
+                      className="h-9 px-4 inline-flex items-center justify-center gap-1.5 rounded-lg border border-brand-200 bg-brand-50 text-brand-700 text-[0.8125rem] font-semibold hover:bg-brand-100 transition-colors cursor-pointer">
                       <PenLine size={14} /> Countersign as reviewer
                     </button>
                   ) : (
-                    <span className="inline-flex items-center gap-1.5 text-[12px] text-ink-400"><Circle size={13} /> Awaiting reviewer — {eng.reviewer}</span>
+                    <span className="inline-flex items-center gap-1.5 text-[0.75rem] text-ink-400"><Circle size={13} /> Awaiting reviewer — {eng.reviewer}</span>
                   )
                 ) : (
-                  <span className="inline-flex items-center gap-1.5 text-[12px] text-ink-400"><Circle size={13} /> Then: reviewer countersign — {eng.reviewer}</span>
+                  <span className="inline-flex items-center gap-1.5 text-[0.75rem] text-ink-400"><Circle size={13} /> Then: reviewer countersign — {eng.reviewer}</span>
                 )}
                 {isConcluded && (
-                  <span className={cn('inline-flex items-center gap-1.5 text-[11px] font-bold uppercase tracking-wide', signsEffective ? 'text-compliant-700' : 'text-ink-500')}><BadgeCheck size={13} /> Concluded</span>
+                  <span className={cn('inline-flex items-center gap-1.5 text-[0.6875rem] font-bold uppercase tracking-wide', signsEffective ? 'text-compliant-700' : 'text-ink-500')}><BadgeCheck size={13} /> Concluded</span>
                 )}
               </div>
             </div>
@@ -644,7 +651,7 @@ export default function Overview() {
 
       {/* by process — the engagement-wide rollup, audit-side only */}
       {!isOwner && <section>
-        <h2 className="text-[12px] font-semibold text-ink-500 uppercase tracking-wide mb-2.5 inline-flex items-center gap-1.5"><ShieldCheck size={13} /> By process</h2>
+        <h2 className="text-[0.75rem] font-semibold text-ink-500 uppercase tracking-wide mb-2.5 inline-flex items-center gap-1.5"><ShieldCheck size={13} /> By process</h2>
         <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-3">
           {processes.map(p => {
             const notStarted = p.total - p.effective - p.ineffective - p.inProgress;
@@ -653,8 +660,8 @@ export default function Overview() {
               <button key={p.name} onClick={() => openRegister({ process: p.name })} className="text-left rounded-2xl border border-canvas-border bg-canvas-elevated p-4 hover:border-brand-300 hover:shadow-[0_4px_16px_-8px_rgba(15,8,30,0.25)] transition-all cursor-pointer">
                 <div className="flex items-center gap-2 mb-2.5">
                   <span className="w-2.5 h-2.5 rounded-full" style={{ background: spineColor(p.name) }} />
-                  <span className="text-[13.5px] font-semibold text-ink-900 truncate">{p.name}</span>
-                  <span className="ml-auto text-[11.5px] font-semibold text-ink-400 tabular-nums">{p.total} controls</span>
+                  <span className="text-[0.875rem] font-semibold text-ink-900 truncate">{p.name}</span>
+                  <span className="ml-auto text-[0.75rem] font-semibold text-ink-400 tabular-nums">{p.total} controls</span>
                 </div>
                 <div className="flex h-2 rounded-full overflow-hidden bg-paper-100 mb-2.5">
                   {seg(p.effective, 'var(--color-compliant-500)')}
@@ -662,7 +669,7 @@ export default function Overview() {
                   {seg(p.inProgress, 'var(--color-brand-400)')}
                   {seg(notStarted, 'var(--color-paper-300)')}
                 </div>
-                <div className="flex items-center gap-x-3 gap-y-1 flex-wrap text-[11px] text-ink-500">
+                <div className="flex items-center gap-x-3 gap-y-1 flex-wrap text-[0.6875rem] text-ink-500">
                   <span><b className="text-compliant-700">{p.effective}</b> effective</span>
                   {p.ineffective > 0 && <span><b className="text-risk-700">{p.ineffective}</b> ineffective</span>}
                   {p.inProgress > 0 && <span><b className="text-brand-700">{p.inProgress}</b> in progress</span>}
@@ -678,15 +685,15 @@ export default function Overview() {
       {/* attest confirm — terminal sign-off is one-way, so it never fires on a bare click */}
       {confirmSign && (
         <div className="modal-backdrop" onClick={() => setConfirmSign(null)}>
-          <div className="modal" onClick={e => e.stopPropagation()}>
+          <div role="dialog" aria-modal="true" aria-labelledby="confirm-sign-title" className="modal" onClick={e => e.stopPropagation()}><DialogFocus onEscape={() => setConfirmSign(null)} />
             <div className="px-5 pt-4 pb-3 border-b border-canvas-border">
               <div className="flex items-center justify-between gap-3">
-                <h2 className="text-[15px] font-semibold text-ink-900">{confirmSign === 'preparer' ? 'Sign off as preparer?' : 'Countersign as reviewer?'}</h2>
+                <h2 id="confirm-sign-title" className="text-[0.9375rem] font-semibold text-ink-900">{confirmSign === 'preparer' ? 'Sign off as preparer?' : 'Countersign as reviewer?'}</h2>
                 <button onClick={() => setConfirmSign(null)} className="h-7 w-7 inline-flex items-center justify-center rounded-md text-ink-400 hover:text-ink-700 cursor-pointer" aria-label="Close"><X size={15} /></button>
               </div>
             </div>
             <div className="p-5">
-              <p className="text-[12.5px] text-ink-600 leading-relaxed">
+              <p className="text-[0.8125rem] text-ink-600 leading-relaxed">
                 {confirmSign === 'preparer'
                   ? (signsEffective
                       ? 'This records your preparer signature and hands the audit to the reviewer. You can’t un-sign.'
@@ -694,8 +701,8 @@ export default function Overview() {
                   : <>This countersigns and concludes this audit as ICFR {signsEffective ? 'effective' : 'not effective'}. This can’t be undone.</>}
               </p>
               <div className="mt-4 flex items-center justify-end gap-2">
-                <button onClick={() => setConfirmSign(null)} className="h-9 px-3.5 rounded-lg border border-canvas-border text-[12.5px] font-semibold text-ink-600 hover:text-ink-900 cursor-pointer">Cancel</button>
-                <button onClick={() => { if (confirmSign === 'preparer') signPreparer(); else signReviewer(); setConfirmSign(null); }} className="h-9 px-3.5 rounded-lg bg-brand-600 text-white text-[12.5px] font-semibold hover:bg-brand-700 transition-colors cursor-pointer">{confirmSign === 'preparer' ? 'Confirm — sign off' : 'Confirm — countersign'}</button>
+                <button onClick={() => setConfirmSign(null)} className="h-9 px-3.5 rounded-lg border border-canvas-border text-[0.8125rem] font-semibold text-ink-600 hover:text-ink-900 cursor-pointer">Cancel</button>
+                <button onClick={() => { if (confirmSign === 'preparer') signPreparer(); else signReviewer(); setConfirmSign(null); }} className="h-9 px-3.5 rounded-lg bg-brand-600 text-white text-[0.8125rem] font-semibold hover:bg-brand-700 transition-colors cursor-pointer">{confirmSign === 'preparer' ? 'Confirm — sign off' : 'Confirm — countersign'}</button>
               </div>
             </div>
           </div>

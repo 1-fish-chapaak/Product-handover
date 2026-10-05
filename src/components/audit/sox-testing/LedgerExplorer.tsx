@@ -67,7 +67,7 @@ export default function LedgerExplorer({ entities, captions, gl, perf, money, ad
                 <ChevronRight size={13} className={cn('shrink-0 text-ink-400 transition-transform', isOpen && 'rotate-90')} />
                 <span className="text-[0.8125rem] font-semibold text-ink-900 truncate flex-1 min-w-0">{ent.name}</span>
                 {addedByTb?.has(ent.id) && (
-                  <span className="shrink-0 text-[0.625rem] font-semibold px-1.5 py-0.5 rounded bg-brand-50 text-brand-700 border border-brand-200">
+                  <span className="shrink-0 text-[0.6875rem] font-semibold px-1.5 py-0.5 rounded bg-brand-50 text-brand-700 border border-brand-200">
                     found in the TB
                   </span>
                 )}
@@ -102,7 +102,7 @@ export default function LedgerExplorer({ entities, captions, gl, perf, money, ad
                             <span className={cn('truncate', !lines.length && 'pl-[1.15rem]')}>{c.caption}</span>
                           </span>
                           <span className="text-[0.6875rem] text-ink-500 truncate">{c.process}</span>
-                          <span className="text-[0.625rem] font-semibold">
+                          <span className="text-[0.6875rem] font-semibold">
                             {material
                               ? <span className="px-1.5 py-0.5 rounded bg-high-50 text-high-700 border border-high-100">above PM</span>
                               : <span className="px-1.5 py-0.5 rounded bg-paper-100 text-ink-500 border border-border-light">below PM</span>}
@@ -142,7 +142,7 @@ function GlLines({ lines, money }: { lines: GlLine[]; money: (v: number) => stri
         </span>
       </div>
       <div className="rounded-lg border border-canvas-border bg-white overflow-hidden">
-        <div className="grid grid-cols-[6rem_7rem_minmax(0,1.5fr)_7rem_minmax(0,0.8fr)] gap-2 px-2.5 py-1.5 border-b border-canvas-border text-[0.625rem] font-bold text-ink-400 uppercase tracking-wider">
+        <div className="grid grid-cols-[6rem_7rem_minmax(0,1.5fr)_7rem_minmax(0,0.8fr)] gap-2 px-2.5 py-1.5 border-b border-canvas-border text-[0.6875rem] font-bold text-ink-400 uppercase tracking-wider">
           <span>Date</span><span>Document</span><span>Description</span><span className="text-right">Amount</span><span>Posted by</span>
         </div>
         {shown.map((l, i) => (
@@ -165,7 +165,7 @@ function GlLines({ lines, money }: { lines: GlLine[]; money: (v: number) => stri
         ))}
       </div>
       {lines.length > shown.length && (
-        <p className="text-[0.625rem] text-ink-400 mt-1.5 pl-5">
+        <p className="text-[0.6875rem] text-ink-400 mt-1.5 pl-5">
           Showing the first {shown.length} of {lines.length} lines.
         </p>
       )}

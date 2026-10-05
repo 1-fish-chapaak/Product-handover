@@ -296,8 +296,10 @@ export interface DesignPoint {
   override?: Override;
   /** A person accepted Ira's result as it stands (agentic UX #1, 1 Oct). Ira
    *  proposes; until this is set the row reads "Ira · review" and the track
-   *  cannot be concluded. A new run of Ira clears it. */
-  confirmed?: { by: string; at: string };
+   *  cannot be concluded. A new run of Ira clears it. `byIra` marks a confirm
+   *  Ira made itself in Automatic mode (recorded under the user's name) —
+   *  "Undo Ira's" may take those back until the step is concluded. */
+  confirmed?: { by: string; at: string; byIra?: boolean };
   /** A file on a design element was added or removed after this override was
    *  recorded (S6, A17) — the override stands, flagged "Evidence changed since
    *  override". Cleared when the override is removed or recorded again. */
@@ -467,8 +469,10 @@ export interface OperatingStep {
   override?: Override;
   /** A person accepted Ira's result as it stands (agentic UX #1, 1 Oct). Ira
    *  proposes; until this is set the row reads "Ira · review" and the track
-   *  cannot be concluded. A new run of Ira clears it. */
-  confirmed?: { by: string; at: string };
+   *  cannot be concluded. A new run of Ira clears it. `byIra` marks a confirm
+   *  Ira made itself in Automatic mode (recorded under the user's name) —
+   *  "Undo Ira's" may take those back until the step is concluded. */
+  confirmed?: { by: string; at: string; byIra?: boolean };
   // Per-drawn-sample results for THIS attribute (keyed by Sample.id) — the
   // handbook grain: every attribute is tested against every sampled item.
   sampleResults?: Record<string, TestResult>;
@@ -1131,6 +1135,25 @@ export interface NewVersionDraft {
   note: string;
 }
 
+/** The plan steps the tester can take off Ira (Stage 1a, 2 Oct). Waiting for the
+ *  population is not one — nobody chooses whether to wait. */
+export type IraPlanStepId = 'design' | 'sample' | 'operating';
+/** What the tester told Ira to do on one control. A list left absent means
+ *  "all of them"; once narrowed, Ira reads only the ids in it and leaves the
+ *  rest exactly as they stand. */
+export interface IraPlanChoices {
+  /** Steps the tester will do themselves. */
+  skipped: IraPlanStepId[];
+  /** Design evidence files (ids) Ira reads. */
+  files?: string[];
+  /** Design checks (ids) Ira marks. */
+  checks?: string[];
+  /** TOE attributes (ids) Ira validates. */
+  attributes?: string[];
+  /** Start pressed — until then Ira runs nothing on this control. */
+  started?: { by: string; at: string };
+}
+
 /** The four parts of a control's set-up that carry between rounds. */
 export type RollPart = 'design' | 'checks' | 'population' | 'attributes';
 export type RollState = { state: 'pending' } | { state: 'confirmed' | 'edited'; by: string; at: string };
@@ -1325,6 +1348,9 @@ export interface Control {
    *  unchanged or edits it — nothing is tested on last round's set-up by
    *  accident, and Ira never confirms one, Automatic or not. */
   rollForward?: RollForward;
+  /** Ira's plan for this control, as the tester shaped it (Stage 1a, 2 Oct).
+   *  Ira runs no step of it, Manual or Automatic, until `started` is set. */
+  iraPlan?: IraPlanChoices;
   /** Audit-side sign-off on THIS working paper — the preparer (auditor hat) signs
    *  once the control is concluded; the reviewer countersigns. Separate from the
    *  engagement-level opinion sign-off. */
@@ -1450,7 +1476,13 @@ export interface HandoffTask {
    *  reader then has to search — the same reasoning `focusDefId` follows for
    *  deficiencies. Absent means the top of the page, which is right for a
    *  task that is about the control as a whole. */
-  focus?: 'population';
+  focus?: 'population' | 'design';
+  /** The one check (design point or TOE attribute id) this ask unblocks —
+   *  set by Ira's "couldn't test" card, so the card and the row can say it
+   *  was sent without keeping their own memory of it. */
+  checkId?: string;
+  /** The real due day (YYYY-MM-DD) behind `dueLabel`, where one was set. */
+  dueAt?: string;
   overdue: boolean;
   status: TaskStatus;
 }
@@ -1899,7 +1931,7 @@ export type ExceptionStatus =
 
 /** The five steps as the screen shows them, and where each state sits. */
 export const EXCEPTION_STEPS: { n: number; title: string; role: Role; states: ExceptionStatus[] }[] = [
-  { n: 1, title: 'Exception raised', role: 'auditor', states: ['Identified'] },
+  { n: 1, title: 'Deficiency raised', role: 'auditor', states: ['Identified'] },
   { n: 2, title: 'Size it', role: 'auditor', states: ['Identified', 'Rating review'] },
   { n: 3, title: 'Plan the fix', role: 'risk-owner', states: ['Planning', 'Plan review'] },
   { n: 4, title: 'Fix and submit', role: 'risk-owner', states: ['Remediation'] },
@@ -2293,6 +2325,21 @@ export type ExecKind =
   // 'reopen': a reopen undoes a conclusion about THIS control, this puts the
   // conclusion beyond reach by replacing the control it was about.
   | 'new-version';
+/** One check or attribute in an Ira run, as it stood the moment the run
+ *  finished (Stage 1c). A snapshot, not a pointer: the row can be confirmed,
+ *  overridden or re-run later, and the History line must still say what THIS
+ *  run found. `blocked` = Ira could not test it (no verdict, no confidence). */
+export interface IraRunItem {
+  label: string;
+  result: 'Pass' | 'Fail' | 'blocked';
+  confidence?: number;
+  /** The file Ira read this answer in — the same "Read in …" the working shows. */
+  source?: string;
+}
+export interface IraRunSnapshot {
+  files: string[];
+  items: IraRunItem[];
+}
 export interface ExecutionEvent {
   id: string;
   controlId: string;
@@ -2301,6 +2348,8 @@ export interface ExecutionEvent {
   verb: string;                               // active-voice phrase, e.g. 'validated', 'concluded effective'
   target?: string;                            // attribute code / consideration / document the action touched
   result?: TestResult | TrackConclusion;      // outcome, when the action produced one
+  /** Set on an Ira run only — what it read and what it found, folded open in History. */
+  iraRun?: IraRunSnapshot;
   by: string;                                 // actor display name
   role: Role;                                 // actor role — drives the trail's glyph + tint
   at: string;

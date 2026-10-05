@@ -11,6 +11,7 @@ import { fmtCr } from '../soxTestingData';
 import { SourceChips } from '../ProgrammeView';
 import { RISK_CATEGORY_TINT } from '../../../sox-icfr/types';
 import { EntityStatusChip, ViaChip } from './V2Wizard';
+import DialogFocus from '../../../shared/DialogFocus';
 import {
   CHASE_STAGES, SAMPLE_SIZES, V2_PHASES, deriveV2Racms, phaseWindows,
   registerV2Programme, v2EntityShort,
@@ -168,9 +169,9 @@ export default function V2ProgrammeView({ programme, onBack, onOpenWorkspace }: 
           <div>
             <div className="flex items-center gap-2.5 flex-wrap">
               <h1 className="text-[1.75rem] font-bold text-text leading-tight">{p.name}</h1>
-              <span className={`inline-flex items-center px-2.5 py-1 rounded-full text-[10.5px] font-semibold ${PHASE_CLS[p.phase]}`}>{p.phase}</span>
+              <span className={`inline-flex items-center px-2.5 py-1 rounded-full text-[0.6875rem] font-semibold ${PHASE_CLS[p.phase]}`}>{p.phase}</span>
             </div>
-            <div className="flex items-center gap-3 mt-1.5 text-[12px] text-text-secondary flex-wrap">
+            <div className="flex items-center gap-3 mt-1.5 text-[0.75rem] text-text-secondary flex-wrap">
               <span className="inline-flex items-center gap-1.5 font-semibold text-text">
                 <Flag size={12} className="text-brand-700" /> Opinion as of {p.asOf}
               </span>
@@ -187,14 +188,14 @@ export default function V2ProgrammeView({ programme, onBack, onOpenWorkspace }: 
           <div className="flex items-center gap-2 shrink-0">
             <button
               onClick={() => setRescopeOpen(true)}
-              className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-lg border border-border bg-white hover:border-primary/40 hover:text-primary text-[12.5px] font-semibold text-text-secondary transition-colors cursor-pointer"
+              className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-lg border border-border bg-white hover:border-primary/40 hover:text-primary text-[0.8125rem] font-semibold text-text-secondary transition-colors cursor-pointer"
             >
               <Scale size={13} /> Re-scope now
             </button>
             {onOpenWorkspace && (
               <button
                 onClick={onOpenWorkspace}
-                className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-lg border border-border bg-white hover:border-primary/40 hover:text-primary text-[12.5px] font-semibold text-text-secondary transition-colors cursor-pointer"
+                className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-lg border border-border bg-white hover:border-primary/40 hover:text-primary text-[0.8125rem] font-semibold text-text-secondary transition-colors cursor-pointer"
               >
                 Open workspace <ArrowUpRight size={13} />
               </button>
@@ -208,7 +209,7 @@ export default function V2ProgrammeView({ programme, onBack, onOpenWorkspace }: 
         {tab === 'overview' && (<>
         {/* ── Cycle — windows follow the year-end convention ── */}
         <div className="mb-8">
-          <div className="text-[11px] font-bold text-text-muted uppercase tracking-wider mb-4">
+          <div className="text-[0.6875rem] font-bold text-text-muted uppercase tracking-wider mb-4">
             Audit cycle — {p.conv === 'dec' ? 'December' : 'March'} year-end calendar
           </div>
           {/* Fixed-length connectors — the stepper stays compact at its natural
@@ -228,10 +229,10 @@ export default function V2ProgrammeView({ programme, onBack, onOpenWorkspace }: 
                     }`}>
                       {done ? <CheckCircle2 size={12} /> : c.phase === 'External audit' ? <Flag size={11} /> : <span className="w-1.5 h-1.5 rounded-full bg-current" />}
                     </span>
-                    <span className={`text-[11px] font-semibold whitespace-nowrap ${active ? 'text-primary' : done ? 'text-brand-700' : 'text-text-muted'}`}>
+                    <span className={`text-[0.6875rem] font-semibold whitespace-nowrap ${active ? 'text-primary' : done ? 'text-brand-700' : 'text-text-muted'}`}>
                       {c.phase}
                     </span>
-                    <span className={`text-[10px] tabular-nums whitespace-nowrap -mt-1 ${active ? 'text-text-secondary font-semibold' : 'text-text-muted'}`}>
+                    <span className={`text-[0.6875rem] tabular-nums whitespace-nowrap -mt-1 ${active ? 'text-text-secondary font-semibold' : 'text-text-muted'}`}>
                       {c.window}
                     </span>
                   </div>
@@ -242,13 +243,13 @@ export default function V2ProgrammeView({ programme, onBack, onOpenWorkspace }: 
           {p.revisions.length > 0 && (
             <div className="flex items-center gap-2 mt-3 flex-wrap">
               {p.revisions.map((r, i) => (
-                <span key={i} className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[10.5px] font-semibold bg-evidence-50 text-evidence-700">
+                <span key={i} className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[0.6875rem] font-semibold bg-evidence-50 text-evidence-700">
                   <TrendingDown size={10} /> {r.label}: {fmtCr(r.fromOverall)} → {fmtCr(r.toOverall)} · {r.addedCaptions} captions in{r.addedEntities.length > 0 ? ` · +${r.addedEntities.join(', +')}` : ''}
                 </span>
               ))}
             </div>
           )}
-          <p className="text-[11px] text-text-muted mt-3 leading-relaxed max-w-3xl">
+          <p className="text-[0.6875rem] text-text-muted mt-3 leading-relaxed max-w-3xl">
             No start and end date — the auditor opines on control effectiveness <span className="font-semibold text-text-secondary">as of {p.asOf}</span>.
             Remediation is a phase of its own: design failures fix within the testing window, effectiveness failures by {p.conv === 'dec' ? 'November' : 'February'}.
           </p>
@@ -256,44 +257,44 @@ export default function V2ProgrammeView({ programme, onBack, onOpenWorkspace }: 
           {/* Where it stands — summary numbers the other tabs hold in detail */}
           <div className="grid grid-cols-3 gap-3 mt-6 max-w-4xl">
             <div className="border border-border-light rounded-xl bg-white p-4">
-              <div className="text-[11px] font-bold text-text-muted uppercase tracking-wider mb-1.5">Testing</div>
+              <div className="text-[0.6875rem] font-bold text-text-muted uppercase tracking-wider mb-1.5">Testing</div>
               {p.controls.length === 0 ? (
-                <p className="text-[11.5px] text-text-muted leading-relaxed">Controls arrive with design testing — RACM shells are ready.</p>
+                <p className="text-[0.75rem] text-text-muted leading-relaxed">Controls arrive with design testing — RACM shells are ready.</p>
               ) : (
                 <>
-                  <div className="text-[20px] font-bold tabular-nums text-text leading-tight">
-                    {p.controls.filter(c => c.toe === 'Pass').length}<span className="text-[13px] font-semibold text-text-muted">/{p.controls.length} effective</span>
+                  <div className="text-[1.25rem] font-bold tabular-nums text-text leading-tight">
+                    {p.controls.filter(c => c.toe === 'Pass').length}<span className="text-[0.8125rem] font-semibold text-text-muted">/{p.controls.length} effective</span>
                   </div>
-                  <p className="text-[11px] text-text-muted mt-1">
+                  <p className="text-[0.6875rem] text-text-muted mt-1">
                     {p.controls.filter(c => c.toe === 'Pending').length} TOE pending · {p.controls.filter(c => c.toe === 'Fail').length} in remediation
                   </p>
                 </>
               )}
             </div>
             <div className="border border-border-light rounded-xl bg-white p-4">
-              <div className="text-[11px] font-bold text-text-muted uppercase tracking-wider mb-1.5">Evidence chase</div>
+              <div className="text-[0.6875rem] font-bold text-text-muted uppercase tracking-wider mb-1.5">Evidence chase</div>
               {p.chase.length === 0 ? (
-                <p className="text-[11.5px] text-text-muted leading-relaxed">Opens with effectiveness testing — requests go to the process owners.</p>
+                <p className="text-[0.75rem] text-text-muted leading-relaxed">Opens with effectiveness testing — requests go to the process owners.</p>
               ) : (
                 <>
-                  <div className="text-[20px] font-bold tabular-nums text-text leading-tight">
-                    {p.chase.filter(c => c.stage === 'Tested').length}<span className="text-[13px] font-semibold text-text-muted">/{p.chase.length} complete</span>
+                  <div className="text-[1.25rem] font-bold tabular-nums text-text leading-tight">
+                    {p.chase.filter(c => c.stage === 'Tested').length}<span className="text-[0.8125rem] font-semibold text-text-muted">/{p.chase.length} complete</span>
                   </div>
-                  <p className="text-[11px] text-text-muted mt-1">
+                  <p className="text-[0.6875rem] text-text-muted mt-1">
                     {p.chase.filter(c => c.stage === 'Population requested' || c.stage === 'Documents requested').length} waiting on process owners
                   </p>
                 </>
               )}
             </div>
             <div className="border border-border-light rounded-xl bg-white p-4">
-              <div className="text-[11px] font-bold text-text-muted uppercase tracking-wider mb-1.5">Coming up</div>
+              <div className="text-[0.6875rem] font-bold text-text-muted uppercase tracking-wider mb-1.5">Coming up</div>
               {phaseIdx < phases.length - 1 ? (
                 <>
-                  <div className="text-[15px] font-bold text-text leading-tight">{phases[phaseIdx + 1].phase}</div>
-                  <p className="text-[11px] text-text-muted mt-1">{phases[phaseIdx + 1].window} — after {p.phase.toLowerCase()}</p>
+                  <div className="text-[0.9375rem] font-bold text-text leading-tight">{phases[phaseIdx + 1].phase}</div>
+                  <p className="text-[0.6875rem] text-text-muted mt-1">{phases[phaseIdx + 1].window} — after {p.phase.toLowerCase()}</p>
                 </>
               ) : (
-                <p className="text-[11.5px] text-text-muted leading-relaxed">Cycle complete — roll forward into the next year.</p>
+                <p className="text-[0.75rem] text-text-muted leading-relaxed">Cycle complete — roll forward into the next year.</p>
               )}
             </div>
           </div>
@@ -304,18 +305,18 @@ export default function V2ProgrammeView({ programme, onBack, onOpenWorkspace }: 
             container, but each column's content is bounded so label and value
             never tear apart on wide screens. */}
         <div className="border border-border-light rounded-xl bg-white grid grid-cols-3 divide-x divide-border-light mb-8 items-stretch">
-          <div className="p-4 max-w-[24rem]">
-            <div className="text-[11px] font-bold text-text-muted uppercase tracking-wider mb-2.5">Materiality</div>
+          <div className="p-4 max-w-96">
+            <div className="text-[0.6875rem] font-bold text-text-muted uppercase tracking-wider mb-2.5">Materiality</div>
             <SummaryRow label="Overall" value={fmtCr(p.materiality.overall)} note={p.materiality.basis === 'custom' ? 'Set directly' : `${p.materiality.pct}% of ${p.materiality.benchmarkLabel.toLowerCase()}`} />
             <SummaryRow label="Performance" value={fmtCr(pm)} strong note={`${p.materiality.pmPct}% — the scoping threshold`} />
             <SummaryRow label="Clearly trivial" value={fmtCr(p.materiality.overall * p.materiality.cttPct / 100)} note={`${p.materiality.cttPct}% of overall`} last />
             {p.revisions.length > 0 && (
-              <p className="text-[10.5px] text-evidence-700 mt-2">Revised mid-year — was {fmtCr(p.revisions[p.revisions.length - 1].fromOverall)}.</p>
+              <p className="text-[0.6875rem] text-evidence-700 mt-2">Revised mid-year — was {fmtCr(p.revisions[p.revisions.length - 1].fromOverall)}.</p>
             )}
           </div>
-          <div className="p-4 max-w-[28rem]">
-            <div className="text-[11px] font-bold text-text-muted uppercase tracking-wider mb-2.5">Entity scope — derived</div>
-            <div className="space-y-1.5 max-h-[220px] overflow-y-auto pr-1">
+          <div className="p-4 max-w-112">
+            <div className="text-[0.6875rem] font-bold text-text-muted uppercase tracking-wider mb-2.5">Entity scope — derived</div>
+            <div className="space-y-1.5 max-h-55 overflow-y-auto pr-1">
               {p.entityScope
                 .slice()
                 .sort((a, b) => Number(a.status === 'out') - Number(b.status === 'out'))
@@ -327,7 +328,7 @@ export default function V2ProgrammeView({ programme, onBack, onOpenWorkspace }: 
                       {e.type === 'Holding'
                         ? <Landmark size={11} className="text-brand-700 shrink-0" />
                         : <Building2 size={11} className="text-text-muted shrink-0" />}
-                      <span className={`text-[11.5px] truncate flex-1 ${d.status === 'out' ? 'text-text-muted' : 'text-text-secondary'}`}>{e.name.replace(' Pvt Ltd', '')}</span>
+                      <span className={`text-[0.75rem] truncate flex-1 ${d.status === 'out' ? 'text-text-muted' : 'text-text-secondary'}`}>{e.name.replace(' Pvt Ltd', '')}</span>
                       <EntityStatusChip status={d.status} small />
                     </div>
                   );
@@ -337,14 +338,14 @@ export default function V2ProgrammeView({ programme, onBack, onOpenWorkspace }: 
               <div className="h-1.5 bg-surface-3 rounded-full overflow-hidden">
                 <div className={`h-full rounded-full ${p.coveragePct >= p.coverageTargetPct ? 'bg-compliant' : 'bg-risk-500'}`} style={{ width: `${Math.min(p.coveragePct, 100)}%` }} />
               </div>
-              <div className="flex items-center justify-between mt-1 text-[10.5px] text-text-muted tabular-nums">
+              <div className="flex items-center justify-between mt-1 text-[0.6875rem] text-text-muted tabular-nums">
                 <span>{p.coveragePct}% coverage</span>
                 <span>target {p.coverageTargetPct}%</span>
               </div>
             </div>
           </div>
-          <div className="p-4 max-w-[24rem]">
-            <div className="text-[11px] font-bold text-text-muted uppercase tracking-wider mb-2.5">Scope funnel</div>
+          <div className="p-4 max-w-96">
+            <div className="text-[0.6875rem] font-bold text-text-muted uppercase tracking-wider mb-2.5">Scope funnel</div>
             <SummaryRow label="TB captions parsed" value={String(p.captions.length)} />
             <SummaryRow label="Entities in scope" value={`${inEntities.length} / ${p.entities.length}`} />
             <SummaryRow label="Process RACMs" value={String(p.racms.filter(r => r.kind === 'process').length)} />
@@ -357,8 +358,8 @@ export default function V2ProgrammeView({ programme, onBack, onOpenWorkspace }: 
         {tab === 'racm' && (<>
         <div className="flex items-center gap-1.5 mb-2.5">
           <Layers size={14} className="text-brand-700" />
-          <h3 className="text-[14px] font-bold text-text">RACMs — processes and workstreams</h3>
-          <span className="text-[11.5px] text-text-muted">derived from scoping; ITGC scoped by system</span>
+          <h3 className="text-[0.875rem] font-bold text-text">RACMs — processes and workstreams</h3>
+          <span className="text-[0.75rem] text-text-muted">derived from scoping; ITGC scoped by system</span>
         </div>
         <div className="grid grid-cols-3 2xl:grid-cols-4 gap-3 mb-8">
           {p.racms.map(r => {
@@ -378,23 +379,23 @@ export default function V2ProgrammeView({ programme, onBack, onOpenWorkspace }: 
                 className={`border border-border-light rounded-xl bg-white p-4 transition-colors ${onOpenWorkspace ? 'hover:border-primary/40 cursor-pointer' : ''}`}
               >
                 <div className="flex items-start justify-between gap-2">
-                  <div className="text-[13.5px] font-semibold text-text">
+                  <div className="text-[0.875rem] font-semibold text-text">
                     {r.area}
                     {r.kind === 'workstream' && (
-                      <span className="text-[10px] font-bold uppercase tracking-wide text-brand-700 bg-brand-50 px-1.5 h-4 rounded inline-flex items-center ml-1.5 align-middle">WS</span>
+                      <span className="text-[0.625rem] font-bold uppercase tracking-wide text-brand-700 bg-brand-50 px-1.5 h-4 rounded inline-flex items-center ml-1.5 align-middle">WS</span>
                     )}
                   </div>
                   {areaControls.length > 0 ? (
-                    <span className="text-[11px] tabular-nums text-text-secondary shrink-0">
+                    <span className="text-[0.6875rem] tabular-nums text-text-secondary shrink-0">
                       <span className="font-semibold text-text">{effective}</span>/{areaControls.length} effective
                     </span>
                   ) : (
-                    <span className="inline-flex items-center px-2 h-5 rounded-full text-[10px] font-semibold bg-brand-50 text-brand-700 shrink-0">
+                    <span className="inline-flex items-center px-2 h-5 rounded-full text-[0.6875rem] font-semibold bg-brand-50 text-brand-700 shrink-0">
                       RACM shell — ready to build
                     </span>
                   )}
                 </div>
-                <div className="text-[10.5px] text-text-muted mt-0.5 mb-2.5 truncate">
+                <div className="text-[0.6875rem] text-text-muted mt-0.5 mb-2.5 truncate">
                   {r.systems ? r.systems.join(' · ') : r.entities.join(' · ')}
                 </div>
                 {tested > 0 && (
@@ -408,8 +409,8 @@ export default function V2ProgrammeView({ programme, onBack, onOpenWorkspace }: 
                   </div>
                 )}
                 <div className="pt-2 border-t border-border-light space-y-0.5">
-                  <div className="text-[10.5px] text-text-muted truncate"><span className="text-text-secondary font-semibold">PO</span> {owner?.processOwner.split('—')[0].trim() ?? '—'}</div>
-                  <div className="text-[10.5px] text-text-muted truncate"><span className="text-text-secondary font-semibold">CO</span> {owner?.controlOwner.split('—')[0].trim() ?? '—'}</div>
+                  <div className="text-[0.6875rem] text-text-muted truncate"><span className="text-text-secondary font-semibold">PO</span> {owner?.processOwner.split('—')[0].trim() ?? '—'}</div>
+                  <div className="text-[0.6875rem] text-text-muted truncate"><span className="text-text-secondary font-semibold">CO</span> {owner?.controlOwner.split('—')[0].trim() ?? '—'}</div>
                 </div>
               </div>
             );
@@ -420,12 +421,12 @@ export default function V2ProgrammeView({ programme, onBack, onOpenWorkspace }: 
         {/* ── Testing & evidence — controls, remediation, chasing ── */}
         {tab === 'attr-testing' && (<>
         <div className="flex items-center gap-3 mb-2.5 flex-wrap">
-          <h3 className="text-[14px] font-bold text-text">Controls</h3>
-          <span className="text-[11.5px] text-text-muted">every control carries a class and key flag — the Auditor tab shows the filtered set</span>
+          <h3 className="text-[0.875rem] font-bold text-text">Controls</h3>
+          <span className="text-[0.75rem] text-text-muted">every control carries a class and key flag — the Auditor tab shows the filtered set</span>
         </div>
         {p.controls.length === 0 ? (
           <div className="border border-dashed border-border rounded-xl bg-white/60 px-6 py-8 text-center mb-8">
-            <p className="text-[12.5px] text-text-secondary">RACM shells are ready — controls are drafted during design testing.</p>
+            <p className="text-[0.8125rem] text-text-secondary">RACM shells are ready — controls are drafted during design testing.</p>
           </div>
         ) : (
           <ControlsTable rows={p.controls} />
@@ -434,12 +435,12 @@ export default function V2ProgrammeView({ programme, onBack, onOpenWorkspace }: 
         {/* Remediation & effective window */}
         {p.controls.some(c => c.toe === 'Fail') && (
           <div className="border border-border-light rounded-xl bg-white p-4 mb-8">
-            <div className="text-[11px] font-bold text-text-muted uppercase tracking-wider mb-2">Remediation — control effective dates</div>
+            <div className="text-[0.6875rem] font-bold text-text-muted uppercase tracking-wider mb-2">Remediation — control effective dates</div>
             {p.controls.filter(c => c.toe === 'Fail').map(c => (
               <div key={c.id} className="flex items-center gap-3 py-1.5 flex-wrap">
-                <span className="text-[12.5px] text-text">{c.name}</span>
-                <span className="inline-flex items-center px-2 h-5 rounded-full text-[10px] font-semibold bg-risk-50 text-risk-700">TOE failed</span>
-                <span className="text-[11.5px] text-text-secondary">
+                <span className="text-[0.8125rem] text-text">{c.name}</span>
+                <span className="inline-flex items-center px-2 h-5 rounded-full text-[0.6875rem] font-semibold bg-risk-50 text-risk-700">TOE failed</span>
+                <span className="text-[0.75rem] text-text-secondary">
                   remediated — effective from <span className="font-semibold tabular-nums">{c.effectiveDate}</span>; the auditor samples the effective window only
                 </span>
               </div>
@@ -450,20 +451,20 @@ export default function V2ProgrammeView({ programme, onBack, onOpenWorkspace }: 
         {/* ── Evidence chasing ── */}
         <div className="flex items-center gap-1.5 mb-1">
           <Mail size={14} className="text-brand-700" />
-          <h3 className="text-[14px] font-bold text-text">Evidence chasing</h3>
+          <h3 className="text-[0.875rem] font-bold text-text">Evidence chasing</h3>
         </div>
-        <p className="text-[11.5px] text-text-muted mb-3 max-w-3xl leading-relaxed">
+        <p className="text-[0.75rem] text-text-muted mb-3 max-w-3xl leading-relaxed">
           “90% of the team's time is spent chasing, 10% testing.” The tool runs the chase: it emails
           the process owner for the population, samples by frequency, requests documents per sample
           and sends the reminders — testing starts when the packs are in.
         </p>
         {p.chase.length === 0 ? (
           <div className="border border-dashed border-border rounded-xl bg-white/60 px-6 py-8 text-center mb-8">
-            <p className="text-[12.5px] text-text-secondary">Chasing opens with effectiveness testing — population requests go out per control, addressed to the process owners captured at scoping.</p>
+            <p className="text-[0.8125rem] text-text-secondary">Chasing opens with effectiveness testing — population requests go out per control, addressed to the process owners captured at scoping.</p>
           </div>
         ) : (
           <div className="border border-border-light rounded-xl bg-white overflow-hidden mb-8">
-            <div className="grid grid-cols-[2fr_1.1fr_0.9fr_1.6fr_0.7fr_1.5fr] gap-3 px-4 py-2 text-[10.5px] uppercase tracking-wider font-semibold text-text-muted/80 border-b border-border-light bg-surface-2/50">
+            <div className="grid grid-cols-[2fr_1.1fr_0.9fr_1.6fr_0.7fr_1.5fr] gap-3 px-4 py-2 text-[0.6875rem] uppercase tracking-wider font-semibold text-text-muted/80 border-b border-border-light bg-surface-2/50">
               <div>Control</div><div>Process owner</div><div>Sample rule</div><div>Progress</div><div>Docs</div><div className="text-right">Next</div>
             </div>
             {p.chase.map(row => {
@@ -482,14 +483,14 @@ export default function V2ProgrammeView({ programme, onBack, onOpenWorkspace }: 
               return (
                 <div key={row.id} className="grid grid-cols-[2fr_1.1fr_0.9fr_1.6fr_0.7fr_1.5fr] gap-3 px-4 py-3 items-center border-b border-border-light last:border-b-0">
                   <div className="min-w-0">
-                    <div className="text-[12.5px] text-text truncate">{ctrl.name}</div>
-                    <div className="text-[10.5px] text-text-muted truncate">
+                    <div className="text-[0.8125rem] text-text truncate">{ctrl.name}</div>
+                    <div className="text-[0.6875rem] text-text-muted truncate">
                       {ctrl.area}{row.popFile ? <> · <span className="font-mono">{row.popFile}</span>{row.popRows ? ` (${row.popRows.toLocaleString('en-IN')} rows)` : ''}</> : null}
                     </div>
                   </div>
-                  <div className="text-[11.5px] text-text-secondary truncate">{owner?.processOwner.split('—')[0].trim() ?? '—'}</div>
-                  <div className="text-[11px] text-text-muted">
-                    {ctrl.frequency} → {size}{row.split ? <span className="block text-[10px]">{row.split}</span> : null}
+                  <div className="text-[0.75rem] text-text-secondary truncate">{owner?.processOwner.split('—')[0].trim() ?? '—'}</div>
+                  <div className="text-[0.6875rem] text-text-muted">
+                    {ctrl.frequency} → {size}{row.split ? <span className="block text-[0.6875rem]">{row.split}</span> : null}
                   </div>
                   <div>
                     <div className="flex items-center gap-1" title={row.stage}>
@@ -497,9 +498,9 @@ export default function V2ProgrammeView({ programme, onBack, onOpenWorkspace }: 
                         <span key={s} className={`h-1.5 flex-1 rounded-full ${i < stageIdx ? 'bg-compliant' : i === stageIdx && row.stage !== 'Tested' ? 'bg-brand-400' : row.stage === 'Tested' ? 'bg-compliant' : 'bg-surface-3'}`} />
                       ))}
                     </div>
-                    <div className="text-[10.5px] text-text-muted mt-1">{row.stage}{row.reminders > 0 ? ` · ${row.reminders} reminder${row.reminders === 1 ? '' : 's'}` : ''}</div>
+                    <div className="text-[0.6875rem] text-text-muted mt-1">{row.stage}{row.reminders > 0 ? ` · ${row.reminders} reminder${row.reminders === 1 ? '' : 's'}` : ''}</div>
                   </div>
-                  <div className="text-[11.5px] tabular-nums text-text-secondary">
+                  <div className="text-[0.75rem] tabular-nums text-text-secondary">
                     {row.stage === 'Documents requested' || row.stage === 'Ready to test' || row.stage === 'Tested' ? `${row.docsIn}/${size}` : '—'}
                   </div>
                   <div className="flex items-center gap-1.5 justify-end">
@@ -507,7 +508,7 @@ export default function V2ProgrammeView({ programme, onBack, onOpenWorkspace }: 
                       <button
                         onClick={() => remind(row)}
                         title="Send a reminder email"
-                        className="inline-flex items-center gap-1 px-2 py-1 rounded-md text-[10.5px] font-semibold text-text-secondary border border-border bg-white hover:text-primary hover:border-primary/30 transition-colors cursor-pointer"
+                        className="inline-flex items-center gap-1 px-2 py-1 rounded-md text-[0.6875rem] font-semibold text-text-secondary border border-border bg-white hover:text-primary hover:border-primary/30 transition-colors cursor-pointer"
                       >
                         <BellRing size={11} /> Remind
                       </button>
@@ -515,19 +516,19 @@ export default function V2ProgrammeView({ programme, onBack, onOpenWorkspace }: 
                     {row.stage === 'Ready to test' ? (
                       <button
                         onClick={() => setTestId(row.id)}
-                        className="inline-flex items-center gap-1 px-2.5 py-1 rounded-md text-[10.5px] font-semibold bg-primary hover:bg-primary-hover text-white transition-colors cursor-pointer"
+                        className="inline-flex items-center gap-1 px-2.5 py-1 rounded-md text-[0.6875rem] font-semibold bg-primary hover:bg-primary-hover text-white transition-colors cursor-pointer"
                       >
                         <ClipboardCheck size={11} /> Open test
                       </button>
                     ) : nextLabel ? (
                       <button
                         onClick={() => advance(row)}
-                        className="inline-flex items-center gap-1 px-2.5 py-1 rounded-md text-[10.5px] font-semibold bg-primary hover:bg-primary-hover text-white transition-colors cursor-pointer"
+                        className="inline-flex items-center gap-1 px-2.5 py-1 rounded-md text-[0.6875rem] font-semibold bg-primary hover:bg-primary-hover text-white transition-colors cursor-pointer"
                       >
                         <Send size={11} /> {nextLabel}
                       </button>
                     ) : (
-                      <span className="inline-flex items-center gap-1 text-[10.5px] font-semibold text-compliant-700"><Check size={11} /> Done</span>
+                      <span className="inline-flex items-center gap-1 text-[0.6875rem] font-semibold text-compliant-700"><Check size={11} /> Done</span>
                     )}
                   </div>
                 </div>
@@ -542,9 +543,9 @@ export default function V2ProgrammeView({ programme, onBack, onOpenWorkspace }: 
         <div className="border border-border-light rounded-xl bg-white p-4 mb-5">
           <div className="flex items-center gap-1.5 mb-1">
             <Lock size={13} className="text-text-muted" />
-            <span className="text-[11px] font-bold text-text-muted uppercase tracking-wider">External auditor — view &amp; download only</span>
+            <span className="text-[0.6875rem] font-bold text-text-muted uppercase tracking-wider">External auditor — view &amp; download only</span>
           </div>
-          <p className="text-[11.5px] text-text-muted mb-3 max-w-3xl leading-relaxed">
+          <p className="text-[0.75rem] text-text-muted mb-3 max-w-3xl leading-relaxed">
             The auditor's working papers live in their own system — here they can see and take the
             key-financial set, nothing else. Management testing stays management's.
           </p>
@@ -553,7 +554,7 @@ export default function V2ProgrammeView({ programme, onBack, onOpenWorkspace }: 
               <button
                 key={w}
                 onClick={() => download(w)}
-                className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-md border border-border bg-white hover:border-primary/30 hover:text-primary text-[11.5px] font-semibold text-text-secondary transition-colors cursor-pointer"
+                className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-md border border-border bg-white hover:border-primary/30 hover:text-primary text-[0.75rem] font-semibold text-text-secondary transition-colors cursor-pointer"
               >
                 <Download size={12} /> {w}
               </button>
@@ -561,9 +562,9 @@ export default function V2ProgrammeView({ programme, onBack, onOpenWorkspace }: 
           </div>
         </div>
         <div className="flex items-center gap-3 mb-2.5 flex-wrap">
-          <h3 className="text-[14px] font-bold text-text">What the auditor sees</h3>
+          <h3 className="text-[0.875rem] font-bold text-text">What the auditor sees</h3>
           {p.controls.length > 0 && (
-            <span className="text-[11.5px] text-text-muted">
+            <span className="text-[0.75rem] text-text-muted">
               {/* Named the categories by hand until 22 Sep, when there were three
                   of them. With six it would have to list five, and be wrong again
                   the next time one is added. */}
@@ -573,7 +574,7 @@ export default function V2ProgrammeView({ programme, onBack, onOpenWorkspace }: 
         </div>
         {keyFinancial.length === 0 ? (
           <div className="border border-dashed border-border rounded-xl bg-white/60 px-6 py-8 text-center mb-8">
-            <p className="text-[12.5px] text-text-secondary">Nothing to hand over yet — key financial controls appear here once design testing drafts them.</p>
+            <p className="text-[0.8125rem] text-text-secondary">Nothing to hand over yet — key financial controls appear here once design testing drafts them.</p>
           </div>
         ) : (
           <ControlsTable rows={keyFinancial} />
@@ -679,68 +680,69 @@ function RescopeModal({ programme: p, onClose, onApply }: {
           animate={{ opacity: 1, y: 0, scale: 1 }}
           transition={{ duration: 0.18 }}
           role="dialog" aria-modal="true" aria-label="Re-scope"
-          className="pointer-events-auto relative w-[640px] max-w-full bg-canvas rounded-[1.25rem] border border-border-light shadow-[0_24px_64px_-16px_rgba(15,8,30,0.28)] p-6"
+          className="pointer-events-auto relative w-160 max-w-full bg-canvas rounded-[1.25rem] border border-border-light shadow-[0_24px_64px_-16px_rgba(15,8,30,0.28)] p-6"
         >
+          <DialogFocus onEscape={onClose} />
           <button onClick={onClose} aria-label="Close" className="absolute top-3.5 right-3.5 p-1.5 rounded-md text-text-muted hover:text-text hover:bg-surface-2 transition-colors cursor-pointer">
             <X size={16} />
           </button>
-          <div className="text-[11px] font-bold text-text-muted uppercase tracking-wider mb-2">Mid-year re-scope</div>
-          <h3 className="text-[17px] font-bold text-text mb-1">Results shifted — revise materiality</h3>
-          <p className="text-[12px] text-text-secondary mb-4 leading-relaxed">
+          <div className="text-[0.6875rem] font-bold text-text-muted uppercase tracking-wider mb-2">Mid-year re-scope</div>
+          <h3 className="text-[1.0625rem] font-bold text-text mb-1">Results shifted — revise materiality</h3>
+          <p className="text-[0.75rem] text-text-secondary mb-4 leading-relaxed">
             Profits fall, materiality falls with them — and areas that weren't material in April are
             material now. A re-scope round at the start of Q4 is standard practice.
           </p>
           <div className="grid grid-cols-2 gap-4 items-start mb-4">
             <div>
               <div className="text-[0.6875rem] font-bold text-ink-500 uppercase tracking-wider mb-1.5">{p.materiality.benchmarkLabel} (₹ Cr) — revised</div>
-              <input
+              <input aria-label={`${p.materiality.benchmarkLabel} (₹ Cr) — revised`}
                 type="number" min={0} value={benchmark}
                 onChange={e => setBenchmark(Number(e.target.value))}
-                className="w-36 px-3 py-2 text-[13px] tabular-nums border border-border rounded-lg bg-white text-text outline-none focus:border-primary/40 focus:ring-2 focus:ring-primary/10"
+                className="w-36 px-3 py-2 text-[0.8125rem] tabular-nums border border-border rounded-lg bg-white text-text outline-none focus:border-primary/40 focus:ring-2 focus:ring-primary/10"
               />
-              <p className="text-[11px] text-text-muted mt-1.5">Was {fmtCr(p.materiality.benchmark)} at scoping.</p>
+              <p className="text-[0.6875rem] text-text-muted mt-1.5">Was {fmtCr(p.materiality.benchmark)} at scoping.</p>
             </div>
             <div className="border border-border-light rounded-xl bg-white p-3.5">
               <div className="flex items-baseline justify-between py-1 border-b border-border-light">
-                <span className="text-[12px] text-text-secondary">Overall</span>
-                <span className="font-mono tabular-nums text-[12.5px] text-text">{fmtCr(oldOverall)} → <span className="font-bold">{fmtCr(newOverall)}</span></span>
+                <span className="text-[0.75rem] text-text-secondary">Overall</span>
+                <span className="font-mono tabular-nums text-[0.8125rem] text-text">{fmtCr(oldOverall)} → <span className="font-bold">{fmtCr(newOverall)}</span></span>
               </div>
               <div className="flex items-baseline justify-between py-1">
-                <span className="text-[12px] text-text-secondary">Performance</span>
-                <span className="font-mono tabular-nums text-[12.5px] text-text">{fmtCr(oldPm)} → <span className="font-bold">{fmtCr(newPm)}</span></span>
+                <span className="text-[0.75rem] text-text-secondary">Performance</span>
+                <span className="font-mono tabular-nums text-[0.8125rem] text-text">{fmtCr(oldPm)} → <span className="font-bold">{fmtCr(newPm)}</span></span>
               </div>
             </div>
           </div>
           <div className="border border-border-light rounded-xl bg-white overflow-hidden mb-4">
-            <div className="px-4 py-2 text-[10.5px] uppercase tracking-wider font-semibold text-text-muted/80 border-b border-border-light bg-surface-2/50">
+            <div className="px-4 py-2 text-[0.6875rem] uppercase tracking-wider font-semibold text-text-muted/80 border-b border-border-light bg-surface-2/50">
               Newly in scope at {fmtCr(newPm)} — {newlyIn.length} caption{newlyIn.length === 1 ? '' : 's'}
             </div>
-            <div className="max-h-[180px] overflow-y-auto">
+            <div className="max-h-45 overflow-y-auto">
               {newlyIn.length === 0 && (
-                <p className="px-4 py-4 text-[12px] text-text-muted">Nothing new crosses the revised threshold.</p>
+                <p className="px-4 py-4 text-[0.75rem] text-text-muted">Nothing new crosses the revised threshold.</p>
               )}
               {newlyIn.map(c => (
                 <div key={c.id} className="flex items-center gap-3 px-4 py-2 border-b border-border-light last:border-b-0">
-                  <span className="text-[12.5px] text-text flex-1 truncate">{c.caption}</span>
-                  <span className="text-[11.5px] text-text-muted">{v2EntityShort(c.entityId, p.entities)}</span>
-                  <span className="text-[12px] font-mono tabular-nums text-text-secondary">{fmtCr(c.balance)}</span>
+                  <span className="text-[0.8125rem] text-text flex-1 truncate">{c.caption}</span>
+                  <span className="text-[0.75rem] text-text-muted">{v2EntityShort(c.entityId, p.entities)}</span>
+                  <span className="text-[0.75rem] font-mono tabular-nums text-text-secondary">{fmtCr(c.balance)}</span>
                   <ViaChip via="revision" />
                 </div>
               ))}
             </div>
             {newEntities.length > 0 && (
-              <p className="px-4 py-2 text-[11px] text-evidence-700 border-t border-border-light">
+              <p className="px-4 py-2 text-[0.6875rem] text-evidence-700 border-t border-border-light">
                 Pulls {newEntities.map(id => v2EntityShort(id, p.entities)).join(', ')} into scope.
               </p>
             )}
           </div>
           <div className="flex items-center justify-end gap-2">
-            <button onClick={onClose} className="px-3.5 py-2 rounded-lg border border-border bg-white hover:bg-surface-2 text-[12.5px] font-semibold text-text-secondary transition-colors cursor-pointer">
+            <button onClick={onClose} className="px-3.5 py-2 rounded-lg border border-border bg-white hover:bg-surface-2 text-[0.8125rem] font-semibold text-text-secondary transition-colors cursor-pointer">
               Cancel
             </button>
             <button
               onClick={apply}
-              className="inline-flex items-center gap-1.5 px-4 py-2 bg-primary hover:bg-primary-hover text-white rounded-lg text-[13px] font-semibold transition-colors cursor-pointer"
+              className="inline-flex items-center gap-1.5 px-4 py-2 bg-primary hover:bg-primary-hover text-white rounded-lg text-[0.8125rem] font-semibold transition-colors cursor-pointer"
             >
               <Check size={13} /> Apply revision
             </button>
@@ -758,24 +760,24 @@ function RescopeModal({ programme: p, onClose, onApply }: {
 function ControlsTable({ rows }: { rows: V2Control[] }) {
   return (
     <div className="border border-border-light rounded-xl bg-white overflow-hidden mb-8">
-      <div className="grid grid-cols-[2.2fr_1fr_1.1fr_0.55fr_0.6fr_0.6fr_1fr] gap-3 px-4 py-2 text-[10.5px] uppercase tracking-wider font-semibold text-text-muted/80 border-b border-border-light bg-surface-2/50">
+      <div className="grid grid-cols-[2.2fr_1fr_1.1fr_0.55fr_0.6fr_0.6fr_1fr] gap-3 px-4 py-2 text-[0.6875rem] uppercase tracking-wider font-semibold text-text-muted/80 border-b border-border-light bg-surface-2/50">
         <div>Control</div><div>RACM</div><div>Risk category</div><div>Key</div><div>TOD</div><div>TOE</div><div>Effective from</div>
       </div>
       {rows.map(c => (
         <div key={c.id} className="grid grid-cols-[2.2fr_1fr_1.1fr_0.55fr_0.6fr_0.6fr_1fr] gap-3 px-4 py-2.5 items-center border-b border-border-light last:border-b-0">
           <div className="min-w-0">
-            <div className="text-[12.5px] text-text truncate">{c.name}</div>
-            {c.note && <div className="text-[10.5px] text-text-muted truncate">{c.note}</div>}
+            <div className="text-[0.8125rem] text-text truncate">{c.name}</div>
+            {c.note && <div className="text-[0.6875rem] text-text-muted truncate">{c.note}</div>}
           </div>
-          <div className="text-[11.5px] text-text-muted">{c.area}</div>
+          <div className="text-[0.75rem] text-text-muted">{c.area}</div>
           <div><ClassChip clazz={c.clazz} /></div>
           <div>{c.key
-            ? <span className="inline-flex items-center px-1.5 h-4 rounded text-[10px] font-bold uppercase tracking-wide bg-brand-50 text-brand-700">Key</span>
-            : <span className="text-[10.5px] text-text-muted">Non-key</span>}
+            ? <span className="inline-flex items-center px-1.5 h-4 rounded text-[0.625rem] font-bold uppercase tracking-wide bg-brand-50 text-brand-700">Key</span>
+            : <span className="text-[0.6875rem] text-text-muted">Non-key</span>}
           </div>
           <div><ResultChip r={c.tod} /></div>
           <div><ResultChip r={c.toe} /></div>
-          <div className="text-[11px] tabular-nums text-text-secondary">{c.effectiveDate ?? '—'}</div>
+          <div className="text-[0.6875rem] tabular-nums text-text-secondary">{c.effectiveDate ?? '—'}</div>
         </div>
       ))}
     </div>
@@ -783,16 +785,16 @@ function ControlsTable({ rows }: { rows: V2Control[] }) {
 }
 
 function ClassChip({ clazz }: { clazz: V2Control['clazz'] }) {
-  return <span className={`inline-flex items-center px-2 h-5 rounded-full text-[0.625rem] font-semibold whitespace-nowrap ${RISK_CATEGORY_TINT[clazz]}`}>{clazz}</span>;
+  return <span className={`inline-flex items-center px-2 h-5 rounded-full text-[0.6875rem] font-semibold whitespace-nowrap ${RISK_CATEGORY_TINT[clazz]}`}>{clazz}</span>;
 }
 
 function ResultChip({ r }: { r: V2Control['tod'] | V2Control['toe'] }) {
-  if (r === '—') return <span className="text-[11px] text-text-muted">—</span>;
+  if (r === '—') return <span className="text-[0.6875rem] text-text-muted">—</span>;
   const cls =
     r === 'Pass' ? 'bg-compliant-50 text-compliant-700'
     : r === 'Fail' ? 'bg-risk-50 text-risk-700'
     : 'bg-surface-2 text-text-muted';
-  return <span className={`inline-flex items-center px-2 h-5 rounded-full text-[10px] font-semibold ${cls}`}>{r}</span>;
+  return <span className={`inline-flex items-center px-2 h-5 rounded-full text-[0.6875rem] font-semibold ${cls}`}>{r}</span>;
 }
 
 function SummaryRow({ label, value, note, strong, last }: {
@@ -801,10 +803,10 @@ function SummaryRow({ label, value, note, strong, last }: {
   return (
     <div className={`py-1.5 ${last ? '' : 'border-b border-border-light'}`}>
       <div className="flex items-baseline justify-between gap-3">
-        <span className={`text-[12px] ${strong ? 'font-semibold text-text' : 'text-text-secondary'}`}>{label}</span>
-        <span className={`font-mono tabular-nums ${strong ? 'text-[14px] font-bold text-text' : 'text-[12.5px] text-text'}`}>{value}</span>
+        <span className={`text-[0.75rem] ${strong ? 'font-semibold text-text' : 'text-text-secondary'}`}>{label}</span>
+        <span className={`font-mono tabular-nums ${strong ? 'text-[0.875rem] font-bold text-text' : 'text-[0.8125rem] text-text'}`}>{value}</span>
       </div>
-      {note && <div className="text-[10px] text-text-muted mt-0.5">{note}</div>}
+      {note && <div className="text-[0.6875rem] text-text-muted mt-0.5">{note}</div>}
     </div>
   );
 }

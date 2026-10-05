@@ -1,7 +1,7 @@
-import { createContext, useCallback, useContext, useMemo, useRef, useState, type Dispatch, type ReactNode, type SetStateAction } from 'react';
+import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type Dispatch, type ReactNode, type SetStateAction } from 'react';
 import { racmTemplateForProcesses, requiredDatasetsFor, sampleRefs, seedIcfrEngagement, type SeedMeta } from './mockData';
-import { learnedNote, learnedRuleFor, rollPending, type OverridePattern, assessSeverity, attestationOverruled, awaitsConfirm, unconfirmedIra, buildFlawScan, designCloseBlock, likelihoodForGap, suggestGapKind, designApproved, designFilesOf, docColumnOf, docNotApplicable, applyDocRequirements, requiredKindsFor, iraCannotTest, designOutstanding, designOutstandingRequired, fmtDateTime, requiredFilesOf, requiredFilesReady, canExtendToe, canRedrawToe, controlConclusion, reconcileConfirmations, formatINR, gradeException, icfrConclusion, inquiryOnlyAttributes, passedWithoutFiles, isControlLocked, isControlLockedIn, isEngagementLocked, itgcHolds, parseLooseDate, samePerson, samplingOf, populationSources, previewRegrades, sampleSizeGuide, samplesFor, sourceTotals, staleSteps, stepResult, designCheckQA, TOE_MAX_ROUNDS, toeRoundFailed, toeRoundNo, toeRounds, trackResult, validationQA, validationSummary, validationTable, wfRunRef, dealSample, samplesTestedCount, sampleHome, spreadPhrase, workingAudit, yearEndPending, versionAudit, versionNo, LEGACY_SOURCE_ID, type RulesPatch } from './helpers';
-import type { PlanFixKind, ControlVersion, NewVersionDraft, ValidationResult, IraLearnedRule, RollPart,
+import { confidenceOf, evidenceKindOf, learnedNote, learnedRuleFor, rollPending, type OverridePattern, assessSeverity, attestationOverruled, awaitsConfirm, unconfirmedIra, couldntAskFor, dayMonth, iraUndoable, buildFlawScan, designCloseBlock, likelihoodForGap, suggestGapKind, designApproved, designFilesOf, docColumnOf, docNotApplicable, applyDocRequirements, requiredKindsFor, iraCannotTest, designOutstanding, designOutstandingRequired, fmtDateTime, requiredFilesOf, requiredFilesReady, canExtendToe, canRedrawToe, controlConclusion, reconcileConfirmations, formatINR, gradeException, icfrConclusion, inquiryOnlyAttributes, passedWithoutFiles, isControlLocked, isControlLockedIn, isEngagementLocked, itgcHolds, parseLooseDate, samePerson, samplingOf, populationSources, previewRegrades, sampleSizeGuide, samplesFor, sampleSourceOf, sourceTotals, staleSteps, stepResult, designCheckQA, TOE_MAX_ROUNDS, toeRoundFailed, toeRoundNo, toeRounds, trackResult, validationQA, validationSummary, validationTable, wfRunRef, dealSample, samplesTestedCount, sampleHome, spreadPhrase, workingAudit, yearEndPending, versionAudit, versionNo, LEGACY_SOURCE_ID, type RulesPatch } from './helpers';
+import type { PlanFixKind, ControlVersion, NewVersionDraft, ValidationResult, IraLearnedRule, RollPart, IraRunItem, IraRunSnapshot, IraPlanChoices,
   Assertion, Attestation, AuditArchive, AuditFileRecord, AuditorProof, AuditRecord, Control, ControlClass, Deficiency, DesignDoc, DesignDocKind, DesignPoint, DiscussionAnchor, DocStatus, FileOrigin,
   DesignJudgements, DesignWaiverReason, EvidenceFile, EvidenceMode, ExceptionStatus, ExecKind, ExecutionEvent, Frequency, HandoffTask, IcfrEngagement,
   DesignBasis, DesignTrack, EvidenceType, ExceptionKind, IpeConclusion, PopulationChecks, IpeTest, MaterialityRules, Walkthrough, Nature, OperatingPark, OperatingStep, Override, Population, PopulationDefinition, RacmReview, Role, RulesChangeEntry, RunControlOutcome, RunRecord, ScopeArchiveEntry,
@@ -15,6 +15,26 @@ import type { PlanFixKind, ControlVersion, NewVersionDraft, ValidationResult, Ir
 
 let _uid = 0;
 const uid = (p: string) => `${p}-${(++_uid).toString(36)}`;
+
+/**
+ * Early conclusions wait (product decision, 5 Oct). "Design ineffective" stays
+ * off until at least one design check has a result — by Ira or by hand — and
+ * "Conclude ineffective" until a sample is drawn and at least one attribute or
+ * item has a result. Returns the one line that says why, or null when the
+ * conclusion may be drawn. A control whose RACM lists no design checks is not
+ * held: there is nothing to test, and the judgement on the documents stays the
+ * auditor's. The page's buttons and every store path read this one rule.
+ */
+export function ineffectiveTooEarly(c: Control, which: 'design' | 'operating'): string | null {
+  if (which === 'design') {
+    const pts = c.design.points;
+    if (pts.length === 0) return null;
+    return pts.some(p => (p.override ? p.override.result : p.result) !== 'Not tested') ? null : 'Test at least one check before concluding.';
+  }
+  const samples = c.operating.sampling?.samples ?? [];
+  const anyResult = c.operating.steps.some(s => stepResult(s) !== 'Not tested') || samplesTestedCount(c) > 0;
+  return samples.length > 0 && anyResult ? null : 'Draw the sample and test at least one item before concluding.';
+}
 
 /**
  * A control returned to the state a fresh audit finds it in: both tracks Not
@@ -52,6 +72,8 @@ function untested(c: Control): Control {
     reopened: undefined,
     // Last round's confirmations are about last round (#13).
     rollForward: undefined,
+    // …and so is the plan Ira was given; this cycle's is shaped afresh.
+    iraPlan: undefined,
     design: {
       ...c.design,
       conclusion: 'Not tested',
@@ -134,9 +156,90 @@ function rolledForward(before: Control, fresh: Control, from: string): Control {
   return { ...fresh, design, operating, rollForward: { from, parts, ...(sampling ? { sampling } : {}) } };
 }
 
+/**
+ * A year-end or roll-forward ENGAGEMENT carrying over from a signed interim
+ * engagement (5 Oct 2026 — one engagement per round). The same carry createAudit
+ * makes when a roll-forward opens on the same engagement: each control comes
+ * across emptied by `untested`, last round's set-up laid back on by
+ * `rolledForward` (Confirm unchanged / Edit), and — where the interim's design
+ * was Effective and the interim was countersigned — the design conclusion
+ * carries with the reviewer's approval, so only operating starts over. Open
+ * findings ride along; closed ones stay on the interim.
+ *
+ * Which controls: the interim's, in the processes the new engagement covers —
+ * or all of them when it names none of the interim's processes.
+ */
+function carriedOver(child: IcfrEngagement, parent: IcfrEngagement): IcfrEngagement {
+  const pAudit = parent.audits[0];
+  const countersign = pAudit?.signoff?.reviewer;
+  const lastRound = pAudit ? `${pAudit.period} interim` : 'the interim';
+  const childProcs = new Set(child.controls.map(c => c.process));
+  const inProcs = parent.controls.filter(c => childProcs.has(c.process));
+  const source = inProcs.length ? inProcs : parent.controls;
+  const ids = new Set(source.map(c => c.id));
+  const controls = source.map(c => {
+    const fresh = rolledForward(c, untested(c), lastRound);
+    if (!countersign || trackResult(c.design) !== 'Effective') return fresh;
+    const carriedFrom = lastRound;
+    const d = c.design;
+    const approval = d.approval?.approvedBy ? d.approval : {
+      preparedBy: d.approval?.preparedBy ?? { by: d.testedBy ?? pAudit?.signoff?.preparer?.by ?? parent.preparer, at: d.testedAt ?? pAudit?.signoff?.preparer?.at ?? carriedFrom },
+      approvedBy: { by: countersign.by, at: countersign.at },
+    };
+    // The design carried whole — only the operating parts still ask (#13).
+    const rf = fresh.rollForward;
+    const keep = rf ? { ...rf, parts: { population: rf.parts.population, attributes: rf.parts.attributes } } : undefined;
+    return {
+      ...fresh,
+      rollForward: keep && (keep.parts.population || keep.parts.attributes) ? keep : undefined,
+      design: { ...d, carriedFrom, approval, designReturn: undefined },
+    };
+  });
+  return {
+    ...child,
+    controls,
+    deficiencies: parent.deficiencies.filter(d => ids.has(d.controlId) && d.status !== 'Closed'),
+    executions: [],
+    tasks: [],
+    reviewNotes: [],
+    runs: [],
+    audits: child.audits.map(a => ({ ...a, scopeNames: Array.from(new Set(controls.map(c => c.process))), controlIds: undefined })),
+  };
+}
+
 /** What gets logged for one execution — actor/id/time are stamped by pushExec. */
-type ExecDraft = { controlId: string; track: 'design' | 'operating'; kind: ExecKind; verb: string; target?: string; result?: TestResult | TrackConclusion };
+type ExecDraft = { controlId: string; track: 'design' | 'operating'; kind: ExecKind; verb: string; target?: string; result?: TestResult | TrackConclusion; iraRun?: IraRunSnapshot };
 const short = (s: string, n = 40) => (s.length > n ? `${s.slice(0, n - 1)}…` : s);
+
+// ── Stage 1c: an Ira run, frozen for History ─────────────────────────────────
+// One line per run in History that folds open to what Ira read and what it
+// found on each row. Taken off the rows the moment the run lands, so a later
+// confirm, override or re-run cannot rewrite what THIS run said. Only what the
+// result already carries: the verdict, the confidence the page shows on the
+// tick, and the file the answer was read in.
+function iraItemOf(controlId: string, row: DesignPoint | OperatingStep, label: string, source: string | undefined): IraRunItem | null {
+  const v = row.validation;
+  if (!v) return null;
+  if (v.blocked && !v.result) return { label, result: 'blocked' };
+  if (v.result !== 'Pass' && v.result !== 'Fail') return null;
+  return { label, result: v.result, confidence: confidenceOf(v, `${controlId}:${row.id}`), ...(source ? { source } : {}) };
+}
+/** The file a design check's answer was read in — the same one its working
+ *  opens on the page: the check's own proof, else the first cited element's. */
+function designSourceOf(c: Control, p: DesignPoint): string | undefined {
+  if (!p.validation?.qa.some(x => x.cite)) return undefined;
+  const linked = c.design.documents.filter(d => p.evidencedBy?.includes(d.id)).flatMap(d => d.files ?? []);
+  return (p.auditorProof?.file ?? linked.find(x => !!x.url) ?? linked[0])?.name;
+}
+function designRunSnapshot(c: Control, files: string[]): IraRunSnapshot {
+  // A started plan that narrowed the checks: only the checks Ira was sent to read.
+  const picked = c.iraPlan?.started && c.iraPlan.checks?.length ? new Set(c.iraPlan.checks) : null;
+  return { files, items: c.design.points.filter(p => !picked || picked.has(p.id)).map(p => iraItemOf(c.id, p, p.text, designSourceOf(c, p))).filter((x): x is IraRunItem => !!x) };
+}
+function operatingRunSnapshot(c: Control, steps: OperatingStep[]): IraRunSnapshot {
+  const files = Array.from(new Set(steps.flatMap(s => requiredFilesOf(s, c).map(f => f.file?.name).filter((n): n is string => !!n))));
+  return { files, items: steps.map(s => iraItemOf(c.id, s, `${s.code} · ${s.description}`, s.validation?.fileName)).filter((x): x is IraRunItem => !!x) };
+}
 
 // The two questions Ira's design read can answer before it looks at the design
 // itself (S6, A17). Kept as constants because the next run reads them back: a
@@ -228,6 +331,7 @@ import { controlIdClashes, copyRacmControls, findLibraryRacm, markRacmsUsed } fr
 import { findEngagement, registerEngagement } from '../../data/engagements';
 import { useInlineNote, type Note } from './InlineNote';
 import { defWord } from './flow';
+import { keepWorkspace, liveWorkspace } from './engagementRounds';
 import { newAuditBlock } from './auditPortfolio';
 
 // ─── You cannot audit what you own ──────────────────────────────────────────────
@@ -248,9 +352,9 @@ function ownsIt(state: IcfrEngagement, controlId: string, person: string): boole
 export type SoxTab = 'overview' | 'racm' | 'risks' | 'controls' | 'runs' | 'deficiencies' | 'config';
 // 'overview' | 'racm'(card) | 'racm-list'(matrix) | 'risks' | 'register'(=Control Library) | 'runs' | 'config'
 // are root-level views; the rest are drill-ins reached from them.
-/** Which step on the control page a navigation was about. One value today —
- *  the list grows as other rows learn to name where they land. */
-export type FocusStep = 'population';
+/** Which step on the control page a navigation was about — the list grows as
+ *  other rows learn to name where they land. */
+export type FocusStep = 'population' | 'design' | 'toe';
 
 type View = 'overview' | 'racm' | 'racm-list' | 'racm-editor' | 'risks' | 'register' | 'runs' | 'config' | 'dossier' | 'deficiencies' | 'scope' | 'handoffs';
 export interface RacmEditorMeta { name: string; process?: string }
@@ -443,7 +547,7 @@ interface IcfrCtx {
   /** Ask the control's owner to come and upload the source data. The population
    *  is theirs to derive, so a missing file is a thing to chase rather than a
    *  thing for the auditor to work around. */
-  remindOwnerForFiles: (controlId: string, what: string) => void;
+  remindOwnerForFiles: (controlId: string, what: string, ask?: { title: string; checkId: string; track: 'design' | 'operating' }) => void;
   /** Put a file into the audit's registry — name, size, who brought it in and
    *  where it came from. Answered once here; every population inherits it. */
   registerFile: (rec: AuditFileRecord) => void;
@@ -482,9 +586,14 @@ interface IcfrCtx {
   setStepResult: (controlId: string, stepId: string, result: TestResult) => void;
   overrideStep: (controlId: string, stepId: string, override: Override | null) => void;
   /** Accept Ira's results as they stand on these rows (agentic UX #1). */
-  confirmIra: (controlId: string, which: 'design' | 'operating', ids: string[]) => void;
-  /** Take every result Ira holds that nobody confirmed back to Not tested (UX #15). */
+  confirmIra: (controlId: string, which: 'design' | 'operating', ids: string[], opts?: { byIra?: boolean }) => void;
+  /** Take every result Ira holds that nobody confirmed — and Ira's own Automatic
+   *  confirms on steps not yet concluded — back to Not tested (UX #15). */
   undoIra: (controlId: string) => void;
+  /** Shape Ira's plan before Start — skip a step, narrow what it reads (Stage 1a). */
+  setIraPlan: (controlId: string, patch: Partial<Omit<IraPlanChoices, 'started'>>) => void;
+  /** Start Ira's plan on this control. Until then Ira runs nothing on it. */
+  startIraPlan: (controlId: string) => void;
   /** The store's last refusal, printed by the page shell as one line (#11). */
   refusal: Note | null;
   /** Auditor only: last round's set-up part, confirmed unchanged or taken to edit (#13). */
@@ -514,7 +623,9 @@ interface IcfrCtx {
   addRequiredFile: (controlId: string, stepId: string, label: string) => void;
   renameRequiredFile: (controlId: string, stepId: string, fileId: string, label: string) => void;
   removeRequiredFile: (controlId: string, stepId: string, fileId: string) => void;
-  uploadRequiredFile: (controlId: string, stepId: string, fileId: string, fileName: string) => void;
+  /** `url` — an object URL for a file picked this session, so the evidence
+   *  viewer can open the actual bytes. Omitted, the record keeps only the name. */
+  uploadRequiredFile: (controlId: string, stepId: string, fileId: string, fileName: string, url?: string) => void;
   clearRequiredFile: (controlId: string, stepId: string, fileId: string) => void;
   /** Run AI validation on every attribute whose required files are all in;
    *  the rest are left untouched. */
@@ -541,6 +652,17 @@ interface IcfrCtx {
   openAuditId: string | null;
   openAudit: (auditId: string) => void;
   closeAudit: () => void;
+  /** Role landing (product decision, 2 Oct): opening an audit, or switching
+   *  "Viewing as", lands each hat on its own list — the reviewer on the Reviewer
+   *  queue, the owner on their tasks, the auditor on the Dashboard top. The list
+   *  that renders consumes this once (scrolls itself into view, shows the note if
+   *  any) and clears it. An explicit navigation — a tab, a control, a finding —
+   *  clears it too, so only the default landing ever scrolls. */
+  listLanding: { note?: string } | null;
+  clearListLanding: () => void;
+  /** The reviewer's way back to their queue — "Countersign & next" with nothing
+   *  left lands here with one line saying so. */
+  openReviewerQueue: (note?: string) => void;
   // RACM / SOP source documents uploaded on the RACM page
   // an uploaded RACM/SOP belongs to ONE process's matrix (a RACM is per-process);
   // docs without a process are legacy engagement-wide pins and show everywhere
@@ -727,7 +849,23 @@ export function IcfrProvider({ children, initialRole = 'auditor', seedMeta }: { 
   // every write through `setEng` below: waivers against elements that do not apply
   // are lifted into the trail, and required kinds the control never listed are
   // added as Missing — see applyDocRequirements.
-  const [eng, setEngState] = useState<IcfrEngagement>(() => applyDocRequirements(seedIcfrEngagement(seedMeta)).eng);
+  // The work kept for this engagement this session (see liveWorkspace) — read
+  // once on mount, so leaving the engagement and coming back picks up where it
+  // was left instead of re-seeding. Keyed by the engagement id the shell passes.
+  const keepKey = seedMeta?.id ?? '__standalone';
+  const [kept] = useState(() => liveWorkspace(keepKey));
+  const [eng, setEngState] = useState<IcfrEngagement>(() => {
+    // A rename on the Engagements list since then still shows.
+    if (kept) return seedMeta?.name && seedMeta.name !== kept.eng.name ? { ...kept.eng, name: seedMeta.name } : kept.eng;
+    const seeded = seedIcfrEngagement(seedMeta);
+    // A year-end / roll-forward created with "Carry over from" a signed interim
+    // engagement (5 Oct 2026) takes that interim's controls, rolled forward —
+    // as they stand this session when the interim was worked on since load.
+    const from = seedMeta?.carryFrom;
+    const source = from ? (from.id ? liveWorkspace(from.id)?.eng : undefined) ?? seedIcfrEngagement(from) : undefined;
+    const carried = source ? carriedOver(seeded, source) : seeded;
+    return applyDocRequirements(carried).eng;
+  });
   /** Every write to the register goes through here, and every write is re-checked
    *  against DOC_REQUIREMENTS.
    *
@@ -763,7 +901,10 @@ export function IcfrProvider({ children, initialRole = 'auditor', seedMeta }: { 
   const [returnView, setReturnView] = useState<View | null>(null);
   // Which business process's RACM the matrix view shows — one RACM per process.
   const [racmProcess, setRacmProcess] = useState<string | null>(null);
-  const [racmDocs, setRacmDocs] = useState<(EvidenceFile & { process?: string; source?: 'racm' | 'sop'; url?: string })[]>([]);
+  const [racmDocs, setRacmDocs] = useState<(EvidenceFile & { process?: string; source?: 'racm' | 'sop'; url?: string })[]>(
+    () => (kept?.racmDocs ?? []) as (EvidenceFile & { process?: string; source?: 'racm' | 'sop'; url?: string })[]);
+  // Every change is written back, so the next mount of this engagement starts here.
+  useEffect(() => { keepWorkspace(keepKey, eng, racmDocs); }, [keepKey, eng, racmDocs]);
   // Owner mode is a person-lane, not a role-lane: "mine" = this named owner's
   // controls, tasks and exceptions. The picker in the top bar switches personas.
   // Start on an owner who actually has something to do. A hard-coded name lands
@@ -805,7 +946,9 @@ export function IcfrProvider({ children, initialRole = 'auditor', seedMeta }: { 
   // Declared up here with the rest of the navigation state — openControl reads
   // it to decide whether a focused open needs to enter an audit first, and the
   // guard below reads it for the open audit's round.
-  const [openAuditId, setOpenAuditId] = useState<string | null>(null);
+  // ONE ENGAGEMENT = ONE AUDIT ROUND (5 Oct 2026): the engagement's one audit
+  // is always open, so every audit-scoped reader below reads it from the start.
+  const [openAuditId, setOpenAuditId] = useState<string | null>(() => eng.audits[0]?.id ?? null);
   // Parts of last round's set-up still waiting on the auditor (#13) hold their
   // step: every action in it refuses until the part is confirmed or edited.
   const controlsRef = useRef(eng.controls);
@@ -838,12 +981,18 @@ export function IcfrProvider({ children, initialRole = 'auditor', seedMeta }: { 
     return !c || !designApproved(c) || !!yearEndPending(c, eng.audits.find(a => a.id === openAuditId));
   }, [eng.controls, eng.audits, openAuditId]);
 
+  // Role landing — see listLanding on IcfrCtx. Only the reviewer and the owner
+  // have a list of their own on the Dashboard; the auditor's landing is its top.
+  const [listLanding, setListLanding] = useState<{ note?: string } | null>(null);
+  const clearListLanding = useCallback(() => setListLanding(null), []);
+
   // Selecting a tab resets to that tab's root view; both personas share the same tabs.
   const setTab = useCallback((t: SoxTab) => {
     setTabState(t);
     setView(TAB_ROOT[t]);
     setSelectedControlId(null);
     setReturnView(null);
+    setListLanding(null);
   }, []);
 
   const changeRole = useCallback((r: Role) => {
@@ -851,6 +1000,15 @@ export function IcfrProvider({ children, initialRole = 'auditor', seedMeta }: { 
     setTabState('overview');
     setView('overview');
     setSelectedControlId(null);
+    setListLanding(r === 'auditor' ? null : {});
+  }, []);
+
+  const openReviewerQueue = useCallback((note?: string) => {
+    setTabState('overview');
+    setView('overview');
+    setSelectedControlId(null);
+    setReturnView(null);
+    setListLanding({ note });
   }, []);
 
   // Open one business process's RACM as the full risks & controls matrix.
@@ -895,6 +1053,7 @@ export function IcfrProvider({ children, initialRole = 'auditor', seedMeta }: { 
       if (owning) { setOpenAuditId(owning.id); setTabState('overview'); }
     }
     setSelectedControlId(id); setView('dossier');
+    setListLanding(null);
   }, [view, openAuditId, eng.controls, eng.audits, role, meOwner, refusalNote.show]);
   // A counted click on the Overview lands on the register showing exactly the
   // counted set — the register consumes the preset once, then owns its filters.
@@ -1057,6 +1216,12 @@ export function IcfrProvider({ children, initialRole = 'auditor', seedMeta }: { 
   const concludeDesign = useCallback<IcfrCtx['concludeDesign']>((controlId, conclusion, rationale) => {
     if (role !== 'auditor') return;
     if (rollHeld(controlId, 'design', 'checks')) return;
+    // Early conclusions wait (5 Oct): ineffective needs one check with a result.
+    if (conclusion === 'Ineffective') {
+      const cur = controlsRef.current.find(x => x.id === controlId);
+      const early = cur && ineffectiveTooEarly(cur, 'design');
+      if (early) { refusalNote.show('info', early); return; }
+    }
     // re-concluding clears a reviewer's return note — the rework happened
     // Clearing the conclusion clears its rationale too: words explaining a
     // conclusion that no longer exists would outlive the thing they explain.
@@ -1068,10 +1233,16 @@ export function IcfrProvider({ children, initialRole = 'auditor', seedMeta }: { 
       designReturn: conclusion === 'Not tested' ? c.design.designReturn : undefined } }));
     if (conclusion !== 'Not tested') pushExec(() => ({ controlId, track: 'design', kind: 'conclude', verb: `concluded design ${conclusion.toLowerCase()}`, result: conclusion }));
     if (conclusion === 'Ineffective') raiseDeficiencyIfIneffective(controlId, 'design');
-  }, [patchControl, me, role, pushExec, raiseDeficiencyIfIneffective]);
+  }, [patchControl, me, role, pushExec, raiseDeficiencyIfIneffective, refusalNote.show]);
 
   const overrideDesign = useCallback<IcfrCtx['overrideDesign']>((controlId, override) => {
     if (role !== 'auditor') return;
+    // An ineffective override is an ineffective conclusion — the same wait holds.
+    if (override?.result === 'Ineffective') {
+      const cur = controlsRef.current.find(x => x.id === controlId);
+      const early = cur && ineffectiveTooEarly(cur, 'design');
+      if (early) { refusalNote.show('info', early); return; }
+    }
     patchControl(controlId, c => {
       const design = { ...c.design, override: override ?? undefined };
       const next = trackResult(design);
@@ -1086,7 +1257,7 @@ export function IcfrProvider({ children, initialRole = 'auditor', seedMeta }: { 
     });
     if (override) pushExec(() => ({ controlId, track: 'design', kind: 'override', verb: 'overrode the design conclusion', result: override.result === 'Effective' ? 'Effective' : 'Ineffective' }));
     if (override?.result === 'Ineffective') raiseDeficiencyIfIneffective(controlId, 'design');
-  }, [patchControl, me, role, pushExec, raiseDeficiencyIfIneffective]);
+  }, [patchControl, me, role, pushExec, raiseDeficiencyIfIneffective, refusalNote.show]);
 
   // ── design sign-off after TOD (S6, A36) ─────────────────────────────────────
   // The reviewer's read of a concluded TOD, before any data is pulled against it.
@@ -1734,7 +1905,9 @@ export function IcfrProvider({ children, initialRole = 'auditor', seedMeta }: { 
       // company, so the coverage strip can tell whether the draw reached each
       // one. The other files' items are what the deal evens out against; the
       // Sample step previewed the same deal, so the rows approved are these.
-      const kept = (samp?.samples ?? []).filter(s => (s.sourceId ?? LEGACY_SOURCE_ID) !== sourceId);
+      // Which file an item came from is read the one way helpers reads it
+      // (sampleSourceOf): an untagged item belongs to the population's first file.
+      const kept = (samp?.samples ?? []).filter(s => sampleSourceOf(c, s) !== sourceId);
       // Inside the months the file's ask named, when it named some — and never
       // outside the window this VERSION of the control was the control. A control
       // rebuilt in November cannot be evidenced by April's transactions, and an
@@ -1837,24 +2010,41 @@ export function IcfrProvider({ children, initialRole = 'auditor', seedMeta }: { 
   // करो, इसकी नीड है." The same handoff the design documents already use — one
   // task list, one place the owner looks, rather than a second inbox for the
   // same kind of ask.
-  const remindOwnerForFiles = useCallback<IcfrCtx['remindOwnerForFiles']>((controlId, what) => {
+  const remindOwnerForFiles = useCallback<IcfrCtx['remindOwnerForFiles']>((controlId, what, ask) => {
     if (role !== 'auditor') return;
+    // Due in three days, kept as a real day so the card, the row and the
+    // owner's list can all print it ("due 5 Oct") rather than a countdown.
+    const due = new Date(); due.setDate(due.getDate() + 3);
+    const dueAt = `${due.getFullYear()}-${String(due.getMonth() + 1).padStart(2, '0')}-${String(due.getDate()).padStart(2, '0')}`;
+    let sent = false;
     setEng(prev => {
       const ctrl = prev.controls.find(c => c.id === controlId);
       if (!ctrl) return prev;
+      // One open ask per check — a second press is not a second task.
+      if (ask && couldntAskFor(prev, controlId, ask.checkId)) return prev;
       // Named, not addressed. An email address is not something anyone can look
       // a person up by, and the task has to land on somebody's list.
       const assignee = ownersOf(ctrl).processOwner;
       const task: HandoffTask = {
         id: uid('PBC'), type: 'pbc', controlId,
-        title: 'Upload the source data for this control',
+        // Ira's card says what the check needs; the population's own reminder
+        // is about the source data.
+        title: ask?.title ?? 'Upload the source data for this control',
         detail: what,
-        assignee, assigneeRole: 'risk-owner', raisedBy: me, dueLabel: 'Due in 3d', overdue: false, status: 'open',
-        focus: 'population',
+        assignee, assigneeRole: 'risk-owner', raisedBy: me, dueLabel: `Due ${dayMonth(dueAt)}`, dueAt, overdue: false, status: 'open',
+        focus: ask?.track === 'design' ? 'design' : 'population',
+        checkId: ask?.checkId,
       };
+      sent = true;
       return { ...prev, tasks: [...prev.tasks, task] };
     });
-    pushExec(() => ({ controlId, track: 'operating', kind: 'request-docs', verb: 'asked the owner to upload the source data', target: what }));
+    pushExec(prev => {
+      if (!sent) return null;
+      const owner = ownersOf(prev.controls.find(c => c.id === controlId)!).processOwner;
+      return ask
+        ? { controlId, track: ask.track, kind: 'request-docs', verb: `asked ${owner} for what Ira couldn't test without, due ${dayMonth(dueAt)}`, target: ask.title }
+        : { controlId, track: 'operating', kind: 'request-docs', verb: 'asked the owner to upload the source data', target: what };
+    });
   }, [me, pushExec, role]);
 
   // ── The file registry ─────────────────────────────────────────────────────
@@ -2027,7 +2217,8 @@ export function IcfrProvider({ children, initialRole = 'auditor', seedMeta }: { 
       // A mark that survived the work it stood for would say "this file is
       // settled" over a dimension somebody has just reopened.
       const pop = c.operating.population;
-      const src = reset ? (ipe.checks.find(k => k.id === checkId)?.sourceId ?? LEGACY_SOURCE_ID) : null;
+      // An untagged check belongs to the population's first file (ipeChecksFor's rule).
+      const src = reset ? (ipe.checks.find(k => k.id === checkId)?.sourceId ?? pop?.sources?.[0]?.id ?? LEGACY_SOURCE_ID) : null;
       return {
         ...c,
         operating: {
@@ -2187,14 +2378,20 @@ export function IcfrProvider({ children, initialRole = 'auditor', seedMeta }: { 
   // ── Ira proposes, a person confirms (agentic UX #1, 1 Oct) ──────────────────
   // Only rows still waiting on it are touched; the conclusion is held until
   // none are left (see concludeDesign / concludeOperating).
-  const confirmIra = useCallback<IcfrCtx['confirmIra']>((controlId, which, ids) => {
+  const confirmIra = useCallback<IcfrCtx['confirmIra']>((controlId, which, ids, opts) => {
     if (role !== 'auditor' || !ids.length) return;
-    const stamp = { by: me, at: 'just now' };
+    // Automatic mode confirms under the user's name, but flagged as Ira's own so
+    // "Undo Ira's" can tell it from a confirm the auditor made by hand.
+    const stamp = opts?.byIra ? { by: me, at: 'just now', byIra: true } : { by: me, at: 'just now' };
     let n = 0;
-    patchControl(controlId, c => which === 'design'
+    // Reset per call: React may run the updater twice (StrictMode in dev), and
+    // a running tally then read 4 for a run that had 2 sure results.
+    patchControl(controlId, c => (n = 0, which === 'design')
       ? { ...c, design: { ...c.design, points: c.design.points.map(p => (ids.includes(p.id) && awaitsConfirm(p) ? (n += 1, { ...p, confirmed: stamp }) : p)) } }
       : { ...c, operating: { ...c.operating, steps: c.operating.steps.map(s => (ids.includes(s.id) && awaitsConfirm(s) ? (n += 1, { ...s, confirmed: stamp }) : s)) } });
-    pushExec(() => (n ? { controlId, track: which, kind: 'validate', verb: `confirmed ${n === 1 ? "Ira's result" : `${n} of Ira's results`}` } : null));
+    pushExec(() => (n ? { controlId, track: which, kind: 'validate', verb: opts?.byIra
+      ? `confirmed ${n === 1 ? "Ira's result it was sure of" : `${n} of Ira's results it was sure of`} (Automatic)`
+      : `confirmed ${n === 1 ? "Ira's result" : `${n} of Ira's results`}` } : null));
   }, [patchControl, pushExec, role, me]);
 
   // ── Undo Ira's unconfirmed work (agentic UX #15, user ask 1 Oct) ─────────────
@@ -2217,6 +2414,38 @@ export function IcfrProvider({ children, initialRole = 'auditor', seedMeta }: { 
         verb: how === 'confirmed' ? `confirmed last round's ${label} unchanged` : `took last round's ${label} to edit`,
         target: c?.rollForward?.from,
       };
+    });
+  }, [role, me, patchControl, pushExec]);
+
+  // ── Ira's plan you approve (Stage 1a, product owner, 2 Oct) ──────────────────
+  // The plan is shaped before Start and fixed by it: nothing Ira runs on this
+  // control — in Manual or Automatic — moves until Start is pressed, and what
+  // was skipped or narrowed goes on the trail in the same press.
+  const setIraPlan = useCallback<IcfrCtx['setIraPlan']>((controlId, patch) => {
+    if (role !== 'auditor') return;
+    patchControl(controlId, c => (c.iraPlan?.started ? c : { ...c, iraPlan: { skipped: [], ...c.iraPlan, ...patch } }));
+  }, [role, patchControl]);
+  const startIraPlan = useCallback<IcfrCtx['startIraPlan']>((controlId) => {
+    if (role !== 'auditor') return;
+    let began = false;
+    patchControl(controlId, c => {
+      if (c.iraPlan?.started) return c;
+      began = true;
+      return { ...c, iraPlan: { skipped: [], ...c.iraPlan, started: { by: me, at: 'just now' } } };
+    });
+    pushExec(prev => {
+      const c = prev.controls.find(x => x.id === controlId);
+      const p = c?.iraPlan;
+      if (!began || !c || !p) return null;
+      const name = { design: 'reading the design', sample: 'drafting the sample request', operating: 'validating the attributes' } as const;
+      const files = c.design.documents.reduce((n, d) => n + designFilesOf(d).length, 0);
+      const of = (picked: string[] | undefined, total: number, noun: string) => (picked && picked.length < total ? `${picked.length} of ${total} ${noun}` : null);
+      const notes = [
+        p.skipped.length ? `skipped ${p.skipped.map(s => name[s]).join(' and ')}` : null,
+        ...(p.skipped.includes('design') ? [] : [of(p.files, files, 'design files'), of(p.checks, c.design.points.length, 'checks')]),
+        ...(p.skipped.includes('operating') ? [] : [of(p.attributes, c.operating.steps.length, 'attributes')]),
+      ].filter(Boolean);
+      return { controlId, track: 'design', kind: 'ai-review', verb: `started Ira's plan${notes.length ? ` — ${notes.join('; ')}` : ''}` };
     });
   }, [role, me, patchControl, pushExec]);
 
@@ -2243,16 +2472,29 @@ export function IcfrProvider({ children, initialRole = 'auditor', seedMeta }: { 
 
   const undoIra = useCallback<IcfrCtx['undoIra']>((controlId) => {
     if (role !== 'auditor') return;
-    let n = 0;
-    const iraOnly = (row: { validation?: ValidationResult; override?: unknown; confirmed?: unknown; result: TestResult }) =>
-      !!row.validation && !row.override && !row.confirmed && (awaitsConfirm(row) || (!!row.validation.blocked && row.result === 'Not tested'));
+    // Counted per track, so each line on the trail files under the step it
+    // undid — it used to file every undo under TOD, attributes included.
+    const tally = { design: { n: 0, auto: 0 }, operating: { n: 0, auto: 0 } };
+    // Ira's unconfirmed work, plus the confirms Ira made itself in Automatic —
+    // only on a track not yet concluded (iraUndoable). A person's confirm or
+    // override is never taken back.
     patchControl(controlId, c => {
-      if (c.design.conclusion !== 'Not tested' && c.operating.conclusion !== 'Not tested') return c;
-      const points = c.design.conclusion !== 'Not tested' ? c.design.points : c.design.points.map(p => (iraOnly(p) ? (n += 1, { ...p, result: 'Not tested' as TestResult, validation: undefined, workflowRunRef: undefined }) : p));
-      const steps = c.operating.conclusion !== 'Not tested' ? c.operating.steps : c.operating.steps.map(st => (iraOnly(st) ? (n += 1, { ...st, result: 'Not tested' as TestResult, validation: undefined, workflowRunRef: undefined, sampleResults: undefined }) : st));
+      const take = iraUndoable(c);
+      if (!take.points.length && !take.steps.length) return c;
+      tally.design = { n: take.points.length, auto: take.points.filter(p => p.confirmed?.byIra).length };
+      tally.operating = { n: take.steps.length, auto: take.steps.filter(s => s.confirmed?.byIra).length };
+      const pts = new Set(take.points.map(p => p.id)), sts = new Set(take.steps.map(s => s.id));
+      const points = c.design.points.map(p => (pts.has(p.id) ? { ...p, result: 'Not tested' as TestResult, validation: undefined, workflowRunRef: undefined, confirmed: undefined } : p));
+      const steps = c.operating.steps.map(st => (sts.has(st.id) ? { ...st, result: 'Not tested' as TestResult, validation: undefined, workflowRunRef: undefined, sampleResults: undefined, confirmed: undefined } : st));
       return { ...c, design: { ...c.design, points }, operating: { ...c.operating, steps } };
     });
-    pushExec(() => (n ? { controlId, track: 'design', kind: 'validate', verb: `undid ${n === 1 ? "Ira's unconfirmed result" : `${n} of Ira's unconfirmed results`}` } : null));
+    (['design', 'operating'] as const).forEach(track => pushExec(() => {
+      const { n, auto } = tally[track];
+      return n ? {
+        controlId, track, kind: 'validate',
+        verb: `undid ${n === 1 ? "Ira's result" : `${n} of Ira's results`}${auto ? ` (${auto === 1 ? 'one' : auto} confirmed by Ira itself in Automatic)` : ''} — back to Not tested`,
+      } : null;
+    }));
   }, [patchControl, pushExec, role]);
 
   const overrideStep = useCallback<IcfrCtx['overrideStep']>((controlId, stepId, override) => {
@@ -2507,7 +2749,9 @@ export function IcfrProvider({ children, initialRole = 'auditor', seedMeta }: { 
     setOpenAuditId(auditId);
     setTabState('overview');
     setView('overview');
-  }, []);
+    // Each hat lands on its own list (role landing, 2 Oct).
+    setListLanding(role === 'auditor' ? null : {});
+  }, [role]);
 
   // Land on the exception itself. openAudit resets the tab by design, so the tab
   // is set AFTER it rather than alongside — otherwise the reset wins and the
@@ -2526,15 +2770,16 @@ export function IcfrProvider({ children, initialRole = 'auditor', seedMeta }: { 
     }
     setFocusDefId(defId);
     const owning = target && eng.audits.find(a => a.controlIds?.includes(target.controlId));
-    if (owning && owning.id !== openAuditId) { openAudit(owning.id); setTabState('deficiencies'); return; }
+    if (owning && owning.id !== openAuditId) { openAudit(owning.id); setTabState('deficiencies'); setListLanding(null); return; }
     if (openAuditId) setTabState('deficiencies'); else setView('deficiencies');
   }, [eng.id, eng.controls, eng.deficiencies, eng.audits, openAuditId, openAudit, role, meOwner, refusalNote.show]);
   // Leaving an audit lands on the engagement's own Overview. Without the reset,
   // closing from the audit's Configuration or Deficiency management tab — neither
   // of which the engagement level has — left the tab bar with nothing active and
   // AuditConfigView rendering null: a blank page.
+  // There is no level above the audit any more (5 Oct 2026), so "leaving" it
+  // keeps it open and just lands on the Overview.
   const closeAudit = useCallback(() => {
-    setOpenAuditId(null);
     setTabState('overview');
     setView('overview');
   }, []);
@@ -2664,7 +2909,7 @@ export function IcfrProvider({ children, initialRole = 'auditor', seedMeta }: { 
       ran = true;
       return validatedStep(s, c, controlId);
     });
-    pushExec(prev => { const s = prev.controls.find(c => c.id === controlId)?.operating.steps.find(st => st.id === stepId); return s && ran ? { controlId, track: 'operating', kind: 'validate', verb: 'validated against its required files', target: s.code, result: s.result } : null; });
+    pushExec(prev => { const s = prev.controls.find(c => c.id === controlId)?.operating.steps.find(st => st.id === stepId); const c = prev.controls.find(cc => cc.id === controlId); return c && s && ran ? { controlId, track: 'operating', kind: 'validate', verb: 'validated against its required files', target: s.code, result: s.result, iraRun: operatingRunSnapshot(c, [s]) } : null; });
     pushRun(prev => {
       const c = prev.controls.find(cc => cc.id === controlId);
       const s = c?.operating.steps.find(st => st.id === stepId);
@@ -2702,7 +2947,11 @@ export function IcfrProvider({ children, initialRole = 'auditor', seedMeta }: { 
     let tally: { checks: number; failed: number; blocked: number; files: string[] } | null = null;
     patchControl(controlId, c => {
       const d = c.design;
-      const onFile = d.documents.filter(doc => designFilesOf(doc).length > 0);
+      // A started plan that was narrowed (Stage 1a): Ira reads only the ticked
+      // files and marks only the ticked checks — the rest stand as they are.
+      const plan = c.iraPlan?.started ? c.iraPlan : undefined;
+      const filesOf = (doc: DesignDoc) => designFilesOf(doc).filter(f => !plan?.files || plan.files.includes(f.id));
+      const onFile = d.documents.filter(doc => filesOf(doc).length > 0);
       if (d.conclusion !== 'Not tested' || d.points.length === 0 || onFile.length === 0) return c;
       const label = (doc: DesignDoc) => (doc.kind === 'Custom' ? doc.name : doc.kind);
       const missing = designOutstandingRequired(c).map(label);
@@ -2715,13 +2964,16 @@ export function IcfrProvider({ children, initialRole = 'auditor', seedMeta }: { 
       // reason off `iraBlocked` and none of them can get round it.
       if (missing.length > 0) return c;
       const read = onFile.map(label);
-      const files = onFile.flatMap(doc => designFilesOf(doc).map(f => f.name));
+      const files = onFile.flatMap(doc => filesOf(doc).map(f => f.name));
       const list = (xs: string[]) => (xs.length < 2 ? xs.join('') : `${xs.slice(0, -1).join(', ')} and ${xs[xs.length - 1]}`);
       const the = (xs: string[]) => list(xs.map(x => `the ${x}`));
       const cap = (x: string) => x.charAt(0).toUpperCase() + x.slice(1);
       let failed = 0;
       let blocked = 0;
+      let marked = 0;
       const points = d.points.map(p => {
+        if (plan?.checks && !plan.checks.includes(p.id)) return p;
+        marked += 1;
         // ── the check Ira cannot answer (user ask, 22 Sep) ──────────────────
         // It read what was there and nothing in it speaks to this question —
         // the element that would answer it has no file, or is not on the
@@ -2790,17 +3042,19 @@ export function IcfrProvider({ children, initialRole = 'auditor', seedMeta }: { 
           validation: { result: res, qa, summary: said, fileName: files.join(', ') || undefined, at },
         };
       });
-      tally = { checks: points.length, failed, blocked, files };
+      if (marked === 0) return c;
+      tally = { checks: marked, failed, blocked, files };
       return { ...c, design: { ...d, points, ira: { by: me, at, evidenceChanged: false } } };
     });
-    pushExec(() => {
+    pushExec(prev => {
       if (!tally) return null;
+      const c = prev.controls.find(cc => cc.id === controlId);
       const passed = tally.checks - tally.failed - tally.blocked;
       // The blocked ones are named in the log, not folded into the pass count.
       // "5 passed" on a run that could only read three is the sentence a
       // reviewer would later find was not true.
       const could = tally.blocked > 0 ? `, ${tally.blocked} it could not test` : '';
-      return { controlId, track: 'design', kind: 'ai-review', verb: `ran Ira on ${tally.checks} design check${tally.checks === 1 ? '' : 's'} — ${passed} passed, ${tally.failed} failed${could}`, result: tally.failed > 0 ? 'Fail' : 'Pass' };
+      return { controlId, track: 'design', kind: 'ai-review', verb: `ran Ira on ${tally.checks} design check${tally.checks === 1 ? '' : 's'} — ${passed} passed, ${tally.failed} failed${could}`, result: tally.failed > 0 ? 'Fail' : 'Pass', ...(c ? { iraRun: designRunSnapshot(c, tally.files) } : {}) };
     });
     pushRun(prev => {
       const c = prev.controls.find(cc => cc.id === controlId);
@@ -2817,14 +3071,20 @@ export function IcfrProvider({ children, initialRole = 'auditor', seedMeta }: { 
     if (role !== 'auditor' || awaitingDesignApproval(controlId)) return;
     if (rollHeld(controlId, 'attributes')) return;
     let codes: string[] = [];
+    let blockedCodes: string[] = [];
     patchControl(controlId, c => {
-      codes = c.operating.steps.filter(s => requiredFilesReady(s, c)).map(s => s.code);
+      // A started plan that was narrowed (Stage 1a): only the ticked attributes
+      // are Ira's; the others are not read, not noted, not touched.
+      const plan = c.iraPlan?.started ? c.iraPlan : undefined;
+      const inPlan = (s: OperatingStep) => !plan?.attributes || plan.attributes.includes(s.id);
+      const isReady = (s: OperatingStep) => inPlan(s) && requiredFilesReady(s, c);
+      codes = c.operating.steps.filter(isReady).map(s => s.code);
       // No citation, no verdict (agentic UX #5, user ask 1 Oct): an untested
       // attribute with no file behind it is not skipped in silence — Ira says
       // it could not test it and why, and Needs you drafts the ask. Never a
       // Pass/Fail: there was nothing to quote. The next run with the files in
       // overwrites it.
-      const noSource = (s: OperatingStep) => !requiredFilesReady(s, c) && stepResult(s) === 'Not tested' && !s.override;
+      const noSource = (s: OperatingStep) => inPlan(s) && !requiredFilesReady(s, c) && stepResult(s) === 'Not tested' && !s.override;
       const blockedOf = (s: OperatingStep): ValidationResult => {
         const missing = requiredFilesOf(s, c).filter(f => !f.file).map(f => f.label.toLowerCase());
         return { qa: [], at: 'just now', blocked: missing.length
@@ -2832,12 +3092,15 @@ export function IcfrProvider({ children, initialRole = 'auditor', seedMeta }: { 
           : 'No required file is listed for it, so there is nothing to quote.' };
       };
       if (!codes.length && !c.operating.steps.some(noSource)) return c;
-      return { ...c, operating: { ...c.operating, steps: c.operating.steps.map(s => (requiredFilesReady(s, c) ? validatedStep(s, c, controlId) : noSource(s) ? { ...s, validation: blockedOf(s) } : s)) } };
+      blockedCodes = c.operating.steps.filter(noSource).map(s => s.code);
+      return { ...c, operating: { ...c.operating, steps: c.operating.steps.map(s => (isReady(s) ? validatedStep(s, c, controlId) : noSource(s) ? { ...s, validation: blockedOf(s) } : s)) } };
     });
     pushExec(prev => {
       if (!codes.length) return null;
-      const steps = prev.controls.find(cc => cc.id === controlId)?.operating.steps.filter(s => codes.includes(s.code)) ?? [];
-      return { controlId, track: 'operating', kind: 'validate', verb: 'ran AI validation on the ready attributes', target: codes.join(', '), result: steps.some(s => s.result === 'Fail') ? 'Fail' : 'Pass' };
+      const c = prev.controls.find(cc => cc.id === controlId);
+      const steps = c?.operating.steps.filter(s => codes.includes(s.code)) ?? [];
+      const ran = c?.operating.steps.filter(s => codes.includes(s.code) || blockedCodes.includes(s.code)) ?? [];
+      return { controlId, track: 'operating', kind: 'validate', verb: 'ran AI validation on the ready attributes', target: codes.join(', '), result: steps.some(s => s.result === 'Fail') ? 'Fail' : 'Pass', ...(c ? { iraRun: operatingRunSnapshot(c, ran) } : {}) };
     });
     pushRun(prev => {
       const c = prev.controls.find(cc => cc.id === controlId);
@@ -2871,9 +3134,9 @@ export function IcfrProvider({ children, initialRole = 'auditor', seedMeta }: { 
   const removeRequiredFile = useCallback<IcfrCtx['removeRequiredFile']>((controlId, stepId, fileId) => {
     editRequiredFiles(controlId, stepId, list => list.filter(f => f.id !== fileId));
   }, [editRequiredFiles]);
-  const uploadRequiredFile = useCallback<IcfrCtx['uploadRequiredFile']>((controlId, stepId, fileId, fileName) => {
-    const kind: EvidenceFile['kind'] = /\.xlsx?$/i.test(fileName) ? 'XLSX' : /\.csv$/i.test(fileName) ? 'CSV' : /\.(png|jpe?g)$/i.test(fileName) ? 'IMG' : 'PDF';
-    editRequiredFiles(controlId, stepId, list => list.map(f => (f.id === fileId ? { ...f, file: { id: uid('f'), name: fileName, kind, uploadedBy: me, uploadedAt: 'just now' } } : f)));
+  const uploadRequiredFile = useCallback<IcfrCtx['uploadRequiredFile']>((controlId, stepId, fileId, fileName, url) => {
+    const kind: EvidenceFile['kind'] = evidenceKindOf(fileName);
+    editRequiredFiles(controlId, stepId, list => list.map(f => (f.id === fileId ? { ...f, file: { id: uid('f'), name: fileName, kind, uploadedBy: me, uploadedAt: 'just now', ...(url ? { url } : {}) } } : f)));
   }, [editRequiredFiles, me]);
   const clearRequiredFile = useCallback<IcfrCtx['clearRequiredFile']>((controlId, stepId, fileId) => {
     editRequiredFiles(controlId, stepId, list => list.map(f => (f.id === fileId ? { id: f.id, label: f.label } : f)));
@@ -2906,6 +3169,12 @@ export function IcfrProvider({ children, initialRole = 'auditor', seedMeta }: { 
   const concludeOperating = useCallback<IcfrCtx['concludeOperating']>((controlId, conclusion, rationale) => {
     // Clearing a TOE conclusion is a way back out, so only concluding waits on TOD.
     if (role !== 'auditor' || (conclusion !== 'Not tested' && awaitingDesignApproval(controlId))) return;
+    // Early conclusions wait (5 Oct): ineffective needs a drawn sample and one result.
+    if (conclusion === 'Ineffective') {
+      const cur = controlsRef.current.find(x => x.id === controlId);
+      const early = cur && ineffectiveTooEarly(cur, 'operating');
+      if (early) { refusalNote.show('info', early); return; }
+    }
     // re-concluding clears a reviewer's return note — the rework happened
     patchControl(controlId, c => {
       // A stale run cannot be concluded on: it was testing a draw that no
@@ -2947,7 +3216,7 @@ export function IcfrProvider({ children, initialRole = 'auditor', seedMeta }: { 
       return { controlId, track: 'operating', kind: 'conclude', verb: `concluded operating ${conclusion.toLowerCase()}`, result: conclusion };
     });
     if (conclusion === 'Ineffective') raiseDeficiencyIfIneffective(controlId, 'operating');
-  }, [patchControl, me, role, pushExec, raiseDeficiencyIfIneffective, awaitingDesignApproval]);
+  }, [patchControl, me, role, pushExec, raiseDeficiencyIfIneffective, awaitingDesignApproval, refusalNote.show]);
 
   /**
    * Set the failed round aside and reopen the draw.
@@ -3016,10 +3285,16 @@ export function IcfrProvider({ children, initialRole = 'auditor', seedMeta }: { 
 
   const overrideOperating = useCallback<IcfrCtx['overrideOperating']>((controlId, override) => {
     if (role !== 'auditor' || (override && awaitingDesignApproval(controlId))) return;
+    // An ineffective override is an ineffective conclusion — the same wait holds.
+    if (override?.result === 'Ineffective') {
+      const cur = controlsRef.current.find(x => x.id === controlId);
+      const early = cur && ineffectiveTooEarly(cur, 'operating');
+      if (early) { refusalNote.show('info', early); return; }
+    }
     patchControl(controlId, c => ({ ...c, operating: { ...c.operating, override: override ?? undefined } }));
     if (override) pushExec(() => ({ controlId, track: 'operating', kind: 'override', verb: 'overrode the operating conclusion', result: override.result === 'Effective' ? 'Effective' : 'Ineffective' }));
     if (override?.result === 'Ineffective') raiseDeficiencyIfIneffective(controlId, 'operating');
-  }, [patchControl, role, pushExec, raiseDeficiencyIfIneffective, awaitingDesignApproval]);
+  }, [patchControl, role, pushExec, raiseDeficiencyIfIneffective, awaitingDesignApproval, refusalNote.show]);
 
   // ── RACM row review + bulk testing ────────────────────────────────────────────
   // Pre-testing review is the auditor's call and only while the engagement is
@@ -3088,7 +3363,10 @@ export function IcfrProvider({ children, initialRole = 'auditor', seedMeta }: { 
         // approved design in an interim or roll-forward there is nothing to run.
         const pending = !!yearEndPending(c, prev.audits.find(a => a.id === openAuditId));
         const dPoints = approved ? [] : points;
-        const oSteps = approved && !pending ? steps : [];
+        // Early conclusions wait (5 Oct): no drawn sample, no ineffective TOE —
+        // the bulk run leaves that track for the page rather than conclude it.
+        const noDraw = !(c.operating.sampling?.samples.length);
+        const oSteps = approved && !pending && !(noDraw && opConcl === 'Ineffective') ? steps : [];
         const checks = dPoints.length + oSteps.length;
         if (checks > 0) execs.push({
           id: uid('ex'), controlId: c.id, track: 'operating', kind: 'test-all', verb: approved ? 'bulk tested operating' : 'bulk tested design',
@@ -4881,6 +5159,7 @@ export function IcfrProvider({ children, initialRole = 'auditor', seedMeta }: { 
 
   const value = useMemo<IcfrCtx>(() => ({
     eng, role, tab, view, selectedControlId, racmEditor, me, meOwner, setMeOwner, racmProcess,
+    listLanding, clearListLanding, openReviewerQueue,
     setRole: changeRole, setTab, setView, openRacmMatrix, openRacmEditor, openControl, focusStep, clearFocusStep, openDeficiency, focusDefId, clearFocusDef, back, returnView,
     registerPreset, openRegister, clearRegisterPreset,
     racmCreateOpen, openRacmCreate, clearRacmCreate,
@@ -4889,7 +5168,7 @@ export function IcfrProvider({ children, initialRole = 'auditor', seedMeta }: { 
     setPointEvidenceType, setStepEvidenceType, setDesignBasis,
     setPopulation, setPopulationDefinition, clearPopulation, setPopulationCheck, setPopulationFacts, addPopulationSource, removePopulationSource, setSourceRole, drawSourceSample, approveSource, redrawSource, remindOwnerForFiles, registerFile, setFileOrigin, lockPopulation, lockAttributes, confirmExtraction, recordException,
     addEvidenceReport, removeEvidenceReport, proveEvidenceReport,
-    registerIpe, setIpeCheck, concludeIpe, clearIpe, setMrc, setSampling, extendSample, resizeSample, setSampleResult, setStepResult, overrideStep, confirmIra, undoIra, pullStepRun, attestStep, addStepEvidence, setStepInputFile, concludeOperating, overrideOperating, startToeRound,
+    registerIpe, setIpeCheck, concludeIpe, clearIpe, setMrc, setSampling, extendSample, resizeSample, setSampleResult, setStepResult, overrideStep, confirmIra, undoIra, setIraPlan, startIraPlan, pullStepRun, attestStep, addStepEvidence, setStepInputFile, concludeOperating, overrideOperating, startToeRound,
     addAttribute, removeAttribute, mapStepWorkflow, setStepEvidenceMode, toggleStepAttest, toggleStepAI, runStepValidation, testAllAttributes,
     addRequiredFile, renameRequiredFile, removeRequiredFile, uploadRequiredFile, clearRequiredFile, validateReadyAttributes,
     approveRacmRows, remarkRacmRow, clearRacmReview, bulkTestControls,
@@ -4899,7 +5178,7 @@ export function IcfrProvider({ children, initialRole = 'auditor', seedMeta }: { 
     updateRules, concludeEntityMw, runFlawScan, applyRules, updateMateriality, reconcileScope, updateDeficiency, linkRootCause, unlinkRootCause, setGroupConclusion, updateAccount, setExceptionStatus, completeSizing, confirmRating, returnRating, submitPlan, reviewPlan, /* PARKED — drawRetestSample, setRetestResult, setRetestCheck, runRetestIra, recordRetest: the retest is no longer a step in this flow. */ signOffException, reopenException, updateRemediation, addRemediationEvidence, raiseChallenge, respondToChallenge, parkOperating, resumeOperating, markUnableToTest, resolveUnableToTest, escalateUnableToTest,
     addControl, proposeSampling, signSampling, reviseSampling, signOffAudit, reopenControl, decideLearned, confirmRollPart, refusal: refusalNote.note, recordNewVersion, clearRetestDue, signOffControlWp, returnControl,
     raiseReviewNote, resolveReviewNote, verifyReviewNote, reopenReviewNote,
-  }), [eng, role, tab, view, selectedControlId, racmEditor, me, meOwner, racmProcess, changeRole, setTab, openRacmMatrix, openRacmEditor, openControl, focusStep, clearFocusStep, openDeficiency, focusDefId, clearFocusDef, back, returnView, registerPreset, openRegister, clearRegisterPreset, racmCreateOpen, openRacmCreate, clearRacmCreate, setDocStatus, setDesignPoint, concludeDesign, overrideDesign, approveDesign, returnDesign, addDesignDoc, attachDesignEvidence, removeDesignDoc, waiveDesignDoc, clearDesignWaiver, updateControlMeta, setControlKey, setDesignJudgements, startWalkthrough, setWalkthroughAttribute, setWalkthroughMeta, addDesignPoint, removeDesignPoint, validateDesignPoint, overrideDesignPoint, removeDesignFile, runDesignIra, linkDesignPointEvidence, setDesignPointProof, requestDataByEmail, setPointEvidenceType, setStepEvidenceType, setDesignBasis, setPopulation, setPopulationDefinition, clearPopulation, setPopulationCheck, setPopulationFacts, addPopulationSource, removePopulationSource, setSourceRole, drawSourceSample, approveSource, redrawSource, remindOwnerForFiles, registerFile, setFileOrigin, lockPopulation, lockAttributes, confirmExtraction, recordException, addEvidenceReport, removeEvidenceReport, proveEvidenceReport, registerIpe, setIpeCheck, concludeIpe, clearIpe, setMrc, setSampling, extendSample, resizeSample, setSampleResult, setStepResult, overrideStep, confirmIra, undoIra, pullStepRun, attestStep, addStepEvidence, setStepInputFile, concludeOperating, overrideOperating, startToeRound, addAttribute, removeAttribute, mapStepWorkflow, setStepEvidenceMode, toggleStepAttest, toggleStepAI, runStepValidation, testAllAttributes, addRequiredFile, renameRequiredFile, removeRequiredFile, uploadRequiredFile, clearRequiredFile, validateReadyAttributes, approveRacmRows, remarkRacmRow, clearRacmReview, bulkTestControls, createAudit, updateAudit, openAuditId, openAudit, closeAudit, racmDocs, addRacmDoc, createRacm, deleteRacm, addLibraryRacms, addComment, resolveDiscussion, submitTask, clearTask, raiseQuery, requestDesignDocs, updateRules, concludeEntityMw, runFlawScan, applyRules, updateMateriality, reconcileScope, updateDeficiency, linkRootCause, unlinkRootCause, setGroupConclusion, updateAccount, setExceptionStatus, completeSizing, confirmRating, returnRating, submitPlan, reviewPlan, /* PARKED — drawRetestSample, setRetestResult, setRetestCheck, runRetestIra, recordRetest: the retest is no longer a step in this flow. */ signOffException, reopenException, updateRemediation, addRemediationEvidence, raiseChallenge, respondToChallenge, parkOperating, resumeOperating, markUnableToTest, resolveUnableToTest, escalateUnableToTest, addControl, proposeSampling, signSampling, reviseSampling, signOffAudit, reopenControl, decideLearned, confirmRollPart, refusalNote.note, recordNewVersion, clearRetestDue, signOffControlWp, returnControl, raiseReviewNote, resolveReviewNote, verifyReviewNote, reopenReviewNote]);
+  }), [eng, role, tab, view, selectedControlId, racmEditor, me, meOwner, racmProcess, listLanding, clearListLanding, openReviewerQueue, changeRole, setTab, openRacmMatrix, openRacmEditor, openControl, focusStep, clearFocusStep, openDeficiency, focusDefId, clearFocusDef, back, returnView, registerPreset, openRegister, clearRegisterPreset, racmCreateOpen, openRacmCreate, clearRacmCreate, setDocStatus, setDesignPoint, concludeDesign, overrideDesign, approveDesign, returnDesign, addDesignDoc, attachDesignEvidence, removeDesignDoc, waiveDesignDoc, clearDesignWaiver, updateControlMeta, setControlKey, setDesignJudgements, startWalkthrough, setWalkthroughAttribute, setWalkthroughMeta, addDesignPoint, removeDesignPoint, validateDesignPoint, overrideDesignPoint, removeDesignFile, runDesignIra, linkDesignPointEvidence, setDesignPointProof, requestDataByEmail, setPointEvidenceType, setStepEvidenceType, setDesignBasis, setPopulation, setPopulationDefinition, clearPopulation, setPopulationCheck, setPopulationFacts, addPopulationSource, removePopulationSource, setSourceRole, drawSourceSample, approveSource, redrawSource, remindOwnerForFiles, registerFile, setFileOrigin, lockPopulation, lockAttributes, confirmExtraction, recordException, addEvidenceReport, removeEvidenceReport, proveEvidenceReport, registerIpe, setIpeCheck, concludeIpe, clearIpe, setMrc, setSampling, extendSample, resizeSample, setSampleResult, setStepResult, overrideStep, confirmIra, undoIra, setIraPlan, startIraPlan, pullStepRun, attestStep, addStepEvidence, setStepInputFile, concludeOperating, overrideOperating, startToeRound, addAttribute, removeAttribute, mapStepWorkflow, setStepEvidenceMode, toggleStepAttest, toggleStepAI, runStepValidation, testAllAttributes, addRequiredFile, renameRequiredFile, removeRequiredFile, uploadRequiredFile, clearRequiredFile, validateReadyAttributes, approveRacmRows, remarkRacmRow, clearRacmReview, bulkTestControls, createAudit, updateAudit, openAuditId, openAudit, closeAudit, racmDocs, addRacmDoc, createRacm, deleteRacm, addLibraryRacms, addComment, resolveDiscussion, submitTask, clearTask, raiseQuery, requestDesignDocs, updateRules, concludeEntityMw, runFlawScan, applyRules, updateMateriality, reconcileScope, updateDeficiency, linkRootCause, unlinkRootCause, setGroupConclusion, updateAccount, setExceptionStatus, completeSizing, confirmRating, returnRating, submitPlan, reviewPlan, /* PARKED — drawRetestSample, setRetestResult, setRetestCheck, runRetestIra, recordRetest: the retest is no longer a step in this flow. */ signOffException, reopenException, updateRemediation, addRemediationEvidence, raiseChallenge, respondToChallenge, parkOperating, resumeOperating, markUnableToTest, resolveUnableToTest, escalateUnableToTest, addControl, proposeSampling, signSampling, reviseSampling, signOffAudit, reopenControl, decideLearned, confirmRollPart, refusalNote.note, recordNewVersion, clearRetestDue, signOffControlWp, returnControl, raiseReviewNote, resolveReviewNote, verifyReviewNote, reopenReviewNote]);
 
   return <Ctx.Provider value={value}>{children}</Ctx.Provider>;
 }

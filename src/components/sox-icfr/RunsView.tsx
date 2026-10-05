@@ -7,6 +7,7 @@ import { useIcfr } from './store';
 import DatePicker from '../shared/DatePicker';
 import { cn } from '../../lib/cn';
 import type { RunKind, RunRecord } from './types';
+import MenuFocus from '../shared/MenuFocus';
 
 /**
  * Runs — the engagement's execution registry. Every bulk test, single-control
@@ -41,7 +42,7 @@ const isoDaysBack = (n: number): string => { const d = new Date(); d.setDate(d.g
 const runISO = (at: string): string => isoDaysBack(daysAgo(at));
 const fmtShort = (iso: string): string => new Date(iso + 'T00:00:00').toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
 
-const RANGE_FIELD = 'w-full h-8 px-2.5 rounded-lg border border-canvas-border bg-canvas-elevated text-[12px] font-medium text-ink-800 hover:border-ink-300 transition-colors text-left';
+const RANGE_FIELD = 'w-full h-8 px-2.5 rounded-lg border border-canvas-border bg-canvas-elevated text-[0.75rem] font-medium text-ink-800 hover:border-ink-300 transition-colors text-left';
 
 /** The date filter — a From / To range on the shared brand calendar, with quick windows. */
 function DateRangeMenu({ from, to, onChange, open, onToggle, onClose }: {
@@ -54,8 +55,8 @@ function DateRangeMenu({ from, to, onChange, open, onToggle, onClose }: {
     : `Until ${fmtShort(to)}`;
   return (
     <div className="relative">
-      <button onClick={onToggle} aria-label="Filter by date range"
-        className={cn('h-8 px-2.5 inline-flex items-center gap-1.5 rounded-lg border text-[12px] font-semibold transition-colors cursor-pointer',
+      <button onClick={onToggle} aria-label="Filter by date range" aria-haspopup="dialog" aria-expanded={open}
+        className={cn('h-8 px-2.5 inline-flex items-center gap-1.5 rounded-lg border text-[0.75rem] font-semibold transition-colors cursor-pointer',
           isDefault ? 'border-canvas-border bg-canvas-elevated text-ink-700 hover:border-ink-300' : 'border-brand-200 bg-brand-50 text-brand-700')}>
         <Calendar size={13} className={isDefault ? 'text-ink-400' : 'text-brand-600'} />
         {label}
@@ -69,11 +70,11 @@ function DateRangeMenu({ from, to, onChange, open, onToggle, onClose }: {
               className="absolute left-0 mt-1.5 z-20 w-72 rounded-xl border border-canvas-border bg-canvas-elevated shadow-[0_16px_40px_-16px_rgba(15,8,30,.4)] p-3">
               <div className="grid grid-cols-2 gap-2">
                 <label>
-                  <span className="block text-[10.5px] font-semibold uppercase tracking-wide text-ink-400 mb-1">From</span>
+                  <span className="block text-[0.6875rem] font-semibold uppercase tracking-wide text-ink-400 mb-1">From</span>
                   <DatePicker value={from} onChange={e => onChange(e.target.value, to)} max={to || undefined} placeholder="Any" aria-label="Runs from date" className={RANGE_FIELD} />
                 </label>
                 <label>
-                  <span className="block text-[10.5px] font-semibold uppercase tracking-wide text-ink-400 mb-1">To</span>
+                  <span className="block text-[0.6875rem] font-semibold uppercase tracking-wide text-ink-400 mb-1">To</span>
                   <DatePicker value={to} onChange={e => onChange(from, e.target.value)} min={from || undefined} placeholder="Any" aria-label="Runs to date" className={RANGE_FIELD} />
                 </label>
               </div>
@@ -82,7 +83,7 @@ function DateRangeMenu({ from, to, onChange, open, onToggle, onClose }: {
                   const active = from === isoDaysBack(s.d) && to === isoDaysBack(0);
                   return (
                     <button key={s.l} onClick={() => { onChange(isoDaysBack(s.d), isoDaysBack(0)); onClose(); }}
-                      className={cn('h-6 px-2 rounded-md border text-[11px] font-semibold cursor-pointer transition-colors',
+                      className={cn('h-6 px-2 rounded-md border text-[0.6875rem] font-semibold cursor-pointer transition-colors',
                         active ? 'border-brand-300 bg-brand-50 text-brand-700' : 'border-canvas-border text-ink-600 hover:text-brand-700 hover:border-brand-300')}>
                       {s.l}
                     </button>
@@ -90,7 +91,7 @@ function DateRangeMenu({ from, to, onChange, open, onToggle, onClose }: {
                 })}
                 <span className="flex-1" />
                 {!isDefault && (
-                  <button onClick={() => onChange('', '')} className="h-6 px-2 rounded-md text-[11px] font-semibold text-ink-500 hover:text-ink-800 cursor-pointer transition-colors">
+                  <button onClick={() => onChange('', '')} className="h-6 px-2 rounded-md text-[0.6875rem] font-semibold text-ink-500 hover:text-ink-800 cursor-pointer transition-colors">
                     Clear
                   </button>
                 )}
@@ -112,8 +113,8 @@ function FilterMenu<T extends string>({ Icon, ariaLabel, value, options, isDefau
   const current = options.find(o => o.id === value)!;
   return (
     <div className="relative">
-      <button onClick={onToggle} aria-label={ariaLabel}
-        className={cn('h-8 px-2.5 inline-flex items-center gap-1.5 rounded-lg border text-[12px] font-semibold transition-colors cursor-pointer',
+      <button onClick={onToggle} aria-label={ariaLabel} aria-haspopup="menu" aria-expanded={open}
+        className={cn('h-8 px-2.5 inline-flex items-center gap-1.5 rounded-lg border text-[0.75rem] font-semibold transition-colors cursor-pointer',
           isDefault ? 'border-canvas-border bg-canvas-elevated text-ink-700 hover:border-ink-300' : 'border-brand-200 bg-brand-50 text-brand-700')}>
         <Icon size={13} className={isDefault ? 'text-ink-400' : 'text-brand-600'} />
         {current.label}
@@ -125,13 +126,15 @@ function FilterMenu<T extends string>({ Icon, ariaLabel, value, options, isDefau
           <>
             <div className="fixed inset-0 z-10" onClick={onToggle} />
             <motion.div initial={{ opacity: 0, y: -4 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -4 }}
+              role="menu" aria-label={ariaLabel}
               className="absolute left-0 mt-1.5 z-20 w-52 rounded-xl border border-canvas-border bg-canvas-elevated shadow-[0_16px_40px_-16px_rgba(15,8,30,.4)] p-1">
+              <MenuFocus onClose={onToggle} />
               {options.map(o => (
-                <button key={o.id} onClick={() => onPick(o.id)}
-                  className={cn('w-full text-left px-2.5 py-1.5 rounded-lg text-[12.5px] hover:bg-paper-50 cursor-pointer flex items-center gap-2', o.id === value ? 'text-brand-700 font-semibold' : 'text-ink-700')}>
+                <button key={o.id} role="menuitemradio" aria-checked={o.id === value} onClick={() => onPick(o.id)}
+                  className={cn('w-full text-left px-2.5 py-1.5 rounded-lg text-[0.8125rem] hover:bg-paper-50 cursor-pointer flex items-center gap-2', o.id === value ? 'text-brand-700 font-semibold' : 'text-ink-700')}>
                   {o.id === value ? <Check size={12} /> : <span className="w-3" />}
                   <span className="flex-1">{o.label}</span>
-                  {o.count !== undefined && <span className="text-[11px] text-ink-400 tabular-nums">{o.count}</span>}
+                  {o.count !== undefined && <span className="text-[0.6875rem] text-ink-400 tabular-nums">{o.count}</span>}
                 </button>
               ))}
             </motion.div>
@@ -147,8 +150,8 @@ function OutcomeChips({ run }: { run: RunRecord }) {
   const ineff = run.controls.length - eff;
   return (
     <span className="inline-flex items-center gap-1.5">
-      {eff > 0 && <span className="inline-flex items-center gap-1 text-[11.5px] font-semibold text-compliant-700"><CheckCircle2 size={13} /> {eff} effective</span>}
-      {ineff > 0 && <span className="inline-flex items-center gap-1 text-[11.5px] font-semibold text-risk-700"><XCircle size={13} /> {ineff} ineffective</span>}
+      {eff > 0 && <span className="inline-flex items-center gap-1 text-[0.75rem] font-semibold text-compliant-700"><CheckCircle2 size={13} /> {eff} effective</span>}
+      {ineff > 0 && <span className="inline-flex items-center gap-1 text-[0.75rem] font-semibold text-risk-700"><XCircle size={13} /> {ineff} ineffective</span>}
     </span>
   );
 }
@@ -192,7 +195,7 @@ export default function RunsView() {
           onClose={() => setMenu(null)}
           onChange={(f, t) => { setFrom(f); setTo(t); }} />
         <div className="flex-1" />
-        <span className="text-[11.5px] text-ink-400">Showing {runs.length} of {eng.runs.length} runs</span>
+        <span className="text-[0.75rem] text-ink-400">Showing {runs.length} of {eng.runs.length} runs</span>
       </div>
 
       {/* the registry */}
@@ -207,10 +210,10 @@ export default function RunsView() {
                 <span className={cn('w-9 h-9 rounded-lg inline-flex items-center justify-center shrink-0', meta.chip)}><meta.Icon size={16} /></span>
                 <span className="min-w-0 flex-1">
                   <span className="flex items-center gap-2 flex-wrap">
-                    <span className="text-[13px] font-semibold text-ink-900">{r.label}</span>
-                    <span className={cn('px-1.5 h-[17px] inline-flex items-center rounded text-[10px] font-bold uppercase tracking-wide', meta.chip)}>{meta.label}</span>
+                    <span className="text-[0.8125rem] font-semibold text-ink-900">{r.label}</span>
+                    <span className={cn('px-1.5 h-4.25 inline-flex items-center rounded text-[0.625rem] font-bold uppercase tracking-wide', meta.chip)}>{meta.label}</span>
                   </span>
-                  <span className="block text-[11.5px] text-ink-500 mt-0.5 truncate">{r.by} · {r.at}{r.detail ? ` · ${r.detail}` : ''}</span>
+                  <span className="block text-[0.75rem] text-ink-500 mt-0.5 truncate">{r.by} · {r.at}{r.detail ? ` · ${r.detail}` : ''}</span>
                 </span>
                 <OutcomeChips run={r} />
                 <ChevronDown size={15} className={cn('text-ink-400 shrink-0 transition-transform', isOpen && 'rotate-180')} />
@@ -219,21 +222,21 @@ export default function RunsView() {
                 <div className="border-t border-canvas-border px-3.5 py-3 bg-paper-50/40">
                   {r.datasets && r.datasets.length > 0 && (
                     <div className="flex items-center gap-1.5 flex-wrap mb-2.5">
-                      <span className="inline-flex items-center gap-1 text-[10.5px] font-semibold uppercase tracking-wide text-ink-400"><Database size={11} /> Datasets</span>
-                      {r.datasets.map(d => <span key={d} className="px-2 h-[19px] inline-flex items-center rounded border border-canvas-border bg-canvas-elevated text-[10.5px] font-medium text-ink-600">{d}</span>)}
+                      <span className="inline-flex items-center gap-1 text-[0.6875rem] font-semibold uppercase tracking-wide text-ink-400"><Database size={11} /> Datasets</span>
+                      {r.datasets.map(d => <span key={d} className="px-2 h-4.75 inline-flex items-center rounded border border-canvas-border bg-canvas-elevated text-[0.6875rem] font-medium text-ink-600">{d}</span>)}
                     </div>
                   )}
                   <div className="space-y-1">
                     {r.controls.map(c => (
                       <div key={c.controlId} className="flex items-center gap-2.5 rounded-lg bg-canvas-elevated border border-canvas-border px-2.5 py-2">
                         <span className="wp-ref shrink-0">{c.wpRef}</span>
-                        <span className="text-[12px] text-ink-700 truncate flex-1 min-w-0">{c.description}</span>
-                        <span className="text-[10.5px] text-ink-400 tabular-nums shrink-0">{c.checks} check{c.checks === 1 ? '' : 's'}</span>
+                        <span className="text-[0.75rem] text-ink-700 truncate flex-1 min-w-0">{c.description}</span>
+                        <span className="text-[0.6875rem] text-ink-400 tabular-nums shrink-0">{c.checks} check{c.checks === 1 ? '' : 's'}</span>
                         {c.outcome === 'Effective'
-                          ? <span className="inline-flex items-center gap-1 text-[11px] font-semibold text-compliant-700 shrink-0"><CheckCircle2 size={12} /> Effective</span>
-                          : <span className="inline-flex items-center gap-1 text-[11px] font-semibold text-risk-700 shrink-0"><XCircle size={12} /> Ineffective</span>}
+                          ? <span className="inline-flex items-center gap-1 text-[0.6875rem] font-semibold text-compliant-700 shrink-0"><CheckCircle2 size={12} /> Effective</span>
+                          : <span className="inline-flex items-center gap-1 text-[0.6875rem] font-semibold text-risk-700 shrink-0"><XCircle size={12} /> Ineffective</span>}
                         <button onClick={() => openControl(c.controlId)}
-                          className="inline-flex items-center gap-1 text-[11.5px] font-semibold text-brand-700 hover:text-brand-800 cursor-pointer shrink-0 transition-colors">
+                          className="inline-flex items-center gap-1 text-[0.75rem] font-semibold text-brand-700 hover:text-brand-800 cursor-pointer shrink-0 transition-colors">
                           Open control <ArrowRight size={12} />
                         </button>
                       </div>
@@ -245,7 +248,7 @@ export default function RunsView() {
           );
         })}
         {runs.length === 0 && (
-          <div className="text-center py-16 text-ink-400 text-[13px] rounded-2xl border border-dashed border-canvas-border">
+          <div className="text-center py-16 text-ink-400 text-[0.8125rem] rounded-2xl border border-dashed border-canvas-border">
             <History size={20} className="mx-auto mb-2 opacity-40" />
             {eng.runs.length === 0
               ? 'No runs here yet — test a control, or bulk test from the RACM or Control library, and the run lands in this registry.'

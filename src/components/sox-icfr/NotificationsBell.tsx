@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { AnimatePresence, motion, useReducedMotion } from 'motion/react';
 import {
-  Bell, CheckCircle2, ClipboardList, Clock, FileText, MessageSquareWarning, RotateCcw, Table2, XCircle,
+  Bell, CheckCircle2, ClipboardList, Clock, FileText, ListTodo, MessageSquareWarning, RotateCcw, Table2, XCircle,
 } from 'lucide-react';
 import { useIcfr } from './store';
 import { conclusionOf, gradeException, isAwaitingReview, isOwnerTask, testDueInDays, testsDueNow, trackResult } from './helpers';
@@ -231,7 +231,8 @@ export default function NotificationsBell() {
           id: `close-${d.id}`, kind: 'exception',
           title: `${d.id} · fix submitted — yours to close`,
           detail: `${d.description} — read the plan, the fix and its proof, then sign it off.`,
-          onOpen: () => { setOpen(false); setView('deficiencies'); },
+          // It names one deficiency, so it opens that one — not the list.
+          onOpen: goException(d.id),
         });
       }
     }
@@ -285,7 +286,7 @@ export default function NotificationsBell() {
         out.push({
           id: `blocked-${c.id}`, kind: 'due',
           title: `Testing blocked on ${c.wpRef} — waiting on ${c.owner}`,
-          detail: `Needed: ${u.needed} — raised ${u.raisedAt}. Still open at period end and it becomes an exception.`,
+          detail: `Needed: ${u.needed} — raised ${u.raisedAt}. Still open at period end and it becomes a deficiency.`,
           onOpen: () => go(c.id),
         });
       }
@@ -314,9 +315,11 @@ export default function NotificationsBell() {
       <button onClick={() => setOpen(o => !o)} aria-label={`To-do — ${pending} pending`}
         className={cn('relative h-9 w-9 inline-flex items-center justify-center rounded-lg border transition-colors cursor-pointer',
           open ? 'border-brand-300 bg-brand-50 text-brand-700' : 'border-canvas-border text-ink-500 hover:text-ink-900 hover:border-ink-300')}>
-        <Bell size={16} />
+        {/* A to-do list, not a second bell — the sidebar already has the
+            notifications bell, and two of them read as the same thing twice. */}
+        <ListTodo size={16} />
         {pending > 0 && (
-          <span className={cn('absolute -top-1.5 -right-1.5 min-w-[18px] h-[18px] px-1 rounded-full text-[10px] font-bold text-white inline-flex items-center justify-center tabular-nums',
+          <span className={cn('absolute -top-1.5 -right-1.5 min-w-4.5 h-4.5 px-1 rounded-full text-[0.625rem] font-bold text-white inline-flex items-center justify-center tabular-nums',
             urgent > 0 ? 'bg-risk-600' : 'bg-brand-600')}>
             {pending}
           </span>
@@ -326,15 +329,15 @@ export default function NotificationsBell() {
       <AnimatePresence>
         {open && (
           <motion.div initial={reduce ? { opacity: 0 } : { opacity: 0, y: 6, scale: 0.98 }} animate={reduce ? { opacity: 1 } : { opacity: 1, y: 0, scale: 1 }} exit={reduce ? { opacity: 0 } : { opacity: 0, y: 6, scale: 0.98 }} transition={{ duration: 0.14 }}
-            className="absolute right-0 top-[calc(100%+8px)] z-50 w-[400px] rounded-2xl border border-canvas-border bg-canvas-elevated shadow-[0_20px_50px_-18px_rgba(15,8,30,0.45)] overflow-hidden">
+            className="absolute right-0 top-[calc(100%+8px)] z-50 w-100 rounded-2xl border border-canvas-border bg-canvas-elevated shadow-[0_20px_50px_-18px_rgba(15,8,30,0.45)] overflow-hidden">
             <div className="px-4 py-3 border-b border-canvas-border flex items-center justify-between">
               <div>
-                <div className="text-[13px] font-semibold text-ink-900">To-do</div>
-                <div className="text-[11px] text-ink-500 mt-0.5">Pending assignment &amp; review · viewing as {role === 'auditor' ? 'Auditor' : role === 'reviewer' ? 'Reviewer' : 'Risk Owner'}</div>
+                <div className="text-[0.8125rem] font-semibold text-ink-900">To-do</div>
+                <div className="text-[0.6875rem] text-ink-500 mt-0.5">Pending assignment &amp; review · viewing as {role === 'auditor' ? 'Auditor' : role === 'reviewer' ? 'Reviewer' : 'Risk Owner'}</div>
               </div>
-              {urgent > 0 && <span className="text-[10.5px] font-bold text-risk-700 bg-risk-50 border border-risk-200 rounded-full px-2 h-5 inline-flex items-center">{urgent} ineffective</span>}
+              {urgent > 0 && <span className="text-[0.6875rem] font-bold text-risk-700 bg-risk-50 border border-risk-200 rounded-full px-2 h-5 inline-flex items-center">{urgent} ineffective</span>}
             </div>
-            <div className="max-h-[420px] overflow-y-auto p-2">
+            <div className="max-h-105 overflow-y-auto p-2">
               {items.map(it => {
                 const meta = KIND_META[it.kind];
                 return (
@@ -342,14 +345,14 @@ export default function NotificationsBell() {
                     className="w-full flex items-start gap-2.5 rounded-xl p-2.5 text-left hover:bg-paper-50 transition-colors cursor-pointer">
                     <span className={cn('w-7 h-7 rounded-lg border inline-flex items-center justify-center shrink-0', meta.cls)}><meta.Icon size={14} /></span>
                     <span className="min-w-0 flex-1">
-                      <span className={cn('block text-[12px] font-semibold leading-snug', it.kind === 'ineffective' ? 'text-risk-700' : 'text-ink-900')}>{it.title}</span>
-                      <span className="block text-[11px] text-ink-600 mt-0.5 line-clamp-2">{it.detail}</span>
+                      <span className={cn('block text-[0.75rem] font-semibold leading-snug', it.kind === 'ineffective' ? 'text-risk-700' : 'text-ink-900')}>{it.title}</span>
+                      <span className="block text-[0.6875rem] text-ink-600 mt-0.5 line-clamp-2">{it.detail}</span>
                     </span>
                   </button>
                 );
               })}
               {items.length === 0 && (
-                <div className="py-10 text-center text-[12px] text-ink-400">
+                <div className="py-10 text-center text-[0.75rem] text-ink-400">
                   <CheckCircle2 size={18} className="mx-auto mb-2 text-compliant-500" /> Nothing pending — all caught up.
                 </div>
               )}

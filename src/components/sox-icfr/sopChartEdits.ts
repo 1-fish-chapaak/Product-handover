@@ -135,7 +135,7 @@ const NEGATION = "do\\s+not|does\\s+not|don'?t|doesn'?t|dont|never|not|nahin?|ma
 
 /** What takes ONE box off the chart. Imperatives only, same reason. */
 const REMOVE_VERBS =
-  "remove|delete|drop|exclude|omit|take\\s+[^.\\n]{0,30}?\\bout|"
+  "remove|delete|drop|exclude|omit|get\\s+rid\\s+of|take\\s+[^.\\n]{0,30}?\\bout|"
   + "hata\\s*d(?:o|ijiye(?:ga)?|e)|hatao|hata\\s*den|hatana|hataiye|hta\\s*do|htao|"
   + "nikaal\\s*d(?:o|ijiye(?:ga)?|e)|nikal\\s*d(?:o|ijiye(?:ga)?|e)|nikaalo|nikalo|"
   + "chhod\\s*d(?:o|ijiye)|chod\\s*d(?:o|ijiye)|nahi\\s*chahiye|mat\\s*rakho";
@@ -145,7 +145,29 @@ const REMOVE_VERBS =
  *  longer has to be the only thing deciding WHICH box, so width is cheap. */
 const NEAR = 60;
 
-const RENAME_WORDS = /\b(?:rename|re-?name|naam|name|title|call\s+it|kehlaye)\b/i;
+const RENAME_WORDS = /\b(?:rename|re-?name|re-?title|re-?label|naam|name|title|call\s+it|kehlaye)\b/i;
+/**
+ * "Change Control 3 to X" — plain English with no rename word in it (5 Oct).
+ * Read like "X ko … kar do": it asks for a rename, but a one-word name must be
+ * quoted, so "change control 3 to monthly" is asked about, never applied.
+ */
+const CHANGE_RENAME = /\b(?:change|update|switch)\b[^\n]{0,80}\bto\b/i;
+
+/**
+ * A box named by position or number — "the first risk", "2nd control",
+ * "control number 4", "risk #2" (5 Oct). "Rename the first risk to Vendor
+ * fraud" used to get "I couldn't place that": only "Risk 1" was a box.
+ */
+const ORDINALS: Record<string, number> = {
+  first: 1, second: 2, third: 3, fourth: 4, fifth: 5, sixth: 6, seventh: 7, eighth: 8, ninth: 9, tenth: 10,
+};
+const ORDINAL_WORD = 'first|second|third|fourth|fifth|sixth|seventh|eighth|ninth|tenth|last|\\d{1,2}(?:st|nd|rd|th)';
+const BOX_NO = '\\s*(?:#|number\\s*|no\\.?\\s*)?\\s*';
+const NAMES_A_BOX = new RegExp(`\\b(?:risk|control)${BOX_NO}\\d{1,2}\\b|\\b(?:${ORDINAL_WORD})\\s+(?:risk|control)\\b`, 'i');
+
+/** Things this box cannot do, asked in plain English — said, not "couldn't place". */
+const ADD_ASK = /\b(?:add|insert|create|new)\b[^.\n]{0,30}\b(?:risks?|controls?|steps?|stages?|box(?:es)?)\b/i;
+const STEP_ASK = /\b(?:steps?|stages?)\b/i;
 /** "X ko Y kar do" names no act at all and is the commonest phrasing there is —
  *  but on its own it also covers "X ko theek karo", so a name arriving this way
  *  must be quoted or at least two words. See `newNameIn`. */
@@ -222,7 +244,11 @@ function newNameIn(raw: string, targetTitle: string, strict: boolean): { name: s
   const pick = fromQuotes
     ? qs[qs.length - 1]!
     : (() => {
-      const m = /(?:→|->|=>|=|:|—|–|\bto\b|\bnaam\b|\bname\b|\btitle\b|\bko\b|\bas\b)\s+([^\n]{2,90})$/i.exec(raw.trim());
+      // An arrow, then "to", say where the name starts more surely than "name"
+      // does: "change the name of Control 3 to X" is X, not "of Control 3 to X".
+      const m = /(?:→|->|=>)\s*([^\n]{2,90})$/i.exec(raw.trim())
+        ?? /\bto\s+([^\n]{2,90})$/i.exec(raw.trim())
+        ?? /(?:→|->|=>|=|:|—|–|\bto\b|\bnaam\b|\bname\b|\btitle\b|\bko\b|\bas\b)\s+([^\n]{2,90})$/i.exec(raw.trim());
       return m ? cleanName(m[1]!) : '';
     })();
 
@@ -261,10 +287,18 @@ function candidates(raw: string, facts: ChartFacts): { hits: Cand[]; miss: OutOf
   let miss: OutOfRange | null = null;
 
   const byNo = (word: string, list: ChartNode[], what: 'risk' | 'control') => {
-    for (const m of t.matchAll(new RegExp(`\\b${word}\\s*#?\\s*(\\d{1,2})\\b`, 'gi'))) {
+    for (const m of t.matchAll(new RegExp(`\\b${word}${BOX_NO}(\\d{1,2})\\b`, 'gi'))) {
       const node = list.find(n => n.no === Number(m[1]));
       if (node) hits.push({ what, node, at: m.index, end: m.index + m[0].length });
       else miss ??= { what, asked: Number(m[1]), have: list.length };
+    }
+    // "the first risk", "2nd control", "the last control".
+    for (const m of t.matchAll(new RegExp(`\\b(${ORDINAL_WORD})\\s+${word}\\b`, 'gi'))) {
+      const w = m[1]!.toLowerCase();
+      const no = w === 'last' ? Math.max(0, ...list.map(n => n.no)) : ORDINALS[w] ?? parseInt(w, 10);
+      const node = list.find(n => n.no === no);
+      if (node) hits.push({ what, node, at: m.index, end: m.index + m[0].length });
+      else miss ??= { what, asked: no, have: list.length };
     }
   };
   byNo('risk', facts.risks, 'risk');
@@ -301,7 +335,7 @@ function candidates(raw: string, facts: ChartFacts): { hits: Cand[]; miss: OutOf
 }
 
 const REMOVE_RE = new RegExp(`\\b(?:${REMOVE_VERBS})\\b`, 'gi');
-const RENAME_MARK = /\b(?:rename|re-?name|naam|name|title|call\s+it|kehlaye)\b|→|->|=>/gi;
+const RENAME_MARK = /\b(?:rename|re-?name|re-?title|re-?label|naam|name|title|call\s+it|kehlaye|change|update|switch)\b|→|->|=>/gi;
 
 /**
  * The `ko` of "X ko … kar do", as a rename marker in its own right.
@@ -386,7 +420,7 @@ function boxList(raw: string, hits: Cand[]): Cand[] | null {
   for (const here of hits) {
     const chain = chains[chains.length - 1];
     const prev = chain?.[chain.length - 1];
-    if (chain && prev && /^\s*(?:,|;|&|\+|\baur\b|\band\b)\s*$/i.test(raw.slice(prev.end, here.at))) chain.push(here);
+    if (chain && prev && /^\s*(?:,|;|&|\+|\baur\b|\band\b)\s*(?:the\s+)?$/i.test(raw.slice(prev.end, here.at))) chain.push(here);
     else chains.push([here]);
   }
   const verbs = removalMarks(raw);
@@ -398,7 +432,7 @@ function boxList(raw: string, hits: Cand[]): Cand[] | null {
   // Punctuation, or one of the particles Hindi puts between a list and its
   // verb. `\W` alone killed "Control 4 aur Control 5 KO hata do" outright — an
   // ordinary phrasing, and the list vanished rather than half-applying.
-  const JOIN = /^(?:\W+|\b(?:ko|dono|sab|sabhi|inko|unko|in|un|ye|yeh|both|all|these|them)\b)*$/i;
+  const JOIN = /^(?:\W+|\b(?:ko|dono|sab|sabhi|inko|unko|in|un|ye|yeh|both|all|these|them|the)\b)*$/i;
   const touching = (chain: Cand[]) => verbs.some(([s, e]) =>
     // Or the verb wraps the whole list, as `take … out` does.
     (s <= chain[0]!.at && e >= chain[chain.length - 1]!.end)
@@ -433,7 +467,7 @@ export function readNarrowing(raw: string): Narrowing {
 
   // A sentence that names a box is a note ABOUT that box, so the plain negative
   // stands down in it entirely. See `ruledOutPlainly`.
-  const aboutOneBox = /\b(?:risk|control)\s*#?\s*\d{1,2}\b/i.test(raw);
+  const aboutOneBox = NAMES_A_BOX.test(raw);
   const out = (term: string) => ruledOut(p, term) || (!aboutOneBox && ruledOutPlainly(p, term));
 
   const keyOnly = narrowedTo(p, 'key') || ruledOut(p, 'non[\\s-]?key');
@@ -495,8 +529,9 @@ function rowsFailing(rows: ImportRow[], n: Narrowing, gone: ReadonlySet<string>)
 // ── the reader ────────────────────────────────────────────────────────────────
 
 const CAPABILITIES =
-  'I can rename a box ("Risk 2 ka naam Duplicate invoice paid kar do"), take one out ("Control 4 hata do"), '
-  + 'or narrow the whole chart ("sirf key controls rakho", "manual controls hata do", "at most 6 controls").';
+  'I can rename a box ("rename the first risk to Vendor fraud", "Risk 2 ka naam Duplicate invoice paid kar do"), '
+  + 'take one out ("remove control 4", "Control 4 hata do"), '
+  + 'or narrow the whole chart ("only key controls", "manual controls hata do", "at most 6 controls").';
 
 const noun = (what: 'risk' | 'control') => (what === 'risk' ? 'Risk' : 'Control');
 
@@ -542,7 +577,7 @@ function readOne(raw: string, facts: ChartFacts, gone: ReadonlySet<string>): Cha
 
   const { hits, miss } = candidates(text, facts);
   const explicitRename = RENAME_WORDS.test(text) || /(?:→|->|=>)/.test(text);
-  const asked = explicitRename || HINDI_RENAME.test(text);
+  const asked = explicitRename || HINDI_RENAME.test(text) || CHANGE_RENAME.test(text);
 
   const removal = nearestTo(hits, removalMarks(text));
   // The rename branch picks its own box the same way the removal branch does.
@@ -612,6 +647,13 @@ function readOne(raw: string, facts: ChartFacts, gone: ReadonlySet<string>): Cha
     const have = `${miss.have} ${miss.have === 1 ? miss.what : `${miss.what}s`}`;
     return [{ kind: 'nothing', text: `There is no ${miss.what} ${miss.asked} — this chart has ${have}.` }];
   }
+  // Asks this box cannot carry out, answered as what they are.
+  if (ADD_ASK.test(text)) {
+    return [{ kind: 'nothing', text: 'I can\'t add a box here — the chart is drawn from the SOP\'s own controls. Once the RACM is imported, add a control to it in the spreadsheet editor.' }];
+  }
+  if (!first && STEP_ASK.test(text)) {
+    return [{ kind: 'nothing', text: `The process steps come straight from the SOP, so I can't change them here — only the risk and control boxes. ${CAPABILITIES}` }];
+  }
   if (first) {
     return [{ kind: 'nothing', text: `I can see ${noun(first.what)} ${first.node.no}, but not what to do with it. ${CAPABILITIES}` }];
   }
@@ -620,7 +662,7 @@ function readOne(raw: string, facts: ChartFacts, gone: ReadonlySet<string>): Cha
 
 /** Does this fragment carry an instruction of its own — a box, or a narrowing? */
 const readable = (s: string, facts: ChartFacts): boolean =>
-  /\b(?:risk|control)\s*#?\s*\d{1,2}\b/i.test(s)
+  NAMES_A_BOX.test(s)
   || [...facts.risks, ...facts.controls].some(n => n.id && s.toLowerCase().includes(n.id.toLowerCase()))
   || readNarrowing(s).said.length > 0;
 
@@ -632,7 +674,7 @@ const readable = (s: string, facts: ChartFacts): boolean =>
  */
 const isWholeChart = (s: string, facts: ChartFacts): boolean =>
   readNarrowing(s).said.length > 0
-  && !/\b(?:risk|control)\s*#?\s*\d{1,2}\b/i.test(s)
+  && !NAMES_A_BOX.test(s)
   && ![...facts.risks, ...facts.controls].some(n => n.id && s.toLowerCase().includes(n.id.toLowerCase()));
 
 /**
@@ -685,7 +727,7 @@ export function readChartEdits(raw: string, facts: ChartFacts): ChartEdit[] {
   // its conjunctions — "remove Control 4 and Control 5" would otherwise be split
   // into a verb and a bare noun, and the bare half vetoes the whole thing.
   const { hits } = candidates(text, facts);
-  if (!RENAME_WORDS.test(text) && !HINDI_RENAME.test(text)) {
+  if (!RENAME_WORDS.test(text) && !HINDI_RENAME.test(text) && !CHANGE_RENAME.test(text)) {
     const list = boxList(text, hits);
     if (list) return list.map(leaveOut);
   }
