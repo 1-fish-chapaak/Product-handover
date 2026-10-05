@@ -15,6 +15,14 @@ import { Lock } from 'lucide-react';
 import { GENERATED_REPORTS, GENERATED_REPORTS_KEY } from './data/mockData';
 import Sidebar from './components/sidebar/Sidebar';
 import ChatView from './components/chat/ChatView';
+import WorkflowBuilderLanding from './components/workflow/WorkflowBuilderLanding';
+import AuditWithAiView from './components/audit-plan/AuditWithAiView';
+import AdaptStandardView from './components/audit-plan/AdaptStandardView';
+import BuildsView from './components/audit-plan/BuildsView';
+import HomeHub from './components/home/HomeHub';
+import TodayView from './components/home/TodayView';
+import { ensureBatchRunning, pendingItems, useAllBatches } from './data/auditPlan';
+import { useNotify } from './notifications/NotificationContext';
 import ArtifactPanel from './components/artifacts/ArtifactPanel';
 import WorkflowTemplates from './components/workflow/WorkflowTemplates';
 import WorkflowDetail from './components/workflow/WorkflowDetail';
@@ -147,6 +155,42 @@ class ErrorBoundary extends React.Component<{ children: React.ReactNode }, { has
   }
 }
 
+/** Keeps batch builds moving and announces finished ones. Batches run in the
+ *  main app (never in a review-session tab, which only displays), so they
+ *  continue whichever page the user is on, and resume after a reload. */
+const NOTIFIED_KEY = 'irame.batch.notified';
+function BatchWatcher() {
+  const batches = useAllBatches();
+  const notify = useNotify();
+  const { currentUser } = useCurrentUser();
+  const isSessionTab = typeof window !== 'undefined' && new URLSearchParams(window.location.search).has('session');
+  useEffect(() => {
+    if (isSessionTab) return;
+    batches.forEach(b => { if (b.items.some(i => i.status === 'queued' || i.status === 'building')) ensureBatchRunning(b.id); });
+    let notified: string[] = [];
+    try { notified = JSON.parse(localStorage.getItem(NOTIFIED_KEY) ?? '[]'); } catch { /* ignore */ }
+    const fresh = batches.filter(b =>
+      !notified.includes(b.id)
+      && Date.now() - b.createdAt < 86_400_000
+      && b.items.every(i => i.status !== 'queued' && i.status !== 'building'));
+    if (fresh.length === 0) return;
+    fresh.forEach(b => {
+      const { needsInput, toReview } = pendingItems([b]);
+      notify({
+        eventId: 'WFL-13',
+        title: `${b.items.length} workflow${b.items.length === 1 ? '' : 's'} built — ${toReview.length} ready to review`,
+        message: `${b.title}.${needsInput.length ? ` ${needsInput.length} need${needsInput.length === 1 ? 's' : ''} a file from you.` : ''}`,
+        recipients: [{ name: currentUser?.name ?? 'You' }],
+        link: { view: 'builds' },
+        linkLabel: 'Open Builds & reviews',
+        dedupKey: b.id,
+      });
+    });
+    try { localStorage.setItem(NOTIFIED_KEY, JSON.stringify([...notified, ...fresh.map(b => b.id)])); } catch { /* ignore */ }
+  }, [batches, notify, currentUser, isSessionTab]);
+  return null;
+}
+
 function AppInner() {
   const {
     state,
@@ -177,6 +221,10 @@ function AppInner() {
     setQueryAssumptions,
     enterWorkflowMode,
     startWorkflowForEngagement,
+    startWorkflowAgent,
+    clearWorkflowAgentSeed,
+    startAdaptStandard,
+    clearAdaptSeed,
     openWorkflowExecutor,
     openChat,
     setSelectedChatId,
@@ -661,16 +709,32 @@ function AppInner() {
     switch (state.view) {
       case 'home':
         return (
-          <HomeView
-            setView={setView}
-            notifications={notif.notifications}
-            onSelectNotification={handleNotificationSelect}
-            onOpenNotificationDrawer={() => notif.openDrawer()}
-            setChatInitialQuery={setChatInitialQuery}
-            setSelectedWorkflow={setSelectedWorkflow}
-            openAuditExecution={openAuditExecution}
-            setSelectedBP={setSelectedBP}
-            onLaunchWorkflowBuilder={launchWorkflowBuilderWithPrompt}
+          <HomeHub
+            today={
+              <TodayView
+                onAdapt={(keys, choices) => startAdaptStandard({ keys, choices })}
+                adaptDraft={state.adaptSeed}
+                onResumeAdapt={() => setView('adapt-standard')}
+                onOpenBuilds={() => setView('builds')}
+                onOpenControls={() => setView('governance-controls')}
+                onOpenEngagement={openEngagement}
+                onAuditWithAi={() => setView('audit-with-ai')}
+                onConnectData={() => setView('knowledge-hub')}
+              />
+            }
+            insights={
+              <HomeView
+                setView={setView}
+                notifications={notif.notifications}
+                onSelectNotification={handleNotificationSelect}
+                onOpenNotificationDrawer={() => notif.openDrawer()}
+                setChatInitialQuery={setChatInitialQuery}
+                setSelectedWorkflow={setSelectedWorkflow}
+                openAuditExecution={openAuditExecution}
+                setSelectedBP={setSelectedBP}
+                onLaunchWorkflowBuilder={launchWorkflowBuilderWithPrompt}
+              />
+            }
           />
         );
 
@@ -799,6 +863,11 @@ function AppInner() {
               onViewDashboard={(id) => openDashboard(id)}
               onViewReport={(id) => { setView('reports'); setFocusReportId(id); }}
               workflowEngagementContext={state.workflowBuilderEngagementName}
+              workflowAgentSeed={state.workflowAgentSeed}
+              onWorkflowAgentSeedConsumed={clearWorkflowAgentSeed}
+              onOpenEngagement={openEngagement}
+              // Main tab only — a review-session tab must never overwrite the thread.
+              persistKey={new URLSearchParams(window.location.search).has('session') ? undefined : 'main'}
             /></div>
             {state.showArtifacts && (
               <div
@@ -873,12 +942,34 @@ function AppInner() {
         );
       }
 
+      case 'workflow-builder':
+        return (
+          <WorkflowBuilderLanding
+            onSelectAgent={(agent) => startWorkflowAgent({ agent })}
+            onAuditWithAi={() => setView('audit-with-ai')}
+          />
+        );
+
+      case 'audit-with-ai':
+        return (
+          <AuditWithAiView
+            onBack={() => setView('workflow-builder')}
+            onOpenEngagement={openEngagement}
+            onBuildBatch={(batchId) => startWorkflowAgent({ agent: 'grc', batchId })}
+            onOpenLibrary={() => setView('workflow-library')}
+          />
+        );
+
       case 'workflow-library':
         return (
           <WorkflowLibraryView
-            onCreateWorkflow={() => enterWorkflowMode()}
+            onCreateWorkflow={() => setView('workflow-builder')}
             onSelectWorkflow={(id) => setSelectedWorkflow(id)}
             onRunWorkflow={(id) => openWorkflowExecutor(id)}
+            onBuildDraft={(engagementId, checkId) => startWorkflowAgent({ agent: 'grc', buildQueue: { engagementId, checkIds: [checkId] } })}
+            onOpenEngagement={openEngagement}
+            onAdaptStandard={(keys, choices) => startAdaptStandard({ keys, choices })}
+            onOpenBuilds={() => setView('builds')}
           />
         );
 
@@ -1240,7 +1331,28 @@ function AppInner() {
 
       case 'governance-controls':
       case 'governance-control-detail':
-        return <ControlLibraryView />;
+        return <ControlLibraryView onAdapt={(keys, choices) => startAdaptStandard({ keys, choices })} onOpenBuilds={() => setView('builds')} />;
+
+      case 'builds':
+        return (
+          <BuildsView
+            onOpenEngagement={openEngagement}
+            onOpenLibrary={() => setView('workflow-library')}
+            onOpenControls={() => setView('governance-controls')}
+            onAuditWithAi={() => setView('audit-with-ai')}
+          />
+        );
+
+      case 'adapt-standard':
+        return state.adaptSeed ? (
+          <AdaptStandardView
+            keys={state.adaptSeed.keys}
+            choices={state.adaptSeed.choices}
+            onChangeChoices={(choices) => startAdaptStandard({ keys: state.adaptSeed!.keys, choices })}
+            onBack={() => setView('governance-controls')}
+            onBuild={(batchId) => { clearAdaptSeed(); startWorkflowAgent({ agent: 'grc', batchId }); }}
+          />
+        ) : <ControlLibraryView onAdapt={(keys, choices) => startAdaptStandard({ keys, choices })} onOpenBuilds={() => setView('builds')} />;
 
       // Execution — new pages
       case 'execution-testing':
@@ -1352,6 +1464,7 @@ function AppInner() {
   return (
     <>
       <BulkRunProgressProvider>
+      <BatchWatcher />
       <ShareProvider openShare={({ type, id, name, anchor }) => setShowShareModal(true, { type, id: id ?? type, name }, anchor)}>
       <div className="flex h-screen w-full bg-canvas overflow-hidden">
         {!((LAUNCHED_FROM_REPORT && state.view === 'manage-exceptions') || state.view === 'engagement-case-management') && (

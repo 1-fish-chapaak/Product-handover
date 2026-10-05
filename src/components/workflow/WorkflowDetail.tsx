@@ -11,6 +11,7 @@ import {
 } from 'lucide-react';
 import { WORKFLOWS } from '../../data/mockData';
 import { LIBRARY_WORKFLOWS } from './WorkflowLibraryView';
+import { CHECK_CATALOG, getEngagementPlan, getPlanWorkflows, stdWorkflowName } from '../../data/auditPlan';
 import { useToast } from '../shared/Toast';
 import Gated from '../shared/Gated';
 import { useAuditLog } from '../../context/AdminDataContext';
@@ -893,6 +894,45 @@ function resolveWorkflow(workflowId: string): ResolvedWorkflow | null {
       linkedControls: [],
     };
   }
+  // Standard library workflows (preloaded, adapted to the client's data).
+  if (workflowId.startsWith('std-')) {
+    const e = CHECK_CATALOG.find(x => x.key === workflowId.slice(4));
+    if (e) {
+      return {
+        id: workflowId,
+        code: `WF-${e.controlId}`,
+        name: stdWorkflowName(e),
+        desc: e.checkDescription,
+        steps: DEFAULT_STEPS,
+        runs: 0,
+        owner: 'Standard library',
+        lastRun: null,
+        lastRunStatus: null,
+        lastRunError: null,
+        lastRunErrorKind: null,
+        linkedControls: [{ id: e.controlId, name: e.controlTitle }],
+      };
+    }
+  }
+  // Checks built from an audit plan (Audit with AI / a split chat prompt).
+  const planRow = getPlanWorkflows().find(w => w.id === workflowId);
+  if (planRow) {
+    const control = getEngagementPlan(planRow.engagementId)?.controls.find(c => c.check.id === planRow.checkId);
+    return {
+      id: planRow.id,
+      code: `WF-${planRow.controlId}`,
+      name: planRow.name,
+      desc: planRow.description,
+      steps: DEFAULT_STEPS,
+      runs: 0,
+      owner: 'You',
+      lastRun: null,
+      lastRunStatus: null,
+      lastRunError: null,
+      lastRunErrorKind: null,
+      linkedControls: [{ id: planRow.controlId, name: control?.title ?? planRow.controlId }],
+    };
+  }
   // Process Hub workflows
   const bpWf = BP_WORKFLOWS[workflowId];
   if (bpWf) {
@@ -1008,6 +1048,9 @@ function EditableChipList({
 
 export default function WorkflowDetail({ workflowId, onBack, onOpenExecutor, onEditInChat, onViewVersionHistory, initialTab = 'overview' }: Props) {
   const wf = resolveWorkflow(workflowId);
+  // A workflow that has never run (a new standard or plan check) shows no
+  // history rather than the demo run list.
+  const runHistory = wf && wf.runs === 0 ? [] : RUN_HISTORY;
   const [tab, setTab] = useState<TabId>(initialTab);
   const [expandedDataset, setExpandedDataset] = useState<{ stepIdx: number; dsName: string } | null>(null);
   const [expandedSources, setExpandedSources] = useState<Set<string>>(new Set());
@@ -1172,7 +1215,7 @@ export default function WorkflowDetail({ workflowId, onBack, onOpenExecutor, onE
       <div className="flex gap-0 border-b border-border mb-6 shrink-0">
         {([
           { id: 'overview' as TabId, label: 'Overview' },
-          { id: 'runs' as TabId, label: 'Runs', count: RUN_HISTORY.length },
+          { id: 'runs' as TabId, label: 'Runs', count: runHistory.length },
           { id: 'config' as TabId, label: 'Configuration' },
         ]).map(t => (
           <button
@@ -1306,7 +1349,12 @@ export default function WorkflowDetail({ workflowId, onBack, onOpenExecutor, onE
               <span key={h} className="text-[0.6875rem] font-semibold uppercase tracking-tight text-ink-500">{h}</span>
             ))}
           </div>
-          {RUN_HISTORY.map((run, i) => (
+          {runHistory.length === 0 && (
+            <div className="px-5 py-10 text-center text-[0.8125rem] text-ink-500">
+              No runs yet. It runs on its schedule once it's live — or run it now from the executor.
+            </div>
+          )}
+          {runHistory.map((run, i) => (
             <motion.div
               key={run.id}
               initial={{ opacity: 0 }}
