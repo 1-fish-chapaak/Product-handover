@@ -13,6 +13,9 @@ export interface ControlRow {
   library?: 'standard' | 'custom';
   /** Standard library only — the catalog key the control comes from. */
   stdKey?: string;
+  /** Control-level test attributes — what testing checks, how it passes or
+   *  fails, and the evidence it needs. Shown even before a workflow is linked. */
+  attributes?: TestAttribute[];
   subProcess: string;
   classification: 'Key' | 'Non-Key';
   nature: 'Preventive' | 'Detective' | 'Corrective';

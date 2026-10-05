@@ -9,6 +9,7 @@
  * already connected; files without one have to be uploaded.
  */
 import type { CatalogEntry } from './catalog';
+import { isFreshWorkspace } from './workspace';
 
 export interface StandardFile {
   id: string;
@@ -134,7 +135,12 @@ const NEED_TO_FILE: Record<string, string> = {
   'Sourcing events': 'me4n',
 };
 
-export const fileById = (id: string) => STANDARD_FILES.find(f => f.id === id);
+/** A file by id. A fresh workspace has connected nothing yet, so nothing
+ *  auto-matches there — every report is one to request. */
+export function fileById(id: string): StandardFile | undefined {
+  const f = STANDARD_FILES.find(x => x.id === id);
+  return f && isFreshWorkspace() ? { ...f, matches: undefined, rows: undefined } : f;
+}
 
 /** The standard files one catalog entry reads (deduped, catalog order). */
 export function filesForEntry(entry: CatalogEntry): StandardFile[] {

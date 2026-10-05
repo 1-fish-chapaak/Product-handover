@@ -17,6 +17,7 @@ import type { ProcessCode } from '../engagements';
 import { CHECK_CATALOG, type CatalogEntry } from './catalog';
 import { filesForEntry, filesForNeeds, hash01, type FileSourceChoice } from './stdFiles';
 import { markStdAdapted, markStdLive } from './standardLibrary';
+import { onWorkspaceChange, workspaceSuffix } from './workspace';
 import { recordApproval } from './ledger';
 import { COMPLEXITY_HOURS, valueOfKey } from './score';
 import { markCheckBuilt, type PlanWorkflowRow } from './store';
@@ -68,11 +69,12 @@ export interface BuildBatch {
   createdAt: number;
 }
 
-const KEY = 'irame.buildBatches';
+const BASE_KEY = 'irame.buildBatches';
+const key = () => `${BASE_KEY}${workspaceSuffix()}`;
 
 function read(): Record<string, BuildBatch> {
   try {
-    const raw = localStorage.getItem(KEY);
+    const raw = localStorage.getItem(key());
     const v = raw ? JSON.parse(raw) : {};
     return v && typeof v === 'object' ? v : {};
   } catch { return {}; }
@@ -82,14 +84,15 @@ let batches: Record<string, BuildBatch> = read();
 const listeners = new Set<() => void>();
 const emit = () => listeners.forEach(fn => fn());
 function persist() {
-  try { localStorage.setItem(KEY, JSON.stringify(batches)); } catch { /* quota */ }
+  try { localStorage.setItem(key(), JSON.stringify(batches)); } catch { /* quota */ }
   emit();
 }
 // Another tab (a review session, or the main chat) wrote — re-read. Module
 // level, so nothing is missed while no component happens to be subscribed.
 if (typeof window !== 'undefined') {
-  window.addEventListener('storage', e => { if (e.key === KEY) { batches = read(); emit(); } });
+  window.addEventListener('storage', e => { if (e.key === key()) { batches = read(); emit(); } });
 }
+onWorkspaceChange(() => { batches = read(); emit(); });
 const subscribe = (fn: () => void) => {
   listeners.add(fn);
   return () => { listeners.delete(fn); };

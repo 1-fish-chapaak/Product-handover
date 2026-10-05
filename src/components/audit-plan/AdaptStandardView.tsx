@@ -37,7 +37,7 @@ const sourceOf = (c: FileSourceChoice | null | undefined) => (c && c.kind !== 's
 
 function coverageWith(process: ProcessCode, addedKeys: string[]): PlanCoverage {
   const universe = catalogFor(process);
-  const before = universe.filter(e => e.automatable && (e.existingWorkflowId || isStdLive(e.key))).length;
+  const before = universe.filter(e => e.automatable && isStdLive(e.key)).length;
   const after = before + universe.filter(e => addedKeys.includes(e.key) && !isStdLive(e.key)).length;
   const pct = (n: number) => Math.round((n / Math.max(1, universe.length)) * 100);
   return { universe: universe.length, before, after, beforePct: pct(before), afterPct: pct(after), liftPts: pct(after) - pct(before) };

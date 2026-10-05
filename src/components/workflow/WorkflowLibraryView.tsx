@@ -24,7 +24,7 @@ import { useCan } from '../../context/CurrentUserContext';
 import { useAuditLog } from '../../context/AdminDataContext';
 import { BulkExecuteModal, Checkbox } from './BulkExecuteModal';
 import {
-  CHECK_CATALOG, PROCESS_LONG, fmtHours, isStdLive, readinessOf, stdWorkflowName, usePlanWorkflows, useStdState, valueOfKey,
+  CHECK_CATALOG, PROCESS_LONG, fmtHours, isStdLive, readinessOf, stdWorkflowName, useFreshWorkspace, usePlanWorkflows, useStdState, valueOfKey,
   type FileSourceChoice, type StdReadiness,
 } from '../../data/auditPlan';
 import AdaptDataModal from '../audit-plan/AdaptDataModal';
@@ -236,11 +236,13 @@ export default function WorkflowLibraryView({ onCreateWorkflow, onSelectWorkflow
   // Ira builds them, then ordinary rows tagged with their engagement.
   const planRows = usePlanWorkflows();
   const std = useStdState();
+  // A fresh workspace has no workflows of its own — only the standard ones.
+  const fresh = useFreshWorkspace();
   const [adaptKeys, setAdaptKeys] = useState<string[] | null>(null);
   // Standard workflows not already represented by a catalog row (those with a
   // library workflow) or a plan check.
   const stdRows = useMemo<LibraryWorkflow[]>(() => CHECK_CATALOG
-    .filter(e => e.automatable && !e.existingWorkflowId && !planRows.some(r => r.stdKey === e.key))
+    .filter(e => e.automatable && (fresh || !e.existingWorkflowId) && (fresh || !planRows.some(r => r.stdKey === e.key)))
     .map(e => {
       const readiness = readinessOf(e, std);
       return {
@@ -255,7 +257,7 @@ export default function WorkflowLibraryView({ onCreateWorkflow, onSelectWorkflow
         stdKey: e.key,
         stdReadiness: readiness,
       };
-    }), [std, planRows]);
+    }), [std, planRows, fresh]);
   const allWorkflows = useMemo<LibraryWorkflow[]>(() => [
     ...planRows.map(r => {
       // Built by a batch isn't live until someone approves it.
@@ -280,7 +282,7 @@ export default function WorkflowLibraryView({ onCreateWorkflow, onSelectWorkflow
     }),
     ...LIBRARY_WORKFLOWS,
     ...stdRows,
-  ], [planRows, stdRows]);
+  ].filter(w => !fresh || w.stdReadiness !== undefined || w.id.startsWith('std-')), [planRows, stdRows, fresh]);
 
   const selectedWorkflows = useMemo(
     () => allWorkflows.filter(w => selectedIds.has(w.id)),

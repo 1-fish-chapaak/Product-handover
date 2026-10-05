@@ -1,4 +1,4 @@
-import { useRef, useEffect, useState, useCallback } from 'react';
+import { useRef, useEffect, useLayoutEffect, useState, useCallback } from 'react';
 import { AnimatePresence, motion } from 'motion/react';
 import { Sparkles } from 'lucide-react';
 import { useAppState, getInitialKnowledgeHubTab, getInitialMemoryFocus, type View } from './hooks/useAppState';
@@ -21,7 +21,8 @@ import AdaptStandardView from './components/audit-plan/AdaptStandardView';
 import BuildsView from './components/audit-plan/BuildsView';
 import HomeHub from './components/home/HomeHub';
 import TodayView from './components/home/TodayView';
-import { ensureBatchRunning, pendingItems, useAllBatches } from './data/auditPlan';
+import { ensureBatchRunning, pendingItems, setAuditWorkspace, useAllBatches } from './data/auditPlan';
+import { WORKSPACES } from './data/workspaces';
 import { useNotify } from './notifications/NotificationContext';
 import ArtifactPanel from './components/artifacts/ArtifactPanel';
 import WorkflowTemplates from './components/workflow/WorkflowTemplates';
@@ -64,6 +65,7 @@ import RACMView from './components/governance/RACMView';
 import RacmFullPageEditor from './components/audit/RacmFullPageEditor';
 import type { ProcurementRacmRow } from './data/procurement-racm';
 import ControlLibraryView from './components/governance/ControlLibraryView';
+import StandardLibraryBanner, { type StdBannerPage } from './components/governance/StandardLibraryBanner';
 import ControlTestingView from './components/execution/ControlTestingView';
 import EvidenceView from './components/execution/EvidenceView';
 import AIConciergeView from './components/intelligence/AIConciergeView';
@@ -246,7 +248,12 @@ function AppInner() {
     setFocusedNotificationRefId,
   } = useAppState();
 
-  const { can, canAny, currentUser } = useCurrentUser();
+  const { can, canAny, currentUser, activeWorkspaceId } = useCurrentUser();
+  // Point the audit-plan stores at this workspace before paint — a fresh
+  // client workspace starts with nothing live and its own saved progress.
+  useLayoutEffect(() => {
+    setAuditWorkspace(activeWorkspaceId, !!WORKSPACES.find(w => w.id === activeWorkspaceId)?.fresh);
+  }, [activeWorkspaceId]);
   const logEvent = useAuditLog();
 
   // Knowledge Hub deep-link state — which tab to land on and (optionally)
@@ -674,6 +681,19 @@ function AppInner() {
     );
   };
 
+  /** A page with the standard-library banner above it. */
+  const withStdBanner = (page: StdBannerPage, node: React.ReactNode) => (
+    <div className="flex-1 flex flex-col min-h-0 overflow-hidden">
+      <StandardLibraryBanner
+        page={page}
+        onAdapt={(keys, choices) => startAdaptStandard({ keys, choices })}
+        onOpenLibrary={() => setView('governance-controls')}
+        onOpenBuilds={() => setView('builds')}
+      />
+      <div className="flex-1 flex flex-col min-h-0 overflow-hidden">{node}</div>
+    </div>
+  );
+
   const renderMainView = () => {
     if (viewLoading) {
       return (
@@ -943,12 +963,12 @@ function AppInner() {
       }
 
       case 'workflow-builder':
-        return (
+        return withStdBanner('workflow-builder', (
           <WorkflowBuilderLanding
             onSelectAgent={(agent) => startWorkflowAgent({ agent })}
             onAuditWithAi={() => setView('audit-with-ai')}
           />
-        );
+        ));
 
       case 'audit-with-ai':
         return (
@@ -961,7 +981,7 @@ function AppInner() {
         );
 
       case 'workflow-library':
-        return (
+        return withStdBanner('workflow-library', (
           <WorkflowLibraryView
             onCreateWorkflow={() => setView('workflow-builder')}
             onSelectWorkflow={(id) => setSelectedWorkflow(id)}
@@ -971,7 +991,7 @@ function AppInner() {
             onAdaptStandard={(keys, choices) => startAdaptStandard({ keys, choices })}
             onOpenBuilds={() => setView('builds')}
           />
-        );
+        ));
 
       case 'workflow-executor':
         return (
@@ -1021,7 +1041,7 @@ function AppInner() {
         );
 
       case 'programs':
-        return (
+        return withStdBanner('process-hub', (
           <ProgramsView
             selectedBPId={state.selectedBPId}
             onSelectBP={setSelectedBP}
@@ -1033,7 +1053,7 @@ function AppInner() {
               setView('engagement-detail');
             }}
           />
-        );
+        ));
 
       case 'business-processes':
       case 'bp-detail':
@@ -1070,7 +1090,7 @@ function AppInner() {
       // it belongs with Risk Register and Control Library rather than inside
       // the engagement portfolio.
       case 'racm-library':
-        return (
+        return withStdBanner('racm', (
           <RacmPage canManage={can('eng_create')}
             onOpenEditor={(r) => {
               // Same tab (5 Oct): the editor reads and saves the library
@@ -1081,14 +1101,14 @@ function AppInner() {
               window.history.replaceState(window.history.state, '', `${window.location.pathname}?${params.toString()}${window.location.hash}`);
               openRacmFullEditor({ racmId: r.id, racmName: r.name, processLabel: r.process, backView: 'racm-library', backLabel: 'RACM Library', initialRows: rows, lockedRowIds: lockedIds });
             }} />
-        );
+        ));
 
       case 'audit-risk-register':
-        return (
+        return withStdBanner('risk-register', (
           <RiskRegister
             onNavigate={(v) => setView(v as View)}
           />
-        );
+        ));
 
       case 'audit-execution':
         return <AuditExecution />;
@@ -1217,7 +1237,7 @@ function AppInner() {
         return <ComplianceEngagementApp engagementId={state.selectedEngagementId ?? undefined} onBack={backToEngagementList} />;
 
       case 'engagements':
-        return (
+        return withStdBanner('engagements', (
           <EngagementsView
             onOpenAuditPlanning={() => setView('audit-planning')}
             onOpenEngagement={(id) => { setSoxFromTesting(false); openEngagement(id); }}
@@ -1228,7 +1248,7 @@ function AppInner() {
             initialList={engBackToList}
             onInitialListConsumed={() => setEngBackToList(false)}
           />
-        );
+        ));
 
       case 'engagement-overview':
         return (
