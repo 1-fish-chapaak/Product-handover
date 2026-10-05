@@ -14,7 +14,7 @@ import {
   Bookmark, BookmarkCheck,
   Search, GitCompare, ShieldCheck, Info, Loader2, AlertTriangle, type LucideIcon,
   LayoutDashboard, ListChecks, FileCode,
-  Trash2, Zap, RefreshCw,
+  Trash2, Zap, RefreshCw, CircleDashed,
 } from 'lucide-react';
 import { CHAT_HISTORY, CHAT_CONVERSATIONS, CLARIFICATION_STEPS, BUSINESS_PROCESSES, SOPS } from '../../data/mockData';
 import {
@@ -38,13 +38,15 @@ import {
 import InsightGenerator from '../shared/InsightGenerator';
 import LayeredInsightCard from '../shared/LayeredInsightCard';
 import type { WorkflowTypeId } from '../../data/mockData';
-import type { ArtifactTab } from '../../hooks/useAppState';
+import type { ArtifactTab, WorkflowAgent, WorkflowAgentSeed } from '../../hooks/useAppState';
+import { SplitPlanCard, AgentNudgeCard, BuildQueueBar, SplitSummaryCard } from './SplitPlanCards';
+import { draftForCheck, type BuildQueue, type QueueItem, type SplitPlanData, type NudgeData, type SplitSummaryData } from './splitPlan';
+import { commitPlan, decomposePrompt, getPlanWorkflows, markCheckBuilt, planFromPrompt, type AuditPlan } from '../../data/auditPlan';
 import { TextShimmer } from '../shared/TextShimmer';
 import { AuditifyHelloEffect } from '../shared/HelloEffect';
 import FloatingLines from '../shared/FloatingLines';
 // Persona removed — Rive WebGL crashes in some browsers
 import DataPickerModal, { type AttachmentSelection } from './DataPickerModal';
-import OneClickAuditModal from '../one-click-audit/OneClickAuditModal';
 import SmartQueriesModal, { SmartQueriesBanner } from './SmartQueriesModal';
 import { describeAnalyzedData } from './smartQueries';
 import { type ComposerContext, type ComposerIconKey, type ComposerTone, editPlanContext } from './composerContext';
@@ -66,7 +68,7 @@ import { AddToDashboardModal } from './AddToDashboardModal';
 import { AddToReportModal } from './AddToReportModal';
 import { LIBRARY_WORKFLOWS } from '../workflow/WorkflowLibraryView';
 import Gated from '../shared/Gated';
-import { useCan } from '../../context/CurrentUserContext';
+import { useCan, useCurrentUser } from '../../context/CurrentUserContext';
 import {
   SectionHeader as WidgetSectionHeader,
   KpiPreviewRow,
@@ -144,7 +146,14 @@ export interface ChatMessage {
     | 'workflow-review'
     | 'workflow-tolerance'
     | 'workflow-view-preview'
-    | 'workflow-output';
+    | 'workflow-output'
+    // GRC agent — a complex prompt split into checks under an engagement,
+    // the General agent's nudge toward it, a built-check recap while Ira
+    // works through the queue, and the queue's closing summary.
+    | 'workflow-split-plan'
+    | 'workflow-agent-nudge'
+    | 'workflow-check-built'
+    | 'workflow-split-summary';
   richData?: Record<string, unknown>;
   // Tracks which dashboards/reports this result was added to
   addedTo?: {
@@ -814,6 +823,11 @@ export interface ChatViewProps {
   onViewReport?: (reportId: string) => void;
   /** When set, shows an "Adding workflow for engagement — <name>" banner above the composer. */
   workflowEngagementContext?: string | null;
+  /** Hand-off into a fresh workflow-builder chat with a chosen agent. */
+  workflowAgentSeed?: WorkflowAgentSeed | null;
+  onWorkflowAgentSeedConsumed?: () => void;
+  /** Open an engagement workspace (split-plan cards link to it). */
+  onOpenEngagement?: (engagementId: string) => void;
   /** Tab mode: initial conversation for this tab (restored from storage, or
    *  pre-loaded from a saved chat). When provided, ChatView seeds messages from
    *  it and skips the selectedChatId auto-load (the tab manager owns loading). */
@@ -3284,7 +3298,7 @@ ${transcriptHtml}
   );
 }
 
-export default function ChatView({ showChatHistory, toggleChatHistory, setShowArtifacts, showArtifacts, setActiveArtifactTab, setArtifactMode, setWorkflowType, initialQuery, onInitialQueryProcessed, workflowRunSeed, onWorkflowRunSeedConsumed, composerDraft, onComposerDraftConsumed, composerContextSeed, onComposerContextSeedConsumed, selectedChatId, onChatLoaded, setView, pendingDashboard, onAddToDashboard, onDismissPendingDashboard, onLaunchWorkflowBuilder, workflowBuilderSeedPrompt, onWorkflowBuilderSeedConsumed, availableDashboards, availableReports, onAddResultToDashboard, onAddResultToReport, onViewDashboard, onViewReport, workflowEngagementContext, initialMessages, onMessagesChange }: ChatViewProps) {
+export default function ChatView({ showChatHistory, toggleChatHistory, setShowArtifacts, showArtifacts, setActiveArtifactTab, setArtifactMode, setWorkflowType, initialQuery, onInitialQueryProcessed, workflowRunSeed, onWorkflowRunSeedConsumed, composerDraft, onComposerDraftConsumed, composerContextSeed, onComposerContextSeedConsumed, selectedChatId, onChatLoaded, setView, pendingDashboard, onAddToDashboard, onDismissPendingDashboard, onLaunchWorkflowBuilder, workflowBuilderSeedPrompt, onWorkflowBuilderSeedConsumed, availableDashboards, availableReports, onAddResultToDashboard, onAddResultToReport, onViewDashboard, onViewReport, workflowEngagementContext, workflowAgentSeed, onWorkflowAgentSeedConsumed, onOpenEngagement, initialMessages, onMessagesChange }: ChatViewProps) {
   const { addToast } = useToast();
   const logEvent = useAuditLog();
   const { can } = useCan();
@@ -3397,6 +3411,20 @@ export default function ChatView({ showChatHistory, toggleChatHistory, setShowAr
   useEffect(() => {
     if (workflowEngagementContext) setBuildWorkflowMode(true);
   }, [workflowEngagementContext]);
+
+  // Workflow agent for this chat. Pickable on the empty state, fixed once the
+  // thread starts (production: "Start a new chat to choose another agent").
+  // GRC splits complex prompts into control-linked checks; General builds one
+  // analysis and only nudges toward GRC.
+  const [wfAgent, setWfAgent] = useState<WorkflowAgent>('grc');
+  // Plan → build queue: the new checks of a committed plan, built one by one.
+  const [buildQueue, setBuildQueue] = useState<BuildQueue | null>(null);
+  const buildQueueRef = useRef<BuildQueue | null>(null);
+  useEffect(() => { buildQueueRef.current = buildQueue; }, [buildQueue]);
+  // Message id of the current queued check's header — its step cards are
+  // collapsed into a recap when the queue moves on.
+  const queueHeaderIdRef = useRef<string | null>(null);
+  const { currentUser } = useCurrentUser();
 
   // ───────── Rotating placeholder (hero empty-state composer) ─────────
   // Typewriter effect: types each prompt character-by-character, holds
@@ -4641,6 +4669,18 @@ export default function ChatView({ showChatHistory, toggleChatHistory, setShowAr
   }) => {
     setShowSaveAsWfModal(false);
 
+    // A queued plan check: its draft row already sits in the library, linked
+    // to its control — mark it built and move the queue on.
+    const q = buildQueueRef.current;
+    const queued = q?.items[q.index];
+    if (q && queued) {
+      markCheckBuilt(queued.checkId, data.name);
+      logEvent({ action: 'Create', description: `Built plan check "${data.name}" for ${q.engagementName}`, module: 'Workflows', entity: 'Workflow' });
+      wfPushAssistant(`**${data.name}** saved and linked to control \`${queued.controlId}\` in **${q.engagementName}**.`);
+      advanceQueue('built');
+      return;
+    }
+
     // Lock the composer pill — visual signal that mode is irreversible per thread.
     setLockedAsWorkflow(true);
     setLockedBannerDismissed(false);
@@ -4809,14 +4849,21 @@ export default function ChatView({ showChatHistory, toggleChatHistory, setShowAr
 
   // Kick off a workflow build from a typed prompt. Mirrors the journey's
   // applyWorkflow but pushes everything into ChatView's messages array.
-  const startWorkflowBuild = useCallback(async (prompt: string, attachments: UploadedFile[] = []) => {
-    // Push the user's prompt as the opening message of the thread.
-    setMessages(prev => [...prev, { id: `msg-${Date.now()}`, role: 'user', text: prompt, timestamp: new Date() }]);
+  const startWorkflowBuild = useCallback(async (
+    prompt: string,
+    attachments: UploadedFile[] = [],
+    opts: { echoUser?: boolean; draft?: WorkflowDraft } = {},
+  ) => {
+    // Push the user's prompt as the opening message of the thread — unless
+    // it's already there (split plan / nudge answered, or a queued check).
+    if (opts.echoUser !== false) {
+      setMessages(prev => [...prev, { id: `msg-${Date.now()}`, role: 'user', text: prompt, timestamp: new Date() }]);
+    }
     setIsTyping(true);
     // Generate the workflow draft (mock). Keep a brief "thinking" beat
     // so the assistant turn has shape.
     await new Promise(r => setTimeout(r, 600));
-    const draft = wfGenerate(prompt);
+    const draft = opts.draft ?? wfGenerate(prompt);
     setWfWorkflow(draft);
 
     // Carry-forward Step 1 attachments into required inputs.
@@ -5007,6 +5054,248 @@ export default function ChatView({ showChatHistory, toggleChatHistory, setShowAr
     }, 700);
   }, [messages, wfWorkflow, wfFiles, wfMappings, wfPushAssistant, wfPushCard]);
 
+  // ─── GRC agent: complex prompt → plan → checks built one by one ─────────
+  // A prompt asking for several distinct tests becomes a plan (one check per
+  // control, under a recommended engagement) instead of one crammed workflow.
+  // Accepting commits the plan; each new check is then built in turn with
+  // the normal in-thread builder, tracked by the pinned BuildQueueBar.
+
+  /** Clear the in-thread builder so the next build starts clean — stale refs
+   *  would otherwise block the Upload → Clarify → Map effects. */
+  const resetWfBuild = useCallback(() => {
+    setWfWorkflow(null);
+    setWfFiles({});
+    setWfMappings({});
+    setWfAlignments({});
+    setWfResult(null);
+    setWfSaved(false);
+    setWfUploadModalOpen(false);
+    wfHasPushedClarifyRef.current = false;
+    wfHasPushedMapRef.current = false;
+    wfValidateCompleteRef.current = null;
+    wfUploadModalSeededFor.current = null;
+  }, []);
+
+  // Attachments that rode in with the split prompt / nudge — handed to the
+  // first check so the user doesn't attach twice.
+  const splitAttachmentsRef = useRef<UploadedFile[]>([]);
+
+  const setRichData = (msgId: string, patch: Record<string, unknown>) =>
+    setMessages(m => m.map(x => (x.id === msgId ? { ...x, richData: { ...(x.richData ?? {}), ...patch } } : x)));
+
+  const startSplitPlan = (prompt: string, attachments: UploadedFile[], echoUser = true) => {
+    const plan = planFromPrompt(prompt, { owner: currentUser?.name ?? 'You', engagementContextName: workflowEngagementContext });
+    if (!plan) { startWorkflowBuild(prompt, attachments, { echoUser }); return; }
+    splitAttachmentsRef.current = attachments;
+    const eng = plan.engagements[0];
+    const reuse = eng.controls.filter(c => c.check.kind === 'reuse').length;
+    const fresh = eng.controls.filter(c => c.check.kind === 'new').length;
+    if (echoUser) setMessages(m => [...m, { id: `msg-${Date.now()}`, role: 'user', text: prompt, timestamp: new Date() }]);
+    setIsTyping(true);
+    const thinkingId = wfMakeId();
+    setMessages(m => [...m, {
+      id: thinkingId,
+      role: 'assistant',
+      text: 'Reading your prompt…',
+      thinking: [
+        `Found ${eng.controls.length} distinct tests in the prompt`,
+        `Matched each to a control — ${eng.controls.map(c => c.controlId).join(', ')}`,
+        `Checked the Workflow Library — ${reuse} already exist${reuse === 1 ? 's' : ''}`,
+        eng.target.kind === 'existing' ? `Landing them in ${eng.target.engagementName}` : `Recommended engagement — ${eng.name}`,
+      ],
+      timestamp: new Date(),
+    }]);
+    window.setTimeout(() => {
+      setIsTyping(false);
+      setMessages(m => [
+        ...m.map(x => (x.id === thinkingId
+          ? { ...x, text: `Your prompt covers **${eng.controls.length} separate tests**, so I'd set them up as one check per control${eng.target.kind === 'existing' ? ` inside **${eng.target.engagementName}**` : ' under an engagement'} — ${reuse} can reuse workflows you already have, ${fresh} ${fresh === 1 ? 'is' : 'are'} new.` }
+          : x)),
+        {
+          id: wfMakeId(),
+          role: 'assistant',
+          text: '',
+          timestamp: new Date(),
+          richType: 'workflow-split-plan',
+          richData: { plan, status: 'open' } satisfies SplitPlanData as unknown as Record<string, unknown>,
+        },
+      ]);
+    }, 1600);
+  };
+
+  /** Move the current queued check's step cards out of the thread and leave a
+   *  one-line recap. The step cards render live builder state, so leaving
+   *  them would show the next check's data under the previous check. */
+  const collapseQueuedCheck = (item: QueueItem, outcome: 'built' | 'skipped', rows: number | null) => {
+    const headerId = queueHeaderIdRef.current;
+    const STEP_CARDS = new Set(['workflow-clarify', 'workflow-upload', 'workflow-map', 'workflow-review', 'workflow-tolerance', 'workflow-view-preview', 'workflow-output']);
+    setMessages(m => {
+      const start = headerId ? m.findIndex(x => x.id === headerId) : -1;
+      const kept = start < 0 ? m : m.filter((x, i) => !(i > start && x.richType && STEP_CARDS.has(x.richType)));
+      return [...kept, {
+        id: wfMakeId(),
+        role: 'assistant',
+        text: '',
+        timestamp: new Date(),
+        richType: 'workflow-check-built',
+        richData: { name: item.name, controlId: item.controlId, outcome, rows },
+      }];
+    });
+  };
+
+  const startQueueAt = (queue: BuildQueue, carried: UploadedFile[]) => {
+    const q: BuildQueue = { ...queue, items: queue.items.map((it, i) => (i === queue.index ? { ...it, status: 'building' } : it)) };
+    setBuildQueue(q);
+    buildQueueRef.current = q;
+    const item = q.items[q.index];
+    resetWfBuild();
+    const headerId = wfMakeId();
+    queueHeaderIdRef.current = headerId;
+    const carriedNote = carried.length > 0
+      ? ` Reusing ${carried.map(f => `**${f.name}**`).join(', ')} from ${q.index === 0 ? 'your prompt' : 'the last check'}.`
+      : '';
+    setMessages(m => [...m, {
+      id: headerId,
+      role: 'assistant',
+      text: `**Check ${q.index + 1} of ${q.items.length} · ${item.name}** — tests control \`${item.controlId}\`.${carriedNote}`,
+      timestamp: new Date(),
+    }]);
+    // Let the reset flush before the next draft lands.
+    window.setTimeout(() => startWorkflowBuild(item.prompt, carried, { echoUser: false, draft: draftForCheck(item) }), 50);
+  };
+
+  const finishQueue = (q: BuildQueue) => {
+    setBuildQueue(null);
+    buildQueueRef.current = null;
+    queueHeaderIdRef.current = null;
+    resetWfBuild();
+    const built = q.items.filter(i => i.status === 'built').map(i => i.name);
+    const drafts = q.items.filter(i => i.status !== 'built').map(i => i.name);
+    wfPushAssistant(built.length === q.items.length
+      ? `All ${q.items.length} checks are built and linked to their controls. **${q.engagementName}** is ready for fieldwork.`
+      : `Stopping here — ${built.length} of ${q.items.length} built. The rest stay as drafts in the Workflow Library, linked to their controls; pick them up any time.`);
+    setMessages(m => [...m, {
+      id: wfMakeId(),
+      role: 'assistant',
+      text: '',
+      timestamp: new Date(),
+      richType: 'workflow-split-summary',
+      richData: { engagementId: q.engagementId, engagementName: q.engagementName, built, drafts } satisfies SplitSummaryData as unknown as Record<string, unknown>,
+    }]);
+  };
+
+  /** Close out the current check and move to the next pending one. */
+  const advanceQueue = (outcome: 'built' | 'skipped') => {
+    const q = buildQueueRef.current;
+    if (!q) return;
+    const item = q.items[q.index];
+    collapseQueuedCheck(item, outcome, outcome === 'built' ? wfResult?.rows.length ?? null : null);
+    const items = q.items.map((it, i) => (i === q.index ? { ...it, status: outcome } : it));
+    const nextIdx = items.findIndex((it, i) => i > q.index && it.status === 'pending');
+    if (nextIdx === -1) { finishQueue({ ...q, items }); return; }
+    // Carry this check's uploads forward only when the next check reads the
+    // same kind of data — an AP register is useful twice, a user list isn't.
+    const next = items[nextIdx];
+    const shares = item.dataNeeds.some(d => next.dataNeeds.includes(d));
+    const carried: UploadedFile[] = shares
+      ? Array.from(new Map(Object.values(wfFiles).flat().map(f => [f.name, { ...f, linkedSource: true }])).values())
+      : [];
+    const pending: BuildQueue = { ...q, items, index: nextIdx };
+    setBuildQueue(pending);
+    buildQueueRef.current = pending;
+    window.setTimeout(() => startQueueAt(pending, carried), 900);
+  };
+
+  const stopQueue = () => {
+    const q = buildQueueRef.current;
+    if (!q) return;
+    const item = q.items[q.index];
+    if (item.status === 'building') collapseQueuedCheck(item, 'skipped', null);
+    finishQueue({ ...q, items: q.items.map(it => (it.status === 'built' ? it : { ...it, status: 'skipped' })) });
+  };
+
+  const confirmSplit = (msgId: string) => {
+    const msg = messages.find(m => m.id === msgId);
+    if (!msg) return;
+    const data = msg.richData as unknown as SplitPlanData;
+    const [res] = commitPlan(data.plan);
+    if (!res) return;
+    setRichData(msgId, {
+      status: 'committed',
+      committed: { engagementId: res.engagementId, engagementName: res.engagementName, created: res.created, reused: res.reused, newChecks: res.newChecks.length, manual: res.manual },
+    });
+    logEvent({ action: 'Create', description: `${res.created ? 'Created' : 'Extended'} engagement "${res.engagementName}" from a split prompt (${res.controls.length} controls)`, module: 'Ask IRA', entity: 'Engagement' });
+    const items: QueueItem[] = res.newChecks.map(w => ({
+      checkId: w.checkId, controlId: w.controlId, name: w.name, description: w.description,
+      prompt: w.buildPrompt, sampleId: w.sampleId, dataNeeds: w.dataNeeds, status: 'pending',
+    }));
+    const linked = res.reused > 0 ? ` ${res.reused} reuse${res.reused === 1 ? 's' : ''} an existing workflow and ${res.reused === 1 ? 'is' : 'are'} already linked.` : '';
+    if (items.length === 0) {
+      wfPushAssistant(`${res.created ? 'Created' : 'Updated'} **${res.engagementName}** with ${res.controls.length} controls.${linked} Nothing new to build.`);
+      finishQueue({ engagementId: res.engagementId, engagementName: res.engagementName, items: [], index: 0 });
+      return;
+    }
+    wfPushAssistant(`${res.created ? 'Created' : 'Updated'} **${res.engagementName}** with ${res.controls.length} controls.${linked} Now the **${items.length} new check${items.length === 1 ? '' : 's'}**, one at a time — skip any and it stays a draft.`);
+    window.setTimeout(() => startQueueAt({ engagementId: res.engagementId, engagementName: res.engagementName, items, index: 0 }, splitAttachmentsRef.current), 700);
+  };
+
+  const buildSplitAsOne = (msgId: string) => {
+    const msg = messages.find(m => m.id === msgId);
+    const data = msg?.richData as unknown as SplitPlanData | undefined;
+    if (!data) return;
+    setRichData(msgId, { status: 'declined' });
+    startWorkflowBuild(data.plan.prompt ?? '', splitAttachmentsRef.current, { echoUser: false });
+  };
+
+  const updateSplitPlan = (msgId: string, plan: AuditPlan) => setRichData(msgId, { plan });
+
+  /** Build an engagement's remaining draft checks (Audit with AI hand-off,
+   *  or one draft row from the Workflow Library). */
+  const startQueueForEngagement = (engagementId: string, checkIds?: string[]) => {
+    const drafts = getPlanWorkflows().filter(w => w.engagementId === engagementId && w.status === 'draft' && (!checkIds || checkIds.includes(w.checkId)));
+    if (drafts.length === 0) {
+      wfPushAssistant('Nothing left to build — every check for this engagement is already built.');
+      return;
+    }
+    const engagementName = drafts[0].engagementName;
+    wfPushAssistant(drafts.length === 1
+      ? `Let's build **${drafts[0].name}** for **${engagementName}**.`
+      : `Let's build the **${drafts.length} new checks** for **${engagementName}**, one at a time — skip any and it stays a draft.`);
+    const items: QueueItem[] = drafts.map(w => ({
+      checkId: w.checkId, controlId: w.controlId, name: w.name, description: w.description,
+      prompt: w.buildPrompt, sampleId: w.sampleId, dataNeeds: w.dataNeeds, status: 'pending',
+    }));
+    window.setTimeout(() => startQueueAt({ engagementId, engagementName, items, index: 0 }, []), 500);
+  };
+
+  const pushAgentNudge = (prompt: string, checks: string[], attachments: UploadedFile[]) => {
+    splitAttachmentsRef.current = attachments;
+    setMessages(m => [...m, { id: `msg-${Date.now()}`, role: 'user', text: prompt, timestamp: new Date() }]);
+    setIsTyping(true);
+    window.setTimeout(() => {
+      setIsTyping(false);
+      setMessages(m => [...m, {
+        id: wfMakeId(),
+        role: 'assistant',
+        text: '',
+        timestamp: new Date(),
+        richType: 'workflow-agent-nudge',
+        richData: { prompt, checks, status: 'open' } satisfies NudgeData as unknown as Record<string, unknown>,
+      }]);
+    }, 700);
+  };
+
+  /** Route a workflow-mode prompt: split (GRC), nudge (General), or build. */
+  const routeWorkflowPrompt = (prompt: string, attachments: UploadedFile[], agent: WorkflowAgent = wfAgent) => {
+    const dec = decomposePrompt(prompt);
+    if (dec.isComplex) {
+      if (agent === 'grc') { startSplitPlan(prompt, attachments); return; }
+      pushAgentNudge(prompt, dec.entries.map(e => e.checkName), attachments);
+      return;
+    }
+    startWorkflowBuild(prompt, attachments);
+  };
+
   const simulateResponse = (userMsg: string, explicitMode?: 'query' | 'workflow') => {
     clearTimers();
 
@@ -5121,21 +5410,12 @@ export default function ChatView({ showChatHistory, toggleChatHistory, setShowAr
       setFiles([]);
       setAttachedSources([]);
       if (textareaRef.current) textareaRef.current.style.height = 'auto';
+      // A new prompt mid-queue ends the queue — unbuilt checks stay drafts.
+      if (buildQueueRef.current) stopQueue();
       // Reset any in-flight workflow state from a prior build in this
       // thread so the new prompt isn't blocked by stale refs.
-      if (wfWorkflow) {
-        setWfWorkflow(null);
-        setWfFiles({});
-        setWfMappings({});
-        setWfAlignments({});
-        setWfResult(null);
-        setWfSaved(false);
-        wfHasPushedClarifyRef.current = false;
-        wfHasPushedMapRef.current = false;
-        wfValidateCompleteRef.current = null;
-        wfUploadModalSeededFor.current = null;
-      }
-      startWorkflowBuild(trimmed, attachmentsForWorkflow);
+      if (wfWorkflow) resetWfBuild();
+      routeWorkflowPrompt(trimmed, attachmentsForWorkflow);
       return;
     }
 
@@ -5631,9 +5911,8 @@ export default function ChatView({ showChatHistory, toggleChatHistory, setShowAr
 
   const isEmpty = messages.length === 0;
 
-  // One-Click Audit — the "audit with AI" wizard surfaced as a banner on the
-  // empty state (integrated DB sources are connected, so Ira can draft a plan).
-  const [showOneClickAudit, setShowOneClickAudit] = useState(false);
+  // Audit with AI — surfaced as a banner on the empty state (integrated DB
+  // sources are connected, so Ira can draft a plan). Opens the full page.
 
   // Smart queries — Ira "profiles" the attached data (or the connected sources
   // when nothing is attached yet) and offers ready-to-ask questions per
@@ -5888,6 +6167,29 @@ export default function ChatView({ showChatHistory, toggleChatHistory, setShowAr
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [journeySeed]);
 
+  // Workflow Builder hand-off — a fresh chat with the chosen agent, then an
+  // optional first prompt or a plan's draft checks to build in turn.
+  useEffect(() => {
+    if (!workflowAgentSeed) return;
+    const seed = workflowAgentSeed;
+    onWorkflowAgentSeedConsumed?.();
+    resetChat();
+    resetWfBuild();
+    setBuildQueue(null);
+    buildQueueRef.current = null;
+    setWfAgent(seed.agent);
+    setBuildWorkflowMode(true);
+    setArtifactMode('workflow');
+    if (seed.buildQueue) {
+      const { engagementId, checkIds } = seed.buildQueue;
+      queueMicrotask(() => startQueueForEngagement(engagementId, checkIds));
+    } else if (seed.prompt) {
+      const prompt = seed.prompt;
+      queueMicrotask(() => routeWorkflowPrompt(prompt, [], seed.agent));
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [workflowAgentSeed]);
+
   /* ────────────────────── EMPTY STATE ────────────────────── */
   if (isEmpty) {
     return (
@@ -5948,7 +6250,7 @@ export default function ChatView({ showChatHistory, toggleChatHistory, setShowAr
             </div>
           )}
 
-          {/* One-Click Audit banner — mirrors the pendingDashboard banner slot.
+          {/* Audit with AI banner — mirrors the pendingDashboard banner slot.
               Dark brand gradient so it reads as the AI surface it opens. */}
           <div className="shrink-0 mx-5 mt-14 mb-2 relative overflow-hidden rounded-xl border border-brand-300/40 bg-gradient-to-r from-[#26064A] via-[#3B0B72] to-[#550FA5] px-4 py-2.5 flex items-center justify-between gap-3 z-10">
             <FloatingLines
@@ -5968,19 +6270,19 @@ export default function ChatView({ showChatHistory, toggleChatHistory, setShowAr
               </div>
               <div className="min-w-0">
                 <div className="flex items-center gap-2">
-                  <p className="text-[0.8125rem] font-semibold text-white">One-Click Audit</p>
+                  <p className="text-[0.8125rem] font-semibold text-white">Audit with AI</p>
                   <span className="px-1.5 h-[16px] inline-flex items-center rounded-full bg-fuchsia-400/25 text-fuchsia-100 text-[8.5px] font-bold uppercase tracking-[0.1em]">New</span>
                 </div>
-                <p className="text-[0.6875rem] text-white/65 truncate">Your databases are connected — let Ira draft engagements, controls & workflows for your review.</p>
+                <p className="text-[0.6875rem] text-white/65 truncate">Your databases are connected — let Ira plan engagements, controls and a check for each, for your review.</p>
               </div>
             </div>
             <button
               type="button"
-              onClick={() => setShowOneClickAudit(true)}
+              onClick={() => setView?.('audit-with-ai')}
               className="relative shrink-0 flex items-center gap-1.5 px-3.5 py-1.5 bg-white text-brand-800 hover:bg-brand-50 text-[0.75rem] font-semibold rounded-md transition-colors cursor-pointer shadow-[0_4px_14px_-4px_rgba(0,0,0,0.4)]"
             >
               <Zap size={12} />
-              Start
+              Plan my audit
             </button>
           </div>
 
@@ -6239,6 +6541,32 @@ export default function ChatView({ showChatHistory, toggleChatHistory, setShowAr
                       ))}
                     </div>
 
+                    {/* Workflow agent — General explores and analyses; GRC
+                        tests controls and splits multi-test prompts into
+                        control-linked checks. Fixed once the chat starts. */}
+                    {buildWorkflowMode && (
+                      <div role="radiogroup" aria-label="Workflow agent" className="inline-flex items-center rounded-full bg-paper-100 p-0.5 shadow-[inset_0_0_0_1px_rgba(15,8,30,0.06)]">
+                        {([
+                          { id: 'general', label: 'General', title: 'General — explore and analyse data with tables, charts, KPIs and summaries' },
+                          { id: 'grc', label: 'GRC', title: 'GRC — test controls and find violations; multi-test prompts become control-linked checks' },
+                        ] as const).map(a => (
+                          <button
+                            key={a.id}
+                            type="button"
+                            role="radio"
+                            aria-checked={wfAgent === a.id}
+                            title={a.title}
+                            onClick={() => setWfAgent(a.id)}
+                            className={`h-8 px-3 rounded-full text-[0.75rem] transition-colors cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/30 ${
+                              wfAgent === a.id ? 'bg-canvas-elevated text-brand-700 font-semibold shadow-[0_1px_2px_rgba(15,8,30,0.10)]' : 'text-ink-500 font-medium hover:text-ink-800'
+                            }`}
+                          >
+                            {a.label}
+                          </button>
+                        ))}
+                      </div>
+                    )}
+
                     {(input.trim() || files.length > 0 || attachedSources.length > 0) && (
                       <button
                         type="button"
@@ -6316,9 +6644,6 @@ export default function ChatView({ showChatHistory, toggleChatHistory, setShowAr
           initialSourceIds={attachedSources.flatMap(s => s.kind === 'source' ? [s.sourceId] : [])}
           initialFiles={files}
         />
-        <AnimatePresence>
-          {showOneClickAudit && <OneClickAuditModal onClose={() => setShowOneClickAudit(false)} />}
-        </AnimatePresence>
         <SmartQueriesModal
           open={showSmartQueries}
           loading={smartQueriesGenerating}
@@ -7156,6 +7481,60 @@ export default function ChatView({ showChatHistory, toggleChatHistory, setShowAr
                           saved={wfSaved}
                         />
                       ) : null
+                    ) : msg.richType === 'workflow-split-plan' ? (
+                      <SplitPlanCard
+                        data={msg.richData as unknown as SplitPlanData}
+                        recommendExisting={!!workflowEngagementContext}
+                        onChange={(plan) => updateSplitPlan(msg.id, plan)}
+                        onConfirm={() => confirmSplit(msg.id)}
+                        onBuildAsOne={() => buildSplitAsOne(msg.id)}
+                        onOpenEngagement={(id) => onOpenEngagement?.(id)}
+                      />
+                    ) : msg.richType === 'workflow-agent-nudge' ? (
+                      <AgentNudgeCard
+                        data={msg.richData as unknown as NudgeData}
+                        onSwitch={() => {
+                          const d = msg.richData as unknown as NudgeData;
+                          setRichData(msg.id, { status: 'switched' });
+                          const atts = splitAttachmentsRef.current;
+                          // The agent is fixed per chat — switching starts a
+                          // fresh GRC chat carrying the same prompt.
+                          window.setTimeout(() => {
+                            resetChat();
+                            setWfAgent('grc');
+                            setBuildWorkflowMode(true);
+                            setArtifactMode('workflow');
+                            startSplitPlan(d.prompt, atts);
+                          }, 350);
+                        }}
+                        onKeep={() => {
+                          const d = msg.richData as unknown as NudgeData;
+                          setRichData(msg.id, { status: 'kept' });
+                          startWorkflowBuild(d.prompt, splitAttachmentsRef.current, { echoUser: false });
+                        }}
+                      />
+                    ) : msg.richType === 'workflow-check-built' ? (
+                      (() => {
+                        const d = msg.richData as { name: string; controlId: string; outcome: 'built' | 'skipped'; rows: number | null };
+                        return (
+                          <div className="inline-flex items-center gap-2 h-8 px-3 rounded-full border border-canvas-border bg-canvas-elevated text-[0.75rem]">
+                            {d.outcome === 'built'
+                              ? <Check size={13} className="text-compliant-700" aria-hidden />
+                              : <CircleDashed size={13} className="text-ink-400" aria-hidden />}
+                            <span className="font-medium text-ink-900">{d.name}</span>
+                            <span className="font-mono text-ink-500">{d.controlId}</span>
+                            <span className="text-ink-500">
+                              {d.outcome === 'built' ? `built${d.rows != null ? ` · ${d.rows} exceptions on first run` : ''}` : 'skipped — left as draft'}
+                            </span>
+                          </div>
+                        );
+                      })()
+                    ) : msg.richType === 'workflow-split-summary' ? (
+                      <SplitSummaryCard
+                        data={msg.richData as unknown as SplitSummaryData}
+                        onOpenEngagement={(id) => onOpenEngagement?.(id)}
+                        onOpenLibrary={() => setView?.('workflow-library')}
+                      />
                     ) : msg.richType === 'error' ? (
                       // Terminal error state. Single icon + label (no side-stripe) per
                       // DESIGN.md alert-card scoping; the risk token names the kind,
@@ -7695,6 +8074,16 @@ export default function ChatView({ showChatHistory, toggleChatHistory, setShowAr
             )}
           </AnimatePresence>
 
+          {buildQueue && (
+            <div className="mb-2">
+              <BuildQueueBar
+                queue={buildQueue}
+                onSkip={() => { setWfUploadModalOpen(false); advanceQueue('skipped'); }}
+                onStop={stopQueue}
+              />
+            </div>
+          )}
+
           {openClarification && (
             // Audit-query clarification — Claude pattern: while a clarification
             // is open the composer is hidden and this card is the single input
@@ -7935,7 +8324,7 @@ export default function ChatView({ showChatHistory, toggleChatHistory, setShowAr
                             ? <Workflow size={11} strokeWidth={2.25} />
                             : <MessageSquare size={11} strokeWidth={2.25} />}
                         </span>
-                        {buildWorkflowMode ? 'Workflow' : 'Chat'}
+                        {buildWorkflowMode ? `Workflow · ${wfAgent === 'grc' ? 'GRC' : 'General'}` : 'Chat'}
                       </div>
 
                       {isGenerating ? (
@@ -8008,13 +8397,16 @@ export default function ChatView({ showChatHistory, toggleChatHistory, setShowAr
           // Objective text reads "<label> — <rule>"; the label seeds a clean
           // workflow name, the full answer seeds the description + a config key.
           const riskShort = (riskAns.split('—')[0] || '').trim();
+          // A queued plan check keeps the name the plan gave it.
+          const queuedItem = buildQueue?.items[buildQueue.index];
           const defaultName =
-            /duplicate/i.test(riskAns) ? 'Duplicate Vendor Payment Detection'
+            queuedItem ? queuedItem.name
+            : /duplicate/i.test(riskAns) ? 'Duplicate Vendor Payment Detection'
             : /fictitious|unauthor/i.test(riskAns) ? 'Unauthorized Vendor Detection'
             : /off-contract/i.test(riskAns) ? 'Off-Contract Spend Detection'
             : /variance/i.test(riskAns) ? 'PO Price/Quantity Variance Detection'
             : 'Audit Workflow';
-          const defaultDescription = [
+          const defaultDescription = queuedItem ? queuedItem.description : [
             `Detects ${(riskShort || 'duplicate / overpayment').toLowerCase()}`,
             popAns ? ` over ${popAns.toLowerCase()}` : '',
             inputAns ? `. Input: ${inputAns.toLowerCase()}` : '',
@@ -8391,6 +8783,15 @@ export default function ChatView({ showChatHistory, toggleChatHistory, setShowAr
           onConfirm={(payload) => {
             setWfSaveModalOpen(false);
             setWfSaved(true);
+            const q = buildQueueRef.current;
+            const item = q?.items[q.index];
+            if (q && item) {
+              // Queued plan check — the draft row becomes built, linked to its control.
+              markCheckBuilt(item.checkId, payload.name);
+              wfPushAssistant(`**${payload.name}** saved and linked to control \`${item.controlId}\` in **${q.engagementName}**.`);
+              advanceQueue('built');
+              return;
+            }
             wfPushAssistant(`**${payload.name}** saved to **${payload.businessProcess} · ${payload.racm}**.`);
           }}
         />

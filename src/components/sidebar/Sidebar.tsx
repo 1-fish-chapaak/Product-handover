@@ -375,6 +375,10 @@ export default function Sidebar({ view, setView, expanded, toggleSidebar, unread
           {/* Top action — Ask IRA is free for everyone (no permission gate) */}
           <NavItem icon={MessageSquare} label="Ask IRA" active={view === 'chat' || view === 'chat-trash'} expanded={isExpanded} onClick={() => setView('chat')} />
 
+          {/* Workflow Builder — agent chooser (General / GRC) + Audit with AI.
+              Open like Ask IRA; Audit with AI gates itself on wf_create. */}
+          <NavItem icon={Workflow} label="Workflow Builder" active={view === 'workflow-builder' || view === 'audit-with-ai'} expanded={isExpanded} onClick={() => setView('workflow-builder')} />
+
           {/* Primary — always available */}
           <NavItem icon={Home} label="Home" active={view === 'home'} expanded={isExpanded} onClick={() => setView('home')} />
           <NavItem icon={Clock} label="Recents" active={view === 'recents'} expanded={isExpanded} onClick={() => setView('recents')} />

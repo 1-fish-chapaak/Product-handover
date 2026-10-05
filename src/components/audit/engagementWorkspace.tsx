@@ -11,11 +11,48 @@
 import { createContext, useCallback, useContext, useMemo, useState, type ReactNode } from 'react';
 import { RACM_LIBRARY, racmRowsForProcess, type ControlAttribute, type RACMRow } from '../../data/racm';
 import type { Engagement } from '../../data/engagements';
+import { getEngagementPlan, type PlanControl } from '../../data/auditPlan';
 
 export interface WorkspaceWorkflow {
   id: string;
   code: string;
   name: string;
+  /** Workflow Library id, when the engagement workflow wraps one. */
+  libraryId?: string;
+}
+
+/** A plan control's single test attribute — the check that evidences it. */
+const planAttributeId = (c: PlanControl) => `${c.controlId}-AI1`;
+
+function planControlToWorkspace(c: PlanControl): WorkspaceControl {
+  const manual = c.check.kind === 'manual';
+  return {
+    controlId: c.controlId,
+    description: c.title,
+    subProcess: c.subProcess,
+    isKey: c.isKey,
+    frequency: c.frequency,
+    attributes: [{
+      id: planAttributeId(c),
+      description: c.check.name,
+      testProcedure: c.check.description,
+      requiredEvidence: manual ? ['Walkthrough evidence'] : ['Workflow exception report'],
+      populationSize: 1000,
+      defaultSampleSize: manual ? 25 : 0,
+      scope: manual ? 'SAMPLE_BASED' : 'GENERIC',
+    }],
+    custom: false,
+    inRacm: true,
+  };
+}
+
+/** The workflow a plan control's check is linked to, if any. Reused checks
+ *  match on the library id; new ones on the id the Workflows tab gives them. */
+function planWorkflowFor(c: PlanControl, workflows: WorkspaceWorkflow[]): WorkspaceWorkflow | undefined {
+  if (c.check.kind === 'manual') return undefined;
+  return workflows.find(w =>
+    (c.check.existingWorkflowId && w.libraryId === c.check.existingWorkflowId) || w.id === `pwf-${c.check.id}`,
+  );
 }
 
 export interface WorkspaceControl {
@@ -62,6 +99,11 @@ export function useEngagementWorkspace(): WorkspaceCtx {
  *  Exported so the engagement insight subjects are built from the SAME rows the
  *  Controls tab renders — the drawer's redirects land on rows that exist. */
 export function baseControlsFor(engagement: Engagement): WorkspaceControl[] {
+  // An engagement created by an audit plan holds exactly its plan's controls;
+  // one extended by a plan lists the plan's controls ahead of the RACM set.
+  const plan = getEngagementPlan(engagement.id);
+  const planned = plan ? plan.controls.map(planControlToWorkspace) : [];
+  if (plan?.mode === 'created') return planned;
   const rows = racmRowsForProcess(engagement.process);
   const usable = rows.length > 0 ? rows : RACM_LIBRARY;
   const byId = new Map<string, WorkspaceControl>();
@@ -78,7 +120,7 @@ export function baseControlsFor(engagement: Engagement): WorkspaceControl[] {
       inRacm: true,
     });
   });
-  return Array.from(byId.values());
+  return [...planned, ...Array.from(byId.values()).filter(c => !planned.some(p => p.controlId === c.controlId))];
 }
 
 /** Seed a few attribute→workflow links so the Workflows tab reads as live out of the box. */
@@ -106,7 +148,17 @@ export function EngagementWorkspaceProvider({
   const [customControls, setCustomControls] = useState<WorkspaceControl[]>([]);
   // Extra attributes added in-session, keyed by controlId (works for base + custom controls).
   const [extraAttributes, setExtraAttributes] = useState<Record<string, ControlAttribute[]>>({});
-  const [linksByAttribute, setLinksByAttribute] = useState<Record<string, string[]>>(() => seedLinks(base, workflows));
+  const [linksByAttribute, setLinksByAttribute] = useState<Record<string, string[]>>(() => {
+    // Plan controls come linked to their check; the demo seed links fill the rest.
+    const plan = getEngagementPlan(engagement.id);
+    const planLinks: Record<string, string[]> = {};
+    plan?.controls.forEach(c => {
+      const wf = planWorkflowFor(c, workflows);
+      if (wf) planLinks[planAttributeId(c)] = [wf.id];
+    });
+    if (plan?.mode === 'created') return planLinks;
+    return { ...seedLinks(base, workflows), ...planLinks };
+  });
 
   const controls = useMemo<WorkspaceControl[]>(() => {
     const merge = (c: WorkspaceControl): WorkspaceControl => {

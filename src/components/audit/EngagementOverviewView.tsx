@@ -26,6 +26,7 @@ import { useShare, rectFromEvent } from '../../context/ShareContext';
 import { buildWorkflowInsight, isPricingSubject, type BuildInsightInput, type LayeredInsight, type EntityRef } from '../../data/layeredInsights';
 import {
   ENGAGEMENTS,
+  findEngagement,
   PROCESS_COLORS,
   type AutomationSubtype,
   type Engagement,
@@ -58,6 +59,7 @@ import { BulkExecuteModal, Checkbox } from '../workflow/BulkExecuteModal';
 import type { LibraryWorkflow } from '../workflow/WorkflowLibraryView';
 import LinkWorkflowModal from './LinkWorkflowModal';
 import { EngagementWorkspaceProvider, useEngagementWorkspace, baseControlsFor, type WorkspaceControl } from './engagementWorkspace';
+import { getEngagementPlan, useEngagementPlan, usePlanWorkflows, type PlanWorkflowRow } from '../../data/auditPlan';
 import ActionTrailReportModal from './ActionTrailReportModal';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -227,7 +229,8 @@ interface MockWorkflow {
   inputs: InputSource[];
   cadence: Cadence;
   lastRun: string;
-  status: 'Success' | 'Failed' | 'Running';
+  /** 'Draft' = an audit-plan check Ira hasn't built yet; 'Ready' = built, not run. */
+  status: 'Success' | 'Failed' | 'Running' | 'Draft' | 'Ready';
   /** Sub-process within the engagement's process. */
   subProcess: string;
   /** True positives / total fires over 90 days — for effectiveness scoring. */
@@ -244,8 +247,41 @@ const MOCK_WORKFLOWS: MockWorkflow[] = [
   { id: 'wf4', code: 'WF-P2P-004', name: 'Vendor Master Change Monitor',          type: 'Monitoring',     inputs: ['Excel', 'SQL'], cadence: { kind: 'Frequency', label: 'Hourly' },    lastRun: '34m ago', status: 'Success', subProcess: 'Vendor Onboarding',          truePositives: 14, totalFires: 22, libraryId: 'lw-012' },
 ];
 
+/** The engagement's test workflows. An engagement created by an audit plan
+ *  shows exactly its plan's checks (reused library workflows keep their run
+ *  history; new ones read Draft until Ira builds them); one extended by a plan
+ *  shows the plan's checks ahead of the seeded set. */
+function engagementWorkflows(eng: Engagement, planRows: PlanWorkflowRow[]): MockWorkflow[] {
+  const plan = getEngagementPlan(eng.id);
+  if (!plan) return MOCK_WORKFLOWS;
+  const fromPlan: MockWorkflow[] = plan.controls
+    .filter(c => c.check.kind !== 'manual')
+    .map(c => {
+      const seeded = c.check.existingWorkflowId ? MOCK_WORKFLOWS.find(w => w.libraryId === c.check.existingWorkflowId) : undefined;
+      if (seeded) return seeded;
+      const row = planRows.find(r => r.checkId === c.check.id);
+      const built = c.check.kind === 'reuse' || row?.status === 'built';
+      return {
+        id: `pwf-${c.check.id}`,
+        code: `WF-${c.controlId}`,
+        name: c.check.name,
+        type: 'Detection',
+        inputs: ['SQL'],
+        cadence: { kind: 'Frequency', label: c.check.cadence },
+        lastRun: built ? 'Not run yet' : 'Not built',
+        status: built ? 'Ready' : 'Draft',
+        subProcess: c.subProcess,
+        truePositives: 0,
+        totalFires: 0,
+        libraryId: c.check.existingWorkflowId ?? row?.id ?? '',
+      };
+    });
+  if (plan.mode === 'created') return fromPlan;
+  return [...fromPlan, ...MOCK_WORKFLOWS.filter(w => !fromPlan.some(f => f.id === w.id))];
+}
+
 /** Engagement workflow set shared with the Controls/RACM tabs via the workspace store. */
-const WORKSPACE_WORKFLOWS = MOCK_WORKFLOWS.map(w => ({ id: w.id, code: w.code, name: w.name }));
+const WORKSPACE_WORKFLOWS = MOCK_WORKFLOWS.map(w => ({ id: w.id, code: w.code, name: w.name, libraryId: w.libraryId }));
 
 function effectivenessTier(pct: number): { label: string; tone: string; bar: string } {
   if (pct >= 80) return { label: 'High', tone: 'text-compliant-700', bar: 'bg-compliant' };
@@ -316,7 +352,18 @@ export default function EngagementDetailView({ engagementId, onBack, onOpenExecu
   const { addToast } = useToast();
   const logEvent = useAuditLog();
   const { openShare } = useShare();
-  const engagement = useMemo(() => ENGAGEMENTS.find(e => e.id === engagementId), [engagementId]);
+  // Runtime registry first — engagements created by Audit with AI or a chat
+  // split plan aren't in the static seed.
+  const engagement = useMemo(() => findEngagement(engagementId) ?? ENGAGEMENTS.find(e => e.id === engagementId), [engagementId]);
+  // Plan-created engagements list their own checks; re-derive when a draft
+  // check gets built or a plan extends this engagement.
+  const planRows = usePlanWorkflows();
+  const engagementPlan = useEngagementPlan(engagementId);
+  const engWorkflows = useMemo(
+    () => (engagement ? engagementWorkflows(engagement, planRows) : MOCK_WORKFLOWS),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [engagement, planRows, engagementPlan],
+  );
 
   // Default the tab to overview; pick the first tab for the type once we know
   // the engagement. A drawer deep link (?tab=&focusControl=, opened in a new
@@ -513,7 +560,7 @@ export default function EngagementDetailView({ engagementId, onBack, onOpenExecu
     { label: 'Tested', value: notStarted ? '—' : tested, icon: CheckCircle2 },
     { label: concludesOnEffectiveness ? 'Effective' : 'Satisfactory', value: notStarted ? '—' : effective, icon: ShieldCheck },
     { label: concludesOnEffectiveness ? 'Failed' : 'Needs improvement', value: notStarted ? '—' : failed, icon: AlertTriangle },
-    { label: 'Workflows', value: MOCK_WORKFLOWS.length, icon: Workflow },
+    { label: 'Workflows', value: engWorkflows.length, icon: Workflow },
     { label: 'Evidence', value: MOCK_EVIDENCE.length, icon: FolderOpen },
   ];
 
@@ -539,7 +586,7 @@ export default function EngagementDetailView({ engagementId, onBack, onOpenExecu
   const completedPct = Math.round((completedCount / checklist.length) * 100);
 
   return (
-    <EngagementWorkspaceProvider engagement={eng} workflows={WORKSPACE_WORKFLOWS}>
+    <EngagementWorkspaceProvider engagement={eng} workflows={engWorkflows === MOCK_WORKFLOWS ? WORKSPACE_WORKFLOWS : engWorkflows.map(w => ({ id: w.id, code: w.code, name: w.name, libraryId: w.libraryId }))}>
     <div ref={pageScrollRef} className={`h-full bg-white bg-mesh-gradient relative ${reportReaderOpen ? 'overflow-hidden' : 'overflow-y-auto'}`}>
       <Orb hoverIntensity={0.06} rotateOnHover hue={275} opacity={0.05} />
       {/* An opened working paper is a report reader, not a tab panel: it brings
@@ -743,7 +790,7 @@ export default function EngagementDetailView({ engagementId, onBack, onOpenExecu
             {/* ═══ WORKFLOWS (all types) — grouped by sub-process accordion ═══ */}
             {activeTab === 'workflows' && (
               <WorkflowsBySubProcess
-                workflows={MOCK_WORKFLOWS}
+                workflows={engWorkflows}
                 engagementId={eng.id}
                 engagementName={eng.name}
                 onOpenWorkflow={onOpenWorkflow}
@@ -2884,6 +2931,8 @@ function WorkflowRow({
       <span className={`px-2.5 h-6 rounded-full text-[0.65625rem] font-semibold inline-flex items-center shrink-0 ${
         wf.status === 'Success' ? 'bg-compliant-50 text-compliant-700'
         : wf.status === 'Running' ? 'bg-evidence-50 text-evidence-700'
+        : wf.status === 'Draft' ? 'bg-draft-50 text-draft-700'
+        : wf.status === 'Ready' ? 'bg-brand-50 text-brand-700'
         : 'bg-risk-50 text-risk-700'
       }`}>{wf.status}</span>
       {!bulkMode && (
