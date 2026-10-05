@@ -7,20 +7,23 @@ import {
   concludeRationale, designFilesOf, designOutstanding, designOutstandingRequired, designSuggestion, draftSamplePrompt, extractionCriteria,
   evidenceKindOf, fileUsable, guessFileKind, itgcHolds, narrowedCount, operatingSuggestion, populationFrom, populationSources,
   readRowCount, readSamplePrompt, sampleSizeGuide, samplingOf, sampledSources, seedKeyOf, trackResult, workingAudit,
-  awaitsConfirm, operatingApplies, pointResult, populationLocked, stepResult,
+  awaitsConfirm, iraUndoable, isControlLockedIn, operatingApplies, pointResult, populationLocked, requiredFilesReady, stepResult,
+  controlCode, couldntAskFor, dayMonth, requiredFilesOf,
 } from './helpers';
+import { ownersOf } from './auditScope';
+import IraFileAsk, { type FileAskRow, type FileAskStep } from './IraFileAsk';
 import { useAuditFiles } from './useAuditFiles';
 import { OriginPicker } from './parts';
 import { ROUND_TAG } from './types';
 import { sampleRefs } from './mockData';
-import { DESIGN_RUN_STEPS, TOE_RUN_STEPS, endRun, say, sayOnce, setIraMode, startRun, stopRun, useControlRun, useControlThread, useIraMode, type RunStep } from './controlChat';
+import { DESIGN_RUN_STEPS, TOE_RUN_STEPS, controlRun, endRun, say, sayOnce, setIraMode, startRun, stopRun, useControlRun, useControlThread, useIraMode, type ChatMsg, type ControlRun, type RunStep } from './controlChat';
 import { useTypewriter } from '../chat/reveal/useTypewriter';
 import { acknowledge, listOf, nextPrompt, type ChatStepId, type PopFile, type Situation } from './controlChatScript';
 import { actionsFor, type ChatAction, type ChatActionId } from './controlChatActions';
 import { readIntent, readVerdict } from './controlChatIntents';
 import { mapEvidence, type EvidenceMatch } from './controlChatEvidence';
 import { cn } from '../../lib/cn';
-import type { Control, DesignDoc, DesignDocKind, DesignWaiverReason, FileOrigin, TestResult } from './types';
+import type { Control, DesignDoc, DesignDocKind, DesignWaiverReason, FileOrigin, IraPlanStepId, TestResult } from './types';
 
 /**
  * Ira, sitting beside the control rather than inside it.
@@ -169,7 +172,7 @@ function WorkingTrail({ label, steps }: { label: string; steps: RunStep[] }) {
               animate={{ opacity: 1, x: 0 }}
               transition={{ duration: 0.25, ease: [0.22, 1, 0.36, 1] }}
               className="text-[0.75rem] text-ink-500 flex items-start gap-1.5">
-              <span className={cn('w-1.5 h-1.5 rounded-full shrink-0 mt-[5px]', live ? 'bg-primary' : 'bg-brand-200')} aria-hidden />
+              <span className={cn('w-1.5 h-1.5 rounded-full shrink-0 mt-1.25', live ? 'bg-primary' : 'bg-brand-200')} aria-hidden />
               <span className="min-w-0">{s.label}{live ? '…' : ''}</span>
             </motion.div>
           );
@@ -233,41 +236,239 @@ const CAPABILITY: Record<ChatStepId, string> = {
 /** Ira's plan for the control, posted when it opens (agentic UX #12, user ask
  *  1 Oct): the steps in the paper's own order, each ticked off as it lands, and
  *  one line on how it will go — stopping for you in Manual, running what it can
- *  in Automatic. One control at a time; batch runs are parked. */
-function IraPlan({ control, mode }: { control: Control; mode: 'manual' | 'automatic' }) {
-  const { eng } = useIcfr();
-  const files = control.design.documents.reduce((n, d) => n + designFilesOf(d).length, 0);
-  const checks = control.design.points.length;
+ *  in Automatic. One control at a time; batch runs are parked.
+ *
+ *  A plan you approve (Stage 1a, product owner, 2 Oct): Ira runs none of it, in
+ *  either mode, until Start is pressed. Before then each step can be taken off
+ *  (it stays yours), and ✎ narrows what a step reads — Ira then touches only
+ *  the ticked files, checks and attributes, and the step's line says so. What
+ *  was chosen is fixed by Start and goes on the control's trail. Waiting for
+ *  the population is not a choice, so it has no tick. */
+/** Plan steps whose run was stopped, by control (user ask, 5 Oct). Outside the
+ *  pane so the mark survives the rail's tab switches; cleared when a run of
+ *  that step starts again, from whichever door. */
+const STOPPED: Record<string, IraPlanStepId[]> = {};
+/** Which plan step a live run belongs to. Read inside a function, never at
+ *  module load (the sox-icfr import cycle). */
+function planStepOf(run: ControlRun | null): IraPlanStepId | null {
+  if (!run) return null;
+  const first = run.steps[0]?.label;
+  if (first === DESIGN_RUN_STEPS[0]) return 'design';
+  if (first === TOE_RUN_STEPS[0]) return 'operating';
+  if (/^Drawing /.test(run.label)) return 'sample';
+  return null;
+}
+/** Plan steps whose results were taken back with "Undo Ira's N" (product
+ *  decision, 5 Oct). Undone means undone: in Automatic the plan used to see the
+ *  results gone and read the step again on its own, so Undo reversed nothing.
+ *  The step now waits, "— undone · Run again", until the tester asks. Outside
+ *  the pane for the same reason as STOPPED; cleared when any run of that step
+ *  starts, from whichever door. */
+const UNDONE: Record<string, IraPlanStepId[]> = {};
+/** Read by the page's plan runners so they hold an undone step. */
+export const iraStepUndone = (controlId: string, step: IraPlanStepId): boolean => !!UNDONE[controlId]?.includes(step);
+const markUndone = (controlId: string, step: IraPlanStepId) => {
+  if (!iraStepUndone(controlId, step)) UNDONE[controlId] = [...(UNDONE[controlId] ?? []), step];
+};
+const clearUndone = (controlId: string, step: IraPlanStepId): boolean => {
+  if (!iraStepUndone(controlId, step)) return false;
+  UNDONE[controlId] = UNDONE[controlId].filter(x => x !== step);
+  return true;
+};
+/** Why a started plan step can be run again: its run was stopped, the evidence
+ *  changed since Ira read it, or its results were undone. */
+type RerunWhy = 'stopped' | 'stale' | 'undone';
+/** Steps whose missing-file pop-up was answered with "Skip for now" or "Ask
+ *  the owner instead" (product decision, 5 Oct). The step waits, and the pop-up
+ *  does not come back on its own until Upload or Run again on the plan. */
+const FILE_HELD: Record<string, FileAskStep[]> = {};
+const holdForFile = (controlId: string, step: FileAskStep) => {
+  if (!(FILE_HELD[controlId] ?? []).includes(step)) FILE_HELD[controlId] = [...(FILE_HELD[controlId] ?? []), step];
+};
+const releaseFile = (controlId: string, step: FileAskStep): boolean => {
+  if (!FILE_HELD[controlId]?.includes(step)) return false;
+  FILE_HELD[controlId] = FILE_HELD[controlId].filter(x => x !== step);
+  return true;
+};
+const markStopped = (controlId: string, step: IraPlanStepId | null) => {
+  if (step && !(STOPPED[controlId] ?? []).includes(step)) STOPPED[controlId] = [...(STOPPED[controlId] ?? []), step];
+};
+const clearStopped = (controlId: string, step: IraPlanStepId): boolean => {
+  if (!STOPPED[controlId]?.includes(step)) return false;
+  STOPPED[controlId] = STOPPED[controlId].filter(x => x !== step);
+  return true;
+};
+
+function IraPlan({ control, mode, rerun, onRerun, waiting, fileWait, onUpload }: {
+  control: Control; mode: 'manual' | 'automatic';
+  /** A step held for a file the tester skipped or asked the owner for. */
+  fileWait?: { at: FileAskStep; text: string }; onUpload?: () => void;
+  rerun?: Partial<Record<IraPlanStepId, RerunWhy>>; onRerun?: (id: IraPlanStepId) => void;
+  /** Why a started step is not moving yet, in one line (click-through, 5 Oct:
+   *  Start on T-03 gave no sign Ira was held by an unmarked sample file). */
+  waiting?: Partial<Record<IraPlanStepId, string>>;
+}) {
+  const { eng, setIraPlan, startIraPlan } = useIcfr();
+  const [editing, setEditing] = useState<IraPlanStepId | null>(null);
+  const [open, setOpen] = useState(false);
+  const choice = control.iraPlan;
+  const started = !!choice?.started;
+  // A concluded control has nothing left for the plan to run (click-through,
+  // 5 Oct: "Nothing runs until you press Start" with live ticks on a closed
+  // control). Read-only: no ticks, no edits, and it says it is finished.
+  const closed = isControlLockedIn(eng, control);
+  const skipped = choice?.skipped ?? [];
+  const allFiles = control.design.documents.flatMap(d => designFilesOf(d));
+  const allChecks = control.design.points;
   const steps = control.operating.steps;
+  const files = choice?.files ? allFiles.filter(f => choice.files!.includes(f.id)) : allFiles;
+  const checks = choice?.checks ? allChecks.filter(p => choice.checks!.includes(p.id)) : allChecks;
+  const attrs = choice?.attributes ? steps.filter(st => choice.attributes!.includes(st.id)) : steps;
   const size = control.operating.sampling?.size ?? sampleSizeGuide(control, itgcHolds(eng, control), samplingOf(eng)).suggested;
-  const plan: { text: string; done: boolean }[] = [
-    { text: `Read the ${files} design file${files === 1 ? '' : 's'} against ${checks} check${checks === 1 ? '' : 's'}`, done: checks > 0 && control.design.points.every(p => pointResult(p) !== 'Not tested') },
+  const plan: { id?: IraPlanStepId; text: string; done: boolean; narrow?: boolean; pop?: boolean }[] = [
+    { id: 'design', text: `Read ${files.length === allFiles.length ? 'the ' : ''}${plural(files.length, 'design file')} against ${plural(checks.length, 'check')}`, done: checks.length > 0 && checks.every(p => pointResult(p) !== 'Not tested'), narrow: allFiles.length > 1 || allChecks.length > 1 },
   ];
   if (operatingApplies(eng, control)) {
     plan.push(
-      { text: 'Wait for the population', done: populationLocked(control) },
-      { text: `Draft the request for ${size} sample item${size === 1 ? '' : 's'}`, done: !!control.operating.sampling },
-      { text: `Validate ${steps.length} attribute${steps.length === 1 ? '' : 's'}`, done: steps.length > 0 && steps.every(st => stepResult(st) !== 'Not tested') },
+      { text: 'Wait for the population', done: populationLocked(control), pop: true },
+      { id: 'sample', text: `Draft the request for ${plural(size, 'sample item')}`, done: !!control.operating.sampling },
+      { id: 'operating', text: `Validate ${plural(attrs.length, 'attribute')}`, done: attrs.length > 0 && attrs.every(st => stepResult(st) !== 'Not tested'), narrow: steps.length > 1 },
     );
   }
-  return (
-    <div className="mb-1.5 text-[0.71875rem] leading-snug text-ink-600">
-      <p className="flex items-center gap-1.5 font-semibold text-ink-700">
-        <Sparkles size={11} className="text-brand-500 shrink-0" aria-hidden /> My plan for {control.wpRef ?? control.id}
-      </p>
-      <ol className="mt-1 ml-[18px] space-y-0.5">
-        {plan.map((p, i) => (
-          <li key={i} className={cn('flex items-start gap-1.5', p.done && 'text-ink-400')}>
-            <span className="tabular-nums shrink-0">{p.done ? '✓' : `${i + 1}.`}</span>
-            <span className={p.done ? 'line-through decoration-ink-300' : undefined}>{p.text}</span>
+  const offAll = plan.every(p => !p.id || skipped.includes(p.id));
+  const toggleStep = (id: IraPlanStepId) => {
+    setIraPlan(control.id, { skipped: skipped.includes(id) ? skipped.filter(x => x !== id) : [...skipped, id] });
+    if (editing === id) setEditing(null);
+  };
+  // A list that is everything again is stored as absent ("all"), so a file
+  // attached later is read too. The last tick cannot come off — a step with
+  // nothing in it is a skipped step, and the step's own tick says that.
+  const toggleIn = (key: 'files' | 'checks' | 'attributes', all: string[], id: string) => {
+    const now = choice?.[key] ?? all;
+    const next = now.includes(id) ? now.filter(x => x !== id) : [...now, id];
+    if (next.length === 0) return;
+    setIraPlan(control.id, { [key]: next.length === all.length ? undefined : next });
+  };
+  const tickList = (title: string, key: 'files' | 'checks' | 'attributes', items: { id: string; label: string }[], picked: string[]) => items.length > 0 && (
+    <div className="mt-1">
+      <p className="text-ink-500">{title}</p>
+      <ul className="mt-0.5 space-y-0.5">
+        {items.map(it => (
+          <li key={it.id}>
+            <label className="flex items-start gap-1.5 cursor-pointer">
+              <input type="checkbox" checked={picked.includes(it.id)} disabled={picked.length === 1 && picked.includes(it.id)}
+                onChange={() => toggleIn(key, items.map(x => x.id), it.id)}
+                className="mt-0.75 cursor-pointer accent-brand-600 disabled:cursor-not-allowed" />
+              <span className="min-w-0 break-words">{it.label}</span>
+            </label>
           </li>
         ))}
+      </ul>
+    </div>
+  );
+  // Pinned above the conversation (user report, 5 Oct: it scrolled away under
+  // a log of status lines). Once Start is pressed there is nothing left to
+  // choose on it, so it folds to one line — what it is and how far it has got —
+  // and opens again on a click.
+  const onPlan = plan.filter(p => !(p.id && skipped.includes(p.id)));
+  const doneCount = onPlan.filter(p => p.done).length;
+  const shut = started && !open;
+  // A started step Ira can read again (user ask, 5 Oct): its run was stopped
+  // and nothing was written, or the evidence changed since it read it. The
+  // only way back in Automatic, where the page's run buttons are hidden. A
+  // stopped step that has since been finished by hand has nothing left to read.
+  const againOf = (p: { id?: IraPlanStepId; done: boolean }): RerunWhy | undefined => {
+    const why = started && p.id && !skipped.includes(p.id) ? rerun?.[p.id] : undefined;
+    return why === 'stale' || ((why === 'stopped' || why === 'undone') && !p.done) ? why : undefined;
+  };
+  const againCount = plan.filter(p => againOf(p)).length;
+  // Folded, the held step still says why — otherwise Start looks like it did nothing.
+  const held = started ? plan.find(p => p.id && !p.done && !skipped.includes(p.id) && !againOf(p) && waiting?.[p.id]) : undefined;
+  const fileHeld = (p: { id?: IraPlanStepId; done: boolean; pop?: boolean }) => started && !!fileWait && !p.done && fileWait.at === (p.pop ? 'population' : p.id);
+  const uploadBtn = <button type="button" onClick={onUpload}
+    className="shrink-0 ml-auto px-1 rounded font-semibold text-brand-700 hover:text-brand-800 cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/30">Upload</button>;
+  const fileHeldStep = plan.find(fileHeld);
+  return (
+    <div className="text-[0.75rem] leading-snug text-ink-600">
+      {started ? (
+        <button type="button" onClick={() => setOpen(o => !o)} aria-expanded={open}
+          className="w-full flex items-center gap-1.5 font-semibold text-ink-700 text-left cursor-pointer rounded focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/30">
+          <Sparkles size={11} className="text-brand-500 shrink-0" aria-hidden />
+          <span className="min-w-0 truncate">My plan for {control.wpRef ?? control.id}</span>
+          <span className="shrink-0 font-normal text-ink-500 tabular-nums">· {doneCount} of {onPlan.length} done</span>
+          {shut && againCount > 0 && <span className="shrink-0 font-normal text-brand-700 tabular-nums">· {againCount} to run again</span>}
+          <ChevronRight size={12} className={cn('ml-auto shrink-0 text-ink-400 transition-transform duration-150', open && 'rotate-90')} aria-hidden />
+        </button>
+      ) : (
+        <p className="flex items-center gap-1.5 font-semibold text-ink-700">
+          <Sparkles size={11} className="text-brand-500 shrink-0" aria-hidden /> My plan for {control.wpRef ?? control.id}
+        </p>
+      )}
+      {shut && fileHeldStep ? <p className="mt-0.5 ml-4.5 flex items-start gap-1.5 text-mitigated-700"><span className="min-w-0">{fileHeldStep.text} — waiting for {fileWait!.text}</span>{uploadBtn}</p>
+        : shut && held && <p className="mt-0.5 ml-4.5 text-mitigated-700">{held.text} — {waiting![held.id!]}</p>}
+      {!shut && <>
+      <ol className="mt-1 ml-4.5 space-y-0.5">
+        {plan.map((p, i) => {
+          const off = !!p.id && skipped.includes(p.id);
+          const again = againOf(p);
+          const settled = (p.done && !again) || off;
+          return (
+            <li key={i}>
+              <div className={cn('flex items-start gap-1.5', settled && 'text-ink-400')}>
+                {!started && !closed && (p.id
+                  ? <input type="checkbox" checked={!off} onChange={() => toggleStep(p.id!)} aria-label={`Ira does: ${p.text}`}
+                      className="mt-0.75 shrink-0 cursor-pointer accent-brand-600" />
+                  : <span className="w-3.25 shrink-0" aria-hidden />)}
+                <span className="tabular-nums shrink-0">{(started || closed) && p.done && !off && !again ? '✓' : `${i + 1}.`}</span>
+                <span className={cn('min-w-0', settled && 'line-through decoration-ink-300')}>{p.text}</span>
+                {off && <span className="shrink-0">{started || closed ? '— skipped' : '— you’ll do it'}</span>}
+                {!off && !again && fileHeld(p) ? <><span className="min-w-0 text-mitigated-700">— waiting for {fileWait!.text}</span>{uploadBtn}</>
+                  : started && !off && !p.done && !again && p.id && waiting?.[p.id] && <span className="min-w-0 text-mitigated-700">— {waiting[p.id]}</span>}
+                {again && <>
+                  <span className="shrink-0 text-ink-500">{again === 'stale' ? '— new evidence' : again === 'undone' ? '— undone' : '— stopped'}</span>
+                  <button type="button" onClick={() => onRerun?.(p.id!)}
+                    className="shrink-0 ml-auto px-1 rounded font-semibold text-brand-700 hover:text-brand-800 cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/30">Run again</button>
+                </>}
+                {!started && !closed && !off && p.narrow && (
+                  <button type="button" onClick={() => setEditing(e => (e === p.id ? null : p.id!))} aria-expanded={editing === p.id}
+                    aria-label={`Choose what this step covers`} title="Choose what this step covers"
+                    className="shrink-0 px-1 rounded text-ink-400 hover:text-brand-700 cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/30">✎</button>
+                )}
+              </div>
+              {!started && editing === p.id && p.id === 'design' && (
+                <div className="ml-4.75 mb-1">
+                  {tickList('Design files', 'files', allFiles.map(f => ({ id: f.id, label: f.name })), files.map(f => f.id))}
+                  {tickList('Checks', 'checks', allChecks.map(x => ({ id: x.id, label: x.text })), checks.map(x => x.id))}
+                </div>
+              )}
+              {!started && editing === p.id && p.id === 'operating' && (
+                <div className="ml-4.75 mb-1">
+                  {tickList('Attributes', 'attributes', steps.map(st => ({ id: st.id, label: `${st.code} · ${st.description}` })), attrs.map(st => st.id))}
+                </div>
+              )}
+            </li>
+          );
+        })}
       </ol>
-      <p className="mt-1 ml-[18px] text-ink-500">
-        {mode === 'manual'
-          ? 'I’ll stop for you to confirm after each.'
-          : 'I’ll run these as soon as I can and confirm what I’m sure of — you confirm the rest, and I never conclude or sign.'}
+      <p className="mt-1 ml-4.5 text-ink-500">
+        {closed
+          ? 'This control is concluded — there is nothing left for me to run on it.'
+          : started
+          ? mode === 'manual'
+            ? 'I’ll stop for you to confirm after each.'
+            : 'I’ll run these as soon as I can and confirm what I’m sure of — you confirm the rest, and I never conclude or sign.'
+          : mode === 'manual'
+            ? 'Nothing runs until you press Start — then I’ll stop for you to confirm after each.'
+            : 'Nothing runs until you press Start — then I’ll run these as soon as I can and confirm what I’m sure of. You confirm the rest, and I never conclude or sign.'}
       </p>
+      {!started && !closed && (
+        <div className="mt-1.5 ml-4.5">
+          <button type="button" onClick={() => { setEditing(null); startIraPlan(control.id); }} disabled={offAll}
+            title={offAll ? 'Tick at least one step for me' : undefined}
+            className="h-6 px-2.5 rounded-md bg-brand-600 text-white font-semibold enabled:hover:bg-brand-700 disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer">Start</button>
+        </div>
+      )}
+      </>}
     </div>
   );
 }
@@ -308,7 +509,8 @@ function WhatIraKnows({ control }: { control: Control }) {
 export default function ControlChatPane({ control }: { control: Control }) {
   const { eng, role, me, openAuditId, addDesignDoc, runDesignIra, concludeDesign, overrideDesign, approveDesign, setDesignPoint, overrideDesignPoint,
     setIpeCheck, concludeIpe, uploadRequiredFile, drawSourceSample, approveSource, lockPopulation, concludeOperating, overrideOperating, signOffControlWp,
-    setStepResult, overrideStep, validateReadyAttributes, registerFile, setPopulation, updateDeficiency, waiveDesignDoc, attachDesignEvidence, undoIra, confirmIra } = useIcfr();
+    setStepResult, overrideStep, validateReadyAttributes, registerFile, setPopulation, updateDeficiency, waiveDesignDoc, attachDesignEvidence, undoIra, confirmIra,
+    remindOwnerForFiles, setDocStatus } = useIcfr();
   const logEvent = useAuditLog();
   const audit = useMemo(() => eng.audits.find(a => a.id === openAuditId) ?? null, [eng.audits, openAuditId]);
   // The audit's own files, read exactly as the source picker on the left reads
@@ -321,7 +523,25 @@ export default function ControlChatPane({ control }: { control: Control }) {
     [auditFiles],
   );
   const prompt = useMemo(() => nextPrompt({ eng, control, role, me, audit, files: popFiles }), [eng, control, role, me, audit, popFiles]);
-  const actions = useMemo(() => actionsFor(prompt.situation, role), [prompt.situation, role]);
+  const iraMode = useIraMode();
+  const offered = useMemo(() => actionsFor(prompt.situation, role), [prompt.situation, role]);
+  // In Automatic, Ira's runs start only from its plan (Stage 1a, 2 Oct), so the
+  // chat's own run buttons go the way the page's did, and the line under the
+  // prompt says where the run comes from instead.
+  const planHold = (id: ChatActionId): string | null => {
+    if (iraMode !== 'automatic' || (id !== 'ira-run' && id !== 'toe-run')) return null;
+    const p = control.iraPlan;
+    if (!p?.started) return 'In Automatic I run from my plan — press Start on it above and I’ll take it from there.';
+    if (p.skipped.includes(id === 'ira-run' ? 'design' : 'operating')) return 'You took that step off my plan, so it’s yours — switch to Manual if you want me to run just this one.';
+    // True to what the page does: a plan step re-runs itself when new evidence
+    // lands, not on request — so a run that was stopped, or one wanted again on
+    // the same evidence, is the plan's own Run again (user ask, 5 Oct).
+    return 'That’s on my plan, so I run it myself whenever there’s something new to read. If I was stopped, or the evidence changed since I read it, press Run again on that step in my plan above.';
+  };
+  const heldRun = offered.find(a => planHold(a.id));
+  // In Automatic the missing-file pop-up replaces "Attach the file" (product
+  // decision, 5 Oct); "Show me the missing element" and Not applicable stay.
+  const actions = useMemo(() => offered.filter(a => !planHold(a.id) && !(iraMode === 'automatic' && a.id === 'attach-doc')), [offered, iraMode, control.iraPlan]); // eslint-disable-line react-hooks/exhaustive-deps
   // Two shapes, one list: next steps are stacked rows, a set to choose from is
   // a wrap of chips. Split here rather than in the action map, because it is a
   // fact about how the rail draws them, not about what they do.
@@ -333,11 +553,11 @@ export default function ControlChatPane({ control }: { control: Control }) {
   // and the reader's rule is that it narrates here (22 Sep). One run, one
   // place it is spoken about, whichever button started it.
   const liveRun = useControlRun(control.id);
-  const iraMode = useIraMode();
-  // What Undo would take back: Ira's unconfirmed verdicts and its "couldn't
-  // test" notes on tracks not yet concluded.
-  const unconfirmedCount = (control.design.conclusion === 'Not tested' ? control.design.points.filter(p => awaitsConfirm(p) || (!!p.validation?.blocked && !p.override && !p.confirmed && pointResult(p) === 'Not tested')).length : 0)
-    + (control.operating.conclusion === 'Not tested' ? control.operating.steps.filter(st => awaitsConfirm(st) || (!!st.validation?.blocked && !st.override && !st.confirmed && stepResult(st) === 'Not tested')).length : 0);
+  // What Undo would take back: Ira's unconfirmed verdicts, its "couldn't test"
+  // notes and its own Automatic confirms, on tracks not yet concluded — the
+  // same set the store's undoIra takes (iraUndoable).
+  const undoable = iraUndoable(control);
+  const unconfirmedCount = undoable.points.length + undoable.steps.length;
   /** A typed instruction waiting for "Do it" (UX #14). */
   const [preview, setPreview] = useState<{ what: string; run: () => void } | null>(null);
   const working = liveRun?.label ?? null;
@@ -356,6 +576,9 @@ export default function ControlChatPane({ control }: { control: Control }) {
   // written: the auditor signs a paper saying this evidence proves that
   // attribute, so they see what went where first.
   const [pile, setPile] = useState<EvidenceMatch[] | null>(null);
+  // The picked files' bytes, by name, so filing the pile keeps them — the
+  // evidence viewer opens the object URL rather than just the name.
+  const pileUrls = useRef(new Map<string, string>());
   const picker = useRef<HTMLInputElement>(null);
   const pickFor = useRef<string | undefined>(undefined);
   // A draw in progress. `refs` null while the ask is still being settled; set
@@ -476,7 +699,9 @@ export default function ControlChatPane({ control }: { control: Control }) {
     window.clearTimeout(timer.current);
     // Only a run THIS pane started is cancelled here — `timer` is the proof of
     // ownership. One the page started keeps its own clock and its own ending.
+    const cut = planStepOf(controlRun(controlId.current));
     endRun(controlId.current);
+    markStopped(controlId.current, cut);
     say(controlId.current, 'ira', 'I stopped reading when you moved away — ask again and I will pick it up.');
   }, []);
 
@@ -609,6 +834,8 @@ export default function ControlChatPane({ control }: { control: Control }) {
   };
 
   const perform = (a: ChatAction) => {
+    const held = planHold(a.id);
+    if (held) { say(control.id, 'ira', held); return; }
     if (a.id === 'show-step') {
       const step = a.focus ?? prompt.step;
       document.getElementById(a.anchor ?? STEP_ANCHOR[step])?.scrollIntoView({ behavior: 'smooth', block: 'center' });
@@ -667,7 +894,7 @@ export default function ControlChatPane({ control }: { control: Control }) {
     // STEP_ANCHOR as a sixth thing the stepper does not have.
     if (a.id === 'show-exception') {
       document.getElementById('control-exception')?.scrollIntoView({ behavior: 'smooth', block: 'center' });
-      say(control.id, 'ira', `It’s on the left — ${prompt.situation.exception?.id ?? 'the exception'}, under the testing.`);
+      say(control.id, 'ira', `It’s on the left — ${prompt.situation.exception?.id ?? 'the deficiency'}, under the testing.`);
       return;
     }
 
@@ -855,9 +1082,12 @@ export default function ControlChatPane({ control }: { control: Control }) {
   // for the sample as soon as one is owed and leaves it in the chat — Send is
   // still the tester's press. Nothing goes to the owner on its own. Once per
   // source, so cancelling the draft is not undone by the next render.
+  //
+  // Only once the plan is started and the step is still Ira's (Stage 1a, 2 Oct)
+  // — in either mode, since the draft is a plan step and Send stays yours.
   const autoDrafted = useRef<string>('');
   useEffect(() => {
-    if (iraMode !== 'automatic' || role !== 'auditor' || draw || working) return;
+    if (!control.iraPlan?.started || control.iraPlan.skipped.includes('sample') || role !== 'auditor' || draw || working) return;
     const offer = actions.find(a => a.id === 'draw-sample' && a.arg);
     if (!offer || autoDrafted.current === offer.arg) return;
     autoDrafted.current = offer.arg!;
@@ -868,6 +1098,178 @@ export default function ControlChatPane({ control }: { control: Control }) {
     if (working) return;
     say(control.id, 'user', a.said);
     perform(a);
+  };
+
+  // ── Run again, on a started plan's step (user ask, 5 Oct) ──────────────────
+  // In Automatic the page's run buttons are hidden, so a step that was stopped,
+  // or whose evidence changed since Ira read it, had no way back. The plan card
+  // offers it on that step, through the same runs the page's buttons start —
+  // the store keeps the plan's ✎ narrowing and every gate (rolled-forward
+  // set-up, design approval, concluded tracks). Offered only where those gates
+  // are open, so the button never promises a run the store would refuse.
+  const [, bumpStopped] = useState(0);
+  useEffect(() => {
+    const st = planStepOf(liveRun);
+    if (st && [clearStopped(control.id, st), clearUndone(control.id, st)].some(Boolean)) bumpStopped(n => n + 1);
+  }, [liveRun, control.id]);
+  const rerun: Partial<Record<IraPlanStepId, RerunWhy>> = {};
+  {
+    const s = prompt.situation;
+    const p = control.iraPlan;
+    const stoppedHere = STOPPED[control.id] ?? [];
+    if (p?.started && role === 'auditor' && !working && !s.locked && !s.sealed && !isControlLockedIn(eng, control)) {
+      if (s.designResult === 'Not tested' && !s.iraBlocked && !s.rollPending.some(x => x === 'design' || x === 'checks')) {
+        if (s.iraStale) rerun.design = 'stale';
+        else if (stoppedHere.includes('design')) rerun.design = 'stopped';
+        else if (iraStepUndone(control.id, 'design')) rerun.design = 'undone';
+      }
+      const ready = control.operating.steps.filter(st => (!p.attributes || p.attributes.includes(st.id)) && requiredFilesReady(st, control));
+      if (s.opApplies && !s.yePending && s.designResult === 'Effective' && s.todApproved && s.operatingResult === 'Not tested'
+        && !s.rollPending.includes('attributes') && ready.length > 0) {
+        if (ready.some(st => st.staleRun)) rerun.operating = 'stale';
+        else if (stoppedHere.includes('operating')) rerun.operating = 'stopped';
+        else if (iraStepUndone(control.id, 'operating')) rerun.operating = 'undone';
+      }
+      if (stoppedHere.includes('sample') && offered.some(a => a.id === 'draw-sample' && a.arg)) rerun.sample = 'stopped';
+    }
+  }
+  // What a started plan is held on, said on the step it holds.
+  const planWait: Partial<Record<IraPlanStepId, string>> = {};
+  if (control.iraPlan?.started && !working) {
+    const s = prompt.situation;
+    const unticked = s.sources.filter(x => x.drawn && !x.approved);
+    if (unticked.length) planWait.operating = `waiting until you mark ${listOf(unticked.map(x => x.file))} done on the sample step`;
+    else if (s.step === 'operating' && s.toeReady === 0 && s.toe.tested < s.toe.total) planWait.operating = 'waiting for the attributes’ files';
+  }
+  const runAgain = (id: IraPlanStepId) => {
+    if (working) return;
+    if ([clearStopped(control.id, id), clearUndone(control.id, id), id !== 'sample' && releaseFile(control.id, id)].some(Boolean)) bumpStopped(n => n + 1);
+    if (id === 'design') run({ id: 'ira-run', label: 'Run again', said: 'Read the evidence against the checks again.' });
+    else if (id === 'operating') run({ id: 'toe-run', label: 'Run again', said: 'Read the files against the attributes again.' });
+    else {
+      const offer = offered.find(a => a.id === 'draw-sample' && a.arg);
+      if (!offer) return;
+      autoDrafted.current = offer.arg!;
+      say(control.id, 'user', 'Draft the sample request again.');
+      perform(offer);
+    }
+  };
+
+  // ── Ira needs a file to continue (Automatic, product decision 5 Oct) ──────
+  // The step a started plan is on cannot run because a file is missing: the
+  // design's required documents, the population's source data (only once the
+  // design is approved — never behind a gate), or the attributes' required
+  // files. One step at a time, in plan order; every missing file of it listed.
+  const EVIDENCE_ACCEPT = '.pdf,.png,.jpg,.jpeg,.xlsx,.xls,.csv,.doc,.docx';
+  const fileAsk = ((): { step: FileAskStep; rows: (FileAskRow & { slots?: { stepId: string; fileId: string }[] })[] } | null => {
+    const s = prompt.situation;
+    const p = control.iraPlan;
+    if (!p?.started || role !== 'auditor' || s.locked || s.sealed || isControlLockedIn(eng, control)) return null;
+    if (s.step === 'design') {
+      if (p.skipped.includes('design') || s.designResult !== 'Not tested' || s.checksTotal === 0 || s.missing.length === 0
+        || s.rollPending.some(x => x === 'design' || x === 'checks')) return null;
+      return { step: 'design', rows: s.missing.map(d => ({
+        key: d.id, label: d.kind === 'Custom' ? d.name : d.kind, docId: d.id, accept: EVIDENCE_ACCEPT, multiple: true,
+        detail: d.status === 'Requested' ? 'Requested from the control owner' : d.description,
+      })) };
+    }
+    if (s.step === 'population') {
+      if (!s.opApplies || s.yePending || s.popStarted || s.popFiles.some(f => f.usable) || s.rollPending.includes('population')
+        || (p.skipped.includes('sample') && p.skipped.includes('operating'))) return null;
+      return { step: 'population', rows: [{ key: 'population', label: 'Population source file', origin: true, accept: '.xlsx,.xls,.csv', multiple: false,
+        detail: 'The system report or listing this control’s instances are filtered out of' }] };
+    }
+    if (s.step === 'operating') {
+      if (p.skipped.includes('operating') || s.designResult !== 'Effective' || !s.todApproved || s.operatingResult !== 'Not tested'
+        || s.yePending || s.rollPending.includes('attributes')) return null;
+      // One row per file, however many attributes ask for it (the TOE Files list's own grouping).
+      const groups = new Map<string, { label: string; codes: string[]; slots: { stepId: string; fileId: string }[] }>();
+      control.operating.steps
+        .filter(st => (!p.attributes || p.attributes.includes(st.id)) && stepResult(st) === 'Not tested')
+        .forEach(st => requiredFilesOf(st, control).filter(f => !f.file).forEach(f => {
+          const k = f.label.trim().replace(/\s+/g, ' ').toLowerCase();
+          const g = groups.get(k) ?? { label: f.label, codes: [], slots: [] };
+          if (!g.codes.includes(st.code)) g.codes.push(st.code);
+          g.slots.push({ stepId: st.id, fileId: f.id });
+          groups.set(k, g);
+        }));
+      if (!groups.size) return null;
+      return { step: 'operating', rows: [...groups.entries()].map(([k, g]) => ({
+        key: `toe-${k}`, label: g.label, slots: g.slots, accept: EVIDENCE_ACCEPT, multiple: false,
+        detail: `For ${g.codes.length === 1 ? 'attribute' : 'attributes'} ${g.codes.join(', ')}`,
+      })) };
+    }
+    return null;
+  })();
+  const fileHeldHere = FILE_HELD[control.id] ?? [];
+  const askShown = iraMode === 'automatic' && !!fileAsk && !fileHeldHere.includes(fileAsk.step) && !working && !draw && !extract && !waive && !pile;
+  const owner = ownersOf(control).processOwner;
+  const askKey = (r: FileAskRow) => `file-ask:${r.key}`;
+  const askedOf = (rows: FileAskRow[]) => {
+    const tasks = rows.map(r => couldntAskFor(eng, control.id, askKey(r)));
+    return tasks.every(Boolean) ? tasks[0] : undefined;
+  };
+  const askedTask = fileAsk ? askedOf(fileAsk.rows) : undefined;
+  const fileWait = iraMode === 'automatic' && fileAsk && fileHeldHere.includes(fileAsk.step)
+    ? { at: fileAsk.step, text: `${listOf(fileAsk.rows.map(r => r.label))}${askedTask ? ` from ${owner.split(/\s+/)[0] || owner}` : ''}` }
+    : undefined;
+  const askFiles = (row: FileAskRow, files: File[], origin?: FileOrigin) => {
+    if (!fileAsk || !files.length) return;
+    if (fileAsk.step === 'design' && row.docId) {
+      const doc = control.design.documents.find(d => d.id === row.docId);
+      const list = files.map(f => ({ name: f.name, kind: evidenceKindOf(f.name), url: URL.createObjectURL(f) }));
+      attachDesignEvidence(control.id, row.docId, list);
+      logEvent({ action: 'Upload', description: `Attached ${list.map(f => f.name).join(', ')} to the ${row.label} design element on ${control.id} from Ira's file request`, module: 'SOX ICFR', entity: 'Control' });
+      skipAck.current = true;
+      say(control.id, 'ira', `${listOf(list.map(f => f.name))} — on ${doc ? row.label : 'the element'}. Carrying on with the design checks.`);
+      return;
+    }
+    const f = files[0];
+    const slots = fileAsk.rows.find(r => r.key === row.key)?.slots;
+    if (fileAsk.step === 'operating' && slots) {
+      const url = URL.createObjectURL(f);
+      slots.forEach(sl => uploadRequiredFile(control.id, sl.stepId, sl.fileId, f.name, url));
+      logEvent({ action: 'Upload', description: `Uploaded ${f.name} as "${row.label}" (${control.id}) from Ira's file request`, module: 'SOX ICFR', entity: 'Evidence' });
+      say(control.id, 'ira', `${f.name} — on ${row.label}. Carrying on with the attributes it covers.`);
+      return;
+    }
+    if (fileAsk.step === 'population' && origin) {
+      const rows = readRowCount(f.name);
+      registerFile({ name: f.name, kind: guessFileKind(f.name), rows, from: `Uploaded on ${control.id}`, uploadedBy: me, uploadedAt: 'just now', origin, originBy: me, originAt: 'just now' });
+      logEvent({ action: 'Upload', description: `Added "${f.name}" to the audit's files from ${control.id} from Ira's file request — ${origin.toLowerCase()}, ${rows.toLocaleString()} rows`, module: 'SOX ICFR', entity: 'Evidence' });
+      say(control.id, 'ira', `On the audit’s files — ${origin.toLowerCase()}. Carrying on with the population.`);
+      beginCriteria({ name: f.name, rows, from: `Uploaded on ${control.id}`, usable: true });
+    }
+  };
+  const askWaive = (row: FileAskRow, reason: DesignWaiverReason, note: string) => {
+    if (!row.docId) return;
+    waiveDesignDoc(control.id, row.docId, reason, note);
+    logEvent({ action: 'Update', description: `Waived the ${row.label} design element on ${control.id} (${reason}) from Ira's file request — ${note}`, module: 'SOX ICFR', entity: 'Control' });
+    skipAck.current = true;
+    say(control.id, 'ira', `${row.label} is accounted for — ${reason.toLowerCase()}, in your words, and the paper prints them.`);
+  };
+  const askOwner = () => {
+    if (!fileAsk) return;
+    const code = controlCode(control);
+    fileAsk.rows.forEach(r => {
+      remindOwnerForFiles(control.id, `${r.label} is needed for ${code} before testing can carry on. Upload it on the control.`,
+        { title: `Upload ${r.label} for ${code}`, checkId: askKey(r), track: fileAsk.step === 'design' ? 'design' : 'operating' });
+      if (r.docId) setDocStatus(control.id, r.docId, 'Requested');
+    });
+    logEvent({ action: 'Update', description: `Asked the owner of ${control.id} for ${fileAsk.rows.map(r => r.label).join(', ')} from Ira's file request`, module: 'SOX ICFR', entity: 'Evidence' });
+    holdForFile(control.id, fileAsk.step);
+    bumpStopped(n => n + 1);
+    const due = new Date(); due.setDate(due.getDate() + 3);
+    say(control.id, 'ira', `Asked ${owner} for ${listOf(fileAsk.rows.map(r => r.label))}, due ${dayMonth(`${due.getFullYear()}-${String(due.getMonth() + 1).padStart(2, '0')}-${String(due.getDate()).padStart(2, '0')}`)}. This step waits for it — I’ll carry on with anything that doesn’t need it.`);
+  };
+  const skipAsk = () => {
+    if (!fileAsk) return;
+    holdForFile(control.id, fileAsk.step);
+    bumpStopped(n => n + 1);
+    say(control.id, 'ira', `Left ${listOf(fileAsk.rows.map(r => r.label))} for now. This step waits for it — I’ll carry on with anything that doesn’t need it. Press Upload on my plan when you have it.`);
+  };
+  const reopenAsk = () => {
+    if (fileAsk && releaseFile(control.id, fileAsk.step)) bumpStopped(n => n + 1);
   };
 
   /** Interrupt. Only a run THIS pane started has a timer to clear — one the
@@ -941,6 +1343,7 @@ export default function ControlChatPane({ control }: { control: Control }) {
       return;
     }
     const names = Array.from(list).map(f => f.name);
+    Array.from(list).forEach(f => pileUrls.current.set(f.name, URL.createObjectURL(f)));
     const matches = mapEvidence(control, names, scope);
     setPile(matches);
     const placed = matches.filter(m => m.slot);
@@ -959,7 +1362,7 @@ export default function ControlChatPane({ control }: { control: Control }) {
     const placed = pile.filter(m => m.slot);
     setPile(null);
     placed.forEach(m => {
-      uploadRequiredFile(control.id, m.slot!.stepId, m.slot!.fileId, m.name);
+      uploadRequiredFile(control.id, m.slot!.stepId, m.slot!.fileId, m.name, pileUrls.current.get(m.name));
       logEvent({ action: 'Upload', description: `Uploaded ${m.name} as "${m.slot!.label}" for attribute ${m.slot!.code} (${control.id}) from the chat`, module: 'SOX ICFR', entity: 'Evidence' });
     });
   };
@@ -978,12 +1381,19 @@ export default function ControlChatPane({ control }: { control: Control }) {
     logEvent({ action: 'Update', description: `Marked the report's ${dimension.toLowerCase()} ${result.toLowerCase()} on ${control.id} from the chat — ${note}`, module: 'SOX ICFR', entity: 'Evidence' });
   };
 
+  // One Stop for every run, whichever door started it (user report, 5 Oct —
+  // there used to be two: the square for the chat's runs and a pill for the
+  // page's, and both showed at once in the beat before the timer was set).
+  // A run this pane started has its own timer to clear; one the page started
+  // finds its run gone and writes nothing (runIsLive).
   const stop = () => {
-    if (!timer.current) return;
-    window.clearTimeout(timer.current);
-    timer.current = null;
-    endRun(control.id);
-    say(control.id, 'ira', 'Stopped. Nothing was written — ask again and I will read it from the top.');
+    if (!liveRun && !timer.current) return;
+    if (timer.current) { window.clearTimeout(timer.current); timer.current = null; }
+    const cut = planStepOf(controlRun(control.id));
+    stopRun(control.id);
+    markStopped(control.id, cut);
+    bumpStopped(n => n + 1);
+    say(control.id, 'ira', 'Stopped. Nothing from that run was written — ask again and I will read it from the top.');
   };
 
   // ── typed, and understood as far as it honestly can be ────────────────────
@@ -1015,7 +1425,7 @@ export default function ControlChatPane({ control }: { control: Control }) {
       // the thing Ira cannot place as an instruction. The root cause and the
       // waiver reason are the other way round on purpose — nothing reads those,
       // they go on the paper in the auditor's own words.
-      const said = readIntent(text, { control, s: prompt.situation, role, actions, promptText: prompt.text });
+      const said = readIntent(text, { control, s: prompt.situation, role, actions: offered, promptText: prompt.text, mode: iraMode });
       if (said.kind === 'unplaced') { runDraw(text); return; }
       // A question is neither an ask nor an instruction. Answer it and leave
       // the draw standing exactly where it was.
@@ -1053,7 +1463,7 @@ export default function ControlChatPane({ control }: { control: Control }) {
     if (awaitingCause) {
       if (/^(no|not now|later|skip|cancel|stop|never ?mind|leave it)\b/i.test(text) && text.length < 40) {
         setAwaitingCause(null);
-        say(control.id, 'ira', 'Left it alone — the root cause is still open, and nothing about the exception moves until it is written.');
+        say(control.id, 'ira', 'Left it alone — the root cause is still open, and nothing about the deficiency moves until it is written.');
         return;
       }
       const id = awaitingCause;
@@ -1065,7 +1475,7 @@ export default function ControlChatPane({ control }: { control: Control }) {
       updateDeficiency(id, { rootCause: text, iraSuggested: Object.keys(rest).length ? rest : undefined });
       logEvent({ action: 'Update', description: `Wrote the root cause for ${id} (${control.id}) from the chat — ${text}`, module: 'SOX ICFR', entity: 'Control' });
       skipAck.current = true;
-      say(control.id, 'ira', 'On the paper, in your words. That is step 1 done — size it on the left and the exception goes on its way.');
+      say(control.id, 'ira', 'On the paper, in your words. That is step 1 done — size it on the left and the deficiency goes on its way.');
       return;
     }
 
@@ -1150,7 +1560,7 @@ export default function ControlChatPane({ control }: { control: Control }) {
       return;
     }
 
-    const intent = readIntent(text, { control, s: prompt.situation, role, actions, promptText: prompt.text });
+    const intent = readIntent(text, { control, s: prompt.situation, role, actions: offered, promptText: prompt.text, mode: iraMode });
     const apply = () => {
       if (intent.kind === 'action') {
         if (intent.note) say(control.id, 'ira', intent.note);
@@ -1199,6 +1609,8 @@ export default function ControlChatPane({ control }: { control: Control }) {
     // A TYPED instruction shows what it will do first (agentic UX #14, user ask
     // 1 Oct): nothing is written until "Do it". Ira's own buttons stay one
     // click — the button already is the confirmation.
+    // A run held for the plan is said straight away — there is nothing to preview.
+    if (intent.kind === 'action' && planHold(intent.action.id)) { say(control.id, 'ira', planHold(intent.action.id)!); return; }
     if (intent.kind === 'action' || intent.kind === 'mark' || intent.kind === 'mark-step') {
       const what = intent.kind === 'action' ? (intent.action.does ?? intent.action.label.toLowerCase())
         : `mark ${intent.label} ${intent.result === 'Pass' ? 'passed' : 'failed'}`;
@@ -1208,47 +1620,92 @@ export default function ControlChatPane({ control }: { control: Control }) {
     apply();
   };
 
+  // Runs of Ira's one-line status notes fold into one "N updates" line (user
+  // report, 5 Oct: the rail had become a log — "Population locked", "Sample
+  // drawn", "1 check to go"…). Three or more in a row: all but the newest
+  // fold, and the newest stays readable, since it is the one just said.
+  // Anything longer than a line, or that the reader typed, is never folded.
+  const items = useMemo(() => {
+    const isNote = (m: ChatMsg) => m.who === 'ira' && !m.text.includes('\n') && m.text.length <= 160;
+    const out: ({ kind: 'msg'; m: ChatMsg; i: number } | { kind: 'fold'; id: string; msgs: ChatMsg[] })[] = [];
+    let run: { m: ChatMsg; i: number }[] = [];
+    const flush = () => {
+      if (run.length >= 3) {
+        out.push({ kind: 'fold', id: run[0].m.id, msgs: run.slice(0, -1).map(x => x.m) });
+        out.push({ kind: 'msg', ...run[run.length - 1] });
+      } else run.forEach(x => out.push({ kind: 'msg', ...x }));
+      run = [];
+    };
+    thread.forEach((m, i) => {
+      if (isNote(m)) run.push({ m, i });
+      else { flush(); out.push({ kind: 'msg', m, i }); }
+    });
+    flush();
+    return out;
+  }, [thread]);
+  const [openFolds, setOpenFolds] = useState<string[]>([]);
+
+  const msgView = (m: ChatMsg, i: number) => (
+    m.who === 'user' ? (
+      <motion.div key={m.id} className="flex justify-end"
+        initial={still ? false : { opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }}
+        transition={{ duration: 0.25, ease: [0.22, 1, 0.36, 1] }}>
+        <div className="w-fit max-w-[85%] px-3 py-2 rounded-2xl bg-brand-50 text-ink-800 text-[0.8125rem] leading-[1.6] whitespace-pre-wrap break-words">
+          {m.text}
+        </div>
+      </motion.div>
+    ) : (
+      // Only a reply to something typed types itself out (see streamId). An older
+      // line re-performing every time the reader comes back would be theatre.
+      <IraText key={m.id} text={m.text} stream={i === thread.length - 1 && m.id === streamId.current} />
+    )
+  );
+
   // The owner does not test the design, so their step ① is called Documents —
   // same exception the stepper makes on the left.
   const stepLabel = role === 'risk-owner' && prompt.step === 'design' ? 'Documents' : STEP_LABEL[prompt.step];
 
   return (
     <>
+      {/* The plan sits OUTSIDE the scroll (user report, 5 Oct): it used to be
+          the first thing in the thread and scrolled away as the chat grew.
+          Capped, so an open ✎ list cannot push the conversation off the rail. */}
+      {role === 'auditor' && (
+        <div className="shrink-0 max-h-[45%] overflow-y-auto px-3 pt-2.5 pb-2 border-b border-canvas-border">
+          <IraPlan control={control} mode={iraMode} rerun={rerun} onRerun={runAgain} waiting={planWait} fileWait={fileWait} onUpload={reopenAsk} />
+        </div>
+      )}
       {/* 20px between turns, where the 840px thread uses 40 — prose needs the
           room to read as prose, and the rail has half the column to give.
-          `mt-auto` sits a short conversation on the floor rather than leaving
-          it adrift at the top of a full-height rail: the live prompt lands
-          where the hands already are. A long one fills upward and scrolls as
-          usual, because auto margins give up the moment there is no slack. */}
+          The conversation starts right under the notes above it. It used to be
+          pushed to the floor with `mt-auto`, which left a tall empty gap
+          between the plan and the first line (user report, 5 Oct). */}
       <div ref={scrollRef} className="chat-canvas-mesh flex-1 min-h-0 overflow-y-auto px-3 pt-3 pb-4 flex flex-col">
-       {/* Pinned to the top of the thread, above the `mt-auto` slack, so it
-           stays where the reader looks first however short the chat is. */}
-       {role === 'auditor' && <IraPlan control={control} mode={iraMode} />}
        <WhatIraKnows control={control} />
        {/* The step's capability note, under what Ira knows — the tester's
            only: it describes the testing pen, which the owner does not hold. */}
        {role === 'auditor' && (
-         <p className="mt-1.5 flex items-start gap-1.5 text-[0.71875rem] leading-snug text-ink-500">
-           <Sparkles size={11} className="text-brand-500 shrink-0 mt-[3px]" aria-hidden />
+         <p className="mt-1.5 flex items-start gap-1.5 text-[0.75rem] leading-snug text-ink-500">
+           <Sparkles size={11} className="text-brand-500 shrink-0 mt-0.75" aria-hidden />
            <span>{CAPABILITY[prompt.step]}</span>
          </p>
        )}
-       <div className="mt-auto space-y-5">
-        {thread.map((m, i) => (
-          m.who === 'user' ? (
-            <motion.div key={m.id} className="flex justify-end"
-              initial={still ? false : { opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }}
-              transition={{ duration: 0.25, ease: [0.22, 1, 0.36, 1] }}>
-              <div className="w-fit max-w-[85%] px-3 py-2 rounded-2xl bg-brand-50 text-ink-800 text-[0.8125rem] leading-[1.6] whitespace-pre-wrap break-words">
-                {m.text}
-              </div>
-            </motion.div>
-          ) : (
-            // Only a reply to something typed types itself out (see streamId). An older
-            // line re-performing every time the reader comes back would be theatre.
-            <IraText key={m.id} text={m.text} stream={i === thread.length - 1 && m.id === streamId.current} />
-          )
-        ))}
+       <div className="mt-5 space-y-5">
+        {items.map(it => it.kind === 'fold' ? (
+          <div key={it.id}>
+            <button type="button" onClick={() => setOpenFolds(o => (o.includes(it.id) ? o.filter(x => x !== it.id) : [...o, it.id]))}
+              aria-expanded={openFolds.includes(it.id)}
+              className="inline-flex items-center gap-1 text-[0.6875rem] font-semibold text-ink-500 hover:text-ink-700 cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/30 rounded">
+              <ChevronRight size={12} className={cn('shrink-0 transition-transform duration-150', openFolds.includes(it.id) && 'rotate-90')} aria-hidden />
+              {it.msgs.length} updates
+            </button>
+            {openFolds.includes(it.id) && (
+              <ul className="mt-1.5 pl-4 space-y-1 text-[0.75rem] leading-snug text-ink-500 list-disc marker:text-ink-300">
+                {it.msgs.map(m => <li key={m.id}>{m.text}</li>)}
+              </ul>
+            )}
+          </div>
+        ) : msgView(it.m, it.i))}
 
         {liveRun && <WorkingTrail label={liveRun.label} steps={liveRun.steps} />}
 
@@ -1263,10 +1720,10 @@ export default function ControlChatPane({ control }: { control: Control }) {
         {!working && draw?.refs && (
           <div>
             <div className="rounded-lg border border-canvas-border overflow-hidden mb-2">
-              <div className="grid grid-cols-[1.1fr_1fr] gap-2 px-2.5 py-1.5 bg-paper-50/70 border-b border-canvas-border text-[0.625rem] font-bold uppercase tracking-wide text-ink-400">
+              <div className="grid grid-cols-[1.1fr_1fr] gap-2 px-2.5 py-1.5 bg-paper-50/70 border-b border-canvas-border text-[0.6875rem] font-bold uppercase tracking-wide text-ink-500">
                 <span>Reference</span><span className="text-right">Drawn from</span>
               </div>
-              <div className="max-h-[11rem] overflow-y-auto">
+              <div className="max-h-44 overflow-y-auto">
                 {draw.refs.map((ref, i) => (
                   <div key={`${ref}-${i}`} className="grid grid-cols-[1.1fr_1fr] gap-2 px-2.5 py-1.5 border-b border-canvas-border last:border-b-0 text-[0.6875rem]">
                     <span className="font-mono text-ink-700 truncate">{ref}</span>
@@ -1299,7 +1756,7 @@ export default function ControlChatPane({ control }: { control: Control }) {
             this adds is the way out. Nothing is written until it is answered —
             a half-written mechanism is worse on a paper than an empty box. */}
         {!working && awaitingCause && (
-          <button onClick={() => { setAwaitingCause(null); say(control.id, 'ira', 'Left it alone — the root cause is still open, and nothing about the exception moves until it is written.'); }}
+          <button onClick={() => { setAwaitingCause(null); say(control.id, 'ira', 'Left it alone — the root cause is still open, and nothing about the deficiency moves until it is written.'); }}
             className="text-[0.6875rem] text-ink-400 hover:text-ink-700 transition-colors cursor-pointer">Leave it for now</button>
         )}
 
@@ -1312,7 +1769,7 @@ export default function ControlChatPane({ control }: { control: Control }) {
             <div className="flex flex-wrap gap-1.5">
               {waive.docs.map(d => (
                 <button key={d.id} onClick={() => (waive.kind === 'waive' ? askWhy(d) : attachTo(d))}
-                  className="h-7 px-2.5 rounded-md border border-canvas-border bg-canvas-elevated text-[0.71875rem] font-semibold text-ink-700 hover:border-brand-300 hover:text-brand-700 transition-colors cursor-pointer">
+                  className="h-7 px-2.5 rounded-md border border-canvas-border bg-canvas-elevated text-[0.75rem] font-semibold text-ink-700 hover:border-brand-300 hover:text-brand-700 transition-colors cursor-pointer">
                   {d.kind === 'Custom' ? d.name : d.kind}
                 </button>
               ))}
@@ -1409,7 +1866,7 @@ export default function ControlChatPane({ control }: { control: Control }) {
                 {STEP_NUM[prompt.step]} {stepLabel}
               </span>
             </div>
-            <IraText key={prompt.key} text={prompt.text} stream={false} />
+            <IraText key={prompt.key} text={heldRun ? `${prompt.text}\n\n${planHold(heldRun.id)}` : prompt.text} stream={false} />
             {/* The verdict, both faces on one line (user ask, 22 Sep). Stacked,
                 "Design ineffective" under "Design effective" read as a second,
                 lesser button; side by side they read as the two answers to one
@@ -1511,19 +1968,25 @@ export default function ControlChatPane({ control }: { control: Control }) {
         className="sr-only" tabIndex={-1} aria-hidden="true"
         onChange={e => { pickedSource(e.target.files); e.target.value = ''; }} />
 
+      {askShown && fileAsk && (
+        <IraFileAsk code={controlCode(control)} step={fileAsk.step} rows={fileAsk.rows} owner={owner}
+          asked={askedTask ? `Asked ${owner}${askedTask.dueAt ? ` · due ${dayMonth(askedTask.dueAt)}` : ''}` : null}
+          onFiles={askFiles} onWaive={askWaive} onAsk={askOwner} onSkip={skipAsk} />
+      )}
+
       <div className="p-3 border-t border-canvas-border">
         {/* What a typed instruction will do, before it does it (UX #14). */}
         {preview && (
           <div role="status" className="mb-2 rounded-xl border border-canvas-border bg-canvas-elevated px-3 py-2.5">
             <p className="text-[0.75rem] text-ink-700 flex items-start gap-1.5">
-              <Sparkles size={12} className="text-brand-500 shrink-0 mt-[3px]" aria-hidden />
+              <Sparkles size={12} className="text-brand-500 shrink-0 mt-0.75" aria-hidden />
               <span>I’ll {preview.what}.</span>
             </p>
             <div className="mt-2 flex items-center gap-2">
               <button type="button" onClick={() => { const run = preview.run; setPreview(null); run(); }}
-                className="h-7 px-3 rounded-lg bg-brand-600 text-white text-[0.71875rem] font-semibold hover:bg-brand-700 transition-colors cursor-pointer">Do it</button>
+                className="h-7 px-3 rounded-lg bg-brand-600 text-white text-[0.75rem] font-semibold hover:bg-brand-700 transition-colors cursor-pointer">Do it</button>
               <button type="button" onClick={() => { setPreview(null); say(control.id, 'ira', 'Left it — nothing was changed.'); }}
-                className="h-7 px-3 rounded-lg border border-canvas-border text-[0.71875rem] font-semibold text-ink-600 hover:text-ink-900 cursor-pointer">Cancel</button>
+                className="h-7 px-3 rounded-lg border border-canvas-border text-[0.75rem] font-semibold text-ink-600 hover:text-ink-900 cursor-pointer">Cancel</button>
             </div>
           </div>
         )}
@@ -1579,7 +2042,7 @@ export default function ControlChatPane({ control }: { control: Control }) {
                 genuinely interrupts — the run ends and the timer is cleared,
                 rather than the affordance merely being hidden. */}
             {working ? (
-              <button onClick={stop} aria-label="Stop Ira" title="Stop reading (Esc)"
+              <button onClick={stop} aria-label="Stop Ira" title="Stop Ira (Esc)"
                 className="inline-flex items-center justify-center size-8 rounded-lg bg-ink-900 text-white hover:bg-ink-800 transition-colors cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/30">
                 <Square size={11} fill="currentColor" />
               </button>
@@ -1606,13 +2069,24 @@ export default function ControlChatPane({ control }: { control: Control }) {
               ))}
             </div>
             <div className="flex-1" />
-            {liveRun && !timer.current && (
-              <button type="button" onClick={() => { stopRun(control.id); say(control.id, 'ira', 'Stopped. Nothing from that run was written.'); }}
-                className="h-6 px-2 rounded-md border border-canvas-border font-semibold text-ink-700 hover:border-ink-300 cursor-pointer inline-flex items-center gap-1"><Square size={9} fill="currentColor" /> Stop</button>
-            )}
             {!liveRun && unconfirmedCount > 0 && (
-              <button type="button" onClick={() => { undoIra(control.id); say(control.id, 'ira', `Took back ${unconfirmedCount === 1 ? 'my unconfirmed result' : `my ${unconfirmedCount} unconfirmed results`} — they read Not tested again.`); }}
-                title="Take every result Ira proposed that nobody confirmed back to Not tested"
+              <button type="button" onClick={() => {
+                undoIra(control.id);
+                // Held until Run again — see UNDONE. Only on a started plan:
+                // without one nothing re-runs by itself to hold.
+                if (control.iraPlan?.started) {
+                  if (undoable.points.length) markUndone(control.id, 'design');
+                  if (undoable.steps.length) markUndone(control.id, 'operating');
+                  bumpStopped(n => n + 1);
+                }
+                const mine = undoable.auto;
+                const n = unconfirmedCount;
+                const what = !mine ? (n === 1 ? 'my unconfirmed result' : `my ${n} unconfirmed results`)
+                  : mine === n ? (n === 1 ? 'the result I had confirmed myself' : `the ${n} results I had confirmed myself`)
+                  : `my ${n} results, ${mine} of them ones I had confirmed myself`;
+                say(control.id, 'ira', `Took back ${what} — ${n === 1 ? 'it reads' : 'they read'} Not tested again.`);
+              }}
+                title="Take every result Ira proposed that nobody confirmed, and every one Ira confirmed itself, back to Not tested — on steps not yet concluded"
                 className="h-6 px-2 rounded-md border border-canvas-border font-semibold text-ink-700 hover:border-ink-300 cursor-pointer inline-flex items-center gap-1"><Undo2 size={10} /> Undo Ira’s {unconfirmedCount}</button>
             )}
           </div>

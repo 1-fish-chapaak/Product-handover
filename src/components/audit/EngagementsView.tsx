@@ -12,6 +12,7 @@ import ConfirmationModal from '../shared/ConfirmationModal';
 import { FilterSelect } from '../shared/FilterSelect';
 import CreateEngagementWizard from './CreateEngagementWizard';
 import ScopingWizard from './sox-testing/ScopingWizard';
+import { ROUND_LABEL, soxCardStats, soxRoundOf } from '../sox-icfr/engagementRounds';
 import { FlowModal } from './sox-testing/SoxTestingTab';
 import { registerProgramme, type SoxProgramme } from './sox-testing/soxTestingData';
 import EngagementsOverview, { type ListFilter } from './EngagementsOverview';
@@ -68,6 +69,10 @@ const STATUS_DOT: Record<EngStatus, string> = {
   Draft: 'bg-ink-400',
   Closed: 'bg-ink-400',
 };
+
+/** What a status reads as on screen. A signed-off engagement is "Concluded" —
+ *  the word its own page uses — so the list and the page never disagree. */
+const STATUS_LABEL = (s: EngStatus): string => (s === 'Closed' ? 'Concluded' : s);
 
 const TYPE_CLS: Record<EngType, string> = {
   Compliance: 'bg-brand-50 text-brand-700 border-brand-100',
@@ -137,6 +142,9 @@ export default function EngagementsView({ onOpenEngagement, onOpenAuditPlanning,
   // SOX is scoped rather than configured, so picking that type in the wizard
   // above hands over to the same journey the SOX Testing tab runs.
   const [soxWizardOpen, setSoxWizardOpen] = useState(false);
+  /** The engagement just created — the list opens with it marked at the top,
+   *  so the new row is the first thing seen after Create. */
+  const [justCreatedId, setJustCreatedId] = useState<string | null>(null);
   /** Set when the SOX sheet's Back reopens the classic wizard — keeps the
    *  Type step showing SOX / ICFR still selected. Cleared on normal opens. */
   const [wizardInitialType, setWizardInitialType] = useState<EngType | undefined>(undefined);
@@ -343,7 +351,7 @@ export default function EngagementsView({ onOpenEngagement, onOpenAuditPlanning,
             />
           </div>
           <MinimalFilter label="Type" allLabel="All types" options={TYPE_FILTERS} value={typeFilter} onChange={setTypeFilter} counts={counts.type} />
-          <MinimalFilter label="Status" allLabel="All statuses" options={STATUS_FILTERS} value={statusFilter} onChange={setStatusFilter} counts={counts.status} />
+          <MinimalFilter label="Status" allLabel="All statuses" options={STATUS_FILTERS} value={statusFilter} onChange={setStatusFilter} counts={counts.status} optionLabel={o => STATUS_LABEL(o as EngStatus)} />
           <MinimalFilter label="Process" allLabel="All processes" options={PROCESS_FILTERS} value={processFilter} onChange={setProcessFilter} counts={counts.process} />
           {anyFilterActive && (
             <button
@@ -370,10 +378,15 @@ export default function EngagementsView({ onOpenEngagement, onOpenAuditPlanning,
                 legible without them, and the last one named a column that has
                 since come down to a single icon. */}
             <div className="space-y-2">
-            {filtered.map((eng, i) => {
+            {filtered.map((row, i) => {
+              // A SOX engagement's figures are counted off its workspace — the
+              // same source and rule as its Overview — not the seed record's
+              // static numbers, which disagreed with the page they open.
+              const sox = row.type === 'SOX / ICFR' ? soxCardStats(row) : null;
+              const eng = sox ? { ...row, controls: sox.controls, health: sox.health, openIssues: sox.openIssues } : row;
               const health = healthTier(eng.health);
               const notStarted = eng.health === 0 && (eng.status === 'Planned' || eng.status === 'Draft');
-              const effective = Math.round((eng.controls * eng.health) / 100);
+              const effective = sox ? sox.effective : Math.round((eng.controls * eng.health) / 100);
               // B+C surfacing: a portfolio insight that spans this engagement
               // reflects its slice here (top-severity one; the rest stay one
               // honest line away), and explicitly-targeted actions land as
@@ -388,15 +401,16 @@ export default function EngagementsView({ onOpenEngagement, onOpenAuditPlanning,
                   animate={{ opacity: 1, y: 0 }}
                   transition={{ delay: i * 0.025 }}
                   onClick={() => onOpenEngagement(eng.id)}
-                  className="grid grid-cols-[2.6fr_1fr_1.7fr_80px] gap-5 px-6 py-5 rounded-lg border border-border-light bg-white hover:border-primary/50 hover: transition-all cursor-pointer group items-start"
+                  className={`grid grid-cols-[2.6fr_1fr_1.7fr_80px] gap-5 px-6 py-5 rounded-lg border hover:border-primary/50 hover: transition-all cursor-pointer group items-start ${eng.id === justCreatedId ? 'border-primary/50 bg-brand-50/40' : 'border-border-light bg-white'}`}
                 >
                   {/* Engagement column */}
                   <div className="min-w-0">
                     <div className="flex items-center gap-2 flex-wrap">
                       <h3 className="text-[0.90625rem] font-semibold text-text leading-snug">{eng.name}</h3>
+                      {eng.id === justCreatedId && <span className="text-[0.6875rem] font-semibold text-brand-700">Just created</span>}
                       <span className={`inline-flex items-center gap-1 px-2 h-5 rounded-full text-[0.625rem] font-semibold ${STATUS_CLS[eng.status]}`}>
                         <span className={`w-1.5 h-1.5 rounded-full ${STATUS_DOT[eng.status]}`} aria-hidden="true" />
-                        {eng.status}
+                        {STATUS_LABEL(eng.status)}
                       </span>
                       {eng.aiRecommended && (
                         <span
@@ -417,6 +431,11 @@ export default function EngagementsView({ onOpenEngagement, onOpenAuditPlanning,
                       <span>{eng.owner}</span>
                       <span className="text-border">·</span>
                       <span className="tabular-nums">{eng.periodStart} – {eng.periodEnd}</span>
+                      {/* One engagement = one audit round (5 Oct 2026) — say which. */}
+                      {eng.type === 'SOX / ICFR' && (<>
+                        <span className="text-border">·</span>
+                        <span>{ROUND_LABEL[soxRoundOf(eng)]}</span>
+                      </>)}
                     </div>
                     {/* Inline tag badges */}
                     <div className="flex items-center gap-1.5 mt-2.5 flex-wrap">
@@ -570,7 +589,7 @@ export default function EngagementsView({ onOpenEngagement, onOpenAuditPlanning,
                 // ENG-01 to the named owner; ENG-02 to everyone in scope when it starts Active.
                 notify({
                   eventId: 'ENG-01', title: `You own new engagement ${eng.code} — ${eng.name}`, actor: 'You',
-                  message: `${eng.type} · ${eng.process} · ${eng.periodStart} – ${eng.periodEnd}. Created as ${eng.status}.`,
+                  message: `${eng.type} · ${eng.process} · ${eng.periodStart} – ${eng.periodEnd}. Created as ${STATUS_LABEL(eng.status)}.`,
                   facts, recipients: [{ name: eng.owner, role: 'Named owner' }],
                   link: { view: 'engagement-overview', ref: { kind: 'engagement', id: eng.id } }, linkLabel: 'Open engagement',
                 });
@@ -583,7 +602,7 @@ export default function EngagementsView({ onOpenEngagement, onOpenAuditPlanning,
                   ];
                   people.forEach(p => notify({
                     eventId: 'ENG-02', title: `${eng.code} kicked off — you’re the ${p.role}`, actor: 'You',
-                    message: `${eng.name} is ${eng.status}. Period ${eng.periodStart} – ${eng.periodEnd}.`,
+                    message: `${eng.name} is ${STATUS_LABEL(eng.status)}. Period ${eng.periodStart} – ${eng.periodEnd}.`,
                     facts: [...facts, { label: 'Your role', value: p.role }],
                     recipients: [p], link: { view: 'engagement-overview', ref: { kind: 'engagement', id: eng.id } }, linkLabel: 'Open engagement', operationKey: `kickoff-${eng.id}`, itemLabel: p.name,
                   }));
@@ -628,17 +647,10 @@ export default function EngagementsView({ onOpenEngagement, onOpenAuditPlanning,
                 const eng = p.engagementId ? findEngagement(p.engagementId) : undefined;
                 if (eng) setAll(prev => prev.some(e => e.id === eng.id) ? prev : [eng, ...prev]);
                 setSoxWizardOpen(false);
-                addToast({
-                  type: 'success',
-                  // Skipped scoping points at the RACM, not the trial balances:
-                  // the Configuration tab this used to name is now Audit logs
-                  // and carries no upload. Matches the Overview banner.
-                  // S11: say what was copied — RACMs picked on the Scope step and
-                  // their controls — not the processes the programme records.
-                  message: eng?.soxRacms?.length
-                    ? `${p.fy} programme created — ${eng.soxRacms.length} RACM${eng.soxRacms.length === 1 ? '' : 's'} and ${eng.soxControls?.length ?? 0} controls copied from the RACM tab`
-                    : `${p.fy} programme created — add RACMs from the Control library`,
-                });
+                // One engagement = one audit round (5 Oct 2026): Create opens
+                // the new engagement on its Overview. Landing there says it was
+                // created, so no toast (no toasts in SOX).
+                if (eng) onOpenEngagement(eng.id);
               }}
             />
           </FlowModal>
@@ -753,7 +765,7 @@ function IconAction({ label, onClick, className, hideTip, children }: {
  *  non-"All" value is picked. The menu is the product's themed popover (the
  *  native <select> popup can't be styled), so it matches every other filter. */
 function MinimalFilter<T extends string>({
-  label, allLabel, options, value, onChange, counts,
+  label, allLabel, options, value, onChange, counts, optionLabel = o => o,
 }: {
   label: string;
   allLabel: string;
@@ -761,11 +773,13 @@ function MinimalFilter<T extends string>({
   value: T;
   onChange: (next: T) => void;
   counts: Record<string, number>;
+  /** Display text for an option — the value itself unless a screen word differs. */
+  optionLabel?: (opt: T) => string;
 }) {
   return (
     <FilterSelect
       value={value}
-      options={options.map(opt => ({ value: opt, label: opt === 'All' ? allLabel : `${opt} · ${counts[opt] ?? 0}` }))}
+      options={options.map(opt => ({ value: opt, label: opt === 'All' ? allLabel : `${optionLabel(opt)} · ${counts[opt] ?? 0}` }))}
       onChange={v => onChange(v as T)}
       ariaLabel={`Filter by ${label}`}
     />

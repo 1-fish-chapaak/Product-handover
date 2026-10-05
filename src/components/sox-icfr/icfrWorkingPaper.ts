@@ -734,7 +734,7 @@ export function buildControlPaper(eng: IcfrEngagement, c: Control): PaperBlock[]
     //
     // const ex = def.exposure;
     blocks.push({
-      kind: 'kv', title: `Exception — ${def.id}`, rows: [
+      kind: 'kv', title: `Deficiency — ${def.id}`, rows: [
         ['Description', def.description],
         // Where it was found and what kind of control broke — DERIVED from the
         // track that failed and the control's own nature, never asked. The
@@ -976,7 +976,7 @@ export function buildIcfrPaper(eng: IcfrEngagement, controls: Control[] = eng.co
 
   const deficiencies: IcfrSheet = {
     name: 'Deficiencies', blocks: [{
-      kind: 'table', title: 'Deficiencies', note: defs.length ? `${defs.length} exception${defs.length === 1 ? '' : 's'}` : 'No exceptions raised',
+      kind: 'table', title: 'Deficiencies', note: defs.length ? `${defs.length} deficienc${defs.length === 1 ? 'y' : 'ies'}` : 'No deficiencies raised',
       // The header and the row below are written one column per line and in the
       // same order, so a column parked here has its cell parked there — the two
       // lists must stay the same length or the sheet shears.

@@ -74,13 +74,13 @@ export default function AuditLogsView() {
               <button
                 onClick={() => setCreating(true)}
                 disabled={noRacm}
-                className="h-9 px-4 inline-flex items-center gap-1.5 rounded-lg bg-brand-600 text-white text-[12.5px] font-semibold enabled:hover:bg-brand-700 disabled:opacity-40 disabled:cursor-not-allowed transition-colors cursor-pointer"
+                className="h-9 px-4 inline-flex items-center gap-1.5 rounded-lg bg-brand-600 text-white text-[0.8125rem] font-semibold enabled:hover:bg-brand-700 disabled:opacity-40 disabled:cursor-not-allowed transition-colors cursor-pointer"
               >
                 <Plus size={15} /> New audit
               </button>
               {/* Said here rather than in the body copy above: the body explains
                   what an audit is, this explains why the button won't move. */}
-              {noRacm && <p className="text-[11.5px] text-ink-400">{racmFirst}</p>}
+              {noRacm && <p className="text-[0.75rem] text-ink-400">{racmFirst}</p>}
             </div>
           ) : undefined}
         />
@@ -95,7 +95,7 @@ export default function AuditLogsView() {
           the action sits directly under the tab bar. Right-aligned because
           there are no filters on its left yet. */}
       <div className="flex items-center gap-2 mb-4 flex-wrap">
-        <span className="text-[11.5px] text-ink-400">
+        <span className="text-[0.75rem] text-ink-400">
           {eng.audits.length} audit{eng.audits.length === 1 ? '' : 's'}
         </span>
         <div className="flex-1" />
@@ -103,11 +103,11 @@ export default function AuditLogsView() {
           <>
             {/* Beside the button, not under it — the toolbar is one row, and the
                 reason has to arrive with the thing it disables. */}
-            {(noRacm || blocked) && <span className="text-[11.5px] text-ink-400">{noRacm ? racmFirst : blocked}</span>}
+            {(noRacm || blocked) && <span className="text-[0.75rem] text-ink-400">{noRacm ? racmFirst : blocked}</span>}
             <button
               onClick={() => setCreating(true)}
               disabled={noRacm || !!blocked}
-              className="h-9 px-3.5 inline-flex items-center gap-1.5 rounded-lg bg-brand-600 text-white text-[12.5px] font-semibold enabled:hover:bg-brand-700 disabled:opacity-40 disabled:cursor-not-allowed transition-colors cursor-pointer"
+              className="h-9 px-3.5 inline-flex items-center gap-1.5 rounded-lg bg-brand-600 text-white text-[0.8125rem] font-semibold enabled:hover:bg-brand-700 disabled:opacity-40 disabled:cursor-not-allowed transition-colors cursor-pointer"
             >
               <Plus size={15} /> New audit
             </button>
@@ -131,14 +131,14 @@ export default function AuditLogsView() {
               <div className="flex items-start justify-between gap-3 mb-2">
                 <div className="min-w-0">
                   <div className="flex items-center gap-2 flex-wrap">
-                    <span className="text-[13px] font-semibold text-ink-900">{a.period}</span>
-                    <span className="text-[11px] font-semibold text-ink-500">{ROUND_LABEL[a.round]}</span>
+                    <span className="text-[0.8125rem] font-semibold text-ink-900">{a.period}</span>
+                    <span className="text-[0.6875rem] font-semibold text-ink-500">{ROUND_LABEL[a.round]}</span>
                     <Pill tone={STATUS_TONE[status]}>{STATUS_LABEL[status]}</Pill>
                   </div>
-                  <div className="text-[11px] text-ink-400">{a.periodSpan}</div>
+                  <div className="text-[0.6875rem] text-ink-400">{a.periodSpan}</div>
                 </div>
                 <div className="flex items-center gap-2 shrink-0">
-                  <div className="text-[11px] text-ink-400 text-right mr-1">{a.by} · {a.at}</div>
+                  <div className="text-[0.6875rem] text-ink-400 text-right mr-1">{a.by} · {a.at}</div>
                   {/* Quarter / custom audits are one-off checks, not a round of a
                       named annual cycle — there is no "next cycle" to roll into. */}
                   {canCreate && (a.yearBasis === 'fy' || a.yearBasis === 'cy') && (
@@ -147,7 +147,7 @@ export default function AuditLogsView() {
                       // Starts a new audit — the toolbar's line says why it waits.
                       disabled={!!blocked}
                       title={blocked ?? `Carry ${a.period} into the next cycle`}
-                      className="h-8 px-2.5 inline-flex items-center gap-1.5 rounded-lg border border-canvas-border bg-white text-[12px] font-semibold text-ink-600 enabled:hover:border-brand-300 enabled:hover:text-brand-700 disabled:opacity-40 disabled:cursor-not-allowed transition-colors cursor-pointer"
+                      className="h-8 px-2.5 inline-flex items-center gap-1.5 rounded-lg border border-canvas-border bg-white text-[0.75rem] font-semibold text-ink-600 enabled:hover:border-brand-300 enabled:hover:text-brand-700 disabled:opacity-40 disabled:cursor-not-allowed transition-colors cursor-pointer"
                     >
                       <RefreshCw size={13} /> Roll forward
                     </button>
@@ -155,7 +155,7 @@ export default function AuditLogsView() {
                 </div>
               </div>
 
-              <div className="flex items-center gap-3 flex-wrap text-[11.5px] text-ink-600">
+              <div className="flex items-center gap-3 flex-wrap text-[0.75rem] text-ink-600">
                 <span className="inline-flex items-center gap-1.5 min-w-0">
                   {a.scopeKind === 'entity'
                     ? <Building2 size={13} className="text-ink-400 shrink-0" />

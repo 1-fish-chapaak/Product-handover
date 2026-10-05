@@ -14,7 +14,7 @@
  *  the user's to fill.
  */
 import type { GroupEntity, EntityType } from './soxTestingData';
-import { readTableRows, isReadableTableFile, type ReadSheet } from './tableReader';
+import { readTableRows, isReadableTableFile, type ReadSheet, type PlacedText } from './tableReader';
 
 /** Deliberately not borrowed from the RACM importer. An org chart has nothing
  *  to do with a control matrix, and reaching into that module for two helpers
@@ -58,7 +58,7 @@ const FIELD_SYNONYMS: { key: OrgChartFieldKey; synonyms: string[] }[] = [
   { key: 'parentName', synonyms: ['immediate parent name', 'immediate parent', 'parent entity name', 'parent entity', 'parent name', 'parent company', 'holding company', 'held by', 'owned by', 'reports to', 'parent'] },
   { key: 'entityId',   synonyms: ['legal entity id', 'entity id', 'entity code', 'entity ref', 'company id', 'company code', 'cin', 'id', 'code'] },
   { key: 'name',       synonyms: ['legal entity name', 'entity name', 'company name', 'subsidiary name', 'name of entity', 'name of company', 'legal entity', 'entity', 'company', 'subsidiary', 'name'] },
-  { key: 'ownership',  synonyms: ['direct ownership', 'direct ownership percent', 'direct holding', 'ownership percent', 'ownership', 'shareholding', 'holding percent', 'percent held', 'stake', 'equity interest', 'holding'] },
+  { key: 'ownership',  synonyms: ['direct ownership', 'direct ownership percent', 'direct holding', 'ownership percent', 'ownership', 'shareholding', 'holding percent', 'percent held', 'stake', 'equity interest', 'holding', 'direct'] },
   { key: 'country',    synonyms: ['jurisdiction of incorporation', 'country of incorporation', 'jurisdiction', 'country', 'incorporated in', 'domicile', 'location'] },
   { key: 'type',       synonyms: ['entity type', 'entity category', 'relationship', 'entity class', 'type', 'legal form', 'category'] },
   { key: 'level',      synonyms: ['level', 'tier', 'depth', 'generation'] },
@@ -129,8 +129,15 @@ const slug = (s: string) => s.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(
  *  and two uploads of two charts must not collide on a shared code. */
 export async function parseOrgChartFile(file: File, onScan?: () => void): Promise<OrgChartResult> {
   const read = await readTableRows(file, onScan);
-  if (!read.ok) return { ok: false, reason: read.reason };
-  return orgChartFromSheets(read.sheets);
+  const fromTable = read.ok ? orgChartFromSheets(read.sheets) : null;
+  if (fromTable?.ok) return fromTable;
+  // No register in it — but a PDF or a picture of a DRAWN chart still names
+  // every company in its boxes (5 Oct). Read those before giving up.
+  if (read.pages?.length) {
+    const fromBoxes = orgChartFromPages(read.pages);
+    if (fromBoxes.ok) return fromBoxes;
+  }
+  return fromTable ?? { ok: false, reason: read.ok ? 'no-table' : read.reason };
 }
 
 /** The same, from rows already read — any file type ends up here. */
@@ -201,6 +208,8 @@ export function orgChartFromSheets(sheets: ReadSheet[]): OrgChartResult {
     const parent =
       (r.parentFileId && byFileId.get(r.parentFileId.toLowerCase())) ||
       (r.parentName && byName.get(r.parentName.toLowerCase())) ||
+      // A printed register often heads its id column just "Parent".
+      (r.parentName && byFileId.get(r.parentName.toLowerCase())) ||
       undefined;
     // A row cannot hold itself — a register that repeats its own id in the
     // parent column for the top company would otherwise build a loop.
@@ -230,6 +239,201 @@ export function orgChartFromSheets(sheets: ReadSheet[]): OrgChartResult {
       groupName: root.ent.name,
       entities: ordered,
       matched: (Object.keys(cols) as OrgChartFieldKey[]).filter(k => cols[k] !== undefined),
+    },
+  };
+}
+
+// ── A drawn chart: boxes, not a table (5 Oct) ──────────────────────────────
+/** The ending a company's name carries — what tells a box's title from a
+ *  heading, a note or a footer on the same page. */
+const LEGAL_FORM = /\b(?:ltd|limited|llc|l\.l\.c|inc|incorporated|corp|corporation|plc|gmbh|ag|sa|s\.a|sas|sarl|bv|b\.v|nv|n\.v|ulc|pty|pte|llp|lp|spa|s\.p\.a|kk|bhd|company|co|holdings?|lda|oy|ab|as|a\/s|aps|srl|s\.r\.l|sl|s\.l|kft|zrt|sp\.? z o\.?o|pjsc|jsc|fze|fzco|wll|saog)\.?\)?$/i;
+
+/** Countries a box's detail line may name, as the register writes them. */
+const COUNTRY_ALIASES: Record<string, string> = {
+  usa: 'United States', us: 'United States', 'u.s.': 'United States', 'u.s.a.': 'United States', 'united states': 'United States',
+  uk: 'United Kingdom', 'united kingdom': 'United Kingdom', england: 'United Kingdom', uae: 'United Arab Emirates',
+};
+const COUNTRIES = new Set([
+  'india', 'canada', 'netherlands', 'germany', 'france', 'switzerland', 'singapore', 'mauritius', 'ireland', 'luxembourg', 'spain',
+  'italy', 'belgium', 'australia', 'new zealand', 'japan', 'china', 'hong kong', 'south africa', 'brazil', 'mexico', 'sweden',
+  'norway', 'denmark', 'finland', 'poland', 'austria', 'portugal', 'saudi arabia', 'qatar', 'oman', 'bahrain', 'kenya', 'nigeria',
+  'indonesia', 'malaysia', 'thailand', 'vietnam', 'philippines', 'sri lanka', 'bangladesh', 'nepal', 'egypt', 'turkey', 'israel',
+  'united states', 'united kingdom', 'united arab emirates', 'cyprus', 'jersey', 'cayman islands', 'chile', 'peru', 'colombia', 'argentina',
+]);
+const titleCase = (t: string) => t.replace(/\b\p{L}/gu, c => c.toUpperCase());
+function countryIn(detail: string): string | undefined {
+  for (const seg of detail.split(/\s*[·•|–—]\s*|\s*-\s+/)) {
+    // "Delaware, USA" / "Ontario, Canada": the country is after the last comma.
+    const parts = seg.split(',').map(p => p.trim().toLowerCase()).filter(Boolean);
+    for (const part of [...parts].reverse()) {
+      if (COUNTRY_ALIASES[part]) return COUNTRY_ALIASES[part];
+      if (COUNTRIES.has(part)) return titleCase(part);
+    }
+  }
+  return undefined;
+}
+
+interface TextLine { x0: number; x1: number; y: number; h: number; text: string }
+interface Box { name: string; detail: string[]; x0: number; x1: number; y0: number; y1: number; h: number; page: number }
+
+/** Runs on one baseline, close enough to be one phrase, joined into a line. */
+export function linesOf(page: PlacedText[]): TextLine[] {
+  const items = page.filter(t => t.text.trim() && t.h > 0).sort((a, b) => a.y - b.y || a.x - b.x);
+  const rows: PlacedText[][] = [];
+  for (const t of items) {
+    const cur = rows[rows.length - 1];
+    if (cur && Math.abs(t.y - cur[0].y) <= Math.max(cur[0].h, t.h) * 0.4) cur.push(t);
+    else rows.push([t]);
+  }
+  const out: TextLine[] = [];
+  for (const row of rows) {
+    row.sort((a, b) => a.x - b.x);
+    let cur: TextLine | null = null;
+    for (const t of row) {
+      const s = t.text.replace(/\s+/g, ' ').trim();
+      if (cur && t.x - cur.x1 < t.h * 1.2) {
+        cur.text = t.x - cur.x1 < t.h * 0.12 ? `${cur.text}${s}` : `${cur.text} ${s}`;
+        cur.x1 = Math.max(cur.x1, t.x + t.w);
+        cur.h = Math.max(cur.h, t.h);
+      } else {
+        if (cur) out.push(cur);
+        cur = { x0: t.x, x1: t.x + t.w, y: t.y, h: t.h, text: s };
+      }
+    }
+    if (cur) out.push(cur);
+  }
+  return out.sort((a, b) => a.y - b.y || a.x0 - b.x0);
+}
+
+/** A line that could be a company's name: short, capitalised, no bullet,
+ *  dash or percentage (those are the detail lines under it), and ending the
+ *  way a company name does. Font size is not trusted — OCR's line heights
+ *  wander more than the type does. */
+const isNameLine = (t: string) =>
+  /^\p{Lu}/u.test(t) && !/%|\s[·•|–—-]\s|;/.test(t) && t.split(/\s+/).length <= 10 && LEGAL_FORM.test(t);
+/** The first half of a name that wrapped onto two lines. */
+const isNamePart = (t: string) => /^\p{Lu}\p{L}/u.test(t) && !/%|\s[·•|–—-]\s|[.;:]$/.test(t) && t.split(/\s+/).length <= 6;
+
+/** Lines stacked under one another in one column, then cut into boxes: each
+ *  box starts at a name and keeps the detail lines under it. */
+export function boxesOf(lines: TextLine[], page: number): Box[] {
+  const stacks: TextLine[][] = [];
+  for (const l of lines) {
+    let best: TextLine[] | undefined;
+    let bestGap = Infinity;
+    for (const st of stacks) {
+      const last = st[st.length - 1];
+      const gap = l.y - last.y;
+      const overlap = Math.min(l.x1, last.x1) - Math.max(l.x0, last.x0);
+      if (gap > 0 && gap <= Math.max(last.h, l.h) * 2.2 && overlap > 0 && gap < bestGap) { best = st; bestGap = gap; }
+    }
+    if (best) best.push(l); else stacks.push([l]);
+  }
+  const boxes: Box[] = [];
+  for (const st of stacks) {
+    let cur: Box | null = null;
+    st.forEach((l, i) => {
+      if (!isNameLine(l.text)) { cur?.detail.push(l.text); return; }
+      const parts = [l];
+      const prev = st[i - 1];
+      // A wrapped name: the line above opens the stack, or is set larger than
+      // the detail line before it (the type steps back up to name size).
+      if (prev && isNamePart(prev.text) && !isNameLine(prev.text)
+        && (i === 1 || (prev.h > st[i - 2].h + 0.25 && prev.h >= l.h - 0.25))) {
+        parts.unshift(prev);
+        if (cur && cur.detail[cur.detail.length - 1] === prev.text) cur.detail.pop();
+      }
+      cur = {
+        name: parts.map(p => p.text).join(' ').replace(/\s+/g, ' ').trim(),
+        detail: [],
+        x0: Math.min(...parts.map(p => p.x0)), x1: Math.max(...parts.map(p => p.x1)),
+        y0: parts[0].y, y1: l.y, h: Math.max(...parts.map(p => p.h)), page,
+      };
+      boxes.push(cur);
+    });
+  }
+  return boxes;
+}
+
+/**
+ * The companies on a drawn org chart — one per box, read from the text the
+ * PDF (or OCR) placed on each page. A box's title is its largest line (joined
+ * when it wraps) and counts only when it ends the way a company name does.
+ * Under it: "City, Country · what it does" and "74% owned" — read for the
+ * jurisdiction and the direct holding. Who holds whom is read off the layout:
+ * a box hangs from the nearest company box above it that starts further left
+ * and spans its column, and a box with nothing above it from the chart's top
+ * company. The same company drawn twice (a page that repeats its parent at
+ * the top) is one company.
+ */
+export function orgChartFromPages(pages: PlacedText[][]): OrgChartResult {
+  interface Found { box: Box; name: string; ownership?: number; country?: string }
+  const found: Found[] = [];
+  pages.forEach((page, p) => {
+    for (const box of boxesOf(linesOf(page), p)) {
+      if (box.name.length < 4 || box.name.length > 120) continue;
+      const pct = box.detail.map(t => t.match(/(\d{1,3}(?:\.\d+)?)\s*%\s*(?:owned|held|[·•–—-]|$)/i)).find(Boolean);
+      const own = pct ? Number(pct[1]) : undefined;
+      found.push({ box, name: box.name, ownership: own !== undefined && own <= 100 ? own : undefined, country: box.detail.length ? countryIn(box.detail.join(' · ')) : undefined });
+    }
+  });
+  if (!found.length) return { ok: false, reason: 'no-table' };
+
+  // One company per name, the first drawing carrying its facts.
+  const key = (n: string) => n.toLowerCase().replace(/[^\p{L}\p{N}]+/gu, ' ').trim();
+  const byKey = new Map<string, GroupEntity>();
+  const usedIds = new Set<string>();
+  for (const f of found) {
+    const k = key(f.name);
+    const have = byKey.get(k);
+    if (have) {
+      if (have.country === undefined && f.country) have.country = f.country;
+      continue;
+    }
+    let id = `oc-${slug(f.name)}`;
+    while (usedIds.has(id)) id += '-x';
+    usedIds.add(id);
+    byKey.set(k, { id, name: f.name, type: 'Subsidiary', ownership: f.ownership ?? 100, country: f.country });
+  }
+
+  // The top company: the largest title on the first page that has one, the
+  // highest up when two tie.
+  const first = found.filter(f => f.box.page === found[0].box.page);
+  const top = [...first].sort((a, b) => b.box.h - a.box.h || a.box.y0 - b.box.y0)[0];
+  const root = byKey.get(key(top.name))!;
+
+  for (const f of found) {
+    const me = byKey.get(key(f.name))!;
+    if (me === root || me.parentId) continue;
+    const above = found
+      .filter(o => o.box.page === f.box.page && o.box.y1 < f.box.y0 && o.box.x0 < f.box.x0 - 3
+        && Math.min(o.box.x1, f.box.x1) - Math.max(o.box.x0, f.box.x0) > 0 && byKey.get(key(o.name)) !== me)
+      .sort((a, b) => b.box.y1 - a.box.y1)[0];
+    const parent = above ? byKey.get(key(above.name))! : root;
+    if (parent !== me) me.parentId = parent.id;
+  }
+  // A chain must reach the top — anything that loops is hung from the root.
+  for (const e of byKey.values()) {
+    const seen = new Set<string>([e.id]);
+    let cur = e.parentId ? [...byKey.values()].find(x => x.id === e.parentId) : undefined;
+    while (cur) {
+      if (seen.has(cur.id)) { e.parentId = root.id; break; }
+      seen.add(cur.id);
+      cur = cur.parentId ? [...byKey.values()].find(x => x.id === cur!.parentId) : undefined;
+    }
+  }
+  root.parentId = undefined;
+  root.type = 'Holding';
+  root.ownership = 100;
+  const entities = [root, ...[...byKey.values()].filter(e => e !== root)].slice(0, MAX_ROWS);
+  if (entities.length < 2) return { ok: false, reason: 'no-table' };
+  return {
+    ok: true,
+    chart: {
+      groupName: root.name,
+      entities,
+      matched: (['name', 'parentName', 'ownership', 'country'] as OrgChartFieldKey[])
+        .filter(k => k === 'name' || k === 'parentName' || (k === 'ownership' ? found.some(f => f.ownership !== undefined) : found.some(f => f.country))),
     },
   };
 }

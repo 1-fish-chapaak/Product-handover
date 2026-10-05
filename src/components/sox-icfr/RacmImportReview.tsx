@@ -53,7 +53,7 @@ import { buildSpine, riskKeyOf, risksAcrossStages } from './sopSpine';
 import { draftSopRows } from './sopProcurementSeed';
 import { racmTemplateForProcesses } from './mockData';
 import {
-  CODE_OK, assignRacmIds, cleanCode, entityCodeTakenBy, peekEntityCode, peekProcessCode, processCodeTakenBy,
+  CODE_OK, assignRacmIds, cleanCode, entityCodeTakenBy, peekEntityCode, peekProcessCode, processCodeTakenBy, sameEntityName,
   setEntityCode, setProcessCode,
 } from './racmIds';
 import { InlineNote, useInlineNote } from './InlineNote';
@@ -75,6 +75,7 @@ import {
 } from './racmImport';
 import { IraDrafted } from './IraState';
 import { Tickmark } from './parts';
+import DialogFocus from '../shared/DialogFocus';
 
 type Step = 'columns' | 'prompt' | 'review' | 'flowchart';
 
@@ -92,7 +93,7 @@ type Step = 'columns' | 'prompt' | 'review' | 'flowchart';
  *  Sized to what is left under this step's heading rather than to the chart:
  *  taller and the chat's own text box falls below the dialog's footer and
  *  cannot be reached at all, which is worse than no box. */
-const CHART_PANE_H = 'h-[24rem]';
+const CHART_PANE_H = 'h-96';
 
 export interface RacmImportMeta {
   source: 'racm' | 'sop';
@@ -204,15 +205,15 @@ const fromFileOption = (current: string, people: string[]): string[] =>
   current && !people.includes(current) ? [current] : [];
 
 const labelCls = 'text-[0.6875rem] font-semibold uppercase tracking-wide text-ink-400 mb-1.5 block';
-const selectCls = 'h-9 px-3 rounded-lg border border-canvas-border bg-canvas-elevated text-[0.78125rem] text-ink-800 cursor-pointer focus:outline-none focus:ring-2 focus:ring-brand-200';
-const primaryBtn = 'h-9 px-3.5 inline-flex items-center gap-1.5 rounded-lg bg-brand-600 text-white text-[0.78125rem] font-semibold enabled:hover:bg-brand-700 disabled:opacity-40 disabled:cursor-not-allowed transition-colors cursor-pointer';
-const secondaryBtn = 'h-9 px-3.5 inline-flex items-center gap-1.5 rounded-lg border border-canvas-border text-[0.78125rem] font-semibold text-ink-600 hover:text-ink-900 transition-colors cursor-pointer';
-const quietBtn = 'h-7 px-2 inline-flex items-center gap-1 rounded-md border border-canvas-border bg-canvas-elevated text-[0.71875rem] font-semibold text-ink-600 hover:text-ink-900 hover:border-ink-300 disabled:opacity-40 disabled:cursor-not-allowed transition-colors cursor-pointer';
+const selectCls = 'h-9 px-3 rounded-lg border border-canvas-border bg-canvas-elevated text-[0.8125rem] text-ink-800 cursor-pointer focus:outline-none focus:ring-2 focus:ring-brand-200';
+const primaryBtn = 'h-9 px-3.5 inline-flex items-center gap-1.5 rounded-lg bg-brand-600 text-white text-[0.8125rem] font-semibold enabled:hover:bg-brand-700 disabled:opacity-40 disabled:cursor-not-allowed transition-colors cursor-pointer';
+const secondaryBtn = 'h-9 px-3.5 inline-flex items-center gap-1.5 rounded-lg border border-canvas-border text-[0.8125rem] font-semibold text-ink-600 hover:text-ink-900 transition-colors cursor-pointer';
+const quietBtn = 'h-7 px-2 inline-flex items-center gap-1 rounded-md border border-canvas-border bg-canvas-elevated text-[0.75rem] font-semibold text-ink-600 hover:text-ink-900 hover:border-ink-300 disabled:opacity-40 disabled:cursor-not-allowed transition-colors cursor-pointer';
 
 // The prompt and the chart it draws stand side by side, so they are one height
 // (user ask, 27 Sep). A short box next to a tall one reads as two unrelated
 // panels; the same height reads as a thing and its read-out.
-const PROMPT_PANE_H = 'h-[30rem]';
+const PROMPT_PANE_H = 'h-120';
 
 /**
  * Which column in the file, picked by name.
@@ -318,7 +319,7 @@ function ColumnPicker({ id, label, value, options, onPick }: {
             <Search size={12} className="shrink-0 text-ink-400" />
             <input ref={mountSearch} value={q} onChange={e => setQ(e.target.value)}
               onKeyDown={e => {
-                if (e.key === 'Escape') { e.preventDefault(); setOpen(false); setQ(''); }
+                if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); setOpen(false); setQ(''); box.current?.querySelector('button')?.focus(); }
                 // Enter takes the only thing left, which is what typing three
                 // letters into a list of forty is for.
                 if (e.key === 'Enter' && shown.length === 1) { e.preventDefault(); take(String(shown[0].i)); }
@@ -333,17 +334,17 @@ function ColumnPicker({ id, label, value, options, onPick }: {
                 answer, not a column, so searching for one must not hide it. */}
             <button type="button" role="option" aria-selected={value === null} onClick={() => take('')}
               className={cn('w-full text-left px-2.5 py-1.5 text-[0.75rem] flex items-center gap-1.5 cursor-pointer hover:bg-paper-50', value === null ? 'text-brand-700 font-semibold' : 'text-ink-500')}>
-              {value === null ? <Check size={11} className="shrink-0" /> : <span className="w-[11px] shrink-0" />}
+              {value === null ? <Check size={11} className="shrink-0" /> : <span className="w-2.75 shrink-0" />}
               — Not in file —
             </button>
             {shown.map(o => (
               <button key={o.i} type="button" role="option" aria-selected={value === o.i} onClick={() => take(String(o.i))}
                 className={cn('w-full text-left px-2.5 py-1.5 text-[0.75rem] flex items-center gap-1.5 cursor-pointer hover:bg-paper-50', value === o.i ? 'text-brand-700 font-semibold' : 'text-ink-700')}>
-                {value === o.i ? <Check size={11} className="shrink-0" /> : <span className="w-[11px] shrink-0" />}
+                {value === o.i ? <Check size={11} className="shrink-0" /> : <span className="w-2.75 shrink-0" />}
                 <span className="truncate">{o.label}</span>
               </button>
             ))}
-            {shown.length === 0 && <p className="px-2.5 py-2 text-[0.71875rem] text-ink-400">No column in this file matches that.</p>}
+            {shown.length === 0 && <p className="px-2.5 py-2 text-[0.75rem] text-ink-400">No column in this file matches that.</p>}
           </div>
         </div>,
         document.body,
@@ -498,7 +499,7 @@ const isRowSpecific = (f: MissingField) =>
 
 // Inputs signal focus by their border, not a ring (house rule).
 const gapInputCls = 'h-8 px-2.5 rounded-lg border border-canvas-border bg-canvas-elevated text-[0.75rem] text-ink-800 placeholder:text-ink-400 focus:outline-none focus:border-brand-300 transition-colors';
-const iraBtn = 'shrink-0 h-7 px-1.5 inline-flex items-center gap-1 rounded-md text-[0.71875rem] font-semibold text-brand-700 hover:bg-brand-50 transition-colors cursor-pointer';
+const iraBtn = 'shrink-0 h-7 px-1.5 inline-flex items-center gap-1 rounded-md text-[0.75rem] font-semibold text-brand-700 hover:bg-brand-50 transition-colors cursor-pointer';
 
 /**
  * WHAT IS MISSING, ONE LINE PER FIELD (agentic UI review #10, 30 Sep).
@@ -558,7 +559,7 @@ function MissingValuesPanel({ fields, people, rowLabel, onFill }: {
       <div className="flex flex-wrap items-baseline gap-x-2 gap-y-0.5">
         <AlertTriangle size={12} className="self-center text-mitigated-700 shrink-0" aria-hidden />
         <h3 id="racm-import-missing-title" className="text-[0.75rem] font-semibold text-ink-900">Missing values</h3>
-        <p className="text-[0.71875rem] text-ink-500">Answer each once — it goes on every row still blank in it.</p>
+        <p className="text-[0.75rem] text-ink-500">Answer each once — it goes on every row still blank in it.</p>
       </div>
       <ul className="mt-1.5">
         {fields.map(f => {
@@ -578,11 +579,15 @@ function MissingValuesPanel({ fields, people, rowLabel, onFill }: {
           return (
             <li key={f.key} className="py-2 border-t border-canvas-border first:border-t-0">
               <div className="flex flex-wrap items-center gap-x-3 gap-y-1.5">
-                <label htmlFor={rowSpecific ? undefined : allId} className="w-[11rem] shrink-0 text-[0.75rem] leading-snug">
+                <label htmlFor={rowSpecific && n === 1 ? undefined : allId} className="w-44 shrink-0 text-[0.75rem] leading-snug">
                   <span className="font-semibold text-ink-800">{f.label}</span>
                   <span className="text-ink-500 tabular-nums"> · {plural(n, 'row')}</span>
                 </label>
-                {!rowSpecific && (
+                {/* A row-specific field (an objective, a description) still gets
+                    one box for all when several rows miss it — the same answer
+                    is often right across one process, and "Fill row by row"
+                    stays beside it for when it is not. */}
+                {(!rowSpecific || n > 1) && (
                   <>
                     {kind.type === 'assertions' ? (
                       <div className="flex flex-wrap items-center gap-1.5" role="group" aria-label={`Assertions for ${plural(n, 'row')}`}>
@@ -608,14 +613,14 @@ function MissingValuesPanel({ fields, people, rowLabel, onFill }: {
                         {kind.options.map(o => <option key={o} value={o}>{o}</option>)}
                       </select>
                     ) : (
-                      <input id={allId} type={kind.type === 'date' ? 'date' : 'text'} value={draft}
-                        placeholder={kind.type === 'text' ? kind.placeholder : undefined}
+                      <input id={allId} type={kind.type === 'date' ? 'date' : kind.type === 'number' ? 'number' : 'text'} value={draft}
+                        placeholder={rowSpecific ? 'Same for every row…' : kind.type === 'text' ? kind.placeholder : undefined}
                         onChange={e => setDrafts(prev => ({ ...prev, [f.key]: e.target.value }))}
                         onKeyDown={e => { if (e.key === 'Enter') applyAll(f, draft); }}
                         className={cn(gapInputCls, 'w-48')} />
                     )}
                     <button type="button" onClick={() => applyAll(f, draft)} disabled={!draft.trim()}
-                      className="h-8 px-3 rounded-lg bg-brand-600 text-white text-[0.71875rem] font-semibold enabled:hover:bg-brand-700 disabled:opacity-40 disabled:cursor-not-allowed transition-colors cursor-pointer whitespace-nowrap">
+                      className="h-8 px-3 rounded-lg bg-brand-600 text-white text-[0.75rem] font-semibold enabled:hover:bg-brand-700 disabled:opacity-40 disabled:cursor-not-allowed transition-colors cursor-pointer whitespace-nowrap">
                       Apply to {plural(n, 'row')}
                     </button>
                   </>
@@ -630,20 +635,20 @@ function MissingValuesPanel({ fields, people, rowLabel, onFill }: {
                 )}
                 {canRowByRow && !(rowSpecific && n === 1) && (
                   <button type="button" onClick={() => toggle(f.key)} aria-expanded={isOpen} aria-controls={`${allId}-rows`}
-                    className="h-7 px-1.5 inline-flex items-center gap-1 rounded-md text-[0.71875rem] font-semibold text-ink-600 hover:text-ink-900 hover:bg-paper-50 transition-colors cursor-pointer">
+                    className="h-7 px-1.5 inline-flex items-center gap-1 rounded-md text-[0.75rem] font-semibold text-ink-600 hover:text-ink-900 hover:bg-paper-50 transition-colors cursor-pointer">
                     {rowSpecific ? (isOpen ? 'Hide rows' : 'Fill row by row') : (isOpen ? 'Hide rows' : 'Row by row')}
                     <ChevronDown size={12} aria-hidden className={cn('transition-transform', isOpen && 'rotate-180')} />
                   </button>
                 )}
               </div>
               {(f.noColumn || unreadable > 0) && (
-                <p className="mt-1 ml-[11.75rem] text-[0.65625rem] leading-snug text-ink-500">
+                <p className="mt-1 ml-47 text-[0.6875rem] leading-snug text-ink-500">
                   {[f.noColumn && 'The file has no column for it',
                     unreadable > 0 && `${plural(unreadable, 'row')} had a value we couldn't read`].filter(Boolean).join(' · ')}
                 </p>
               )}
               {isOpen && (
-                <ul id={`${allId}-rows`} className="mt-2 ml-[11.75rem] space-y-2">
+                <ul id={`${allId}-rows`} className="mt-2 ml-47 space-y-2">
                   {f.rows.map(row => {
                     const id = `${allId}-${row.key}`;
                     const dk = `${f.key}|${row.key}`;
@@ -675,7 +680,7 @@ function MissingValuesPanel({ fields, people, rowLabel, onFill }: {
                               className={cn(gapInputCls, kind.type === 'text' ? 'w-full' : 'w-48')} />
                           )}
                         </div>
-                        {note && <p className="mt-1 text-[0.65625rem] leading-snug text-mitigated-700">{note}</p>}
+                        {note && <p className="mt-1 text-[0.6875rem] leading-snug text-mitigated-700">{note}</p>}
                         {idea && (
                           <p className="mt-1 flex items-start gap-1.5 text-[0.6875rem] leading-snug text-ink-600">
                             <span className="min-w-0">
@@ -743,12 +748,12 @@ function DuplicateBand({ row, twin, included, colSpan }: {
           included ? 'border-mitigated-300 bg-mitigated-50/60' : 'border-canvas-border bg-paper-50/60')}>
           <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
             <Copy size={12} className={cn('shrink-0', included ? 'text-mitigated-700' : 'text-ink-500')} aria-hidden />
-            <p className={cn('text-[0.71875rem] font-semibold', included ? 'text-mitigated-700' : 'text-ink-700')}>
+            <p className={cn('text-[0.75rem] font-semibold', included ? 'text-mitigated-700' : 'text-ink-700')}>
               {included
                 ? 'Duplicate — ticked back in, so it will be written a second time'
                 : 'Duplicate — left out'}
             </p>
-            <p className="text-[0.71875rem] text-ink-600">
+            <p className="text-[0.75rem] text-ink-600">
               All {DUPLICATE_FIELDS.length} fields match{' '}
               <span className="font-mono font-semibold text-ink-800">{dup.name}</span> in {dup.where}.
             </p>
@@ -765,8 +770,8 @@ function DuplicateBand({ row, twin, included, colSpan }: {
             <div id={tableId} className="mt-3 rounded-lg border border-canvas-border bg-canvas-elevated overflow-hidden">
               <div className="grid grid-cols-[9rem_minmax(0,1fr)_minmax(0,1fr)] gap-x-4 px-3 py-2 border-b border-canvas-border bg-paper-50">
                 <span className="sr-only">Field</span>
-                <p className="text-[0.625rem] font-semibold uppercase tracking-wide text-ink-500">This row</p>
-                <p className="text-[0.625rem] font-semibold uppercase tracking-wide text-ink-500 truncate" title={dup.name}>{dup.name}</p>
+                <p className="text-[0.6875rem] font-semibold uppercase tracking-wide text-ink-500">This row</p>
+                <p className="text-[0.6875rem] font-semibold uppercase tracking-wide text-ink-500 truncate" title={dup.name}>{dup.name}</p>
               </div>
               {DUPLICATE_FIELDS.map(f => (
                 <div key={f.key} className="grid grid-cols-[9rem_minmax(0,1fr)_minmax(0,1fr)] gap-x-4 px-3 py-2 border-b border-canvas-border last:border-b-0">
@@ -800,8 +805,8 @@ function StepRail({ steps, current }: { steps: { key: Step; label: string }[]; c
         const on = i === at;
         return (
           <li key={s.key} className={cn('flex items-center gap-2', i > 0 && 'flex-1 min-w-0')} aria-current={on ? 'step' : undefined}>
-            {i > 0 && <span className={cn('flex-1 h-px min-w-[1.5rem]', done || on ? 'bg-brand-300' : 'bg-canvas-border')} aria-hidden />}
-            <span className={cn('w-5 h-5 rounded-full inline-flex items-center justify-center text-[0.65625rem] font-semibold tabular-nums',
+            {i > 0 && <span className={cn('flex-1 h-px min-w-6', done || on ? 'bg-brand-300' : 'bg-canvas-border')} aria-hidden />}
+            <span className={cn('w-5 h-5 rounded-full inline-flex items-center justify-center text-[0.6875rem] font-semibold tabular-nums',
               done ? 'bg-compliant-50 text-compliant-700' : on ? 'bg-brand-600 text-white' : 'border border-canvas-border text-ink-400')}>
               {done ? <Check size={11} strokeWidth={3} /> : i + 1}
             </span>
@@ -1375,7 +1380,8 @@ export default function RacmImportReview({ mode, file, process, entity, existing
     : processCodeTakenBy(processCode, process) ? `Already the code for ${titleCase(processCodeTakenBy(processCode, process)!)}` : null;
   const entityCodeErrors = entityNames.map(name => {
     const code = codeForEntity(name);
-    const clash = entityNames.find(other => other !== name && codeForEntity(other) === code);
+    // Two spellings of one company ("Ltd" / "Limited") share its code by design.
+    const clash = entityNames.find(other => other !== name && !sameEntityName(other, name) && codeForEntity(other) === code);
     const error = !CODE_OK(code) ? 'Use exactly 3 letters or digits'
       : entityCodeTakenBy(code, name) ? `Already the code for ${titleCase(entityCodeTakenBy(code, name)!)}`
       : clash ? `Same code as ${clash}` : null;
@@ -1596,6 +1602,9 @@ export default function RacmImportReview({ mode, file, process, entity, existing
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       if (e.key !== 'Escape') return;
+      // A control inside the dialog (a column picker, a rename box) that already
+      // dealt with this Escape keeps it — only its own popover closes.
+      if (e.defaultPrevented) return;
       if (fillOpen) { setFillOpen(false); return; }
       if (step !== 'review' && !extracting) onClose();
     };
@@ -1611,7 +1620,7 @@ export default function RacmImportReview({ mode, file, process, entity, existing
   return (
     <div className="modal-backdrop" style={{ padding: '6vh 20px' }}>
       <div ref={dialogRef} tabIndex={-1} role="dialog" aria-modal="true" aria-label={`Import RACM — ${process}`}
-        className="modal flex flex-col focus:outline-none" style={{ maxWidth: 1100, height: '88vh' }}>
+        className="modal flex flex-col focus:outline-none" style={{ maxWidth: 1100, height: '88vh' }}><DialogFocus />
         {/* head — what is being imported, into which RACM, and where in the flow */}
         <div className="px-5 pt-4 pb-3 border-b border-canvas-border shrink-0">
           <div className="flex items-start justify-between gap-4">
@@ -1649,8 +1658,8 @@ export default function RacmImportReview({ mode, file, process, entity, existing
           {step === 'columns' && read.status === 'failed' && (
             <div className="h-full flex flex-col items-center justify-center text-center" role="alert">
               <span className="p-2.5 rounded-lg bg-mitigated-50 inline-flex mb-3"><FileWarning size={18} className="text-mitigated-700" /></span>
-              <p className="text-[0.84375rem] font-semibold text-ink-900">We couldn't read rows from {file.name}.</p>
-              <p className="text-[0.75rem] text-ink-500 mt-1 max-w-[28rem] leading-relaxed">
+              <p className="text-[0.875rem] font-semibold text-ink-900">We couldn't read rows from {file.name}.</p>
+              <p className="text-[0.75rem] text-ink-500 mt-1 max-w-112 leading-relaxed">
                 It needs to be an .xlsx or .csv with a header row and at least one row below it. You can start from the template and edit the rows in the spreadsheet editor instead.
               </p>
               <button onClick={startFromTemplate} className={cn(primaryBtn, 'mt-4')}>Use the {process} template instead</button>
@@ -1663,18 +1672,18 @@ export default function RacmImportReview({ mode, file, process, entity, existing
                 {read.sheets.length > 1 && (
                   <div>
                     <label htmlFor="racm-import-sheet" className={labelCls}>Sheet</label>
-                    <select id="racm-import-sheet" value={sheetIx} onChange={e => pickSheet(Number(e.target.value))} className={cn(selectCls, 'min-w-[12rem]')}>
+                    <select id="racm-import-sheet" value={sheetIx} onChange={e => pickSheet(Number(e.target.value))} className={cn(selectCls, 'min-w-48')}>
                       {read.sheets.map((s, i) => <option key={`${s.name}-${i}`} value={i}>{s.name}</option>)}
                     </select>
                   </div>
                 )}
-                <div className="min-w-0 flex-1 max-w-[32rem]">
+                <div className="min-w-0 flex-1 max-w-128">
                   <label htmlFor="racm-import-header-row" className={labelCls}>Header row</label>
                   <select id="racm-import-header-row" value={headerRow} onChange={e => pickHeaderRow(Number(e.target.value))} className={cn(selectCls, 'w-full')}>
                     {headerChoices.map(i => <option key={i} value={i}>Row {i + 1} — {rowPreview(sheet.rows[i])}</option>)}
                   </select>
                 </div>
-                <p className="text-[0.71875rem] text-ink-400 pb-2.5">{plural(dataRowCount, 'row')} below it</p>
+                <p className="text-[0.75rem] text-ink-400 pb-2.5">{plural(dataRowCount, 'row')} below it</p>
               </div>
 
               {/* what to look at before continuing — said once, above the table it refers to */}
@@ -1730,7 +1739,7 @@ export default function RacmImportReview({ mode, file, process, entity, existing
                             <span className="flex items-center gap-2 min-w-0">
                               <span className="font-medium text-ink-800 truncate">{f?.label ?? m.field}</span>
                               {f?.required && (
-                                <span className="shrink-0 text-[0.625rem] font-semibold uppercase tracking-wide text-ink-500 border border-canvas-border rounded px-1.5 leading-4"
+                                <span className="shrink-0 text-[0.6875rem] font-semibold uppercase tracking-wide text-ink-500 border border-canvas-border rounded px-1.5 leading-4"
                                   title={TITLE_PAIR.includes(m.field) ? 'Required — with only one of Control title and Control description in the file, Ira writes the other from it' : undefined}>Required</span>
                               )}
                             </span>
@@ -1745,20 +1754,20 @@ export default function RacmImportReview({ mode, file, process, entity, existing
                                 assistant's job showing up. Amber and named,
                                 rather than the red "missing" that means stop. */}
                             {fillable.some(x => x.field === m.field)
-                              ? <span className="inline-flex items-center gap-1 h-[22px] px-2 rounded-md bg-mitigated-50 text-mitigated-800 text-[0.65625rem] font-bold whitespace-nowrap" title="Not a column in this file — Ira reads it off the row's other columns at the next step, and shows you what it read it from">
+                              ? <span className="inline-flex items-center gap-1 h-5.5 px-2 rounded-md bg-mitigated-50 text-mitigated-800 text-[0.6875rem] font-bold whitespace-nowrap" title="Not a column in this file — Ira reads it off the row's other columns at the next step, and shows you what it read it from">
                                   <Sparkles size={9} /> {previewRows.length > 0
                                     ? `Ira will fill — read on ${fillCounts.get(m.field) ?? 0} of ${previewRows.length} rows`
                                     : 'Ira will fill this'}
                                 </span>
                               : atReview.some(x => x.field === m.field)
-                                ? <span className="inline-flex items-center h-[22px] px-2 rounded-md bg-paper-100 text-ink-600 text-[0.65625rem] font-bold whitespace-nowrap" title="Not a column in this file — filled in at Review, row by row or once for every row">
+                                ? <span className="inline-flex items-center h-5.5 px-2 rounded-md bg-paper-100 text-ink-600 text-[0.6875rem] font-bold whitespace-nowrap" title="Not a column in this file — filled in at Review, row by row or once for every row">
                                     You'll fill at Review{previewRows.length > 0 ? ` · ${previewRows.length} rows` : ''}
                                   </span>
                                 : m.byValues
                                   ? <span className="inline-flex items-center gap-1" title="The heading isn't one we know — matched on what the column holds. Check it.">
                                       <Sparkles size={10} className="text-brand-500 shrink-0" aria-hidden />
                                       <ConfidencePill match={m} missing={false} />
-                                      <span className="text-[0.65625rem] text-ink-500 whitespace-nowrap">by its values</span>
+                                      <span className="text-[0.6875rem] text-ink-500 whitespace-nowrap">by its values</span>
                                     </span>
                                   : <ConfidencePill match={m} missing={blocking.some(x => x.field === m.field)} />}
                           </td>
@@ -1786,7 +1795,7 @@ export default function RacmImportReview({ mode, file, process, entity, existing
                   <p className={labelCls}>Also imported · {plural(unusedColumns.length, 'column')}</p>
                   <div className="flex flex-wrap gap-1.5">
                     {unusedColumns.map(o => (
-                      <span key={o.i} className="inline-flex items-center h-6 px-2 rounded-md border border-canvas-border bg-paper-50 text-[0.71875rem] text-ink-600">{o.label}</span>
+                      <span key={o.i} className="inline-flex items-center h-6 px-2 rounded-md border border-canvas-border bg-paper-50 text-[0.75rem] text-ink-600">{o.label}</span>
                     ))}
                   </div>
                   <p className="text-[0.6875rem] text-ink-400 mt-1.5">
@@ -1811,7 +1820,7 @@ export default function RacmImportReview({ mode, file, process, entity, existing
                   where they were, locked until the draft lands. */}
               {extracting && (
                 <div ref={progressRef} role="status" aria-live="polite" className="mb-3">
-                  <p className="text-[0.71875rem] text-ink-600 flex items-center gap-1.5">
+                  <p className="text-[0.75rem] text-ink-600 flex items-center gap-1.5">
                     <Sparkles size={12} className="text-brand-500 shrink-0" aria-hidden />
                     Reading {file.name} · {extract.done >= EXTRACT_STEPS.length ? 'opening the draft…' : `${EXTRACT_STEPS[extract.done]!.toLowerCase()} · step ${extract.done + 1} of ${EXTRACT_STEPS.length}`}
                   </p>
@@ -1836,7 +1845,7 @@ export default function RacmImportReview({ mode, file, process, entity, existing
                         it used to follow the typing. */}
                     <fieldset>
                       <legend className="text-[0.6875rem] font-semibold uppercase tracking-wide text-ink-400 mb-1.5">What should Ira extract?</legend>
-                      <p className="text-[0.71875rem] text-ink-500 mb-3">Ira reads {file.name} only after you press Extract.</p>
+                      <p className="text-[0.75rem] text-ink-500 mb-3">The outline on the right is a first pass over {file.name}. Press Extract and Ira writes out each risk and control in full.</p>
                       <div className="space-y-2">
                         {SOP_CHOICES.map(c => {
                           const on = withSuggestions === c.suggest;
@@ -1845,8 +1854,8 @@ export default function RacmImportReview({ mode, file, process, entity, existing
                               on ? 'border-brand-300 bg-brand-50/40' : 'border-canvas-border bg-canvas-elevated hover:border-ink-300')}>
                               <input type="radio" name="sop-scope" checked={on} disabled={extracting} onChange={() => setWithSuggestions(c.suggest)} className="mt-0.5 accent-brand-600 cursor-pointer disabled:cursor-not-allowed" />
                               <span className="min-w-0">
-                                <span className="block text-[0.78125rem] font-semibold text-ink-900">{c.title}</span>
-                                <span className="block text-[0.71875rem] leading-snug text-ink-500 mt-0.5">{c.hint}</span>
+                                <span className="block text-[0.8125rem] font-semibold text-ink-900">{c.title}</span>
+                                <span className="block text-[0.75rem] leading-snug text-ink-500 mt-0.5">{c.hint}</span>
                               </span>
                             </label>
                           );
@@ -1871,7 +1880,7 @@ export default function RacmImportReview({ mode, file, process, entity, existing
                       <p className="text-[0.6875rem] font-semibold uppercase tracking-wide text-ink-400">Structure</p>
                       <span className="text-[0.6875rem] text-ink-400 tabular-nums">{plural(liveRiskCount, 'risk')} · {plural(liveDraft.length, 'control')}</span>
                       <span className="text-[0.6875rem] text-ink-300" aria-hidden>·</span>
-                      <span className="text-[0.6875rem] text-ink-500">the flowchart opens once you validate</span>
+                      <span className="text-[0.6875rem] text-ink-500">the named flowchart opens after Extract</span>
                     </div>
                     {/* The structure owns its own scrolling, so the pane is a
                         frame of a fixed height and nothing more. */}
@@ -1905,9 +1914,21 @@ export default function RacmImportReview({ mode, file, process, entity, existing
                   what the tick boxes already show. */}
               <div className="mb-3">
                 <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
-                  <p className="text-[0.9375rem] font-semibold text-ink-900 tabular-nums">
-                    {included.length} of {plural(effective.length, 'row')} will be imported
-                  </p>
+                  {/* Ira's suggestions not yet taken are counted on their own:
+                      folded into the total they read as rows being dropped. */}
+                  {(() => {
+                    const offered = effective.filter(r => r.origin !== 'suggested' || acceptedRows.has(r.key)).length;
+                    const pending = effective.length - offered;
+                    return (
+                      <p className="text-[0.9375rem] font-semibold text-ink-900 tabular-nums">
+                        {/* "will be imported" sat right above "need a value before they
+                            can be imported" (5 Oct) — while any row is blocked the
+                            headline says what has to happen first instead. */}
+                        {included.length === offered ? plural(included.length, 'row') : `${included.length} of ${plural(offered, 'row')}`}{needFix > 0 ? ' · fill the missing values below to import them' : ' will be imported'}
+                        {pending > 0 && <span className="font-normal text-ink-500"> · {pending} more suggested by Ira below</span>}
+                      </p>
+                    );
+                  })()}
                   <span className="text-[0.75rem] text-ink-500 tabular-nums">{plural(attributeCount, 'attribute')} · {plural(requiredFileCount, 'required file')}</span>
                   <div className="flex-1" />
                   {/* Brand, not amber. Ira filling a blank is help, and an amber
@@ -1944,13 +1965,13 @@ export default function RacmImportReview({ mode, file, process, entity, existing
                         <AlertTriangle size={12} className="mt-0.5 shrink-0" aria-hidden />
                         <span>
                           <span className="font-semibold">{needFix} {needFix === 1 ? 'row needs' : 'rows need'} a value from you</span>{' '}
-                          before {needFix === 1 ? 'it' : 'they'} can be imported — the Missing values list below asks for each once.
+                          — the Missing values list below asks for each once.
                         </span>
                       </p>
                     )}
                   </div>
                 )}
-                <p className="mt-1.5 text-[0.6875rem] text-ink-400" title="Each client group has its own column set-up, on the RACM Config tab. This upload follows the group its company belongs to.">
+                <p className="mt-1.5 text-[0.6875rem] text-ink-400" title="Each client group has its own set of columns. This upload follows the group its company belongs to.">
                   {[`Using ${setup.label}'s columns`,
                     mergedCount > 0 && `${plural(mergedCount, 'duplicate design check')} merged`,
                     iraCheckCount > 0 && `${plural(iraCheckCount, 'design check')} written by Ira`].filter(Boolean).join(' · ')}
@@ -1965,12 +1986,12 @@ export default function RacmImportReview({ mode, file, process, entity, existing
                   <div className="flex flex-wrap items-center gap-3 px-4 py-2.5 border-b border-canvas-border">
                     <div className="min-w-0">
                       <h3 className="text-[0.8125rem] font-semibold text-ink-900">Values Ira filled</h3>
-                      <p className="text-[0.71875rem] text-ink-500">Read off each row's other cells where the file left the field blank. Clear any of them before you import.</p>
+                      <p className="text-[0.75rem] text-ink-500">Read off each row's other cells where the file left the field blank. Clear any of them before you import.</p>
                     </div>
                     <div className="flex-1" />
                     <button type="button" onClick={undoAllFills} className={quietBtn}><Undo2 size={12} /> Clear all</button>
                   </div>
-                  <div className="max-h-[18rem] overflow-y-auto">
+                  <div className="max-h-72 overflow-y-auto">
                     {filledList.map(({ row, fills: fs }) => (
                       <div key={row.key} className="px-4 py-2.5 border-b border-canvas-border last:border-b-0">
                         <p className="text-[0.6875rem] font-semibold text-ink-500 mb-1.5">Row {row.rowNo} · <span className="font-mono">{idOf(row)}</span></p>
@@ -2029,10 +2050,10 @@ export default function RacmImportReview({ mode, file, process, entity, existing
                     <div id="racm-import-codes" className="mt-3 pt-3 border-t border-canvas-border flex flex-wrap items-start gap-x-5 gap-y-2.5">
                       {entityCodeErrors.map(({ name, code, error }, i) => (
                         <div key={name}>
-                          <label htmlFor={`racm-import-entity-code-${i}`} className={cn(labelCls, 'max-w-[16rem] truncate')} title={name}>Entity code · {name}</label>
+                          <label htmlFor={`racm-import-entity-code-${i}`} className={cn(labelCls, 'max-w-64 truncate')} title={name}>Entity code · {name}</label>
                           <input id={`racm-import-entity-code-${i}`} value={code} maxLength={3} onChange={e => setEntityCodeDrafts(prev => ({ ...prev, [name]: cleanCode(e.target.value) }))}
                             aria-invalid={!!error} aria-describedby={error ? `racm-import-entity-code-error-${i}` : undefined}
-                            className={cn('h-8 w-[5.5rem] px-2 rounded-lg border bg-canvas text-[0.78125rem] font-mono font-semibold text-ink-900 uppercase focus:outline-none focus:ring-2 focus:ring-brand-200', error ? 'border-risk-400' : 'border-canvas-border')} />
+                            className={cn('h-8 w-22 px-2 rounded-lg border bg-canvas text-[0.8125rem] font-mono font-semibold text-ink-900 uppercase focus:outline-none focus:ring-2 focus:ring-brand-200', error ? 'border-risk-400' : 'border-canvas-border')} />
                           {error && <p id={`racm-import-entity-code-error-${i}`} className="mt-1 text-[0.6875rem] text-risk-700">{error}</p>}
                         </div>
                       ))}
@@ -2040,10 +2061,10 @@ export default function RacmImportReview({ mode, file, process, entity, existing
                         <label htmlFor="racm-import-process-code" className={labelCls}>Process code · {process}</label>
                         <input id="racm-import-process-code" value={processCode} maxLength={3} onChange={e => setProcessCodeDraft(cleanCode(e.target.value))}
                           aria-invalid={!!processCodeError} aria-describedby={processCodeError ? 'racm-import-process-code-error' : undefined}
-                          className={cn('h-8 w-[5.5rem] px-2 rounded-lg border bg-canvas text-[0.78125rem] font-mono font-semibold text-ink-900 uppercase focus:outline-none focus:ring-2 focus:ring-brand-200', processCodeError ? 'border-risk-400' : 'border-canvas-border')} />
+                          className={cn('h-8 w-22 px-2 rounded-lg border bg-canvas text-[0.8125rem] font-mono font-semibold text-ink-900 uppercase focus:outline-none focus:ring-2 focus:ring-brand-200', processCodeError ? 'border-risk-400' : 'border-canvas-border')} />
                         {processCodeError && <p id="racm-import-process-code-error" className="mt-1 text-[0.6875rem] text-risk-700">{processCodeError}</p>}
                       </div>
-                      <p className="min-w-0 flex-1 basis-[16rem] text-[0.71875rem] text-ink-500 leading-snug">
+                      <p className="min-w-0 flex-1 basis-[16rem] text-[0.75rem] text-ink-500 leading-snug">
                         Numbers come from the file's own Risk ID and Control ID, else the row order.
                       </p>
                     </div>
@@ -2052,7 +2073,7 @@ export default function RacmImportReview({ mode, file, process, entity, existing
               )}
 
               {rows.length === 0 ? (
-                <div className="rounded-xl border border-dashed border-canvas-border py-14 text-center text-[0.78125rem] text-ink-500">
+                <div className="rounded-xl border border-dashed border-canvas-border py-14 text-center text-[0.8125rem] text-ink-500">
                   {mode === 'racm' ? 'No rows to import — nothing sits below the header row you picked.' : `Ira found no controls to draft from ${file.name}.`}
                 </div>
               ) : (
@@ -2109,14 +2130,14 @@ export default function RacmImportReview({ mode, file, process, entity, existing
                                   <input id={`racm-import-take-${row.key}`} type="checkbox" checked={isIn}
                                     aria-label={`Import ${idOf(row)}`}
                                     onChange={e => setIncluded(row, e.target.checked)} className="accent-brand-600 cursor-pointer" />
-                                  <span className={cn('text-[0.65625rem] font-semibold uppercase tracking-wide', isIn ? 'text-ink-500' : 'text-ink-400')}>{isIn ? 'In' : 'Out'}</span>
+                                  <span className={cn('text-[0.6875rem] font-semibold uppercase tracking-wide', isIn ? 'text-ink-500' : 'text-ink-400')}>{isIn ? 'In' : 'Out'}</span>
                                 </label>
                               </td>
                               <td>
                                 {newIds.get(row.key)
                                   ? <span className="font-mono text-[0.6875rem] font-semibold text-ink-800 break-all">{newIds.get(row.key)}</span>
                                   : <span className="text-ink-300">—</span>}
-                                {cell(row.values.controlId) && <span className="block font-mono text-[0.625rem] text-ink-400 break-all mt-0.5">File: {cell(row.values.controlId)}</span>}
+                                {cell(row.values.controlId) && <span className="block font-mono text-[0.6875rem] text-ink-400 break-all mt-0.5">File: {cell(row.values.controlId)}</span>}
                               </td>
                               <td className="tight">
                                 {/* The title IS the door. A 36px column holding only
@@ -2127,7 +2148,7 @@ export default function RacmImportReview({ mode, file, process, entity, existing
                                   className="group w-full flex items-start gap-1.5 text-left cursor-pointer">
                                   <ChevronRight size={13} aria-hidden
                                     className={cn('mt-0.5 shrink-0 text-ink-400 transition-transform group-hover:text-ink-700', open && 'rotate-90')} />
-                                  <span className="min-w-0 text-[0.78125rem] font-medium text-ink-900 leading-snug line-clamp-2 group-hover:text-brand-700 transition-colors">
+                                  <span className="min-w-0 text-[0.8125rem] font-medium text-ink-900 leading-snug line-clamp-2 group-hover:text-brand-700 transition-colors">
                                     {titleOf(row)}
                                   </span>
                                 </button>
@@ -2136,7 +2157,7 @@ export default function RacmImportReview({ mode, file, process, entity, existing
                                       "Key" described the control, so it belongs
                                       beside the control's name. */}
                                   {row.isKey && (
-                                    <span className="inline-flex items-center gap-1 text-[0.65625rem] font-semibold text-mitigated-700" title="Key control">
+                                    <span className="inline-flex items-center gap-1 text-[0.6875rem] font-semibold text-mitigated-700" title="Key control">
                                       <Star size={11} className="fill-mitigated-200" aria-hidden /> Key
                                     </span>
                                   )}
@@ -2147,11 +2168,11 @@ export default function RacmImportReview({ mode, file, process, entity, existing
                                   )}
                                   {row.origin === 'sop' && <Pill tone="evidence">From the SOP{row.sectionRef ? ` · ${row.sectionRef}` : ''}</Pill>}
                                   {row.origin === 'suggested' && <Pill tone="info">Suggested by Ira</Pill>}
-                                  {row.origin === 'file' && <span className="font-mono text-[0.65625rem] text-ink-400">Row {row.rowNo}</span>}
+                                  {row.origin === 'file' && <span className="font-mono text-[0.6875rem] text-ink-400">Row {row.rowNo}</span>}
                                   {/* The only per-row trace of a gap now — words, not a
                                       badge, and gone the moment the row is complete. */}
                                   {gaps > 0 && (
-                                    <span className="text-[0.65625rem] font-semibold text-mitigated-700 tabular-nums">
+                                    <span className="text-[0.6875rem] font-semibold text-mitigated-700 tabular-nums">
                                       {gaps === 1 ? '1 value missing' : `${gaps} values missing`}
                                     </span>
                                   )}
@@ -2167,24 +2188,28 @@ export default function RacmImportReview({ mode, file, process, entity, existing
                                 {row.frequency
                                   ? <span className="text-ink-700">{row.frequency}</span>
                                   : (
-                                    <span className="inline-flex items-center gap-1 text-[0.71875rem] font-semibold text-mitigated-700">
+                                    <span className="inline-flex items-center gap-1 text-[0.75rem] font-semibold text-mitigated-700">
                                       <AlertTriangle size={11} className="shrink-0" aria-hidden /> Not set
                                     </span>
                                   )}
                               </td>
                               <td className="tight">
-                                <p className="text-[0.71875rem] text-ink-600 leading-snug tabular-nums">
+                                <p className="text-[0.75rem] text-ink-600 leading-snug tabular-nums truncate"
+                                  title={`${plural(row.attributes.length, 'attribute')} · ${plural(row.designChecks.length, 'check')}`}>
                                   {plural(row.attributes.length, 'attribute')} · {plural(row.designChecks.length, 'check')}
                                 </p>
                                 {row.mergedDuplicateChecks > 0 && (
-                                  <p className="text-[0.65625rem] text-ink-400">{row.mergedDuplicateChecks} merged</p>
+                                  <p className="text-[0.6875rem] text-ink-400">{row.mergedDuplicateChecks} merged</p>
                                 )}
                                 {sugg.length > 0 && (
                                   <button type="button" onClick={() => { if (!open) toggleExpanded(row.key); }} aria-controls={detailId}
                                     aria-label={`Ira suggests ${[checkSugg > 0 && plural(checkSugg, 'design check'), attrSugg > 0 && plural(attrSugg, 'attribute')].filter(Boolean).join(' and ')} — show them`}
-                                    className="mt-1 h-6 px-1.5 -ml-1.5 inline-flex items-center gap-1 rounded-md text-[0.6875rem] font-semibold text-brand-700 hover:bg-brand-50 cursor-pointer whitespace-nowrap">
+                                    title={`${[checkSugg > 0 && `+${plural(checkSugg, 'check')}`, attrSugg > 0 && `+${plural(attrSugg, 'attribute')}`].filter(Boolean).join(' · ')} from Ira`}
+                                    className="mt-1 h-6 px-1.5 -ml-1.5 max-w-[calc(100%+0.375rem)] inline-flex items-center gap-1 rounded-md text-[0.6875rem] font-semibold text-brand-700 hover:bg-brand-50 cursor-pointer whitespace-nowrap">
                                     <Sparkles size={11} className="shrink-0" aria-hidden />
-                                    {[checkSugg > 0 && `+${plural(checkSugg, 'check')}`, attrSugg > 0 && `+${plural(attrSugg, 'attribute')}`].filter(Boolean).join(' · ')} from Ira
+                                    <span className="min-w-0 truncate">
+                                      {[checkSugg > 0 && `+${plural(checkSugg, 'check')}`, attrSugg > 0 && `+${plural(attrSugg, 'attribute')}`].filter(Boolean).join(' · ')} from Ira
+                                    </span>
                                   </button>
                                 )}
                               </td>
@@ -2212,14 +2237,14 @@ export default function RacmImportReview({ mode, file, process, entity, existing
                                   {/* The people on the row, editable — so a value set for
                                       every row at once can be changed on one (22 Sep). A
                                       name cleared here puts it back on the Missing values list. */}
-                                  <div className="pt-2.5 flex flex-wrap items-center gap-x-5 gap-y-1.5 text-[0.71875rem]">
+                                  <div className="pt-2.5 flex flex-wrap items-center gap-x-5 gap-y-1.5 text-[0.75rem]">
                                     {PEOPLE_FIELDS.map(f => (
                                       <label key={f} className="inline-flex items-center gap-1.5">
                                         <span className="font-semibold text-ink-500">{fieldLabel(f)}:</span>
                                         <select value={cell(row.values[f])}
                                           aria-label={`${fieldLabel(f)} for row ${row.rowNo}`}
                                           onChange={e => { if (e.target.value !== cell(row.values[f])) setValue(row.key, f, e.target.value); }}
-                                          className="h-7 w-44 px-1.5 rounded-md border border-canvas-border bg-canvas-elevated text-[0.71875rem] text-ink-800 cursor-pointer focus:outline-none focus:ring-2 focus:ring-brand-200">
+                                          className="h-7 w-44 px-1.5 rounded-md border border-canvas-border bg-canvas-elevated text-[0.75rem] text-ink-800 cursor-pointer focus:outline-none focus:ring-2 focus:ring-brand-200">
                                           <option value="">Nobody yet</option>
                                           {/* What the client's file wrote, when it names somebody
                                               this tenant has never added — kept so opening the row
@@ -2233,7 +2258,7 @@ export default function RacmImportReview({ mode, file, process, entity, existing
                                     ))}
                                   </div>
                                   {(cell(row.values.riskTitle) || cell(row.values.riskDescription) || cell(row.values.controlActivity) || cell(row.values.effectiveDate) || cell(row.values.country) || row.testingStrategy || Object.keys(row.extras).length > 0) && (
-                                    <div className="pt-2.5 space-y-1 text-[0.71875rem] leading-relaxed">
+                                    <div className="pt-2.5 space-y-1 text-[0.75rem] leading-relaxed">
                                       {cell(row.values.riskTitle) && (
                                         <p className="text-ink-600"><span className="font-semibold text-ink-500">Risk title:</span> {cell(row.values.riskTitle)}</p>
                                       )}
@@ -2275,19 +2300,19 @@ export default function RacmImportReview({ mode, file, process, entity, existing
                                   <div className="grid gap-5 pt-3 md:grid-cols-3">
                                     <div className="min-w-0">
                                       <p className={labelCls}>Attributes ({row.attributes.length})</p>
-                                      {row.attributes.length === 0 ? <p className="text-[0.71875rem] text-ink-400">None in the file.</p> : (
+                                      {row.attributes.length === 0 ? <p className="text-[0.75rem] text-ink-400">None in the file.</p> : (
                                         <ol className="space-y-2">
                                           {row.attributes.map((a, i) => (
                                             <li key={`${a.text}-${i}`} className="text-[0.75rem] text-ink-700 flex gap-2">
-                                              <span className="font-mono text-[0.65625rem] text-ink-400 tabular-nums mt-0.5 shrink-0">{i + 1}.</span>
+                                              <span className="font-mono text-[0.6875rem] text-ink-400 tabular-nums mt-0.5 shrink-0">{i + 1}.</span>
                                               <span className="min-w-0">
                                                 <span className="leading-snug">{a.text}</span>
-                                                {addedAttrs.has(norm(a.text)) && <span className="ml-1.5 text-[0.625rem] font-semibold text-brand-700">Added from Ira</span>}
+                                                {addedAttrs.has(norm(a.text)) && <span className="ml-1.5 text-[0.6875rem] font-semibold text-brand-700">Added from Ira</span>}
                                                 <span className="mt-1 flex flex-wrap gap-1">
                                                   {a.requiredFiles.length === 0
-                                                    ? <span className="text-[0.65625rem] text-ink-400">No required files</span>
+                                                    ? <span className="text-[0.6875rem] text-ink-400">No required files</span>
                                                     : a.requiredFiles.map((rf, j) => (
-                                                      <span key={`${rf}-${j}`} className="inline-flex items-center gap-1 h-5 px-1.5 rounded border border-canvas-border bg-canvas-elevated text-[0.65625rem] text-ink-600">
+                                                      <span key={`${rf}-${j}`} className="inline-flex items-center gap-1 h-5 px-1.5 rounded border border-canvas-border bg-canvas-elevated text-[0.6875rem] text-ink-600">
                                                         <Paperclip size={10} className="text-ink-400 shrink-0" /> {rf}
                                                       </span>
                                                     ))}
@@ -2300,12 +2325,12 @@ export default function RacmImportReview({ mode, file, process, entity, existing
                                     </div>
                                     <div className="min-w-0">
                                       <p className={labelCls}>Design checks ({row.designChecks.length})</p>
-                                      {row.designChecks.length === 0 ? <p className="text-[0.71875rem] text-ink-400">None in the file.</p> : (
+                                      {row.designChecks.length === 0 ? <p className="text-[0.75rem] text-ink-400">None in the file.</p> : (
                                         <ul className="space-y-1.5">
                                           {row.designChecks.map((c, i) => (
                                             <li key={`${c}-${i}`} className="text-[0.75rem] text-ink-700 leading-snug flex gap-1.5">
                                               <Check size={11} className="text-ink-400 mt-0.5 shrink-0" />
-                                              <span>{c}{addedChecks.has(norm(c)) && <span className="ml-1.5 text-[0.625rem] font-semibold text-brand-700">Added from Ira</span>}</span>
+                                              <span>{c}{addedChecks.has(norm(c)) && <span className="ml-1.5 text-[0.6875rem] font-semibold text-brand-700">Added from Ira</span>}</span>
                                             </li>
                                           ))}
                                         </ul>
@@ -2317,13 +2342,13 @@ export default function RacmImportReview({ mode, file, process, entity, existing
                                     {/* A7 — Ira's additions wait for a decision; accepted ones join the lists beside them */}
                                     <div className="min-w-0">
                                       <p className="text-[0.6875rem] font-semibold uppercase tracking-wide text-ink-400 mb-1.5 flex items-center gap-1"><Sparkles size={11} className="text-brand-600" /> Ira suggests</p>
-                                      {sugg.length === 0 ? <p className="text-[0.71875rem] text-ink-400">Nothing to add.</p> : (
+                                      {sugg.length === 0 ? <p className="text-[0.75rem] text-ink-400">Nothing to add.</p> : (
                                         <ul className="space-y-2">
                                           {sugg.map(s => {
                                             const kind = s.kind === 'check' ? 'design check' : 'attribute';
                                             return (
                                               <li key={s.id} className="rounded-lg border border-canvas-border bg-canvas-elevated px-2.5 py-2">
-                                                <p className="text-[0.625rem] font-semibold uppercase tracking-wide text-ink-400">{s.kind === 'check' ? 'Design check' : 'Attribute'}</p>
+                                                <p className="text-[0.6875rem] font-semibold uppercase tracking-wide text-ink-400">{s.kind === 'check' ? 'Design check' : 'Attribute'}</p>
                                                 <p className="text-[0.75rem] text-ink-700 leading-snug mt-0.5">{s.text}</p>
                                                 <div className="mt-1.5 flex items-center gap-1">
                                                   <button type="button" onClick={() => acceptSuggestion(row.key, s)} aria-label={`Accept ${kind}: ${s.text}`}
@@ -2371,8 +2396,8 @@ export default function RacmImportReview({ mode, file, process, entity, existing
                       {iraExtras.map(r => (
                         <li key={r.key} className="py-2 border-t border-canvas-border flex items-start gap-3">
                           <div className="min-w-0 flex-1">
-                            <p className="text-[0.78125rem] font-semibold text-ink-900 leading-snug">{cell(r.values.controlTitle) || cell(r.values.controlActivity)}</p>
-                            {cell(r.values.riskDescription) && <p className="mt-0.5 text-[0.71875rem] text-ink-500 leading-snug line-clamp-2">Risk · {cell(r.values.riskDescription)}</p>}
+                            <p className="text-[0.8125rem] font-semibold text-ink-900 leading-snug">{cell(r.values.controlTitle) || cell(r.values.controlActivity)}</p>
+                            {cell(r.values.riskDescription) && <p className="mt-0.5 text-[0.75rem] text-ink-500 leading-snug line-clamp-2">Risk · {cell(r.values.riskDescription)}</p>}
                           </div>
                           <button type="button" onClick={() => setIncluded(r, true)} className={cn(quietBtn, 'shrink-0')}
                             aria-label={`Add ${cell(r.values.controlTitle) || 'this control'} to the import`}>
@@ -2458,7 +2483,7 @@ export default function RacmImportReview({ mode, file, process, entity, existing
                 <div className="min-w-0">
                   {/* Compact drops the chart's own caption, so the one thing that
                       must never come off it is said here instead. */}
-                  <div className="flex flex-wrap items-center gap-x-2 gap-y-1 mb-2 text-[0.71875rem] text-ink-500">
+                  <div className="flex flex-wrap items-center gap-x-2 gap-y-1 mb-2 text-[0.75rem] text-ink-500">
                     <Pill tone="draft">SOP-derived · unconfirmed</Pill>
                     <span className="tabular-nums">{plural(chartFacts.risks.length, 'risk')} · {plural(included.length, 'control')}</span>
                     {chartMode === 'edit' && <><span className="text-ink-300" aria-hidden>·</span><span>click a name to rename it, or say it on the left</span></>}
@@ -2487,7 +2512,7 @@ export default function RacmImportReview({ mode, file, process, entity, existing
           {step === 'columns' && read.status === 'ready' && (
             <>
               {(blocking.length > 0 || fillable.length > 0 || atReviewCount > 0 || dataRowCount === 0) && (
-                <span className={cn('text-[0.71875rem]', blocking.length > 0 || dataRowCount === 0 ? 'text-ink-500' : 'text-ink-400 inline-flex items-center gap-1')}>
+                <span className={cn('text-[0.75rem]', blocking.length > 0 || dataRowCount === 0 ? 'text-ink-500' : 'text-ink-400 inline-flex items-center gap-1')}>
                   {dataRowCount === 0
                     ? 'No rows below the header row'
                     : blocking.length > 0
@@ -2521,23 +2546,23 @@ export default function RacmImportReview({ mode, file, process, entity, existing
                   no account of why. It is the first thing to answer, not the
                   case nobody thought about. */}
               {included.length === 0 && (
-                <span className="text-[0.71875rem] text-mitigated-700">
+                <span className="text-[0.75rem] text-mitigated-700">
                   {effective.length === 0 ? 'Nothing to import.' : `No rows ticked — tick the ones to import, or Import all at the top of the list.`}
                 </span>
               )}
               {included.length > 0 && needFix > 0 && (
-                <span className="text-[0.71875rem] text-mitigated-700">
+                <span className="text-[0.75rem] text-mitigated-700">
                   {needFix} {needFix === 1 ? 'row still needs' : 'rows still need'} {missingLabels.length > 1 ? `${missingLabels.slice(0, -1).join(', ')} or ${missingLabels[missingLabels.length - 1]}` : missingLabels[0]}
                 </span>
               )}
               {included.length > 0 && needFix === 0 && !codesOk && (
-                <span className="text-[0.71875rem] text-risk-700">Fix the ID codes to import</span>
+                <span className="text-[0.75rem] text-risk-700">Fix the ID codes to import</span>
               )}
               {/* A warning, not a wall. The reviewer has ticked a duplicate back
                   in, which is theirs to do — this only makes sure they read what
                   it means before pressing the button. */}
               {included.length > 0 && needFix === 0 && codesOk && duplicatesIncluded > 0 && (
-                <span className="text-[0.71875rem] text-mitigated-700">
+                <span className="text-[0.75rem] text-mitigated-700">
                   {duplicatesIncluded === 1
                     ? 'Includes 1 duplicate — that control will be written a second time'
                     : `Includes ${duplicatesIncluded} duplicates — those controls will be written a second time`}
@@ -2556,7 +2581,7 @@ export default function RacmImportReview({ mode, file, process, entity, existing
               {/* The edit box can empty the chart from here, and then the
                   reader needs an account of why the button is off. */}
               {included.length === 0 && (
-                <span className="text-[0.71875rem] text-mitigated-700">Nothing left on the chart — undo the last edit, or go back and change the prompt.</span>
+                <span className="text-[0.75rem] text-mitigated-700">Nothing left on the chart — undo the last edit, or go back and change the prompt.</span>
               )}
               {/* Not gated on `canImport`. The blanks it counts — an owner, a
                   frequency — are the next screen's question, and holding this

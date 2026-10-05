@@ -400,7 +400,7 @@ export function gradeException(d: Deficiency, eng: IcfrEngagement, ownGradeOnly 
     working.push({ n: 2, rule: 'Compensating control', fired: false, detail: 'No cap available — an indicator cannot be argued down by another control.' });
     return { grade: 'Material Weakness', ladderGrade: 'Material Weakness', working, capBlocked: d.compensatingControlId ? 'mw-indicator' : undefined };
   }
-  working.push({ n: 1, rule: 'MW indicator', fired: false, detail: 'None recorded on this exception.' });
+  working.push({ n: 1, rule: 'MW indicator', fired: false, detail: 'None recorded on this deficiency.' });
 
   // ── 2 ── is a cap available, and does it actually stand up?
   let capValid = false;
@@ -415,7 +415,7 @@ export function gradeException(d: Deficiency, eng: IcfrEngagement, ownGradeOnly 
       working.push({ n: 2, rule: 'Compensating control', fired: false, detail: `${d.compensatingControlId} is not concluded effective in this engagement, so it caps nothing.` });
     } else {
       capValid = true;
-      working.push({ n: 2, rule: 'Compensating control', fired: true, detail: `${d.compensatingControlId} is tested effective — it can cap a material weakness down to significant, and never clears the exception.` });
+      working.push({ n: 2, rule: 'Compensating control', fired: true, detail: `${d.compensatingControlId} is tested effective — it can cap a material weakness down to significant, and never clears the deficiency.` });
     }
   }
 
@@ -461,7 +461,7 @@ export function gradeException(d: Deficiency, eng: IcfrEngagement, ownGradeOnly 
   if (capValid && grade === 'Material Weakness') {
     cap = { from: grade, to: 'Significant Deficiency', by: d.compensatingControlId! };
     grade = 'Significant Deficiency';
-    working.push({ n: 2, rule: 'Compensating control — applied', fired: true, detail: `Capped from Material Weakness to Significant Deficiency by ${d.compensatingControlId}. The exception stands.` });
+    working.push({ n: 2, rule: 'Compensating control — applied', fired: true, detail: `Capped from Material Weakness to Significant Deficiency by ${d.compensatingControlId}. The deficiency stands.` });
   }
 
   // ── 6 ── individually minor, collectively not.
@@ -474,7 +474,7 @@ export function gradeException(d: Deficiency, eng: IcfrEngagement, ownGradeOnly 
   if (!eng.rules.aggregate) {
     working.push({ n: 6, rule: 'Aggregation', fired: false, detail: 'Switched off in the engagement ground rules.' });
   } else if (ownGradeOnly) {
-    working.push({ n: 6, rule: 'Aggregation', fired: false, detail: 'Not evaluated — this is the exception on its own, which is what its groups are built from.' });
+    working.push({ n: 6, rule: 'Aggregation', fired: false, detail: 'Not evaluated — this is the deficiency on its own, which is what its groups are built from.' });
   } else {
     const groups = groupsFor(d, eng);
     if (groups.length) {
@@ -483,11 +483,11 @@ export function gradeException(d: Deficiency, eng: IcfrEngagement, ownGradeOnly 
       aggregate = { members: worst.members.length, sum: worst.exposure, grade: worst.grade, raised, sharedBy: worst.name };
       working.push({
         n: 6, rule: 'Aggregation', fired: raised,
-        detail: `${worst.members.length} exception${worst.members.length === 1 ? '' : 's'} on ${worst.name} — ${RUPEE(worst.exposure)} together${worst.unverified ? ' (not all of it placed against a population)' : ''} ⇒ ${worst.grade}${raised ? `, which raises this one from ${grade}.` : ', which does not raise it.'}`,
+        detail: `${worst.members.length} deficienc${worst.members.length === 1 ? 'y' : 'ies'} on ${worst.name} — ${RUPEE(worst.exposure)} together${worst.unverified ? ' (not all of it placed against a population)' : ''} ⇒ ${worst.grade}${raised ? `, which raises this one from ${grade}.` : ', which does not raise it.'}`,
       });
       if (raised) grade = worst.grade;
     } else {
-      working.push({ n: 6, rule: 'Aggregation', fired: false, detail: joinsNoDerivedGroup(d, eng) ? 'Not grouped — an MW indicator or an ITGC exception does not aggregate on a line item.' : 'Nothing else hits the same line item, and it is not linked to a root cause.' });
+      working.push({ n: 6, rule: 'Aggregation', fired: false, detail: joinsNoDerivedGroup(d, eng) ? 'Not grouped — an MW indicator or an ITGC deficiency does not aggregate on a line item.' : 'Nothing else hits the same line item, and it is not linked to a root cause.' });
     }
   }
 
@@ -1400,14 +1400,29 @@ export const LEGACY_SOURCE_ID = 'src-legacy';
  *  existed is. */
 export function ipeChecksFor(c: Control, sourceId: string): IpeCheck[] {
   const checks = c.operating.ipe?.checks ?? [];
-  return checks.filter(k => (k.sourceId ?? LEGACY_SOURCE_ID) === sourceId);
+  const home = untaggedHome(c);
+  return checks.filter(k => (k.sourceId ?? home) === sourceId);
+}
+
+/** The file an untagged IPE check belongs to: the population's first file.
+ *  The same rule the store applies when a second file joins (addPopulationSource)
+ *  — reading untagged as LEGACY_SOURCE_ID alone missed every single-file
+ *  population extracted today, whose one file is 'src-1', so a report proven
+ *  Reliable still read "not registered yet" on its own row. */
+function untaggedHome(c: Control): string {
+  return c.operating.population?.sources?.[0]?.id ?? LEGACY_SOURCE_ID;
 }
 
 /** The items drawn out of one file. Tagged the same way, for the same reason. */
 export function samplesFor(c: Control, sourceId: string): Sample[] {
   const samples = c.operating.sampling?.samples ?? [];
-  return samples.filter(s => (s.sourceId ?? LEGACY_SOURCE_ID) === sourceId);
+  return samples.filter(s => sampleSourceOf(c, s) === sourceId);
 }
+/** The file one item was drawn from. An untagged item belongs to the
+ *  population's first file — the same rule as an untagged IPE check. Reading
+ *  untagged as LEGACY_SOURCE_ID alone left every seeded draw off its own file,
+ *  so a control with 25 items tested read "not drawn yet" (click-through, 5 Oct). */
+export const sampleSourceOf = (c: Control, s: Sample): string => s.sourceId ?? untaggedHome(c);
 
 /** Is this file the thing being tested, or a table joined onto it? */
 export const isAssisting = (s: PopulationSource): boolean => s.role === 'assisting';
@@ -2365,6 +2380,18 @@ export function fmtDay(iso?: string, empty = '—'): string {
   return d ? d.toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' }) : iso;
 }
 
+/** '2026-10-05' → '5 Oct' — a near due day, read without its year. */
+export function dayMonth(iso?: string): string {
+  const d = parseDay(iso);
+  return d ? `${d.getDate()} ${['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'][d.getMonth()]}` : (iso ?? '');
+}
+
+/** The open ask Ira's "couldn't test" card sent the owner for one check, if
+ *  any — read off the task list, so it survives a reload or a new visit. */
+export function couldntAskFor(eng: IcfrEngagement, controlId: string, checkId: string): HandoffTask | undefined {
+  return eng.tasks.find(t => t.controlId === controlId && t.checkId === checkId && t.status === 'open');
+}
+
 /** An instant as a person reads it on the page — '15 Sep 2026, 14:32'. Built by
  *  hand rather than through toLocaleString: newer browsers print September as
  *  "Sept" in en-GB, and a stamp should read the same on every machine. */
@@ -2882,9 +2909,31 @@ const RATING_NOTE: Record<RiskRating, string> = {
  * Only controls that have actually been sized count in the denominator: a
  * control nobody has drawn a sample for has not departed from anything.
  */
-export function samplingOverrides(controls: Control[]): { overridden: number; sized: number } {
+export function samplingOverrides(controls: Control[], eng?: IcfrEngagement): { overridden: number; sized: number; unrecorded: number } {
   const sized = controls.filter(c => c.operating?.sampling);
-  return { overridden: sized.filter(c => c.operating.sampling?.override).length, sized: sized.length };
+  // With the engagement in hand, a draw that simply stands at another number
+  // than the table counts too — it departed whether or not anyone said so.
+  const off = sized.map(c => eng ? sizeDeparture(eng, c) : (c.operating.sampling?.override ? { recorded: true } : null));
+  return { overridden: off.filter(Boolean).length, sized: sized.length, unrecorded: off.filter(d => d && !d.recorded).length };
+}
+
+/**
+ * Does this control's draw stand at a different number from the agreed table?
+ *
+ * One rule for every reader — the Sample step's sentence, the year card's
+ * target and the methodology page's count (click-through, 5 Oct: a control "tested
+ * at 5 items, the number the agreed table gives it" under "Monthly · Medium → 4").
+ * A recorded departure is compared at the size it was set to; otherwise the draw
+ * is compared before any extension after a failure, which moves the size for a
+ * reason of its own. A full-population test is not sized off the table at all.
+ */
+export function sizeDeparture(eng: IcfrEngagement, c: Control): { size: number; agreed: number; recorded: boolean } | null {
+  const s = c.operating?.sampling;
+  if (!s || s.method === 'Full population') return null;
+  if (s.override) return { size: s.override.size, agreed: s.override.agreed, recorded: true };
+  const agreed = sampleSizeGuide(c, itgcHolds(eng, c), samplingOf(eng)).suggested;
+  const size = s.size - s.samples.filter(x => x.extension).length;
+  return size === agreed ? null : { size, agreed, recorded: false };
 }
 
 /** This engagement's agreed sampling methodology — the product default where an
@@ -3028,6 +3077,11 @@ export function isControlFinal(c: Control): boolean {
 export function isAwaitingReview(c: Control): boolean {
   return isControlLocked(c) && !!c.wpSignoff?.preparer && !c.wpSignoff?.reviewer;
 }
+/** The papers waiting for the reviewer's countersign, in Reviewer queue order —
+ *  the queue lists them from here, and "Countersign & next" walks the same list. */
+export function awaitingCountersign(eng: IcfrEngagement): Control[] {
+  return eng.controls.filter(isAwaitingReview);
+}
 
 // ─── Review notes — the formal raise → resolve → verify channel ──────────────────
 export function reviewNotesFor(eng: IcfrEngagement, controlId: string): ReviewNote[] {
@@ -3064,6 +3118,20 @@ export function awaitsConfirm(row: { validation?: ValidationResult; override?: u
  *  conclusion back. */
 export function unconfirmedIra(c: Control, which: 'design' | 'operating'): (DesignPoint | OperatingStep)[] {
   return which === 'design' ? c.design.points.filter(awaitsConfirm) : c.operating.steps.filter(awaitsConfirm);
+}
+/** What "Undo Ira's" takes back on a track not yet concluded (UX #15): Ira's
+ *  unconfirmed verdicts, its "couldn't test" notes, and the confirms Ira made
+ *  itself in Automatic mode. A person's own confirm or override is never on it.
+ *  `auto` is how many of the rows are Ira's own confirms. */
+export function iraUndoable(c: Control): { points: DesignPoint[]; steps: OperatingStep[]; auto: number } {
+  const take = (row: { validation?: ValidationResult; override?: unknown; confirmed?: { byIra?: boolean }; result: TestResult }) =>
+    !!row.validation && !row.override && (row.confirmed
+      ? !!row.confirmed.byIra
+      : awaitsConfirm(row) || (!!row.validation.blocked && row.result === 'Not tested'));
+  const points = c.design.conclusion === 'Not tested' ? c.design.points.filter(take) : [];
+  const steps = c.operating.conclusion === 'Not tested' ? c.operating.steps.filter(take) : [];
+  const auto = [...points, ...steps].filter(r => r.confirmed?.byIra).length;
+  return { points, steps, auto };
 }
 
 export function stepResult(s: OperatingStep): TestResult {
@@ -3439,7 +3507,12 @@ export interface DocumentSystemRow { id: string; ref: string; field: string; doc
  *  sample grid can never disagree about which item failed. */
 function compareRow(key: string, id: string, ref: string, i: number, fields: [string, (h: number) => string][], result: TestResult, date?: string): DocumentSystemRow {
   const [field, value] = fields[i % fields.length]!;
-  const h = hnum(key + id);
+  // Hashed on the FIELD and the item's REF, not the attribute or the draw slot:
+  // one transaction's approval record names one approver, whichever attribute
+  // reads it — and the Altura evidence packs (public/samples/sox-evidence) print
+  // these same values, so they must not move with a step id that the seed
+  // counter hands out differently on every seeding.
+  const h = hnum(key + field + ref);
   // A date field reads the item's own date (the one the sample grid shows); a
   // mismatch is the system holding a date a few days off it.
   if (date && DATE_FIELDS.has(field)) {
@@ -3453,11 +3526,23 @@ function compareRow(key: string, id: string, ref: string, i: number, fields: [st
   for (let k = 1; result === 'Fail' && system === document && k < 8; k++) system = value(h + k * 7919);
   return { id, ref, field, document, system, result };
 }
+/** One item against one attribute. An item tested before the TOE grid existed
+ *  carries its result on the item, not per attribute (the sampleTested rule), so
+ *  with no per-attribute cell the item's own result stands: a failed item marks
+ *  the attributes that did not pass as a whole, and an attribute that passed as
+ *  a whole keeps its pass. Without this a closed control with every item passed
+ *  read "Not tested" in every cell (click-through, 5 Oct). */
+export function itemResult(step: OperatingStep, item: Sample): TestResult {
+  const own = step.sampleResults?.[item.id];
+  if (own) return own;
+  if (item.result === 'Fail') return step.result === 'Pass' ? 'Pass' : 'Fail';
+  return item.result ?? 'Not tested';
+}
 /** The drawn sample, compared item by item. Empty before a sample exists. */
 export function documentSystemRows(c: Control, s: OperatingStep, home?: Pick<AuditRecord, 'windowFrom' | 'windowTo'>): DocumentSystemRow[] {
   const fields = compareFieldsFor(c, s);
   return (c.operating.sampling?.samples ?? []).map((it, i) =>
-    compareRow(seedKeyOf(c) + s.id, it.id, it.ref, i, fields, s.sampleResults?.[it.id] ?? 'Not tested', sampleDate(it, home)));
+    compareRow(seedKeyOf(c), it.id, it.ref, i, fields, itemResult(s, it), sampleDate(it, home)));
 }
 
 /** Plain-language summary the AI returns after comparing the sampled items'
@@ -3647,7 +3732,11 @@ export function designSuggestion(c: Control): TrackConclusion {
   // has yet written down what the design has to show, states a conclusion the
   // work does not support — and it is what made the untouched RACM row read
   // Ineffective once its required elements were seeded.
-  return d.points.length === 0 ? 'Not tested'
+  // Nor before anything has been tested (click-through, 5 Oct: "Evidence
+  // suggests: Ineffective" on PX-05 with no check tested) — outstanding
+  // documents say the work is unfinished, not that the design failed.
+  const anyTested = walkFailed || d.points.some(p => pointResult(p) !== 'Not tested');
+  return d.points.length === 0 || !anyTested ? 'Not tested'
     : designOutstandingRequired(c).length > 0 || walkFailed || d.points.some(p => pointResult(p) === 'Fail') ? 'Ineffective'
     : d.points.length > 0 && d.points.every(p => pointResult(p) === 'Pass') ? 'Effective' : 'Not tested';
 }
@@ -3800,13 +3889,16 @@ function provenanceLine(items: { validated: boolean; blocked: boolean; overridde
     else if (i.validated) ira += 1;
     else byHand += 1;
   });
-  return [
+  // Read as a sentence on the working paper ("Ira checked 1; 1 couldn't be
+  // tested"), not a row of chips — the reviewer reads this, not the screen.
+  const line = [
     ira && `Ira checked ${ira}`,
-    byHand && `you marked ${byHand}`,
-    overrode && `you overrode ${overrode}`,
-    couldNot && `Ira couldn't test ${couldNot}`,
-    untested && `${untested} not tested`,
-  ].filter(Boolean).join(' · ');
+    byHand && `${byHand} marked by hand`,
+    overrode && `${overrode} overridden`,
+    couldNot && `${couldNot} couldn't be tested`,
+    untested && `${untested} not tested yet`,
+  ].filter(Boolean).join('; ');
+  return line && line[0].toUpperCase() + line.slice(1);
 }
 
 /** The rationale the conclusion box opens with.

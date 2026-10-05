@@ -38,7 +38,7 @@ const TONE: Record<NoteTone, string> = {
 export function InlineNote({ note, className }: { note: Note | null; className?: string }) {
   if (!note) return null;
   return (
-    <p role={note.tone === 'info' ? 'status' : 'alert'} className={cn('text-[0.71875rem] leading-snug', TONE[note.tone], className)}>
+    <p role={note.tone === 'info' ? 'status' : 'alert'} className={cn('text-[0.75rem] leading-snug', TONE[note.tone], className)}>
       {note.text}
     </p>
   );

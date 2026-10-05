@@ -134,6 +134,12 @@ export function useControlRun(controlId: string): ControlRun | null {
 
 export const controlRun = (controlId: string): ControlRun | null => RUNS[controlId] ?? null;
 
+/** Every run going right now, by control — for the audit Dashboard's "Ira's
+ *  work", which lists them across the audit rather than on one control. */
+export function useControlRuns(): Record<string, ControlRun> {
+  return useSyncExternalStore(subscribeRuns, allRuns, allRuns);
+}
+
 /**
  * Start a run and lay out the trail it will walk.
  *

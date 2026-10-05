@@ -9,6 +9,7 @@ import { requiredDatasetsFor, type RequiredDataset } from './mockData';
 import { controlCode, isControlLocked } from './helpers';
 import { cn } from '../../lib/cn';
 import type { Control } from './types';
+import DialogFocus from '../shared/DialogFocus';
 
 /**
  * Bulk test of controls — the same knitted experience as the workflow library's
@@ -172,8 +173,8 @@ export default function BulkTestModal({ controlIds, onClose }: { controlIds: str
   // clickable stepper — no navigation is wired to them. Movement between steps is
   // the footer's primary button (forward) and Back (backward).
   const stepChip = (n: Step, label: string) => (
-    <span className={cn('inline-flex items-center gap-1.5 text-[11.5px] select-none', step === n ? 'text-brand-700 font-semibold' : step > n ? 'text-ink-500 font-medium' : 'text-ink-400 font-medium')}>
-      <span className={cn('w-[18px] h-[18px] rounded-full inline-flex items-center justify-center text-[10px] font-semibold', step === n ? 'bg-brand-100 text-brand-700' : step > n ? 'bg-compliant-100 text-compliant-700' : 'bg-paper-100 text-ink-400')}>
+    <span className={cn('inline-flex items-center gap-1.5 text-[0.75rem] select-none', step === n ? 'text-brand-700 font-semibold' : step > n ? 'text-ink-500 font-medium' : 'text-ink-400 font-medium')}>
+      <span className={cn('w-4.5 h-4.5 rounded-full inline-flex items-center justify-center text-[0.625rem] font-semibold', step === n ? 'bg-brand-100 text-brand-700' : step > n ? 'bg-compliant-100 text-compliant-700' : 'bg-paper-100 text-ink-500')}>
         {step > n ? <Check size={10} strokeWidth={3} /> : n}
       </span>
       {label}
@@ -182,14 +183,14 @@ export default function BulkTestModal({ controlIds, onClose }: { controlIds: str
 
   return (
     <div className="modal-backdrop" onClick={() => { if (canClose) onClose(); }}>
-      <div className="modal flex flex-col" style={{ maxWidth: 880, maxHeight: 'calc(100vh - 96px)' }} onClick={e => e.stopPropagation()}>
+      <div role="dialog" aria-modal="true" aria-labelledby="bulk-test-title" className="modal flex flex-col" style={{ maxWidth: 880, maxHeight: 'calc(100vh - 96px)' }} onClick={e => e.stopPropagation()}><DialogFocus />
         {/* header */}
         <div className="px-6 pt-5 pb-4 border-b border-canvas-border shrink-0">
           <div className="flex items-center justify-between gap-3">
-            <h2 className="text-[17px] font-semibold text-ink-900" style={{ fontFamily: "'Source Serif 4', serif" }}>Bulk test of controls</h2>
+            <h2 id="bulk-test-title" className="text-[1.0625rem] font-semibold text-ink-900" style={{ fontFamily: "'Source Serif 4', serif" }}>Bulk test of controls</h2>
             <button onClick={onClose} disabled={!canClose} className="h-7 w-7 inline-flex items-center justify-center rounded-md text-ink-400 hover:text-ink-700 disabled:opacity-30 cursor-pointer" aria-label="Close"><X size={15} /></button>
           </div>
-          <p className="text-[12px] text-ink-500 mt-0.5">{eng.name} · {selected.length} control{selected.length === 1 ? '' : 's'} selected</p>
+          <p className="text-[0.75rem] text-ink-500 mt-0.5">{eng.name} · {selected.length} control{selected.length === 1 ? '' : 's'} selected</p>
           <div className="flex items-center gap-3 mt-3">
             {stepChip(1, 'Scope')}
             <ChevronRight size={13} className="text-ink-300" />
@@ -204,14 +205,14 @@ export default function BulkTestModal({ controlIds, onClose }: { controlIds: str
           {step === 1 && (compiling ? (
             <div className="py-16 text-center">
               <Loader2 size={22} className="mx-auto animate-spin text-brand-600" />
-              <div className="mt-3 text-[13px] font-semibold text-ink-800">Compiling required files…</div>
-              <div className="mt-1 text-[12px] text-ink-500">Reading test attributes across {active.length} controls and de-duplicating the datasets they need.</div>
+              <div className="mt-3 text-[0.8125rem] font-semibold text-ink-800">Compiling required files…</div>
+              <div className="mt-1 text-[0.75rem] text-ink-500">Reading test attributes across {active.length} controls and de-duplicating the datasets they need.</div>
             </div>
           ) : (
             <div>
-              <p className="text-[12px] text-ink-500 mb-3">Each control's design considerations and operating attributes will be tested against its evidence. Untick anything you want to leave out of this run.</p>
+              <p className="text-[0.75rem] text-ink-500 mb-3">Each control's design considerations and operating attributes will be tested against its evidence. Untick anything you want to leave out of this run.</p>
               {active.length === 0 && (
-                <div className="mb-3 rounded-xl border border-dashed border-canvas-border p-3.5 text-[12px] text-ink-500">
+                <div className="mb-3 rounded-xl border border-dashed border-canvas-border p-3.5 text-[0.75rem] text-ink-500">
                   Every control in this selection is already concluded — its paper is frozen, so there is nothing left to test. Reopen a conclusion from the control's page to retest it.
                 </div>
               )}
@@ -219,7 +220,7 @@ export default function BulkTestModal({ controlIds, onClose }: { controlIds: str
                 const open = g.rows.filter(c => !isControlLocked(c));
                 return (
                 <div key={g.key} className="mb-4">
-                  <label className={cn('flex items-center gap-2 text-[11px] font-bold uppercase tracking-wide text-ink-400 mb-1.5 w-fit', open.length > 0 && 'cursor-pointer')}>
+                  <label className={cn('flex items-center gap-2 text-[0.6875rem] font-bold uppercase tracking-wide text-ink-400 mb-1.5 w-fit', open.length > 0 && 'cursor-pointer')}>
                     <input type="checkbox" checked={open.length > 0 && open.every(c => !excluded.has(c.id))} disabled={open.length === 0} onChange={() => toggleGroup(g.rows)}
                       className="cursor-pointer accent-brand-600 disabled:cursor-not-allowed" aria-label={`Select all in ${g.key}`} />
                     {g.key} · {g.rows.filter(c => !excluded.has(c.id)).length}/{g.rows.length}
@@ -234,10 +235,10 @@ export default function BulkTestModal({ controlIds, onClose }: { controlIds: str
                           <span className="flex items-center gap-1.5">
                             <span className="wp-ref">{c.wpRef}</span>
                             {c.isKey && <Star size={11} className="text-mitigated-500 fill-mitigated-100 shrink-0" />}
-                            <span className="text-[12.5px] font-semibold text-ink-900 truncate">{c.description}</span>
-                            {locked && <span className="px-1.5 h-[17px] inline-flex items-center rounded border border-canvas-border bg-paper-50 text-[10px] font-bold uppercase tracking-wide text-ink-500 shrink-0">Concluded — locked</span>}
+                            <span className="text-[0.8125rem] font-semibold text-ink-900 truncate">{c.description}</span>
+                            {locked && <span className="px-1.5 h-4.25 inline-flex items-center rounded border border-canvas-border bg-paper-50 text-[0.625rem] font-bold uppercase tracking-wide text-ink-500 shrink-0">Concluded — locked</span>}
                           </span>
-                          <span className="block text-[11px] text-ink-400 mt-0.5">{checksOf(c)} checks · {evidenceSummary(c)} · {c.owner}</span>
+                          <span className="block text-[0.6875rem] text-ink-400 mt-0.5">{checksOf(c)} checks · {evidenceSummary(c)} · {c.owner}</span>
                         </span>
                       </label>
                       );
@@ -252,10 +253,10 @@ export default function BulkTestModal({ controlIds, onClose }: { controlIds: str
           {step === 2 && (
             <div>
               <div className="flex items-start justify-between gap-3 mb-3">
-                <p className="text-[12px] text-ink-500">
+                <p className="text-[0.75rem] text-ink-500">
                   {totalRequirements} file requirement{totalRequirements === 1 ? '' : 's'} across {active.length} controls compile down to <span className="font-semibold text-ink-800">{compiled.length} unique dataset{compiled.length === 1 ? '' : 's'}</span> — attach each once and every control that needs it is covered.
                 </p>
-                <button onClick={pullAll} disabled={pullingAll || allProvided} className="h-8 px-3 shrink-0 inline-flex items-center gap-1.5 rounded-lg border border-brand-200 bg-brand-50 text-brand-700 text-[12px] font-semibold hover:bg-brand-100 disabled:opacity-40 transition-colors cursor-pointer">
+                <button onClick={pullAll} disabled={pullingAll || allProvided} className="h-8 px-3 shrink-0 inline-flex items-center gap-1.5 rounded-lg border border-brand-200 bg-brand-50 text-brand-700 text-[0.75rem] font-semibold hover:bg-brand-100 disabled:opacity-40 transition-colors cursor-pointer">
                   {pullingAll ? <Loader2 size={13} className="animate-spin" /> : <Database size={13} />} Pull all from source systems
                 </button>
               </div>
@@ -268,21 +269,21 @@ export default function BulkTestModal({ controlIds, onClose }: { controlIds: str
                       <span className={cn('w-9 h-9 rounded-lg inline-flex items-center justify-center shrink-0', isOn ? 'bg-compliant-100 text-compliant-700' : 'bg-paper-50 text-ink-500')}><FileSpreadsheet size={17} /></span>
                       <div className="min-w-0 flex-1">
                         <div className="flex items-center gap-2">
-                          <span className="text-[13px] font-semibold text-ink-900">{dataset.name}</span>
-                          <span className={cn('px-1.5 h-[17px] inline-flex items-center rounded border text-[10px] font-bold', FORMAT_TONE[dataset.format])}>{dataset.format}</span>
+                          <span className="text-[0.8125rem] font-semibold text-ink-900">{dataset.name}</span>
+                          <span className={cn('px-1.5 h-4.25 inline-flex items-center rounded border text-[0.625rem] font-bold', FORMAT_TONE[dataset.format])}>{dataset.format}</span>
                         </div>
-                        <div className="text-[11.5px] text-ink-500 mt-0.5">{dataset.description}</div>
+                        <div className="text-[0.75rem] text-ink-500 mt-0.5">{dataset.description}</div>
                         <div className="flex items-center gap-1 mt-1.5 flex-wrap">
-                          <span className="text-[10.5px] font-semibold text-ink-400">Used by {usedBy.length} control{usedBy.length === 1 ? '' : 's'}:</span>
-                          {usedBy.slice(0, 6).map(c => <span key={c.id} className="wp-ref" style={{ fontSize: 9.5 }}>{c.wpRef}</span>)}
-                          {usedBy.length > 6 && <span className="text-[10.5px] text-ink-400 font-semibold">+{usedBy.length - 6}</span>}
+                          <span className="text-[0.6875rem] font-semibold text-ink-400">Used by {usedBy.length} control{usedBy.length === 1 ? '' : 's'}:</span>
+                          {usedBy.slice(0, 6).map(c => <span key={c.id} className="wp-ref" style={{ fontSize: '0.625rem' }}>{c.wpRef}</span>)}
+                          {usedBy.length > 6 && <span className="text-[0.6875rem] text-ink-400 font-semibold">+{usedBy.length - 6}</span>}
                         </div>
                       </div>
                       <div className="shrink-0">
                         {isOn ? (
-                          <span className="inline-flex items-center gap-1 text-[11.5px] font-semibold text-compliant-700"><CheckCircle2 size={14} /> Attached</span>
+                          <span className="inline-flex items-center gap-1 text-[0.75rem] font-semibold text-compliant-700"><CheckCircle2 size={14} /> Attached</span>
                         ) : (
-                          <button onClick={() => attach(dataset.name)} disabled={isBusy} className="h-8 px-3 inline-flex items-center gap-1.5 rounded-lg border border-canvas-border text-[12px] font-semibold text-ink-600 hover:text-brand-700 hover:border-brand-300 disabled:opacity-50 transition-colors cursor-pointer">
+                          <button onClick={() => attach(dataset.name)} disabled={isBusy} className="h-8 px-3 inline-flex items-center gap-1.5 rounded-lg border border-canvas-border text-[0.75rem] font-semibold text-ink-600 hover:text-brand-700 hover:border-brand-300 disabled:opacity-50 transition-colors cursor-pointer">
                             {attaching.has(dataset.name) ? <Loader2 size={13} className="animate-spin" /> : <UploadCloud size={13} />} Attach
                           </button>
                         )}
@@ -294,7 +295,7 @@ export default function BulkTestModal({ controlIds, onClose }: { controlIds: str
               {attestOnly.length > 0 && (
                 <div className="mt-3 rounded-xl border border-dashed border-canvas-border p-3 flex items-start gap-2.5">
                   <Paperclip size={14} className="text-ink-400 mt-0.5 shrink-0" />
-                  <p className="text-[11.5px] text-ink-500">
+                  <p className="text-[0.75rem] text-ink-500">
                     <span className="font-semibold text-ink-700">{attestOnly.length} control{attestOnly.length === 1 ? '' : 's'}</span> {attestOnly.length === 1 ? 'needs' : 'need'} no files — tested from recorded attestations and evidence already on the control ({attestOnly.slice(0, 5).map(c => c.wpRef).join(', ')}{attestOnly.length > 5 ? '…' : ''}).
                   </p>
                 </div>
@@ -313,12 +314,12 @@ export default function BulkTestModal({ controlIds, onClose }: { controlIds: str
                   { v: `~${estRuntimeSec}s`, k: 'Est. runtime' },
                 ].map(s => (
                   <div key={s.k} className="rounded-xl border border-canvas-border bg-paper-50/50 px-3 py-2.5 text-center">
-                    <div className="text-[17px] font-bold tabular-nums text-ink-900 leading-none">{s.v}</div>
-                    <div className="text-[10.5px] text-ink-400 font-medium mt-1">{s.k}</div>
+                    <div className="text-[1.0625rem] font-bold tabular-nums text-ink-900 leading-none">{s.v}</div>
+                    <div className="text-[0.6875rem] text-ink-400 font-medium mt-1">{s.k}</div>
                   </div>
                 ))}
               </div>
-              <p className="text-[10.5px] text-ink-400 mb-4">Runtime is simulated for this preview.</p>
+              <p className="text-[0.6875rem] text-ink-400 mb-4">Runtime is simulated for this preview.</p>
               <div className="space-y-1.5">
                 {active.map((c, i) => {
                   const state = !running ? 'queued' : i < doneCount ? 'done' : i === doneCount ? 'running' : 'queued';
@@ -327,8 +328,8 @@ export default function BulkTestModal({ controlIds, onClose }: { controlIds: str
                     <div key={c.id} className={cn('rounded-xl border p-3 flex items-center gap-3 transition-colors', state === 'done' ? (outcome === 'Effective' ? 'border-compliant-200 bg-compliant-50/30' : 'border-risk-200 bg-risk-50/30') : 'border-canvas-border bg-canvas-elevated')}>
                       <span className="wp-ref shrink-0">{c.wpRef}</span>
                       <span className="min-w-0 flex-1">
-                        <span className="block text-[12.5px] font-semibold text-ink-900 truncate">{c.description}</span>
-                        <span className="block text-[10.5px] text-ink-400 mt-0.5">
+                        <span className="block text-[0.8125rem] font-semibold text-ink-900 truncate">{c.description}</span>
+                        <span className="block text-[0.6875rem] text-ink-400 mt-0.5">
                           {state === 'done'
                             ? `${checksOf(c)} checks run · TOD & TOE concluded`
                             : `${checksOf(c)} checks · ${requiredDatasetsFor(c).map(d => d.name).join(', ') || 'attestation-based'}`}
@@ -337,12 +338,12 @@ export default function BulkTestModal({ controlIds, onClose }: { controlIds: str
                       <span className="shrink-0">
                         {state === 'done' ? (
                           outcome === 'Effective'
-                            ? <span className="inline-flex items-center gap-1 text-[11.5px] font-semibold text-compliant-700"><CheckCircle2 size={14} /> Effective</span>
-                            : <span className="inline-flex items-center gap-1 text-[11.5px] font-semibold text-risk-700"><XCircle size={14} /> Ineffective</span>
+                            ? <span className="inline-flex items-center gap-1 text-[0.75rem] font-semibold text-compliant-700"><CheckCircle2 size={14} /> Effective</span>
+                            : <span className="inline-flex items-center gap-1 text-[0.75rem] font-semibold text-risk-700"><XCircle size={14} /> Ineffective</span>
                         ) : state === 'running' ? (
                           <Loader2 size={15} className="animate-spin text-brand-600" />
                         ) : (
-                          <span className="text-[11px] text-ink-400 font-medium">{running ? 'Queued' : 'Ready'}</span>
+                          <span className="text-[0.6875rem] text-ink-400 font-medium">{running ? 'Queued' : 'Ready'}</span>
                         )}
                       </span>
                     </div>
@@ -359,34 +360,34 @@ export default function BulkTestModal({ controlIds, onClose }: { controlIds: str
               scope + attached datasets are component state and are never reset,
               so nothing is discarded on the way back. */}
           {!running && !finished && step > 1 && (
-            <button onClick={() => setStep((step - 1) as Step)} className="h-9 px-2.5 -ml-1 inline-flex items-center gap-1 rounded-lg text-[12.5px] font-semibold text-ink-500 hover:text-ink-900 hover:bg-paper-100 transition-colors cursor-pointer">
+            <button onClick={() => setStep((step - 1) as Step)} className="h-9 px-2.5 -ml-1 inline-flex items-center gap-1 rounded-lg text-[0.8125rem] font-semibold text-ink-500 hover:text-ink-900 hover:bg-paper-100 transition-colors cursor-pointer">
               <ChevronLeft size={14} /> Back
             </button>
           )}
-          {step === 2 && !allProvided && <span className="text-[11.5px] text-ink-400">{compiled.filter(e => provided.has(e.dataset.name)).length}/{compiled.length} datasets attached</span>}
-          {step === 3 && running && !finished && <span className="text-[11.5px] text-ink-500 inline-flex items-center gap-1.5"><Loader2 size={12} className="animate-spin" /> Testing control {Math.min(doneCount + 1, active.length)} of {active.length}…</span>}
+          {step === 2 && !allProvided && <span className="text-[0.75rem] text-ink-400">{compiled.filter(e => provided.has(e.dataset.name)).length}/{compiled.length} datasets attached</span>}
+          {step === 3 && running && !finished && <span className="text-[0.75rem] text-ink-500 inline-flex items-center gap-1.5"><Loader2 size={12} className="animate-spin" /> Testing control {Math.min(doneCount + 1, active.length)} of {active.length}…</span>}
           <div className="flex-1" />
           {/* Stop — the explicit, labelled way out of an in-progress run (the header
               X stays disabled mid-run to avoid an accidental dismissal that loses the
               whole setup). Halts the remaining controls and returns to a safe state. */}
           {running && !finished && (
-            <button onClick={stop} className="h-9 px-3.5 inline-flex items-center gap-1.5 rounded-lg border border-risk-200 text-[12.5px] font-semibold text-risk-700 hover:bg-risk-50 transition-colors cursor-pointer">
+            <button onClick={stop} className="h-9 px-3.5 inline-flex items-center gap-1.5 rounded-lg border border-risk-200 text-[0.8125rem] font-semibold text-risk-700 hover:bg-risk-50 transition-colors cursor-pointer">
               <Square size={11} className="fill-current" /> Stop
             </button>
           )}
-          {!finished && !running && <button onClick={onClose} disabled={!canClose} className="h-9 px-3.5 rounded-lg border border-canvas-border text-[12.5px] font-semibold text-ink-600 hover:text-ink-900 disabled:opacity-40 transition-colors cursor-pointer">Cancel</button>}
+          {!finished && !running && <button onClick={onClose} disabled={!canClose} className="h-9 px-3.5 rounded-lg border border-canvas-border text-[0.8125rem] font-semibold text-ink-600 hover:text-ink-900 disabled:opacity-40 transition-colors cursor-pointer">Cancel</button>}
           {step === 1 && (
-            <button onClick={compile} disabled={active.length === 0 || compiling} className="h-9 px-4 inline-flex items-center gap-1.5 rounded-lg bg-brand-600 text-white text-[12.5px] font-semibold hover:bg-brand-700 disabled:opacity-40 transition-colors cursor-pointer">
+            <button onClick={compile} disabled={active.length === 0 || compiling} className="h-9 px-4 inline-flex items-center gap-1.5 rounded-lg bg-brand-600 text-white text-[0.8125rem] font-semibold hover:bg-brand-700 disabled:opacity-40 transition-colors cursor-pointer">
               Compile required files <ChevronRight size={14} />
             </button>
           )}
           {step === 2 && (
-            <button onClick={() => setStep(3)} disabled={!allProvided} className="h-9 px-4 inline-flex items-center gap-1.5 rounded-lg bg-brand-600 text-white text-[12.5px] font-semibold hover:bg-brand-700 disabled:opacity-40 transition-colors cursor-pointer">
+            <button onClick={() => setStep(3)} disabled={!allProvided} className="h-9 px-4 inline-flex items-center gap-1.5 rounded-lg bg-brand-600 text-white text-[0.8125rem] font-semibold hover:bg-brand-700 disabled:opacity-40 transition-colors cursor-pointer">
               Review &amp; execute <ChevronRight size={14} />
             </button>
           )}
           {step === 3 && !running && (
-            <button onClick={execute} className="h-9 px-4 inline-flex items-center gap-1.5 rounded-lg bg-brand-600 text-white text-[12.5px] font-semibold hover:bg-brand-700 transition-colors cursor-pointer">
+            <button onClick={execute} className="h-9 px-4 inline-flex items-center gap-1.5 rounded-lg bg-brand-600 text-white text-[0.8125rem] font-semibold hover:bg-brand-700 transition-colors cursor-pointer">
               <FlaskConical size={14} /> Test {active.length} control{active.length === 1 ? '' : 's'}
             </button>
           )}
@@ -396,7 +397,7 @@ export default function BulkTestModal({ controlIds, onClose }: { controlIds: str
               launched from, both of which already show the new results, and the
               per-control history survives on each control page. */}
           {finished && (
-            <button onClick={onClose} className="h-9 px-4 rounded-lg bg-brand-600 text-white text-[12.5px] font-semibold hover:bg-brand-700 transition-colors cursor-pointer">
+            <button onClick={onClose} className="h-9 px-4 rounded-lg bg-brand-600 text-white text-[0.8125rem] font-semibold hover:bg-brand-700 transition-colors cursor-pointer">
               Done
             </button>
           )}

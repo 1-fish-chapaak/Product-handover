@@ -109,6 +109,9 @@ interface Props {
 
 type Step = 1 | 2 | 3 | 4 | 5;
 const STEP_LABELS = ['Type', 'Basics', 'Scope', 'Team & timeline', 'Review'] as const;
+/** With SOX / ICFR picked, Next hands over to the SOX scoping sheet — its six
+ *  steps are the journey, so the Type step already counts and names them. */
+const SOX_STEP_LABELS = ['Type', 'Basics', 'Materiality', 'Scope', 'Sampling', 'Review'] as const;
 
 export default function CreateEngagementWizard({ onClose, onCreated, initial, onPickSox, initialType, enterInstant }: Props): JSX.Element {
   const { addToast } = useToast();
@@ -285,6 +288,7 @@ export default function CreateEngagementWizard({ onClose, onCreated, initial, on
   // Leaving the Type step having chosen SOX hands the journey over — the rest
   // of this wizard asks for a period and materiality that SOX derives instead.
   const handsOffToSox = !isEdit && !!onPickSox && type === 'SOX / ICFR';
+  const railLabels: readonly string[] = handsOffToSox ? SOX_STEP_LABELS : STEP_LABELS;
   const goToStep = (target: Step) => {
     if (target <= step) { setStep(target); return; }
     if (step === 1 && handsOffToSox) { onPickSox!(); return; }
@@ -383,6 +387,25 @@ export default function CreateEngagementWizard({ onClose, onCreated, initial, on
   const dirty = dataSnap !== initialSnapRef.current;
   const [confirmDiscard, setConfirmDiscard] = useState(false);
   const attemptClose = () => { if (dirty) setConfirmDiscard(true); else onClose(); };
+  // Escape (click-through, 5 Oct): the guard closes first; a field being typed
+  // in only loses focus; an open menu keeps the key (its own handler closes
+  // it); otherwise the sheet closes — straight away when nothing was entered,
+  // through the discard guard when something was.
+  const escRef = useRef({ dirty, confirmDiscard, attemptClose });
+  escRef.current = { dirty, confirmDiscard, attemptClose };
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key !== 'Escape' || e.defaultPrevented) return;
+      const s = escRef.current;
+      if (s.confirmDiscard) { setConfirmDiscard(false); return; }
+      if (document.querySelector('body > .z-\\[1000\\], [role="listbox"]')) return;
+      const t = e.target as HTMLElement | null;
+      if (t && t !== document.body && t.matches('input, textarea, select, [contenteditable="true"]')) { t.blur(); return; }
+      s.attemptClose();
+    };
+    document.addEventListener('keydown', onKey);
+    return () => document.removeEventListener('keydown', onKey);
+  }, []);
 
   // ─── Render ─────────────────────────────────────────────────────────────
   return (
@@ -421,22 +444,22 @@ export default function CreateEngagementWizard({ onClose, onCreated, initial, on
                 <Sparkles size={16} className="text-brand-600 shrink-0" />
                 <h2 className="text-[1.125rem] font-semibold text-ink-900 tracking-tight">{isEdit ? 'Edit Engagement' : 'Create Engagement'}</h2>
               </div>
-              <p className="text-[0.75rem] text-ink-500">Step {step} of 5 — {STEP_LABELS[step - 1]}</p>
+              <p className="text-[0.75rem] text-ink-500">Step {step} of {railLabels.length} — {railLabels[step - 1]}</p>
             </div>
             <button onClick={attemptClose} className="w-8 h-8 rounded-full text-ink-500 hover:text-ink-800 hover:bg-[#F4F2F7] flex items-center justify-center cursor-pointer shrink-0" aria-label="Close drawer"><X size={16} /></button>
           </div>
           <div className="flex items-center gap-1.5">
-            {[1, 2, 3, 4, 5].map(n => (
+            {railLabels.map((_, i) => i + 1).map(n => (
               <button
                 key={n}
-                onClick={() => goToStep(n as Step)}
+                onClick={() => goToStep(Math.min(n, 5) as Step)}
                 className={`flex-1 h-1.5 rounded-full transition-colors ${n === step ? 'bg-brand-600' : n < step ? 'bg-brand-300' : 'bg-canvas-border'} ${n <= step ? 'cursor-pointer hover:opacity-80' : 'cursor-not-allowed'}`}
                 aria-label={`Go to step ${n}`}
               />
             ))}
           </div>
           <div className="flex justify-between mt-1.5 text-[0.625rem] font-semibold text-ink-400 uppercase tracking-wider">
-            {STEP_LABELS.map((lbl, i) => (
+            {railLabels.map((lbl, i) => (
               <span key={lbl} className={step === i + 1 ? 'text-brand-700' : ''}>{lbl}</span>
             ))}
           </div>

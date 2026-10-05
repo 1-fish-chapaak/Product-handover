@@ -43,7 +43,7 @@ export function NatureChip({ nature, small }: { nature: Nature; small?: boolean 
   const Icon = nature === 'Automated' ? WorkflowIcon : nature === 'IT-dependent' ? Cpu : Hand;
   const tone = nature === 'Automated' ? 'bg-evidence-50 border-evidence-100 text-evidence-700' : nature === 'IT-dependent' ? 'bg-brand-50 border-brand-100 text-brand-700' : 'bg-paper-50 border-canvas-border text-ink-600';
   return (
-    <span className={cn('inline-flex items-center gap-1 rounded-md border font-semibold whitespace-nowrap', tone, small ? 'px-1.5 h-5 text-[0.625rem]' : 'px-2 h-[22px] text-[0.65625rem]')}>
+    <span className={cn('inline-flex items-center gap-1 rounded-md border font-semibold whitespace-nowrap', tone, small ? 'px-1.5 h-5 text-[0.6875rem]' : 'px-2 h-5.5 text-[0.6875rem]')}>
       <Icon size={small ? 9 : 10} />{nature}
     </span>
   );
@@ -115,7 +115,7 @@ export function Stamp({ result, size = 'sm', animate = true }: { result: 'Effect
 
 // ─── The baton — whose court is the ball in ──────────────────────────────────────
 const COURT: Record<Court, { tone: Tone; label: string; Icon: typeof Gavel }> = {
-  auditor: { tone: 'info', label: 'Your court', Icon: Gavel },
+  auditor: { tone: 'info', label: 'You', Icon: Gavel },
   'risk-owner': { tone: 'mitigated', label: 'Risk owner', Icon: UserCheck },
   reviewer: { tone: 'evidence', label: 'Reviewer', Icon: ShieldCheck },
   none: { tone: 'compliant', label: 'Closed', Icon: CheckCircle2 },
@@ -129,7 +129,7 @@ export function CourtBadge({ court, fromRole, who }: { court: Court; fromRole?: 
   const label = who ? who
     : court === 'auditor' && fromRole && fromRole !== 'auditor' ? 'Auditor'
     : court === 'risk-owner' && fromRole === 'risk-owner' ? 'You'
-    : court === 'reviewer' && fromRole === 'reviewer' ? 'Your court'
+    : court === 'reviewer' && fromRole === 'reviewer' ? 'You'
     : c.label;
   return <span className="inline-flex items-center gap-1"><c.Icon size={12} className="text-ink-400" /><Pill tone={c.tone}>{label}</Pill></span>;
 }
@@ -144,7 +144,7 @@ export function RoleSwitcher({ role, onChange }: { role: Role; onChange: (r: Rol
         const Icon = ROLE_ICON[r];
         const active = role === r;
         return (
-          <button key={r} onClick={() => onChange(r)} className={cn('relative inline-flex items-center gap-2 px-3 h-8 rounded-lg text-[0.78125rem] font-semibold transition-colors cursor-pointer', active ? 'text-brand-700' : 'text-ink-500 hover:text-ink-700')}>
+          <button key={r} onClick={() => onChange(r)} className={cn('relative inline-flex items-center gap-2 px-3 h-8 rounded-lg text-[0.8125rem] font-semibold transition-colors cursor-pointer', active ? 'text-brand-700' : 'text-ink-500 hover:text-ink-700')}>
             {active && <motion.span layoutId="icfr-role-pill" className="absolute inset-0 rounded-lg bg-canvas-elevated shadow-[0_2px_8px_-3px_rgba(15,8,30,0.25)] ring-1 ring-brand-100" transition={{ type: 'spring', stiffness: 420, damping: 32 }} />}
             <span className="relative inline-flex items-center gap-1.5"><Icon size={14} />{ROLE_NAME[r]}</span>
           </button>
@@ -193,7 +193,7 @@ export function OwnerPicker({ owner, options, onChange }: { owner: string; optio
         aria-controls={open ? 'owner-persona-menu' : undefined}
         aria-activedescendant={open && activeIndex >= 0 ? optId(activeIndex) : undefined}
         title={`Acting as ${owner}`}
-        className="h-8 px-2.5 inline-flex items-center gap-1.5 rounded-lg border border-canvas-border bg-canvas-elevated text-[12px] font-semibold text-ink-700 hover:border-mitigated-300 hover:text-mitigated-700 transition-colors cursor-pointer">
+        className="h-8 px-2.5 inline-flex items-center gap-1.5 rounded-lg border border-canvas-border bg-canvas-elevated text-[0.75rem] font-semibold text-ink-700 hover:border-mitigated-300 hover:text-mitigated-700 transition-colors cursor-pointer">
         <UserCheck size={13} className="text-mitigated-600" /> as {short}<ChevronDown size={12} className="text-ink-400" />
       </button>
       <AnimatePresence>
@@ -206,7 +206,7 @@ export function OwnerPicker({ owner, options, onChange }: { owner: string; optio
               {options.map((o, i) => (
                 <button key={o} id={optId(i)} role="menuitemradio" aria-checked={o === owner} tabIndex={-1}
                   onClick={() => select(o)} onMouseEnter={() => setActiveIndex(i)}
-                  className={cn('w-full text-left px-2.5 py-1.5 rounded-lg text-[12.5px] cursor-pointer flex items-center gap-2', i === activeIndex && 'bg-paper-50', o === owner ? 'text-mitigated-700 font-semibold' : 'text-ink-700')}>
+                  className={cn('w-full text-left px-2.5 py-1.5 rounded-lg text-[0.8125rem] cursor-pointer flex items-center gap-2', i === activeIndex && 'bg-paper-50', o === owner ? 'text-mitigated-700 font-semibold' : 'text-ink-700')}>
                   {o === owner ? <Check size={12} /> : <span className="w-3" />}{o}
                 </button>
               ))}
@@ -344,7 +344,7 @@ export function RagCard({ m }: { m: RagMeterDef; /** @deprecated the card no lon
     <div className={cn('rounded-xl border transition-colors', open ? 'h-full' : 'self-start', tint)}>
       <button type="button" onClick={() => setOpen(o => !o)} aria-expanded={open} aria-controls={bodyId}
         aria-label={m.empty ? `${m.label} — not set up` : `${m.label} ${m.pct}% — ${statusWordOf(m)}`}
-        className="w-full min-h-[4.75rem] text-left p-3.5 flex items-center gap-3 cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-200 rounded-xl">
+        className="w-full min-h-19 text-left p-3.5 flex items-center gap-3 cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-200 rounded-xl">
         <div className="relative w-12 h-12 shrink-0">
           <svg viewBox="0 0 40 40" className="w-12 h-12 -rotate-90">
             <circle cx="20" cy="20" r="16" fill="none" stroke="var(--color-paper-200)" strokeWidth="4" />
@@ -374,7 +374,7 @@ export function RagCard({ m }: { m: RagMeterDef; /** @deprecated the card no lon
               </div>
               {m.formula && (
                 <div className="mt-2.5 rounded-lg border border-canvas-border bg-paper-50/70 px-3 py-2.5">
-                  <div className="text-[0.625rem] font-bold uppercase tracking-wider text-ink-400">How this is counted</div>
+                  <div className="text-[0.6875rem] font-bold uppercase tracking-wider text-ink-400">How this is counted</div>
                   <div className="mt-1 font-mono text-[0.6875rem] leading-relaxed text-ink-800">{m.formula}</div>
                 </div>
               )}
@@ -454,7 +454,7 @@ export function RagKpiRow({ meters, flush, inline, dial }: {
     // score of zero — a round cap on a zero-length dash leaves a floating dot.
     const C = 2 * Math.PI * 16;
     return (
-      <div className={cn('flex items-center min-w-0', dial ? 'gap-2' : 'gap-5')}>
+      <div className={cn('flex items-center min-w-0', dial ? 'gap-3' : 'gap-5')}>
         {meters.map(m => {
           const state = ragWord(m);
           const flagged = worst === m;
@@ -508,6 +508,10 @@ export function RagKpiRow({ meters, flush, inline, dial }: {
                   the only signal, which is the one thing DESIGN.md forbids
                   outright. */}
               {flagged && <StateIcon size={11} className={cn('shrink-0', state === 'red' ? 'text-risk-700' : 'text-high-700')} />}
+              {/* A one-word name beside each ring (click-through, 5 Oct): three
+                  bare numbers read as nothing. The short word fits where the
+                  full name did not; the full name stays on hover. */}
+              <span aria-hidden className="text-[0.6875rem] font-semibold text-ink-500 whitespace-nowrap">{m.short ?? m.label}</span>
               {/* Sighted readers hover. Everyone else still gets the name. */}
               <span className="sr-only">{m.label} — {m.empty ? 'not set up' : `${m.pct}%`}, {statusWordOf(m)}</span>
             </div>
@@ -537,7 +541,7 @@ export function RagKpiRow({ meters, flush, inline, dial }: {
               <div className={cn('text-[1.0625rem] font-bold tabular-nums leading-none', numCls)}>{m.empty ? '—' : `${m.pct}%`}</div>
               {/* The icon is why the colour is allowed at all: colour is never
                   the only signal (DESIGN.md §6). */}
-              <div className="mt-1.5 flex items-start gap-1 text-[0.65625rem] font-semibold text-ink-500 leading-tight">
+              <div className="mt-1.5 flex items-start gap-1 text-[0.6875rem] font-semibold text-ink-500 leading-tight">
                 {flagged && <StateIcon size={11} className={cn('shrink-0 mt-px', state === 'red' ? 'text-risk-700' : 'text-high-700')} />}
                 <span className="min-w-0">{m.label}</span>
               </div>
@@ -557,7 +561,7 @@ export function RagKpiRow({ meters, flush, inline, dial }: {
               <div className="text-[0.75rem] font-semibold text-ink-700">{open.detail}</div>
               {open.formula && (
                 <div className="mt-2 rounded-lg border border-canvas-border bg-paper-50/70 px-3 py-2.5">
-                  <div className="text-[0.625rem] font-bold uppercase tracking-wider text-ink-400">How this is counted</div>
+                  <div className="text-[0.6875rem] font-bold uppercase tracking-wider text-ink-400">How this is counted</div>
                   <div className="mt-1 font-mono text-[0.6875rem] leading-relaxed text-ink-800">{open.formula}</div>
                 </div>
               )}
@@ -614,14 +618,14 @@ export function ItgcCascadeBanner({ failed, affected, onOpenControl, onShowAffec
         <div className="mt-2 flex flex-wrap items-center gap-1.5">
           {failed.map(f => (
             <button key={f.id} onClick={() => onOpenControl(f.id)} title={f.description}
-              className="inline-flex items-center gap-1.5 max-w-full px-2 h-[22px] rounded-md border border-mitigated-200 bg-canvas-elevated text-[0.6875rem] font-semibold text-mitigated-800 hover:border-mitigated-400 transition-colors cursor-pointer">
+              className="inline-flex items-center gap-1.5 max-w-full px-2 h-5.5 rounded-md border border-mitigated-200 bg-canvas-elevated text-[0.6875rem] font-semibold text-mitigated-800 hover:border-mitigated-400 transition-colors cursor-pointer">
               <span className="font-mono">{f.code}</span>
               <span className="truncate font-medium text-ink-600">{f.description}</span>
             </button>
           ))}
           {onShowAffected && affected > 0 && (
             <button onClick={onShowAffected}
-              className="inline-flex items-center gap-1 px-2 h-[22px] rounded-md text-[0.6875rem] font-bold text-mitigated-800 hover:bg-mitigated-100 transition-colors cursor-pointer">
+              className="inline-flex items-center gap-1 px-2 h-5.5 rounded-md text-[0.6875rem] font-bold text-mitigated-800 hover:bg-mitigated-100 transition-colors cursor-pointer">
               Show the {affected} affected <ChevronDown size={12} className="-rotate-90" />
             </button>
           )}
@@ -649,10 +653,10 @@ export function OriginPicker({ value, onPick, disabled }: { value?: FileOrigin; 
           <button key={o.id} type="button" disabled={disabled} onClick={() => onPick(o.id)}
             className={cn('text-left rounded-lg border px-3 py-2.5 transition-colors disabled:cursor-not-allowed disabled:opacity-60',
               on ? 'border-brand-300 bg-brand-50' : 'border-canvas-border bg-canvas-elevated enabled:hover:border-ink-300 cursor-pointer')}>
-            <span className={cn('flex items-center gap-1.5 text-[0.78125rem] font-semibold', on ? 'text-brand-700' : 'text-ink-800')}>
+            <span className={cn('flex items-center gap-1.5 text-[0.8125rem] font-semibold', on ? 'text-brand-700' : 'text-ink-800')}>
               {on && <Check size={12} className="shrink-0" />}{o.id}
             </span>
-            <span className="block text-[0.65625rem] text-ink-400 mt-0.5 leading-snug">{o.hint}</span>
+            <span className="block text-[0.6875rem] text-ink-400 mt-0.5 leading-snug">{o.hint}</span>
           </button>
         );
       })}

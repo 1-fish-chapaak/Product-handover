@@ -1,6 +1,6 @@
 import { entityShort } from '../audit/sox-testing/soxTestingData';
 import { normaliseProcess, programmeFor } from './auditScope';
-import { NEW_FLOW_ENGAGEMENT_ID } from './flow';
+import { ALTURA_YE_ENGAGEMENT_ID, NEW_FLOW_ENGAGEMENT_ID } from './flow';
 import { applyDocRequirements, designCheckQA, docColumnOf, docRequirement, racmRowOf, requiredFilesOf, requiredFilesReady, requiredKindsFor, stepResult, titleFromRisk } from './helpers';
 import { entityCodeFor, processCodeFor, renameEngagementIds } from './racmIds';
 import { defaultSamplingMethodology, FIVE_W_1H, ipeChecklist, ROUND_TAG, ROUND_WINDOW_LABEL } from './types';
@@ -2129,18 +2129,23 @@ function alturaAwaitingApproval(controls: Control[]): Control[] {
  * preparer and the reviewer have both signed it.
  */
 function singleAudit(meta: SeedMeta, controls: Control[]): AuditRecord[] {
-  if (!controls.length) return [];
-  const year = Number(/(\d{4})/.exec(meta.periodEnd ?? '')?.[1] ?? new Date().getFullYear());
+  // One engagement = one audit round (5 Oct 2026): every engagement has its one
+  // audit, even before it has controls — there is no audit level left to fall
+  // back to. The round and window come from Create engagement's Basics when it
+  // set them (meta.audit); the older seeds are each one year-end.
+  const a = meta.audit;
+  const year = a?.fiscalYear ?? Number(/(\d{4})/.exec(meta.periodEnd ?? '')?.[1] ?? new Date().getFullYear());
+  const cy = a?.yearBasis === 'cy';
   const processes = Array.from(new Set(controls.map(c => c.process)));
   return [{
-    id: `audit-${meta.id ?? 'eng'}-ye`,
-    period: `FY ${year - 1}-${String(year).slice(-2)}`,
-    yearBasis: 'fy',
+    id: `audit-${meta.id ?? 'eng'}-${a?.round === 'interim' ? 'int' : a?.round === 'rollforward' ? 'rf' : 'ye'}`,
+    period: cy ? `CY ${year}` : `FY ${year - 1}-${String(year).slice(-2)}`,
+    yearBasis: cy ? 'cy' : 'fy',
     fiscalYear: year,
-    periodSpan: `Apr ${year - 1} – Mar ${year}`,
-    round: 'yearend',
-    windowFrom: `${year}-01-01`,
-    windowTo: `${year}-03-31`,
+    periodSpan: cy ? `Jan ${year} – Dec ${year}` : `Apr ${year - 1} – Mar ${year}`,
+    round: a?.round ?? 'yearend',
+    windowFrom: a?.windowFrom ?? `${year}-01-01`,
+    windowTo: a?.windowTo ?? `${year}-03-31`,
     scopeKind: 'racm',
     scopeNames: processes,
     scopeIds: [],
@@ -2244,7 +2249,7 @@ function rfDemoDeficiencies(controls: Control[]): Deficiency[] {
 export interface SeedMeta { id?: string; code?: string; name?: string; /** The company being audited. Carried because the workspace clones the flagship
   *  seed: without it every engagement inherited the flagship's own company, and
   *  the status report — which names the entity in its title and its first table —
-  *  issued under the wrong client. */ entity?: string; process?: string; /** Scoping-derived process list — when present, the workspace seeds one RACM per entry. */ processes?: string[]; /** Testing state for scoping-derived RACMs — see Engagement.soxSeedMode. */ seedMode?: 'fresh' | 'live' | 'carried'; periodStart?: string; periodEnd?: string; owner?: string; materiality?: number; performanceMateriality?: number; clearlyTrivial?: number; sdBandPct?: number; /** Controls copied from the RACM tab when the engagement was created (S11) — when present they are the register, as picked. */ controls?: Control[]; /** The sampling approach the lead proposed at creation (#22) — when present it replaces the flagship's agreed one, proposal and all, so the workspace opens on what was just proposed and still waiting to be signed. */ sampling?: SamplingMethodology; }
+  *  issued under the wrong client. */ entity?: string; process?: string; /** Scoping-derived process list — when present, the workspace seeds one RACM per entry. */ processes?: string[]; /** Testing state for scoping-derived RACMs — see Engagement.soxSeedMode. */ seedMode?: 'fresh' | 'live' | 'carried'; periodStart?: string; periodEnd?: string; owner?: string; materiality?: number; performanceMateriality?: number; clearlyTrivial?: number; sdBandPct?: number; /** The one audit round this engagement is (5 Oct 2026) — from Engagement.soxAudit. */ audit?: { round: AuditRecord['round']; yearBasis?: 'fy' | 'cy'; fiscalYear?: number; windowFrom?: string; windowTo?: string }; /** The signed interim engagement a year-end / roll-forward carries over from — the store rolls its controls forward at seed time. */ carryFrom?: SeedMeta; /** Controls copied from the RACM tab when the engagement was created (S11) — when present they are the register, as picked. */ controls?: Control[]; /** The sampling approach the lead proposed at creation (#22) — when present it replaces the flagship's agreed one, proposal and all, so the workspace opens on what was just proposed and still waiting to be signed. */ sampling?: SamplingMethodology; }
 
 /** A group is recorded with its listing status attached — "Altura Infra Holdings
  *  Ltd (Listed)" — because that is what the scoping screens key off. A document
@@ -2272,8 +2277,82 @@ export function seedIcfrEngagement(meta?: SeedMeta): IcfrEngagement {
   //
   // The store re-runs this same pass on every write. This call is not that: it is
   // so the SEED is honest before anything reads it.
-  const eng = withConcludedEvidence(applyDocRequirements(withRacmFields(seedEngagementBody(meta))).eng);
+  const built = withConcludedEvidence(applyDocRequirements(withRacmFields(seedEngagementBody(meta))).eng);
+  // Altura's files have real bytes behind them (see withAlturaEvidence). Last,
+  // so every file the passes above put on file gets its bytes too; before the
+  // rename, because the folders are named by the seed's own ids.
+  const eng = meta?.id === NEW_FLOW_ENGAGEMENT_ID || meta?.id === ALTURA_YE_ENGAGEMENT_ID ? withAlturaEvidence(built) : built;
   return renameEngagementIds(eng, processCodeFor, e => entityCodeFor(e || eng.entity));
+}
+
+/**
+ * REAL FILES BEHIND ALTURA'S EVIDENCE (product owner, 2 Oct).
+ *
+ * Every other seeded file is a record with no bytes, so the evidence viewer can
+ * only say "attached in an earlier session". For FY26 ICFR — Altura Infra Group
+ * each control has a folder of genuine documents under
+ * public/samples/sox-evidence/altura/<seed id>/ — its narrative, control
+ * description, walkthrough, flowchart or configuration export (and, for an
+ * ITGC, the role matrix), plus a TOE evidence pack (PDF) and population extract
+ * (XLSX) listing every sampled item. Each file's text contains the wording
+ * Ira's answers cite, so the viewer finds and boxes the passage rather than
+ * showing a document with nothing marked.
+ *
+ * Only `url` (and `kind`, to match the file actually served) is added — no
+ * status, result, conclusion or file count moves. A TOE file record maps to
+ * the control's pack by its own extension: a spreadsheet to the population
+ * extract, anything else to the PDF pack.
+ *
+ * One more thing a run would have left behind: a design check the seed already
+ * validated never had its elements linked, so its working opened on no file.
+ * Ira links every element with a file to each check it reads (runDesignIra);
+ * the seeded checks get the same links, and nothing else.
+ *
+ * The files are generated, not hand-made — the generator reads this seed
+ * through the app's own helpers, so the values each pack prints are the ones
+ * `documentSystemRows` shows for the same item. Regenerate after changing
+ * Altura's controls, attributes or samples.
+ */
+function withAlturaEvidence(eng: IcfrEngagement): IcfrEngagement {
+  const DESIGN: Partial<Record<DesignDoc['kind'], string>> = {
+    'Process narrative': 'design-process-narrative.pdf',
+    'Control description': 'design-control-description.pdf',
+    'Walkthrough': 'design-walkthrough.pdf',
+    'Flowchart': 'design-flowchart.pdf',
+    'System configuration': 'design-system-configuration.pdf',
+    'Segregation of duties': 'design-segregation-of-duties.xlsx',
+  };
+  const served = (f: EvidenceFile, url: string): EvidenceFile =>
+    ({ ...f, url, kind: url.endsWith('.xlsx') ? 'XLSX' : 'PDF' });
+  return {
+    ...eng,
+    controls: eng.controls.map(c => {
+      const dir = `/samples/sox-evidence/altura/${c.id}/`;
+      const toe = (f: EvidenceFile): EvidenceFile =>
+        served(f, dir + (/\.(xlsx?|csv)$/i.test(f.name) ? 'toe-population.xlsx' : 'toe-evidence-pack.pdf'));
+      const documents = c.design.documents.map(d => {
+        const name = DESIGN[d.kind];
+        return name && d.files?.length ? { ...d, files: d.files.map(f => served(f, dir + name)) } : d;
+      });
+      const onFile = documents.filter(d => d.files?.length).map(d => d.id);
+      return {
+        ...c,
+        design: {
+          ...c.design,
+          documents,
+          points: c.design.points.map(p => (p.validation && !p.evidencedBy?.length && onFile.length ? { ...p, evidencedBy: onFile } : p)),
+        },
+        operating: {
+          ...c.operating,
+          steps: c.operating.steps.map(s => ({
+            ...s,
+            ...(s.inputFile ? { inputFile: toe(s.inputFile) } : {}),
+            ...(s.requiredFiles ? { requiredFiles: s.requiredFiles.map(rf => (rf.file ? { ...rf, file: toe(rf.file) } : rf)) } : {}),
+          })),
+        },
+      };
+    }),
+  };
 }
 
 /** "Signed approval record" on attribute 4.2 -> signed_approval_record_4_2.pdf */
@@ -2406,7 +2485,8 @@ function seedEngagementBody(meta?: SeedMeta): IcfrEngagement {
   // deeper seed: varied attribute counts, partial workflow mapping, a real run
   // history and the audits those cycles ran under. Every other engagement is
   // seeded exactly as before. See `rich` on racmTemplateForProcesses.
-  const rich = meta.id === NEW_FLOW_ENGAGEMENT_ID;
+  // Altura's CY 2025 year-end (split out, 5 Oct 2026) is built off the same seed.
+  const rich = meta.id === NEW_FLOW_ENGAGEMENT_ID || meta.id === ALTURA_YE_ENGAGEMENT_ID;
   // Picked from the RACM tab at creation (S11): the copies the engagement took,
   // already carrying their companies and IDs.
   const picked = meta.controls ? structuredClone(meta.controls) : null;
@@ -2469,7 +2549,9 @@ function seedEngagementBody(meta?: SeedMeta): IcfrEngagement {
   // fails five of the controls those runs concluded on, and a run record states
   // the outcome as it stood when it ran, so re-reading it here would be wrong.
   // Every other engagement stays clean, as before.
-  const deficiencies = rich ? alturaDeficiencies(controls) : rfDemo ? rfDemoDeficiencies(controls) : [];
+  // The split-out CY 2025 year-end's findings live on its archive — this
+  // year's open ones belong to the CY 2026 interim, not to it.
+  const deficiencies = meta.id === ALTURA_YE_ENGAGEMENT_ID ? [] : rich ? alturaDeficiencies(controls) : rfDemo ? rfDemoDeficiencies(controls) : [];
   // A blocked control, not a finding — see alturaUnableToTest. Altura only, like
   // the findings above; every other engagement stays clean.
   if (rich) alturaUnableToTest(controls);
@@ -2477,7 +2559,11 @@ function seedEngagementBody(meta?: SeedMeta): IcfrEngagement {
   // two), so every concluded TOD is approved on arrival — except the one Altura
   // control alturaAwaitingApproval left waiting.
   controls = withDesignApprovals(controls, meta.owner ?? base.preparer, base.reviewer);
+  // One engagement = one round (5 Oct 2026): Altura's two rounds are two
+  // engagements now — the running CY 2026 interim (SOX-104) and the signed,
+  // archived CY 2025 year-end (SOX-103) — each holding only its own audit.
   const audits = rich ? libraryAudits(meta.processes ?? [], controls)
+      .filter(a => (meta.id === ALTURA_YE_ENGAGEMENT_ID ? a.round === 'yearend' : a.round === 'interim'))
     // The roll-forward demo — a countersigned interim instead of the open
     // year-end every other engagement gets. See signedInterim.
     : meta.id === 'eng-sox-rf' ? signedInterim(meta, controls)
@@ -2514,7 +2600,7 @@ function seedEngagementBody(meta?: SeedMeta): IcfrEngagement {
     }] : undefined,
     tasks: [],
     discussions: [],
-    reviewNotes: rich ? alturaReviewNotes(controls) : [],
+    reviewNotes: rich && meta.id !== ALTURA_YE_ENGAGEMENT_ID ? alturaReviewNotes(controls) : [],
     executions: [],
     runs,
     // Every SOX engagement has at least one audit now: the Overview IS the audit

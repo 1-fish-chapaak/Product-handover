@@ -23,6 +23,7 @@ import { isEngagementLocked } from './helpers';
 import { rowEntities } from './registerColumns';
 import { CONTROL_CLASSES, RISK_CATEGORY_TINT } from './types';
 import type { Control, IcfrEngagement } from './types';
+import DialogFocus from '../shared/DialogFocus';
 
 /** The processes a SOX RACM can be created for — the scoping wizard's seven
  *  plus the two cycles it doesn't scope from the trial balance. A process
@@ -110,12 +111,12 @@ function NewRacmModal({ available, inScope, entities, onClose, onPick }: {
 
   return (
     <div className="modal-backdrop" onClick={onClose}>
-      <div className="modal" onClick={e => e.stopPropagation()} role="dialog" aria-modal="true" aria-label="Create RACM">
+      <div className="modal" onClick={e => e.stopPropagation()} role="dialog" aria-modal="true" aria-label="Create RACM"><DialogFocus />
         <div className="px-5 pt-4 pb-3 border-b border-canvas-border">
           <div className="flex items-start justify-between gap-3">
             <div>
-              <h2 className="text-[15px] font-semibold text-ink-900">Create RACM</h2>
-              <p className="text-[12.5px] text-ink-500 mt-0.5">Start from an existing matrix, or extract one from an SOP.</p>
+              <h2 className="text-[0.9375rem] font-semibold text-ink-900">Create RACM</h2>
+              <p className="text-[0.8125rem] text-ink-500 mt-0.5">Start from an existing matrix, or extract one from an SOP.</p>
             </div>
             <button onClick={onClose} className="h-7 w-7 inline-flex items-center justify-center rounded-md text-ink-400 hover:text-ink-700 cursor-pointer shrink-0" aria-label="Close"><X size={15} /></button>
           </div>
@@ -127,23 +128,23 @@ function NewRacmModal({ available, inScope, entities, onClose, onPick }: {
               a single-entity audit is not asked a question with one answer. */}
           {entities.length > 0 && (
             <>
-              <label htmlFor="new-racm-entity" className="text-[11px] font-semibold uppercase tracking-wide text-ink-400 mb-1.5 block">Entity</label>
+              <label htmlFor="new-racm-entity" className="text-[0.6875rem] font-semibold uppercase tracking-wide text-ink-400 mb-1.5 block">Entity</label>
               <select id="new-racm-entity" value={entity} onChange={e => setEntity(e.target.value)}
-                className="w-full h-9 px-3 rounded-lg border border-canvas-border bg-canvas-elevated text-[12.5px] text-ink-800 cursor-pointer focus:outline-none focus:ring-2 focus:ring-brand-200">
+                className="w-full h-9 px-3 rounded-lg border border-canvas-border bg-canvas-elevated text-[0.8125rem] text-ink-800 cursor-pointer focus:outline-none focus:ring-2 focus:ring-brand-200">
                 {entities.map(en => <option key={en} value={en}>{en}</option>)}
               </select>
-              <p className="text-[11.5px] text-ink-400 mt-1.5 mb-4">
+              <p className="text-[0.75rem] text-ink-400 mt-1.5 mb-4">
                 The companies in scope of this engagement — the same process is tested separately at each.
               </p>
             </>
           )}
-          <label htmlFor="new-racm-process" className="text-[11px] font-semibold uppercase tracking-wide text-ink-400 mb-1.5 block">Business process</label>
+          <label htmlFor="new-racm-process" className="text-[0.6875rem] font-semibold uppercase tracking-wide text-ink-400 mb-1.5 block">Business process</label>
           <select id="new-racm-process" value={choice} onChange={e => setChoice(e.target.value)}
-            className="w-full h-9 px-3 rounded-lg border border-canvas-border bg-canvas-elevated text-[12.5px] text-ink-800 cursor-pointer focus:outline-none focus:ring-2 focus:ring-brand-200">
+            className="w-full h-9 px-3 rounded-lg border border-canvas-border bg-canvas-elevated text-[0.8125rem] text-ink-800 cursor-pointer focus:outline-none focus:ring-2 focus:ring-brand-200">
             {available.map(p => <option key={p} value={p}>{p}</option>)}
             <option value={NEW_PROCESS}>＋ Name another process…</option>
           </select>
-          <p className="text-[11.5px] text-ink-400 mt-1.5">
+          <p className="text-[0.75rem] text-ink-400 mt-1.5">
             {available.length
               ? "Processes already carrying a RACM aren't listed — a process has one."
               : 'Every standard process already has a RACM, so name the new one yourself.'}
@@ -151,20 +152,20 @@ function NewRacmModal({ available, inScope, entities, onClose, onPick }: {
           {choice === NEW_PROCESS && (
             <input value={custom} onChange={e => setCustom(e.target.value)} autoFocus
               placeholder="e.g. Leases" aria-label="New process name"
-              className="w-full h-9 px-3 mt-2 rounded-lg border border-canvas-border bg-canvas-elevated text-[12.5px] text-ink-800 placeholder:text-ink-400 focus:outline-none focus:ring-2 focus:ring-brand-200" />
+              className="w-full h-9 px-3 mt-2 rounded-lg border border-canvas-border bg-canvas-elevated text-[0.8125rem] text-ink-800 placeholder:text-ink-400 focus:outline-none focus:ring-2 focus:ring-brand-200" />
           )}
-          {taken && <p className="text-[11.5px] text-risk-700 mt-1.5">{process} already has a RACM — open it from the list instead.</p>}
+          {taken && <p className="text-[0.75rem] text-risk-700 mt-1.5">{process} already has a RACM — open it from the list instead.</p>}
 
           <div className="grid grid-cols-2 gap-3 mt-4">
             <button onClick={() => onPick(process, 'racm', entity)} disabled={!ready} className={cardCls}>
               <span className="p-2 rounded-lg bg-evidence-50 inline-flex mb-2.5"><FileUp size={15} className="text-evidence-700" /></span>
-              <span className="block text-[13px] font-semibold text-ink-900 mb-1">Upload a RACM</span>
-              <span className="block text-[11.5px] text-ink-500 leading-relaxed">Import an existing matrix (.xlsx / .csv).</span>
+              <span className="block text-[0.8125rem] font-semibold text-ink-900 mb-1">Upload a RACM</span>
+              <span className="block text-[0.75rem] text-ink-500 leading-relaxed">Import an existing matrix (.xlsx / .csv).</span>
             </button>
             <button onClick={() => onPick(process, 'sop', entity)} disabled={!ready} className={cardCls}>
               <span className="p-2 rounded-lg bg-brand-50 inline-flex mb-2.5"><Sparkles size={15} className="text-brand-600" /></span>
-              <span className="block text-[13px] font-semibold text-ink-900 mb-1 flex items-center gap-1.5">Upload an SOP <span className="text-ink-400">→</span> extract</span>
-              <span className="block text-[11.5px] text-ink-500 leading-relaxed">IRA reads a procedure (.pdf / .docx) and drafts the RACM.</span>
+              <span className="block text-[0.8125rem] font-semibold text-ink-900 mb-1 flex items-center gap-1.5">Upload an SOP <span className="text-ink-400">→</span> extract</span>
+              <span className="block text-[0.75rem] text-ink-500 leading-relaxed">IRA reads a procedure (.pdf / .docx) and drafts the RACM.</span>
             </button>
           </div>
         </div>
@@ -186,18 +187,18 @@ function RacmExtractionOverlay({ filename, onCancel }: { filename: string; onCan
   }, []);
   return (
     <div role="status" aria-live="polite"
-      className="fixed bottom-6 right-6 z-[110] w-[360px] rounded-xl border border-canvas-border bg-canvas-elevated shadow-[0_24px_60px_-20px_rgba(15,8,30,.55)] p-4">
+      className="fixed bottom-6 right-6 z-[110] w-90 rounded-xl border border-canvas-border bg-canvas-elevated shadow-[0_24px_60px_-20px_rgba(15,8,30,.55)] p-4">
       <div className="flex items-start gap-2.5">
         <Loader2 size={15} className="text-brand-600 animate-spin shrink-0 mt-0.5" />
         <div className="min-w-0 flex-1">
-          <p className="text-[12.5px] font-semibold text-ink-900">Extracting a RACM</p>
-          <p className="text-[11.5px] text-ink-400 truncate">{filename}</p>
+          <p className="text-[0.8125rem] font-semibold text-ink-900">Extracting a RACM</p>
+          <p className="text-[0.75rem] text-ink-400 truncate">{filename}</p>
         </div>
-        <button onClick={onCancel} className="text-[11.5px] font-semibold text-ink-400 hover:text-ink-700 cursor-pointer shrink-0">Cancel</button>
+        <button onClick={onCancel} className="text-[0.75rem] font-semibold text-ink-400 hover:text-ink-700 cursor-pointer shrink-0">Cancel</button>
       </div>
       <ul className="mt-3 space-y-1.5">
         {STEPS.map((s, i) => (
-          <li key={s} className="flex items-center gap-2 text-[11.5px]">
+          <li key={s} className="flex items-center gap-2 text-[0.75rem]">
             {i < done
               ? <CheckCircle2 size={12} className="text-compliant-600 shrink-0" />
               : <Circle size={12} className={cn('shrink-0', i === done ? 'text-brand-500' : 'text-ink-300')} />}
@@ -222,8 +223,10 @@ function racmDeleteBlocker(eng: IcfrEngagement, process: string): string | null 
 // Menu rows that can be disabled: no hover wash on a disabled one, greyed text
 // rather than faded opacity (so a reason line under it stays readable), and the
 // destructive row in risk tones. Derived from the shared menuItem so they stay in step.
-const menuRowCls = `${menuItem.replace('hover:bg-paper-50', 'enabled:hover:bg-paper-50').replace('items-center', 'items-start')} disabled:text-ink-400 disabled:cursor-not-allowed`;
-const menuDangerCls = menuRowCls.replace('text-ink-700', 'text-risk-700').replace('enabled:hover:bg-paper-50', 'enabled:hover:bg-risk-50');
+// Functions, not constants: menuItem is another sox-icfr module's export, and
+// reading one at module load trips the import cycle (TDZ).
+const menuRowCls = () => `${menuItem.replace('hover:bg-paper-50', 'enabled:hover:bg-paper-50').replace('items-center', 'items-start')} disabled:text-ink-400 disabled:cursor-not-allowed`;
+const menuDangerCls = () => menuRowCls().replace('text-ink-700', 'text-risk-700').replace('enabled:hover:bg-paper-50', 'enabled:hover:bg-risk-50');
 
 /**
  * A4 — the "⋯" on a RACM row. Opening the editor is also what the row does; the
@@ -250,19 +253,20 @@ function RacmRowActions({ name, sopName, sopUrl, canDelete, deleteBlocker, onOpe
     wrap.current?.querySelector('button')?.setAttribute('aria-label', `Actions for the ${name} RACM`);
   }, [name]);
   return (
-    <span ref={wrap} className="inline-flex" onClick={e => e.stopPropagation()} onKeyDown={e => e.stopPropagation()}>
+    <span ref={wrap} className="inline-flex" onClick={e => e.stopPropagation()} onKeyDown={e => { if (e.key !== 'Escape') e.stopPropagation(); }}>
       <Dropdown
         // the trailing chevron Dropdown adds reads wrong on a "⋯" button — hidden
         triggerClass="h-7 w-7 inline-flex items-center justify-center rounded-md text-ink-400 hover:text-ink-800 hover:bg-paper-50 transition-colors cursor-pointer [&>svg:last-child]:hidden"
         trigger={<MoreHorizontal size={15} />}
+        ariaLabel="RACM actions"
       >
         {close => (
           <>
-            <button type="button" className={menuRowCls} onClick={() => { close(); onOpen(); }}>
+            <button type="button" role="menuitem" className={menuRowCls()} onClick={() => { close(); onOpen(); }}>
               <FileSpreadsheet size={13} className="text-ink-400 mt-0.5 shrink-0" /> Open in spreadsheet editor
             </button>
             {sopName && (
-              <button type="button" className={menuRowCls} disabled={!sopUrl}
+              <button type="button" role="menuitem" className={menuRowCls()} disabled={!sopUrl}
                 title={sopUrl ? `Opens ${sopName} in a new tab` : "The SOP file isn't available in this session"}
                 onClick={() => { close(); onViewSop(); }}>
                 <FileText size={13} className="text-ink-400 mt-0.5 shrink-0" /> View SOP
@@ -271,7 +275,7 @@ function RacmRowActions({ name, sopName, sopUrl, canDelete, deleteBlocker, onOpe
             {canDelete && (
               <>
                 <div className="my-1 h-px bg-canvas-border" role="separator" />
-                <button type="button" className={menuDangerCls} disabled={!!deleteBlocker} title={deleteBlocker ?? undefined}
+                <button type="button" role="menuitem" className={menuDangerCls()} disabled={!!deleteBlocker} title={deleteBlocker ?? undefined}
                   onClick={() => { close(); onDelete(); }}>
                   <Trash2 size={13} className="mt-0.5 shrink-0" />
                   <span className="min-w-0">
@@ -401,7 +405,7 @@ export function RacmLanding() {
         <div className="flex-1" />
         <button onClick={() => setCreating(true)}
           title="Create a RACM for a process — import a matrix, or extract one from an SOP"
-          className="h-9 px-3.5 inline-flex items-center gap-1.5 rounded-lg bg-brand-600 text-white text-[12.5px] font-semibold hover:bg-brand-700 transition-colors cursor-pointer">
+          className="h-9 px-3.5 inline-flex items-center gap-1.5 rounded-lg bg-brand-600 text-white text-[0.8125rem] font-semibold hover:bg-brand-700 transition-colors cursor-pointer">
           <Plus size={15} /> Create RACM
         </button>
       </div>
@@ -420,7 +424,7 @@ export function RacmLanding() {
       return (
         <div className="modal-backdrop" onClick={() => setDeleting(null)}>
           <div className="modal" onClick={e => e.stopPropagation()} role="dialog" aria-modal="true" aria-labelledby="delete-racm-title"
-            onKeyDown={e => { if (e.key === 'Escape') setDeleting(null); }}>
+            onKeyDown={e => { if (e.key === 'Escape') setDeleting(null); }}><DialogFocus />
             <div className="px-5 pt-4 pb-3 border-b border-canvas-border">
               <div className="flex items-center justify-between gap-3">
                 <h2 id="delete-racm-title" className="text-[0.9375rem] font-semibold text-ink-900">Delete the {deleting} RACM?</h2>
@@ -428,11 +432,11 @@ export function RacmLanding() {
               </div>
             </div>
             <div className="p-5">
-              <p className="text-[0.78125rem] text-ink-600 leading-relaxed">Its {count} control{count === 1 ? '' : 's'} go with it. This can't be undone.</p>
+              <p className="text-[0.8125rem] text-ink-600 leading-relaxed">Its {count} control{count === 1 ? '' : 's'} go with it. This can't be undone.</p>
               <div className="mt-4 flex items-center justify-end gap-2">
-                <button onClick={() => setDeleting(null)} autoFocus className="h-9 px-3.5 rounded-lg border border-canvas-border text-[0.78125rem] font-semibold text-ink-600 hover:text-ink-900 cursor-pointer">Cancel</button>
+                <button onClick={() => setDeleting(null)} autoFocus className="h-9 px-3.5 rounded-lg border border-canvas-border text-[0.8125rem] font-semibold text-ink-600 hover:text-ink-900 cursor-pointer">Cancel</button>
                 <button onClick={() => confirmDelete(deleting)}
-                  className="h-9 px-3.5 inline-flex items-center gap-1.5 rounded-lg bg-risk-600 text-white text-[0.78125rem] font-semibold hover:bg-risk-700 transition-colors cursor-pointer">
+                  className="h-9 px-3.5 inline-flex items-center gap-1.5 rounded-lg bg-risk-600 text-white text-[0.8125rem] font-semibold hover:bg-risk-700 transition-colors cursor-pointer">
                   <Trash2 size={13} /> Delete RACM
                 </button>
               </div>
@@ -471,21 +475,21 @@ export function RacmLanding() {
                   <span className="flex items-center gap-2.5 min-w-0">
                     <span className="w-8 h-8 rounded-lg bg-brand-50 text-brand-700 flex items-center justify-center shrink-0"><Table2 size={15} /></span>
                     <span className="w-2 h-2 rounded-[3px] shrink-0" style={{ background: spineColor(name) }} aria-hidden />
-                    <span className="text-[13.5px] font-semibold text-ink-900 truncate" style={{ fontFamily: "'Source Serif 4', serif" }}>{name} — RACM</span>
-                    <span className="font-mono text-[11px] text-ink-400 shrink-0">v1.0</span>
+                    <span className="text-[0.875rem] font-semibold text-ink-900 truncate" style={{ fontFamily: "'Source Serif 4', serif" }}>{name} — RACM</span>
+                    <span className="font-mono text-[0.6875rem] text-ink-400 shrink-0">v1.0</span>
                   </span>
-                  {noteFor === name && <InlineNote note={rowNote.note} className="mt-1 pl-[3.75rem]" />}
+                  {noteFor === name && <InlineNote note={rowNote.note} className="mt-1 pl-15" />}
                 </td>
                 <td><Pill tone={status.tone}>{status.label}</Pill></td>
                 <td><span className="tabular-nums font-medium text-ink-600">{risks}</span></td>
                 <td><span className="tabular-nums font-medium text-ink-600">{rows.length}</span></td>
                 <td>
                   <span className="flex items-center gap-2">
-                    <span className="w-[120px] h-2 rounded-full bg-paper-100 overflow-hidden flex shrink-0">
+                    <span className="w-30 h-2 rounded-full bg-paper-100 overflow-hidden flex shrink-0">
                       <span className="h-full bg-compliant-500" style={{ width: `${(approved / Math.max(1, rows.length)) * 100}%` }} />
                       <span className="h-full bg-high-400" style={{ width: `${(remarks / Math.max(1, rows.length)) * 100}%` }} />
                     </span>
-                    <span className="text-[11px] tabular-nums text-ink-400 whitespace-nowrap">{approved}/{rows.length} approved</span>
+                    <span className="text-[0.6875rem] tabular-nums text-ink-400 whitespace-nowrap">{approved}/{rows.length} approved</span>
                   </span>
                 </td>
                 {/* Where the row goes, said out loud rather than left to be
@@ -495,7 +499,7 @@ export function RacmLanding() {
                     the row can't: the source SOP, and deleting the RACM. */}
                 <td>
                   <span className="flex items-center justify-end gap-2 whitespace-nowrap">
-                    <span className="flex items-center gap-1.5 text-[12px] font-semibold text-ink-500">
+                    <span className="flex items-center gap-1.5 text-[0.75rem] font-semibold text-ink-500">
                       <FileSpreadsheet size={13} className="text-ink-400" /> Spreadsheet editor <ExternalLink size={12} className="text-ink-400" />
                     </span>
                     {(() => {
@@ -523,22 +527,22 @@ export function RacmLanding() {
 /** The auditor's review status on one RACM row — approval, remark, or pending. */
 function ReviewCell({ c }: { c: Control }) {
   const r = c.racmReview;
-  if (!r) return <span className="inline-flex items-center gap-1.5 text-[11.5px] text-ink-400"><Circle size={11} /> Pending review</span>;
+  if (!r) return <span className="inline-flex items-center gap-1.5 text-[0.75rem] text-ink-400"><Circle size={11} /> Pending review</span>;
   if (r.status === 'Approved') {
     // pre-testing review pass — reads as "ready to test", NOT a tested-effective
     // result; distinct icon + wording keep it clear of the ✓ test tickmarks.
     return (
       <span className="inline-flex flex-col gap-0.5 min-w-0">
-        <span className="inline-flex items-center gap-1 text-[11.5px] font-semibold text-compliant-700"><ClipboardCheck size={13} /> Ready to test</span>
+        <span className="inline-flex items-center gap-1 text-[0.75rem] font-semibold text-compliant-700"><ClipboardCheck size={13} /> Ready to test</span>
         {/* who + when only — "Approved" is already said by the headline above */}
-        <span className="text-[10.5px] text-ink-400 truncate max-w-[180px]" title={`Approved · ${r.by} · ${r.at}`}>{r.by} · {r.at}</span>
+        <span className="text-[0.6875rem] text-ink-400 truncate max-w-45" title={`Approved · ${r.by} · ${r.at}`}>{r.by} · {r.at}</span>
       </span>
     );
   }
   return (
     <span className="inline-flex flex-col gap-0.5 min-w-0">
-      <span className="inline-flex items-center gap-1 text-[11.5px] font-semibold text-high-700"><MessageSquareWarning size={13} /> Remark</span>
-      <span className="text-[10.5px] text-ink-500 truncate max-w-[180px]" title={r.remark}>{r.remark}</span>
+      <span className="inline-flex items-center gap-1 text-[0.75rem] font-semibold text-high-700"><MessageSquareWarning size={13} /> Remark</span>
+      <span className="text-[0.6875rem] text-ink-500 truncate max-w-45" title={r.remark}>{r.remark}</span>
     </span>
   );
 }
@@ -638,8 +642,8 @@ export default function Racm() {
         <div className="min-w-0">
           <div className="flex items-center gap-2.5">
             <span className="w-2.5 h-2.5 rounded-[3px] shrink-0" style={{ background: spineColor(proc) }} />
-            <h1 className="text-[22px] font-semibold text-ink-900 tracking-tight" style={{ fontFamily: "'Source Serif 4', serif" }}>{proc} — Risk &amp; Control Matrix</h1>
-            <span className="font-mono text-[11px] text-ink-400">v1.0</span>
+            <h1 className="text-[1.375rem] font-semibold text-ink-900 tracking-tight" style={{ fontFamily: "'Source Serif 4', serif" }}>{proc} — Risk &amp; Control Matrix</h1>
+            <span className="font-mono text-[0.6875rem] text-ink-400">v1.0</span>
             <Pill tone={matrixStatus.tone}>{matrixStatus.label}</Pill>
           </div>
         </div>
@@ -649,7 +653,7 @@ export default function Racm() {
       <div className="flex items-center gap-2 mb-3 flex-wrap">
         <div className="relative">
           <Search size={14} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-ink-400" />
-          <input value={q} onChange={e => setQ(e.target.value)} placeholder="Search risks, controls, owners…" className="h-9 w-64 pl-8 pr-3 rounded-lg border border-canvas-border bg-canvas-elevated text-[12.5px] text-ink-800 placeholder:text-ink-400 focus:outline-none focus:ring-2 focus:ring-brand-200" />
+          <input value={q} onChange={e => setQ(e.target.value)} placeholder="Search risks, controls, owners…" className="h-9 w-64 pl-8 pr-3 rounded-lg border border-canvas-border bg-canvas-elevated text-[0.8125rem] text-ink-800 placeholder:text-ink-400 focus:outline-none focus:ring-2 focus:ring-brand-200" />
         </div>
         <FilterSelect prefix="Status" engaged={review !== 'All'} value={review}
           options={[
@@ -663,12 +667,12 @@ export default function Racm() {
         <input ref={fileRef} type="file" accept=".xlsx,.xls,.csv,.pdf,.docx" className="hidden" onChange={onPickFile} aria-label="Upload RACM or SOP document" />
         <button onClick={() => fileRef.current?.click()} disabled={!!importing}
           title={`Upload a RACM workbook or SOP for ${proc} — rows and test attributes are read from the document`}
-          className="h-9 px-3.5 inline-flex items-center gap-1.5 rounded-lg border border-canvas-border bg-canvas-elevated text-[12.5px] font-semibold text-ink-700 hover:text-brand-700 hover:border-brand-300 disabled:opacity-60 transition-colors cursor-pointer">
+          className="h-9 px-3.5 inline-flex items-center gap-1.5 rounded-lg border border-canvas-border bg-canvas-elevated text-[0.8125rem] font-semibold text-ink-700 hover:text-brand-700 hover:border-brand-300 disabled:opacity-60 transition-colors cursor-pointer">
           {importing ? <Loader2 size={14} className="animate-spin" /> : <UploadCloud size={14} />} {importing ? 'Importing…' : 'Upload RACM / SOP'}
         </button>
         <button onClick={() => openEditorTab(eng.id, proc, eng.controls)}
           title="Opens in a new tab" aria-label="Open spreadsheet editor in a new tab"
-          className="h-9 px-3.5 inline-flex items-center gap-1.5 rounded-lg bg-brand-600 text-white text-[12.5px] font-semibold hover:bg-brand-700 transition-colors cursor-pointer">
+          className="h-9 px-3.5 inline-flex items-center gap-1.5 rounded-lg bg-brand-600 text-white text-[0.8125rem] font-semibold hover:bg-brand-700 transition-colors cursor-pointer">
           <FileSpreadsheet size={15} /> Open spreadsheet editor <ExternalLink size={13} className="opacity-80" />
         </button>
       </div>
@@ -676,9 +680,9 @@ export default function Racm() {
       {/* source documents pinned to the matrix */}
       {myDocs.length > 0 && (
         <div className="flex items-center gap-1.5 mb-3 flex-wrap">
-          <span className="text-[11px] font-semibold uppercase tracking-wide text-ink-400">Source documents</span>
+          <span className="text-[0.6875rem] font-semibold uppercase tracking-wide text-ink-400">Source documents</span>
           {myDocs.map(d => (
-            <span key={d.id} className="inline-flex items-center gap-1.5 h-7 px-2.5 rounded-lg border border-canvas-border bg-canvas-elevated text-[11.5px] font-medium text-ink-700">
+            <span key={d.id} className="inline-flex items-center gap-1.5 h-7 px-2.5 rounded-lg border border-canvas-border bg-canvas-elevated text-[0.75rem] font-medium text-ink-700">
               <Paperclip size={11} className="text-ink-400" /> {d.name}
               <span className="text-ink-400">· {d.uploadedAt}</span>
             </span>
@@ -689,7 +693,7 @@ export default function Racm() {
       {/* the matrix — flat rows in control-code order (already scoped to one process).
           The tickmark legend is VISIBLE — hover-titles alone fail touch and
           keyboard users, and TOD→TOE is the one rule worth teaching. */}
-      <div className="flex items-center gap-1.5 mb-2 text-[11.5px] text-ink-400">
+      <div className="flex items-center gap-1.5 mb-2 text-[0.75rem] text-ink-400">
         <span className="text-compliant-700 font-semibold">✓</span> effective
         <span className="text-ink-300" aria-hidden>·</span>
         <span className="text-risk-700 font-semibold">✗</span> ineffective
@@ -759,20 +763,20 @@ export default function Racm() {
                   {/* row-select — auditor only (they alone have bulk actions); toggle from the input's change only, a td-level toggle would double-fire when the checkbox itself is clicked */}
                   {isAuditor && <td onClick={e => { e.stopPropagation(); if (e.target === e.currentTarget) toggle(c.id); }}><input type="checkbox" checked={sel.has(c.id)} onChange={() => toggle(c.id)} className="cursor-pointer accent-brand-600" aria-label={`Select ${c.id}`} /></td>}
                   <td className="tight">
-                    <div className="font-mono text-[10.5px] font-bold text-ink-500">{c.riskId}</div>
+                    <div className="font-mono text-[0.6875rem] font-bold text-ink-500">{c.riskId}</div>
                     {/* Name then sentence, where the RACM carries both: a column
                         of full risk statements is a column nobody scans. */}
-                    {c.riskTitle && <div className="font-semibold text-ink-800 text-[11.5px] leading-snug line-clamp-2">{c.riskTitle}</div>}
-                    <div className={cn('text-[11.5px] text-ink-600 leading-snug', c.riskTitle ? 'line-clamp-1 text-ink-400' : 'line-clamp-2')} title={c.riskDescription}>{c.riskDescription}</div>
+                    {c.riskTitle && <div className="font-semibold text-ink-800 text-[0.75rem] leading-snug line-clamp-2">{c.riskTitle}</div>}
+                    <div className={cn('text-[0.75rem] text-ink-600 leading-snug', c.riskTitle ? 'line-clamp-1 text-ink-400' : 'line-clamp-2')} title={c.riskDescription}>{c.riskDescription}</div>
                   </td>
                   <td className="tight">
                     {rowEntities(c).length
-                      ? <div className="text-[11.5px] text-ink-600 leading-snug line-clamp-2" title={rowEntities(c).join(', ')}>{rowEntities(c).join(', ')}</div>
+                      ? <div className="text-[0.75rem] text-ink-600 leading-snug line-clamp-2" title={rowEntities(c).join(', ')}>{rowEntities(c).join(', ')}</div>
                       : <span className="text-ink-300">—</span>}
                   </td>
                   <td className="tight">
                     {c.rootCause
-                      ? <div className="text-[11.5px] text-ink-600 leading-snug line-clamp-2" title={c.rootCause}>{c.rootCause}</div>
+                      ? <div className="text-[0.75rem] text-ink-600 leading-snug line-clamp-2" title={c.rootCause}>{c.rootCause}</div>
                       : <span className="text-ink-300">—</span>}
                   </td>
                   <td className="tight">
@@ -782,12 +786,12 @@ export default function Racm() {
                           the readability complaint itself — you could not read what
                           the control does without opening the row. Two lines, the
                           same clamp the risk and root-cause cells use. */}
-                      <span className="font-semibold text-ink-900 text-[12.5px] leading-snug line-clamp-2" title={c.controlActivity ?? c.description}>{c.description}</span>
+                      <span className="font-semibold text-ink-900 text-[0.8125rem] leading-snug line-clamp-2" title={c.controlActivity ?? c.description}>{c.description}</span>
                       {/* the auditor's verdict — kept loud so the risk owner can't miss it */}
                       {ineffective && <Pill tone="risk">Ineffective</Pill>}
                     </div>
                     {/* the highest-value supporting facts only — identity · sub-process · owner; guarded so an empty field never leaves a dangling middot */}
-                    <div className="text-[11px] text-ink-400 mt-0.5 truncate max-w-[360px]" title={[c.id, c.subProcess, c.owner].filter(Boolean).join(' · ')}>
+                    <div className="text-[0.6875rem] text-ink-400 mt-0.5 truncate max-w-90" title={[c.id, c.subProcess, c.owner].filter(Boolean).join(' · ')}>
                       {[c.id, c.subProcess, c.owner].filter(Boolean).join(' · ')}
                     </div>
                   </td>
@@ -799,16 +803,16 @@ export default function Racm() {
                   <td><NatureChip nature={c.nature} small /></td>
                   <td><span className="inline-flex items-center gap-1.5 cursor-help" title={`TOD — ${d}`}><Tickmark result={d === 'Effective' ? 'Pass' : d === 'Ineffective' ? 'Fail' : 'Not tested'} size={16} /></span></td>
                   <td><span className="inline-flex items-center gap-1.5 cursor-help" title={`TOE — ${o}`}><Tickmark result={o === 'Effective' ? 'Pass' : o === 'Ineffective' ? 'Fail' : 'Not tested'} size={16} /></span></td>
-                  <td>{c.performedBy ? <span className="text-[11.5px] text-ink-600">{c.performedBy}</span> : <span className="text-ink-300">—</span>}</td>
+                  <td>{c.performedBy ? <span className="text-[0.75rem] text-ink-600">{c.performedBy}</span> : <span className="text-ink-300">—</span>}</td>
                   <td className="tight">
                     {c.wpRefHard || c.wpRefSoft ? (
                       <>
-                        {c.wpRefHard && <div className="font-mono text-[10.5px] text-ink-600" title={`Hard-copy file — ${c.wpRefHard}`}>{c.wpRefHard}</div>}
-                        {c.wpRefSoft && <div className="font-mono text-[10px] text-ink-400 truncate max-w-[140px]" title={`Soft-copy path — ${c.wpRefSoft}`}>{c.wpRefSoft}</div>}
+                        {c.wpRefHard && <div className="font-mono text-[0.6875rem] text-ink-600" title={`Hard-copy file — ${c.wpRefHard}`}>{c.wpRefHard}</div>}
+                        {c.wpRefSoft && <div className="font-mono text-[0.6875rem] text-ink-400 truncate max-w-35" title={`Soft-copy path — ${c.wpRefSoft}`}>{c.wpRefSoft}</div>}
                       </>
                     ) : <span className="text-ink-300">—</span>}
                   </td>
-                  <td>{c.reportRef ? <span className="font-mono text-[11px] text-ink-600">{c.reportRef}</span> : <span className="text-ink-300">—</span>}</td>
+                  <td>{c.reportRef ? <span className="font-mono text-[0.6875rem] text-ink-600">{c.reportRef}</span> : <span className="text-ink-300">—</span>}</td>
                   <td><ReviewCell c={c} /></td>
                   <td onClick={e => e.stopPropagation()}>
                     {canReview && (
@@ -829,7 +833,7 @@ export default function Racm() {
                     return (
                       <td key={col.header} className="tight">
                         {v
-                          ? <div className="text-[0.71875rem] text-ink-600 leading-snug line-clamp-2" title={v}>{v}</div>
+                          ? <div className="text-[0.75rem] text-ink-600 leading-snug line-clamp-2" title={v}>{v}</div>
                           : <span className="text-ink-300">—</span>}
                       </td>
                     );
@@ -838,19 +842,19 @@ export default function Racm() {
               );
             })}
             {filtered.length === 0 && (
-              <tr><td colSpan={colSpan} className="text-center py-16 text-ink-400 text-[13px]">
+              <tr><td colSpan={colSpan} className="text-center py-16 text-ink-400 text-[0.8125rem]">
                 <Table2 size={20} className="mx-auto mb-2 opacity-40" /> No RACM rows match these filters. <button onClick={() => { setQ(''); setReview('All'); setNatureF([]); setDesignF([]); setOperatingF([]); }} className="text-brand-700 font-semibold hover:underline">Clear filters</button>
               </td></tr>
             )}
           </tbody>
         </table>
       </div>
-      <div className="mt-3 text-[11.5px] text-ink-400">Showing {filtered.length} of {controls.length} rows</div>
+      <div className="mt-3 text-[0.75rem] text-ink-400">Showing {filtered.length} of {controls.length} rows</div>
 
       {/* bulk bar — testing and approving rows are both the auditor's lane (D1); non-auditors have no bulk actions, so no checkboxes and no bar */}
       {isAuditor && sel.size > 0 && (
         <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-30 flex items-center gap-3 bg-ink-900 text-white rounded-2xl pl-4 pr-2.5 py-2.5 shadow-[0_12px_40px_-12px_rgba(15,8,30,0.6)]">
-          <span className="text-[12.5px] font-semibold">{sel.size} selected</span>
+          <span className="text-[0.8125rem] font-semibold">{sel.size} selected</span>
           <span className="w-px h-5 bg-white/20" />
           {canReview && <button onClick={() => {
             const ids = Array.from(sel);
@@ -858,7 +862,7 @@ export default function Racm() {
             const remarked = ids.filter(id => controls.find(c => c.id === id)?.racmReview?.status === 'Remark').length;
             if (remarked > 0) { setBulkApproveIds(ids); return; }
             approveRacmRows(ids); setSel(new Set());
-          }} className="h-8 px-3 inline-flex items-center gap-1.5 rounded-lg bg-white/10 hover:bg-white/20 text-[12.5px] font-semibold transition-colors cursor-pointer"><CheckCircle2 size={14} /> Approve rows</button>}
+          }} className="h-8 px-3 inline-flex items-center gap-1.5 rounded-lg bg-white/10 hover:bg-white/20 text-[0.8125rem] font-semibold transition-colors cursor-pointer"><CheckCircle2 size={14} /> Approve rows</button>}
           <button onClick={() => setSel(new Set())} className="h-8 w-8 inline-flex items-center justify-center rounded-lg hover:bg-white/15 transition-colors cursor-pointer" aria-label="Clear selection"><X size={15} /></button>
         </div>
       )}
@@ -868,19 +872,19 @@ export default function Racm() {
         const remarked = bulkApproveIds.filter(id => controls.find(c => c.id === id)?.racmReview?.status === 'Remark').length;
         return (
           <div className="modal-backdrop" onClick={() => setBulkApproveIds(null)}>
-            <div className="modal" onClick={e => e.stopPropagation()}>
+            <div role="dialog" aria-modal="true" aria-labelledby="racm-bulk-approve-title" className="modal" onClick={e => e.stopPropagation()}><DialogFocus onEscape={() => setBulkApproveIds(null)} />
               <div className="px-5 pt-4 pb-3 border-b border-canvas-border">
                 <div className="flex items-center justify-between gap-3">
-                  <h2 className="text-[15px] font-semibold text-ink-900">Approve {bulkApproveIds.length} row{bulkApproveIds.length === 1 ? '' : 's'}?</h2>
+                  <h2 id="racm-bulk-approve-title" className="text-[0.9375rem] font-semibold text-ink-900">Approve {bulkApproveIds.length} row{bulkApproveIds.length === 1 ? '' : 's'}?</h2>
                   <button onClick={() => setBulkApproveIds(null)} className="h-7 w-7 inline-flex items-center justify-center rounded-md text-ink-400 hover:text-ink-700 cursor-pointer" aria-label="Close"><X size={15} /></button>
                 </div>
               </div>
               <div className="p-5">
-                <p className="text-[12.5px] text-ink-600 leading-relaxed">{remarked} of them {remarked === 1 ? 'has an open remark' : 'have open remarks'} — approving clears {remarked === 1 ? 'it' : 'them'} from the record.</p>
+                <p className="text-[0.8125rem] text-ink-600 leading-relaxed">{remarked} of them {remarked === 1 ? 'has an open remark' : 'have open remarks'} — approving clears {remarked === 1 ? 'it' : 'them'} from the record.</p>
                 <div className="mt-4 flex items-center justify-end gap-2">
-                  <button onClick={() => setBulkApproveIds(null)} className="h-9 px-3.5 rounded-lg border border-canvas-border text-[12.5px] font-semibold text-ink-600 hover:text-ink-900 cursor-pointer">Cancel</button>
+                  <button onClick={() => setBulkApproveIds(null)} className="h-9 px-3.5 rounded-lg border border-canvas-border text-[0.8125rem] font-semibold text-ink-600 hover:text-ink-900 cursor-pointer">Cancel</button>
                   <button onClick={() => { approveRacmRows(bulkApproveIds); setSel(new Set()); setBulkApproveIds(null); }}
-                    className="h-9 px-3.5 rounded-lg bg-compliant-600 text-white text-[12.5px] font-semibold hover:bg-compliant-700 transition-colors cursor-pointer inline-flex items-center gap-1.5"><CheckCircle2 size={13} /> Approve anyway</button>
+                    className="h-9 px-3.5 rounded-lg bg-compliant-600 text-white text-[0.8125rem] font-semibold hover:bg-compliant-700 transition-colors cursor-pointer inline-flex items-center gap-1.5"><CheckCircle2 size={13} /> Approve anyway</button>
                 </div>
               </div>
             </div>
@@ -891,24 +895,24 @@ export default function Racm() {
       {/* remark modal */}
       {remarkFor && (
         <div className="modal-backdrop" onClick={() => setRemarkFor(null)}>
-          <div className="modal" onClick={e => e.stopPropagation()}>
+          <div role="dialog" aria-modal="true" aria-labelledby="racm-remark-title" className="modal" onClick={e => e.stopPropagation()}><DialogFocus onEscape={() => setRemarkFor(null)} />
             <div className="px-5 pt-4 pb-3 border-b border-canvas-border">
               <div className="flex items-center justify-between gap-3">
-                <h2 className="text-[15px] font-semibold text-ink-900">Remark — <span className="wp-ref">{controlCode(remarkFor)}</span></h2>
+                <h2 id="racm-remark-title" className="text-[0.9375rem] font-semibold text-ink-900">Remark — <span className="wp-ref">{controlCode(remarkFor)}</span></h2>
                 <button onClick={() => setRemarkFor(null)} className="h-7 w-7 inline-flex items-center justify-center rounded-md text-ink-400 hover:text-ink-700 cursor-pointer" aria-label="Close"><X size={15} /></button>
               </div>
-              <p className="text-[12px] text-ink-500 mt-1 line-clamp-2">{remarkFor.description}</p>
+              <p className="text-[0.75rem] text-ink-500 mt-1 line-clamp-2">{remarkFor.description}</p>
             </div>
             <div className="p-5">
               <textarea value={remarkText} onChange={e => setRemarkText(e.target.value)} rows={4} autoFocus
                 placeholder="What must change before this row can be approved?"
-                className="w-full rounded-lg border border-canvas-border bg-canvas-elevated p-3 text-[12.5px] text-ink-800 placeholder:text-ink-400 focus:outline-none focus:ring-2 focus:ring-brand-200 resize-none" />
+                className="w-full rounded-lg border border-canvas-border bg-canvas-elevated p-3 text-[0.8125rem] text-ink-800 placeholder:text-ink-400 focus:outline-none focus:ring-2 focus:ring-brand-200 resize-none" />
               <div className="mt-3 flex items-center justify-end gap-2">
                 {remarkFor.racmReview && (
-                  <button onClick={() => { clearRacmReview(remarkFor.id); setRemarkFor(null); }} className="h-9 px-3 mr-auto text-[12.5px] font-semibold text-ink-500 hover:text-ink-800 cursor-pointer">Clear review</button>
+                  <button onClick={() => { clearRacmReview(remarkFor.id); setRemarkFor(null); }} className="h-9 px-3 mr-auto text-[0.8125rem] font-semibold text-ink-500 hover:text-ink-800 cursor-pointer">Clear review</button>
                 )}
-                <button onClick={() => setRemarkFor(null)} className="h-9 px-3.5 rounded-lg border border-canvas-border text-[12.5px] font-semibold text-ink-600 hover:text-ink-900 cursor-pointer">Cancel</button>
-                <button onClick={saveRemark} disabled={!remarkText.trim()} className="h-9 px-3.5 rounded-lg bg-brand-600 text-white text-[12.5px] font-semibold hover:bg-brand-700 disabled:opacity-40 transition-colors cursor-pointer">Save remark</button>
+                <button onClick={() => setRemarkFor(null)} className="h-9 px-3.5 rounded-lg border border-canvas-border text-[0.8125rem] font-semibold text-ink-600 hover:text-ink-900 cursor-pointer">Cancel</button>
+                <button onClick={saveRemark} disabled={!remarkText.trim()} className="h-9 px-3.5 rounded-lg bg-brand-600 text-white text-[0.8125rem] font-semibold hover:bg-brand-700 disabled:opacity-40 transition-colors cursor-pointer">Save remark</button>
               </div>
             </div>
           </div>

@@ -3,7 +3,7 @@
  *
  * What used to be each SOX engagement's RACM tab, moved up a level: Create RACM
  * (upload a matrix, or an SOP → prompt → extract), the import review, the list,
- * the spreadsheet editor in a new tab, and the ⋯ menu with View SOP and Delete.
+ * the spreadsheet editor (same tab), and the ⋯ menu with View SOP and Delete.
  * One flat list (user ask, 15 Sep): every RACM sits at the same level whoever
  * owns it, and the process filter narrows that list rather than hiding groups.
  * Cards OR rows (user ask, 1 Oct). Cards lead, because a RACM is a thing you
@@ -31,15 +31,8 @@ import { Dropdown, menuItem } from './ControlDossier';
 import CreateRacmFlow from './CreateRacmFlow';
 import SopFlowchartView from './SopFlowchartView';
 import { chartRowsFromControls } from './sopChartFromRacm';
-import { currentVersion, deleteLibraryRacm, publishRacm, racmInUse, racmStatus, useRacmLibrary, writeEditorHandoff, type LibraryRacm } from './racmLibrary';
-
-/** The spreadsheet editor opens in its own tab, handed this RACM's rows first —
- *  the new tab has none of this page's state. */
-function openEditorTab(r: LibraryRacm): void {
-  writeEditorHandoff(r);
-  const params = new URLSearchParams({ view: 'racm-full-editor', racmId: r.id, racmName: r.name, processLabel: r.process });
-  window.open(`${window.location.origin}${window.location.pathname}?${params.toString()}`, '_blank', 'noopener');
-}
+import { currentVersion, deleteLibraryRacm, publishRacm, racmInUse, racmStatus, useRacmLibrary, type LibraryRacm } from './racmLibrary';
+import DialogFocus from '../shared/DialogFocus';
 
 /** Where a RACM came from, in a line. An extracted one also carries a flowchart
  *  drawn off the same SOP, and whether that has been walked is part of where it
@@ -56,8 +49,10 @@ function sourceLine(r: LibraryRacm): string {
 
 // Menu rows that can be disabled keep a readable reason line under them, and the
 // destructive row sits in risk tones — the same rule the engagement RACM menu used.
-const menuRowCls = `${menuItem.replace('hover:bg-paper-50', 'enabled:hover:bg-paper-50').replace('items-center', 'items-start')} disabled:text-ink-400 disabled:cursor-not-allowed`;
-const menuDangerCls = menuRowCls.replace('text-ink-700', 'text-risk-700').replace('enabled:hover:bg-paper-50', 'enabled:hover:bg-risk-50');
+// Functions, not constants: menuItem is another sox-icfr module's export, and
+// reading one at module load trips the import cycle (TDZ).
+const menuRowCls = () => `${menuItem.replace('hover:bg-paper-50', 'enabled:hover:bg-paper-50').replace('items-center', 'items-start')} disabled:text-ink-400 disabled:cursor-not-allowed`;
+const menuDangerCls = () => menuRowCls().replace('text-ink-700', 'text-risk-700').replace('enabled:hover:bg-paper-50', 'enabled:hover:bg-risk-50');
 
 /** The one place the list says whether a RACM can be scoped from. Draft is the
  *  loud one: it reads as unfinished because that is exactly what it is, and a
@@ -147,7 +142,7 @@ function SopRowButtons({ racm, onFlowchart }: { racm: LibraryRacm; onFlowchart: 
   return (
     // The card itself opens the spreadsheet editor, so anything sitting on it
     // has to stop the click going through.
-    <span className="inline-flex items-center gap-1.5" onClick={e => e.stopPropagation()} onKeyDown={e => e.stopPropagation()}>
+    <span className="inline-flex items-center gap-1.5" onClick={e => e.stopPropagation()} onKeyDown={e => { if (e.key !== 'Escape') e.stopPropagation(); }}>
       {/* `sopUrl` is an object URL minted when the file was read, so it dies
           with the session while the RACM outlives it. Saying that plainly beats
           a button that does nothing. */}
@@ -172,7 +167,7 @@ function SopRowButtons({ racm, onFlowchart }: { racm: LibraryRacm; onFlowchart: 
   );
 }
 
-function RowActions({ racm, canManage, onDelete, onPublish, onHistory }: { racm: LibraryRacm; canManage: boolean; onDelete: () => void; onPublish: () => void; onHistory: () => void }) {
+function RowActions({ racm, canManage, onOpen, onDelete, onPublish, onHistory }: { racm: LibraryRacm; canManage: boolean; onOpen: () => void; onDelete: () => void; onPublish: () => void; onHistory: () => void }) {
   const wrap = useRef<HTMLSpanElement>(null);
   // Dropdown draws its own trigger and takes no props for its name
   useLayoutEffect(() => {
@@ -181,24 +176,25 @@ function RowActions({ racm, canManage, onDelete, onPublish, onHistory }: { racm:
   const blocker = racmInUse(racm);
   const { draftCount } = racmStatus(racm);
   return (
-    <span ref={wrap} className="inline-flex" onClick={e => e.stopPropagation()} onKeyDown={e => e.stopPropagation()}>
+    <span ref={wrap} className="inline-flex" onClick={e => e.stopPropagation()} onKeyDown={e => { if (e.key !== 'Escape') e.stopPropagation(); }}>
       <Dropdown
         triggerClass="h-7 w-7 inline-flex items-center justify-center rounded-md text-ink-400 hover:text-ink-800 hover:bg-paper-50 transition-colors cursor-pointer [&>svg:last-child]:hidden"
         trigger={<MoreHorizontal size={15} />}
+        ariaLabel="RACM actions"
       >
         {close => (
           <>
-            <button type="button" className={menuRowCls} onClick={() => { close(); openEditorTab(racm); }}>
+            <button type="button" role="menuitem" className={menuRowCls()} onClick={() => { close(); onOpen(); }}>
               <FileSpreadsheet size={13} className="text-ink-400 mt-0.5 shrink-0" /> Open in spreadsheet editor
             </button>
             {/* View SOP used to sit here. It is on the row now — see
                 `SopRowButtons` — and offering it twice would just make the menu
                 longer for no new answer. */}
-            <button type="button" className={menuRowCls} onClick={() => { close(); onHistory(); }}>
+            <button type="button" role="menuitem" className={menuRowCls()} onClick={() => { close(); onHistory(); }}>
               <History size={13} className="text-ink-400 mt-0.5 shrink-0" /> View history
             </button>
             {canManage && draftCount > 0 && (
-              <button type="button" className={menuRowCls} onClick={() => { close(); onPublish(); }}>
+              <button type="button" role="menuitem" className={menuRowCls()} onClick={() => { close(); onPublish(); }}>
                 <CheckCircle2 size={13} className="text-ink-400 mt-0.5 shrink-0" />
                 <span className="min-w-0">
                   <span className="block">Publish {draftCount === racm.controls.length ? 'this RACM' : `${draftCount} new control${draftCount === 1 ? '' : 's'}`}</span>
@@ -209,7 +205,7 @@ function RowActions({ racm, canManage, onDelete, onPublish, onHistory }: { racm:
             {canManage && (
               <>
                 <div className="my-1 h-px bg-canvas-border" role="separator" />
-                <button type="button" className={menuDangerCls} disabled={!!blocker} title={blocker ?? undefined}
+                <button type="button" role="menuitem" className={menuDangerCls()} disabled={!!blocker} title={blocker ?? undefined}
                   onClick={() => { close(); onDelete(); }}>
                   <Trash2 size={13} className="mt-0.5 shrink-0" />
                   <span className="min-w-0">
@@ -250,8 +246,9 @@ function RowActions({ racm, canManage, onDelete, onPublish, onHistory }: { racm:
  * whole of it opens the editor. The last cell is the exception, and stops the
  * click, because those buttons go somewhere else.
  */
-function RacmTable({ rows, canManage, note, noteFor, onDelete, onPublish, onHistory, onFlowchart }: {
+function RacmTable({ rows, canManage, note, noteFor, onOpen, onDelete, onPublish, onHistory, onFlowchart }: {
   rows: LibraryRacm[];
+  onOpen: (r: LibraryRacm) => void;
   canManage: boolean;
   /** A refused publish or delete, said under the name of the row it was for. */
   note: Note | null;
@@ -281,15 +278,15 @@ function RacmTable({ rows, canManage, note, noteFor, onDelete, onPublish, onHist
             const risks = new Set(r.controls.map(c => c.riskId)).size;
             return (
               <tr key={r.id} className="reg-row" tabIndex={0} role="button"
-                aria-label={`Open ${r.name} in the spreadsheet editor — opens in a new tab`}
-                onClick={() => openEditorTab(r)}
-                onKeyDown={e => { if (e.key === 'Enter') openEditorTab(r); }}>
+                aria-label={`Open ${r.name} in the spreadsheet editor`}
+                onClick={() => onOpen(r)}
+                onKeyDown={e => { if (e.key === 'Enter') onOpen(r); }}>
                 <td>
                   <span className="flex items-center gap-2.5 min-w-0">
                     <span className="w-7 h-7 rounded-md bg-brand-50 text-brand-700 flex items-center justify-center shrink-0"><Table2 size={13} /></span>
                     <span className="reg-clamp font-semibold text-ink-900" title={r.name}>{r.name}</span>
                   </span>
-                  {noteFor === r.id && <InlineNote note={note} className="mt-1 pl-[2.375rem]" />}
+                  {noteFor === r.id && <InlineNote note={note} className="mt-1 pl-9.5" />}
                 </td>
                 <td title="Only published RACMs can be scoped into an engagement"><StatusCell racm={r} /></td>
                 <td className="truncate" title={r.process}>{r.process}</td>
@@ -305,7 +302,7 @@ function RacmTable({ rows, canManage, note, noteFor, onDelete, onPublish, onHist
                 <td className="tight">
                   <span className="flex items-center justify-end gap-1">
                     {r.source === 'sop' && <SopRowButtons racm={r} onFlowchart={() => onFlowchart(r)} />}
-                    <RowActions racm={r} canManage={canManage}
+                    <RowActions racm={r} canManage={canManage} onOpen={() => onOpen(r)}
                       onDelete={() => onDelete(r)} onPublish={() => onPublish(r)} onHistory={() => onHistory(r)} />
                   </span>
                 </td>
@@ -318,7 +315,9 @@ function RacmTable({ rows, canManage, note, noteFor, onDelete, onPublish, onHist
   );
 }
 
-export default function RacmLibraryView({ canManage, creating, setCreating }: {
+export default function RacmLibraryView({ canManage, creating, setCreating, onOpenEditor }: {
+  /** Opens a RACM in the spreadsheet editor — a full page in this same tab. */
+  onOpenEditor: (r: LibraryRacm) => void;
   /** Create and delete — the same permission that creates engagements. */
   canManage: boolean;
   /** The wizard's open flag. It is owned by `RacmPage`, because the button
@@ -332,6 +331,9 @@ export default function RacmLibraryView({ canManage, creating, setCreating }: {
      line — `noteFor` says which one. */
   const rowNote = useInlineNote();
   const [noteFor, setNoteFor] = useState<string | null>(null);
+  /* What a finished Create RACM did, said once under the toolbar — the wizard
+     has closed by then, so this is where the reader is looking. */
+  const createdNote = useInlineNote();
   const logEvent = useAuditLog();
   const { currentUser } = useCurrentUser();
   const [search, setSearch] = useState('');
@@ -378,13 +380,13 @@ export default function RacmLibraryView({ canManage, creating, setCreating }: {
       rowNote.show('warning', `Can't delete this RACM. ${racmInUse(r) ?? 'It is in use'}.`);
       return;
     }
-    logEvent({ action: 'Delete', description: `Deleted ${r.name} from the RACM tab — ${r.controls.length} control${r.controls.length === 1 ? '' : 's'}`, module: 'SOX ICFR', entity: 'RACM' });
+    logEvent({ action: 'Delete', description: `Deleted ${r.name} from the RACM Library — ${r.controls.length} control${r.controls.length === 1 ? '' : 's'}`, module: 'SOX ICFR', entity: 'RACM' });
   };
 
   return (
     <div>
       <div className="flex items-center gap-2 mb-5 flex-wrap">
-        <div className="relative flex-1 min-w-[220px] max-w-md">
+        <div className="relative flex-1 min-w-55 max-w-md">
           <Search size={14} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-text-muted" />
           <input
             id="racm-library-search"
@@ -418,12 +420,32 @@ export default function RacmLibraryView({ canManage, creating, setCreating }: {
         <FilterSelect value={process} options={['All', ...processes]} allLabel="All processes" onChange={setProcess} ariaLabel="Filter by process" />
         <FilterSelect value={status} options={['All', 'Draft', 'Published']} allLabel="Any status" onChange={setStatus} ariaLabel="Filter by status" />
       </div>
+      <InlineNote note={createdNote.note} className="-mt-3 mb-4 px-1" />
 
       {shown.length === 0 ? (
         <div className="border border-border-light rounded-xl p-14 text-center bg-white">
           <Table2 size={32} className="text-text-muted mx-auto mb-3" />
-          <p className="text-[0.875rem] font-semibold text-text mb-1">{racms.length ? 'No RACMs match your search' : 'No RACMs yet'}</p>
-          <p className="text-[0.75rem] text-text-muted">{racms.length ? 'Try clearing the process filter or search.' : 'Create one from a matrix or an SOP.'}</p>
+          {racms.length ? (() => {
+            // Name what is actually narrowing the list — a status or process
+            // filter reads nothing like a search, and "clear the search" is no
+            // help when the box is empty.
+            const q = search.trim();
+            const filtered = process !== 'All' || status !== 'All';
+            const what = `No ${status !== 'All' ? `${status.toLowerCase()} ` : ''}RACMs${process !== 'All' ? ` for ${process}` : ''}${q ? ` match “${q}”` : ''}`;
+            const clearLabel = q && filtered ? 'Clear search and filters' : q ? 'Clear search' : 'Clear filters';
+            return (
+              <>
+                <p className="text-[0.875rem] font-semibold text-text mb-1">{what}</p>
+                <button onClick={() => { setSearch(''); setProcess('All'); setStatus('All'); }}
+                  className="text-[0.75rem] font-semibold text-primary hover:underline cursor-pointer">{clearLabel}</button>
+              </>
+            );
+          })() : (
+            <>
+              <p className="text-[0.875rem] font-semibold text-text mb-1">No RACMs yet</p>
+              <p className="text-[0.75rem] text-text-muted">Create one from a matrix or an SOP.</p>
+            </>
+          )}
         </div>
       ) : (
         <>
@@ -437,8 +459,8 @@ export default function RacmLibraryView({ canManage, creating, setCreating }: {
               const risks = new Set(r.controls.map(c => c.riskId)).size;
               return (
                 <div key={r.id} role="button" tabIndex={0}
-                  aria-label={`Open ${r.name} in the spreadsheet editor — opens in a new tab`}
-                  onClick={() => openEditorTab(r)} onKeyDown={e => { if (e.key === 'Enter') openEditorTab(r); }}
+                  aria-label={`Open ${r.name} in the spreadsheet editor`}
+                  onClick={() => onOpenEditor(r)} onKeyDown={e => { if (e.key === 'Enter') onOpenEditor(r); }}
                   className="rounded-xl border border-canvas-border bg-canvas-elevated p-4 flex flex-col gap-3 cursor-pointer transition-colors hover:border-brand-300">
                   <div className="flex items-start gap-2.5">
                     <span className="w-8 h-8 rounded-lg bg-brand-50 text-brand-700 flex items-center justify-center shrink-0"><Table2 size={15} /></span>
@@ -457,13 +479,13 @@ export default function RacmLibraryView({ canManage, creating, setCreating }: {
                         </span>
                       </div>
                     </div>
-                    <RowActions racm={r} canManage={canManage} onDelete={() => setDeleting(r)} onPublish={() => setPublishing(r)} onHistory={() => setHistoryFor(r)} />
+                    <RowActions racm={r} canManage={canManage} onOpen={() => onOpenEditor(r)} onDelete={() => setDeleting(r)} onPublish={() => setPublishing(r)} onHistory={() => setHistoryFor(r)} />
                   </div>
 
                   {/* A card has no column headings, so a value that is not
                       self-evident has to say what it is — which is why the
                       counts are spelled out rather than sitting bare. */}
-                  <p className="line-clamp-2 text-[0.71875rem] text-ink-400 leading-snug" title={sourceLine(r)}>{sourceLine(r)}</p>
+                  <p className="line-clamp-2 text-[0.75rem] text-ink-400 leading-snug" title={sourceLine(r)}>{sourceLine(r)}</p>
 
                   {/* The SOP buttons ride the counts row (user ask, 29 Sep)
                       rather than a footer of their own — with the editor hint
@@ -510,7 +532,7 @@ export default function RacmLibraryView({ canManage, creating, setCreating }: {
             })}
           </div>
           ) : (
-            <RacmTable rows={shown} canManage={canManage} note={rowNote.note} noteFor={noteFor}
+            <RacmTable rows={shown} canManage={canManage} note={rowNote.note} noteFor={noteFor} onOpen={onOpenEditor}
               onDelete={setDeleting} onPublish={setPublishing} onHistory={setHistoryFor} onFlowchart={setChartFor} />
           )}
           <p className="mt-3 px-1 text-[0.6875rem] text-text-muted tabular-nums">{shown.length} of {racms.length} RACMs</p>
@@ -519,7 +541,14 @@ export default function RacmLibraryView({ canManage, creating, setCreating }: {
 
       {creating && (
         <CreateRacmFlow onClose={() => setCreating(false)}
-          onCreated={r => { setCreating(false); setProcess('All'); setSearch('');  }} />
+          onCreated={r => {
+            setCreating(false); setProcess('All'); setSearch(''); setStatus('All');
+            const n = r.controls.length;
+            const how = r.source === 'sop' ? 'Extracted' : 'Imported';
+            createdNote.show('info', racmStatus(r).status === 'Draft'
+              ? `${how} ${n} control${n === 1 ? '' : 's'} into ${r.name} as a draft — publish it when it's ready.`
+              : `${how} ${n} control${n === 1 ? '' : 's'} into ${r.name}.`);
+          }} />
       )}
 
       {/* The chart, redrawn from the controls — see `sopChartFromRacm` on why it
@@ -529,7 +558,7 @@ export default function RacmLibraryView({ canManage, creating, setCreating }: {
         <div className="modal-backdrop" style={{ padding: '6vh 20px' }} onClick={() => setChartFor(null)}>
           <div className="modal modal-wide flex flex-col" style={{ maxWidth: 1100, height: '82vh' }}
             onClick={e => e.stopPropagation()} role="dialog" aria-modal="true" aria-labelledby="racm-chart-title"
-            onKeyDown={e => { if (e.key === 'Escape') setChartFor(null); }}>
+            onKeyDown={e => { if (e.key === 'Escape') setChartFor(null); }}><DialogFocus />
             <div className="px-5 pt-4 pb-3 border-b border-canvas-border shrink-0">
               <div className="flex items-center justify-between gap-3">
                 <h2 id="racm-chart-title" className="text-[0.9375rem] font-semibold text-ink-900">{chartFor.name}</h2>
@@ -550,7 +579,7 @@ export default function RacmLibraryView({ canManage, creating, setCreating }: {
                   {chartFor.controls.length === 1 ? 'control' : 'controls'}
                 </span>
               </p>
-              <p className="mt-1 text-[0.71875rem] text-ink-500">
+              <p className="mt-1 text-[0.75rem] text-ink-500">
                 Read out of {chartFor.flowchart?.source ?? chartFor.fileName ?? 'the SOP'} when this RACM was extracted,
                 and drawn again from its rows each time you open it.
               </p>
@@ -599,18 +628,18 @@ export default function RacmLibraryView({ canManage, creating, setCreating }: {
             <ol className="space-y-3">
               {[...historyFor.history].reverse().map((h, i) => (
                 <li key={`${h.at}-${h.kind}-${i}`} className="flex items-baseline gap-3">
-                  <span className="shrink-0 w-9 font-mono text-[0.71875rem] text-ink-400 tabular-nums">
+                  <span className="shrink-0 w-9 font-mono text-[0.75rem] text-ink-400 tabular-nums">
                     {h.version > 0 ? `v${h.version}` : '—'}
                   </span>
                   <span className="min-w-0">
-                    <span className="block text-[0.78125rem] text-ink-800 leading-snug">{h.what}</span>
+                    <span className="block text-[0.8125rem] text-ink-800 leading-snug">{h.what}</span>
                     <span className="block text-[0.6875rem] text-ink-400">{h.by} · {h.at}</span>
                   </span>
                 </li>
               ))}
             </ol>
             {historyFor.history.length === 0 && (
-              <p className="text-[0.78125rem] text-ink-500">Nothing has happened to this matrix yet.</p>
+              <p className="text-[0.8125rem] text-ink-500">Nothing has happened to this matrix yet.</p>
             )}
           </Drawer>
         )}
@@ -625,7 +654,7 @@ export default function RacmLibraryView({ canManage, creating, setCreating }: {
         return (
           <div className="modal-backdrop" onClick={() => setPublishing(null)}>
             <div className="modal" onClick={e => e.stopPropagation()} role="dialog" aria-modal="true" aria-labelledby="publish-library-racm-title"
-              onKeyDown={e => { if (e.key === 'Escape') setPublishing(null); }}>
+              onKeyDown={e => { if (e.key === 'Escape') setPublishing(null); }}><DialogFocus />
               <div className="px-5 pt-4 pb-3 border-b border-canvas-border">
                 <div className="flex items-center justify-between gap-3">
                   <h2 id="publish-library-racm-title" className="text-[0.9375rem] font-semibold text-ink-900">
@@ -635,7 +664,7 @@ export default function RacmLibraryView({ canManage, creating, setCreating }: {
                 </div>
               </div>
               <div className="p-5">
-                <p className="text-[0.78125rem] text-ink-600 leading-relaxed">
+                <p className="text-[0.8125rem] text-ink-600 leading-relaxed">
                   {draftCount === 1 ? 'This row' : `These ${draftCount} rows`} can be scoped into an engagement once published.
                 </p>
                 <div className="mt-3 flex items-start gap-2.5 rounded-lg border border-canvas-border bg-paper-50 px-3.5 py-3">
@@ -646,9 +675,9 @@ export default function RacmLibraryView({ canManage, creating, setCreating }: {
                   </p>
                 </div>
                 <div className="mt-4 flex items-center justify-end gap-2">
-                  <button onClick={() => setPublishing(null)} autoFocus className="h-9 px-3.5 rounded-lg border border-canvas-border text-[0.78125rem] font-semibold text-ink-600 hover:text-ink-900 cursor-pointer">Cancel</button>
+                  <button onClick={() => setPublishing(null)} autoFocus className="h-9 px-3.5 rounded-lg border border-canvas-border text-[0.8125rem] font-semibold text-ink-600 hover:text-ink-900 cursor-pointer">Cancel</button>
                   <button onClick={() => confirmPublish(publishing)}
-                    className="h-9 px-3.5 inline-flex items-center gap-1.5 rounded-lg bg-brand-600 text-white text-[0.78125rem] font-semibold hover:bg-brand-700 transition-colors cursor-pointer">
+                    className="h-9 px-3.5 inline-flex items-center gap-1.5 rounded-lg bg-brand-600 text-white text-[0.8125rem] font-semibold hover:bg-brand-700 transition-colors cursor-pointer">
                     <CheckCircle2 size={13} /> {all ? 'Publish RACM' : `Publish ${draftCount}`}
                   </button>
                 </div>
@@ -661,7 +690,7 @@ export default function RacmLibraryView({ canManage, creating, setCreating }: {
       {deleting && (
         <div className="modal-backdrop" onClick={() => setDeleting(null)}>
           <div className="modal" onClick={e => e.stopPropagation()} role="dialog" aria-modal="true" aria-labelledby="delete-library-racm-title"
-            onKeyDown={e => { if (e.key === 'Escape') setDeleting(null); }}>
+            onKeyDown={e => { if (e.key === 'Escape') setDeleting(null); }}><DialogFocus />
             <div className="px-5 pt-4 pb-3 border-b border-canvas-border">
               <div className="flex items-center justify-between gap-3">
                 <h2 id="delete-library-racm-title" className="text-[0.9375rem] font-semibold text-ink-900">Delete {deleting.name}?</h2>
@@ -669,11 +698,11 @@ export default function RacmLibraryView({ canManage, creating, setCreating }: {
               </div>
             </div>
             <div className="p-5">
-              <p className="text-[0.78125rem] text-ink-600 leading-relaxed">Its {deleting.controls.length} control{deleting.controls.length === 1 ? '' : 's'} go with it. No engagement uses it. This can't be undone.</p>
+              <p className="text-[0.8125rem] text-ink-600 leading-relaxed">Its {deleting.controls.length} control{deleting.controls.length === 1 ? '' : 's'} go with it. No engagement uses it. This can't be undone.</p>
               <div className="mt-4 flex items-center justify-end gap-2">
-                <button onClick={() => setDeleting(null)} autoFocus className="h-9 px-3.5 rounded-lg border border-canvas-border text-[0.78125rem] font-semibold text-ink-600 hover:text-ink-900 cursor-pointer">Cancel</button>
+                <button onClick={() => setDeleting(null)} autoFocus className="h-9 px-3.5 rounded-lg border border-canvas-border text-[0.8125rem] font-semibold text-ink-600 hover:text-ink-900 cursor-pointer">Cancel</button>
                 <button onClick={() => confirmDelete(deleting)}
-                  className="h-9 px-3.5 inline-flex items-center gap-1.5 rounded-lg bg-risk-600 text-white text-[0.78125rem] font-semibold hover:bg-risk-700 transition-colors cursor-pointer">
+                  className="h-9 px-3.5 inline-flex items-center gap-1.5 rounded-lg bg-risk-600 text-white text-[0.8125rem] font-semibold hover:bg-risk-700 transition-colors cursor-pointer">
                   <Trash2 size={13} /> Delete RACM
                 </button>
               </div>
