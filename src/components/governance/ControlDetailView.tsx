@@ -60,7 +60,8 @@ export default function ControlDetailView({ control, onBack, onUpdate }: Props) 
   const [workflowAttributes, setWorkflowAttributes] = useState<Record<string, TestAttribute[]>>(() => {
     const initial: Record<string, TestAttribute[]> = {};
     for (const wfId of control.linkedWorkflowIds) {
-      initial[wfId] = SEED_WORKFLOW_ATTRIBUTES[wfId] ? [...SEED_WORKFLOW_ATTRIBUTES[wfId]] : [];
+      // The workflow's own attributes where seeded, else the control's.
+      initial[wfId] = SEED_WORKFLOW_ATTRIBUTES[wfId] ? [...SEED_WORKFLOW_ATTRIBUTES[wfId]] : [...(control.attributes ?? [])];
     }
     return initial;
   });
@@ -603,11 +604,30 @@ export default function ControlDetailView({ control, onBack, onUpdate }: Props) 
                   <div className="glass-card p-10 text-center">
                     <ClipboardList size={36} className="mx-auto text-ink-300 mb-3" />
                     <p className="text-[0.9375rem] font-semibold text-ink-600 mb-1">No workflow linked</p>
-                    <p className="text-[0.8125rem] text-ink-400 mb-5 max-w-md mx-auto">Link or create a workflow to define test conditions. These describe what evidence and criteria are validated during testing.</p>
+                    <p className="text-[0.8125rem] text-ink-400 mb-5 max-w-md mx-auto">
+                      {control.attributes?.length
+                        ? 'The test attributes below are tested manually until a workflow is linked to automate them.'
+                        : 'Link or create a workflow to define test conditions. These describe what evidence and criteria are validated during testing.'}
+                    </p>
                     <div className="flex items-center justify-center gap-3">
                       <button onClick={() => setShowLinkDrawerFromAttrs(true)} className="flex items-center gap-2 px-4 py-2 bg-brand-600 hover:bg-brand-500 text-white rounded-lg text-[0.8125rem] font-semibold transition-colors cursor-pointer"><Link2 size={14} />Link Workflow</button>
                       <button onClick={() => addToast({ message: 'Workflow builder will open with this control as context', type: 'info' })} className="flex items-center gap-2 px-4 py-2 border border-border rounded-lg text-[0.8125rem] text-text-secondary hover:bg-white transition-colors cursor-pointer"><Workflow size={14} />Create Workflow</button>
                     </div>
+                    {control.attributes && control.attributes.length > 0 && (
+                      <ul className="mt-6 text-left divide-y divide-canvas-border rounded-lg border border-canvas-border bg-white">
+                        {control.attributes.map(a => (
+                          <li key={a.id} className="px-4 py-3">
+                            <div className="flex items-center gap-2">
+                              <span className="font-mono text-[0.6875rem] text-ink-500">{a.label}</span>
+                              <span className="text-[0.8125rem] font-medium text-ink-900">{a.name}</span>
+                              {a.evidenceType && <span className="ml-auto text-[0.6875rem] text-ink-500">Evidence: {a.evidenceType}</span>}
+                            </div>
+                            <p className="text-[0.75rem] text-ink-600 mt-0.5">{a.description}</p>
+                            <p className="text-[0.75rem] mt-1"><span className="text-compliant-700">Pass:</span> <span className="text-ink-600">{a.passCriteria}</span> · <span className="text-risk-700">Fail:</span> <span className="text-ink-600">{a.failureCriteria}</span></p>
+                          </li>
+                        ))}
+                      </ul>
+                    )}
                   </div>
                 ) : (
                   <>
@@ -621,7 +641,7 @@ export default function ControlDetailView({ control, onBack, onUpdate }: Props) 
                           <Workflow size={15} className="text-brand-600" />
                           <div>
                             <div className="flex items-center gap-2">
-                              <span className="text-[0.8125rem] font-semibold text-ink-800">{primaryWf?.name}</span>
+                              <span className="text-[0.8125rem] font-semibold text-ink-800">{primaryWf?.name ?? control.linkedWorkflows[0]}</span>
                               <span className="px-2 py-0.5 rounded-full text-[0.625rem] font-bold bg-brand-50 text-brand-700">PRIMARY</span>
                               {draftVersionCreated ? (
                                 <span className="px-2 py-0.5 rounded text-[0.625rem] font-bold bg-mitigated-50 text-mitigated-700">DRAFT v2</span>

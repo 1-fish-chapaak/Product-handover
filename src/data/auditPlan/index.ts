@@ -21,3 +21,5 @@ export {
   itemsFromEntries, itemsFromPlanRows, sessionHref, type BuildBatch, type BatchItem, type BatchItemStatus,
 } from './batch';
 export { loadAuditDraft, saveAuditDraft, clearAuditDraft, type AuditDraft } from './drafts';
+export { setAuditWorkspace, isFreshWorkspace, useFreshWorkspace, workspaceSuffix } from './workspace';
+export { stdAttributes, stdOwner, stdAssertions, CATALOG_DETAIL } from './catalogDetail';
