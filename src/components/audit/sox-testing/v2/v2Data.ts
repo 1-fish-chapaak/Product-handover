@@ -604,7 +604,10 @@ function buildV2Seed(): V2Programme {
   registerEngagement({
     id: 'sox-v2-fy26',
     code: 'SOX-104',
-    name: 'FY26 ICFR — Altura Infra Group',
+    name: 'FY26 ICFR — Altura Infra Group · CY 2026 Interim',
+    // One engagement = one round (5 Oct 2026): this is Altura's running CY 2026
+    // interim; its CY 2025 year-end is engagement SOX-103 now.
+    soxAudit: { round: 'interim', yearBasis: 'cy', fiscalYear: 2026, windowFrom: '2026-01-01', windowTo: '2026-06-30' },
     description: 'SOX 404 / ICFR programme — V2 scoping: 5/8 entities derived in scope (67% coverage), 8 RACMs incl. group workstreams.',
     type: 'SOX / ICFR',
     soxConfig: {
@@ -636,7 +639,7 @@ function buildV2Seed(): V2Programme {
   return {
     id: 'sox-v2-fy26',
     engagementId: 'sox-v2-fy26',
-    name: 'FY26 ICFR — Altura Infra Group',
+    name: 'FY26 ICFR — Altura Infra Group · CY 2026 Interim',
     code: 'SOX-104',
     owner: 'A. Mehta',
     fy: 'FY26',

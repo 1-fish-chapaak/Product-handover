@@ -50,8 +50,8 @@ function NoBytes({ file }: { file: EvidenceFile }) {
   return (
     <div className="h-full flex flex-col items-center justify-center text-center px-6 py-10 gap-2">
       <FileText size={20} className="text-ink-300" />
-      <p className="text-[0.78125rem] font-semibold text-ink-700">{file.name}</p>
-      <p className="text-[0.71875rem] text-ink-500 leading-relaxed max-w-[26rem]">
+      <p className="text-[0.8125rem] font-semibold text-ink-700">{file.name}</p>
+      <p className="text-[0.75rem] text-ink-500 leading-relaxed max-w-104">
         This file was attached in an earlier session, so its contents aren’t on this machine to mark up.
         Re-attach it on the design element to see the passage behind the answer.
       </p>
@@ -96,7 +96,13 @@ function PdfAnnotator({ file, quotes, active }: Props) {
         for (let n = 1; n <= count; n++) {
           if (dead) return;
           const page = await doc.getPage(n);
-          const viewport = page.getViewport({ scale: SCALE });
+          // Fit the page to the panel it opens in. At a fixed scale a page wider
+          // than the 400px rail cut its right-hand column off (click-through,
+          // 5 Oct); never drawn larger than SCALE where there is room.
+          const avail = (holder.current?.clientWidth ?? 0) - 32;
+          const base = page.getViewport({ scale: 1 });
+          const scale = avail > 0 ? Math.min(SCALE, avail / base.width) : SCALE;
+          const viewport = page.getViewport({ scale });
           dims.push({ n, w: viewport.width, h: viewport.height });
 
           const canvas = canvases.current.get(n);
@@ -159,7 +165,7 @@ function PdfAnnotator({ file, quotes, active }: Props) {
               for (const s of touched) {
                 const tx = pdfjs.Util.transform(viewport.transform, s.item.transform);
                 const h = Math.hypot(tx[2], tx[3]) || 10;
-                const w = (s.item.width ?? 0) * SCALE;
+                const w = (s.item.width ?? 0) * scale;
                 found.push({ page: n, x: tx[4], y: tx[5] - h, w: w || 40, h, quote: q });
               }
               at = hay.indexOf(alt, at + Math.max(alt.length, 1));
@@ -187,7 +193,12 @@ function PdfAnnotator({ file, quotes, active }: Props) {
     const hit = marks.find(m => m.quote === want) ?? marks[0];
     if (!hit) return;
     const el = holder.current.querySelector<HTMLElement>(`[data-page="${hit.page}"]`);
-    if (el) holder.current.scrollTo({ top: Math.max(0, el.offsetTop + hit.y - 120), behavior: 'smooth' });
+    if (!el) return;
+    // Measured against the scroller itself — offsetTop is relative to the nearest
+    // positioned ancestor, which sat well above this box and scrolled past the
+    // mark. The box lands a third of the way down, with its context above it.
+    const top = el.getBoundingClientRect().top - holder.current.getBoundingClientRect().top + holder.current.scrollTop + hit.y;
+    holder.current.scrollTo({ top: Math.max(0, top - holder.current.clientHeight / 3), behavior: 'smooth' });
   }, [state, marks, active]);
 
   const activeQ = active ? squash(active) : undefined;
@@ -202,7 +213,7 @@ function PdfAnnotator({ file, quotes, active }: Props) {
       {state === 'failed' && (
         <div className="h-full flex flex-col items-center justify-center gap-2 text-center px-6">
           <AlertTriangle size={18} className="text-mitigated-600" />
-          <p className="text-[0.75rem] text-ink-600 max-w-[24rem]">
+          <p className="text-[0.75rem] text-ink-600 max-w-96">
             {file.name} couldn’t be rendered here. It may be password-protected or damaged.
           </p>
         </div>
@@ -242,7 +253,7 @@ function PdfAnnotator({ file, quotes, active }: Props) {
           </div>
         ))}
         {state === 'ready' && marks.length === 0 && (
-          <p className="text-center text-[0.71875rem] text-ink-500 py-2">
+          <p className="text-center text-[0.75rem] text-ink-500 py-2">
             Nothing in this document matched the wording behind the answer — the page is shown unmarked.
           </p>
         )}
@@ -304,14 +315,14 @@ function SheetAnnotator({ file, quotes, active }: Props) {
 
   return (
     <div ref={holder} className="h-full overflow-auto bg-paper-50/60">
-      <div className="px-3 py-2 text-[0.65625rem] font-semibold text-ink-500 sticky top-0 bg-canvas-elevated border-b border-canvas-border z-10">
+      <div className="px-3 py-2 text-[0.6875rem] font-semibold text-ink-500 sticky top-0 bg-canvas-elevated border-b border-canvas-border z-10">
         {file.name}{sheetName && <span className="text-ink-400"> · {sheetName}</span>}
       </div>
       <table className="text-[0.6875rem] border-collapse">
         <tbody>
           {rows.map((r, ri) => (
             <tr key={ri}>
-              <td className="sticky left-0 bg-paper-50 text-ink-300 text-[0.625rem] px-2 border border-canvas-border/60 text-right select-none">{ri + 1}</td>
+              <td className="sticky left-0 bg-paper-50 text-ink-300 text-[0.6875rem] px-2 border border-canvas-border/60 text-right select-none">{ri + 1}</td>
               {Array.from({ length: width }).map((_, ci) => {
                 const cell = r[ci] ?? '';
                 const hit = hitOf(cell);
@@ -320,7 +331,7 @@ function SheetAnnotator({ file, quotes, active }: Props) {
                 if (mark) first = false;
                 return (
                   <td key={ci} data-hit={mark ? '1' : undefined}
-                    className={cn('px-2 py-1 border border-canvas-border/60 whitespace-nowrap max-w-[16rem] truncate',
+                    className={cn('px-2 py-1 border border-canvas-border/60 whitespace-nowrap max-w-64 truncate',
                       ri === 0 ? 'font-semibold text-ink-700 bg-paper-50/80' : 'text-ink-700 bg-white',
                       on && 'outline outline-2 outline-dashed outline-evidence-600 bg-evidence-100 font-semibold relative z-[1]',
                       hit && !on && 'bg-paper-100')}

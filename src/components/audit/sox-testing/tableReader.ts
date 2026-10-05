@@ -26,9 +26,12 @@ import * as XLSX from 'xlsx';
 
 export interface ReadSheet { name: string; rows: string[][] }
 export type ReadVia = 'sheet' | 'pdf' | 'word' | 'scan';
+/** For a PDF or an image, the text as it sat on each page is handed back too,
+ *  read or not — a drawn org chart has no table, but its boxes still name
+ *  every company (orgChartImport reads them from this). */
 export type TableReadResult =
-  | { ok: true; sheets: ReadSheet[]; via: ReadVia }
-  | { ok: false; reason: 'no-table' | 'unsupported' };
+  | { ok: true; sheets: ReadSheet[]; via: ReadVia; pages?: PlacedText[][] }
+  | { ok: false; reason: 'no-table' | 'unsupported'; pages?: PlacedText[][] };
 
 const SHEET = /\.(xlsx|xlsm|xlsb|xls|csv|tsv)$/i;
 const PDF = /\.pdf$/i;
@@ -227,10 +230,47 @@ async function getPdfjs() {
  *  baseline at [5], measured up from the page's foot. */
 interface PdfTextItem { str: string; transform: number[]; width: number; height: number }
 
-async function readPdf(buf: ArrayBuffer, onScan?: () => void): Promise<{ sheets: ReadSheet[]; scanned: boolean }> {
+/**
+ * A PDF's text as sheets. The whole document read as one grid comes first —
+ * a table that runs on from page to page without repeating its header reads
+ * as one. Then each page on its own, with consecutive pages that repeat the
+ * same header joined (5 Oct): a report that opens with drawn charts and ends
+ * with its register used to be read as one grid, and the charts' columns
+ * scrambled the register's, so no table was found at all.
+ */
+export function sheetsFromPdfPages(pages: PlacedText[][]): ReadSheet[] {
+  const whole = rowsFromPlacedText(pages.flat());
+  const sheets: ReadSheet[] = whole.length ? [{ name: 'PDF', rows: whole }] : [];
+  if (pages.length < 2) return sheets;
+  const headerAt = (rows: string[][]) => rows.findIndex(r => r.filter(c => c).length >= 3);
+  const keyOf = (rows: string[][], i: number) => (i < 0 ? '' : rows[i].map(c => c.toLowerCase()).join('|'));
+  let group: { from: number; to: number; key: string; rows: string[][] } | null = null;
+  const flush = () => {
+    if (group?.rows.length) {
+      sheets.push({ name: group.from === group.to ? `Page ${group.from}` : `Pages ${group.from}–${group.to}`, rows: group.rows });
+    }
+    group = null;
+  };
+  pages.forEach((page, n) => {
+    const rows = rowsFromPlacedText(page);
+    const h = headerAt(rows);
+    const key = keyOf(rows, h);
+    if (group && key && key === group.key) {
+      group.rows.push(...rows.slice(h + 1));
+      group.to = n + 1;
+      return;
+    }
+    flush();
+    group = { from: n + 1, to: n + 1, key, rows };
+  });
+  flush();
+  return sheets;
+}
+
+async function readPdf(buf: ArrayBuffer, onScan?: () => void): Promise<{ sheets: ReadSheet[]; scanned: boolean; pages: PlacedText[][] }> {
   const pdfjs = await getPdfjs();
   const doc = await pdfjs.getDocument({ data: new Uint8Array(buf) }).promise;
-  const placed: PlacedText[] = [];
+  const pages: PlacedText[][] = [];
   let scanned = false;
   let top = 0;
   try {
@@ -239,6 +279,8 @@ async function readPdf(buf: ArrayBuffer, onScan?: () => void): Promise<{ sheets:
       const view = page.getViewport({ scale: 1 });
       const content = await page.getTextContent();
       const items = (content.items as unknown[]).filter((i): i is PdfTextItem => !!i && typeof (i as PdfTextItem).str === 'string');
+      const placed: PlacedText[] = [];
+      pages.push(placed);
       if (items.some(i => i.str.trim())) {
         for (const i of items) {
           const h = i.height || Math.abs(i.transform[3]) || 10;
@@ -265,8 +307,7 @@ async function readPdf(buf: ArrayBuffer, onScan?: () => void): Promise<{ sheets:
   } finally {
     await doc.destroy();
   }
-  const rows = rowsFromPlacedText(placed);
-  return { sheets: rows.length ? [{ name: 'PDF', rows }] : [], scanned };
+  return { sheets: sheetsFromPdfPages(pages), scanned, pages };
 }
 
 // ── OCR ────────────────────────────────────────────────────────────────────
@@ -432,12 +473,14 @@ export async function readTableRows(file: File, onScan?: () => void): Promise<Ta
   try {
     let sheets: ReadSheet[];
     let via: ReadVia;
+    let pages: PlacedText[][] | undefined;
     if (SHEET.test(name)) {
       sheets = readSheetFile(await file.arrayBuffer());
       via = 'sheet';
     } else if (PDF.test(name)) {
       const r = await readPdf(await file.arrayBuffer(), onScan);
       sheets = r.sheets;
+      pages = r.pages;
       via = r.scanned ? 'scan' : 'pdf';
     } else if (DOCX.test(name)) {
       sheets = await readDocx(await file.arrayBuffer());
@@ -447,7 +490,9 @@ export async function readTableRows(file: File, onScan?: () => void): Promise<Ta
       via = 'word';
     } else {
       onScan?.();
-      const rows = rowsFromPlacedText(await ocrWords(file));
+      const words = await ocrWords(file);
+      pages = [words];
+      const rows = rowsFromPlacedText(words);
       sheets = rows.length ? [{ name: 'Scan', rows }] : [];
       via = 'scan';
     }
@@ -457,7 +502,7 @@ export async function readTableRows(file: File, onScan?: () => void): Promise<Ta
       const filled = s.rows.filter(r => r.filter(c => c).length >= 2);
       return filled.length >= 2;
     });
-    return usable.length ? { ok: true, sheets: usable, via } : { ok: false, reason: 'no-table' };
+    return usable.length ? { ok: true, sheets: usable, via, pages } : { ok: false, reason: 'no-table', pages };
   } catch {
     return { ok: false, reason: 'no-table' };
   }

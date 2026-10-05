@@ -67,7 +67,7 @@ const STATUS_LABEL: Record<AuditStatus, string> = { concluded: 'Concluded', acti
 // ── Page furniture ───────────────────────────────────────────────────────────
 
 const cardCls = 'rounded-xl border border-canvas-border bg-canvas-elevated p-4 shadow-[0_1px_2px_rgba(15,8,30,0.04)]';
-const eyebrow = 'text-[0.625rem] font-semibold uppercase tracking-[0.1em]';
+const eyebrow = 'text-[0.6875rem] font-semibold uppercase tracking-[0.1em]';
 /** Table header band — full-bleed inside a p-4 card so it never reads as a card
  *  nested in a card. Every `-mx-4 px-4` below is the same trick. */
 const bandCls = '-mx-4 px-4 py-1.5 bg-paper-50 border-y border-canvas-border';
@@ -212,7 +212,7 @@ function AuditBody({ audit, note }: { audit: AuditRecord; note?: React.ReactNode
   // facts left, progress right, and the tile stays a short strip.
   return (
     <div className="flex flex-wrap items-center gap-x-8 gap-y-3">
-      <div className="min-w-[16rem] flex-1">
+      <div className="min-w-64 flex-1">
         <div className="flex items-center gap-1.5 text-[0.75rem] text-ink-500 flex-wrap">
           <CalendarRange size={12} className="text-ink-400 shrink-0" />
           <span className="tabular-nums">{audit.windowFrom.slice(0, 7)} → {audit.windowTo.slice(0, 7)}</span>
@@ -228,7 +228,7 @@ function AuditBody({ audit, note }: { audit: AuditRecord; note?: React.ReactNode
       {/* Testing progress — the bar is the glance, the fraction is the fact. The
           per-outcome counters that used to sit under it belong to the audit's own
           Dashboard, not to the engagement. */}
-      <div className="w-full sm:w-[22rem] shrink-0">
+      <div className="w-full sm:w-88 shrink-0">
         <Bar
           label="Concluded"
           value={progress.concluded}
@@ -285,13 +285,13 @@ function CoverageBody({ audits, range }: { audits: AuditRecord[]; range: Range }
 
       {/* Month axis, banded like a table header so the grid below reads as rows. */}
       <div className={cn(bandCls, 'flex items-center gap-2.5')}>
-        <span className="w-[76px] shrink-0" aria-hidden />
+        <span className="w-19 shrink-0" aria-hidden />
         <div className="flex-1 grid gap-px" style={cols}>
           {months.map(m => (
             <span
               key={m.key}
               className={cn(
-                'text-[0.625rem] font-semibold uppercase tracking-[0.02em] text-center py-0.5 rounded-sm',
+                'text-[0.6875rem] font-semibold uppercase tracking-[0.02em] text-center py-0.5 rounded-sm',
                 covered.has(m.key) ? 'text-ink-500' : 'text-mitigated-700 bg-mitigated-50',
               )}
             >
@@ -310,13 +310,13 @@ function CoverageBody({ audits, range }: { audits: AuditRecord[]; range: Range }
           const from = a.windowFrom.slice(0, 7);
           const to = a.windowTo.slice(0, 7);
           return (
-            <div key={a.id} className="flex-1 min-h-[1.75rem] flex items-center gap-2.5 py-1.5">
+            <div key={a.id} className="flex-1 min-h-7 flex items-center gap-2.5 py-1.5">
               {/* Round only. The range is named in the header and the bar's
                   position says which cycle it belongs to — repeating the period on
                   every row cost the label its width and told you nothing. */}
               <span
                 title={`${a.period} ${ROUND_LABEL[a.round].toLowerCase()} · ${monthLabel(from)} → ${monthLabel(to)}`}
-                className="w-[76px] shrink-0 text-[0.75rem] font-medium text-ink-700 truncate"
+                className="w-19 shrink-0 text-[0.75rem] font-medium text-ink-700 truncate"
               >
                 {ROUND_LABEL[a.round]}
               </span>
@@ -601,7 +601,7 @@ export default function EngagementOverview() {
           body="An audit sets the period it covers, the round it is, what it tests and the materiality it is measured against. Everything on this page is a read-out across audits, so it starts with the first one."
           action={firstActions ?? undefined}
         />
-        <div className={cn(cardCls, 'mt-5 max-w-[480px] mx-auto')}>
+        <div className={cn(cardCls, 'mt-5 max-w-120 mx-auto')}>
           <span className={cn(eyebrow, 'text-brand-600')}>Setup</span>
           <h3 className="font-display text-[1.0625rem] leading-tight text-ink-900 mt-0.5 mb-2.5">Before you start</h3>
           <ul className="-mx-4 px-4 divide-y divide-canvas-border">
@@ -654,7 +654,7 @@ export default function EngagementOverview() {
               'h-8 px-2.5 inline-flex items-center gap-1.5 rounded-md text-[0.75rem] font-semibold transition-colors',
               dirty
                 ? 'bg-brand-600 text-white shadow-sm shadow-brand-900/10 hover:bg-brand-500 cursor-pointer'
-                : 'bg-paper-50 text-ink-400 cursor-default',
+                : 'bg-paper-50 text-ink-500 cursor-default',
             )}
           >
             <Check size={13} /> Apply
@@ -881,7 +881,7 @@ export default function EngagementOverview() {
                     'mt-2 text-[0.75rem] font-medium inline-flex items-start gap-1.5',
                     consistency.consistent ? 'text-compliant-700' : 'text-mitigated-700',
                   )}>
-                    <Scale size={12} className="shrink-0 mt-[3px]" />
+                    <Scale size={12} className="shrink-0 mt-0.75" />
                     <span className="tabular-nums">
                       {consistency.consistent
                         ? <>All {sameCycle.length} rounds of {current.period} share materiality ₹{consistency.values[0]} Cr</>
@@ -1039,7 +1039,7 @@ export default function EngagementOverview() {
                 <div key={deficiency.id} className="flex items-start gap-2.5 py-2.5">
                   {verified
                     ? <CheckCircle2 size={14} className="text-compliant-600 shrink-0 mt-0.5" />
-                    : <Circle size={13} className="text-mitigated-500 shrink-0 mt-[3px]" />}
+                    : <Circle size={13} className="text-mitigated-500 shrink-0 mt-0.75" />}
                   <div className="min-w-0">
                     <p className="text-[0.8125rem] text-ink-700 leading-snug">{deficiency.description}</p>
                     <div className="mt-1.5 flex items-center gap-2 flex-wrap">

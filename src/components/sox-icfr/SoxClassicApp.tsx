@@ -7,6 +7,7 @@ import { EngagementTabBar, type TabDef } from '../audit/EngagementTabBar';
 import { useIcfr, type SoxTab } from './store';
 import { AUDIT_TABS, defWord } from './flow';
 import { ownersOf } from './auditScope';
+import { controlCode } from './helpers';
 import type { SoxTabLike } from './types';
 import { OwnerPicker, RoleSwitcher, SoxBreadcrumb } from './parts';
 import NotificationsBell from './NotificationsBell';
@@ -68,7 +69,9 @@ const SOX_TABS: TabDef[] = [
      them. Nothing navigates into the tab, so no link is left dangling. */
   // { id: 'risks', label: 'Risk Register' },
   { id: 'controls', label: 'Control Library' },
-  { id: 'runs', label: 'SOX testing' },
+  /* SOX testing — RETIRED (5 Oct 2026, one engagement = one audit round). The
+     register is gone with the level it listed; AuditLogsView still compiles.
+  { id: 'runs', label: 'SOX testing' }, */
   /* Configuration is BACK (23 Sep), carrying the same one thing the reworked
      shell's does: the sampling methodology (#22). It had been parked because
      period, scope, TB / GL and materiality are all set per cycle and nothing
@@ -91,7 +94,6 @@ export default function SoxClassicInner({ onBack, backLabel = 'Back to Engagemen
   // the breadcrumb names where ← actually lands — "Engagements" or "SOX Testing"
   const backCrumb = backLabel.replace(/^Back to /, '');
   const { refusal, eng, role, tab, view, racmEditor, racmProcess, meOwner, selectedControlId, returnView, openAuditId, closeAudit, setMeOwner, setRole, setTab, setView, back } = useIcfr();
-  const concluded = !!(eng.signoff.preparer && eng.signoff.reviewer);
   /* Audits reached this shell with the portfolio Overview, so opening one has to
      work here too — a register row whose Open button did nothing would be worse
      than no register. Same two levels and the same AUDIT_TABS as the reworked
@@ -100,6 +102,9 @@ export default function SoxClassicInner({ onBack, backLabel = 'Back to Engagemen
      flow.ts), which is why they remain separate files. */
   const audit = eng.audits.find(a => a.id === openAuditId);
   const inAudit = !!audit;
+  // The engagement IS its round now (5 Oct 2026), so the round's sign-off concludes it.
+  const concluded = !!(eng.signoff.preparer && eng.signoff.reviewer) || !!(audit?.signoff?.preparer && audit?.signoff?.reviewer);
+  const concludedBy = eng.signoff.preparer && eng.signoff.reviewer ? eng.signoff : audit?.signoff;
   // The owner's SOX is a to-do list, not a workspace: their inbox, their controls
   // and their own findings. RACM and the audit register are auditor-side surfaces.
   //
@@ -108,7 +113,8 @@ export default function SoxClassicInner({ onBack, backLabel = 'Back to Engagemen
   // they are the ones being asked to fix — the deficiency page exists, and they
   // simply could not reach it. Same three tabs on both shells now; only the
   // WORDING differs, which is what defWord is for.
-  const levelTabs = inAudit ? AUDIT_TABS : SOX_TABS;
+  // One level of tabs (5 Oct 2026). This shell says "exceptions", not "deficiencies".
+  const levelTabs = AUDIT_TABS.map(t => (t.id === 'deficiencies' ? { ...t, label: defWord(eng.id).Many } : t));
   const tabs = role === 'risk-owner'
     ? [
         ...levelTabs.filter(t => t.id === 'overview' || t.id === 'controls'),
@@ -124,35 +130,40 @@ export default function SoxClassicInner({ onBack, backLabel = 'Back to Engagemen
   // Header matches the production engagement page: a "Back to Engagements" line,
   // then avatar-initials tile + name + status/type pills, with code · Configuration
   // beneath — the tabs sit tight underneath.
-  const initials = eng.name.replace(/[^A-Za-z0-9]/g, '').slice(0, 3) || eng.code.slice(0, 3);
+  // The company's initials, not the name's first characters — "FY26 ICFR —
+  // Altura Infra Group" used to read "FY2". The words after the dash name the
+  // company; the code stands in when there are none.
+  const initials = (eng.name.split(/[—–-]/).slice(1).join(' ').match(/\b[A-Za-z]/g) ?? []).slice(0, 2).join('').toUpperCase() || eng.code.slice(0, 3);
   const topBar = (
     <div className={cn('bg-canvas shrink-0', view === 'racm-editor' && 'border-b border-canvas-border')}>
-      <div className="max-w-[1320px] mx-auto px-6 pt-4">
+      <div className="max-w-330 mx-auto px-6 pt-4">
         {onBack && (
           <button
             onClick={onBack}
             aria-label={backLabel}
-            className="inline-flex items-center gap-1.5 text-[13px] font-medium text-ink-500 hover:text-brand-700 cursor-pointer transition-colors"
+            className="inline-flex items-center gap-1.5 text-[0.8125rem] font-medium text-ink-500 hover:text-brand-700 cursor-pointer transition-colors"
           >
             <ArrowLeft size={15} /> {backLabel}
           </button>
         )}
         <div className="mt-3 flex items-start gap-3.5">
-          <span className="w-12 h-12 rounded-xl bg-brand-600 text-white text-[14px] font-semibold flex items-center justify-center shrink-0 select-none" aria-hidden>{initials}</span>
+          <span className="w-12 h-12 rounded-xl bg-brand-600 text-white text-[0.875rem] font-semibold flex items-center justify-center shrink-0 select-none" aria-hidden>{initials}</span>
           <div className="min-w-0 flex-1">
-            <div className="flex items-center gap-2.5 min-w-0 flex-wrap">
-              <h1 className="text-[22px] leading-7 font-bold text-ink-900 tracking-tight truncate min-w-0">{eng.name}</h1>
+            {/* One line: a long name truncates (full name on hover) so the
+                status and SOX / ICFR chips stay beside it, never wrap below. */}
+            <div className="flex items-center gap-2.5 min-w-0">
+              <h1 title={eng.name} className="text-[1.375rem] leading-7 font-bold text-ink-900 tracking-tight truncate min-w-0">{eng.name}</h1>
               {concluded ? (
-                <span title={`Signed off — ${eng.signoff.preparer!.by}, countersigned ${eng.signoff.reviewer!.by}`} className="text-[11.5px] font-semibold text-compliant-700 bg-compliant-50 border border-compliant-200 px-2 h-[22px] inline-flex items-center gap-1 rounded-full shrink-0">
+                <span title={`Signed off — ${concludedBy?.preparer?.by}, countersigned ${concludedBy?.reviewer?.by}`} className="text-[0.75rem] font-semibold text-compliant-700 bg-compliant-50 border border-compliant-200 px-2 h-5.5 inline-flex items-center gap-1 rounded-full shrink-0">
                   <BadgeCheck size={11} /> Concluded
                 </span>
               ) : (
-                <span className="text-[11.5px] font-semibold text-compliant-700 bg-compliant-50 border border-compliant-200 px-2 h-[22px] inline-flex items-center rounded-full shrink-0">Active</span>
+                <span className="text-[0.75rem] font-semibold text-compliant-700 bg-compliant-50 border border-compliant-200 px-2 h-5.5 inline-flex items-center rounded-full shrink-0">Active</span>
               )}
               {/* Module chip — same job as the type pill on the production header. */}
-              <span className="text-[11.5px] font-semibold text-brand-700 bg-brand-50 border border-brand-100 px-2 h-[22px] inline-flex items-center rounded-full shrink-0">SOX / ICFR</span>
+              <span className="text-[0.75rem] font-semibold text-brand-700 bg-brand-50 border border-brand-100 px-2 h-5.5 inline-flex items-center rounded-full shrink-0">SOX / ICFR</span>
             </div>
-            <div className="mt-1 text-[12px] text-ink-500">
+            <div className="mt-1 text-[0.75rem] text-ink-500">
               <span className="font-mono font-semibold">{eng.code}</span>
             </div>
           </div>
@@ -166,7 +177,7 @@ export default function SoxClassicInner({ onBack, backLabel = 'Back to Engagemen
             <NotificationsBell />
             <span className="w-px h-6 bg-canvas-border" aria-hidden />
             <div className="flex items-center gap-2 opacity-75 hover:opacity-100 focus-within:opacity-100 transition-opacity">
-              <span className="text-[10px] font-medium uppercase tracking-wide text-ink-400">Viewing as</span>
+              <span className="text-[0.6875rem] font-medium uppercase tracking-wide text-ink-400">Viewing as</span>
               <RoleSwitcher role={role} onChange={setRole} />
               {role === 'risk-owner' && <OwnerPicker owner={meOwner} options={owners} onChange={setMeOwner} />}
             </div>
@@ -195,7 +206,9 @@ export default function SoxClassicInner({ onBack, backLabel = 'Back to Engagemen
   const isScope = view === 'scope';
   // Deficiencies is one of the audit's four tabs inside an audit, and a
   // breadcrumbed drill-in outside one.
-  const isDeficiencies = view === 'deficiencies' && !inAudit;
+  // …except the risk owner's: "My deficiencies" is one of their own tabs, so
+  // it keeps the tab bar rather than turning into a breadcrumbed page.
+  const isDeficiencies = view === 'deficiencies' && !inAudit && role !== 'risk-owner';
   const isHandoffs = view === 'handoffs';
   // drilled-in document pages carry a breadcrumb instead of the engagement header
   const isDrillIn = isRacmMatrix || isScope || isDeficiencies || isHandoffs;
@@ -205,7 +218,7 @@ export default function SoxClassicInner({ onBack, backLabel = 'Back to Engagemen
   // the page above it has no height of its own to give.
   const dossierPanes = view === 'dossier' && inAudit;
   const isRoot = view === 'overview' || view === 'racm' || view === 'risks' || view === 'register'
-    || view === 'runs' || view === 'config' || (inAudit && view === 'deficiencies');
+    || view === 'runs' || view === 'config' || ((inAudit || role === 'risk-owner') && view === 'deficiencies');
   // Same as the reworked shell: a concluded audit is its archive, read-only.
   const body = (inAudit && audit!.archive && isRoot)
     ? <AuditArchiveView audit={audit!} tab={(tab === 'racm' || tab === 'risks' || tab === 'runs' ? 'overview' : tab) as SoxTabLike} />
@@ -219,12 +232,14 @@ export default function SoxClassicInner({ onBack, backLabel = 'Back to Engagemen
     // Inside an audit for the audit side; at engagement level it is the owner's
     // own tab — their findings span whichever audit is testing them.
     : ((inAudit || role === 'risk-owner') && tab === 'deficiencies') ? <DeficienciesView />
-    : (inAudit && tab === 'config') ? <AuditConfigView audit={audit!} />
+    // One Configuration (5 Oct 2026): the methodology and the round's settings.
+    : (inAudit && tab === 'config') ? <div className="space-y-8"><SamplingMethodologyView /><AuditConfigView audit={audit!} /></div>
     // The risk owner never gets the portfolio: their engagement-level tabs are an
     // inbox and their controls, and the inbox (RiskOwnerPortal, inside Overview)
     // is engagement-wide anyway — their controls and their deficiencies, whichever
     // audit is testing them. A portfolio of audits is an auditor's question.
-    : tab === 'overview' ? ((inAudit || role === 'risk-owner') ? <Overview /> : <EngagementOverview />)
+    // EngagementOverview (the cross-audit portfolio) is unwired (5 Oct 2026).
+    : tab === 'overview' ? <Overview />
     : tab === 'racm' ? (view === 'racm-list' ? <Racm /> : <RacmLanding />)
     : tab === 'risks' ? <RiskLibrary />
     : tab === 'runs' ? <AuditLogsView />
@@ -266,28 +281,11 @@ export default function SoxClassicInner({ onBack, backLabel = 'Back to Engagemen
       {/* The control detail page and the RACM matrix stand alone — no engagement
           header, no role switcher; the persona is fixed until you go back to the
           engagement. */}
-      {view !== 'dossier' && !isDrillIn && !inAudit && topBar}
+      {view !== 'dossier' && !isDrillIn && topBar}
       {/* 32px gutter on the control page, as in the reworked shell. */}
       <div className={cn('pt-4 w-full',
-        dossierPanes ? 'flex-1 min-h-0 flex flex-col px-8' : 'max-w-[1320px] mx-auto px-6 pb-6')}>
-        {inAudit && isRoot && (
-          <div className="flex items-start justify-between gap-3">
-            <SoxBreadcrumb onBack={closeAudit} items={[
-              ...(onBack ? [{ label: backCrumb, onClick: onBack }] : []),
-              { label: eng.name, onClick: closeAudit },
-              { label: `${audit!.period} · ${audit!.round === 'interim' ? 'Interim' : audit!.round === 'rollforward' ? 'Roll-forward' : 'Year-end'}` },
-            ]} />
-            <div className="flex items-center gap-3 shrink-0 -mt-1">
-              <NotificationsBell />
-              <span className="w-px h-6 bg-canvas-border" aria-hidden />
-              <div className="flex items-center gap-2 opacity-75 hover:opacity-100 focus-within:opacity-100 transition-opacity">
-                <span className="text-[10px] font-medium uppercase tracking-wide text-ink-400">Viewing as</span>
-                <RoleSwitcher role={role} onChange={setRole} />
-                {role === 'risk-owner' && <OwnerPicker owner={meOwner} options={owners} onChange={setMeOwner} />}
-              </div>
-            </div>
-          </div>
-        )}
+        dossierPanes ? 'flex-1 min-h-0 flex flex-col px-8' : 'max-w-330 mx-auto px-6 pb-6')}>
+        {/* The audit breadcrumb is gone with the audit level (5 Oct 2026). */}
         {isRoot && (
           <EngagementTabBar tabs={tabs} activeTab={tab} onSelect={(id) => setTab(id as SoxTab)} storageKey={inAudit ? `sox-audit-${eng.id}` : `sox-${eng.id}`} size="md" />
         )}
@@ -314,11 +312,14 @@ export default function SoxClassicInner({ onBack, backLabel = 'Back to Engagemen
           /* the dossier's trail names where ← actually lands — back() returns
              to the context it was opened from, not a pinned page */
           const VIEW_LABEL: Record<string, string> = {
-            register: 'Control Library', 'racm-list': 'RACM', racm: 'RACM', deficiencies: 'Exceptions',
+            register: 'Control Library', 'racm-list': 'RACM', racm: 'RACM', deficiencies: 'Deficiencies',
             scope: 'Materiality & scope', runs: 'SOX testing', overview: 'Overview', risks: 'Risk Register', handoffs: 'Handoffs',
           };
           const from = VIEW_LABEL[returnView ?? ''] ?? VIEW_LABEL[tab === 'controls' ? 'register' : tab] ?? 'Overview';
-          const wpRef = eng.controls.find(c => c.id === selectedControlId)?.wpRef ?? 'Control';
+          // the same code the Control Library list prints (AIH/TRY/R001/C001),
+          // not the working-paper ref — one control, one ID on every screen
+          const selCtl = eng.controls.find(c => c.id === selectedControlId);
+          const wpRef = selCtl ? controlCode(selCtl) : 'Control';
           const trail = (
             <SoxBreadcrumb onBack={back} items={[
               ...(onBack ? [{ label: backCrumb, onClick: onBack }] : []),
@@ -352,12 +353,11 @@ export default function SoxClassicInner({ onBack, backLabel = 'Back to Engagemen
             <SoxBreadcrumb onBack={back} items={[
               ...(onBack ? [{ label: backCrumb, onClick: onBack }] : []),
               { label: eng.name, onClick: () => setTab('overview') },
-              { label: role === 'risk-owner' ? 'My exceptions' : 'Exceptions' },
+              { label: 'Deficiencies' },
             ]} />
             <div className="flex items-center gap-2 mb-3 shrink-0 opacity-75 hover:opacity-100 focus-within:opacity-100 transition-opacity">
-              <span className="text-[10px] font-medium uppercase tracking-wide text-ink-400">Viewing as</span>
+              <span className="text-[0.6875rem] font-medium uppercase tracking-wide text-ink-400">Viewing as</span>
               <RoleSwitcher role={role} onChange={setRole} />
-              {role === 'risk-owner' && <OwnerPicker owner={meOwner} options={owners} onChange={setMeOwner} />}
             </div>
           </div>
         )}

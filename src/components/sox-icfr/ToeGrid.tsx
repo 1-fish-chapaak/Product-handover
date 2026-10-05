@@ -7,16 +7,16 @@
 //
 // No sox-icfr export is read at module load here (the folder's import cycle turns
 // that into a TDZ throw) — helpers are only called inside render.
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 import { ChevronDown, ChevronRight, Upload, X } from 'lucide-react';
 import { cn } from '../../lib/cn';
 import { useIcfr } from './store';
 import { useAuditLog } from '../../context/AdminDataContext';
 import { mapEvidence } from './controlChatEvidence';
-import { requiredFilesOf } from './helpers';
+import { itemResult, requiredFilesOf } from './helpers';
 import type { Control, EvidenceFile, OperatingStep, Sample, TestResult } from './types';
 
-const cellOf = (step: OperatingStep, item: Sample): TestResult => step.sampleResults?.[item.id] ?? 'Not tested';
+const cellOf = (step: OperatingStep, item: Sample): TestResult => itemResult(step, item);
 
 /** One cell. Green and red are outcomes, so they are the only colours; a hollow
  *  ring is "not tested" — nothing claimed, nothing to colour. */
@@ -28,7 +28,7 @@ function Dot({ r, title }: { r: TestResult; title: string }) {
   );
 }
 
-export function ToeGrid({ control, onOpenWorking }: { control: Control; onOpenWorking?: (step: OperatingStep) => void }) {
+export function ToeGrid({ control, onOpenWorking }: { control: Control; onOpenWorking?: (step: OperatingStep, item?: Sample) => void }) {
   const [showClean, setShowClean] = useState(false);
   const steps = control.operating.steps;
   const items = control.operating.sampling?.samples ?? [];
@@ -47,13 +47,20 @@ export function ToeGrid({ control, onOpenWorking }: { control: Control; onOpenWo
   const row = (it: Sample) => (
     <tr key={it.id} className={cn('border-t border-canvas-border', failing(it) && 'bg-risk-50/40')}>
       <td className="sticky left-0 bg-inherit px-2 py-1 font-mono text-[0.6875rem] text-ink-700 whitespace-nowrap">
-        {it.ref}{it.extension && <span className="ml-1 text-[0.625rem] text-ink-400" title="Drawn in the extension round">ext</span>}
+        {it.ref}{it.extension && <span className="ml-1 text-[0.6875rem] text-ink-400" title="Drawn in the extension round">ext</span>}
       </td>
       {steps.map(s => {
         const r = cellOf(s, it);
+        const title = `${s.code} · ${it.ref} · ${r === 'Pass' ? 'Match' : r === 'Fail' ? 'Mismatch' : 'Not tested'}`;
+        // A cell Ira answered opens that attribute's working with this item
+        // marked in its file; an untested cell has nothing to show.
+        const open = onOpenWorking && s.validation?.result && r !== 'Not tested';
         return (
           <td key={s.id} className="px-2 py-1 text-center">
-            <Dot r={r} title={`${s.code} · ${it.ref} · ${r === 'Pass' ? 'Match' : r === 'Fail' ? 'Mismatch' : 'Not tested'}`} />
+            {open
+              ? <button type="button" onClick={() => onOpenWorking(s, it)} aria-label={`${title} — see where Ira read it`}
+                  className="inline-flex p-1 -m-1 rounded cursor-pointer hover:bg-paper-100"><Dot r={r} title={`${title} — see where Ira read it`} /></button>
+              : <Dot r={r} title={title} />}
           </td>
         );
       })}
@@ -65,7 +72,7 @@ export function ToeGrid({ control, onOpenWorking }: { control: Control; onOpenWo
       <table className="w-auto min-w-full border-collapse text-left">
         <thead>
           <tr>
-            <th className="sticky left-0 bg-canvas px-2 py-1 text-[0.625rem] font-semibold uppercase tracking-wide text-ink-400">Item</th>
+            <th className="sticky left-0 bg-canvas px-2 py-1 text-[0.6875rem] font-semibold uppercase tracking-wide text-ink-400">Item</th>
             {steps.map(s => (
               <th key={s.id} className="px-2 py-1 text-center">
                 {/* The code opens the attribute's Ira working only where there is a
@@ -96,7 +103,7 @@ export function ToeGrid({ control, onOpenWorking }: { control: Control; onOpenWo
           {ordered.map(row)}
         </tbody>
       </table>
-      <p className="mt-1 px-2 text-[0.625rem] text-ink-400">Green = match · red = mismatch · ring = not tested</p>
+      <p className="mt-1 px-2 text-[0.6875rem] text-ink-400">Green = match · red = mismatch · ring = not tested</p>
     </div>
   );
 }
@@ -112,6 +119,9 @@ export function ToeFiles({ control, canEdit, onOpenFile }: { control: Control; c
   // Files from "Upload several" that matched no line — named here until placed
   // or discarded, never dropped silently (user ask, 1 Oct: multi-upload back).
   const [spare, setSpare] = useState<string[]>([]);
+  // The picked files' bytes, by name — a spare placed later still carries its
+  // object URL, so the evidence viewer opens the file rather than just its name.
+  const urls = useRef(new Map<string, string>());
   const groups = new Map<string, FileGroup>();
   for (const step of control.operating.steps) {
     for (const f of requiredFilesOf(step, control)) {
@@ -128,8 +138,8 @@ export function ToeFiles({ control, canEdit, onOpenFile }: { control: Control; c
   const isIn = (g: FileGroup) => g.slots.every(s => s.file);
   const inCount = list.filter(isIn).length;
 
-  const upload = (g: FileGroup, name: string) => {
-    g.slots.forEach(s => uploadRequiredFile(control.id, s.step.id, s.fileId, name));
+  const upload = (g: FileGroup, name: string, url = urls.current.get(name)) => {
+    g.slots.forEach(s => uploadRequiredFile(control.id, s.step.id, s.fileId, name, url));
     logEvent({ action: 'Upload', description: `Uploaded ${name} as "${g.label}" for ${Array.from(new Set(g.slots.map(s => s.step.code))).join(', ')} (${control.id})`, module: 'SOX ICFR', entity: 'Evidence' });
   };
   // "Upload several": pick a pile, and Ira's mapper (the chat rail's own, one
@@ -138,6 +148,7 @@ export function ToeFiles({ control, canEdit, onOpenFile }: { control: Control; c
   const takePile = (files: FileList | null) => {
     if (!files?.length) return;
     const left: string[] = [];
+    Array.from(files).forEach(f => urls.current.set(f.name, URL.createObjectURL(f)));
     mapEvidence(control, Array.from(files).map(f => f.name)).forEach(m => {
       const g = m.slot ? groups.get(norm(m.slot.label)) : undefined;
       if (g) upload(g, m.name); else left.push(m.name);
@@ -166,12 +177,12 @@ export function ToeFiles({ control, canEdit, onOpenFile }: { control: Control; c
       </div>
       {spare.length > 0 && (
         <div className="mx-2 mb-1.5 rounded-md border border-canvas-border bg-paper-50/60 px-2.5 py-2 space-y-1.5">
-          <p className="text-[0.65625rem] text-ink-600">{spare.length === 1 ? 'This file matched no line' : `${spare.length} files matched no line`} — pick where {spare.length === 1 ? 'it goes' : 'each goes'}, or discard.</p>
+          <p className="text-[0.6875rem] text-ink-600">{spare.length === 1 ? 'This file matched no line' : `${spare.length} files matched no line`} — pick where {spare.length === 1 ? 'it goes' : 'each goes'}, or discard.</p>
           {spare.map(name => (
             <div key={name} className="flex items-center gap-2">
               <span className="min-w-0 flex-1 truncate text-[0.6875rem] text-ink-800" title={name}>{name}</span>
               <select defaultValue="" aria-label={`Line for ${name}`} onChange={e => e.target.value && place(name, e.target.value)}
-                className="h-6 max-w-[12rem] rounded-md border border-canvas-border bg-canvas-elevated px-1.5 text-[0.6875rem] text-ink-700 focus:outline-none focus:border-brand-300 cursor-pointer">
+                className="h-6 max-w-48 rounded-md border border-canvas-border bg-canvas-elevated px-1.5 text-[0.6875rem] text-ink-700 focus:outline-none focus:border-brand-300 cursor-pointer">
                 <option value="" disabled>Put on…</option>
                 {list.map(g => <option key={g.label} value={g.label}>{g.label}</option>)}
               </select>
@@ -189,20 +200,20 @@ export function ToeFiles({ control, canEdit, onOpenFile }: { control: Control; c
           return (
             <li key={g.label} className="flex items-center gap-2 px-2 py-1.5">
               <div className="min-w-0 flex-1">
-                <div className="text-[0.71875rem] font-medium text-ink-800 truncate" title={g.label}>{g.label}</div>
-                <div className="text-[0.65625rem] text-ink-400">
+                <div className="text-[0.75rem] font-medium text-ink-800 truncate" title={g.label}>{g.label}</div>
+                <div className="text-[0.6875rem] text-ink-400">
                   for {codes}{file && !full && <span className="text-ink-500"> · not yet on every attribute</span>}
                 </div>
               </div>
               {file && (onOpenFile
                 ? <button onClick={() => onOpenFile(file, g.slots.map(s => s.step.id))} title={file.name}
-                    className="max-w-[11rem] truncate text-[0.6875rem] font-medium text-brand-700 hover:underline cursor-pointer">{file.name}</button>
-                : <span title={file.name} className="max-w-[11rem] truncate text-[0.6875rem] text-ink-700">{file.name}</span>)}
+                    className="max-w-44 truncate text-[0.6875rem] font-medium text-brand-700 hover:underline cursor-pointer">{file.name}</button>
+                : <span title={file.name} className="max-w-44 truncate text-[0.6875rem] text-ink-700">{file.name}</span>)}
               {!file && !canEdit && <span className="text-[0.6875rem] text-ink-400">Not in</span>}
               {canEdit && (
                 <label className="h-6 px-2 rounded-md border border-canvas-border bg-canvas-elevated text-ink-600 text-[0.6875rem] font-semibold hover:border-brand-300 hover:text-brand-700 focus-within:ring-2 focus-within:ring-brand-200 inline-flex items-center gap-1 cursor-pointer shrink-0">
                   <input type="file" className="sr-only" aria-label={`${file ? 'Replace' : 'Upload'} ${g.label}`}
-                    onChange={e => { const f = e.target.files?.[0]; if (f) upload(g, f.name); e.target.value = ''; }} />
+                    onChange={e => { const f = e.target.files?.[0]; if (f) upload(g, f.name, URL.createObjectURL(f)); e.target.value = ''; }} />
                   <Upload size={10} /> {file ? 'Replace' : 'Upload'}
                 </label>
               )}

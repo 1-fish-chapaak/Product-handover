@@ -7,13 +7,13 @@ import {
   CornerDownRight, Pencil, RotateCcw, Cpu, ChevronRight, Scale, Paperclip, Plus, Trash2,
   Mail, X, Loader2, ChevronDown, Check, PlayCircle, Link2, ListChecks, Gavel, UserCheck, History, FileUp, ArrowLeft, Footprints, BadgeCheck, Star,
   Database, Circle, PenLine, Eye, Inbox, ChevronUp, AlertCircle, FileWarning, StickyNote, Filter, Quote, CalendarClock, GitBranch} from 'lucide-react';
-import { useIcfr } from './store';
+import { ineffectiveTooEarly, useIcfr } from './store';
 import EvidenceAnnotator from './EvidenceAnnotator';
 import { IraState, IraDrafted, iraStateOfPoint, iraStateOfStep } from './IraState';
 import InlineWhy from './InlineWhy';
 import { ToeFiles, ToeGrid } from './ToeGrid';
 import NeedsYouPane, { needsYouItems } from './NeedsYouPane';
-import RailDetailPane, { RailDetailContext, SampleResultsTable, useOpenRailDetail, type RailDetail } from './RailDetail';
+import RailDetailPane, { RailDetailContext, SampleResultsTable, useOpenRailDetail, itemFocus, verdictCite, type RailDetail } from './RailDetail';
 import { useAuditLog } from '../../context/AdminDataContext';
 import {
   // PARKED (Aug 2026) — `formatINR` came in only to price the exposure strip in
@@ -22,13 +22,13 @@ import {
   concludeRationale, controlCode, controlConclusion, courtFor, operatingApplies, designCompleteness, designOutstanding, designOutstandingRequired, discussionsFor, extractionCriteria,
   isControlLocked, isControlLockedIn, itgcHolds, failedItgcs, isItgcDependent, docRequirement, docColumnOf, docNotApplicable, operatingProgress, operatingSuggestion, TOE_MAX_ROUNDS, toeRoundFailed, toeRoundNo, toeRounds, toeSpent, canRedrawToe, canExtendToe, populationLocked, sampleSizeGuide, samplingOf, trackResult, pointResult, stepResult, attestationOverruled, inquiryOnlyAttributes, restsOnStatementAlone,
   countVerdict, coverageVerdict, derivedRunCount, populationReady, designBasis, designSuggestion, auditorProvenChecks, suggestedDesignChecks, suggestPopulationFile, fmtDay, parseDay,
-  iraCannotTest, designBlocked, confidenceOf, CONFIDENT_AT, awaitsConfirm, unconfirmedIra, ROLL_PART_LABEL, ROLL_PART_ANCHOR,
-  monthlyBreakdown, spikeMonths, priorRoundCount, fileUsable, originLabel, guessFileKind, populationSources, ipeChecksFor, samplesFor,
+  iraCannotTest, designBlocked, confidenceOf, CONFIDENT_AT, awaitsConfirm, unconfirmedIra, ROLL_PART_LABEL, ROLL_PART_ANCHOR, couldntAskFor, dayMonth,
+  monthlyBreakdown, spikeMonths, priorRoundCount, fileUsable, originLabel, guessFileKind, populationSources, ipeChecksFor, samplesFor, sampleSourceOf,
   expectedInputsFor, hasRowCount, isAssisting, sampledSources, reviewNotesFor, isShared, entityCoverage, uncoveredEntities, hasPaths, pathCoverage, untouchedPaths, type PopVerdict,
   requiredFilesOf, requiredFilesCount, requiredFilesReady, passedWithoutFiles, designFilesOf,
   evidenceKindOf,
-  designApproved, isEngagementLocked, samePerson, documentSystemRows,
-  dealSample, NO_COUNTRY, sampleDate, sampleHome, sampleSplit, spreadPhrase, workingAudit, yearSampleRounds, LEGACY_SOURCE_ID, type SampleSplit, type YearRound, yearEndPending, operatingHeld,
+  designApproved, isEngagementLocked, samePerson, documentSystemRows, awaitingCountersign,
+  dealSample, NO_COUNTRY, sampleDate, sampleHome, sampleSplit, spreadPhrase, workingAudit, yearSampleRounds, type SampleSplit, type YearRound, yearEndPending, operatingHeld,
   draftSamplePrompt, readSamplePrompt,
   populationInstances, sampleAmount, seedKeyOf,
   narrowedCount, populationFrom, readRowCount,
@@ -43,8 +43,8 @@ import { InlineNote, useInlineNote } from './InlineNote';
 import { Sparkles, FileSpreadsheet } from 'lucide-react';
 import WorkingPaperModal from './WorkingPaperModal';
 import RemediationBriefModal from './RemediationBriefModal';
-import ControlChatPane from './ControlChatPane';
-import { DESIGN_RUN_STEPS, TOE_RUN_STEPS, controlRun, endRun, runIsLive, startRun, railShown, useControlRun, useIraMode } from './controlChat';
+import ControlChatPane, { iraStepUndone } from './ControlChatPane';
+import { DESIGN_RUN_STEPS, TOE_RUN_STEPS, controlRun, endRun, runIsLive, startRun, railShown, useControlRun, useIraMode, type ControlRun } from './controlChat';
 import { DeficiencyCard } from './extraViews';
 import DatePicker from '../shared/DatePicker';
 import { cn } from '../../lib/cn';
@@ -56,9 +56,12 @@ import { AUDIT_ROUNDS, AUDITOR_PROOF_KINDS, DESIGN_DOC_KINDS, DESIGN_WAIVER_REAS
 import { requiredDatasetsFor, sampleRefs } from './mockData';
 import { extraLabel, useRacmConfig } from './racmConfig';
 import { racmSetupKeyFor } from './racmLibrary';
+import DialogFocus from '../shared/DialogFocus';
+import MenuFocus from '../shared/MenuFocus';
+import { tabKeys } from '../shared/tabKeys';
 import type { RollPart,
   AuditRound, Control, DesignDoc, DesignDocKind, DesignPoint, DesignWaiverReason, DiscussionAnchor, DocStatus, EvidenceFile, OperatingStep,
-  AuditorProofKind, FileOrigin, Frequency, IpeCheck, IpeConclusion, PopulationSource, Role, Sampling, SamplingMethodology, SourceRole, TestResult, ToeRound, TrackConclusion, ValidationResult,
+  AuditorProofKind, ExecutionEvent, FileOrigin, Frequency, IpeCheck, IpeConclusion, PopulationSource, Role, Sampling, SamplingMethodology, SourceRole, TestResult, ToeRound, TrackConclusion, ValidationResult,
 } from './types';
 
 // Short button labels for the waiver reasons — the stored reason is the full
@@ -77,11 +80,13 @@ function RationaleForm({ title, onCancel, buttons }: { title: string; onCancel: 
   const [note, setNote] = useState('');
   return (
     <motion.div initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: 'auto' }} className="mt-2 p-3 rounded-xl border border-high-200 bg-high-50/40">
-      <div className="text-[0.71875rem] font-semibold text-high-700 mb-1.5 flex items-center gap-1.5"><Pencil size={12} /> {title}</div>
+      <div className="text-[0.75rem] font-semibold text-high-700 mb-1.5 flex items-center gap-1.5"><Pencil size={12} /> {title}</div>
       <textarea autoFocus value={note} onChange={e => setNote(e.target.value)} rows={2} placeholder="Record your rationale — retained in the working paper." className="w-full text-[0.75rem] rounded-lg border border-canvas-border bg-canvas-elevated px-2.5 py-2 text-ink-800 placeholder:text-ink-400 focus:outline-none focus:ring-2 focus:ring-high-200 resize-none" />
-      <div className="flex items-center justify-end gap-2 mt-2">
+      <div className="flex items-center justify-end gap-2 mt-2 flex-wrap">
+        {/* Why the buttons are dead, said beside them rather than on hover. */}
+        {!note.trim() && <span className="mr-auto text-[0.6875rem] text-ink-500">Write the reason first — the buttons wait for it.</span>}
         <button onClick={onCancel} className="h-7 px-2.5 text-[0.75rem] font-semibold text-ink-500 hover:text-ink-800 cursor-pointer">Cancel</button>
-        {buttons.map(b => <button key={b.label} disabled={!note.trim() || b.disabled} title={b.title} onClick={() => b.onClick(note.trim())} className="h-7 px-3 text-[0.75rem] font-semibold rounded-lg bg-high-600 text-white disabled:opacity-40 enabled:hover:bg-high-700 transition-colors cursor-pointer">{b.label}</button>)}
+        {buttons.map(b => <button key={b.label} disabled={!note.trim() || b.disabled} title={b.title ?? (note.trim() ? undefined : 'Write the reason first')} onClick={() => b.onClick(note.trim())} className="h-7 px-3 text-[0.75rem] font-semibold rounded-lg bg-high-600 text-white disabled:opacity-40 enabled:hover:bg-high-700 transition-colors cursor-pointer">{b.label}</button>)}
       </div>
     </motion.div>
   );
@@ -95,7 +100,7 @@ export function EmptyState({ icon, title, hint, children }: { icon: React.ReactN
     <div className="rounded-xl border border-dashed border-canvas-border bg-paper-50/30 px-5 py-7 text-center">
       <div className="w-10 h-10 rounded-xl bg-canvas-elevated border border-canvas-border flex items-center justify-center mx-auto mb-2.5 text-ink-400">{icon}</div>
       <div className="text-[0.8125rem] font-semibold text-ink-800">{title}</div>
-      <p className="text-[0.75rem] text-ink-500 mt-0.5 max-w-[360px] mx-auto">{hint}</p>
+      <p className="text-[0.75rem] text-ink-500 mt-0.5 max-w-90 mx-auto">{hint}</p>
       {children && <div className="mt-3 flex items-center justify-center gap-2">{children}</div>}
     </div>
   );
@@ -137,7 +142,7 @@ function MoreLink({ open, onClick }: { open: boolean; onClick: () => void }) {
 function HeadChip({ icon, tint, children }: { icon?: React.ReactNode; tint?: string; children: React.ReactNode }) {
   return (
     <span className={cn(
-      'inline-flex items-center gap-1 h-6 px-2.5 rounded-full text-[0.71875rem] font-medium whitespace-nowrap',
+      'inline-flex items-center gap-1 h-6 px-2.5 rounded-full text-[0.75rem] font-medium whitespace-nowrap',
       tint ?? 'border border-canvas-border bg-paper-50/70 text-ink-700',
     )}>
       {icon && <span className="text-ink-400 shrink-0">{icon}</span>}
@@ -169,7 +174,7 @@ const HEAD_SHOWN_KEYS = new Set([
   'rootcause', 'objective', 'controlobjective', 'effectivedate', 'country', 'testingstrategy', 'keycontrol', 'key',
 ].map(headKey));
 
-export function Dropdown({ trigger, children, triggerClass }: { trigger: React.ReactNode; children: (close: () => void) => React.ReactNode; triggerClass?: string }) {
+export function Dropdown({ trigger, children, triggerClass, ariaLabel }: { trigger: React.ReactNode; children: (close: () => void) => React.ReactNode; triggerClass?: string; ariaLabel?: string }) {
   const [open, setOpen] = useState(false);
   const btnRef = useRef<HTMLButtonElement>(null);
   const [pos, setPos] = useState<{ y: number; right: number; flip: boolean } | null>(null);
@@ -196,7 +201,7 @@ export function Dropdown({ trigger, children, triggerClass }: { trigger: React.R
 
   return (
     <div className="relative">
-      <button ref={btnRef} onClick={() => setOpen(o => !o)} className={triggerClass ?? "h-8 px-2.5 inline-flex items-center gap-1.5 rounded-lg border border-canvas-border bg-canvas-elevated text-[0.75rem] font-semibold text-ink-700 hover:border-ink-300 transition-colors cursor-pointer"}>{trigger}<ChevronDown size={13} className="text-ink-400" /></button>
+      <button ref={btnRef} onClick={() => setOpen(o => !o)} aria-haspopup="menu" aria-expanded={open} aria-label={ariaLabel} className={triggerClass ?? "h-8 px-2.5 inline-flex items-center gap-1.5 rounded-lg border border-canvas-border bg-canvas-elevated text-[0.75rem] font-semibold text-ink-700 hover:border-ink-300 transition-colors cursor-pointer"}>{trigger}<ChevronDown size={13} className="text-ink-400" /></button>
       {createPortal(
         <AnimatePresence>
           {open && pos && (
@@ -206,7 +211,9 @@ export function Dropdown({ trigger, children, triggerClass }: { trigger: React.R
               <motion.div
                 initial={{ opacity: 0, y: pos.flip ? 4 : -4 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: pos.flip ? 4 : -4 }}
                 style={{ position: 'fixed', right: pos.right, ...(pos.flip ? { bottom: pos.y } : { top: pos.y }) }}
+                role="menu"
                 className="z-[46] w-56 max-h-64 overflow-y-auto rounded-xl border border-canvas-border bg-canvas-elevated shadow-[0_16px_40px_-16px_rgba(15,8,30,.4)] p-1">
+                <MenuFocus onClose={() => setOpen(false)} />
                 {children(() => setOpen(false))}
               </motion.div>
             </>
@@ -217,7 +224,7 @@ export function Dropdown({ trigger, children, triggerClass }: { trigger: React.R
     </div>
   );
 }
-export const menuItem = 'w-full text-left px-2.5 py-1.5 rounded-lg text-[0.78125rem] text-ink-700 hover:bg-paper-50 cursor-pointer flex items-center gap-2';
+export const menuItem = 'w-full text-left px-2.5 py-1.5 rounded-lg text-[0.8125rem] text-ink-700 hover:bg-paper-50 cursor-pointer flex items-center gap-2';
 
 // ── request-data modal (TOD) ──────────────────────────────────────────────────────
 function RequestDataModal({ control, onClose }: { control: Control; onClose: () => void }) {
@@ -244,10 +251,10 @@ function RequestDataModal({ control, onClose }: { control: Control; onClose: () 
   const canSend = sel.size > 0 && emails.length > 0;
   return createPortal(
     <div className="modal-backdrop" onClick={onClose}>
-      <motion.div className="modal" onClick={e => e.stopPropagation()} initial={{ opacity: 0, y: 14, scale: 0.98 }} animate={{ opacity: 1, y: 0, scale: 1 }} exit={{ opacity: 0, y: 10, scale: 0.98 }}>
+      <motion.div role="dialog" aria-modal="true" aria-labelledby="request-tod-title" className="modal" onClick={e => e.stopPropagation()} initial={{ opacity: 0, y: 14, scale: 0.98 }} animate={{ opacity: 1, y: 0, scale: 1 }} exit={{ opacity: 0, y: 10, scale: 0.98 }}><DialogFocus onEscape={onClose} />
         <div className="flex items-center justify-between px-5 py-3.5 border-b border-canvas-border">
-          <div className="flex items-center gap-2"><Mail size={16} className="text-brand-600" /><h3 className="text-[0.875rem] font-bold text-ink-900">Request TOD data</h3></div>
-          <button onClick={onClose} className="h-8 w-8 inline-flex items-center justify-center rounded-lg text-ink-400 hover:text-ink-800 hover:bg-paper-50 cursor-pointer"><X size={16} /></button>
+          <div className="flex items-center gap-2"><Mail size={16} className="text-brand-600" /><h3 id="request-tod-title" className="text-[0.875rem] font-bold text-ink-900">Request TOD data</h3></div>
+          <button onClick={onClose} aria-label="Close" className="h-8 w-8 inline-flex items-center justify-center rounded-lg text-ink-400 hover:text-ink-800 hover:bg-paper-50 cursor-pointer"><X size={16} /></button>
         </div>
         <div className="px-5 py-4 space-y-4">
           <div>
@@ -258,8 +265,8 @@ function RequestDataModal({ control, onClose }: { control: Control; onClose: () 
                 const on = sel.has(d.id);
                 return (
                   <button key={d.id} onClick={() => toggle(d.id)} className={cn('w-full flex items-center gap-2.5 px-3 py-2 rounded-lg border text-left transition-colors cursor-pointer', on ? 'border-brand-300 bg-brand-50/50' : 'border-canvas-border hover:border-ink-300')}>
-                    <span className={cn('w-[18px] h-[18px] rounded-sm border flex items-center justify-center shrink-0', on ? 'bg-brand-600 border-brand-600 text-white' : 'border-ink-300')}>{on && <Check size={12} strokeWidth={3} />}</span>
-                    <span className="min-w-0 flex-1"><span className="text-[0.78125rem] font-semibold text-ink-800">{d.kind}</span><span className="text-[0.6875rem] text-ink-400 ml-2">{d.waiver ? 'Waived' : d.status}</span></span>
+                    <span className={cn('w-4.5 h-4.5 rounded-sm border flex items-center justify-center shrink-0', on ? 'bg-brand-600 border-brand-600 text-white' : 'border-ink-300')}>{on && <Check size={12} strokeWidth={3} />}</span>
+                    <span className="min-w-0 flex-1"><span className="text-[0.8125rem] font-semibold text-ink-800">{d.kind}</span><span className="text-[0.6875rem] text-ink-400 ml-2">{d.waiver ? 'Waived' : d.status}</span></span>
                   </button>
                 );
               })}
@@ -267,26 +274,26 @@ function RequestDataModal({ control, onClose }: { control: Control; onClose: () 
           </div>
           <div>
             <div className="text-[0.6875rem] font-bold uppercase tracking-wide text-ink-400 mb-2">Send to</div>
-            <p className="text-[0.71875rem] text-ink-500 mb-2">
+            <p className="text-[0.75rem] text-ink-500 mb-2">
               {owners.single
                 ? <><b className="font-semibold text-ink-700">{owners.processOwner}</b> owns and runs this control.</>
                 : <><b className="font-semibold text-ink-700">{owners.processOwner}</b> runs the process and is who this reaches; <b className="font-semibold text-ink-700">{owners.controlOwner}</b> is accountable for the control and is copied.</>}
             </p>
             <div className="flex flex-wrap gap-1.5 mb-2">
-              {emails.map(e => <span key={e} className="inline-flex items-center gap-1.5 h-7 pl-2.5 pr-1.5 rounded-lg bg-paper-100 text-[0.75rem] font-medium text-ink-700">{e}<button onClick={() => setEmails(emails.filter(x => x !== e))} className="text-ink-400 hover:text-risk-600 cursor-pointer"><X size={12} /></button></span>)}
-              {emails.length === 0 && <span className="text-[0.71875rem] text-ink-400">No address on file for either owner — add one below.</span>}
+              {emails.map(e => <span key={e} className="inline-flex items-center gap-1.5 h-7 pl-2.5 pr-1.5 rounded-lg bg-paper-100 text-[0.75rem] font-medium text-ink-700">{e}<button aria-label={`Remove ${e}`} onClick={() => setEmails(emails.filter(x => x !== e))} className="text-ink-400 hover:text-risk-600 cursor-pointer"><X size={12} /></button></span>)}
+              {emails.length === 0 && <span className="text-[0.75rem] text-ink-400">No address on file for either owner — add one below.</span>}
             </div>
             <div className="flex items-center gap-2">
-              <input value={draft} onChange={e => setDraft(e.target.value)} onKeyDown={e => { if (e.key === 'Enter' || e.key === ',') { e.preventDefault(); addEmail(); } }} type="email" placeholder="name@company.com" className="flex-1 h-9 px-3 rounded-lg border border-canvas-border bg-canvas-elevated text-[0.78125rem] text-ink-800 placeholder:text-ink-400 focus:outline-none focus:ring-2 focus:ring-brand-200" />
-              <button onClick={addEmail} className="h-9 px-3 rounded-lg border border-canvas-border text-[0.78125rem] font-semibold text-ink-600 hover:border-ink-300 cursor-pointer">Add</button>
+              <input aria-label="Add an email address" value={draft} onChange={e => setDraft(e.target.value)} onKeyDown={e => { if (e.key === 'Enter' || e.key === ',') { e.preventDefault(); addEmail(); } }} type="email" placeholder="name@company.com" className="flex-1 h-9 px-3 rounded-lg border border-canvas-border bg-canvas-elevated text-[0.8125rem] text-ink-800 placeholder:text-ink-400 focus:outline-none focus:ring-2 focus:ring-brand-200" />
+              <button onClick={addEmail} className="h-9 px-3 rounded-lg border border-canvas-border text-[0.8125rem] font-semibold text-ink-600 hover:border-ink-300 cursor-pointer">Add</button>
             </div>
           </div>
         </div>
         <div className="flex items-center justify-between px-5 py-3.5 border-t border-canvas-border bg-paper-50/40">
-          <span className="text-[0.71875rem] text-ink-400">{sel.size} document{sel.size === 1 ? '' : 's'} · {emails.length} recipient{emails.length === 1 ? '' : 's'}</span>
+          <span className="text-[0.75rem] text-ink-400">{sel.size} document{sel.size === 1 ? '' : 's'} · {emails.length} recipient{emails.length === 1 ? '' : 's'}</span>
           <div className="flex items-center gap-2">
-            <button onClick={onClose} className="h-9 px-3.5 text-[0.78125rem] font-semibold text-ink-600 hover:text-ink-900 cursor-pointer">Cancel</button>
-            <button disabled={!canSend} onClick={() => { requestDataByEmail(control.id, Array.from(sel), emails); logEvent({ action: 'Share', description: `Requested ${sel.size} TOD document(s) for ${control.id} from ${emails.length} recipient(s)`, module: 'SOX ICFR', entity: 'Control' });  onClose(); }} className="h-9 px-4 inline-flex items-center gap-1.5 rounded-lg bg-brand-600 text-white text-[0.78125rem] font-semibold disabled:opacity-40 enabled:hover:bg-brand-700 transition-colors cursor-pointer"><Send size={14} /> Send request</button>
+            <button onClick={onClose} className="h-9 px-3.5 text-[0.8125rem] font-semibold text-ink-600 hover:text-ink-900 cursor-pointer">Cancel</button>
+            <button disabled={!canSend} onClick={() => { requestDataByEmail(control.id, Array.from(sel), emails); logEvent({ action: 'Share', description: `Requested ${sel.size} TOD document(s) for ${control.id} from ${emails.length} recipient(s)`, module: 'SOX ICFR', entity: 'Control' });  onClose(); }} className="h-9 px-4 inline-flex items-center gap-1.5 rounded-lg bg-brand-600 text-white text-[0.8125rem] font-semibold disabled:opacity-40 enabled:hover:bg-brand-700 transition-colors cursor-pointer"><Send size={14} /> Send request</button>
           </div>
         </div>
       </motion.div>
@@ -329,7 +336,7 @@ function ItgcCascadeNotice({ control }: { control: Control }) {
         <div className="mt-2 flex flex-wrap gap-1.5">
           {failed.map(f => (
             <button key={f.id} onClick={() => openControl(f.id)} title={f.description}
-              className="inline-flex items-center gap-1.5 max-w-full px-2 h-[22px] rounded-md border border-mitigated-200 bg-canvas-elevated text-[0.6875rem] font-semibold text-mitigated-800 hover:border-mitigated-400 transition-colors cursor-pointer">
+              className="inline-flex items-center gap-1.5 max-w-full px-2 h-5.5 rounded-md border border-mitigated-200 bg-canvas-elevated text-[0.6875rem] font-semibold text-mitigated-800 hover:border-mitigated-400 transition-colors cursor-pointer">
               {/* shrink-0 + nowrap: a AIH/TRY/R001/C001-length ID would otherwise
                   break at its slashes inside this one-line chip */}
               <span className="font-mono shrink-0 whitespace-nowrap">{controlCode(f)}</span>
@@ -357,12 +364,12 @@ function ShortFormNote({ control }: { control: Control }) {
         <span className="w-7 h-7 rounded-lg bg-brand-50 text-brand-600 inline-flex items-center justify-center shrink-0"><Cpu size={14} /></span>
         <div className="min-w-0">
           <h4 className="text-[0.8125rem] font-bold text-ink-900">Population, sample and TOE don't apply</h4>
-          <p className="text-[0.75rem] text-ink-500 mt-1 leading-relaxed max-w-[42rem]">
+          <p className="text-[0.75rem] text-ink-500 mt-1 leading-relaxed max-w-168">
             {control.description.split('.')[0]} runs automatically, so it does the same thing to every
             transaction — testing fifty proves nothing that testing one did not. The design test is the
             whole test, and this control concludes on it alone.
           </p>
-          <p className="text-[0.71875rem] text-ink-400 mt-2 leading-relaxed max-w-[42rem]">
+          <p className="text-[0.75rem] text-ink-400 mt-2 leading-relaxed max-w-168">
             That holds while the IT general controls behind the system do. If change management or access
             fails, nobody can say the logic that ran in March is the logic that ran in October — these three
             steps come back and the control is tested like a manual one.
@@ -421,6 +428,10 @@ function ConcludeFooter({ control, which, suggestion, canEdit, disabled, disable
   // Ira proposes, a person confirms (agentic UX #1, 1 Oct): the store refuses
   // to conclude over unconfirmed results, so both buttons say so here.
   const waiting = unconfirmedIra(control, which).length;
+  // Early conclusions wait (product decision, 5 Oct): Ineffective needs a
+  // tested check (TOD), or a drawn sample with a result (TOE). The store
+  // refuses it too; this says why beside the button.
+  const tooEarly = ineffectiveTooEarly(control, which);
   if (!canEdit) return null;
   const apply = (target: TrackConclusion) => {
     const rationale = note.trim();
@@ -435,13 +446,13 @@ function ConcludeFooter({ control, which, suggestion, canEdit, disabled, disable
   };
   return (
     <div id={`conclude-${which}`} className="mt-4 pt-4 border-t border-canvas-border scroll-mt-4">
-      {suggestion !== 'Not tested' && <div className="text-[0.71875rem] text-ink-400 inline-flex items-center gap-1 mb-2"><Scale size={12} /> Evidence suggests <b className="font-semibold text-ink-600">{suggestion}</b></div>}
+      {suggestion !== 'Not tested' && <div className="text-[0.75rem] text-ink-400 inline-flex items-center gap-1 mb-2"><Scale size={12} /> Evidence suggests <b className="font-semibold text-ink-600">{suggestion}</b></div>}
       {/* Drafted, not demanded: the words are already here and the buttons never
           wait on them, so a clean control concludes in one click and the paper
           still carries a sentence saying what was tested and what it showed. */}
       <label className="block">
         <span className="flex items-center gap-2">
-          <span className="text-[0.71875rem] font-semibold text-ink-500">Rationale</span>
+          <span className="text-[0.75rem] font-semibold text-ink-500">Rationale</span>
           {/* A draft until a conclusion files it. Ira's own draft carries the
               sparkle; once the auditor types, the words are theirs and the mark
               goes — confirmed (filed) text carries no mark at all. */}
@@ -457,36 +468,41 @@ function ConcludeFooter({ control, which, suggestion, canEdit, disabled, disable
           className="mt-1 w-full text-[0.75rem] rounded-lg border border-canvas-border bg-canvas-elevated px-2.5 py-2 text-ink-800 placeholder:text-ink-400 focus:outline-none focus:ring-2 focus:ring-brand-200 resize-none" />
       </label>
       <div className="flex items-center gap-2.5 flex-wrap mt-2.5">
-        <button disabled={disabled || disableEffective || staleRuns > 0 || onWordAlone > 0 || roundFail || waiting > 0} title={disableEffective ? disableEffectiveNote : undefined} onClick={() => apply('Effective')} className="h-9 px-4 inline-flex items-center gap-1.5 rounded-lg bg-compliant-600 text-white text-[0.78125rem] font-semibold enabled:hover:bg-compliant-700 disabled:opacity-40 transition-colors cursor-pointer">{disableEffective ? <Lock size={14} /> : <CheckCircle2 size={15} />} {effectiveLabel}</button>
-        <button disabled={disabled || staleRuns > 0 || waiting > 0} onClick={() => apply('Ineffective')} className="h-9 px-4 inline-flex items-center gap-1.5 rounded-lg border border-risk-300 text-risk-700 text-[0.78125rem] font-semibold enabled:hover:bg-risk-50 disabled:opacity-40 transition-colors cursor-pointer"><XCircle size={15} /> {ineffectiveLabel}</button>
+        <button disabled={disabled || disableEffective || staleRuns > 0 || onWordAlone > 0 || roundFail || waiting > 0} title={disableEffective ? disableEffectiveNote : undefined} onClick={() => apply('Effective')} className="h-9 px-4 inline-flex items-center gap-1.5 rounded-lg bg-compliant-600 text-white text-[0.8125rem] font-semibold enabled:hover:bg-compliant-700 disabled:opacity-40 transition-colors cursor-pointer">{disableEffective ? <Lock size={14} /> : <CheckCircle2 size={15} />} {effectiveLabel}</button>
+        <button disabled={disabled || staleRuns > 0 || waiting > 0 || !!tooEarly} title={tooEarly ?? undefined} onClick={() => apply('Ineffective')} className="h-9 px-4 inline-flex items-center gap-1.5 rounded-lg border border-risk-300 text-risk-700 text-[0.8125rem] font-semibold enabled:hover:bg-risk-50 disabled:opacity-40 transition-colors cursor-pointer"><XCircle size={15} /> {ineffectiveLabel}</button>
         {disabled && disabledNote
-          ? <span className="text-[0.71875rem] text-mitigated-700 inline-flex items-center gap-1"><Lock size={11} /> {disabledNote}</span>
-          : disableEffective && disableEffectiveNote && <span className="text-[0.71875rem] text-mitigated-700 inline-flex items-center gap-1"><Lock size={11} /> {disableEffectiveNote}</span>}
+          ? <span className="text-[0.75rem] text-mitigated-700 inline-flex items-center gap-1"><BadgeCheck size={11} /> {disabledNote}</span>
+          : disableEffective && disableEffectiveNote && <span className="text-[0.75rem] text-mitigated-700 inline-flex items-center gap-1"><Lock size={11} /> {disableEffectiveNote}</span>}
+        {tooEarly && !disabled && (
+          <span className="text-[0.75rem] text-ink-500 inline-flex items-center gap-1">
+            <Lock size={11} /> {tooEarly}
+          </span>
+        )}
         {waiting > 0 && (
-          <span className="text-[0.71875rem] text-ink-500 inline-flex items-center gap-1">
+          <span className="text-[0.75rem] text-ink-500 inline-flex items-center gap-1">
             <Sparkles size={11} className="text-brand-500" /> Confirm Ira’s {waiting} result{waiting === 1 ? '' : 's'} above first.
           </span>
         )}
         {staleRuns > 0 && (
-          <span className="text-[0.71875rem] text-mitigated-700 inline-flex items-center gap-1">
+          <span className="text-[0.75rem] text-mitigated-700 inline-flex items-center gap-1">
             <AlertTriangle size={11} /> {staleRuns} run{staleRuns === 1 ? ' predates' : 's predate'} the current draw — re-run before concluding.
           </span>
         )}
         {onWordAlone > 0 && (
-          <span className="text-[0.71875rem] text-mitigated-700 inline-flex items-center gap-1">
+          <span className="text-[0.75rem] text-mitigated-700 inline-flex items-center gap-1">
             <AlertTriangle size={11} /> {onWordAlone} attribute{onWordAlone === 1 ? ' rests' : 's rest'} on a statement alone — attach what was inspected, or validate the file, before calling this effective.
           </span>
         )}
         {/* The failure itself is stated above, by the block that offers the two
             ways out — so this names the way forward rather than repeating it. */}
         {roundFail && (
-          <span className="text-[0.71875rem] text-mitigated-700 inline-flex items-center gap-1">
+          <span className="text-[0.75rem] text-mitigated-700 inline-flex items-center gap-1">
             <AlertTriangle size={11} /> An attribute failed — extend or redraw above, or conclude ineffective.
           </span>
         )}
       </div>
       {track.override && (
-        <div className="mt-2.5 text-[0.71875rem] text-high-700 flex items-start gap-1.5 p-2.5 rounded-lg bg-high-50/50 border border-high-200">
+        <div className="mt-2.5 text-[0.75rem] text-high-700 flex items-start gap-1.5 p-2.5 rounded-lg bg-high-50/50 border border-high-200">
           <Pencil size={12} className="mt-0.5 shrink-0" /><span><b>Conclusion overridden</b> — {track.override.rationale} <span className="text-ink-400">· {track.override.by}</span></span>
           <button onClick={() => override(control.id, null)} className="ml-auto text-ink-400 hover:text-ink-700 inline-flex items-center gap-1 cursor-pointer"><RotateCcw size={11} /> undo</button>
         </div>
@@ -513,9 +529,9 @@ function RunResultsModal({ control, step, onClose }: { control: Control; step: O
   const eff = stepResult(step);
   return createPortal(
     <div className="modal-backdrop" onClick={onClose}>
-      <motion.div className="modal modal-wide" onClick={e => e.stopPropagation()} initial={{ opacity: 0, y: 14, scale: 0.98 }} animate={{ opacity: 1, y: 0, scale: 1 }} exit={{ opacity: 0, y: 10, scale: 0.98 }}>
+      <motion.div role="dialog" aria-modal="true" aria-labelledby="workflow-run-title" className="modal modal-wide" onClick={e => e.stopPropagation()} initial={{ opacity: 0, y: 14, scale: 0.98 }} animate={{ opacity: 1, y: 0, scale: 1 }} exit={{ opacity: 0, y: 10, scale: 0.98 }}><DialogFocus onEscape={onClose} />
         <div className="flex items-center justify-between px-5 py-3.5 border-b border-canvas-border">
-          <div className="flex items-center gap-2"><WorkflowIcon size={16} className="text-evidence-700" /><h3 className="text-[0.875rem] font-bold text-ink-900">Workflow run — results</h3></div>
+          <div className="flex items-center gap-2"><WorkflowIcon size={16} className="text-evidence-700" /><h3 id="workflow-run-title" className="text-[0.875rem] font-bold text-ink-900">Workflow run — results</h3></div>
           <div className="flex items-center gap-2">
             {eff !== 'Not tested' && <span className={cn('inline-flex items-center gap-1 text-[0.75rem] font-bold px-2 h-6 rounded-full', eff === 'Pass' ? 'bg-compliant-50 text-compliant-700' : 'bg-risk-50 text-risk-700')}><Tickmark result={eff} size={13} /> {eff}</span>}
             <button onClick={onClose} className="h-8 w-8 inline-flex items-center justify-center rounded-lg text-ink-400 hover:text-ink-800 hover:bg-paper-50 cursor-pointer" aria-label="Close"><X size={16} /></button>
@@ -523,11 +539,11 @@ function RunResultsModal({ control, step, onClose }: { control: Control; step: O
         </div>
         <div className="px-5 py-2.5 border-b border-canvas-border bg-paper-50/40 flex items-center gap-2 flex-wrap">
           <p className="text-[0.75rem] text-ink-600"><b className="text-ink-800">Tested —</b> {step.code} · {step.description}</p>
-          {step.workflowRunRef && <span className="font-mono text-[0.65625rem] text-ink-400">{step.workflowRunRef}</span>}
+          {step.workflowRunRef && <span className="font-mono text-[0.6875rem] text-ink-400">{step.workflowRunRef}</span>}
         </div>
         <div className="px-5 py-4 max-h-[58vh] overflow-y-auto">
           {samples.length === 0
-            ? <p className="text-[0.78125rem] text-ink-500 leading-relaxed">
+            ? <p className="text-[0.8125rem] text-ink-500 leading-relaxed">
                 No sample has been extracted for this control yet, so the run has nothing to report per item — it recorded an overall result only.
                 Draw a sample in step ③ and re-pull the run to see it item by item.
               </p>
@@ -535,7 +551,7 @@ function RunResultsModal({ control, step, onClose }: { control: Control; step: O
         </div>
         {/* the pass count lives on the table's own header — not repeated here */}
         <div className="flex items-center justify-end px-5 py-3.5 border-t border-canvas-border">
-          <button onClick={onClose} className="h-9 px-4 rounded-lg bg-brand-600 text-white text-[0.78125rem] font-semibold hover:bg-brand-700 cursor-pointer">Close</button>
+          <button onClick={onClose} className="h-9 px-4 rounded-lg bg-brand-600 text-white text-[0.8125rem] font-semibold hover:bg-brand-700 cursor-pointer">Close</button>
         </div>
       </motion.div>
     </div>,
@@ -576,7 +592,7 @@ function ConfirmSure({ control, which, rows }: { control: Control; which: 'desig
   const sure = waiting.filter(r => (confidenceOf(r.validation, `${control.id}:${r.id}`) ?? 0) >= CONFIDENT_AT);
   const unsure = waiting.length - sure.length;
   return (
-    <div className="mb-2.5 flex items-center gap-2 flex-wrap text-[0.71875rem] text-ink-600">
+    <div className="mb-2.5 flex items-center gap-2 flex-wrap text-[0.75rem] text-ink-600">
       <Sparkles size={12} className="text-brand-500 shrink-0" aria-hidden />
       {sure.length > 0 && <>
         <span>Ira is sure on {sure.length}</span>
@@ -610,10 +626,48 @@ function RunLine({ files, total, noun, label, ms }: { files: number; total: numb
   );
 }
 
+/** Which step a live run is working on, read off the shared run itself — so a
+ *  run started from the Ira chat shows on the page exactly like one started
+ *  here (click-through, 5 Oct). The design and TOE runs walk the shared step
+ *  lists; the chat's extract and draw are named by their label. Read inside a
+ *  function, never at module load (the sox-icfr import cycle). */
+type RunStage = 'design' | 'toe' | 'population' | 'sample' | 'other';
+function runStageOf(run: ControlRun | null): RunStage | null {
+  if (!run) return null;
+  const first = run.steps[0]?.label;
+  if (first === DESIGN_RUN_STEPS[0]) return 'design';
+  if (first === TOE_RUN_STEPS[0]) return 'toe';
+  if (/^Filtering /.test(run.label)) return 'population';
+  if (/^Drawing /.test(run.label)) return 'sample';
+  return 'other';
+}
+/** Why a run button is dead while Ira is already working on this control. */
+const busyNote = (run: ControlRun) => `Ira is already working on this control — ${run.label.charAt(0).toLowerCase()}${run.label.slice(1)}. Wait for it, or stop it in the Ira panel.`;
+
+/** The progress line for a run this page did not start (the chat's). Same
+ *  place and shape as RunLine; it narrates the run's own live step because the
+ *  page does not know that run's length. */
+function LiveRunLine({ run }: { run: ControlRun }) {
+  const now = run.steps[run.steps.length - 1]?.label;
+  return (
+    <div role="status" aria-live="polite" className="mb-2.5">
+      <p className="text-[0.6875rem] text-ink-500 inline-flex items-center gap-1.5">
+        <Sparkles size={11} className="text-brand-500 shrink-0" />
+        {run.label}{now ? ` · ${now.charAt(0).toLowerCase()}${now.slice(1)}` : ''}…
+      </p>
+      <div className="mt-1 h-0.5 rounded-full bg-paper-100 overflow-hidden">
+        <div className="h-full w-full bg-brand-500/70 motion-safe:animate-pulse" />
+      </div>
+    </div>
+  );
+}
+
 /** `checking` — Ira is running across every design check from the section header
  *  (S6, A17). The row wears the same busy state its own validation used to. */
 function PointRow({ control, point, canEdit, checking = false }: { control: Control; point: DesignPoint; canEdit: boolean; checking?: boolean }) {
-  const { me, role, confirmIra, setDesignPoint, validateDesignPoint, overrideDesignPoint, removeDesignPoint, linkDesignPointEvidence, setDesignPointProof } = useIcfr();
+  const { eng, me, role, confirmIra, setDesignPoint, validateDesignPoint, overrideDesignPoint, removeDesignPoint, linkDesignPointEvidence, setDesignPointProof } = useIcfr();
+  // The ask Needs you sent the owner for this check, read off their task list.
+  const asked = couldntAskFor(eng, control.id, point.id);
   const [over, setOver] = useState(false);
   const [validatingOne, setValidating] = useState(false);
   const validating = validatingOne || checking;
@@ -668,12 +722,18 @@ function PointRow({ control, point, canEdit, checking = false }: { control: Cont
   const cites = point.validation?.qa.map(x => x.cite).filter((q): q is string => !!q) ?? [];
   // Layer 3 lives in the rail, not a popup (agentic UI review #3).
   const seeWorking = () => point.validation && openDetail({ kind: 'working', title: point.text, validation: point.validation, control, evidence: workingEvidence, confKey: `${control.id}:${point.id}` });
+  // One click from Ira's result to the sentence it rests on: the same working,
+  // opened on this answer's passage (none if it couldn't test or read no file).
+  const seeAnswer = () => point.validation && openDetail({ kind: 'working', title: point.text, validation: point.validation, control, evidence: workingEvidence, confKey: `${control.id}:${point.id}`, focusCite: verdictCite(point.validation) });
+  // The tick is Ira's marker while Ira's verdict (or its "couldn't") stands.
+  const iraMarked = !!point.validation && !point.override && (conf != null || !!blocked);
+  const answerLabel = verdictCite(point.validation) ? "See the passage Ira's answer rests on" : "See Ira's working";
   const closeProof = () => { setProving(false); setProofFile(null); setProofNote(''); setProofKind(AUDITOR_PROOF_KINDS[0]); setDragOver(false); };
   const submitProof = () => {
     if (!proofFile) return;
     setDesignPointProof(control.id, point.id, {
       kind: proofKind,
-      file: { id: `ap-${point.id}`, name: proofFile.name, kind: evidenceKindOf(proofFile.name), uploadedBy: me, uploadedAt: 'just now' },
+      file: { id: `ap-${point.id}`, name: proofFile.name, kind: evidenceKindOf(proofFile.name), uploadedBy: me, uploadedAt: 'just now', url: URL.createObjectURL(proofFile) },
       note: proofNote.trim() || undefined,
     });
     closeProof();
@@ -686,11 +746,15 @@ function PointRow({ control, point, canEdit, checking = false }: { control: Cont
             is working; the row only says "checking…" beneath its text. */}
         {/* Clicking a recorded tick is how it is changed (review #8) — and it
             always costs a reason: the click opens the "why?" line below. */}
-        {canEdit && eff !== 'Not tested' && !point.override
+        {iraMarked
+          ? <button type="button" onClick={seeAnswer} aria-label={answerLabel} className="shrink-0 rounded cursor-pointer hover:opacity-80"><Tickmark result={eff} size={20} confidence={conf} blocked={!!blocked} title={tickTitle(conf, run)} /></button>
+          : canEdit && eff !== 'Not tested' && !point.override
           ? <button onClick={() => setOver(true)} aria-label={`Change this result to ${flipTo.toLowerCase()} — say why`} className="shrink-0 rounded cursor-pointer hover:opacity-80"><Tickmark result={eff} size={20} confidence={conf} title={tickTitle(conf, run)} /></button>
           : <Tickmark result={eff} size={20} confidence={conf} blocked={!!blocked} title={tickTitle(conf, run)} />}
         <div className="min-w-0 flex-1">
-          <div className="flex items-center gap-2"><span className="text-[0.78125rem] font-medium text-ink-800">{point.text}</span>{rowState && rowState !== 'couldnt' && <IraState state={rowState} title={rowState === 'review' ? run : undefined} />}</div>
+          <div className="flex items-center gap-2"><span className="text-[0.8125rem] font-medium text-ink-800">{point.text}</span>{rowState === 'review' && point.validation
+            ? <button type="button" onClick={seeAnswer} aria-label={`${answerLabel}${run ? ` — ${run}` : ''}`} className="rounded cursor-pointer hover:[&>span]:text-ink-800"><IraState state={rowState} title={tickTitle(conf, run) ?? run} /></button>
+            : rowState && rowState !== 'couldnt' && <IraState state={rowState} title={rowState === 'review' ? run : undefined} />}</div>
           <div className="text-[0.6875rem] text-ink-400 mt-1 inline-flex items-center gap-1.5"><WorkflowIcon size={11} /> {point.workflowName ?? 'Design walkthrough check'}{(checking || validating || blocked || !point.validation) && ' · '}{checking ? 'checking…' : validating ? 'validating…' : blocked ? (
             /* ── Ira read it and could not answer it ─────────────────────────
                Text on the row, not a banner of its own (agentic UI review #7):
@@ -700,12 +764,17 @@ function PointRow({ control, point, canEdit, checking = false }: { control: Cont
                It clears itself the moment the check is marked or the missing
                element lands, because it is read off the validation the next run
                overwrites. */
-            <IraState state="couldnt" className="cursor-help" title={`${blockKind === 'missing' ? 'Missing files' : 'Not enough to go on'} — ${blocked}`} />
+            <>
+              <button type="button" onClick={seeAnswer} aria-label={`See Ira's working — ${blockKind === 'missing' ? 'Missing files' : 'Not enough to go on'}: ${blocked}`} className="rounded cursor-pointer hover:[&>span]:text-ink-800">
+                <IraState state="couldnt" title={`${blockKind === 'missing' ? 'Missing files' : 'Not enough to go on'} — ${blocked}`} />
+              </button>
+              {asked && <span title={asked.title}>· asked {asked.assignee.split(/\s+/)[0] || asked.assignee}{asked.dueAt ? `, due ${dayMonth(asked.dueAt)}` : ''}</span>}
+            </>
           ) : (point.validation ? null : 'not validated')}</div>
           {/* Layer 1 — what Ira found, in one line; the reasons on hover (layer
               2); the full working one click away in the rail (layer 3). */}
           {point.validation?.summary && !point.validation.blocked && !validating && (
-            <button onClick={seeWorking} title={reasons} className="mt-1 block max-w-full truncate text-left text-[0.71875rem] text-ink-600 hover:text-ink-900 cursor-pointer">{point.validation.summary}</button>
+            <button onClick={seeWorking} title={reasons} className="mt-1 block max-w-full truncate text-left text-[0.75rem] text-ink-600 hover:text-ink-900 cursor-pointer">{point.validation.summary}</button>
           )}
           {/* The override stands when a file comes or goes after it — it is still
               the auditor's recorded judgement — but it says the evidence under it
@@ -752,7 +821,7 @@ function PointRow({ control, point, canEdit, checking = false }: { control: Cont
               {point.auditorProof ? (
                 <button onClick={() => openDetail({ kind: 'file', file: point.auditorProof!.file, label: point.auditorProof!.kind, quotes: cites })} title={`Open ${point.auditorProof.file.name}`}
                   className="inline-flex items-center gap-1 rounded-md border border-evidence-200 bg-evidence-50/50 px-1.5 py-0.5 text-evidence-700 hover:underline underline-offset-2 cursor-pointer">
-                  <Paperclip size={9} /> {point.auditorProof.kind} · <span className="font-medium text-evidence-600 max-w-[16rem] truncate">{point.auditorProof.file.name}</span>
+                  <Paperclip size={9} /> {point.auditorProof.kind} · <span className="font-medium text-evidence-600 max-w-64 truncate">{point.auditorProof.file.name}</span>
                 </button>
               ) : <span className="text-ink-300">none — taken on the documents</span>}
               {canEdit && (point.auditorProof
@@ -771,7 +840,7 @@ function PointRow({ control, point, canEdit, checking = false }: { control: Cont
           {/* pick from what is already on this control — never an upload box */}
           {linking && canEdit && (
             <div className="mt-2 rounded-lg border border-canvas-border bg-paper-50/60 p-2.5">
-              <span className="block text-[0.625rem] font-bold uppercase tracking-wider text-ink-400 mb-1.5">Which elements evidence this check?</span>
+              <span className="block text-[0.6875rem] font-bold uppercase tracking-wider text-ink-400 mb-1.5">Which elements evidence this check?</span>
               {control.design.documents.length === 0 ? (
                 <p className="text-[0.6875rem] text-ink-400">No design elements on this control yet — add one above first.</p>
               ) : (
@@ -788,7 +857,7 @@ function PointRow({ control, point, canEdit, checking = false }: { control: Cont
                   })}
                 </div>
               )}
-              <p className="text-[0.625rem] text-ink-400 mt-2">A link, not a copy — the file stays on the element it was uploaded against.</p>
+              <p className="text-[0.6875rem] text-ink-400 mt-2">A link, not a copy — the file stays on the element it was uploaded against.</p>
             </div>
           )}
 
@@ -800,7 +869,7 @@ function PointRow({ control, point, canEdit, checking = false }: { control: Cont
           {proving && canEdit && (
             <div className="mt-2 rounded-lg border border-canvas-border bg-paper-50/60 p-2.5 space-y-2.5">
               <div>
-                <span className="block text-[0.625rem] font-bold uppercase tracking-wider text-ink-400 mb-1.5">What did you do on this check?</span>
+                <span className="block text-[0.6875rem] font-bold uppercase tracking-wider text-ink-400 mb-1.5">What did you do on this check?</span>
                 <div className="flex flex-wrap gap-1.5">
                   {AUDITOR_PROOF_KINDS.map(k => (
                     <button key={k} onClick={() => setProofKind(k)}
@@ -813,15 +882,15 @@ function PointRow({ control, point, canEdit, checking = false }: { control: Cont
               </div>
 
               <div>
-                <span className="block text-[0.625rem] font-bold uppercase tracking-wider text-ink-400 mb-1.5">The file</span>
+                <span className="block text-[0.6875rem] font-bold uppercase tracking-wider text-ink-400 mb-1.5">The file</span>
                 {proofFile ? (
                   <div className="flex items-center gap-2 rounded-md border border-canvas-border bg-canvas-elevated px-2.5 py-2">
                     <span className="w-6 h-6 rounded inline-flex items-center justify-center bg-evidence-50 text-evidence-700 shrink-0"><FileText size={11} /></span>
                     <div className="min-w-0 flex-1">
-                      <p className="text-[0.71875rem] font-semibold text-ink-800 truncate" title={proofFile.name}>{proofFile.name}</p>
-                      <p className="text-[0.625rem] text-ink-400">{evidenceKindOf(proofFile.name)} · {Math.max(1, Math.round(proofFile.size / 1024)).toLocaleString()} KB</p>
+                      <p className="text-[0.75rem] font-semibold text-ink-800 truncate" title={proofFile.name}>{proofFile.name}</p>
+                      <p className="text-[0.6875rem] text-ink-400">{evidenceKindOf(proofFile.name)} · {Math.max(1, Math.round(proofFile.size / 1024)).toLocaleString()} KB</p>
                     </div>
-                    <button onClick={() => setProofFile(null)} title="Choose a different file"
+                    <button onClick={() => setProofFile(null)} title="Choose a different file" aria-label="Choose a different file"
                       className="h-6 w-6 inline-flex items-center justify-center rounded-md text-ink-400 hover:text-risk-600 cursor-pointer"><X size={12} /></button>
                   </div>
                 ) : (
@@ -837,20 +906,20 @@ function PointRow({ control, point, canEdit, checking = false }: { control: Cont
                       onChange={e => { const f = e.target.files?.[0]; if (f) setProofFile(f); e.target.value = ''; }} />
                     <Upload size={14} className="mx-auto text-ink-400 mb-1" />
                     <p className="text-[0.6875rem] font-semibold text-ink-700 leading-tight">Drop a file, or click to browse</p>
-                    <p className="text-[0.625rem] text-ink-400 mt-0.5">PDF, image, XLSX, CSV or Word</p>
+                    <p className="text-[0.6875rem] text-ink-400 mt-0.5">PDF, image, XLSX, CSV or Word</p>
                   </label>
                 )}
               </div>
 
               <div>
-                <span className="block text-[0.625rem] font-bold uppercase tracking-wider text-ink-400 mb-1.5">Why you attached it</span>
+                <span className="block text-[0.6875rem] font-bold uppercase tracking-wider text-ink-400 mb-1.5">Why you attached it</span>
                 <textarea value={proofNote} onChange={e => setProofNote(e.target.value)} rows={2}
                   placeholder="e.g. Reperformed the 14 May payment run — both authorisers were distinct from the preparer."
-                  className="w-full px-2.5 py-2 rounded-md border border-canvas-border bg-canvas-elevated text-[0.71875rem] leading-relaxed resize-none focus:outline-none focus:ring-2 focus:ring-brand-200" />
+                  className="w-full px-2.5 py-2 rounded-md border border-canvas-border bg-canvas-elevated text-[0.75rem] leading-relaxed resize-none focus:outline-none focus:ring-2 focus:ring-brand-200" />
               </div>
 
               <div className="flex items-center justify-between gap-2 flex-wrap">
-                <p className="text-[0.625rem] text-ink-400">This is what the conclusion's basis is read from — nobody types the basis.</p>
+                <p className="text-[0.6875rem] text-ink-400">This is what the conclusion's basis is read from — nobody types the basis.</p>
                 <div className="flex items-center gap-1.5 shrink-0">
                   <button onClick={closeProof} className="h-7 px-2.5 rounded-md border border-canvas-border bg-canvas-elevated text-[0.6875rem] font-semibold text-ink-600 hover:text-ink-900 cursor-pointer">Cancel</button>
                   <button disabled={!proofFile} onClick={submitProof}
@@ -863,11 +932,11 @@ function PointRow({ control, point, canEdit, checking = false }: { control: Cont
         </div>
         {canEdit && !validating && (
           <div className="flex items-center gap-1.5 shrink-0">
-            {point.validation && <button onClick={seeWorking} className="h-7 px-2.5 inline-flex items-center gap-1 rounded-md border border-canvas-border bg-canvas-elevated text-[0.71875rem] font-semibold text-ink-600 hover:border-brand-300 hover:text-brand-700 cursor-pointer"><ListChecks size={12} /> See the working</button>}
+            {point.validation && <button onClick={seeWorking} className="h-7 px-2.5 inline-flex items-center gap-1 rounded-md border border-canvas-border bg-canvas-elevated text-[0.75rem] font-semibold text-ink-600 hover:border-brand-300 hover:text-brand-700 cursor-pointer"><ListChecks size={12} /> See the working</button>}
             {/* Ira proposes, the tester confirms (UX #1) — one row at a time. */}
             {role === 'auditor' && control.design.conclusion === 'Not tested' && awaitsConfirm(point) && (
               <button onClick={() => confirmIra(control.id, 'design', [point.id])}
-                className="h-7 px-2.5 inline-flex items-center rounded-md border border-brand-200 bg-brand-50 text-[0.71875rem] font-semibold text-brand-700 hover:bg-brand-100 cursor-pointer">Confirm</button>
+                className="h-7 px-2.5 inline-flex items-center rounded-md border border-brand-200 bg-brand-50 text-[0.75rem] font-semibold text-brand-700 hover:bg-brand-100 cursor-pointer">Confirm</button>
             )}
             {/* PARKED (Aug 2026, user ask) — the workflow Validate / Re-run button.
                 The tester can state the result themselves with the two buttons
@@ -875,7 +944,7 @@ function PointRow({ control, point, canEdit, checking = false }: { control: Cont
                 checks header (S6, A17) rather than one row at a time.
                 `runValidate` and the `validating` machinery are left in place
                 above, so putting this back is one line:
-                <button onClick={runValidate} title="Validate via workflow" className="h-7 px-2.5 inline-flex items-center gap-1 rounded-md border border-canvas-border bg-canvas-elevated text-[0.71875rem] font-semibold text-ink-600 hover:border-evidence-300 hover:text-evidence-700 cursor-pointer"><PlayCircle size={12} /> {point.validation ? 'Re-run' : 'Validate'}</button> */}
+                <button onClick={runValidate} title="Validate via workflow" className="h-7 px-2.5 inline-flex items-center gap-1 rounded-md border border-canvas-border bg-canvas-elevated text-[0.75rem] font-semibold text-ink-600 hover:border-evidence-300 hover:text-evidence-700 cursor-pointer"><PlayCircle size={12} /> {point.validation ? 'Re-run' : 'Validate'}</button> */}
             {/* ── one door at a time (user ask, 22 Sep) ──────────────────────
                 Before there is a result, the ticks: somebody has to be able to
                 say what this check did. After there is one, they go, and the
@@ -899,7 +968,7 @@ function PointRow({ control, point, canEdit, checking = false }: { control: Cont
             ) : (
               <button onClick={() => setOver(o => !o)}
                 title={point.override ? 'Take the override off and go back to what was found' : `Record why this check ${eff === 'Pass' ? 'fails' : 'passes'} after all`}
-                className={cn('h-7 px-2.5 inline-flex items-center rounded-md border text-[0.71875rem] font-semibold transition-colors cursor-pointer',
+                className={cn('h-7 px-2.5 inline-flex items-center rounded-md border text-[0.75rem] font-semibold transition-colors cursor-pointer',
                   point.override ? 'bg-high-50 border-high-300 text-high-700 hover:bg-high-100' : 'border-canvas-border bg-canvas-elevated text-ink-600 hover:border-high-300 hover:text-high-700')}>
                 {point.override ? 'Remove override' : 'Override'}
               </button>
@@ -909,7 +978,7 @@ function PointRow({ control, point, canEdit, checking = false }: { control: Cont
                 one mid-test rewrites the question after the answer. Failing it,
                 or overriding it with a reason, is the way to disagree.
                 `removeDesignPoint` is left on the store, so restoring it is:
-                <button onClick={() => removeDesignPoint(control.id, point.id)} title="Remove" className="h-7 w-7 inline-flex items-center justify-center rounded-md border border-canvas-border bg-canvas-elevated text-ink-400 hover:border-risk-300 hover:text-risk-600 cursor-pointer"><Trash2 size={12} /></button> */}
+                <button onClick={() => removeDesignPoint(control.id, point.id)} title="Remove" aria-label="Remove" className="h-7 w-7 inline-flex items-center justify-center rounded-md border border-canvas-border bg-canvas-elevated text-ink-400 hover:border-risk-300 hover:text-risk-600 cursor-pointer"><Trash2 size={12} /></button> */}
           </div>
         )}
       </div>
@@ -940,7 +1009,7 @@ export function KeyControlChip({ control, canEdit }: { control: Control; canEdit
         : control.isKey ? 'Key control, agreed with management — click to make it non-key'
         : 'Non-key control — click to mark it key'}
       onClick={() => { updateControlMeta(control.id, { isKey: !control.isKey }); logEvent({ action: 'Update', description: `${control.isKey ? 'Unmarked' : 'Marked'} ${control.id} as a key control`, module: 'SOX ICFR', entity: 'Control' }); }}
-      className={cn('inline-flex items-center gap-1 h-[22px] px-2 rounded-full border text-[0.6875rem] font-semibold transition-colors',
+      className={cn('inline-flex items-center gap-1 h-5.5 px-2 rounded-full border text-[0.6875rem] font-semibold transition-colors',
         control.isKey ? 'border-mitigated-200 bg-mitigated-50 text-mitigated-700' : 'border-canvas-border bg-canvas-elevated text-ink-500',
         locked ? 'opacity-60 cursor-not-allowed' : 'cursor-pointer hover:border-mitigated-300')}>
       <Star size={10} className={control.isKey ? 'fill-mitigated-300' : ''} />
@@ -971,7 +1040,7 @@ function WalkthroughCard({ control, canEdit }: { control: Control; canEdit: bool
         <div className="flex items-start gap-3">
           <Footprints size={15} className="text-ink-400 shrink-0 mt-0.5" />
           <div className="min-w-0 flex-1">
-            <div className="text-[0.78125rem] font-semibold text-ink-800">Walkthrough not started</div>
+            <div className="text-[0.8125rem] font-semibold text-ink-800">Walkthrough not started</div>
             <p className="text-[0.6875rem] text-ink-500 mt-0.5 leading-relaxed">
               Walk one transaction with the control owner and prove the same attributes the sample will test.
               The transaction, who attended and what each attribute showed are what the working paper prints.
@@ -994,12 +1063,12 @@ function WalkthroughCard({ control, canEdit }: { control: Control; canEdit: bool
   return (
     <div className="subcard px-3.5 py-3 mb-5">
       <div className="flex items-center justify-between gap-2 flex-wrap mb-2.5">
-        <h5 className="text-[0.78125rem] font-bold text-ink-700 inline-flex items-center gap-1.5">
+        <h5 className="text-[0.8125rem] font-bold text-ink-700 inline-flex items-center gap-1.5">
           <Footprints size={14} /> Walkthrough
           <span className="font-normal text-ink-400">· one transaction, the same attributes the sample tests</span>
         </h5>
         <span className="inline-flex items-center gap-1.5">
-          <span className="text-[0.65625rem] font-semibold text-ink-500 bg-paper-50/70 border border-canvas-border rounded px-1.5 h-[18px] inline-flex items-center">{w.sampleRef}</span>
+          <span className="text-[0.6875rem] font-semibold text-ink-500 bg-paper-50/70 border border-canvas-border rounded px-1.5 h-4.5 inline-flex items-center">{w.sampleRef}</span>
           {steps.length > 0 && <Pill tone={failed > 0 ? 'risk' : tested === steps.length ? 'compliant' : 'draft'}>{tested}/{steps.length} attributes</Pill>}
         </span>
       </div>
@@ -1007,21 +1076,21 @@ function WalkthroughCard({ control, canEdit }: { control: Control; canEdit: bool
       {/* who walked it, when, and who was in the room — captured once, printed once */}
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 mb-3">
         <label className="block">
-          <span className="text-[0.625rem] font-bold uppercase tracking-wide text-ink-400">Performed by</span>
+          <span className="text-[0.6875rem] font-bold uppercase tracking-wide text-ink-400">Performed by</span>
           <input value={w.tester} disabled={!canEdit} onChange={e => setWalkthroughMeta(control.id, { tester: e.target.value })}
             className="mt-0.5 w-full h-8 px-2.5 rounded-lg border border-canvas-border bg-canvas-elevated text-[0.75rem] text-ink-800 disabled:opacity-60 focus:outline-none focus:ring-2 focus:ring-brand-200" />
         </label>
         <label className="block">
-          <span className="text-[0.625rem] font-bold uppercase tracking-wide text-ink-400">Date walked</span>
+          <span className="text-[0.6875rem] font-bold uppercase tracking-wide text-ink-400">Date walked</span>
           <input value={w.date} disabled={!canEdit} onChange={e => setWalkthroughMeta(control.id, { date: e.target.value })}
             className="mt-0.5 w-full h-8 px-2.5 rounded-lg border border-canvas-border bg-canvas-elevated text-[0.75rem] text-ink-800 disabled:opacity-60 focus:outline-none focus:ring-2 focus:ring-brand-200" />
         </label>
       </div>
       <div className="mb-3">
-        <span className="text-[0.625rem] font-bold uppercase tracking-wide text-ink-400">Attended by (client)</span>
+        <span className="text-[0.6875rem] font-bold uppercase tracking-wide text-ink-400">Attended by (client)</span>
         <div className="flex items-center gap-1.5 flex-wrap mt-1">
           {w.attendees.map(a => (
-            <span key={a} className="inline-flex items-center gap-1 text-[0.65625rem] font-medium text-ink-700 bg-paper-50/70 border border-canvas-border rounded px-1.5 h-[20px]">
+            <span key={a} className="inline-flex items-center gap-1 text-[0.6875rem] font-medium text-ink-700 bg-paper-50/70 border border-canvas-border rounded px-1.5 h-5">
               <UserCheck size={9} className="shrink-0" />{a}
               {canEdit && <button onClick={() => setWalkthroughMeta(control.id, { attendees: w.attendees.filter(x => x !== a) })} aria-label={`Remove ${a}`} className="text-ink-400 hover:text-risk-600 cursor-pointer"><X size={9} /></button>}
             </span>
@@ -1030,15 +1099,15 @@ function WalkthroughCard({ control, canEdit }: { control: Control; canEdit: bool
             <input value={attendee} onChange={e => setAttendee(e.target.value)}
               onKeyDown={e => { if (e.key === 'Enter' && attendee.trim()) { setWalkthroughMeta(control.id, { attendees: [...w.attendees, attendee.trim()] }); setAttendee(''); } }}
               placeholder={w.attendees.length ? 'Add another…' : 'Name · role, then Enter'} aria-label="Add an attendee"
-              className="h-[22px] px-2 w-[170px] rounded border border-canvas-border bg-canvas-elevated text-[0.65625rem] focus:outline-none focus:ring-2 focus:ring-brand-200" />
+              className="h-5.5 px-2 w-42.5 rounded border border-canvas-border bg-canvas-elevated text-[0.6875rem] focus:outline-none focus:ring-2 focus:ring-brand-200" />
           )}
-          {!canEdit && w.attendees.length === 0 && <span className="text-[0.65625rem] text-ink-400">Not recorded</span>}
+          {!canEdit && w.attendees.length === 0 && <span className="text-[0.6875rem] text-ink-400">Not recorded</span>}
         </div>
       </div>
 
       {/* the attributes — the same list the sample will test */}
       {steps.length === 0 ? (
-        <div className="text-[0.71875rem] text-mitigated-700 bg-mitigated-50/60 border border-mitigated-200 rounded-lg px-3 py-2 flex items-start gap-1.5">
+        <div className="text-[0.75rem] text-mitigated-700 bg-mitigated-50/60 border border-mitigated-200 rounded-lg px-3 py-2 flex items-start gap-1.5">
           <AlertTriangle size={13} className="mt-0.5 shrink-0" />
           <span>No test attributes defined yet — without attributes there is nothing for the walkthrough to prove, and nothing for the sample to test either. Add them below; they serve both tracks.</span>
         </div>
@@ -1051,7 +1120,7 @@ function WalkthroughCard({ control, canEdit }: { control: Control; canEdit: bool
                 <Tickmark result={r} size={17} />
                 <div className="min-w-0 flex-1">
                   <span className="text-[0.75rem] text-ink-800">{s.description}</span>
-                  <span className="text-[0.65625rem] text-ink-400 ml-1.5">({[s.code, s.assertion].filter(Boolean).join(' · ')})</span>
+                  <span className="text-[0.6875rem] text-ink-400 ml-1.5">({[s.code, s.assertion].filter(Boolean).join(' · ')})</span>
                 </div>
                 {canEdit && (
                   <div className="flex items-center gap-1 shrink-0">
@@ -1071,7 +1140,7 @@ function WalkthroughCard({ control, canEdit }: { control: Control; canEdit: bool
           added from here as well as from step 3 */}
       {canEdit && (addingAttr ? (
         <div className="flex items-center gap-2 mt-2">
-          <input autoFocus value={newAttr} onChange={e => setNewAttr(e.target.value)}
+          <input aria-label="New attribute" autoFocus value={newAttr} onChange={e => setNewAttr(e.target.value)}
             onKeyDown={e => {
               if (e.key === 'Escape') { setAddingAttr(false); setNewAttr(''); }
               if (e.key === 'Enter' && newAttr.trim()) { addAttribute(control.id, newAttr.trim()); logEvent({ action: 'Create', description: `Added test attribute to ${control.id}`, module: 'SOX ICFR', entity: 'Control' }); setNewAttr(''); setAddingAttr(false); }
@@ -1079,14 +1148,14 @@ function WalkthroughCard({ control, canEdit }: { control: Control; canEdit: bool
             placeholder="e.g. Approval evidenced before the transaction posts"
             className="flex-1 h-8 px-3 rounded-lg border border-canvas-border bg-canvas-elevated text-[0.75rem] focus:outline-none focus:ring-2 focus:ring-brand-200" />
           <button disabled={!newAttr.trim()} onClick={() => { addAttribute(control.id, newAttr.trim()); logEvent({ action: 'Create', description: `Added test attribute to ${control.id}`, module: 'SOX ICFR', entity: 'Control' }); setNewAttr(''); setAddingAttr(false); }}
-            className="h-8 px-3 rounded-lg bg-brand-600 text-white text-[0.71875rem] font-semibold disabled:opacity-40 cursor-pointer">Add</button>
+            className="h-8 px-3 rounded-lg bg-brand-600 text-white text-[0.75rem] font-semibold disabled:opacity-40 cursor-pointer">Add</button>
         </div>
       ) : (
-        <button onClick={() => setAddingAttr(true)} className="mt-2 h-7 px-2.5 inline-flex items-center gap-1.5 rounded-md border border-canvas-border bg-canvas-elevated text-[0.71875rem] font-semibold text-ink-700 hover:border-brand-300 hover:text-brand-700 cursor-pointer"><Plus size={12} /> Add attribute</button>
+        <button onClick={() => setAddingAttr(true)} className="mt-2 h-7 px-2.5 inline-flex items-center gap-1.5 rounded-md border border-canvas-border bg-canvas-elevated text-[0.75rem] font-semibold text-ink-700 hover:border-brand-300 hover:text-brand-700 cursor-pointer"><Plus size={12} /> Add attribute</button>
       ))}
 
       <label className="block mt-3">
-        <span className="text-[0.625rem] font-bold uppercase tracking-wide text-ink-400">What the walkthrough showed</span>
+        <span className="text-[0.6875rem] font-bold uppercase tracking-wide text-ink-400">What the walkthrough showed</span>
         <textarea rows={2} value={w.notes ?? ''} disabled={!canEdit} onChange={e => setWalkthroughMeta(control.id, { notes: e.target.value })}
           placeholder="How the transaction actually moved, and anything the narrative doesn't say."
           className="mt-0.5 w-full px-2.5 py-2 rounded-lg border border-canvas-border bg-canvas-elevated text-[0.75rem] text-ink-800 placeholder:text-ink-400 resize-none disabled:opacity-60 focus:outline-none focus:ring-2 focus:ring-brand-200" />
@@ -1110,6 +1179,7 @@ function WalkthroughCard({ control, canEdit }: { control: Control; canEdit: bool
  *  stronger of the two. */
 // ── operating attribute — its required files + AI validation, and/or self-attestation ─
 function AttributeRow({ control, step, canEdit, testing }: { control: Control; step: OperatingStep; canEdit: boolean; testing: boolean }) {
+  const iraMode = useIraMode();
   const { eng, me, role, confirmIra, setStepResult, overrideStep, attestStep, addStepEvidence, uploadRequiredFile, clearRequiredFile, toggleStepAttest, runStepValidation } = useIcfr();
   const logEvent = useAuditLog();
   const [over, setOver] = useState(false);
@@ -1128,6 +1198,11 @@ function AttributeRow({ control, step, canEdit, testing }: { control: Control; s
   const { uploaded, total } = requiredFilesCount(step, control);
   const ready = requiredFilesReady(step, control);
   const busy = testing || validatingWf;
+  // Any run on this control — the chat's included — holds this button too.
+  const liveRun = useControlRun(control.id);
+  // Stop in the Ira tab ends the shared run at once; the page's own clock
+  // used to keep saying "checking…" until its timer ran out (click-through, 5 Oct).
+  useEffect(() => { if (validatingWf && !liveRun) setValidatingWf(false); }, [validatingWf, liveRun]);
   // One word for who reached this attribute's answer (agentic UI review #1).
   const rowState = iraStateOfStep(step, control.operating.conclusion !== 'Not tested');
   const conf = !step.override && step.validation?.result && step.validation.result === eff
@@ -1189,7 +1264,7 @@ function AttributeRow({ control, step, canEdit, testing }: { control: Control; s
             )}
             {resultBtn('Pass', 'Pass', CheckCircle2, eff === 'Pass', 'bg-compliant-50 border-compliant-300 text-compliant-700')}
             {resultBtn('Fail', 'Fail', XCircle, eff === 'Fail', 'bg-risk-50 border-risk-300 text-risk-700')}
-            <button onClick={() => { if (step.override) { setWhy(null); setOver(o => !o); } else setWhy(w => w ? null : eff === 'Pass' ? 'Fail' : 'Pass'); }} title={step.override ? 'Remove the override' : 'Override result — say why'} className={cn('h-8 w-8 inline-flex items-center justify-center rounded-lg border cursor-pointer', step.override ? 'bg-high-50 border-high-300 text-high-700' : 'border-canvas-border bg-canvas-elevated text-ink-600 hover:border-high-300 hover:text-high-700')}><Pencil size={13} /></button>
+            <button onClick={() => { if (step.override) { setWhy(null); setOver(o => !o); } else setWhy(w => w ? null : eff === 'Pass' ? 'Fail' : 'Pass'); }} title={step.override ? 'Remove the override' : 'Override result — say why'} aria-label={step.override ? 'Remove the override' : 'Override result — say why'} className={cn('h-8 w-8 inline-flex items-center justify-center rounded-lg border cursor-pointer', step.override ? 'bg-high-50 border-high-300 text-high-700' : 'border-canvas-border bg-canvas-elevated text-ink-600 hover:border-high-300 hover:text-high-700')}><Pencil size={13} /></button>
             {/* PARKED (22 Sep, user ask) — the bin, for the same reason the
                 design check lost its own: an attribute comes from the RACM and
                 is part of what every sampled item was tested against. Deleting
@@ -1203,7 +1278,7 @@ function AttributeRow({ control, step, canEdit, testing }: { control: Control; s
       </div>
 
       {/* evidence — Section 1: required files + AI validation · Section 2: self-attest (separate) */}
-      <div className="mt-3 ml-[36px] space-y-2">
+      <div className="mt-3 ml-9 space-y-2">
         <div className="rounded-lg border border-canvas-border px-3 py-2.5">
           <div className="mb-2">
             <span className="text-[0.6875rem] font-bold text-ink-600">AI validation</span>
@@ -1213,7 +1288,7 @@ function AttributeRow({ control, step, canEdit, testing }: { control: Control; s
               not testing these items, so the run is stale and the operating
               track refuses to conclude until it is re-run (or re-attested). */}
           {step.staleRun && (
-            <p className="mb-1.5 text-[0.71875rem] leading-snug" title="This run predates the current draw — the items it tested are no longer the sample. Re-run it before the operating test can conclude.">
+            <p className="mb-1.5 text-[0.75rem] leading-snug" title="This run predates the current draw — the items it tested are no longer the sample. Re-run it before the operating test can conclude.">
               <span className="font-semibold text-mitigated-800">Re-run needed</span> <span className="text-ink-500">— the sample changed since this ran.</span>
             </p>
           )}
@@ -1227,17 +1302,18 @@ function AttributeRow({ control, step, canEdit, testing }: { control: Control; s
             {/* run + result */}
             <div className="flex items-center gap-2.5 flex-wrap pt-2 border-t border-brand-100/70">
               <Sparkles size={14} className="text-brand-600 shrink-0" />
-              <span className="text-[0.71875rem] text-ink-600 flex-1 min-w-0">Ira · <span className="text-ink-400">{busy ? 'checking…' : (step.validation ? 'checked the files' : 'not run yet')}</span></span>
+              <span className="text-[0.75rem] text-ink-600 flex-1 min-w-0">Ira · <span className="text-ink-400">{busy ? 'checking…' : (step.validation ? 'checked the files' : 'not run yet')}</span></span>
               {/* the verdict lives on the attribute's tickmark above — repeating
                   it here said the same thing twice */}
-              {canEdit && !busy && (
-                <button onClick={runAI} disabled={!ready} title={ready ? undefined : total > 0 ? `Upload all ${total} required files first` : 'No required files listed for this attribute'} className="h-7 px-2.5 rounded-md bg-brand-600 text-white text-[0.71875rem] font-semibold enabled:hover:bg-brand-700 disabled:opacity-40 disabled:cursor-not-allowed inline-flex items-center gap-1 cursor-pointer"><Sparkles size={12} /> {step.validation ? 'Re-run' : 'Run AI validation'}</button>)}
-              {step.validation && <button onClick={seeWorking} className="text-[0.71875rem] font-semibold text-brand-700 underline underline-offset-2 hover:text-brand-800 inline-flex items-center gap-1 cursor-pointer"><ListChecks size={12} /> See the working</button>}
+              {/* Manual only (Stage 1a) — in Automatic, Ira runs from its plan's Start. */}
+              {canEdit && !busy && iraMode === 'manual' && (
+                <button onClick={runAI} disabled={!ready || !!liveRun} title={liveRun ? busyNote(liveRun) : ready ? undefined : total > 0 ? `Upload all ${total} required files first` : 'No required files listed for this attribute'} className="h-7 px-2.5 rounded-md bg-brand-600 text-white text-[0.75rem] font-semibold enabled:hover:bg-brand-700 disabled:opacity-40 disabled:cursor-not-allowed inline-flex items-center gap-1.5 transition-colors cursor-pointer"><Sparkles size={12} /> {step.validation ? 'Re-run' : 'Run AI validation'}</button>)}
+              {step.validation && <button onClick={seeWorking} className="text-[0.75rem] font-semibold text-brand-700 underline underline-offset-2 hover:text-brand-800 inline-flex items-center gap-1 cursor-pointer"><ListChecks size={12} /> See the working</button>}
             </div>
             {validatingWf && <RunLine files={uploaded} total={1} noun="attribute" label={`attribute ${step.code}`} ms={4000} />}
-            {step.validation?.summary && !validatingWf && <p className="text-[0.71875rem] text-ink-600 leading-snug cursor-help" title={step.validation.qa.map(x => `${x.pass ? '✓' : '✗'} ${x.q} — ${x.a}`).join('\n')}>{step.validation.summary}</p>}
+            {step.validation?.summary && !validatingWf && <p className="text-[0.75rem] text-ink-600 leading-snug cursor-help" title={step.validation.qa.map(x => `${x.pass ? '✓' : '✗'} ${x.q} — ${x.a}`).join('\n')}>{step.validation.summary}</p>}
             {/* only for a list that exists — an empty one already says where to add files */}
-            {canEdit && !ready && total > 0 && <p className="text-[0.65625rem] text-mitigated-700 inline-flex items-center gap-1"><AlertTriangle size={10} /> Upload every required file to pass this attribute or run AI validation — {uploaded} of {total} in.</p>}
+            {canEdit && !ready && total > 0 && <p className="text-[0.6875rem] text-mitigated-700 inline-flex items-center gap-1"><AlertTriangle size={10} /> Upload every required file to pass this attribute or run AI validation — {uploaded} of {total} in.</p>}
           </div>
         </div>
 
@@ -1257,7 +1333,7 @@ function AttributeRow({ control, step, canEdit, testing }: { control: Control; s
                 answers to the evidence, so the validation is the result and this
                 says so rather than leaving two verdicts on one card. */}
             {overruled && (
-              <p className="mt-2 text-[0.71875rem] leading-snug" title={`The validation reached ${step.validation!.result} on this attribute, and it stands — an attestation supports evidence, it does not overrule it. The note above is on the record, but the result is ${step.validation!.result}. To depart from the file, use the auditor's override and say why.`}>
+              <p className="mt-2 text-[0.75rem] leading-snug" title={`The validation reached ${step.validation!.result} on this attribute, and it stands — an attestation supports evidence, it does not overrule it. The note above is on the record, but the result is ${step.validation!.result}. To depart from the file, use the auditor's override and say why.`}>
                 <span className="font-semibold text-mitigated-800">Validation stands at {step.validation!.result}</span> <span className="text-ink-500">— the attestation doesn't overrule it.</span>
               </p>
             )}
@@ -1267,20 +1343,20 @@ function AttributeRow({ control, step, canEdit, testing }: { control: Control; s
                 conclusion, because the fix belongs on this card: attach what the
                 visit produced, or run the validation. */}
             {wordAlone && (
-              <p className="mt-2 text-[0.71875rem] leading-snug" title="This attribute rests on the statement alone — nothing was attached and nothing was validated behind it. An attribute proven by inquiry is not tested, so the control cannot be concluded effective while it stands. Attach what was inspected, or run the validation.">
+              <p className="mt-2 text-[0.75rem] leading-snug" title="This attribute rests on the statement alone — nothing was attached and nothing was validated behind it. An attribute proven by inquiry is not tested, so the control cannot be concluded effective while it stands. Attach what was inspected, or run the validation.">
                 <span className="font-semibold text-mitigated-800">Statement only</span> <span className="text-ink-500">— nothing attached or validated, so this can't pass.</span>
               </p>
             )}
             {att?.note && <p className="text-[0.75rem] text-ink-700 mt-1.5 italic">“{att.note}”</p>}
-            {att && att.evidence.length > 0 && <div className="flex flex-wrap gap-1.5 mt-2">{att.evidence.map(f => <span key={f.id} className="inline-flex items-center gap-1 text-[0.65625rem] font-semibold text-ink-600 bg-paper-50 border border-canvas-border rounded-md px-1.5 h-[20px]"><Paperclip size={9} />{f.name}</span>)}</div>}
+            {att && att.evidence.length > 0 && <div className="flex flex-wrap gap-1.5 mt-2">{att.evidence.map(f => <span key={f.id} className="inline-flex items-center gap-1 text-[0.6875rem] font-semibold text-ink-600 bg-paper-50 border border-canvas-border rounded-md px-1.5 h-5"><Paperclip size={9} />{f.name}</span>)}</div>}
             {canEdit && (
               <div className="mt-2">
                 <textarea value={noteDraft} onChange={e => setNoteDraft(e.target.value)} rows={2} placeholder="Describe how this attribute is satisfied — recorded with your attestation." className="w-full text-[0.75rem] rounded-lg border border-canvas-border bg-canvas-elevated px-2.5 py-2 text-ink-800 placeholder:text-ink-400 focus:outline-none focus:ring-2 focus:ring-brand-200 resize-none" />
                 <div className="flex items-center gap-2 mt-1.5 flex-wrap">
-                  <span className="text-[0.65625rem] font-semibold text-ink-400 uppercase tracking-wide">Attest</span>
-                  <button disabled={!noteDraft.trim() || !ready} title={passLock} onClick={() => { attestStep(control.id, step.id, noteDraft.trim(), 'Pass'); logEvent({ action: 'Update', description: `Attested ${step.code} for ${control.id}`, module: 'SOX ICFR', entity: 'Test Result' }); }} className="h-7 px-2.5 rounded-md bg-compliant-600 text-white text-[0.71875rem] font-semibold disabled:opacity-40 enabled:hover:bg-compliant-700 inline-flex items-center gap-1 cursor-pointer"><CheckCircle2 size={12} /> Pass</button>
-                  <button disabled={!noteDraft.trim()} onClick={() => { attestStep(control.id, step.id, noteDraft.trim(), 'Fail'); logEvent({ action: 'Update', description: `Attested ${step.code} for ${control.id}`, module: 'SOX ICFR', entity: 'Test Result' }); }} className="h-7 px-2.5 rounded-md border border-risk-300 text-risk-700 text-[0.71875rem] font-semibold disabled:opacity-40 enabled:hover:bg-risk-50 inline-flex items-center gap-1 cursor-pointer"><XCircle size={12} /> Fail</button>
-                  <button onClick={() => { addStepEvidence(control.id, step.id, `evidence-${step.code}.pdf`); logEvent({ action: 'Upload', description: `Attached evidence to attribute ${step.code} (${control.id})`, module: 'SOX ICFR', entity: 'Evidence' }); }} className="h-7 px-2.5 rounded-md border border-canvas-border bg-canvas-elevated text-ink-600 text-[0.71875rem] font-semibold hover:border-brand-300 hover:text-brand-700 inline-flex items-center gap-1 cursor-pointer"><Upload size={11} /> Attach evidence</button>
+                  <span className="text-[0.6875rem] font-semibold text-ink-400 uppercase tracking-wide">Attest</span>
+                  <button disabled={!noteDraft.trim() || !ready} title={passLock} onClick={() => { attestStep(control.id, step.id, noteDraft.trim(), 'Pass'); logEvent({ action: 'Update', description: `Attested ${step.code} for ${control.id}`, module: 'SOX ICFR', entity: 'Test Result' }); }} className="h-7 px-2.5 rounded-md bg-compliant-600 text-white text-[0.75rem] font-semibold disabled:opacity-40 enabled:hover:bg-compliant-700 inline-flex items-center gap-1 cursor-pointer"><CheckCircle2 size={12} /> Pass</button>
+                  <button disabled={!noteDraft.trim()} onClick={() => { attestStep(control.id, step.id, noteDraft.trim(), 'Fail'); logEvent({ action: 'Update', description: `Attested ${step.code} for ${control.id}`, module: 'SOX ICFR', entity: 'Test Result' }); }} className="h-7 px-2.5 rounded-md border border-risk-300 text-risk-700 text-[0.75rem] font-semibold disabled:opacity-40 enabled:hover:bg-risk-50 inline-flex items-center gap-1 cursor-pointer"><XCircle size={12} /> Fail</button>
+                  <button onClick={() => { addStepEvidence(control.id, step.id, `evidence-${step.code}.pdf`); logEvent({ action: 'Upload', description: `Attached evidence to attribute ${step.code} (${control.id})`, module: 'SOX ICFR', entity: 'Evidence' }); }} className="h-7 px-2.5 rounded-md border border-canvas-border bg-canvas-elevated text-ink-600 text-[0.75rem] font-semibold hover:border-brand-300 hover:text-brand-700 inline-flex items-center gap-1 cursor-pointer"><Upload size={11} /> Attach evidence</button>
                 </div>
               </div>
             )}
@@ -1314,9 +1390,9 @@ function CompactAttributeLine({ control, step, onOpen, open }: { control: Contro
       className="scroll-mt-4 w-full text-left flex items-center gap-2.5 rounded-lg border border-canvas-border bg-canvas-elevated px-3 py-2 hover:border-ink-300 transition-colors cursor-pointer">
       <Tickmark result={eff} size={18} confidence={conf} blocked={!!step.validation?.blocked && eff === 'Not tested'} title={tickTitle(conf, run)} />
       <span className="font-mono text-[0.6875rem] font-bold text-ink-500 shrink-0">{step.code}</span>
-      <span className="text-[0.78125rem] font-medium text-ink-900 truncate min-w-0 flex-1">{step.description}</span>
+      <span className="text-[0.8125rem] font-medium text-ink-900 truncate min-w-0 flex-1">{step.description}</span>
       {state && <IraState state={state} title={state === 'review' ? run : state === 'couldnt' ? step.validation?.blocked : undefined} />}
-      {total > 0 && <span className="text-[0.65625rem] text-ink-400 tabular-nums shrink-0">{uploaded}/{total} files</span>}
+      {total > 0 && <span className="text-[0.6875rem] text-ink-400 tabular-nums shrink-0">{uploaded}/{total} files</span>}
       {open !== undefined && (open ? <ChevronUp size={13} className="text-ink-400 shrink-0" /> : <ChevronDown size={13} className="text-ink-400 shrink-0" />)}
     </button>
   );
@@ -1429,30 +1505,30 @@ function EvidencePreviewModal({ file, element, onClose }: { file: EvidenceFile; 
   }, [onClose]);
   return createPortal(
     <div className="modal-backdrop" onClick={onClose}>
-      <motion.div className="modal modal-wide" role="dialog" aria-modal="true" aria-label={`Preview of ${file.name}`} onClick={e => e.stopPropagation()} initial={{ opacity: 0, y: 14, scale: 0.98 }} animate={{ opacity: 1, y: 0, scale: 1 }} exit={{ opacity: 0, y: 10, scale: 0.98 }}>
+      <motion.div className="modal modal-wide" role="dialog" aria-modal="true" aria-label={`Preview of ${file.name}`} onClick={e => e.stopPropagation()} initial={{ opacity: 0, y: 14, scale: 0.98 }} animate={{ opacity: 1, y: 0, scale: 1 }} exit={{ opacity: 0, y: 10, scale: 0.98 }}><DialogFocus />
         <div className="flex items-center justify-between gap-3 px-5 py-3.5 border-b border-canvas-border">
           <div className="flex items-center gap-2 min-w-0"><FileText size={16} className="text-brand-600 shrink-0" /><h3 className="text-[0.875rem] font-bold text-ink-900 truncate" title={file.name}>{file.name}</h3></div>
           <button onClick={onClose} aria-label="Close" className="h-8 w-8 shrink-0 inline-flex items-center justify-center rounded-lg text-ink-400 hover:text-ink-800 hover:bg-paper-50 cursor-pointer"><X size={16} /></button>
         </div>
         <div className="px-5 py-2.5 border-b border-canvas-border bg-paper-50/40 text-[0.75rem] text-ink-600 flex items-center gap-x-2 gap-y-1 flex-wrap">
-          <span className="font-mono text-[0.65625rem] font-semibold text-ink-600 bg-canvas-elevated border border-canvas-border rounded-md px-1.5 h-[20px] inline-flex items-center">{type}</span>
+          <span className="font-mono text-[0.6875rem] font-semibold text-ink-600 bg-canvas-elevated border border-canvas-border rounded-md px-1.5 h-5 inline-flex items-center">{type}</span>
           <span><b className="text-ink-800">{element}</b></span>
           <span className="text-ink-300">·</span>
           <span>Uploaded by {file.uploadedBy}{file.uploadedAt ? ` · ${file.uploadedAt}` : ''}</span>
         </div>
         <div className="px-5 py-4 max-h-[70vh] overflow-auto">
           {!file.url ? (
-            <p className="text-[0.78125rem] text-ink-500 leading-relaxed">A preview isn’t available for sample files in this prototype.</p>
+            <p className="text-[0.8125rem] text-ink-500 leading-relaxed">A preview isn’t available for sample files in this prototype.</p>
           ) : isPdf ? (
             <iframe src={file.url} title={file.name} className="w-full h-[62vh] rounded-lg border border-canvas-border bg-paper-50" />
           ) : isImage ? (
             <img src={file.url} alt={file.name} className="block max-w-full max-h-[62vh] mx-auto rounded-lg border border-canvas-border" />
           ) : (
-            <p className="text-[0.78125rem] text-ink-500 leading-relaxed">{type} files can’t be shown here. The file is attached to {element} all the same.</p>
+            <p className="text-[0.8125rem] text-ink-500 leading-relaxed">{type} files can’t be shown here. The file is attached to {element} all the same.</p>
           )}
         </div>
         <div className="flex items-center justify-end px-5 py-3.5 border-t border-canvas-border">
-          <button onClick={onClose} className="h-9 px-4 rounded-lg bg-brand-600 text-white text-[0.78125rem] font-semibold hover:bg-brand-700 cursor-pointer">Close</button>
+          <button onClick={onClose} className="h-9 px-4 rounded-lg bg-brand-600 text-white text-[0.8125rem] font-semibold hover:bg-brand-700 cursor-pointer">Close</button>
         </div>
       </motion.div>
     </div>,
@@ -1558,6 +1634,13 @@ function DesignSection({ control, canEdit: canEditIn, locked = false }: { contro
     : d.conclusion !== 'Not tested' ? 'TOD is concluded — it has to be reopened or returned before Ira runs again'
     : null;
   const iraStale = !!d.ira?.evidenceChanged;
+  // Whatever Ira is running on this control, from whichever door — the chat's
+  // runs used to leave this step silent and its button live (double run).
+  const liveRun = useControlRun(control.id);
+  const chatRun = !iraRunning && runStageOf(liveRun) === 'design' ? liveRun : null;
+  // Stopped from the Ira tab: the progress line goes the moment the run does,
+  // not when this page's timer runs out (click-through, 5 Oct).
+  useEffect(() => { if (iraRunning && !liveRun) setIraRunning(false); }, [iraRunning, liveRun]);
   // Checks the last run read and could not answer. Still Not tested, still
   // holding the conclusion — the count is here so that is visible without
   // opening every row.
@@ -1578,21 +1661,29 @@ function DesignSection({ control, canEdit: canEditIn, locked = false }: { contro
   // the evidence, so a Stop or an Undo is not simply re-run over the top — and
   // confirms its own SURE results in the tester's name. The less-sure wait for
   // the tester; the conclusion is never Ira's.
+  //
+  // Ira's plan you approve (Stage 1a, 2 Oct): none of it moves until Start is
+  // pressed on the plan in the Ira tab — in Manual too, where Ira then reads
+  // and stops for the tester to confirm. A step taken off the plan is the
+  // tester's, and only the ticked checks count towards "due".
   const iraMode = useIraMode();
+  const plan = control.iraPlan;
+  const planRuns = !!plan?.started && !plan.skipped.includes('design');
   const autoKey = useRef('');
-  const autoDue = d.conclusion === 'Not tested' && (iraStale || d.points.some(p => !p.validation && !p.override && pointResult(p) === 'Not tested'));
+  const autoDue = d.conclusion === 'Not tested' && (iraStale || d.points.some(p => (!plan?.checks || plan.checks.includes(p.id)) && !p.validation && !p.override && pointResult(p) === 'Not tested'));
   useEffect(() => {
-    if (iraMode !== 'automatic' || !canTest || locked || iraRunning || iraBlocked || !autoDue || controlRun(control.id)) return;
+    // An undone step waits for Run again on the plan (5 Oct) — Undo is not a cue to re-read.
+    if (!planRuns || !canTest || locked || iraRunning || iraBlocked || !autoDue || controlRun(control.id) || iraStepUndone(control.id, 'design')) return;
     const key = `${control.id}|${d.documents.map(x => designFilesOf(x).length).join(',')}|${iraStale}`;
     if (autoKey.current === key) return;
     autoKey.current = key;
     runIra();
   }); // eslint-disable-line react-hooks/exhaustive-deps
   useEffect(() => {
-    if (iraMode !== 'automatic' || !canTest || locked || d.conclusion !== 'Not tested') return;
+    if (iraMode !== 'automatic' || !planRuns || !canTest || locked || d.conclusion !== 'Not tested') return;
     const sure = d.points.filter(p => awaitsConfirm(p) && (confidenceOf(p.validation, `${control.id}:${p.id}`) ?? 0) >= CONFIDENT_AT);
-    if (sure.length) confirmIra(control.id, 'design', sure.map(p => p.id));
-  }, [iraMode, canTest, locked, d.conclusion, d.points, control.id, confirmIra]);
+    if (sure.length) confirmIra(control.id, 'design', sure.map(p => p.id), { byIra: true });
+  }, [iraMode, planRuns, canTest, locked, d.conclusion, d.points, control.id, confirmIra]);
   const addStandard = (k: DesignDocKind) => { addDesignDoc(control.id, k); logEvent({ action: 'Create', description: `Added design element to ${control.id}`, module: 'SOX ICFR', entity: 'Control' }); };
   const saveCustom = () => {
     if (!customName.trim()) return;
@@ -1606,9 +1697,9 @@ function DesignSection({ control, canEdit: canEditIn, locked = false }: { contro
       {/* Only the kinds this class of control actually has — offering an ITGC a
           process narrative invites the auditor to file something that will then sit
           on the paper as evidence of a design the control does not work that way. */}
-      {DESIGN_DOC_KINDS.filter(k => !docNotApplicable(control, { kind: k })).map(k => <button key={k} className={menuItem} onClick={() => { addStandard(k); close(); }}><FileText size={12} className="text-brand-600" />{k}</button>)}
-      <div className="my-1 border-t border-canvas-border" />
-      <button className={menuItem} onClick={() => { setAddingCustom(true); close(); }}><Plus size={12} className="text-brand-600" />Custom…</button>
+      {DESIGN_DOC_KINDS.filter(k => !docNotApplicable(control, { kind: k })).map(k => <button key={k} role="menuitem" className={menuItem} onClick={() => { addStandard(k); close(); }}><FileText size={12} className="text-brand-600" />{k}</button>)}
+      <div className="my-1 border-t border-canvas-border" role="separator" />
+      <button role="menuitem" className={menuItem} onClick={() => { setAddingCustom(true); close(); }}><Plus size={12} className="text-brand-600" />Custom…</button>
     </>}</Dropdown>
   );
   const customForm = addingCustom && (
@@ -1616,11 +1707,11 @@ function DesignSection({ control, canEdit: canEditIn, locked = false }: { contro
       <input autoFocus value={customName} onChange={e => setCustomName(e.target.value)}
         onKeyDown={e => { if (e.key === 'Enter') saveCustom(); if (e.key === 'Escape') setAddingCustom(false); }}
         placeholder="Element name — e.g. Delegation of authority matrix" aria-label="Custom element name"
-        className="w-full h-9 px-3 rounded-lg border border-canvas-border bg-canvas-elevated text-[0.78125rem] focus:outline-none focus:ring-2 focus:ring-brand-200" />
+        className="w-full h-9 px-3 rounded-lg border border-canvas-border bg-canvas-elevated text-[0.8125rem] focus:outline-none focus:ring-2 focus:ring-brand-200" />
       <textarea rows={2} value={customDesc} onChange={e => setCustomDesc(e.target.value)}
         onKeyDown={e => { if (e.key === 'Escape') setAddingCustom(false); }}
         placeholder="Description (optional) — what this element should evidence" aria-label="Custom element description"
-        className="w-full px-3 py-2 rounded-lg border border-canvas-border bg-canvas-elevated text-[0.78125rem] resize-none focus:outline-none focus:ring-2 focus:ring-brand-200" />
+        className="w-full px-3 py-2 rounded-lg border border-canvas-border bg-canvas-elevated text-[0.8125rem] resize-none focus:outline-none focus:ring-2 focus:ring-brand-200" />
       <div className="flex items-center justify-end gap-2">
         <button onClick={() => { setAddingCustom(false); setCustomName(''); setCustomDesc(''); }} className="h-8 px-3 rounded-lg border border-canvas-border text-[0.75rem] font-semibold text-ink-600 hover:text-ink-900 cursor-pointer">Cancel</button>
         <button disabled={!customName.trim()} onClick={saveCustom} className="h-8 px-3 rounded-lg bg-brand-600 text-white text-[0.75rem] font-semibold disabled:opacity-40 cursor-pointer">Add element</button>
@@ -1681,13 +1772,13 @@ function DesignSection({ control, canEdit: canEditIn, locked = false }: { contro
         <>
           {/* design elements — each one evidenced by attached files */}
           <div className="flex items-center justify-between mb-2.5">
-            <h4 className="text-[0.78125rem] font-bold text-ink-700 inline-flex items-center gap-1.5"><FileText size={14} /> Design elements &amp; evidence</h4>
+            <h4 className="text-[0.8125rem] font-bold text-ink-700 inline-flex items-center gap-1.5"><FileText size={14} /> Design elements &amp; evidence</h4>
             <div className="flex items-center gap-2">
               {/* PARKED (18 Sep, user ask) — Request data. The email request lives
                   on the TOE population step, where the file that is actually
                   chased is asked for; `setModal` and `RequestDataModal` are left
                   in place, so restoring it is:
-                  <button onClick={() => setModal(true)} className="h-7 px-2.5 inline-flex items-center gap-1.5 rounded-md border border-canvas-border bg-canvas-elevated text-[0.71875rem] font-semibold text-ink-700 hover:border-brand-300 hover:text-brand-700 cursor-pointer"><Mail size={12} /> Request data</button> */}
+                  <button onClick={() => setModal(true)} className="h-7 px-2.5 inline-flex items-center gap-1.5 rounded-md border border-canvas-border bg-canvas-elevated text-[0.75rem] font-semibold text-ink-700 hover:border-brand-300 hover:text-brand-700 cursor-pointer"><Mail size={12} /> Request data</button> */}
               {canEdit && addElementMenu}
             </div>
           </div>
@@ -1700,15 +1791,15 @@ function DesignSection({ control, canEdit: canEditIn, locked = false }: { contro
                 // rather than a flag on the element — see DOC_REQUIREMENTS.
                 const docReq = docRequirement(control, doc);
                 return (
-                  <div key={doc.id}>
+                  <div key={doc.id} id={`doc-${doc.id}`} className="scroll-mt-4">
                   <div className={cn('doc-row', doc.status === 'Received' && '!border-compliant-200', doc.waiver && doc.status !== 'Received' && '!border-evidence-200')}>
                     {doc.waiver && doc.status !== 'Received' ? <BadgeCheck size={15} className="shrink-0 text-evidence-600" />
                       : <FileCheck2 size={15} className={cn('shrink-0', DOC_TONE[doc.status])} />}
                     <div className="min-w-0 flex-1">
                       <div className="flex items-center gap-1.5">
                         <span className="text-[0.75rem] font-semibold text-ink-800">{docLabel(doc)}</span>
-                        <span className={cn('text-[0.625rem] font-bold uppercase tracking-wide px-1 h-[15px] inline-flex items-center rounded',
-                          docReq === 'Required' ? 'bg-brand-50 text-brand-700' : 'bg-paper-100 text-ink-400')}>{docReq}</span>
+                        <span className={cn('text-[0.625rem] font-bold uppercase tracking-wide px-1 h-3.75 inline-flex items-center rounded',
+                          docReq === 'Required' ? 'bg-brand-50 text-brand-700' : 'bg-paper-100 text-ink-500')}>{docReq}</span>
                       </div>
                       {doc.description && <div className="text-[0.6875rem] text-ink-500 mt-0.5">{doc.description}</div>}
                       {files.length > 0 ? (
@@ -1720,10 +1811,10 @@ function DesignSection({ control, canEdit: canEditIn, locked = false }: { contro
                             <span key={f.id} className={cn('inline-flex items-center gap-1 max-w-full rounded-md border border-canvas-border bg-paper-50/70 pl-1.5 py-0.5', canRemoveFile(f) ? 'pr-0.5' : 'pr-1.5')}>
                               <button onClick={() => setPreviewing({ file: f, element: docLabel(doc) })} title={`Preview ${f.name}`}
                                 className="group min-w-0 inline-flex items-start gap-1.5 text-left rounded-sm cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-500/40">
-                                <Paperclip size={10} className="shrink-0 mt-[3px] text-ink-400" />
+                                <Paperclip size={10} className="shrink-0 mt-0.75 text-ink-400" />
                                 <span className="min-w-0">
-                                  <span className="block max-w-[16rem] truncate text-[0.65625rem] font-medium text-ink-700 underline-offset-2 group-hover:text-brand-700 group-hover:underline">{f.name}</span>
-                                  <span className="block max-w-[16rem] truncate text-[0.625rem] text-ink-400">Uploaded by {f.uploadedBy}{f.uploadedAt ? ` · ${f.uploadedAt}` : ''}</span>
+                                  <span className="block max-w-64 truncate text-[0.6875rem] font-medium text-ink-700 underline-offset-2 group-hover:text-brand-700 group-hover:underline">{f.name}</span>
+                                  <span className="block max-w-64 truncate text-[0.6875rem] text-ink-400">Uploaded by {f.uploadedBy}{f.uploadedAt ? ` · ${f.uploadedAt}` : ''}</span>
                                 </span>
                               </button>
                               {canRemoveFile(f) && (
@@ -1750,13 +1841,13 @@ function DesignSection({ control, canEdit: canEditIn, locked = false }: { contro
                     {(docReq !== 'Not applicable' || doc.status === 'Received') &&
                       <Pill tone={doc.status === 'Received' ? 'compliant' : doc.waiver ? 'evidence' : doc.status === 'Requested' ? 'mitigated' : 'draft'}>{doc.status === 'Received' ? 'Evidenced' : doc.waiver ? 'Waived' : doc.status}</Pill>}
                     {canEdit && <div className="flex items-center gap-1">
-                      {docReq !== 'Not applicable' && doc.status !== 'Received' && !doc.waiver && <button onClick={() => setWaiving(x => x === doc.id ? null : doc.id)} title="Account for this element without a file" className="h-7 px-2.5 text-[0.71875rem] font-semibold rounded-md border border-canvas-border bg-canvas-elevated text-ink-600 hover:text-evidence-700 hover:border-evidence-300 disabled:opacity-50 inline-flex items-center gap-1 cursor-pointer"><BadgeCheck size={11} /> Not applicable</button>}
+                      {docReq !== 'Not applicable' && doc.status !== 'Received' && !doc.waiver && <button onClick={() => setWaiving(x => x === doc.id ? null : doc.id)} title="Account for this element without a file" className="h-7 px-2.5 text-[0.75rem] font-semibold rounded-md border border-canvas-border bg-canvas-elevated text-ink-600 hover:text-evidence-700 hover:border-evidence-300 disabled:opacity-50 inline-flex items-center gap-1 cursor-pointer"><BadgeCheck size={11} /> Not applicable</button>}
                       {doc.waiver && <button onClick={() => clearDesignWaiver(control.id, doc.id)} title="Remove the waiver — the element is required again, and can take evidence" aria-label={`Remove the waiver on ${docLabel(doc)}`} className="h-7 w-7 inline-flex items-center justify-center rounded-md border border-canvas-border bg-canvas-elevated text-ink-400 hover:border-brand-300 hover:text-brand-700 cursor-pointer"><RotateCcw size={12} /></button>}
                       {/* a waived element offers no upload. Waiving it settled
                           that there is no file to give; the way back is to lift
                           the waiver first, which puts the element back in the
                           count before anything is attached to it. */}
-                      {doc.status !== 'Received' && !doc.waiver && <button onClick={() => attach(doc)} title="Choose one or more files — PDF, image, XLSX, CSV or Word" className="h-7 px-2.5 text-[0.71875rem] font-semibold rounded-md border border-canvas-border bg-canvas-elevated text-ink-600 hover:text-compliant-700 hover:border-compliant-300 disabled:opacity-50 inline-flex items-center gap-1 cursor-pointer"><Upload size={11} /> Attach evidence</button>}
+                      {doc.status !== 'Received' && !doc.waiver && <button onClick={() => attach(doc)} title="Choose one or more files — PDF, image, XLSX, CSV or Word" className="h-7 px-2.5 text-[0.75rem] font-semibold rounded-md border border-canvas-border bg-canvas-elevated text-ink-600 hover:text-compliant-700 hover:border-compliant-300 disabled:opacity-50 inline-flex items-center gap-1 cursor-pointer"><Upload size={11} /> Attach evidence</button>}
                       {doc.status === 'Received' && <button onClick={() => attach(doc)} title="Attach another file" aria-label={`Attach another file to ${docLabel(doc)}`} className="h-7 w-7 inline-flex items-center justify-center rounded-md border border-canvas-border bg-canvas-elevated text-ink-400 hover:border-brand-300 hover:text-brand-700 cursor-pointer"><Plus size={12} /></button>}
                       {/* PARKED (22 Sep, user ask) — the bin. A design element
                           is what the design was read against, and dropping one
@@ -1815,11 +1906,11 @@ function DesignSection({ control, canEdit: canEditIn, locked = false }: { contro
                   <div className="mt-2 space-y-1.5">
                     {suggestions.map(s => (
                       <div key={s} className="flex items-start justify-between gap-2.5 rounded-lg border border-canvas-border bg-canvas-elevated px-2.5 py-2">
-                        <span className="text-[0.71875rem] text-ink-700 leading-relaxed min-w-0">{s}</span>
+                        <span className="text-[0.75rem] text-ink-700 leading-relaxed min-w-0">{s}</span>
                         <span className="flex items-center gap-1 shrink-0">
                           <button onClick={() => { addDesignPoint(control.id, s); logEvent({ action: 'Create', description: `Added a suggested design check to ${control.id}`, module: 'SOX ICFR', entity: 'Control' }); }}
                             className="h-7 px-2.5 rounded-md bg-brand-600 text-white text-[0.6875rem] font-semibold hover:bg-brand-700 transition-colors cursor-pointer">Add</button>
-                          <button onClick={() => setDismissed(d => [...d, s])} title="Not relevant to this control"
+                          <button onClick={() => setDismissed(d => [...d, s])} title="Not relevant to this control" aria-label="Not relevant to this control"
                             className="h-7 w-7 inline-flex items-center justify-center rounded-md border border-canvas-border text-ink-400 hover:text-ink-700 hover:border-ink-300 transition-colors cursor-pointer"><X size={12} /></button>
                         </span>
                       </div>
@@ -1831,7 +1922,7 @@ function DesignSection({ control, canEdit: canEditIn, locked = false }: { contro
           )}
           */}
           <div className="flex items-center justify-between mb-2.5 gap-2 flex-wrap">
-            <h4 className="text-[0.78125rem] font-bold text-ink-700 inline-flex items-center gap-1.5 flex-wrap"><ClipboardCheck size={14} /> Design checks <span className="font-normal text-ink-400">· assessed against the evidence</span>
+            <h4 className="text-[0.8125rem] font-bold text-ink-700 inline-flex items-center gap-1.5 flex-wrap"><ClipboardCheck size={14} /> Design checks <span className="font-normal text-ink-400">· assessed against the evidence</span>
               {/* What the run left behind, said once at the top so it does not
                   have to be found by scrolling. Plain text now, not an amber
                   chip (agentic UI review #7): these are checks waiting for a
@@ -1846,24 +1937,25 @@ function DesignSection({ control, canEdit: canEditIn, locked = false }: { contro
             <div className="flex items-center gap-2">
               {/* PARKED (Aug 2026, user ask) — the Validate all button. `runValidateAll`
                   and `validatingAll` are left above so restoring it is one line:
-                  <button disabled={validatingAll} onClick={runValidateAll} className="h-7 px-2.5 inline-flex items-center gap-1.5 rounded-md bg-evidence-600 text-white text-[0.71875rem] font-semibold enabled:hover:bg-evidence-700 disabled:opacity-70 cursor-pointer">{validatingAll ? <><Loader2 size={12} className="animate-spin" /> Validating…</> : <><PlayCircle size={12} /> Validate all</>}</button> */}
+                  <button disabled={validatingAll} onClick={runValidateAll} className="h-7 px-2.5 inline-flex items-center gap-1.5 rounded-md bg-evidence-600 text-white text-[0.75rem] font-semibold enabled:hover:bg-evidence-700 disabled:opacity-70 cursor-pointer">{validatingAll ? <><Loader2 size={12} className="animate-spin" /> Validating…</> : <><PlayCircle size={12} /> Validate all</>}</button> */}
               {/* PARKED (S6, A17) — Pass all / Fail all, replaced by the Ira button
                   beside them. `markAll` is left above, so restoring them is:
-                <button onClick={() => markAll('Pass')} title="Mark every check passed" className="h-7 px-2.5 inline-flex items-center gap-1.5 rounded-md border border-compliant-300 bg-compliant-50 text-[0.71875rem] font-semibold text-compliant-700 hover:bg-compliant-100 transition-colors cursor-pointer"><CheckCircle2 size={12} /> Pass all</button>
-                <button onClick={() => markAll('Fail')} title="Mark every check failed" className="h-7 px-2.5 inline-flex items-center gap-1.5 rounded-md border border-canvas-border bg-canvas-elevated text-[0.71875rem] font-semibold text-ink-600 hover:border-risk-300 hover:text-risk-700 transition-colors cursor-pointer"><XCircle size={12} /> Fail all</button> */}
-              {canTest && !iraRunning && (
-                <button onClick={runIra} disabled={!!iraBlocked}
-                    title={iraBlocked ?? (iraStale
+                <button onClick={() => markAll('Pass')} title="Mark every check passed" className="h-7 px-2.5 inline-flex items-center gap-1.5 rounded-md border border-compliant-300 bg-compliant-50 text-[0.75rem] font-semibold text-compliant-700 hover:bg-compliant-100 transition-colors cursor-pointer"><CheckCircle2 size={12} /> Pass all</button>
+                <button onClick={() => markAll('Fail')} title="Mark every check failed" className="h-7 px-2.5 inline-flex items-center gap-1.5 rounded-md border border-canvas-border bg-canvas-elevated text-[0.75rem] font-semibold text-ink-600 hover:border-risk-300 hover:text-risk-700 transition-colors cursor-pointer"><XCircle size={12} /> Fail all</button> */}
+              {/* Manual only (Stage 1a): in Automatic, Ira runs from its plan's Start. */}
+              {canTest && !iraRunning && iraMode === 'manual' && (
+                <button onClick={runIra} disabled={!!iraBlocked || !!liveRun}
+                    title={liveRun ? busyNote(liveRun) : iraBlocked ?? (iraStale
                       ? 'A design element’s files changed since Ira last ran — run it again to check against what is on file now'
                       : 'Ira reads every design check against the evidence on file and marks each one Pass or Fail')}
-                    className="h-7 px-2.5 inline-flex items-center gap-1.5 rounded-md bg-brand-600 text-white text-[0.71875rem] font-semibold enabled:hover:bg-brand-700 disabled:opacity-40 disabled:cursor-not-allowed transition-colors cursor-pointer">
+                    className="h-7 px-2.5 inline-flex items-center gap-1.5 rounded-md bg-brand-600 text-white text-[0.75rem] font-semibold enabled:hover:bg-brand-700 disabled:opacity-40 disabled:cursor-not-allowed transition-colors cursor-pointer">
                     <Sparkles size={12} /> {iraStale ? 'Re-run AI validation' : 'Run AI validation'}
                   </button>)}
               {/* PARKED (18 Sep, user ask) — Add a design check. The checks come
                   from the RACM, and writing a new one here put the question and
                   the answer in the same hand. `addingPoint` and the form below
                   are left in place, so restoring it is:
-                  <button onClick={() => setAddingPoint(a => !a)} aria-label="Add a design check" className="h-7 px-2.5 inline-flex items-center gap-1.5 rounded-md border border-canvas-border bg-canvas-elevated text-[0.71875rem] font-semibold text-ink-700 hover:border-brand-300 hover:text-brand-700 cursor-pointer"><Plus size={12} /> Add</button> */}
+                  <button onClick={() => setAddingPoint(a => !a)} aria-label="Add a design check" className="h-7 px-2.5 inline-flex items-center gap-1.5 rounded-md border border-canvas-border bg-canvas-elevated text-[0.75rem] font-semibold text-ink-700 hover:border-brand-300 hover:text-brand-700 cursor-pointer"><Plus size={12} /> Add</button> */}
             </div>
           </div>
           {addingPoint && (() => {
@@ -1876,13 +1968,13 @@ function DesignSection({ control, canEdit: canEditIn, locked = false }: { contro
             };
             return (
               <div className="flex items-center gap-2 mb-2.5 flex-wrap">
-                <input autoFocus value={newPoint} onChange={e => setNewPoint(e.target.value)} onKeyDown={e => { if (e.key === 'Enter') submit(); }} placeholder="e.g. Reviewer is independent of the preparer" className="flex-1 min-w-[16rem] h-9 px-3 rounded-lg border border-canvas-border bg-canvas-elevated text-[0.78125rem] focus:outline-none focus:ring-2 focus:ring-brand-200" />
+                <input autoFocus value={newPoint} onChange={e => setNewPoint(e.target.value)} onKeyDown={e => { if (e.key === 'Enter') submit(); }} placeholder="e.g. Reviewer is independent of the preparer" className="flex-1 min-w-64 h-9 px-3 rounded-lg border border-canvas-border bg-canvas-elevated text-[0.8125rem] focus:outline-none focus:ring-2 focus:ring-brand-200" />
                 {/* What the check is ABOUT, asked at the point of writing it. Filed
                     afterwards it never gets filed — and a check under the wrong
                     heading reads as a check of something it never tested. */}
                 {steps.length > 0 && (
                   <select value={newPointStep} onChange={e => setNewPointStep(e.target.value)} aria-label="What this check is about"
-                    className="h-9 px-2.5 rounded-lg border border-canvas-border bg-canvas-elevated text-[0.75rem] text-ink-700 max-w-[16rem] focus:outline-none focus:ring-2 focus:ring-brand-200 cursor-pointer">
+                    className="h-9 px-2.5 rounded-lg border border-canvas-border bg-canvas-elevated text-[0.75rem] text-ink-700 max-w-64 focus:outline-none focus:ring-2 focus:ring-brand-200 cursor-pointer">
                     <option value="">The control as a whole</option>
                     {steps.map(s => <option key={s.id} value={s.id}>{s.code} · {s.description}</option>)}
                   </select>
@@ -1891,8 +1983,20 @@ function DesignSection({ control, canEdit: canEditIn, locked = false }: { contro
               </div>
             );
           })()}
+          {/* Why "Run AI validation" is dead, said under it rather than only on
+              hover (click-through, 5 Oct). Not once TOD is concluded — the
+              conclusion footer already says why the step is closed. */}
+          {canTest && iraMode === 'manual' && !iraRunning && !liveRun && iraBlocked && d.conclusion === 'Not tested' && (
+            <p className="-mt-1 mb-2.5 text-[0.6875rem] text-ink-500">{iraBlocked}.</p>
+          )}
           {iraRunning && <RunLine files={d.documents.reduce((n, doc) => n + designFilesOf(doc).length, 0)} total={d.points.length} noun="check" ms={VALIDATE_MS} />}
-          {!iraRunning && <ConfirmSure control={control} which="design" rows={d.points} />}
+          {chatRun && <LiveRunLine run={chatRun} />}
+          {/* A run of another step (the chat's extract or draw) still holds this
+              button, so it says why in one line. */}
+          {canTest && iraMode === 'manual' && !iraRunning && liveRun && !chatRun && d.conclusion === 'Not tested' && (
+            <p className="-mt-1 mb-2.5 text-[0.6875rem] text-ink-500">{busyNote(liveRun)}</p>
+          )}
+          {!iraRunning && !chatRun && <ConfirmSure control={control} which="design" rows={d.points} />}
           {d.points.length === 0 ? <p className="text-[0.75rem] text-ink-400 mb-5">No considerations yet — add the design points you’ll assess in the walkthrough.</p> : (
             <div className="space-y-4 mb-5">
               {controlChecks.length > 0 && (
@@ -1900,18 +2004,18 @@ function DesignSection({ control, canEdit: canEditIn, locked = false }: { contro
                   {/* Only labelled when there is something to tell it apart FROM.
                       One heading over one list names nothing. */}
                   {stepChecks.length > 0 && (
-                    <p className="text-[0.65625rem] font-semibold uppercase tracking-wide text-ink-400">The control as a whole</p>
+                    <p className="text-[0.6875rem] font-semibold uppercase tracking-wide text-ink-400">The control as a whole</p>
                   )}
-                  {controlChecks.map(p => <PointRow key={p.id} control={control} point={p} canEdit={canEdit} checking={iraRunning} />)}
+                  {controlChecks.map(p => <PointRow key={p.id} control={control} point={p} canEdit={canEdit} checking={iraRunning || !!chatRun} />)}
                 </div>
               )}
               {stepChecks.map(g => (
                 <div key={g.step.id} className="space-y-2">
-                  <p className="text-[0.65625rem] font-semibold uppercase tracking-wide text-ink-400 flex items-baseline gap-1.5 min-w-0">
+                  <p className="text-[0.6875rem] font-semibold uppercase tracking-wide text-ink-400 flex items-baseline gap-1.5 min-w-0">
                     <span className="font-mono normal-case text-ink-500 shrink-0">{g.step.code}</span>
                     <span className="truncate normal-case font-medium text-ink-500">{g.step.description}</span>
                   </p>
-                  {g.points.map(p => <PointRow key={p.id} control={control} point={p} canEdit={canEdit} checking={iraRunning} />)}
+                  {g.points.map(p => <PointRow key={p.id} control={control} point={p} canEdit={canEdit} checking={iraRunning || !!chatRun} />)}
                 </div>
               ))}
             </div>
@@ -1931,14 +2035,16 @@ function DesignSection({ control, canEdit: canEditIn, locked = false }: { contro
               It used to be read off the walkthrough alone, which meant a control
               could carry three reperformed checks and still describe itself as
               documents-only. */}
-          <p className="mt-3 text-[0.71875rem] text-ink-500 leading-relaxed">
+          <p className="mt-3 text-[0.75rem] text-ink-500 leading-relaxed">
             <span className="text-ink-400">Basis</span> · {designBasis(control)}
             {proven > 0 && <span className="text-ink-400"> — {proven} of {control.design.points.length} check{control.design.points.length === 1 ? '' : 's'} carry the auditor's own proof</span>}
             <span className="text-ink-300"> · </span>
             <span className="text-ink-400">In operation</span> · {control.design.walkthrough ? 'yes — seen running on a live transaction' : docsIn > 0 ? 'evidenced by the documents on file' : 'not yet evidenced'}
           </p>
 
-          {missing.length > 0 && <div className="mt-3 text-[0.71875rem] text-mitigated-700 bg-mitigated-50/60 border border-mitigated-200 rounded-lg px-3 py-2 inline-flex items-center gap-1.5"><AlertTriangle size={13} /> {missing.length} element{missing.length > 1 ? 's' : ''} outstanding — attach evidence, request it from the control owner, or mark it not applicable.</div>}
+          {/* Required elements only: an Optional one missing is a thinner file,
+              not a gap, and the amber line used to nag about the Flowchart. */}
+          {iraMissing.length > 0 && <div className="mt-3 text-[0.75rem] text-mitigated-700 bg-mitigated-50/60 border border-mitigated-200 rounded-lg px-3 py-2 inline-flex items-center gap-1.5"><AlertTriangle size={13} /> {iraMissing.length} required element{iraMissing.length > 1 ? 's' : ''} outstanding — attach evidence, request it from the control owner, or mark it not applicable.</div>}
           {/* Effective needs every gate: evidence accounted for, every design check
               validated — an unvalidated check is an untested opinion — the control
               confirmed in operation, and the basis on the record. Inquiry-only
@@ -1957,7 +2063,7 @@ function DesignSection({ control, canEdit: canEditIn, locked = false }: { contro
           </>)}
           {/* What the owner gets in its place: the state of their own lane. */}
           {isOwner && (
-            <p className="mt-3 text-[0.71875rem] text-ink-500 leading-relaxed rounded-lg border border-canvas-border bg-paper-50/60 px-3 py-2.5">
+            <p className="mt-3 text-[0.75rem] text-ink-500 leading-relaxed rounded-lg border border-canvas-border bg-paper-50/60 px-3 py-2.5">
               {missing.length > 0
                 ? <><span className="font-semibold text-ink-700">{missing.length} document{missing.length > 1 ? 's' : ''} still outstanding.</span> Attach what you hold — the auditor takes it from there.</>
                 : <><span className="font-semibold text-ink-700">Everything asked for is on file.</span> The auditor's testing and its conclusion are not shown here.</>}
@@ -2046,8 +2152,8 @@ function IpeCheckRow({ control, check, canWrite, reportCount }: { control: Contr
       <div className="flex items-start gap-3">
         <Tickmark result={check.result} size={18} />
         <div className="min-w-0 flex-1">
-          <span className="block text-[0.65625rem] font-bold uppercase tracking-wider text-ink-400">{check.dimension}</span>
-          <p className="text-[0.78125rem] text-ink-800 leading-relaxed mt-0.5">{check.description}</p>
+          <span className="block text-[0.6875rem] font-bold uppercase tracking-wider text-ink-400">{check.dimension}</span>
+          <p className="text-[0.8125rem] text-ink-800 leading-relaxed mt-0.5">{check.description}</p>
           <p className="text-[0.6875rem] text-ink-400 leading-relaxed mt-1 flex items-start gap-1.5"><FlaskConical size={11} className="mt-0.5 shrink-0" /> {check.method}</p>
 
           {/* What the parked "Period covered" row put on screen: the audit's own
@@ -2057,7 +2163,7 @@ function IpeCheckRow({ control, check, canWrite, reportCount }: { control: Contr
               on dates they have to go and look up. */}
           {check.dimension === 'Period coverage' && canWrite && !answered && cover && (
             <div className="mt-2.5 rounded-md border border-canvas-border bg-canvas-elevated px-2.5 py-2">
-              <span className="block text-[0.625rem] font-bold uppercase tracking-wider text-ink-400 mb-1.5">What the extract holds</span>
+              <span className="block text-[0.6875rem] font-bold uppercase tracking-wider text-ink-400 mb-1.5">What the extract holds</span>
               <p className="text-[0.6875rem] text-ink-600 leading-relaxed">
                 <span className="font-semibold text-ink-900">{cover.headline}</span> — {cover.detail}
               </p>
@@ -2072,10 +2178,10 @@ function IpeCheckRow({ control, check, canWrite, reportCount }: { control: Contr
           {/* the auditor's own count, only where counting is the procedure */}
           {check.dimension === 'Completeness' && canWrite && !answered && (
             <div className="mt-2.5 rounded-md border border-canvas-border bg-canvas-elevated px-2.5 py-2">
-              <span className="block text-[0.625rem] font-bold uppercase tracking-wider text-ink-400 mb-1.5">Count it yourself</span>
+              <span className="block text-[0.6875rem] font-bold uppercase tracking-wider text-ink-400 mb-1.5">Count it yourself</span>
               <div className="flex items-center gap-2 flex-wrap">
                 <input type="number" min={0} value={counted} onChange={e => setCounted(e.target.value)} placeholder="records in the system"
-                  className="w-44 h-8 px-2.5 rounded-lg border border-canvas-border bg-canvas-elevated text-[0.78125rem] tabular-nums focus:outline-none focus:ring-2 focus:ring-brand-200" />
+                  className="w-44 h-8 px-2.5 rounded-lg border border-canvas-border bg-canvas-elevated text-[0.8125rem] tabular-nums focus:outline-none focus:ring-2 focus:ring-brand-200" />
                 <span className="text-[0.6875rem] text-ink-400">the report claims <span className="tabular-nums font-semibold text-ink-700">{reportCount.toLocaleString()}</span></span>
                 {variance != null && (
                   <span className={cn('text-[0.6875rem] font-bold', variance === 0 ? 'text-compliant-700' : 'text-risk-700')}>
@@ -2084,7 +2190,7 @@ function IpeCheckRow({ control, check, canWrite, reportCount }: { control: Contr
                 )}
                 {variance != null && (
                   <button onClick={() => setDraft(countedNote)}
-                    className="h-8 px-3 rounded-md border border-canvas-border text-[0.71875rem] font-semibold text-ink-700 hover:border-ink-300 transition-colors cursor-pointer">Write it up</button>
+                    className="h-8 px-3 rounded-md border border-canvas-border text-[0.75rem] font-semibold text-ink-700 hover:border-ink-300 transition-colors cursor-pointer">Write it up</button>
                 )}
               </div>
             </div>
@@ -2095,14 +2201,15 @@ function IpeCheckRow({ control, check, canWrite, reportCount }: { control: Contr
             <div className="mt-2.5">
               <textarea value={draft} onChange={e => setDraft(e.target.value)} rows={2}
                 placeholder={check.dimension === 'Completeness' ? 'What the tie-out showed — the numbers, and the variance if there is one' : check.dimension === 'Accuracy' ? 'Which records were vouched, to what, and what was found' : check.dimension === 'Period coverage' ? 'The span the extract holds, and what accounts for any empty month inside the period' : 'What the parameter screen showed, and how it agrees to the test scope'}
-                className="w-full px-2.5 py-2 rounded-lg border border-canvas-border bg-canvas-elevated text-[0.71875rem] leading-relaxed resize-none focus:outline-none focus:ring-2 focus:ring-brand-200" />
+                className="w-full px-2.5 py-2 rounded-lg border border-canvas-border bg-canvas-elevated text-[0.75rem] leading-relaxed resize-none focus:outline-none focus:ring-2 focus:ring-brand-200" />
               <div className="mt-1.5 flex items-center gap-2 flex-wrap">
                 <button onClick={() => save('Pass')} disabled={!draft.trim()} title={draft.trim() ? undefined : 'Record what was found first.'}
-                  className="h-8 px-3 inline-flex items-center gap-1.5 rounded-md bg-compliant-600 text-white text-[0.71875rem] font-semibold enabled:hover:bg-compliant-700 disabled:opacity-40 disabled:cursor-not-allowed transition-colors cursor-pointer"><CheckCircle2 size={12} /> Pass</button>
+                  className="h-8 px-3 inline-flex items-center gap-1.5 rounded-md bg-compliant-600 text-white text-[0.75rem] font-semibold enabled:hover:bg-compliant-700 disabled:opacity-40 disabled:cursor-not-allowed transition-colors cursor-pointer"><CheckCircle2 size={12} /> Pass</button>
                 <button onClick={() => save('Fail')} disabled={!draft.trim()} title={draft.trim() ? undefined : 'Record what was found first.'}
-                  className="h-8 px-3 inline-flex items-center gap-1.5 rounded-md border border-risk-300 text-risk-700 text-[0.71875rem] font-semibold enabled:hover:bg-risk-50 disabled:opacity-40 disabled:cursor-not-allowed transition-colors cursor-pointer"><XCircle size={12} /> Fail</button>
-                <button onClick={attach} className="h-8 px-3 inline-flex items-center gap-1.5 rounded-md border border-canvas-border bg-canvas-elevated text-[0.71875rem] font-semibold text-ink-600 hover:border-evidence-300 hover:text-evidence-700 transition-colors cursor-pointer"><Paperclip size={12} /> Attach proof</button>
-                <span className="text-[0.625rem] text-ink-400">This prints on the working paper.</span>
+                  className="h-8 px-3 inline-flex items-center gap-1.5 rounded-md border border-risk-300 text-risk-700 text-[0.75rem] font-semibold enabled:hover:bg-risk-50 disabled:opacity-40 disabled:cursor-not-allowed transition-colors cursor-pointer"><XCircle size={12} /> Fail</button>
+                <button onClick={attach} className="h-8 px-3 inline-flex items-center gap-1.5 rounded-md border border-canvas-border bg-canvas-elevated text-[0.75rem] font-semibold text-ink-600 hover:border-evidence-300 hover:text-evidence-700 transition-colors cursor-pointer"><Paperclip size={12} /> Attach proof</button>
+                {/* The refusal said where it applies, not only on hover. */}
+                <span className="text-[0.6875rem] text-ink-400">{draft.trim() ? 'This prints on the working paper.' : 'Write what you found first — Pass and Fail wait for it.'}</span>
               </div>
             </div>
           ) : check.note ? (
@@ -2115,7 +2222,7 @@ function IpeCheckRow({ control, check, canWrite, reportCount }: { control: Contr
           {check.evidence && check.evidence.length > 0 && (
             <div className="mt-2 flex flex-wrap gap-1.5">
               {check.evidence.map(f => (
-                <span key={f.id} className="inline-flex items-center gap-1 rounded-md border border-canvas-border bg-canvas-elevated px-2 py-1 text-[0.65625rem] text-ink-600"><Paperclip size={10} /> {f.name}</span>
+                <span key={f.id} className="inline-flex items-center gap-1 rounded-md border border-canvas-border bg-canvas-elevated px-2 py-1 text-[0.6875rem] text-ink-600"><Paperclip size={10} /> {f.name}</span>
               ))}
             </div>
           )}
@@ -2193,9 +2300,9 @@ function IpeSection({ control, canWrite, isAuditor }: { control: Control; canWri
     <div className={cn('rounded-xl border', reliable ? 'border-compliant-200 bg-compliant-50/30' : ipe?.conclusion === 'Not reliable' ? 'border-risk-200 bg-risk-50/30' : 'border-canvas-border bg-paper-50/50')}>
       <button onClick={() => setOpen(o => !o)} className="w-full flex items-center gap-2.5 px-3.5 py-2.5 text-left cursor-pointer">
         {open ? <ChevronDown size={14} className="text-ink-400 shrink-0" /> : <ChevronRight size={14} className="text-ink-400 shrink-0" />}
-        <span className="text-[0.78125rem] font-bold text-ink-900">IPE test</span>
+        <span className="text-[0.8125rem] font-bold text-ink-900">IPE test</span>
         <span className="text-[0.6875rem] text-ink-400 min-w-0 truncate">— the report this population came out of, proven before anything is built on it</span>
-        <span className={cn('ml-auto shrink-0 text-[0.71875rem] font-bold', IPE_TONE[ipe?.conclusion ?? 'Not tested'])}>
+        <span className={cn('ml-auto shrink-0 text-[0.75rem] font-bold', IPE_TONE[ipe?.conclusion ?? 'Not tested'])}>
           {ipe ? ipe.conclusion : 'Not tested'}
         </span>
       </button>
@@ -2207,7 +2314,7 @@ function IpeSection({ control, canWrite, isAuditor }: { control: Control; canWri
                top of this component. What is left is the one honest case: a hat
                that cannot seed the record, told why rather than shown a form it
                is not allowed to submit. */
-            <p className="text-[0.71875rem] text-ink-400 leading-relaxed">The report behind this population has not been registered yet. Only the auditor can test it.</p>
+            <p className="text-[0.75rem] text-ink-400 leading-relaxed">The report behind this population has not been registered yet. Only the auditor can test it.</p>
           ) : (
             <>
               {/* What the audit holds about the report. Every part is optional
@@ -2220,7 +2327,7 @@ function IpeSection({ control, canWrite, isAuditor }: { control: Control; canWri
               <div className="rounded-lg border border-canvas-border bg-canvas-elevated px-3 py-2.5">
                 <div className="flex items-start justify-between gap-3">
                   <div className="min-w-0">
-                    <span className="block text-[0.78125rem] font-bold text-ink-900 truncate">
+                    <span className="block text-[0.8125rem] font-bold text-ink-900 truncate">
                       {sources.length > 1 ? `${sources.length} reports behind this population` : ipe.reportName}
                     </span>
                     <span className="block text-[0.6875rem] text-ink-500 mt-0.5 truncate">
@@ -2274,9 +2381,9 @@ function IpeSection({ control, canWrite, isAuditor }: { control: Control; canWri
                           className="w-full flex items-center gap-2 px-3 py-2.5 text-left cursor-pointer">
                           {isOpen ? <ChevronDown size={13} className="text-ink-400 shrink-0" /> : <ChevronRight size={13} className="text-ink-400 shrink-0" />}
                           {done ? <CheckCircle2 size={13} className="text-compliant-600 shrink-0" /> : <FileText size={13} className="text-ink-400 shrink-0" />}
-                          <span className="text-[0.71875rem] font-bold text-ink-800 truncate min-w-0">{s.file}</span>
-                          <span className="text-[0.65625rem] text-ink-400 shrink-0 tabular-nums hidden sm:inline">{s.rows.toLocaleString()} records</span>
-                          <span className={cn('ml-auto shrink-0 text-[0.65625rem] font-bold',
+                          <span className="text-[0.75rem] font-bold text-ink-800 truncate min-w-0">{s.file}</span>
+                          <span className="text-[0.6875rem] text-ink-400 shrink-0 tabular-nums hidden sm:inline">{s.rows.toLocaleString()} records</span>
+                          <span className={cn('ml-auto shrink-0 text-[0.6875rem] font-bold',
                             failed ? 'text-risk-700' : done ? 'text-compliant-700' : passed === checks.length ? 'text-compliant-700' : 'text-ink-400')}>
                             {failed ? 'a check failed' : done ? 'done' : `${passed}/${checks.length} proven`}
                           </span>
@@ -2292,7 +2399,7 @@ function IpeSection({ control, canWrite, isAuditor }: { control: Control; canWri
                             </div>
                             {canWrite && isAuditor && (
                               <div className="mt-2.5 flex items-center justify-between gap-3 flex-wrap">
-                                <p className="text-[0.65625rem] text-ink-400 min-w-0">
+                                <p className="text-[0.6875rem] text-ink-400 min-w-0">
                                   {done
                                     ? `Marked done by ${s.approvedIpe!.by}, ${s.approvedIpe!.at}. Answering a check again takes the mark off.`
                                     : answered
@@ -2301,7 +2408,7 @@ function IpeSection({ control, canWrite, isAuditor }: { control: Control; canWri
                                 </p>
                                 {done ? (
                                   <button onClick={() => approveSource(control.id, s.id, 'ipe', false)}
-                                    className="shrink-0 h-8 px-3 inline-flex items-center gap-1.5 rounded-md border border-canvas-border text-[0.71875rem] font-semibold text-ink-500 hover:text-ink-900 hover:border-ink-300 transition-colors cursor-pointer"><RotateCcw size={11} /> Take the mark off</button>
+                                    className="shrink-0 h-8 px-3 inline-flex items-center gap-1.5 rounded-md border border-canvas-border text-[0.75rem] font-semibold text-ink-500 hover:text-ink-900 hover:border-ink-300 transition-colors cursor-pointer"><RotateCcw size={11} /> Take the mark off</button>
                                 ) : (
                                   <button disabled={!answered} title={answered ? undefined : `Work all ${checks.length} checks on this file first.`}
                                     onClick={() => {
@@ -2313,7 +2420,7 @@ function IpeSection({ control, canWrite, isAuditor }: { control: Control; canWri
                                       const next = sources.find(x => x.id !== s.id && !x.approvedIpe);
                                       setOpenSource(next?.id ?? null);
                                     }}
-                                    className="shrink-0 h-8 px-3.5 inline-flex items-center gap-1.5 rounded-md bg-brand-600 text-white text-[0.71875rem] font-semibold enabled:hover:bg-brand-700 disabled:opacity-40 disabled:cursor-not-allowed transition-colors cursor-pointer"><Check size={12} /> Approve and continue</button>
+                                    className="shrink-0 h-8 px-3.5 inline-flex items-center gap-1.5 rounded-md bg-brand-600 text-white text-[0.75rem] font-semibold enabled:hover:bg-brand-700 disabled:opacity-40 disabled:cursor-not-allowed transition-colors cursor-pointer"><Check size={12} /> Approve and continue</button>
                                 )}
                               </div>
                             )}
@@ -2327,7 +2434,7 @@ function IpeSection({ control, canWrite, isAuditor }: { control: Control; canWri
 
               {/* the verdict — a single failure sinks it, so the suggestion is stated and the auditor signs it */}
               <div className="mt-3 flex items-center justify-between gap-3 flex-wrap">
-                <p className="text-[0.65625rem] text-ink-400 min-w-0">
+                <p className="text-[0.6875rem] text-ink-400 min-w-0">
                   {ipe.conclusion !== 'Not tested'
                     ? <>Concluded <span className={cn('font-bold', IPE_TONE[ipe.conclusion])}>{ipe.conclusion.toLowerCase()}</span> by {ipe.testedBy}{ipe.testedAt ? `, ${ipe.testedAt}` : ''}.</>
                     : allAnswered
@@ -2338,15 +2445,15 @@ function IpeSection({ control, canWrite, isAuditor }: { control: Control; canWri
                   <div className="flex items-center gap-2 shrink-0">
                     <button disabled={!allAnswered || suggestion !== 'Reliable'} title={!allAnswered ? `Work all ${ipe.checks.length} checks first.` : suggestion !== 'Reliable' ? 'A check failed — the report cannot be concluded reliable.' : undefined}
                       onClick={() => { concludeIpe(control.id, 'Reliable'); setOpen(false);  }}
-                      className="h-9 px-4 inline-flex items-center gap-1.5 rounded-lg bg-compliant-600 text-white text-[0.78125rem] font-semibold enabled:hover:bg-compliant-700 disabled:opacity-40 disabled:cursor-not-allowed transition-colors cursor-pointer"><CheckCircle2 size={14} /> Reliable</button>
+                      className="h-9 px-4 inline-flex items-center gap-1.5 rounded-lg bg-compliant-600 text-white text-[0.8125rem] font-semibold enabled:hover:bg-compliant-700 disabled:opacity-40 disabled:cursor-not-allowed transition-colors cursor-pointer"><CheckCircle2 size={14} /> Reliable</button>
                     <button disabled={!allAnswered}
                       onClick={() => { concludeIpe(control.id, 'Not reliable');  }}
-                      className="h-9 px-4 inline-flex items-center gap-1.5 rounded-lg border border-risk-300 text-risk-700 text-[0.78125rem] font-semibold enabled:hover:bg-risk-50 disabled:opacity-40 disabled:cursor-not-allowed transition-colors cursor-pointer"><XCircle size={14} /> Not reliable</button>
+                      className="h-9 px-4 inline-flex items-center gap-1.5 rounded-lg border border-risk-300 text-risk-700 text-[0.8125rem] font-semibold enabled:hover:bg-risk-50 disabled:opacity-40 disabled:cursor-not-allowed transition-colors cursor-pointer"><XCircle size={14} /> Not reliable</button>
                   </div>
                 )}
                 {canWrite && isAuditor && ipe.conclusion !== 'Not tested' && (
                   <button onClick={() => concludeIpe(control.id, 'Not tested')}
-                    className="shrink-0 h-8 px-3 inline-flex items-center gap-1.5 rounded-md border border-canvas-border text-[0.71875rem] font-semibold text-ink-600 hover:border-ink-300 transition-colors cursor-pointer"><RotateCcw size={12} /> Reopen</button>
+                    className="shrink-0 h-8 px-3 inline-flex items-center gap-1.5 rounded-md border border-canvas-border text-[0.75rem] font-semibold text-ink-600 hover:border-ink-300 transition-colors cursor-pointer"><RotateCcw size={12} /> Reopen</button>
                 )}
               </div>
 
@@ -2398,10 +2505,10 @@ function VerdictRow({ label, v, note, canWrite, placeholder, onNote, onRefilter,
         </span>
         <div className="min-w-0 flex-1">
           <div className="flex items-baseline gap-2 flex-wrap">
-            <span className="text-[0.65625rem] font-bold uppercase tracking-wider text-ink-400">{label}</span>
-            <span className={cn('text-[0.78125rem] font-semibold', accent)}>{v.headline}</span>
-            {v.level === 'warn' && !answered && <span className="text-[0.625rem] font-bold uppercase tracking-wider text-mitigated-700">Variance</span>}
-            {v.level === 'fail' && !answered && <span className="text-[0.625rem] font-bold uppercase tracking-wider text-risk-700">Completeness</span>}
+            <span className="text-[0.6875rem] font-bold uppercase tracking-wider text-ink-400">{label}</span>
+            <span className={cn('text-[0.8125rem] font-semibold', accent)}>{v.headline}</span>
+            {v.level === 'warn' && !answered && <span className="text-[0.6875rem] font-bold uppercase tracking-wider text-mitigated-700">Variance</span>}
+            {v.level === 'fail' && !answered && <span className="text-[0.6875rem] font-bold uppercase tracking-wider text-risk-700">Completeness</span>}
           </div>
           <p className="text-[0.6875rem] text-ink-500 leading-relaxed mt-0.5">{v.detail}</p>
 
@@ -2409,7 +2516,7 @@ function VerdictRow({ label, v, note, canWrite, placeholder, onNote, onRefilter,
               are not in the extract to be grouped. */}
           {v.breakdown && v.breakdown.length > 0 && (
             <div className="mt-2 rounded-md border border-canvas-border bg-canvas-elevated px-2.5 py-2">
-              <span className="block text-[0.625rem] font-bold uppercase tracking-wider text-ink-400 mb-1">Where the extra rows sit</span>
+              <span className="block text-[0.6875rem] font-bold uppercase tracking-wider text-ink-400 mb-1">Where the extra rows sit</span>
               <div className="flex flex-wrap gap-x-3 gap-y-1">
                 {v.breakdown.map(b => (
                   <span key={b.label} className="text-[0.6875rem] text-ink-600">
@@ -2419,7 +2526,7 @@ function VerdictRow({ label, v, note, canWrite, placeholder, onNote, onRefilter,
               </div>
             </div>
           )}
-          {v.causes && !answered && <p className="mt-1.5 text-[0.65625rem] text-ink-400 leading-relaxed">{v.causes}</p>}
+          {v.causes && !answered && <p className="mt-1.5 text-[0.6875rem] text-ink-400 leading-relaxed">{v.causes}</p>}
 
           {children}
           {v.blocks && !children && (
@@ -2436,16 +2543,16 @@ function VerdictRow({ label, v, note, canWrite, placeholder, onNote, onRefilter,
                   <div className="flex items-center gap-2 flex-wrap mb-2">
                     <button onClick={onRefilter}
                       className="h-7 px-3 inline-flex items-center gap-1.5 rounded-md border border-canvas-border bg-canvas-elevated text-[0.6875rem] font-semibold text-ink-700 hover:border-ink-300 transition-colors cursor-pointer"><RotateCcw size={11} /> Refilter</button>
-                    <span className="text-[0.625rem] text-ink-400">Adjust the filter and extract again — the comparison re-runs.</span>
+                    <span className="text-[0.6875rem] text-ink-400">Adjust the filter and extract again — the comparison re-runs.</span>
                   </div>
                 )}
-                <span className="block text-[0.625rem] text-ink-400 mb-1">{onRefilter ? 'Or accept it, and say why:' : 'Say why:'}</span>
+                <span className="block text-[0.6875rem] text-ink-400 mb-1">{onRefilter ? 'Or accept it, and say why:' : 'Say why:'}</span>
                 <textarea value={draft} onChange={e => setDraft(e.target.value)} rows={2} placeholder={placeholder}
-                  className="w-full px-2.5 py-2 rounded-lg border border-canvas-border bg-canvas-elevated text-[0.71875rem] leading-relaxed resize-none focus:outline-none focus:ring-2 focus:ring-brand-200" />
+                  className="w-full px-2.5 py-2 rounded-lg border border-canvas-border bg-canvas-elevated text-[0.75rem] leading-relaxed resize-none focus:outline-none focus:ring-2 focus:ring-brand-200" />
                 <div className="mt-1.5 flex items-center gap-2 flex-wrap">
                   <button disabled={!draft.trim()} onClick={() => { onNote(draft.trim()); setOpen(false); }}
                     className="h-7 px-3 rounded-md bg-brand-600 text-white text-[0.6875rem] font-semibold enabled:hover:bg-brand-700 disabled:opacity-40 disabled:cursor-not-allowed transition-colors cursor-pointer">Accept with reason</button>
-                  <span className="text-[0.625rem] text-ink-400">This prints on the working paper beside the figure.</span>
+                  <span className="text-[0.6875rem] text-ink-400">This prints on the working paper beside the figure.</span>
                 </div>
               </div>
             ) : <p className="mt-1.5 text-[0.6875rem] text-ink-400">Not resolved.</p>
@@ -2487,15 +2594,15 @@ function PopulationPreviewModal({ control, onClose }: { control: Control; onClos
 
   return (
     <div className="modal-backdrop" onClick={onClose}>
-      <motion.div className="modal" style={{ maxWidth: 940 }} onClick={e => e.stopPropagation()} initial={{ opacity: 0, y: 14, scale: 0.98 }} animate={{ opacity: 1, y: 0, scale: 1 }}>
+      <motion.div role="dialog" aria-modal="true" aria-labelledby="population-title" className="modal" style={{ maxWidth: 940 }} onClick={e => e.stopPropagation()} initial={{ opacity: 0, y: 14, scale: 0.98 }} animate={{ opacity: 1, y: 0, scale: 1 }}><DialogFocus onEscape={onClose} />
         <div className="px-5 py-4 border-b border-canvas-border flex items-start justify-between gap-3">
           <div className="min-w-0">
             <div className="flex items-center gap-2 flex-wrap">
-              <h3 className="text-[0.875rem] font-bold text-ink-900">The population</h3>
+              <h3 id="population-title" className="text-[0.875rem] font-bold text-ink-900">The population</h3>
               {pop.version && <span className="wp-ref">{pop.version}</span>}
-              {pop.locked && <span className="inline-flex items-center gap-1 text-[0.6875rem] font-bold text-compliant-700"><Lock size={11} /> Locked</span>}
+              {pop.locked && <span className="inline-flex items-center gap-1 text-[0.6875rem] font-bold text-compliant-700"><Database size={11} /> Locked</span>}
             </div>
-            <p className="text-[0.71875rem] text-ink-500 mt-1">
+            <p className="text-[0.75rem] text-ink-500 mt-1">
               First {rows.length} of <span className="tabular-nums font-semibold text-ink-700">{pop.count.toLocaleString()}</span> instances
               {pop.sourceFile && <> · filtered out of <span className="font-mono text-[0.6875rem] text-ink-600">{pop.sourceFile}</span></>}
             </p>
@@ -2504,7 +2611,7 @@ function PopulationPreviewModal({ control, onClose }: { control: Control; onClos
           <button onClick={onClose} className="shrink-0 h-8 px-3 rounded-md border border-canvas-border text-[0.75rem] font-semibold text-ink-600 hover:text-ink-900 hover:border-ink-300 transition-colors cursor-pointer">Close</button>
         </div>
         <div className="max-h-[60vh] overflow-auto">
-          <table className="w-full border-collapse text-[0.71875rem]">
+          <table className="w-full border-collapse text-[0.75rem]">
             <thead className="sticky top-0 bg-canvas-elevated">
               <tr>
                 {['Reference', 'Date', 'Description', 'Account', 'Amount', 'Approved by'].map(h => (
@@ -2564,9 +2671,9 @@ function CountContext({ control, canWrite, locked }: { control: Control; canWrit
 
   return (
     <>
-      <span className="block text-[0.65625rem] font-bold uppercase tracking-wider text-ink-400 mt-4 mb-2">Does the count read right?</span>
+      <span className="block text-[0.6875rem] font-bold uppercase tracking-wider text-ink-400 mt-4 mb-2">Does the count read right?</span>
       <div className="rounded-xl border border-canvas-border bg-canvas-elevated p-3.5">
-        <div className="flex flex-wrap items-baseline gap-x-4 gap-y-1 text-[0.71875rem] text-ink-500">
+        <div className="flex flex-wrap items-baseline gap-x-4 gap-y-1 text-[0.75rem] text-ink-500">
           <span className="text-[0.8125rem] font-bold text-ink-900 tabular-nums">{pop.count.toLocaleString()} instances</span>
           {perMonth != null && <span><span className="text-ink-400">around</span> <b className="font-semibold text-ink-700 tabular-nums">{perMonth.toLocaleString()}</b> a month</span>}
           {prior && (
@@ -2601,19 +2708,19 @@ function CountContext({ control, canWrite, locked }: { control: Control; canWrit
               })}
             </div>
             <div className="mt-1 flex items-center gap-1">
-              {months.map(m => <span key={m.key} className={cn('flex-1 min-w-0 text-center text-[0.625rem] font-semibold uppercase tracking-wide', m.n === 0 ? 'text-risk-700' : 'text-ink-400')}>{m.label}</span>)}
+              {months.map(m => <span key={m.key} className={cn('flex-1 min-w-0 text-center text-[0.6875rem] font-semibold uppercase tracking-wide', m.n === 0 ? 'text-risk-700' : 'text-ink-400')}>{m.label}</span>)}
             </div>
           </>
         )}
 
         {zeros.length > 0 && (
-          <p className="mt-2.5 text-[0.71875rem] text-risk-700 inline-flex items-start gap-1.5">
+          <p className="mt-2.5 text-[0.75rem] text-risk-700 inline-flex items-start gap-1.5">
             <AlertTriangle size={12} className="mt-0.5 shrink-0" />
             <span>No instances at all in {zeros.map(m => m.label).join(', ')} — either the control did not run, or those months are not in the extract.</span>
           </p>
         )}
         {spikes.size > 0 && (
-          <p className="mt-1.5 text-[0.71875rem] text-mitigated-800 inline-flex items-start gap-1.5">
+          <p className="mt-1.5 text-[0.75rem] text-mitigated-800 inline-flex items-start gap-1.5">
             <AlertCircle size={12} className="mt-0.5 shrink-0" />
             <span>{months.filter(m => spikes.has(m.key)).map(m => m.label).join(', ')} holds more than double a typical month — usually a duplicate load or a second entity, occasionally the business itself.</span>
           </p>
@@ -2621,13 +2728,13 @@ function CountContext({ control, canWrite, locked }: { control: Control; canWrit
 
         <div className="mt-3 pt-3 border-t border-canvas-border flex items-center justify-between gap-3 flex-wrap">
           {confirmed ? (
-            <span className="text-[0.71875rem] font-semibold text-compliant-700 inline-flex items-center gap-1.5"><CheckCircle2 size={13} /> Count agreed by {confirmed.by}, {confirmed.at}</span>
+            <span className="text-[0.75rem] font-semibold text-compliant-700 inline-flex items-center gap-1.5"><CheckCircle2 size={13} /> Count agreed by {confirmed.by}, {confirmed.at}</span>
           ) : (
-            <p className="text-[0.65625rem] text-ink-400 min-w-0 flex-1">The arithmetic is settled above. This is the judgement it cannot make — that this is what a{months.length ? ` ${months.length}-month` : ''} run of this control looks like.</p>
+            <p className="text-[0.6875rem] text-ink-400 min-w-0 flex-1">The arithmetic is settled above. This is the judgement it cannot make — that this is what a{months.length ? ` ${months.length}-month` : ''} run of this control looks like.</p>
           )}
           {!confirmed && canWrite && !locked && (
             <button onClick={() => { setPopulationFacts(control.id, { countConfirmed: { by: me, at: 'just now' } }); logEvent({ action: 'Update', description: `Agreed the population count for ${control.id} — ${pop.count.toLocaleString()} instances`, module: 'SOX ICFR', entity: 'Evidence' }); }}
-              className="shrink-0 h-8 px-3 inline-flex items-center gap-1.5 rounded-md border border-canvas-border bg-canvas-elevated text-[0.71875rem] font-semibold text-ink-700 hover:border-brand-300 hover:text-brand-700 transition-colors cursor-pointer"><Check size={12} /> The count reads right</button>
+              className="shrink-0 h-8 px-3 inline-flex items-center gap-1.5 rounded-md border border-canvas-border bg-canvas-elevated text-[0.75rem] font-semibold text-ink-700 hover:border-brand-300 hover:text-brand-700 transition-colors cursor-pointer"><Check size={12} /> The count reads right</button>
           )}
         </div>
       </div>
@@ -2669,9 +2776,9 @@ function ControlUploadModal({ onClose, onAdd }: { onClose: () => void; onAdd: (n
   };
   return createPortal(
     <div className="modal-backdrop" onClick={onClose}>
-      <motion.div className="modal" style={{ maxWidth: 520 }} onClick={e => e.stopPropagation()} initial={{ opacity: 0, y: 14, scale: 0.98 }} animate={{ opacity: 1, y: 0, scale: 1 }}>
+      <motion.div role="dialog" aria-modal="true" aria-labelledby="add-source-title" className="modal" style={{ maxWidth: 520 }} onClick={e => e.stopPropagation()} initial={{ opacity: 0, y: 14, scale: 0.98 }} animate={{ opacity: 1, y: 0, scale: 1 }}><DialogFocus onEscape={onClose} />
         <div className="px-5 py-4">
-          <h3 className="text-[0.875rem] font-bold text-ink-900">Add a source file</h3>
+          <h3 id="add-source-title" className="text-[0.875rem] font-bold text-ink-900">Add a source file</h3>
           <p className="text-[0.75rem] text-ink-500 mt-1 leading-relaxed">
             It joins this audit's files, so every other control can draw on it without being asked where it came from again.
           </p>
@@ -2679,29 +2786,29 @@ function ControlUploadModal({ onClose, onAdd }: { onClose: () => void; onAdd: (n
           {name ? (
             <div className="mt-3 flex items-center gap-2 px-3 py-2.5 rounded-lg border border-canvas-border bg-paper-50/60">
               <FileText size={13} className="text-brand-600 shrink-0" />
-              <span className="text-[0.78125rem] font-semibold text-ink-900 truncate min-w-0">{name}</span>
+              <span className="text-[0.8125rem] font-semibold text-ink-900 truncate min-w-0">{name}</span>
               <span className="text-[0.6875rem] text-ink-400 tabular-nums shrink-0 ml-auto">{rows.toLocaleString()} rows</span>
               <button onClick={() => { setName(''); setOrigin(undefined); }} aria-label="Choose a different file"
                 className="p-1 rounded text-ink-400 hover:text-risk-700 cursor-pointer shrink-0"><X size={12} /></button>
             </div>
           ) : (
             <button onClick={pick} disabled={reading}
-              className="mt-3 w-full px-3 py-4 rounded-xl border border-dashed border-canvas-border bg-canvas-elevated hover:border-brand-400 hover:bg-brand-50/40 transition-colors cursor-pointer text-[0.78125rem] font-semibold text-ink-700 inline-flex items-center justify-center gap-2">
+              className="mt-3 w-full px-3 py-4 rounded-xl border border-dashed border-canvas-border bg-canvas-elevated hover:border-brand-400 hover:bg-brand-50/40 transition-colors cursor-pointer text-[0.8125rem] font-semibold text-ink-700 inline-flex items-center justify-center gap-2">
               {reading ? <><Loader2 size={14} className="animate-spin" /> Reading…</> : <><Upload size={14} className="text-brand-600" /> Choose a file</>}
             </button>
           )}
 
-          <span className="block text-[0.65625rem] font-bold uppercase tracking-wider text-ink-400 mt-4 mb-2">Where did this file come from?</span>
+          <span className="block text-[0.6875rem] font-bold uppercase tracking-wider text-ink-400 mt-4 mb-2">Where did this file come from?</span>
           <OriginPicker value={origin} onPick={setOrigin} disabled={!name} />
-          <p className="text-[0.65625rem] text-ink-400 mt-2 leading-relaxed">
+          <p className="text-[0.6875rem] text-ink-400 mt-2 leading-relaxed">
             Asked once, here, and recorded on the file. Nothing that reads this file later has to ask again — and it can only be changed back on the file itself, under Configuration.
           </p>
         </div>
         <div className="flex items-center justify-end gap-2 px-5 py-3.5 border-t border-canvas-border bg-paper-50/40">
-          <button onClick={onClose} className="h-9 px-3.5 text-[0.78125rem] font-semibold text-ink-600 hover:text-ink-900 cursor-pointer">Cancel</button>
+          <button onClick={onClose} className="h-9 px-3.5 text-[0.8125rem] font-semibold text-ink-600 hover:text-ink-900 cursor-pointer">Cancel</button>
           <button disabled={!name || !origin} title={!name ? 'Choose a file first' : !origin ? 'Say where it came from first' : undefined}
             onClick={() => origin && onAdd(name, rows, origin)}
-            className="h-9 px-4 inline-flex items-center gap-1.5 rounded-lg bg-brand-600 text-white text-[0.78125rem] font-semibold enabled:hover:bg-brand-700 disabled:opacity-40 disabled:cursor-not-allowed transition-colors cursor-pointer"><Plus size={13} /> Add file</button>
+            className="h-9 px-4 inline-flex items-center gap-1.5 rounded-lg bg-brand-600 text-white text-[0.8125rem] font-semibold enabled:hover:bg-brand-700 disabled:opacity-40 disabled:cursor-not-allowed transition-colors cursor-pointer"><Plus size={13} /> Add file</button>
         </div>
       </motion.div>
     </div>,
@@ -2739,7 +2846,7 @@ function AwaitingInputs({ control, canAsk }: { control: Control; canAsk: boolean
   if (!awaiting.length) return null;
   return (
     <div className="mt-1.5">
-      <p className="text-[0.65625rem] text-mitigated-800 leading-relaxed">
+      <p className="text-[0.6875rem] text-mitigated-800 leading-relaxed">
         {awaiting.length} attribute{awaiting.length === 1 ? '' : 's'} — {awaiting.map(a => a.code).join(', ')} — {awaiting.length === 1 ? 'is still missing a required file' : 'are still missing required files'}. {awaiting.length === 1 ? 'It is' : 'They are'} uploaded on the attribute's checklist in TOE.
       </p>
       {canAsk && (
@@ -2804,6 +2911,10 @@ function SourcePickerForm({ control, exclude, submitLabel, onSubmit, seedFile, s
   const [picked, setPicked] = useState<string | null>(seedFile ?? null);
   const [busy, setBusy] = useState(false);
   const [uploading, setUploading] = useState(false);
+  // A run on this control from the Ira chat — its own extract shows here as
+  // progress; any run holds Extract, so one population is never filtered twice.
+  const liveRun = useControlRun(control.id);
+  const popRun = !busy && runStageOf(liveRun) === 'population' ? liveRun : null;
   const chosen = files.find(f => f.name === picked);
   const audit = eng.audits.find(a => a.id === openAuditId);
   const from = audit?.windowFrom ?? '';
@@ -2866,7 +2977,7 @@ function SourcePickerForm({ control, exclude, submitLabel, onSubmit, seedFile, s
       <div className="mb-3 flex items-start justify-between gap-3">
         <div className="min-w-0">
           <h4 className="text-[0.8125rem] font-bold text-ink-900">Select the source</h4>
-          <p className="text-[0.71875rem] text-ink-500 mt-1 leading-relaxed">The files this control's evidence comes from. Then say what to take out of them: the source is the raw data; the population is what this control actually operated on.</p>
+          <p className="text-[0.75rem] text-ink-500 mt-1 leading-relaxed">The files this control's evidence comes from. Then say what to take out of them: the source is the raw data; the population is what this control actually operated on.</p>
         </div>
         {/* Upload, not "Add a source" (dev call, Aug 2026). The picker it
             replaced offered the platform's whole data catalogue and a
@@ -2876,7 +2987,7 @@ function SourcePickerForm({ control, exclude, submitLabel, onSubmit, seedFile, s
             the same action, and two buttons for one job is one button too many. */}
         {files.length > 0 && (
           <button onClick={() => setUploading(true)}
-            className="shrink-0 h-8 px-3 inline-flex items-center gap-1.5 rounded-md border border-canvas-border bg-canvas-elevated text-[0.71875rem] font-semibold text-ink-700 hover:border-brand-300 hover:text-brand-700 transition-colors cursor-pointer"><FileUp size={12} /> Upload file</button>
+            className="shrink-0 h-8 px-3 inline-flex items-center gap-1.5 rounded-md border border-canvas-border bg-canvas-elevated text-[0.75rem] font-semibold text-ink-700 hover:border-brand-300 hover:text-brand-700 transition-colors cursor-pointer"><FileUp size={12} /> Upload file</button>
         )}
       </div>
 
@@ -2889,7 +3000,7 @@ function SourcePickerForm({ control, exclude, submitLabel, onSubmit, seedFile, s
       {hint && (
         <div className="mb-3 rounded-lg border border-brand-200 bg-brand-50/40 px-3.5 py-2.5 flex items-start gap-2">
           <Sparkles size={13} className="text-brand-600 mt-0.5 shrink-0" />
-          <p className="text-[0.71875rem] text-ink-700 leading-relaxed min-w-0">
+          <p className="text-[0.75rem] text-ink-700 leading-relaxed min-w-0">
             <span className="font-semibold text-ink-900">Likely {hint.name}</span> — {hint.reason}. Pick it below if you agree.
           </p>
         </div>
@@ -2909,11 +3020,11 @@ function SourcePickerForm({ control, exclude, submitLabel, onSubmit, seedFile, s
           <Paperclip size={13} className="text-brand-600 mt-0.5 shrink-0" />
           <div className="min-w-0">
             {expected.size > 0 ? (
-              <p className="text-[0.71875rem] text-ink-700 leading-relaxed">
+              <p className="text-[0.75rem] text-ink-700 leading-relaxed">
                 <span className="font-semibold text-ink-900">{expected.size === 1 ? 'One file is' : `${expected.size} files are`} what this control reads</span> — {expected.size === 1 ? 'a required file' : 'required files'} on its attributes. {expected.size === 1 ? 'It is' : 'They are'} first in the list.
               </p>
             ) : (
-              <p className="text-[0.71875rem] text-ink-700 leading-relaxed">
+              <p className="text-[0.75rem] text-ink-700 leading-relaxed">
                 <span className="font-semibold text-ink-900">{inputs.length === 1 ? 'The file' : 'The files'} this control reads {inputs.length === 1 ? 'is' : 'are'} not on this audit</span> — {inputs.map(i => i.name).join(', ')}. {inputs.length === 1 ? 'It was' : 'They were'} uploaded as {inputs.length === 1 ? 'a required file' : 'required files'} on {inputs.length === 1 ? 'an attribute' : 'its attributes'}, but nobody has uploaded {inputs.length === 1 ? 'it' : 'them'} here. Upload above, or draw this population off a file that is.
               </p>
             )}
@@ -2933,14 +3044,14 @@ function SourcePickerForm({ control, exclude, submitLabel, onSubmit, seedFile, s
              finds it waiting rather than uploading it again. */
           <div className="px-4 py-5 text-center">
             <span className="w-9 h-9 rounded-lg bg-brand-50 text-brand-600 inline-flex items-center justify-center"><FileUp size={17} /></span>
-            <p className="text-[0.78125rem] font-semibold text-ink-800 mt-2">{exclude.length ? 'Every file on this audit is already in this population' : 'No source data on this audit yet'}</p>
-            <p className="text-[0.71875rem] text-ink-500 mt-1 leading-relaxed max-w-[26rem] mx-auto">
+            <p className="text-[0.8125rem] font-semibold text-ink-800 mt-2">{exclude.length ? 'Every file on this audit is already in this population' : 'No source data on this audit yet'}</p>
+            <p className="text-[0.75rem] text-ink-500 mt-1 leading-relaxed max-w-104 mx-auto">
               {exclude.length
                 ? 'Upload another one and it joins the audit\'s sources — every other control can then draw on it without being asked where it came from again.'
                 : 'No trial balance or general ledger was attached when this audit was created. Upload what this control operates on and it joins the audit\'s sources — every other control can then draw on it without being asked where it came from again.'}
             </p>
             <button onClick={() => setUploading(true)}
-              className="mt-3 h-9 px-4 inline-flex items-center gap-1.5 rounded-lg bg-brand-600 text-white text-[0.78125rem] font-semibold hover:bg-brand-700 transition-colors cursor-pointer"><FileUp size={14} /> Upload file</button>
+              className="mt-3 h-9 px-4 inline-flex items-center gap-1.5 rounded-lg bg-brand-600 text-white text-[0.8125rem] font-semibold hover:bg-brand-700 transition-colors cursor-pointer"><FileUp size={14} /> Upload file</button>
           </div>
         ) : ordered.map((f, idx) => {
           const on = picked === f.name;
@@ -2953,7 +3064,7 @@ function SourcePickerForm({ control, exclude, submitLabel, onSubmit, seedFile, s
               {/* The line between the attributes' required files and everything else.
                   Only drawn when there is something on both sides of it. */}
               {inputs.length > 0 && idx === firstOther && idx > 0 && (
-                <div className="px-3 py-1.5 bg-paper-50/70 border-b border-canvas-border text-[0.625rem] font-bold uppercase tracking-wide text-ink-400">
+                <div className="px-3 py-1.5 bg-paper-50/70 border-b border-canvas-border text-[0.6875rem] font-bold uppercase tracking-wide text-ink-500">
                   Not a required file on any of this control's attributes
                 </div>
               )}
@@ -2967,18 +3078,18 @@ function SourcePickerForm({ control, exclude, submitLabel, onSubmit, seedFile, s
                 {f.systemFetched
                   ? <Database size={13} className={cn('shrink-0', on ? 'text-brand-600' : 'text-ink-400')} />
                   : <FileText size={13} className={cn('shrink-0', on ? 'text-brand-600' : 'text-ink-400')} />}
-                <span className={cn('text-[0.78125rem] truncate min-w-0', on ? 'font-semibold text-brand-700' : 'text-ink-800')}>{f.name}</span>
+                <span className={cn('text-[0.8125rem] truncate min-w-0', on ? 'font-semibold text-brand-700' : 'text-ink-800')}>{f.name}</span>
                 {/* Which attributes read it. The reason a file is at the top of
                     the list belongs on the row, not in a paragraph above it. */}
                 {wanted && (
-                  <span className="shrink-0 inline-flex items-center gap-1 px-1.5 py-0.5 rounded bg-brand-50 text-brand-700 text-[0.625rem] font-bold whitespace-nowrap">
+                  <span className="shrink-0 inline-flex items-center gap-1 px-1.5 py-0.5 rounded bg-brand-50 text-brand-700 text-[0.6875rem] font-bold whitespace-nowrap">
                     <Paperclip size={9} /> {wanted.attributes.join(', ')}
                   </span>
                 )}
                 {f.system && <span className="shrink-0 text-[0.6875rem] text-ink-400 hidden lg:inline">{f.system}</span>}
                 {/* provenance, inherited — stated on every file so the choice of
                     source is made knowing what it is */}
-                <span className={cn('shrink-0 px-1.5 py-0.5 rounded text-[0.625rem] font-bold uppercase tracking-wide whitespace-nowrap',
+                <span className={cn('shrink-0 px-1.5 py-0.5 rounded text-[0.6875rem] font-bold uppercase tracking-wide whitespace-nowrap',
                   !usable ? 'bg-mitigated-50 text-mitigated-800' : f.origin === 'Client-prepared' ? 'bg-paper-100 text-ink-600' : 'bg-compliant-50 text-compliant-700')}>
                   {originLabel(f)}
                 </span>
@@ -2996,37 +3107,38 @@ function SourcePickerForm({ control, exclude, submitLabel, onSubmit, seedFile, s
           system, the criteria ARE the query and no fixed set of fields fits
           them. Drafted from the control and its window, then edited. */}
       <div className="flex items-center justify-between gap-3 mb-2">
-        <span className="block text-[0.65625rem] font-bold uppercase tracking-wider text-ink-400">Extraction criteria</span>
+        <span className="block text-[0.6875rem] font-bold uppercase tracking-wider text-ink-400">Extraction criteria</span>
         {/* A refilter is not a draft — the sentence in the box is the auditor's
             own, and calling it drafted would invite them to trust it as new. */}
         {seedCriteria
-          ? <span className="inline-flex items-center gap-1 text-[0.65625rem] text-ink-400"><RotateCcw size={11} className="text-ink-400" /> as you wrote it</span>
+          ? <span className="inline-flex items-center gap-1 text-[0.6875rem] text-ink-400"><RotateCcw size={11} className="text-ink-400" /> as you wrote it</span>
           : <IraDrafted />}
       </div>
       <textarea value={criteria} onChange={e => setCriteria(e.target.value)} rows={2}
         aria-label="Extraction criteria"
         placeholder="What to take out of the source — in plain English, for the reviewer."
-        className="w-full rounded-lg border border-canvas-border bg-canvas-elevated px-2.5 py-2 text-[0.78125rem] text-ink-800 placeholder:text-ink-400 focus:outline-none focus:ring-2 focus:ring-brand-200 resize-none" />
+        className="w-full rounded-lg border border-canvas-border bg-canvas-elevated px-2.5 py-2 text-[0.8125rem] text-ink-800 placeholder:text-ink-400 focus:outline-none focus:ring-2 focus:ring-brand-200 resize-none" />
       {/* The window is stated, not asked for — it is the audit's own, which the
           form was already defaulting to, and the IPE is what proves the report
           actually covers it. */}
-      <p className="mt-2 text-[0.65625rem] text-ink-400">
+      <p className="mt-2 text-[0.6875rem] text-ink-400">
         {from && to ? <>Period covered · {from} – {to} — the audit's own window.</> : <>Period covered · the audit's own window.</>}{' '}
         The IPE check on this report is what confirms it was run over that period.
       </p>
 
+      {popRun && <div className="mt-3"><LiveRunLine run={popRun} /></div>}
       <div className="mt-3 flex items-center justify-between gap-3 flex-wrap">
-        <p className="text-[0.65625rem] text-ink-400 min-w-0">
-          {!chosen ? (seedFileMissing
+        <p className="text-[0.6875rem] text-ink-400 min-w-0">
+          {liveRun && !popRun && !busy ? busyNote(liveRun) : !chosen ? (seedFileMissing
             ? <>The audit no longer offers <span className="font-semibold text-ink-600">{seedFile}</span> — pick the file this filter should run against.</>
             : 'Pick the source file first.')
             : hasRowCount(chosen.name)
               ? <>Filtering <span className="tabular-nums font-semibold text-ink-600">{chosen.rows.toLocaleString()}</span> rows by: {criteria || 'nothing yet'}</>
               : <>Filtering {chosen.name} by: {criteria || 'nothing yet'} — a PDF has no rows to count.</>}
         </p>
-        <button disabled={!chosen || busy} onClick={submit}
-          title={!chosen ? 'Pick a source file first' : undefined}
-          className="shrink-0 h-9 px-4 inline-flex items-center gap-1.5 rounded-lg bg-brand-600 text-white text-[0.78125rem] font-semibold enabled:hover:bg-brand-700 disabled:opacity-40 disabled:cursor-not-allowed transition-colors cursor-pointer">
+        <button disabled={!chosen || busy || !!liveRun} onClick={submit}
+          title={liveRun && !busy ? busyNote(liveRun) : !chosen ? 'Pick a source file first' : undefined}
+          className="shrink-0 h-9 px-4 inline-flex items-center gap-1.5 rounded-lg bg-brand-600 text-white text-[0.8125rem] font-semibold enabled:hover:bg-brand-700 disabled:opacity-40 disabled:cursor-not-allowed transition-colors cursor-pointer">
           {busy ? <><Loader2 size={14} className="animate-spin" /> Extracting…</> : <><Database size={14} /> {submitLabel}</>}
         </button>
       </div>
@@ -3198,7 +3310,7 @@ function PopulationSection({ control, canEdit, locked: gated = false }: { contro
         canWrite ? (
           <>
             {refilterSeed && (
-              <p className="mb-3 text-[0.71875rem] text-ink-600 bg-paper-50/60 border border-canvas-border rounded-lg px-3 py-2 flex items-start gap-1.5">
+              <p className="mb-3 text-[0.75rem] text-ink-600 bg-paper-50/60 border border-canvas-border rounded-lg px-3 py-2 flex items-start gap-1.5">
                 <Filter size={13} className="mt-0.5 shrink-0 text-ink-400" />
                 <span>The extract is gone and the filter is back as you wrote it. Edit it and extract again — nothing else about this control has moved.</span>
               </p>
@@ -3227,7 +3339,7 @@ function PopulationSection({ control, canEdit, locked: gated = false }: { contro
                   the count of them now — the files themselves are listed below,
                   because a control can stand on several and a single line could
                   only ever have shown the first. */}
-              <p className="text-[0.71875rem] text-ink-500 mt-1.5">
+              <p className="text-[0.75rem] text-ink-500 mt-1.5">
                 <span className="text-ink-400">Filtered out of</span> {sources.length} source file{sources.length === 1 ? '' : 's'}
               </p>
               {locked && <p className="text-[0.6875rem] text-ink-400 mt-1.5">Locked by {pop.locked!.by}, {pop.locked!.at}</p>}
@@ -3235,7 +3347,7 @@ function PopulationSection({ control, canEdit, locked: gated = false }: { contro
             <div className="shrink-0 flex items-center gap-2">
               {/* the population is a number until somebody can look at it */}
               <button onClick={() => setPreviewing(true)}
-                className="h-7 px-2.5 inline-flex items-center gap-1.5 rounded-md border border-canvas-border text-[0.71875rem] font-semibold text-ink-600 hover:text-ink-900 hover:border-ink-300 transition-colors cursor-pointer"><Eye size={11} /> Preview</button>
+                className="h-7 px-2.5 inline-flex items-center gap-1.5 rounded-md border border-canvas-border text-[0.75rem] font-semibold text-ink-600 hover:text-ink-900 hover:border-ink-300 transition-colors cursor-pointer"><Eye size={11} /> Preview</button>
               {/* Refilter sits before Withdraw because it is the smaller of the
                   two and answers the commoner mistake: the file was right, the
                   filter was not. Both drop the same things — this one hands the
@@ -3247,17 +3359,17 @@ function PopulationSection({ control, canEdit, locked: gated = false }: { contro
                   it exists for with no answer but a full restart. */}
               {isAuditor && (
                 <button onClick={() => (control.operating.sampling ? setConfirmRefilter(true) : beginRefilter())}
-                  className="h-7 px-2.5 inline-flex items-center gap-1.5 rounded-md border border-canvas-border text-[0.71875rem] font-semibold text-ink-600 hover:text-brand-700 hover:border-brand-300 transition-colors cursor-pointer"><Filter size={11} /> Refilter</button>
+                  className="h-7 px-2.5 inline-flex items-center gap-1.5 rounded-md border border-canvas-border text-[0.75rem] font-semibold text-ink-600 hover:text-brand-700 hover:border-brand-300 transition-colors cursor-pointer"><Filter size={11} /> Refilter</button>
               )}
               {isAuditor && (
                 <button onClick={() => setWithdrawing(true)}
-                  className="h-7 px-2.5 inline-flex items-center gap-1.5 rounded-md border border-canvas-border text-[0.71875rem] font-semibold text-ink-500 hover:text-risk-700 hover:border-risk-300 transition-colors cursor-pointer"><RotateCcw size={11} /> Withdraw</button>
+                  className="h-7 px-2.5 inline-flex items-center gap-1.5 rounded-md border border-canvas-border text-[0.75rem] font-semibold text-ink-500 hover:text-risk-700 hover:border-risk-300 transition-colors cursor-pointer"><RotateCcw size={11} /> Withdraw</button>
               )}
             </div>
           </div>
 
           {unfiltered && (
-            <p className="mt-3 text-[0.71875rem] text-mitigated-800 bg-mitigated-50/60 border border-mitigated-200 rounded-lg px-3 py-2 flex items-start gap-1.5">
+            <p className="mt-3 text-[0.75rem] text-mitigated-800 bg-mitigated-50/60 border border-mitigated-200 rounded-lg px-3 py-2 flex items-start gap-1.5">
               <AlertTriangle size={13} className="mt-0.5 shrink-0" />
               <span>The population is the same size as the files it came from — nothing was filtered out. Unless this control really does operate on every row, refilter it down first.</span>
             </p>
@@ -3271,10 +3383,10 @@ function PopulationSection({ control, canEdit, locked: gated = false }: { contro
               readable without opening anything. */}
           <div className="mt-4">
             <div className="flex items-center justify-between gap-3 mb-2">
-              <span className="block text-[0.65625rem] font-bold uppercase tracking-wider text-ink-400">Source files · {sources.length}</span>
+              <span className="block text-[0.6875rem] font-bold uppercase tracking-wider text-ink-400">Source files · {sources.length}</span>
               {isAuditor && !locked && !addingSource && (
                 <button onClick={() => setAddingSource(true)}
-                  className="h-7 px-2.5 inline-flex items-center gap-1.5 rounded-md border border-canvas-border bg-canvas-elevated text-[0.71875rem] font-semibold text-ink-700 hover:border-brand-300 hover:text-brand-700 transition-colors cursor-pointer"><FileUp size={11} /> Add file</button>
+                  className="h-7 px-2.5 inline-flex items-center gap-1.5 rounded-md border border-canvas-border bg-canvas-elevated text-[0.75rem] font-semibold text-ink-700 hover:border-brand-300 hover:text-brand-700 transition-colors cursor-pointer"><FileUp size={11} /> Add file</button>
               )}
             </div>
             <div className="rounded-xl border border-canvas-border overflow-hidden">
@@ -3287,9 +3399,9 @@ function PopulationSection({ control, canEdit, locked: gated = false }: { contro
                   <div key={s.id} className="border-b border-canvas-border last:border-b-0 px-3 py-2.5">
                     <div className="flex items-center gap-2.5">
                       {rec?.systemFetched ? <Database size={13} className="shrink-0 text-ink-400" /> : <FileText size={13} className="shrink-0 text-ink-400" />}
-                      <span className="text-[0.78125rem] font-semibold text-ink-800 truncate min-w-0">{s.file}</span>
+                      <span className="text-[0.8125rem] font-semibold text-ink-800 truncate min-w-0">{s.file}</span>
                       {rec && (
-                        <span className={cn('shrink-0 px-1.5 py-0.5 rounded text-[0.625rem] font-bold uppercase tracking-wide whitespace-nowrap',
+                        <span className={cn('shrink-0 px-1.5 py-0.5 rounded text-[0.6875rem] font-bold uppercase tracking-wide whitespace-nowrap',
                           !fileUsable(rec) ? 'bg-mitigated-50 text-mitigated-800' : rec.origin === 'Client-prepared' ? 'bg-paper-100 text-ink-600' : 'bg-compliant-50 text-compliant-700')}>
                           {originLabel(rec)}
                         </span>
@@ -3306,7 +3418,7 @@ function PopulationSection({ control, canEdit, locked: gated = false }: { contro
                           className="shrink-0 h-7 w-7 inline-flex items-center justify-center rounded-md border border-canvas-border text-ink-400 hover:border-risk-300 hover:text-risk-600 transition-colors cursor-pointer"><Trash2 size={12} /></button>
                       )}
                     </div>
-                    <div className="mt-1 flex items-center gap-2.5 flex-wrap pl-[1.4375rem]">
+                    <div className="mt-1 flex items-center gap-2.5 flex-wrap pl-5.75">
                       {/* Population or assisting table. Asked on the row because
                           it is a fact about THIS file, and because it changes
                           what the two numbers beside it mean: an assisting
@@ -3319,26 +3431,26 @@ function PopulationSection({ control, canEdit, locked: gated = false }: { contro
                             if (next === 'assisting' && drawn > 0) { setRoleChange({ source: s, drawn }); return; }
                             setSourceRole(control.id, s.id, next);
                           }}
-                          className={cn('h-6 pl-1.5 pr-5 rounded border text-[0.625rem] font-bold uppercase tracking-wide cursor-pointer focus:outline-none focus:ring-2 focus:ring-brand-200',
+                          className={cn('h-6 pl-1.5 pr-5 rounded border text-[0.6875rem] font-bold uppercase tracking-wide cursor-pointer focus:outline-none focus:ring-2 focus:ring-brand-200',
                             isAssisting(s) ? 'border-canvas-border bg-paper-50 text-ink-500' : 'border-brand-200 bg-brand-50 text-brand-700')}>
                           <option value="population">Population</option>
                           <option value="assisting">Assisting</option>
                         </select>
                       ) : (
-                        <span className={cn('px-1.5 py-0.5 rounded text-[0.625rem] font-bold uppercase tracking-wide',
+                        <span className={cn('px-1.5 py-0.5 rounded text-[0.6875rem] font-bold uppercase tracking-wide',
                           isAssisting(s) ? 'bg-paper-100 text-ink-600' : 'bg-brand-50 text-brand-700')}>
                           {isAssisting(s) ? 'Assisting' : 'Population'}
                         </span>
                       )}
-                      <span className="text-[0.65625rem] text-ink-400 min-w-0 truncate">{s.criteria ?? 'No filter applied'}</span>
+                      <span className="text-[0.6875rem] text-ink-400 min-w-0 truncate">{s.criteria ?? 'No filter applied'}</span>
                       {/* How the testing of this file is going — how much of it was
                           drawn, how far its IPE checks have got — is the auditor's
                           read, not the owner's. They supplied the file; how much of
                           it is being looked at tells them how closely to expect to
                           be examined, which is the thing independence turns on. */}
                       {!isOwnerView && <>
-                        <span className="text-[0.65625rem] text-ink-400">·</span>
-                        <span className={cn('text-[0.65625rem] font-semibold', checks.length && proven === checks.length ? 'text-compliant-700' : 'text-ink-400')}>
+                        <span className="text-[0.6875rem] text-ink-400">·</span>
+                        <span className={cn('text-[0.6875rem] font-semibold', checks.length && proven === checks.length ? 'text-compliant-700' : 'text-ink-400')}>
                           {checks.length ? `${proven}/${checks.length} checks proven` : 'not registered yet'}
                         </span>
                       </>}
@@ -3346,14 +3458,14 @@ function PopulationSection({ control, canEdit, locked: gated = false }: { contro
                           once, here, so its blank sample column reads as correct
                           rather than as work nobody got to. */}
                       {isAssisting(s)
-                        ? <><span className="text-[0.65625rem] text-ink-400">·</span><span className="text-[0.65625rem] text-ink-500">joined by the workflow, never sampled</span></>
-                        : !isOwnerView && drawn > 0 && <><span className="text-[0.65625rem] text-ink-400">·</span><span className="text-[0.65625rem] font-semibold text-brand-700">{drawn} sampled</span></>}
+                        ? <><span className="text-[0.6875rem] text-ink-400">·</span><span className="text-[0.6875rem] text-ink-500">joined by the workflow, never sampled</span></>
+                        : !isOwnerView && drawn > 0 && <><span className="text-[0.6875rem] text-ink-400">·</span><span className="text-[0.6875rem] font-semibold text-brand-700">{drawn} sampled</span></>}
                     </div>
                   </div>
                 );
               })}
             </div>
-            <p className="mt-1.5 text-[0.65625rem] text-ink-400 leading-relaxed">
+            <p className="mt-1.5 text-[0.6875rem] text-ink-400 leading-relaxed">
               Each file is proved on its own and sampled on its own. The verdict on the report is one for all of them — a check that fails on any file sinks the lot.
             </p>
             {/* ── still owed ──────────────────────────────────────────────────
@@ -3403,7 +3515,7 @@ function PopulationSection({ control, canEdit, locked: gated = false }: { contro
           // Period first, then the count — so the count's arithmetic and the
           // count's context sit next to each other rather than either side of
           // a check about something else. *⁄}
-          // <span className="block text-[0.65625rem] font-bold uppercase tracking-wider text-ink-400 mb-2">Checked automatically</span>
+          // <span className="block text-[0.6875rem] font-bold uppercase tracking-wider text-ink-400 mb-2">Checked automatically</span>
           // <div className="space-y-1.5">
           // <VerdictRow label="Period covered" v={gv} note={pop.coverageNote} canWrite={canWrite && !locked}
           // placeholder="e.g. the system was cut over on 1 Mar — pre-cutover instances are in the legacy extract, tested separately"
@@ -3431,11 +3543,11 @@ function PopulationSection({ control, canEdit, locked: gated = false }: { contro
           // // <div className="mt-2 flex items-center gap-2">
           // // <input type="number" min={1} value={expectedDraft} onChange={e => setExpectedDraft(e.target.value)} placeholder="expected"
           // // disabled={!canWrite || locked}
-          // // className="w-28 h-8 px-2.5 rounded-lg border border-canvas-border bg-canvas-elevated text-[0.78125rem] tabular-nums focus:outline-none focus:ring-2 focus:ring-brand-200 disabled:opacity-50" />
+          // // className="w-28 h-8 px-2.5 rounded-lg border border-canvas-border bg-canvas-elevated text-[0.8125rem] tabular-nums focus:outline-none focus:ring-2 focus:ring-brand-200 disabled:opacity-50" />
           // // <button disabled={!canWrite || locked || !Number(expectedDraft)}
           // // onClick={() => setPopulationFacts(control.id, { expectedCount: Number(expectedDraft) })}
-          // // className="h-8 px-3 rounded-md border border-canvas-border text-[0.71875rem] font-semibold text-ink-700 enabled:hover:border-ink-300 disabled:opacity-40 disabled:cursor-not-allowed transition-colors cursor-pointer">Record</button>
-          // // <span className="text-[0.65625rem] text-ink-400">then the comparison is ours to make</span>
+          // // className="h-8 px-3 rounded-md border border-canvas-border text-[0.75rem] font-semibold text-ink-700 enabled:hover:border-ink-300 disabled:opacity-40 disabled:cursor-not-allowed transition-colors cursor-pointer">Record</button>
+          // // <span className="text-[0.6875rem] text-ink-400">then the comparison is ours to make</span>
           // // </div>
           // // )}
           // // </VerdictRow>
@@ -3481,7 +3593,7 @@ function PopulationSection({ control, canEdit, locked: gated = false }: { contro
               control that happens to be reading the file today. */}
 
           <div id="lock-population" className="mt-3 scroll-mt-4 flex items-center justify-between gap-3 flex-wrap">
-            <p className="text-[0.65625rem] text-ink-400 min-w-0">
+            <p className="text-[0.6875rem] text-ink-400 min-w-0">
               {/* The owner is told what happens next without being told what is
                   being looked for. "Locked" is a fact about their data; the
                   checks behind it are not theirs to read. */}
@@ -3496,9 +3608,9 @@ function PopulationSection({ control, canEdit, locked: gated = false }: { contro
             {!locked && isAuditor && (
               <button disabled={!ready} title={ready ? undefined : missing}
                 onClick={() => { lockPopulation(control.id); logEvent({ action: 'Update', description: `Locked the population for ${control.id}`, module: 'SOX ICFR', entity: 'Evidence' });  }}
-                className="shrink-0 h-9 px-4 inline-flex items-center gap-1.5 rounded-lg bg-brand-600 text-white text-[0.78125rem] font-semibold enabled:hover:bg-brand-700 disabled:opacity-40 disabled:cursor-not-allowed transition-colors cursor-pointer"><Lock size={14} /> Lock the population</button>
+                className="shrink-0 h-9 px-4 inline-flex items-center gap-1.5 rounded-lg bg-brand-600 text-white text-[0.8125rem] font-semibold enabled:hover:bg-brand-700 disabled:opacity-40 disabled:cursor-not-allowed transition-colors cursor-pointer"><Lock size={14} /> Lock the population</button>
             )}
-            {locked && <span className="shrink-0 inline-flex items-center gap-1.5 text-[0.71875rem] font-bold text-compliant-700"><Lock size={13} /> Locked</span>}
+            {locked && <span className="shrink-0 inline-flex items-center gap-1.5 text-[0.75rem] font-bold text-compliant-700"><Database size={13} /> Locked</span>}
           </div>
         </>
       )}
@@ -3520,12 +3632,12 @@ function PopulationSection({ control, canEdit, locked: gated = false }: { contro
           an extract to re-run it costs nothing and a dialog would be noise. */}
       {confirmRefilter && createPortal(
         <div className="modal-backdrop" onClick={() => setConfirmRefilter(false)}>
-          <motion.div className="modal" style={{ maxWidth: 460 }} onClick={e => e.stopPropagation()} initial={{ opacity: 0, y: 14, scale: 0.98 }} animate={{ opacity: 1, y: 0, scale: 1 }}>
+          <motion.div role="dialog" aria-modal="true" aria-labelledby="refilter-title" className="modal" style={{ maxWidth: 460 }} onClick={e => e.stopPropagation()} initial={{ opacity: 0, y: 14, scale: 0.98 }} animate={{ opacity: 1, y: 0, scale: 1 }}><DialogFocus onEscape={() => setConfirmRefilter(false)} />
             <div className="px-5 py-4">
               <div className="flex items-start gap-3">
                 <span className="w-9 h-9 rounded-lg bg-mitigated-50 text-mitigated-800 inline-flex items-center justify-center shrink-0"><Filter size={17} /></span>
                 <div className="min-w-0">
-                  <h3 className="text-[0.875rem] font-bold text-ink-900">Refilter this population?</h3>
+                  <h3 id="refilter-title" className="text-[0.875rem] font-bold text-ink-900">Refilter this population?</h3>
                   <p className="text-[0.75rem] text-ink-500 mt-1">
                     The {control.operating.sampling!.size} items drawn off it go, and so does every result recorded against them — they were drawn from the filter you are about to change.
                     {sources.length > 1 && <> The other {sources.length - 1} source file{sources.length === 2 ? '' : 's'} go too, and can be added back after.</>}
@@ -3535,9 +3647,9 @@ function PopulationSection({ control, canEdit, locked: gated = false }: { contro
               </div>
             </div>
             <div className="flex items-center justify-end gap-2 px-5 py-3.5 border-t border-canvas-border bg-paper-50/40">
-              <button onClick={() => setConfirmRefilter(false)} className="h-9 px-3.5 text-[0.78125rem] font-semibold text-ink-600 hover:text-ink-900 cursor-pointer">Keep it</button>
+              <button onClick={() => setConfirmRefilter(false)} className="h-9 px-3.5 text-[0.8125rem] font-semibold text-ink-600 hover:text-ink-900 cursor-pointer">Keep it</button>
               <button onClick={beginRefilter}
-                className="h-9 px-4 inline-flex items-center gap-1.5 rounded-lg bg-brand-600 text-white text-[0.78125rem] font-semibold hover:bg-brand-700 transition-colors cursor-pointer"><Filter size={13} /> Refilter</button>
+                className="h-9 px-4 inline-flex items-center gap-1.5 rounded-lg bg-brand-600 text-white text-[0.8125rem] font-semibold hover:bg-brand-700 transition-colors cursor-pointer"><Filter size={13} /> Refilter</button>
             </div>
           </motion.div>
         </div>,
@@ -3545,20 +3657,20 @@ function PopulationSection({ control, canEdit, locked: gated = false }: { contro
 
       {withdrawing && createPortal(
         <div className="modal-backdrop" onClick={() => setWithdrawing(false)}>
-          <motion.div className="modal" style={{ maxWidth: 440 }} onClick={e => e.stopPropagation()} initial={{ opacity: 0, y: 14, scale: 0.98 }} animate={{ opacity: 1, y: 0, scale: 1 }}>
+          <motion.div role="dialog" aria-modal="true" aria-labelledby="withdraw-population-title" className="modal" style={{ maxWidth: 440 }} onClick={e => e.stopPropagation()} initial={{ opacity: 0, y: 14, scale: 0.98 }} animate={{ opacity: 1, y: 0, scale: 1 }}><DialogFocus onEscape={() => setWithdrawing(false)} />
             <div className="px-5 py-4">
               <div className="flex items-start gap-3">
                 <span className="w-9 h-9 rounded-lg bg-risk-50 text-risk-700 inline-flex items-center justify-center shrink-0"><AlertTriangle size={17} /></span>
                 <div>
-                  <h3 className="text-[0.875rem] font-bold text-ink-900">Withdraw this population?</h3>
+                  <h3 id="withdraw-population-title" className="text-[0.875rem] font-bold text-ink-900">Withdraw this population?</h3>
                   <p className="text-[0.75rem] text-ink-500 mt-1">All {sources.length} source file{sources.length === 1 ? '' : 's'} go, and so do{control.operating.sampling ? ` the ${control.operating.sampling.size} items drawn off them and ` : ' '}every result recorded against them. To replace just one file, drop that file instead.</p>
                 </div>
               </div>
             </div>
             <div className="flex items-center justify-end gap-2 px-5 py-3.5 border-t border-canvas-border bg-paper-50/40">
-              <button onClick={() => setWithdrawing(false)} className="h-9 px-3.5 text-[0.78125rem] font-semibold text-ink-600 hover:text-ink-900 cursor-pointer">Keep it</button>
+              <button onClick={() => setWithdrawing(false)} className="h-9 px-3.5 text-[0.8125rem] font-semibold text-ink-600 hover:text-ink-900 cursor-pointer">Keep it</button>
               <button onClick={() => { clearPopulation(control.id); setWithdrawing(false); logEvent({ action: 'Delete', description: `Withdrew the population for ${control.id}`, module: 'SOX ICFR', entity: 'Evidence' }); }}
-                className="h-9 px-4 inline-flex items-center gap-1.5 rounded-lg bg-risk-600 text-white text-[0.78125rem] font-semibold hover:bg-risk-700 transition-colors cursor-pointer"><RotateCcw size={13} /> Withdraw</button>
+                className="h-9 px-4 inline-flex items-center gap-1.5 rounded-lg bg-risk-600 text-white text-[0.8125rem] font-semibold hover:bg-risk-700 transition-colors cursor-pointer"><RotateCcw size={13} /> Withdraw</button>
             </div>
           </motion.div>
         </div>,
@@ -3571,12 +3683,12 @@ function PopulationSection({ control, canEdit, locked: gated = false }: { contro
           dropdown that silently binned that work would not be trusted twice. */}
       {roleChange && createPortal(
         <div className="modal-backdrop" onClick={() => setRoleChange(null)}>
-          <motion.div className="modal" style={{ maxWidth: 460 }} onClick={e => e.stopPropagation()} initial={{ opacity: 0, y: 14, scale: 0.98 }} animate={{ opacity: 1, y: 0, scale: 1 }}>
+          <motion.div role="dialog" aria-modal="true" aria-labelledby="role-change-title" className="modal" style={{ maxWidth: 460 }} onClick={e => e.stopPropagation()} initial={{ opacity: 0, y: 14, scale: 0.98 }} animate={{ opacity: 1, y: 0, scale: 1 }}><DialogFocus onEscape={() => setRoleChange(null)} />
             <div className="px-5 py-4">
               <div className="flex items-start gap-3">
                 <span className="w-9 h-9 rounded-lg bg-mitigated-50 text-mitigated-800 inline-flex items-center justify-center shrink-0"><AlertTriangle size={17} /></span>
                 <div className="min-w-0">
-                  <h3 className="text-[0.875rem] font-bold text-ink-900">Make {roleChange.source.file} an assisting table?</h3>
+                  <h3 id="role-change-title" className="text-[0.875rem] font-bold text-ink-900">Make {roleChange.source.file} an assisting table?</h3>
                   <p className="text-[0.75rem] text-ink-500 mt-1">
                     An assisting table is joined onto the population, not tested — so its {roleChange.drawn} drawn item{roleChange.drawn === 1 ? '' : 's'} go, along with every attribute result recorded against them, and its {roleChange.source.count.toLocaleString()} instances leave the population count.
                   </p>
@@ -3585,13 +3697,13 @@ function PopulationSection({ control, canEdit, locked: gated = false }: { contro
               </div>
             </div>
             <div className="flex items-center justify-end gap-2 px-5 py-3.5 border-t border-canvas-border bg-paper-50/40">
-              <button onClick={() => setRoleChange(null)} className="h-9 px-3.5 text-[0.78125rem] font-semibold text-ink-600 hover:text-ink-900 cursor-pointer">Keep it sampled</button>
+              <button onClick={() => setRoleChange(null)} className="h-9 px-3.5 text-[0.8125rem] font-semibold text-ink-600 hover:text-ink-900 cursor-pointer">Keep it sampled</button>
               <button onClick={() => {
                 setSourceRole(control.id, roleChange.source.id, 'assisting');
                 logEvent({ action: 'Update', description: `Marked ${roleChange.source.file} an assisting table on ${control.id}`, module: 'SOX ICFR', entity: 'Evidence' });
                 setRoleChange(null);
               }}
-                className="h-9 px-4 inline-flex items-center gap-1.5 rounded-lg bg-mitigated-600 text-white text-[0.78125rem] font-semibold hover:bg-mitigated-700 transition-colors cursor-pointer">Make it assisting</button>
+                className="h-9 px-4 inline-flex items-center gap-1.5 rounded-lg bg-mitigated-600 text-white text-[0.8125rem] font-semibold hover:bg-mitigated-700 transition-colors cursor-pointer">Make it assisting</button>
             </div>
           </motion.div>
         </div>,
@@ -3604,12 +3716,12 @@ function PopulationSection({ control, canEdit, locked: gated = false }: { contro
           drop to cost them everything will not use it. */}
       {dropping && createPortal(
         <div className="modal-backdrop" onClick={() => setDropping(null)}>
-          <motion.div className="modal" style={{ maxWidth: 460 }} onClick={e => e.stopPropagation()} initial={{ opacity: 0, y: 14, scale: 0.98 }} animate={{ opacity: 1, y: 0, scale: 1 }}>
+          <motion.div role="dialog" aria-modal="true" aria-labelledby="drop-source-title" className="modal" style={{ maxWidth: 460 }} onClick={e => e.stopPropagation()} initial={{ opacity: 0, y: 14, scale: 0.98 }} animate={{ opacity: 1, y: 0, scale: 1 }}><DialogFocus onEscape={() => setDropping(null)} />
             <div className="px-5 py-4">
               <div className="flex items-start gap-3">
                 <span className="w-9 h-9 rounded-lg bg-risk-50 text-risk-700 inline-flex items-center justify-center shrink-0"><AlertTriangle size={17} /></span>
                 <div className="min-w-0">
-                  <h3 className="text-[0.875rem] font-bold text-ink-900">Drop {dropping.file}?</h3>
+                  <h3 id="drop-source-title" className="text-[0.875rem] font-bold text-ink-900">Drop {dropping.file}?</h3>
                   <p className="text-[0.75rem] text-ink-500 mt-1">
                     Its {dropping.count.toLocaleString()} instances leave the population, its checks go unproven again
                     {samplesFor(control, dropping.id).length > 0 && <>, and the {samplesFor(control, dropping.id).length} items drawn off it — with every result recorded against them — go too</>}.
@@ -3620,13 +3732,13 @@ function PopulationSection({ control, canEdit, locked: gated = false }: { contro
               </div>
             </div>
             <div className="flex items-center justify-end gap-2 px-5 py-3.5 border-t border-canvas-border bg-paper-50/40">
-              <button onClick={() => setDropping(null)} className="h-9 px-3.5 text-[0.78125rem] font-semibold text-ink-600 hover:text-ink-900 cursor-pointer">Keep it</button>
+              <button onClick={() => setDropping(null)} className="h-9 px-3.5 text-[0.8125rem] font-semibold text-ink-600 hover:text-ink-900 cursor-pointer">Keep it</button>
               <button onClick={() => {
                 removePopulationSource(control.id, dropping.id);
                 logEvent({ action: 'Delete', description: `Dropped ${dropping.file} from the population for ${control.id}`, module: 'SOX ICFR', entity: 'Evidence' });
                 setDropping(null);
               }}
-                className="h-9 px-4 inline-flex items-center gap-1.5 rounded-lg bg-risk-600 text-white text-[0.78125rem] font-semibold hover:bg-risk-700 transition-colors cursor-pointer"><Trash2 size={13} /> Drop the file</button>
+                className="h-9 px-4 inline-flex items-center gap-1.5 rounded-lg bg-risk-600 text-white text-[0.8125rem] font-semibold hover:bg-risk-700 transition-colors cursor-pointer"><Trash2 size={13} /> Drop the file</button>
             </div>
           </motion.div>
         </div>,
@@ -3657,8 +3769,8 @@ function SizeDerivation({ control, guide, methodology }: {
   // and its ITGCs — so claiming a cell for it would be inventing a derivation.
   if (!guide.cell) {
     return (
-      <span className="inline-flex items-center gap-1.5 text-[0.65625rem] text-ink-500">
-        <Lock size={10} className="text-ink-400 shrink-0" />
+      <span className="inline-flex items-center gap-1.5 text-[0.6875rem] text-ink-500">
+        <Scale size={10} className="text-ink-400 shrink-0" />
         <span className="font-semibold text-ink-600">Automated</span>
         <span className="text-ink-400">→</span>
         <span className="font-bold text-ink-700">test of one</span>
@@ -3671,8 +3783,8 @@ function SizeDerivation({ control, guide, methodology }: {
   // mouth that nobody has given it.
   const rated = !!control.riskRating;
   return (
-    <span className="inline-flex items-baseline gap-1.5 flex-wrap text-[0.65625rem] text-ink-500">
-      <Lock size={10} className="text-ink-400 shrink-0 self-center" />
+    <span className="inline-flex items-baseline gap-1.5 flex-wrap text-[0.6875rem] text-ink-500">
+      <Scale size={10} className="text-ink-400 shrink-0 self-center" />
       <span className="font-semibold text-ink-600">{guide.cell.frequency}</span>
       <span className="text-ink-300">·</span>
       <span className="font-semibold text-ink-600">{guide.cell.rating} risk</span>
@@ -3711,6 +3823,8 @@ function SampleSizeDeparture({ control, agreed, canEdit }: { control: Control; a
   const [why, setWhy] = useState('');
   if (!s) return null;
   const dep = s.override;
+  // The draw before any extension after a failure — what the table is compared with.
+  const base = s.size - s.samples.filter(x => x.extension).length;
   const n = Number(size);
   const valid = Number.isInteger(n) && n >= 1 && n !== s.size;
 
@@ -3726,7 +3840,7 @@ function SampleSizeDeparture({ control, agreed, canEdit }: { control: Control; a
         <div className="flex items-start gap-2.5">
           <AlertTriangle size={14} className="text-mitigated-700 mt-0.5 shrink-0" />
           <div className="min-w-0 flex-1">
-            <p className="text-[0.71875rem] font-bold text-mitigated-700">
+            <p className="text-[0.75rem] font-bold text-mitigated-700">
               Departure from the agreed methodology — set to <span className="tabular-nums">{dep.size}</span> items where the table gives <span className="tabular-nums">{dep.agreed}</span>
             </p>
             <p className="text-[0.6875rem] text-ink-700 mt-1 leading-relaxed">{dep.reason}</p>
@@ -3735,13 +3849,26 @@ function SampleSizeDeparture({ control, agreed, canEdit }: { control: Control; a
             {s.size !== dep.size && (
               <p className="text-[0.6875rem] text-ink-500 mt-1">Standing at <span className="tabular-nums font-semibold text-ink-700">{s.size}</span> items now, after the sample was extended.</p>
             )}
-            <p className="text-[0.625rem] text-ink-400 mt-1">{dep.by} · {dep.at} — recorded on the working paper and the trail.</p>
+            <p className="text-[0.6875rem] text-ink-400 mt-1">{dep.by} · {dep.at} — recorded on the working paper and the trail.</p>
           </div>
+        </div>
+      ) : base !== agreed && s.method !== 'Full population' ? (
+        /* The same rule the methodology page counts by (sizeDeparture): a draw
+           standing at another number than the table is a departure whether or
+           not one was recorded — saying "the number the table gives it" over a
+           different number was the contradiction (click-through, 5 Oct). */
+        <div className="flex items-start gap-2.5">
+          <AlertTriangle size={14} className="text-mitigated-700 mt-0.5 shrink-0" />
+          <p className="text-[0.6875rem] text-ink-600 leading-relaxed">
+            <span className="font-bold text-mitigated-700">Drawn at <span className="tabular-nums">{base}</span> items where the agreed table gives <span className="tabular-nums">{agreed}</span></span> — no reason for the difference is on the record, so it counts as a departure from the methodology.
+            {s.size !== base && <> Standing at <span className="tabular-nums font-semibold text-ink-700">{s.size}</span> now, after the sample was extended.</>}
+          </p>
         </div>
       ) : (
         <p className="text-[0.6875rem] text-ink-500 leading-relaxed">
-          This control is tested at <span className="font-semibold text-ink-700 tabular-nums">{s.size}</span> items, the number the agreed table gives it.
-          Testing a different number is allowed, and is recorded as a departure from the methodology rather than as a change of mind.
+          This control is tested at <span className="font-semibold text-ink-700 tabular-nums">{base}</span> items, the number the agreed table gives it.
+          {s.size !== base && <> Standing at <span className="tabular-nums font-semibold text-ink-700">{s.size}</span> now, after the sample was extended.</>}
+          {' '}Testing a different number is allowed, and is recorded as a departure from the methodology rather than as a change of mind.
         </p>
       )}
 
@@ -3756,11 +3883,11 @@ function SampleSizeDeparture({ control, agreed, canEdit }: { control: Control; a
         <div className="mt-3 pt-3 border-t border-canvas-border">
           <div className="flex items-center gap-2 flex-wrap">
             <label className="inline-flex items-center gap-2">
-              <span className="text-[0.71875rem] font-semibold text-ink-600">Test</span>
+              <span className="text-[0.75rem] font-semibold text-ink-600">Test</span>
               <input type="number" min={1} autoFocus value={size} onChange={e => setSize(e.target.value)}
                 aria-label="Number of items to test"
-                className="h-8 w-20 px-2 rounded-lg border border-canvas-border bg-canvas-elevated text-[0.78125rem] text-ink-800 tabular-nums focus:outline-none focus:ring-2 focus:ring-brand-200" />
-              <span className="text-[0.71875rem] text-ink-500">items, against an agreed <span className="font-semibold text-ink-700 tabular-nums">{agreed}</span></span>
+                className="h-8 w-20 px-2 rounded-lg border border-canvas-border bg-canvas-elevated text-[0.8125rem] text-ink-800 tabular-nums focus:outline-none focus:ring-2 focus:ring-brand-200" />
+              <span className="text-[0.75rem] text-ink-500">items, against an agreed <span className="font-semibold text-ink-700 tabular-nums">{agreed}</span></span>
             </label>
           </div>
           {/* The question is the specific one. "Why a different size" invites
@@ -3768,7 +3895,7 @@ function SampleSizeDeparture({ control, agreed, canEdit }: { control: Control; a
               what the table did not know about this control asks for the fact
               that would have changed the table had it been known. */}
           <label className="block mt-2.5">
-            <span className="text-[0.71875rem] font-semibold text-ink-600">What does this control have that the agreed table did not allow for?</span>
+            <span className="text-[0.75rem] font-semibold text-ink-600">What does this control have that the agreed table did not allow for?</span>
             <textarea value={why} onChange={e => setWhy(e.target.value)} rows={2}
               placeholder="e.g. the control changed hands in August, so the period either side of the handover is tested separately"
               className="mt-1.5 w-full text-[0.75rem] rounded-lg border border-canvas-border bg-canvas-elevated px-2.5 py-2 text-ink-800 placeholder:text-ink-400 focus:outline-none focus:ring-2 focus:ring-brand-200 resize-none" />
@@ -3776,11 +3903,11 @@ function SampleSizeDeparture({ control, agreed, canEdit }: { control: Control; a
           <div className="mt-2 flex items-center gap-2 flex-wrap">
             <button disabled={!valid || !why.trim()} onClick={save}
               title={!valid ? 'Give a whole number of items, different from the size now' : why.trim() ? undefined : 'A departure with no reason is a size nobody can defend'}
-              className="h-8 px-3.5 inline-flex items-center gap-1.5 rounded-md bg-mitigated-600 text-white text-[0.71875rem] font-semibold enabled:hover:bg-mitigated-700 disabled:opacity-40 disabled:cursor-not-allowed transition-colors cursor-pointer">
+              className="h-8 px-3.5 inline-flex items-center gap-1.5 rounded-md bg-mitigated-600 text-white text-[0.75rem] font-semibold enabled:hover:bg-mitigated-700 disabled:opacity-40 disabled:cursor-not-allowed transition-colors cursor-pointer">
               <Scale size={12} /> Record the departure
             </button>
-            <button onClick={() => { setOpen(false); setWhy(''); }} className="h-8 px-3 text-[0.71875rem] font-semibold text-ink-500 hover:text-ink-900 cursor-pointer">Cancel</button>
-            <span className="text-[0.625rem] text-ink-400">Recorded results on any item dropped go with it, and the tested attributes go stale until re-run.</span>
+            <button onClick={() => { setOpen(false); setWhy(''); }} className="h-8 px-3 text-[0.75rem] font-semibold text-ink-500 hover:text-ink-900 cursor-pointer">Cancel</button>
+            <span className="text-[0.6875rem] text-ink-400">Recorded results on any item dropped go with it, and the tested attributes go stale until re-run.</span>
           </div>
         </div>
       )}
@@ -3830,6 +3957,10 @@ function SourceDrawRow({ control, source, canDraw, single, isOpen, onToggle, onA
 
   type Stage = 'ready' | 'drawing' | 'review';
   const [stage, setStage] = useState<Stage>('ready');
+  // The chat draws too. Its draw of THIS file shows here as progress, and any
+  // run on the control holds Draw sample so the same file is not drawn twice.
+  const liveRun = useControlRun(control.id);
+  const drawRun = runStageOf(liveRun) === 'sample' && liveRun!.label.endsWith(`from ${source.file}`) ? liveRun : null;
   const [drawn, setDrawn] = useState<string[]>([]);
   const [rejecting, setRejecting] = useState(false);
   const [redrawing, setRedrawing] = useState(false);
@@ -3868,7 +3999,7 @@ function SourceDrawRow({ control, source, canDraw, single, isOpen, onToggle, onA
   // are the rows filed.
   const dealt = drawn.length
     ? dealSample(drawControl, stretch, methodology, drawn.length,
-      (control.operating.sampling?.samples ?? []).filter(x => (x.sourceId ?? LEGACY_SOURCE_ID) !== source.id),
+      (control.operating.sampling?.samples ?? []).filter(x => sampleSourceOf(control, x) !== source.id),
       `${seedKeyOf(control)}·${source.id}`, e => countryOf(eng.id, e), home)
     : [];
 
@@ -3903,9 +4034,9 @@ function SourceDrawRow({ control, source, canDraw, single, isOpen, onToggle, onA
       className="w-full flex items-center gap-2 px-3.5 py-3 text-left cursor-pointer">
       {isOpen ? <ChevronDown size={13} className="text-ink-400 shrink-0" /> : <ChevronRight size={13} className="text-ink-400 shrink-0" />}
       {done ? <CheckCircle2 size={13} className="text-compliant-600 shrink-0" /> : <FileText size={13} className="text-ink-400 shrink-0" />}
-      <span className="text-[0.78125rem] font-bold text-ink-900 truncate min-w-0">{source.file}</span>
-      <span className="text-[0.65625rem] text-ink-400 shrink-0 tabular-nums hidden sm:inline">{source.count.toLocaleString()} instances</span>
-      <span className={cn('ml-auto shrink-0 text-[0.65625rem] font-bold',
+      <span className="text-[0.8125rem] font-bold text-ink-900 truncate min-w-0">{source.file}</span>
+      <span className="text-[0.6875rem] text-ink-400 shrink-0 tabular-nums hidden sm:inline">{source.count.toLocaleString()} instances</span>
+      <span className={cn('ml-auto shrink-0 text-[0.6875rem] font-bold',
         done ? 'text-compliant-700' : drawnAlready ? 'text-brand-700' : 'text-ink-400')}>
         {done ? 'done' : drawnAlready ? `${already.length} items drawn` : 'not drawn yet'}
       </span>
@@ -3921,31 +4052,31 @@ function SourceDrawRow({ control, source, canDraw, single, isOpen, onToggle, onA
             <>
               {/* what was drawn off this file */}
               <div className="rounded-lg border border-canvas-border bg-canvas-elevated px-3 py-2.5">
-                <p className="text-[0.71875rem] text-ink-700">
+                <p className="text-[0.75rem] text-ink-700">
                   {already.length} item{already.length === 1 ? '' : 's'} drawn{ext > 0 && <span className="text-ink-500"> · {already.length - ext} original + {ext} extension</span>} — from {source.count.toLocaleString()} instances
                 </p>
                 {/* What was asked for, in the words it was asked in. A reviewer
                     holding only "25 items, random" cannot tell whether the
                     auditor asked for two months and got twenty-five rows. */}
                 {source.draw?.prompt && (
-                  <p className="text-[0.65625rem] text-ink-500 mt-1.5 leading-relaxed">
+                  <p className="text-[0.6875rem] text-ink-500 mt-1.5 leading-relaxed">
                     <span className="text-ink-400">Asked for</span> · {source.draw.prompt}
                   </p>
                 )}
                 {source.draw && (
-                  <p className="text-[0.65625rem] text-ink-400 mt-1">
+                  <p className="text-[0.6875rem] text-ink-400 mt-1">
                     {source.draw.method.toLowerCase()}, seed <span className="tabular-nums">{source.draw.seed}</span> — reperform the draw with these and land on the same items.
                   </p>
                 )}
                 <div className="mt-2 rounded-lg border border-canvas-border overflow-hidden">
-                  <div className="grid grid-cols-[1.2fr_1fr_0.8fr] gap-2 px-3 py-1.5 bg-paper-50/70 border-b border-canvas-border text-[0.625rem] font-bold uppercase tracking-wide text-ink-400">
+                  <div className="grid grid-cols-[1.2fr_1fr_0.8fr] gap-2 px-3 py-1.5 bg-paper-50/70 border-b border-canvas-border text-[0.6875rem] font-bold uppercase tracking-wide text-ink-500">
                     <span>Reference</span><span>Date</span><span className="text-right">Amount</span>
                   </div>
                   {/* Every drawn item, not the first few (17 Sep — a list cut at
                       six read as a draw of six). Long draws scroll in place. */}
-                  <div className="max-h-[16rem] overflow-y-auto">
+                  <div className="max-h-64 overflow-y-auto">
                     {already.map(smp => (
-                      <div key={smp.id} className="grid grid-cols-[1.2fr_1fr_0.8fr] gap-2 px-3 py-1.5 border-b border-canvas-border last:border-b-0 text-[0.71875rem]">
+                      <div key={smp.id} className="grid grid-cols-[1.2fr_1fr_0.8fr] gap-2 px-3 py-1.5 border-b border-canvas-border last:border-b-0 text-[0.75rem]">
                         <span className="font-mono text-ink-700">{smp.ref}</span>
                         {/* the date the quarter split counts it under (A28) */}
                         <span className="text-ink-500">{fmtDay(sampleDate(smp, home))}</span>
@@ -3957,7 +4088,7 @@ function SourceDrawRow({ control, source, canDraw, single, isOpen, onToggle, onA
               </div>
               {canDraw && (
                 <div className="mt-2.5 flex items-center justify-between gap-3 flex-wrap">
-                  <p className="text-[0.65625rem] text-ink-400 min-w-0">
+                  <p className="text-[0.6875rem] text-ink-400 min-w-0">
                     {done
                       ? `Marked done by ${source.approvedSample!.by}, ${source.approvedSample!.at}. A re-draw takes the mark off.`
                       : 'Mark it done and the next file opens. This is a marker, not a lock — TOE still tests every item.'}
@@ -3967,20 +4098,23 @@ function SourceDrawRow({ control, source, canDraw, single, isOpen, onToggle, onA
                         'ड्रा सैंपल' क्लिक हो जाएगा". Offered after approval too,
                         because the reason to re-draw usually turns up later. */}
                     <button onClick={() => setRedrawing(true)}
-                      className="h-8 px-3 inline-flex items-center gap-1.5 rounded-md border border-risk-200 text-[0.71875rem] font-semibold text-risk-700 hover:bg-risk-50 transition-colors cursor-pointer"><RotateCcw size={11} /> Reject and retry</button>
+                      className="h-8 px-3 inline-flex items-center gap-1.5 rounded-md border border-risk-200 text-[0.75rem] font-semibold text-risk-700 hover:bg-risk-50 transition-colors cursor-pointer"><RotateCcw size={11} /> Reject and retry</button>
                     {done ? (
                       <button onClick={() => approveSource(control.id, source.id, 'sample', false)}
-                        className="h-8 px-3 inline-flex items-center gap-1.5 rounded-md border border-canvas-border text-[0.71875rem] font-semibold text-ink-500 hover:text-ink-900 hover:border-ink-300 transition-colors cursor-pointer">Take the mark off</button>
+                        className="h-8 px-3 inline-flex items-center gap-1.5 rounded-md border border-canvas-border text-[0.75rem] font-semibold text-ink-500 hover:text-ink-900 hover:border-ink-300 transition-colors cursor-pointer">Take the mark off</button>
                     ) : (
                       <button onClick={() => { approveSource(control.id, source.id, 'sample', true); onApproved(); }}
-                        className="h-8 px-3.5 inline-flex items-center gap-1.5 rounded-md bg-brand-600 text-white text-[0.71875rem] font-semibold hover:bg-brand-700 transition-colors cursor-pointer"><Check size={12} /> Approve and continue</button>
+                        className="h-8 px-3.5 inline-flex items-center gap-1.5 rounded-md bg-brand-600 text-white text-[0.75rem] font-semibold hover:bg-brand-700 transition-colors cursor-pointer"><Check size={12} /> {/* Not a second "Approve and continue" (click-through, 5 Oct):
+                          the draw is already approved onto the paper above —
+                          this only marks the file done and opens the next. */}
+                        {single ? 'Mark this file done' : 'Mark done, open next file'}</button>
                     )}
                   </div>
                 </div>
               )}
             </>
           ) : !canDraw ? (
-            <p className="text-[0.71875rem] text-ink-400">Nothing drawn yet — the auditor draws the sample off the locked population.</p>
+            <p className="text-[0.75rem] text-ink-400">Nothing drawn yet — the auditor draws the sample off the locked population.</p>
           ) : (
             <>
               {/* ── say what you want out of this file ─────────────────────
@@ -3994,16 +4128,16 @@ function SourceDrawRow({ control, source, canDraw, single, isOpen, onToggle, onA
                   is still one read and a click. It sets how many and which
                   months — the method and spread above are the audit's (A28). */}
               <div className="flex items-center justify-between gap-3 mb-2">
-                <span className="block text-[0.65625rem] font-bold uppercase tracking-wider text-ink-400">Ask for the sample</span>
+                <span className="block text-[0.6875rem] font-bold uppercase tracking-wider text-ink-400">Ask for the sample</span>
                 <IraDrafted />
               </div>
               <textarea value={prompt} onChange={e => setPrompt(e.target.value)} rows={2} disabled={stage !== 'ready'}
                 aria-label={`Ask for the sample from ${source.file}`}
                 placeholder="In plain English — how many items, and from which months."
-                className="w-full rounded-lg border border-canvas-border bg-canvas-elevated px-2.5 py-2 text-[0.78125rem] text-ink-800 placeholder:text-ink-400 focus:outline-none focus:ring-2 focus:ring-brand-200 resize-none disabled:opacity-60" />
+                className="w-full rounded-lg border border-canvas-border bg-canvas-elevated px-2.5 py-2 text-[0.8125rem] text-ink-800 placeholder:text-ink-400 focus:outline-none focus:ring-2 focus:ring-brand-200 resize-none disabled:opacity-60" />
               {/* How it was read, before it runs. A prompt nobody confirms the
                   reading of is a prompt that quietly did something else. */}
-              <p className="mt-1.5 text-[0.65625rem] text-ink-500 leading-relaxed">
+              <p className="mt-1.5 text-[0.6875rem] text-ink-500 leading-relaxed">
                 <span className="font-semibold text-ink-700">Read as:</span> {plan.reading}
               </p>
               <div className="mt-3 flex items-center justify-between gap-3 flex-wrap">
@@ -4013,23 +4147,25 @@ function SourceDrawRow({ control, source, canDraw, single, isOpen, onToggle, onA
                     and the column it came from. */}
                 <div className="min-w-0">
                   <SizeDerivation control={control} guide={guide} methodology={methodology} />
-                  <p className="text-[0.65625rem] text-ink-400 mt-1">Band {guide.range}. Ask for something else and the paper records what you asked for.</p>
+                  <p className="text-[0.6875rem] text-ink-400 mt-1">Band {guide.range}. Ask for something else and the paper records what you asked for.</p>
                 </div>
-                <button disabled={stage !== 'ready'} onClick={draw}
-                  className="shrink-0 h-9 px-4 inline-flex items-center gap-1.5 rounded-lg bg-brand-600 text-white text-[0.78125rem] font-semibold enabled:hover:bg-brand-700 disabled:opacity-40 disabled:cursor-not-allowed transition-colors cursor-pointer">
+                <button disabled={stage !== 'ready' || !!liveRun} onClick={draw} title={liveRun ? busyNote(liveRun) : undefined}
+                  className="shrink-0 h-9 px-4 inline-flex items-center gap-1.5 rounded-lg bg-brand-600 text-white text-[0.8125rem] font-semibold enabled:hover:bg-brand-700 disabled:opacity-40 disabled:cursor-not-allowed transition-colors cursor-pointer">
                   {stage === 'drawing' ? <><Loader2 size={14} className="animate-spin" /> Drawing…</> : <><FlaskConical size={14} /> Draw sample</>}
                 </button>
               </div>
               {/* The band is the control's, so on a multi-file control it is
                   stated once under the list rather than on every row. */}
               {single && (
-                <p className="text-[0.65625rem] text-ink-400 mt-2 leading-relaxed">
+                <p className="text-[0.6875rem] text-ink-400 mt-2 leading-relaxed">
                   {control.frequency} · {control.nature}{control.riskRating ? ` · ${control.riskRating.toLowerCase()} risk` : ''} — {guide.note} Frequency sets the floor; the control's risk rating moves it inside the band.
                 </p>
               )}
-              <p className="text-[0.65625rem] text-ink-400 mt-1 leading-relaxed">
+              <p className="text-[0.6875rem] text-ink-400 mt-1 leading-relaxed">
                 Seed <span className="tabular-nums font-semibold text-ink-600">{seed}</span> — off this control, this round and this file, and stored on the paper with the ask, so the reviewer reperforms the draw and lands on these same items.
               </p>
+              {drawRun && stage === 'ready' && <div className="mt-2.5"><LiveRunLine run={drawRun} /></div>}
+              {liveRun && !drawRun && stage === 'ready' && <p className="mt-2.5 text-[0.6875rem] text-ink-500">{busyNote(liveRun)}</p>}
               {stage === 'drawing' && (
                 <div className="mt-2.5 flex items-center gap-1.5 text-[0.75rem] text-brand-600 font-semibold"><Loader2 size={13} className="animate-spin" /> Drawing {plan.size} from {source.count.toLocaleString()} · {method.toLowerCase()}, seed {seed}…</div>
               )}
@@ -4040,15 +4176,15 @@ function SourceDrawRow({ control, source, canDraw, single, isOpen, onToggle, onA
                 <div className="ac-div my-3.5" />
                 <div>
                   <div className="flex items-center justify-between gap-2 mb-2 flex-wrap">
-                    <div className="text-[0.71875rem] font-bold text-ink-700 inline-flex items-center gap-1.5"><FlaskConical size={12} /> Drawn sample <span className="font-normal text-ink-400">· {drawn.length} items</span></div>
+                    <div className="text-[0.75rem] font-bold text-ink-700 inline-flex items-center gap-1.5"><FlaskConical size={12} /> Drawn sample <span className="font-normal text-ink-400">· {drawn.length} items</span></div>
                   </div>
                   <div className="rounded-lg border border-canvas-border overflow-hidden mb-3">
-                    <div className="grid grid-cols-[1.2fr_1fr_0.8fr] gap-2 px-3 py-1.5 bg-paper-50/70 border-b border-canvas-border text-[0.625rem] font-bold uppercase tracking-wide text-ink-400">
+                    <div className="grid grid-cols-[1.2fr_1fr_0.8fr] gap-2 px-3 py-1.5 bg-paper-50/70 border-b border-canvas-border text-[0.6875rem] font-bold uppercase tracking-wide text-ink-500">
                       <span>Reference</span><span>Date</span><span className="text-right">Amount</span>
                     </div>
-                    <div className="max-h-[16rem] overflow-y-auto">
+                    <div className="max-h-64 overflow-y-auto">
                       {drawn.map((ref, i) => (
-                        <div key={`${ref}-${i}`} className="grid grid-cols-[1.2fr_1fr_0.8fr] gap-2 px-3 py-1.5 border-b border-canvas-border last:border-b-0 text-[0.71875rem]">
+                        <div key={`${ref}-${i}`} className="grid grid-cols-[1.2fr_1fr_0.8fr] gap-2 px-3 py-1.5 border-b border-canvas-border last:border-b-0 text-[0.75rem]">
                           <span className="font-mono text-ink-700">{ref}</span>
                           <span className="text-ink-500">{fmtDay(dealt[i]?.date)}</span>
                           <span className="text-right tabular-nums text-ink-700">{rowRupees(sampleAmount(control, ref, dealt[i]?.date, home))}</span>
@@ -4057,10 +4193,10 @@ function SourceDrawRow({ control, source, canDraw, single, isOpen, onToggle, onA
                     </div>
                   </div>
                   <div className="flex items-center justify-end gap-2">
-                    <button onClick={() => setRejecting(true)} className="h-9 px-3.5 inline-flex items-center gap-1.5 rounded-lg border border-risk-200 text-[0.78125rem] font-semibold text-risk-700 hover:bg-risk-50 transition-colors cursor-pointer">
+                    <button onClick={() => setRejecting(true)} className="h-9 px-3.5 inline-flex items-center gap-1.5 rounded-lg border border-risk-200 text-[0.8125rem] font-semibold text-risk-700 hover:bg-risk-50 transition-colors cursor-pointer">
                       <RotateCcw size={13} /> Reject and retry
                     </button>
-                    <button disabled={drawn.length === 0} onClick={approve} className="h-9 px-4 inline-flex items-center gap-1.5 rounded-lg bg-brand-600 text-white text-[0.78125rem] font-semibold enabled:hover:bg-brand-700 disabled:opacity-40 transition-colors cursor-pointer">
+                    <button disabled={drawn.length === 0} onClick={approve} className="h-9 px-4 inline-flex items-center gap-1.5 rounded-lg bg-brand-600 text-white text-[0.8125rem] font-semibold enabled:hover:bg-brand-700 disabled:opacity-40 transition-colors cursor-pointer">
                       <Check size={14} /> Approve and continue
                     </button>
                   </div>
@@ -4074,19 +4210,19 @@ function SourceDrawRow({ control, source, canDraw, single, isOpen, onToggle, onA
 
       {rejecting && createPortal(
         <div className="modal-backdrop" onClick={() => setRejecting(false)}>
-          <motion.div className="modal" style={{ maxWidth: 440 }} onClick={e => e.stopPropagation()} initial={{ opacity: 0, y: 14, scale: 0.98 }} animate={{ opacity: 1, y: 0, scale: 1 }}>
+          <motion.div role="dialog" aria-modal="true" aria-labelledby="reject-sample-title" className="modal" style={{ maxWidth: 440 }} onClick={e => e.stopPropagation()} initial={{ opacity: 0, y: 14, scale: 0.98 }} animate={{ opacity: 1, y: 0, scale: 1 }}><DialogFocus onEscape={() => setRejecting(false)} />
             <div className="px-5 py-4">
               <div className="flex items-start gap-3">
                 <span className="w-9 h-9 rounded-lg bg-risk-50 text-risk-700 inline-flex items-center justify-center shrink-0"><AlertTriangle size={17} /></span>
                 <div>
-                  <h3 className="text-[0.875rem] font-bold text-ink-900">Reject this sample?</h3>
+                  <h3 id="reject-sample-title" className="text-[0.875rem] font-bold text-ink-900">Reject this sample?</h3>
                   <p className="text-[0.75rem] text-ink-500 mt-1">These items go and the draw starts again from the size. Only {source.file} is affected — the population is untouched, and any other file's sample stays exactly as it is.</p>
                 </div>
               </div>
             </div>
             <div className="flex items-center justify-end gap-2 px-5 py-3.5 border-t border-canvas-border bg-paper-50/40">
-              <button onClick={() => setRejecting(false)} className="h-9 px-3.5 text-[0.78125rem] font-semibold text-ink-600 hover:text-ink-900 cursor-pointer">Keep working</button>
-              <button onClick={restart} className="h-9 px-4 inline-flex items-center gap-1.5 rounded-lg bg-risk-600 text-white text-[0.78125rem] font-semibold hover:bg-risk-700 transition-colors cursor-pointer"><RotateCcw size={13} /> Reject and start over</button>
+              <button onClick={() => setRejecting(false)} className="h-9 px-3.5 text-[0.8125rem] font-semibold text-ink-600 hover:text-ink-900 cursor-pointer">Keep working</button>
+              <button onClick={restart} className="h-9 px-4 inline-flex items-center gap-1.5 rounded-lg bg-risk-600 text-white text-[0.8125rem] font-semibold hover:bg-risk-700 transition-colors cursor-pointer"><RotateCcw size={13} /> Reject and start over</button>
             </div>
           </motion.div>
         </div>,
@@ -4097,25 +4233,25 @@ function SourceDrawRow({ control, source, canDraw, single, isOpen, onToggle, onA
           and those results go with them. */}
       {redrawing && createPortal(
         <div className="modal-backdrop" onClick={() => setRedrawing(false)}>
-          <motion.div className="modal" style={{ maxWidth: 460 }} onClick={e => e.stopPropagation()} initial={{ opacity: 0, y: 14, scale: 0.98 }} animate={{ opacity: 1, y: 0, scale: 1 }}>
+          <motion.div role="dialog" aria-modal="true" aria-labelledby="redraw-title" className="modal" style={{ maxWidth: 460 }} onClick={e => e.stopPropagation()} initial={{ opacity: 0, y: 14, scale: 0.98 }} animate={{ opacity: 1, y: 0, scale: 1 }}><DialogFocus onEscape={() => setRedrawing(false)} />
             <div className="px-5 py-4">
               <div className="flex items-start gap-3">
                 <span className="w-9 h-9 rounded-lg bg-risk-50 text-risk-700 inline-flex items-center justify-center shrink-0"><AlertTriangle size={17} /></span>
                 <div className="min-w-0">
-                  <h3 className="text-[0.875rem] font-bold text-ink-900">Draw {source.file} again?</h3>
+                  <h3 id="redraw-title" className="text-[0.875rem] font-bold text-ink-900">Draw {source.file} again?</h3>
                   <p className="text-[0.75rem] text-ink-500 mt-1">Its {already.length} item{already.length === 1 ? '' : 's'} go, along with every attribute result recorded against them, and the file goes back to its draw.</p>
                   <p className="text-[0.75rem] text-ink-600 mt-2 font-semibold">Only this file. The population is locked and untouched, and every other file keeps its own sample and its own results.</p>
                 </div>
               </div>
             </div>
             <div className="flex items-center justify-end gap-2 px-5 py-3.5 border-t border-canvas-border bg-paper-50/40">
-              <button onClick={() => setRedrawing(false)} className="h-9 px-3.5 text-[0.78125rem] font-semibold text-ink-600 hover:text-ink-900 cursor-pointer">Keep it</button>
+              <button onClick={() => setRedrawing(false)} className="h-9 px-3.5 text-[0.8125rem] font-semibold text-ink-600 hover:text-ink-900 cursor-pointer">Keep it</button>
               <button onClick={() => {
                 redrawSource(control.id, source.id);
                 logEvent({ action: 'Delete', description: `Rejected the sample from ${source.file} on ${control.id} — the draw was reopened`, module: 'SOX ICFR', entity: 'Test Result' });
                 setRedrawing(false);
               }}
-                className="h-9 px-4 inline-flex items-center gap-1.5 rounded-lg bg-risk-600 text-white text-[0.78125rem] font-semibold hover:bg-risk-700 transition-colors cursor-pointer"><RotateCcw size={13} /> Reject and retry</button>
+                className="h-9 px-4 inline-flex items-center gap-1.5 rounded-lg bg-risk-600 text-white text-[0.8125rem] font-semibold hover:bg-risk-700 transition-colors cursor-pointer"><RotateCcw size={13} /> Reject and retry</button>
             </div>
           </motion.div>
         </div>,
@@ -4163,8 +4299,8 @@ function SampleExtractSection({ control, canEdit, locked }: { control: Control; 
         ) : (
           <EmptyState icon={<Lock size={18} />} title="The draw is locked"
             hint={o.population
-              ? 'The population is extracted but not locked. Settle the checks at step ① and lock it — a sample drawn from a population that can still change proves nothing.'
-              : 'No population yet. Pick the source file and filter it down at step ① — the draw comes off a locked population, never off a file.'}>
+              ? 'The population is extracted but not locked. Settle the checks at step ② and lock it — a sample drawn from a population that can still change proves nothing.'
+              : 'No population yet. Pick the source file and filter it down at step ② — the draw comes off a locked population, never off a file.'}>
             <span className="inline-flex items-center gap-1.5 text-[0.75rem] text-ink-500">
               <span>Population is currently</span>
               <Pill tone="draft">{!o.population ? 'Not extracted' : 'Not locked'}</Pill>
@@ -4209,8 +4345,8 @@ function SampleExtractSection({ control, canEdit, locked }: { control: Control; 
           filtered and locked at step ①; this step cannot narrow it further. */}
       <div className="flex items-center gap-2.5 flex-wrap">
         <div className="inline-flex items-center gap-2 px-3 py-2.5 rounded-lg border border-compliant-100 bg-compliant-50/40">
-          <Lock size={12} className="text-compliant-700 shrink-0" />
-          <span className="text-[0.78125rem] font-semibold text-ink-900">Population {o.population?.version ?? 'locked'}</span>
+          <Database size={12} className="text-compliant-700 shrink-0" />
+          <span className="text-[0.8125rem] font-semibold text-ink-900">Population {o.population?.version ?? 'locked'}</span>
           <span className="text-[0.6875rem] text-ink-500 tabular-nums">{o.population?.count.toLocaleString()} instances</span>
           <Check size={13} className="text-compliant-600 shrink-0" />
         </div>
@@ -4236,7 +4372,7 @@ function SampleExtractSection({ control, canEdit, locked }: { control: Control; 
           across the year's rounds, and nothing used to add them up against the
           number the sizing table sets. */}
       <div className="mt-4 rounded-xl border border-canvas-border bg-paper-50/40 p-3.5">
-        <p className="text-[0.71875rem] text-ink-700">
+        <p className="text-[0.75rem] text-ink-700">
           <span className="font-bold">Method: {methodology.method}</span> · {spreadPhrase(methodology.spread)} <span className="text-ink-400">(agreed for this engagement)</span>
         </p>
         {/* Last round's draw, set beside this one (#13). The method is the
@@ -4260,11 +4396,11 @@ function SampleExtractSection({ control, canEdit, locked }: { control: Control; 
               {/* Past the target it stops being a fraction — "26 of 5" reads as a
                   counting error rather than a control tested more than it had to be. */}
               {yearTotal > guide.suggested
-                ? <span className="text-[0.71875rem] font-bold text-ink-700"><span className="tabular-nums">{yearTotal}</span> samples tested this year — above the target of <span className="tabular-nums">{guide.suggested}</span></span>
-                : <span className="text-[0.71875rem] font-bold text-ink-700">This year so far: <span className="tabular-nums">{yearTotal} of {guide.suggested}</span> samples tested</span>}
+                ? <span className="text-[0.75rem] font-bold text-ink-700"><span className="tabular-nums">{yearTotal}</span> samples tested this year — above the target of <span className="tabular-nums">{guide.suggested}</span></span>
+                : <span className="text-[0.75rem] font-bold text-ink-700">This year so far: <span className="tabular-nums">{yearTotal} of {guide.suggested}</span> samples tested</span>}
               {/* The cell that set this target is stated once at the top of the
                   card, so here it is only the number it produced. */}
-              <span className="text-[0.65625rem] text-ink-400 tabular-nums">Target {guide.suggested}</span>
+              <span className="text-[0.6875rem] text-ink-400 tabular-nums">Target {guide.suggested}</span>
             </div>
             <p className="mt-1 text-[0.6875rem] text-ink-500 tabular-nums">
               {yearRounds.map((r, i) => (
@@ -4298,8 +4434,8 @@ function SampleExtractSection({ control, canEdit, locked }: { control: Control; 
         return (
           <div className={cn('mt-4 rounded-xl border p-3.5', missing.length ? 'border-high-200 bg-high-50/30' : 'border-canvas-border bg-paper-50/40')}>
             <div className="flex items-center gap-2 flex-wrap">
-              <span className="text-[0.71875rem] font-bold text-ink-700">One conclusion, {cov.length} companies</span>
-              <span className="text-[0.65625rem] text-ink-400">— every company this control answers for needs items of its own in the sample.</span>
+              <span className="text-[0.75rem] font-bold text-ink-700">One conclusion, {cov.length} companies</span>
+              <span className="text-[0.6875rem] text-ink-400">— every company this control answers for needs items of its own in the sample.</span>
             </div>
             <div className="mt-2 flex items-center gap-2 flex-wrap">
               {cov.map(e => (
@@ -4333,8 +4469,8 @@ function SampleExtractSection({ control, canEdit, locked }: { control: Control; 
         return (
           <div className={cn('mt-4 rounded-xl border p-3.5', missed.length ? 'border-high-200 bg-high-50/30' : 'border-canvas-border bg-paper-50/40')}>
             <div className="flex items-center gap-2 flex-wrap">
-              <span className="text-[0.71875rem] font-bold text-ink-700">One control, {cov.length} routes</span>
-              <span className="text-[0.65625rem] text-ink-400">— every route work can take through this control needs items of its own in the sample.</span>
+              <span className="text-[0.75rem] font-bold text-ink-700">One control, {cov.length} routes</span>
+              <span className="text-[0.6875rem] text-ink-400">— every route work can take through this control needs items of its own in the sample.</span>
             </div>
             <div className="mt-2 flex items-center gap-2 flex-wrap">
               {cov.map(p => (
@@ -4401,7 +4537,7 @@ function SampleExtractSection({ control, canEdit, locked }: { control: Control; 
       {/* The band is the control's, not the file's, so on a multi-file control
           it is stated once underneath rather than repeated on every row. */}
       {sources.length > 1 && (
-        <p className="text-[0.65625rem] text-ink-400 mt-3 leading-relaxed">
+        <p className="text-[0.6875rem] text-ink-400 mt-3 leading-relaxed">
           {control.frequency} · {control.nature}{control.riskRating ? ` · ${control.riskRating.toLowerCase()} risk` : ''} — band {guide.range}. {guide.note} Frequency sets the floor; the control's risk rating moves it inside the band. Each file is sized off the same band.
         </p>
       )}
@@ -4409,7 +4545,7 @@ function SampleExtractSection({ control, canEdit, locked }: { control: Control; 
           the auditor has to defend needs the name behind it, on the same screen
           as the draw rather than two pages away. */}
       {!holds && failedItgcs(eng).length > 0 && (
-        <p className="text-[0.65625rem] text-mitigated-700 mt-1 leading-relaxed">
+        <p className="text-[0.6875rem] text-mitigated-700 mt-1 leading-relaxed">
           Because {failedItgcs(eng).map(f => `${controlCode(f)} — ${f.description.replace(/\.$/, '')}`).join('; ')} concluded ineffective. Test of one comes back when that is remediated and retested.
         </p>
       )}
@@ -4434,13 +4570,13 @@ function ReturnForm({ onCancel, onReturn, consequence = 'Both conclusions clear,
     <>
       <textarea value={reason} onChange={e => setReason(e.target.value)} rows={2} autoFocus
         placeholder="What needs rework — the auditor sees this, and it goes on the trail"
-        className="w-full px-2.5 py-2 rounded-lg border border-canvas-border bg-canvas-elevated text-[0.71875rem] leading-relaxed resize-none focus:outline-none focus:ring-2 focus:ring-brand-200" />
+        className="w-full px-2.5 py-2 rounded-lg border border-canvas-border bg-canvas-elevated text-[0.75rem] leading-relaxed resize-none focus:outline-none focus:ring-2 focus:ring-brand-200" />
       <div className="mt-2 flex items-center gap-2 flex-wrap">
         <button disabled={!reason.trim()} title={reason.trim() ? undefined : 'Say what needs rework — a paper returned without a reason costs the work twice.'}
           onClick={() => onReturn(reason.trim())}
-          className="h-8 px-3.5 inline-flex items-center gap-1.5 rounded-md bg-risk-600 text-white text-[0.71875rem] font-semibold enabled:hover:bg-risk-700 disabled:opacity-40 disabled:cursor-not-allowed transition-colors cursor-pointer"><CornerDownRight size={12} /> Return</button>
-        <button onClick={onCancel} className="h-8 px-3 text-[0.71875rem] font-semibold text-ink-500 hover:text-ink-900 cursor-pointer">Cancel</button>
-        <span className="text-[0.625rem] text-ink-400">{consequence}</span>
+          className="h-8 px-3.5 inline-flex items-center gap-1.5 rounded-md bg-risk-600 text-white text-[0.75rem] font-semibold enabled:hover:bg-risk-700 disabled:opacity-40 disabled:cursor-not-allowed transition-colors cursor-pointer"><CornerDownRight size={12} /> Return</button>
+        <button onClick={onCancel} className="h-8 px-3 text-[0.75rem] font-semibold text-ink-500 hover:text-ink-900 cursor-pointer">Cancel</button>
+        <span className="text-[0.6875rem] text-ink-400">{consequence}</span>
       </div>
     </>
   );
@@ -4479,14 +4615,14 @@ function ReviewNotesBlock({ control }: { control: Control }) {
     <div className="mt-3 rounded-xl border border-canvas-border overflow-hidden">
       <div className="px-3.5 py-2 bg-paper-50/60 border-b border-canvas-border flex items-center gap-2">
         <StickyNote size={13} className="text-ink-500" />
-        <span className="text-[0.71875rem] font-bold text-ink-700">Review notes</span>
-        <span className="text-[0.65625rem] text-ink-400">
+        <span className="text-[0.75rem] font-bold text-ink-700">Review notes</span>
+        <span className="text-[0.6875rem] text-ink-400">
           {notes.length === 0 ? 'None raised on this paper' : `${notes.filter(n => n.status !== 'Closed').length} open of ${notes.length}`}
         </span>
       </div>
 
       {sorted.map(n => (
-        <div key={n.id} className="px-3.5 py-3 border-b border-canvas-border last:border-b-0">
+        <div key={n.id} id={`rn-${n.id}`} className="px-3.5 py-3 border-b border-canvas-border last:border-b-0 scroll-mt-4">
           <div className="flex items-start justify-between gap-3">
             <p className="text-[0.75rem] text-ink-800 leading-relaxed min-w-0">{n.text}</p>
             <span className="shrink-0">
@@ -4495,12 +4631,12 @@ function ReviewNotesBlock({ control }: { control: Control }) {
                 : <Pill tone="compliant">Verified &amp; closed</Pill>}
             </span>
           </div>
-          <p className="text-[0.65625rem] text-ink-400 mt-1">Raised by {n.raisedBy} · {n.raisedAt}</p>
+          <p className="text-[0.6875rem] text-ink-400 mt-1">Raised by {n.raisedBy} · {n.raisedAt}</p>
 
           {n.resolution && (
             <div className="mt-2 pl-3 border-l-2 border-canvas-border">
-              <p className="text-[0.71875rem] text-ink-700 leading-relaxed">{n.resolution.text}</p>
-              <p className="text-[0.65625rem] text-ink-400 mt-0.5">
+              <p className="text-[0.75rem] text-ink-700 leading-relaxed">{n.resolution.text}</p>
+              <p className="text-[0.6875rem] text-ink-400 mt-0.5">
                 {n.resolution.by} · {n.resolution.at}{n.verified && <> — verified by {n.verified.by} · {n.verified.at}</>}
               </p>
             </div>
@@ -4517,14 +4653,14 @@ function ReviewNotesBlock({ control }: { control: Control }) {
                 <div className="mt-2 flex items-center gap-2">
                   <button disabled={!response.trim()}
                     onClick={() => { resolveReviewNote(n.id, response.trim()); setRespondingTo(null); setResponse(''); }}
-                    className="h-8 px-3 rounded-lg bg-brand-600 text-white text-[0.71875rem] font-semibold enabled:hover:bg-brand-700 disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer">Resolve</button>
+                    className="h-8 px-3 rounded-lg bg-brand-600 text-white text-[0.75rem] font-semibold enabled:hover:bg-brand-700 disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer">Resolve</button>
                   <button onClick={() => { setRespondingTo(null); setResponse(''); }}
-                    className="h-8 px-2.5 text-[0.71875rem] font-semibold text-ink-500 hover:text-ink-900 cursor-pointer">Cancel</button>
+                    className="h-8 px-2.5 text-[0.75rem] font-semibold text-ink-500 hover:text-ink-900 cursor-pointer">Cancel</button>
                 </div>
               </div>
             ) : (
               <button onClick={() => { setRespondingTo(n.id); setResponse(''); }}
-                className="mt-2 h-8 px-3 rounded-lg border border-canvas-border text-[0.71875rem] font-semibold text-ink-600 hover:border-brand-300 hover:text-brand-700 cursor-pointer">Resolve with response</button>
+                className="mt-2 h-8 px-3 rounded-lg border border-canvas-border text-[0.75rem] font-semibold text-ink-600 hover:border-brand-300 hover:text-brand-700 cursor-pointer">Resolve with response</button>
             )
           )}
 
@@ -4533,9 +4669,9 @@ function ReviewNotesBlock({ control }: { control: Control }) {
           {isReviewer && n.status === 'Resolved' && (
             <div className="mt-2.5 flex items-center gap-2">
               <button onClick={() => verifyReviewNote(n.id)}
-                className="h-8 px-3 rounded-lg bg-compliant-600 text-white text-[0.71875rem] font-semibold hover:bg-compliant-700 cursor-pointer inline-flex items-center gap-1.5"><CheckCircle2 size={13} /> Verify &amp; close</button>
+                className="h-8 px-3 rounded-lg bg-compliant-600 text-white text-[0.75rem] font-semibold hover:bg-compliant-700 cursor-pointer inline-flex items-center gap-1.5"><CheckCircle2 size={13} /> Verify &amp; close</button>
               <button onClick={() => reopenReviewNote(n.id)}
-                className="h-8 px-3 rounded-lg border border-high-300 text-high-700 text-[0.71875rem] font-semibold hover:bg-high-50 cursor-pointer">Reopen</button>
+                className="h-8 px-3 rounded-lg border border-high-300 text-high-700 text-[0.75rem] font-semibold hover:bg-high-50 cursor-pointer">Reopen</button>
             </div>
           )}
         </div>
@@ -4547,7 +4683,7 @@ function ReviewNotesBlock({ control }: { control: Control }) {
             placeholder="Raise a review note — the auditor answers it, you verify, and it holds the countersign until it closes"
             className="w-full px-3 py-2 rounded-lg border border-canvas-border bg-canvas-elevated text-[0.75rem] resize-none focus:outline-none focus:border-brand-300 focus:ring-2 focus:ring-brand-50" />
           <button disabled={!raising.trim()} onClick={() => { raiseReviewNote(control.id, raising.trim()); setRaising(''); }}
-            className="mt-2 h-8 px-3 rounded-lg bg-brand-600 text-white text-[0.71875rem] font-semibold enabled:hover:bg-brand-700 disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer">Raise review note</button>
+            className="mt-2 h-8 px-3 rounded-lg bg-brand-600 text-white text-[0.75rem] font-semibold enabled:hover:bg-brand-700 disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer">Raise review note</button>
         </div>
       )}
     </div>
@@ -4611,7 +4747,7 @@ function RebuildBlock({ control }: { control: Control }) {
 
   const ready = wording.trim() && liveFrom.trim() && note.trim();
   const fieldCls = 'w-full px-2.5 py-2 rounded-lg border border-canvas-border bg-canvas-elevated text-[0.75rem] text-ink-800 placeholder:text-ink-400 focus:outline-none focus:ring-2 focus:ring-brand-200';
-  const labelCls = 'block text-[0.65625rem] font-bold uppercase tracking-wider text-ink-400 mb-1';
+  const labelCls = 'block text-[0.6875rem] font-bold uppercase tracking-wider text-ink-400 mb-1';
 
   return (
     <div className="px-5 pb-5">
@@ -4711,7 +4847,7 @@ function VersionVerdict({ control }: { control: Control }) {
             <p className="text-[0.75rem] leading-relaxed mt-1 opacity-90">{collapse.reason}</p>
             {/* The earlier failure, in the same box as the conclusion it qualifies.
                 Separating them is how a disclosure stops being read. */}
-            <p className="text-[0.71875rem] leading-relaxed mt-2 pt-2 border-t border-current/10 opacity-80">{collapse.disclosure}</p>
+            <p className="text-[0.75rem] leading-relaxed mt-2 pt-2 border-t border-current/10 opacity-80">{collapse.disclosure}</p>
           </div>
         </div>
       </div>
@@ -4735,14 +4871,14 @@ function VersionHistory({ control }: { control: Control }) {
     <div className="mb-5">
       <div className="flex items-center gap-2 mb-2">
         <History size={14} className="text-ink-400" />
-        <h3 className="text-[0.71875rem] font-bold uppercase tracking-wider text-ink-500">What this control has been</h3>
+        <h3 className="text-[0.6875rem] font-bold uppercase tracking-wider text-ink-500">What this control has been</h3>
       </div>
       <div className="rounded-xl border border-canvas-border bg-canvas-elevated divide-y divide-canvas-border overflow-hidden">
         {/* The live version first — it IS the control, and the rest is history. */}
         <div className="px-4 py-3 flex items-center gap-3">
-          <span className="shrink-0 font-mono text-[0.71875rem] font-semibold text-brand-700">v{versionNo(control)}</span>
+          <span className="shrink-0 font-mono text-[0.75rem] font-semibold text-brand-700">v{versionNo(control)}</span>
           <div className="min-w-0 flex-1">
-            <p className="text-[0.78125rem] text-ink-800 truncate">{control.description}</p>
+            <p className="text-[0.8125rem] text-ink-800 truncate">{control.description}</p>
             <p className="text-[0.6875rem] text-ink-400 mt-0.5">
               Running since {formatDueDate(audit ? versionWindow(control, audit).from : prior[prior.length - 1].supersededAt)} · this is the control
             </p>
@@ -4751,9 +4887,9 @@ function VersionHistory({ control }: { control: Control }) {
         </div>
         {[...prior].reverse().map(v => (
           <div key={v.no} className="px-4 py-3 flex items-center gap-3 bg-paper-50/40">
-            <span className="shrink-0 font-mono text-[0.71875rem] font-semibold text-ink-400">v{v.no}</span>
+            <span className="shrink-0 font-mono text-[0.75rem] font-semibold text-ink-400">v{v.no}</span>
             <div className="min-w-0 flex-1">
-              <p className="text-[0.78125rem] text-ink-600 truncate">{v.description}</p>
+              <p className="text-[0.8125rem] text-ink-600 truncate">{v.description}</p>
               <p className="text-[0.6875rem] text-ink-400 mt-0.5">
                 {audit ? `${formatDueDate(versionWindow(control, audit, v.no).from)} – ` : ''}superseded {formatDueDate(v.supersededAt)} · {v.replaced.defId} · {v.replaced.note}
               </p>
@@ -4763,7 +4899,7 @@ function VersionHistory({ control }: { control: Control }) {
         ))}
       </div>
       {collapse && (
-        <p className="text-[0.71875rem] text-ink-500 leading-relaxed mt-2">
+        <p className="text-[0.75rem] text-ink-500 leading-relaxed mt-2">
           <b className="font-semibold text-ink-700">{collapse.verdict}.</b> {collapse.reason}
         </p>
       )}
@@ -4795,20 +4931,20 @@ function DesignApprovalBlock({ control }: { control: Control }) {
   const Row = ({ label, entry, waiting }: { label: string; entry?: { by: string; at: string }; waiting: string }) => (
     <div className="flex items-center gap-2.5 py-2">
       {entry ? <CheckCircle2 size={16} className="text-compliant-700 shrink-0" /> : <Circle size={15} className="text-ink-300 shrink-0" />}
-      <span className="text-[0.71875rem] text-ink-400 w-[110px] shrink-0">{label}</span>
-      <span className={cn('text-[0.78125rem] min-w-0 truncate', entry ? 'font-semibold text-ink-800' : 'text-ink-400')}>
+      <span className="text-[0.75rem] text-ink-400 w-27.5 shrink-0">{label}</span>
+      <span className={cn('text-[0.8125rem] min-w-0 truncate', entry ? 'font-semibold text-ink-800' : 'text-ink-400')}>
         {entry ? `${entry.by}${entry.at ? ` · ${entry.at}` : ''}` : waiting}
       </span>
     </div>
   );
 
   return (
-    <div className="px-5 pb-5">
+    <div id="design-approval" className="px-5 pb-5 scroll-mt-4">
       <div className="rounded-xl border border-canvas-border overflow-hidden">
         <div className="px-3.5 py-2 bg-paper-50/60 border-b border-canvas-border flex items-center gap-2">
           <BadgeCheck size={13} className="text-ink-500" />
-          <span className="text-[0.71875rem] font-bold text-ink-700">Design approval</span>
-          <span className="text-[0.65625rem] text-ink-400">{approvedBy ? '1 of 1 approved' : '0 of 1 approved'}</span>
+          <span className="text-[0.75rem] font-bold text-ink-700">Design approval</span>
+          <span className="text-[0.6875rem] text-ink-400">{approvedBy ? '1 of 1 approved' : '0 of 1 approved'}</span>
         </div>
         <div className="px-3.5 py-1.5">
           <Row label="Prepared by" entry={preparedBy} waiting="—" />
@@ -4831,10 +4967,10 @@ function DesignApprovalBlock({ control }: { control: Control }) {
           {open && (
             <span className="shrink-0 flex items-center gap-2">
               <button onClick={() => setReturning(r => !r)}
-                className="h-9 px-3.5 inline-flex items-center gap-1.5 rounded-lg border border-canvas-border bg-canvas-elevated text-[0.78125rem] font-semibold text-ink-600 hover:border-risk-300 hover:text-risk-700 transition-colors cursor-pointer"><CornerDownRight size={14} /> Return to the auditor</button>
+                className="h-9 px-3.5 inline-flex items-center gap-1.5 rounded-lg border border-canvas-border bg-canvas-elevated text-[0.8125rem] font-semibold text-ink-600 hover:border-risk-300 hover:text-risk-700 transition-colors cursor-pointer"><CornerDownRight size={14} /> Return to the auditor</button>
               {canApprove && (
                 <button onClick={() => { approveDesign(control.id); logEvent({ action: 'Update', description: `Approved TOD for ${control.id}`, module: 'SOX ICFR', entity: 'Control' }); }}
-                  className="h-9 px-4 inline-flex items-center gap-1.5 rounded-lg bg-brand-600 text-white text-[0.78125rem] font-semibold hover:bg-brand-700 transition-colors cursor-pointer"><Check size={14} /> Approve</button>
+                  className="h-9 px-4 inline-flex items-center gap-1.5 rounded-lg bg-brand-600 text-white text-[0.8125rem] font-semibold hover:bg-brand-700 transition-colors cursor-pointer"><Check size={14} /> Approve</button>
               )}
             </span>
           )}
@@ -4843,7 +4979,7 @@ function DesignApprovalBlock({ control }: { control: Control }) {
 
       {returning && open && (
         <div className="mt-3 rounded-xl border border-risk-200 bg-risk-50/30 p-3.5">
-          <span className="block text-[0.65625rem] font-bold uppercase tracking-wider text-ink-400 mb-1.5">What needs rework in TOD?</span>
+          <span className="block text-[0.6875rem] font-bold uppercase tracking-wider text-ink-400 mb-1.5">What needs rework in TOD?</span>
           <ReturnForm consequence="The TOD conclusion clears, and TOD reopens for the auditor." onCancel={() => setReturning(false)} onReturn={note => {
             returnDesign(control.id, note);
             setReturning(false);
@@ -4856,7 +4992,7 @@ function DesignApprovalBlock({ control }: { control: Control }) {
 }
 
 function SignOffSection({ control }: { control: Control }) {
-  const { eng, role, me, signOffControlWp, returnControl } = useIcfr();
+  const { eng, role, me, signOffControlWp, returnControl, openControl, openReviewerQueue } = useIcfr();
   const logEvent = useAuditLog();
   const so = control.wpSignoff;
   const concluded = isControlLockedIn(eng, control);
@@ -4871,6 +5007,8 @@ function SignOffSection({ control }: { control: Control }) {
   // and the second is exactly what a reviewer reaches for when the first was not
   // enough. This mirrors what returnControl itself permits.
   const canReturn = role === 'reviewer' && !!so?.preparer && !so?.reviewer;
+  // The rest of the reviewer's countersign pile, in the queue's order.
+  const waitingNext = awaitingCountersign(eng).filter(c => c.id !== control.id);
   const done = !!so?.preparer && !!so?.reviewer;
   // ── the reviewer's OTHER answer ─────────────────────────────────────────────
   // Restored Aug 2026. returnControl has done the whole job since 9402d19 —
@@ -4887,15 +5025,15 @@ function SignOffSection({ control }: { control: Control }) {
   const Row = ({ label, entry, waiting }: { label: string; entry?: { by: string; at: string }; waiting: string }) => (
     <div className="flex items-center gap-2.5 py-2">
       {entry ? <CheckCircle2 size={16} className="text-compliant-700 shrink-0" /> : <Circle size={15} className="text-ink-300 shrink-0" />}
-      <span className="text-[0.71875rem] text-ink-400 w-[110px] shrink-0">{label}</span>
-      <span className={cn('text-[0.78125rem] min-w-0 truncate', entry ? 'font-semibold text-ink-800' : 'text-ink-400')}>
+      <span className="text-[0.75rem] text-ink-400 w-27.5 shrink-0">{label}</span>
+      <span className={cn('text-[0.8125rem] min-w-0 truncate', entry ? 'font-semibold text-ink-800' : 'text-ink-400')}>
         {entry ? `${entry.by} · ${entry.at}` : waiting}
       </span>
     </div>
   );
 
   return (
-    <div className="p-5">
+    <div id="wp-signoff" className="p-5 scroll-mt-4">
       {!concluded ? (
         <EmptyState icon={<Lock size={18} />} title="Sign-off is locked" hint="Both tracks have to conclude first. A signature on a half-tested control says the work is finished when it isn't." />
       ) : (
@@ -4924,17 +5062,35 @@ function SignOffSection({ control }: { control: Control }) {
             </p>
             {canSign && (
               <button onClick={() => { signOffControlWp(control.id, 'preparer'); logEvent({ action: 'Update', description: `Signed off the working paper for ${control.id}`, module: 'SOX ICFR', entity: 'Control' }); }}
-                className="shrink-0 h-9 px-4 inline-flex items-center gap-1.5 rounded-lg bg-brand-600 text-white text-[0.78125rem] font-semibold hover:bg-brand-700 transition-colors cursor-pointer"><PenLine size={14} /> Sign off</button>
+                className="shrink-0 h-9 px-4 inline-flex items-center gap-1.5 rounded-lg bg-brand-600 text-white text-[0.8125rem] font-semibold hover:bg-brand-700 transition-colors cursor-pointer"><PenLine size={14} /> Sign off</button>
             )}
             {(canReturn || canCounter) && (
               <span className="shrink-0 flex items-center gap-2">
                 {canReturn && (
                   <button onClick={() => setReturning(r => !r)}
-                    className="h-9 px-3.5 inline-flex items-center gap-1.5 rounded-lg border border-canvas-border bg-canvas-elevated text-[0.78125rem] font-semibold text-ink-600 hover:border-risk-300 hover:text-risk-700 transition-colors cursor-pointer"><CornerDownRight size={14} /> Return to auditor</button>
+                    className="h-9 px-3.5 inline-flex items-center gap-1.5 rounded-lg border border-canvas-border bg-canvas-elevated text-[0.8125rem] font-semibold text-ink-600 hover:border-risk-300 hover:text-risk-700 transition-colors cursor-pointer"><CornerDownRight size={14} /> Return to auditor</button>
                 )}
                 {canCounter && (
                   <button onClick={() => { signOffControlWp(control.id, 'reviewer'); logEvent({ action: 'Update', description: `Countersigned the working paper for ${control.id}`, module: 'SOX ICFR', entity: 'Control' }); }}
-                    className="h-9 px-4 inline-flex items-center gap-1.5 rounded-lg bg-brand-600 text-white text-[0.78125rem] font-semibold hover:bg-brand-700 transition-colors cursor-pointer"><PenLine size={14} /> Countersign</button>
+                    className="h-9 px-4 inline-flex items-center gap-1.5 rounded-lg bg-brand-600 text-white text-[0.8125rem] font-semibold hover:bg-brand-700 transition-colors cursor-pointer"><PenLine size={14} /> Countersign</button>
+                )}
+                {/* Countersign & next (product decision, 2 Oct): the same countersign,
+                    then straight on to the next paper in the Reviewer queue's
+                    order — or back to the queue when this was the last one. */}
+                {canCounter && (
+                  <>
+                    <span className="text-[0.6875rem] text-ink-400 tabular-nums" title="Other papers waiting for your countersign">{waitingNext.length} waiting</span>
+                    <button onClick={e => {
+                      const scroller = e.currentTarget.closest('.overflow-y-auto');
+                      signOffControlWp(control.id, 'reviewer');
+                      logEvent({ action: 'Update', description: `Countersigned the working paper for ${control.id}`, module: 'SOX ICFR', entity: 'Control' });
+                      const next = waitingNext[0];
+                      if (!next) { openReviewerQueue('Nothing else waiting for your countersign.'); return; }
+                      openControl(next.id);
+                      scroller?.scrollTo({ top: 0 });
+                    }}
+                      className="h-9 px-4 inline-flex items-center gap-1 rounded-lg border border-brand-600 bg-canvas-elevated text-brand-700 text-[0.8125rem] font-semibold hover:bg-brand-50 transition-colors cursor-pointer">Countersign &amp; next <ChevronRight size={14} /></button>
+                  </>
                 )}
               </span>
             )}
@@ -4942,7 +5098,7 @@ function SignOffSection({ control }: { control: Control }) {
 
           {returning && canReturn && (
             <div className="mt-3 rounded-xl border border-risk-200 bg-risk-50/30 p-3.5">
-              <span className="block text-[0.65625rem] font-bold uppercase tracking-wider text-ink-400 mb-1.5">What needs rework?</span>
+              <span className="block text-[0.6875rem] font-bold uppercase tracking-wider text-ink-400 mb-1.5">What needs rework?</span>
               <ReturnForm onCancel={() => setReturning(false)} onReturn={reason => {
                 returnControl(control.id, reason);
                 setReturning(false);
@@ -4985,14 +5141,14 @@ function PriorRound({ control, round }: { control: Control; round: ToeRound }) {
         <div className="min-w-0 flex-1">
           <div className="flex items-center gap-2 flex-wrap">
             <span className="text-[0.75rem] font-bold text-ink-700">Round {round.n}</span>
-            <span className="text-[0.71875rem] text-ink-500 tabular-nums">
+            <span className="text-[0.75rem] text-ink-500 tabular-nums">
               {items.length} item{items.length === 1 ? '' : 's'} · {passed} pass · {failed} fail
             </span>
             <span className="text-[0.6875rem] font-semibold text-ink-400 uppercase tracking-wide">set aside</span>
           </div>
           {/* The reason, always visible. It is the whole justification for there
               being a second round at all, so it does not hide behind a click. */}
-          <p className="text-[0.71875rem] text-ink-600 mt-1 leading-relaxed">
+          <p className="text-[0.75rem] text-ink-600 mt-1 leading-relaxed">
             “{round.setAside.reason}” <span className="text-ink-400">— {round.setAside.by}, {round.setAside.at}</span>
           </p>
         </div>
@@ -5065,8 +5221,8 @@ function RoundActions({ control, canEdit }: { control: Control; canEdit: boolean
         <div className="min-w-0 flex-1">
           {spent ? (
             <>
-              <h4 className="text-[0.78125rem] font-bold text-risk-700">The finding stands</h4>
-              <p className="text-[0.71875rem] text-ink-700 mt-1 leading-relaxed">
+              <h4 className="text-[0.8125rem] font-bold text-risk-700">The finding stands</h4>
+              <p className="text-[0.75rem] text-ink-700 mt-1 leading-relaxed">
                 This is round {toeRoundNo(control)} of {TOE_MAX_ROUNDS}, and it failed too — on a sample drawn to answer the first
                 failure. The deficiency has been raised. There is no further round: extending or redrawing now would be
                 looking for a kinder sample, not testing the control. Conclude ineffective and work the finding.
@@ -5074,8 +5230,8 @@ function RoundActions({ control, canEdit }: { control: Control; canEdit: boolean
             </>
           ) : (
             <>
-              <h4 className="text-[0.78125rem] font-bold text-mitigated-800">An attribute failed — round {toeRoundNo(control)} of {TOE_MAX_ROUNDS}</h4>
-              <p className="text-[0.71875rem] text-ink-700 mt-1 leading-relaxed">
+              <h4 className="text-[0.8125rem] font-bold text-mitigated-800">An attribute failed — round {toeRoundNo(control)} of {TOE_MAX_ROUNDS}</h4>
+              <p className="text-[0.75rem] text-ink-700 mt-1 leading-relaxed">
                 A miss is never ignored. Extend the sample to see whether it is isolated — or, if the draw itself was wrong
                 (the window, the entity, reversals nobody excluded), correct the criteria and draw once more. That second
                 draw is the last one, and it needs a reason.
@@ -5107,9 +5263,9 @@ function RoundActions({ control, canEdit }: { control: Control; canEdit: boolean
 
       {asking && createPortal(
         <div className="modal-backdrop" onClick={() => setAsking(false)}>
-          <motion.div className="modal" style={{ maxWidth: 520 }} onClick={e => e.stopPropagation()} initial={{ opacity: 0, y: 14, scale: 0.98 }} animate={{ opacity: 1, y: 0, scale: 1 }}>
+          <motion.div role="dialog" aria-modal="true" aria-labelledby="toe-redraw-title" className="modal" style={{ maxWidth: 520 }} onClick={e => e.stopPropagation()} initial={{ opacity: 0, y: 14, scale: 0.98 }} animate={{ opacity: 1, y: 0, scale: 1 }}><DialogFocus onEscape={() => setAsking(false)} />
             <div className="px-5 py-4">
-              <h3 className="text-[0.875rem] font-bold text-ink-900">Set round {toeRoundNo(control)} aside and draw again?</h3>
+              <h3 id="toe-redraw-title" className="text-[0.875rem] font-bold text-ink-900">Set round {toeRoundNo(control)} aside and draw again?</h3>
               <p className="text-[0.75rem] text-ink-500 mt-1.5 leading-relaxed">
                 Round {toeRoundNo(control)} is kept whole — its items, its results and this reason all print on the working
                 paper. The draw reopens at step ③, and what you draw next is the last round this control gets.
@@ -5119,20 +5275,20 @@ function RoundActions({ control, canEdit }: { control: Control; canEdit: boolean
                   the draw. A redraw is only defensible if the first one did not
                   test the control. */}
               <label className="block mt-3.5">
-                <span className="text-[0.71875rem] font-semibold text-ink-600">Why did the first draw not test this control?</span>
+                <span className="text-[0.75rem] font-semibold text-ink-600">Why did the first draw not test this control?</span>
                 <textarea autoFocus value={why} onChange={e => setWhy(e.target.value)} rows={3}
                   placeholder="e.g. the extract included reversals and test postings, so the failed item was never a payment the control applies to"
                   className="mt-1.5 w-full text-[0.75rem] rounded-lg border border-canvas-border bg-canvas-elevated px-2.5 py-2 text-ink-800 placeholder:text-ink-400 focus:outline-none focus:ring-2 focus:ring-brand-200 resize-none" />
               </label>
             </div>
             <div className="flex items-center justify-end gap-2 px-5 py-3.5 border-t border-canvas-border bg-paper-50/40">
-              <button onClick={() => setAsking(false)} className="h-9 px-3.5 text-[0.78125rem] font-semibold text-ink-600 hover:text-ink-900 cursor-pointer">Keep this round</button>
+              <button onClick={() => setAsking(false)} className="h-9 px-3.5 text-[0.8125rem] font-semibold text-ink-600 hover:text-ink-900 cursor-pointer">Keep this round</button>
               <button disabled={!why.trim()} onClick={() => {
                 startToeRound(control.id, why.trim());
                 logEvent({ action: 'Update', description: `Set a TOE round aside on ${control.id} and reopened the draw`, module: 'SOX ICFR', entity: 'Test Result' });
                 setWhy(''); setAsking(false);
               }}
-                className="h-9 px-4 inline-flex items-center gap-1.5 rounded-lg bg-brand-600 text-white text-[0.78125rem] font-semibold disabled:opacity-40 enabled:hover:bg-brand-700 transition-colors cursor-pointer">
+                className="h-9 px-4 inline-flex items-center gap-1.5 rounded-lg bg-brand-600 text-white text-[0.8125rem] font-semibold disabled:opacity-40 enabled:hover:bg-brand-700 transition-colors cursor-pointer">
                 <RotateCcw size={13} /> Set aside and reopen
               </button>
             </div>
@@ -5154,6 +5310,12 @@ function OperatingSection({ control, canEdit, locked }: { control: Control; canE
   const allTested = o.steps.length > 0 && o.steps.every(s => stepResult(s) !== 'Not tested');
   const suggestion: TrackConclusion = operatingSuggestion(control);
   const [testing, setTesting] = useState(false);
+  // A TOE run this page did not start (the chat's) shows here like its own.
+  // One attribute's own run is left to that attribute's line.
+  const liveRun = useControlRun(control.id);
+  const chatRun = !testing && runStageOf(liveRun) === 'toe' && !liveRun!.label.startsWith('Reading the files behind attribute') ? liveRun : null;
+  // Stopped from the Ira tab: the progress line goes the moment the run does (5 Oct).
+  useEffect(() => { if (testing && !liveRun) setTesting(false); }, [testing, liveRun]);
   const openDetail = useOpenRailDetail();
   const [newAttr, setNewAttr] = useState('');
   const [addingAttr, setAddingAttr] = useState(false);
@@ -5173,7 +5335,9 @@ function OperatingSection({ control, canEdit, locked }: { control: Control; canE
     // left and would otherwise be watching the wrong column.
     const t = startRun(control.id, 'Reading the uploaded files against each attribute', TOE_RUN_STEPS, 2400, true);
     logEvent({ action: 'Run', description: `Ran AI validation on ${ready} ready attribute(s) for ${control.id}`, module: 'SOX ICFR', entity: 'Test Result' });
-    const skipped = o.steps.filter(s => !requiredFilesReady(s, control)).map(s => {
+    // An attribute taken off a started plan is not Ira's, so it is not "skipped" either.
+    const picked = control.iraPlan?.started ? control.iraPlan.attributes : undefined;
+    const skipped = o.steps.filter(s => (!picked || picked.includes(s.id)) && !requiredFilesReady(s, control)).map(s => {
       const { uploaded, total } = requiredFilesCount(s, control);
       const missing = total - uploaded;
       // an attribute with an empty list isn't short a file — it has none to upload
@@ -5193,21 +5357,27 @@ function OperatingSection({ control, canEdit, locked }: { control: Control; canE
   // files; Ira's sure results are confirmed in the tester's name. Attributes
   // still short a file are left alone here — the button run is what marks them
   // "couldn't test", and that is the tester's call to make.
+  //
+  // Ira's plan you approve (Stage 1a, 2 Oct): nothing here runs until Start is
+  // pressed on the plan, in either mode, and only for the ticked attributes.
   const iraMode = useIraMode();
+  const plan = control.iraPlan;
+  const planRuns = !!plan?.started && !plan.skipped.includes('operating');
   const autoKey = useRef('');
-  const autoReady = o.steps.filter(s => requiredFilesReady(s, control) && !s.validation && !s.override && stepResult(s) === 'Not tested');
+  const autoReady = o.steps.filter(s => (!plan?.attributes || plan.attributes.includes(s.id)) && requiredFilesReady(s, control) && !s.validation && !s.override && stepResult(s) === 'Not tested');
   useEffect(() => {
-    if (iraMode !== 'automatic' || role !== 'auditor' || !canEdit || locked || testing || !autoReady.length || controlRun(control.id)) return;
+    // An undone step waits for Run again on the plan (5 Oct) — Undo is not a cue to re-read.
+    if (!planRuns || role !== 'auditor' || !canEdit || locked || testing || !autoReady.length || controlRun(control.id) || iraStepUndone(control.id, 'operating')) return;
     const key = `${control.id}|${autoReady.map(s => s.id).join(',')}`;
     if (autoKey.current === key) return;
     autoKey.current = key;
     runAll();
   }); // eslint-disable-line react-hooks/exhaustive-deps
   useEffect(() => {
-    if (iraMode !== 'automatic' || role !== 'auditor' || !canEdit || locked || o.conclusion !== 'Not tested') return;
+    if (iraMode !== 'automatic' || !planRuns || role !== 'auditor' || !canEdit || locked || o.conclusion !== 'Not tested') return;
     const sure = o.steps.filter(s => awaitsConfirm(s) && (confidenceOf(s.validation, `${control.id}:${s.id}`) ?? 0) >= CONFIDENT_AT);
-    if (sure.length) confirmIra(control.id, 'operating', sure.map(s => s.id));
-  }, [iraMode, role, canEdit, locked, o.conclusion, o.steps, control.id, confirmIra]);
+    if (sure.length) confirmIra(control.id, 'operating', sure.map(s => s.id), { byIra: true });
+  }, [iraMode, planRuns, role, canEdit, locked, o.conclusion, o.steps, control.id, confirmIra]);
 
   if (locked) {
     // A29 — a year-end control in an interim or roll-forward audit waits for the
@@ -5243,7 +5413,7 @@ function OperatingSection({ control, canEdit, locked }: { control: Control; canE
           Every control tests against a sample now, whatever its evidence mode. */}
       <div className="mb-5">
         {o.sampling ? (
-          <div className="rounded-xl border border-canvas-border bg-paper-50/40 p-3 flex items-center gap-3 flex-wrap text-[0.71875rem] text-ink-500">
+          <div className="rounded-xl border border-canvas-border bg-paper-50/40 p-3 flex items-center gap-3 flex-wrap text-[0.75rem] text-ink-500">
             <span className="inline-flex items-center gap-1.5 font-semibold text-ink-700"><FlaskConical size={12} /> Testing {o.sampling.size} sampled items</span>
             {/* A size the auditor set against the agreed table is not an
                 ordinary value, and the step that records the results is where
@@ -5259,7 +5429,7 @@ function OperatingSection({ control, canEdit, locked }: { control: Control; canE
             {o.population && <span className="text-ink-400">Population {o.population.count.toLocaleString()} · {o.population.tieOut}</span>}
           </div>
         ) : !isControlLockedIn(eng, control) && (
-          <div className="rounded-xl border border-dashed border-canvas-border p-3 text-[0.71875rem] text-ink-500 inline-flex items-center gap-1.5">
+          <div className="rounded-xl border border-dashed border-canvas-border p-3 text-[0.75rem] text-ink-500 inline-flex items-center gap-1.5">
             <FlaskConical size={12} className="text-ink-400" /> No sample yet — draw one in step ③ to test against sampled items.
           </div>
         )}
@@ -5269,23 +5439,25 @@ function OperatingSection({ control, canEdit, locked }: { control: Control; canE
           30 Sep): the files used to be listed again under every attribute that
           needed them, and the per-item answers only lived inside a popup. */}
       <ToeFiles control={control} canEdit={canEdit} onOpenFile={f => openDetail({ kind: 'file', file: f })} />
-      <ToeGrid control={control} onOpenWorking={st => st.validation && openDetail({ kind: 'working', title: `${st.code} · ${st.description}`, validation: st.validation, control, step: st, confKey: `${control.id}:${st.id}`, home: sampleHome(eng, a => auditCovers(a, control, eng.id)) })}  />
+      <ToeGrid control={control} onOpenWorking={(st, it) => st.validation && openDetail({ kind: 'working', title: `${st.code} · ${st.description}`, validation: st.validation, control, step: st, confKey: `${control.id}:${st.id}`, home: sampleHome(eng, a => auditCovers(a, control, eng.id)), ...(it ? itemFocus(control, st, it) : {}) })}  />
 
       {/* attributes */}
       <div className="flex items-center justify-between mb-3 gap-3 flex-wrap">
-        <h4 className="text-[0.78125rem] font-bold text-ink-700 inline-flex items-center gap-1.5"><ClipboardCheck size={14} /> Test attributes <span className="font-normal text-ink-400">· each evidenced independently</span></h4>
+        <h4 className="text-[0.8125rem] font-bold text-ink-700 inline-flex items-center gap-1.5"><ClipboardCheck size={14} /> Test attributes <span className="font-normal text-ink-400">· each evidenced independently</span></h4>
         <div className="flex items-center gap-2">
           <span className="text-[0.6875rem] text-ink-400 tabular-nums hidden md:inline">{attCount} attested · {prog.passed} pass · {prog.failed} fail</span>
-          {canEdit && o.steps.length > 0 && !testing && <button disabled={ready === 0 && untested === 0} onClick={runAll} title={ready === 0 ? 'No attribute has its files yet — Ira will say which it could not test, and draft the ask' : undefined} className={cn('h-8 px-3 inline-flex items-center gap-1.5 rounded-lg bg-evidence-600 text-white text-[0.75rem] font-semibold enabled:hover:bg-evidence-700 transition-colors cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed')}><Sparkles size={14} /> {`Run AI validation on ready attributes (${ready} of ${o.steps.length})`}</button>}
+          {/* Manual only (Stage 1a): in Automatic, Ira runs from its plan's Start. */}
+          {canEdit && o.steps.length > 0 && !testing && iraMode === 'manual' && <button disabled={(ready === 0 && untested === 0) || !!liveRun} onClick={runAll} title={liveRun ? busyNote(liveRun) : ready === 0 ? 'No attribute has its files yet — Ira will say which it could not test, and draft the ask' : undefined} className={cn('h-8 px-3 inline-flex items-center gap-1.5 rounded-md bg-brand-600 text-white text-[0.75rem] font-semibold enabled:hover:bg-brand-700 transition-colors cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed')}><Sparkles size={12} /> {`Run AI validation on ready attributes (${ready} of ${o.steps.length})`}</button>}
           {canEdit && <button onClick={() => setAddingAttr(a => !a)} className="h-8 px-2.5 inline-flex items-center gap-1.5 rounded-lg border border-canvas-border bg-canvas-elevated text-[0.75rem] font-semibold text-ink-700 hover:border-brand-300 hover:text-brand-700 cursor-pointer"><Plus size={13} /> Add</button>}
         </div>
       </div>
       <InlineNote note={runNote.note} className="-mt-2 mb-3 text-right" />
       {testing && <RunLine files={o.steps.filter(s => requiredFilesReady(s, control)).reduce((n, s) => n + requiredFilesCount(s, control).uploaded, 0)} total={ready || o.steps.length} noun="attribute" ms={2400} />}
-      {!testing && <ConfirmSure control={control} which="operating" rows={o.steps} />}
+      {chatRun && <LiveRunLine run={chatRun} />}
+      {!testing && !chatRun && <ConfirmSure control={control} which="operating" rows={o.steps} />}
       {addingAttr && (
         <div className="flex items-center gap-2 mb-3">
-          <input autoFocus value={newAttr} onChange={e => setNewAttr(e.target.value)} onKeyDown={e => { if (e.key === 'Enter' && newAttr.trim()) { addAttribute(control.id, newAttr.trim()); logEvent({ action: 'Create', description: `Added test attribute to ${control.id}`, module: 'SOX ICFR', entity: 'Control' }); setNewAttr(''); setAddingAttr(false); } }} placeholder="e.g. Approval evidenced before the transaction posts" className="flex-1 h-9 px-3 rounded-lg border border-canvas-border bg-canvas-elevated text-[0.78125rem] focus:outline-none focus:ring-2 focus:ring-brand-200" />
+          <input aria-label="New attribute" autoFocus value={newAttr} onChange={e => setNewAttr(e.target.value)} onKeyDown={e => { if (e.key === 'Enter' && newAttr.trim()) { addAttribute(control.id, newAttr.trim()); logEvent({ action: 'Create', description: `Added test attribute to ${control.id}`, module: 'SOX ICFR', entity: 'Control' }); setNewAttr(''); setAddingAttr(false); } }} placeholder="e.g. Approval evidenced before the transaction posts" className="flex-1 h-9 px-3 rounded-lg border border-canvas-border bg-canvas-elevated text-[0.8125rem] focus:outline-none focus:ring-2 focus:ring-brand-200" />
           <button disabled={!newAttr.trim()} onClick={() => { addAttribute(control.id, newAttr.trim()); logEvent({ action: 'Create', description: `Added test attribute to ${control.id}`, module: 'SOX ICFR', entity: 'Control' }); setNewAttr(''); setAddingAttr(false); }} className="h-9 px-3 rounded-lg bg-brand-600 text-white text-[0.75rem] font-semibold disabled:opacity-40 cursor-pointer">Add</button>
         </div>
       )}
@@ -5296,7 +5468,7 @@ function OperatingSection({ control, canEdit, locked }: { control: Control; canE
       ) : (
         // Each attribute folded to one line until opened (user pick, 1 Oct: B of
         // three trial layouts) — the grid above carries the per-item answers.
-        <div className="space-y-1.5 mb-5">{o.steps.map(st => <FoldableAttribute key={st.id} control={control} step={st} canEdit={canEdit} testing={testing && requiredFilesReady(st, control)} />)}</div>
+        <div className="space-y-1.5 mb-5">{o.steps.map(st => <FoldableAttribute key={st.id} control={control} step={st} canEdit={canEdit} testing={(testing || !!chatRun) && requiredFilesReady(st, control)} />)}</div>
       )}
 
       {/* What a failure opens — and, in the last round, what it closes. Directly
@@ -5352,9 +5524,9 @@ function RollForwardBar({ control, parts }: { control: Control; parts: RollPart[
                 {st.state === 'pending' ? (
                   <span className="flex items-center gap-1.5">
                     <button type="button" onClick={() => confirmRollPart(control.id, p, 'confirmed')}
-                      className="h-7 px-2.5 rounded-md bg-brand-600 text-white text-[0.71875rem] font-semibold hover:bg-brand-700 transition-colors cursor-pointer">Confirm unchanged</button>
+                      className="h-7 px-2.5 rounded-md bg-brand-600 text-white text-[0.75rem] font-semibold hover:bg-brand-700 transition-colors cursor-pointer">Confirm unchanged</button>
                     <button type="button" onClick={() => confirmRollPart(control.id, p, 'edited')}
-                      className="h-7 px-2.5 rounded-md border border-canvas-border bg-canvas-elevated text-[0.71875rem] font-semibold text-ink-700 hover:border-ink-300 transition-colors cursor-pointer">Edit</button>
+                      className="h-7 px-2.5 rounded-md border border-canvas-border bg-canvas-elevated text-[0.75rem] font-semibold text-ink-700 hover:border-ink-300 transition-colors cursor-pointer">Edit</button>
                   </span>
                 ) : (
                   <span className="text-[0.6875rem] text-ink-500">{st.state === 'confirmed' ? 'Confirmed unchanged' : 'Taken to edit'} by {st.by} · {st.at}</span>
@@ -5368,10 +5540,14 @@ function RollForwardBar({ control, parts }: { control: Control; parts: RollPart[
   );
 }
 
-function VStep({ n, title, subtitle, status, locked, right, children, defaultOpen = true, id, hideStatus, arrived }: { n: number; title: string; subtitle: string; status: TrackConclusion; locked?: boolean; right?: React.ReactNode; children: React.ReactNode; defaultOpen?: boolean; id?: string; hideStatus?: boolean; arrived?: boolean }) {
+/** `sealed` — the step is locked because its own work was approved, not because
+ *  a gate holds it shut: the node wears the approval mark, not the padlock. */
+function VStep({ n, title, subtitle, status, locked, sealed, right, children, defaultOpen = true, id, hideStatus, arrived }: { n: number; title: string; subtitle: string; status: TrackConclusion; locked?: boolean; sealed?: boolean; right?: React.ReactNode; children: React.ReactNode; defaultOpen?: boolean; id?: string; hideStatus?: boolean; arrived?: boolean }) {
   const nodeClass = locked ? 'locked' : status === 'Effective' ? 'done' : status === 'Ineffective' ? 'fail' : 'active';
   const concluded = !hideStatus && (status === 'Effective' || status === 'Ineffective');
   const [open, setOpen] = useState(defaultOpen);
+  // A step somebody was sent to opens, even if it started folded as finished.
+  useEffect(() => { if (arrived) setOpen(true); }, [arrived]);
   const [flash, setFlash] = useState(false);
   const prev = useRef(status);
   useEffect(() => {
@@ -5390,7 +5566,7 @@ function VStep({ n, title, subtitle, status, locked, right, children, defaultOpe
   return (
     <motion.div id={id} className={cn('vstep transition-shadow duration-500', arrived && 'rounded-xl ring-2 ring-brand-500/60 shadow-lg shadow-brand-500/10')} variants={{ hidden: { opacity: 0, y: 12 }, show: { opacity: 1, y: 0 } }}>
       <div className="vstep-rail" />
-      <div className={cn('vstep-node', nodeClass)}>{locked ? <Lock size={15} /> : status === 'Effective' ? <Check size={17} strokeWidth={3} /> : status === 'Ineffective' ? <X size={16} strokeWidth={3} /> : n}</div>
+      <div className={cn('vstep-node', nodeClass)}>{locked ? (sealed ? <BadgeCheck size={15} /> : <Lock size={15} />) : status === 'Effective' ? <Check size={17} strokeWidth={3} /> : status === 'Ineffective' ? <X size={16} strokeWidth={3} /> : n}</div>
       <div className={cn('panel relative', locked && 'panel-locked')}>
         <button type="button" onClick={() => setOpen(o => !o)} aria-expanded={open} title={open ? 'Collapse' : 'Expand'} className={cn('w-full flex items-start justify-between gap-3 px-5 pt-4 pb-3 text-left cursor-pointer transition-colors hover:bg-paper-50/40', open && 'border-b border-canvas-border')}>
           <div className="flex items-start gap-2.5 min-w-0">
@@ -5398,7 +5574,7 @@ function VStep({ n, title, subtitle, status, locked, right, children, defaultOpe
             <div className="min-w-0">
               <h3 className="text-[0.9375rem] font-bold text-ink-900">{title}</h3>
               {/* fills the container — a 520px cap wrapped these to more rows than they needed */}
-              {open && <p className="text-[0.71875rem] text-ink-500 mt-0.5">{subtitle}</p>}
+              {open && <p className="text-[0.75rem] text-ink-500 mt-0.5">{subtitle}</p>}
             </div>
           </div>
           <div className="flex items-center gap-2 shrink-0">{right}{hideStatus ? null : concluded ? <Stamp result={status as 'Effective' | 'Ineffective'} animate={false} /> : <TrackPill c={status} />}</div>
@@ -5422,7 +5598,7 @@ function VStep({ n, title, subtitle, status, locked, right, children, defaultOpe
 
 // ── discussion rail ──────────────────────────────────────────────────────────────
 const ANCHORS: { id: DiscussionAnchor | 'all'; label: string }[] = [
-  { id: 'all', label: 'All' }, { id: 'control', label: 'Control' }, { id: 'design', label: '② TOD' }, { id: 'operating', label: '④ TOE' },
+  { id: 'all', label: 'All' }, { id: 'control', label: 'Control' }, { id: 'design', label: '① TOD' }, { id: 'operating', label: '④ TOE' },
 ];
 // the two hands on the working paper — auditor (purple/gavel) and risk owner (amber/check)
 const EXEC_ROLE: Record<Role, { Icon: typeof Gavel; accent: string; chip: string; label: string }> = {
@@ -5431,12 +5607,65 @@ const EXEC_ROLE: Record<Role, { Icon: typeof Gavel; accent: string; chip: string
   // our branch carries a third persona — the reviewer who countersigns
   reviewer: { Icon: UserCheck, accent: 'var(--color-evidence-500)', chip: 'bg-evidence-50 text-evidence-700', label: 'Reviewer' },
 };
-const TRACK_FILTERS = [{ id: 'all', label: 'All' }, { id: 'design', label: '② TOD' }, { id: 'operating', label: '④ TOE' }] as const;
+const TRACK_FILTERS = [{ id: 'all', label: 'All' }, { id: 'design', label: '① TOD' }, { id: 'operating', label: '④ TOE' }] as const;
 
 function ExecResult({ result }: { result?: TestResult | TrackConclusion }) {
   if (!result || result === 'Not tested') return null;
   const pass = result === 'Pass' || result === 'Effective';
-  return <span className="inline-flex items-center gap-1"><Tickmark result={pass ? 'Pass' : 'Fail'} size={13} /><span className={cn('text-[0.65625rem] font-bold', pass ? 'text-compliant-700' : 'text-risk-700')}>{result}</span></span>;
+  return <span className="inline-flex items-center gap-1"><Tickmark result={pass ? 'Pass' : 'Fail'} size={13} /><span className={cn('text-[0.6875rem] font-bold', pass ? 'text-compliant-700' : 'text-risk-700')}>{result}</span></span>;
+}
+
+/** One Ira run in History (Stage 1c): one line — what it read and how sure it
+ *  was — folding open to the files, then each check or attribute with its
+ *  answer, confidence and the file the answer was read in. Read off the
+ *  snapshot taken at the run, so it still says what this run found after the
+ *  rows have been confirmed, overridden or run again. */
+function IraRunLine({ e }: { e: ExecutionEvent & { iraRun: NonNullable<ExecutionEvent['iraRun']> } }) {
+  const [open, setOpen] = useState(false);
+  const { files, items } = e.iraRun;
+  const sure = items.filter(i => i.result !== 'blocked' && (i.confidence ?? 0) >= CONFIDENT_AT).length;
+  const unsure = items.filter(i => i.result !== 'blocked' && (i.confidence ?? 0) < CONFIDENT_AT).length;
+  const couldnt = items.filter(i => i.result === 'blocked').length;
+  const failed = items.filter(i => i.result === 'Fail').length;
+  const tally = [sure && `${sure} sure`, unsure && `${unsure} less sure`, couldnt && `${couldnt} couldn't test`, failed && `${failed} failed`].filter(Boolean).join(', ');
+  return (
+    // sits on the trail like every other entry — the node carries Ira's one
+    // sparkle, the card is the one line
+    <div className="flex gap-2.5">
+    <span className="exec-node text-brand-500"><Sparkles size={13} aria-hidden /></span>
+    <div className="exec-card flex-1 min-w-0 !p-0" style={{ borderLeftColor: 'var(--color-brand-400)' }}>
+      <button type="button" onClick={() => setOpen(o => !o)} aria-expanded={open}
+        className="w-full flex items-center gap-2 px-2.5 py-2 text-left cursor-pointer hover:bg-paper-50/60 rounded-[10px] transition-colors">
+        <span className="flex-1 min-w-0 truncate text-[0.75rem] text-ink-800">Ira read {files.length} file{files.length === 1 ? '' : 's'}{tally && <span className="text-ink-500"> · {tally}</span>}</span>
+        <span className="text-[0.6875rem] text-ink-400 shrink-0">{e.at}</span>
+        <ChevronRight size={13} className={cn('text-ink-400 shrink-0 transition-transform', open && 'rotate-90')} />
+      </button>
+      {open && (
+        <div className="px-2.5 pb-2.5 pt-0.5 space-y-2 border-t border-canvas-border">
+          <div className="pt-2 text-[0.6875rem] font-semibold uppercase tracking-wide text-ink-400">{e.track === 'design' ? '① TOD' : '④ TOE'} · files read</div>
+          {files.length > 0
+            ? <ul className="space-y-0.5">{files.map(f => <li key={f} className="flex items-center gap-1.5 text-[0.6875rem] text-ink-600 min-w-0"><Paperclip size={10} className="text-ink-400 shrink-0" /><span className="truncate">{f}</span></li>)}</ul>
+            : <p className="text-[0.6875rem] text-ink-400">No file was on record for this run.</p>}
+          <ul className="space-y-1.5">
+            {items.map((i, k) => (
+              <li key={k} className="flex items-start gap-2 min-w-0">
+                <span className="mt-px shrink-0"><Tickmark result={i.result === 'blocked' ? 'Not tested' : i.result} blocked={i.result === 'blocked'} confidence={i.confidence} size={13} /></span>
+                <div className="min-w-0 flex-1">
+                  <div className="text-[0.6875rem] text-ink-800 leading-snug truncate" title={i.label}>{i.label}</div>
+                  <div className="text-[0.6875rem] text-ink-400 truncate">
+                    {i.result === 'blocked' ? "Couldn't test" : i.result === 'Pass' ? 'Passed' : 'Failed'}
+                    {i.confidence != null && ` · ${Math.round(i.confidence)}% sure`}
+                    {i.source && ` · read in ${i.source}`}
+                  </div>
+                </div>
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
+    </div>
+    </div>
+  );
 }
 
 // ── execution history — the shared sign-off trail (both personas, both tracks) ─────
@@ -5457,8 +5686,8 @@ function ExecutionTrail({ control }: { control: Control }) {
   );
   return (
     <>
-      <div className="px-3 pb-2 flex items-center gap-1">
-        {TRACK_FILTERS.map(t => <button key={t.id} onClick={() => setTrack(t.id)} className={cn('h-7 px-2.5 rounded-md text-[0.71875rem] font-semibold transition-colors cursor-pointer', track === t.id ? 'bg-brand-600 text-white' : 'text-ink-500 hover:text-ink-800')}>{t.label}</button>)}
+      <div role="tablist" aria-label="Filter the trail" onKeyDown={tabKeys} className="px-3 pb-2 flex items-center gap-1">
+        {TRACK_FILTERS.map(t => <button key={t.id} role="tab" aria-selected={track === t.id} onClick={() => setTrack(t.id)} className={cn('h-7 px-2.5 rounded-md text-[0.75rem] font-semibold transition-colors cursor-pointer', track === t.id ? 'bg-brand-600 text-white' : 'text-ink-500 hover:text-ink-800')}>{t.label}</button>)}
       </div>
       <div className="flex-1 overflow-y-auto p-3">
         {events.length === 0 ? (
@@ -5466,6 +5695,7 @@ function ExecutionTrail({ control }: { control: Control }) {
         ) : (
           <div className="exec-trail space-y-2">
             {events.map(e => {
+              if (e.iraRun) return <IraRunLine key={e.id} e={{ ...e, iraRun: e.iraRun }} />;
               const rm = EXEC_ROLE[e.role];
               const who = e.by.split(' · ')[0];
               return (
@@ -5474,15 +5704,15 @@ function ExecutionTrail({ control }: { control: Control }) {
                   <div className="exec-card flex-1 min-w-0" style={{ borderLeftColor: rm.accent }}>
                     <div className="flex items-start justify-between gap-2">
                       <span className="text-[0.75rem] text-ink-800 leading-snug"><b className="font-semibold">{who}</b> {e.verb}</span>
-                      <span className="text-[0.65625rem] text-ink-400 shrink-0 mt-0.5">{e.at}</span>
+                      <span className="text-[0.6875rem] text-ink-400 shrink-0 mt-0.5">{e.at}</span>
                     </div>
                     {(e.target || e.result) && (
                       <div className="flex items-center gap-2 mt-1.5 flex-wrap">
-                        {e.target && <span className="font-mono text-[0.65625rem] font-semibold text-ink-500 bg-paper-50 border border-canvas-border rounded px-1.5 h-[18px] inline-flex items-center max-w-full truncate">{e.target}</span>}
+                        {e.target && <span className="font-mono text-[0.6875rem] font-semibold text-ink-500 bg-paper-50 border border-canvas-border rounded px-1.5 h-4.5 inline-flex items-center max-w-full truncate">{e.target}</span>}
                         <ExecResult result={e.result} />
                       </div>
                     )}
-                    <div className="mt-1.5 inline-flex items-center gap-1.5 text-[0.625rem] font-semibold uppercase tracking-wide text-ink-400">{e.track === 'design' ? '① TOD' : '② TOE'}<span className={cn('normal-case tracking-normal rounded px-1.5 h-[16px] inline-flex items-center', rm.chip)}>{rm.label}</span></div>
+                    <div className="mt-1.5 inline-flex items-center gap-1.5 text-[0.6875rem] font-semibold uppercase tracking-wide text-ink-400">{e.track === 'design' ? '① TOD' : '④ TOE'}<span className={cn('normal-case tracking-normal rounded px-1.5 h-4 inline-flex items-center', rm.chip)}>{rm.label}</span></div>
                   </div>
                 </div>
               );
@@ -5503,17 +5733,17 @@ function DiscussionPane({ control }: { control: Control }) {
   const postAnchor: DiscussionAnchor = tab === 'all' ? 'control' : tab;
   return (
     <>
-      <div className="px-3 pb-2 flex items-center gap-1">
-        {ANCHORS.map(a => <button key={a.id} onClick={() => setTab(a.id)} className={cn('h-7 px-2.5 rounded-md text-[0.71875rem] font-semibold transition-colors cursor-pointer', tab === a.id ? 'bg-brand-600 text-white' : 'text-ink-500 hover:text-ink-800')}>{a.label}</button>)}
+      <div role="tablist" aria-label="Discussion threads" onKeyDown={tabKeys} className="px-3 pb-2 flex items-center gap-1">
+        {ANCHORS.map(a => <button key={a.id} role="tab" aria-selected={tab === a.id} onClick={() => setTab(a.id)} className={cn('h-7 px-2.5 rounded-md text-[0.75rem] font-semibold transition-colors cursor-pointer', tab === a.id ? 'bg-brand-600 text-white' : 'text-ink-500 hover:text-ink-800')}>{a.label}</button>)}
       </div>
       <div className="flex-1 overflow-y-auto p-3 space-y-2.5">
         {threads.length === 0 && <div className="text-center text-[0.75rem] text-ink-400 py-10">No discussion here yet. Start a thread below — your role is tagged automatically.</div>}
         {threads.map(d => (
           <div key={d.id} className="space-y-2">
-            <div className="flex items-center gap-2 text-[0.65625rem] font-semibold uppercase tracking-wide text-ink-400">{d.anchor === 'design' ? '① TOD' : d.anchor === 'operating' ? '② TOE' : 'Control'}{d.resolved && <Pill tone="compliant">Resolved</Pill>}<button onClick={() => resolveDiscussion(d.id, !d.resolved)} className="ml-auto text-ink-400 hover:text-brand-700 normal-case cursor-pointer">{d.resolved ? 'reopen' : 'resolve'}</button></div>
+            <div className="flex items-center gap-2 text-[0.6875rem] font-semibold uppercase tracking-wide text-ink-400">{d.anchor === 'design' ? '① TOD' : d.anchor === 'operating' ? '④ TOE' : 'Control'}{d.resolved && <Pill tone="compliant">Resolved</Pill>}<button onClick={() => resolveDiscussion(d.id, !d.resolved)} className="ml-auto text-ink-400 hover:text-brand-700 normal-case cursor-pointer">{d.resolved ? 'reopen' : 'resolve'}</button></div>
             {d.comments.map(c => (
               <div key={c.id} className={cn('disc-bubble', c.role)}>
-                <div className="flex items-center justify-between gap-2 mb-1"><span className="text-[0.71875rem] font-bold text-ink-800">{c.by}</span><span className="text-[0.65625rem] text-ink-400">{c.at}</span></div>
+                <div className="flex items-center justify-between gap-2 mb-1"><span className="text-[0.75rem] font-bold text-ink-800">{c.by}</span><span className="text-[0.6875rem] text-ink-400">{c.at}</span></div>
                 <p className="text-[0.75rem] text-ink-700 leading-snug">{c.text}</p>
               </div>
             ))}
@@ -5521,10 +5751,10 @@ function DiscussionPane({ control }: { control: Control }) {
         ))}
       </div>
       <div className="p-3 border-t border-canvas-border">
-        <div className="text-[0.65625rem] text-ink-400 mb-1.5">Posting to <b className="text-ink-600">{postAnchor === 'control' ? 'Control' : postAnchor === 'design' ? '① TOD' : '② TOE'}</b> as <b className="text-ink-600 capitalize">{role}</b></div>
+        <div className="text-[0.6875rem] text-ink-400 mb-1.5">Posting to <b className="text-ink-600">{postAnchor === 'control' ? 'Control' : postAnchor === 'design' ? '① TOD' : '④ TOE'}</b> as <b className="text-ink-600 capitalize">{role}</b></div>
         <div className="flex items-end gap-2">
-          <textarea value={text} onChange={e => setText(e.target.value)} rows={2} placeholder="Add a comment or ask the risk owner…" className="flex-1 text-[0.75rem] rounded-lg border border-canvas-border bg-canvas-elevated px-2.5 py-2 text-ink-800 placeholder:text-ink-400 focus:outline-none focus:ring-2 focus:ring-brand-200 resize-none" />
-          <button disabled={!text.trim()} onClick={() => { addComment(control.id, postAnchor, text.trim()); logEvent({ action: 'Create', description: `Posted comment on ${control.id}`, module: 'SOX ICFR', entity: 'Comment' }); setText(''); }} className="h-9 w-9 shrink-0 inline-flex items-center justify-center rounded-lg bg-brand-600 text-white disabled:opacity-40 enabled:hover:bg-brand-700 transition-colors cursor-pointer"><Send size={15} /></button>
+          <textarea aria-label="Comment" value={text} onChange={e => setText(e.target.value)} rows={2} placeholder="Add a comment or ask the risk owner…" className="flex-1 text-[0.75rem] rounded-lg border border-canvas-border bg-canvas-elevated px-2.5 py-2 text-ink-800 placeholder:text-ink-400 focus:outline-none focus:ring-2 focus:ring-brand-200 resize-none" />
+          <button aria-label="Post comment" disabled={!text.trim()} onClick={() => { addComment(control.id, postAnchor, text.trim()); logEvent({ action: 'Create', description: `Posted comment on ${control.id}`, module: 'SOX ICFR', entity: 'Comment' }); setText(''); }} className="h-9 w-9 shrink-0 inline-flex items-center justify-center rounded-lg bg-brand-600 text-white disabled:opacity-40 enabled:hover:bg-brand-700 transition-colors cursor-pointer"><Send size={15} /></button>
         </div>
       </div>
     </>
@@ -5551,12 +5781,12 @@ type ActivityView = 'changes' | 'comments';
 function ActivityPane({ control, view, onView }: { control: Control; view: ActivityView; onView: (v: ActivityView) => void }) {
   const { eng } = useIcfr();
   const openDisc = discussionsFor(eng, control.id).filter(d => !d.resolved).length;
-  const seg = (on: boolean) => cn('h-7 px-2.5 rounded-md text-[0.71875rem] font-semibold transition-colors cursor-pointer', on ? 'bg-paper-100 text-ink-900' : 'text-ink-500 hover:text-ink-800');
+  const seg = (on: boolean) => cn('h-7 px-2.5 rounded-md text-[0.75rem] font-semibold transition-colors cursor-pointer', on ? 'bg-paper-100 text-ink-900' : 'text-ink-500 hover:text-ink-800');
   return (
     <>
-      <div className="px-3 pb-1.5 flex items-center gap-1">
-        <button onClick={() => onView('changes')} className={seg(view === 'changes')}>Changes</button>
-        <button onClick={() => onView('comments')} className={seg(view === 'comments')}>Comments{openDisc > 0 && <span className="ml-1 tabular-nums text-high-700">{openDisc}</span>}</button>
+      <div role="tablist" aria-label="History" onKeyDown={tabKeys} className="px-3 pb-1.5 flex items-center gap-1">
+        <button role="tab" aria-selected={view === 'changes'} onClick={() => onView('changes')} className={seg(view === 'changes')}>Changes</button>
+        <button role="tab" aria-selected={view === 'comments'} onClick={() => onView('comments')} className={seg(view === 'comments')}>Comments{openDisc > 0 && <span className="ml-1 tabular-nums text-high-700">{openDisc}</span>}</button>
       </div>
       {view === 'changes' ? <ExecutionTrail control={control} /> : <DiscussionPane control={control} />}
     </>
@@ -5567,22 +5797,22 @@ function ActivityRail({ control, pane, onPane, onCollapse, detail, onCloseDetail
   control: Control; pane: RailPane; onPane: (p: RailPane) => void; onCollapse: () => void;
   detail: RailDetail | null; onCloseDetail: () => void; activityView: ActivityView; onActivityView: (v: ActivityView) => void;
 }) {
-  const { eng, role, openAuditId } = useIcfr();
+  const { eng, role, me, openAuditId } = useIcfr();
   // The pane belongs to the page, not to this component: the folded spine
   // picks one too, and a rail that forgot which tab was chosen the moment it
   // was folded would make folding it destructive. Picking a tab also closes
   // whatever detail (Ira's working, a file) was open over it.
   const setPane = (p: RailPane) => { onCloseDetail(); onPane(p); };
   // Ambient level (review #11): the count on the tab, never a toast.
-  const needs = needsYouItems(control, eng, role, openAuditId).length;
+  const needs = needsYouItems(control, eng, role, openAuditId, me).length;
   const tabCls = (on: boolean) => cn('flex-1 min-w-0 h-8 rounded-lg text-[0.75rem] font-semibold inline-flex items-center justify-center gap-1.5 transition-colors cursor-pointer', on ? 'bg-canvas-elevated text-brand-700 shadow-[0_1px_4px_-1px_rgba(15,8,30,0.18)] ring-1 ring-canvas-border' : 'text-ink-500 hover:text-ink-800');
   return (
     <aside className="panel overflow-hidden h-full min-h-0 flex flex-col">
       <div className="flex items-center gap-2 m-3 mb-2">
-        <div className="flex-1 min-w-0 flex items-center gap-1 p-1 rounded-xl bg-paper-50 border border-canvas-border">
-          <button onClick={() => setPane('ask')} className={tabCls(pane === 'ask' && !detail)}><Sparkles size={13} /> Ira</button>
-          <button onClick={() => setPane('needs')} className={tabCls(pane === 'needs' && !detail)}><Inbox size={13} /> Needs you{needs > 0 && <span className="text-[0.625rem] tabular-nums opacity-70">{needs}</span>}</button>
-          <button onClick={() => setPane('activity')} className={tabCls(pane === 'activity' && !detail)}><History size={13} /> History</button>
+        <div role="tablist" aria-label="Control rail" onKeyDown={tabKeys} className="flex-1 min-w-0 flex items-center gap-1 p-1 rounded-xl bg-paper-50 border border-canvas-border">
+          <button role="tab" aria-selected={pane === 'ask' && !detail} onClick={() => setPane('ask')} className={tabCls(pane === 'ask' && !detail)}><Sparkles size={13} /> Ira</button>
+          <button role="tab" aria-selected={pane === 'needs' && !detail} onClick={() => setPane('needs')} className={tabCls(pane === 'needs' && !detail)}><Inbox size={13} /> Needs you{needs > 0 && <span className="text-[0.625rem] tabular-nums opacity-70">{needs}</span>}</button>
+          <button role="tab" aria-selected={pane === 'activity' && !detail} onClick={() => setPane('activity')} className={tabCls(pane === 'activity' && !detail)}><History size={13} /> History</button>
         </div>
         <button onClick={onCollapse} title="Hide this rail" aria-label="Hide the Ira rail"
           className="shrink-0 w-8 h-8 rounded-lg text-ink-400 hover:text-ink-700 hover:bg-paper-50 inline-flex items-center justify-center transition-colors cursor-pointer">
@@ -5612,7 +5842,7 @@ function RailSpine({ control, running, onOpen }: { control: Control; running: bo
   const { eng, role, me, openAuditId } = useIcfr();
   const still = useReducedMotion();
   const execCount = eng.executions.filter(e => e.controlId === control.id).length;
-  const needs = needsYouItems(control, eng, role, openAuditId).length;
+  const needs = needsYouItems(control, eng, role, openAuditId, me).length;
   // One shape for all three (user ask, 23 Sep). History and Discussion were
   // naked 15px glyphs stacked under a 36px tile that plainly WAS a button, so
   // they read as leftovers rather than as the other two ways in. They take Ira's
@@ -5624,7 +5854,7 @@ function RailSpine({ control, running, onOpen }: { control: Control; running: bo
   const cap = 'text-[0.6875rem] font-semibold';
   // The count rides the tile's corner rather than sharing a line with the icon:
   // at this size a numeral beside a glyph reads as part of the glyph.
-  const badge = 'absolute -top-1 -right-1 min-w-[15px] h-[15px] px-1 rounded-full inline-flex items-center justify-center text-[0.625rem] font-bold tabular-nums';
+  const badge = 'absolute -top-1 -right-1 min-w-3.75 h-3.75 px-1 rounded-full inline-flex items-center justify-center text-[0.625rem] font-bold tabular-nums';
   return (
     <div className="panel absolute inset-0 bottom-6 flex flex-col overflow-hidden">
       {/* The fold control sits where it sits in the open rail — top right of
@@ -5787,10 +6017,10 @@ function ParkOperatingBanner({ control }: { control: Control }) {
       </p>
       <input value={reason} onChange={e => setReason(e.target.value)}
         placeholder="Why it cannot be tested yet — e.g. the control went live with the new AP system in August"
-        className="w-full h-8 px-2.5 rounded-md border border-canvas-border bg-canvas-elevated text-[0.78125rem] focus:outline-none focus:border-brand-300" />
+        className="w-full h-8 px-2.5 rounded-md border border-canvas-border bg-canvas-elevated text-[0.8125rem] focus:outline-none focus:border-brand-300" />
       <input value={from} onChange={e => setFrom(e.target.value)}
         placeholder="Testable from — e.g. 30 Nov 2026"
-        className="w-full h-8 px-2.5 rounded-md border border-canvas-border bg-canvas-elevated text-[0.78125rem] focus:outline-none focus:border-brand-300" />
+        className="w-full h-8 px-2.5 rounded-md border border-canvas-border bg-canvas-elevated text-[0.8125rem] focus:outline-none focus:border-brand-300" />
       <div className="flex items-center gap-2">
         <button disabled={!reason.trim() || !from.trim()}
           onClick={() => { parkOperating(control.id, reason.trim(), from.trim()); setAsking(false); setReason(''); setFrom(''); }}
@@ -5885,7 +6115,7 @@ function RetestDueBanner({ control }: { control: Control }) {
         <div className="mt-3 space-y-2">
           <textarea autoFocus rows={2} value={reason} onChange={e => setReason(e.target.value)}
             placeholder="What you did — e.g. re-read the failed design checks against the new wording on 12 Oct, all three hold; or why no retest is needed"
-            className="w-full px-2.5 py-2 rounded-md border border-canvas-border bg-canvas-elevated text-[0.78125rem] text-ink-800 placeholder:text-ink-400 resize-none focus:outline-none focus:border-brand-300" />
+            className="w-full px-2.5 py-2 rounded-md border border-canvas-border bg-canvas-elevated text-[0.8125rem] text-ink-800 placeholder:text-ink-400 resize-none focus:outline-none focus:border-brand-300" />
           <div className="flex items-center gap-2 flex-wrap">
             <button disabled={!reason.trim()}
               onClick={() => { clearRetestDue(control.id, reason.trim()); setAsking(false); setReason(''); }}
@@ -5917,9 +6147,9 @@ function UnableToTestBanner({ control }: { control: Control }) {
         <h3 className="text-[0.8125rem] font-bold text-mitigated-800 inline-flex items-center gap-1.5"><FileWarning size={15} /> Record that you can't test this</h3>
         <p className="text-[0.75rem] text-ink-600">This is not a finding — nothing has been shown to have failed. It goes to {ownersOf(control).processOwner} as a request, and testing picks up where it left off once they produce it.</p>
         <input value={reason} onChange={e => setReason(e.target.value)} placeholder="What is blocking the test — e.g. the approval log isn't retained by the system"
-          className="w-full h-8 px-2.5 rounded-md border border-canvas-border bg-canvas-elevated text-[0.78125rem] focus:outline-none focus:border-brand-300" />
+          className="w-full h-8 px-2.5 rounded-md border border-canvas-border bg-canvas-elevated text-[0.8125rem] focus:outline-none focus:border-brand-300" />
         <input value={needed} onChange={e => setNeeded(e.target.value)} placeholder="What the owner has to produce for testing to resume"
-          className="w-full h-8 px-2.5 rounded-md border border-canvas-border bg-canvas-elevated text-[0.78125rem] focus:outline-none focus:border-brand-300" />
+          className="w-full h-8 px-2.5 rounded-md border border-canvas-border bg-canvas-elevated text-[0.8125rem] focus:outline-none focus:border-brand-300" />
         <div className="flex items-center gap-2">
           <button disabled={!reason.trim() || !needed.trim()} onClick={() => { markUnableToTest(control.id, 'operating', reason.trim(), needed.trim()); setAsking(false); setReason(''); setNeeded(''); }}
             className="h-8 px-3 rounded-lg bg-mitigated-700 text-white text-[0.75rem] font-semibold enabled:hover:bg-mitigated-800 disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer">Send the request</button>
@@ -5948,7 +6178,7 @@ function UnableToTestBanner({ control }: { control: Control }) {
         {isAuditor && !block.convertedTo && !isControlLockedIn(eng, control) && (
           <div className="flex items-center gap-2 shrink-0">
             <button onClick={() => resolveUnableToTest(control.id)} className="h-8 px-3 rounded-lg bg-brand-600 text-white text-[0.75rem] font-semibold hover:bg-brand-700 cursor-pointer">Received — resume testing</button>
-            <button onClick={() => escalateUnableToTest(control.id)} title="The period is closing and it never arrived — the control could not be evidenced, so it becomes an ordinary exception"
+            <button onClick={() => escalateUnableToTest(control.id)} title="The period is closing and it never arrived — the control could not be evidenced, so it becomes an ordinary deficiency"
               className="h-8 px-3 rounded-lg border border-risk-300 text-risk-700 text-[0.75rem] font-semibold hover:bg-risk-50 cursor-pointer">Never arrived — raise it</button>
           </div>
         )}
@@ -5983,9 +6213,10 @@ export default function ControlDossier() {
   const [wpPreview, setWpPreview] = useState(false);
   // The owner's own document — see RemediationBriefModal.
   const [briefOpen, setBriefOpen] = useState(false);
-  /** The leadsheet header's detail half — activity, risk and fields. Open by
-   *  default; folding it away leaves the objective and the status bar. */
-  const [headDetailOpen, setHeadDetailOpen] = useState(true);
+  /** The leadsheet header's detail half — activity, risk and fields. Folded by
+   *  default (design review, 5 Oct: the page was too long before step ①);
+   *  "more" opens it, and folded it still leaves the risk line and status bar. */
+  const [headDetailOpen, setHeadDetailOpen] = useState(false);
   // the way back into a concluded control — reason required, trail recorded
   const [reopening, setReopening] = useState(false);
   const [reopenWhy, setReopenWhy] = useState('');
@@ -6025,10 +6256,11 @@ export default function ControlDossier() {
   // nothing.
   const [arrivedAt, setArrivedAt] = useState<string | null>(null);
   useEffect(() => {
-    if (focusStep !== 'population') return;
+    if (!focusStep) return;
+    const step = focusStep;
     const t = window.setTimeout(() => {
-      document.getElementById('vstep-population')?.scrollIntoView({ behavior: 'smooth', block: 'center' });
-      setArrivedAt('population');
+      document.getElementById(`vstep-${step}`)?.scrollIntoView({ behavior: 'smooth', block: step === 'design' ? 'start' : 'center' });
+      setArrivedAt(step);
       clearFocusStep();
     }, 160);
     return () => window.clearTimeout(t);
@@ -6130,6 +6362,19 @@ export default function ControlDossier() {
   // sample is never re-locked by the population — that work is done, and its own
   // gate is on the paper.
   const sampleLocked = toeLocked || (!control.operating.sampling && !popLocked);
+  // ── finished steps start folded (design review, 5 Oct) ─────────────────────
+  // A step whose work is done and whose result is on its header line opens
+  // folded, so the page leads with the step still being worked. A click opens
+  // it. Only an EFFECTIVE finish folds — an ineffective one carries the next
+  // move (a rebuild, a further round) inside it — and a part last round carried
+  // over that still waits on a confirm keeps its step open.
+  const rollHeld = (...parts: RollPart[]) => parts.some(p => control.rollForward?.parts[p]?.state === 'pending');
+  const drawFiles = sampledSources(populationSources(control));
+  const foldDesign = !isOwner && todApproved && designResult === 'Effective' && !rollHeld('design', 'checks');
+  const foldPop = !isOwner && popLocked && !popGated && !rollHeld('population');
+  const foldSample = !sampleLocked && !!control.operating.sampling && drawFiles.length > 0 && drawFiles.every(s => s.approvedSample) && !rollHeld('attributes');
+  const foldToe = !toeLocked && opResult === 'Effective';
+  const foldFinal = !!control.wpSignoff?.reviewer;
   const def = eng.deficiencies.find(d => d.controlId === control.id);
   const country = countryFor(eng.id, control);
 
@@ -6191,13 +6436,13 @@ export default function ControlDossier() {
               {control.frequency && <HeadChip>{control.frequency}</HeadChip>}
               {headOwners.controlOwner && <HeadChip icon={<UserCheck size={11} />}><span className="text-ink-400">Owner</span> {headOwners.controlOwner}</HeadChip>}
               {control.assertions.length > 0 && (
-                <span className="max-w-[18rem] truncate" title={control.assertions.join(', ')}>
+                <span className="max-w-72 truncate" title={control.assertions.join(', ')}>
                   <HeadChip><span className="truncate">{control.assertions.join(', ')}</span></HeadChip>
                 </span>
               )}
               {/* The control's own number, plain — it is a reference, not a
                   judgement, so it does not wear a chip like one. */}
-              <span className="font-mono text-[0.71875rem] text-ink-400 ml-1">{control.wpRef ?? control.id}</span>
+              <span className="font-mono text-[0.75rem] text-ink-400 ml-1">{control.wpRef ?? control.id}</span>
               {/* Only on a control that has actually been rebuilt — a lone "v1" on
                   every other control would be noise claiming to be information. */}
               {hasVersions(control) && <HeadChip>v{versionNo(control)}</HeadChip>}
@@ -6251,11 +6496,17 @@ export default function ControlDossier() {
                       {control.riskDescription}
                     </p>
                   )}
-                  <p className="mt-2">
-                    <span className="font-semibold text-ink-900">Control description</span>
-                    <span className="text-ink-300 mx-1.5">·</span>
-                    {control.controlActivity}
-                  </p>
+                  {/* The RACM's Control Activity narrative. A row that never
+                      carried one (O-04, several imports) used to print the label
+                      over nothing; the one-line statement is already the
+                      heading above, so the line goes rather than repeat it. */}
+                  {control.controlActivity?.trim() && (
+                    <p className="mt-2">
+                      <span className="font-semibold text-ink-900">Control description</span>
+                      <span className="text-ink-300 mx-1.5">·</span>
+                      {control.controlActivity}
+                    </p>
+                  )}
                   <div className="mt-3.5 flex flex-wrap items-baseline gap-x-6 gap-y-2">
                     {/* Who and where, moved off the header line (22 Sep): the
                         chips above say what kind of control this is, and six
@@ -6319,14 +6570,14 @@ export default function ControlDossier() {
                 and an owner watching it move learns what is being tested and how
                 it is going. They see what is asked of them instead. */}
             {isOwner ? (
-              <span className="text-[0.71875rem] font-semibold text-ink-400 uppercase tracking-wide">Your control</span>
+              <span className="text-[0.6875rem] font-semibold text-ink-400 uppercase tracking-wide">Your control</span>
             ) : (
               <>
                 <ConclusionPill c={concl} />
                 <span aria-hidden className="w-px h-4 bg-canvas-border" />
-                <span className="text-[0.71875rem] text-ink-400 inline-flex items-center gap-1.5"><Tickmark result={designResult === 'Effective' ? 'Pass' : designResult === 'Ineffective' ? 'Fail' : 'Not tested'} size={14} /> TOD {designResult.toLowerCase()}</span>
+                <span className="text-[0.75rem] text-ink-400 inline-flex items-center gap-1.5"><Tickmark result={designResult === 'Effective' ? 'Pass' : designResult === 'Ineffective' ? 'Fail' : 'Not tested'} size={14} /> TOD {designResult.toLowerCase()}</span>
                 <ChevronRight size={13} className="text-ink-300" />
-                <span className="text-[0.71875rem] text-ink-400 inline-flex items-center gap-1.5"><Tickmark result={opResult === 'Effective' ? 'Pass' : opResult === 'Ineffective' ? 'Fail' : 'Not tested'} size={14} /> TOE {toeLocked ? 'locked' : opResult.toLowerCase()}</span>
+                <span className="text-[0.75rem] text-ink-400 inline-flex items-center gap-1.5"><Tickmark result={opResult === 'Effective' ? 'Pass' : opResult === 'Ineffective' ? 'Fail' : 'Not tested'} size={14} /> TOE {toeLocked ? 'locked' : opResult.toLowerCase()}</span>
               </>
             )}
             {/* The three readings, in the gap this row already had between the
@@ -6384,7 +6635,7 @@ export default function ControlDossier() {
           <ol className="space-y-1.5">
             {control.auditSteps.map((s, i) => (
               <li key={i} className="flex items-start gap-2.5 text-[0.75rem] text-ink-700 leading-relaxed">
-                <span className="w-[18px] h-[18px] rounded-md bg-brand-50 text-brand-700 text-[0.625rem] font-bold inline-flex items-center justify-center shrink-0 mt-0.5 tabular-nums">{i + 1}</span>
+                <span className="w-4.5 h-4.5 rounded-md bg-brand-50 text-brand-700 text-[0.625rem] font-bold inline-flex items-center justify-center shrink-0 mt-0.5 tabular-nums">{i + 1}</span>
                 <span>{s}</span>
               </li>
             ))}
@@ -6457,7 +6708,7 @@ export default function ControlDossier() {
       <UnableToTestBanner control={control} />
 
       {/* the stepper — the whole of the left column below the header */}
-      <motion.div className="vstepper" variants={{ hidden: {}, show: { transition: { staggerChildren: 0.1, delayChildren: 0.08 } } }}>
+      <motion.div key={control.id} className="vstepper" variants={{ hidden: {}, show: { transition: { staggerChildren: 0.1, delayChildren: 0.08 } } }}>
           {/* Design leads (user ask). It is also the order the work happens in:
               design gates operating, so a control whose design fails never needs
               a population at all — building one first was work done on spec. */}
@@ -6466,13 +6717,13 @@ export default function ControlDossier() {
               for nothing. The owner keeps "Documents" — they supply evidence
               rather than test design, and naming the step after a test they
               cannot run would describe somebody else's job. */}
-          <VStep n={1} id="vstep-design" locked={!isOwner && todApproved} title={isOwner ? 'Documents' : 'Test of design'}
+          <VStep n={1} id="vstep-design" arrived={arrivedAt === 'design'} locked={!isOwner && todApproved} sealed defaultOpen={!foldDesign} title={isOwner ? 'Documents' : 'Test of design'}
             subtitle={isOwner
               ? 'The documents this control needs on file. Attach what you hold — the auditor tests them.'
               : 'The documents on file, one transaction traced end-to-end, and a design check for each thing that has to be true. Ends with the design marked effective or ineffective.'}
             status={designResult} hideStatus={isOwner}
             right={!isOwner && todApproved
-              ? <span className="text-[0.6875rem] font-semibold text-ink-400 inline-flex items-center gap-1"><Lock size={11} /> Approved by {control.design.approval?.approvedBy?.by}</span>
+              ? <span className="text-[0.6875rem] font-semibold text-ink-400 inline-flex items-center gap-1"><BadgeCheck size={11} /> Approved by {control.design.approval?.approvedBy?.by}</span>
               : !isOwner && control.design.carriedFrom
               // A roll-forward carried this conclusion from its parent interim —
               // TOD is retested only where TOD failed (user ask), so the step
@@ -6535,19 +6786,19 @@ export default function ControlDossier() {
               person to tick that they agreed. What gates the lock now is the IPE
               conclusion: four checks somebody actually performs on the report the
               population came out of. */}
-          <VStep n={2} id="vstep-population" arrived={arrivedAt === 'population'} title="Population" subtitle="Pick the source file and filter it down to this control's instances, then test the report it came from before locking it. Nothing downstream runs until it is locked." hideStatus
+          <VStep n={2} id="vstep-population" arrived={arrivedAt === 'population'} defaultOpen={!foldPop} title="Population" subtitle="Pick the source file and filter it down to this control's instances, then test the report it came from before locking it. Nothing downstream runs until it is locked." hideStatus
             status={popLocked && !popGated ? 'Effective' : 'Not tested'} locked={popGated}
             right={popGated
               ? <span className="text-[0.6875rem] font-semibold text-ink-400 inline-flex items-center gap-1"><Lock size={11} /> {popNote}</span>
               : popLocked
-              ? <span className="text-[0.6875rem] font-bold text-compliant-700 inline-flex items-center gap-1"><Lock size={12} /> Locked · {control.operating.population?.count.toLocaleString()} instances</span>
+              ? <span className="text-[0.6875rem] font-bold text-compliant-700 inline-flex items-center gap-1"><Database size={12} /> Locked · {control.operating.population?.count.toLocaleString()} instances</span>
               : control.operating.population
                 ? <span className="text-[0.6875rem] font-semibold text-mitigated-800 inline-flex items-center gap-1"><AlertTriangle size={11} /> Extracted, not yet locked</span>
                 : <span className="text-[0.6875rem] font-semibold text-ink-400">Nothing extracted yet</span>}>
             <RollForwardBar control={control} parts={['population']} />
             <PopulationSection control={control} canEdit={canEdit} locked={popGated} />
           </VStep>
-          <VStep n={3} id="vstep-sample" title="Sample drawing" subtitle="Drawn off the locked population, sized by how often the control runs, with the selection method and its seed stored so anyone can reproduce the same items." hideStatus
+          <VStep n={3} id="vstep-sample" defaultOpen={!foldSample} title="Sample drawing" subtitle="Drawn off the locked population, sized by how often the control runs, with the selection method and its seed stored so anyone can reproduce the same items." hideStatus
             status={sampleLocked ? 'Not tested' : control.operating.sampling ? 'Effective' : 'Not tested'} locked={sampleLocked}
             right={toeLocked
               ? <span className="text-[0.6875rem] font-semibold text-ink-400 inline-flex items-center gap-1"><Lock size={11} /> {gateNote}</span>
@@ -6559,13 +6810,13 @@ export default function ControlDossier() {
             <RollForwardBar control={control} parts={['attributes']} />
             <SampleExtractSection control={control} canEdit={canEdit} locked={sampleLocked} />
           </VStep>
-          <VStep n={4} id="vstep-toe" title="Test of effectiveness" subtitle="Each sampled item against each attribute, pass or fail, with the evidence attached. Concludes effective or ineffective." status={toeLocked ? 'Not tested' : opResult} locked={toeLocked}
+          <VStep n={4} id="vstep-toe" arrived={arrivedAt === 'toe'} defaultOpen={!foldToe} title="Test of effectiveness" subtitle="Each sampled item against each attribute, pass or fail, with the evidence attached. Concludes effective or ineffective." status={toeLocked ? 'Not tested' : opResult} locked={toeLocked}
             right={toeLocked ? <span className="text-[0.6875rem] font-semibold text-ink-400 inline-flex items-center gap-1"><Lock size={11} /> {gateNote}</span> : undefined}>
             <OperatingSection control={control} canEdit={canEdit} locked={toeLocked} />
           </VStep>
           </>
           )}
-          {!isOwner && <VStep n={5} id="vstep-signoff" title="Final" subtitle="The auditor signs the paper, the reviewer countersigns it, and the control is done. Nobody countersigns work they prepared." hideStatus
+          {!isOwner && <VStep n={5} id="vstep-signoff" defaultOpen={!foldFinal} title="Final" subtitle="The auditor signs the paper, the reviewer countersigns it, and the control is done. Nobody countersigns work they prepared." hideStatus
             status={control.wpSignoff?.reviewer ? 'Effective' : 'Not tested'} locked={!controlLocked}
             right={control.wpSignoff?.reviewer
               ? <span className="text-[0.6875rem] font-bold text-compliant-700 inline-flex items-center gap-1"><BadgeCheck size={12} /> Control done</span>
@@ -6581,7 +6832,7 @@ export default function ControlDossier() {
               exception's root cause is written on this page, and Ira offers to
               do it from the chat. */}
           {concl === 'Ineffective' && (
-            <motion.div id="control-exception" variants={{ hidden: { opacity: 0, y: 12 }, show: { opacity: 1, y: 0 } }} className="ml-[54px] rounded-xl border border-risk-200 bg-risk-50/40 p-4 mt-1">
+            <motion.div id="control-exception" variants={{ hidden: { opacity: 0, y: 12 }, show: { opacity: 1, y: 0 } }} className="ml-13.5 rounded-xl border border-risk-200 bg-risk-50/40 p-4 mt-1">
               {/* ── graded here, and only here ───────────────────────────────
                   This used to send the auditor to the Deficiency management tab
                   to grade the finding their own testing had just raised, which
@@ -6650,7 +6901,7 @@ export default function ControlDossier() {
                   and the same figures twice on one screen is one figure too many.
 
                   {def && !defOpen && exposureTotal(def.exposure) > 0 && (
-                    <div className="mt-2.5 pt-2.5 border-t border-risk-200/70 flex flex-wrap items-center gap-x-4 gap-y-1 text-[0.71875rem]">
+                    <div className="mt-2.5 pt-2.5 border-t border-risk-200/70 flex flex-wrap items-center gap-x-4 gap-y-1 text-[0.75rem]">
                       <span className="font-semibold text-risk-700">Exposure {formatINR(exposureTotal(def.exposure))}</span>
                       {(Object.keys(EXPOSURE_LABEL) as (keyof typeof EXPOSURE_LABEL)[])
                         .filter(k => (def.exposure as Exposure)[k] > 0)
@@ -6691,7 +6942,7 @@ export default function ControlDossier() {
         <motion.div className="h-full min-h-0 pb-6 relative overflow-hidden" variants={{ hidden: { opacity: 0, y: 12 }, show: { opacity: 1, y: 0 } }}>
           {/* `inert` so a folded rail cannot be tabbed into — it is clipped
               out of sight, not merely out of the way. */}
-          <div className="h-full w-[400px]" inert={!railOpen}>
+          <div className="h-full w-100" inert={!railOpen}>
             <ActivityRail control={control} pane={railPane} onPane={setRailPane} onCollapse={() => setRailOpen(false)}
               detail={railDetail} onCloseDetail={() => setRailDetail(null)} activityView={activityView} onActivityView={setActivityView} />
           </div>
@@ -6704,29 +6955,29 @@ export default function ControlDossier() {
 
       {reopening && createPortal(
         <div className="modal-backdrop" onClick={() => setReopening(false)}>
-          <motion.div className="modal" style={{ maxWidth: 460 }} onClick={e => e.stopPropagation()} initial={{ opacity: 0, y: 14, scale: 0.98 }} animate={{ opacity: 1, y: 0, scale: 1 }}>
+          <motion.div role="dialog" aria-modal="true" aria-labelledby="reopen-control-title" className="modal" style={{ maxWidth: 460 }} onClick={e => e.stopPropagation()} initial={{ opacity: 0, y: 14, scale: 0.98 }} animate={{ opacity: 1, y: 0, scale: 1 }}><DialogFocus onEscape={() => setReopening(false)} />
             <div className="px-5 py-4">
               <div className="flex items-start gap-3">
                 <span className="w-9 h-9 rounded-lg bg-risk-50 text-risk-700 inline-flex items-center justify-center shrink-0"><RotateCcw size={17} /></span>
                 <div className="min-w-0">
-                  <h3 className="text-[0.875rem] font-bold text-ink-900">Reopen this control?</h3>
+                  <h3 id="reopen-control-title" className="text-[0.875rem] font-bold text-ink-900">Reopen this control?</h3>
                   <p className="text-[0.75rem] text-ink-500 mt-1 leading-relaxed">
                     Both conclusions go back to <b className="font-semibold text-ink-700">not tested</b> and the sign-off clears — a reopened paper is no longer the paper anybody signed. The evidence, the sample and the results stay where they are; it is the conclusions that have to be reached again.
                   </p>
                 </div>
               </div>
               <label className="block mt-3.5">
-                <span className="block text-[0.65625rem] font-bold uppercase tracking-wider text-ink-400 mb-1">Why — recorded on the trail</span>
+                <span className="block text-[0.6875rem] font-bold uppercase tracking-wider text-ink-400 mb-1">Why — recorded on the trail</span>
                 <textarea autoFocus rows={2} value={reopenWhy} onChange={e => setReopenWhy(e.target.value)}
                   placeholder="e.g. the FX rate feed changed in November — Q3 onwards has to be retested"
                   className="w-full px-2.5 py-2 rounded-lg border border-canvas-border bg-canvas-elevated text-[0.75rem] text-ink-800 placeholder:text-ink-400 resize-none focus:outline-none focus:ring-2 focus:ring-brand-200" />
               </label>
             </div>
             <div className="flex items-center justify-end gap-2 px-5 py-3.5 border-t border-canvas-border bg-paper-50/40">
-              <button onClick={() => { setReopening(false); setReopenWhy(''); }} className="h-9 px-3.5 text-[0.78125rem] font-semibold text-ink-600 hover:text-ink-900 cursor-pointer">Keep it closed</button>
+              <button onClick={() => { setReopening(false); setReopenWhy(''); }} className="h-9 px-3.5 text-[0.8125rem] font-semibold text-ink-600 hover:text-ink-900 cursor-pointer">Keep it closed</button>
               <button disabled={!reopenWhy.trim()} title={reopenWhy.trim() ? undefined : 'A reopened conclusion needs a reason on the trail'}
                 onClick={() => { reopenControl(control.id, reopenWhy.trim()); logEvent({ action: 'Update', description: `Reopened ${control.id} — ${reopenWhy.trim()}`, module: 'SOX ICFR', entity: 'Control' }); setReopening(false); setReopenWhy(''); }}
-                className="h-9 px-4 inline-flex items-center gap-1.5 rounded-lg bg-risk-600 text-white text-[0.78125rem] font-semibold enabled:hover:bg-risk-700 disabled:opacity-40 disabled:cursor-not-allowed transition-colors cursor-pointer"><RotateCcw size={13} /> Reopen</button>
+                className="h-9 px-4 inline-flex items-center gap-1.5 rounded-lg bg-risk-600 text-white text-[0.8125rem] font-semibold enabled:hover:bg-risk-700 disabled:opacity-40 disabled:cursor-not-allowed transition-colors cursor-pointer"><RotateCcw size={13} /> Reopen</button>
             </div>
           </motion.div>
         </div>,

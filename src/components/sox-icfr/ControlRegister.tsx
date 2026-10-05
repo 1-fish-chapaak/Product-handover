@@ -24,11 +24,11 @@ import { isOwnerOf, ownersOf } from './auditScope';
 import type { AuditRecord, Conclusion, Control } from './types';
 
 type SavedView = 'all' | 'due' | 'court' | 'design' | 'design-done' | 'operating' | 'operating-done'
-  | 'effective' | 'exceptions' | 'review' | 'owner' | 'open' | 'papers' | 'key' | 'itgc';
+  | 'effective' | 'exceptions' | 'review' | 'owner' | 'open' | 'papers' | 'key' | 'itgc' | 'pending-review';
 const VIEWS: { id: SavedView; label: string }[] = [
   { id: 'all', label: 'All' },
   { id: 'due', label: 'Due now' },
-  { id: 'court', label: 'My court' },
+  { id: 'court', label: 'Waiting on me' },
   { id: 'design', label: 'TOD' },
   { id: 'design-done', label: 'TOD concluded' },
   { id: 'operating', label: 'TOE' },
@@ -45,6 +45,9 @@ const VIEWS: { id: SavedView; label: string }[] = [
   // question that only exists after something broke, and an always-present chip
   // reading "(0)" would teach people to ignore it.
   { id: 'itgc', label: 'Test-of-one withdrawn' },
+  // Arrives only from the to-do's "controls awaiting your review" (the
+  // pre-testing RACM review); listed while it is the filter applied.
+  { id: 'pending-review', label: 'Not yet reviewed' },
 ];
 
 // binding colours, one per process — drawn from the brand purple + evidence blue families (on-theme, no brown)
@@ -82,8 +85,8 @@ function CardTrack({ label, res, started }: { label: string; res: ReturnType<typ
   const dot = res === 'Effective' ? 'ok' : res === 'Ineffective' ? 'ko' : started ? 'prog' : 'none';
   const word = res === 'Not tested' ? (started ? 'In progress' : 'Not tested') : res;
   return (
-    <div className="flex items-center gap-2.5 text-[11.5px]">
-      <span className="text-ink-400 w-[58px] shrink-0">{label}</span>
+    <div className="flex items-center gap-2.5 text-[0.75rem]">
+      <span className="text-ink-400 w-14.5 shrink-0">{label}</span>
       <span className={cn('ac-dot', dot)} />
       <span className="font-medium text-ink-700">{word}</span>
     </div>
@@ -102,8 +105,8 @@ function ControlCard({ c, concl, discN, noteN, onOpen, selectable, selected, onT
         <span className="ac-eyebrow"><span className="dot" style={{ background: spineColor(c.process) }} /><span className="lbl">{c.process}</span></span>
         <span className="ml-auto inline-flex items-center gap-2 shrink-0">
           {c.isKey && <Star size={11} className="text-mitigated-500 fill-mitigated-100" />}
-          {discN > 0 && <span className="inline-flex items-center gap-0.5 text-[10px] font-bold text-brand-700"><MessageSquare size={9} />{discN}</span>}
-          {noteN > 0 && <span title={`${noteN} review note${noteN === 1 ? '' : 's'} pending`} className="inline-flex items-center gap-0.5 text-[10px] font-bold text-high-700"><StickyNote size={9} />{noteN}</span>}
+          {discN > 0 && <span className="inline-flex items-center gap-0.5 text-[0.6875rem] font-bold text-brand-700"><MessageSquare size={9} />{discN}</span>}
+          {noteN > 0 && <span title={`${noteN} review note${noteN === 1 ? '' : 's'} pending`} className="inline-flex items-center gap-0.5 text-[0.6875rem] font-bold text-high-700"><StickyNote size={9} />{noteN}</span>}
           {/* A remediation closed against it, so the conclusion below is about an
               earlier version of this control. No count — it is one fact, not a
               queue — and it goes once the auditor settles it on the control. */}
@@ -148,10 +151,10 @@ function TrackCell({ result, a, b, label }: { result: ReturnType<typeof trackRes
     <span className="cell-track">
       <Tickmark result={result === 'Effective' ? 'Pass' : result === 'Ineffective' ? 'Fail' : 'Not tested'} size={16} />
       <span className="flex flex-col gap-0.5">
-        <span className="text-[11px] font-semibold text-ink-600 leading-none">{result}</span>
+        <span className="text-[0.6875rem] font-semibold text-ink-600 leading-none">{result}</span>
         <span className="inline-flex items-center gap-1.5">
           <span className="meter"><span style={{ width: `${pct}%`, background: tone }} /></span>
-          <span className="text-[10px] tabular-nums text-ink-400">{label}</span>
+          <span className="text-[0.6875rem] tabular-nums text-ink-400">{label}</span>
         </span>
       </span>
     </span>
@@ -173,18 +176,19 @@ export default function ControlRegister() {
   // The ITGC cascade — computed once here because three things read it: the
   // banner, the conditional saved view, and the view's own count.
   const failedItgc = useMemo(() => failedItgcs(eng), [eng]);
+  const [savedView, setSavedView] = useState<SavedView>('all');
   const viewOptions = useMemo(
     () => VIEWS
       .filter(v => v.id !== 'itgc' || failedItgc.length > 0)
+      .filter(v => v.id !== 'pending-review' || savedView === 'pending-review')
       .map(v => ({ ...v, label: v.id === 'exceptions' ? defWord(eng.id).Many : v.label })),
-    [eng.id, failedItgc.length],
+    [eng.id, failedItgc.length, savedView],
   );
   // preview-before-download for the consolidated working paper, and for the audit
   // report — the deliverable the paper isn't. Same modal, same block format.
   const [wpPreview, setWpPreview] = useState(false);
   const [reportPreview, setReportPreview] = useState(false);
   // roll-forward is one-way — confirm before it fires
-  const [savedView, setSavedView] = useState<SavedView>('all');
   const [q, setQ] = useState('');
   const [process, setProcess] = useState('All');
   // An Overview count arrives with intent — apply its exact view/filter once,
@@ -243,6 +247,7 @@ export default function ControlRegister() {
     if (v === 'effective') return conclusionOf(eng, c) === 'Effective';
     if (v === 'exceptions') return conclusionOf(eng, c) === 'Ineffective';
     if (v === 'review') return isAwaitingReview(c);
+    if (v === 'pending-review') return !c.racmReview;
     if (v === 'owner') return courtFor(c, eng.tasks, eng.reviewNotes) === 'risk-owner';
     if (v === 'open') return conclusionOf(eng, c) === 'In progress';
     if (v === 'papers') return conclusionOf(eng, c) !== 'In progress' && !isControlFinal(c);
@@ -293,7 +298,13 @@ export default function ControlRegister() {
   //   const toggleAll = () => setSel(allSelected ? new Set() : new Set(allVisible));
   const toggle = (id: string) => setSel(prev => { const n = new Set(prev); if (n.has(id)) n.delete(id); else n.add(id); return n; });
 
-  const colSpan = REG_COLS.length;
+  // Stacked by process, every group header already names it — the Process
+  // column would repeat it on each row. It stays while a process filter is on,
+  // so that filter (it lives in the column header) can still be cleared.
+  const hideProcessCol = groupBy === 'process' && process === 'All';
+  const cols = hideProcessCol ? REG_COLS.filter(c => c.key !== 'process') : REG_COLS;
+  const tableWidth = totalWidth - (hideProcessCol ? widthOf('process') : 0);
+  const colSpan = cols.length;
 
   return (
     <div>
@@ -302,7 +313,7 @@ export default function ControlRegister() {
       <div className="flex items-center gap-2 mb-4 flex-wrap">
         <div className="relative">
           <Search size={14} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-ink-400" />
-          <input value={q} onChange={e => setQ(e.target.value)} placeholder="Search controls and owners…" className="h-9 w-64 pl-8 pr-3 rounded-lg border border-canvas-border bg-canvas-elevated text-[12.5px] text-ink-800 placeholder:text-ink-400 focus:outline-none focus:ring-2 focus:ring-brand-200" />
+          <input value={q} onChange={e => setQ(e.target.value)} placeholder="Search controls and owners…" className="h-9 w-64 pl-8 pr-3 rounded-lg border border-canvas-border bg-canvas-elevated text-[0.8125rem] text-ink-800 placeholder:text-ink-400 focus:outline-none focus:ring-2 focus:ring-brand-200" />
         </div>
         {/* Toolbar filter dropdowns — COMMENTED OUT by user instruction
             (Jul 24): filtering moved into the table's column headers
@@ -350,20 +361,44 @@ export default function ControlRegister() {
               anonymous — an unlabelled icon next to a labelled report reads as
               "what is this?", which is exactly the question it caused.
               Absent for the risk owner: see the note on the control page. */}
-          {role !== 'risk-owner' && <button onClick={() => setWpPreview(true)} title="Working paper — the audit's evidence file, every control the filters leave visible" className="h-9 px-3 inline-flex items-center gap-1.5 rounded-lg border border-canvas-border text-[12.5px] font-semibold text-ink-600 hover:text-ink-900 hover:border-ink-300 transition-colors cursor-pointer"><FileSpreadsheet size={14} /> Working paper</button>}
+          {role !== 'risk-owner' && <button onClick={() => setWpPreview(true)} title="Working paper — the audit's evidence file, every control the filters leave visible" className="h-9 px-3 inline-flex items-center gap-1.5 rounded-lg border border-canvas-border text-[0.8125rem] font-semibold text-ink-600 hover:text-ink-900 hover:border-ink-300 transition-colors cursor-pointer"><FileSpreadsheet size={14} /> Working paper</button>}
           {/* the Internal Controls Status Report — what management and the board
               actually read: the observations, what they are worth, and who has
               committed to the fix. The button says "Reports" (user, 25 Sep): the
               full name is the document's, not a toolbar's. */}
-          {role !== 'risk-owner' && <button onClick={() => setReportPreview(true)} title="Internal Controls Status Report — observations and the management action plan" className="h-9 px-3 inline-flex items-center gap-1.5 rounded-lg border border-canvas-border text-[12.5px] font-semibold text-ink-600 hover:text-ink-900 hover:border-ink-300 transition-colors cursor-pointer"><FileText size={14} /> Reports</button>}
+          {role !== 'risk-owner' && <button onClick={() => setReportPreview(true)} title="Internal Controls Status Report — observations and the management action plan" className="h-9 px-3 inline-flex items-center gap-1.5 rounded-lg border border-canvas-border text-[0.8125rem] font-semibold text-ink-600 hover:text-ink-900 hover:border-ink-300 transition-colors cursor-pointer"><FileText size={14} /> Reports</button>}
           {/* Add RACM (S11) — copies controls in from RACMs on the Engagements
               page's RACM tab, into the ENGAGEMENT. Engagement level only: inside
               an audit this register is that cycle's scope, which was fixed when
               the audit was created, so controls added from here would either not
               show in the list or quietly widen a scope already being tested. */}
-          {role === 'auditor' && !isEngagementLocked(eng) && !openAuditId && <button onClick={() => setAddingRacm(true)} title="Copy controls in from RACMs on the Engagements page's RACM tab" className="h-9 px-3 inline-flex items-center gap-1.5 rounded-lg border border-canvas-border text-[12.5px] font-semibold text-ink-600 hover:text-ink-900 hover:border-ink-300 transition-colors cursor-pointer"><Table2 size={14} /> Add RACM</button>}
-          {role === 'auditor' && !isEngagementLocked(eng) && <button onClick={() => setCreating(true)} className="h-9 px-3.5 inline-flex items-center gap-1.5 rounded-lg bg-brand-600 text-white text-[12.5px] font-semibold hover:bg-brand-700 transition-colors cursor-pointer"><Plus size={15} /> New control</button>}
+          {role === 'auditor' && !isEngagementLocked(eng) && !openAuditId && <button onClick={() => setAddingRacm(true)} title="Copy controls in from RACMs in the RACM Library" className="h-9 px-3 inline-flex items-center gap-1.5 rounded-lg border border-canvas-border text-[0.8125rem] font-semibold text-ink-600 hover:text-ink-900 hover:border-ink-300 transition-colors cursor-pointer"><Table2 size={14} /> Add RACM</button>}
+          {role === 'auditor' && !isEngagementLocked(eng) && <button onClick={() => setCreating(true)} className="h-9 px-3.5 inline-flex items-center gap-1.5 rounded-lg bg-brand-600 text-white text-[0.8125rem] font-semibold hover:bg-brand-700 transition-colors cursor-pointer"><Plus size={15} /> New control</button>}
       </div>
+
+      {/* A filter set from somewhere else (an Overview count, a to-do) has no
+          visible control in the grid view, and in the list it sits in a column
+          header — so say what is applied, and let it go. Same chip as the
+          Control Library's. */}
+      {(savedView !== 'all' || process !== 'All') && (
+        <div className="flex items-center gap-2 mb-3 flex-wrap">
+          <span className="text-[0.75rem] text-ink-500">Filtered:</span>
+          {savedView !== 'all' && (
+            <button onClick={() => setSavedView('all')}
+              className="inline-flex items-center gap-1.5 h-7 pl-2.5 pr-2 rounded-full border border-brand-200 bg-brand-50 text-[0.75rem] font-semibold text-brand-700 hover:border-brand-300 cursor-pointer transition-colors"
+              aria-label={`Clear the ${viewOptions.find(v => v.id === savedView)?.label ?? savedView} filter`}>
+              {viewOptions.find(v => v.id === savedView)?.label ?? savedView} <X size={12} />
+            </button>
+          )}
+          {process !== 'All' && (
+            <button onClick={() => setProcess('All')}
+              className="inline-flex items-center gap-1.5 h-7 pl-2.5 pr-2 rounded-full border border-brand-200 bg-brand-50 text-[0.75rem] font-semibold text-brand-700 hover:border-brand-300 cursor-pointer transition-colors"
+              aria-label={`Clear the ${process} filter`}>
+              {process} <X size={12} />
+            </button>
+          )}
+        </div>
+      )}
 
       {/* KPI rail — the summary band above the list (Overview's tile language) */}
       <div className="flex items-stretch gap-3 mb-4 flex-wrap">
@@ -375,8 +410,8 @@ export default function ControlRegister() {
           { k: role === 'risk-owner' ? 'Waiting on you' : 'Waiting on owner', v: stats.waitingOnOwner, t: 'text-mitigated-700' },
         ].map(s => (
           <div key={s.k} className="rounded-xl border border-canvas-border bg-canvas-elevated px-4 py-2.5">
-            <div className={cn('text-[20px] font-bold tabular-nums leading-6', s.t)}>{s.v}</div>
-            <div className="text-[11.5px] text-ink-500 font-medium mt-0.5">{s.k}</div>
+            <div className={cn('text-[1.25rem] font-bold tabular-nums leading-6', s.t)}>{s.v}</div>
+            <div className="text-[0.75rem] text-ink-500 font-medium mt-0.5">{s.k}</div>
           </div>
         ))}
       </div>
@@ -419,8 +454,8 @@ export default function ControlRegister() {
                 <div className="shelf-head">
                   <span className="shelf-swatch" style={{ background: spineColor(g.key) }} />
                   <span className="shelf-title">{g.key}</span>
-                  <span className="text-[11.5px] text-ink-400 font-medium">· {g.rows.length}</span>
-                  <span className="text-[10.5px] font-semibold text-ink-400 hidden md:inline">{g.rows.filter(c => trackResult(c.design) !== 'Not tested').length} TOD · {g.rows.filter(c => trackResult(c.operating) !== 'Not tested').length} TOE concluded</span>
+                  <span className="text-[0.75rem] text-ink-400 font-medium">· {g.rows.length}</span>
+                  <span className="text-[0.6875rem] font-semibold text-ink-400 hidden md:inline">{g.rows.filter(c => trackResult(c.design) !== 'Not tested').length} TOD · {g.rows.filter(c => trackResult(c.operating) !== 'Not tested').length} TOE concluded</span>
                   <span className="shelf-board" />
                 </div>
               )}
@@ -433,7 +468,7 @@ export default function ControlRegister() {
             </div>
           ))}
           {filtered.length === 0 && (
-            <div className="text-center py-16 text-ink-400 text-[13px] rounded-2xl border border-dashed border-canvas-border">No controls match these filters. <button onClick={() => { setQ(''); setProcess('All'); setNature('All'); setEntity('All'); setCtype('All'); setFrequency('All'); setOwner('All'); setSavedView('all'); }} className="text-brand-700 font-semibold hover:underline">Clear filters</button></div>
+            <div className="text-center py-16 text-ink-400 text-[0.8125rem] rounded-2xl border border-dashed border-canvas-border">No controls match these filters. <button onClick={() => { setQ(''); setProcess('All'); setNature('All'); setEntity('All'); setCtype('All'); setFrequency('All'); setOwner('All'); setSavedView('all'); }} className="text-brand-700 font-semibold hover:underline">Clear filters</button></div>
           )}
         </div>
       ) : (
@@ -442,15 +477,15 @@ export default function ControlRegister() {
             screen — the wrapper scrolls sideways rather than crushing the text.
             Fixed layout + a colgroup means the widths are the ones on record, not
             whatever the longest cell argued for, which is what makes a drag hold. */}
-        <table className="border-collapse" style={{ tableLayout: 'fixed', width: totalWidth }}>
-          <colgroup>{REG_COLS.map(c => <col key={c.key} style={{ width: widthOf(c.key) }} />)}</colgroup>
+        <table className="border-collapse" style={{ tableLayout: 'fixed', width: tableWidth }}>
+          <colgroup>{cols.map(c => <col key={c.key} style={{ width: widthOf(c.key) }} />)}</colgroup>
           <thead className="reg-head">
             <tr>
               {/* Column filters live in the headers — the toolbar dropdowns moved
                   up here (Jul 24), and Entity / Control type / Frequency / Owner
                   joined them once controls started naming their companies. The
                   Entity filter matches performed-at OR covered — see rowCovers. */}
-              <Th {...th('process')}><HeaderFilter label="Process" value={process} options={processes} allLabel="All processes" onChange={setProcess} ariaLabel="Filter by process" /></Th>
+              {!hideProcessCol && <Th {...th('process')}><HeaderFilter label="Process" value={process} options={processes} allLabel="All processes" onChange={setProcess} ariaLabel="Filter by process" /></Th>}
               <Th {...th('control')}>Control</Th>
               <Th {...th('entity')}><HeaderFilter label="Entity" value={entity} options={entities} allLabel="All entities" onChange={setEntity} ariaLabel="Filter by entity" /></Th>
               <Th {...th('type')} title="Preventive controls stop it happening; detective controls find it after it has">
@@ -460,8 +495,8 @@ export default function ControlRegister() {
               <Th {...th('owner')}><HeaderFilter label="Control Owner" value={owner} options={owners} allLabel="All control owners" onChange={setOwner} ariaLabel="Filter by control owner" /></Th>
               <Th {...th('objective')} title="What the control is for — the outcome it secures">Objective</Th>
               <Th {...th('nature')}><HeaderFilter label="Nature" value={nature} options={['All', 'Manual', 'Automated', 'IT-dependent']} allLabel="All natures" onChange={setNature} ariaLabel="Filter by nature" /></Th>
-              <Th {...th('design')}>① TOD</Th>
-              <Th {...th('operating')}>② TOE</Th>
+              <Th {...th('design')} title="Test of design — step ① on the control page">① TOD</Th>
+              <Th {...th('operating')} title="Test of operating effectiveness — step ④ on the control page">④ TOE</Th>
               <Th {...th('conclusion')}>
                 <HeaderFilter label="Conclusion" value={savedView} engaged={savedView !== 'all'}
                   options={viewOptions.map(v => ({ value: v.id, label: `${v.label} (${viewCounts[v.id]})` }))}
@@ -474,8 +509,8 @@ export default function ControlRegister() {
               <FragmentGroup key={g.key || 'flat'}>
                 {g.key && (
                   <tr className="reg-group-row"><td colSpan={colSpan}>
-                    <span className="inline-flex items-center gap-2">{g.key}<span className="text-ink-400 font-medium">· {g.rows.length}</span>
-                      <span className="ml-2 text-[10.5px] font-semibold text-ink-400">
+                    <span className="reg-group-label inline-flex items-center gap-2">{g.key}<span className="text-ink-400 font-medium">· {g.rows.length}</span>
+                      <span className="ml-2 text-[0.6875rem] font-semibold text-ink-400">
                         {g.rows.filter(c => trackResult(c.design) !== 'Not tested').length} TOD · {g.rows.filter(c => trackResult(c.operating) !== 'Not tested').length} TOE concluded
                       </span>
                     </span>
@@ -492,25 +527,25 @@ export default function ControlRegister() {
                           bulk bar, so nothing downstream is dead.
                       <td onClick={e => { e.stopPropagation(); if (e.target === e.currentTarget) toggle(c.id); }}><input type="checkbox" checked={sel.has(c.id)} onChange={() => toggle(c.id)} className="cursor-pointer accent-brand-600" aria-label={`Select ${c.id}`} /></td>
                       */}
-                      <td className="text-[0.71875rem] text-ink-600"><span className="truncate block" title={c.process}>{c.process}</span></td>
+                      {!hideProcessCol && <td className="text-[0.75rem] text-ink-600"><span className="truncate block" title={c.process}>{c.process}</span></td>}
                       <td className="tight">
                         <div className="flex items-center gap-1.5">
                           {c.isKey && <Star size={12} className="text-mitigated-600 fill-mitigated-200 shrink-0" />}
-                          <span className="font-semibold text-ink-900 text-[12.5px] truncate min-w-0">{c.description}</span>
-                          {discN > 0 && <span className="inline-flex items-center gap-0.5 text-[10.5px] font-bold text-brand-700 bg-brand-50 px-1.5 h-[17px] rounded-full"><MessageSquare size={9} />{discN}</span>}
-                          {noteN > 0 && <span title={`${noteN} review note${noteN === 1 ? '' : 's'} pending`} className="inline-flex items-center gap-0.5 text-[10.5px] font-bold text-high-700 bg-high-50 px-1.5 h-[17px] rounded-full"><StickyNote size={9} />{noteN}</span>}
+                          <span className="reg-clamp font-semibold text-ink-900 text-[0.8125rem] min-w-0" title={c.description}>{c.description}</span>
+                          {discN > 0 && <span className="inline-flex items-center gap-0.5 text-[0.6875rem] font-bold text-brand-700 bg-brand-50 px-1.5 h-4.25 rounded-full"><MessageSquare size={9} />{discN}</span>}
+                          {noteN > 0 && <span title={`${noteN} review note${noteN === 1 ? '' : 's'} pending`} className="inline-flex items-center gap-0.5 text-[0.6875rem] font-bold text-high-700 bg-high-50 px-1.5 h-4.25 rounded-full"><StickyNote size={9} />{noteN}</span>}
                           {/* Same shelf as the note pill, and read in the same
                               glance as the conclusion two columns along — which
                               is the point: that conclusion is about the control
                               as it was, not as it now reads. */}
                           {c.retestDue && !c.retestDue.cleared && (
                             <span title={`Changed by a closed remediation (${c.retestDue.defId}) — a retest is owed`}
-                              className="inline-flex items-center gap-0.5 text-[0.65625rem] font-bold text-mitigated-800 bg-mitigated-50 px-1.5 h-[17px] rounded-full shrink-0"><RotateCcw size={9} />Retest</span>
+                              className="inline-flex items-center gap-0.5 text-[0.6875rem] font-bold text-mitigated-800 bg-mitigated-50 px-1.5 h-4.25 rounded-full shrink-0"><RotateCcw size={9} />Retest</span>
                           )}
                         </div>
                         {/* process and owner have their own columns now — saying
                             them twice on the same row is noise. */}
-                        <div className="text-[11px] text-ink-400 mt-0.5">
+                        <div className="text-[0.6875rem] text-ink-400 mt-0.5">
                           {controlCode(c)}{c.subProcess ? ` · ${c.subProcess}` : ''} ·{' '}
                           {/* A rebuilt control's row reads as an ordinary one otherwise,
                               and its conclusion is about a different control from the one
@@ -519,15 +554,15 @@ export default function ControlRegister() {
                           {(() => { const dd = testDueDisplay(c, true, openAudit); return <span className={dd.cls}>{dd.label}</span>; })()}
                         </div>
                       </td>
-                      <td className="text-[0.71875rem] text-ink-700">
+                      <td className="text-[0.75rem] text-ink-700">
                         {entityCell(c)
                           ? <span className="flex items-center gap-1.5 min-w-0 max-w-full" title={entityCell(c)!.title}><Building2 size={12} className="text-ink-300 shrink-0" /><span className="truncate">{entityCell(c)!.label}</span>{entityCell(c)!.more > 0 && <span className="shrink-0 font-semibold text-ink-500">+{entityCell(c)!.more}</span>}</span>
                           : <span className="text-ink-300">—</span>}
                       </td>
-                      <td className="text-[0.71875rem] text-ink-600">{c.type}</td>
-                      <td className="text-[0.71875rem] text-ink-600">{c.frequency}</td>
-                      <td className="text-[0.71875rem] text-ink-600"><span className="truncate block" title={c.owner}>{c.owner}</span></td>
-                      <td className="text-[0.71875rem] text-ink-500">
+                      <td className="text-[0.75rem] text-ink-600">{c.type}</td>
+                      <td className="text-[0.75rem] text-ink-600">{c.frequency}</td>
+                      <td className="text-[0.75rem] text-ink-600"><span className="truncate block" title={c.owner}>{c.owner}</span></td>
+                      <td className="text-[0.75rem] text-ink-500">
                         <span className="reg-clamp" title={c.objective ?? undefined}>{c.objective ?? '—'}</span>
                       </td>
                       <td><NatureChip nature={c.nature} small /></td>
@@ -545,22 +580,22 @@ export default function ControlRegister() {
               </FragmentGroup>
             ))}
             {filtered.length === 0 && (
-              <tr><td colSpan={colSpan} className="text-center py-16 text-ink-400 text-[13px]">No controls match these filters. <button onClick={() => { setQ(''); setProcess('All'); setNature('All'); setEntity('All'); setCtype('All'); setFrequency('All'); setOwner('All'); setSavedView('all'); }} className="text-brand-700 font-semibold hover:underline">Clear filters</button></td></tr>
+              <tr><td colSpan={colSpan} className="text-center py-16 text-ink-400 text-[0.8125rem]">No controls match these filters. <button onClick={() => { setQ(''); setProcess('All'); setNature('All'); setEntity('All'); setCtype('All'); setFrequency('All'); setOwner('All'); setSavedView('all'); }} className="text-brand-700 font-semibold hover:underline">Clear filters</button></td></tr>
             )}
           </tbody>
         </table>
       </div>
       )}
-      <div className="mt-3 text-[11.5px] text-ink-400">Showing {filtered.length} of {scoped.length} controls</div>
+      <div className="mt-3 text-[0.75rem] text-ink-400">Showing {filtered.length} of {scoped.length} controls</div>
 
       {/* bulk bar — no bulk TEST here (user ask, 30 Jul: SOX controls aren't
           bulk-tested) */}
       {sel.size > 0 && (
         <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-30 flex items-center gap-3 bg-ink-900 text-white rounded-2xl pl-4 pr-2.5 py-2.5 shadow-[0_12px_40px_-12px_rgba(15,8,30,0.6)]">
-          <span className="text-[12.5px] font-semibold">{sel.size} selected</span>
+          <span className="text-[0.8125rem] font-semibold">{sel.size} selected</span>
           <span className="w-px h-5 bg-white/20" />
-          {role === 'auditor' && <button onClick={() => { requestDesignDocs(Array.from(sel));  setSel(new Set()); }} className="h-8 px-3 inline-flex items-center gap-1.5 rounded-lg bg-white/10 hover:bg-white/20 text-[12.5px] font-semibold transition-colors cursor-pointer"><FileText size={14} /> Request design documents</button>}
-          <button onClick={() => { openControl(Array.from(sel)[0]); setSel(new Set()); }} className="h-8 px-3 inline-flex items-center gap-1.5 rounded-lg bg-white/10 hover:bg-white/20 text-[12.5px] font-semibold transition-colors cursor-pointer"><Send size={14} /> Open first</button>
+          {role === 'auditor' && <button onClick={() => { requestDesignDocs(Array.from(sel));  setSel(new Set()); }} className="h-8 px-3 inline-flex items-center gap-1.5 rounded-lg bg-white/10 hover:bg-white/20 text-[0.8125rem] font-semibold transition-colors cursor-pointer"><FileText size={14} /> Request design documents</button>}
+          <button onClick={() => { openControl(Array.from(sel)[0]); setSel(new Set()); }} className="h-8 px-3 inline-flex items-center gap-1.5 rounded-lg bg-white/10 hover:bg-white/20 text-[0.8125rem] font-semibold transition-colors cursor-pointer"><Send size={14} /> Open first</button>
           <button onClick={() => setSel(new Set())} className="h-8 w-8 inline-flex items-center justify-center rounded-lg hover:bg-white/15 transition-colors cursor-pointer" aria-label="Clear selection"><X size={15} /></button>
         </div>
       )}

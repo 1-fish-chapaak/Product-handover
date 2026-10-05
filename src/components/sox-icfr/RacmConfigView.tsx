@@ -26,6 +26,7 @@ import { FormSelect } from '../shared/FilterSelect';
 import { RACM_FIELDS, isAlwaysRequired, type RacmFieldKey } from './racmImport';
 import { defaultCore, extraLabel, racmConfig, resetRacmConfig, savedSetupKeys, setRacmConfig, useRacmConfig, type ExtraColumn, type ExtraKind } from './racmConfig';
 import { knownCompanies } from './racmLibrary';
+import DialogFocus from '../shared/DialogFocus';
 
 const FIELD_LABEL: Record<string, string> = Object.fromEntries(RACM_FIELDS.map(f => [f.key, f.label]));
 
@@ -68,9 +69,9 @@ function setupOptions(selected: string): { value: string; label: string }[] {
 
 const inputCls = 'w-full h-9 px-3 text-[0.8125rem] border border-canvas-border rounded-lg bg-canvas-elevated text-ink-900 placeholder:text-ink-400 outline-none focus:border-brand-400 transition-colors disabled:opacity-50 disabled:cursor-not-allowed';
 /** The client picker, wearing the same clothes as the inputs below it. */
-const pickerCls = 'h-9 px-3 min-w-[15rem] max-w-[22rem] text-[0.8125rem] border border-canvas-border rounded-lg bg-canvas-elevated text-ink-900 transition-colors';
-const primaryBtnCls = 'h-9 px-3.5 inline-flex items-center gap-1.5 rounded-lg bg-brand-600 text-white text-[0.78125rem] font-semibold hover:bg-brand-700 transition-colors cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:bg-brand-600';
-const outlineBtnCls = 'h-9 px-3.5 inline-flex items-center gap-1.5 rounded-lg border border-canvas-border bg-canvas-elevated text-[0.78125rem] font-semibold text-ink-600 hover:text-ink-900 hover:border-brand-200 hover:bg-brand-50/50 transition-colors cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:bg-canvas-elevated disabled:hover:text-ink-600';
+const pickerCls = 'h-9 px-3 min-w-60 max-w-88 text-[0.8125rem] border border-canvas-border rounded-lg bg-canvas-elevated text-ink-900 transition-colors';
+const primaryBtnCls = 'h-9 px-3.5 inline-flex items-center gap-1.5 rounded-lg bg-brand-600 text-white text-[0.8125rem] font-semibold hover:bg-brand-700 transition-colors cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:bg-brand-600';
+const outlineBtnCls = 'h-9 px-3.5 inline-flex items-center gap-1.5 rounded-lg border border-canvas-border bg-canvas-elevated text-[0.8125rem] font-semibold text-ink-600 hover:text-ink-900 hover:border-brand-200 hover:bg-brand-50/50 transition-colors cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:bg-canvas-elevated disabled:hover:text-ink-600';
 const quietBtnCls = 'h-7 w-7 inline-flex items-center justify-center rounded-md text-ink-400 hover:text-risk-700 hover:bg-risk-50 transition-colors cursor-pointer';
 
 function Section({ icon, title, blurb, count, action, children }: {
@@ -87,10 +88,10 @@ function Section({ icon, title, blurb, count, action, children }: {
       <div className="flex items-start justify-between gap-4 mb-4">
         <div className="min-w-0">
           <h2 className="font-display text-[1.0625rem] leading-tight text-ink-900 inline-flex items-center gap-2">{icon} {title}</h2>
-          <p className="text-[0.71875rem] text-ink-500 mt-1 leading-relaxed max-w-[62ch]">{blurb}</p>
+          <p className="text-[0.75rem] text-ink-500 mt-1 leading-relaxed max-w-[62ch]">{blurb}</p>
         </div>
         <div className="flex items-center gap-3 shrink-0">
-          {count && <span className="text-[0.71875rem] text-ink-500 tabular-nums whitespace-nowrap">{count}</span>}
+          {count && <span className="text-[0.75rem] text-ink-500 tabular-nums whitespace-nowrap">{count}</span>}
           {action}
         </div>
       </div>
@@ -121,7 +122,7 @@ function CoreRow({ label, on, disabled, locked = false, onChange }: {
     return (
       <div className="flex w-full items-center justify-between gap-3 px-3.5 py-2.5">
         <span className="text-[0.8125rem] text-ink-900 font-medium">{label}</span>
-        <span className="inline-flex items-center gap-1 text-[0.71875rem] text-ink-500" title="Every control needs this — it can't be switched off">
+        <span className="inline-flex items-center gap-1 text-[0.75rem] text-ink-500" title="Every control needs this — it can't be switched off">
           <Lock size={11} className="text-ink-400" aria-hidden /> Always
         </span>
       </div>
@@ -199,11 +200,11 @@ function ExtraRow({ column, disabled, onPatch, onRemove }: {
         </div>
         {/* Read-only viewers get the answer, not a picker they can't use. */}
         {disabled ? (
-          <span className="shrink-0 text-[0.75rem] text-ink-500 w-[9rem]">{EXTRA_KINDS.find(k => k.value === column.kind)?.label}</span>
+          <span className="shrink-0 text-[0.75rem] text-ink-500 w-36">{EXTRA_KINDS.find(k => k.value === column.kind)?.label}</span>
         ) : (
           <FormSelect
             value={column.kind} onChange={v => onPatch({ kind: v as ExtraKind }, `Set what the client column "${column.header}" holds`)}
-            className={cn(pickerCls, 'h-8 min-w-[9rem]')} ariaLabel={`What "${extraLabel(column)}" holds`}
+            className={cn(pickerCls, 'h-8 min-w-36')} ariaLabel={`What "${extraLabel(column)}" holds`}
             options={EXTRA_KINDS}
           />
         )}
@@ -367,28 +368,28 @@ export default function RacmConfigView({ canManage }: {
     <div className="space-y-4 pb-8">
       <div className="flex items-start justify-between gap-4">
         <div className="min-w-0">
-          <p className="text-[0.78125rem] text-ink-500 leading-relaxed max-w-[68ch]">
+          <p className="text-[0.8125rem] text-ink-500 leading-relaxed max-w-[68ch]">
             Every client writes their matrix differently. {setupKey === 'default'
               ? 'This is the shape an upload falls back to when no company was named.'
               : `This is ${possessive(label)} shape: an upload for any of its companies lands this way.`}
           </p>
           <div className="mt-3 flex flex-wrap items-center gap-x-4 gap-y-2">
             <div className="flex items-center gap-2">
-              <span className="text-[0.78125rem] font-semibold text-ink-700 whitespace-nowrap">Column set-up for:</span>
+              <span className="text-[0.8125rem] font-semibold text-ink-700 whitespace-nowrap">Column set-up for:</span>
               <FormSelect
                 value={setupKey}
                 options={options}
                 onChange={setSetupKey}
                 className={pickerCls}
                 ariaLabel="Column set-up for"
-                menuCls="w-full min-w-[15rem]"
+                menuCls="w-full min-w-60"
               />
             </div>
             <p className="inline-flex items-center gap-1.5 text-[0.75rem] font-medium text-ink-600">
               <SetUpIcon size={13} className="text-ink-400 shrink-0" /> {setUpText}
             </p>
           </div>
-          <p className="mt-2 text-[0.71875rem] text-ink-400 leading-relaxed max-w-[68ch]">
+          <p className="mt-2 text-[0.75rem] text-ink-400 leading-relaxed max-w-[68ch]">
             The company picked at Create RACM decides which set-up an upload follows — this tab only edits them.
           </p>
         </div>
@@ -419,7 +420,7 @@ export default function RacmConfigView({ canManage }: {
         count={`${cfg.core.length} of ${RACM_FIELDS.length} on`}
       >
         <p className="text-[0.6875rem] font-bold uppercase tracking-wider text-ink-400 mb-1.5">Always required</p>
-        <p className="text-[0.71875rem] text-ink-500 mb-2 leading-relaxed max-w-[62ch]">
+        <p className="text-[0.75rem] text-ink-500 mb-2 leading-relaxed max-w-[62ch]">
           Every control needs these, whatever the client's file carries. A file without one of them still uploads:
           Ira fills what she can read from the row, IDs are built, and the rest is filled in at Review.
         </p>
@@ -453,7 +454,7 @@ export default function RacmConfigView({ canManage }: {
         )}
 
         {canManage && (
-          <form onSubmit={addExtra} className="flex items-center gap-2 mt-3 max-w-[30rem]">
+          <form onSubmit={addExtra} className="flex items-center gap-2 mt-3 max-w-120">
             <input
               value={draftExtra}
               onChange={e => setDraftExtra(e.target.value)}
@@ -504,8 +505,8 @@ export default function RacmConfigView({ canManage }: {
                       <td><span className="font-mono text-[0.75rem] text-ink-700">{heading}</span></td>
                       <td>
                         {field
-                          ? <span className="text-[0.78125rem] text-ink-800">{FIELD_LABEL[field] ?? field}</span>
-                          : <span className="text-[0.78125rem] text-ink-400">Left out</span>}
+                          ? <span className="text-[0.8125rem] text-ink-800">{FIELD_LABEL[field] ?? field}</span>
+                          : <span className="text-[0.8125rem] text-ink-400">Left out</span>}
                       </td>
                       {canManage && (
                         <td>
@@ -535,7 +536,7 @@ export default function RacmConfigView({ canManage }: {
       {confirming && (
         <div className="modal-backdrop" onClick={() => setConfirming(null)}>
           <div className="modal" onClick={e => e.stopPropagation()} role="dialog" aria-modal="true" aria-labelledby="racm-config-confirm-title"
-            onKeyDown={e => { if (e.key === 'Escape') setConfirming(null); }}>
+            onKeyDown={e => { if (e.key === 'Escape') setConfirming(null); }}><DialogFocus />
             <div className="px-5 pt-4 pb-3 border-b border-canvas-border">
               <div className="flex items-center justify-between gap-3">
                 <h2 id="racm-config-confirm-title" className="text-[0.9375rem] font-semibold text-ink-900">
@@ -547,7 +548,7 @@ export default function RacmConfigView({ canManage }: {
             <div className="p-5">
               {confirming === 'reset' ? (
                 <>
-                  <p className="text-[0.78125rem] text-ink-600 leading-relaxed">
+                  <p className="text-[0.8125rem] text-ink-600 leading-relaxed">
                     Required columns for {label} go back to the {defaultCore().length} the product ships with
                     — {defaultCore().map(k => FIELD_LABEL[k]).join(', ')}. Every column kept from their file and
                     every remembered heading is dropped. No other client is touched.
@@ -558,15 +559,15 @@ export default function RacmConfigView({ canManage }: {
                   </p>
                 </>
               ) : (
-                <p className="text-[0.78125rem] text-ink-600 leading-relaxed">
+                <p className="text-[0.8125rem] text-ink-600 leading-relaxed">
                   The next upload for {label} matches its columns from scratch, with nothing offered up front —
                   including the headings someone chose to leave out, which will be suggested again.
                 </p>
               )}
               <div className="mt-4 flex items-center justify-end gap-2">
-                <button onClick={() => setConfirming(null)} autoFocus className="h-9 px-3.5 rounded-lg border border-canvas-border text-[0.78125rem] font-semibold text-ink-600 hover:text-ink-900 cursor-pointer">Cancel</button>
+                <button onClick={() => setConfirming(null)} autoFocus className="h-9 px-3.5 rounded-lg border border-canvas-border text-[0.8125rem] font-semibold text-ink-600 hover:text-ink-900 cursor-pointer">Cancel</button>
                 <button onClick={confirming === 'reset' ? confirmReset : confirmForgetAll}
-                  className="h-9 px-3.5 inline-flex items-center gap-1.5 rounded-lg bg-risk-600 text-white text-[0.78125rem] font-semibold hover:bg-risk-700 transition-colors cursor-pointer">
+                  className="h-9 px-3.5 inline-flex items-center gap-1.5 rounded-lg bg-risk-600 text-white text-[0.8125rem] font-semibold hover:bg-risk-700 transition-colors cursor-pointer">
                   {confirming === 'reset' ? <><RotateCcw size={13} /> Reset</> : 'Forget all'}
                 </button>
               </div>

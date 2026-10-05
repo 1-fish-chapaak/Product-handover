@@ -32,14 +32,15 @@ import { addLibraryRacm, knownCompanies, racmLibrary, type LibraryRacm } from '.
 import { canonicalProcess, PROCESS_TYPED_ALIASES, SOX_PROCESS_NAMES } from './auditScope';
 import type { Control } from './types';
 import { IraDrafted } from './IraState';
+import DialogFocus from '../shared/DialogFocus';
 
 
 const NEW_OPTION = '__new__';
-const labelCls = 'text-[11px] font-semibold uppercase tracking-wide text-ink-400 mb-1.5 block';
-const fieldCls = 'w-full h-9 px-3 rounded-lg border border-canvas-border bg-canvas-elevated text-[12.5px] text-ink-800 focus:outline-none focus:ring-2 focus:ring-brand-200';
+const labelCls = 'text-[0.6875rem] font-semibold uppercase tracking-wide text-ink-400 mb-1.5 block';
+const fieldCls = 'w-full h-9 px-3 rounded-lg border border-canvas-border bg-canvas-elevated text-[0.8125rem] text-ink-800 focus:outline-none focus:ring-2 focus:ring-brand-200';
 const cardCls = 'text-left rounded-xl border border-canvas-border p-4 transition-colors cursor-pointer hover:border-brand-300 hover:bg-brand-50/40';
-const ghostBtn = 'inline-flex items-center gap-1.5 h-8 px-3 rounded-lg text-[0.78125rem] font-semibold text-ink-600 hover:text-ink-900 hover:bg-canvas-subtle cursor-pointer';
-const primaryBtn = 'inline-flex items-center gap-1.5 h-8 px-4 rounded-lg text-[0.78125rem] font-semibold bg-brand-600 text-white hover:bg-brand-700 cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:bg-brand-600';
+const ghostBtn = 'inline-flex items-center gap-1.5 h-8 px-3 rounded-lg text-[0.8125rem] font-semibold text-ink-600 hover:text-ink-900 hover:bg-canvas-subtle cursor-pointer';
+const primaryBtn = 'inline-flex items-center gap-1.5 h-8 px-4 rounded-lg text-[0.8125rem] font-semibold bg-brand-600 text-white hover:bg-brand-700 cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:bg-brand-600';
 
 /** A name nobody else on the tab has — "Treasury — Altura Solar Pvt Ltd (2)". */
 function uniqueRacmName(base: string): string {
@@ -251,7 +252,7 @@ export default function CreateRacmFlow({ fixedProcess, defaultEntity, publishOnC
     });
     logEvent({
       action: meta.source === 'sop' ? 'Create' : 'Upload',
-      description: `${meta.source === 'sop' ? 'Extracted' : meta.fromTemplate ? 'Created from the template' : 'Imported'} "${racm.name}" on the RACM tab — ${controls.length} control${controls.length === 1 ? '' : 's'} from "${meta.fileName}"`,
+      description: `${meta.source === 'sop' ? 'Extracted' : meta.fromTemplate ? 'Created from the template' : 'Imported'} "${racm.name}" in the RACM Library — ${controls.length} control${controls.length === 1 ? '' : 's'} from "${meta.fileName}"`,
       module: 'SOX ICFR',
       entity: 'RACM',
     });
@@ -270,15 +271,15 @@ export default function CreateRacmFlow({ fixedProcess, defaultEntity, publishOnC
 
   return (
     <div className="modal-backdrop" onClick={onClose}>
-      <div className="modal" onClick={e => e.stopPropagation()} role="dialog" aria-modal="true" aria-labelledby="create-racm-title">
+      <div className="modal" onClick={e => e.stopPropagation()} role="dialog" aria-modal="true" aria-labelledby="create-racm-title"><DialogFocus />
         <div className="px-5 pt-4 pb-3 border-b border-canvas-border">
           <div className="flex items-start justify-between gap-3">
             <div>
-              <h2 id="create-racm-title" className="text-[15px] font-semibold text-ink-900">{fixedProcess ? `Upload a RACM for ${fixedProcess}` : 'Create RACM'}</h2>
-              <p className="text-[12.5px] text-ink-500 mt-0.5">
+              <h2 id="create-racm-title" className="text-[0.9375rem] font-semibold text-ink-900">{fixedProcess ? `Upload a RACM for ${fixedProcess}` : 'Create RACM'}</h2>
+              <p className="text-[0.8125rem] text-ink-500 mt-0.5">
                 {picked
                   ? `Where does this ${noun} belong?`
-                  : "Start from an existing matrix, or extract one from an SOP. It's saved to the RACM tab."}
+                  : "Start from an existing matrix, or extract one from an SOP. It's saved to the RACM Library."}
               </p>
             </div>
             <button onClick={onClose} className="h-7 w-7 inline-flex items-center justify-center rounded-md text-ink-400 hover:text-ink-700 cursor-pointer shrink-0" aria-label="Close"><X size={15} /></button>
@@ -291,13 +292,13 @@ export default function CreateRacmFlow({ fixedProcess, defaultEntity, publishOnC
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
               <button onClick={() => racmInput.current?.click()} className={cardCls}>
                 <span className="p-2 rounded-lg bg-evidence-50 inline-flex mb-2.5"><FileUp size={15} className="text-evidence-700" /></span>
-                <span className="block text-[13px] font-semibold text-ink-900 mb-1">Upload a RACM</span>
-                <span className="block text-[11.5px] text-ink-500 leading-relaxed">Import an existing matrix (.xlsx / .csv).</span>
+                <span className="block text-[0.8125rem] font-semibold text-ink-900 mb-1">Upload a RACM</span>
+                <span className="block text-[0.75rem] text-ink-500 leading-relaxed">Import an existing matrix (.xlsx / .csv).</span>
               </button>
               <button onClick={() => sopInput.current?.click()} className={cardCls}>
                 <span className="p-2 rounded-lg bg-brand-50 inline-flex mb-2.5"><Sparkles size={15} className="text-brand-600" /></span>
-                <span className="block text-[13px] font-semibold text-ink-900 mb-1">Upload an SOP <span className="text-ink-400">→</span> extract</span>
-                <span className="block text-[11.5px] text-ink-500 leading-relaxed">Ira reads a procedure (.pdf / .docx) and drafts the RACM.</span>
+                <span className="block text-[0.8125rem] font-semibold text-ink-900 mb-1">Upload an SOP <span className="text-ink-400">→</span> extract</span>
+                <span className="block text-[0.75rem] text-ink-500 leading-relaxed">Ira reads a procedure (.pdf / .docx) and drafts the RACM.</span>
               </button>
             </div>
           </div>
@@ -308,7 +309,7 @@ export default function CreateRacmFlow({ fixedProcess, defaultEntity, publishOnC
           <div className="p-5">
             <div className="flex items-center gap-2.5 rounded-lg border border-canvas-border bg-paper-50 px-3 py-2.5 mb-4">
               <FileText size={15} className="text-ink-400 shrink-0" aria-hidden />
-              <span className="text-[0.78125rem] text-ink-800 truncate flex-1" title={picked.file.name}>{picked.file.name}</span>
+              <span className="text-[0.8125rem] text-ink-800 truncate flex-1" title={picked.file.name}>{picked.file.name}</span>
               <button type="button" onClick={startOver}
                 className="text-[0.6875rem] font-semibold text-brand-700 hover:text-brand-800 hover:underline cursor-pointer shrink-0">Change</button>
             </div>
@@ -332,7 +333,7 @@ export default function CreateRacmFlow({ fixedProcess, defaultEntity, publishOnC
             )}
             {readFrom.entity
               ? <ReadNote from={readFrom.entity} what="entity" onPutBack={() => { setEntityChoice(''); setReadFrom(p => ({ ...p, entity: undefined })); }} />
-              : <p className="text-[11.5px] text-ink-400 mt-1.5">The company the matrix is tested at. A file with its own entity column sets it row by row.</p>}
+              : <p className="text-[0.75rem] text-ink-400 mt-1.5">The company the matrix is tested at. A file with its own entity column sets it row by row.</p>}
 
             {!fixedProcess && (
               <div className="mt-4">
@@ -354,7 +355,7 @@ export default function CreateRacmFlow({ fixedProcess, defaultEntity, publishOnC
                 )}
                 {readFrom.process
                   ? <ReadNote from={readFrom.process} what="business process" onPutBack={() => { setProcessChoice(''); setReadFrom(p => ({ ...p, process: undefined })); }} />
-                  : <p className="text-[11.5px] text-ink-400 mt-1.5">
+                  : <p className="text-[0.75rem] text-ink-400 mt-1.5">
                       {sameProcess > 0
                         ? `${process} already has ${sameProcess} RACM${sameProcess === 1 ? '' : 's'} on the tab — this one is added beside ${sameProcess === 1 ? 'it' : 'them'}.`
                         : 'A process can have several RACMs.'}

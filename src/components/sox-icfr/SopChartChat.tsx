@@ -65,7 +65,7 @@ export interface SopChartChatProps {
 }
 
 const OPENING =
-  'Tell me what to change and I\'ll change it on the chart. I can rename a box, take one out, or narrow the whole thing — "sirf key controls rakho", "Control 4 hata do", "Risk 2 ka naam Duplicate invoice paid kar do".';
+  'Tell me what to change and I\'ll change it on the chart. I can rename a box, take one out, or narrow the whole thing — "rename the first risk to Vendor fraud", "remove control 4", "only key controls" (Hinglish works too: "Control 4 hata do").';
 
 /** Offered until the reviewer has said something of their own. */
 const OPENERS = ['sirf key controls rakho', 'manual controls hata do', 'at most 6 controls'];
@@ -159,7 +159,7 @@ export default function SopChartChat({ facts, onRenameRisk, onRenameControl, onL
         <div className="mt-auto space-y-4">
           {msgs.map(m => (m.who === 'user' ? (
             <div key={m.id} className="flex justify-end">
-              <p className="max-w-[85%] px-3 py-2 rounded-2xl rounded-br-md bg-brand-50 border border-brand-200 text-[0.78125rem] leading-relaxed text-ink-800 break-words whitespace-pre-wrap">
+              <p className="max-w-[85%] px-3 py-2 rounded-2xl rounded-br-md bg-brand-50 border border-brand-200 text-[0.8125rem] leading-relaxed text-ink-800 break-words whitespace-pre-wrap">
                 {m.text}
               </p>
             </div>
@@ -169,14 +169,14 @@ export default function SopChartChat({ facts, onRenameRisk, onRenameControl, onL
                with the reader's own words set into it. */
             <div key={m.id}>
               <p className="mb-1 font-mono text-[0.6875rem] uppercase tracking-[0.14em] text-ink-400">Ira</p>
-              <p className="text-[0.78125rem] leading-[1.65] text-ink-800 break-words">{m.text}</p>
+              <p className="text-[0.8125rem] leading-[1.65] text-ink-800 break-words">{m.text}</p>
               {m.receipts && (
                 <ul className="mt-2 space-y-1">
                   {m.receipts.map(r => {
                     const gone = undone.has(r.id);
                     return (
                       <li key={r.id}
-                        className={`rounded-lg border px-2.5 py-1.5 text-[0.71875rem] leading-snug ${gone
+                        className={`rounded-lg border px-2.5 py-1.5 text-[0.75rem] leading-snug ${gone
                           ? 'border-canvas-border bg-canvas text-ink-400'
                           : 'border-brand-200 bg-brand-50 text-brand-700'}`}>
                         <div className="flex items-start gap-1.5">
@@ -194,7 +194,7 @@ export default function SopChartChat({ facts, onRenameRisk, onRenameControl, onL
                         </div>
                         {/* The one fact nobody can be expected to remember. */}
                         {r.was && !gone && (
-                          <p className="mt-0.5 pl-[1.125rem] text-[0.6875rem] text-ink-500 break-words">was: {r.was}</p>
+                          <p className="mt-0.5 pl-4.5 text-[0.6875rem] text-ink-500 break-words">was: {r.was}</p>
                         )}
                       </li>
                     );
@@ -207,7 +207,7 @@ export default function SopChartChat({ facts, onRenameRisk, onRenameControl, onL
             <div className="flex flex-wrap gap-1.5">
               {OPENERS.map(o => (
                 <button key={o} type="button" onClick={() => send(o)}
-                  className="inline-flex items-center h-7 px-2.5 rounded-lg border border-canvas-border bg-canvas text-[0.71875rem] font-medium text-ink-600 hover:border-brand-300 hover:text-brand-700 hover:bg-brand-50 transition-colors cursor-pointer">
+                  className="inline-flex items-center h-7 px-2.5 rounded-lg border border-canvas-border bg-canvas text-[0.75rem] font-medium text-ink-600 hover:border-brand-300 hover:text-brand-700 hover:bg-brand-50 transition-colors cursor-pointer">
                   {o}
                 </button>
               ))}
@@ -222,8 +222,12 @@ export default function SopChartChat({ facts, onRenameRisk, onRenameControl, onL
           <textarea rows={2} value={draft} aria-label="Tell Ira what to change on the chart"
             placeholder="What should change?"
             onChange={e => setDraft(e.target.value)}
-            onKeyDown={e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); send(draft); } }}
-            className="no-focus-ring w-full bg-transparent border-none outline-none resize-none px-3 pt-2.5 pb-1 text-[0.78125rem] leading-[1.5] text-ink-800 placeholder:text-ink-400" />
+            onKeyDown={e => {
+              if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); send(draft); }
+              // Escape leaves the box, not the import wizard around it.
+              if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); e.currentTarget.blur(); }
+            }}
+            className="no-focus-ring w-full bg-transparent border-none outline-none resize-none px-3 pt-2.5 pb-1 text-[0.8125rem] leading-[1.5] text-ink-800 placeholder:text-ink-400" />
           <div className="flex items-center justify-between gap-2 px-2 pb-2">
             <span className="text-[0.6875rem] text-ink-400 select-none">Enter to send</span>
             {/* Mounted only when there is something to send — the house rule. */}

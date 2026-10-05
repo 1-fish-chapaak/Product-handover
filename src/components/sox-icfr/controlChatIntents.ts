@@ -48,6 +48,9 @@ export interface IntentCtx {
   actions: ChatAction[];
   /** The live prompt, so "what now?" is answered with the same words. */
   promptText: string;
+  /** Manual or Automatic — in Automatic Ira's runs come from its plan, so a
+   *  line telling the reader to ask for a run would point at nothing. */
+  mode?: 'manual' | 'automatic';
 }
 
 const has = (t: string, ...words: string[]) => words.some(w => t.includes(w));
@@ -80,11 +83,38 @@ function codeOf(control: Control, p: DesignPoint): string | null {
   return control.operating.steps.find(s => s.id === p.stepId)?.code ?? null;
 }
 
+/** The checks in the order the page lists them: the control-level ones first,
+ *  then one group per attribute in attribute order. "Check 1" is the first one
+ *  the reader sees, so that is the order a number counts in. */
+function checksInPageOrder(control: Control): DesignPoint[] {
+  const ids = new Set(control.operating.steps.map(s => s.id));
+  const pts = control.design.points;
+  return [
+    ...pts.filter(p => !p.stepId || !ids.has(p.stepId)),
+    ...control.operating.steps.flatMap(s => pts.filter(p => p.stepId === s.id)),
+  ];
+}
+
+const ORDINAL_WORDS = ['first', 'second', 'third', 'fourth', 'fifth', 'sixth', 'seventh', 'eighth', 'ninth', 'tenth'];
+const NUMBER_WORDS = ['one', 'two', 'three', 'four', 'five', 'six', 'seven', 'eight', 'nine', 'ten'];
+/** "1", "#2", "no. 3", "3rd", "second", "the second one", "two" → a 1-based
+ *  position, or null when the words are not a position at all. */
+function positionOf(ref: string): number | null {
+  const n = ref.trim().toLowerCase().replace(/^(no\.?|number|#)\s*/, '').replace(/\s+one$/, '').trim();
+  const digits = /^(\d+)(st|nd|rd|th)?$/.exec(n);
+  if (digits) return Number(digits[1]) || null;
+  const word = ORDINAL_WORDS.indexOf(n) >= 0 ? ORDINAL_WORDS.indexOf(n) : NUMBER_WORDS.indexOf(n);
+  return word >= 0 ? word + 1 : null;
+}
+
 function findPoint(control: Control, ref: string): DesignPoint | undefined {
   const needle = ref.trim().toLowerCase();
   if (!needle) return undefined;
   const byCode = control.design.points.find(p => (codeOf(control, p) ?? '').toLowerCase() === needle);
   if (byCode) return byCode;
+  // By number, as the page lists them — "mark check 1 pass" (user report, 5 Oct).
+  const at = positionOf(needle);
+  if (at !== null) return checksInPageOrder(control)[at - 1];
   return control.design.points.find(p => p.text.toLowerCase().includes(needle));
 }
 
@@ -97,15 +127,19 @@ const labelOf = (control: Control, p: DesignPoint): string => {
 function findStep(control: Control, ref: string): OperatingStep | undefined {
   const needle = ref.trim().toLowerCase();
   if (!needle) return undefined;
-  return control.operating.steps.find(s => s.code.toLowerCase() === needle)
-    ?? control.operating.steps.find(s => s.description.toLowerCase().includes(needle));
+  const byCode = control.operating.steps.find(s => s.code.toLowerCase() === needle);
+  if (byCode) return byCode;
+  const at = positionOf(needle);
+  if (at !== null) return control.operating.steps[at - 1];
+  return control.operating.steps.find(s => s.description.toLowerCase().includes(needle));
 }
 
 const stepLabelOf = (s: OperatingStep): string => `attribute ${s.code}`;
 
 /** Why an action the reader asked for is not on offer. Read off the same
  *  situation the buttons are, so the two can never disagree. */
-function refusal(id: ChatActionId, { s, role }: IntentCtx): string {
+function refusal(id: ChatActionId, ctx: IntentCtx): string {
+  const { s, role } = ctx;
   if (s.sealed) return 'This engagement is signed off — nothing on this control can move now.';
   const auditorsOwn: ChatActionId[] = ['add-element', 'attach-doc', 'waive-doc', 'upload-source', 'pick-source', 'upload-evidence', 'draw-sample', 'file-sample', 'tick-sample', 'ipe-check', 'ipe-reliable', 'ipe-unreliable', 'ira-run', 'toe-run', 'conclude-effective', 'conclude-ineffective', 'lock-population', 'conclude-op-effective', 'conclude-op-ineffective', 'rootcause-take', 'rootcause-write'];
   if (role !== 'auditor' && auditorsOwn.includes(id)) {
@@ -133,7 +167,7 @@ function refusal(id: ChatActionId, { s, role }: IntentCtx): string {
     return 'I can’t account for it from here just now.';
   }
   if (id === 'rootcause-take' || id === 'rootcause-write') {
-    if (!s.exception) return 'There is no exception open on this control that needs a root cause.';
+    if (!s.exception) return 'There is no deficiency open on this control that needs a root cause.';
     if (id === 'rootcause-take') return 'There is nothing of mine to take — the root cause on the paper is already in somebody\u2019s own words.';
     return 'I can\u2019t write it from here just now.';
   }
@@ -190,7 +224,9 @@ function refusal(id: ChatActionId, { s, role }: IntentCtx): string {
     if (s.operatingResult !== 'Not tested') return `Operating effectiveness is already concluded ${s.operatingResult.toLowerCase()}.`;
     if (s.toe.total === 0) return 'This control has no attributes to test against — that comes from the RACM.';
     if (s.toe.tested === s.toe.total) return 'Every attribute already has a result. Nothing left for me to read.';
-    return 'No attribute has all the files its test asks for yet, so there is nothing I can read.';
+    return s.toe.tested > 0
+      ? `None of the ${plural(s.toe.total - s.toe.tested, 'attribute')} left has all the files its test asks for yet, so there is nothing more I can read.`
+      : 'No attribute has all the files its test asks for yet, so there is nothing I can read.';
   }
   if (id === 'lock-population') {
     if (s.popLocked) return 'The population is already locked.';
@@ -199,7 +235,9 @@ function refusal(id: ChatActionId, { s, role }: IntentCtx): string {
   }
   if (id === 'conclude-op-effective' || id === 'conclude-op-ineffective') {
     if (s.operatingResult !== 'Not tested') return `Operating effectiveness is already concluded ${s.operatingResult.toLowerCase()}.`;
-    if (s.toeStale) return 'A run sits against a draw that has since changed. Re-run it and the conclusion opens up again.';
+    if (s.toeStale) return ctx.mode === 'automatic'
+      ? 'My last read was against a draw that has since changed, so I need to read the attributes again from my plan before the conclusion opens up.'
+      : 'My last read was against a draw that has since changed. Ask me to read the attributes again and the conclusion opens up.';
     if (s.toe.total === 0) return 'This control has no attributes to test against, so there is nothing to conclude on.';
     if (s.toe.tested < s.toe.total) return `${plural(s.toe.total - s.toe.tested, 'attribute')} still to test.`;
     if (id === 'conclude-op-effective' && s.toeHolds) return `Effective is held: ${s.toeHolds}.`;
@@ -240,7 +278,7 @@ function capabilities(ctx: IntentCtx): string {
   if (adds.length > 0) can.unshift(`add a design element — ${listOf(adds.map(a => a.label.toLowerCase()), 3)}`);
   if (folded) can.unshift(`draw the population off one of this audit’s files — ${listOf(srcs.map(a => a.arg ?? a.label), 3)}`);
   if (role === 'auditor' && s.step === 'design' && s.checksTotal > 0 && s.designResult === 'Not tested' && !s.locked) {
-    can.push('mark one check — try “pass 5.1” or “fail 5.2”');
+    can.push('mark one check — try “pass check 1” or “fail check 2”');
   }
   can.push('tell you where this control stands');
   return listOf(can, 4);
@@ -260,7 +298,7 @@ export function readIntent(raw: string, ctx: IntentCtx): Intent {
     // exception for a missing element and warned about the cost; there is no
     // exception to make any more, because the store refuses that one outright.
     if (id === 'ira-run' && !s.iraBlocked && ctx.role === 'auditor' && !s.locked && !s.sealed) {
-      return { kind: 'action', action: { id: 'ira-run', label: 'Run the AI validation', said: raw.trim(), does: 'assess the design checks' } };
+      return { kind: 'action', action: { id: 'ira-run', label: 'Assess the design checks', said: raw.trim(), does: 'assess the design checks' } };
     }
     return { kind: 'reply', text: refusal(id, ctx) };
   };
@@ -345,7 +383,7 @@ export function readIntent(raw: string, ctx: IntentCtx): Intent {
       if (!step) {
         const codes = control.operating.steps.map(x => x.code);
         return { kind: 'reply', text: codes.length
-          ? `I could not tell which attribute you mean. This control has ${listOf(codes, 5)} — try “${result.toLowerCase()} ${codes[0]}”.`
+          ? `I could not tell which attribute you mean. This control has ${listOf(codes, 5)} — try “${result.toLowerCase()} ${codes[0]}” or “${result.toLowerCase()} attribute 1”.`
           : 'This control has no attributes to test against — that comes from the RACM.' };
       }
       if (ctx.role !== 'auditor' || s.locked || s.operatingResult !== 'Not tested') {
@@ -370,10 +408,10 @@ export function readIntent(raw: string, ctx: IntentCtx): Intent {
 
     const point = findPoint(control, ref);
     if (!point) {
-      const codes = control.design.points.map(p => codeOf(control, p)).filter(Boolean) as string[];
-      return { kind: 'reply', text: codes.length
-        ? `I could not tell which check you mean. This control has ${listOf(codes, 5)} — try “${result.toLowerCase()} ${codes[0]}”.`
-        : 'I could not tell which check you mean — name a few words from it and I will find it.' };
+      const n = control.design.points.length;
+      return { kind: 'reply', text: n
+        ? `I could not tell which check you mean. This control has ${plural(n, 'check')}, numbered in the order the page lists them — try “${result.toLowerCase()} check 1”, or a few words from it.`
+        : 'This control has no design checks to mark — they come from the RACM.' };
     }
     if (ctx.role !== 'auditor' || s.locked || s.designResult !== 'Not tested') {
       return { kind: 'reply', text: refusal('conclude-effective', ctx) };
@@ -388,7 +426,7 @@ export function readIntent(raw: string, ctx: IntentCtx): Intent {
     return { kind: 'mark', pointId: point.id, label: labelOf(control, point), result };
   }
   if (mark && has(t, 'all')) {
-    return { kind: 'reply', text: 'I don’t mark every check in one go — that button came off the page on purpose, because a design check is a judgement each time. I can read the evidence and assess them, or you can mark them one by one.' };
+    return { kind: 'reply', text: 'I don’t mark every check in one go — a design check is a judgement each time. I can read the evidence and assess them, or you can mark them one by one.' };
   }
 
   // ── the real actions ──────────────────────────────────────────────────────

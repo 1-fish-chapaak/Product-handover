@@ -4,6 +4,7 @@ import { AlertTriangle, ArrowRight, BadgeCheck, CalendarRange, Check, History, I
 import { useIcfr } from './store';
 import { cn } from '../../lib/cn';
 import { isEngagementLocked, samePerson, samplingOf, samplingOverrides } from './helpers';
+import DialogFocus from '../shared/DialogFocus';
 import {
   DEFAULT_SAMPLE_SIZES, ROUND_BASIS_EFFECT, SAMPLING_METHODS, SAMPLING_SPREADS, samplingAgreed, spreadLabel,
   type Frequency, type SampleSizeRow, type SamplingMethod, type SamplingMethodology, type SamplingRoundBasis, type SamplingSpread,
@@ -113,7 +114,7 @@ export default function SamplingMethodologyView() {
   const log = eng.samplingLog ?? [];
   // How far the agreed table is actually being followed, counted across the
   // whole register rather than per control — the point of agreeing it once.
-  const overrides = useMemo(() => samplingOverrides(eng.controls), [eng.controls]);
+  const overrides = useMemo(() => samplingOverrides(eng.controls, eng), [eng]);
 
   const [draft, setDraft] = useState<Draft>(() => snapshot(m));
   const [revising, setRevising] = useState(false);
@@ -148,7 +149,7 @@ export default function SamplingMethodologyView() {
     <div className="w-full space-y-4 pb-8">
       {/* Runs the full width of the tab (user ask, 28 Sep) — it used to stop at
           52rem, which left it visibly short of the cards below it. */}
-      <p className="text-[0.78125rem] text-ink-500 leading-relaxed">
+      <p className="text-[0.8125rem] text-ink-500 leading-relaxed">
         How this engagement samples — agreed once, for every control. A control's sample step reads its number off
         the table below instead of asking the auditor to decide again, so there is one answer when a reviewer or an
         external auditor asks what the sampling approach is.
@@ -165,13 +166,13 @@ export default function SamplingMethodologyView() {
               : <AlertTriangle size={16} className="text-mitigated-700 shrink-0 mt-0.5" />}
             <div className="min-w-0">
               <p className={cn('text-[0.8125rem] font-bold', agreed ? 'text-compliant-800' : 'text-mitigated-800')}>{headline}</p>
-              <p className="text-[0.75rem] text-ink-600 leading-relaxed mt-1 max-w-[42rem]">
+              <p className="text-[0.75rem] text-ink-600 leading-relaxed mt-1 max-w-168">
                 {agreed
                   ? 'Every control on this engagement is sized from this table, and its working paper names the version it was tested under.'
                   : 'Testing is blocked until a reviewer signs. A size nobody has agreed is a number the auditor picked, which is the one thing this record exists to stop.'}
               </p>
               {locked && (
-                <p className="text-[0.71875rem] text-ink-500 mt-2 inline-flex items-center gap-1.5">
+                <p className="text-[0.75rem] text-ink-500 mt-2 inline-flex items-center gap-1.5">
                   <Lock size={11} /> The engagement is signed off — the methodology it was tested under is frozen.
                 </p>
               )}
@@ -184,12 +185,12 @@ export default function SamplingMethodologyView() {
             canSign ? (
               <button
                 onClick={signSampling}
-                className="h-9 px-4 shrink-0 inline-flex items-center gap-1.5 rounded-lg bg-brand-600 text-white text-[0.78125rem] font-semibold hover:bg-brand-700 transition-colors cursor-pointer"
+                className="h-9 px-4 shrink-0 inline-flex items-center gap-1.5 rounded-lg bg-brand-600 text-white text-[0.8125rem] font-semibold hover:bg-brand-700 transition-colors cursor-pointer"
               >
                 <ShieldCheck size={14} /> Sign the methodology
               </button>
             ) : (
-              <p className="text-[0.71875rem] text-ink-600 leading-relaxed shrink-0 max-w-[18rem] rounded-lg border border-canvas-border bg-canvas-elevated px-3 py-2.5">
+              <p className="text-[0.75rem] text-ink-600 leading-relaxed shrink-0 max-w-72 rounded-lg border border-canvas-border bg-canvas-elevated px-3 py-2.5">
                 {iProposed
                   ? <>You proposed this {when(m.proposedBy!.at)}, so you cannot be the one to sign it — four eyes means two people.</>
                   : <>The engagement is locked, so nothing more can be signed on it.</>}
@@ -197,7 +198,7 @@ export default function SamplingMethodologyView() {
             )
           )}
           {role !== 'reviewer' && !agreed && (
-            <p className="text-[0.71875rem] text-ink-500 shrink-0">Waiting on a reviewer.</p>
+            <p className="text-[0.75rem] text-ink-500 shrink-0">Waiting on a reviewer.</p>
           )}
           {/* The one way back into the fields once it is agreed, and it says
               what it costs before it is pressed rather than after. */}
@@ -205,7 +206,7 @@ export default function SamplingMethodologyView() {
             revisingDraft ? (
               <button
                 onClick={() => { setDraft(snapshot(m)); setRevisingDraft(false); }}
-                className="h-9 px-4 shrink-0 rounded-lg border border-canvas-border bg-canvas-elevated text-[0.78125rem] font-semibold text-ink-600 hover:border-ink-300 transition-colors cursor-pointer"
+                className="h-9 px-4 shrink-0 rounded-lg border border-canvas-border bg-canvas-elevated text-[0.8125rem] font-semibold text-ink-600 hover:border-ink-300 transition-colors cursor-pointer"
               >
                 Stop revising
               </button>
@@ -213,7 +214,7 @@ export default function SamplingMethodologyView() {
               <button
                 onClick={() => setRevisingDraft(true)}
                 title={`Creates v${m.version + 1} and returns the methodology to unsigned`}
-                className="h-9 px-4 shrink-0 inline-flex items-center gap-1.5 rounded-lg border border-canvas-border bg-canvas-elevated text-[0.78125rem] font-semibold text-ink-700 hover:border-brand-300 hover:text-brand-700 transition-colors cursor-pointer"
+                className="h-9 px-4 shrink-0 inline-flex items-center gap-1.5 rounded-lg border border-canvas-border bg-canvas-elevated text-[0.8125rem] font-semibold text-ink-700 hover:border-brand-300 hover:text-brand-700 transition-colors cursor-pointer"
               >
                 <History size={14} /> Revise the methodology
               </button>
@@ -239,13 +240,13 @@ export default function SamplingMethodologyView() {
             </span>
           </p>
           <div className="flex items-center gap-2 shrink-0">
-            <button onClick={() => { setDraft(snapshot(m)); setRevisingDraft(false); }} className="h-9 px-3.5 rounded-lg border border-canvas-border bg-canvas-elevated text-[0.78125rem] font-semibold text-ink-600 hover:border-ink-300 transition-colors cursor-pointer">Discard</button>
+            <button onClick={() => { setDraft(snapshot(m)); setRevisingDraft(false); }} className="h-9 px-3.5 rounded-lg border border-canvas-border bg-canvas-elevated text-[0.8125rem] font-semibold text-ink-600 hover:border-ink-300 transition-colors cursor-pointer">Discard</button>
             {agreed ? (
-              <button onClick={() => setRevising(true)} className="h-9 px-4 inline-flex items-center gap-1.5 rounded-lg bg-brand-600 text-white text-[0.78125rem] font-semibold hover:bg-brand-700 transition-colors cursor-pointer">
+              <button onClick={() => setRevising(true)} className="h-9 px-4 inline-flex items-center gap-1.5 rounded-lg bg-brand-600 text-white text-[0.8125rem] font-semibold hover:bg-brand-700 transition-colors cursor-pointer">
                 <History size={14} /> Review &amp; revise
               </button>
             ) : (
-              <button onClick={() => proposeSampling({ sizes: draft.sizes, method: draft.method, spread: draft.spread, roundBasis: draft.roundBasis })} className="h-9 px-4 rounded-lg bg-brand-600 text-white text-[0.78125rem] font-semibold hover:bg-brand-700 transition-colors cursor-pointer">
+              <button onClick={() => proposeSampling({ sizes: draft.sizes, method: draft.method, spread: draft.spread, roundBasis: draft.roundBasis })} className="h-9 px-4 rounded-lg bg-brand-600 text-white text-[0.8125rem] font-semibold hover:bg-brand-700 transition-colors cursor-pointer">
                 Save the proposal
               </button>
             )}
@@ -273,14 +274,14 @@ export default function SamplingMethodologyView() {
             <span className="text-[0.9375rem] font-bold text-ink-900">
               {overrides.overridden} of {overrides.sized}
             </span>
-            <span className="text-[0.78125rem] text-ink-600">
+            <span className="text-[0.8125rem] text-ink-600">
               {overrides.overridden === 1 ? 'control has been sized' : 'controls have been sized'} against something other than this table
             </span>
           </div>
-          <p className="text-[0.71875rem] text-ink-500 mt-1 leading-relaxed max-w-[42rem]">
+          <p className="text-[0.75rem] text-ink-500 mt-1 leading-relaxed max-w-168">
             {overrides.overridden === 0
               ? 'Every size drawn so far was read off the agreed table.'
-              : 'A departure is always allowed and is never blocked — each one carries the auditor’s reason and prints on the working paper. But if this number keeps climbing, the table is not the methodology the engagement is really using.'}
+              : `${overrides.unrecorded > 0 ? `${overrides.unrecorded} of these ${overrides.unrecorded === 1 ? 'stands' : 'stand'} at another number with no reason recorded. ` : ''}A departure is always allowed and is never blocked — once recorded it carries the auditor’s reason and prints on the working paper. But if this number keeps climbing, the table is not the methodology the engagement is really using.`}
           </p>
         </section>
       )}
@@ -288,13 +289,13 @@ export default function SamplingMethodologyView() {
       {/* ── the table ───────────────────────────────────────────────────────────── */}
       <section className="rounded-xl border border-canvas-border bg-canvas-elevated p-5">
         <h2 className="font-display text-[1.0625rem] leading-tight text-ink-900 inline-flex items-center gap-2"><Table2 size={15} className="text-brand-600" /> Sample sizes</h2>
-        <p className="text-[0.71875rem] text-ink-500 mt-1 mb-3">How many items to test, by how often the control runs and how it is rated. A control with no rating yet is sized at Medium.</p>
+        <p className="text-[0.75rem] text-ink-500 mt-1 mb-3">How many items to test, by how often the control runs and how it is rated. A control with no rating yet is sized at Medium.</p>
         <table className="w-full">
           <thead>
             <tr className="border-b border-canvas-border">
-              <th className="text-left text-[0.625rem] font-bold uppercase tracking-wider text-ink-400 pb-2">Frequency</th>
+              <th className="text-left text-[0.6875rem] font-bold uppercase tracking-wider text-ink-400 pb-2">Frequency</th>
               {RATINGS.map(r => (
-                <th key={r} className="text-center text-[0.625rem] font-bold uppercase tracking-wider text-ink-400 pb-2 w-[7rem]">{r[0]!.toUpperCase()}{r.slice(1)} risk</th>
+                <th key={r} className="text-center text-[0.6875rem] font-bold uppercase tracking-wider text-ink-400 pb-2 w-28">{r[0]!.toUpperCase()}{r.slice(1)} risk</th>
               ))}
             </tr>
           </thead>
@@ -302,12 +303,12 @@ export default function SamplingMethodologyView() {
             {FREQUENCIES.map(f => (
               <tr key={f} className="border-b border-canvas-border last:border-b-0 align-top">
                 <td className="py-2.5 pr-4">
-                  <span className="text-[0.78125rem] font-semibold text-ink-800">{f}</span>
+                  <span className="text-[0.8125rem] font-semibold text-ink-800">{f}</span>
                   {/* The one row that cannot be sized off a rhythm, so the
                       judgment it needs is stated beside it rather than left to
                       whoever opens the control. */}
                   {f === 'Ad-hoc' && (
-                    <p className="text-[0.6875rem] text-ink-500 leading-relaxed mt-0.5 max-w-[26rem]">
+                    <p className="text-[0.6875rem] text-ink-500 leading-relaxed mt-0.5 max-w-104">
                       Judgment — there is no fixed rhythm to size against. Size by how often the control actually ran in
                       the period, and record that count on the paper.
                     </p>
@@ -320,10 +321,10 @@ export default function SamplingMethodologyView() {
                         type="number" min={1} value={draft.sizes[f][r]}
                         aria-label={`${f}, ${r} risk — sample size`}
                         onChange={e => setSize(f, r, e.target.value)}
-                        className="h-8 w-16 px-2 rounded-lg border border-canvas-border bg-canvas-elevated text-[0.78125rem] tabular-nums text-center focus:outline-none focus:ring-2 focus:ring-brand-200"
+                        className="h-8 w-16 px-2 rounded-lg border border-canvas-border bg-canvas-elevated text-[0.8125rem] tabular-nums text-center focus:outline-none focus:ring-2 focus:ring-brand-200"
                       />
                     ) : (
-                      <span className="text-[0.78125rem] font-semibold text-ink-800 tabular-nums">{m.sizes[f]?.[r] ?? DEFAULT_SAMPLE_SIZES[f][r]}</span>
+                      <span className="text-[0.8125rem] font-semibold text-ink-800 tabular-nums">{m.sizes[f]?.[r] ?? DEFAULT_SAMPLE_SIZES[f][r]}</span>
                     )}
                   </td>
                 ))}
@@ -340,7 +341,7 @@ export default function SamplingMethodologyView() {
       {/* ── how the items are picked ───────────────────────────────────────────── */}
       <section className="rounded-xl border border-canvas-border bg-canvas-elevated p-5">
         <h2 className="font-display text-[1.0625rem] leading-tight text-ink-900 inline-flex items-center gap-2"><Shuffle size={15} className="text-brand-600" /> Selection method</h2>
-        <p className="text-[0.71875rem] text-ink-500 mt-1 mb-3">How the items are picked out of the population, on every control.</p>
+        <p className="text-[0.75rem] text-ink-500 mt-1 mb-3">How the items are picked out of the population, on every control.</p>
         <div className="grid grid-cols-3 gap-2.5" role="radiogroup" aria-label="Selection method">
           {SAMPLING_METHODS.map(opt => (
             <OptionCard
@@ -361,7 +362,7 @@ export default function SamplingMethodologyView() {
           its own section rather than three more cards under the method. */}
       <section className="rounded-xl border border-canvas-border bg-canvas-elevated p-5">
         <h2 className="font-display text-[1.0625rem] leading-tight text-ink-900 inline-flex items-center gap-2"><Layers size={15} className="text-brand-600" /> Spread across</h2>
-        <p className="text-[0.71875rem] text-ink-500 mt-1 mb-3">Each group ticked gets items of its own in every control's draw, so a sample cannot land entirely in one quarter or one company.</p>
+        <p className="text-[0.75rem] text-ink-500 mt-1 mb-3">Each group ticked gets items of its own in every control's draw, so a sample cannot land entirely in one quarter or one company.</p>
         <div className="grid grid-cols-3 gap-2.5" role="group" aria-label="Spread across">
           {SAMPLING_SPREADS.map(opt => (
             <OptionCard
@@ -386,7 +387,7 @@ export default function SamplingMethodologyView() {
           (user ask): this is a choice people make by its effect, not by its name. */}
       <section className="rounded-xl border border-canvas-border bg-canvas-elevated p-5">
         <h2 className="font-display text-[1.0625rem] leading-tight text-ink-900 inline-flex items-center gap-2"><CalendarRange size={15} className="text-brand-600" /> Across rounds</h2>
-        <p className="text-[0.71875rem] text-ink-500 mt-1 mb-3">A year is tested in rounds — interim first, then roll-forward. This says whether each round draws its own sample or the year is drawn once.</p>
+        <p className="text-[0.75rem] text-ink-500 mt-1 mb-3">A year is tested in rounds — interim first, then roll-forward. This says whether each round draws its own sample or the year is drawn once.</p>
         <div className="grid grid-cols-2 gap-2.5" role="radiogroup" aria-label="Across rounds">
           {(Object.keys(BASIS_LABEL) as SamplingRoundBasis[]).map(opt => (
             <OptionCard
@@ -411,19 +412,19 @@ export default function SamplingMethodologyView() {
       {log.length > 0 && (
         <section className="rounded-xl border border-canvas-border bg-canvas-elevated p-5">
           <h2 className="font-display text-[1.0625rem] leading-tight text-ink-900 inline-flex items-center gap-2"><History size={15} className="text-brand-600" /> Changes to the methodology</h2>
-          <p className="text-[0.71875rem] text-ink-500 mt-1 mb-3">Every revision since the engagement opened, newest first. An audit stays on the version it was created under.</p>
+          <p className="text-[0.75rem] text-ink-500 mt-1 mb-3">Every revision since the engagement opened, newest first. An audit stays on the version it was created under.</p>
           <div className="space-y-2.5">
             {log.map(entry => (
               <div key={entry.id} className="rounded-xl border border-canvas-border bg-paper-50/50 px-3.5 py-3">
                 <div className="flex items-baseline justify-between gap-3 flex-wrap">
-                  <span className="text-[0.78125rem] font-bold text-ink-800">v{entry.version}</span>
+                  <span className="text-[0.8125rem] font-bold text-ink-800">v{entry.version}</span>
                   <span className="text-[0.6875rem] text-ink-400 shrink-0">{entry.by} · {entry.at}</span>
                 </div>
                 <div className="mt-1.5 space-y-1">
                   {entry.changes.map(c => (
                     <div key={c.field} className="flex items-center justify-between gap-3 rounded-lg border border-canvas-border bg-canvas-elevated px-3 py-1.5">
-                      <span className="text-[0.71875rem] text-ink-700 min-w-0 truncate">{c.field}</span>
-                      <span className="text-[0.71875rem] tabular-nums shrink-0">
+                      <span className="text-[0.75rem] text-ink-700 min-w-0 truncate">{c.field}</span>
+                      <span className="text-[0.75rem] tabular-nums shrink-0">
                         <span className="text-ink-400">{c.from}</span>
                         <ArrowRight size={10} className="inline mx-1 -mt-0.5 text-ink-300" />
                         <span className="font-bold text-ink-900">{c.to}</span>
@@ -431,7 +432,7 @@ export default function SamplingMethodologyView() {
                     </div>
                   ))}
                 </div>
-                <p className="text-[0.71875rem] text-ink-600 leading-relaxed mt-1.5"><span className="text-ink-400">Why</span> · {entry.reason}</p>
+                <p className="text-[0.75rem] text-ink-600 leading-relaxed mt-1.5"><span className="text-ink-400">Why</span> · {entry.reason}</p>
               </div>
             ))}
           </div>
@@ -454,7 +455,7 @@ function OptionCard({ title, note, selected, canEdit, multi, onPick }: {
   const shell = cn('rounded-xl border px-3.5 py-3 text-left', selected ? 'border-brand-300 bg-brand-50/40' : 'border-canvas-border');
   const body = (
     <>
-      <span className={cn('flex items-center gap-1.5 text-[0.78125rem] font-bold', selected ? 'text-brand-700' : 'text-ink-800')}>
+      <span className={cn('flex items-center gap-1.5 text-[0.8125rem] font-bold', selected ? 'text-brand-700' : 'text-ink-800')}>
         {multi && selected && <Check size={12} className="shrink-0" />}{title}
       </span>
       <span className="block text-[0.6875rem] text-ink-500 leading-relaxed mt-0.5">{note}</span>
@@ -486,15 +487,15 @@ function ReviseModal({ changes, nextVersion, runningAudits, onClose, onRevise }:
   const [reason, setReason] = useState('');
   return createPortal(
     <div className="modal-backdrop" onClick={onClose}>
-      <div className="modal" style={{ maxWidth: 560 }} onClick={e => e.stopPropagation()}>
+      <div role="dialog" aria-modal="true" aria-labelledby="sampling-revise-title" className="modal" style={{ maxWidth: 560 }} onClick={e => e.stopPropagation()}><DialogFocus onEscape={onClose} />
         <div className="px-5 py-4 border-b border-canvas-border">
-          <h3 className="text-[0.875rem] font-bold text-ink-900 inline-flex items-center gap-2"><History size={16} className="text-brand-600" /> Revise the methodology</h3>
+          <h3 id="sampling-revise-title" className="text-[0.875rem] font-bold text-ink-900 inline-flex items-center gap-2"><History size={16} className="text-brand-600" /> Revise the methodology</h3>
           <p className="text-[0.75rem] text-ink-500 mt-1">Nothing has changed yet. This is what revising would do.</p>
         </div>
 
         <div className="px-5 py-4 space-y-4 max-h-[60vh] overflow-y-auto">
           <div>
-            <span className="block text-[0.625rem] font-bold uppercase tracking-wider text-ink-400 mb-1.5">What changes — {changes.length}</span>
+            <span className="block text-[0.6875rem] font-bold uppercase tracking-wider text-ink-400 mb-1.5">What changes — {changes.length}</span>
             <div className="space-y-1">
               {changes.map(c => (
                 <div key={c.field} className="flex items-center justify-between gap-3 rounded-lg border border-canvas-border bg-paper-50/50 px-3 py-2">
@@ -510,7 +511,7 @@ function ReviseModal({ changes, nextVersion, runningAudits, onClose, onRevise }:
           </div>
 
           <div>
-            <span className="block text-[0.625rem] font-bold uppercase tracking-wider text-ink-400 mb-1.5">What it costs</span>
+            <span className="block text-[0.6875rem] font-bold uppercase tracking-wider text-ink-400 mb-1.5">What it costs</span>
             <p className="text-[0.75rem] text-ink-600 leading-relaxed rounded-lg border border-mitigated-200 bg-mitigated-50/40 px-3 py-2.5 inline-flex items-start gap-1.5">
               <AlertTriangle size={12} className="mt-0.5 shrink-0 text-mitigated-700" />
               <span>
@@ -522,19 +523,19 @@ function ReviseModal({ changes, nextVersion, runningAudits, onClose, onRevise }:
           </div>
 
           <div>
-            <span className="block text-[0.625rem] font-bold uppercase tracking-wider text-ink-400 mb-1.5">Why this is changing</span>
+            <span className="block text-[0.6875rem] font-bold uppercase tracking-wider text-ink-400 mb-1.5">Why this is changing</span>
             <textarea value={reason} onChange={e => setReason(e.target.value)} rows={3}
               placeholder="e.g. the monthly population came in far larger than planned, so the monthly sizes are re-cut on the actual volumes"
               className="w-full px-3 py-2.5 rounded-lg border border-canvas-border bg-canvas-elevated text-[0.75rem] leading-relaxed resize-none focus:outline-none focus:ring-2 focus:ring-brand-200" />
-            <p className="text-[0.625rem] text-ink-400 mt-1">Recorded against the version, with your name and everything it moved.</p>
+            <p className="text-[0.6875rem] text-ink-400 mt-1">Recorded against the version, with your name and everything it moved.</p>
           </div>
         </div>
 
         <div className="flex items-center justify-end gap-2 px-5 py-3.5 border-t border-canvas-border bg-paper-50/40">
-          <button onClick={onClose} className="h-9 px-3.5 text-[0.78125rem] font-semibold text-ink-600 hover:text-ink-900 cursor-pointer">Cancel</button>
+          <button onClick={onClose} className="h-9 px-3.5 text-[0.8125rem] font-semibold text-ink-600 hover:text-ink-900 cursor-pointer">Cancel</button>
           <button disabled={!reason.trim()} title={reason.trim() ? undefined : 'A change to an agreed methodology needs a reason on the record.'}
             onClick={() => onRevise(reason.trim())}
-            className="h-9 px-4 rounded-lg bg-brand-600 text-white text-[0.78125rem] font-semibold enabled:hover:bg-brand-700 disabled:opacity-40 disabled:cursor-not-allowed transition-colors cursor-pointer">Create v{nextVersion}</button>
+            className="h-9 px-4 rounded-lg bg-brand-600 text-white text-[0.8125rem] font-semibold enabled:hover:bg-brand-700 disabled:opacity-40 disabled:cursor-not-allowed transition-colors cursor-pointer">Create v{nextVersion}</button>
         </div>
       </div>
     </div>,

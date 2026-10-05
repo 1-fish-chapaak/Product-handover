@@ -22,6 +22,7 @@ import WorkflowLibraryView from './components/workflow/WorkflowLibraryView';
 import BusinessProcesses, { ControlDetailStandalone } from './components/audit/BusinessProcesses';
 import RiskRegister from './components/audit/RiskRegister';
 import RacmPage from './components/sox-icfr/RacmPage';
+import { editorHandoff, findLibraryRacm } from './components/sox-icfr/racmLibrary';
 import AuditExecution from './components/audit/AuditExecution';
 import DashboardView from './components/dashboard/DashboardView';
 import DashboardListPage from './components/dashboard/DashboardListPage';
@@ -318,7 +319,7 @@ function AppInner() {
   const [engagementBackView, setEngagementBackView] = useState<'programs' | 'audit-planning' | 'business-processes'>('programs');
   const [workflowBackView, setWorkflowBackView] = useState<'workflow-library' | 'business-processes' | null>(null);
   // Local context for the full-page RACM editor: which RACM, what process, where to go back to.
-  type RacmEditorContext = { racmId: string; racmName: string; processLabel: string; backView: 'engagement-overview' | 'business-processes' | 'bp-detail' | 'engagement-final' | 'ai-concierge' | 'ai-concierge-racm'; backLabel?: string; sourceFiles?: string[]; initialRows?: ProcurementRacmRow[]; lockedRowIds?: string[] };
+  type RacmEditorContext = { racmId: string; racmName: string; processLabel: string; backView: 'engagement-overview' | 'business-processes' | 'bp-detail' | 'engagement-final' | 'ai-concierge' | 'ai-concierge-racm' | 'racm-library'; backLabel?: string; sourceFiles?: string[]; initialRows?: ProcurementRacmRow[]; lockedRowIds?: string[] };
   // Deep-link support: when this tab is opened at ?view=racm-full-editor (the
   // "Open in editor" new tab), restore the editor context at init so there's no
   // mount-time setState / double render. getInitialView (useAppState) already
@@ -328,6 +329,15 @@ function AppInner() {
     const params = new URLSearchParams(window.location.search);
     if (params.get('view') !== 'racm-full-editor') return null;
     const racmId = params.get('racmId') ?? '';
+    // Opened from the RACM Library (same tab since 5 Oct): a reload reads the
+    // matrix straight from the library, which keeps itself between loads.
+    if (params.get('backView') === 'racm-library') {
+      const lib = racmId ? findLibraryRacm(racmId) : undefined;
+      if (lib) {
+        const { rows, lockedIds } = editorHandoff(lib);
+        return { racmId, initialRows: rows, lockedRowIds: lockedIds, racmName: lib.name, processLabel: lib.process, backView: 'racm-library', backLabel: 'RACM Library' };
+      }
+    }
     // A SOX RACM hands its own rows over before opening this tab (Racm.tsx) —
     // this tab has none of the engagement's state to read them from.
     let initialRows: ProcurementRacmRow[] | undefined;
@@ -353,6 +363,18 @@ function AppInner() {
       backLabel: params.get('backLabel') ?? undefined,
     };
   });
+  // Leaving the editor (its back link, or the sidebar) must take its deep link
+  // with it — otherwise the bar keeps saying racm-full-editor over whatever
+  // page is showing, and a reload drops the reader back into the editor.
+  useEffect(() => {
+    if (state.view === 'racm-full-editor') return;
+    const params = new URLSearchParams(window.location.search);
+    if (params.get('view') !== 'racm-full-editor') return;
+    ['view', 'racmId', 'racmName', 'processLabel', 'backView', 'backLabel'].forEach(k => params.delete(k));
+    if (state.view === 'racm-library') params.set('view', 'racm-library');
+    const qs = params.toString();
+    window.history.replaceState(window.history.state, '', `${window.location.pathname}${qs ? `?${qs}` : ''}${window.location.hash}`);
+  }, [state.view]);
   const openRacmFullEditor = (ctx: RacmEditorContext) => {
     setRacmEditorContext(ctx);
     setView('racm-full-editor');
@@ -957,7 +979,18 @@ function AppInner() {
       // it belongs with Risk Register and Control Library rather than inside
       // the engagement portfolio.
       case 'racm-library':
-        return <RacmPage canManage={can('eng_create')} />;
+        return (
+          <RacmPage canManage={can('eng_create')}
+            onOpenEditor={(r) => {
+              // Same tab (5 Oct): the editor reads and saves the library
+              // directly, and the SOP file's link stays alive. The address bar
+              // names the matrix so a reload comes back to it.
+              const { rows, lockedIds } = editorHandoff(r);
+              const params = new URLSearchParams({ view: 'racm-full-editor', racmId: r.id, backView: 'racm-library' });
+              window.history.replaceState(window.history.state, '', `${window.location.pathname}?${params.toString()}${window.location.hash}`);
+              openRacmFullEditor({ racmId: r.id, racmName: r.name, processLabel: r.process, backView: 'racm-library', backLabel: 'RACM Library', initialRows: rows, lockedRowIds: lockedIds });
+            }} />
+        );
 
       case 'audit-risk-register':
         return (
@@ -1198,6 +1231,7 @@ function AppInner() {
             sourceFiles={racmEditorContext?.sourceFiles}
             initialRows={racmEditorContext?.initialRows}
             lockedRowIds={racmEditorContext?.lockedRowIds}
+            libraryLive={racmEditorContext?.backView === 'racm-library'}
           />
         );
 

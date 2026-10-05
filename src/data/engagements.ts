@@ -104,6 +104,19 @@ export interface Engagement {
    *  Carried here proposed and unsigned — the reviewer signs it inside the
    *  workspace, on the Configuration tab, and testing waits for that. */
   soxSampling?: SamplingMethodology;
+  /** SOX (5 Oct 2026): ONE engagement = ONE audit round. Which round this
+   *  engagement is and the window it tests, set on Create engagement's Basics.
+   *  Absent on the older seeds, which are each one year-end. `carriedFromId`
+   *  is the signed interim engagement a year-end / roll-forward carried its
+   *  controls over from. */
+  soxAudit?: {
+    round: 'interim' | 'rollforward' | 'yearend';
+    yearBasis?: 'fy' | 'cy';
+    fiscalYear?: number;
+    windowFrom?: string;
+    windowTo?: string;
+    carriedFromId?: string;
+  };
   /** Present only for Compliance engagements created via the wizard. */
   complianceConfig?: ComplianceConfig;
   /** Present only for Internal Audit engagements created via the wizard. */
@@ -144,6 +157,21 @@ export interface Engagement {
 }
 
 export const ENGAGEMENTS: Engagement[] = [
+  {
+    // Split out of Altura SOX-104 (5 Oct 2026 — one engagement per round). It
+    // was that engagement's CY 2025 year-end, archived when CY 2026's interim
+    // started; it keeps its results, findings and sign-offs, read-only.
+    id: 'sox-v2-fy25-ye', code: 'SOX-103', name: 'FY25 ICFR — Altura Infra Group · CY 2025 Year-end',
+    description: 'CY 2025 ICFR year-end for Altura Infra Group — signed by preparer and reviewer, ICFR effective. Read-only.',
+    type: 'SOX / ICFR', process: 'P2P', framework: 'COSO 2013 / SOX 404', owner: 'A. Mehta',
+    status: 'Closed', periodStart: 'Jan 2025', periodEnd: 'Dec 2025', controls: 9,
+    health: 78, openIssues: 1, lastActivity: '12 Jan 2026', nextScheduled: 'Signed off',
+    entity: 'Altura Infra Holdings Ltd (Listed)',
+    soxConfig: { overallMateriality: 105_000_000, performanceMateriality: 78_750_000, clearlyTrivial: 5_250_000, sdBandPct: 20, aggregate: true, keyOnly: true },
+    soxSeedMode: 'live',
+    soxAudit: { round: 'yearend', yearBasis: 'cy', fiscalYear: 2025, windowFrom: '2025-10-01', windowTo: '2025-12-31' },
+    startDate: '2025-01-01', endDate: '2025-12-31',
+  },
   {
     id: 'eng-1', code: 'ENG-001', name: 'FY26 ICFR — Airline P2P & O2C',
     description: 'SOX 404 / ICFR engagement — entity-wide scoping, Procure-to-Pay key controls, design + operating effectiveness, and deficiency evaluation against materiality.',
@@ -190,7 +218,8 @@ export const ENGAGEMENTS: Engagement[] = [
     // restricted to what passed — can be walked without concluding an audit by
     // hand first. Altura (SOX-104) stays the testing demo; this one exists to
     // be rolled forward.
-    id: 'eng-sox-rf', code: 'SOX-105', name: 'FY27 ICFR — Altura Renewables',
+    id: 'eng-sox-rf', code: 'SOX-105', name: 'FY27 ICFR — Altura Renewables · Interim',
+    soxAudit: { round: 'interim', yearBasis: 'fy', fiscalYear: 2027, windowFrom: '2026-04-01', windowTo: '2026-07-31' },
     description: 'FY 2026-27 ICFR cycle for the renewables arm — interim countersigned with two open findings, ready to roll forward to year end.',
     type: 'SOX / ICFR', process: 'O2C', framework: 'COSO 2013 / SOX 404', owner: 'A. Mehta',
     status: 'Active', periodStart: 'Apr 2026', periodEnd: 'Mar 2027', controls: 10,
@@ -359,7 +388,12 @@ export function findEngagement(id: string): Engagement | undefined {
  *  Without this a created engagement vanishes from the list when the library
  *  remounts (e.g. Back to Engagements from its workspace). */
 export function libraryEngagements(): Engagement[] {
-  const fresh = RUNTIME_ENGAGEMENTS.filter(r => !ENGAGEMENTS.some(s => s.id === r.id));
+  // A runtime record carrying a seed's code under a different id is a second
+  // copy of that engagement, not a new one — SOX Testing's seed programme
+  // registers 'sox-prog-fy26' as "FY26 ICFR — Airline P2P & O2C · ENG-001" to
+  // back its own workspace, which listed ENG-001 twice with different figures.
+  // It stays findable by id (findEngagement); it is just not listed.
+  const fresh = RUNTIME_ENGAGEMENTS.filter(r => !ENGAGEMENTS.some(s => s.id === r.id || (!!r.code && s.code === r.code)));
   return [...fresh, ...ENGAGEMENTS.map(s => RUNTIME_ENGAGEMENTS.find(r => r.id === s.id) ?? s)];
 }
 /** The name an engagement will actually be saved under. A name already used by

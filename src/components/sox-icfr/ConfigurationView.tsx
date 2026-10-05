@@ -21,12 +21,12 @@ const GROUP_RULE_ID = 'rule-group';
  *  reverted. Set false to park it again (rows without a TB show a dash). */
 const TB_UPLOAD_BTN = true;
 
-const inputCls = 'w-full px-3 py-2 text-[13px] border border-canvas-border rounded-lg bg-white text-ink-900 outline-none focus:border-brand-400 focus:ring-2 focus:ring-brand-500/10 transition-all';
-const selectCls = 'text-[12px] text-ink-600 bg-white border border-canvas-border rounded-md px-2 py-1.5 outline-none focus:border-brand-400 cursor-pointer';
-const uploadBtnCls = 'inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-md border border-canvas-border bg-white hover:bg-brand-50/60 hover:border-brand-300 text-[11px] font-semibold text-ink-600 hover:text-brand-700 transition-colors cursor-pointer';
+const inputCls = 'w-full px-3 py-2 text-[0.8125rem] border border-canvas-border rounded-lg bg-white text-ink-900 outline-none focus:border-brand-400 focus:ring-2 focus:ring-brand-500/10 transition-all';
+const selectCls = 'text-[0.75rem] text-ink-600 bg-white border border-canvas-border rounded-md px-2 py-1.5 outline-none focus:border-brand-400 cursor-pointer';
+const uploadBtnCls = 'inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-md border border-canvas-border bg-white hover:bg-brand-50/60 hover:border-brand-300 text-[0.6875rem] font-semibold text-ink-600 hover:text-brand-700 transition-colors cursor-pointer';
 
 function Label({ children }: { children: React.ReactNode }) {
-  return <div className="text-[10.5px] font-bold text-ink-400 uppercase tracking-wider mb-1.5">{children}</div>;
+  return <div className="text-[0.6875rem] font-bold text-ink-400 uppercase tracking-wider mb-1.5">{children}</div>;
 }
 
 /**
@@ -215,7 +215,7 @@ function ConfigInner({ prog, engId, reconcileScope }: {
   return (
     <div className="w-full space-y-4 pb-8">
       <div className="flex items-start justify-between gap-4">
-        <p className="text-[12.5px] text-ink-500">
+        <p className="text-[0.8125rem] text-ink-500">
           The working surface for this engagement's scoping configuration. Edits save instantly;
           the Materiality &amp; scope page remains the formal record and reflects the latest numbers.
         </p>
@@ -223,7 +223,7 @@ function ConfigInner({ prog, engId, reconcileScope }: {
 
       {stale && (
         <div className="flex items-center justify-between gap-3 px-4 py-3 rounded-xl border border-evidence-200 bg-evidence-50">
-          <div className="flex items-start gap-2 text-[12.5px] font-medium text-evidence-800 min-w-0">
+          <div className="flex items-start gap-2 text-[0.8125rem] font-medium text-evidence-800 min-w-0">
             <AlertTriangle size={14} className="text-evidence-700 shrink-0 mt-0.5" />
             <span>
               Configuration changed — the derived scope may be stale.
@@ -235,14 +235,14 @@ function ConfigInner({ prog, engId, reconcileScope }: {
           <button
             onClick={reDerive}
             disabled={!canReDerive}
-            className="inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-lg bg-brand-600 hover:bg-brand-700 text-white text-[12px] font-semibold transition-colors cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed shrink-0"
+            className="inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-lg bg-brand-600 hover:bg-brand-700 text-white text-[0.75rem] font-semibold transition-colors cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed shrink-0"
           >
             <RefreshCw size={12} /> Re-derive scope
           </button>
         </div>
       )}
       {!stale && lastDerive && (
-        <div className="px-4 py-3 rounded-xl border border-compliant-200 bg-compliant-50 text-[12.5px] text-compliant-800">
+        <div className="px-4 py-3 rounded-xl border border-compliant-200 bg-compliant-50 text-[0.8125rem] text-compliant-800">
           {lastDerive}
         </div>
       )}
@@ -250,34 +250,34 @@ function ConfigInner({ prog, engId, reconcileScope }: {
       {/* ── Testing period ─────────────────────────────────────────────── */}
       <section className="rounded-xl border border-canvas-border bg-white p-5">
         <h2 className="font-display text-[1.0625rem] leading-tight text-ink-900 inline-flex items-center gap-2"><CalendarRange size={15} className="text-brand-600" /> Testing period</h2>
-        <p className="text-[11.5px] text-ink-500 mt-1 mb-4">An annual cycle, not a dated project — the cycle is named by the year the group reports on.</p>
+        <p className="text-[0.75rem] text-ink-500 mt-1 mb-4">An annual cycle, not a dated project — the cycle is named by the year the group reports on.</p>
         <div className="flex items-end gap-4 flex-wrap">
           <div>
             <Label>Year type</Label>
-            <div className="grid grid-cols-2 gap-1.5 w-[300px]">
+            <div className="grid grid-cols-2 gap-1.5 w-75">
               <button
                 onClick={() => { if (yearBasis !== 'fy') applyPeriod('fy', fyEnd + 1); }}
-                className={`px-2 py-1.5 rounded-lg border text-[12px] font-bold transition-all cursor-pointer ${yearBasis === 'fy' ? 'border-brand-500 bg-brand-50 text-brand-700 ring-2 ring-brand-500/15' : 'border-canvas-border bg-white text-ink-500 hover:bg-brand-50/40'}`}
+                className={`px-2 py-1.5 rounded-lg border text-[0.75rem] font-bold transition-all cursor-pointer ${yearBasis === 'fy' ? 'border-brand-500 bg-brand-50 text-brand-700 ring-2 ring-brand-500/15' : 'border-canvas-border bg-white text-ink-500 hover:bg-brand-50/40'}`}
               >
                 Financial year
-                <span className="block text-[10px] font-semibold opacity-70">Apr – Mar</span>
+                <span className="block text-[0.6875rem] font-semibold opacity-70">Apr – Mar</span>
               </button>
               <button
                 onClick={() => { if (yearBasis !== 'cy') applyPeriod('cy', fyEnd - 1); }}
-                className={`px-2 py-1.5 rounded-lg border text-[12px] font-bold transition-all cursor-pointer ${yearBasis === 'cy' ? 'border-brand-500 bg-brand-50 text-brand-700 ring-2 ring-brand-500/15' : 'border-canvas-border bg-white text-ink-500 hover:bg-brand-50/40'}`}
+                className={`px-2 py-1.5 rounded-lg border text-[0.75rem] font-bold transition-all cursor-pointer ${yearBasis === 'cy' ? 'border-brand-500 bg-brand-50 text-brand-700 ring-2 ring-brand-500/15' : 'border-canvas-border bg-white text-ink-500 hover:bg-brand-50/40'}`}
               >
                 Calendar year
-                <span className="block text-[10px] font-semibold opacity-70">Jan – Dec</span>
+                <span className="block text-[0.6875rem] font-semibold opacity-70">Jan – Dec</span>
               </button>
             </div>
           </div>
           <div>
             <Label>Audit period</Label>
-            <select value={fyEnd} onChange={e => applyPeriod(yearBasis, Number(e.target.value))} className={`${selectCls} py-2 min-w-[140px]`}>
+            <select aria-label="Audit period" value={fyEnd} onChange={e => applyPeriod(yearBasis, Number(e.target.value))} className={`${selectCls} py-2 min-w-35`}>
               {YEAR_OPTIONS.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
             </select>
           </div>
-          <div className="text-[11.5px] text-ink-400 pb-2.5">
+          <div className="text-[0.75rem] text-ink-400 pb-2.5">
             Testing runs {yearBasis === 'fy' ? `Apr ${fyEnd - 1} – Mar ${fyEnd}` : `Jan – Dec ${fyEnd}`} · opinion as of {prog.asOf}.
           </div>
         </div>
@@ -286,13 +286,13 @@ function ConfigInner({ prog, engId, reconcileScope }: {
       {/* ── Group & entities ───────────────────────────────────────────── */}
       <section className="rounded-xl border border-canvas-border bg-white p-5">
         <h2 className="font-display text-[1.0625rem] leading-tight text-ink-900 inline-flex items-center gap-2"><Building2 size={15} className="text-brand-600" /> Group &amp; entities</h2>
-        <p className="text-[11.5px] text-ink-500 mt-1 mb-4">Add or remove entities and their trial balances — then re-derive so scoping catches up.</p>
+        <p className="text-[0.75rem] text-ink-500 mt-1 mb-4">Add or remove entities and their trial balances — then re-derive so scoping catches up.</p>
         <div className="max-w-md mb-4">
           <Label>Group (listed / holding)</Label>
-          <input value={groupName} onChange={e => { setGroupName(e.target.value); prog.groupName = e.target.value; }} className={inputCls} />
+          <input aria-label="Group (listed / holding)" value={groupName} onChange={e => { setGroupName(e.target.value); prog.groupName = e.target.value; }} className={inputCls} />
         </div>
         <div className="border border-canvas-border rounded-xl overflow-hidden">
-          <div className="grid grid-cols-[1.6fr_0.8fr_1.5fr_1.2fr_76px] gap-3 px-4 py-2 text-[10.5px] uppercase tracking-wider font-semibold text-ink-400 border-b border-canvas-border bg-canvas">
+          <div className="grid grid-cols-[1.6fr_0.8fr_1.5fr_1.2fr_76px] gap-3 px-4 py-2 text-[0.6875rem] uppercase tracking-wider font-semibold text-ink-400 border-b border-canvas-border bg-canvas">
             <div>Entity</div><div>Type</div><div>Trial balance</div><div>Materiality rule</div><div />
           </div>
           {entities.map(ent => (
@@ -306,10 +306,10 @@ function ConfigInner({ prog, engId, reconcileScope }: {
                   onChange={e => saveEntities(prev => prev.map(x => (x.id === ent.id ? { ...x, name: e.target.value } : x)), false)}
                   aria-label="Entity name"
                   placeholder="Entity name"
-                  className="w-full text-[13px] text-ink-900 bg-transparent outline-none border-b border-transparent focus:border-brand-400 transition-colors py-0.5"
+                  className="w-full text-[0.8125rem] text-ink-900 bg-transparent outline-none border-b border-transparent focus:border-brand-400 transition-colors py-0.5"
                 />
               </div>
-              <select
+              <select aria-label={`Entity type — ${ent.name}`}
                 value={ent.type}
                 onChange={e => saveEntities(prev => prev.map(x => (x.id === ent.id ? { ...x, type: e.target.value as GroupEntity['type'] } : x)), false)}
                 className={selectCls}
@@ -319,12 +319,12 @@ function ConfigInner({ prog, engId, reconcileScope }: {
               </select>
               <div className="min-w-0">
                 {parsing === ent.id ? (
-                  <span className="inline-flex items-center gap-1.5 text-[11px] text-ink-400"><Loader2 size={12} className="animate-spin" /> Parsing…</span>
+                  <span className="inline-flex items-center gap-1.5 text-[0.6875rem] text-ink-400"><Loader2 size={12} className="animate-spin" /> Parsing…</span>
                 ) : ent.tbFile ? (
                   <span className="inline-flex items-center gap-1.5 min-w-0 max-w-full">
                     <FileSpreadsheet size={13} className="text-compliant-600 shrink-0" />
-                    <span className="text-[11px] font-mono text-ink-600 truncate">{ent.tbFile}</span>
-                    {ent.tbLines != null && <span className="text-[10.5px] text-ink-400 tabular-nums shrink-0">· {ent.tbLines}</span>}
+                    <span className="text-[0.6875rem] font-mono text-ink-600 truncate">{ent.tbFile}</span>
+                    {ent.tbLines != null && <span className="text-[0.6875rem] text-ink-400 tabular-nums shrink-0">· {ent.tbLines}</span>}
                     <button
                       onClick={() => saveEntities(prev => prev.map(x => (x.id === ent.id ? { ...x, tbFile: undefined, tbLines: undefined } : x)))}
                       aria-label={`Remove trial balance for ${ent.name}`}
@@ -338,7 +338,7 @@ function ConfigInner({ prog, engId, reconcileScope }: {
                     <Upload size={11} /> Upload TB
                   </button>
                 ) : (
-                  <span className="text-[11px] text-ink-400">—</span>
+                  <span className="text-[0.6875rem] text-ink-400">—</span>
                 )}
               </div>
               <select
@@ -353,7 +353,7 @@ function ConfigInner({ prog, engId, reconcileScope }: {
                 <span className="flex items-center gap-1 justify-self-end">
                   <button
                     onClick={() => { saveEntities(prev => prev.filter(x => x.id !== ent.id)); setConfirmDelete(null); }}
-                    className="px-2 py-1 rounded-md text-[10.5px] font-bold text-white bg-risk-600 hover:bg-risk-700 transition-colors cursor-pointer"
+                    className="px-2 py-1 rounded-md text-[0.6875rem] font-bold text-white bg-risk-600 hover:bg-risk-700 transition-colors cursor-pointer"
                   >
                     Remove
                   </button>
@@ -375,7 +375,7 @@ function ConfigInner({ prog, engId, reconcileScope }: {
           ))}
           <button
             onClick={() => saveEntities(prev => [...prev, { id: `ent-cfg-${prev.length}-${Date.now()}`, name: '', type: 'Subsidiary', ownership: 100 }])}
-            className="flex items-center gap-1.5 px-4 py-2.5 text-[12px] font-semibold text-brand-700 hover:bg-brand-50/60 w-full transition-colors cursor-pointer"
+            className="flex items-center gap-1.5 px-4 py-2.5 text-[0.75rem] font-semibold text-brand-700 hover:bg-brand-50/60 w-full transition-colors cursor-pointer"
           >
             <Plus size={13} /> Add entity
           </button>
@@ -385,7 +385,7 @@ function ConfigInner({ prog, engId, reconcileScope }: {
       {/* ── Materiality rules ──────────────────────────────────────────── */}
       <section className="rounded-xl border border-canvas-border bg-white p-5">
         <h2 className="font-display text-[1.0625rem] leading-tight text-ink-900 inline-flex items-center gap-2"><Scale size={15} className="text-brand-600" /> Materiality rules</h2>
-        <p className="text-[11.5px] text-ink-500 mt-1 mb-4">
+        <p className="text-[0.75rem] text-ink-500 mt-1 mb-4">
           The group default drives scoping; add rules and assign them to entities for component-level thresholds.
         </p>
         <div className="space-y-2.5">
@@ -398,7 +398,7 @@ function ConfigInner({ prog, engId, reconcileScope }: {
                   <div>
                     <Label>Rule</Label>
                     {isGroup ? (
-                      <div className="text-[13px] font-semibold text-ink-900 py-2">Group default</div>
+                      <div className="text-[0.8125rem] font-semibold text-ink-900 py-2">Group default</div>
                     ) : (
                       <input
                         value={r.name}
@@ -448,7 +448,7 @@ function ConfigInner({ prog, engId, reconcileScope }: {
                   </div>
                   <div className="text-right">
                     <Label>Overall</Label>
-                    <div className="text-[13.5px] font-bold text-ink-900 tabular-nums py-1.5">{fmtCr(ruleOverall(r))}</div>
+                    <div className="text-[0.875rem] font-bold text-ink-900 tabular-nums py-1.5">{fmtCr(ruleOverall(r))}</div>
                   </div>
                   {!isGroup ? (
                     confirmDelete === `rule:${r.id}` ? (
@@ -458,7 +458,7 @@ function ConfigInner({ prog, engId, reconcileScope }: {
                           saveEntities(prev => prev.map(e => (e.ruleId === r.id ? { ...e, ruleId: undefined } : e)));
                           setConfirmDelete(null);
                         }}
-                        className="mb-1 px-1.5 py-1 rounded-md text-[10px] font-bold text-white bg-risk-600 hover:bg-risk-700 transition-colors cursor-pointer"
+                        className="mb-1 px-1.5 py-1 rounded-md text-[0.6875rem] font-bold text-white bg-risk-600 hover:bg-risk-700 transition-colors cursor-pointer"
                       >
                         Del
                       </button>
@@ -473,7 +473,7 @@ function ConfigInner({ prog, engId, reconcileScope }: {
                     )
                   ) : <span />}
                 </div>
-                <div className="text-[10.5px] text-ink-400 mt-2">
+                <div className="text-[0.6875rem] text-ink-400 mt-2">
                   {assigned} entit{assigned === 1 ? 'y' : 'ies'} on this rule{isGroup ? ' (every entity without its own assignment)' : ''}
                 </div>
               </div>
@@ -482,7 +482,7 @@ function ConfigInner({ prog, engId, reconcileScope }: {
         </div>
         <button
           onClick={() => saveRules([...rules, { id: `rule-${Date.now()}`, name: `Rule ${rules.length + 1}`, basis: 'custom', benchmark: 10, pct: 100 }])}
-          className="mt-3 inline-flex items-center gap-1.5 px-3 py-1.5 rounded-md border border-canvas-border bg-white hover:bg-brand-50/60 hover:border-brand-300 text-[11.5px] font-semibold text-ink-600 hover:text-brand-700 transition-colors cursor-pointer"
+          className="mt-3 inline-flex items-center gap-1.5 px-3 py-1.5 rounded-md border border-canvas-border bg-white hover:bg-brand-50/60 hover:border-brand-300 text-[0.75rem] font-semibold text-ink-600 hover:text-brand-700 transition-colors cursor-pointer"
         >
           <Plus size={12} /> Add rule
         </button>
@@ -490,7 +490,7 @@ function ConfigInner({ prog, engId, reconcileScope }: {
         <div className="grid grid-cols-2 gap-4 mt-5 max-w-md">
           <div>
             <Label>Performance materiality (% of overall)</Label>
-            <input
+            <input aria-label="Performance materiality (% of overall)"
               type="number" min={50} max={75} step={5}
               value={pmPct}
               onChange={e => { setPmPct(Number(e.target.value)); saveRules(rules, Number(e.target.value), cttPct); }}
@@ -499,7 +499,7 @@ function ConfigInner({ prog, engId, reconcileScope }: {
           </div>
           <div>
             <Label>Clearly trivial (% of overall)</Label>
-            <input
+            <input aria-label="Clearly trivial (% of overall)"
               type="number" min={1} max={10}
               value={cttPct}
               onChange={e => { setCttPct(Number(e.target.value)); saveRules(rules, pmPct, Number(e.target.value)); }}

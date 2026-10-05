@@ -20,6 +20,7 @@ import { motion } from 'motion/react';
 import { Plus } from 'lucide-react';
 import FloatingLines from '../shared/FloatingLines';
 import RacmLibraryView from './RacmLibraryView';
+import type { LibraryRacm } from './racmLibrary';
 // PARKED (1 Oct, user ask) — the Config tab. `RacmConfigView` is untouched and
 // still holds the per-client-group column set-up; nothing else opens it, so that
 // screen is unreachable while this is off. Restore by un-commenting the import,
@@ -28,9 +29,11 @@ import RacmLibraryView from './RacmLibraryView';
 
 // PARKED with the row — type RacmTab = 'library' | 'config';
 
-export default function RacmPage({ canManage }: {
+export default function RacmPage({ canManage, onOpenEditor }: {
   /** Create, publish and delete — the same permission that creates engagements. */
   canManage: boolean;
+  /** Opens a RACM in the spreadsheet editor, in this tab. */
+  onOpenEditor: (r: LibraryRacm) => void;
 }) {
   /**
    * Create RACM sits in the header (user ask, 1 Oct), so the flag it opens
@@ -132,7 +135,7 @@ export default function RacmPage({ canManage }: {
       {/* The one scroll region on the page. Its own top padding replaces the
           margin the strip used to carry. */}
       <div className="flex-1 min-h-0 overflow-y-auto px-9 pt-6 pb-8">
-        <RacmLibraryView canManage={canManage} creating={creating} setCreating={setCreating} />
+        <RacmLibraryView canManage={canManage} creating={creating} setCreating={setCreating} onOpenEditor={onOpenEditor} />
         {/* PARKED — <RacmConfigView canManage={canManage} /> */}
       </div>
     </div>

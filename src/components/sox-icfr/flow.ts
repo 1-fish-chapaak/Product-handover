@@ -32,17 +32,26 @@ import type { TabDef } from '../audit/EngagementTabBar';
  * renaming the id would ripple through SoxTab, View, TAB_ROOT and RETURNABLE in
  * store.tsx for no user-visible gain.
  */
+/* ONE ENGAGEMENT = ONE AUDIT ROUND (product owner, 5 Oct 2026). These four are
+   now the ENGAGEMENT's tabs on both shells: the audit register and the second
+   level of tabs are gone, and each engagement holds exactly one audit that is
+   always open (see openAuditId in store.tsx). 'overview' is labelled Overview
+   again — it is the engagement's own page now, not a dashboard one level down. */
 export const AUDIT_TABS: TabDef[] = [
-  { id: 'overview', label: 'Dashboard' },
+  { id: 'overview', label: 'Overview' },
   { id: 'controls', label: 'Control Library' },
-  { id: 'deficiencies', label: 'Deficiency management' },
+  { id: 'deficiencies', label: 'Deficiencies' },
   { id: 'config', label: 'Configuration' },
 ];
 
-export const NEW_FLOW_ENGAGEMENT_ID = 'sox-v2-fy26'; // FY26 ICFR — Altura Infra Group (SOX-104)
+export const NEW_FLOW_ENGAGEMENT_ID = 'sox-v2-fy26'; // FY26 ICFR — Altura Infra Group · CY 2026 Interim (SOX-104)
+/** The CY 2025 year-end Altura used to hold as a second, archived audit — split
+ *  out into an engagement of its own (5 Oct 2026). Same seed, same shell. */
+export const ALTURA_YE_ENGAGEMENT_ID = 'sox-v2-fy25-ye';
 
-/** True only for the engagement the new flow is being built on. */
-export const isNewFlow = (engagementId: string): boolean => engagementId === NEW_FLOW_ENGAGEMENT_ID;
+/** True for the engagements the new flow is built on — Altura's two rounds. */
+export const isNewFlow = (engagementId: string): boolean =>
+  engagementId === NEW_FLOW_ENGAGEMENT_ID || engagementId === ALTURA_YE_ENGAGEMENT_ID;
 
 /**
  * Class stamped on <body> while the new flow is mounted.
@@ -60,6 +69,9 @@ export const NEW_FLOW_BODY_CLASS = 'sox-new-flow';
  * keep the old word. Kept as one lookup rather than a ternary at each string, so
  * the rename can't go half-done — every surface reads the same table.
  */
+// 5 Oct (product decision): "Deficiencies" everywhere for the finding, on
+// classic engagements too. "Exception" is kept only for one failed sample item
+// in TOE, which never reads this table.
 export const defWord = (engagementId: string) => (isNewFlow(engagementId)
   ? { one: 'deficiency', many: 'deficiencies', Many: 'Deficiencies', page: 'Deficiency management', mine: 'My deficiencies' }
-  : { one: 'exception', many: 'exceptions', Many: 'Exceptions', page: 'Exceptions', mine: 'My exceptions' });
+  : { one: 'deficiency', many: 'deficiencies', Many: 'Deficiencies', page: 'Deficiencies', mine: 'My deficiencies' });

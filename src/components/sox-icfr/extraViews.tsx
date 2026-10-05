@@ -15,7 +15,7 @@ import { cn } from '../../lib/cn';
 // Exposure / GapType types — priced impact and the gap taxonomy are off the card.
 // `gapNature` replaces the latter, derived read-only from the track and the nature.
 import RemediationBriefModal from './RemediationBriefModal';
-import { auditCovers, captionsFor, entitiesFor, isOwnerOf, normaliseProcess } from './auditScope';
+import { auditCovers, captionsFor, entitiesFor, isOwnerOf, normaliseProcess, ownersOf } from './auditScope';
 import { exposureFromData, fmtDay, sampleHome, workingAudit, type DataExposure } from './helpers';
 // PARKED (30 Sep 2026): the retest panels' own imports, read by nobody while those
 // two are parked further down — awaitsNewVersion, isVersionRetest, versionFrom,
@@ -28,6 +28,7 @@ import type { ReactNode } from 'react';
 import { designCloseBlock, flawScanDrift, remediationRunway, rootCauseReady, sizingReady } from './helpers';
 import { CHALLENGED_INPUT_LABEL, DESIGN_GAP_KINDS, sortGapKinds, PLAN_FIX_HINT, PLAN_FIX_KINDS, PLAN_FIX_LABEL, type PlanFixKind, EXCEPTION_STEPS, GAP_KIND_HINT, GAP_KIND_LABEL, GAP_KIND_PLAN_PROMPT, gapNature, GRADE_RANK, ENTITY_MW_INDICATORS, EXCEPTION_MW_INDICATORS, MW_INDICATOR_BY_ID, mwIndicatorIds, mwSourceLabel, SEVERITY_URGENCY, type Assertion, type ChallengedInput, type Court, type Deficiency, type EntityMwConclusion, type MwIndicatorDef, type DeficiencyGroup, type ExceptionGrade, type ExceptionStatus, type IcfrEngagement, type RetestRound, type Severity, type SignificantAccount, type TaskType } from './types';
 import { IraDrafted } from './IraState';
+import DialogFocus from '../shared/DialogFocus';
 
 const fmt = (n: number) => formatINR(n);
 /** The same figure where it may not exist yet. `fmt` is left number-only on
@@ -49,9 +50,9 @@ function scopeAdvice(eng: IcfrEngagement): ScopeAdvice {
   if (defs.length === 0) {
     return {
       tone: 'ok',
-      headline: 'No exceptions yet — nothing to read against the thresholds',
-      detail: 'Once exceptions are raised, this panel reports how they sit against the clearly-trivial and significant-deficiency lines.',
-      evidence: '0 exceptions raised',
+      headline: 'No deficiencies yet — nothing to read against the thresholds',
+      detail: 'Once deficiencies are raised, this panel reports how they sit against the clearly-trivial and significant-deficiency lines.',
+      evidence: '0 deficiencies raised',
     };
   }
   // Unsized exceptions are counted on their own and kept out of both figures
@@ -65,12 +66,12 @@ function scopeAdvice(eng: IcfrEngagement): ScopeAdvice {
   // the grade rests on judgment rather than a comfortable margin
   const near = (v: number, line: number) => line > 0 && Math.abs(v - line) / line <= 0.10;
   const borderline = sized.filter(d => near(d.magnitude, ctt) || near(d.magnitude, sd) || near(d.magnitude, M));
-  const evidence = `${defs.length} exception${defs.length === 1 ? '' : 's'} · ${trivial} at or below clearly-trivial · ${borderline.length} within 10% of a grading line${unsized ? ` · ${unsized} not sized` : ''}`;
+  const evidence = `${defs.length} deficienc${defs.length === 1 ? 'y' : 'ies'} · ${trivial} at or below clearly-trivial · ${borderline.length} within 10% of a grading line${unsized ? ` · ${unsized} not sized` : ''}`;
 
   if (trivial / defs.length >= 0.5) {
     return {
       tone: 'note',
-      headline: `The clearly-trivial line is catching most exceptions — consider raising it next period`,
+      headline: `The clearly-trivial line is catching most deficiencies — consider raising it next period`,
       detail: `${trivial} of ${defs.length} sit at or below ${fmtFull(ctt)} (${Math.round((ctt / M) * 100)}% of materiality). A higher floor next period would keep the register focused on what can actually matter, without changing how anything here was graded.`,
       evidence,
     };
@@ -78,7 +79,7 @@ function scopeAdvice(eng: IcfrEngagement): ScopeAdvice {
   if (borderline.length > 0) {
     return {
       tone: 'note',
-      headline: `${borderline.length} exception${borderline.length === 1 ? ' sits' : 's sit'} within 10% of a grading line`,
+      headline: `${borderline.length} ${borderline.length === 1 ? 'deficiency sits' : 'deficiencies sit'} within 10% of a grading line`,
       detail: `${borderline.map(d => d.id).join(', ')} would change grade on a small threshold move, so ${borderline.length === 1 ? 'its' : 'their'} severity rests on judgment rather than margin. Document the reasoning, and revisit the band when planning next period.`,
       evidence,
     };
@@ -86,7 +87,7 @@ function scopeAdvice(eng: IcfrEngagement): ScopeAdvice {
   return {
     tone: 'ok',
     headline: 'Thresholds are holding — no change indicated',
-    detail: 'Every exception sits clear of a grading line, so the severities are not sensitive to where the thresholds were drawn.',
+    detail: 'Every deficiency sits clear of a grading line, so the severities are not sensitive to where the thresholds were drawn.',
     evidence,
   };
 }
@@ -129,8 +130,8 @@ function EntityMwRow({ ind, answer, canEdit, onConclude }: {
     <div className={cn('rounded-lg border px-3 py-2.5', on ? 'border-risk-200 bg-risk-50/40' : 'border-canvas-border')}>
       <div className="flex items-start gap-2.5">
         <span className="min-w-0 flex-1">
-          <span className="block text-[0.78125rem] text-ink-800">{ind.label}</span>
-          <span className="block text-[0.65625rem] text-ink-400 mt-0.5">{mwSourceLabel(ind.source)} · {ind.hint}</span>
+          <span className="block text-[0.8125rem] text-ink-800">{ind.label}</span>
+          <span className="block text-[0.6875rem] text-ink-400 mt-0.5">{mwSourceLabel(ind.source)} · {ind.hint}</span>
         </span>
         {canEdit ? (
           <span className="flex items-center gap-1 shrink-0">
@@ -154,7 +155,7 @@ function EntityMwRow({ ind, answer, canEdit, onConclude }: {
           <input value={basis} onChange={e => setBasis(e.target.value)} autoFocus
             placeholder="What was found? — required"
             aria-label={`Basis for ${ind.label}`}
-            className="h-8 flex-1 min-w-0 px-2.5 rounded-md border border-canvas-border text-[0.78125rem] focus:outline-none focus:border-brand-300 focus:ring-2 focus:ring-brand-50" />
+            className="h-8 flex-1 min-w-0 px-2.5 rounded-md border border-canvas-border text-[0.8125rem] focus:outline-none focus:border-brand-300 focus:ring-2 focus:ring-brand-50" />
           <button disabled={!basis.trim()} onClick={() => { onConclude(true, basis); setAsking(false); setBasis(''); }}
             className="h-8 px-3 rounded-md bg-risk-600 text-white text-[0.6875rem] font-semibold disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer">Record</button>
           <button onClick={() => { setAsking(false); setBasis(''); }} className="h-8 px-2 text-[0.6875rem] text-ink-500 cursor-pointer">Cancel</button>
@@ -247,7 +248,7 @@ export function MaterialityGroundRules({ sharedWith }: { sharedWith?: string[] }
           title={`Change ${pending.what} for every audit?`}
           description={<>
             {pending.what[0]!.toUpperCase() + pending.what.slice(1)} is set once for the engagement, so this also applies to{' '}
-            <b>{sharedWith?.join(', ')}</b>. Exceptions already graded against the old rule are re-graded.
+            <b>{sharedWith?.join(', ')}</b>. Deficiencies already graded against the old rule are re-graded.
           </>}
           confirmLabel="Change it"
           onConfirm={() => { pending.apply(); setPending(null); }}
@@ -259,7 +260,7 @@ export function MaterialityGroundRules({ sharedWith }: { sharedWith?: string[] }
       <section className="rounded-2xl border border-canvas-border bg-canvas-elevated p-5">
         <div className="flex items-center justify-between gap-3 mb-3">
           <h2 className="font-display text-[1.0625rem] leading-tight text-ink-900 inline-flex items-center gap-2"><Target size={15} className="text-brand-600" /> Materiality</h2>
-          {locked && <span className="inline-flex items-center gap-1 text-[10.5px] font-bold uppercase tracking-wide text-ink-500 bg-paper-50 border border-canvas-border rounded-full px-2 h-5"><Lock size={10} /> Locked at go-live</span>}
+          {locked && <span className="inline-flex items-center gap-1 text-[0.6875rem] font-bold uppercase tracking-wide text-ink-500 bg-paper-50 border border-canvas-border rounded-full px-2 h-5"><Lock size={10} /> Locked at go-live</span>}
         </div>
         {eng.materialityBasis ? (
           <MaterialityWorksheet basis={eng.materialityBasis} locked={locked} />
@@ -285,11 +286,11 @@ export function MaterialityGroundRules({ sharedWith }: { sharedWith?: string[] }
         <div className="rounded-xl border border-mitigated-200 bg-mitigated-50/40 px-4 py-3 flex items-center justify-between gap-3 flex-wrap">
           <p className="text-[0.75rem] text-mitigated-800 leading-relaxed min-w-0 inline-flex items-start gap-2">
             <AlertTriangle size={14} className="mt-0.5 shrink-0" />
-            <span><span className="font-bold">Not saved yet.</span> These are the grading basis — moving them re-grades exceptions that were already concluded, so the change is reviewed against them first.</span>
+            <span><span className="font-bold">Not saved yet.</span> These are the grading basis — moving them re-grades deficiencies that were already concluded, so the change is reviewed against them first.</span>
           </p>
           <div className="flex items-center gap-2 shrink-0">
-            <button onClick={() => setDraft(saved)} className="h-9 px-3.5 rounded-lg border border-canvas-border bg-canvas-elevated text-[0.78125rem] font-semibold text-ink-600 hover:border-ink-300 transition-colors cursor-pointer">Discard</button>
-            <button onClick={() => setReviewing(true)} className="h-9 px-4 inline-flex items-center gap-1.5 rounded-lg bg-brand-600 text-white text-[0.78125rem] font-semibold hover:bg-brand-700 transition-colors cursor-pointer"><Scale size={14} /> Review &amp; apply</button>
+            <button onClick={() => setDraft(saved)} className="h-9 px-3.5 rounded-lg border border-canvas-border bg-canvas-elevated text-[0.8125rem] font-semibold text-ink-600 hover:border-ink-300 transition-colors cursor-pointer">Discard</button>
+            <button onClick={() => setReviewing(true)} className="h-9 px-4 inline-flex items-center gap-1.5 rounded-lg bg-brand-600 text-white text-[0.8125rem] font-semibold hover:bg-brand-700 transition-colors cursor-pointer"><Scale size={14} /> Review &amp; apply</button>
           </div>
         </div>
       )}
@@ -298,10 +299,10 @@ export function MaterialityGroundRules({ sharedWith }: { sharedWith?: string[] }
       {/* severity ladder */}
       <section className="rounded-lg border border-canvas-border bg-canvas-elevated p-5">
         <div className="flex items-center justify-between gap-3 mb-3 flex-wrap">
-          <h2 className="font-display text-[1.0625rem] leading-tight text-ink-900 inline-flex items-center gap-2"><Scale size={15} className="text-brand-600" /> Exception severity ladder</h2>
+          <h2 className="font-display text-[1.0625rem] leading-tight text-ink-900 inline-flex items-center gap-2"><Scale size={15} className="text-brand-600" /> Deficiency severity ladder</h2>
           <label className="inline-flex items-center gap-2 text-[0.75rem] text-ink-600"><Sliders size={13} /> Significant-deficiency band
             {canEditRules
-              ? <input type="number" min={1} max={100} value={draft.band} onChange={e => setDraft(d => ({ ...d, band: Math.max(1, Math.min(100, +e.target.value || 0)) }))} className="h-8 w-16 px-2 rounded-lg border border-canvas-border text-[0.78125rem] tabular-nums focus:outline-none focus:ring-2 focus:ring-brand-200" />
+              ? <input type="number" min={1} max={100} value={draft.band} onChange={e => setDraft(d => ({ ...d, band: Math.max(1, Math.min(100, +e.target.value || 0)) }))} className="h-8 w-16 px-2 rounded-lg border border-canvas-border text-[0.8125rem] tabular-nums focus:outline-none focus:ring-2 focus:ring-brand-200" />
               : <b className="font-semibold tabular-nums text-ink-800">{draft.band}</b>}
             <span className="text-ink-400">% of materiality</span>
           </label>
@@ -314,7 +315,7 @@ export function MaterialityGroundRules({ sharedWith }: { sharedWith?: string[] }
             </div>
           ))}
         </div>
-        <p className="text-[0.71875rem] text-ink-400 mt-2.5">Severity = likelihood (more than remote) × magnitude vs materiality. A compensating control can cap — never clear — a deficiency.</p>
+        <p className="text-[0.75rem] text-ink-400 mt-2.5">Severity = likelihood (more than remote) × magnitude vs materiality. A compensating control can cap — never clear — a deficiency.</p>
       </section>
 
       {/* policies */}
@@ -333,7 +334,7 @@ export function MaterialityGroundRules({ sharedWith }: { sharedWith?: string[] }
             : <Pill tone={r.aggregate ? 'compliant' : 'draft'}>{r.aggregate ? 'On' : 'Off'}</Pill>}
         </div>
         <div className="rounded-lg border border-canvas-border bg-canvas-elevated p-4 flex items-start justify-between gap-3">
-          <div><div className="text-[0.8125rem] font-bold text-ink-800 inline-flex items-center gap-1.5"><Route size={14} className="text-brand-600" /> Auto-routing</div><p className="text-[0.75rem] text-ink-500 mt-1">Route an exception to the owner (remediation) or the auditor (sign-off) by computed severity.</p></div>
+          <div><div className="text-[0.8125rem] font-bold text-ink-800 inline-flex items-center gap-1.5"><Route size={14} className="text-brand-600" /> Auto-routing</div><p className="text-[0.75rem] text-ink-500 mt-1">Route a deficiency to the owner (remediation) or the auditor (sign-off) by computed severity.</p></div>
           {canEditRules
             ? <Toggle on={r.autoRoute} onChange={v => setRules('auto-routing', { autoRoute: v })} label="Auto-routing" />
             : <Pill tone={r.autoRoute ? 'compliant' : 'draft'}>{r.autoRoute ? 'On' : 'Off'}</Pill>}
@@ -351,7 +352,7 @@ export function MaterialityGroundRules({ sharedWith }: { sharedWith?: string[] }
           exception's own sizing panel instead. */}
       <section className="rounded-lg border border-canvas-border bg-canvas-elevated p-5">
         <h2 className="font-display text-[1.0625rem] leading-tight text-ink-900 inline-flex items-center gap-2 mb-1"><AlertTriangle size={15} className="text-risk-600" /> Company-level indicators</h2>
-        <p className="text-[0.75rem] text-ink-500 mb-3">Facts about the company and the audit, concluded once. Any one of them present makes ICFR not effective, whatever each individual exception is worth.</p>
+        <p className="text-[0.75rem] text-ink-500 mb-3">Facts about the company and the audit, concluded once. Any one of them present makes ICFR not effective, whatever each individual deficiency is worth.</p>
         <div className="space-y-2">
           {ENTITY_MW_INDICATORS.map(ind => (
             <EntityMwRow key={ind.id} ind={ind}
@@ -370,23 +371,23 @@ export function MaterialityGroundRules({ sharedWith }: { sharedWith?: string[] }
       {eng.rulesLog.length > 0 && (
         <section className="rounded-2xl border border-canvas-border bg-canvas-elevated p-5">
           <h2 className="font-display text-[1.0625rem] leading-tight text-ink-900 inline-flex items-center gap-2 mb-1"><History size={15} className="text-brand-600" /> Changes to the ground rules</h2>
-          <p className="text-[0.75rem] text-ink-500 mb-3">Every threshold change since the engagement opened, and the exceptions each one re-graded.</p>
+          <p className="text-[0.75rem] text-ink-500 mb-3">Every threshold change since the engagement opened, and the deficiencies each one re-graded.</p>
           <div className="space-y-2.5">
             {eng.rulesLog.map(entry => (
               <div key={entry.id} className="rounded-xl border border-canvas-border bg-paper-50/50 px-3.5 py-3">
                 <div className="flex items-baseline justify-between gap-3 flex-wrap">
-                  <span className="text-[0.78125rem] font-semibold text-ink-800">
+                  <span className="text-[0.8125rem] font-semibold text-ink-800">
                     {entry.changes.map(c => `${c.field} ${c.from} → ${c.to}`).join('  ·  ')}
                   </span>
                   <span className="text-[0.6875rem] text-ink-400 shrink-0">{entry.by} · {entry.at}</span>
                 </div>
-                <p className="text-[0.71875rem] text-ink-600 leading-relaxed mt-1"><span className="text-ink-400">Why</span> · {entry.reason}</p>
+                <p className="text-[0.75rem] text-ink-600 leading-relaxed mt-1"><span className="text-ink-400">Why</span> · {entry.reason}</p>
                 {entry.regraded.length > 0 ? (
                   <div className="mt-2 pt-2 border-t border-canvas-border">
-                    <span className="block text-[0.625rem] font-bold uppercase tracking-wider text-ink-400 mb-1.5">Re-graded {entry.regraded.length}</span>
+                    <span className="block text-[0.6875rem] font-bold uppercase tracking-wider text-ink-400 mb-1.5">Re-graded {entry.regraded.length}</span>
                     <div className="flex flex-wrap gap-1.5">
                       {entry.regraded.map(g => (
-                        <span key={g.defId} className="inline-flex items-center gap-1.5 rounded-md border border-canvas-border bg-canvas-elevated px-2 py-1 text-[0.65625rem] text-ink-600">
+                        <span key={g.defId} className="inline-flex items-center gap-1.5 rounded-md border border-canvas-border bg-canvas-elevated px-2 py-1 text-[0.6875rem] text-ink-600">
                           <span className="font-mono">{g.defId}</span>
                           <span className="text-ink-400">{g.from}</span>
                           <ArrowRight size={9} className="text-ink-300" />
@@ -396,7 +397,7 @@ export function MaterialityGroundRules({ sharedWith }: { sharedWith?: string[] }
                     </div>
                   </div>
                 ) : (
-                  <p className="mt-1.5 text-[0.6875rem] text-ink-400">No exception changed grade.</p>
+                  <p className="mt-1.5 text-[0.6875rem] text-ink-400">No deficiency changed grade.</p>
                 )}
               </div>
             ))}
@@ -406,9 +407,9 @@ export function MaterialityGroundRules({ sharedWith }: { sharedWith?: string[] }
 
       {/* significant accounts */}
       <section className="rounded-2xl border border-canvas-border bg-canvas-elevated overflow-hidden">
-        <header className="px-4 py-3 border-b border-canvas-border flex items-center justify-between"><h2 className="font-display text-[1.0625rem] leading-tight text-ink-900 inline-flex items-center gap-2"><ShieldCheck size={15} className="text-brand-600" /> Significant accounts &amp; disclosures</h2><span className="text-[0.71875rem] text-ink-400">{eng.accounts.filter(a => a.inScope).length} in scope</span></header>
-        <table className="w-full text-[0.78125rem]">
-          <thead><tr className="text-ink-500 border-b border-canvas-border">{['Account', 'Balance', 'In scope', 'Assertions'].map(h => <th key={h} className="text-left font-semibold uppercase tracking-wide text-[0.625rem] px-4 py-2">{h}</th>)}</tr></thead>
+        <header className="px-4 py-3 border-b border-canvas-border flex items-center justify-between"><h2 className="font-display text-[1.0625rem] leading-tight text-ink-900 inline-flex items-center gap-2"><ShieldCheck size={15} className="text-brand-600" /> Significant accounts &amp; disclosures</h2><span className="text-[0.75rem] text-ink-400">{eng.accounts.filter(a => a.inScope).length} in scope</span></header>
+        <table className="w-full text-[0.8125rem]">
+          <thead><tr className="text-ink-500 border-b border-canvas-border">{['Account', 'Balance', 'In scope', 'Assertions'].map(h => <th key={h} className="text-left font-semibold uppercase tracking-wide text-[0.6875rem] px-4 py-2">{h}</th>)}</tr></thead>
           <tbody>
             {eng.accounts.map(a => (
               <tr key={a.id} className="border-b border-canvas-border/60 last:border-0">
@@ -435,10 +436,10 @@ export function ScopeView() {
   const { eng, back, racmDocs } = useIcfr();
   return (
     <div className="space-y-5">
-      <button onClick={back} className="inline-flex items-center gap-1.5 text-[0.78125rem] font-semibold text-ink-500 hover:text-brand-700 cursor-pointer transition-colors"><ArrowLeft size={14} /> Back</button>
+      <button onClick={back} className="inline-flex items-center gap-1.5 text-[0.8125rem] font-semibold text-ink-500 hover:text-brand-700 cursor-pointer transition-colors"><ArrowLeft size={14} /> Back</button>
       <div>
         <h1 className="text-[1.375rem] font-bold text-ink-900 tracking-tight" style={{ fontFamily: "'Source Serif 4', Georgia, serif" }}>Materiality &amp; scoping</h1>
-        <p className="text-[0.8125rem] text-ink-500 mt-0.5">Entity, materiality and the ground rules that drive how every exception is evaluated, sized, and routed. Materiality locks at go-live.</p>
+        <p className="text-[0.8125rem] text-ink-500 mt-0.5">Entity, materiality and the ground rules that drive how every deficiency is evaluated, sized, and routed. Materiality locks at go-live.</p>
       </div>
 
       {/* entity & source */}
@@ -486,7 +487,7 @@ function AccountRow({ a, canEdit, onPatch }: { a: SignificantAccount; canEdit: b
           {canEdit
             ? <span className="inline-flex items-center gap-2">
                 <Toggle on={a.inScope} onChange={v => onPatch({ inScope: v })} label={a.inScope ? 'In scope — click to take out of scope' : 'Out of scope — click to bring into scope'} />
-                <span className={cn('text-[11.5px] font-semibold', a.inScope ? 'text-compliant-700' : 'text-ink-400')}>{a.inScope ? 'In scope' : 'Out'}</span>
+                <span className={cn('text-[0.75rem] font-semibold', a.inScope ? 'text-compliant-700' : 'text-ink-400')}>{a.inScope ? 'In scope' : 'Out'}</span>
               </span>
             : a.inScope ? <Pill tone="compliant">In scope</Pill> : <Pill tone="draft">Out</Pill>}
         </td>
@@ -497,7 +498,7 @@ function AccountRow({ a, canEdit, onPatch }: { a: SignificantAccount; canEdit: b
               if (!canEdit && !on) return null;
               return (
                 <button key={as_} disabled={!canEdit} onClick={() => toggleAssertion(as_)}
-                  className={cn('h-6 px-1.5 rounded-md border text-[10.5px] font-semibold transition-colors', on ? 'bg-brand-50 border-brand-200 text-brand-700' : 'border-canvas-border text-ink-400', canEdit && 'cursor-pointer hover:border-ink-300')}>
+                  className={cn('h-6 px-1.5 rounded-md border text-[0.6875rem] font-semibold transition-colors', on ? 'bg-brand-50 border-brand-200 text-brand-700' : 'border-canvas-border text-ink-400', canEdit && 'cursor-pointer hover:border-ink-300')}>
                   {as_.replace(' / Occurrence', '/Occ.')}
                 </button>
               );
@@ -505,7 +506,7 @@ function AccountRow({ a, canEdit, onPatch }: { a: SignificantAccount; canEdit: b
           </div>
         </td>
         <td className="px-4 py-2.5">
-          <button onClick={() => setOpen(o => !o)} className="inline-flex items-center gap-1 text-[11.5px] font-semibold text-brand-700 hover:text-brand-800 cursor-pointer">
+          <button onClick={() => setOpen(o => !o)} className="inline-flex items-center gap-1 text-[0.75rem] font-semibold text-brand-700 hover:text-brand-800 cursor-pointer">
             {(a.wcgw?.length ?? 0)} WCGW{(a.wcgw?.length ?? 0) === 1 ? '' : 's'} {open ? '▾' : '▸'}
           </button>
         </td>
@@ -513,24 +514,24 @@ function AccountRow({ a, canEdit, onPatch }: { a: SignificantAccount; canEdit: b
       {open && (
         <tr className="border-b border-canvas-border/60 last:border-0 bg-paper-50/40">
           <td colSpan={6} className="px-4 py-3">
-            <div className="text-[10.5px] uppercase tracking-wide font-semibold text-ink-400 mb-1.5">What could go wrong — {a.name}</div>
+            <div className="text-[0.6875rem] uppercase tracking-wide font-semibold text-ink-400 mb-1.5">What could go wrong — {a.name}</div>
             <ul className="space-y-1 mb-2">
               {(a.wcgw ?? []).map((w, i) => (
-                <li key={i} className="flex items-center gap-2 text-[12px] text-ink-700">
+                <li key={i} className="flex items-center gap-2 text-[0.75rem] text-ink-700">
                   <span className="w-1 h-1 rounded-full bg-risk-400 shrink-0" /> {w}
-                  {canEdit && <button onClick={() => onPatch({ wcgw: (a.wcgw ?? []).filter((_, j) => j !== i) })} className="text-ink-300 hover:text-risk-600 cursor-pointer text-[11px]">remove</button>}
+                  {canEdit && <button onClick={() => onPatch({ wcgw: (a.wcgw ?? []).filter((_, j) => j !== i) })} className="text-ink-300 hover:text-risk-600 cursor-pointer text-[0.6875rem]">remove</button>}
                 </li>
               ))}
-              {(a.wcgw?.length ?? 0) === 0 && <li className="text-[12px] text-ink-400">None captured — a relevant assertion should trace to at least one WCGW.</li>}
+              {(a.wcgw?.length ?? 0) === 0 && <li className="text-[0.75rem] text-ink-400">None captured — a relevant assertion should trace to at least one WCGW.</li>}
             </ul>
             {canEdit && (
               <div className="flex items-center gap-2">
-                <input value={newWcgw} onChange={e => setNewWcgw(e.target.value)}
+                <input aria-label="New WCGW" value={newWcgw} onChange={e => setNewWcgw(e.target.value)}
                   onKeyDown={e => { if (e.key === 'Enter' && newWcgw.trim()) { onPatch({ wcgw: [...(a.wcgw ?? []), newWcgw.trim()] }); setNewWcgw(''); } }}
                   placeholder="e.g. Sales near period end recorded in the wrong period"
-                  className="h-8 flex-1 max-w-[480px] px-2.5 rounded-md border border-canvas-border bg-canvas-elevated text-[12px] focus:outline-none focus:border-brand-300" />
+                  className="h-8 flex-1 max-w-120 px-2.5 rounded-md border border-canvas-border bg-canvas-elevated text-[0.75rem] focus:outline-none focus:border-brand-300" />
                 <button disabled={!newWcgw.trim()} onClick={() => { onPatch({ wcgw: [...(a.wcgw ?? []), newWcgw.trim()] }); setNewWcgw(''); }}
-                  className="h-8 px-2.5 rounded-md bg-brand-600 text-white text-[11.5px] font-semibold disabled:opacity-40 cursor-pointer">Add</button>
+                  className="h-8 px-2.5 rounded-md bg-brand-600 text-white text-[0.75rem] font-semibold disabled:opacity-40 cursor-pointer">Add</button>
               </div>
             )}
           </td>
@@ -549,7 +550,7 @@ function Money({ label, value, onChange, hint, readOnly }: { label: string; valu
         <div className="h-10 flex items-center text-[0.8125rem] tabular-nums font-semibold text-ink-800">{fmtFull(value)}</div>
       ) : (
         <div className="relative"><span className="absolute left-3 top-1/2 -translate-y-1/2 text-[0.8125rem] text-ink-400 pointer-events-none">₹</span>
-          <input type="number" min={0} value={value} onChange={e => onChange(Math.max(0, +e.target.value || 0))} className="w-full h-10 pl-7 pr-3 rounded-lg border border-canvas-border text-[0.8125rem] tabular-nums text-ink-800 focus:outline-none focus:ring-2 focus:ring-brand-200" />
+          <input aria-label={label} type="number" min={0} value={value} onChange={e => onChange(Math.max(0, +e.target.value || 0))} className="w-full h-10 pl-7 pr-3 rounded-lg border border-canvas-border text-[0.8125rem] tabular-nums text-ink-800 focus:outline-none focus:ring-2 focus:ring-brand-200" />
         </div>
       )}
       <div className="text-[0.6875rem] text-ink-400 mt-1">{hint}</div>
@@ -589,15 +590,15 @@ function RulesReviewModal({ eng, patch, onClose, onApply }: { eng: IcfrEngagemen
 
   return createPortal(
     <div className="modal-backdrop" onClick={onClose}>
-      <div className="modal" style={{ maxWidth: 560 }} onClick={e => e.stopPropagation()}>
+      <div role="dialog" aria-modal="true" aria-labelledby="review-apply-title" className="modal" style={{ maxWidth: 560 }} onClick={e => e.stopPropagation()}><DialogFocus onEscape={onClose} />
         <div className="px-5 py-4 border-b border-canvas-border">
-          <h3 className="text-[0.875rem] font-bold text-ink-900 inline-flex items-center gap-2"><Scale size={16} className="text-brand-600" /> Review &amp; apply</h3>
+          <h3 id="review-apply-title" className="text-[0.875rem] font-bold text-ink-900 inline-flex items-center gap-2"><Scale size={16} className="text-brand-600" /> Review &amp; apply</h3>
           <p className="text-[0.75rem] text-ink-500 mt-1">Nothing has changed yet. This is what applying would do.</p>
         </div>
 
         <div className="px-5 py-4 space-y-4 max-h-[60vh] overflow-y-auto">
           <div>
-            <span className="block text-[0.625rem] font-bold uppercase tracking-wider text-ink-400 mb-1.5">What changes</span>
+            <span className="block text-[0.6875rem] font-bold uppercase tracking-wider text-ink-400 mb-1.5">What changes</span>
             <div className="space-y-1">
               {rows.map(x => (
                 <div key={x.field} className="flex items-center justify-between gap-3 rounded-lg border border-canvas-border bg-paper-50/50 px-3 py-2">
@@ -609,16 +610,16 @@ function RulesReviewModal({ eng, patch, onClose, onApply }: { eng: IcfrEngagemen
           </div>
 
           <div>
-            <span className="block text-[0.625rem] font-bold uppercase tracking-wider text-ink-400 mb-1.5">
-              {regrades.length === 0 ? 'Exceptions affected' : `Exceptions re-graded — ${regrades.length}${worse ? `, ${worse} more severe` : ''}${eased ? `, ${eased} less severe` : ''}`}
+            <span className="block text-[0.6875rem] font-bold uppercase tracking-wider text-ink-400 mb-1.5">
+              {regrades.length === 0 ? 'Deficiencies affected' : `Deficiencies re-graded — ${regrades.length}${worse ? `, ${worse} more severe` : ''}${eased ? `, ${eased} less severe` : ''}`}
             </span>
             {regrades.length === 0 ? (
               <p className="text-[0.75rem] text-ink-500 leading-relaxed rounded-lg border border-compliant-200 bg-compliant-50/40 px-3 py-2.5">
-                None. No open exception crosses a band at the new thresholds — this change is safe to make.
+                None. No open deficiency crosses a band at the new thresholds — this change is safe to make.
               </p>
             ) : (
               <>
-                <p className="text-[0.71875rem] text-mitigated-800 leading-relaxed mb-2 inline-flex items-start gap-1.5">
+                <p className="text-[0.75rem] text-mitigated-800 leading-relaxed mb-2 inline-flex items-start gap-1.5">
                   <AlertTriangle size={12} className="mt-0.5 shrink-0" />
                   <span>These were already concluded and graded. Applying re-grades them everywhere at once — the register, the reviewer queue, the working paper and the engagement conclusion.</span>
                 </p>
@@ -633,9 +634,9 @@ function RulesReviewModal({ eng, patch, onClose, onApply }: { eng: IcfrEngagemen
                       <div key={g.defId} className={cn('flex items-center justify-between gap-3 rounded-lg border px-3 py-2', up ? 'border-risk-200 bg-risk-50/40' : 'border-mitigated-200 bg-mitigated-50/40')}>
                         <span className="min-w-0">
                           <span className="font-mono text-[0.6875rem] text-ink-500">{g.defId}</span>
-                          {d && <span className="block text-[0.71875rem] text-ink-700 truncate max-w-[300px]" title={d.description}>{d.controlId} · {d.description}</span>}
+                          {d && <span className="block text-[0.75rem] text-ink-700 truncate max-w-75" title={d.description}>{d.controlId} · {d.description}</span>}
                         </span>
-                        <span className="text-[0.71875rem] shrink-0"><span className="text-ink-400">{g.from}</span> <ArrowRight size={10} className="inline -mt-0.5 text-ink-300" /> <span className={cn('font-bold', up ? 'text-risk-700' : 'text-mitigated-800')}>{g.to}</span></span>
+                        <span className="text-[0.75rem] shrink-0"><span className="text-ink-400">{g.from}</span> <ArrowRight size={10} className="inline -mt-0.5 text-ink-300" /> <span className={cn('font-bold', up ? 'text-risk-700' : 'text-mitigated-800')}>{g.to}</span></span>
                       </div>
                     );
                   })}
@@ -645,19 +646,19 @@ function RulesReviewModal({ eng, patch, onClose, onApply }: { eng: IcfrEngagemen
           </div>
 
           <div>
-            <span className="block text-[0.625rem] font-bold uppercase tracking-wider text-ink-400 mb-1.5">Why this is changing</span>
+            <span className="block text-[0.6875rem] font-bold uppercase tracking-wider text-ink-400 mb-1.5">Why this is changing</span>
             <textarea value={reason} onChange={e => setReason(e.target.value)} rows={3}
               placeholder="e.g. the audited balance came in materially above the planning estimate, so overall materiality is re-cut on the final figure"
               className="w-full px-3 py-2.5 rounded-lg border border-canvas-border bg-canvas-elevated text-[0.75rem] leading-relaxed resize-none focus:outline-none focus:ring-2 focus:ring-brand-200" />
-            <p className="text-[0.625rem] text-ink-400 mt-1">Recorded against the change, with your name and every exception it moved.</p>
+            <p className="text-[0.6875rem] text-ink-400 mt-1">Recorded against the change, with your name and every deficiency it moved.</p>
           </div>
         </div>
 
         <div className="flex items-center justify-end gap-2 px-5 py-3.5 border-t border-canvas-border bg-paper-50/40">
-          <button onClick={onClose} className="h-9 px-3.5 text-[0.78125rem] font-semibold text-ink-600 hover:text-ink-900 cursor-pointer">Cancel</button>
+          <button onClick={onClose} className="h-9 px-3.5 text-[0.8125rem] font-semibold text-ink-600 hover:text-ink-900 cursor-pointer">Cancel</button>
           <button disabled={!reason.trim()} title={reason.trim() ? undefined : 'A change to the grading rules needs a reason on the record.'}
             onClick={() => onApply(reason.trim())}
-            className="h-9 px-4 rounded-lg bg-brand-600 text-white text-[0.78125rem] font-semibold enabled:hover:bg-brand-700 disabled:opacity-40 disabled:cursor-not-allowed transition-colors cursor-pointer">Apply the change</button>
+            className="h-9 px-4 rounded-lg bg-brand-600 text-white text-[0.8125rem] font-semibold enabled:hover:bg-brand-700 disabled:opacity-40 disabled:cursor-not-allowed transition-colors cursor-pointer">Apply the change</button>
         </div>
       </div>
     </div>,
@@ -675,31 +676,31 @@ function PrudentRow({ d, baseFinal, onApply, onClear }: { d: Deficiency; baseFin
   const [note, setNote] = useState('');
   const options = (['Significant Deficiency', 'Material Weakness'] as Severity[]).filter(s => GRADE_RANK[s] > GRADE_RANK[baseFinal]);
   return (
-    <div className="flex items-start gap-2 text-[12px] flex-wrap">
-      <span className="text-ink-500 w-[120px] mt-1">Prudent official</span>
+    <div className="flex items-start gap-2 text-[0.75rem] flex-wrap">
+      <span className="text-ink-500 w-30 mt-1">Prudent official</span>
       {d.prudentOverride ? (
-        <span className="text-[11.5px] text-high-700 inline-flex items-center gap-1.5 flex-wrap mt-1">
+        <span className="text-[0.75rem] text-high-700 inline-flex items-center gap-1.5 flex-wrap mt-1">
           <b className="font-semibold">{d.prudentOverride.to ? `raised to ${d.prudentOverride.to}` : 'considered — grade stands'}</b> — “{d.prudentOverride.rationale}” <span className="text-ink-400">· {d.prudentOverride.by}</span>
           <button onClick={onClear} className="text-ink-400 hover:text-ink-700 cursor-pointer inline-flex items-center gap-0.5"><RotateCcw size={10} /> undo</button>
         </span>
       ) : pending ? (
-        <span className="flex items-center gap-2 flex-1 min-w-[260px]">
+        <span className="flex items-center gap-2 flex-1 min-w-65">
           <input autoFocus value={note} onChange={e => setNote(e.target.value)} placeholder={pending === 'stands' ? 'Why does the grade stand on a prudent official’s reading?' : `Why would a prudent official call this ${pending === 'Material Weakness' ? 'a material weakness' : 'a significant deficiency'}?`}
-            className="h-8 flex-1 px-2.5 rounded-md border border-canvas-border bg-canvas-elevated text-[11.5px] focus:outline-none focus:border-brand-300" />
-          <button disabled={!note.trim()} onClick={() => { onApply(pending === 'stands' ? null : pending, note.trim()); setPending(null); setNote(''); }} className="h-8 px-2.5 rounded-md bg-brand-600 text-white text-[11.5px] font-semibold disabled:opacity-40 cursor-pointer">Raise</button>
-          <button onClick={() => { setPending(null); setNote(''); }} className="h-8 px-2 rounded-md border border-canvas-border text-[11.5px] text-ink-600 cursor-pointer">Cancel</button>
+            className="h-8 flex-1 px-2.5 rounded-md border border-canvas-border bg-canvas-elevated text-[0.75rem] focus:outline-none focus:border-brand-300" />
+          <button disabled={!note.trim()} onClick={() => { onApply(pending === 'stands' ? null : pending, note.trim()); setPending(null); setNote(''); }} className="h-8 px-2.5 rounded-md bg-brand-600 text-white text-[0.75rem] font-semibold disabled:opacity-40 cursor-pointer">Raise</button>
+          <button onClick={() => { setPending(null); setNote(''); }} className="h-8 px-2 rounded-md border border-canvas-border text-[0.75rem] text-ink-600 cursor-pointer">Cancel</button>
         </span>
       ) : (
         <>
           {options.map(s => (
-            <button key={s} onClick={() => setPending(s)} className="h-7 px-2.5 rounded-md border border-canvas-border text-[11px] font-semibold text-ink-600 hover:border-high-300 hover:text-high-700 cursor-pointer transition-colors">Raise to {s}</button>
+            <button key={s} onClick={() => setPending(s)} className="h-7 px-2.5 rounded-md border border-canvas-border text-[0.6875rem] font-semibold text-ink-600 hover:border-high-300 hover:text-high-700 cursor-pointer transition-colors">Raise to {s}</button>
           ))}
           {/* The answer that was missing. Two buttons both raised the grade, so
               a judgement the standard REQUIRES could be made and leave no trace
               — and a file cannot show a test was applied by showing nothing. */}
           <button onClick={() => setPending('stands')}
             className="h-7 px-2.5 rounded-md border border-canvas-border text-[0.6875rem] font-semibold text-ink-600 hover:border-ink-400 cursor-pointer transition-colors">Considered — grade stands</button>
-          <span className="text-[0.65625rem] text-ink-400 mt-1.5">{options.length ? 'judgment goes up only — rationale recorded either way' : 'already at the top of the ladder — it can still be recorded as considered'}</span>
+          <span className="text-[0.6875rem] text-ink-400 mt-1.5">{options.length ? 'judgment goes up only — rationale recorded either way' : 'already at the top of the ladder — it can still be recorded as considered'}</span>
         </>
       )}
     </div>
@@ -774,10 +775,10 @@ function PlanBlock({ d, isOwner, locked = false, onPatch, onAttach }: { d: Defic
   const rejected = d.planReview?.decision === 'Rejected';
   return (
     <div className="rounded-lg border border-canvas-border bg-paper-50/50 px-3 py-2.5">
-      <div className="flex items-center gap-1.5 text-[11px] uppercase tracking-wide font-semibold text-ink-500 mb-1.5">
+      <div className="flex items-center gap-1.5 text-[0.6875rem] uppercase tracking-wide font-semibold text-ink-500 mb-1.5">
         <RotateCcw size={12} /> The fix{isOwner ? ' — your commitment' : ''}
         <span className="ml-auto normal-case tracking-normal font-medium text-ink-600">{r.status}</span>
-        {overdue && <span className="normal-case tracking-normal inline-flex items-center gap-1 text-[10.5px] font-bold text-risk-700 bg-risk-50 border border-risk-200 rounded px-1.5 h-5"><AlertTriangle size={10} /> overdue — escalate</span>}
+        {overdue && <span className="normal-case tracking-normal inline-flex items-center gap-1 text-[0.6875rem] font-bold text-risk-700 bg-risk-50 border border-risk-200 rounded px-1.5 h-5"><AlertTriangle size={10} /> overdue — escalate</span>}
       </div>
 
       {/* A rejection is not a status change, it is a message — so it reads as one,
@@ -796,31 +797,31 @@ function PlanBlock({ d, isOwner, locked = false, onPatch, onAttach }: { d: Defic
               question that kind actually needs answering. */}
           <input value={r.action} onChange={e => onPatch({ action: e.target.value })}
             placeholder={d.track === 'design' && d.gapKinds?.length ? GAP_KIND_PLAN_PROMPT[d.gapKinds[0]!] : 'What fixes the root cause — not the symptom (e.g. normalise the match key, not recover the 4 invoices)'}
-            className="w-full h-8 px-2.5 rounded-md border border-canvas-border bg-canvas-elevated text-[12.5px] text-ink-800 focus:outline-none focus:border-brand-300" />
-          <div className="flex items-center gap-2 flex-wrap text-[11.5px]">
+            className="w-full h-8 px-2.5 rounded-md border border-canvas-border bg-canvas-elevated text-[0.8125rem] text-ink-800 focus:outline-none focus:border-brand-300" />
+          <div className="flex items-center gap-2 flex-wrap text-[0.75rem]">
             <span className="text-ink-400">Responsible person</span>
             <input value={r.owner} onChange={e => onPatch({ owner: e.target.value })} placeholder="Who does it"
-              className="h-7 w-56 px-2 rounded-md border border-canvas-border bg-canvas-elevated text-[11.5px] focus:outline-none focus:border-brand-300" />
+              className="h-7 w-56 px-2 rounded-md border border-canvas-border bg-canvas-elevated text-[0.75rem] focus:outline-none focus:border-brand-300" />
             <span className="text-ink-400">Due</span>
-            <input type="date" value={toDateInputValue(r.date)} onChange={e => onPatch({ date: e.target.value || null })}
-              className={cn('h-7 w-40 px-2 rounded-md border bg-canvas-elevated text-[11.5px] tabular-nums focus:outline-none focus:border-brand-300', overdue ? 'border-risk-300 text-risk-700' : 'border-canvas-border')} />
+            <input aria-label="Due date" type="date" value={toDateInputValue(r.date)} onChange={e => onPatch({ date: e.target.value || null })}
+              className={cn('h-7 w-40 px-2 rounded-md border bg-canvas-elevated text-[0.75rem] tabular-nums focus:outline-none focus:border-brand-300', overdue ? 'border-risk-300 text-risk-700' : 'border-canvas-border')} />
           </div>
         </div>
       ) : (
         <>
-          <div className="text-[0.78125rem] text-ink-700">{r.action || <span className="text-ink-400">Not written yet.</span>}</div>
-          <div className="text-[0.71875rem] text-ink-400 mt-0.5">{r.owner} · due {formatDueLabel(r.date)}{d.retest && <> · latest retest <span className={d.retest.result === 'Pass' ? 'text-compliant-700 font-semibold' : 'text-risk-700 font-semibold'}>{d.retest.result}</span></>}{d.signoff && <> · signed off by {d.signoff.by}</>}</div>
+          <div className="text-[0.8125rem] text-ink-700">{r.action || <span className="text-ink-400">Not written yet.</span>}</div>
+          <div className="text-[0.75rem] text-ink-400 mt-0.5">{r.owner} · due {formatDueLabel(r.date)}{d.retest && <> · latest retest <span className={d.retest.result === 'Pass' ? 'text-compliant-700 font-semibold' : 'text-risk-700 font-semibold'}>{d.retest.result}</span></>}{d.signoff && <> · signed off by {d.signoff.by}</>}</div>
         </>
       )}
 
       {/* The auditor's verdict on the plan, once given — their whole say in it. */}
       {d.planReview?.decision === 'Accepted' && (
         <>
-          <p className="text-[0.71875rem] text-compliant-700 font-semibold mt-1.5 inline-flex items-center gap-1"><CheckCircle2 size={11} /> Addresses the root cause — accepted by {d.planReview.by}</p>
+          <p className="text-[0.75rem] text-compliant-700 font-semibold mt-1.5 inline-flex items-center gap-1"><CheckCircle2 size={11} /> Addresses the root cause — accepted by {d.planReview.by}</p>
           {/* A workaround accepted as a fix has to keep saying it is a workaround,
               or the record reads remediated on a control nobody rebuilt. */}
           {d.planReview.fix && (
-            <p className={cn('text-[0.65625rem] mt-1', d.planReview.fix === 'workaround' ? 'text-mitigated-700' : 'text-ink-500')}>
+            <p className={cn('text-[0.6875rem] mt-1', d.planReview.fix === 'workaround' ? 'text-mitigated-700' : 'text-ink-500')}>
               <b className="font-semibold">{PLAN_FIX_LABEL[d.planReview.fix]}</b> — {PLAN_FIX_HINT[d.planReview.fix]}
             </p>
           )}
@@ -831,16 +832,16 @@ function PlanBlock({ d, isOwner, locked = false, onPatch, onAttach }: { d: Defic
           there is nothing to evidence while the plan is still being written. */}
       {!planning && (
         <div className="flex items-center gap-1.5 flex-wrap mt-2">
-          <span className="text-[0.65625rem] uppercase tracking-wide font-semibold text-ink-400">Fix evidence</span>
+          <span className="text-[0.6875rem] uppercase tracking-wide font-semibold text-ink-400">Fix evidence</span>
           {files.map(f => (
-            <span key={f.id} className="inline-flex items-center gap-1 h-6 px-1.5 rounded-md border border-canvas-border bg-canvas-elevated text-[0.65625rem] font-semibold text-ink-600"><Paperclip size={10} /> {f.name}</span>
+            <span key={f.id} className="inline-flex items-center gap-1 h-6 px-1.5 rounded-md border border-canvas-border bg-canvas-elevated text-[0.6875rem] font-semibold text-ink-600"><Paperclip size={10} /> {f.name}</span>
           ))}
           {files.length === 0 && !editable && <span className="text-[0.6875rem] text-ink-400">none attached</span>}
           {editable && (
             <button onClick={() => onAttach(`${d.id.toLowerCase()}-fix-evidence${files.length ? `-${files.length + 1}` : ''}.pdf`)}
-              className="h-6 px-2 rounded-md border border-dashed border-canvas-border text-[0.65625rem] font-semibold text-ink-500 hover:text-brand-700 hover:border-brand-300 cursor-pointer inline-flex items-center gap-1 transition-colors"><Paperclip size={10} /> Attach evidence</button>
+              className="h-6 px-2 rounded-md border border-dashed border-canvas-border text-[0.6875rem] font-semibold text-ink-500 hover:text-brand-700 hover:border-brand-300 cursor-pointer inline-flex items-center gap-1 transition-colors"><Paperclip size={10} /> Attach evidence</button>
           )}
-          {editable && files.length === 0 && <span className="text-[0.65625rem] text-mitigated-700">required before you can submit for sign-off</span>}
+          {editable && files.length === 0 && <span className="text-[0.6875rem] text-mitigated-700">required before you can submit for sign-off</span>}
         </div>
       )}
     </div>
@@ -858,18 +859,18 @@ function SeverityConclusion({ result, showMateriality }: { result: ExceptionGrad
   return (
     <div className="pt-2 border-t border-canvas-border">
       <div className="flex items-center gap-2 flex-wrap">
-        <span className="text-[10.5px] uppercase tracking-wide font-semibold text-ink-400">Conclusion</span>
+        <span className="text-[0.6875rem] uppercase tracking-wide font-semibold text-ink-400">Conclusion</span>
         <SeverityPill s={result.grade} />
-        <button onClick={() => setShowWorking(w => !w)} className="ml-auto inline-flex items-center gap-1 text-[11px] font-semibold text-brand-700 hover:text-brand-800 cursor-pointer">
-          {showWorking ? 'Hide working' : 'Show working'} <span className="text-[10px] leading-none">{showWorking ? '▾' : '▸'}</span>
+        <button onClick={() => setShowWorking(w => !w)} className="ml-auto inline-flex items-center gap-1 text-[0.6875rem] font-semibold text-brand-700 hover:text-brand-800 cursor-pointer">
+          {showWorking ? 'Hide working' : 'Show working'} <span className="text-[0.625rem] leading-none">{showWorking ? '▾' : '▸'}</span>
         </button>
       </div>
       {showWorking && (
         <ol className="mt-2 space-y-1">
           {shown.map((w, i) => (
-            <li key={`${w.n}-${i}`} className="flex items-start gap-2 text-[0.71875rem] leading-relaxed">
-              <span className={cn('mt-[3px] shrink-0 w-[18px] h-[18px] rounded-full inline-flex items-center justify-center text-[0.625rem] font-bold tabular-nums',
-                w.fired ? 'bg-brand-600 text-white' : 'bg-paper-100 text-ink-400')}>{w.n}</span>
+            <li key={`${w.n}-${i}`} className="flex items-start gap-2 text-[0.75rem] leading-relaxed">
+              <span className={cn('mt-0.75 shrink-0 w-4.5 h-4.5 rounded-full inline-flex items-center justify-center text-[0.625rem] font-bold tabular-nums',
+                w.fired ? 'bg-brand-600 text-white' : 'bg-paper-100 text-ink-500')}>{w.n}</span>
               <span className={cn('min-w-0', w.fired ? 'text-ink-800' : 'text-ink-400')}>
                 <b className="font-semibold">{w.rule}</b> — {w.detail}
               </span>
@@ -925,13 +926,13 @@ function RetestPanel({ d }: { d: Deficiency }) {
     <div className="rounded-lg border border-canvas-border bg-paper-50/40 px-3 py-3 space-y-2.5">
       <div className="flex items-center gap-2 flex-wrap">
         <span className="text-[0.6875rem] uppercase tracking-wide font-semibold text-ink-500">Retest {draft.n} — {draft.samples.length} items</span>
-        <span className="text-[0.6875rem] text-ink-500">drawn from {draft.windowFrom} → {draft.windowTo}</span>
+        <span className="text-[0.6875rem] text-ink-500">drawn from {fmtDay(draft.windowFrom)} → {fmtDay(draft.windowTo)}</span>
         <span className="ml-auto text-[0.6875rem] font-semibold tabular-nums text-ink-500">{marks.filter(m => m !== 'Not tested').length} / {marks.length} marked</span>
       </div>
       <p className="text-[0.6875rem] text-ink-400">Same attributes as the original test — a retest that invents its own is not a retest of anything.</p>
 
       <div className="overflow-x-auto">
-        <table className="w-full text-[0.71875rem] border-collapse">
+        <table className="w-full text-[0.75rem] border-collapse">
           <thead>
             <tr className="text-left">
               <th className="py-1.5 pr-3 font-semibold text-ink-500 whitespace-nowrap">Item</th>
@@ -945,7 +946,7 @@ function RetestPanel({ d }: { d: Deficiency }) {
             {draft.samples.map(s => (
               <tr key={s.id} className="border-t border-canvas-border">
                 <td className="py-1.5 pr-3 font-mono text-ink-700 whitespace-nowrap">{s.ref}</td>
-                <td className="py-1.5 pr-3 tabular-nums text-ink-500 whitespace-nowrap">{s.date}</td>
+                <td className="py-1.5 pr-3 tabular-nums text-ink-500 whitespace-nowrap">{fmtDay(s.date)}</td>
                 {draft.attributes.map(a => {
                   const v = cell(s.id, a.code);
                   return (
@@ -954,7 +955,7 @@ function RetestPanel({ d }: { d: Deficiency }) {
                         {(['Pass', 'Fail'] as const).map(r => (
                           <button key={r} onClick={() => setRetestResult(d.id, s.id, a.code, r)}
                             aria-label={`${s.ref} ${a.code} ${r}`}
-                            className={cn('h-6 px-2 text-[0.65625rem] font-bold cursor-pointer transition-colors',
+                            className={cn('h-6 px-2 text-[0.6875rem] font-bold cursor-pointer transition-colors',
                               v === r
                                 ? (r === 'Pass' ? 'bg-compliant-600 text-white' : 'bg-risk-600 text-white')
                                 : 'bg-canvas-elevated text-ink-400 hover:bg-paper-100')}>{r === 'Pass' ? 'P' : 'F'}</button>
@@ -984,7 +985,7 @@ function RetestPanel({ d }: { d: Deficiency }) {
             {willFail ? <><XCircle size={13} /> Record retest {draft.n} — failed</> : <><CheckCircle2 size={13} /> Record retest {draft.n} — passed</>}
           </button>
         ) : (
-          <span className="text-[0.71875rem] text-ink-400">Mark every item against every attribute — the verdict comes off the grid, not a button.</span>
+          <span className="text-[0.75rem] text-ink-400">Mark every item against every attribute — the verdict comes off the grid, not a button.</span>
         )}
       </div>
     </div>
@@ -1062,14 +1063,14 @@ function DesignRetestPanel({ d }: { d: Deficiency }) {
           : 'Re-check the design checks that failed — against the fix evidence.'}
       </p>
       {!onVersion && <div className="flex items-start gap-2 flex-wrap">
-        <p className="min-w-0 flex-1 text-[0.71875rem] text-ink-500">
+        <p className="min-w-0 flex-1 text-[0.75rem] text-ink-500">
           <span className="font-semibold text-ink-600">Fix evidence:</span> {files.length ? files.map(f => f.name).join(', ') : 'none attached'}
         </p>
         {iraRunning
-          ? <span className="h-7 inline-flex items-center gap-1.5 text-[0.71875rem] font-semibold text-brand-600"><Loader2 size={12} className="animate-spin" /> Ira is checking {checks.length} design check{plural}…</span>
+          ? <span className="h-7 inline-flex items-center gap-1.5 text-[0.75rem] font-semibold text-brand-600"><Loader2 size={12} className="animate-spin" /> Ira is checking {checks.length} design check{plural}…</span>
           : <button onClick={runIra} disabled={!!iraBlocked}
               title={iraBlocked ?? 'Ira reads each of these checks against the fix evidence and marks it Pass or Fail'}
-              className="h-7 px-2.5 inline-flex items-center gap-1.5 rounded-md bg-brand-600 text-white text-[0.71875rem] font-semibold enabled:hover:bg-brand-700 disabled:opacity-40 disabled:cursor-not-allowed transition-colors cursor-pointer">
+              className="h-7 px-2.5 inline-flex items-center gap-1.5 rounded-md bg-brand-600 text-white text-[0.75rem] font-semibold enabled:hover:bg-brand-700 disabled:opacity-40 disabled:cursor-not-allowed transition-colors cursor-pointer">
               <Sparkles size={12} /> Run Ira on these checks
             </button>}
       </div>}
@@ -1078,15 +1079,15 @@ function DesignRetestPanel({ d }: { d: Deficiency }) {
         <ol className="rounded-md border border-canvas-border bg-canvas-elevated divide-y divide-canvas-border">
           {checks.map((x, i) => (
             <li key={x.pointId} className="flex items-start gap-2 px-2.5 py-2">
-              <span className="mt-[5px] shrink-0 tabular-nums text-[0.71875rem] text-ink-400">{i + 1}.</span>
-              <span className="mt-[4px] min-w-0 flex-1 text-[0.75rem] leading-snug text-ink-800">{x.text}</span>
+              <span className="mt-1.25 shrink-0 tabular-nums text-[0.75rem] text-ink-400">{i + 1}.</span>
+              <span className="mt-1 min-w-0 flex-1 text-[0.75rem] leading-snug text-ink-800">{x.text}</span>
               {iraRunning
-                ? <span className="mt-[4px] shrink-0 text-[0.6875rem] font-semibold text-evidence-600">Checking…</span>
+                ? <span className="mt-1 shrink-0 text-[0.6875rem] font-semibold text-evidence-600">Checking…</span>
                 : (
                   onVersion ? (
                   // Read off the design test, not entered. Two places that can say
                   // different things about one check is the bug this closes.
-                  <span className={cn('mt-[3px] shrink-0 h-6 px-2 inline-flex items-center gap-1 rounded-md text-[0.6875rem] font-semibold border',
+                  <span className={cn('mt-0.75 shrink-0 h-6 px-2 inline-flex items-center gap-1 rounded-md text-[0.6875rem] font-semibold border',
                     x.result === 'Pass' ? 'bg-compliant-50 border-compliant-200 text-compliant-700'
                       : x.result === 'Fail' ? 'bg-risk-50 border-risk-200 text-risk-700'
                         : 'bg-canvas-elevated border-canvas-border text-ink-400')}>
@@ -1095,7 +1096,7 @@ function DesignRetestPanel({ d }: { d: Deficiency }) {
                   </span>
                   ) : (
                   <div className="flex items-center gap-1.5 shrink-0">
-                    {x.validation && <button onClick={() => setViewing(x.pointId)} className="h-7 px-2.5 inline-flex items-center gap-1 rounded-md border border-canvas-border bg-canvas-elevated text-[0.71875rem] font-semibold text-ink-600 hover:border-brand-300 hover:text-brand-700 cursor-pointer"><ListChecks size={12} /> View results</button>}
+                    {x.validation && <button onClick={() => setViewing(x.pointId)} className="h-7 px-2.5 inline-flex items-center gap-1 rounded-md border border-canvas-border bg-canvas-elevated text-[0.75rem] font-semibold text-ink-600 hover:border-brand-300 hover:text-brand-700 cursor-pointer"><ListChecks size={12} /> View results</button>}
                     <button onClick={() => setRetestCheck(d.id, x.pointId, 'Pass')} title="Mark this check passed" aria-label={`Check ${i + 1} passed`}
                       className={cn('h-7 w-7 inline-flex items-center justify-center rounded-md border transition-colors cursor-pointer',
                         x.result === 'Pass' ? 'bg-compliant-50 border-compliant-300 text-compliant-700' : 'border-canvas-border bg-canvas-elevated text-ink-500 hover:border-compliant-300 hover:text-compliant-700')}>
@@ -1135,7 +1136,7 @@ function DesignRetestPanel({ d }: { d: Deficiency }) {
             {willFail ? <><XCircle size={13} /> Record retest {n} — failed</> : <><CheckCircle2 size={13} /> Record retest {n} — passed</>}
           </button>
         ) : checks.length ? (
-          <span className="text-[0.71875rem] text-ink-400">
+          <span className="text-[0.75rem] text-ink-400">
             {onVersion
               ? 'Finish the design test above — the verdict comes off it.'
               : 'Mark every check — the verdict comes off the checks, not a button.'}
@@ -1161,7 +1162,7 @@ function RetestHistory({ rounds }: { rounds: RetestRound[] }) {
         <History size={12} /> Retest history
         <span className="normal-case tracking-normal font-medium text-ink-500">attempt {rounds.length}</span>
         {failures >= 2 && (
-          <span className="normal-case tracking-normal inline-flex items-center gap-1 text-[0.65625rem] font-bold text-risk-700 bg-risk-50 border border-risk-200 rounded px-1.5 h-5">
+          <span className="normal-case tracking-normal inline-flex items-center gap-1 text-[0.6875rem] font-bold text-risk-700 bg-risk-50 border border-risk-200 rounded px-1.5 h-5">
             <AlertTriangle size={10} /> {failures} failures — flagged to the reviewer
           </span>
         )}
@@ -1175,7 +1176,7 @@ function RetestHistory({ rounds }: { rounds: RetestRound[] }) {
               {/* A design round re-checked checks, not items — there is no sample to count. */}
               {r.checks
                 ? <span className="text-ink-400"> · {r.checks.length} design check{r.checks.length === 1 ? '' : 's'} re-checked against the fix · {r.by}</span>
-                : <span className="text-ink-400"> · {r.samples.length} items from {r.windowFrom} → {r.windowTo} · {r.by}</span>}
+                : <span className="text-ink-400"> · {r.samples.length} items from {fmtDay(r.windowFrom)} → {fmtDay(r.windowTo)} · {r.by}</span>}
               {r.rationale && <span className="block text-ink-600">{r.rationale}</span>}
             </span>
           </li>
@@ -1198,7 +1199,7 @@ function RetestReadyLine({ readiness }: { readiness: RetestReadiness }) {
     <div className="space-y-1.5">
       <div className={cn('rounded-lg border px-3 py-2 text-[0.75rem] flex items-start gap-2',
         readiness.beyondPeriodEnd ? 'border-high-200 bg-high-50/60 text-high-800' : 'border-canvas-border bg-paper-50/40 text-ink-600')}>
-        {readiness.beyondPeriodEnd ? <AlertTriangle size={13} className="mt-[2px] shrink-0" /> : <History size={13} className="mt-[2px] shrink-0 text-ink-400" />}
+        {readiness.beyondPeriodEnd ? <AlertTriangle size={13} className="mt-0.5 shrink-0" /> : <History size={13} className="mt-0.5 shrink-0 text-ink-400" />}
         <span className="min-w-0">
           {/* A design retest waits for nothing, so "Retestable from" is the wrong
               sentence for it — it is ready when the fix is. */}
@@ -1210,7 +1211,7 @@ function RetestReadyLine({ readiness }: { readiness: RetestReadiness }) {
       {readiness.firstOperating && (
         <div className={cn('rounded-lg border px-3 py-2 text-[0.75rem] flex items-start gap-2',
           readiness.firstOperating.beyondPeriodEnd ? 'border-high-200 bg-high-50/60 text-high-800' : 'border-canvas-border bg-paper-50/40 text-ink-600')}>
-          {readiness.firstOperating.beyondPeriodEnd ? <AlertTriangle size={13} className="mt-[2px] shrink-0" /> : <History size={13} className="mt-[2px] shrink-0 text-ink-400" />}
+          {readiness.firstOperating.beyondPeriodEnd ? <AlertTriangle size={13} className="mt-0.5 shrink-0" /> : <History size={13} className="mt-0.5 shrink-0 text-ink-400" />}
           <span className="min-w-0">
             <b className="font-semibold">First operating test {readiness.firstOperating.label}</b> — {readiness.firstOperating.reason}
           </span>
@@ -1238,15 +1239,15 @@ export function HandoffsView() {
       {/* getting back up is the breadcrumb's job (rendered by the shell):
           Engagements / engagement / Handoffs */}
       <div>
-        <h1 className="text-[22px] font-bold text-ink-900 tracking-tight" style={{ fontFamily: "'Source Serif 4', Georgia, serif" }}>Handoffs</h1>
-        <p className="text-[13px] text-ink-500 mt-0.5">Open requests between audit and the first line — documents, questions and remediations. A row opens its control.</p>
+        <h1 className="text-[1.375rem] font-bold text-ink-900 tracking-tight" style={{ fontFamily: "'Source Serif 4', Georgia, serif" }}>Handoffs</h1>
+        <p className="text-[0.8125rem] text-ink-500 mt-0.5">Open requests between audit and the first line — documents, questions and remediations. A row opens its control.</p>
       </div>
 
       {open.length === 0 ? (
         <div className="rounded-2xl border border-canvas-border bg-canvas-elevated p-12 flex flex-col items-center text-center gap-2">
           <div className="w-12 h-12 rounded-full bg-compliant-50 flex items-center justify-center"><CheckCircle2 size={22} className="text-compliant-700" /></div>
-          <p className="text-[15px] font-semibold text-ink-800">No open handoffs</p>
-          <p className="text-[13px] text-ink-500">Nothing is waiting on either side right now.</p>
+          <p className="text-[0.9375rem] font-semibold text-ink-800">No open handoffs</p>
+          <p className="text-[0.8125rem] text-ink-500">Nothing is waiting on either side right now.</p>
         </div>
       ) : HANDOFF_GROUPS.map(g => {
         const rows = open.filter(t => t.type === g.type);
@@ -1256,7 +1257,7 @@ export function HandoffsView() {
             <div className="flex items-center gap-2 mb-2">
               <g.Icon size={15} className={g.tone} />
               <h2 className="font-display text-[1.0625rem] leading-tight text-ink-900">{g.label}</h2>
-              <span className="ml-auto text-[11px] font-semibold text-ink-400">{rows.length} open</span>
+              <span className="ml-auto text-[0.6875rem] font-semibold text-ink-400">{rows.length} open</span>
             </div>
             <div className="space-y-0.5">
               {/* Same rule on the auditor's side: a task that names a step lands on
@@ -1265,10 +1266,10 @@ export function HandoffsView() {
               {rows.map(t => (
                 <button key={t.id} onClick={() => openControl(t.controlId, t.focus)} className={rowCls}>
                   <span className="w-4 flex justify-center shrink-0"><Circle size={11} className={t.overdue ? 'text-risk-700' : 'text-ink-400'} /></span>
-                  <span className="min-w-0 flex-1 truncate text-[12.5px] text-ink-700">
+                  <span className="min-w-0 flex-1 truncate text-[0.8125rem] text-ink-700">
                     <b className="font-semibold text-ink-900">{t.title}</b> <span className="text-ink-400">· {t.controlId} · with {t.assignee}</span>
                   </span>
-                  <span className={cn('shrink-0 text-[11.5px] font-semibold', t.overdue ? 'text-risk-700' : 'text-ink-400')}>{t.dueLabel}</span>
+                  <span className={cn('shrink-0 text-[0.75rem] font-semibold', t.overdue ? 'text-risk-700' : 'text-ink-400')}>{t.dueLabel}</span>
                   <ChevronRight size={14} className="shrink-0 text-ink-300 group-hover:text-ink-500 transition-colors" />
                 </button>
               ))}
@@ -1276,7 +1277,7 @@ export function HandoffsView() {
           </section>
         );
       })}
-      {cleared > 0 && <p className="text-[11.5px] text-ink-400">{cleared} already submitted or cleared — each control's activity trail keeps the history.</p>}
+      {cleared > 0 && <p className="text-[0.75rem] text-ink-400">{cleared} already submitted or cleared — each control's activity trail keeps the history.</p>}
     </div>
   );
 }
@@ -1315,9 +1316,14 @@ function currentStep(d: Deficiency): number {
  *  owner columns are sized to their headers ("Deficiency owner" outruns any
  *  initial-and-surname under it); Stage is wide enough for "Awaiting reviewer",
  *  with its due date on a line of its own beneath. The first column carries the
- *  control ID under the finding's own, indented — 200 fits the S11 format
- *  (AIH/TRY/R001/C001, up to ~21 characters) on one line. */
-const DEF_COL_W = { id: 200, track: 104, exposure: 116, severity: 176, riskOwner: 124, defOwner: 164, status: 152, court: 158 };
+ *  control ID under the finding's own, indented — it fits the S11 format
+ *  (AIH/TRY/R001/C001, up to ~21 characters) on one line at 180. */
+// Rebalanced Oct 2026 so the whole register — Waiting on included — fits a
+// 1440px screen (~1270px of table). Narrower than that it scrolls sideways with
+// the ID column pinned (register.css, .def-reg).
+const DEF_COL_W = { id: 180, track: 84, exposure: 96, severity: 172, riskOwner: 120, defOwner: 156, status: 140, court: 128 };
+/** Fixed columns plus ~190px for the finding — below this the table scrolls. */
+const DEF_MIN_W = 1268;
 const DEF_COLS = 9;
 
 /** Filter menus read in the order the thing itself runs in — severity worst
@@ -1328,8 +1334,10 @@ const STAGE_ORDER = ['Identified', 'Rating review', 'Planning', 'Plan review', '
 const COURT_ORDER = ['auditor', 'risk-owner', 'reviewer', 'none'] as const;
 const COURT_LABEL: Record<Court, string> = { auditor: 'Auditor', 'risk-owner': 'Risk owner', reviewer: 'Reviewer', none: 'Closed' };
 
-/** The register's two people. The risk owner is the control's owner — who answers
- *  for the control the finding sits on. The deficiency owner is the Responsible
+/** The register's two people. The risk owner is the one the RACM names for the
+ *  control the finding sits on (`ownersOf().riskOwner`) — never its control or
+ *  process owner as such, so the column and its filter list risk owners only.
+ *  The deficiency owner is the Responsible
  *  person the fix plan names, and only once that plan has been submitted: until
  *  then the field still holds the control owner it was pre-filled with at raise,
  *  and a name nobody has committed to would read as an assignment. Every stage
@@ -1337,7 +1345,8 @@ const COURT_LABEL: Record<Court, string> = { auditor: 'Auditor', 'risk-owner': '
  *  written before the submission was stamped. */
 const PLAN_SUBMITTED_STAGES: readonly ExceptionStatus[] = ['Plan review', 'Remediation', 'Awaiting reviewer', 'Closed'];
 function riskOwnerOf(d: Deficiency, eng: IcfrEngagement): string | null {
-  return eng.controls.find(c => c.id === d.controlId)?.owner?.trim() || null;
+  const c = eng.controls.find(x => x.id === d.controlId);
+  return c ? ownersOf(c).riskOwner.trim() || null : null;
 }
 function deficiencyOwnerOf(d: Deficiency): string | null {
   const submitted = !!d.planSubmitted || PLAN_SUBMITTED_STAGES.includes(d.status);
@@ -1456,7 +1465,7 @@ export function DeficienciesView() {
         // what makes a page of these triageable: severity, stage and whose court
         // it is in line up down the page instead of being re-found in each card.
         <div className="reg-wrap def-reg">
-          <table className="border-collapse w-full" style={{ tableLayout: 'fixed', minWidth: 1428 }}>
+          <table className="border-collapse w-full" style={{ tableLayout: 'fixed', minWidth: DEF_MIN_W }}>
             <colgroup>
               <col style={{ width: DEF_COL_W.id }} />
               <col />
@@ -1485,14 +1494,14 @@ export function DeficienciesView() {
                 </th>
                 <th title="Where it stands, and when the fix is due"><HeaderFilter label="Stage" value={stage} options={stageOpts} allLabel="All stages" onChange={setStage} ariaLabel="Filter by stage" /></th>
                 <th title="Whose move it is — the auditor sizes it and judges the plan, the owner remediates, the reviewer closes">
-                  <HeaderFilter label="Court" value={court} options={courtOpts} allLabel="Any court" onChange={setCourt} ariaLabel="Filter by court" />
+                  <HeaderFilter label="Waiting on" value={court} options={courtOpts} allLabel="Anyone" onChange={setCourt} ariaLabel="Filter by who it is waiting on" />
                 </th>
               </tr>
             </thead>
             <tbody>
               {rows.map(({ d }) => <DeficiencyCard key={d.id} d={d} layout="row" defaultOpen={d.id === focusDefId} />)}
               {rows.length === 0 && (
-                <tr><td colSpan={DEF_COLS} className="text-center py-16 text-ink-400 text-[13px]">
+                <tr><td colSpan={DEF_COLS} className="text-center py-16 text-ink-400 text-[0.8125rem]">
                   No {W.many} match these filters. <button onClick={clearFilters} className="text-brand-700 font-semibold hover:underline cursor-pointer">Clear filters</button>
                 </td></tr>
               )}
@@ -1503,7 +1512,7 @@ export function DeficienciesView() {
       {/* Only once a filter is on: with nothing set the table IS the count, and
           saying it twice is noise. */}
       {engaged && all.length > 0 && (
-        <p className="text-[0.71875rem] text-ink-400">Showing {rows.length} of {all.length} {W.many}. <button onClick={clearFilters} className="text-brand-700 font-semibold hover:underline cursor-pointer">Clear filters</button></p>
+        <p className="text-[0.75rem] text-ink-400">Showing {rows.length} of {all.length} {W.many}. <button onClick={clearFilters} className="text-brand-700 font-semibold hover:underline cursor-pointer">Clear filters</button></p>
       )}
     </div>
   );
@@ -1560,7 +1569,7 @@ function SameFlawElsewhere({ d, eng, onOpen, onRun }: { d: Deficiency; eng: Icfr
   const scan = d.flawScan;
   if (!check) {
     return (
-      <p className="text-[0.65625rem] text-ink-400">
+      <p className="text-[0.6875rem] text-ink-400">
         {d.gapKinds?.includes('no-control')
           ? 'Nothing to scan — "no control at all" is a judgement about this control, not a pattern another row can be matched against.'
           : 'Name the design gap first — the scan looks for controls built the same way.'}
@@ -1575,7 +1584,7 @@ function SameFlawElsewhere({ d, eng, onOpen, onRun }: { d: Deficiency; eng: Icfr
           said a person had run it — and "nobody looked" and "looked, found
           nothing" are the same empty list on screen. */}
       {scan ? (
-        <p className="text-[0.65625rem] text-ink-500">
+        <p className="text-[0.6875rem] text-ink-500">
           Checked by <b className="font-semibold text-ink-700">{scan.by}</b> {scan.at} · {scan.examined.length} control{scan.examined.length === 1 ? '' : 's'} in {scan.process} examined · <b className={cn('font-semibold', scan.carrying ? 'text-risk-700' : 'text-ink-700')}>{scan.carrying}</b> could be built the same way
           {drift?.gapChanged
             ? <> · <span className="text-high-700">the design gap has changed since — this needs running again</span></>
@@ -1585,28 +1594,28 @@ function SameFlawElsewhere({ d, eng, onOpen, onRun }: { d: Deficiency; eng: Icfr
           {' '}<button onClick={onRun} className="text-brand-700 hover:underline cursor-pointer">{drift?.gapChanged || (drift && drift.moved > 0) ? 'Re-run' : 'Run again'}</button>
         </p>
       ) : (
-        <p className="text-[0.65625rem] text-ink-500">
+        <p className="text-[0.6875rem] text-ink-500">
           Not checked yet — nothing on the record says whether anyone looked.{' '}
           <button onClick={onRun} className="text-brand-700 font-semibold hover:underline cursor-pointer">Run the check</button>
         </p>
       )}
       {untested.length > 0 ? (
         <>
-          <p className="text-[0.65625rem] font-semibold text-mitigated-700">Not yet looked at</p>
+          <p className="text-[0.6875rem] font-semibold text-mitigated-700">Not yet looked at</p>
           <div className="space-y-0.5">
             {untested.map(c => (
               <button key={c.id} onClick={() => onOpen(c.id)}
                 className="group w-full text-left flex items-start gap-1.5 text-[0.6875rem] text-ink-600 hover:text-ink-900 cursor-pointer">
-                <span className="font-mono text-[0.65625rem] font-semibold text-ink-500 shrink-0 mt-[1px]">{c.wpRef}</span>
+                <span className="font-mono text-[0.6875rem] font-semibold text-ink-500 shrink-0 mt-0.25">{c.wpRef}</span>
                 <span className="min-w-0 flex-1 group-hover:underline">{c.description}</span>
               </button>
             ))}
           </div>
         </>
       ) : (
-        <p className="text-[0.65625rem] text-ink-500">Every other control in {process} that could be built this way has already been looked at.</p>
+        <p className="text-[0.6875rem] text-ink-500">Every other control in {process} that could be built this way has already been looked at.</p>
       )}
-      <p className="text-[0.65625rem] text-ink-500">
+      <p className="text-[0.6875rem] text-ink-500">
         {tested.length > 0
           ? `+ ${tested.length} more in ${process} with no check for this, already tested — their results are the evidence on whether the habit is wider.`
           : untested.length > 0 ? `Matched on ${process} and on how each control is described and classified — a prompt to look, not a finding.` : ''}
@@ -1627,11 +1636,11 @@ function AggregationKeys({ d, eng }: { d: Deficiency; eng: IcfrEngagement }) {
     <div className="space-y-1">
       <div className="flex items-center gap-1.5 flex-wrap">
         {derived.map(k => (
-          <span key={k.key} className="inline-flex items-center h-6 px-2 rounded-md bg-brand-50 border border-brand-200 text-[0.65625rem] font-bold text-brand-700">{k.name}</span>
+          <span key={k.key} className="inline-flex items-center h-6 px-2 rounded-md bg-brand-50 border border-brand-200 text-[0.6875rem] font-bold text-brand-700">{k.name}</span>
         ))}
         {!derived.length && (
-          <span className="text-[0.65625rem] text-ink-400">
-            {joinsNoDerivedGroup(d, eng) ? 'No line-item group — an MW indicator or ITGC exception does not aggregate on one account.' : 'No FS line item on this control.'}
+          <span className="text-[0.6875rem] text-ink-400">
+            {joinsNoDerivedGroup(d, eng) ? 'No line-item group — an MW indicator or ITGC deficiency does not aggregate on one account.' : 'No FS line item on this control.'}
           </span>
         )}
         {assertions.map(a => (
@@ -1639,12 +1648,12 @@ function AggregationKeys({ d, eng }: { d: Deficiency; eng: IcfrEngagement }) {
              solid brand chips read as "options you have not picked" — but these
              are attributes of the finding, nothing selects them, and they were
              never controls: both rows were always <span>s. */
-          <span key={a} className="text-[0.65625rem] text-ink-500">{a}</span>
+          <span key={a} className="text-[0.6875rem] text-ink-500">{a}</span>
         ))}
       </div>
-      <p className="text-[0.65625rem] text-ink-500">
+      <p className="text-[0.6875rem] text-ink-500">
         {groups.length === 0
-          ? 'Nothing else hits the same line item — this exception is graded on its own.'
+          ? 'Nothing else hits the same line item — this deficiency is graded on its own.'
           : groups.map(g => `Grouped with ${g.members.length - 1} other deficienc${g.members.length - 1 === 1 ? 'y' : 'ies'} on ${g.name}`).join(' · ')}
       </p>
     </div>
@@ -1665,8 +1674,8 @@ function GroupResult({ d, eng, g }: { d: Deficiency; eng: IcfrEngagement; g: Def
     <div className={cn('rounded-lg border p-3 space-y-2', raises ? 'border-risk-200 bg-risk-50/30' : 'border-canvas-border bg-paper-50/40')}>
       <div className="flex items-center gap-2 flex-wrap">
         <span className="text-[0.75rem] font-bold text-ink-900">{g.name}</span>
-        <span className="inline-flex items-center h-5 px-1.5 rounded bg-paper-100 text-[0.625rem] font-semibold text-ink-500 uppercase tracking-wide">{g.kind}</span>
-        <span className="text-[0.6875rem] text-ink-500">{g.members.length} exceptions</span>
+        <span className="inline-flex items-center h-5 px-1.5 rounded bg-paper-100 text-[0.6875rem] font-semibold text-ink-500 uppercase tracking-wide">{g.kind}</span>
+        <span className="text-[0.6875rem] text-ink-500">{g.members.length} deficiencies</span>
       </div>
 
       {/* Each member as a person would name it — the control's company and the
@@ -1683,7 +1692,7 @@ function GroupResult({ d, eng, g }: { d: Deficiency; eng: IcfrEngagement; g: Def
               {/* An em-dash in a dense 11px list; "not sized" is said once, by the
                   grade column immediately to its right. */}
               <span className="shrink-0 text-ink-700">{m.magnitude === null ? '—' : formatINR(m.magnitude)}</span>
-              <span className="shrink-0 w-[128px] text-right text-ink-500">{mg}</span>
+              <span className="shrink-0 w-32 text-right text-ink-500">{mg}</span>
             </li>
           );
         })}
@@ -1699,16 +1708,16 @@ function GroupResult({ d, eng, g }: { d: Deficiency; eng: IcfrEngagement; g: Def
       </div>
 
       {g.unverified && (
-        <p className="text-[0.65625rem] text-mitigated-700 inline-flex items-start gap-1"><AlertTriangle size={11} className="mt-0.5 shrink-0" /> Not every figure could be placed against a population, so the total is added rather than proven — it may overstate.</p>
+        <p className="text-[0.6875rem] text-mitigated-700 inline-flex items-start gap-1"><AlertTriangle size={11} className="mt-0.5 shrink-0" /> Not every figure could be placed against a population, so the total is added rather than proven — it may overstate.</p>
       )}
       {likelihoodNeedsConfirming(g) && (
-        <p className="text-[0.65625rem] text-mitigated-700 inline-flex items-start gap-1"><AlertTriangle size={11} className="mt-0.5 shrink-0" /> {g.members.length} exceptions all judged remote — confirm that, or raise one with a reason, before accepting the group.</p>
+        <p className="text-[0.6875rem] text-mitigated-700 inline-flex items-start gap-1"><AlertTriangle size={11} className="mt-0.5 shrink-0" /> {g.members.length} deficiencies all judged remote — confirm that, or raise one with a reason, before accepting the group.</p>
       )}
 
       {/* The auditor's argument that these do not compound. It never breaks the
           group up — the combined grade stands beside it. */}
       {g.conclusion && !writing ? (
-        <p className="text-[0.65625rem] text-ink-600 rounded-md bg-canvas-elevated border border-canvas-border px-2 py-1.5">
+        <p className="text-[0.6875rem] text-ink-600 rounded-md bg-canvas-elevated border border-canvas-border px-2 py-1.5">
           <b className="font-semibold text-ink-800">Judged not to compound</b> — {g.conclusion.note} <span className="text-ink-400">· {g.conclusion.by}, {g.conclusion.at}</span>
           <button onClick={() => setWriting(true)} className="ml-1.5 text-brand-700 font-semibold cursor-pointer">edit</button>
         </p>
@@ -1723,14 +1732,14 @@ function GroupResult({ d, eng, g }: { d: Deficiency; eng: IcfrEngagement; g: Def
           </div>
         </div>
       ) : (
-        <button onClick={() => setWriting(true)} className="text-[0.65625rem] font-semibold text-ink-500 hover:text-ink-800 cursor-pointer">Record that these do not compound</button>
+        <button onClick={() => setWriting(true)} className="text-[0.6875rem] font-semibold text-ink-500 hover:text-ink-800 cursor-pointer">Record that these do not compound</button>
       )}
 
       {/* Last, and a whole sentence. */}
-      <p className={cn('text-[0.71875rem] leading-relaxed pt-1', raises ? 'text-risk-700 font-semibold' : 'text-ink-600')}>
+      <p className={cn('text-[0.75rem] leading-relaxed pt-1', raises ? 'text-risk-700 font-semibold' : 'text-ink-600')}>
         {raises
-          ? `Together these come to ${formatINR(g.exposure)}, which grades ${g.grade} — so this exception is raised from ${own} to ${g.grade} by the group.`
-          : `Together these come to ${formatINR(g.exposure)}, which grades ${g.grade} — that does not raise this exception, which stays at ${own} on its own merits.`}
+          ? `Together these come to ${formatINR(g.exposure)}, which grades ${g.grade} — so this deficiency is raised from ${own} to ${g.grade} by the group.`
+          : `Together these come to ${formatINR(g.exposure)}, which grades ${g.grade} — that does not raise this deficiency, which stays at ${own} on its own merits.`}
       </p>
     </div>
   );
@@ -1770,7 +1779,7 @@ function RootCauseLink({ d, eng }: { d: Deficiency; eng: IcfrEngagement }) {
         </button>
         {mine.map(g => (
           <button key={g.id} onClick={() => unlinkRootCause(d.id, g.id)} title={`Remove from ${g.name}`}
-            className="h-6 px-2 inline-flex items-center gap-1 rounded-md bg-paper-100 text-[0.65625rem] font-semibold text-ink-600 hover:text-risk-700 cursor-pointer">
+            className="h-6 px-2 inline-flex items-center gap-1 rounded-md bg-paper-100 text-[0.6875rem] font-semibold text-ink-600 hover:text-risk-700 cursor-pointer">
             {g.name} <X size={10} />
           </button>
         ))}
@@ -1778,16 +1787,16 @@ function RootCauseLink({ d, eng }: { d: Deficiency; eng: IcfrEngagement }) {
 
       {open && (
         // bottom-full — the menu grows UPWARD, away from the conclusion line.
-        <div className="absolute bottom-full left-0 mb-1.5 z-30 w-[420px] max-w-[90vw] rounded-lg border border-canvas-border bg-canvas-elevated shadow-lg p-2.5 space-y-2">
+        <div className="absolute bottom-full left-0 mb-1.5 z-30 w-105 max-w-[90vw] rounded-lg border border-canvas-border bg-canvas-elevated shadow-lg p-2.5 space-y-2">
           <input autoFocus value={q} onChange={e => setQ(e.target.value)} placeholder="Search by id, control or root cause…"
-            className="w-full h-8 px-2.5 rounded-md border border-canvas-border text-[0.71875rem] focus:outline-none focus:ring-2 focus:ring-brand-200" />
+            className="w-full h-8 px-2.5 rounded-md border border-canvas-border text-[0.75rem] focus:outline-none focus:ring-2 focus:ring-brand-200" />
           {mine.length > 0 && (
             <div className="space-y-1">
-              <div className="text-[0.625rem] font-semibold uppercase tracking-wide text-ink-400">Add to a group it is already in</div>
+              <div className="text-[0.6875rem] font-semibold uppercase tracking-wide text-ink-400">Add to a group it is already in</div>
               {mine.map(g => <div key={g.id} className="text-[0.6875rem] text-ink-500">{g.name} · {g.memberIds.length} members</div>)}
             </div>
           )}
-          <div className="max-h-[220px] overflow-y-auto space-y-0.5">
+          <div className="max-h-55 overflow-y-auto space-y-0.5">
             {options.map(o => {
               const on = picked.includes(o.id);
               return (
@@ -1798,7 +1807,7 @@ function RootCauseLink({ d, eng }: { d: Deficiency; eng: IcfrEngagement }) {
                     <span className="block text-[0.6875rem] font-semibold text-ink-800">{o.id} · {o.controlId}</span>
                     {/* the other exception's root cause line — an id alone does
                         not tell anyone whether the mechanism is really shared */}
-                    <span className="block text-[0.65625rem] text-ink-500">{o.rootCause || 'root cause not written yet'}</span>
+                    <span className="block text-[0.6875rem] text-ink-500">{o.rootCause || 'root cause not written yet'}</span>
                   </span>
                 </button>
               );
@@ -1806,7 +1815,7 @@ function RootCauseLink({ d, eng }: { d: Deficiency; eng: IcfrEngagement }) {
             {!options.length && <div className="px-2 py-2 text-[0.6875rem] text-ink-400">Nothing matches.</div>}
           </div>
           <input value={naming} onChange={e => setNaming(e.target.value)} placeholder="Name this root cause — e.g. approval matrix not enforced in SAP"
-            className="w-full h-8 px-2.5 rounded-md border border-canvas-border text-[0.71875rem] focus:outline-none focus:ring-2 focus:ring-brand-200" />
+            className="w-full h-8 px-2.5 rounded-md border border-canvas-border text-[0.75rem] focus:outline-none focus:ring-2 focus:ring-brand-200" />
           <div className="flex items-center justify-end gap-2">
             <button onClick={() => { setOpen(false); setPicked([]); setNaming(''); setQ(''); }} className="h-7 px-2.5 text-[0.6875rem] font-semibold text-ink-500 cursor-pointer">Cancel</button>
             <button disabled={!picked.length || !naming.trim()}
@@ -1826,7 +1835,7 @@ function RootCauseLink({ d, eng }: { d: Deficiency; eng: IcfrEngagement }) {
 function IraTag({ reason }: { reason?: string }) {
   if (!reason) return null;
   return (
-    <p className="leading-snug pl-[128px] -mt-1"><IraDrafted title={reason} /></p>
+    <p className="leading-snug pl-32 -mt-1"><IraDrafted title={reason} /></p>
   );
 }
 
@@ -1839,7 +1848,7 @@ function dayRange(from: string, to: string): string {
 function WorkingRow({ label, children }: { label?: string; children: ReactNode }) {
   return (
     <div className="flex items-baseline gap-2">
-      <span className="w-[8.5rem] shrink-0 text-ink-400">{label}</span>
+      <span className="w-34 shrink-0 text-ink-400">{label}</span>
       <span className="min-w-0 flex-1 text-ink-700">{children}</span>
     </div>
   );
@@ -1850,11 +1859,11 @@ function WorkingRow({ label, children }: { label?: string; children: ReactNode }
  *  or types their own in the box above. */
 function ExposureWorking({ x, current, onUse }: { x: DataExposure; current: number | null; onUse: (value: number) => void }) {
   if (x.kind === 'no-audit') {
-    return <p className="pl-[128px] -mt-1 text-[0.6875rem] text-ink-400">No audit on this engagement to work the exposure out over — type the figure by hand.</p>;
+    return <p className="pl-32 -mt-1 text-[0.6875rem] text-ink-400">No audit on this engagement to work the exposure out over — type the figure by hand.</p>;
   }
   const figure = x.kind === 'population' || x.accounts.length > 0;
   return (
-    <div className="ml-[128px] rounded-md border border-canvas-border bg-paper-50/40 px-2.5 py-2 space-y-1.5">
+    <div className="ml-32 rounded-md border border-canvas-border bg-paper-50/40 px-2.5 py-2 space-y-1.5">
       <div className="flex items-center gap-2 flex-wrap">
         <span className="text-[0.6875rem] font-semibold text-ink-600">Exposure (worked out from the data)</span>
         {figure && <span className="text-[0.75rem] font-bold tabular-nums text-ink-900">{fmt(x.value)}</span>}
@@ -1862,7 +1871,7 @@ function ExposureWorking({ x, current, onUse }: { x: DataExposure; current: numb
           ? <span className="ml-auto inline-flex items-center gap-1 text-[0.6875rem] font-semibold text-compliant-700"><Check size={11} /> In use</span>
           : (
             <span className="ml-auto inline-flex items-center gap-1.5 text-[0.6875rem] text-ink-400">
-              <button onClick={() => onUse(x.value)} className="h-7 px-2.5 rounded-md border border-brand-200 bg-brand-50 text-[0.71875rem] font-semibold text-brand-700 hover:bg-brand-100 cursor-pointer transition-colors">Use {fmt(x.value)}</button>
+              <button onClick={() => onUse(x.value)} className="h-7 px-2.5 rounded-md border border-brand-200 bg-brand-50 text-[0.75rem] font-semibold text-brand-700 hover:bg-brand-100 cursor-pointer transition-colors">Use {fmt(x.value)}</button>
               or type your own
             </span>
           ))}
@@ -2025,8 +2034,8 @@ export function DeficiencyCard({ d, defaultOpen = false, showControlLink = true,
   // row, and the two must not fire together. On the control's own paper that
   // journey is a circle, so the id stays a label there rather than a link back.
   const controlLink = showControlLink
-    ? <button onClick={e => { e.stopPropagation(); openControl(d.controlId); }} className="font-mono text-[12px] text-brand-700 hover:underline cursor-pointer">{d.controlId}</button>
-    : <span className="font-mono text-[12px] text-ink-500">{d.controlId}</span>;
+    ? <button onClick={e => { e.stopPropagation(); openControl(d.controlId); }} className="font-mono text-[0.75rem] text-brand-700 hover:underline cursor-pointer">{d.controlId}</button>
+    : <span className="font-mono text-[0.75rem] text-ink-500">{d.controlId}</span>;
   // The whole summary is the toggle — a body this tall needs a target bigger than
   // a chevron. Never a <button>, because the control link inside it is one and a
   // button inside a button is invalid; same role/tabIndex/onKeyDown pattern the
@@ -2040,17 +2049,17 @@ export function DeficiencyCard({ d, defaultOpen = false, showControlLink = true,
             the top of the card because everything below is judged against it: the
             plan at ③, and the auditor's one question at plan review. */}
         <div className="mt-2.5 rounded-lg border border-canvas-border bg-paper-50/40 px-3 py-2.5">
-          <div className="text-[0.65625rem] uppercase tracking-wide font-semibold text-ink-400 mb-1">Root cause</div>
+          <div className="text-[0.6875rem] uppercase tracking-wide font-semibold text-ink-400 mb-1">Root cause</div>
           {sizing ? (
             <>
               <textarea value={d.rootCause} onChange={e => updateDeficiency(d.id, { rootCause: e.target.value })} rows={2}
                 placeholder="The mechanism, not the count — “the system allows manual posting that bypasses approval”, not “3 of 25 lacked approval”"
-                className="w-full px-2.5 py-2 rounded-md border border-canvas-border bg-canvas-elevated text-[0.78125rem] text-ink-800 resize-none focus:outline-none focus:border-brand-300" />
+                className="w-full px-2.5 py-2 rounded-md border border-canvas-border bg-canvas-elevated text-[0.8125rem] text-ink-800 resize-none focus:outline-none focus:border-brand-300" />
               {/* Ira's draft (17 Sep dev call): kept until the auditor edits it
                   or takes it as written — a draft nobody checked is not step 1. */}
               {d.iraSuggested?.rootCause && d.rootCause.trim() ? (
                 <div className="mt-1 flex items-start gap-2 flex-wrap">
-                  <p className="text-[0.65625rem] leading-snug min-w-0 flex-1 text-ink-500">
+                  <p className="text-[0.6875rem] leading-snug min-w-0 flex-1 text-ink-500">
                     <IraDrafted title={d.iraSuggested.rootCause} /> · Edit it or use it as written before this can be sized.
                   </p>
                   <button onClick={() => { const { rootCause: _drafted, ...rest } = d.iraSuggested!; updateDeficiency(d.id, { iraSuggested: Object.keys(rest).length ? rest : undefined }); }}
@@ -2058,10 +2067,10 @@ export function DeficiencyCard({ d, defaultOpen = false, showControlLink = true,
                     Use this
                   </button>
                 </div>
-              ) : !d.rootCause.trim() && <p className="text-[0.65625rem] text-mitigated-700 mt-1">Needed before this can be sized — the grade and the plan both hang off it.</p>}
+              ) : !d.rootCause.trim() && <p className="text-[0.6875rem] text-mitigated-700 mt-1">Needed before this can be sized — the grade and the plan both hang off it.</p>}
             </>
           ) : (
-            <p className="text-[0.78125rem] text-ink-700">{d.rootCause || <span className="text-ink-400">Not written yet.</span>}</p>
+            <p className="text-[0.8125rem] text-ink-700">{d.rootCause || <span className="text-ink-400">Not written yet.</span>}</p>
           )}
           {d.failedSamples && d.failedSamples.length > 0 && (
             <p className="text-[0.6875rem] text-ink-400 mt-1.5">Found in {d.failedSamples.slice(0, 6).join(', ')}{d.failedSamples.length > 6 ? ` +${d.failedSamples.length - 6} more` : ''}</p>
@@ -2092,8 +2101,8 @@ export function DeficiencyCard({ d, defaultOpen = false, showControlLink = true,
             const done = s.n < step || d.status === 'Closed';
             return (
             <div key={s.n} className="flex items-center gap-1.5 flex-1 last:flex-none">
-              <span className={cn('inline-flex items-center gap-1.5 h-7 px-2.5 rounded-full text-[0.6875rem] font-semibold whitespace-nowrap', done ? 'bg-compliant-50 text-compliant-700' : s.n === step ? 'bg-brand-600 text-white' : 'bg-paper-100 text-ink-400')}>
-                {done ? <CheckCircle2 size={12} /> : <span className="w-[14px] text-center">{s.n}</span>}{s.title}
+              <span className={cn('inline-flex items-center gap-1.5 h-7 px-2.5 rounded-full text-[0.6875rem] font-semibold whitespace-nowrap', done ? 'bg-compliant-50 text-compliant-700' : s.n === step ? 'bg-brand-600 text-white' : 'bg-paper-100 text-ink-500')}>
+                {done ? <CheckCircle2 size={12} /> : <span className="w-3.5 text-center">{s.n}</span>}{s.title}
               </span>
               {i < EXCEPTION_STEPS.length - 1 && <span className={cn('h-px flex-1', done ? 'bg-compliant-300' : 'bg-paper-200')} />}
             </div>
@@ -2108,12 +2117,12 @@ export function DeficiencyCard({ d, defaultOpen = false, showControlLink = true,
             replaces the per-status "with X" lines that used to sit down beside
             the buttons, so the fact is stated once and in one place. */}
         <div className="flex items-center gap-2.5 flex-wrap rounded-lg border border-canvas-border bg-paper-50/40 px-3 py-2">
-          <span className="text-[0.65625rem] font-semibold text-ink-400 uppercase tracking-wide">Current state</span>
+          <span className="text-[0.6875rem] font-semibold text-ink-400 uppercase tracking-wide">Current state</span>
           <CourtBadge court={courtForException(d)} fromRole={role} />
           {d.status === 'Closed'
             ? <span className="text-[0.75rem] text-ink-600">Signed off by <b className="font-semibold text-ink-800">{court.who}</b></span>
             : <span className="text-[0.75rem] text-ink-600"><b className="font-semibold text-ink-800">{court.who}</b> — {court.doing}</span>}
-          <span className="ml-auto text-[0.71875rem] font-semibold text-ink-400">Step {step} of {EXCEPTION_STEPS.length} · {d.status}</span>
+          <span className="ml-auto text-[0.75rem] font-semibold text-ink-400">Step {step} of {EXCEPTION_STEPS.length} · {d.status}</span>
         </div>
 
         {/* severity + the fix — the owner's card leads with THEIR work (visual reverse) */}
@@ -2122,7 +2131,7 @@ export function DeficiencyCard({ d, defaultOpen = false, showControlLink = true,
             rating has gone up for confirmation it is a record, not a form. */}
         {sizing ? (
           <div className="rounded-lg border border-canvas-border p-3 space-y-2.5">
-            <div className="text-[10.5px] uppercase tracking-wide text-ink-400 font-semibold">Severity inputs — recomputed live vs the ground rules</div>
+            <div className="text-[0.6875rem] uppercase tracking-wide text-ink-400 font-semibold">Severity inputs — recomputed live vs the ground rules</div>
             {d.ratingReturn && (
               <div className="rounded-md border border-high-200 bg-high-50/60 px-2.5 py-2 text-[0.75rem] text-high-800">
                 <b className="font-semibold">Sent back by {d.ratingReturn.by}</b> — {d.ratingReturn.reason}
@@ -2134,8 +2143,8 @@ export function DeficiencyCard({ d, defaultOpen = false, showControlLink = true,
                 about the whole control, not about any one check. */}
             {d.track === 'design' && (
               <>
-                <div className="flex items-center gap-2 flex-wrap text-[12px]">
-                  <span className="text-ink-500 w-[120px]">Design gap</span>
+                <div className="flex items-center gap-2 flex-wrap text-[0.75rem]">
+                  <span className="text-ink-500 w-30">Design gap</span>
                   {/* MULTI-SELECT (user ask, 30 Sep). A control can be both
                       insufficiently precise AND in the wrong place — two
                       findings needing two fixes, and picking one lost the other.
@@ -2148,22 +2157,22 @@ export function DeficiencyCard({ d, defaultOpen = false, showControlLink = true,
                       const have = d.gapKinds ?? [];
                       const next = have.includes(k) ? have.filter(x => x !== k) : [...have, k];
                       updateDeficiency(d.id, { gapKinds: sortGapKinds(next) });
-                    }} className={cn('h-7 px-2.5 rounded-md border text-[11.5px] font-semibold cursor-pointer transition-colors', d.gapKinds?.includes(k) ? 'bg-brand-50 border-brand-200 text-brand-700' : 'border-canvas-border text-ink-600 hover:bg-paper-50')}>{GAP_KIND_LABEL[k]}</button>
+                    }} className={cn('h-7 px-2.5 rounded-md border text-[0.75rem] font-semibold cursor-pointer transition-colors', d.gapKinds?.includes(k) ? 'bg-brand-50 border-brand-200 text-brand-700' : 'border-canvas-border text-ink-600 hover:bg-paper-50')}>{GAP_KIND_LABEL[k]}</button>
                   ))}
                 </div>
                 <IraTag reason={d.iraSuggested?.gapKinds} />
-                <p className="text-[10.5px] text-ink-400 pl-[128px] -mt-1">{d.gapKinds?.length ? d.gapKinds.map(k => GAP_KIND_HINT[k]).join(' ') : 'Pick every way it is built wrong — the owner is asked to fix that, and the plan is judged against it.'}</p>
+                <p className="text-[0.6875rem] text-ink-400 pl-32 -mt-1">{d.gapKinds?.length ? d.gapKinds.map(k => GAP_KIND_HINT[k]).join(' ') : 'Pick every way it is built wrong — the owner is asked to fix that, and the plan is judged against it.'}</p>
               </>
             )}
-            <div className="flex items-center gap-2 flex-wrap text-[12px]">
-              <span className="text-ink-500 w-[120px]">Likelihood</span>
+            <div className="flex items-center gap-2 flex-wrap text-[0.75rem]">
+              <span className="text-ink-500 w-30">Likelihood</span>
               {(['Remote', 'Reasonably possible', 'Probable'] as const).map(l => (
-                <button key={l} onClick={() => updateDeficiency(d.id, { likelihood: l })} className={cn('h-7 px-2.5 rounded-md border text-[11.5px] font-semibold cursor-pointer transition-colors', d.likelihood === l ? 'bg-brand-50 border-brand-200 text-brand-700' : 'border-canvas-border text-ink-600 hover:bg-paper-50')}>{l}</button>
+                <button key={l} onClick={() => updateDeficiency(d.id, { likelihood: l })} className={cn('h-7 px-2.5 rounded-md border text-[0.75rem] font-semibold cursor-pointer transition-colors', d.likelihood === l ? 'bg-brand-50 border-brand-200 text-brand-700' : 'border-canvas-border text-ink-600 hover:bg-paper-50')}>{l}</button>
               ))}
             </div>
             <IraTag reason={d.iraSuggested?.likelihood} />
-            <div className="flex items-center gap-2 text-[12px]">
-              <span className="text-ink-500 w-[120px]">Exposure ₹</span>
+            <div className="flex items-center gap-2 text-[0.75rem]">
+              <span className="text-ink-500 w-30">Exposure ₹</span>
               {/* AN EMPTY BOX MEANS EMPTY. It read `Number(e.target.value) || 0`,
                   so clearing the field wrote ₹0 — and ₹0 is under every
                   de-minimis line, which is the whole bug. Blank now writes
@@ -2174,25 +2183,25 @@ export function DeficiencyCard({ d, defaultOpen = false, showControlLink = true,
                   updateDeficiency(d.id, raw === '' ? { magnitude: null, magnitudeZeroReason: undefined } : { magnitude: Number(raw) });
                 }}
                 placeholder="not sized" aria-label="Exposure in rupees"
-                className={cn('h-8 w-44 px-2.5 rounded-md border text-[0.78125rem] tabular-nums focus:outline-none focus:ring-2 focus:ring-brand-50',
+                className={cn('h-8 w-44 px-2.5 rounded-md border text-[0.8125rem] tabular-nums focus:outline-none focus:ring-2 focus:ring-brand-50',
                   d.magnitude === null ? 'border-high-300 bg-high-50/40 focus:border-high-400' : 'border-canvas-border focus:border-brand-300')} />
               {/* "< materiality" is a comforting sentence about a number nobody
                   typed. While it is unsized the line says so instead. */}
               {d.magnitude === null
-                ? <span className="text-[0.71875rem] text-high-700 font-semibold">not sized — no grade until this is answered</span>
-                : <span className={cn('text-[11.5px]', material ? 'text-risk-700 font-semibold' : 'text-ink-400')}>{material ? '≥' : '<'} materiality {fmt(M)}{ct ? ' · clearly trivial' : ''}</span>}
+                ? <span className="text-[0.75rem] text-high-700 font-semibold">not sized — no grade until this is answered</span>
+                : <span className={cn('text-[0.75rem]', material ? 'text-risk-700 font-semibold' : 'text-ink-400')}>{material ? '≥' : '<'} materiality {fmt(M)}{ct ? ' · clearly trivial' : ''}</span>}
             </div>
-            <p className="text-[10.5px] text-ink-400 pl-[128px] -mt-1">What <b className="font-semibold text-ink-500">could</b> have slipped through while the control was broken — not the error actually found.</p>
+            <p className="text-[0.6875rem] text-ink-400 pl-32 -mt-1">What <b className="font-semibold text-ink-500">could</b> have slipped through while the control was broken — not the error actually found.</p>
             {/* NIL COSTS A REASON. Zero is the value a blank used to pass itself
                 off as, so if it is going to clear an exception a person says why
                 in their own words — and until they do, step 2 will not send. */}
             {d.magnitude === 0 && (
-              <div className="flex items-start gap-2 text-[0.75rem] pl-[128px]">
+              <div className="flex items-start gap-2 text-[0.75rem] pl-32">
                 <input value={d.magnitudeZeroReason ?? ''}
                   onChange={e => updateDeficiency(d.id, { magnitudeZeroReason: e.target.value })}
                   placeholder="Why is there no exposure? — required"
                   aria-label="Why there is no exposure"
-                  className={cn('h-8 flex-1 min-w-0 max-w-[420px] px-2.5 rounded-md border text-[0.78125rem] focus:outline-none focus:ring-2 focus:ring-brand-50',
+                  className={cn('h-8 flex-1 min-w-0 max-w-105 px-2.5 rounded-md border text-[0.8125rem] focus:outline-none focus:ring-2 focus:ring-brand-50',
                     d.magnitudeZeroReason?.trim() ? 'border-canvas-border focus:border-brand-300' : 'border-high-300 bg-high-50/40 focus:border-high-400')} />
               </div>
             )}
@@ -2209,7 +2218,7 @@ export function DeficiencyCard({ d, defaultOpen = false, showControlLink = true,
                 and a paragraph of AS 2201 should not look alike when ticking
                 either forces a material weakness. */}
             <div className="flex items-start gap-2 text-[0.75rem]">
-              <span className="text-ink-500 w-[120px] mt-1.5 shrink-0">MW indicators</span>
+              <span className="text-ink-500 w-30 mt-1.5 shrink-0">MW indicators</span>
               <div className="flex-1 min-w-0 grid gap-1.5 [grid-template-columns:repeat(auto-fit,minmax(17.5rem,1fr))]">
                 {EXCEPTION_MW_INDICATORS.map(ind => { const on = d.mwIndicators.includes(ind.id); return (
                   <button key={ind.id} title={ind.hint}
@@ -2217,15 +2226,15 @@ export function DeficiencyCard({ d, defaultOpen = false, showControlLink = true,
                     className={cn('flex items-start gap-2 px-2.5 py-1.5 rounded-md border text-left cursor-pointer transition-colors', on ? 'border-risk-200 bg-risk-50/50' : 'border-canvas-border hover:border-ink-300')}>
                     <span className={cn('w-4 h-4 rounded-sm border flex items-center justify-center shrink-0 mt-px', on ? 'bg-risk-600 border-risk-600 text-white' : 'border-ink-300')}>{on && <CheckCircle2 size={11} />}</span>
                     <span className="min-w-0">
-                      <span className={cn('block text-[0.71875rem] leading-snug', on ? 'text-risk-800 font-semibold' : 'text-ink-700')}>{ind.label}</span>
-                      <span className="block text-[0.625rem] text-ink-400 mt-0.5">{mwSourceLabel(ind.source)}</span>
+                      <span className={cn('block text-[0.75rem] leading-snug', on ? 'text-risk-800 font-semibold' : 'text-ink-700')}>{ind.label}</span>
+                      <span className="block text-[0.6875rem] text-ink-400 mt-0.5">{mwSourceLabel(ind.source)}</span>
                     </span>
                   </button>
                 ); })}
               </div>
             </div>
-            <div className="flex items-center gap-2 text-[12px] flex-wrap">
-              <span className="text-ink-500 w-[120px]">Compensating control</span>
+            <div className="flex items-center gap-2 text-[0.75rem] flex-wrap">
+              <span className="text-ink-500 w-30">Compensating control</span>
               {/* Every control on the engagement, not just this risk or process
                   (user ask, 30 Sep) — what matters is whether another control
                   would catch the same misstatement, wherever it sits. It already
@@ -2233,13 +2242,13 @@ export function DeficiencyCard({ d, defaultOpen = false, showControlLink = true,
                   scoped or it stops being a suggestion and becomes a list. */}
               <FormSelect value={d.compensatingControlId ?? ''} onChange={v => updateDeficiency(d.id, { compensatingControlId: v || undefined })}
                 options={[{ value: '', label: 'None' }, ...eng.controls.filter(c => c.id !== d.controlId).map(c => { const short = c.description.length > 42 ? c.description.slice(0, 40).trimEnd() + '…' : c.description; return { value: c.id, label: `${c.id} — ${short}` }; })]}
-                className="h-8 max-w-[300px] px-2.5 rounded-md border border-canvas-border text-[12px] bg-canvas-elevated focus:outline-none focus:border-brand-300"
-                menuCls="w-[340px]" ariaLabel="Compensating control" />
+                className="h-8 max-w-75 px-2.5 rounded-md border border-canvas-border text-[0.75rem] bg-canvas-elevated focus:outline-none focus:border-brand-300"
+                menuCls="w-85" ariaLabel="Compensating control" />
               {d.compensatingControlId && (
-                result.cap ? <span className="text-compliant-700 text-[0.6875rem] font-semibold">capping Material Weakness → Significant Deficiency — never clears the exception</span>
+                result.cap ? <span className="text-compliant-700 text-[0.6875rem] font-semibold">capping Material Weakness → Significant Deficiency — never clears the deficiency</span>
                 : result.capBlocked === 'not-effective' ? <span className="text-high-700 text-[0.6875rem] font-semibold">no cap — {d.compensatingControlId} isn't concluded effective in this engagement</span>
                 : result.capBlocked === 'mw-indicator' ? <span className="text-risk-700 text-[0.6875rem] font-semibold">no cap — MW indicators can't be argued down</span>
-                : <span className="text-ink-400 text-[11px]">in place — the cap only rescues a Material Weakness grade, and never clears the exception</span>
+                : <span className="text-ink-400 text-[0.6875rem]">in place — the cap only rescues a Material Weakness grade, and never clears the deficiency</span>
               )}
             </div>
             <IraTag reason={d.iraSuggested?.compensatingControlId} />
@@ -2257,14 +2266,14 @@ export function DeficiencyCard({ d, defaultOpen = false, showControlLink = true,
                 should not read as though the flaw was rebuilt away. */}
             {closeBlock && !closeBlock.blocks && (
               <div className="flex items-start gap-2 text-[0.75rem] flex-wrap">
-                <span className="text-ink-500 w-[120px] mt-0.5 shrink-0">On closing</span>
-                <span className="flex-1 min-w-[260px] text-[0.71875rem] text-ink-600 leading-snug">{closeBlock.reason}</span>
+                <span className="text-ink-500 w-30 mt-0.5 shrink-0">On closing</span>
+                <span className="flex-1 min-w-65 text-[0.75rem] text-ink-600 leading-snug">{closeBlock.reason}</span>
               </div>
             )}
             {runway && (
               <div className="flex items-start gap-2 text-[0.75rem] flex-wrap">
-                <span className="text-ink-500 w-[120px] mt-0.5 shrink-0">Time left this year</span>
-                <span className={cn('flex-1 min-w-[260px] inline-flex items-start gap-1.5 rounded-md border px-2.5 py-1.5 text-[0.71875rem] leading-snug',
+                <span className="text-ink-500 w-30 mt-0.5 shrink-0">Time left this year</span>
+                <span className={cn('flex-1 min-w-65 inline-flex items-start gap-1.5 rounded-md border px-2.5 py-1.5 text-[0.75rem] leading-snug',
                   runway.verdict === 'fits' ? 'border-canvas-border bg-paper-50/40 text-ink-600' : 'border-high-200 bg-high-50/60 text-high-800')}>
                   {runway.verdict === 'fits' ? <History size={12} className="shrink-0 mt-0.5" /> : <AlertTriangle size={12} className="shrink-0 mt-0.5" />}
                   <span className="min-w-0">{runway.line}</span>
@@ -2279,10 +2288,10 @@ export function DeficiencyCard({ d, defaultOpen = false, showControlLink = true,
                 re-checks — see `designRetestChecks`. */}
             {d.track === 'design' && (d.failedChecks?.length ?? 0) > 0 && (
               <div className="flex items-start gap-2 text-[0.75rem] flex-wrap">
-                <span className="text-ink-500 w-[120px] mt-0.5 shrink-0">Failed design checks</span>
-                <ul className="flex-1 min-w-[260px] space-y-1">
+                <span className="text-ink-500 w-30 mt-0.5 shrink-0">Failed design checks</span>
+                <ul className="flex-1 min-w-65 space-y-1">
                   {d.failedChecks!.map(fc => (
-                    <li key={fc.pointId} className="flex items-start gap-1.5 text-[0.71875rem] text-ink-700">
+                    <li key={fc.pointId} className="flex items-start gap-1.5 text-[0.75rem] text-ink-700">
                       <XCircle size={12} className="text-risk-600 shrink-0 mt-0.5" />
                       <span className="min-w-0">“{fc.text.replace(/[.\s]+$/, '')}”</span>
                     </li>
@@ -2306,13 +2315,13 @@ export function DeficiencyCard({ d, defaultOpen = false, showControlLink = true,
                 never read the scan, so closing a design finding is unaffected. */}
             {/* {d.track === 'design' && (
               <div className="flex items-start gap-2 text-[0.75rem] flex-wrap">
-                <span className="text-ink-500 w-[120px] mt-1.5">Same flaw elsewhere</span>
-                <div className="flex-1 min-w-[260px]"><SameFlawElsewhere d={d} eng={eng} onOpen={openControl} onRun={() => runFlawScan(d.id)} /></div>
+                <span className="text-ink-500 w-30 mt-1.5">Same flaw elsewhere</span>
+                <div className="flex-1 min-w-65"><SameFlawElsewhere d={d} eng={eng} onOpen={openControl} onRun={() => runFlawScan(d.id)} /></div>
               </div>
             )} */}
             <div className="flex items-start gap-2 text-[0.75rem] flex-wrap">
-              <span className="text-ink-500 w-[120px] mt-1.5">Aggregation</span>
-              <div className="flex-1 min-w-[260px] space-y-2">
+              <span className="text-ink-500 w-30 mt-1.5">Aggregation</span>
+              <div className="flex-1 min-w-65 space-y-2">
                 <AggregationKeys d={d} eng={eng} />
                 {groupsFor(d, eng).map(g => <GroupResult key={g.key} d={d} eng={eng} g={g} />)}
                 {/* PARKED — user-made root-cause groups. Restore by un-commenting
@@ -2332,7 +2341,7 @@ export function DeficiencyCard({ d, defaultOpen = false, showControlLink = true,
           </div>
         ) : (
           <div className="rounded-lg border border-canvas-border bg-paper-50/30 p-3 space-y-1.5">
-            <div className="text-[0.65625rem] uppercase tracking-wide text-ink-400 font-semibold">Severity — evaluated by the auditor{isOwner ? '; your part is the fix below' : ''}</div>
+            <div className="text-[0.6875rem] uppercase tracking-wide text-ink-400 font-semibold">Severity — evaluated by the auditor{isOwner ? '; your part is the fix below' : ''}</div>
             {/* ── the owner reads the numbers, and argues on the record ─────────
                 404(a) is management's assessment of its own controls, and the
                 process owner is management — they need the exposure to argue for
@@ -2351,7 +2360,7 @@ export function DeficiencyCard({ d, defaultOpen = false, showControlLink = true,
                 so the escalation shows and the reason does not. */}
             {isOwner ? (
               <>
-                <div className="grid gap-x-6 gap-y-1 text-[12px] sm:grid-cols-2">
+                <div className="grid gap-x-6 gap-y-1 text-[0.75rem] sm:grid-cols-2">
                   <span className="text-ink-700"><span className="text-ink-400">Classification</span> · <b className="font-semibold">{result.grade ?? 'not sized yet'}</b></span>
                   <span className="text-ink-700"><span className="text-ink-400">Fix due</span> · {d.remediation.date ?? 'not set yet'}</span>
                   {/* The owner argues for budget off this number. A blank read
@@ -2366,8 +2375,8 @@ export function DeficiencyCard({ d, defaultOpen = false, showControlLink = true,
                   {d.compensatingControlId && (
                     <span className="text-ink-700 sm:col-span-2">
                       <span className="text-ink-400">Compensating control</span> · {d.compensatingControlId} — {result.cap
-                        ? 'it capped how far this grade could rise. It does not clear the exception.'
-                        : 'considered, and it did not change the grade. A compensating control never clears an exception either way.'}
+                        ? 'it capped how far this grade could rise. It does not clear the deficiency.'
+                        : 'considered, and it did not change the grade. A compensating control never clears a deficiency either way.'}
                     </span>
                   )}
                   {/* That it was escalated, never what escalated it. */}
@@ -2377,22 +2386,22 @@ export function DeficiencyCard({ d, defaultOpen = false, showControlLink = true,
                 </div>
                 <p className="text-[0.75rem] text-ink-600">{result.grade === null ? 'Not sized yet — the auditor has still to work out what could have slipped through.' : SEVERITY_URGENCY[result.grade]}</p>
                 {d.planReview?.decision === 'Rejected' && d.planReview.reason && (
-                  <p className="text-[12px] text-risk-700"><span className="text-ink-400">Plan returned</span> · {d.planReview.reason}</p>
+                  <p className="text-[0.75rem] text-risk-700"><span className="text-ink-400">Plan returned</span> · {d.planReview.reason}</p>
                 )}
                 {/* One action, and it changes nothing by itself — see the store. */}
                 {!locked && d.status !== 'Closed' && !challenging && !d.challenges?.some(ch => !ch.response) && (
                   <button onClick={() => setChallenging(true)}
-                    className="mt-1 inline-flex items-center gap-1.5 h-7 px-2.5 rounded-md border border-canvas-border bg-canvas-elevated text-[0.71875rem] font-semibold text-ink-700 hover:border-brand-300 hover:text-brand-700 cursor-pointer">
+                    className="mt-1 inline-flex items-center gap-1.5 h-7 px-2.5 rounded-md border border-canvas-border bg-canvas-elevated text-[0.75rem] font-semibold text-ink-700 hover:border-brand-300 hover:text-brand-700 cursor-pointer">
                     <MessageSquareWarning size={12} /> Disagree with this assessment
                   </button>
                 )}
                 {challenging && (
                   <div className="mt-1 rounded-lg border border-high-200 bg-high-50/40 p-2.5 space-y-2">
-                    <p className="text-[0.71875rem] text-ink-600">
+                    <p className="text-[0.75rem] text-ink-600">
                       This goes to the audit team as a tracked item. It does not change the rating on its own — they answer it, either way, with a reason.
                     </p>
                     <label className="block">
-                      <span className="text-[0.65625rem] uppercase tracking-wide font-semibold text-ink-500">What do you dispute?</span>
+                      <span className="text-[0.6875rem] uppercase tracking-wide font-semibold text-ink-500">What do you dispute?</span>
                       <select value={challengeInput} onChange={e => setChallengeInput(e.target.value as ChallengedInput)}
                         className="mt-1 w-full px-2 py-1.5 rounded-md border border-canvas-border bg-canvas-elevated text-[0.75rem] text-ink-800 focus:outline-none focus:border-brand-300">
                         {(Object.keys(CHALLENGED_INPUT_LABEL) as ChallengedInput[]).map(k => (
@@ -2406,20 +2415,20 @@ export function DeficiencyCard({ d, defaultOpen = false, showControlLink = true,
                     <div className="flex items-center gap-2 flex-wrap">
                       <input value={challengeFile} onChange={e => setChallengeFile(e.target.value)}
                         placeholder="Supporting file (optional)"
-                        className="flex-1 min-w-[180px] px-2 py-1.5 rounded-md border border-canvas-border bg-canvas-elevated text-[0.71875rem] text-ink-800 focus:outline-none focus:border-brand-300" />
+                        className="flex-1 min-w-45 px-2 py-1.5 rounded-md border border-canvas-border bg-canvas-elevated text-[0.75rem] text-ink-800 focus:outline-none focus:border-brand-300" />
                       <button disabled={!challengeWhy.trim()}
                         onClick={() => { raiseChallenge(d.id, challengeInput, challengeWhy, challengeFile.trim() || undefined); setChallenging(false); setChallengeWhy(''); setChallengeFile(''); }}
-                        className="inline-flex items-center gap-1.5 h-7 px-3 rounded-md bg-brand-600 text-white text-[0.71875rem] font-semibold disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer">
+                        className="inline-flex items-center gap-1.5 h-7 px-3 rounded-md bg-brand-600 text-white text-[0.75rem] font-semibold disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer">
                         Send to the audit team
                       </button>
                       <button onClick={() => { setChallenging(false); setChallengeWhy(''); setChallengeFile(''); }}
-                        className="h-7 px-2.5 rounded-md text-[0.71875rem] text-ink-500 hover:text-ink-700 cursor-pointer">Cancel</button>
+                        className="h-7 px-2.5 rounded-md text-[0.75rem] text-ink-500 hover:text-ink-700 cursor-pointer">Cancel</button>
                     </div>
                   </div>
                 )}
               </>
             ) : (
-            <div className="grid gap-x-6 gap-y-1 text-[12px] sm:grid-cols-2">
+            <div className="grid gap-x-6 gap-y-1 text-[0.75rem] sm:grid-cols-2">
               <span className="text-ink-700"><span className="text-ink-400">Likelihood</span> · {d.likelihood}</span>
               <span className="text-ink-700"><span className="text-ink-400">Exposure</span> · {fmtEx(d.magnitude)}{ct ? ' (clearly trivial)' : ''}</span>
               {/* NAMED, not counted. "in force" was the engagement's word for which
@@ -2488,23 +2497,23 @@ export function DeficiencyCard({ d, defaultOpen = false, showControlLink = true,
                       <div className="flex items-center gap-2">
                         <button disabled={!answerReason.trim()}
                           onClick={() => { respondToChallenge(d.id, ch.id, answering.decision, answerReason); setAnswering(null); setAnswerReason(''); }}
-                          className="h-7 px-3 rounded-md bg-brand-600 text-white text-[0.71875rem] font-semibold disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer">
+                          className="h-7 px-3 rounded-md bg-brand-600 text-white text-[0.75rem] font-semibold disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer">
                           Record — {answering.decision.toLowerCase()}
                         </button>
                         <button onClick={() => { setAnswering(null); setAnswerReason(''); }}
-                          className="h-7 px-2.5 rounded-md text-[0.71875rem] text-ink-500 hover:text-ink-700 cursor-pointer">Cancel</button>
+                          className="h-7 px-2.5 rounded-md text-[0.75rem] text-ink-500 hover:text-ink-700 cursor-pointer">Cancel</button>
                       </div>
                     </div>
                   ) : (
                     <div className="mt-1.5 flex items-center gap-2">
                       <button onClick={() => { setAnswering({ id: ch.id, decision: 'Accepted' }); setAnswerReason(''); }}
-                        className="h-7 px-2.5 rounded-md border border-canvas-border bg-canvas-elevated text-[0.71875rem] font-semibold text-ink-700 hover:border-brand-300 hover:text-brand-700 cursor-pointer">Accept</button>
+                        className="h-7 px-2.5 rounded-md border border-canvas-border bg-canvas-elevated text-[0.75rem] font-semibold text-ink-700 hover:border-brand-300 hover:text-brand-700 cursor-pointer">Accept</button>
                       <button onClick={() => { setAnswering({ id: ch.id, decision: 'Declined' }); setAnswerReason(''); }}
-                        className="h-7 px-2.5 rounded-md border border-canvas-border bg-canvas-elevated text-[0.71875rem] font-semibold text-ink-700 hover:border-risk-300 hover:text-risk-700 cursor-pointer">Decline — reason required</button>
+                        className="h-7 px-2.5 rounded-md border border-canvas-border bg-canvas-elevated text-[0.75rem] font-semibold text-ink-700 hover:border-risk-300 hover:text-risk-700 cursor-pointer">Decline — reason required</button>
                     </div>
                   )
                 ) : (
-                  <p className="mt-1 text-[0.71875rem] text-ink-400">With the audit team — they answer it either way, with a reason.</p>
+                  <p className="mt-1 text-[0.75rem] text-ink-400">With the audit team — they answer it either way, with a reason.</p>
                 )}
               </div>
             ))}
@@ -2521,13 +2530,13 @@ export function DeficiencyCard({ d, defaultOpen = false, showControlLink = true,
             one card and let the reviewer own one they never saw. */}
         {d.ratingConfirm && (
           d.ratingConfirm.grade === grade ? (
-            <p className="text-[0.71875rem] text-compliant-700 font-semibold inline-flex items-center gap-1.5"><ShieldCheck size={12} /> Rated {d.ratingConfirm.grade}, confirmed by {d.ratingConfirm.by}</p>
+            <p className="text-[0.75rem] text-compliant-700 font-semibold inline-flex items-center gap-1.5"><ShieldCheck size={12} /> Rated {d.ratingConfirm.grade}, confirmed by {d.ratingConfirm.by}</p>
           ) : (
             <div className="rounded-lg border border-high-200 bg-high-50/60 px-3 py-2 text-[0.75rem] text-high-800 flex items-start gap-2">
-              <AlertTriangle size={13} className="mt-[2px] shrink-0" />
+              <AlertTriangle size={13} className="mt-0.5 shrink-0" />
               <span className="min-w-0">
                 <b className="font-semibold">The confirmed rating no longer matches.</b> {d.ratingConfirm.by} confirmed this as {d.ratingConfirm.grade}; it now grades <b className="font-semibold">{grade}</b>
-                {result.aggregate?.raised ? ' after combining with other exceptions' : ''}. It needs confirming again.
+                {result.aggregate?.raised ? ' after combining with other deficiencies' : ''}. It needs confirming again.
               </span>
             </div>
           )
@@ -2602,7 +2611,7 @@ export function DeficiencyCard({ d, defaultOpen = false, showControlLink = true,
                 <div className="flex items-center gap-2 flex-wrap w-full">
                   <input autoFocus value={rejectReason} onChange={e => setRejectReason(e.target.value)}
                     placeholder="Why the grade is wrong — the auditor rewrites it against this"
-                    className="h-8 flex-1 min-w-[240px] px-2.5 rounded-md border border-canvas-border bg-canvas-elevated text-[0.75rem] focus:outline-none focus:border-brand-300" />
+                    className="h-8 flex-1 min-w-60 px-2.5 rounded-md border border-canvas-border bg-canvas-elevated text-[0.75rem] focus:outline-none focus:border-brand-300" />
                   <button disabled={!rejectReason.trim()} onClick={() => { returnRating(d.id, rejectReason.trim()); setRejecting(null); setRejectReason(''); }}
                     className="h-8 px-3 rounded-lg bg-high-600 text-white text-[0.75rem] font-semibold enabled:hover:bg-high-700 disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer">Send back</button>
                   <button onClick={() => { setRejecting(null); setRejectReason(''); }} className="h-8 px-2.5 rounded-lg border border-canvas-border text-[0.75rem] font-semibold text-ink-600 cursor-pointer">Cancel</button>
@@ -2632,26 +2641,26 @@ export function DeficiencyCard({ d, defaultOpen = false, showControlLink = true,
                 <div className="flex items-center gap-2 flex-wrap w-full">
                   <input autoFocus value={rejectReason} onChange={e => setRejectReason(e.target.value)}
                     placeholder="What it misses about the root cause — the owner rewrites the plan against this"
-                    className="h-8 flex-1 min-w-[240px] px-2.5 rounded-md border border-canvas-border bg-canvas-elevated text-[0.75rem] focus:outline-none focus:border-brand-300" />
+                    className="h-8 flex-1 min-w-60 px-2.5 rounded-md border border-canvas-border bg-canvas-elevated text-[0.75rem] focus:outline-none focus:border-brand-300" />
                   <button disabled={!rejectReason.trim()} onClick={() => { reviewPlan(d.id, 'Rejected', rejectReason.trim()); setRejecting(null); setRejectReason(''); }}
                     className="h-8 px-3 rounded-lg bg-high-600 text-white text-[0.75rem] font-semibold enabled:hover:bg-high-700 disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer">Send back</button>
                   <button onClick={() => { setRejecting(null); setRejectReason(''); }} className="h-8 px-2.5 rounded-lg border border-canvas-border text-[0.75rem] font-semibold text-ink-600 cursor-pointer">Cancel</button>
                 </div>
               ) : <>
-                <span className="text-[0.71875rem] text-ink-500 w-full">Does this address the root cause? You judge the plan — you never write or execute it.</span>
+                <span className="text-[0.75rem] text-ink-500 w-full">Does this address the root cause? You judge the plan — you never write or execute it.</span>
                 {/* The design track asks one more thing before it can be accepted:
                     has the control been rebuilt, or has someone been put behind it?
                     Only the first ends a design gap, and a plan accepted without
                     the answer lets the second be filed as the first. */}
                 {d.track === 'design' && (
                   <div className="w-full">
-                    <span className="text-[0.71875rem] text-ink-500">Real redesign, or a manual workaround?</span>
+                    <span className="text-[0.75rem] text-ink-500">Real redesign, or a manual workaround?</span>
                     <div className="flex items-center gap-2 flex-wrap mt-1.5">
                       {PLAN_FIX_KINDS.map(k => (
-                        <button key={k} onClick={() => setPlanFix(k)} className={cn('h-7 px-2.5 rounded-md border text-[11.5px] font-semibold cursor-pointer transition-colors', planFix === k ? 'bg-brand-50 border-brand-200 text-brand-700' : 'border-canvas-border text-ink-600 hover:bg-paper-50')}>{PLAN_FIX_LABEL[k]}</button>
+                        <button key={k} onClick={() => setPlanFix(k)} className={cn('h-7 px-2.5 rounded-md border text-[0.75rem] font-semibold cursor-pointer transition-colors', planFix === k ? 'bg-brand-50 border-brand-200 text-brand-700' : 'border-canvas-border text-ink-600 hover:bg-paper-50')}>{PLAN_FIX_LABEL[k]}</button>
                       ))}
                     </div>
-                    {planFix && <p className="text-[10.5px] text-ink-400 mt-1">{PLAN_FIX_HINT[planFix]}</p>}
+                    {planFix && <p className="text-[0.6875rem] text-ink-400 mt-1">{PLAN_FIX_HINT[planFix]}</p>}
                   </div>
                 )}
                 <button onClick={() => reviewPlan(d.id, 'Accepted', undefined, planFix ?? undefined)} disabled={d.track === 'design' && !planFix}
@@ -2690,23 +2699,23 @@ export function DeficiencyCard({ d, defaultOpen = false, showControlLink = true,
             ) : samePerson(d.planReview, me) ? (
               <span className="text-[0.75rem] font-semibold text-high-700 inline-flex items-center gap-1.5"><XCircle size={14} /> A different person must close — you accepted this plan.</span>
             ) : (
-              <button onClick={() => setClosing(true)} className="h-8 px-3 rounded-lg bg-compliant-600 text-white text-[12px] font-semibold hover:bg-compliant-700 cursor-pointer inline-flex items-center gap-1.5"><ShieldCheck size={13} /> Close — reviewer sign-off</button>
+              <button onClick={() => setClosing(true)} className="h-8 px-3 rounded-lg bg-compliant-600 text-white text-[0.75rem] font-semibold hover:bg-compliant-700 cursor-pointer inline-flex items-center gap-1.5"><ShieldCheck size={13} /> Close — reviewer sign-off</button>
             )
           )}
-          {d.status === 'Closed' && d.signoff && <span className="text-[12px] font-semibold text-compliant-700 inline-flex items-center gap-1.5"><CheckCircle2 size={14} /> Closed — signed off by {d.signoff.by}</span>}
+          {d.status === 'Closed' && d.signoff && <span className="text-[0.75rem] font-semibold text-compliant-700 inline-flex items-center gap-1.5"><CheckCircle2 size={14} /> Closed — signed off by {d.signoff.by}</span>}
           {/* The owner's own copy. Not the working paper filtered down — a separate
               artefact built from owner-safe fields, so handing it over cannot leak
               the audit's file. Their door to it is here, on the exception it is
               about. */}
           {isOwner && (
             <button onClick={() => setBriefOpen(true)}
-              className="h-8 px-3 rounded-lg border border-canvas-border text-ink-700 text-[12px] font-semibold hover:border-brand-300 hover:text-brand-700 cursor-pointer inline-flex items-center gap-1.5"><Download size={13} /> Remediation brief</button>
+              className="h-8 px-3 rounded-lg border border-canvas-border text-ink-700 text-[0.75rem] font-semibold hover:border-brand-300 hover:text-brand-700 cursor-pointer inline-flex items-center gap-1.5"><Download size={13} /> Remediation brief</button>
           )}
           {/* the way back in: the reviewer's alone — they signed it closed, so
               undoing that is theirs — and never one-click; the reason is the record */}
           {!locked && isReviewer && d.status === 'Closed' && (
             <button onClick={() => { setReopening(true); setReopenReason(''); }}
-              className="h-8 px-3 rounded-lg border border-high-300 text-high-700 text-[12px] font-semibold hover:bg-high-50 cursor-pointer inline-flex items-center gap-1.5"><RotateCcw size={13} /> Reopen — reason required</button>
+              className="h-8 px-3 rounded-lg border border-high-300 text-high-700 text-[0.75rem] font-semibold hover:bg-high-50 cursor-pointer inline-flex items-center gap-1.5"><RotateCcw size={13} /> Reopen — reason required</button>
           )}
         </div>
   </>) : null;
@@ -2721,23 +2730,23 @@ export function DeficiencyCard({ d, defaultOpen = false, showControlLink = true,
           where a backdrop could not live at all. */}
       {closing && createPortal(
         <div className="modal-backdrop" onClick={() => setClosing(false)}>
-          <div className="modal" onClick={e => e.stopPropagation()}>
+          <div role="dialog" aria-modal="true" aria-labelledby="close-item-title" className="modal" onClick={e => e.stopPropagation()}><DialogFocus onEscape={() => setClosing(false)} />
             <div className="px-5 pt-4 pb-3 border-b border-canvas-border">
               <div className="flex items-center justify-between gap-3">
-                <h2 className="text-[15px] font-semibold text-ink-900">Close this {W.one}?</h2>
+                <h2 id="close-item-title" className="text-[0.9375rem] font-semibold text-ink-900">Close this {W.one}?</h2>
                 <button onClick={() => setClosing(false)} className="h-7 w-7 inline-flex items-center justify-center rounded-md text-ink-400 hover:text-ink-700 cursor-pointer" aria-label="Close"><X size={15} /></button>
               </div>
             </div>
             <div className="p-5">
-              <p className="text-[12.5px] text-ink-600 leading-relaxed">Confirm — close <span className="font-mono font-semibold text-ink-800">{d.id}</span>? Your reviewer sign-off is recorded against it. Closing is the final act in the four-eyes review — it comes back only through a reopen with a recorded reason.</p>
+              <p className="text-[0.8125rem] text-ink-600 leading-relaxed">Confirm — close <span className="font-mono font-semibold text-ink-800">{d.id}</span>? Your reviewer sign-off is recorded against it. Closing is the final act in the four-eyes review — it comes back only through a reopen with a recorded reason.</p>
               <div className="mt-4 flex items-center justify-end gap-2">
-                <button onClick={() => setClosing(false)} className="h-9 px-3.5 rounded-lg border border-canvas-border text-[12.5px] font-semibold text-ink-600 hover:text-ink-900 cursor-pointer">Cancel</button>
+                <button onClick={() => setClosing(false)} className="h-9 px-3.5 rounded-lg border border-canvas-border text-[0.8125rem] font-semibold text-ink-600 hover:text-ink-900 cursor-pointer">Cancel</button>
                 {/* The store refuses this outright on a design exception whose
                     rebuild cannot be watched in time, so the button says why
                     rather than doing nothing when pressed. */}
                 {closeBlock?.blocks
-                  ? <span className="text-[0.75rem] text-high-800 max-w-[420px] leading-snug">{closeBlock.reason}</span>
-                  : <button onClick={() => { signOffException(d.id); setClosing(false); }} className="h-9 px-3.5 rounded-lg bg-compliant-600 text-white text-[12.5px] font-semibold hover:bg-compliant-700 transition-colors cursor-pointer inline-flex items-center gap-1.5"><ShieldCheck size={13} /> Close — reviewer sign-off</button>}
+                  ? <span className="text-[0.75rem] text-high-800 max-w-105 leading-snug">{closeBlock.reason}</span>
+                  : <button onClick={() => { signOffException(d.id); setClosing(false); }} className="h-9 px-3.5 rounded-lg bg-compliant-600 text-white text-[0.8125rem] font-semibold hover:bg-compliant-700 transition-colors cursor-pointer inline-flex items-center gap-1.5"><ShieldCheck size={13} /> Close — reviewer sign-off</button>}
               </div>
             </div>
           </div>
@@ -2748,23 +2757,23 @@ export function DeficiencyCard({ d, defaultOpen = false, showControlLink = true,
       {/* reopen — the mirror of the close: same weight, same portal, and the reason IS the record */}
       {reopening && createPortal(
         <div className="modal-backdrop" onClick={() => setReopening(false)}>
-          <div className="modal" onClick={e => e.stopPropagation()}>
+          <div role="dialog" aria-modal="true" aria-labelledby="reopen-deficiency-title" className="modal" onClick={e => e.stopPropagation()}><DialogFocus onEscape={() => setReopening(false)} />
             <div className="px-5 pt-4 pb-3 border-b border-canvas-border">
               <div className="flex items-center justify-between gap-3">
-                <h2 className="text-[15px] font-semibold text-ink-900 inline-flex items-center gap-2"><RotateCcw size={15} className="text-high-700" /> Reopen this exception?</h2>
+                <h2 id="reopen-deficiency-title" className="text-[0.9375rem] font-semibold text-ink-900 inline-flex items-center gap-2"><RotateCcw size={15} className="text-high-700" /> Reopen this deficiency?</h2>
                 <button onClick={() => setReopening(false)} className="h-7 w-7 inline-flex items-center justify-center rounded-md text-ink-400 hover:text-ink-700 cursor-pointer" aria-label="Close"><X size={15} /></button>
               </div>
             </div>
             <div className="p-5">
-              <p className="text-[12.5px] text-ink-600 leading-relaxed"><span className="font-mono font-semibold text-ink-800">{d.id}</span> returns to Remediation — the reviewer sign-off clears, and your reason goes on the trail with your name.</p>
+              <p className="text-[0.8125rem] text-ink-600 leading-relaxed"><span className="font-mono font-semibold text-ink-800">{d.id}</span> returns to Remediation — the reviewer sign-off clears, and your reason goes on the trail with your name.</p>
               <textarea autoFocus value={reopenReason} onChange={e => setReopenReason(e.target.value)} rows={2}
                 placeholder="Why it comes back — e.g. the fix regressed, or new occurrences surfaced"
-                className="mt-3 w-full px-3 py-2 rounded-lg border border-canvas-border bg-canvas-elevated text-[12.5px] resize-none focus:outline-none focus:border-brand-300 focus:ring-2 focus:ring-brand-50" />
+                className="mt-3 w-full px-3 py-2 rounded-lg border border-canvas-border bg-canvas-elevated text-[0.8125rem] resize-none focus:outline-none focus:border-brand-300 focus:ring-2 focus:ring-brand-50" />
               <div className="mt-4 flex items-center justify-end gap-2">
-                <button onClick={() => setReopening(false)} className="h-9 px-3.5 rounded-lg border border-canvas-border text-[12.5px] font-semibold text-ink-600 hover:text-ink-900 cursor-pointer">Cancel</button>
+                <button onClick={() => setReopening(false)} className="h-9 px-3.5 rounded-lg border border-canvas-border text-[0.8125rem] font-semibold text-ink-600 hover:text-ink-900 cursor-pointer">Cancel</button>
                 <button disabled={!reopenReason.trim()}
                   onClick={() => { reopenException(d.id, reopenReason.trim()); setReopening(false);  }}
-                  className="h-9 px-3.5 rounded-lg bg-high-600 text-white text-[12.5px] font-semibold enabled:hover:bg-high-700 disabled:opacity-40 disabled:cursor-not-allowed transition-colors cursor-pointer inline-flex items-center gap-1.5"><RotateCcw size={13} /> Reopen</button>
+                  className="h-9 px-3.5 rounded-lg bg-high-600 text-white text-[0.8125rem] font-semibold enabled:hover:bg-high-700 disabled:opacity-40 disabled:cursor-not-allowed transition-colors cursor-pointer inline-flex items-center gap-1.5"><RotateCcw size={13} /> Reopen</button>
               </div>
             </div>
           </div>
@@ -2783,11 +2792,11 @@ export function DeficiencyCard({ d, defaultOpen = false, showControlLink = true,
         role="button" tabIndex={0} aria-expanded={open} aria-label={`${open ? 'Collapse' : 'Expand'} ${d.id}`}
         onClick={() => setOpen(o => !o)} onKeyDown={onToggleKey}>
         <td className="tight">
-          <span className="inline-flex items-center gap-1.5">{chevron}<span className="font-mono text-[12px] font-semibold text-ink-800">{d.id}</span></span>
-          <div className="ml-[21px]">{controlLink}</div>
+          <span className="inline-flex items-center gap-1.5">{chevron}<span className="font-mono text-[0.75rem] font-semibold text-ink-800">{d.id}</span></span>
+          <div className="ml-5.25">{controlLink}</div>
         </td>
         <td className="tight">
-          <span className="reg-clamp text-[12.5px] text-ink-800" title={d.description}>{d.description}</span>
+          <span className="reg-clamp text-[0.8125rem] text-ink-800" title={d.description}>{d.description}</span>
           {/* A fix that has missed twice is not a remediation problem any more,
               so the count rides the collapsed row where triage happens. */}
           {failures >= 2 && <div className="mt-1"><Pill tone="risk">{failures} failed retests</Pill></div>}
@@ -2796,7 +2805,7 @@ export function DeficiencyCard({ d, defaultOpen = false, showControlLink = true,
         {/* What could have slipped through — the number severity is graded on.
             The owner is never shown the engagement's thresholds, so the
             over-materiality mark is audit-side only. */}
-        <td className={cn('text-right tabular-nums text-[12.5px]', !isOwner && material ? 'text-risk-700 font-semibold' : 'text-ink-700')}
+        <td className={cn('text-right tabular-nums text-[0.8125rem]', !isOwner && material ? 'text-risk-700 font-semibold' : 'text-ink-700')}
           title={d.magnitude === null ? 'Not sized yet' : ct ? 'Clearly trivial' : !isOwner && material ? `At or over materiality ${fmt(M)}` : undefined}>
           {/* An em-dash in the number column; the severity pill beside it says
               "Not sized" in words. */}
@@ -2828,7 +2837,7 @@ export function DeficiencyCard({ d, defaultOpen = false, showControlLink = true,
           <div className="flex items-start justify-between gap-3">
             <div className="inline-flex items-center gap-2 flex-wrap min-w-0">
               {chevron}
-              <span className="font-mono text-[12px] font-semibold text-ink-600">{d.id}</span>
+              <span className="font-mono text-[0.75rem] font-semibold text-ink-600">{d.id}</span>
               {controlLink}
               <Pill tone={d.track === 'design' ? 'mitigated' : 'evidence'}>{d.track === 'design' ? 'TOD' : 'TOE'}</Pill>
               {/* PARKED (Aug 2026) — the Gap type pill and the priced-impact teaser.
@@ -2842,7 +2851,7 @@ export function DeficiencyCard({ d, defaultOpen = false, showControlLink = true,
           {/* The finding itself stays on the collapsed header — clamped to one
               line. Without it it reads as an id and some pills, and you would
               have to open it to find out what it was. */}
-          <p className={cn('text-[13px] text-ink-800 leading-relaxed mt-2.5', !open && 'truncate')}>{d.description}</p>
+          <p className={cn('text-[0.8125rem] text-ink-800 leading-relaxed mt-2.5', !open && 'truncate')}>{d.description}</p>
         </div>
         {detail}
       </div>

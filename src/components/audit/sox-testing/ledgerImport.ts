@@ -455,6 +455,14 @@ export function generalLedgerFrom(files: LedgerFileRead[], entities: GroupEntity
   }
 
   if (!readable) return { ok: false, reason: 'not-a-ledger' };
+  // Rows were there, but for companies the entity list does not have yet (a
+  // ledger uploaded before the trial balance that adds them, or a different
+  // group's file). That is not an empty ledger: it reads, and its lines link
+  // up once the companies are in the list. Calling it "no account rows" held
+  // Continue on a perfectly good file (click-through, 5 Oct — Meridian GL).
+  if (!lines.length && unmatchedNames.size) {
+    return { ok: true, lines: [], byCaption: new Map(), totalLines: 0, matchedEntities: 0, unmatchedNames: [...unmatchedNames] };
+  }
   if (!lines.length) return { ok: false, reason: 'no-rows' };
 
   const byCaption = new Map<string, GlLine[]>();
