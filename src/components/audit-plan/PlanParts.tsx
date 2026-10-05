@@ -43,7 +43,7 @@ export function CheckTag({ check }: { check: PlanCheck }) {
   return (
     <span className="inline-flex items-center gap-1.5">
       <span className="inline-flex items-center gap-1 h-6 px-2.5 rounded-full bg-brand-50 text-brand-700 text-[0.75rem] font-medium whitespace-nowrap">
-        <CircleDashed size={12} aria-hidden /> New check
+        <CircleDashed size={12} aria-hidden /> Needs data
       </span>
       <Pill tone={RATING_TONE[check.impact]}>{check.impact} impact</Pill>
     </span>
@@ -164,7 +164,7 @@ export function CheckMix({ controls }: { controls: PlanControl[] }) {
   const n = (k: PlanCheck['kind']) => sel.filter(c => c.check.kind === k).length;
   const items = [
     { label: 'reuse existing', value: n('reuse') },
-    { label: 'new checks', value: n('new') },
+    { label: 'need data', value: n('new') },
     { label: 'manual', value: n('manual') },
   ];
   return (

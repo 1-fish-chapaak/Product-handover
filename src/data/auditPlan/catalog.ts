@@ -47,6 +47,7 @@ export const PROCESS_LONG: Record<ProcessCode, string> = {
   R2R: 'Record-to-Report',
   S2C: 'Source-to-Contract',
   ITGC: 'IT General Controls',
+  INV: 'Inventory',
 };
 
 export const PROCESS_BLURB: Record<ProcessCode, string> = {
@@ -55,6 +56,7 @@ export const PROCESS_BLURB: Record<ProcessCode, string> = {
   R2R: 'Journals, reconciliations and the close',
   S2C: 'Sourcing, contracts and vendor onboarding',
   ITGC: 'Access, segregation of duties and change',
+  INV: 'Stock movements, counts, valuation and write-offs',
 };
 
 const AP = 'sample-ap-audit';
@@ -424,6 +426,74 @@ export const CHECK_CATALOG: CatalogEntry[] = [
     cadence: 'Quarterly',
     keywords: ['access review', 'uar', 'recertification'],
     automatable: false, dataNeeds: ['Access review sign-offs'], sampleId: RECON,
+  },
+
+  // ── Inventory ───────────────────────────────────────────────────────────
+  {
+    key: 'inv-negative', process: 'INV', subProcess: 'Stock Movements', controlId: 'INV-C01',
+    controlTitle: 'Negative stock prevention',
+    controlDescription: 'Goods issues that would drive a material’s stock below zero are blocked at posting.',
+    riskTitle: 'Issues recorded without stock on hand', riskRating: 'High', frequency: 'Daily', controlType: 'Preventive',
+    checkName: 'Negative stock balances',
+    checkDescription: 'Materials and plants whose book stock went negative on any day in the period, with the movements that caused it.',
+    cadence: 'Daily',
+    keywords: ['negative stock', 'negative inventory', 'stock below zero'],
+    automatable: true, dataNeeds: ['Stock on posting date', 'Material movements'], sampleId: RECON,
+  },
+  {
+    key: 'inv-writeoff', process: 'INV', subProcess: 'Write-offs & Scrap', controlId: 'INV-C02',
+    controlTitle: 'Write-off and scrap approval',
+    controlDescription: 'Scrapping and inventory write-offs above ₹1L are approved per the DOA before posting.',
+    riskTitle: 'Stock written off to hide losses', riskRating: 'High', frequency: 'Event-driven', controlType: 'Preventive',
+    checkName: 'Unapproved write-offs & scrap',
+    checkDescription: 'Scrap and write-off movements (types 551 / 701) above threshold without an approver at the right DOA level.',
+    cadence: 'Weekly',
+    keywords: ['write-off', 'write off', 'writeoff', 'scrap', 'inventory adjustment'],
+    automatable: true, dataNeeds: ['Material movements', 'DOA matrix'], sampleId: RECON,
+  },
+  {
+    key: 'inv-slow', process: 'INV', subProcess: 'Valuation', controlId: 'INV-C03',
+    controlTitle: 'Slow-moving stock review',
+    controlDescription: 'Stock with no movement in 180 days is reviewed quarterly for provisioning.',
+    riskTitle: 'Obsolete stock carried at full value', riskRating: 'Medium', frequency: 'Quarterly', controlType: 'Detective',
+    checkName: 'Slow-moving & obsolete stock',
+    checkDescription: 'Materials with stock but no issue in 90 / 180 / 365 days, valued and aged by bucket.',
+    cadence: 'Quarterly',
+    keywords: ['slow moving', 'slow-moving', 'obsolete', 'non-moving', 'ageing stock', 'aging stock'],
+    automatable: true, dataNeeds: ['Stock on posting date', 'Material movements', 'Material master'], sampleId: RECON,
+  },
+  {
+    key: 'inv-count', process: 'INV', subProcess: 'Physical Inventory', controlId: 'INV-C04',
+    controlTitle: 'Physical count reconciliation',
+    controlDescription: 'Cycle-count differences above tolerance are investigated before the book stock is adjusted.',
+    riskTitle: 'Book stock differs from physical stock', riskRating: 'Medium', frequency: 'Monthly', controlType: 'Detective',
+    checkName: 'Count vs book variance',
+    checkDescription: 'Count documents where the physical quantity differs from book by more than 2% or ₹50k, and how they were cleared.',
+    cadence: 'Monthly',
+    keywords: ['physical count', 'cycle count', 'stock count', 'physical inventory', 'stock take'],
+    automatable: true, dataNeeds: ['Physical inventory documents', 'Stock on posting date'], sampleId: RECON,
+  },
+  {
+    key: 'inv-grn-backdated', process: 'INV', subProcess: 'Stock Movements', controlId: 'INV-C05',
+    controlTitle: 'Goods receipt posting date',
+    controlDescription: 'Goods receipts are posted in the period the goods arrived.',
+    riskTitle: 'Receipts shifted across periods', riskRating: 'Low', frequency: 'Monthly', controlType: 'Detective',
+    checkName: 'Back-dated goods receipts',
+    checkDescription: 'Goods receipts whose posting date is earlier than the entry date by more than 3 days, around period end.',
+    cadence: 'Monthly',
+    keywords: ['back-dated grn', 'backdated grn', 'grn date', 'receipt posting'],
+    automatable: true, dataNeeds: ['Material movements'], sampleId: RECON,
+  },
+  {
+    key: 'inv-nrv', process: 'INV', subProcess: 'Valuation', controlId: 'INV-C06',
+    controlTitle: 'Net realisable value review',
+    controlDescription: 'Finance compares carrying value to recent selling prices and books a provision where NRV is lower.',
+    riskTitle: 'Inventory overstated', riskRating: 'Medium', frequency: 'Quarterly', controlType: 'Detective',
+    checkName: 'NRV walkthrough',
+    checkDescription: 'Inspect the quarter’s NRV working and the provision journal; re-perform for a sample of materials.',
+    cadence: 'Quarterly',
+    keywords: ['nrv', 'net realisable value', 'net realizable value'],
+    automatable: false, dataNeeds: ['NRV working'], sampleId: RECON,
   },
 ];
 

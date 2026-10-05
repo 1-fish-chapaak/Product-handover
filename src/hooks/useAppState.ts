@@ -24,6 +24,10 @@ export type View =
   // Workflow Builder — agent chooser (General / GRC) + Audit with AI
   | 'workflow-builder'
   | 'audit-with-ai'
+  // Control Library → adapt standard workflows to the client's data
+  | 'adapt-standard'
+  // Every batch build and what needs the user in them
+  | 'builds'
   // Governance
   | 'business-processes'
   | 'bp-detail'
@@ -106,6 +110,16 @@ export interface WorkflowAgentSeed {
   /** Build a committed plan's draft checks one by one. `checkIds` narrows it
    *  to specific drafts (e.g. one row from the Workflow Library). */
   buildQueue?: { engagementId: string; checkIds?: string[] };
+  /** Show a batch build (created by Adapt / Audit with AI) and run it. */
+  batchId?: string;
+  /** Open one workflow's review session (a new tab from a batch card). */
+  reviewSessionId?: string;
+}
+
+/** Hand-off from the Control Library's adapt modal to the adapt plan page. */
+export interface AdaptSeed {
+  keys: string[];
+  choices: Record<string, import('../data/auditPlan').FileSourceChoice | null>;
 }
 export type ExceptionRole = 'risk-owner' | 'auditor';
 export type ArtifactTab = 'plan' | 'code' | 'sources' | 'output' | 'flow' | 'preview' | 'history';
@@ -177,6 +191,8 @@ export interface AppState {
   workflowBuilderEngagementName: string | null;
   /** Pending hand-off into a workflow-builder chat (agent + optional prompt / build queue). */
   workflowAgentSeed: WorkflowAgentSeed | null;
+  /** Pending Control Library adapt (keys + file choices) for the adapt page. */
+  adaptSeed: AdaptSeed | null;
   // Pre-fill text dropped into the chat composer (not auto-submitted). Used
   // when another surface — e.g. the workspace panel's "Edit assumptions"
   // action — wants to seed the textarea with a draft prompt.
@@ -264,8 +280,37 @@ const getInitialView = (): View => {
   if (v === 'knowledge-hub') return 'knowledge-hub';
   if (v === 'dev-configurable-engagement-v3') return 'dev-configurable-engagement-v3';
   if (v === 'home') return 'home';
+  if (v === 'builds') return 'builds';
+  // First-time users start on Home — its setup checklist is the way in. Once
+  // setup is done the app opens on Ask IRA again.
+  try { if (localStorage.getItem('irame.setup.done') !== '1') return 'home'; } catch { /* ignore */ }
   return 'chat';
 };
+
+/** An adapt the user started but hasn't built yet survives a reload — the
+ *  plan page reopens on it, and Home offers to resume it. */
+const ADAPT_DRAFT_KEY = 'irame.adaptDraft';
+function loadAdaptDraft(): AdaptSeed | null {
+  try {
+    const raw = localStorage.getItem(ADAPT_DRAFT_KEY);
+    const v = raw ? JSON.parse(raw) : null;
+    return v && Array.isArray(v.keys) ? v : null;
+  } catch { return null; }
+}
+export function saveAdaptDraft(seed: AdaptSeed | null): void {
+  try {
+    if (seed) localStorage.setItem(ADAPT_DRAFT_KEY, JSON.stringify(seed));
+    else localStorage.removeItem(ADAPT_DRAFT_KEY);
+  } catch { /* ignore */ }
+}
+
+/** ?view=chat&session=<id> — a batch-built workflow's review session. */
+function getInitialReviewSession(): WorkflowAgentSeed | null {
+  if (typeof window === 'undefined') return null;
+  const params = new URLSearchParams(window.location.search);
+  const session = params.get('session');
+  return params.get('view') === 'chat' && session ? { agent: 'grc', reviewSessionId: session } : null;
+}
 
 /** ?view=knowledge-hub&tab=learn lands on the Smart Learn tab. */
 export const getInitialKnowledgeHubTab = (): 'data' | 'learn' => {
@@ -369,7 +414,9 @@ const INITIAL_STATE: AppState = {
   chatComposerDraft: getInitialChatDraft(),
   chatWorkflowContext: null,
   workflowBuilderEngagementName: null,
-  workflowAgentSeed: null,
+  // A batch card's "Review ↗" opens ?view=chat&session=<id> in a new tab.
+  workflowAgentSeed: getInitialReviewSession(),
+  adaptSeed: loadAdaptDraft(),
   workflowBuilderSeedPrompt: null,
   selectedChatId: null,
   queryAssumptions: [],
@@ -604,6 +651,17 @@ export function useAppState() {
     }));
   }, []);
 
+  const startAdaptStandard = useCallback((seed: AdaptSeed) => {
+    saveAdaptDraft(seed);
+    setState(prev => ({ ...prev, view: 'adapt-standard' as View, adaptSeed: seed }));
+  }, []);
+
+  /** The adapt was built (or abandoned) — drop the draft. */
+  const clearAdaptSeed = useCallback(() => {
+    saveAdaptDraft(null);
+    setState(prev => ({ ...prev, adaptSeed: null }));
+  }, []);
+
   const clearWorkflowAgentSeed = useCallback(() => {
     setState(prev => (prev.workflowAgentSeed ? { ...prev, workflowAgentSeed: null } : prev));
   }, []);
@@ -810,6 +868,8 @@ export function useAppState() {
     startWorkflowForEngagement,
     startWorkflowAgent,
     clearWorkflowAgentSeed,
+    startAdaptStandard,
+    clearAdaptSeed,
     openWorkflowExecutor,
     openAuditExecution,
     openEngagement,

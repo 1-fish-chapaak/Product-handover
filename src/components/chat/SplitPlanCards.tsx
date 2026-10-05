@@ -9,10 +9,10 @@
  * chat, so switching starts a fresh GRC chat with the same prompt.
  */
 import { useState } from 'react';
-import { ArrowRight, Check, ExternalLink, Layers, ShieldCheck, SkipForward, Square, Workflow as WorkflowIcon, CircleDashed, Link2, FileSearch } from 'lucide-react';
+import { ArrowRight, Check, ExternalLink, ShieldCheck, CircleDashed, Link2, FileSearch } from 'lucide-react';
 import { Button } from '../shared/Button';
 import { Pill } from '../shared/StatusBadge';
-import type { BuildQueue, NudgeData, SplitPlanData, SplitSummaryData } from './splitPlan';
+import type { NudgeData, SplitPlanData } from './splitPlan';
 import { coverageFor, withPhases, type AuditPlan, type PlanControl, type PlanEngagement } from '../../data/auditPlan';
 import { CheckTag, CoverageMeter, IraMark, TargetPicker } from '../audit-plan/PlanParts';
 import { RATING_TONE } from '../audit-plan/planTone';
@@ -220,69 +220,6 @@ export function AgentNudgeCard({ data, onSwitch, onKeep }: { data: NudgeData; on
           {data.status === 'switched' ? 'Switched to the GRC agent in a new chat.' : 'Kept as one General workflow.'}
         </div>
       )}
-    </div>
-  );
-}
-
-/** Pinned above the composer while Ira builds a plan's new checks in turn. */
-export function BuildQueueBar({ queue, onSkip, onStop }: { queue: BuildQueue; onSkip: () => void; onStop: () => void }) {
-  const total = queue.items.length;
-  const done = queue.items.filter(i => i.status === 'built').length;
-  const current = queue.items[queue.index];
-  return (
-    <div className="rounded-lg border border-canvas-border bg-canvas-elevated px-3 py-2.5" role="status" aria-live="polite">
-      <div className="flex items-center gap-3">
-        <WorkflowIcon size={14} className="text-brand-600 shrink-0" aria-hidden />
-        <div className="min-w-0 flex-1">
-          <div className="text-[0.75rem] text-ink-500 truncate">
-            <span className="font-medium text-ink-900">Building {Math.min(queue.index + 1, total)} of {total}</span>
-            {current ? <> · {current.name}</> : null}
-            <span className="text-ink-400"> · {queue.engagementName}</span>
-          </div>
-          <div className="mt-1.5 flex items-center gap-1" aria-hidden>
-            {queue.items.map(i => (
-              <span
-                key={i.checkId}
-                title={`${i.name} — ${i.status}`}
-                className={`h-1.5 flex-1 rounded-full ${
-                  i.status === 'built' ? 'bg-brand-600' : i.status === 'building' ? 'bg-brand-300' : i.status === 'skipped' ? 'bg-ink-300' : 'bg-paper-100'
-                }`}
-              />
-            ))}
-          </div>
-        </div>
-        <span className="font-mono tabular-nums text-[0.75rem] text-ink-500 shrink-0">{done}/{total}</span>
-        <Button variant="ghost" size="sm" leftIcon={<SkipForward size={12} />} onClick={onSkip} title="Leave this check as a draft and move on">Skip</Button>
-        <Button variant="ghost" size="sm" leftIcon={<Square size={10} />} onClick={onStop} title="Stop — unbuilt checks stay as drafts">Stop</Button>
-      </div>
-    </div>
-  );
-}
-
-
-export function SplitSummaryCard({ data, onOpenEngagement, onOpenLibrary }: {
-  data: SplitSummaryData;
-  onOpenEngagement: (id: string) => void;
-  onOpenLibrary: () => void;
-}) {
-  return (
-    <div className="max-w-[40rem] rounded-lg border border-canvas-border bg-canvas-elevated p-4">
-      <div className="flex items-center gap-2">
-        <Layers size={15} className="text-brand-600" aria-hidden />
-        <span className="text-[0.875rem] font-semibold text-ink-900">{data.engagementName}</span>
-      </div>
-      <ul className="mt-2 space-y-1">
-        {data.built.map(n => (
-          <li key={n} className="flex items-center gap-2 text-[0.8125rem] text-ink-700"><Check size={13} className="text-compliant-700" aria-hidden /> {n}</li>
-        ))}
-        {data.drafts.map(n => (
-          <li key={n} className="flex items-center gap-2 text-[0.8125rem] text-ink-500"><CircleDashed size={13} aria-hidden /> {n} <span className="text-ink-400">— draft</span></li>
-        ))}
-      </ul>
-      <div className="mt-3 flex flex-wrap items-center gap-2">
-        <Button variant="primary" size="sm" rightIcon={<ExternalLink size={12} />} onClick={() => onOpenEngagement(data.engagementId)}>Open engagement</Button>
-        <Button variant="outline" size="sm" onClick={onOpenLibrary}>Workflow Library</Button>
-      </div>
     </div>
   );
 }

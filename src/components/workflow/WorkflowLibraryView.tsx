@@ -23,7 +23,11 @@ import { useToast } from '../shared/Toast';
 import { useCan } from '../../context/CurrentUserContext';
 import { useAuditLog } from '../../context/AdminDataContext';
 import { BulkExecuteModal, Checkbox } from './BulkExecuteModal';
-import { usePlanWorkflows } from '../../data/auditPlan';
+import {
+  CHECK_CATALOG, PROCESS_LONG, fmtHours, isStdLive, readinessOf, stdWorkflowName, usePlanWorkflows, useStdState, valueOfKey,
+  type FileSourceChoice, type StdReadiness,
+} from '../../data/auditPlan';
+import AdaptDataModal from '../audit-plan/AdaptDataModal';
 
 interface Props {
   onCreateWorkflow?: () => void;
@@ -35,6 +39,9 @@ interface Props {
   /** A plan check still in draft — build it with Ira (GRC agent). */
   onBuildDraft?: (engagementId: string, checkId: string) => void;
   onOpenEngagement?: (engagementId: string) => void;
+  /** Adapt standard workflows that still need the client's data. */
+  onAdaptStandard?: (keys: string[], choices: Record<string, FileSourceChoice | null>) => void;
+  onOpenBuilds?: () => void;
 }
 
 export type LibraryWorkflow = {
@@ -54,6 +61,9 @@ export type LibraryWorkflow = {
   engagementId?: string;
   engagementName?: string;
   checkId?: string;
+  /** Standard library workflows — preloaded in every account. */
+  stdKey?: string;
+  stdReadiness?: StdReadiness;
 };
 
 export const LIBRARY_WORKFLOWS: LibraryWorkflow[] = [
@@ -201,7 +211,7 @@ export const LIBRARY_WORKFLOWS: LibraryWorkflow[] = [
   },
 ];
 
-export default function WorkflowLibraryView({ onCreateWorkflow, onSelectWorkflow, onRunWorkflow, processFilter, onBuildDraft, onOpenEngagement }: Props) {
+export default function WorkflowLibraryView({ onCreateWorkflow, onSelectWorkflow, onRunWorkflow, processFilter, onBuildDraft, onOpenEngagement, onAdaptStandard, onOpenBuilds }: Props) {
   const { can } = useCan();
   const { addToast } = useToast();
   const logEvent = useAuditLog();
@@ -225,24 +235,52 @@ export default function WorkflowLibraryView({ onCreateWorkflow, onSelectWorkflow
   // Checks created by audit plans sit on top of the catalog — drafts until
   // Ira builds them, then ordinary rows tagged with their engagement.
   const planRows = usePlanWorkflows();
+  const std = useStdState();
+  const [adaptKeys, setAdaptKeys] = useState<string[] | null>(null);
+  // Standard workflows not already represented by a catalog row (those with a
+  // library workflow) or a plan check.
+  const stdRows = useMemo<LibraryWorkflow[]>(() => CHECK_CATALOG
+    .filter(e => e.automatable && !e.existingWorkflowId && !planRows.some(r => r.stdKey === e.key))
+    .map(e => {
+      const readiness = readinessOf(e, std);
+      return {
+        id: `std-${e.key}`,
+        name: stdWorkflowName(e),
+        description: e.checkDescription,
+        tags: ['Standard', e.process],
+        businessProcess: PROCESS_LONG[e.process],
+        controlId: e.controlId,
+        live: readiness === 'live',
+        singleRunOnly: readiness !== 'live',
+        stdKey: e.key,
+        stdReadiness: readiness,
+      };
+    }), [std, planRows]);
   const allWorkflows = useMemo<LibraryWorkflow[]>(() => [
-    ...planRows.map(r => ({
+    ...planRows.map(r => {
+      // Built by a batch isn't live until someone approves it.
+      const live = r.status === 'built' && (!r.stdKey || isStdLive(r.stdKey));
+      return {
       id: r.id,
       name: r.name,
       description: r.description,
       tags: r.tags,
       businessProcess: r.businessProcess,
       controlId: r.controlId,
-      live: r.status === 'built',
+      live,
       // A draft has nothing to run yet.
-      singleRunOnly: r.status === 'draft',
+      singleRunOnly: !live,
       planStatus: r.status,
+      stdKey: r.stdKey,
+      stdReadiness: r.status === 'built' && !live ? 'awaiting-review' as const : undefined,
       engagementId: r.engagementId,
       engagementName: r.engagementName,
       checkId: r.checkId,
-    })),
+      };
+    }),
     ...LIBRARY_WORKFLOWS,
-  ], [planRows]);
+    ...stdRows,
+  ], [planRows, stdRows]);
 
   const selectedWorkflows = useMemo(
     () => allWorkflows.filter(w => selectedIds.has(w.id)),
@@ -355,6 +393,9 @@ export default function WorkflowLibraryView({ onCreateWorkflow, onSelectWorkflow
     }
     // A draft plan check has no detail page yet — building it is the next step.
     const wf = allWorkflows.find(w => w.id === id);
+    // A standard workflow that needs data adapts; one awaiting review goes to review.
+    if (wf?.stdReadiness === 'needs-data' && wf.stdKey) { setAdaptKeys([wf.stdKey]); return; }
+    if (wf?.stdReadiness === 'awaiting-review') { onOpenBuilds?.(); return; }
     if (wf?.planStatus === 'draft' && wf.engagementId && wf.checkId) {
       onBuildDraft?.(wf.engagementId, wf.checkId);
       return;
@@ -581,10 +622,18 @@ export default function WorkflowLibraryView({ onCreateWorkflow, onSelectWorkflow
                           <span className="self-start text-[0.6875rem] font-mono text-ink-500 tracking-tight">
                             {wf.controlId}
                           </span>
+                          {wf.stdReadiness && wf.stdReadiness !== 'live' && (
+                            <span className="self-start flex items-center gap-1.5 text-[0.6875rem]">
+                              <span className={`inline-flex items-center px-1.5 h-5 rounded-full font-medium ${wf.stdReadiness === 'needs-data' ? 'bg-mitigated-50 text-mitigated-700' : 'bg-evidence-50 text-evidence-700'}`}>
+                                {wf.stdReadiness === 'needs-data' ? 'Needs data' : 'Awaiting review'}
+                              </span>
+                              <span className="text-ink-400">Standard library · ~{fmtHours(valueOfKey(wf.stdKey)?.hoursPerMonth ?? 0)}/mo once live</span>
+                            </span>
+                          )}
                           {wf.engagementName && (
                             <span className="self-start flex items-center gap-1.5 text-[0.6875rem] text-ink-500">
                               {wf.planStatus === 'draft' && (
-                                <span className="inline-flex items-center px-1.5 h-5 rounded-full bg-draft-50 text-draft-700 font-medium">Draft</span>
+                                <span className="inline-flex items-center px-1.5 h-5 rounded-full bg-mitigated-50 text-mitigated-700 font-medium">Needs data</span>
                               )}
                               <button
                                 type="button"
@@ -618,7 +667,18 @@ export default function WorkflowLibraryView({ onCreateWorkflow, onSelectWorkflow
                         </div>
                       </td>
                       <td className={`px-4 py-4 align-top ${bulkMode ? 'pointer-events-none opacity-40' : ''}`}>
-                        {wf.planStatus === 'draft' ? (
+                        {wf.stdReadiness === 'needs-data' || wf.stdReadiness === 'awaiting-review' ? (
+                          <div className="flex items-center justify-end">
+                            <button
+                              type="button"
+                              disabled={bulkMode}
+                              onClick={e => { e.stopPropagation(); handleRowClick(wf.id); }}
+                              className="inline-flex items-center gap-1.5 h-8 px-3 rounded-md bg-brand-50 text-brand-700 text-[0.75rem] font-semibold hover:bg-brand-100 transition-colors cursor-pointer whitespace-nowrap"
+                            >
+                              {wf.stdReadiness === 'needs-data' ? 'Adapt with your data' : 'Review'} <ArrowRight size={12} />
+                            </button>
+                          </div>
+                        ) : wf.planStatus === 'draft' ? (
                           <div className="flex items-center justify-end">
                             <button
                               type="button"
@@ -773,6 +833,15 @@ export default function WorkflowLibraryView({ onCreateWorkflow, onSelectWorkflow
         )}
       </AnimatePresence>
 
+      <AnimatePresence>
+        {adaptKeys && (
+          <AdaptDataModal
+            keys={adaptKeys}
+            onClose={() => setAdaptKeys(null)}
+            onContinue={(choices) => { const k = adaptKeys; setAdaptKeys(null); onAdaptStandard?.(k, choices); }}
+          />
+        )}
+      </AnimatePresence>
     </motion.div>
   );
 }

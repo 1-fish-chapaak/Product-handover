@@ -31,16 +31,18 @@ import { useAuditLog } from '../../context/AdminDataContext';
 import type { ProcessCode } from '../../data/engagements';
 import {
   CHECK_CATALOG, PROCESS_BLURB, PROCESS_LONG, coverageFor, commitPlan, planFromContext, portfolioCoverage, withPhases,
+  loadAuditDraft, saveAuditDraft, clearAuditDraft, createBatch, itemsFromPlanRows,
   type AuditPlan, type AuditPlanContext, type CommittedEngagement, type PlanEngagement,
 } from '../../data/auditPlan';
 import { LIBRARY_WORKFLOWS } from '../workflow/WorkflowLibraryView';
 import { CheckMix, ControlCheckCard, CoverageMeter, IraMark, PlanGantt, TargetPicker } from './PlanParts';
+import AdaptDataModal from './AdaptDataModal';
 
 interface Props {
   onBack: () => void;
   onOpenEngagement: (engagementId: string) => void;
-  /** Build an engagement's new checks one by one in Ask IRA (GRC agent). */
-  onBuildChecks: (engagementId: string) => void;
+  /** A batch of this plan's new checks, built on the files the user chose. */
+  onBuildBatch: (batchId: string) => void;
   onOpenLibrary: () => void;
 }
 
@@ -60,28 +62,30 @@ const DATABASES = SEED.filter(s => s.type === 'database');
 type Stage = 'context' | 'analysing' | 'plan' | 'timeline' | 'create' | 'done';
 const STAGE_STEP: Record<Stage, number> = { context: 0, analysing: 0, plan: 1, timeline: 2, create: 3, done: 3 };
 
-export default function AuditWithAiView({ onBack, onOpenEngagement, onBuildChecks, onOpenLibrary }: Props) {
+export default function AuditWithAiView({ onBack, onOpenEngagement, onBuildBatch, onOpenLibrary }: Props) {
   const { currentUser } = useCurrentUser();
   const logEvent = useAuditLog();
   const reduced = useReducedMotion();
   const scrollRef = useRef<HTMLDivElement>(null);
 
-  const [stage, setStage] = useState<Stage>('context');
+  // Restore progress if the user left mid-way (or reloaded).
+  const [draft] = useState(loadAuditDraft);
+  const [stage, setStage] = useState<Stage>(draft?.stage ?? 'context');
   // ── Step 1: context ──
-  const [databases, setDatabases] = useState<string[]>(['SAP ERP: AP Module', 'Vendor Master Data', 'GL Transaction History']);
-  const [documents, setDocuments] = useState<string[]>(['P2P Standard Operating Procedure.pdf', 'Delegation of Authority matrix.xlsx']);
-  const [uploadedDocs, setUploadedDocs] = useState<string[]>([]);
-  const [reports, setReports] = useState<string[]>([ATR_LIBRARY[0]?.id].filter(Boolean) as string[]);
-  const [files, setFiles] = useState<string[]>([]);
+  const [databases, setDatabases] = useState<string[]>(draft?.databases ?? ['SAP ERP: AP Module', 'Vendor Master Data', 'GL Transaction History']);
+  const [documents, setDocuments] = useState<string[]>(draft?.documents ?? ['P2P Standard Operating Procedure.pdf', 'Delegation of Authority matrix.xlsx']);
+  const [uploadedDocs, setUploadedDocs] = useState<string[]>(draft?.uploadedDocs ?? []);
+  const [reports, setReports] = useState<string[]>(draft?.reports ?? ([ATR_LIBRARY[0]?.id].filter(Boolean) as string[]));
+  const [files, setFiles] = useState<string[]>(draft?.files ?? []);
   const [pickerOpen, setPickerOpen] = useState(false);
-  const [scopeAll, setScopeAll] = useState(true);
-  const [domains, setDomains] = useState<ProcessCode[]>(['P2P', 'R2R']);
-  const [notes, setNotes] = useState('');
+  const [scopeAll, setScopeAll] = useState(draft?.scopeAll ?? true);
+  const [domains, setDomains] = useState<ProcessCode[]>(draft?.domains ?? ['P2P', 'R2R']);
+  const [notes, setNotes] = useState(draft?.notes ?? '');
   const docInputRef = useRef<HTMLInputElement>(null);
 
   // ── Plan ──
-  const [plan, setPlan] = useState<AuditPlan | null>(null);
-  const [expanded, setExpanded] = useState<string | null>(null);
+  const [plan, setPlan] = useState<AuditPlan | null>(draft?.plan ?? null);
+  const [expanded, setExpanded] = useState<string | null>(draft?.plan?.engagements[0]?.id ?? null);
   const [committed, setCommitted] = useState<CommittedEngagement[] | null>(null);
 
   const scopeDomains = scopeAll ? DOMAINS : domains;
@@ -90,6 +94,15 @@ export default function AuditWithAiView({ onBack, onOpenEngagement, onBuildCheck
   }), [databases, documents, uploadedDocs, reports, files, notes]);
 
   useEffect(() => { scrollRef.current?.scrollTo({ top: 0 }); }, [stage]);
+
+  // Keep the draft as the user works; drop it once the plan is created.
+  useEffect(() => {
+    if (stage === 'done') { clearAuditDraft(); return; }
+    saveAuditDraft({
+      stage: stage === 'analysing' ? 'context' : stage,
+      databases, documents, uploadedDocs, reports, files, scopeAll, domains, notes, plan,
+    });
+  }, [stage, databases, documents, uploadedDocs, reports, files, scopeAll, domains, notes, plan]);
 
   const toggle = <T,>(list: T[], v: T) => (list.includes(v) ? list.filter(x => x !== v) : [...list, v]);
 
@@ -202,7 +215,8 @@ export default function AuditWithAiView({ onBack, onOpenEngagement, onBuildCheck
               <DoneStep
                 committed={committed}
                 onOpenEngagement={onOpenEngagement}
-                onBuildChecks={onBuildChecks}
+                owner={currentUser?.name ?? 'You'}
+                onBuildBatch={onBuildBatch}
                 onOpenLibrary={onOpenLibrary}
               />
             )}
@@ -550,7 +564,7 @@ function PlanStep({ plan, expanded, setExpanded, updateEng }: {
               { v: selected.length, l: 'engagements' },
               { v: allControls.length, l: 'controls' },
               { v: allControls.filter(c => c.check.kind === 'reuse').length, l: 'reuse existing' },
-              { v: newChecks.length, l: 'new checks' },
+              { v: newChecks.length, l: 'need your data' },
             ].map(k => (
               <div key={k.l}>
                 <div className="font-mono tabular-nums text-[1.5rem] font-semibold text-ink-900 leading-none">{k.v}</div>
@@ -658,7 +672,7 @@ function EngagementCard({ eng, open, onToggleOpen, updateEng }: {
                 onClick={() => setFilter(k)}
                 className={`h-7 px-3 rounded-full text-[0.75rem] font-medium cursor-pointer transition-colors ${filter === k ? 'bg-ink-900 text-white' : 'text-ink-600 hover:bg-paper-100'}`}
               >
-                {{ all: 'All', new: 'New checks', reuse: 'Reuse existing', manual: 'Manual' }[k]} <span className="tabular-nums opacity-70">{count(k)}</span>
+                {{ all: 'All', new: 'Need data', reuse: 'Reuse existing', manual: 'Manual' }[k]} <span className="tabular-nums opacity-70">{count(k)}</span>
               </button>
             ))}
           </div>
@@ -777,12 +791,15 @@ function CreateStep({ plan }: { plan: AuditPlan }) {
   );
 }
 
-function DoneStep({ committed, onOpenEngagement, onBuildChecks, onOpenLibrary }: {
+function DoneStep({ committed, owner, onOpenEngagement, onBuildBatch, onOpenLibrary }: {
   committed: CommittedEngagement[];
   onOpenEngagement: (id: string) => void;
-  onBuildChecks: (id: string) => void;
+  owner: string;
+  onBuildBatch: (batchId: string) => void;
   onOpenLibrary: () => void;
 }) {
+  // Ask for the files first (matched sources, bulk upload), then build.
+  const [adaptFor, setAdaptFor] = useState<CommittedEngagement | null>(null);
   const drafts = committed.reduce((s, c) => s + c.newChecks.length, 0);
   return (
     <div>
@@ -807,7 +824,7 @@ function DoneStep({ committed, onOpenEngagement, onBuildChecks, onOpenLibrary }:
                 Open engagement
               </Button>
               {c.newChecks.length > 0 && (
-                <Button variant="primary" size="sm" leftIcon={<WorkflowIcon size={13} />} onClick={() => onBuildChecks(c.engagementId)}>
+                <Button variant="primary" size="sm" leftIcon={<WorkflowIcon size={13} />} onClick={() => setAdaptFor(c)}>
                   Build {c.newChecks.length} check{c.newChecks.length === 1 ? '' : 's'} with Ira
                 </Button>
               )}
@@ -820,6 +837,28 @@ function DoneStep({ committed, onOpenEngagement, onBuildChecks, onOpenLibrary }:
           See the drafts in the Workflow Library →
         </button>
       )}
+      <AnimatePresence>
+        {adaptFor && (
+          <AdaptDataModal
+            keys={adaptFor.newChecks.map(r => r.stdKey).filter((x): x is string => !!x)}
+            onClose={() => setAdaptFor(null)}
+            onContinue={(choices) => {
+              const c = adaptFor;
+              setAdaptFor(null);
+              const items = itemsFromPlanRows(c.newChecks, choices);
+              const batchId = createBatch({
+                title: `Building ${items.length} check${items.length === 1 ? '' : 's'} for ${c.engagementName}`,
+                origin: 'audit-plan',
+                engagementId: c.engagementId,
+                engagementName: c.engagementName,
+                owner,
+                items,
+              });
+              onBuildBatch(batchId);
+            }}
+          />
+        )}
+      </AnimatePresence>
     </div>
   );
 }
