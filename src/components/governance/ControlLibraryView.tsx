@@ -1,4 +1,4 @@
-import { useMemo, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { motion, AnimatePresence, useReducedMotion } from 'motion/react';
 import {
   Plus, Download, Star, Workflow, Share2, Search, Check, Minus, ArrowRight, FileSearch, CircleDashed, Database,
@@ -140,7 +140,13 @@ export default function ControlLibraryView({ processFilter, onAdapt, onOpenBuild
   });
   const [showCreateDrawer, setShowCreateDrawer] = useState(false);
   const [linkWfControlId, setLinkWfControlId] = useState<string | null>(null);
-  const [processIdx, setProcessIdx] = useState(() => Math.max(0, PROCESS_ORDER.indexOf((processFilter as ProcessCode) ?? 'P2P')));
+  const [processIdx, setProcessIdx] = useState(() => {
+    // Process Hub hands over the process it was opened from.
+    // Read here, cleared in an effect — StrictMode runs initialisers twice.
+    let handed: string | null = null;
+    try { handed = window.sessionStorage.getItem('control-library.open-process'); } catch { /* ignore */ }
+    return Math.max(0, PROCESS_ORDER.indexOf(((handed ?? processFilter) as ProcessCode) ?? 'P2P'));
+  });
   const [tab, setTab] = useState<LibTab>('all');
   const [query, setQuery] = useState('');
   const [statusFilter, setStatusFilter] = useState<StatusFilter>('all');
@@ -149,6 +155,9 @@ export default function ControlLibraryView({ processFilter, onAdapt, onOpenBuild
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [adaptKeys, setAdaptKeys] = useState<string[] | null>(null);
   const [welcomeDismissed, setWelcomeDismissed] = useState(() => readDismissed(fresh));
+  useEffect(() => {
+    try { window.sessionStorage.removeItem('control-library.open-process'); } catch { /* ignore */ }
+  }, []);
 
   // ── Per-process numbers (cards, header) ──
   const processStats = useMemo(() => PROCESS_ORDER.map(p => {

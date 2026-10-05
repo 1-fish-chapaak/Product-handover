@@ -24,13 +24,13 @@ import {
 } from 'lucide-react';
 import { useCurrentUser } from '../../context/CurrentUserContext';
 import { useToast } from '../shared/Toast';
-import { SEED } from '../data-sources/sources';
+import { connectedDatabaseCount } from '../../hooks/useKnowledgeSources';
 import { libraryEngagements, type Engagement, type ProcessCode } from '../../data/engagements';
 import { useCreatedEngagements } from '../../data/createdEngagementsStore';
 import {
   CHECK_CATALOG, MILESTONES, PROCESS_LONG, allLive, catalogFor, filesForEntry, fmtHours, getEngagementPlan, hoursFor,
   hoursPerMonthFor, isNameHidden, isStdLive, itemHours, leaderboard, pendingItems, readinessOf, runRateAddedToday, runRateFor, setNameHidden,
-  streakFor, useAllBatches, useLedgerVersion, useStdState, loadAuditDraft, withTeammates, type FileSourceChoice, type ScoreWindow,
+  streakFor, useAllBatches, useLedgerVersion, useStdState, loadAuditDraft, withTeammates, workspaceSuffix, type FileSourceChoice, type ScoreWindow,
 } from '../../data/auditPlan';
 import type { AdaptSeed } from '../../hooks/useAppState';
 import AdaptDataModal from '../audit-plan/AdaptDataModal';
@@ -51,7 +51,8 @@ const DAY = 86_400_000;
 const TARGET = 85;
 const PROCESSES: ProcessCode[] = ['P2P', 'O2C', 'R2R', 'S2C', 'INV', 'ITGC'];
 const SETUP_DONE_KEY = 'irame.setup.done';
-const INVITED_KEY = 'irame.setup.invited';
+/** Per workspace — inviting Platform's team says nothing about a new client's. */
+const invitedKey = () => `irame.setup.invited${workspaceSuffix()}`;
 
 const initials = (n: string) => n.split(' ').map(p => p[0]).join('').slice(0, 2).toUpperCase();
 const firstName = (n: string) => n.split(' ')[0];
@@ -87,7 +88,7 @@ export default function TodayView(p: Props) {
   // One clock per render pass — the 30-day windows compare against it.
   const [now] = useState(() => Date.now());
   const [auditDraft] = useState(loadAuditDraft);
-  const [invited, setInvited] = useState(() => { try { return localStorage.getItem(INVITED_KEY) === '1'; } catch { return false; } });
+  const [invited, setInvited] = useState(() => { try { return localStorage.getItem(invitedKey()) === '1'; } catch { return false; } });
 
   // ── Score ──
   const board = leaderboard(win, [me]);
@@ -109,8 +110,10 @@ export default function TodayView(p: Props) {
 
   const processOps = useMemo(() => PROCESSES.map(proc => {
     const keys = catalogFor(proc).filter(e => readinessOf(e, std) === 'needs-data').map(e => e.key);
-    const files = new Set(keys.flatMap(k => filesForEntry(CHECK_CATALOG.find(e => e.key === k)!).filter(f => !f.matches).map(f => f.code)));
-    return { proc, keys, hours: hoursPerMonthFor(keys), missingFiles: [...files] };
+    const all = keys.flatMap(k => filesForEntry(CHECK_CATALOG.find(e => e.key === k)!));
+    const files = new Set(all.filter(f => !f.matches).map(f => f.code));
+    const anyConnected = all.some(f => f.matches);
+    return { proc, keys, hours: hoursPerMonthFor(keys), missingFiles: [...files], anyConnected };
   }).filter(o => o.keys.length > 0).sort((a, b) => b.hours - a.hours), [std]);
 
   const aiEngagements = created.filter(e => e.aiRecommended).length;
@@ -120,7 +123,9 @@ export default function TodayView(p: Props) {
       id: `adapt-${o.proc}`,
       hours: o.hours,
       title: `Adapt ${o.keys.length} ${PROCESS_LONG[o.proc]} workflow${o.keys.length === 1 ? '' : 's'}`,
-      sub: o.missingFiles.length === 0 ? 'All the data is already connected' : `Needs ${o.missingFiles.slice(0, 3).join(', ')}${o.missingFiles.length > 3 ? ` +${o.missingFiles.length - 3}` : ''} — the rest is connected`,
+      sub: o.missingFiles.length === 0
+        ? 'All the data is already connected'
+        : `Needs ${o.missingFiles.slice(0, 3).join(', ')}${o.missingFiles.length > 3 ? ` +${o.missingFiles.length - 3}` : ''}${o.anyConnected ? ' — the rest is connected' : ''}`,
       cta: 'Adapt',
       run: () => setAdaptKeys(o.keys),
       icon: Sparkles,
@@ -134,7 +139,7 @@ export default function TodayView(p: Props) {
   ].sort((a, b) => b.hours - a.hours).slice(0, 4);
 
   // ── Setup (FTUE) ──
-  const connected = SEED.filter(s => s.type === 'database').length;
+  const connected = connectedDatabaseCount();
   const approvedOnce = allLive().some(w => w.approvedBy === me && w.id.startsWith('live-'));
   const fullProcess = PROCESSES.some(proc => {
     const auto = catalogFor(proc).filter(e => e.automatable);
@@ -142,13 +147,16 @@ export default function TodayView(p: Props) {
   });
   const topOp = processOps[0];
   const steps = [
-    { id: 'connect', done: connected > 0, title: 'Connect your ERP data', sub: connected > 0 ? `${connected} sources connected — Ira auto-fills files from them` : 'Ira fills most standard files straight from it', cta: 'Connect', run: p.onConnectData, icon: Database },
+    { id: 'connect', done: connected > 0, title: 'Connect your ERP data', sub: connected > 0 ? `${connected} source${connected === 1 ? '' : 's'} connected — Ira auto-fills files from them` : 'Ira fills most standard files straight from it', cta: 'Connect', run: p.onConnectData, icon: Database },
     { id: 'adapt', done: std.built.length > 0, title: 'Adapt the standard library', sub: topOp ? `Start with ${PROCESS_LONG[topOp.proc]} — +${fmtHours(topOp.hours)}/mo once live` : 'Preloaded controls, fitted to your files', cta: 'Adapt', run: () => (topOp ? setAdaptKeys(topOp.keys) : p.onOpenControls()), icon: Sparkles },
     { id: 'approve', done: approvedOnce, title: 'Approve your first workflow', sub: 'Live workflows are what count — hours start the day you approve', cta: 'Review', run: p.onOpenBuilds, icon: ShieldCheck },
     { id: 'plan', done: aiEngagements > 0, title: 'Plan an audit with AI', sub: 'One engagement per process, every control with a check, and a timeline', cta: 'Plan', run: p.onAuditWithAi, icon: Layers },
     { id: 'full', done: fullProcess, title: 'Fully automate one process', sub: 'Every automatable control in a process live', cta: 'See gaps', run: p.onOpenControls, icon: Trophy },
-    { id: 'invite', done: invited, title: 'Invite your team', sub: 'Share the review load — and the leaderboard', cta: 'Invite', run: () => { setInvited(true); try { localStorage.setItem(INVITED_KEY, '1'); } catch { /* ignore */ } addToast({ message: 'Invites sent to the SOX Audit team', type: 'success' }); }, icon: Users },
+    { id: 'invite', done: invited, title: 'Invite your team', sub: 'Share the review load — and the leaderboard', cta: 'Invite', run: () => { setInvited(true); try { localStorage.setItem(invitedKey(), '1'); } catch { /* ignore */ } addToast({ message: 'Invites sent to the SOX Audit team', type: 'success' }); }, icon: Users },
   ];
+  const invite = steps.find(s => s.id === 'invite')!;
+  // Just you on the board — a new client hasn't invited anyone yet.
+  const solo = board.length <= 1;
   const doneCount = steps.filter(s => s.done).length;
   const setupDone = doneCount === steps.length;
   // Once setup is complete the app opens on Ask IRA again (see getInitialView).
@@ -217,13 +225,29 @@ export default function TodayView(p: Props) {
         </div>
         <div className="rounded-lg border border-canvas-border bg-canvas-elevated p-4">
           <div className="text-[0.75rem] text-ink-600">Your rank · {win === '30d' ? 'last 30 days' : 'all time'}</div>
-          <div className="mt-1 flex items-baseline gap-2">
-            <span className="font-mono tabular-nums text-[1.875rem] font-semibold text-ink-900 leading-none">#{myIdx + 1}</span>
-            <span className="text-[0.8125rem] text-ink-500">of {board.length}</span>
-          </div>
-          <div className="mt-3 text-[0.75rem] text-ink-600">
-            {ahead && myRow ? <>{fmtHours(ahead.hours - myRow.hours)} behind <span className="font-medium text-ink-900">{ahead.person}</span></> : 'Top of the board'}
-          </div>
+          {solo ? (
+            <>
+              <div className="mt-1 flex items-baseline gap-2">
+                <span className="font-mono tabular-nums text-[1.875rem] font-semibold text-ink-300 leading-none">—</span>
+                <span className="text-[0.8125rem] text-ink-500">just you so far</span>
+              </div>
+              <div className="mt-3 text-[0.75rem] text-ink-600">
+                {invite.done ? 'Invites sent — ranks appear as your team puts workflows live.' : (
+                  <button onClick={invite.run} className="font-medium text-brand-700 hover:underline cursor-pointer">Invite your team to start a leaderboard</button>
+                )}
+              </div>
+            </>
+          ) : (
+            <>
+              <div className="mt-1 flex items-baseline gap-2">
+                <span className="font-mono tabular-nums text-[1.875rem] font-semibold text-ink-900 leading-none">#{myIdx + 1}</span>
+                <span className="text-[0.8125rem] text-ink-500">of {board.length}</span>
+              </div>
+              <div className="mt-3 text-[0.75rem] text-ink-600">
+                {ahead && myRow ? <>{fmtHours(ahead.hours - myRow.hours)} behind <span className="font-medium text-ink-900">{ahead.person}</span></> : 'Top of the board'}
+              </div>
+            </>
+          )}
         </div>
         <div className="rounded-lg border border-canvas-border bg-canvas-elevated p-4">
           <div className="text-[0.75rem] text-ink-600">Review streak</div>
@@ -337,6 +361,18 @@ export default function TodayView(p: Props) {
           {/* Coverage by engagement */}
           <motion.section {...fade(0.15)} aria-label="Coverage by engagement">
             <SectionHead title="Coverage by engagement" hint={`live automated controls · target ${TARGET}%`} />
+            {engagements.length === 0 ? (
+              <div className="flex items-center gap-4 rounded-lg border border-dashed border-canvas-border bg-canvas-elevated px-4 py-4">
+                <span className="size-9 rounded-lg bg-paper-100 text-ink-500 flex items-center justify-center shrink-0"><Layers size={16} aria-hidden /></span>
+                <div className="min-w-0 flex-1">
+                  <p className="text-[0.8125rem] font-medium text-ink-900">No engagements yet</p>
+                  <p className="text-[0.75rem] text-ink-500">Ira plans one per process — every control with a check and a timeline — and tracks coverage here.</p>
+                </div>
+                <button onClick={p.onAuditWithAi} className="shrink-0 h-8 px-3 rounded-md text-[0.75rem] font-semibold text-brand-700 hover:bg-brand-50 cursor-pointer inline-flex items-center gap-1">
+                  Plan an audit <ArrowRight size={12} />
+                </button>
+              </div>
+            ) : (
             <ul className="rounded-lg border border-canvas-border bg-canvas-elevated divide-y divide-canvas-border">
               {engagements.map(({ e, cov }) => (
                 <li key={e.id} className="flex items-center gap-3 px-4 py-3">
@@ -362,6 +398,7 @@ export default function TodayView(p: Props) {
                 </li>
               ))}
             </ul>
+            )}
           </motion.section>
         </div>
 
@@ -378,6 +415,18 @@ export default function TodayView(p: Props) {
                 ))}
               </div>
             </div>
+            {solo ? (
+              <div className="rounded-lg border border-dashed border-canvas-border bg-canvas-elevated px-4 py-5 text-center">
+                <span className="mx-auto size-9 rounded-full bg-paper-100 text-ink-500 flex items-center justify-center"><Users size={16} aria-hidden /></span>
+                <p className="mt-2.5 text-[0.8125rem] font-medium text-ink-900">Just you so far</p>
+                <p className="mt-0.5 text-[0.75rem] text-ink-500 max-w-[18rem] mx-auto">
+                  The board ranks hours returned by the workflows each person owns. Invite your team to share the reviews — and the race.
+                </p>
+                {invite.done
+                  ? <p className="mt-3 text-[0.75rem] text-compliant-700">Invites sent</p>
+                  : <button onClick={invite.run} className="mt-3 h-8 px-3 rounded-md border border-canvas-border text-[0.75rem] font-medium text-ink-700 hover:border-brand-200 hover:bg-brand-50 cursor-pointer">Invite your team</button>}
+              </div>
+            ) : (
             <div className="rounded-lg border border-canvas-border bg-canvas-elevated">
               <ol>
                 {top.map((r, i) => <BoardLine key={r.person} rank={i + 1} row={r} me={r.person === me} hidden={hidden} />)}
@@ -399,6 +448,7 @@ export default function TodayView(p: Props) {
                 </button>
               </div>
             </div>
+            )}
           </motion.section>
 
           <motion.section {...fade(0.13)} aria-label="How to raise your score">

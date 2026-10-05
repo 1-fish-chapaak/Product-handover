@@ -24,6 +24,7 @@ import { programmeFor, sameCompany } from './auditScope';
 import { applyEditorRows, lockedEditorIds, RACM_LOCKED_KEY, RACM_ROWS_KEY, racmEditorRows } from './helpers';
 import { seedIcfrEngagement, type SeedMeta } from './mockData';
 import type { Control } from './types';
+import { currentWorkspaceId, onWorkspaceChange } from '../../data/auditPlan/workspace';
 
 /**
  * The ONE flowchart a process has.
@@ -58,6 +59,8 @@ export interface ProcessFlowchart {
 
 export interface LibraryRacm {
   id: string;
+  /** Workspace it was created in; seeds and older records belong to Platform. */
+  workspaceId?: string;
   /** What the list calls it — "Treasury — Altura Infra Holdings Ltd", or the file's name. */
   name: string;
   process: string;
@@ -249,10 +252,23 @@ function adoptLibrary(raw: string | null): void {
 
 /** Every RACM on the tab, newest first. Re-renders when one is added, deleted or picked. */
 export function useRacmLibrary(): LibraryRacm[] {
-  return useSyncExternalStore(subscribe, all, all);
+  return useSyncExternalStore(subscribe, visible, visible);
 }
 /** The same list, read once — for code outside React. */
-export const racmLibrary = (): LibraryRacm[] => all();
+export const racmLibrary = (): LibraryRacm[] => visible();
+
+/** This workspace's RACMs only. Cached against the list and workspace, since
+ *  useSyncExternalStore needs the same array back until something changes. */
+let view: { src: LibraryRacm[] | null; ws: string; out: LibraryRacm[] } = { src: null, ws: '', out: [] };
+function visible(): LibraryRacm[] {
+  const src = all();
+  const ws = currentWorkspaceId();
+  if (view.src !== src || view.ws !== ws) view = { src, ws, out: src.filter(r => (r.workspaceId ?? 'platform') === ws) };
+  return view.out;
+}
+// A workspace switch re-derives the seeds (they come from that workspace's
+// engagements) and re-filters the list.
+onWorkspaceChange(() => { RACMS = null; emit(); });
 export const findLibraryRacm = (id: string): LibraryRacm | undefined => all().find(r => r.id === id);
 
 let seq = 0;
@@ -260,6 +276,7 @@ let seq = 0;
 export function addLibraryRacm(input: Omit<LibraryRacm, 'id' | 'usedBy' | 'createdAt' | 'published' | 'history'> & { createdAt?: string; published?: string[] }): LibraryRacm {
   const racm: LibraryRacm = {
     ...input,
+    workspaceId: currentWorkspaceId(),
     id: `racm-${Date.now().toString(36)}-${(++seq).toString(36)}`,
     controls: input.controls.map(racmRowOf),
     createdAt: input.createdAt ?? 'just now',

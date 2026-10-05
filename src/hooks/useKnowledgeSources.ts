@@ -46,7 +46,8 @@
  */
 
 import { useCallback, useEffect, useState } from 'react';
-import { TODAY, type DataSource } from '../components/data-sources/sources';
+import { SEED, TODAY, type DataSource } from '../components/data-sources/sources';
+import { isFreshWorkspace, workspaceSuffix } from '../data/auditPlan/workspace';
 
 // ─── Public API ─────────────────────────────────────────────────────────────
 
@@ -86,7 +87,9 @@ export interface KnowledgeSourcesAPI {
  *  v3 adds `health` (integration override) and ships a much wider seed
  *  catalogue covering every source type + edge cases (0 B, GB, very-long
  *  names, degraded integration). */
-const STORAGE_KEY = 'kh:sources:v5';
+const BASE_STORAGE_KEY = 'kh:sources:v5';
+/** Each workspace keeps its own catalog (Platform keeps the original key). */
+const storageKey = () => BASE_STORAGE_KEY + workspaceSuffix();
 
 // First-run seed — the catalog the user sees before they've added anything.
 // Mirrors the reference design's example surface: a handful of recent files,
@@ -144,11 +147,12 @@ function makeSeedSources(): DataSource[] {
 function loadFromLocal(): DataSource[] {
   if (typeof window === 'undefined') return [];
   try {
-    const raw = window.localStorage.getItem(STORAGE_KEY);
+    const raw = window.localStorage.getItem(storageKey());
     // Distinct from "[]": a missing key means the user has never interacted
     // with the catalog. Seed in that case so the surface isn't blank-and-
     // confusing on first load. Empty-but-present means the user cleared it.
-    if (raw === null) return makeSeedSources();
+    // A new client's workspace starts with nothing connected — no seed.
+    if (raw === null) return isFreshWorkspace() ? [] : makeSeedSources();
     if (!raw) return [];
     const parsed = JSON.parse(raw);
     if (!Array.isArray(parsed)) return [];
@@ -168,7 +172,7 @@ function loadFromLocal(): DataSource[] {
 function saveToLocal(sources: DataSource[]): string | null {
   if (typeof window === 'undefined') return null;
   try {
-    window.localStorage.setItem(STORAGE_KEY, JSON.stringify(sources));
+    window.localStorage.setItem(storageKey(), JSON.stringify(sources));
     return null;
   } catch (e) {
     // Most common failure: QuotaExceededError when localStorage is full.
@@ -199,7 +203,7 @@ export function useKnowledgeSources(): KnowledgeSourcesAPI {
   useEffect(() => {
     if (typeof window === 'undefined') return;
     const onStorage = (e: StorageEvent) => {
-      if (e.key !== STORAGE_KEY) return;
+      if (e.key !== storageKey()) return;
       setSources(loadFromLocal().sort(byCreatedDesc));
     };
     window.addEventListener('storage', onStorage);
@@ -244,4 +248,11 @@ export function useKnowledgeSources(): KnowledgeSourcesAPI {
     removeMany,
     replaceAll,
   };
+}
+
+/** Databases connected in this workspace — Platform's seeded catalog
+ *  counts its five, a new client's counts what they've actually added. */
+export function connectedDatabaseCount(): number {
+  if (!isFreshWorkspace()) return SEED.filter(x => x.type === 'database').length;
+  return loadFromLocal().filter(x => x.type === 'database').length;
 }

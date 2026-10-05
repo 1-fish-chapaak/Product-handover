@@ -6,6 +6,7 @@
  */
 
 import type { Control as SoxControl, SamplingMethodology } from '../components/sox-icfr/types';
+import { currentWorkspaceId, isFreshWorkspace } from './auditPlan/workspace';
 
 export type ProcessCode = 'P2P' | 'O2C' | 'R2R' | 'S2C' | 'ITGC' | 'INV';
 export type EngStatus = 'Active' | 'In Progress' | 'Planned' | 'Review' | 'Draft' | 'Closed';
@@ -76,6 +77,8 @@ export interface EngagementEntity {
 
 export interface Engagement {
   id: string;
+  /** Workspace it was created in; seeds and older records belong to Platform. */
+  workspaceId?: string;
   code: string;
   name: string;
   description: string;
@@ -374,7 +377,9 @@ export const PROCESS_COLORS: Record<ProcessCode, string> = {
  *  session-edited engagement by id. */
 const RUNTIME_ENGAGEMENTS: Engagement[] = [];
 /** Upsert — replaces an existing runtime entry so session edits stay current. */
-export function registerEngagement(e: Engagement): void {
+export function registerEngagement(input: Engagement): void {
+  // Created here, in this workspace — unless it already says where it's from.
+  const e = input.workspaceId ? input : { ...input, workspaceId: currentWorkspaceId() };
   const idx = RUNTIME_ENGAGEMENTS.findIndex(x => x.id === e.id);
   if (idx >= 0) RUNTIME_ENGAGEMENTS[idx] = e;
   else RUNTIME_ENGAGEMENTS.unshift(e);
@@ -393,8 +398,13 @@ export function libraryEngagements(): Engagement[] {
   // registers 'sox-prog-fy26' as "FY26 ICFR — Airline P2P & O2C · ENG-001" to
   // back its own workspace, which listed ENG-001 twice with different figures.
   // It stays findable by id (findEngagement); it is just not listed.
-  const fresh = RUNTIME_ENGAGEMENTS.filter(r => !ENGAGEMENTS.some(s => s.id === r.id || (!!r.code && s.code === r.code)));
-  return [...fresh, ...ENGAGEMENTS.map(s => RUNTIME_ENGAGEMENTS.find(r => r.id === s.id) ?? s)];
+  // Each workspace lists only its own engagements; a new client starts with
+  // none of Platform's seeds.
+  const ws = currentWorkspaceId();
+  const mine = RUNTIME_ENGAGEMENTS.filter(r => (r.workspaceId ?? 'platform') === ws);
+  if (isFreshWorkspace()) return mine;
+  const added = mine.filter(r => !ENGAGEMENTS.some(s => s.id === r.id || (!!r.code && s.code === r.code)));
+  return [...added, ...ENGAGEMENTS.map(s => RUNTIME_ENGAGEMENTS.find(r => r.id === s.id) ?? s)];
 }
 /** The name an engagement will actually be saved under. A name already used by
  *  any engagement in the library (every type; trimmed, case-insensitive) gets

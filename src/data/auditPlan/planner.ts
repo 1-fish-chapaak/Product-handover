@@ -238,8 +238,13 @@ export function suggestExistingEngagement(process: ProcessCode): PlanEngagement[
   return hit ? { engagementId: hit.id, engagementName: hit.name } : undefined;
 }
 
+// Codes must be unique even when one plan creates several engagements in the
+// same millisecond — the clock's last four digits alone gave them all one code.
+let lastCode = -1;
 function engagementCode(): string {
-  return `ENG-AI-${String(Date.now()).slice(-4)}`;
+  const n = Math.max(Number(String(Date.now()).slice(-4)), lastCode + 1) % 10000;
+  lastCode = n;
+  return `ENG-AI-${String(n).padStart(4, '0')}`;
 }
 
 function fiscalLabel(): string {

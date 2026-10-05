@@ -193,7 +193,10 @@ export default function EngagementsOverview({ engagements, onOpenEngagement, onG
       : 0;
     const atRisk = started.filter(e => e.health < 65).length;
 
-    const openExceptions = ENGAGEMENT_EXCEPTIONS.filter(ex => ex.status !== 'Resolved');
+    // Only the listed engagements' findings and activity — a new client's
+    // portfolio doesn't inherit Platform's.
+    const ids = new Set(engagements.map(e => e.id));
+    const openExceptions = ENGAGEMENT_EXCEPTIONS.filter(ex => ex.status !== 'Resolved' && ids.has(ex.engagementId));
     const sevCounts = { Critical: 0, High: 0, Medium: 0, Low: 0 } as Record<Severity, number>;
     for (const ex of openExceptions) sevCounts[ex.severity] += 1;
 
@@ -227,6 +230,7 @@ export default function EngagementsOverview({ engagements, onOpenEngagement, onG
 
     const recent = Object.values(ENGAGEMENT_ACTIVITY)
       .flat()
+      .filter(ev => ids.has(ev.engagementId))
       .sort((a, b) => (a.dayOffset - b.dayOffset) || (b.hour - a.hour))
       .slice(0, 7);
 
