@@ -41,6 +41,7 @@ import ReportsView from './components/reports/ReportsView';
 import type { EditableTemplate, TemplateSection } from './components/reports/reportShared';
 import { letterheadLine, looksLikeCapturedLetterhead, oneDefaultOnly, splitLetterhead } from './components/reports/reportShared';
 import { REPORT_TEMPLATES } from './data/mockData';
+import { SEED_CUSTOM_TEMPLATES } from './data/seedCustomTemplates';
 import HomeView from './components/home/HomeView';
 import RecentsView from './components/recents/RecentsView';
 import KnowledgeHubView from './components/knowledge/KnowledgeHubView';
@@ -126,6 +127,8 @@ const SHARED_DASHBOARD_OPTIONS = [
 // v2 — resets the Custom list to a clean slate (the v1 blob had accumulated
 // dozens of test copies); new templates persist here going forward.
 const CUSTOM_TEMPLATES_KEY = 'irame.reports.customTemplates.v2';
+// Set once the staging custom templates have been seeded into the list above.
+const STAGING_SEED_FLAG_KEY = 'irame.reports.stagingSeed.v1';
 // The old demo seeds — filtered out of any previously persisted blob so the
 // Custom section only ever shows templates the user actually created.
 const DEMO_TEMPLATE_IDS = new Set(['ct-custom-01', 'ct-custom-02', 'ct-003', 'ct-004', 'ct-005', 'ct-006']);
@@ -467,17 +470,30 @@ function AppInner() {
             })
     ), []);
   const [customTemplates, setCustomTemplates] = useState<CustomTemplate[]>(() => {
+    let stored: CustomTemplate[] = [];
     try {
       const raw = localStorage.getItem(CUSTOM_TEMPLATES_KEY);
       if (raw) {
         const parsed = JSON.parse(raw);
-        if (Array.isArray(parsed)) return hydrateTemplates(parsed as CustomTemplate[]);
+        if (Array.isArray(parsed)) stored = hydrateTemplates(parsed as CustomTemplate[]);
       }
     } catch { /* ignore */ }
-    return [];
+    // Seed staging's custom templates once, after whatever the user already
+    // has. The flag (set in the effect below, so this initializer stays pure
+    // under StrictMode's double call) keeps a deleted seed from coming back.
+    try {
+      if (!localStorage.getItem(STAGING_SEED_FLAG_KEY)) {
+        const have = new Set(stored.map(t => t.id));
+        return [...stored, ...SEED_CUSTOM_TEMPLATES.filter(t => !have.has(t.id))];
+      }
+    } catch { /* ignore */ }
+    return stored;
   });
   useEffect(() => {
-    try { localStorage.setItem(CUSTOM_TEMPLATES_KEY, JSON.stringify(customTemplates)); } catch { /* ignore */ }
+    try {
+      localStorage.setItem(CUSTOM_TEMPLATES_KEY, JSON.stringify(customTemplates));
+      localStorage.setItem(STAGING_SEED_FLAG_KEY, '1');
+    } catch { /* ignore */ }
   }, [customTemplates]);
   // Another tab saved a template. The storage event only fires in the OTHER
   // tabs, so there is no loop with the write above: this tab takes what that

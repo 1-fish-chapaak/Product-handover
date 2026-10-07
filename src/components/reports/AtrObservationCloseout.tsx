@@ -4,7 +4,6 @@ import { AnimatePresence, motion, useReducedMotion } from 'motion/react';
 import {
   X, Check, ChevronDown, Plus, Paperclip, ShieldCheck, History, Trash2, Link2, Search,
 } from 'lucide-react';
-import { PEOPLE } from '../../data/grc-domain';
 import DatePicker from '../shared/DatePicker';
 import type { AtrObservation, AtrActionPlan, AtrClassification } from './atrTypes';
 import type { AtrEvent, AtrTimeline } from './atrTimeline';
@@ -21,6 +20,10 @@ import { matrixForSeverity, summarizeMatrix } from './atr-upload/escalationMatri
 // Owner does. The toggle decides which you are looking at; a dot marks the side
 // the ball is currently in. Every action lands on the report's timeline, so the
 // audit trail at the foot of the panel and the Report Snapshot are one record.
+
+/** Deliberately choosing no chasing at all. Distinct from an empty select,
+ *  which means the auditor has not decided yet. */
+const NO_ESCALATION = '__none__';
 
 const SUBCLASSES: AtrClassification[] = ['System Deficiency', 'Design Deficiency', 'Procedural Non-Compliance', 'Other'];
 
@@ -161,6 +164,9 @@ export default function AtrObservationCloseout({ open, index, obs, me, timeline,
   const [planDecision, setPlanDecision] = useState<Record<number, PlanOutcome | undefined>>({});
   const [decision, setDecision] = useState<Record<number, ActionOutcome | undefined>>({});
   const [revise, setRevise] = useState<Record<number, { title: string; text: string; due: string } | undefined>>({});
+  // Assignment now settles two things at once: who owns it, and under which
+  // approval & escalation matrix. Both are drafted here and committed together.
+  const [matrixPick, setMatrixPick] = useState('');
   // The "Attach existing" picker, and what the reader has typed into it.
   const [picking, setPicking] = useState(false);
   const [pickQuery, setPickQuery] = useState('');
@@ -176,6 +182,7 @@ export default function AtrObservationCloseout({ open, index, obs, me, timeline,
     setSub(c0?.classification ?? '');
     setClsNote(c0?.classificationComment ?? '');
     setFpReason(c0?.falsePositiveReason ?? '');
+    setMatrixPick(c0?.escalationMatrixId ? c0.escalationMatrixId : c0?.owner ? NO_ESCALATION : '');
     setNewPlans([]);
     setTaken({});
     setComment({});
@@ -202,6 +209,13 @@ export default function AtrObservationCloseout({ open, index, obs, me, timeline,
   // One tie-up governs both halves: the matrix the auditor picked for this
   // observation says who approves as well as who gets chased.
   const policy = policyFor(co.escalationMatrixId);
+  // An observation can only go to someone a matrix names as a risk-owner
+  // approver — otherwise there would be no chain to sign their work off.
+  const ownerChoices = [...new Set(matrices.flatMap(m => m.ownerApproval?.approvers ?? []))].sort();
+  // …and only the matrices that name them are offered back.
+  const matrixChoices = owner ? matrices.filter(m => (m.ownerApproval?.approvers ?? []).includes(owner)) : [];
+  const pickedMatrix = escalationMatrices.byId(matrixPick);
+  const committedPick = co.escalationMatrixId ? co.escalationMatrixId : co.owner ? NO_ESCALATION : '';
   // Both sides end to end — the risk owner's own chain, then the audit side's.
   const levels = approvalChain(policy);
   /** One line for a gate: who decides now, and how far through the chain. */
@@ -234,10 +248,18 @@ export default function AtrObservationCloseout({ open, index, obs, me, timeline,
 
   // ── Auditor ──
   const assign = () => {
-    fire('case-assigned', 'Auditor', `Assigned ${obsRef} to ${owner}`, { observation: { closeout: { owner, auditor: me } } });
+    if (!owner || !matrixPick) return;
+    fire('case-assigned', 'Auditor',
+      `Assigned ${obsRef} to ${owner} under ${pickedMatrix?.name ?? 'no escalation'}`,
+      { observation: { closeout: { owner, auditor: me, escalationMatrixId: matrixPick === NO_ESCALATION ? '' : matrixPick } } });
     setView('owner');
   };
-  const reassign = () => fire('case-assigned', 'Auditor', `Reassigned ${obsRef} to ${owner}`, { observation: { closeout: { owner } } });
+  const reassign = () => {
+    if (!owner || !matrixPick) return;
+    fire('case-assigned', 'Auditor',
+      `Reassigned ${obsRef} to ${owner} under ${pickedMatrix?.name ?? 'no escalation'}`,
+      { observation: { closeout: { owner, escalationMatrixId: matrixPick === NO_ESCALATION ? '' : matrixPick } } });
+  };
   /** Tie an escalation matrix to the whole observation, or to one plan when it
    *  belongs to a different department from the rest. */
   const setMatrix = (id: string, planIndex?: number) => {
@@ -281,19 +303,28 @@ export default function AtrObservationCloseout({ open, index, obs, me, timeline,
     const name = plans[i].title || `action plan ${i + 1}`;
     const note = c(`act-${i}`).trim();
     const rest = plans.filter((_, k) => k !== i);
-    const lastOne = outcome === 'Implemented' && rest.every(planSettled);
+    // The action taken runs the same chain the plan did: accepting at a level
+    // that is not the last hands it up rather than settling it, and a rejection
+    // at any level goes straight back to the risk owner.
+    const at = plans[i].actionLevel ?? 0;
+    const advance = outcome !== 'Rejected' && !lastLevel(at);
+    const lastOne = !advance && outcome === 'Implemented' && rest.every(planSettled);
     const events = [newCloseoutEvent({
       kind: outcome === 'Rejected' ? 'action-discrepancy' : 'action-verified', role: 'Auditor', actor: me, index, title,
       summary: outcome === 'Rejected'
         ? `Rejected the action taken on ${obsRef} · ${name} — back to the risk owner`
-        : `Accepted the action taken on ${obsRef} · ${name} as ${outcome}`,
+        : advance
+          ? `Accepted the action taken on ${obsRef} · ${name} — to ${levels[at + 1]?.approvers.join(', ') || 'the next approver'}`
+          : `Accepted the action taken on ${obsRef} · ${name} as ${outcome}`,
       detail: note || undefined,
       patch: {
         plan: {
           index: realIdx(i),
           set: outcome === 'Rejected'
-            ? { status: 'Pending', actionTaken: '', verification: note || 'Rejected by the auditor — to be reworked.' }
-            : { status: outcome, verification: note || undefined },
+            ? { status: 'Pending', actionTaken: '', actionLevel: 0, verification: note || 'Rejected by the auditor — to be reworked.' }
+            : advance
+              ? { actionLevel: at + 1, verification: note || undefined }
+              : { status: outcome, actionLevel: 0, verification: note || undefined },
         },
       },
     })];
@@ -418,48 +449,68 @@ export default function AtrObservationCloseout({ open, index, obs, me, timeline,
         defaultOpen={phase === 'unassigned'}
         note="Pick the risk owner who will classify this observation and carry out the fix. You stay on it as the auditor.">
         <label className="block">
-          <span className={LABEL}>Risk owner</span>
-          <select value={owner} onChange={e => setOwner(e.target.value)} className={FIELD}>
-            <option value="">Choose a risk owner…</option>
-            {PEOPLE.filter(p => p.role !== 'Auditor').map(p => <option key={p.id} value={p.name}>{p.name} · {p.role}</option>)}
+          <span className={LABEL}>Risk owner <span className="text-risk-600">*</span></span>
+          <select
+            value={owner}
+            onChange={e => {
+              const v = e.target.value;
+              setOwner(v);
+              // A matrix that does not cover the new owner cannot stay selected.
+              setMatrixPick(p => (p === NO_ESCALATION || matrices.some(m => m.id === p && (m.ownerApproval?.approvers ?? []).includes(v)) ? p : ''));
+            }}
+            className={FIELD}
+          >
+            <option value="">Select a Risk Owner</option>
+            {ownerChoices.map(n => <option key={n} value={n}>{n}</option>)}
           </select>
+          {ownerChoices.length === 0 && (
+            <span className="block text-[0.6875rem] text-risk-700 leading-snug mt-1">
+              No risk owners configured. Add them under Risk Owner approvals in Administration → Approval &amp; Escalation Matrix.
+            </span>
+          )}
         </label>
-        <div className="flex justify-end mt-3">
-          <button type="button" onClick={co.owner ? reassign : assign} disabled={!owner || owner === co.owner} className={BTN_PRIMARY}>
-            {co.owner ? 'Reassign' : 'Assign'}
-          </button>
-        </div>
 
-        {policy && (
-          <div className="mt-3 pt-3 border-t border-canvas-border">
-            <p className={LABEL}>Approval flow</p>
-            <p className="text-[0.8125rem] text-ink-800 leading-snug">{policy.name}</p>
-            <p className="text-[0.6875rem] text-ink-500 leading-snug mt-0.5">
-              {levels.length > 0
-                ? `Action plans and action taken are signed off by ${chainLine(policy)}.`
-                : 'Action plans and action taken take a single auditor sign-off.'}
-              {' '}From the matrix below; set in Administration → Approval &amp; Escalation Matrix.
+        <label className="block mt-3">
+          <span className={LABEL}>Approval &amp; escalation matrix <span className="text-risk-600">*</span></span>
+          <select value={matrixPick} onChange={e => setMatrixPick(e.target.value)} disabled={!owner} className={`${FIELD} disabled:opacity-50 disabled:cursor-not-allowed`}>
+            <option value="">{owner ? 'Select a matrix' : 'Select risk owner first'}</option>
+            <option value={NO_ESCALATION}>No escalation — nobody is chased</option>
+            {matrixChoices.map(m => (
+              <option key={m.id} value={m.id}>{m.name}{m.department ? ` · ${m.department}` : ''}</option>
+            ))}
+          </select>
+          <span className="block text-[0.6875rem] text-ink-500 leading-snug mt-1">
+            {!owner
+              ? 'Only the matrices that cover the chosen risk owner are offered.'
+              : matrixChoices.length === 0
+                ? `No matrix names ${owner} as a risk-owner approver — assign with no escalation, or add them in Administration.`
+                : `Matrices covering ${owner}. One sets both who approves their work and who chases a late action plan.`}
+          </span>
+        </label>
+
+        {pickedMatrix && (
+          <div className="mt-3 rounded-md border border-canvas-border bg-canvas px-3 py-2.5">
+            <p className="text-[0.71875rem] text-ink-700 leading-snug">
+              <span className="font-semibold">Approvals:</span> {chainLine(pickedMatrix) || 'a single auditor sign-off'}
+            </p>
+            <p className="text-[0.71875rem] text-ink-600 leading-snug mt-0.5">
+              <span className="font-semibold">Chasing:</span> {summarizeMatrix(matrixForSeverity(pickedMatrix.set, obs.risk))}
             </p>
           </div>
         )}
 
-        <div className="mt-3 pt-3 border-t border-canvas-border">
-          <label className={LABEL} htmlFor="esc-obs">Escalation matrix</label>
-          <select id="esc-obs" value={co.escalationMatrixId ?? ''} onChange={e => setMatrix(e.target.value)} className={FIELD}>
-            <option value="">No escalation — nobody is chased</option>
-            {matrices.map(m => (
-              <option key={m.id} value={m.id}>{m.name}{m.department ? ` · ${m.department}` : ''}</option>
-            ))}
-          </select>
-          <p className="text-[0.6875rem] text-ink-500 leading-snug mt-1.5">
-            {(() => {
-              const line = matrixLine();
-              return line
-                ? `Chases every action plan here: ${line.cadence}. A plan from another department can be pointed at a different matrix under Plan approval.`
-                : 'Pick who chases a late action plan, and how far up it goes. Matrices are configured in Administration → Escalation Matrix.';
-            })()}
-          </p>
+        <div className="flex justify-end mt-3">
+          <button
+            type="button"
+            onClick={co.owner ? reassign : assign}
+            disabled={!owner || !matrixPick || (owner === co.owner && matrixPick === committedPick)}
+            className={BTN_PRIMARY}
+          >
+            {co.owner ? 'Reassign' : 'Assign'}
+          </button>
         </div>
+
+
       </Card>
 
       {co.verdict === 'False Positive' && (
@@ -608,6 +659,11 @@ export default function AtrObservationCloseout({ open, index, obs, me, timeline,
               {p.verification && <p className="text-[0.6875rem] text-ink-500 italic mt-0.5">{p.verification}</p>}
               {!planSettled(p) && (
                 <div className="mt-2 space-y-2">
+                  {gateLine(p.actionLevel) && (
+                    <p className="text-[0.6875rem] text-ink-500">
+                      <span className="font-semibold text-ink-600">With:</span> {gateLine(p.actionLevel)}
+                    </p>
+                  )}
                   <textarea rows={2} value={c(`act-${i}`)} onChange={e => setC(`act-${i}`, e.target.value)} placeholder="Reason — required to reject" className={AREA} />
                   <div role="radiogroup" aria-label={`Decision on ${p.title || `action plan ${i + 1}`}`} className="flex flex-wrap items-center gap-1.5">
                     {OUTCOMES.map(o => {
