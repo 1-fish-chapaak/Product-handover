@@ -111,6 +111,9 @@ export interface ControlRun {
   steps: RunStep[];
   /** Raised once by whoever started the run; the rail lowers it on arrival. */
   wantsRail: boolean;
+  /** Which run this is. The work a run started checks it is still the live run
+   *  before it lands, so a Stop (agentic UX #15) really stops it. */
+  token: number;
 }
 
 let RUNS: Record<string, ControlRun> = {};
@@ -131,6 +134,12 @@ export function useControlRun(controlId: string): ControlRun | null {
 
 export const controlRun = (controlId: string): ControlRun | null => RUNS[controlId] ?? null;
 
+/** Every run going right now, by control — for the audit Dashboard's "Ira's
+ *  work", which lists them across the audit rather than on one control. */
+export function useControlRuns(): Record<string, ControlRun> {
+  return useSyncExternalStore(subscribeRuns, allRuns, allRuns);
+}
+
 /**
  * Start a run and lay out the trail it will walk.
  *
@@ -140,13 +149,15 @@ export const controlRun = (controlId: string): ControlRun | null => RUNS[control
  *
  * `focusRail` — the caller is not the rail, so bring the rail forward.
  */
-export function startRun(controlId: string, label: string, stepLabels: string[], ms: number, focusRail = false): void {
+let NEXT_TOKEN = 1;
+export function startRun(controlId: string, label: string, stepLabels: string[], ms: number, focusRail = false): number {
   clearRunTimers(controlId);
+  const token = NEXT_TOKEN++;
   // Only the first is live at the start; the rest are not shown until their turn.
   const steps: RunStep[] = stepLabels.length
     ? [{ id: 's0', label: stepLabels[0], status: 'active' }]
     : [];
-  RUNS = { ...RUNS, [controlId]: { label, steps, wantsRail: focusRail } };
+  RUNS = { ...RUNS, [controlId]: { label, steps, wantsRail: focusRail, token } };
   emitRuns();
   // The last step stays live until the work lands and `endRun` is called —
   // a trail that finishes before the answer does is a trail that lied.
@@ -164,7 +175,16 @@ export function startRun(controlId: string, label: string, stepLabels: string[],
     emitRuns();
   }, gap * (i + 1)));
   RUN_TIMERS[controlId] = timers;
+  return token;
 }
+
+/** Is the run that `token` names still the one going? False once it was stopped
+ *  — the caller then drops its result on the floor instead of writing it. */
+export const runIsLive = (controlId: string, token: number): boolean => RUNS[controlId]?.token === token;
+
+/** Stop whatever Ira is running on this control (agentic UX #15, 1 Oct). The
+ *  work it started finds its run gone and writes nothing. */
+export const stopRun = (controlId: string): void => endRun(controlId);
 
 function clearRunTimers(controlId: string): void {
   (RUN_TIMERS[controlId] ?? []).forEach(t => window.clearTimeout(t));
@@ -207,4 +227,27 @@ export function railShown(controlId: string): void {
   if (!run?.wantsRail) return;
   RUNS = { ...RUNS, [controlId]: { ...run, wantsRail: false } };
   emitRuns();
+}
+
+// ── Manual / Automatic (agentic UX #3, user ask 1 Oct) ─────────────────────────
+// The trust ladder, as one switch under the Ira chat box. Manual: Ira proposes
+// and you press each button. Automatic: Ira runs the mechanical work itself the
+// moment it can and confirms its own SURE results in your name; a less-sure
+// result still waits for you, and the sample request is drafted, never sent.
+// Never automatic, in either mode (agentic UX #2): concluding, signing,
+// countersigning, the materiality number, the key flag and descoping.
+// Remembered per viewer; every control follows it.
+export type IraMode = 'manual' | 'automatic';
+const MODE_KEY = 'sox-ira-mode';
+let MODE: IraMode = (() => { try { return window.localStorage.getItem(MODE_KEY) === 'automatic' ? 'automatic' : 'manual'; } catch { return 'manual'; } })();
+const modeListeners = new Set<() => void>();
+const subscribeMode = (l: () => void) => { modeListeners.add(l); return () => { modeListeners.delete(l); }; };
+const getMode = (): IraMode => MODE;
+export function setIraMode(next: IraMode): void {
+  MODE = next;
+  try { window.localStorage.setItem(MODE_KEY, next); } catch { /* storage blocked */ }
+  modeListeners.forEach(l => l());
+}
+export function useIraMode(): IraMode {
+  return useSyncExternalStore(subscribeMode, getMode, getMode);
 }

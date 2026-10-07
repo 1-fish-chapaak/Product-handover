@@ -1,5 +1,6 @@
 import { Upload, CheckCircle2, MessageSquare, Circle, ChevronRight, FileWarning, Inbox, ListChecks, PenLine } from 'lucide-react';
-import { useToast } from '../shared/Toast';
+import { useEffect, useRef, useState, Fragment } from 'react';
+import { InlineNote, useInlineNote } from './InlineNote';
 import { useIcfr } from './store';
 import { isOwnerTask, testDueInDays, testDueLabel, testsDueNow } from './helpers';
 import { isOwnerOf } from './auditScope';
@@ -13,16 +14,27 @@ const TASK_META: Record<TaskType, { label: string; Icon: typeof Upload; action: 
 };
 
 export default function RiskOwnerPortal() {
-  const { eng, meOwner, openAuditId, submitTask, openControl, openRegister, setTab, setView, setExceptionStatus } = useIcfr();
-  const { addToast } = useToast();
+  const { eng, meOwner, openAuditId, submitTask, openControl, openRegister, setTab, setView, setExceptionStatus, listLanding, clearListLanding } = useIcfr();
+  // Role landing (2 Oct): the owner lands on their tasks. They lead the owner's
+  // Dashboard already, so this only moves the page if something above has
+  // pushed them out of view.
+  const ref = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    if (!listLanding) return;
+    const t = window.setTimeout(() => { ref.current?.scrollIntoView({ block: 'nearest' }); clearListLanding(); }, 60);
+    return () => window.clearTimeout(t);
+  }, [listLanding, clearListLanding]);
+  // a refusal is said on the row whose button was pressed (agentic UX #11)
+  const note = useInlineNote();
+  const [noteRow, setNoteRow] = useState<string | null>(null);
   // person-lane: only this persona's tasks and controls — never the whole engagement
   const mine = eng.tasks.filter(t => isOwnerTask(eng, t, meOwner));
   const dueNow = (t: HandoffTask) => t.overdue || /today/i.test(t.dueLabel);
 
-  // The exception flow is six steps and only two of them are the owner's: ③ write
+  // The exception flow is five steps and only two of them are the owner's: ③ write
   // the plan, ④ do the fix and show the proof. Everything else — sizing, the
-  // rating confirmation, the auditor's read of the plan, the retest, the close —
-  // sits in someone else's court, and a reminder for work you cannot do is worse
+  // rating confirmation, the auditor's read of the plan, the close — sits in
+  // someone else's court, and a reminder for work you cannot do is worse
   // than no reminder. So a remediation row appears while the exception is at one
   // of those two states, and disappears while it is away.
   const OWNER_STATES: ExceptionStatus[] = ['Planning', 'Remediation'];
@@ -31,7 +43,7 @@ export default function RiskOwnerPortal() {
   const inMyCourt = (t: HandoffTask) => t.type !== 'remediation' || !!exceptionFor(t);
   // The two steps ask for different things, so the row's call to action says
   // which one it is: at ③ there is nothing to submit yet — the plan has to be
-  // written first, and only ④ ends in "submit for retest".
+  // written first, and only ④ ends in handing the fix over for sign-off.
   const remediationCta = (t: HandoffTask): { label: string; Icon: typeof Upload } => {
     const def = exceptionFor(t);
     return def?.status === 'Planning'
@@ -44,6 +56,8 @@ export default function RiskOwnerPortal() {
   const submitted = mine.filter(t => t.status !== 'open');
 
   const act = (t: HandoffTask) => {
+    note.clear();
+    setNoteRow(t.id);
     // a remediation "done" goes through the same gate as the exceptions page:
     // proof first, then the submit — never a reminder cleared on its own
     if (t.type === 'remediation') {
@@ -51,31 +65,32 @@ export default function RiskOwnerPortal() {
       if (def) {
         // ③ nothing to submit yet — the plan is what the auditor judges against
         // the root cause, so this points at writing it rather than at finishing.
+        // The button says "Write the plan", so landing on the exceptions page is
+        // the action itself — no message needed (a line here would unmount with the page).
         if (def.status === 'Planning') {
           setView('deficiencies');
-          addToast({ type: 'info', title: 'Write the plan first', message: `${def.id} needs the action, who does it and a due date — the auditor judges it against the root cause.` });
           return;
         }
         // Only the fixing step submits. Anywhere else the finding is in somebody
         // else's hands, and a button that reports success while the store refuses
         // the move is worse than one that says where the thing actually is.
         if (def.status !== 'Remediation') {
-          setView('deficiencies');
-          addToast({ type: 'info', title: 'Not yours to submit yet', message: `${def.id} is at ${def.status.toLowerCase()} — it comes back to you when the work does.` });
+          note.show('info', `Not yours to submit yet — ${def.id} is at ${def.status.toLowerCase()} and comes back to you when the work does.`);
           return;
         }
         if ((def.remediation.evidence?.length ?? 0) > 0) {
-          setExceptionStatus(def.id, 'Retest'); // clears this reminder with it
-          addToast({ type: 'success', title: 'Submitted for retest', message: `${def.id} is with the auditor — your evidence rides along.` });
+          // Straight to the reviewer (30 Sep). The plan was approved before the
+          // work started and the proof is attached now, so there is nothing left
+          // to wait for: the retest happens on the CONTROL, on the audit's own
+          // timetable, once the fixed control has had a chance to run.
+          setExceptionStatus(def.id, 'Awaiting reviewer'); // clears this reminder with it
         } else {
-          setView('deficiencies');
-          addToast({ type: 'warning', title: 'Evidence first', message: `Attach proof of the fix on ${def.id}, then submit — “done” needs proof.` });
+          note.show('warning', `Attach proof of the fix on ${def.id} in Deficiencies first — “done” needs proof.`);
         }
         return;
       }
     }
     submitTask(t.id);
-    addToast({ type: 'success', title: 'Sent to audit', message: 'Submitted — we’ll let you know if more is needed.' });
   };
 
   // Inside an audit, a year-end control it holds back (A29) is not a test due.
@@ -92,15 +107,15 @@ export default function RiskOwnerPortal() {
   const chevron = <ChevronRight size={14} className="shrink-0 text-ink-300 group-hover:text-ink-500 transition-colors" />;
 
   return (
-    <div className="space-y-5">
-      <h1 className="text-[22px] font-bold text-ink-900 tracking-tight" style={{ fontFamily: "'Source Serif 4', Georgia, serif" }}>Your control tasks</h1>
+    <div ref={ref} className="space-y-5 scroll-mt-4">
+      <h1 className="text-[1.375rem] font-bold text-ink-900 tracking-tight" style={{ fontFamily: "'Source Serif 4', Georgia, serif" }}>Your control tasks</h1>
 
       {hasWork ? (
         <section className={cn('rounded-2xl border p-4', anyOverdue ? 'border-high-200 bg-high-50/30' : 'border-mitigated-300 bg-mitigated-50/20')}>
           <div className="flex items-center gap-2 flex-wrap">
             <ListChecks size={15} className={anyOverdue ? 'text-high-700' : 'text-brand-600'} />
-            <h2 className="text-[13px] font-bold text-ink-800">{headline}</h2>
-            <span className="text-[11.5px] text-ink-500">— what needs doing, and by when</span>
+            <h2 className="font-display text-[1.0625rem] leading-tight text-ink-900">{headline}</h2>
+            <span className="text-[0.75rem] text-ink-500">— what needs doing, and by when</span>
           </div>
           <div className="mt-3 space-y-0.5">
             {/* cycle testing — the owner's move is attesting & evidencing on the control */}
@@ -109,10 +124,10 @@ export default function RiskOwnerPortal() {
               return (
                 <button key={c.id} onClick={() => openControl(c.id)} className={rowCls}>
                   <span className="w-4 flex justify-center shrink-0"><Circle size={11} className={dd < 0 ? 'text-risk-700' : 'text-mitigated-700'} /></span>
-                  <span className="min-w-0 flex-1 truncate text-[12.5px] text-ink-700">
+                  <span className="min-w-0 flex-1 truncate text-[0.8125rem] text-ink-700">
                     <b className="font-semibold text-ink-900">{c.wpRef}</b> {c.description} <span className="text-ink-400">· {c.frequency} · attest &amp; evidence</span>
                   </span>
-                  <span className={cn('shrink-0 text-[11.5px] font-semibold', dd < 0 ? 'text-risk-700' : 'text-mitigated-700')}>{testDueLabel(dd)}</span>
+                  <span className={cn('shrink-0 text-[0.75rem] font-semibold', dd < 0 ? 'text-risk-700' : 'text-mitigated-700')}>{testDueLabel(dd)}</span>
                   {chevron}
                 </button>
               );
@@ -120,7 +135,7 @@ export default function RiskOwnerPortal() {
             {dueTests.length > 5 && (
               <button onClick={() => openRegister({ view: 'due' })} className={rowCls}>
                 <span className="w-4 shrink-0" />
-                <span className="text-[11.5px] text-ink-500">+{dueTests.length - 5} more control tests in the “Due now” view</span>
+                <span className="text-[0.75rem] text-ink-500">+{dueTests.length - 5} more control tests in the “Due now” view</span>
                 <span className="ml-auto" />
                 {chevron}
               </button>
@@ -136,20 +151,23 @@ export default function RiskOwnerPortal() {
               // data that opens on the design documents is a row that made the
               // reader do the finding themselves.
               return (
-                <div key={t.id} role="button" tabIndex={0} onClick={() => openControl(t.controlId, t.focus)}
+                <Fragment key={t.id}>
+                <div role="button" tabIndex={0} onClick={() => openControl(t.controlId, t.focus)}
                   onKeyDown={e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); openControl(t.controlId, t.focus); } }}
                   className={rowCls}>
                   <span className="w-4 flex justify-center shrink-0"><Circle size={11} className={t.overdue ? 'text-risk-700' : urgent ? 'text-mitigated-700' : 'text-ink-400'} /></span>
-                  <span className="min-w-0 flex-1 truncate text-[12.5px] text-ink-700">
+                  <span className="min-w-0 flex-1 truncate text-[0.8125rem] text-ink-700">
                     <b className="font-semibold text-ink-900">{t.title}</b> <span className="text-ink-400">· {t.controlId} · {m.label}</span>
                   </span>
-                  <span className={cn('shrink-0 text-[11.5px] font-semibold', t.overdue ? 'text-risk-700' : urgent ? 'text-mitigated-700' : 'text-ink-400')}>{t.dueLabel}</span>
+                  <span className={cn('shrink-0 text-[0.75rem] font-semibold', t.overdue ? 'text-risk-700' : urgent ? 'text-mitigated-700' : 'text-ink-400')}>{t.dueLabel}</span>
                   <button onClick={e => { e.stopPropagation(); act(t); }}
-                    className="shrink-0 inline-flex items-center gap-1 text-[11.5px] font-semibold text-brand-700 hover:text-brand-800 cursor-pointer">
+                    className="shrink-0 inline-flex items-center gap-1 text-[0.75rem] font-semibold text-brand-700 hover:text-brand-800 cursor-pointer">
                     <cta.Icon size={12} /> {cta.label}
                   </button>
                   {chevron}
                 </div>
+                {noteRow === t.id && <InlineNote note={note.note} className="mt-0.5 mb-1 pl-7 pr-2" />}
+                </Fragment>
               );
             })}
           </div>
@@ -157,20 +175,20 @@ export default function RiskOwnerPortal() {
       ) : (
         <div className="rounded-2xl border border-canvas-border bg-canvas-elevated p-12 flex flex-col items-center text-center gap-2">
           <div className="w-12 h-12 rounded-full bg-compliant-50 flex items-center justify-center"><CheckCircle2 size={22} className="text-compliant-700" /></div>
-          <p className="text-[15px] font-semibold text-ink-800">You’re all caught up</p>
-          <p className="text-[13px] text-ink-500">Nothing needs your attention right now.</p>
+          <p className="text-[0.9375rem] font-semibold text-ink-800">You’re all caught up</p>
+          <p className="text-[0.8125rem] text-ink-500">Nothing needs your attention right now.</p>
         </div>
       )}
 
       {submitted.length > 0 && (
         <div className="space-y-2">
-          <h2 className="text-[12px] font-semibold text-ink-500 uppercase tracking-wide inline-flex items-center gap-1.5"><Inbox size={13} /> With the audit team</h2>
+          <h2 className="text-[0.75rem] font-semibold text-ink-500 uppercase tracking-wide inline-flex items-center gap-1.5"><Inbox size={13} /> With the audit team</h2>
           {submitted.map(t => (
-            <div key={t.id} className="rounded-lg border border-canvas-border bg-paper-50/40 px-4 py-2.5 flex items-center gap-3 text-[12.5px]">
+            <div key={t.id} className="rounded-lg border border-canvas-border bg-paper-50/40 px-4 py-2.5 flex items-center gap-3 text-[0.8125rem]">
               <CheckCircle2 size={15} className="text-compliant-700 shrink-0" />
-              <span className="font-mono text-[11px] text-ink-500">{t.controlId}</span>
+              <span className="font-mono text-[0.6875rem] text-ink-500">{t.controlId}</span>
               <span className="text-ink-700">{t.title}</span>
-              <span className="ml-auto text-[11.5px] text-ink-400">Sent to audit</span>
+              <span className="ml-auto text-[0.75rem] text-ink-400">Sent to audit</span>
             </div>
           ))}
         </div>

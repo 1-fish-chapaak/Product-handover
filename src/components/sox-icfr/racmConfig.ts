@@ -55,16 +55,68 @@ export interface RacmConfig {
 
 /** The shape the module assumed before any of this was the team's to choose.
  *  Defined in `racmImport` beside the check that reads it, so the two can never
- *  drift apart, and re-exported here because this is where callers look. */
-export const DEFAULT_CORE: RacmFieldKey[] = DEFAULT_CORE_FIELDS;
+ *  drift apart, and re-exported here because this is where callers look.
+ *
+ *  A FUNCTION, not a const, and that is the whole point of it. `sox-icfr` is one
+ *  import cycle — this file is reached through `racmImport` itself — so a
+ *  module-level `const` reading another module's export evaluates before that
+ *  module has initialised and throws `ReferenceError: Cannot access
+ *  'DEFAULT_CORE_FIELDS' before initialization` at page load. It did: the Control
+ *  Library detail page, `SoxIcfrApp` and `SoxClassicApp` all failed to load
+ *  behind it. A hoisted `function` survives, because the read happens when it is
+ *  CALLED rather than while the module body runs.
+ *
+ *  `npm run build` does not catch this class of fault — it type-checks and bundles
+ *  clean. Only the running app shows it. Nothing at module level in this file may
+ *  read from `racmImport`; see `setups()` below for the same reason. */
+export function defaultCore(): RacmFieldKey[] {
+  return DEFAULT_CORE_FIELDS;
+}
 
-const DEFAULT: RacmConfig = { core: [...DEFAULT_CORE], extras: [], mapping: {}, configured: false };
+/** The built-in set-up. A fresh object each call rather than one shared const, so
+ *  a caller spreading it can never reach the copy everyone else reads. */
+function defaultConfig(): RacmConfig {
+  return { core: [...defaultCore()], extras: [], mapping: {}, configured: false };
+}
 
 /** Every client group's set-up, by key. A key with nothing saved reads as the
  *  built-in shape, so a new client needs no set-up act before their first
  *  upload. */
 const STORE_KEY = 'irame.racmSetups.v1';
-let SETUPS: Record<string, RacmConfig> = load();
+/** Read on first use, not on import. `load()` reaches `RACM_FIELDS` and
+ *  `ALWAYS_REQUIRED` through `withLocked`, and both live in `racmImport` — calling
+ *  it while this module's body runs is the same cycle fault `defaultCore` above
+ *  describes, by a longer route. */
+let SETUPS: Record<string, RacmConfig> | null = null;
+function setups(): Record<string, RacmConfig> {
+  if (!SETUPS) SETUPS = load();
+  return SETUPS;
+}
+
+/**
+ * WHAT `useSyncExternalStore` IS ALLOWED TO SEE — one cached object per key.
+ *
+ * `racmConfig()` hands back a FRESH object for a key nobody has configured, on
+ * purpose: `defaultConfig()` says so above, so that a caller spreading the
+ * built-in shape can never reach the copy everyone else reads. `getSnapshot`
+ * needs the opposite promise — the same object until something actually
+ * changes, or React compares the two, finds them different, and re-renders
+ * forever.
+ *
+ * It did. The full-page RACM editor calls `useRacmConfig` and crashed with
+ * "Maximum update depth exceeded" for every client group that had never been
+ * through the Config tab — which is every RACM on the day it is created. The
+ * error surfaced as a React minified #185 with no hint of this file in the
+ * stack; what names it is the warning beside it, "The result of getSnapshot
+ * should be cached to avoid an infinite loop".
+ *
+ * A Map rather than a shared frozen default, because the entry for a key that
+ * IS configured has to be cached too, and this way the rule is one rule.
+ * Cleared by `emit`, which is the only moment a set-up can change — nothing
+ * else in this module assigns `SETUPS`.
+ */
+const SNAPSHOTS = new Map<string, RacmConfig>();
+
 const listeners = new Set<() => void>();
 
 /** Extras as they may have been stored — bare headers before 22 Sep, defined
@@ -90,7 +142,7 @@ function load(): Record<string, RacmConfig> {
     // header strings until 22 Sep; one saved then reads as plain text nobody
     // has made compulsory, which is exactly what it was.
     return Object.fromEntries(Object.entries(parsed).map(([k, c]) => [k, {
-      ...DEFAULT, ...c,
+      ...defaultConfig(), ...c,
       core: withLocked(c.core ?? []),
       extras: readExtras(c.extras),
     }]));
@@ -99,9 +151,9 @@ function load(): Record<string, RacmConfig> {
   }
 }
 function save(): void {
-  try { localStorage.setItem(STORE_KEY, JSON.stringify(SETUPS)); } catch { /* nothing to do about it */ }
+  try { localStorage.setItem(STORE_KEY, JSON.stringify(setups())); } catch { /* nothing to do about it */ }
 }
-const emit = () => { save(); listeners.forEach(l => l()); };
+const emit = () => { save(); SNAPSHOTS.clear(); listeners.forEach(l => l()); };
 const subscribe = (l: () => void) => { listeners.add(l); return () => { listeners.delete(l); }; };
 
 /** The 22 Sep list is always in `core`, whoever asks to take it out — the
@@ -111,25 +163,42 @@ function withLocked(core: RacmFieldKey[]): RacmFieldKey[] {
 }
 
 /** One client group's set-up. Unsaved keys read as the built-in shape. */
-export const racmConfig = (key: string): RacmConfig => SETUPS[key] ?? DEFAULT;
+export const racmConfig = (key: string): RacmConfig => setups()[key] ?? defaultConfig();
+/**
+ * The same set-up, as ONE object that stays the same object until it changes.
+ *
+ * This is what React is given; `racmConfig` above is what everyone else gets.
+ * The two differ only in that promise, and the promise is the whole fix — see
+ * the note on `SNAPSHOTS`. Exported so it can be tested without a renderer,
+ * because the failure it prevents is invisible until a page dies.
+ */
+export function racmConfigSnapshot(key: string): RacmConfig {
+  const cached = SNAPSHOTS.get(key);
+  if (cached) return cached;
+  const fresh = racmConfig(key);
+  SNAPSHOTS.set(key, fresh);
+  return fresh;
+}
+
 export function useRacmConfig(key: string): RacmConfig {
-  const read = useCallback(() => racmConfig(key), [key]);
+  // Through the snapshot, never `racmConfig` directly.
+  const read = useCallback(() => racmConfigSnapshot(key), [key]);
   return useSyncExternalStore(subscribe, read, read);
 }
 /** The keys that have been set up, for the Config tab to list beside the client
  *  groups it already knows. */
 export function savedSetupKeys(): string[] {
-  return Object.keys(SETUPS).sort((a, b) => a.localeCompare(b));
+  return Object.keys(setups()).sort((a, b) => a.localeCompare(b));
 }
 
 export function setRacmConfig(key: string, patch: Partial<RacmConfig>): void {
   const cur = racmConfig(key);
-  SETUPS = { ...SETUPS, [key]: { ...cur, ...patch, ...(patch.core ? { core: withLocked(patch.core) } : {}), configured: true } };
+  SETUPS = { ...setups(), [key]: { ...cur, ...patch, ...(patch.core ? { core: withLocked(patch.core) } : {}), configured: true } };
   emit();
 }
 
 export function resetRacmConfig(key: string): void {
-  const next = { ...SETUPS };
+  const next = { ...setups() };
   delete next[key];
   SETUPS = next;
   emit();
@@ -149,7 +218,7 @@ export function rememberMapping(key: string, pairs: { header: string; field: Rac
     const k = normaliseHeader(header);
     if (k) mapping[k] = field;
   });
-  SETUPS = { ...SETUPS, [key]: { ...cur, mapping } };
+  SETUPS = { ...setups(), [key]: { ...cur, mapping } };
   emit();
 }
 
@@ -174,7 +243,7 @@ export function configureFromSample(
   const present = new Set(mapped.map(h => h.field));
   // The locked list stays whatever the file carried (22 Sep) — a column it
   // lacks is filled by Ira or at Review, never dropped from what a row needs.
-  const core = withLocked(RACM_FIELDS.map(f => f.key).filter(k => present.has(k) && DEFAULT_CORE.includes(k)));
+  const core = withLocked(RACM_FIELDS.map(f => f.key).filter(k => present.has(k) && defaultCore().includes(k)));
   // A column we have no field for is kept as the client's own — as plain text
   // nobody has made compulsory, because the file has just told us it exists and
   // nothing more. What it holds is theirs to define on the Config tab.
@@ -191,7 +260,7 @@ export function configureFromSample(
     sampleFileName: fileName,
     configured: true,
   };
-  SETUPS = { ...SETUPS, [key]: next };
+  SETUPS = { ...setups(), [key]: next };
   emit();
   return next;
 }

@@ -84,13 +84,13 @@ export default function DashboardView({ onNewAudit, onRollForward }: {
     <div className="space-y-5">
       <div>
       <div className="flex items-center justify-between gap-3 mb-3">
-        <h2 className="text-[13px] font-bold text-ink-800">Audits</h2>
+        <h2 className="font-display text-[1.0625rem] leading-tight text-ink-900">Audits</h2>
         <div className="flex items-center gap-2.5">
-          {noRacm && <span className="text-[11.5px] text-ink-400">Add a RACM first — an audit with no controls has nothing to test.</span>}
+          {noRacm && <span className="text-[0.75rem] text-ink-400">Add a RACM first — an audit with no controls has nothing to test.</span>}
           <button
             onClick={onNewAudit}
             disabled={noRacm}
-            className="h-8 px-3 inline-flex items-center gap-1.5 rounded-lg border border-canvas-border bg-white text-[12px] font-semibold text-ink-700 enabled:hover:border-brand-300 enabled:hover:text-brand-700 disabled:opacity-40 disabled:cursor-not-allowed transition-colors cursor-pointer"
+            className="h-8 px-3 inline-flex items-center gap-1.5 rounded-lg border border-canvas-border bg-white text-[0.75rem] font-semibold text-ink-700 enabled:hover:border-brand-300 enabled:hover:text-brand-700 disabled:opacity-40 disabled:cursor-not-allowed transition-colors cursor-pointer"
           >
             <Plus size={14} /> New audit
           </button>
@@ -110,12 +110,12 @@ export default function DashboardView({ onNewAudit, onRollForward }: {
               <div className="flex items-start justify-between gap-3">
                 <div className="min-w-0">
                   <div className="flex items-center gap-2 mb-0.5">
-                    <span className="text-[13.5px] font-semibold text-ink-900">{a.period}</span>
-                    <span className="text-[11px] text-ink-400 inline-flex items-center gap-1">
+                    <span className="text-[0.875rem] font-semibold text-ink-900">{a.period}</span>
+                    <span className="text-[0.6875rem] text-ink-400 inline-flex items-center gap-1">
                       <CalendarRange size={11} /> {a.periodSpan}
                     </span>
                   </div>
-                  <div className="text-[11.5px] text-ink-500 inline-flex items-center gap-1.5 min-w-0">
+                  <div className="text-[0.75rem] text-ink-500 inline-flex items-center gap-1.5 min-w-0">
                     {a.scopeKind === 'entity'
                       ? <Building2 size={12} className="text-ink-400 shrink-0" />
                       : <Grid3x3 size={12} className="text-ink-400 shrink-0" />}
@@ -126,20 +126,20 @@ export default function DashboardView({ onNewAudit, onRollForward }: {
                   <button
                     onClick={() => onRollForward(a)}
                     title={`Carry ${a.period} into the next cycle`}
-                    className="h-8 px-2.5 inline-flex items-center gap-1.5 rounded-lg border border-canvas-border bg-white text-[12px] font-semibold text-ink-600 hover:border-brand-300 hover:text-brand-700 transition-colors cursor-pointer"
+                    className="h-8 px-2.5 inline-flex items-center gap-1.5 rounded-lg border border-canvas-border bg-white text-[0.75rem] font-semibold text-ink-600 hover:border-brand-300 hover:text-brand-700 transition-colors cursor-pointer"
                   >
                     <RefreshCw size={13} /> Roll forward
                   </button>
                   <button
                     onClick={() => openAudit(a.id)}
-                    className="h-8 px-3 inline-flex items-center gap-1 rounded-lg bg-brand-600 text-white text-[12px] font-semibold hover:bg-brand-700 transition-colors cursor-pointer"
+                    className="h-8 px-3 inline-flex items-center gap-1 rounded-lg bg-brand-600 text-white text-[0.75rem] font-semibold hover:bg-brand-700 transition-colors cursor-pointer"
                   >
                     Open <ArrowRight size={13} />
                   </button>
                 </div>
               </div>
 
-              <div className="mt-3 flex items-center gap-3 text-[11.5px]">
+              <div className="mt-3 flex items-center gap-3 text-[0.75rem]">
                 <span className="tabular-nums text-ink-600">
                   <span className="font-semibold text-ink-900">{p.effective}/{p.total}</span> effective
                 </span>
@@ -156,41 +156,41 @@ export default function DashboardView({ onNewAudit, onRollForward }: {
       <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
         {tiles.map(s => (
           <div key={s.k} className="rounded-xl border border-canvas-border bg-canvas-elevated px-4 py-3">
-            <div className={cn('text-[20px] font-bold tabular-nums', s.t)}>{s.v}</div>
-            <div className="text-[11.5px] text-ink-500 font-medium mt-0.5">{s.k}</div>
+            <div className={cn('text-[1.25rem] font-bold tabular-nums', s.t)}>{s.v}</div>
+            <div className="text-[0.75rem] text-ink-500 font-medium mt-0.5">{s.k}</div>
           </div>
         ))}
       </div>
 
       <div className="rounded-2xl border border-canvas-border bg-canvas-elevated p-4">
-        <h2 className="text-[13px] font-bold text-ink-800 inline-flex items-center gap-1.5 mb-3"><ShieldCheck size={15} className="text-brand-600" /> Engagement health</h2>
+        <h2 className="font-display text-[1.0625rem] leading-tight text-ink-900 inline-flex items-center gap-2 mb-3"><ShieldCheck size={15} className="text-brand-600" /> Engagement health</h2>
         <RagStrip meters={ragMeters} />
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
         <div className="rounded-2xl border border-canvas-border bg-canvas-elevated p-4">
-          <h2 className="text-[13px] font-bold text-ink-800 inline-flex items-center gap-1.5 mb-3"><AlertTriangle size={15} className="text-risk-600" /> {W.Many}</h2>
+          <h2 className="font-display text-[1.0625rem] leading-tight text-ink-900 inline-flex items-center gap-2 mb-3"><AlertTriangle size={15} className="text-risk-600" /> {W.Many}</h2>
           <div className="flex items-baseline gap-2">
-            <span className="text-[20px] font-bold tabular-nums text-ink-900">{sev.open}</span>
-            <span className="text-[12.5px] text-ink-500">open of {eng.deficiencies.length}</span>
+            <span className="text-[1.25rem] font-bold tabular-nums text-ink-900">{sev.open}</span>
+            <span className="text-[0.8125rem] text-ink-500">open of {eng.deficiencies.length}</span>
           </div>
           {sev.mwOpen > 0 && (
-            <p className="text-[11.5px] text-risk-700 font-semibold mt-1">
+            <p className="text-[0.75rem] text-risk-700 font-semibold mt-1">
               {sev.mwOpen} material weakness{sev.mwOpen === 1 ? '' : 'es'} open
             </p>
           )}
-          <p className="text-[11.5px] text-ink-400 mt-2 leading-relaxed">
-            Remediation, retest and close happen inside the audit that raised them.
+          <p className="text-[0.75rem] text-ink-400 mt-2 leading-relaxed">
+            Sizing, the plan, the fix and the close happen inside the audit that raised them.
           </p>
         </div>
 
         <div className="rounded-2xl border border-canvas-border bg-canvas-elevated p-4">
-          <h2 className="text-[13px] font-bold text-ink-800 inline-flex items-center gap-1.5 mb-3"><Inbox size={15} className="text-evidence-600" /> Handoffs</h2>
+          <h2 className="font-display text-[1.0625rem] leading-tight text-ink-900 inline-flex items-center gap-2 mb-3"><Inbox size={15} className="text-evidence-600" /> Handoffs</h2>
           <div className="space-y-1.5">
             {([['pbc', 'Document requests'], ['query', 'Queries'], ['remediation', 'Remediations']] as const).map(([k, label]) => (
               <div key={k} className="flex items-center gap-2">
-                <span className="text-[12.5px] text-ink-600">{label}</span>
-                <span className="ml-auto text-[15px] font-bold tabular-nums text-ink-800">{handoffs[k]}</span>
+                <span className="text-[0.8125rem] text-ink-600">{label}</span>
+                <span className="ml-auto text-[0.9375rem] font-bold tabular-nums text-ink-800">{handoffs[k]}</span>
               </div>
             ))}
           </div>

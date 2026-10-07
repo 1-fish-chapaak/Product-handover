@@ -1,0 +1,9 @@
+Entity ID,Legal entity name,Entity type,Level,Immediate parent ID,Immediate parent name,Direct ownership %,Effective group ownership %,Non-controlling interest %,Jurisdiction of incorporation
+ENT-AIH,Altura Infra Holdings Limited,Holding,0,,,100,100,0,India
+ENT-ASO,Altura Solar One Pvt Ltd,Subsidiary,1,ENT-AIH,Altura Infra Holdings Limited,100,100,0,India
+ENT-AWT,Altura Wind Two Pvt Ltd,Subsidiary,1,ENT-AIH,Altura Infra Holdings Limited,100,100,0,India
+ENT-ARO,Altura Roadways Pvt Ltd,Subsidiary,1,ENT-AIH,Altura Infra Holdings Limited,100,100,0,India
+ENT-ATR,Altura Transmission Pvt Ltd,Subsidiary,1,ENT-AIH,Altura Infra Holdings Limited,74,74,26,India
+ENT-ASM,Altura Smart Metering Pvt Ltd,Subsidiary,2,ENT-ATR,Altura Transmission Pvt Ltd,100,74,0,India
+ENT-AWU,Altura Water Utilities Pvt Ltd,Subsidiary,1,ENT-AIH,Altura Infra Holdings Limited,51,51,49,India
+ENT-ALP,Altura Logistics Parks Pvt Ltd,Subsidiary,1,ENT-AIH,Altura Infra Holdings Limited,100,100,0,India

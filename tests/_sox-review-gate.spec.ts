@@ -104,6 +104,7 @@ test('engagement sign-off gates on countersigned papers', async ({ page }) => {
   // (sign-off now lives inside the year-end box; the gate copy is its explainer)
   await expect(page.getByText(/reviewer countersigns to conclude/).first()).toBeVisible();
   await expect(page.getByText(/concluded · \d+\/\d+ countersigned/).first()).toBeVisible();
-  // awaiting-review work is visible on the progress rail
-  await expect(page.getByText('Awaiting review', { exact: true })).toBeVisible();
+  // awaiting-review work is visible on the Dashboard's one progress line — the
+  // six-tile rail it used to sit on folded behind "Show health detail" (30 Sep)
+  await expect(page.getByText(/\d+ awaiting review/).first()).toBeVisible();
 });

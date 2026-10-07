@@ -84,6 +84,16 @@ export interface ProcurementRacmRow {
   confidence: string;
   /** SOP Section Ref */
   sopSectionRef: string;
+  /** Process Owner — who owns the process the control sits in, as against the
+   *  control's own owner. A required import column; it had no grid column
+   *  until 24 Sep, so it was read and then dropped. */
+  processOwner?: string;
+  /** Design checks (TOD) — what was checked to decide the control is DESIGNED
+   *  to work, as against `attributes`, which is what gets tested when it RUNS.
+   *  Optional because the 124 generated rows below predate the column (24 Sep);
+   *  an imported or extracted RACM always carries it, since it is a required
+   *  import column. */
+  designChecks?: string;
   /** Attributes — comma-separated list of test attributes for this control (a control can have one or multiple) */
   attributes: string;
   /** Ref — source file this row was extracted from. Set only for multi-file consolidation (RACM Generator). */
@@ -126,7 +136,7 @@ export const PROCUREMENT_RACM_COLUMNS: RacmColumnDef[] = [
   { key: 'riskTitle', label: "Risk Title", group: 'risk', width: 220 },
   { key: 'riskDescription', label: "Risk Description", group: 'risk', width: 320 },
   { key: 'riskRating', label: "Risk Rating", group: 'risk', width: 100 },
-  { key: 'likelihood', label: "Likelihood", group: 'risk', width: 100 },
+  { key: 'likelihood', label: "Likelihood", group: 'risk', width: 150 },
   { key: 'impact', label: "Impact", group: 'risk', width: 100 },
   { key: 'controlTitle', label: "Control Title", group: 'control', width: 260 },
   { key: 'controlObjective', label: "Control Objective", group: 'control', width: 280 },
@@ -138,7 +148,9 @@ export const PROCUREMENT_RACM_COLUMNS: RacmColumnDef[] = [
   { key: 'testingStrategy', label: "Testing Strategy", group: 'control', width: 150 },
   { key: 'controlOwner', label: "Control Owner", group: 'control', width: 160 },
   { key: 'riskOwner', label: "Risk Owner", group: 'control', width: 160 },
+  { key: 'processOwner', label: "Process Owner", group: 'control', width: 160 },
   { key: 'controlEvidence', label: "Control Evidence", group: 'control', width: 280 },
+  { key: 'designChecks', label: "Design Checks (TOD)", group: 'control', width: 300 },
   { key: 'attributes', label: "Attributes", group: 'control', width: 300 },
   { key: 'assertions', label: "Assertions (CEAVOP)", group: 'assertions', width: 200 },
   { key: 'fsLineItem', label: "FS Line Item", group: 'assertions', width: 220 },
@@ -209,7 +221,7 @@ export const PROCUREMENT_RACM_ROWS: ProcurementRacmRow[] = [
     "riskCategory": "Operational",
     "riskDescription": "Risk that departmental procurement budgets are inaccurate or not aligned with strategic priorities and historical spending.",
     "riskRating": "Medium",
-    "likelihood": "Medium",
+    "likelihood": "Reasonably possible",
     "impact": "Medium",
     "controlObjective": "To ensure procurement budgets are accurate and strategically aligned.",
     "controlActivity": "Each department head prepares a detailed procurement budget covering anticipated OPEX and CAPEX requirements, referencing historical spending data, approved project plans, and strategic priorities.",
@@ -227,6 +239,8 @@ export const PROCUREMENT_RACM_ROWS: ProcurementRacmRow[] = [
     "mgmtReviewControl": "",
     "confidence": "INFERRED",
     "sopSectionRef": "SOP-PROC-001, Section 5.2.1",
+    "processOwner": "Head of Financial Planning & Analysis",
+    "designChecks": "The person performing the control is independent of the person who prepares what it checks. | The control leaves evidence that it operated — a reviewer can tell it ran on a given date. | The person performing the control has the authority and competence to do so. | The control operates over a complete population — nothing routes around it.",
     "attributes": "Evidence of review"
   },
   {
@@ -237,7 +251,7 @@ export const PROCUREMENT_RACM_ROWS: ProcurementRacmRow[] = [
     "riskCategory": "Financial",
     "riskDescription": "Risk that consolidated budget contains overlaps, missed consolidation opportunities, or discrepancies with the overall corporate financial plan.",
     "riskRating": "Medium",
-    "likelihood": "Medium",
+    "likelihood": "Reasonably possible",
     "impact": "Medium",
     "controlObjective": "To ensure the master procurement budget is accurate and aligned with corporate financial plans.",
     "controlActivity": "The Finance team consolidates departmental budgets into a master procurement budget, identifies overlaps or opportunities for volume consolidation, and reconciles with the overall corporate financial plan.",
@@ -255,6 +269,8 @@ export const PROCUREMENT_RACM_ROWS: ProcurementRacmRow[] = [
     "mgmtReviewControl": "",
     "confidence": "INFERRED",
     "sopSectionRef": "SOP-PROC-001, Section 5.2.2",
+    "processOwner": "Head of Financial Planning & Analysis",
+    "designChecks": "The person performing the control is independent of the person who prepares what it checks. | The control leaves evidence that it operated — a reviewer can tell it ran on a given date. | The person performing the control has the authority and competence to do so. | The control operates over a complete population — nothing routes around it.",
     "attributes": "Sign-off obtained"
   },
   {
@@ -265,7 +281,7 @@ export const PROCUREMENT_RACM_ROWS: ProcurementRacmRow[] = [
     "riskCategory": "Operational",
     "riskDescription": "Risk that significant budget variances are not identified, challenged, or justified, leading to inefficient spending.",
     "riskRating": "Medium",
-    "likelihood": "Medium",
+    "likelihood": "Reasonably possible",
     "impact": "Medium",
     "controlObjective": "To ensure budget variances are justified and spending is efficient.",
     "controlActivity": "The Budget Committee (comprising CFO, CPO, Department Heads) reviews the consolidated budget, and departments must justify variances exceeding 10% from prior year actuals.",
@@ -283,6 +299,8 @@ export const PROCUREMENT_RACM_ROWS: ProcurementRacmRow[] = [
     "mgmtReviewControl": "",
     "confidence": "INFERRED",
     "sopSectionRef": "SOP-PROC-001, Section 5.2.3",
+    "processOwner": "Head of Financial Planning & Analysis",
+    "designChecks": "The person performing the control is independent of the person who prepares what it checks. | The threshold or tolerance the control operates at is documented and approved. | Exceptions the control raises are followed through to resolution, not just noted. | The control leaves evidence that it operated — a reviewer can tell it ran on a given date.",
     "attributes": "Completeness of documentation"
   },
   {
@@ -293,7 +311,7 @@ export const PROCUREMENT_RACM_ROWS: ProcurementRacmRow[] = [
     "riskCategory": "Financial",
     "riskDescription": "Risk that the procurement budget is not formally approved, leading to unauthorized spending limits.",
     "riskRating": "High",
-    "likelihood": "Medium",
+    "likelihood": "Reasonably possible",
     "impact": "High",
     "controlObjective": "To ensure formal authorization of the procurement budget and accurate system setup.",
     "controlActivity": "The Board / Executive Committee approves the final procurement budget, and approved budgets are loaded into the ERP system with appropriate cost center and GL account mappings.",
@@ -311,6 +329,8 @@ export const PROCUREMENT_RACM_ROWS: ProcurementRacmRow[] = [
     "mgmtReviewControl": "",
     "confidence": "INFERRED",
     "sopSectionRef": "SOP-PROC-001, Section 5.2.4",
+    "processOwner": "Head of Financial Planning & Analysis",
+    "designChecks": "The person performing the control is independent of the person who prepares what it checks. | The control leaves evidence that it operated — a reviewer can tell it ran on a given date. | The person performing the control has the authority and competence to do so. | The control runs often enough to catch a misstatement before it reaches the accounts.",
     "attributes": "Timeliness of execution,Sign-off obtained"
   },
   {
@@ -321,7 +341,7 @@ export const PROCUREMENT_RACM_ROWS: ProcurementRacmRow[] = [
     "riskCategory": "Operational",
     "riskDescription": "Risk that budget holders are not formally notified of approved allocations, leading to confusion or unauthorized spending.",
     "riskRating": "Low",
-    "likelihood": "Low",
+    "likelihood": "Remote",
     "impact": "Low",
     "controlObjective": "To ensure budget holders are aware of their spending authority.",
     "controlActivity": "Quarterly budget releases are activated in the ERP system, and budget holders receive formal notification of approved allocations and spending authority.",
@@ -339,6 +359,8 @@ export const PROCUREMENT_RACM_ROWS: ProcurementRacmRow[] = [
     "mgmtReviewControl": "",
     "confidence": "INFERRED",
     "sopSectionRef": "SOP-PROC-001, Section 5.2.5",
+    "processOwner": "Head of Financial Planning & Analysis",
+    "designChecks": "The person performing the control is independent of the person who prepares what it checks. | The control leaves evidence that it operated — a reviewer can tell it ran on a given date. | The person performing the control has the authority and competence to do so. | The control operates over a complete population — nothing routes around it.",
     "attributes": "Approval evidence verified"
   },
   {
@@ -349,7 +371,7 @@ export const PROCUREMENT_RACM_ROWS: ProcurementRacmRow[] = [
     "riskCategory": "Operational",
     "riskDescription": "Risk of budget overruns or underutilization due to lack of timely monitoring.",
     "riskRating": "Medium",
-    "likelihood": "Medium",
+    "likelihood": "Reasonably possible",
     "impact": "Medium",
     "controlObjective": "To prevent budget overruns and ensure timely utilization.",
     "controlActivity": "Automated system monitors budget vs. actual variance and generates alerts at 80% and 95% utilization.",
@@ -367,6 +389,8 @@ export const PROCUREMENT_RACM_ROWS: ProcurementRacmRow[] = [
     "mgmtReviewControl": "",
     "confidence": "EXTRACTED",
     "sopSectionRef": "SOP-PROC-001, Section 5.3",
+    "processOwner": "Head of Financial Planning & Analysis",
+    "designChecks": "The person performing the control is independent of the person who prepares what it checks. | Exceptions the control raises are followed through to resolution, not just noted. | The control leaves evidence that it operated — a reviewer can tell it ran on a given date. | The control operates over a complete population — nothing routes around it.",
     "attributes": "Completeness of documentation,Sign-off obtained"
   },
   {
@@ -377,7 +401,7 @@ export const PROCUREMENT_RACM_ROWS: ProcurementRacmRow[] = [
     "riskCategory": "Financial",
     "riskDescription": "Risk of unauthorized budget reallocations leading to misallocation of funds.",
     "riskRating": "Medium",
-    "likelihood": "Medium",
+    "likelihood": "Reasonably possible",
     "impact": "Medium",
     "controlObjective": "To ensure all budget reallocations are properly authorized.",
     "controlActivity": "Budget reallocation requires written approval from the Budget Committee.",
@@ -395,6 +419,8 @@ export const PROCUREMENT_RACM_ROWS: ProcurementRacmRow[] = [
     "mgmtReviewControl": "",
     "confidence": "EXTRACTED",
     "sopSectionRef": "SOP-PROC-001, Section 5.3",
+    "processOwner": "Head of Financial Planning & Analysis",
+    "designChecks": "The person performing the control is independent of the person who prepares what it checks. | The control leaves evidence that it operated — a reviewer can tell it ran on a given date. | The person performing the control has the authority and competence to do so.",
     "attributes": "Exception identification accuracy"
   },
   {
@@ -405,7 +431,7 @@ export const PROCUREMENT_RACM_ROWS: ProcurementRacmRow[] = [
     "riskCategory": "Financial",
     "riskDescription": "Risk of unbudgeted expenditures being incurred without proper authorization.",
     "riskRating": "Medium",
-    "likelihood": "Medium",
+    "likelihood": "Reasonably possible",
     "impact": "Medium",
     "controlObjective": "To ensure all unbudgeted expenditures are authorized.",
     "controlActivity": "Unbudgeted expenditure requires an approved Budget Amendment Request (BAR) form.",
@@ -423,6 +449,8 @@ export const PROCUREMENT_RACM_ROWS: ProcurementRacmRow[] = [
     "mgmtReviewControl": "",
     "confidence": "EXTRACTED",
     "sopSectionRef": "SOP-PROC-001, Section 5.3",
+    "processOwner": "Head of Financial Planning & Analysis",
+    "designChecks": "The person performing the control is independent of the person who prepares what it checks. | The control leaves evidence that it operated — a reviewer can tell it ran on a given date. | The person performing the control has the authority and competence to do so.",
     "attributes": "Timeliness of execution,Sign-off obtained"
   },
   {
@@ -433,7 +461,7 @@ export const PROCUREMENT_RACM_ROWS: ProcurementRacmRow[] = [
     "riskCategory": "Financial",
     "riskDescription": "Risk of CAPEX items exceeding defined thresholds being approved without appropriate project-level scrutiny.",
     "riskRating": "High",
-    "likelihood": "Medium",
+    "likelihood": "Reasonably possible",
     "impact": "High",
     "controlObjective": "To ensure high-value CAPEX items receive appropriate approval.",
     "controlActivity": "CAPEX items above the defined threshold require separate project-level approval.",
@@ -451,6 +479,8 @@ export const PROCUREMENT_RACM_ROWS: ProcurementRacmRow[] = [
     "mgmtReviewControl": "",
     "confidence": "EXTRACTED",
     "sopSectionRef": "SOP-PROC-001, Section 5.3",
+    "processOwner": "Head of Financial Planning & Analysis",
+    "designChecks": "The person performing the control is independent of the person who prepares what it checks. | The threshold or tolerance the control operates at is documented and approved. | The control leaves evidence that it operated — a reviewer can tell it ran on a given date. | The person performing the control has the authority and competence to do so.",
     "attributes": "Completeness of documentation"
   },
   {
@@ -461,7 +491,7 @@ export const PROCUREMENT_RACM_ROWS: ProcurementRacmRow[] = [
     "riskCategory": "Financial",
     "riskDescription": "Risk of over-commitment of funds due to PRs or POs exceeding available budget.",
     "riskRating": "High",
-    "likelihood": "Medium",
+    "likelihood": "Reasonably possible",
     "impact": "High",
     "controlObjective": "To prevent budget overruns at the point of commitment.",
     "controlActivity": "ERP system performs system-enforced budget checking at PR and PO stages to prevent over-commitment.",
@@ -479,6 +509,8 @@ export const PROCUREMENT_RACM_ROWS: ProcurementRacmRow[] = [
     "mgmtReviewControl": "",
     "confidence": "EXTRACTED",
     "sopSectionRef": "SOP-PROC-001, Section 5.3",
+    "processOwner": "Head of Financial Planning & Analysis",
+    "designChecks": "The control leaves evidence that it operated — a reviewer can tell it ran on a given date. | The control operates over a complete population — nothing routes around it. | The system configuration behind the control is under change control.",
     "attributes": "Approval evidence verified,Sign-off obtained"
   },
   {
@@ -489,7 +521,7 @@ export const PROCUREMENT_RACM_ROWS: ProcurementRacmRow[] = [
     "riskCategory": "Operational",
     "riskDescription": "Risk that procurement needs are not properly assessed, leading to unnecessary purchases or duplication.",
     "riskRating": "Medium",
-    "likelihood": "Medium",
+    "likelihood": "Reasonably possible",
     "impact": "Low",
     "controlObjective": "To ensure procurement needs are legitimate and avoid unnecessary spending.",
     "controlActivity": "The requisitioner identifies the need, verifies that existing inventory or contracts cannot fulfill the requirement, and checks against the approved budget allocation.",
@@ -507,6 +539,8 @@ export const PROCUREMENT_RACM_ROWS: ProcurementRacmRow[] = [
     "mgmtReviewControl": "",
     "confidence": "INFERRED",
     "sopSectionRef": "SOP-PROC-001, Section 6.2.1",
+    "processOwner": "Head of Procurement Operations",
+    "designChecks": "The person performing the control is independent of the person who prepares what it checks. | The control leaves evidence that it operated — a reviewer can tell it ran on a given date. | The person performing the control has the authority and competence to do so.",
     "attributes": "Evidence of review,Segregation of duties confirmed"
   },
   {
@@ -517,7 +551,7 @@ export const PROCUREMENT_RACM_ROWS: ProcurementRacmRow[] = [
     "riskCategory": "Operational",
     "riskDescription": "Risk that PR is incomplete or inaccurate, leading to incorrect sourcing or financial misstatements.",
     "riskRating": "Medium",
-    "likelihood": "Medium",
+    "likelihood": "Reasonably possible",
     "impact": "Low",
     "controlObjective": "To ensure PRs are complete and accurate for effective sourcing.",
     "controlActivity": "The requisitioner creates a Purchase Requisition in the ERP system with: item description and specifications, quantity, estimated unit cost, required delivery date, cost center and GL account, justification and business case for non-standard items.",
@@ -535,6 +569,8 @@ export const PROCUREMENT_RACM_ROWS: ProcurementRacmRow[] = [
     "mgmtReviewControl": "",
     "confidence": "INFERRED",
     "sopSectionRef": "SOP-PROC-001, Section 6.2.2",
+    "processOwner": "Head of Procurement Operations",
+    "designChecks": "The control leaves evidence that it operated — a reviewer can tell it ran on a given date. | The control operates over a complete population — nothing routes around it.",
     "attributes": "Completeness of documentation,Timeliness of execution,Sign-off obtained"
   },
   {
@@ -545,7 +581,7 @@ export const PROCUREMENT_RACM_ROWS: ProcurementRacmRow[] = [
     "riskCategory": "Financial",
     "riskDescription": "Risk that PR proceeds without sufficient budget, leading to budget overruns.",
     "riskRating": "High",
-    "likelihood": "Medium",
+    "likelihood": "Reasonably possible",
     "impact": "High",
     "controlObjective": "To prevent PRs from being created without sufficient budget.",
     "controlActivity": "The ERP system performs an automated budget availability check. If sufficient budget exists, the PR proceeds to approval workflow. If not, the system blocks the PR and prompts the requisitioner to initiate a Budget Amendment Request.",
@@ -563,6 +599,8 @@ export const PROCUREMENT_RACM_ROWS: ProcurementRacmRow[] = [
     "mgmtReviewControl": "",
     "confidence": "INFERRED",
     "sopSectionRef": "SOP-PROC-001, Section 6.2.3",
+    "processOwner": "Head of Procurement Operations",
+    "designChecks": "The person performing the control is independent of the person who prepares what it checks. | The control leaves evidence that it operated — a reviewer can tell it ran on a given date. | The person performing the control has the authority and competence to do so. | The control operates over a complete population — nothing routes around it.",
     "attributes": "Evidence of review,System configuration validated"
   },
   {
@@ -573,7 +611,7 @@ export const PROCUREMENT_RACM_ROWS: ProcurementRacmRow[] = [
     "riskCategory": "Financial",
     "riskDescription": "Risk of unauthorized PRs being approved, leading to unapproved commitments.",
     "riskRating": "High",
-    "likelihood": "Medium",
+    "likelihood": "Reasonably possible",
     "impact": "High",
     "controlObjective": "To ensure PRs are approved by appropriate authority levels.",
     "controlActivity": "The PR enters a multi-level approval workflow based on the Delegation of Authority (DOA) matrix, with approval levels determined by estimated total value.",
@@ -591,6 +629,8 @@ export const PROCUREMENT_RACM_ROWS: ProcurementRacmRow[] = [
     "mgmtReviewControl": "",
     "confidence": "INFERRED",
     "sopSectionRef": "SOP-PROC-001, Section 6.2.4",
+    "processOwner": "Head of Procurement Operations",
+    "designChecks": "The person performing the control is independent of the person who prepares what it checks. | The control leaves evidence that it operated — a reviewer can tell it ran on a given date. | The person performing the control has the authority and competence to do so. | The system configuration behind the control is under change control.",
     "attributes": "Exception identification accuracy,Sign-off obtained"
   },
   {
@@ -601,7 +641,7 @@ export const PROCUREMENT_RACM_ROWS: ProcurementRacmRow[] = [
     "riskCategory": "Operational",
     "riskDescription": "Risk that PR is not released to Procurement in a timely manner, delaying sourcing.",
     "riskRating": "Low",
-    "likelihood": "Low",
+    "likelihood": "Remote",
     "impact": "Low",
     "controlObjective": "To ensure timely initiation of the sourcing process.",
     "controlActivity": "Once all required approvals are obtained, the PR is released and transmitted to the Procurement team for sourcing action.",
@@ -619,6 +659,8 @@ export const PROCUREMENT_RACM_ROWS: ProcurementRacmRow[] = [
     "mgmtReviewControl": "",
     "confidence": "INFERRED",
     "sopSectionRef": "SOP-PROC-001, Section 6.2.5",
+    "processOwner": "Head of Procurement Operations",
+    "designChecks": "The person performing the control is independent of the person who prepares what it checks. | The control leaves evidence that it operated — a reviewer can tell it ran on a given date. | The person performing the control has the authority and competence to do so. | The control operates over a complete population — nothing routes around it.",
     "attributes": "Completeness of documentation,Approval evidence verified"
   },
   {
@@ -629,7 +671,7 @@ export const PROCUREMENT_RACM_ROWS: ProcurementRacmRow[] = [
     "riskCategory": "Financial",
     "riskDescription": "Risk of unauthorized PRs up to $5,000 if Line Manager approval is bypassed.",
     "riskRating": "Medium",
-    "likelihood": "Medium",
+    "likelihood": "Reasonably possible",
     "impact": "Low",
     "controlObjective": "To ensure PRs up to $5,000 are properly authorized.",
     "controlActivity": "Line Manager approves Purchase Requisitions with an estimated value up to $5,000.",
@@ -647,6 +689,8 @@ export const PROCUREMENT_RACM_ROWS: ProcurementRacmRow[] = [
     "mgmtReviewControl": "",
     "confidence": "EXTRACTED",
     "sopSectionRef": "SOP-PROC-001, Section 6.3",
+    "processOwner": "Head of Procurement Operations",
+    "designChecks": "The person performing the control is independent of the person who prepares what it checks. | The control leaves evidence that it operated — a reviewer can tell it ran on a given date. | The person performing the control has the authority and competence to do so. | The system configuration behind the control is under change control.",
     "attributes": "Timeliness of execution,Sign-off obtained"
   },
   {
@@ -657,7 +701,7 @@ export const PROCUREMENT_RACM_ROWS: ProcurementRacmRow[] = [
     "riskCategory": "Financial",
     "riskDescription": "Risk of unauthorized PRs between $5,001 and $25,000 if dual approval is bypassed.",
     "riskRating": "Medium",
-    "likelihood": "Medium",
+    "likelihood": "Reasonably possible",
     "impact": "Medium",
     "controlObjective": "To ensure PRs between $5,001 and $25,000 are properly authorized.",
     "controlActivity": "Line Manager and Department Head approve Purchase Requisitions with an estimated value between $5,001 and $25,000.",
@@ -675,6 +719,8 @@ export const PROCUREMENT_RACM_ROWS: ProcurementRacmRow[] = [
     "mgmtReviewControl": "",
     "confidence": "EXTRACTED",
     "sopSectionRef": "SOP-PROC-001, Section 6.3",
+    "processOwner": "Head of Procurement Operations",
+    "designChecks": "The person performing the control is independent of the person who prepares what it checks. | The control leaves evidence that it operated — a reviewer can tell it ran on a given date. | The person performing the control has the authority and competence to do so. | The system configuration behind the control is under change control.",
     "attributes": "Evidence of review"
   },
   {
@@ -685,7 +731,7 @@ export const PROCUREMENT_RACM_ROWS: ProcurementRacmRow[] = [
     "riskCategory": "Financial",
     "riskDescription": "Risk of unauthorized PRs between $25,001 and $100,000 if multi-level approval is bypassed.",
     "riskRating": "Medium",
-    "likelihood": "Medium",
+    "likelihood": "Reasonably possible",
     "impact": "Medium",
     "controlObjective": "To ensure PRs between $25,001 and $100,000 are properly authorized.",
     "controlActivity": "Line Manager, Department Head, and VP / Director approve Purchase Requisitions with an estimated value between $25,001 and $100,000.",
@@ -703,6 +749,8 @@ export const PROCUREMENT_RACM_ROWS: ProcurementRacmRow[] = [
     "mgmtReviewControl": "",
     "confidence": "EXTRACTED",
     "sopSectionRef": "SOP-PROC-001, Section 6.3",
+    "processOwner": "Head of Procurement Operations",
+    "designChecks": "The person performing the control is independent of the person who prepares what it checks. | The control leaves evidence that it operated — a reviewer can tell it ran on a given date. | The person performing the control has the authority and competence to do so. | The system configuration behind the control is under change control.",
     "attributes": "Completeness of documentation,Sign-off obtained"
   },
   {
@@ -713,7 +761,7 @@ export const PROCUREMENT_RACM_ROWS: ProcurementRacmRow[] = [
     "riskCategory": "Financial",
     "riskDescription": "Risk of unauthorized PRs between $100,001 and $500,000 if multi-level approval is bypassed.",
     "riskRating": "High",
-    "likelihood": "Medium",
+    "likelihood": "Reasonably possible",
     "impact": "High",
     "controlObjective": "To ensure PRs between $100,001 and $500,000 are properly authorized.",
     "controlActivity": "Department Head, VP / Director, and CFO approve Purchase Requisitions with an estimated value between $100,001 and $500,000.",
@@ -731,6 +779,8 @@ export const PROCUREMENT_RACM_ROWS: ProcurementRacmRow[] = [
     "mgmtReviewControl": "",
     "confidence": "EXTRACTED",
     "sopSectionRef": "SOP-PROC-001, Section 6.3",
+    "processOwner": "Head of Procurement Operations",
+    "designChecks": "The person performing the control is independent of the person who prepares what it checks. | The control leaves evidence that it operated — a reviewer can tell it ran on a given date. | The person performing the control has the authority and competence to do so. | The system configuration behind the control is under change control.",
     "attributes": "Evidence of review"
   },
   {
@@ -741,7 +791,7 @@ export const PROCUREMENT_RACM_ROWS: ProcurementRacmRow[] = [
     "riskCategory": "Financial",
     "riskDescription": "Risk of unauthorized PRs above $500,000 if multi-level approval is bypassed.",
     "riskRating": "High",
-    "likelihood": "Medium",
+    "likelihood": "Reasonably possible",
     "impact": "High",
     "controlObjective": "To ensure high-value PRs are properly authorized.",
     "controlActivity": "VP / Director, CFO, and CEO / Board approve Purchase Requisitions with an estimated value above $500,000.",
@@ -759,6 +809,8 @@ export const PROCUREMENT_RACM_ROWS: ProcurementRacmRow[] = [
     "mgmtReviewControl": "",
     "confidence": "EXTRACTED",
     "sopSectionRef": "SOP-PROC-001, Section 6.3",
+    "processOwner": "Head of Procurement Operations",
+    "designChecks": "The person performing the control is independent of the person who prepares what it checks. | The threshold or tolerance the control operates at is documented and approved. | The control leaves evidence that it operated — a reviewer can tell it ran on a given date. | The person performing the control has the authority and competence to do so.",
     "attributes": "Timeliness of execution,Approval evidence verified,Sign-off obtained"
   },
   {
@@ -769,7 +821,7 @@ export const PROCUREMENT_RACM_ROWS: ProcurementRacmRow[] = [
     "riskCategory": "Operational",
     "riskDescription": "Risk of incomplete or inaccurate PRs being submitted, leading to errors in sourcing.",
     "riskRating": "Medium",
-    "likelihood": "Medium",
+    "likelihood": "Reasonably possible",
     "impact": "Low",
     "controlObjective": "To ensure all necessary information is captured in PRs.",
     "controlActivity": "ERP system enforces mandatory fields validation to ensure complete PR submission.",
@@ -787,6 +839,8 @@ export const PROCUREMENT_RACM_ROWS: ProcurementRacmRow[] = [
     "mgmtReviewControl": "",
     "confidence": "EXTRACTED",
     "sopSectionRef": "SOP-PROC-001, Section 6.4",
+    "processOwner": "Head of Procurement Operations",
+    "designChecks": "The control leaves evidence that it operated — a reviewer can tell it ran on a given date. | The control operates over a complete population — nothing routes around it. | The system configuration behind the control is under change control.",
     "attributes": "Completeness of documentation,Exception identification accuracy"
   },
   {
@@ -797,7 +851,7 @@ export const PROCUREMENT_RACM_ROWS: ProcurementRacmRow[] = [
     "riskCategory": "IT general control",
     "riskDescription": "Risk of PRs being approved by unauthorized personnel or bypassing the DOA matrix.",
     "riskRating": "High",
-    "likelihood": "Medium",
+    "likelihood": "Reasonably possible",
     "impact": "High",
     "controlObjective": "To ensure PRs are routed and approved according to the DOA matrix.",
     "controlActivity": "ERP system enforces DOA-based approval routing with no bypassing.",
@@ -815,6 +869,8 @@ export const PROCUREMENT_RACM_ROWS: ProcurementRacmRow[] = [
     "mgmtReviewControl": "",
     "confidence": "EXTRACTED",
     "sopSectionRef": "SOP-PROC-001, Section 6.4",
+    "processOwner": "Head of Procurement Operations",
+    "designChecks": "The person performing the control is independent of the person who prepares what it checks. | The control leaves evidence that it operated — a reviewer can tell it ran on a given date. | The person performing the control has the authority and competence to do so. | The system configuration behind the control is under change control.",
     "attributes": "Sign-off obtained,Segregation of duties confirmed"
   },
   {
@@ -825,7 +881,7 @@ export const PROCUREMENT_RACM_ROWS: ProcurementRacmRow[] = [
     "riskCategory": "Financial",
     "riskDescription": "Risk of budget overruns due to double commitment of funds after PR approval.",
     "riskRating": "Medium",
-    "likelihood": "Medium",
+    "likelihood": "Reasonably possible",
     "impact": "Medium",
     "controlObjective": "To ensure funds are reserved upon PR approval.",
     "controlActivity": "ERP system performs automatic budget encumbrance upon PR approval to prevent double commitment.",
@@ -843,6 +899,8 @@ export const PROCUREMENT_RACM_ROWS: ProcurementRacmRow[] = [
     "mgmtReviewControl": "",
     "confidence": "EXTRACTED",
     "sopSectionRef": "SOP-PROC-001, Section 6.4",
+    "processOwner": "Head of Procurement Operations",
+    "designChecks": "The person performing the control is independent of the person who prepares what it checks. | The control leaves evidence that it operated — a reviewer can tell it ran on a given date. | The person performing the control has the authority and competence to do so. | The control operates over a complete population — nothing routes around it.",
     "attributes": "Evidence of review"
   },
   {
@@ -853,7 +911,7 @@ export const PROCUREMENT_RACM_ROWS: ProcurementRacmRow[] = [
     "riskCategory": "Operational",
     "riskDescription": "Risk of delays in procurement process due to unaddressed or stalled PRs.",
     "riskRating": "Medium",
-    "likelihood": "Medium",
+    "likelihood": "Reasonably possible",
     "impact": "Low",
     "controlObjective": "To ensure timely processing of PRs and prevent delays.",
     "controlActivity": "PR aging report is reviewed weekly; PRs open beyond 30 days are escalated.",
@@ -871,6 +929,8 @@ export const PROCUREMENT_RACM_ROWS: ProcurementRacmRow[] = [
     "mgmtReviewControl": "",
     "confidence": "EXTRACTED",
     "sopSectionRef": "SOP-PROC-001, Section 6.4",
+    "processOwner": "Head of Procurement Operations",
+    "designChecks": "The person performing the control is independent of the person who prepares what it checks. | Exceptions the control raises are followed through to resolution, not just noted. | The control leaves evidence that it operated — a reviewer can tell it ran on a given date. | The control operates over a complete population — nothing routes around it.",
     "attributes": "Completeness of documentation,Timeliness of execution,Sign-off obtained"
   },
   {
@@ -881,7 +941,7 @@ export const PROCUREMENT_RACM_ROWS: ProcurementRacmRow[] = [
     "riskCategory": "Fraud",
     "riskDescription": "Risk of fraud or unauthorized self-dealing if a requisitioner can approve their own PR.",
     "riskRating": "High",
-    "likelihood": "Medium",
+    "likelihood": "Reasonably possible",
     "impact": "High",
     "controlObjective": "To prevent conflicts of interest and fraud in PR approval.",
     "controlActivity": "System enforces segregation of duties such that the requisitioner cannot approve their own PR.",
@@ -899,6 +959,8 @@ export const PROCUREMENT_RACM_ROWS: ProcurementRacmRow[] = [
     "mgmtReviewControl": "",
     "confidence": "EXTRACTED",
     "sopSectionRef": "SOP-PROC-001, Section 6.4",
+    "processOwner": "Head of Procurement Operations",
+    "designChecks": "The person performing the control is independent of the person who prepares what it checks. | The control leaves evidence that it operated — a reviewer can tell it ran on a given date. | The person performing the control has the authority and competence to do so. | The system configuration behind the control is under change control.",
     "attributes": "Approval evidence verified"
   },
   {
@@ -909,7 +971,7 @@ export const PROCUREMENT_RACM_ROWS: ProcurementRacmRow[] = [
     "riskCategory": "Operational",
     "riskDescription": "Risk of non-competitive pricing or inappropriate vendor selection for purchases up to $5,000.",
     "riskRating": "Medium",
-    "likelihood": "Medium",
+    "likelihood": "Reasonably possible",
     "impact": "Low",
     "controlObjective": "To ensure appropriate sourcing method for low-value purchases.",
     "controlActivity": "Direct purchase (single quote) is allowed for values up to $5,000, with vendor quote on file.",
@@ -927,6 +989,8 @@ export const PROCUREMENT_RACM_ROWS: ProcurementRacmRow[] = [
     "mgmtReviewControl": "",
     "confidence": "EXTRACTED",
     "sopSectionRef": "SOP-PROC-001, Section 7.2",
+    "processOwner": "Head of Vendor Management",
+    "designChecks": "The control leaves evidence that it operated — a reviewer can tell it ran on a given date. | The person performing the control has the authority and competence to do so.",
     "attributes": "Sign-off obtained,System configuration validated"
   },
   {
@@ -937,7 +1001,7 @@ export const PROCUREMENT_RACM_ROWS: ProcurementRacmRow[] = [
     "riskCategory": "Operational",
     "riskDescription": "Risk of non-competitive pricing or inappropriate vendor selection for purchases between $5,001 and $25,000.",
     "riskRating": "Medium",
-    "likelihood": "Medium",
+    "likelihood": "Reasonably possible",
     "impact": "Medium",
     "controlObjective": "To ensure competitive sourcing for medium-value purchases.",
     "controlActivity": "Minimum 3 written quotations (RFQ) are required for values between $5,001 and $25,000, with comparative quote analysis documented.",
@@ -955,6 +1019,8 @@ export const PROCUREMENT_RACM_ROWS: ProcurementRacmRow[] = [
     "mgmtReviewControl": "",
     "confidence": "EXTRACTED",
     "sopSectionRef": "SOP-PROC-001, Section 7.2",
+    "processOwner": "Head of Vendor Management",
+    "designChecks": "The control leaves evidence that it operated — a reviewer can tell it ran on a given date. | The person performing the control has the authority and competence to do so.",
     "attributes": "Completeness of documentation"
   },
   {
@@ -965,7 +1031,7 @@ export const PROCUREMENT_RACM_ROWS: ProcurementRacmRow[] = [
     "riskCategory": "Operational",
     "riskDescription": "Risk of non-competitive pricing or inappropriate vendor selection for purchases between $25,001 and $100,000.",
     "riskRating": "Medium",
-    "likelihood": "Medium",
+    "likelihood": "Reasonably possible",
     "impact": "Medium",
     "controlObjective": "To ensure transparent and competitive sourcing for higher-value purchases.",
     "controlActivity": "Formal RFQ with sealed bids is required for values between $25,001 and $100,000, with bid evaluation scorecard documented.",
@@ -983,6 +1049,8 @@ export const PROCUREMENT_RACM_ROWS: ProcurementRacmRow[] = [
     "mgmtReviewControl": "",
     "confidence": "EXTRACTED",
     "sopSectionRef": "SOP-PROC-001, Section 7.2",
+    "processOwner": "Head of Vendor Management",
+    "designChecks": "The control leaves evidence that it operated — a reviewer can tell it ran on a given date. | The person performing the control has the authority and competence to do so.",
     "attributes": "Timeliness of execution,Exception identification accuracy,Sign-off obtained"
   },
   {
@@ -993,7 +1061,7 @@ export const PROCUREMENT_RACM_ROWS: ProcurementRacmRow[] = [
     "riskCategory": "Operational",
     "riskDescription": "Risk of non-competitive pricing or inappropriate vendor selection for purchases above $100,000.",
     "riskRating": "High",
-    "likelihood": "Medium",
+    "likelihood": "Reasonably possible",
     "impact": "High",
     "controlObjective": "To ensure comprehensive and authorized sourcing for high-value purchases.",
     "controlActivity": "Formal RFP with technical and commercial evaluation is required for values above $100,000, with full evaluation report and committee minutes documented.",
@@ -1011,6 +1079,8 @@ export const PROCUREMENT_RACM_ROWS: ProcurementRacmRow[] = [
     "mgmtReviewControl": "",
     "confidence": "EXTRACTED",
     "sopSectionRef": "SOP-PROC-001, Section 7.2",
+    "processOwner": "Head of Vendor Management",
+    "designChecks": "The threshold or tolerance the control operates at is documented and approved. | The control leaves evidence that it operated — a reviewer can tell it ran on a given date. | The person performing the control has the authority and competence to do so.",
     "attributes": "Evidence of review"
   },
   {
@@ -1021,7 +1091,7 @@ export const PROCUREMENT_RACM_ROWS: ProcurementRacmRow[] = [
     "riskCategory": "Operational",
     "riskDescription": "Risk that an inappropriate sourcing method is chosen, leading to suboptimal value or non-compliance.",
     "riskRating": "Medium",
-    "likelihood": "Medium",
+    "likelihood": "Reasonably possible",
     "impact": "Medium",
     "controlObjective": "To ensure the most effective and compliant sourcing strategy is applied.",
     "controlActivity": "Procurement reviews the PR specifications and determines the appropriate sourcing method based on value thresholds and category sourcing plans.",
@@ -1039,6 +1109,8 @@ export const PROCUREMENT_RACM_ROWS: ProcurementRacmRow[] = [
     "mgmtReviewControl": "",
     "confidence": "INFERRED",
     "sopSectionRef": "SOP-PROC-001, Section 7.3.1",
+    "processOwner": "Head of Vendor Management",
+    "designChecks": "The person performing the control is independent of the person who prepares what it checks. | The threshold or tolerance the control operates at is documented and approved. | The control leaves evidence that it operated — a reviewer can tell it ran on a given date. | The person performing the control has the authority and competence to do so.",
     "attributes": "Completeness of documentation,Approval evidence verified,Sign-off obtained"
   },
   {
@@ -1049,7 +1121,7 @@ export const PROCUREMENT_RACM_ROWS: ProcurementRacmRow[] = [
     "riskCategory": "Operational",
     "riskDescription": "Risk of engaging unqualified or high-risk vendors, leading to operational or financial issues.",
     "riskRating": "High",
-    "likelihood": "Medium",
+    "likelihood": "Reasonably possible",
     "impact": "High",
     "controlObjective": "To ensure only qualified and compliant vendors are engaged.",
     "controlActivity": "Procurement identifies potential vendors from the Approved Vendor List (AVL). New vendors must complete the Vendor Registration Form and undergo due diligence (financial health check, reference verification, compliance screening, capacity assessment).",
@@ -1067,6 +1139,8 @@ export const PROCUREMENT_RACM_ROWS: ProcurementRacmRow[] = [
     "mgmtReviewControl": "",
     "confidence": "INFERRED",
     "sopSectionRef": "SOP-PROC-001, Section 7.3.2",
+    "processOwner": "Head of Vendor Management",
+    "designChecks": "The person performing the control is independent of the person who prepares what it checks. | The control leaves evidence that it operated — a reviewer can tell it ran on a given date. | The person performing the control has the authority and competence to do so.",
     "attributes": "Evidence of review"
   },
   {
@@ -1077,7 +1151,7 @@ export const PROCUREMENT_RACM_ROWS: ProcurementRacmRow[] = [
     "riskCategory": "Operational",
     "riskDescription": "Risk that solicitation documents are unclear, incomplete, or do not contain fair terms, leading to poor vendor responses.",
     "riskRating": "Medium",
-    "likelihood": "Medium",
+    "likelihood": "Reasonably possible",
     "impact": "Low",
     "controlObjective": "To ensure clear and comprehensive solicitation for optimal vendor responses.",
     "controlActivity": "Formal solicitation documents (RFQ/RFP) are issued to shortlisted vendors with clear specifications, evaluation criteria and weightages, submission deadlines, and terms and conditions.",
@@ -1095,6 +1169,8 @@ export const PROCUREMENT_RACM_ROWS: ProcurementRacmRow[] = [
     "mgmtReviewControl": "",
     "confidence": "INFERRED",
     "sopSectionRef": "SOP-PROC-001, Section 7.3.3",
+    "processOwner": "Head of Vendor Management",
+    "designChecks": "The control leaves evidence that it operated — a reviewer can tell it ran on a given date. | The person performing the control has the authority and competence to do so. | The control operates over a complete population — nothing routes around it.",
     "attributes": "Timeliness of execution,Sign-off obtained"
   },
   {
@@ -1105,7 +1181,7 @@ export const PROCUREMENT_RACM_ROWS: ProcurementRacmRow[] = [
     "riskCategory": "Operational",
     "riskDescription": "Risk that vendor bids are not evaluated objectively or consistently, leading to suboptimal vendor selection.",
     "riskRating": "Medium",
-    "likelihood": "Medium",
+    "likelihood": "Reasonably possible",
     "impact": "Medium",
     "controlObjective": "To ensure objective and fair evaluation of vendor bids.",
     "controlActivity": "A cross-functional evaluation committee scores vendor responses on pre-defined criteria including: technical compliance (30-40%), commercial competitiveness (25-35%), delivery capability (15-20%), and past performance / references (10-15%).",
@@ -1123,6 +1199,8 @@ export const PROCUREMENT_RACM_ROWS: ProcurementRacmRow[] = [
     "mgmtReviewControl": "",
     "confidence": "INFERRED",
     "sopSectionRef": "SOP-PROC-001, Section 7.3.4",
+    "processOwner": "Head of Vendor Management",
+    "designChecks": "The control leaves evidence that it operated — a reviewer can tell it ran on a given date. | The person performing the control has the authority and competence to do so.",
     "attributes": "Completeness of documentation,Segregation of duties confirmed"
   },
   {
@@ -1133,7 +1211,7 @@ export const PROCUREMENT_RACM_ROWS: ProcurementRacmRow[] = [
     "riskCategory": "Operational",
     "riskDescription": "Risk that negotiation outcomes are not favorable or not properly documented, leading to disputes or financial loss.",
     "riskRating": "Medium",
-    "likelihood": "Medium",
+    "likelihood": "Reasonably possible",
     "impact": "Medium",
     "controlObjective": "To ensure favorable and documented negotiation outcomes.",
     "controlActivity": "Commercial negotiations are conducted with shortlisted vendors, and all negotiation outcomes are documented in a Negotiation Summary Sheet.",
@@ -1151,6 +1229,8 @@ export const PROCUREMENT_RACM_ROWS: ProcurementRacmRow[] = [
     "mgmtReviewControl": "",
     "confidence": "INFERRED",
     "sopSectionRef": "SOP-PROC-001, Section 7.3.5",
+    "processOwner": "Head of Vendor Management",
+    "designChecks": "The control leaves evidence that it operated — a reviewer can tell it ran on a given date. | The person performing the control has the authority and competence to do so. | The control operates over a complete population — nothing routes around it.",
     "attributes": "Sign-off obtained"
   },
   {
@@ -1161,7 +1241,7 @@ export const PROCUREMENT_RACM_ROWS: ProcurementRacmRow[] = [
     "riskCategory": "Operational",
     "riskDescription": "Risk that vendor selection is not properly authorized or is biased.",
     "riskRating": "Medium",
-    "likelihood": "Medium",
+    "likelihood": "Reasonably possible",
     "impact": "Medium",
     "controlObjective": "To ensure authorized and unbiased vendor selection.",
     "controlActivity": "The evaluation committee recommends the preferred vendor, and the award decision is approved per the DOA matrix.",
@@ -1179,6 +1259,8 @@ export const PROCUREMENT_RACM_ROWS: ProcurementRacmRow[] = [
     "mgmtReviewControl": "",
     "confidence": "INFERRED",
     "sopSectionRef": "SOP-PROC-001, Section 7.3.6",
+    "processOwner": "Head of Vendor Management",
+    "designChecks": "The person performing the control is independent of the person who prepares what it checks. | The control leaves evidence that it operated — a reviewer can tell it ran on a given date. | The person performing the control has the authority and competence to do so.",
     "attributes": "Approval evidence verified,Exception identification accuracy"
   },
   {
@@ -1189,7 +1271,7 @@ export const PROCUREMENT_RACM_ROWS: ProcurementRacmRow[] = [
     "riskCategory": "Operational",
     "riskDescription": "Risk of non-competitive sourcing leading to inflated prices or suboptimal value.",
     "riskRating": "Medium",
-    "likelihood": "Medium",
+    "likelihood": "Reasonably possible",
     "impact": "Medium",
     "controlObjective": "To ensure competitive pricing and optimal value.",
     "controlActivity": "Mandatory competitive bidding is enforced for procurement above threshold amounts.",
@@ -1207,6 +1289,8 @@ export const PROCUREMENT_RACM_ROWS: ProcurementRacmRow[] = [
     "mgmtReviewControl": "",
     "confidence": "EXTRACTED",
     "sopSectionRef": "SOP-PROC-001, Section 7.4",
+    "processOwner": "Head of Vendor Management",
+    "designChecks": "The threshold or tolerance the control operates at is documented and approved. | The control leaves evidence that it operated — a reviewer can tell it ran on a given date. | The person performing the control has the authority and competence to do so.",
     "attributes": "Completeness of documentation,Timeliness of execution,Sign-off obtained"
   },
   {
@@ -1217,7 +1301,7 @@ export const PROCUREMENT_RACM_ROWS: ProcurementRacmRow[] = [
     "riskCategory": "Fraud",
     "riskDescription": "Risk of biased vendor selection due to undisclosed conflicts of interest.",
     "riskRating": "High",
-    "likelihood": "Medium",
+    "likelihood": "Reasonably possible",
     "impact": "High",
     "controlObjective": "To ensure impartiality in vendor evaluation.",
     "controlActivity": "All evaluation committee members provide conflict of interest declarations.",
@@ -1235,6 +1319,8 @@ export const PROCUREMENT_RACM_ROWS: ProcurementRacmRow[] = [
     "mgmtReviewControl": "",
     "confidence": "EXTRACTED",
     "sopSectionRef": "SOP-PROC-001, Section 7.4",
+    "processOwner": "Head of Vendor Management",
+    "designChecks": "The control leaves evidence that it operated — a reviewer can tell it ran on a given date. | The person performing the control has the authority and competence to do so.",
     "attributes": "Evidence of review"
   },
   {
@@ -1245,7 +1331,7 @@ export const PROCUREMENT_RACM_ROWS: ProcurementRacmRow[] = [
     "riskCategory": "Fraud",
     "riskDescription": "Risk of bid manipulation or unfair advantage in formal tenders.",
     "riskRating": "High",
-    "likelihood": "Medium",
+    "likelihood": "Reasonably possible",
     "impact": "High",
     "controlObjective": "To ensure fairness and integrity of the bidding process.",
     "controlActivity": "A sealed bid process is used for formal tenders with witnessed bid opening.",
@@ -1263,6 +1349,8 @@ export const PROCUREMENT_RACM_ROWS: ProcurementRacmRow[] = [
     "mgmtReviewControl": "",
     "confidence": "EXTRACTED",
     "sopSectionRef": "SOP-PROC-001, Section 7.4",
+    "processOwner": "Head of Vendor Management",
+    "designChecks": "The control leaves evidence that it operated — a reviewer can tell it ran on a given date. | The person performing the control has the authority and competence to do so.",
     "attributes": "Sign-off obtained"
   },
   {
@@ -1273,7 +1361,7 @@ export const PROCUREMENT_RACM_ROWS: ProcurementRacmRow[] = [
     "riskCategory": "Operational",
     "riskDescription": "Risk of onboarding unqualified, financially unstable, or non-compliant vendors.",
     "riskRating": "High",
-    "likelihood": "Medium",
+    "likelihood": "Reasonably possible",
     "impact": "High",
     "controlObjective": "To ensure only qualified and compliant vendors are added to the AVL.",
     "controlActivity": "Vendor due diligence (KYC, financial health, compliance) is performed before onboarding new vendors to the Approved Vendor List (AVL).",
@@ -1291,6 +1379,8 @@ export const PROCUREMENT_RACM_ROWS: ProcurementRacmRow[] = [
     "mgmtReviewControl": "",
     "confidence": "EXTRACTED",
     "sopSectionRef": "SOP-PROC-001, Section 7.4",
+    "processOwner": "Head of Vendor Management",
+    "designChecks": "The person performing the control is independent of the person who prepares what it checks. | The control leaves evidence that it operated — a reviewer can tell it ran on a given date. | The person performing the control has the authority and competence to do so.",
     "attributes": "Completeness of documentation,System configuration validated"
   },
   {
@@ -1301,7 +1391,7 @@ export const PROCUREMENT_RACM_ROWS: ProcurementRacmRow[] = [
     "riskCategory": "Operational",
     "riskDescription": "Risk of inappropriate or unjustified sole-source procurement leading to higher costs or lack of competition.",
     "riskRating": "Medium",
-    "likelihood": "Medium",
+    "likelihood": "Reasonably possible",
     "impact": "Medium",
     "controlObjective": "To ensure sole-source procurements are justified and authorized.",
     "controlActivity": "Sole-source justification requires written approval from the CPO and Finance Controller.",
@@ -1319,6 +1409,8 @@ export const PROCUREMENT_RACM_ROWS: ProcurementRacmRow[] = [
     "mgmtReviewControl": "",
     "confidence": "EXTRACTED",
     "sopSectionRef": "SOP-PROC-001, Section 7.4",
+    "processOwner": "Head of Vendor Management",
+    "designChecks": "The person performing the control is independent of the person who prepares what it checks. | The control leaves evidence that it operated — a reviewer can tell it ran on a given date. | The person performing the control has the authority and competence to do so.",
     "attributes": "Timeliness of execution,Approval evidence verified,Sign-off obtained"
   },
   {
@@ -1329,7 +1421,7 @@ export const PROCUREMENT_RACM_ROWS: ProcurementRacmRow[] = [
     "riskCategory": "Operational",
     "riskDescription": "Risk of inefficient or non-standardized procurement for recurring high-volume items.",
     "riskRating": "Low",
-    "likelihood": "Low",
+    "likelihood": "Remote",
     "impact": "Low",
     "controlObjective": "To optimize procurement for recurring items.",
     "controlActivity": "Rate contracts or framework agreements are established for recurring high-volume categories.",
@@ -1347,6 +1439,8 @@ export const PROCUREMENT_RACM_ROWS: ProcurementRacmRow[] = [
     "mgmtReviewControl": "",
     "confidence": "EXTRACTED",
     "sopSectionRef": "SOP-PROC-001, Section 7.4",
+    "processOwner": "Head of Vendor Management",
+    "designChecks": "The control leaves evidence that it operated — a reviewer can tell it ran on a given date. | The person performing the control has the authority and competence to do so. | The control runs often enough to catch a misstatement before it reaches the accounts.",
     "attributes": "Evidence of review"
   },
   {
@@ -1357,7 +1451,7 @@ export const PROCUREMENT_RACM_ROWS: ProcurementRacmRow[] = [
     "riskCategory": "Operational",
     "riskDescription": "Risk that PO is inaccurate or does not reflect agreed terms, leading to vendor disputes or incorrect payments.",
     "riskRating": "Medium",
-    "likelihood": "Medium",
+    "likelihood": "Reasonably possible",
     "impact": "Medium",
     "controlObjective": "To ensure POs accurately reflect agreed terms and conditions.",
     "controlActivity": "The Buyer creates a Purchase Order in the ERP system referencing the approved PR and vendor selection documentation, including vendor details, item descriptions, quantities, agreed unit prices, total value, delivery schedule, payment terms, taxes, and standard terms and conditions.",
@@ -1375,6 +1469,8 @@ export const PROCUREMENT_RACM_ROWS: ProcurementRacmRow[] = [
     "mgmtReviewControl": "",
     "confidence": "INFERRED",
     "sopSectionRef": "SOP-PROC-001, Section 8.2.1",
+    "processOwner": "Head of Procurement Operations",
+    "designChecks": "The person performing the control is independent of the person who prepares what it checks. | The control leaves evidence that it operated — a reviewer can tell it ran on a given date. | The person performing the control has the authority and competence to do so. | The control operates over a complete population — nothing routes around it.",
     "attributes": "Completeness of documentation,Exception identification accuracy,Sign-off obtained"
   },
   {
@@ -1385,7 +1481,7 @@ export const PROCUREMENT_RACM_ROWS: ProcurementRacmRow[] = [
     "riskCategory": "Financial",
     "riskDescription": "Risk of budget overruns if PO value significantly exceeds PR estimate without re-verification.",
     "riskRating": "High",
-    "likelihood": "Medium",
+    "likelihood": "Reasonably possible",
     "impact": "High",
     "controlObjective": "To ensure POs remain within budget and significant variances are approved.",
     "controlActivity": "The ERP system re-checks budget availability at the PO stage. Any variance between PR estimate and PO value exceeding 10% requires re-approval.",
@@ -1403,6 +1499,8 @@ export const PROCUREMENT_RACM_ROWS: ProcurementRacmRow[] = [
     "mgmtReviewControl": "",
     "confidence": "INFERRED",
     "sopSectionRef": "SOP-PROC-001, Section 8.2.2",
+    "processOwner": "Head of Procurement Operations",
+    "designChecks": "The person performing the control is independent of the person who prepares what it checks. | The threshold or tolerance the control operates at is documented and approved. | The control leaves evidence that it operated — a reviewer can tell it ran on a given date. | The person performing the control has the authority and competence to do so.",
     "attributes": "Evidence of review"
   },
   {
@@ -1413,7 +1511,7 @@ export const PROCUREMENT_RACM_ROWS: ProcurementRacmRow[] = [
     "riskCategory": "Financial",
     "riskDescription": "Risk of unauthorized POs being issued, leading to unapproved contractual commitments.",
     "riskRating": "High",
-    "likelihood": "Medium",
+    "likelihood": "Reasonably possible",
     "impact": "High",
     "controlObjective": "To ensure POs are approved by appropriate authority levels.",
     "controlActivity": "The Purchase Order enters the DOA-based approval workflow (same thresholds as PR approval). For POs referencing approved rate contracts with no deviations, a simplified approval workflow applies.",
@@ -1431,6 +1529,8 @@ export const PROCUREMENT_RACM_ROWS: ProcurementRacmRow[] = [
     "mgmtReviewControl": "",
     "confidence": "INFERRED",
     "sopSectionRef": "SOP-PROC-001, Section 8.2.3",
+    "processOwner": "Head of Procurement Operations",
+    "designChecks": "The person performing the control is independent of the person who prepares what it checks. | The threshold or tolerance the control operates at is documented and approved. | The control leaves evidence that it operated — a reviewer can tell it ran on a given date. | The person performing the control has the authority and competence to do so.",
     "attributes": "Timeliness of execution,Sign-off obtained,Segregation of duties confirmed"
   },
   {
@@ -1441,7 +1541,7 @@ export const PROCUREMENT_RACM_ROWS: ProcurementRacmRow[] = [
     "riskCategory": "Operational",
     "riskDescription": "Risk that PO is not dispatched or acknowledged by vendor, leading to delays or misunderstandings.",
     "riskRating": "Low",
-    "likelihood": "Low",
+    "likelihood": "Remote",
     "impact": "Low",
     "controlObjective": "To ensure timely and confirmed communication of POs to vendors.",
     "controlActivity": "Upon final approval, the PO is dispatched to the vendor via the ERP portal, email, or EDI. The vendor acknowledges receipt and acceptance of the PO terms.",
@@ -1459,6 +1559,8 @@ export const PROCUREMENT_RACM_ROWS: ProcurementRacmRow[] = [
     "mgmtReviewControl": "",
     "confidence": "INFERRED",
     "sopSectionRef": "SOP-PROC-001, Section 8.2.4",
+    "processOwner": "Head of Procurement Operations",
+    "designChecks": "The person performing the control is independent of the person who prepares what it checks. | The control leaves evidence that it operated — a reviewer can tell it ran on a given date. | The person performing the control has the authority and competence to do so. | The control operates over a complete population — nothing routes around it.",
     "attributes": "Completeness of documentation,Approval evidence verified"
   },
   {
@@ -1469,7 +1571,7 @@ export const PROCUREMENT_RACM_ROWS: ProcurementRacmRow[] = [
     "riskCategory": "Operational",
     "riskDescription": "Risk that changes to approved POs are not formally documented or authorized, leading to discrepancies or unauthorized commitments.",
     "riskRating": "Medium",
-    "likelihood": "Medium",
+    "likelihood": "Reasonably possible",
     "impact": "Medium",
     "controlObjective": "To ensure all PO changes are formally authorized and documented.",
     "controlActivity": "Any changes to an approved PO (quantity, price, delivery date) must be processed as a formal PO Amendment, routed through the same approval workflow as the original PO.",
@@ -1487,6 +1589,8 @@ export const PROCUREMENT_RACM_ROWS: ProcurementRacmRow[] = [
     "mgmtReviewControl": "",
     "confidence": "INFERRED",
     "sopSectionRef": "SOP-PROC-001, Section 8.2.5",
+    "processOwner": "Head of Procurement Operations",
+    "designChecks": "The person performing the control is independent of the person who prepares what it checks. | The control leaves evidence that it operated — a reviewer can tell it ran on a given date. | The person performing the control has the authority and competence to do so.",
     "attributes": "Sign-off obtained"
   },
   {
@@ -1497,7 +1601,7 @@ export const PROCUREMENT_RACM_ROWS: ProcurementRacmRow[] = [
     "riskCategory": "Financial",
     "riskDescription": "Risk of unauthorized or unbudgeted purchases if POs are created without an approved PR.",
     "riskRating": "High",
-    "likelihood": "Medium",
+    "likelihood": "Reasonably possible",
     "impact": "High",
     "controlObjective": "To ensure all POs are backed by an approved PR.",
     "controlActivity": "PO must reference an approved PR; the system prevents standalone POs without requisition backing.",
@@ -1515,6 +1619,8 @@ export const PROCUREMENT_RACM_ROWS: ProcurementRacmRow[] = [
     "mgmtReviewControl": "",
     "confidence": "EXTRACTED",
     "sopSectionRef": "SOP-PROC-001, Section 8.3",
+    "processOwner": "Head of Procurement Operations",
+    "designChecks": "The person performing the control is independent of the person who prepares what it checks. | The control leaves evidence that it operated — a reviewer can tell it ran on a given date. | The person performing the control has the authority and competence to do so. | The system configuration behind the control is under change control.",
     "attributes": "Evidence of review"
   },
   {
@@ -1525,7 +1631,7 @@ export const PROCUREMENT_RACM_ROWS: ProcurementRacmRow[] = [
     "riskCategory": "Financial",
     "riskDescription": "Risk of budget overruns if POs are created exceeding available budget.",
     "riskRating": "High",
-    "likelihood": "Medium",
+    "likelihood": "Reasonably possible",
     "impact": "High",
     "controlObjective": "To prevent POs from exceeding available budget.",
     "controlActivity": "The ERP system prevents PO creation exceeding available budget.",
@@ -1543,6 +1649,8 @@ export const PROCUREMENT_RACM_ROWS: ProcurementRacmRow[] = [
     "mgmtReviewControl": "",
     "confidence": "EXTRACTED",
     "sopSectionRef": "SOP-PROC-001, Section 8.3",
+    "processOwner": "Head of Procurement Operations",
+    "designChecks": "The threshold or tolerance the control operates at is documented and approved. | The control leaves evidence that it operated — a reviewer can tell it ran on a given date. | The control operates over a complete population — nothing routes around it. | The system configuration behind the control is under change control.",
     "attributes": "Completeness of documentation,Timeliness of execution,Sign-off obtained"
   },
   {
@@ -1553,7 +1661,7 @@ export const PROCUREMENT_RACM_ROWS: ProcurementRacmRow[] = [
     "riskCategory": "Operational",
     "riskDescription": "Risk of significant price discrepancies between PR and PO going unnoticed or unauthorized.",
     "riskRating": "Medium",
-    "likelihood": "Medium",
+    "likelihood": "Reasonably possible",
     "impact": "Medium",
     "controlObjective": "To ensure significant price variances are reviewed and approved.",
     "controlActivity": "Price variance between PR estimate and PO exceeding 10% triggers re-approval.",
@@ -1571,6 +1679,8 @@ export const PROCUREMENT_RACM_ROWS: ProcurementRacmRow[] = [
     "mgmtReviewControl": "",
     "confidence": "EXTRACTED",
     "sopSectionRef": "SOP-PROC-001, Section 8.3",
+    "processOwner": "Head of Procurement Operations",
+    "designChecks": "The person performing the control is independent of the person who prepares what it checks. | The threshold or tolerance the control operates at is documented and approved. | The control leaves evidence that it operated — a reviewer can tell it ran on a given date. | The person performing the control has the authority and competence to do so.",
     "attributes": "Exception identification accuracy"
   },
   {
@@ -1581,7 +1691,7 @@ export const PROCUREMENT_RACM_ROWS: ProcurementRacmRow[] = [
     "riskCategory": "Fraud",
     "riskDescription": "Risk of fraud or unauthorized transactions if the PO creator can also approve the PO.",
     "riskRating": "High",
-    "likelihood": "Medium",
+    "likelihood": "Reasonably possible",
     "impact": "High",
     "controlObjective": "To prevent conflicts of interest and fraud in PO creation and approval.",
     "controlActivity": "System enforces segregation of duties such that the PO creator cannot be the same as the PO approver.",
@@ -1599,6 +1709,8 @@ export const PROCUREMENT_RACM_ROWS: ProcurementRacmRow[] = [
     "mgmtReviewControl": "",
     "confidence": "EXTRACTED",
     "sopSectionRef": "SOP-PROC-001, Section 8.3",
+    "processOwner": "Head of Procurement Operations",
+    "designChecks": "The person performing the control is independent of the person who prepares what it checks. | The control leaves evidence that it operated — a reviewer can tell it ran on a given date. | The person performing the control has the authority and competence to do so. | The system configuration behind the control is under change control.",
     "attributes": "Approval evidence verified,Sign-off obtained"
   },
   {
@@ -1609,7 +1721,7 @@ export const PROCUREMENT_RACM_ROWS: ProcurementRacmRow[] = [
     "riskCategory": "Operational",
     "riskDescription": "Risk of discrepancies between PO terms and negotiated vendor agreements, leading to disputes or financial loss.",
     "riskRating": "Medium",
-    "likelihood": "Medium",
+    "likelihood": "Reasonably possible",
     "impact": "Medium",
     "controlObjective": "To ensure PO terms align with vendor agreements.",
     "controlActivity": "PO terms are verified to match the negotiated and documented vendor agreement.",
@@ -1627,6 +1739,8 @@ export const PROCUREMENT_RACM_ROWS: ProcurementRacmRow[] = [
     "mgmtReviewControl": "",
     "confidence": "EXTRACTED",
     "sopSectionRef": "SOP-PROC-001, Section 8.3",
+    "processOwner": "Head of Procurement Operations",
+    "designChecks": "The person performing the control is independent of the person who prepares what it checks. | The threshold or tolerance the control operates at is documented and approved. | The control leaves evidence that it operated — a reviewer can tell it ran on a given date. | The person performing the control has the authority and competence to do so.",
     "attributes": "Completeness of documentation"
   },
   {
@@ -1637,7 +1751,7 @@ export const PROCUREMENT_RACM_ROWS: ProcurementRacmRow[] = [
     "riskCategory": "Operational",
     "riskDescription": "Risk of unauthorized or unapproved purchases being made without proper process, indicated by retrospective POs.",
     "riskRating": "Medium",
-    "likelihood": "Medium",
+    "likelihood": "Reasonably possible",
     "impact": "Medium",
     "controlObjective": "To detect and review retrospective POs.",
     "controlActivity": "Retrospective POs (created after goods/service receipt) are flagged for management review.",
@@ -1655,6 +1769,8 @@ export const PROCUREMENT_RACM_ROWS: ProcurementRacmRow[] = [
     "mgmtReviewControl": "",
     "confidence": "EXTRACTED",
     "sopSectionRef": "SOP-PROC-001, Section 8.3",
+    "processOwner": "Head of Procurement Operations",
+    "designChecks": "The person performing the control is independent of the person who prepares what it checks. | Exceptions the control raises are followed through to resolution, not just noted. | The control leaves evidence that it operated — a reviewer can tell it ran on a given date.",
     "attributes": "Timeliness of execution,Sign-off obtained,System configuration validated"
   },
   {
@@ -1665,7 +1781,7 @@ export const PROCUREMENT_RACM_ROWS: ProcurementRacmRow[] = [
     "riskCategory": "Operational",
     "riskDescription": "Risk of unpreparedness for delivery or missed inspections if delivery notifications are not received or processed.",
     "riskRating": "Low",
-    "likelihood": "Low",
+    "likelihood": "Remote",
     "impact": "Low",
     "controlObjective": "To ensure timely and prepared receipt and inspection of goods/services.",
     "controlActivity": "The vendor provides advance shipping notice (ASN) or delivery schedule, and the receiving team prepares for inspection using the PO as the reference document.",
@@ -1683,6 +1799,8 @@ export const PROCUREMENT_RACM_ROWS: ProcurementRacmRow[] = [
     "mgmtReviewControl": "",
     "confidence": "INFERRED",
     "sopSectionRef": "SOP-PROC-001, Section 9.2.1",
+    "processOwner": "Head of Warehouse & Receiving",
+    "designChecks": "The control leaves evidence that it operated — a reviewer can tell it ran on a given date. | The person performing the control has the authority and competence to do so. | The control operates over a complete population — nothing routes around it.",
     "attributes": "Evidence of review"
   },
   {
@@ -1693,7 +1811,7 @@ export const PROCUREMENT_RACM_ROWS: ProcurementRacmRow[] = [
     "riskCategory": "Operational",
     "riskDescription": "Risk of receiving incorrect quantities, damaged goods, or non-conforming services.",
     "riskRating": "Medium",
-    "likelihood": "Medium",
+    "likelihood": "Reasonably possible",
     "impact": "Medium",
     "controlObjective": "To verify that received goods/services conform to PO specifications.",
     "controlActivity": "For goods: the receiving team inspects delivery against the PO for quantity, condition, specifications, and packaging. For services: the project owner or designated reviewer evaluates deliverables against agreed milestones or SLA benchmarks.",
@@ -1711,6 +1829,8 @@ export const PROCUREMENT_RACM_ROWS: ProcurementRacmRow[] = [
     "mgmtReviewControl": "",
     "confidence": "INFERRED",
     "sopSectionRef": "SOP-PROC-001, Section 9.2.2",
+    "processOwner": "Head of Warehouse & Receiving",
+    "designChecks": "The person performing the control is independent of the person who prepares what it checks. | The control leaves evidence that it operated — a reviewer can tell it ran on a given date. | The person performing the control has the authority and competence to do so.",
     "attributes": "Completeness of documentation,Sign-off obtained"
   },
   {
@@ -1721,7 +1841,7 @@ export const PROCUREMENT_RACM_ROWS: ProcurementRacmRow[] = [
     "riskCategory": "Operational",
     "riskDescription": "Risk of accepting goods/services that do not meet quality standards.",
     "riskRating": "Medium",
-    "likelihood": "Medium",
+    "likelihood": "Reasonably possible",
     "impact": "Medium",
     "controlObjective": "To ensure received goods/services meet quality standards.",
     "controlActivity": "For items requiring quality inspection, samples are routed to the QA team. QA certifies acceptance or flags non-conformances. Non-conforming goods are quarantined.",
@@ -1739,6 +1859,8 @@ export const PROCUREMENT_RACM_ROWS: ProcurementRacmRow[] = [
     "mgmtReviewControl": "",
     "confidence": "INFERRED",
     "sopSectionRef": "SOP-PROC-001, Section 9.2.3",
+    "processOwner": "Head of Warehouse & Receiving",
+    "designChecks": "The control leaves evidence that it operated — a reviewer can tell it ran on a given date. | The person performing the control has the authority and competence to do so.",
     "attributes": "Approval evidence verified,Segregation of duties confirmed"
   },
   {
@@ -1749,7 +1871,7 @@ export const PROCUREMENT_RACM_ROWS: ProcurementRacmRow[] = [
     "riskCategory": "Financial",
     "riskDescription": "Risk of inaccurate or incomplete GRN/SRN, leading to incorrect inventory records or payment issues.",
     "riskRating": "Medium",
-    "likelihood": "Medium",
+    "likelihood": "Reasonably possible",
     "impact": "Medium",
     "controlObjective": "To create an accurate and complete record of goods/service receipt.",
     "controlActivity": "Upon satisfactory inspection, the receiving team creates a Goods Receipt Note (GRN) or Service Receipt Note (SRN) in the ERP system, recording: actual quantities received, receipt date, inspection outcome, storage location (for goods), and any discrepancies or damages noted.",
@@ -1767,6 +1889,8 @@ export const PROCUREMENT_RACM_ROWS: ProcurementRacmRow[] = [
     "mgmtReviewControl": "",
     "confidence": "INFERRED",
     "sopSectionRef": "SOP-PROC-001, Section 9.2.4",
+    "processOwner": "Head of Warehouse & Receiving",
+    "designChecks": "The control leaves evidence that it operated — a reviewer can tell it ran on a given date. | The control operates over a complete population — nothing routes around it.",
     "attributes": "Timeliness of execution,Exception identification accuracy,Sign-off obtained"
   },
   {
@@ -1777,7 +1901,7 @@ export const PROCUREMENT_RACM_ROWS: ProcurementRacmRow[] = [
     "riskCategory": "Operational",
     "riskDescription": "Risk that discrepancies in delivery are not documented or resolved, leading to financial loss or vendor disputes.",
     "riskRating": "Medium",
-    "likelihood": "Medium",
+    "likelihood": "Reasonably possible",
     "impact": "Medium",
     "controlObjective": "To ensure all delivery discrepancies are documented and resolved.",
     "controlActivity": "Short deliveries, excess deliveries, damaged goods, or quality rejections are documented in a Discrepancy Report. The Buyer coordinates with the vendor for resolution (replacement, credit note, return shipment).",
@@ -1795,6 +1919,8 @@ export const PROCUREMENT_RACM_ROWS: ProcurementRacmRow[] = [
     "mgmtReviewControl": "",
     "confidence": "INFERRED",
     "sopSectionRef": "SOP-PROC-001, Section 9.2.5",
+    "processOwner": "Head of Warehouse & Receiving",
+    "designChecks": "The control leaves evidence that it operated — a reviewer can tell it ran on a given date. | The person performing the control has the authority and competence to do so. | The control operates over a complete population — nothing routes around it.",
     "attributes": "Completeness of documentation"
   },
   {
@@ -1805,7 +1931,7 @@ export const PROCUREMENT_RACM_ROWS: ProcurementRacmRow[] = [
     "riskCategory": "Operational",
     "riskDescription": "Risk of inaccurate receipt recording if receiving personnel are influenced by PO quantities.",
     "riskRating": "Medium",
-    "likelihood": "Medium",
+    "likelihood": "Reasonably possible",
     "impact": "Medium",
     "controlObjective": "To ensure independent and accurate verification of received quantities.",
     "controlActivity": "Blind receipt option: receiving team counts without seeing PO quantities to ensure independent verification.",
@@ -1823,6 +1949,8 @@ export const PROCUREMENT_RACM_ROWS: ProcurementRacmRow[] = [
     "mgmtReviewControl": "",
     "confidence": "EXTRACTED",
     "sopSectionRef": "SOP-PROC-001, Section 9.3",
+    "processOwner": "Head of Warehouse & Receiving",
+    "designChecks": "The person performing the control is independent of the person who prepares what it checks. | The control leaves evidence that it operated — a reviewer can tell it ran on a given date. | The person performing the control has the authority and competence to do so. | The control operates over a complete population — nothing routes around it.",
     "attributes": "Sign-off obtained"
   },
   {
@@ -1833,7 +1961,7 @@ export const PROCUREMENT_RACM_ROWS: ProcurementRacmRow[] = [
     "riskCategory": "Operational",
     "riskDescription": "Risk of delayed or inaccurate recording of goods/service receipt, impacting inventory and payment cycles.",
     "riskRating": "Medium",
-    "likelihood": "Medium",
+    "likelihood": "Reasonably possible",
     "impact": "Low",
     "controlObjective": "To ensure timely and accurate recording of receipts.",
     "controlActivity": "GRN/SRN must be created within 48 hours of actual receipt.",
@@ -1851,6 +1979,8 @@ export const PROCUREMENT_RACM_ROWS: ProcurementRacmRow[] = [
     "mgmtReviewControl": "",
     "confidence": "EXTRACTED",
     "sopSectionRef": "SOP-PROC-001, Section 9.3",
+    "processOwner": "Head of Warehouse & Receiving",
+    "designChecks": "The control leaves evidence that it operated — a reviewer can tell it ran on a given date. | The control operates over a complete population — nothing routes around it. | The system configuration behind the control is under change control.",
     "attributes": "Evidence of review"
   },
   {
@@ -1861,7 +1991,7 @@ export const PROCUREMENT_RACM_ROWS: ProcurementRacmRow[] = [
     "riskCategory": "Operational",
     "riskDescription": "Risk of accepting excessive deliveries without proper authorization, leading to unnecessary inventory or costs.",
     "riskRating": "Medium",
-    "likelihood": "Medium",
+    "likelihood": "Reasonably possible",
     "impact": "Medium",
     "controlObjective": "To control over-deliveries and ensure proper authorization for exceptions.",
     "controlActivity": "Tolerance limits defined in ERP: over-delivery beyond 5% requires Buyer approval.",
@@ -1879,6 +2009,8 @@ export const PROCUREMENT_RACM_ROWS: ProcurementRacmRow[] = [
     "mgmtReviewControl": "",
     "confidence": "EXTRACTED",
     "sopSectionRef": "SOP-PROC-001, Section 9.3",
+    "processOwner": "Head of Warehouse & Receiving",
+    "designChecks": "The person performing the control is independent of the person who prepares what it checks. | The threshold or tolerance the control operates at is documented and approved. | The control leaves evidence that it operated — a reviewer can tell it ran on a given date. | The person performing the control has the authority and competence to do so.",
     "attributes": "Completeness of documentation,Timeliness of execution,Approval evidence verified,Sign-off obtained"
   },
   {
@@ -1889,7 +2021,7 @@ export const PROCUREMENT_RACM_ROWS: ProcurementRacmRow[] = [
     "riskCategory": "Operational",
     "riskDescription": "Risk of accepting and processing payment for goods that do not meet quality standards.",
     "riskRating": "Medium",
-    "likelihood": "Medium",
+    "likelihood": "Reasonably possible",
     "impact": "Medium",
     "controlObjective": "To ensure goods meet quality standards before formal receipt.",
     "controlActivity": "Quality holds prevent GRN posting until QA clearance for designated material categories.",
@@ -1907,6 +2039,8 @@ export const PROCUREMENT_RACM_ROWS: ProcurementRacmRow[] = [
     "mgmtReviewControl": "",
     "confidence": "EXTRACTED",
     "sopSectionRef": "SOP-PROC-001, Section 9.3",
+    "processOwner": "Head of Warehouse & Receiving",
+    "designChecks": "The control leaves evidence that it operated — a reviewer can tell it ran on a given date. | The system configuration behind the control is under change control.",
     "attributes": "Evidence of review"
   },
   {
@@ -1917,7 +2051,7 @@ export const PROCUREMENT_RACM_ROWS: ProcurementRacmRow[] = [
     "riskCategory": "Fraud",
     "riskDescription": "Risk of fraud or errors if the person creating the GRN is also the PO approver.",
     "riskRating": "High",
-    "likelihood": "Medium",
+    "likelihood": "Reasonably possible",
     "impact": "High",
     "controlObjective": "To prevent conflicts of interest and fraud in GRN creation and PO approval.",
     "controlActivity": "System enforces segregation of duties such that the person creating the GRN must not be the PO approver.",
@@ -1935,6 +2069,8 @@ export const PROCUREMENT_RACM_ROWS: ProcurementRacmRow[] = [
     "mgmtReviewControl": "",
     "confidence": "EXTRACTED",
     "sopSectionRef": "SOP-PROC-001, Section 9.3",
+    "processOwner": "Head of Warehouse & Receiving",
+    "designChecks": "The person performing the control is independent of the person who prepares what it checks. | The control leaves evidence that it operated — a reviewer can tell it ran on a given date. | The person performing the control has the authority and competence to do so. | The system configuration behind the control is under change control.",
     "attributes": "Sign-off obtained"
   },
   {
@@ -1945,7 +2081,7 @@ export const PROCUREMENT_RACM_ROWS: ProcurementRacmRow[] = [
     "riskCategory": "Financial",
     "riskDescription": "Risk of goods/services being received but not invoiced, leading to unrecorded liabilities or lost invoices.",
     "riskRating": "Medium",
-    "likelihood": "Medium",
+    "likelihood": "Reasonably possible",
     "impact": "Medium",
     "controlObjective": "To identify and resolve unmatched GRNs.",
     "controlActivity": "Unmatched GRNs (GRN without corresponding invoice) are monitored and aged weekly.",
@@ -1963,6 +2099,8 @@ export const PROCUREMENT_RACM_ROWS: ProcurementRacmRow[] = [
     "mgmtReviewControl": "",
     "confidence": "EXTRACTED",
     "sopSectionRef": "SOP-PROC-001, Section 9.3",
+    "processOwner": "Head of Warehouse & Receiving",
+    "designChecks": "The person performing the control is independent of the person who prepares what it checks. | The threshold or tolerance the control operates at is documented and approved. | Exceptions the control raises are followed through to resolution, not just noted. | The control leaves evidence that it operated — a reviewer can tell it ran on a given date.",
     "attributes": "Completeness of documentation,Exception identification accuracy"
   },
   {
@@ -1973,7 +2111,7 @@ export const PROCUREMENT_RACM_ROWS: ProcurementRacmRow[] = [
     "riskCategory": "Operational",
     "riskDescription": "Risk of lost or delayed invoices, leading to late payments or unrecorded liabilities.",
     "riskRating": "Medium",
-    "likelihood": "Medium",
+    "likelihood": "Reasonably possible",
     "impact": "Low",
     "controlObjective": "To ensure all invoices are received and tracked promptly.",
     "controlActivity": "Vendor invoices are received through designated channels (AP email inbox, vendor portal, or EDI), date-stamped upon receipt, and logged into the AP tracking system.",
@@ -1991,6 +2129,8 @@ export const PROCUREMENT_RACM_ROWS: ProcurementRacmRow[] = [
     "mgmtReviewControl": "",
     "confidence": "INFERRED",
     "sopSectionRef": "SOP-PROC-001, Section 10.2.1",
+    "processOwner": "Head of Accounts Payable",
+    "designChecks": "The control leaves evidence that it operated — a reviewer can tell it ran on a given date. | The person performing the control has the authority and competence to do so. | The control operates over a complete population — nothing routes around it.",
     "attributes": "Timeliness of execution,Sign-off obtained"
   },
   {
@@ -2001,7 +2141,7 @@ export const PROCUREMENT_RACM_ROWS: ProcurementRacmRow[] = [
     "riskCategory": "Financial",
     "riskDescription": "Risk of processing invalid or incorrect invoices, leading to erroneous payments or compliance issues.",
     "riskRating": "Medium",
-    "likelihood": "Medium",
+    "likelihood": "Reasonably possible",
     "impact": "Medium",
     "controlObjective": "To ensure invoices are valid, accurate, and compliant before processing.",
     "controlActivity": "AP team verifies: invoice is addressed to the correct legal entity, contains valid vendor details (name, address, bank details, tax ID), references a valid PO number, complies with tax requirements (GST/VAT details, withholding tax applicability).",
@@ -2019,6 +2159,8 @@ export const PROCUREMENT_RACM_ROWS: ProcurementRacmRow[] = [
     "mgmtReviewControl": "",
     "confidence": "INFERRED",
     "sopSectionRef": "SOP-PROC-001, Section 10.2.2",
+    "processOwner": "Head of Accounts Payable",
+    "designChecks": "The person performing the control is independent of the person who prepares what it checks. | The control leaves evidence that it operated — a reviewer can tell it ran on a given date. | The person performing the control has the authority and competence to do so.",
     "attributes": "Approval evidence verified,System configuration validated"
   },
   {
@@ -2029,7 +2171,7 @@ export const PROCUREMENT_RACM_ROWS: ProcurementRacmRow[] = [
     "riskCategory": "Financial",
     "riskDescription": "Risk of paying for goods/services not ordered, not received, or at incorrect prices.",
     "riskRating": "High",
-    "likelihood": "Medium",
+    "likelihood": "Reasonably possible",
     "impact": "High",
     "controlObjective": "To ensure invoices are accurate and legitimate based on ordered and received goods/services.",
     "controlActivity": "The AP team performs the three-way match: (a) PO vs. Invoice: Item descriptions, quantities, unit prices, and terms match. (b) GRN/SRN vs. Invoice: Quantities invoiced do not exceed quantities received. (c) PO vs. GRN/SRN: Goods/services received align with what was ordered.",
@@ -2047,6 +2189,8 @@ export const PROCUREMENT_RACM_ROWS: ProcurementRacmRow[] = [
     "mgmtReviewControl": "",
     "confidence": "INFERRED",
     "sopSectionRef": "SOP-PROC-001, Section 10.2.3",
+    "processOwner": "Head of Accounts Payable",
+    "designChecks": "The threshold or tolerance the control operates at is documented and approved. | The control leaves evidence that it operated — a reviewer can tell it ran on a given date. | The control operates over a complete population — nothing routes around it.",
     "attributes": "Completeness of documentation,Sign-off obtained,Segregation of duties confirmed"
   },
   {
@@ -2057,7 +2201,7 @@ export const PROCUREMENT_RACM_ROWS: ProcurementRacmRow[] = [
     "riskCategory": "Operational",
     "riskDescription": "Risk that invoice mismatches are not identified, investigated, or resolved, leading to incorrect payments or disputes.",
     "riskRating": "Medium",
-    "likelihood": "Medium",
+    "likelihood": "Reasonably possible",
     "impact": "Medium",
     "controlObjective": "To ensure timely investigation and resolution of invoice mismatches.",
     "controlActivity": "Mismatches are routed to an exception queue. Common exceptions: price variance, quantity variance, missing GRN, duplicate invoice. The Buyer and requisitioner are notified to investigate and resolve.",
@@ -2075,6 +2219,8 @@ export const PROCUREMENT_RACM_ROWS: ProcurementRacmRow[] = [
     "mgmtReviewControl": "",
     "confidence": "INFERRED",
     "sopSectionRef": "SOP-PROC-001, Section 10.2.5",
+    "processOwner": "Head of Accounts Payable",
+    "designChecks": "The person performing the control is independent of the person who prepares what it checks. | The threshold or tolerance the control operates at is documented and approved. | Exceptions the control raises are followed through to resolution, not just noted. | The control leaves evidence that it operated — a reviewer can tell it ran on a given date.",
     "attributes": "Evidence of review"
   },
   {
@@ -2085,7 +2231,7 @@ export const PROCUREMENT_RACM_ROWS: ProcurementRacmRow[] = [
     "riskCategory": "Financial",
     "riskDescription": "Risk of unauthorized invoice payments, especially for invoices exceeding tolerance limits.",
     "riskRating": "High",
-    "likelihood": "Medium",
+    "likelihood": "Reasonably possible",
     "impact": "High",
     "controlObjective": "To ensure all invoices are properly authorized before payment.",
     "controlActivity": "Matched invoices are approved per the AP approval matrix. For invoices requiring management override (exceeding tolerance), additional approval from Finance Controller is mandatory.",
@@ -2103,6 +2249,8 @@ export const PROCUREMENT_RACM_ROWS: ProcurementRacmRow[] = [
     "mgmtReviewControl": "",
     "confidence": "INFERRED",
     "sopSectionRef": "SOP-PROC-001, Section 10.2.6",
+    "processOwner": "Head of Accounts Payable",
+    "designChecks": "The person performing the control is independent of the person who prepares what it checks. | The threshold or tolerance the control operates at is documented and approved. | The control leaves evidence that it operated — a reviewer can tell it ran on a given date. | The person performing the control has the authority and competence to do so.",
     "attributes": "Timeliness of execution,Sign-off obtained"
   },
   {
@@ -2113,7 +2261,7 @@ export const PROCUREMENT_RACM_ROWS: ProcurementRacmRow[] = [
     "riskCategory": "Financial",
     "riskDescription": "Risk of unauthorized or incorrect payments if the three-way match is not performed.",
     "riskRating": "High",
-    "likelihood": "Medium",
+    "likelihood": "Reasonably possible",
     "impact": "High",
     "controlObjective": "To ensure all PO-based invoices are verified before payment.",
     "controlActivity": "Mandatory three-way match for all PO-based invoices before payment authorization.",
@@ -2131,6 +2279,8 @@ export const PROCUREMENT_RACM_ROWS: ProcurementRacmRow[] = [
     "mgmtReviewControl": "",
     "confidence": "EXTRACTED",
     "sopSectionRef": "SOP-PROC-001, Section 10.3",
+    "processOwner": "Head of Accounts Payable",
+    "designChecks": "The threshold or tolerance the control operates at is documented and approved. | The control leaves evidence that it operated — a reviewer can tell it ran on a given date. | The person performing the control has the authority and competence to do so. | The system configuration behind the control is under change control.",
     "attributes": "Completeness of documentation"
   },
   {
@@ -2141,7 +2291,7 @@ export const PROCUREMENT_RACM_ROWS: ProcurementRacmRow[] = [
     "riskCategory": "Fraud",
     "riskDescription": "Risk of duplicate payments being made to vendors.",
     "riskRating": "High",
-    "likelihood": "Medium",
+    "likelihood": "Reasonably possible",
     "impact": "High",
     "controlObjective": "To prevent duplicate invoice payments.",
     "controlActivity": "Automated duplicate invoice detection (vendor + invoice number + amount + date) in ERP.",
@@ -2159,6 +2309,8 @@ export const PROCUREMENT_RACM_ROWS: ProcurementRacmRow[] = [
     "mgmtReviewControl": "",
     "confidence": "EXTRACTED",
     "sopSectionRef": "SOP-PROC-001, Section 10.3",
+    "processOwner": "Head of Accounts Payable",
+    "designChecks": "The control leaves evidence that it operated — a reviewer can tell it ran on a given date. | The system configuration behind the control is under change control.",
     "attributes": "Approval evidence verified,Exception identification accuracy,Sign-off obtained"
   },
   {
@@ -2169,7 +2321,7 @@ export const PROCUREMENT_RACM_ROWS: ProcurementRacmRow[] = [
     "riskCategory": "Financial",
     "riskDescription": "Risk of unauthorized or unrecorded overrides of three-way match tolerance limits.",
     "riskRating": "Medium",
-    "likelihood": "Medium",
+    "likelihood": "Reasonably possible",
     "impact": "Medium",
     "controlObjective": "To ensure proper control over tolerance limit overrides.",
     "controlActivity": "Tolerance limits defined in ERP configuration with audit trail for overrides.",
@@ -2187,6 +2339,8 @@ export const PROCUREMENT_RACM_ROWS: ProcurementRacmRow[] = [
     "mgmtReviewControl": "",
     "confidence": "EXTRACTED",
     "sopSectionRef": "SOP-PROC-001, Section 10.3",
+    "processOwner": "Head of Accounts Payable",
+    "designChecks": "The threshold or tolerance the control operates at is documented and approved. | The control leaves evidence that it operated — a reviewer can tell it ran on a given date. | The system configuration behind the control is under change control.",
     "attributes": "Evidence of review"
   },
   {
@@ -2197,7 +2351,7 @@ export const PROCUREMENT_RACM_ROWS: ProcurementRacmRow[] = [
     "riskCategory": "Operational",
     "riskDescription": "Risk of delays in invoice processing or unrecorded liabilities due to unresolved mismatches.",
     "riskRating": "Medium",
-    "likelihood": "Medium",
+    "likelihood": "Reasonably possible",
     "impact": "Medium",
     "controlObjective": "To ensure timely resolution of unmatched invoices.",
     "controlActivity": "Invoice aging is tracked: invoices unmatched beyond 15 days escalated to Procurement.",
@@ -2215,6 +2369,8 @@ export const PROCUREMENT_RACM_ROWS: ProcurementRacmRow[] = [
     "mgmtReviewControl": "",
     "confidence": "EXTRACTED",
     "sopSectionRef": "SOP-PROC-001, Section 10.3",
+    "processOwner": "Head of Accounts Payable",
+    "designChecks": "The person performing the control is independent of the person who prepares what it checks. | The threshold or tolerance the control operates at is documented and approved. | Exceptions the control raises are followed through to resolution, not just noted. | The control leaves evidence that it operated — a reviewer can tell it ran on a given date.",
     "attributes": "Completeness of documentation,Timeliness of execution,Sign-off obtained"
   },
   {
@@ -2225,7 +2381,7 @@ export const PROCUREMENT_RACM_ROWS: ProcurementRacmRow[] = [
     "riskCategory": "Fraud",
     "riskDescription": "Risk of fraud or errors if the person posting the invoice can also approve the payment.",
     "riskRating": "High",
-    "likelihood": "Medium",
+    "likelihood": "Reasonably possible",
     "impact": "High",
     "controlObjective": "To prevent conflicts of interest and fraud in invoice posting and payment approval.",
     "controlActivity": "System enforces segregation of duties such that the person posting the invoice cannot approve the payment.",
@@ -2243,6 +2399,8 @@ export const PROCUREMENT_RACM_ROWS: ProcurementRacmRow[] = [
     "mgmtReviewControl": "",
     "confidence": "EXTRACTED",
     "sopSectionRef": "SOP-PROC-001, Section 10.3",
+    "processOwner": "Head of Accounts Payable",
+    "designChecks": "The person performing the control is independent of the person who prepares what it checks. | The control leaves evidence that it operated — a reviewer can tell it ran on a given date. | The person performing the control has the authority and competence to do so. | The system configuration behind the control is under change control.",
     "attributes": "Evidence of review"
   },
   {
@@ -2253,7 +2411,7 @@ export const PROCUREMENT_RACM_ROWS: ProcurementRacmRow[] = [
     "riskCategory": "Compliance",
     "riskDescription": "Risk of non-compliance with tax regulations, leading to penalties or incorrect tax filings.",
     "riskRating": "High",
-    "likelihood": "Medium",
+    "likelihood": "Reasonably possible",
     "impact": "High",
     "controlObjective": "To ensure invoices comply with tax regulations.",
     "controlActivity": "Tax compliance validation (GST/VAT input credit eligibility, TDS applicability) is performed for invoices.",
@@ -2271,6 +2429,8 @@ export const PROCUREMENT_RACM_ROWS: ProcurementRacmRow[] = [
     "mgmtReviewControl": "",
     "confidence": "EXTRACTED",
     "sopSectionRef": "SOP-PROC-001, Section 10.3",
+    "processOwner": "Head of Accounts Payable",
+    "designChecks": "The control leaves evidence that it operated — a reviewer can tell it ran on a given date. | The person performing the control has the authority and competence to do so.",
     "attributes": "Sign-off obtained"
   },
   {
@@ -2281,7 +2441,7 @@ export const PROCUREMENT_RACM_ROWS: ProcurementRacmRow[] = [
     "riskCategory": "Financial",
     "riskDescription": "Risk that payment proposals are incomplete or inaccurate, leading to incorrect payments.",
     "riskRating": "Medium",
-    "likelihood": "Medium",
+    "likelihood": "Reasonably possible",
     "impact": "Medium",
     "controlObjective": "To generate accurate and complete payment proposals.",
     "controlActivity": "The AP team generates a periodic payment proposal (typically weekly or bi-weekly) from the ERP system, selecting approved invoices that have reached their payment due date based on agreed payment terms.",
@@ -2299,6 +2459,8 @@ export const PROCUREMENT_RACM_ROWS: ProcurementRacmRow[] = [
     "mgmtReviewControl": "",
     "confidence": "INFERRED",
     "sopSectionRef": "SOP-PROC-001, Section 11.2.1",
+    "processOwner": "Head of Accounts Payable",
+    "designChecks": "The person performing the control is independent of the person who prepares what it checks. | The control leaves evidence that it operated — a reviewer can tell it ran on a given date. | The person performing the control has the authority and competence to do so. | The control operates over a complete population — nothing routes around it.",
     "attributes": "Completeness of documentation,Approval evidence verified"
   },
   {
@@ -2309,7 +2471,7 @@ export const PROCUREMENT_RACM_ROWS: ProcurementRacmRow[] = [
     "riskCategory": "Financial",
     "riskDescription": "Risk that payment proposal contains errors, duplicate payments, or includes disputed invoices.",
     "riskRating": "Medium",
-    "likelihood": "Medium",
+    "likelihood": "Reasonably possible",
     "impact": "Medium",
     "controlObjective": "To ensure the payment proposal is accurate and free from errors or unauthorized items.",
     "controlActivity": "The AP Manager reviews the payment proposal for: completeness and accuracy, prioritization (early payment discounts, critical vendors), cash availability, and any vendor holds or disputed invoices that should be excluded.",
@@ -2327,6 +2489,8 @@ export const PROCUREMENT_RACM_ROWS: ProcurementRacmRow[] = [
     "mgmtReviewControl": "",
     "confidence": "INFERRED",
     "sopSectionRef": "SOP-PROC-001, Section 11.2.2",
+    "processOwner": "Head of Accounts Payable",
+    "designChecks": "The person performing the control is independent of the person who prepares what it checks. | Exceptions the control raises are followed through to resolution, not just noted. | The control leaves evidence that it operated — a reviewer can tell it ran on a given date.",
     "attributes": "Timeliness of execution,Sign-off obtained"
   },
   {
@@ -2337,7 +2501,7 @@ export const PROCUREMENT_RACM_ROWS: ProcurementRacmRow[] = [
     "riskCategory": "Financial",
     "riskDescription": "Risk of unauthorized payments being executed.",
     "riskRating": "High",
-    "likelihood": "Medium",
+    "likelihood": "Reasonably possible",
     "impact": "High",
     "controlObjective": "To ensure all payment batches are properly authorized.",
     "controlActivity": "The payment batch is approved per the payment authorization matrix. Payments above defined thresholds require dual authorization.",
@@ -2355,6 +2519,8 @@ export const PROCUREMENT_RACM_ROWS: ProcurementRacmRow[] = [
     "mgmtReviewControl": "",
     "confidence": "INFERRED",
     "sopSectionRef": "SOP-PROC-001, Section 11.2.3",
+    "processOwner": "Head of Accounts Payable",
+    "designChecks": "The person performing the control is independent of the person who prepares what it checks. | The threshold or tolerance the control operates at is documented and approved. | The control leaves evidence that it operated — a reviewer can tell it ran on a given date. | The person performing the control has the authority and competence to do so.",
     "attributes": "Exception identification accuracy,Segregation of duties confirmed"
   },
   {
@@ -2365,7 +2531,7 @@ export const PROCUREMENT_RACM_ROWS: ProcurementRacmRow[] = [
     "riskCategory": "Financial",
     "riskDescription": "Risk of incorrect payment execution (wrong amount, wrong vendor, wrong method) or lack of maker-checker controls.",
     "riskRating": "High",
-    "likelihood": "Medium",
+    "likelihood": "Reasonably possible",
     "impact": "High",
     "controlObjective": "To ensure accurate and secure execution of payments.",
     "controlActivity": "Approved payments are executed via the designated method: electronic bank transfer (preferred for all payments above $1,000), check (exceptional cases only, with dual signatory requirement), or payment through a bank portal with maker-checker controls.",
@@ -2383,6 +2549,8 @@ export const PROCUREMENT_RACM_ROWS: ProcurementRacmRow[] = [
     "mgmtReviewControl": "",
     "confidence": "INFERRED",
     "sopSectionRef": "SOP-PROC-001, Section 11.2.4",
+    "processOwner": "Head of Accounts Payable",
+    "designChecks": "The person performing the control is independent of the person who prepares what it checks. | The threshold or tolerance the control operates at is documented and approved. | Exceptions the control raises are followed through to resolution, not just noted. | The control leaves evidence that it operated — a reviewer can tell it ran on a given date.",
     "attributes": "Completeness of documentation,Sign-off obtained,System configuration validated"
   },
   {
@@ -2393,7 +2561,7 @@ export const PROCUREMENT_RACM_ROWS: ProcurementRacmRow[] = [
     "riskCategory": "Operational",
     "riskDescription": "Risk that vendors do not receive remittance advice, leading to payment inquiries or reconciliation issues.",
     "riskRating": "Low",
-    "likelihood": "Low",
+    "likelihood": "Remote",
     "impact": "Low",
     "controlObjective": "To ensure vendors receive timely payment details.",
     "controlActivity": "Automated remittance advice is sent to vendors upon payment execution, detailing invoice numbers and amounts covered by the payment.",
@@ -2411,6 +2579,8 @@ export const PROCUREMENT_RACM_ROWS: ProcurementRacmRow[] = [
     "mgmtReviewControl": "",
     "confidence": "INFERRED",
     "sopSectionRef": "SOP-PROC-001, Section 11.2.5",
+    "processOwner": "Head of Accounts Payable",
+    "designChecks": "The control leaves evidence that it operated — a reviewer can tell it ran on a given date. | The control operates over a complete population — nothing routes around it. | The system configuration behind the control is under change control.",
     "attributes": "Evidence of review"
   },
   {
@@ -2421,7 +2591,7 @@ export const PROCUREMENT_RACM_ROWS: ProcurementRacmRow[] = [
     "riskCategory": "Financial",
     "riskDescription": "Risk of undetected discrepancies between bank records and ERP, leading to financial misstatements or fraud.",
     "riskRating": "High",
-    "likelihood": "Medium",
+    "likelihood": "Reasonably possible",
     "impact": "High",
     "controlObjective": "To ensure accuracy and completeness of cash records.",
     "controlActivity": "Treasury / Finance reconciles bank statements with ERP payment records within 3 business days. Discrepancies are investigated and resolved immediately.",
@@ -2439,6 +2609,8 @@ export const PROCUREMENT_RACM_ROWS: ProcurementRacmRow[] = [
     "mgmtReviewControl": "",
     "confidence": "INFERRED",
     "sopSectionRef": "SOP-PROC-001, Section 11.2.6",
+    "processOwner": "Head of Accounts Payable",
+    "designChecks": "The person performing the control is independent of the person who prepares what it checks. | Exceptions the control raises are followed through to resolution, not just noted. | The control leaves evidence that it operated — a reviewer can tell it ran on a given date. | The control operates over a complete population — nothing routes around it.",
     "attributes": "Timeliness of execution,Approval evidence verified,Sign-off obtained"
   },
   {
@@ -2449,7 +2621,7 @@ export const PROCUREMENT_RACM_ROWS: ProcurementRacmRow[] = [
     "riskCategory": "Financial",
     "riskDescription": "Risk of unauthorized payments up to $10,000 if AP Manager approval is bypassed.",
     "riskRating": "Medium",
-    "likelihood": "Medium",
+    "likelihood": "Reasonably possible",
     "impact": "Low",
     "controlObjective": "To ensure low-value payments are properly authorized.",
     "controlActivity": "AP Manager authorizes payments up to $10,000 via electronic transfer.",
@@ -2467,6 +2639,8 @@ export const PROCUREMENT_RACM_ROWS: ProcurementRacmRow[] = [
     "mgmtReviewControl": "",
     "confidence": "EXTRACTED",
     "sopSectionRef": "SOP-PROC-001, Section 11.3",
+    "processOwner": "Head of Accounts Payable",
+    "designChecks": "The control leaves evidence that it operated — a reviewer can tell it ran on a given date. | The person performing the control has the authority and competence to do so. | The system configuration behind the control is under change control.",
     "attributes": "Completeness of documentation"
   },
   {
@@ -2477,7 +2651,7 @@ export const PROCUREMENT_RACM_ROWS: ProcurementRacmRow[] = [
     "riskCategory": "Financial",
     "riskDescription": "Risk of unauthorized payments between $10,001 and $50,000 if dual approval is bypassed.",
     "riskRating": "Medium",
-    "likelihood": "Medium",
+    "likelihood": "Reasonably possible",
     "impact": "Medium",
     "controlObjective": "To ensure medium-value payments are properly authorized.",
     "controlActivity": "AP Manager and Finance Manager authorize payments between $10,001 and $50,000 via electronic transfer.",
@@ -2495,6 +2669,8 @@ export const PROCUREMENT_RACM_ROWS: ProcurementRacmRow[] = [
     "mgmtReviewControl": "",
     "confidence": "EXTRACTED",
     "sopSectionRef": "SOP-PROC-001, Section 11.3",
+    "processOwner": "Head of Accounts Payable",
+    "designChecks": "The control leaves evidence that it operated — a reviewer can tell it ran on a given date. | The person performing the control has the authority and competence to do so. | The system configuration behind the control is under change control.",
     "attributes": "Sign-off obtained"
   },
   {
@@ -2505,7 +2681,7 @@ export const PROCUREMENT_RACM_ROWS: ProcurementRacmRow[] = [
     "riskCategory": "Financial",
     "riskDescription": "Risk of unauthorized payments between $50,001 and $250,000 if dual authorization is bypassed.",
     "riskRating": "High",
-    "likelihood": "Medium",
+    "likelihood": "Reasonably possible",
     "impact": "High",
     "controlObjective": "To ensure high-value payments are properly authorized with dual control.",
     "controlActivity": "Finance Manager and Finance Controller provide dual authorization for payments between $50,001 and $250,000 via electronic transfer.",
@@ -2523,6 +2699,8 @@ export const PROCUREMENT_RACM_ROWS: ProcurementRacmRow[] = [
     "mgmtReviewControl": "",
     "confidence": "EXTRACTED",
     "sopSectionRef": "SOP-PROC-001, Section 11.3",
+    "processOwner": "Head of Accounts Payable",
+    "designChecks": "The control leaves evidence that it operated — a reviewer can tell it ran on a given date. | The person performing the control has the authority and competence to do so. | The system configuration behind the control is under change control.",
     "attributes": "Evidence of review"
   },
   {
@@ -2533,7 +2711,7 @@ export const PROCUREMENT_RACM_ROWS: ProcurementRacmRow[] = [
     "riskCategory": "Financial",
     "riskDescription": "Risk of unauthorized payments above $250,000 if dual authorization is bypassed.",
     "riskRating": "High",
-    "likelihood": "Medium",
+    "likelihood": "Reasonably possible",
     "impact": "High",
     "controlObjective": "To ensure very high-value payments are properly authorized with dual control.",
     "controlActivity": "Finance Controller and CFO provide dual authorization for payments above $250,000 via electronic transfer.",
@@ -2551,6 +2729,8 @@ export const PROCUREMENT_RACM_ROWS: ProcurementRacmRow[] = [
     "mgmtReviewControl": "",
     "confidence": "EXTRACTED",
     "sopSectionRef": "SOP-PROC-001, Section 11.3",
+    "processOwner": "Head of Accounts Payable",
+    "designChecks": "The threshold or tolerance the control operates at is documented and approved. | The control leaves evidence that it operated — a reviewer can tell it ran on a given date. | The person performing the control has the authority and competence to do so. | The system configuration behind the control is under change control.",
     "attributes": "Completeness of documentation,Timeliness of execution,Exception identification accuracy,Sign-off obtained"
   },
   {
@@ -2561,7 +2741,7 @@ export const PROCUREMENT_RACM_ROWS: ProcurementRacmRow[] = [
     "riskCategory": "Fraud",
     "riskDescription": "Risk of payments being diverted to incorrect or fraudulent bank accounts.",
     "riskRating": "High",
-    "likelihood": "Medium",
+    "likelihood": "Reasonably possible",
     "impact": "High",
     "controlObjective": "To ensure payments are made to legitimate vendor bank accounts.",
     "controlActivity": "Vendor bank details verified independently before first payment and upon any change request.",
@@ -2579,6 +2759,8 @@ export const PROCUREMENT_RACM_ROWS: ProcurementRacmRow[] = [
     "mgmtReviewControl": "",
     "confidence": "EXTRACTED",
     "sopSectionRef": "SOP-PROC-001, Section 11.4",
+    "processOwner": "Head of Accounts Payable",
+    "designChecks": "The person performing the control is independent of the person who prepares what it checks. | The control leaves evidence that it operated — a reviewer can tell it ran on a given date. | The person performing the control has the authority and competence to do so.",
     "attributes": "Approval evidence verified"
   },
   {
@@ -2589,7 +2771,7 @@ export const PROCUREMENT_RACM_ROWS: ProcurementRacmRow[] = [
     "riskCategory": "Financial",
     "riskDescription": "Risk of unauthorized high-value payments being executed.",
     "riskRating": "High",
-    "likelihood": "Medium",
+    "likelihood": "Reasonably possible",
     "impact": "High",
     "controlObjective": "To ensure high-value payments are subject to enhanced authorization.",
     "controlActivity": "Dual authorization for payments exceeding defined thresholds.",
@@ -2607,6 +2789,8 @@ export const PROCUREMENT_RACM_ROWS: ProcurementRacmRow[] = [
     "mgmtReviewControl": "",
     "confidence": "EXTRACTED",
     "sopSectionRef": "SOP-PROC-001, Section 11.4",
+    "processOwner": "Head of Accounts Payable",
+    "designChecks": "The threshold or tolerance the control operates at is documented and approved. | The control leaves evidence that it operated — a reviewer can tell it ran on a given date. | The person performing the control has the authority and competence to do so. | The system configuration behind the control is under change control.",
     "attributes": "Sign-off obtained"
   },
   {
@@ -2617,7 +2801,7 @@ export const PROCUREMENT_RACM_ROWS: ProcurementRacmRow[] = [
     "riskCategory": "Operational",
     "riskDescription": "Risk of non-compliance with payment terms or unjustified early payments leading to financial loss.",
     "riskRating": "Medium",
-    "likelihood": "Medium",
+    "likelihood": "Reasonably possible",
     "impact": "Low",
     "controlObjective": "To ensure adherence to payment terms and proper justification for early payments.",
     "controlActivity": "System-enforced payment terms; early payments require documented business justification.",
@@ -2635,6 +2819,8 @@ export const PROCUREMENT_RACM_ROWS: ProcurementRacmRow[] = [
     "mgmtReviewControl": "",
     "confidence": "EXTRACTED",
     "sopSectionRef": "SOP-PROC-001, Section 11.4",
+    "processOwner": "Head of Accounts Payable",
+    "designChecks": "The control leaves evidence that it operated — a reviewer can tell it ran on a given date. | The system configuration behind the control is under change control.",
     "attributes": "Completeness of documentation"
   },
   {
@@ -2645,7 +2831,7 @@ export const PROCUREMENT_RACM_ROWS: ProcurementRacmRow[] = [
     "riskCategory": "Fraud",
     "riskDescription": "Risk of check fraud if unauthorized checks are presented for payment.",
     "riskRating": "High",
-    "likelihood": "Low",
+    "likelihood": "Remote",
     "impact": "High",
     "controlObjective": "To prevent fraudulent check disbursements.",
     "controlActivity": "Positive pay file transmitted to bank to prevent check fraud.",
@@ -2663,6 +2849,8 @@ export const PROCUREMENT_RACM_ROWS: ProcurementRacmRow[] = [
     "mgmtReviewControl": "",
     "confidence": "EXTRACTED",
     "sopSectionRef": "SOP-PROC-001, Section 11.4",
+    "processOwner": "Head of Accounts Payable",
+    "designChecks": "The control leaves evidence that it operated — a reviewer can tell it ran on a given date. | The system configuration behind the control is under change control.",
     "attributes": "Timeliness of execution,Sign-off obtained,Segregation of duties confirmed"
   },
   {
@@ -2673,7 +2861,7 @@ export const PROCUREMENT_RACM_ROWS: ProcurementRacmRow[] = [
     "riskCategory": "Fraud",
     "riskDescription": "Risk of fraud or unauthorized payments if the person creating the payment batch can also authorize it.",
     "riskRating": "High",
-    "likelihood": "Medium",
+    "likelihood": "Reasonably possible",
     "impact": "High",
     "controlObjective": "To prevent conflicts of interest and fraud in payment processing.",
     "controlActivity": "System enforces segregation of duties such that the person creating the payment batch cannot authorize it.",
@@ -2691,6 +2879,8 @@ export const PROCUREMENT_RACM_ROWS: ProcurementRacmRow[] = [
     "mgmtReviewControl": "",
     "confidence": "EXTRACTED",
     "sopSectionRef": "SOP-PROC-001, Section 11.4",
+    "processOwner": "Head of Accounts Payable",
+    "designChecks": "The control leaves evidence that it operated — a reviewer can tell it ran on a given date. | The person performing the control has the authority and competence to do so. | The system configuration behind the control is under change control.",
     "attributes": "Evidence of review"
   },
   {
@@ -2701,7 +2891,7 @@ export const PROCUREMENT_RACM_ROWS: ProcurementRacmRow[] = [
     "riskCategory": "Financial",
     "riskDescription": "Risk of missed or duplicate payments going undetected.",
     "riskRating": "Medium",
-    "likelihood": "Medium",
+    "likelihood": "Reasonably possible",
     "impact": "Medium",
     "controlObjective": "To ensure accuracy and completeness of vendor payments.",
     "controlActivity": "Monthly vendor statement reconciliation is performed to identify missed or duplicate payments.",
@@ -2719,6 +2909,8 @@ export const PROCUREMENT_RACM_ROWS: ProcurementRacmRow[] = [
     "mgmtReviewControl": "",
     "confidence": "EXTRACTED",
     "sopSectionRef": "SOP-PROC-001, Section 11.4",
+    "processOwner": "Head of Accounts Payable",
+    "designChecks": "The person performing the control is independent of the person who prepares what it checks. | Exceptions the control raises are followed through to resolution, not just noted. | The control leaves evidence that it operated — a reviewer can tell it ran on a given date. | The person performing the control has the authority and competence to do so.",
     "attributes": "Completeness of documentation,Approval evidence verified,Sign-off obtained"
   },
   {
@@ -2729,7 +2921,7 @@ export const PROCUREMENT_RACM_ROWS: ProcurementRacmRow[] = [
     "riskCategory": "Financial",
     "riskDescription": "Risk of financial loss if advance payments are made without adequate security.",
     "riskRating": "Medium",
-    "likelihood": "Low",
+    "likelihood": "Remote",
     "impact": "Medium",
     "controlObjective": "To mitigate financial risk associated with advance payments.",
     "controlActivity": "Advance payments require security deposit or bank guarantee documentation.",
@@ -2747,6 +2939,8 @@ export const PROCUREMENT_RACM_ROWS: ProcurementRacmRow[] = [
     "mgmtReviewControl": "",
     "confidence": "EXTRACTED",
     "sopSectionRef": "SOP-PROC-001, Section 11.4",
+    "processOwner": "Head of Accounts Payable",
+    "designChecks": "The control leaves evidence that it operated — a reviewer can tell it ran on a given date. | The person performing the control has the authority and competence to do so.",
     "attributes": "Exception identification accuracy,System configuration validated"
   },
   {
@@ -2757,7 +2951,7 @@ export const PROCUREMENT_RACM_ROWS: ProcurementRacmRow[] = [
     "riskCategory": "Financial",
     "riskDescription": "Risk of open POs with residual balances, leading to inaccurate financial commitments or budget reporting.",
     "riskRating": "Low",
-    "likelihood": "Low",
+    "likelihood": "Remote",
     "impact": "Low",
     "controlObjective": "To ensure accurate financial commitments and budget reporting.",
     "controlActivity": "Once all goods/services have been received, invoices matched, and payments completed, the Buyer initiates PO close-out in the ERP system. Any residual PO balance (due to under-delivery or price adjustments) is released back to the budget.",
@@ -2775,6 +2969,8 @@ export const PROCUREMENT_RACM_ROWS: ProcurementRacmRow[] = [
     "mgmtReviewControl": "",
     "confidence": "INFERRED",
     "sopSectionRef": "SOP-PROC-001, Section 12.2.1",
+    "processOwner": "Head of Procurement Operations",
+    "designChecks": "The threshold or tolerance the control operates at is documented and approved. | The control leaves evidence that it operated — a reviewer can tell it ran on a given date. | The control operates over a complete population — nothing routes around it.",
     "attributes": "Timeliness of execution,Sign-off obtained"
   },
   {
@@ -2785,7 +2981,7 @@ export const PROCUREMENT_RACM_ROWS: ProcurementRacmRow[] = [
     "riskCategory": "Operational",
     "riskDescription": "Risk of engaging underperforming vendors in the future due to lack of performance evaluation.",
     "riskRating": "Low",
-    "likelihood": "Low",
+    "likelihood": "Remote",
     "impact": "Low",
     "controlObjective": "To ensure vendor performance is evaluated and informs future sourcing decisions.",
     "controlActivity": "For POs above the defined threshold, the requisitioner and Buyer complete a Vendor Performance Scorecard covering quality, delivery timeliness, responsiveness, and commercial competitiveness. Scores feed into the AVL rating system.",
@@ -2803,6 +2999,8 @@ export const PROCUREMENT_RACM_ROWS: ProcurementRacmRow[] = [
     "mgmtReviewControl": "",
     "confidence": "INFERRED",
     "sopSectionRef": "SOP-PROC-001, Section 12.2.2",
+    "processOwner": "Head of Vendor Management",
+    "designChecks": "The person performing the control is independent of the person who prepares what it checks. | The threshold or tolerance the control operates at is documented and approved. | Exceptions the control raises are followed through to resolution, not just noted. | The control leaves evidence that it operated — a reviewer can tell it ran on a given date.",
     "attributes": "Completeness of documentation"
   },
   {
@@ -2813,7 +3011,7 @@ export const PROCUREMENT_RACM_ROWS: ProcurementRacmRow[] = [
     "riskCategory": "Compliance",
     "riskDescription": "Risk of incomplete audit trail or inability to demonstrate compliance due to missing documentation.",
     "riskRating": "Medium",
-    "likelihood": "Medium",
+    "likelihood": "Reasonably possible",
     "impact": "Medium",
     "controlObjective": "To ensure a complete and auditable record of procurement activities.",
     "controlActivity": "The complete procurement file is compiled, including: approved PR, sourcing documents (RFQ/RFP, bid evaluation), PO and amendments, GRN/SRN, invoice and three-way match documentation, payment confirmation, correspondence, and any deviation or exception approvals.",
@@ -2831,6 +3029,8 @@ export const PROCUREMENT_RACM_ROWS: ProcurementRacmRow[] = [
     "mgmtReviewControl": "",
     "confidence": "INFERRED",
     "sopSectionRef": "SOP-PROC-001, Section 12.2.3",
+    "processOwner": "Chief Procurement Officer",
+    "designChecks": "The person performing the control is independent of the person who prepares what it checks. | The threshold or tolerance the control operates at is documented and approved. | Exceptions the control raises are followed through to resolution, not just noted. | The control leaves evidence that it operated — a reviewer can tell it ran on a given date.",
     "attributes": "Sign-off obtained"
   },
   {
@@ -2841,7 +3041,7 @@ export const PROCUREMENT_RACM_ROWS: ProcurementRacmRow[] = [
     "riskCategory": "Compliance",
     "riskDescription": "Risk of non-compliance with record retention policies or loss of critical records.",
     "riskRating": "Medium",
-    "likelihood": "Medium",
+    "likelihood": "Reasonably possible",
     "impact": "Medium",
     "controlObjective": "To ensure compliance with record retention policies and data availability.",
     "controlActivity": "Physical and digital records are archived per the organization's record retention policy. Typical retention periods: 7 years for financial records (or as required by local regulations), 10 years for contracts and capital expenditure documentation.",
@@ -2859,6 +3059,8 @@ export const PROCUREMENT_RACM_ROWS: ProcurementRacmRow[] = [
     "mgmtReviewControl": "",
     "confidence": "INFERRED",
     "sopSectionRef": "SOP-PROC-001, Section 12.2.4",
+    "processOwner": "Chief Procurement Officer",
+    "designChecks": "The control leaves evidence that it operated — a reviewer can tell it ran on a given date. | The person performing the control has the authority and competence to do so.",
     "attributes": "Approval evidence verified"
   },
   {
@@ -2869,7 +3071,7 @@ export const PROCUREMENT_RACM_ROWS: ProcurementRacmRow[] = [
     "riskCategory": "Operational",
     "riskDescription": "Risk of repeating past mistakes or missing opportunities for process improvement.",
     "riskRating": "Low",
-    "likelihood": "Low",
+    "likelihood": "Remote",
     "impact": "Low",
     "controlObjective": "To foster continuous improvement in procurement processes.",
     "controlActivity": "For strategic or high-value procurement, a brief lessons-learned note is prepared to improve future sourcing and contract management.",
@@ -2887,6 +3089,8 @@ export const PROCUREMENT_RACM_ROWS: ProcurementRacmRow[] = [
     "mgmtReviewControl": "",
     "confidence": "INFERRED",
     "sopSectionRef": "SOP-PROC-001, Section 12.2.5",
+    "processOwner": "Chief Procurement Officer",
+    "designChecks": "The control leaves evidence that it operated — a reviewer can tell it ran on a given date. | The person performing the control has the authority and competence to do so.",
     "attributes": "Completeness of documentation,Timeliness of execution,Sign-off obtained"
   },
   {
@@ -2897,7 +3101,7 @@ export const PROCUREMENT_RACM_ROWS: ProcurementRacmRow[] = [
     "riskCategory": "Fraud",
     "riskDescription": "Risk of fraud or unauthorized transactions if the person creating a PR can approve the resulting PO.",
     "riskRating": "High",
-    "likelihood": "Medium",
+    "likelihood": "Reasonably possible",
     "impact": "High",
     "controlObjective": "To prevent conflicts of interest and fraud between PR creation and PO approval.",
     "controlActivity": "ERP workflow rule enforces that the person who creates a PR cannot approve the resulting PO.",
@@ -2915,6 +3119,8 @@ export const PROCUREMENT_RACM_ROWS: ProcurementRacmRow[] = [
     "mgmtReviewControl": "",
     "confidence": "EXTRACTED",
     "sopSectionRef": "SOP-PROC-001, Section 13",
+    "processOwner": "Chief Procurement Officer",
+    "designChecks": "The person performing the control is independent of the person who prepares what it checks. | The control leaves evidence that it operated — a reviewer can tell it ran on a given date. | The person performing the control has the authority and competence to do so. | The system configuration behind the control is under change control.",
     "attributes": "Evidence of review"
   },
   {
@@ -2925,7 +3131,7 @@ export const PROCUREMENT_RACM_ROWS: ProcurementRacmRow[] = [
     "riskCategory": "Fraud",
     "riskDescription": "Risk of fraud or errors if the person creating a PO can also post the GRN, potentially creating fictitious receipts.",
     "riskRating": "High",
-    "likelihood": "Medium",
+    "likelihood": "Reasonably possible",
     "impact": "High",
     "controlObjective": "To prevent conflicts of interest and fraud between PO creation and GRN posting.",
     "controlActivity": "ERP role-based access enforces that the person who creates a PO cannot post the GRN.",
@@ -2943,6 +3149,8 @@ export const PROCUREMENT_RACM_ROWS: ProcurementRacmRow[] = [
     "mgmtReviewControl": "",
     "confidence": "EXTRACTED",
     "sopSectionRef": "SOP-PROC-001, Section 13",
+    "processOwner": "Chief Procurement Officer",
+    "designChecks": "The control leaves evidence that it operated — a reviewer can tell it ran on a given date. | The system configuration behind the control is under change control.",
     "attributes": "Exception identification accuracy,Sign-off obtained"
   },
   {
@@ -2953,7 +3161,7 @@ export const PROCUREMENT_RACM_ROWS: ProcurementRacmRow[] = [
     "riskCategory": "Fraud",
     "riskDescription": "Risk of fraud or errors if the person posting the GRN can also post the vendor invoice, potentially creating fictitious invoices.",
     "riskRating": "High",
-    "likelihood": "Medium",
+    "likelihood": "Reasonably possible",
     "impact": "High",
     "controlObjective": "To prevent conflicts of interest and fraud between GRN posting and invoice posting.",
     "controlActivity": "ERP workflow rule enforces that the person who posts the GRN cannot post the vendor invoice.",
@@ -2971,6 +3179,8 @@ export const PROCUREMENT_RACM_ROWS: ProcurementRacmRow[] = [
     "mgmtReviewControl": "",
     "confidence": "EXTRACTED",
     "sopSectionRef": "SOP-PROC-001, Section 13",
+    "processOwner": "Chief Procurement Officer",
+    "designChecks": "The control leaves evidence that it operated — a reviewer can tell it ran on a given date. | The system configuration behind the control is under change control.",
     "attributes": "Completeness of documentation,Segregation of duties confirmed"
   },
   {
@@ -2981,7 +3191,7 @@ export const PROCUREMENT_RACM_ROWS: ProcurementRacmRow[] = [
     "riskCategory": "Fraud",
     "riskDescription": "Risk of fraud or errors if the person posting the invoice can also authorize the payment.",
     "riskRating": "High",
-    "likelihood": "Medium",
+    "likelihood": "Reasonably possible",
     "impact": "High",
     "controlObjective": "To prevent conflicts of interest and fraud between invoice posting and payment authorization.",
     "controlActivity": "ERP workflow rule enforces that the person who posts the invoice cannot authorize the payment.",
@@ -2999,6 +3209,8 @@ export const PROCUREMENT_RACM_ROWS: ProcurementRacmRow[] = [
     "mgmtReviewControl": "",
     "confidence": "EXTRACTED",
     "sopSectionRef": "SOP-PROC-001, Section 13",
+    "processOwner": "Chief Procurement Officer",
+    "designChecks": "The control leaves evidence that it operated — a reviewer can tell it ran on a given date. | The person performing the control has the authority and competence to do so. | The system configuration behind the control is under change control.",
     "attributes": "Timeliness of execution,Approval evidence verified,Sign-off obtained"
   },
   {
@@ -3009,7 +3221,7 @@ export const PROCUREMENT_RACM_ROWS: ProcurementRacmRow[] = [
     "riskCategory": "Fraud",
     "riskDescription": "Risk of fraud (e.g., diverting payments to personal accounts) if the person maintaining vendor bank details can also initiate payments.",
     "riskRating": "High",
-    "likelihood": "Medium",
+    "likelihood": "Reasonably possible",
     "impact": "High",
     "controlObjective": "To prevent fraud related to vendor master data and payments.",
     "controlActivity": "ERP role-based access enforces that the person who maintains vendor bank details cannot initiate payments.",
@@ -3027,6 +3239,8 @@ export const PROCUREMENT_RACM_ROWS: ProcurementRacmRow[] = [
     "mgmtReviewControl": "",
     "confidence": "EXTRACTED",
     "sopSectionRef": "SOP-PROC-001, Section 13",
+    "processOwner": "Chief Procurement Officer",
+    "designChecks": "The control leaves evidence that it operated — a reviewer can tell it ran on a given date. | The system configuration behind the control is under change control.",
     "attributes": "Evidence of review"
   },
   {
@@ -3037,7 +3251,7 @@ export const PROCUREMENT_RACM_ROWS: ProcurementRacmRow[] = [
     "riskCategory": "Fraud",
     "riskDescription": "Risk of fraud or unauthorized payments if the person creating the payment batch can also approve it.",
     "riskRating": "High",
-    "likelihood": "Medium",
+    "likelihood": "Reasonably possible",
     "impact": "High",
     "controlObjective": "To prevent fraud in payment creation and approval.",
     "controlActivity": "Banking system dual authorization enforces that the person creating the payment batch cannot be the approver.",
@@ -3055,6 +3269,8 @@ export const PROCUREMENT_RACM_ROWS: ProcurementRacmRow[] = [
     "mgmtReviewControl": "",
     "confidence": "EXTRACTED",
     "sopSectionRef": "SOP-PROC-001, Section 13",
+    "processOwner": "Chief Procurement Officer",
+    "designChecks": "The person performing the control is independent of the person who prepares what it checks. | The control leaves evidence that it operated — a reviewer can tell it ran on a given date. | The person performing the control has the authority and competence to do so. | The system configuration behind the control is under change control.",
     "attributes": "Completeness of documentation,Sign-off obtained"
   },
   {
@@ -3065,7 +3281,7 @@ export const PROCUREMENT_RACM_ROWS: ProcurementRacmRow[] = [
     "riskCategory": "IT general control",
     "riskDescription": "Risk of undetected SoD violations leading to increased fraud risk.",
     "riskRating": "High",
-    "likelihood": "Medium",
+    "likelihood": "Reasonably possible",
     "impact": "High",
     "controlObjective": "To detect and remediate SoD violations.",
     "controlActivity": "SoD violations are monitored through periodic access reviews (quarterly) and continuous monitoring tools.",
@@ -3083,6 +3299,8 @@ export const PROCUREMENT_RACM_ROWS: ProcurementRacmRow[] = [
     "mgmtReviewControl": "",
     "confidence": "EXTRACTED",
     "sopSectionRef": "SOP-PROC-001, Section 13",
+    "processOwner": "Chief Procurement Officer",
+    "designChecks": "The person performing the control is independent of the person who prepares what it checks. | Exceptions the control raises are followed through to resolution, not just noted. | The control leaves evidence that it operated — a reviewer can tell it ran on a given date. | The control runs often enough to catch a misstatement before it reaches the accounts.",
     "attributes": "Evidence of review"
   },
   {
@@ -3093,7 +3311,7 @@ export const PROCUREMENT_RACM_ROWS: ProcurementRacmRow[] = [
     "riskCategory": "Operational",
     "riskDescription": "Risk of inappropriate or unjustified sole-source procurement.",
     "riskRating": "Medium",
-    "likelihood": "Medium",
+    "likelihood": "Reasonably possible",
     "impact": "Medium",
     "controlObjective": "To ensure sole source procurements are justified and authorized.",
     "controlActivity": "Sole source procurement requires prior approval from the CPO.",
@@ -3111,6 +3329,8 @@ export const PROCUREMENT_RACM_ROWS: ProcurementRacmRow[] = [
     "mgmtReviewControl": "",
     "confidence": "EXTRACTED",
     "sopSectionRef": "SOP-PROC-001, Section 14.1",
+    "processOwner": "Head of Procurement Operations",
+    "designChecks": "The person performing the control is independent of the person who prepares what it checks. | The control leaves evidence that it operated — a reviewer can tell it ran on a given date. | The person performing the control has the authority and competence to do so.",
     "attributes": "Timeliness of execution,Sign-off obtained,System configuration validated"
   },
   {
@@ -3121,7 +3341,7 @@ export const PROCUREMENT_RACM_ROWS: ProcurementRacmRow[] = [
     "riskCategory": "Operational",
     "riskDescription": "Risk of unauthorized or non-compliant emergency purchases.",
     "riskRating": "Medium",
-    "likelihood": "Medium",
+    "likelihood": "Reasonably possible",
     "impact": "Medium",
     "controlObjective": "To ensure emergency purchases are properly authorized and documented.",
     "controlActivity": "Emergency purchases require approval from the Department Head and CPO within 24 hours.",
@@ -3139,6 +3359,8 @@ export const PROCUREMENT_RACM_ROWS: ProcurementRacmRow[] = [
     "mgmtReviewControl": "",
     "confidence": "EXTRACTED",
     "sopSectionRef": "SOP-PROC-001, Section 14.1",
+    "processOwner": "Head of Procurement Operations",
+    "designChecks": "The person performing the control is independent of the person who prepares what it checks. | The control leaves evidence that it operated — a reviewer can tell it ran on a given date. | The person performing the control has the authority and competence to do so.",
     "attributes": "Completeness of documentation,Approval evidence verified,Exception identification accuracy"
   },
   {
@@ -3149,7 +3371,7 @@ export const PROCUREMENT_RACM_ROWS: ProcurementRacmRow[] = [
     "riskCategory": "Financial",
     "riskDescription": "Risk of unaddressed budget overruns leading to financial instability.",
     "riskRating": "High",
-    "likelihood": "Medium",
+    "likelihood": "Reasonably possible",
     "impact": "High",
     "controlObjective": "To ensure timely resolution of budget overruns.",
     "controlActivity": "Budget overruns are escalated to the Finance Controller for resolution within 5 business days.",
@@ -3167,6 +3389,8 @@ export const PROCUREMENT_RACM_ROWS: ProcurementRacmRow[] = [
     "mgmtReviewControl": "",
     "confidence": "EXTRACTED",
     "sopSectionRef": "SOP-PROC-001, Section 14.1",
+    "processOwner": "Head of Procurement Operations",
+    "designChecks": "The control leaves evidence that it operated — a reviewer can tell it ran on a given date. | The person performing the control has the authority and competence to do so.",
     "attributes": "Sign-off obtained"
   },
   {
@@ -3177,7 +3401,7 @@ export const PROCUREMENT_RACM_ROWS: ProcurementRacmRow[] = [
     "riskCategory": "Operational",
     "riskDescription": "Risk of unresolved three-way match failures leading to incorrect payments or vendor disputes.",
     "riskRating": "Medium",
-    "likelihood": "Medium",
+    "likelihood": "Reasonably possible",
     "impact": "Medium",
     "controlObjective": "To ensure timely resolution of three-way match failures.",
     "controlActivity": "Three-way match failures are resolved by the AP Team and Buyer within 15 business days.",
@@ -3195,6 +3419,8 @@ export const PROCUREMENT_RACM_ROWS: ProcurementRacmRow[] = [
     "mgmtReviewControl": "",
     "confidence": "EXTRACTED",
     "sopSectionRef": "SOP-PROC-001, Section 14.1",
+    "processOwner": "Head of Procurement Operations",
+    "designChecks": "The threshold or tolerance the control operates at is documented and approved. | The control leaves evidence that it operated — a reviewer can tell it ran on a given date. | The person performing the control has the authority and competence to do so.",
     "attributes": "Evidence of review"
   },
   {
@@ -3205,7 +3431,7 @@ export const PROCUREMENT_RACM_ROWS: ProcurementRacmRow[] = [
     "riskCategory": "Operational",
     "riskDescription": "Risk of unauthorized or unapproved purchases made retrospectively.",
     "riskRating": "Medium",
-    "likelihood": "Medium",
+    "likelihood": "Reasonably possible",
     "impact": "Medium",
     "controlObjective": "To ensure retrospective POs are properly authorized.",
     "controlActivity": "Retrospective POs require approval from the Department Head and CPO within 48 hours.",
@@ -3223,6 +3449,8 @@ export const PROCUREMENT_RACM_ROWS: ProcurementRacmRow[] = [
     "mgmtReviewControl": "",
     "confidence": "EXTRACTED",
     "sopSectionRef": "SOP-PROC-001, Section 14.1",
+    "processOwner": "Head of Procurement Operations",
+    "designChecks": "The person performing the control is independent of the person who prepares what it checks. | The control leaves evidence that it operated — a reviewer can tell it ran on a given date. | The person performing the control has the authority and competence to do so.",
     "attributes": "Completeness of documentation,Timeliness of execution,Sign-off obtained"
   },
   {
@@ -3233,7 +3461,7 @@ export const PROCUREMENT_RACM_ROWS: ProcurementRacmRow[] = [
     "riskCategory": "Operational",
     "riskDescription": "Risk of financial or operational impact due to vendor non-performance.",
     "riskRating": "Medium",
-    "likelihood": "Medium",
+    "likelihood": "Reasonably possible",
     "impact": "Medium",
     "controlObjective": "To mitigate risks arising from vendor non-performance.",
     "controlActivity": "Vendor non-performance is addressed by the Buyer and Legal team per contract terms.",
@@ -3251,6 +3479,8 @@ export const PROCUREMENT_RACM_ROWS: ProcurementRacmRow[] = [
     "mgmtReviewControl": "",
     "confidence": "EXTRACTED",
     "sopSectionRef": "SOP-PROC-001, Section 14.1",
+    "processOwner": "Head of Procurement Operations",
+    "designChecks": "The control leaves evidence that it operated — a reviewer can tell it ran on a given date. | The person performing the control has the authority and competence to do so.",
     "attributes": "Evidence of review"
   },
   {
@@ -3261,7 +3491,7 @@ export const PROCUREMENT_RACM_ROWS: ProcurementRacmRow[] = [
     "riskCategory": "Operational",
     "riskDescription": "Risk of exceptions remaining unresolved, leading to prolonged issues or financial impact.",
     "riskRating": "Medium",
-    "likelihood": "Medium",
+    "likelihood": "Reasonably possible",
     "impact": "Medium",
     "controlObjective": "To ensure timely escalation of unresolved exceptions.",
     "controlActivity": "Exceptions unresolved after 5 business days at Level 1 are escalated to the Procurement Manager / AP Manager.",
@@ -3279,6 +3509,8 @@ export const PROCUREMENT_RACM_ROWS: ProcurementRacmRow[] = [
     "mgmtReviewControl": "",
     "confidence": "INFERRED",
     "sopSectionRef": "SOP-PROC-001, Section 14.2",
+    "processOwner": "Head of Procurement Operations",
+    "designChecks": "Exceptions the control raises are followed through to resolution, not just noted. | The control leaves evidence that it operated — a reviewer can tell it ran on a given date. | The person performing the control has the authority and competence to do so.",
     "attributes": "Approval evidence verified,Sign-off obtained,Segregation of duties confirmed"
   },
   {
@@ -3289,7 +3521,7 @@ export const PROCUREMENT_RACM_ROWS: ProcurementRacmRow[] = [
     "riskCategory": "Operational",
     "riskDescription": "Risk of significant exceptions remaining unresolved, leading to major financial or operational impact.",
     "riskRating": "High",
-    "likelihood": "Medium",
+    "likelihood": "Reasonably possible",
     "impact": "High",
     "controlObjective": "To ensure high-impact exceptions are escalated to senior management.",
     "controlActivity": "Exceptions unresolved after 10 business days or with value exceeding $50,000 are escalated to the CPO / Finance Controller.",
@@ -3307,6 +3539,8 @@ export const PROCUREMENT_RACM_ROWS: ProcurementRacmRow[] = [
     "mgmtReviewControl": "",
     "confidence": "INFERRED",
     "sopSectionRef": "SOP-PROC-001, Section 14.2",
+    "processOwner": "Head of Procurement Operations",
+    "designChecks": "The threshold or tolerance the control operates at is documented and approved. | Exceptions the control raises are followed through to resolution, not just noted. | The control leaves evidence that it operated — a reviewer can tell it ran on a given date. | The person performing the control has the authority and competence to do so.",
     "attributes": "Completeness of documentation"
   },
   {
@@ -3317,7 +3551,7 @@ export const PROCUREMENT_RACM_ROWS: ProcurementRacmRow[] = [
     "riskCategory": "Operational",
     "riskDescription": "Risk of critical issues (financial exposure, legal, fraud) not receiving highest-level attention.",
     "riskRating": "Critical",
-    "likelihood": "Medium",
+    "likelihood": "Reasonably possible",
     "impact": "High",
     "controlObjective": "To ensure critical issues receive highest-level attention and resolution.",
     "controlActivity": "Significant financial exposure, legal implications, or fraud suspicion are escalated to the CFO / Executive Committee.",
@@ -3335,6 +3569,8 @@ export const PROCUREMENT_RACM_ROWS: ProcurementRacmRow[] = [
     "mgmtReviewControl": "",
     "confidence": "INFERRED",
     "sopSectionRef": "SOP-PROC-001, Section 14.2",
+    "processOwner": "Head of Procurement Operations",
+    "designChecks": "The control leaves evidence that it operated — a reviewer can tell it ran on a given date. | The person performing the control has the authority and competence to do so.",
     "attributes": "Timeliness of execution,Exception identification accuracy,Sign-off obtained"
   },
   {
@@ -3345,7 +3581,7 @@ export const PROCUREMENT_RACM_ROWS: ProcurementRacmRow[] = [
     "riskCategory": "Operational",
     "riskDescription": "Risk of delays in the procurement process impacting operational efficiency.",
     "riskRating": "Low",
-    "likelihood": "Low",
+    "likelihood": "Remote",
     "impact": "Low",
     "controlObjective": "To monitor and improve procurement cycle efficiency.",
     "controlActivity": "PR-to-PO Cycle Time is tracked monthly to ensure efficiency.",
@@ -3363,6 +3599,8 @@ export const PROCUREMENT_RACM_ROWS: ProcurementRacmRow[] = [
     "mgmtReviewControl": "",
     "confidence": "INFERRED",
     "sopSectionRef": "SOP-PROC-001, Section 15",
+    "processOwner": "Chief Procurement Officer",
+    "designChecks": "The person performing the control is independent of the person who prepares what it checks. | Exceptions the control raises are followed through to resolution, not just noted. | The control leaves evidence that it operated — a reviewer can tell it ran on a given date.",
     "attributes": "Evidence of review"
   },
   {
@@ -3373,7 +3611,7 @@ export const PROCUREMENT_RACM_ROWS: ProcurementRacmRow[] = [
     "riskCategory": "Operational",
     "riskDescription": "Risk of high exception rates in invoice processing leading to inefficiencies and errors.",
     "riskRating": "Low",
-    "likelihood": "Low",
+    "likelihood": "Remote",
     "impact": "Low",
     "controlObjective": "To monitor and improve invoice matching accuracy.",
     "controlActivity": "Three-Way Match Rate is tracked monthly to ensure accuracy and efficiency of invoice processing.",
@@ -3391,6 +3629,8 @@ export const PROCUREMENT_RACM_ROWS: ProcurementRacmRow[] = [
     "mgmtReviewControl": "",
     "confidence": "INFERRED",
     "sopSectionRef": "SOP-PROC-001, Section 15",
+    "processOwner": "Chief Procurement Officer",
+    "designChecks": "The person performing the control is independent of the person who prepares what it checks. | The threshold or tolerance the control operates at is documented and approved. | Exceptions the control raises are followed through to resolution, not just noted. | The control leaves evidence that it operated — a reviewer can tell it ran on a given date.",
     "attributes": "Completeness of documentation,Sign-off obtained"
   },
   {
@@ -3401,7 +3641,7 @@ export const PROCUREMENT_RACM_ROWS: ProcurementRacmRow[] = [
     "riskCategory": "Operational",
     "riskDescription": "Risk of unauthorized or non-compliant spending outside approved processes.",
     "riskRating": "Medium",
-    "likelihood": "Medium",
+    "likelihood": "Reasonably possible",
     "impact": "Medium",
     "controlObjective": "To monitor and control maverick spending.",
     "controlActivity": "Maverick Spend percentage is tracked quarterly to identify and reduce unauthorized spending.",
@@ -3419,6 +3659,8 @@ export const PROCUREMENT_RACM_ROWS: ProcurementRacmRow[] = [
     "mgmtReviewControl": "",
     "confidence": "INFERRED",
     "sopSectionRef": "SOP-PROC-001, Section 15",
+    "processOwner": "Chief Procurement Officer",
+    "designChecks": "The person performing the control is independent of the person who prepares what it checks. | Exceptions the control raises are followed through to resolution, not just noted. | The control leaves evidence that it operated — a reviewer can tell it ran on a given date. | The control runs often enough to catch a misstatement before it reaches the accounts.",
     "attributes": "Approval evidence verified"
   },
   {
@@ -3429,7 +3671,7 @@ export const PROCUREMENT_RACM_ROWS: ProcurementRacmRow[] = [
     "riskCategory": "Operational",
     "riskDescription": "Risk of frequent retrospective POs indicating process breakdowns or unauthorized commitments.",
     "riskRating": "Medium",
-    "likelihood": "Medium",
+    "likelihood": "Reasonably possible",
     "impact": "Medium",
     "controlObjective": "To monitor and reduce retrospective POs.",
     "controlActivity": "Retrospective PO Rate is tracked monthly to monitor adherence to procurement process.",
@@ -3447,6 +3689,8 @@ export const PROCUREMENT_RACM_ROWS: ProcurementRacmRow[] = [
     "mgmtReviewControl": "",
     "confidence": "INFERRED",
     "sopSectionRef": "SOP-PROC-001, Section 15",
+    "processOwner": "Chief Procurement Officer",
+    "designChecks": "The person performing the control is independent of the person who prepares what it checks. | Exceptions the control raises are followed through to resolution, not just noted. | The control leaves evidence that it operated — a reviewer can tell it ran on a given date.",
     "attributes": "Timeliness of execution,Sign-off obtained"
   },
   {
@@ -3457,7 +3701,7 @@ export const PROCUREMENT_RACM_ROWS: ProcurementRacmRow[] = [
     "riskCategory": "Financial",
     "riskDescription": "Risk of significant deviations from approved budget impacting financial planning.",
     "riskRating": "Medium",
-    "likelihood": "Medium",
+    "likelihood": "Reasonably possible",
     "impact": "Medium",
     "controlObjective": "To monitor and control budget adherence.",
     "controlActivity": "Budget Variance is tracked quarterly to ensure procurement spend aligns with approved budget.",
@@ -3475,6 +3719,8 @@ export const PROCUREMENT_RACM_ROWS: ProcurementRacmRow[] = [
     "mgmtReviewControl": "",
     "confidence": "INFERRED",
     "sopSectionRef": "SOP-PROC-001, Section 15",
+    "processOwner": "Chief Procurement Officer",
+    "designChecks": "The person performing the control is independent of the person who prepares what it checks. | Exceptions the control raises are followed through to resolution, not just noted. | The control leaves evidence that it operated — a reviewer can tell it ran on a given date. | The person performing the control has the authority and competence to do so.",
     "attributes": "Completeness of documentation,System configuration validated"
   },
   {
@@ -3485,7 +3731,7 @@ export const PROCUREMENT_RACM_ROWS: ProcurementRacmRow[] = [
     "riskCategory": "Compliance",
     "riskDescription": "Risk that the SOP becomes outdated or ineffective if not periodically reviewed.",
     "riskRating": "Low",
-    "likelihood": "Low",
+    "likelihood": "Remote",
     "impact": "Low",
     "controlObjective": "To ensure the SOP remains current and effective.",
     "controlActivity": "The Standard Operating Procedure (SOP) is subject to annual review to ensure its continued adequacy and relevance.",
@@ -3503,6 +3749,8 @@ export const PROCUREMENT_RACM_ROWS: ProcurementRacmRow[] = [
     "mgmtReviewControl": "",
     "confidence": "EXTRACTED",
     "sopSectionRef": "SOP-PROC-001, Section 16 Note",
+    "processOwner": "Chief Procurement Officer",
+    "designChecks": "The person performing the control is independent of the person who prepares what it checks. | The control leaves evidence that it operated — a reviewer can tell it ran on a given date. | The person performing the control has the authority and competence to do so. | The control runs often enough to catch a misstatement before it reaches the accounts.",
     "attributes": "Sign-off obtained"
   },
   {
@@ -3513,7 +3761,7 @@ export const PROCUREMENT_RACM_ROWS: ProcurementRacmRow[] = [
     "riskCategory": "Compliance",
     "riskDescription": "Risk that employees use outdated versions of the SOP, leading to non-compliance or errors.",
     "riskRating": "Medium",
-    "likelihood": "Medium",
+    "likelihood": "Reasonably possible",
     "impact": "Medium",
     "controlObjective": "To ensure all personnel adhere to the latest approved procedures.",
     "controlActivity": "Formal version control and periodic review process for the SOP is implemented and communicated to all stakeholders.",
@@ -3531,6 +3779,8 @@ export const PROCUREMENT_RACM_ROWS: ProcurementRacmRow[] = [
     "mgmtReviewControl": "",
     "confidence": "RECOMMENDED",
     "sopSectionRef": "SOP-PROC-001, Section 16 Note",
+    "processOwner": "Chief Procurement Officer",
+    "designChecks": "The person performing the control is independent of the person who prepares what it checks. | The control leaves evidence that it operated — a reviewer can tell it ran on a given date. | The person performing the control has the authority and competence to do so. | The control runs often enough to catch a misstatement before it reaches the accounts.",
     "attributes": "Exception identification accuracy"
   },
   {
@@ -3541,7 +3791,7 @@ export const PROCUREMENT_RACM_ROWS: ProcurementRacmRow[] = [
     "riskCategory": "Operational",
     "riskDescription": "Risk that stakeholders are unaware of current procurement procedures, leading to non-compliance or process inefficiencies.",
     "riskRating": "Medium",
-    "likelihood": "Medium",
+    "likelihood": "Reasonably possible",
     "impact": "Medium",
     "controlObjective": "To ensure all stakeholders are knowledgeable about and adhere to procurement procedures.",
     "controlActivity": "Regular training and awareness programs are conducted for all relevant stakeholders on the latest procurement procedures.",
@@ -3559,6 +3809,8 @@ export const PROCUREMENT_RACM_ROWS: ProcurementRacmRow[] = [
     "mgmtReviewControl": "",
     "confidence": "RECOMMENDED",
     "sopSectionRef": "SOP-PROC-001, Section 3",
+    "processOwner": "Chief Procurement Officer",
+    "designChecks": "The control leaves evidence that it operated — a reviewer can tell it ran on a given date. | The person performing the control has the authority and competence to do so. | The control runs often enough to catch a misstatement before it reaches the accounts.",
     "attributes": "Completeness of documentation,Timeliness of execution,Approval evidence verified,Sign-off obtained"
   },
   {
@@ -3569,7 +3821,7 @@ export const PROCUREMENT_RACM_ROWS: ProcurementRacmRow[] = [
     "riskCategory": "IT general control",
     "riskDescription": "Risk of unauthorized access to ERP system functionalities, leading to fraud or data manipulation.",
     "riskRating": "High",
-    "likelihood": "Medium",
+    "likelihood": "Reasonably possible",
     "impact": "High",
     "controlObjective": "To maintain secure and appropriate access to ERP system functionalities.",
     "controlActivity": "System access controls for the ERP are periodically reviewed and monitored to ensure appropriate segregation of duties and prevent unauthorized access.",
@@ -3587,6 +3839,8 @@ export const PROCUREMENT_RACM_ROWS: ProcurementRacmRow[] = [
     "mgmtReviewControl": "",
     "confidence": "RECOMMENDED",
     "sopSectionRef": "SOP-PROC-001, Section 13",
+    "processOwner": "Chief Procurement Officer",
+    "designChecks": "The person performing the control is independent of the person who prepares what it checks. | Exceptions the control raises are followed through to resolution, not just noted. | The control leaves evidence that it operated — a reviewer can tell it ran on a given date. | The control runs often enough to catch a misstatement before it reaches the accounts.",
     "attributes": "Evidence of review,Segregation of duties confirmed"
   },
   {
@@ -3597,7 +3851,7 @@ export const PROCUREMENT_RACM_ROWS: ProcurementRacmRow[] = [
     "riskCategory": "IT general control",
     "riskDescription": "Risk that DOA matrices and other thresholds are incorrectly configured in the ERP system, leading to unauthorized transactions.",
     "riskRating": "High",
-    "likelihood": "Medium",
+    "likelihood": "Reasonably possible",
     "impact": "High",
     "controlObjective": "To ensure ERP system configurations for approvals and thresholds are accurate.",
     "controlActivity": "DOA matrices and other critical thresholds (e.g., sourcing, payment) configured in the ERP system are periodically reviewed for accuracy and alignment with policy.",
@@ -3615,6 +3869,8 @@ export const PROCUREMENT_RACM_ROWS: ProcurementRacmRow[] = [
     "mgmtReviewControl": "",
     "confidence": "RECOMMENDED",
     "sopSectionRef": "SOP-PROC-001, Sections 6.3, 7.2, 11.3",
+    "processOwner": "Chief Procurement Officer",
+    "designChecks": "The person performing the control is independent of the person who prepares what it checks. | The threshold or tolerance the control operates at is documented and approved. | Exceptions the control raises are followed through to resolution, not just noted. | The control leaves evidence that it operated — a reviewer can tell it ran on a given date.",
     "attributes": "Sign-off obtained"
   },
   {
@@ -3625,7 +3881,7 @@ export const PROCUREMENT_RACM_ROWS: ProcurementRacmRow[] = [
     "riskCategory": "IT general control",
     "riskDescription": "Risk of loss or corruption of critical procurement data, impacting audit trails and business continuity.",
     "riskRating": "High",
-    "likelihood": "Medium",
+    "likelihood": "Reasonably possible",
     "impact": "High",
     "controlObjective": "To ensure the availability, integrity, and retention of procurement data.",
     "controlActivity": "Data integrity, backup, and record retention policies are enforced for all procurement-related data in the ERP and document management systems.",
@@ -3643,6 +3899,8 @@ export const PROCUREMENT_RACM_ROWS: ProcurementRacmRow[] = [
     "mgmtReviewControl": "",
     "confidence": "RECOMMENDED",
     "sopSectionRef": "SOP-PROC-001, Section 12.2.4",
+    "processOwner": "Chief Procurement Officer",
+    "designChecks": "The control leaves evidence that it operated — a reviewer can tell it ran on a given date. | The control operates over a complete population — nothing routes around it. | The system configuration behind the control is under change control.",
     "attributes": "Completeness of documentation"
   },
   {
@@ -3653,7 +3911,7 @@ export const PROCUREMENT_RACM_ROWS: ProcurementRacmRow[] = [
     "riskCategory": "Fraud",
     "riskDescription": "Risk of circumvention of approval thresholds through transaction splitting, leading to unauthorized commitments.",
     "riskRating": "High",
-    "likelihood": "Medium",
+    "likelihood": "Reasonably possible",
     "impact": "High",
     "controlObjective": "To detect and prevent attempts to bypass approval thresholds.",
     "controlActivity": "Monitoring for unusual patterns of transaction splitting to bypass DOA thresholds is performed.",
@@ -3671,6 +3929,8 @@ export const PROCUREMENT_RACM_ROWS: ProcurementRacmRow[] = [
     "mgmtReviewControl": "",
     "confidence": "RECOMMENDED",
     "sopSectionRef": "SOP-PROC-001, Sections 6.3, 11.3",
+    "processOwner": "Chief Procurement Officer",
+    "designChecks": "The person performing the control is independent of the person who prepares what it checks. | The threshold or tolerance the control operates at is documented and approved. | Exceptions the control raises are followed through to resolution, not just noted. | The control leaves evidence that it operated — a reviewer can tell it ran on a given date.",
     "attributes": "Timeliness of execution,Sign-off obtained"
   }
 ];
@@ -3693,6 +3953,17 @@ export function deriveRiskRatingClass(rating: string): string {
   if (r === 'high' || r === 'critical') return 'bg-risk-50 text-risk-700 border-risk-700/15';
   if (r === 'medium') return 'bg-mitigated-50 text-mitigated-700 border-mitigated-700/15';
   if (r === 'low') return 'bg-compliant-50 text-compliant-700 border-compliant-700/15';
+  return 'bg-paper-100 text-ink-600 border-border-light';
+}
+
+/** Likelihood grades on its own three words — Remote, Reasonably possible,
+ *  Probable — so it cannot borrow the rating's colours by name. The severity
+ *  reading is the same shape, though: Probable is the one to worry about. */
+export function deriveLikelihoodClass(likelihood: string): string {
+  const l = (likelihood || '').toLowerCase();
+  if (l === 'probable') return 'bg-risk-50 text-risk-700 border-risk-700/15';
+  if (l === 'reasonably possible') return 'bg-mitigated-50 text-mitigated-700 border-mitigated-700/15';
+  if (l === 'remote') return 'bg-compliant-50 text-compliant-700 border-compliant-700/15';
   return 'bg-paper-100 text-ink-600 border-border-light';
 }
 

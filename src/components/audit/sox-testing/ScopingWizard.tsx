@@ -5,19 +5,23 @@ import {
   Building2, Landmark, Upload, FileText, Check, Circle, Plus, Trash2, X,
   ArrowRight, ArrowLeft, Loader2, Info, Sparkles,
   ShieldCheck, ClipboardList, Zap, AlertCircle, AlertTriangle,
-  FileSpreadsheet, Grid3x3, Paperclip, Pencil, Minus, ChevronDown,
+  FileSpreadsheet, Grid3x3, Paperclip, Pencil, Minus, ChevronDown, Lock,
 } from 'lucide-react';
+import { CustomDatePicker } from '../../shared/CustomDatePicker';
+import { AUDIT_ROUNDS, type AuditRound } from '../../sox-icfr/types';
+import { ROUND_LABEL, signedInterimsFor } from '../../sox-icfr/engagementRounds';
 import { SourceChips } from './ProgrammeView';
 import { FormSelect } from '../../shared/FilterSelect';
 import { OWNER_NAMES } from '../../../data/grc-domain';
 import { registerEngagement, uniqueEngagementName, type EngType, type ProcessCode } from '../../../data/engagements';
 import { useAuditLog } from '../../../context/AdminDataContext';
+import { useCurrentUser } from '../../../context/CurrentUserContext';
 import type { FileOrigin, Frequency, SampleSizeRow, SamplingMethodology } from '../../sox-icfr/types';
-import { defaultSamplingMethodology, FREQUENCY_ORDER, FREQUENCY_SAYS, ROUND_BASIS_EFFECT, SAMPLING_METHODS } from '../../sox-icfr/types';
+import { defaultSamplingMethodology, FREQUENCY_ORDER, FREQUENCY_SAYS, ROUND_BASIS_EFFECT, SAMPLING_METHODS, SAMPLING_SPREADS, spreadLabel } from '../../sox-icfr/types';
 import { cn } from '../../../lib/cn';
 import {
   BASIS_OPTIONS, BEYOND_TB, ENTITY_TYPES, QUAL_REASONS, SEED_ENTITIES,
-  SEED_GROUP_NAME, SEED_QUAL_PICKS, SEED_TB_FILES, captionsForEntities,
+  SEED_GROUP_NAME, SEED_QUAL_PICKS, SEED_TB_FILES,
   currentFyEnd, cycleYears, deriveRacms, entityShort, fmtCr, genCode,
   type DerivedRacm, type GroupEntity, type MaterialityBasis, type ProcessName, type QualPick,
   type SoxProgramme, type TbCaption,
@@ -25,16 +29,25 @@ import {
 import {
   chainDepth, COVERAGE_TARGET, type DerivedScopeRow, deriveEntityScope, entityTotalsOf,
   materialAccountsOf, normaliseProcess, type ProcessScopeRow, recommendProcesses,
-  sameCompany, type ScopeEntityRow, SOX_MAPPING_PROCESSES,
+  sameCompany, type ScopeEntityRow, SOX_MAPPING_PROCESSES, programmeFor,
 } from '../../sox-icfr/auditScope';
 import {
-  clashSummary, controlIdClashes, copyRacmControls, isRowPublished, markRacmsUsed, racmStatus, useRacmLibrary, type LibraryRacm,
+  clashSummary, controlIdClashes, copyRacmControls, currentVersion, isRowPublished, markRacmsUsed, racmStatus, useRacmLibrary, type LibraryRacm,
 } from '../../sox-icfr/racmLibrary';
 import CreateRacmFlow from '../../sox-icfr/CreateRacmFlow';
+import { parseOrgChartFile } from './orgChartImport';
+import LedgerExplorer from './LedgerExplorer';
+import {
+  parseTrialBalanceFile, parseGeneralLedgerFile, isReadableLedger, captionKey, readLedgerFile, checkTrialBalance,
+  trialBalanceFrom, generalLedgerFrom, type TbParseOk, type TbParseResult, type GlParseOk, type GlLine, type LedgerFileRead,
+} from './ledgerImport';
+import { TABLE_FILE_ACCEPT, isScanFile } from './tableReader';
+import { benchmarksFromTb } from './tbBenchmarks';
 // Upload RACM opens the RACM tab's own dialog, which is styled by the SOX
 // register sheet (.modal-backdrop / .modal). Imported here as well so the
 // dialog is dressed whichever screen opened this sheet.
 import '../../sox-icfr/register.css';
+import DialogFocus from '../../shared/DialogFocus';
 
 /** Scoping step — PARKED (user ask). SOX creation is now identity + entities +
  *  a RACM attached to each entity; the trial balance and general ledger are
@@ -82,7 +95,7 @@ const SD_BAND_PCT = 20;
 
 /** ₹ Cr in, readable money out — under a crore reads as lakhs. The New audit
  *  wizard's formatter, so the two scoping screens write money the same way. */
-const money = (cr: number) => (cr >= 1 ? `₹${cr.toFixed(2)} Cr` : `₹${(cr * 100).toFixed(1)} L`);
+const money = (cr: number) => (!Number.isFinite(cr) ? '—' : cr >= 1 ? `₹${cr.toFixed(2)} Cr` : `₹${(cr * 100).toFixed(1)} L`);
 
 /** "A, B and C" — for the footer lines that name what Continue waits on. */
 const andList = (names: string[]) => names.join(', ').replace(/, ([^,]*)$/, ' and $1');
@@ -96,11 +109,38 @@ const inputCls = 'w-full px-3 py-2.5 border border-border rounded-lg text-[0.812
 const selectCls = inputCls + ' cursor-pointer appearance-none';
 /** Compact FormSelect for a table row — the sheet's dropdown look at row scale,
  *  so the entity type matches Owner instead of falling back to a raw <select>. */
-const rowSelectCls = 'w-full text-[12px] text-text-secondary bg-white border border-border rounded-md px-2 py-1 outline-none hover:border-primary/40 transition-colors';
+const rowSelectCls = 'w-full text-[0.75rem] text-text-secondary bg-white border border-border rounded-md px-2 py-1 outline-none hover:border-primary/40 transition-colors';
+/** "3 accounts" / "1 company" — the count and its noun, agreeing. */
+const plural = (n: number, one: string, many = `${one}s`) => `${n} ${n === 1 ? one : many}`;
+
 const basicsLabelCls = 'text-[0.6875rem] font-bold text-ink-500 uppercase tracking-wider mb-1.5 block';
 /** The same label without its own spacing — for a header row that carries the
  *  margin itself, so the label and the control beside it sit on one baseline. */
 const basicsLabelInlineCls = 'text-[0.6875rem] font-bold text-ink-500 uppercase tracking-wider';
+
+/**
+ * A FILE NAME IN A CHIP, truncated so the EXTENSION survives.
+ *
+ * Plain `truncate` cuts from the right, which eats the one part of a file name
+ * that says what the file IS: "altura-infra-group-org-chart.xlsx" became
+ * "altura-infra-group-org-ch…" and the reader lost the .xlsx. Here the stem
+ * shrinks and the extension is pinned beside it, so a squeezed chip still reads
+ * "altura-infra-gro….xlsx" — you can always tell a spreadsheet from a PDF, which
+ * on this control is the difference between a chart that could be read and one
+ * that could not. The whole name stays on the tooltip either way.
+ */
+function FileChipName({ name, className }: { name: string; className?: string }) {
+  const dot = name.lastIndexOf('.');
+  // A leading dot is the whole name of a dotfile, not an extension.
+  const stem = dot > 0 ? name.slice(0, dot) : name;
+  const ext = dot > 0 ? name.slice(dot) : '';
+  return (
+    <span className={cn('min-w-0 flex items-baseline text-[0.6875rem]', className)} title={name}>
+      <span className="truncate">{stem}</span>
+      {ext && <span className="shrink-0">{ext}</span>}
+    </span>
+  );
+}
 /** The New audit wizard's field, for the Materiality & TB step brought over
  *  from it — the two scoping screens set the same rule with the same fields. */
 const matInputCls = 'w-full px-3 py-2 text-[0.8125rem] border border-canvas-border rounded-lg bg-white text-ink-900 outline-none focus:border-brand-400 focus:ring-2 focus:ring-brand-500/10 transition-all';
@@ -176,12 +216,6 @@ const ALTURA_CHART: SampleChart = {
 
 const SAMPLE_CHARTS: SampleChart[] = [MERIDIAN_CHART, ALTURA_CHART];
 
-/** Which client's chart was uploaded. An unrecognised filename still extracts —
- *  a demo that reads "nothing happened" is worse than one that reads the group
- *  it has — so Meridian remains the default. */
-const chartFor = (fileName: string): SampleChart =>
-  SAMPLE_CHARTS.find(c => c.match.test(fileName)) ?? MERIDIAN_CHART;
-
 /** A row and everything held beneath it, however deep. Deleting one company
  *  has to take its whole family: a subsidiary only reaches the group THROUGH
  *  its parent, so leaving the children behind would claim the group still owns
@@ -241,6 +275,12 @@ const effectiveOwnership = (ent: GroupEntity, all: GroupEntity[]): number => {
  *  is on screen now. */
 const ORG_CHART_ENTITY_IDS = new Set(SAMPLE_CHARTS.flatMap(c => c.entities.map(e => e.id)));
 
+/** Did an org chart put this row in the table? Rows parsed out of an uploaded
+ *  document carry an `oc-` id minted from the file, so the question can no
+ *  longer be answered by a fixed list of ids — the sample ids stay in it only
+ *  for a table filled before the reader was real (24 Sep). */
+const isChartRow = (id: string) => id.startsWith('oc-') || ORG_CHART_ENTITY_IDS.has(id);
+
 /** The listing parenthetical belongs to the group field, not to a name people
  *  will read on a card: "Meridian Global Holdings, Inc. (NYSE: MGH)" is how the
  *  registrant is identified, "Meridian Global Holdings, Inc." is what the
@@ -259,10 +299,36 @@ const suggestEngagementName = (group: string, fyLbl: string) =>
 const yearLabel = (basis: 'fy' | 'cy', end: number) =>
   basis === 'fy' ? `FY ${end - 1}-${String(end).slice(-2)}` : `CY ${end}`;
 
-/** Formats an org chart is realistically kept in. Deliberately wide: whatever
- *  the client has is what we take — a spreadsheet of companies (Excel / CSV)
- *  as much as a drawn chart (image, Visio, PDF, PowerPoint, draw.io). */
-const ORG_CHART_ACCEPT = '.xlsx,.xls,.csv,.pdf,.png,.jpg,.jpeg,.webp,.gif,.svg,.vsd,.vsdx,.vsdm,.ppt,.pptx,.drawio,image/*,application/pdf,text/csv';
+/** Formats an org chart can be read from (1 Oct): a spreadsheet, a PDF, a
+ *  Word file or a scan — the same set the trial balance and ledger take. Visio,
+ *  PowerPoint, draw.io and SVG stay on offer (user, 1 Oct) and are refused
+ *  with a named reason when picked. */
+const ORG_CHART_ACCEPT = `${TABLE_FILE_ACCEPT},.svg,.vsd,.vsdx,.vsdm,.ppt,.pptx,.drawio`;
+
+/** A file on Materiality & TB, and how reading it went. `problem` says why a
+ *  failed one failed: no table Ira could use, or a general ledger in the
+ *  trial-balance slot. `scan` is true while OCR is running on it. */
+interface ScopeFile {
+  id: string;
+  name: string;
+  kind: 'tb' | 'gl';
+  origin?: FileOrigin;
+  read: 'pending' | 'ok' | 'failed';
+  problem?: ScopeFileProblem;
+  scan?: boolean;
+}
+type ScopeFileProblem = 'no-table' | 'unsupported' | 'no-amount-column' | 'no-rows' | 'not-a-ledger' | 'looks-like-gl';
+const asProblem = (reason: string): ScopeFileProblem =>
+  (['unsupported', 'no-amount-column', 'no-rows', 'not-a-ledger', 'looks-like-gl'] as const).find(r => r === reason) ?? 'no-table';
+/** Name what's missing when Ira knows it (user, 1 Oct); the general line otherwise. */
+const PROBLEM_LINE: Record<ScopeFileProblem, string> = {
+  'no-table': 'Ira couldn’t find a table in this file.',
+  unsupported: 'Ira can’t read this file type — upload Excel, CSV, PDF, Word or an image.',
+  'no-amount-column': 'Ira found a table but no amount column — a trial balance needs a balance, or debit and credit.',
+  'no-rows': 'Ira found the columns but no account rows under them.',
+  'not-a-ledger': 'Ira found a table but no posting date or document number — a general ledger lists journal lines.',
+  'looks-like-gl': 'This looks like a general ledger — a trial balance has one closing balance per account.',
+};
 
 const TYPE_TILES: { type: EngType; icon: JSX.Element; tagline: string; tint: string; ring: string; iconWrap: string }[] = [
   { type: 'SOX / ICFR',     icon: <ShieldCheck size={22} />,    tagline: 'SOX 404 / ICFR — scoping, materiality rules, design + operating effectiveness, deficiency evaluation', tint: 'bg-brand-50/70 hover:bg-brand-50 text-brand-700 border-brand-200',          ring: 'ring-brand-600 ring-offset-2 ring-offset-canvas-elevated',     iconWrap: 'bg-brand-600 text-white' },
@@ -385,6 +451,10 @@ export default function ScopingWizard({ onCancel, onCreated, typePreselected, on
    *  group and the year. A name someone wrote is an answer, and nothing
    *  downstream gets to overwrite an answer. */
   const [nameTouched, setNameTouched] = useState(false);
+  /** Basics fields the user has left (blurred). A required-field line shows
+   *  only after that — never on a form nobody has touched yet. */
+  const [touched, setTouched] = useState<Record<string, true>>({});
+  const touch = (k: string) => () => setTouched(t => (t[k] ? t : { ...t, [k]: true }));
   const [code, setCode] = useState(genCode());
   const [description, setDescription] = useState('');
   // SOX is an annual recurring cycle, not a dated project — so no start/end
@@ -397,13 +467,19 @@ export default function ScopingWizard({ onCancel, onCreated, typePreselected, on
    *  the cycle, and a hard-coded year would keep creating stale programmes
    *  once the financial year turned over. */
   const [fyEnd, setFyEnd] = useState(currentFyEnd);
-  const [owner, setOwner] = useState(OWNER_NAMES[0]);
+  // The person creating the engagement owns it — never a name they were not
+  // asked about. OWNER_NAMES[0] only stands in if nobody is signed in.
+  const { currentUser } = useCurrentUser();
+  const [owner, setOwner] = useState(currentUser?.name ?? OWNER_NAMES[0]);
 
   const YEAR_OPTIONS = cycleYears(yearBasis).map(y => (yearBasis === 'fy'
     ? { value: y, label: `FY ${y - 1}-${String(y).slice(-2)}` }
     : { value: y, label: `CY ${y}` }));
   const fyLabel = YEAR_OPTIONS.find(o => o.value === fyEnd)?.label ?? `FY ${fyEnd}`;
-  const fy = `FY${String(fyEnd).slice(-2)}`;
+  /** Short year label for the button, the Review line and the programme —
+   *  follows the year basis, so a calendar-year engagement named "CY 2026 …"
+   *  is not created as "FY26". */
+  const fy = `${yearBasis === 'fy' ? 'FY' : 'CY'}${String(fyEnd).slice(-2)}`;
   const asOf = yearBasis === 'fy' ? `31 Mar ${fyEnd}` : `31 Dec ${fyEnd}`;
 
   // Step 2 — group & entities. The table starts empty: entities are mapped
@@ -415,10 +491,65 @@ export default function ScopingWizard({ onCancel, onCreated, typePreselected, on
    *  still ours: read an org chart and the engagement renames itself to the
    *  group it just found; switch FY to CY and it re-dates. Stops dead the
    *  moment the user types. */
+  // ── Audit period (5 Oct 2026 — one engagement = one audit round) ─────────
+  // New audit's period logic, moved into Basics: the year, which round of it
+  // this engagement is, and the window that round covers. Year first, round
+  // second, dates last — the year decides the dates, the round decides which
+  // of them are the auditor's to pick.
+  const [round, setRound] = useState<AuditRound | null>(null);
+  /** Year-end / roll-forward only: the signed interim ENGAGEMENT this one
+   *  carries its controls over from. '' = none. */
+  const [carryId, setCarryId] = useState('');
+  const [fromDate, setFromDate] = useState('');
+  /** The interim cut-off — the one date that is genuinely the auditor's. */
+  const [cutoff, setCutoff] = useState('');
+  const yearMid = yearBasis === 'fy' ? currentFyEnd() : currentFyEnd() - 1;
+  const periodYearOptions = [yearMid - 1, yearMid, yearMid + 1, yearMid + 2];
+  if (!periodYearOptions.includes(fyEnd)) periodYearOptions.unshift(fyEnd);
+  const yearSpanOf = (b: 'fy' | 'cy', y: number) => (b === 'fy' ? `Apr ${y - 1} – Mar ${y}` : `Jan – Dec ${y}`);
+  const yearStart = yearBasis === 'fy' ? `${fyEnd - 1}-04-01` : `${fyEnd}-01-01`;
+  const yearEnd = yearBasis === 'fy' ? `${fyEnd}-03-31` : `${fyEnd}-12-31`;
+  const shiftDay = (iso: string, days: number) => {
+    const d = new Date(`${iso}T00:00:00`);
+    d.setDate(d.getDate() + days);
+    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+  };
+  const fmtDate = (iso: string) => new Date(`${iso}T00:00:00`).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' });
+  /** Signed interims of this client — what a year-end or roll-forward can
+   *  carry over from. Only interims signed by BOTH preparer and reviewer. */
+  const carrySources = useMemo(
+    () => (round === 'yearend' || round === 'rollforward' ? signedInterimsFor(groupName) : []),
+    [round, groupName],
+  );
+  const carry = carrySources.find(c => c.engagement.id === carryId);
+  // Roll-forward picks up the day after its interim stopped and runs to the year
+  // end; year-end always closes on the year end — neither end is a choice there.
+  const windowFrom = round === 'rollforward' ? (carry ? shiftDay(carry.audit.windowTo, 1) : '') : fromDate;
+  const windowTo = round === 'interim' ? cutoff : yearEnd;
+  const periodValid = round === 'interim' ? !!fromDate && !!cutoff && fromDate >= yearStart && fromDate <= cutoff && cutoff < yearEnd
+    : round === 'rollforward' ? !!carry
+    : round === 'yearend' ? !!fromDate && fromDate >= yearStart && fromDate <= yearEnd
+    : false;
+  /** Changing the year re-dates the window under it. The round is kept — it is
+   *  the same kind of work whichever way the year runs (click-through, 5 Oct:
+   *  switching Apr–Mar to Jan–Dec used to clear it). */
+  const changeYear = (b: 'fy' | 'cy', y: number) => {
+    setYearBasis(b); setFyEnd(y); setCarryId(''); setCutoff('');
+    setFromDate(round && round !== 'rollforward' ? (b === 'fy' ? `${y - 1}-04-01` : `${y}-01-01`) : '');
+  };
+  const pickRound = (r: AuditRound) => {
+    setRound(r);
+    setFromDate(r === 'rollforward' ? '' : yearStart);
+    setCutoff('');
+    if (r === 'interim') setCarryId('');
+  };
+
+  /** The suggested name keeps following the group, the year and the round
+   *  while it is still ours — "FY 2026-27 ICFR — Altura · Interim". */
   useEffect(() => {
     if (nameTouched) return;
-    setName(suggestEngagementName(groupName, fyLabel));
-  }, [groupName, fyLabel, nameTouched]);
+    setName(suggestEngagementName(groupName, yearLabel(yearBasis, fyEnd)) + (round ? ` · ${ROUND_LABEL[round]}` : ''));
+  }, [groupName, yearBasis, fyEnd, round, nameTouched]);
   const [racmUpload, setRacmUpload] = useState<'idle' | 'parsing' | 'done'>('idle');
   const [tbUpload, setTbUpload] = useState<'idle' | 'parsing' | 'done'>('idle');
 
@@ -465,7 +596,13 @@ export default function ScopingWizard({ onCancel, onCreated, typePreselected, on
   // Step 2 — materiality
   const [basis, setBasis] = useState<MaterialityBasis>('pbt');
   const basisOpt = BASIS_OPTIONS.find(b => b.id === basis)!;
-  const [benchmark, setBenchmark] = useState(basisOpt.defaultBenchmark);
+  /** The benchmark in use. Filled from the trial balance (product owner, 5 Oct —
+   *  replaces "offered, never written in"): empty until a TB is read, then the
+   *  TB's figure for the basis, unless the user typed their own for that basis
+   *  (`userBench`). No placeholder figure ever — an empty box says "not yet". */
+  const [benchmark, setBenchmark] = useState<number>(NaN);
+  /** Figures the user typed, by basis. Absent = follow the TB. "Use" clears it. */
+  const [userBench, setUserBench] = useState<Partial<Record<MaterialityBasis, number>>>({});
   const [pct, setPct] = useState(basisOpt.defaultPct);
   const [pmPct, setPmPct] = useState(75);
   const [cttPct, setCttPct] = useState(5);
@@ -487,8 +624,31 @@ export default function ScopingWizard({ onCancel, onCreated, typePreselected, on
   const [beyond, setBeyond] = useState<Record<string, boolean>>(() =>
     Object.fromEntries(BEYOND_TB.map(b => [b.id, true])));
 
-  /** All captions for the current entity set. */
-  const captions = useMemo<TbCaption[]>(() => captionsForEntities(entities), [entities]);
+  /** ── What the trial balance actually said ────────────────────────────────
+   *  Held from the moment the file is read, because everything downstream —
+   *  captions, materiality, which processes each company runs — is derived
+   *  from it rather than from the seed. */
+  const [tbParse, setTbParse] = useState<TbParseOk | null>(null);
+  const [glParse, setGlParse] = useState<GlParseOk | null>(null);
+  /** A ledger we could not read, named so the user knows which file to fix. */
+  const [ledgerError, setLedgerError] = useState<{ kind: 'tb' | 'gl'; name: string; reason: string } | null>(null);
+  /** Rows the trial balance put in the table itself, so the explorer can mark
+   *  them: nobody drew them on the chart and nobody typed them. */
+  const [tbAddedIds, setTbAddedIds] = useState<Set<string>>(new Set());
+  /** Those rows as the trial balance wrote them — a row still equal to this is
+   *  removed with its TB; one the user changed is kept. */
+  const tbAddedRows = useRef(new Map<string, GroupEntity>());
+
+  /** All captions for the current entity set — the uploaded trial balance's,
+   *  and nothing else (1 Oct). Until then a company the file never mentioned,
+   *  or every company before a file was read, was filled with four invented
+   *  captions worth ₹249 Cr, and those made-up figures reached Scope, Review
+   *  and the created engagement. A company the file does not mention now has
+   *  no figures; Scope says it is not in the trial balance. */
+  const captions = useMemo<TbCaption[]>(() => {
+    if (!tbParse) return [];
+    return tbParse.captions.filter(c => entities.some(e => e.id === c.entityId));
+  }, [entities, tbParse]);
 
   const captionProcess = (c: TbCaption): ProcessName => mapping[c.id] ?? c.process;
   /** Distinct processes extracted for one entity — shown on its Scoping row. */
@@ -512,11 +672,27 @@ export default function ScopingWizard({ onCancel, onCreated, typePreselected, on
   // engagement yet, so nothing can be looked up by id: the companies are the
   // Basics table, and their trial-balance captions are `captions` above.
 
-  /** Picking a basis restarts its benchmark and % from that basis's defaults. */
+  /** Ira's figure for each basis, added up from the uploaded TB only — never
+   *  from the seed captions (agentic UX #8). Written into the field (5 Oct)
+   *  unless the user typed their own figure for that basis. */
+  const tbCaptions = useMemo(() => (tbParse ? tbParse.captions.filter(c => entities.some(e => e.id === c.entityId)) : []), [tbParse, entities]);
+  const tbWorking = useMemo(() => benchmarksFromTb(tbCaptions), [tbCaptions]);
+  const tbCompanies = useMemo(() => new Set(tbCaptions.map(c => c.entityId)).size, [tbCaptions]);
+  const [workingOpen, setWorkingOpen] = useState(false);
+  // The field follows the TB: on read, on a basis change, on a recombined TB.
+  // A figure the user typed for this basis wins until they press Use.
+  const userFigure = userBench[basis];
+  useEffect(() => {
+    setBenchmark(userFigure !== undefined ? userFigure : tbWorking[basis]?.amount ?? NaN);
+  }, [basis, tbWorking, userFigure]);
+  const typeBenchmark = (n: number) => setUserBench(prev => ({ ...prev, [basis]: n }));
+  const takeTbBenchmark = () => setUserBench(prev => { const out = { ...prev }; delete out[basis]; return out; });
+
+  /** Picking a basis restarts its % from that basis's default; the benchmark
+   *  comes from the TB (or the user's own figure for that basis). */
   const changeBasis = (id: MaterialityBasis) => {
     const opt = BASIS_OPTIONS.find(b => b.id === id)!;
     setBasis(id);
-    setBenchmark(opt.defaultBenchmark);
     setPct(opt.defaultPct);
   };
   /** Performance materiality — what material accounts are listed against, and
@@ -540,25 +716,125 @@ export default function ScopingWizard({ onCancel, onCreated, typePreselected, on
    *  generated or Client prepared — and Continue waits on every answer. It is
    *  saved on the programme's scoping record, which is where the engagement's
    *  file list reads it back (useAuditFiles), so no control asks it again. */
-  const [scopeFiles, setScopeFiles] = useState<{ name: string; kind: 'tb' | 'gl'; origin?: FileOrigin }[]>([]);
-  /** Files still waiting on their source. */
-  const unsourcedFiles = scopeFiles.filter(f => !f.origin).length;
+  const [scopeFiles, setScopeFiles] = useState<ScopeFile[]>([]);
+  /** What each file read into, by file id — kept so the trial balance can be
+   *  recombined (another file added, one removed) without reading a scan twice. */
+  const scopeReads = useRef(new Map<string, LedgerFileRead>());
+  /** Files still waiting on their source. One Ira could not read is not asked —
+   *  it can only be removed. */
+  const unsourcedFiles = scopeFiles.filter(f => !f.origin && f.read !== 'failed').length;
   /** Required before Materiality & TB will pass — the account mapping and Ira's
-   *  process recommendation both read it. The general ledger never is. */
-  const hasTb = scopeFiles.some(f => f.kind === 'tb');
+   *  process recommendation both read it. The general ledger never is. Only a
+   *  trial balance Ira actually READ counts: a file merely attached used to
+   *  pass, and the step then scoped off invented figures. */
+  const hasTb = scopeFiles.some(f => f.kind === 'tb' && f.read === 'ok');
+  /** Still reading, or could not be read — either holds Continue. */
+  const filesReading = scopeFiles.some(f => f.read === 'pending');
+  const filesFailed = scopeFiles.some(f => f.read === 'failed');
+  const glInTbSlot = scopeFiles.some(f => f.kind === 'tb' && f.problem === 'looks-like-gl');
+
+  const markScopeFile = (id: string, patch: Partial<ScopeFile>) =>
+    setScopeFiles(prev => prev.map(f => (f.id === id ? { ...f, ...patch } : f)));
+
+  /** Whether a file already read is usable in the slot it sits in. */
+  const settleScopeFile = (id: string, kind: 'tb' | 'gl', read: LedgerFileRead) => {
+    if (kind === 'tb') {
+      const check = checkTrialBalance(read);
+      markScopeFile(id, check.ok
+        ? { read: 'ok', problem: undefined }
+        : { read: 'failed', problem: asProblem(check.reason) });
+      return;
+    }
+    const gl = generalLedgerFrom([read], entitiesRef.current);
+    markScopeFile(id, gl.ok ? { read: 'ok', problem: undefined } : { read: 'failed', problem: asProblem(gl.reason) });
+  };
+
+  /** READ THE FILE, don't just log its name (28 Sep) — and every file, not
+   *  only the first one picked (1 Oct). Spreadsheet, PDF, Word or scan, the
+   *  same reader puts it into rows; a file it cannot find a table in stays
+   *  listed with the reason, and Continue waits until it is removed. */
+  const readScopeFile = async (id: string, kind: 'tb' | 'gl', file: File) => {
+    const r = await readLedgerFile(file, () => markScopeFile(id, { scan: true }));
+    if (!r.ok) { markScopeFile(id, { read: 'failed', problem: asProblem(r.reason), scan: false }); return; }
+    scopeReads.current.set(id, r.read);
+    markScopeFile(id, { scan: false });
+    settleScopeFile(id, kind, r.read);
+  };
+
   const addScopeFile = (kind: 'tb' | 'gl') => {
     const input = document.createElement('input');
     input.type = 'file';
-    input.accept = '.xlsx,.xls,.csv';
+    input.accept = TABLE_FILE_ACCEPT;
     // A group can file one trial balance per company, so several at once is
-    // normal — same as New audit.
+    // normal — same as New audit. All of them are read, and combined.
     input.multiple = true;
     input.onchange = () => {
       const picked = Array.from(input.files ?? []);
-      if (picked.length) setScopeFiles(prev => [...prev, ...picked.map(f => ({ name: f.name, kind }))]);
+      if (!picked.length) return;
+      const added = picked.map((f, n) => ({
+        file: f,
+        entry: { id: `sf-${Date.now()}-${n}`, name: f.name, kind, read: 'pending' as const, scan: isScanFile(f.name) },
+      }));
+      setScopeFiles(prev => [...prev, ...added.map(a => a.entry)]);
+      added.forEach(a => { void readScopeFile(a.entry.id, kind, a.file); });
     };
     input.click();
   };
+
+  const removeScopeFile = (id: string) => {
+    scopeReads.current.delete(id);
+    setScopeFiles(prev => prev.filter(f => f.id !== id));
+  };
+
+  /** A general ledger dropped in the trial-balance slot, moved to where it
+   *  belongs and read there as a ledger. Its source answer goes with it. */
+  const moveToGeneralLedger = (id: string) => {
+    const read = scopeReads.current.get(id);
+    markScopeFile(id, { kind: 'gl', read: 'pending', problem: undefined });
+    if (read) settleScopeFile(id, 'gl', read);
+  };
+
+  // The trial balance is every readable TB file, combined — recomputed when
+  // one is added, removed or moved out. With none left, nothing it said stays.
+  const tbOkKey = scopeFiles.filter(f => f.kind === 'tb' && f.read === 'ok').map(f => f.id).join('|');
+  useEffect(() => {
+    const reads = tbOkKey ? tbOkKey.split('|').map(id => scopeReads.current.get(id)).filter((r): r is LedgerFileRead => !!r) : [];
+    // Companies the previous trial balance put in the table go with it
+    // (click-through, 5 Oct: removing the TB left "8 of 266"). A row the user
+    // has since edited is theirs now and stays. Whatever the files still
+    // carry is added back by applyTbResult just below.
+    const added = tbAddedRows.current;
+    const untouched = (e: GroupEntity) => {
+      const was = added.get(e.id);
+      return !!was && was.name === e.name && was.type === e.type && (was.country ?? '') === (e.country ?? '') && was.parentId === e.parentId;
+    };
+    tbAddedRows.current = new Map();
+    const base = entitiesRef.current.filter(e => !untouched(e));
+    if (base.length !== entitiesRef.current.length) {
+      entitiesRef.current = base;
+      setEntities(prev => prev.filter(e => !untouched(e)));
+    }
+    setTbAddedIds(new Set());
+    if (!reads.length) {
+      setTbParse(null);
+      setUploads({});
+      setLedgerError(null);
+      return;
+    }
+    applyTbResult(trialBalanceFrom(reads, base));
+    // Keyed on the files alone — entity edits never re-read the trial balance.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [tbOkKey]);
+  const glOkKey = scopeFiles.filter(f => f.kind === 'gl' && f.read === 'ok').map(f => f.id).join('|');
+  const glEntityKey = glOkKey ? entities.map(e => `${e.id}=${e.name}`).join('|') : '';
+  useEffect(() => {
+    const reads = glOkKey ? glOkKey.split('|').map(id => scopeReads.current.get(id)).filter((r): r is LedgerFileRead => !!r) : [];
+    const gl = reads.length ? generalLedgerFrom(reads, entitiesRef.current) : null;
+    setGlParse(gl?.ok ? gl : null);
+    // Re-matched when the companies change too: a ledger read before the
+    // trial balance added its companies links up once they arrive.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [glOkKey, glEntityKey]);
 
   // ── Material accounts → processes ────────────────────────────────────────
   // Only the accounts at or above performance materiality, so the list redraws
@@ -591,6 +867,91 @@ export default function ScopingWizard({ onCancel, onCreated, typePreselected, on
     return names.map(p => ({ value: p, label: racmProcessNames.includes(p) ? p : `${p} · no RACM yet` }));
   }, [racmProcessNames]);
 
+  // The companies come FIRST in this file as well as on screen (25 Sep). The
+  // Scope step asks which companies are in before it asks which processes, and
+  // now that the process list is drawn from the companies that are in, the
+  // derivation has to exist before `processRows` reads it.
+  // ── Companies ────────────────────────────────────────────────────────────
+  // The Basics table, weighed against performance materiality. Built straight
+  // off the table rather than through mergeScopeEntities: that merges by NAME,
+  // and two rows typed with one name would collapse into one company here.
+  // `inData` asks the captions — a company the trial balance has nothing for
+  // can't be weighed, so it is shown excluded rather than judged too small.
+  const entityRows = useMemo<ScopeEntityRow[]>(
+    () => entities.map(e => ({
+      id: e.id, name: e.name, type: e.type, parentId: e.parentId,
+      inRegister: true, inData: captions.some(c => c.entityId === e.id),
+    })),
+    [entities, captions],
+  );
+  const totals = useMemo(() => entityTotalsOf(captions), [captions]);
+  const scope = useMemo(
+    () => deriveEntityScope(entityRows, totals, perf, money, hasTb),
+    [entityRows, totals, perf, hasTb],
+  );
+  /** Where the user overruled the derivation, by entity id. */
+  const [overrides, setOverrides] = useState<Record<string, boolean>>({});
+  /** Why, by entity id — required before Continue. Saved vs being typed, with
+   *  the same Save / Cancel meaning as the process notes. */
+  const [scopeNotes, setScopeNotes] = useState<Record<string, string>>({});
+  const [noteDrafts, setNoteDrafts] = useState<Record<string, string>>({});
+  /** What the company's OWN line says — the derivation, or the user's override
+   *  of it. Says nothing about the group above it. A company the trial balance
+   *  never mentioned starts out, and can be brought in with a written reason
+   *  (1 Oct): it then counts as a company in scope, with no figures and nothing
+   *  added to coverage. */
+  const ownInScope = (r: DerivedScopeRow) =>
+    overrides[r.id] ?? (r.status === 'tb' || r.status === 'coverage');
+  /**
+   * THE COMPANY ABOVE THIS ONE THAT TAKES IT OUT WITH IT, if any (user, 27 Sep
+   * — "jab humne upar wali entity ko hataya to neeche wali automatically hat
+   * jani chahiye thi from the scoping").
+   *
+   * Taking a company out of scope takes everything it holds out too: you cannot
+   * audit a subsidiary through a parent you have decided not to look at, and
+   * leaving the child ticked left the scope claiming coverage it did not have.
+   * `splitFromParent` already flagged the mirror case — a child left out while
+   * its parent is in — and this closes the other direction.
+   *
+   * DERIVED, never written into `overrides`. Writing the descendants out would
+   * forge decisions the user never made, and every one of them would then demand
+   * its own why-note — turning "this sub-group is out" into a note-writing
+   * exercise. One note on the company actually taken out covers the branch.
+   * It also means re-ticking the parent restores the branch untouched, while a
+   * child the user took out on its own stays out on its own reason.
+   */
+  const outByAncestor = (r: DerivedScopeRow): DerivedScopeRow | undefined => {
+    let cur = r;
+    for (let i = 0; i < 8; i++) {
+      const parent = cur.parentId ? scope.rows.find(x => x.id === cur.parentId) : undefined;
+      if (!parent) return undefined;
+      if (!ownInScope(parent)) return parent;
+      cur = parent;
+    }
+    return undefined;
+  };
+  const companyInScope = (r: DerivedScopeRow) => ownInScope(r) && !outByAncestor(r);
+  const scopedEntities = scope.rows.filter(companyInScope);
+
+  /**
+   * IS THIS RACM WRITTEN FOR A COMPANY THAT IS IN SCOPE? (user, 25 Sep —
+   * "by process mein jo upar entity selected hai, sirf usi ke related process
+   * aur controls dikhne chahiye. Saare entities ke nahi dikhai denge.")
+   *
+   * The step used to list every process and every RACM the tab holds, whoever
+   * they belonged to, and only PRE-TICK the ones written for an in-scope
+   * company (`defaultPicksFor`). So scoping one subsidiary still showed the
+   * other twelve companies' processes and controls, and a control could be
+   * ticked into an engagement that does not cover the company it belongs to.
+   *
+   * A matrix with NO company on it is not tied to one, so it stays — hiding it
+   * would lose a RACM that is legitimately group-wide.
+   */
+  const racmInScope = useCallback(
+    (r: LibraryRacm) => !r.entity || scopedEntities.some(e => sameCompany(e.name, r.entity)),
+    [scopedEntities],
+  );
+
   // ══ S11 · Scope ══════════════════════════════════════════════════════════
   // New audit's Scope step without its entity / RACM either-or: processes at
   // the top (Ira's call, overruled with a note), the companies beneath (the
@@ -598,9 +959,22 @@ export default function ScopingWizard({ onCancel, onCreated, typePreselected, on
   // has — the RACMs each in-scope process is tested with, picked off the tab.
 
   // ── Processes ────────────────────────────────────────────────────────────
+  /** The material accounts belonging to the companies ticked in above. A
+   *  company taken out of scope takes its accounts — and any process only it
+   *  ran — off this list with it. */
+  const scopedMaterialRows = useMemo(() => {
+    const inIds = new Set(scopedEntities.map(e => e.id));
+    return materialRows.filter(c => inIds.has(c.entityId));
+  }, [materialRows, scopedEntities]);
+  /** …and the processes the in-scope companies keep a RACM for, which is what
+   *  fills the quiet tail under "Show more". */
+  const scopedRacmProcessNames = useMemo(
+    () => Array.from(new Set(libraryRacms.filter(r => racmStatus(r).status !== 'Draft' && racmInScope(r)).map(r => normaliseProcess(r.process)))),
+    [libraryRacms, racmInScope],
+  );
   const processRows = useMemo(
-    () => recommendProcesses(materialRows.map(c => ({ balance: c.balance, process: processOf(c) })), racmProcessNames),
-    [materialRows, processOf, racmProcessNames],
+    () => recommendProcesses(scopedMaterialRows.map(c => ({ balance: c.balance, process: processOf(c) })), scopedRacmProcessNames),
+    [scopedMaterialRows, processOf, scopedRacmProcessNames],
   );
   /** Where the user overruled Ira, by process. Absent means "as recommended" —
    *  `true` is a qualitative pick, `false` a recommended process taken out. */
@@ -612,11 +986,24 @@ export default function ScopingWizard({ onCancel, onCreated, typePreselected, on
   /** The qualitative reason, saved and draft. '' in a draft = not picked yet. */
   const [procReasons, setProcReasons] = useState<Record<string, string>>({});
   const [procReasonDrafts, setProcReasonDrafts] = useState<Record<string, string>>({});
-  /** The one process whose RACM list is open (user ask, 17 Sep: RACMs are
-   *  picked inside the process row). One at a time keeps the step short.
-   *  `undefined` until Scope first shows — then it opens the first in-scope
-   *  process still waiting on a RACM, and the user drives it from there. */
-  const [openProc, setOpenProc] = useState<string | null | undefined>(undefined);
+  /** WHICH processes have their RACM list open — as many at once as the user
+   *  wants (user, 25 Sep: "user should be able to select multiple processes ek
+   *  time pe. ek process ka ye kabhi bhi testing nahi hogi").
+   *
+   *  Ticking a process was already independent of every other; what was not was
+   *  this. It held ONE process (17 Sep — "one at a time keeps the step short"),
+   *  so ticking a second process folded the first one's RACM list away
+   *  mid-pick. An engagement is never scoped to a single process, so the shape
+   *  that keeps the step short was the shape that fought the ordinary case.
+   *
+   *  `undefined` until Scope first shows — then the first in-scope process
+   *  still waiting on a RACM opens, and the user drives it from there. */
+  const [openProcs, setOpenProcs] = useState<Set<string> | undefined>(undefined);
+  const toggleProcOpen = (process: string) => setOpenProcs(prev => {
+    const next = new Set(prev ?? []);
+    if (!next.delete(process)) next.add(process);
+    return next;
+  });
   /** Processes with no material accounts sit behind "Show more" unless one is
    *  in scope or was moved — they are the long, quiet tail of the list. */
   const [showAllProcs, setShowAllProcs] = useState(false);
@@ -643,7 +1030,9 @@ export default function ScopingWizard({ onCancel, onCreated, typePreselected, on
   const flipProcess = (r: ProcessScopeRow) => {
     const next = !procInScope(r);
     // Switching a process in opens its RACM list — picking them comes next.
-    if (next) setOpenProc(r.process);
+    // Added to whatever is already open, never replacing it: the process ticked
+    // a moment ago is usually still being worked on.
+    if (next) setOpenProcs(prev => new Set(prev ?? []).add(r.process));
     if (next === r.recommended) { clearProcMove(r.process); return; }
     setProcOverrides(prev => ({ ...prev, [r.process]: next }));
     setProcNoteDrafts(prev => ({ ...prev, [r.process]: procNotes[r.process] ?? '' }));
@@ -697,35 +1086,6 @@ export default function ScopingWizard({ onCancel, onCreated, typePreselected, on
   const quietProcCount = processRows.filter(isQuietProc).length;
   const visibleProcs = showAllProcs ? processRows : processRows.filter(r => !isQuietProc(r));
 
-  // ── Companies ────────────────────────────────────────────────────────────
-  // The Basics table, weighed against performance materiality. Built straight
-  // off the table rather than through mergeScopeEntities: that merges by NAME,
-  // and two rows typed with one name would collapse into one company here.
-  // `inData` asks the captions — a company the trial balance has nothing for
-  // can't be weighed, so it is shown excluded rather than judged too small.
-  const entityRows = useMemo<ScopeEntityRow[]>(
-    () => entities.map(e => ({
-      id: e.id, name: e.name, type: e.type, parentId: e.parentId,
-      inRegister: true, inData: captions.some(c => c.entityId === e.id),
-    })),
-    [entities, captions],
-  );
-  const totals = useMemo(() => entityTotalsOf(captions), [captions]);
-  const scope = useMemo(
-    () => deriveEntityScope(entityRows, totals, perf, money, hasTb),
-    [entityRows, totals, perf, hasTb],
-  );
-  /** Where the user overruled the derivation, by entity id. */
-  const [overrides, setOverrides] = useState<Record<string, boolean>>({});
-  /** Why, by entity id — required before Continue. Saved vs being typed, with
-   *  the same Save / Cancel meaning as the process notes. */
-  const [scopeNotes, setScopeNotes] = useState<Record<string, string>>({});
-  const [noteDrafts, setNoteDrafts] = useState<Record<string, string>>({});
-  /** In scope after the user has had their say. A company the trial balance
-   *  never mentioned can't be overruled in — there is nothing to test it on. */
-  const companyInScope = (r: DerivedScopeRow) =>
-    r.status === 'absent' ? false : overrides[r.id] ?? (r.status === 'tb' || r.status === 'coverage');
-  const scopedEntities = scope.rows.filter(companyInScope);
   /** What the numbers said before anyone touched it. */
   const derivedIn = (r: DerivedScopeRow) => r.status === 'tb' || r.status === 'coverage';
 
@@ -773,9 +1133,15 @@ export default function ScopingWizard({ onCancel, onCreated, typePreselected, on
     setOverrides(prev => { const out = { ...prev }; delete out[r.id]; return out; });
   };
   const scopeChanges = useMemo(
+    // A company carried out by the one holding it is NOT a change of its own,
+    // even if it carries an override from before the parent went out: that
+    // override is dormant, the row is out either way, and its note box is
+    // hidden. Counting it here would hold Continue on a note with nowhere to
+    // write it — and would record a decision the user never made.
     () => scope.rows
-      .filter(r => r.status !== 'absent' && overrides[r.id] !== undefined)
+      .filter(r => overrides[r.id] !== undefined && !outByAncestor(r))
       .map(r => ({ entityId: r.id, name: r.name, inScope: !!overrides[r.id], note: (scopeNotes[r.id] ?? '').trim() })),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
     [scope.rows, overrides, scopeNotes],
   );
   const notesOutstanding = scopeChanges.filter(c => !c.note).length;
@@ -807,22 +1173,44 @@ export default function ScopingWizard({ onCancel, onCreated, typePreselected, on
   // nobody has agreed yet. A matrix with published rows AND later additions
   // still appears — its published half is scopable, and `copyRacmControls`
   // takes only that half.
+  /** Published RACMs the user brought to a process with "Pick from Library" —
+   *  written for another process or company, so the list above would not
+   *  offer them on its own. By process. */
+  const [libExtras, setLibExtras] = useState<Record<string, string[]>>({});
+  /** Processes whose starting RACM was swapped for another through "Pick from
+   *  Library" — the one replaced owes no note (see `racmChanges`). */
+  const [libSwapped, setLibSwapped] = useState<Record<string, true>>({});
   const racmsFor = useCallback(
-    (process: string) => libraryRacms.filter(r => normaliseProcess(r.process) === process && racmStatus(r).status !== 'Draft'),
-    [libraryRacms],
+    (process: string) => {
+      const own = libraryRacms.filter(r => normaliseProcess(r.process) === process && racmStatus(r).status !== 'Draft' && racmInScope(r));
+      const extra = libraryRacms.filter(r => (libExtras[process] ?? []).includes(r.id) && racmStatus(r).status !== 'Draft' && !own.includes(r));
+      return [...own, ...extra];
+    },
+    [libraryRacms, racmInScope, libExtras],
   );
   /** Drafts for a process, named as the reason this list looks emptier than the
    *  RACM tab does — hiding them silently would read as a RACM gone missing. */
   const draftRacmsFor = useCallback(
-    (process: string) => libraryRacms.filter(r => normaliseProcess(r.process) === process && racmStatus(r).status === 'Draft'),
-    [libraryRacms],
+    (process: string) => libraryRacms.filter(r => normaliseProcess(r.process) === process && racmStatus(r).status === 'Draft' && racmInScope(r)),
+    [libraryRacms, racmInScope],
   );
-  /** The user's ticks, by process. Absent means "the default": every RACM
-   *  written for a company in scope. Once a process's list is touched it is the
-   *  user's, and moving a company in or out no longer re-ticks it. */
+  /** The user's ticks, by process. Absent means "the default": the ONE
+   *  published library RACM picked for the process (product owner, 5 Oct).
+   *  Once a process's list is touched it is the user's, and moving a company
+   *  in or out no longer re-picks it. */
   const [racmPicks, setRacmPicks] = useState<Record<string, string[]>>({});
-  const defaultPicksFor = (process: string) =>
-    racmsFor(process).filter(r => scopedEntities.some(e => sameCompany(e.name, r.entity))).map(r => r.id);
+  /** The library RACM a process starts with: one written for a company in
+   *  scope (this group) first, then any group-wide one; newest first within
+   *  each — the library keeps the newest at the top. Each library record is
+   *  already its latest published version. */
+  const libraryPickFor = (process: string): LibraryRacm | undefined => {
+    const own = libraryRacms.filter(r => normaliseProcess(r.process) === process && racmStatus(r).status !== 'Draft' && racmInScope(r));
+    return own.find(r => !!r.entity && scopedEntities.some(e => sameCompany(e.name, r.entity))) ?? own[0];
+  };
+  const defaultPicksFor = (process: string) => {
+    const pick = libraryPickFor(process);
+    return pick ? [pick.id] : [];
+  };
   /** Ticked ids for one process, minus any RACM since deleted off the tab. */
   const picksFor = (process: string) => {
     const ids = racmPicks[process] ?? defaultPicksFor(process);
@@ -968,20 +1356,26 @@ export default function ScopingWizard({ onCancel, onCreated, typePreselected, on
    *  the reason — the note gate, Review and the programme record. */
   const racmChanges = scopedProcesses.flatMap(p => {
     const picked = picksFor(p.process);
-    const defaults = defaultPicksFor(p.process);
+    // Swapped for another library RACM through "Pick from Library": a choice
+    // of matrix, not a descoping, so the one it replaced owes no note.
+    const defaults = libSwapped[p.process] ? [] : defaultPicksFor(p.process);
     return racmsFor(p.process)
       .filter(r => defaults.includes(r.id) && !picked.includes(r.id))
       .map(r => ({ process: p.process, racmId: r.id, racm: r.name, note: (racmNotes[r.id] ?? '').trim() }));
   });
   const racmNotesOutstanding = racmChanges.filter(c => !c.note).length;
-  // First look at Scope: open the first in-scope process still waiting on a
-  // RACM (else the first in scope). After that the user opens and folds.
+  // First look at Scope: every in-scope process arrives with its library RACM
+  // picked (5 Oct), shown as one line — so only the processes still waiting
+  // on a RACM open. After that the user opens and folds.
   useEffect(() => {
-    if (step !== SCOPE_STEP || openProc !== undefined) return;
-    setOpenProc((pickedByProcess.find(g => g.racms.length === 0) ?? pickedByProcess[0])?.process ?? null);
-    // Only the arrival matters — later ticks must not move the open list.
+    if (step !== SCOPE_STEP || openProcs !== undefined) return;
+    // Every in-scope process with no RACM yet opens — Upload RACM or Pick from
+    // Library is the only way on, so it should not hide behind a fold.
+    const noRacmYet = pickedByProcess.filter(g => g.racms.length === 0).map(g => g.process);
+    setOpenProcs(new Set(noRacmYet));
+    // Only the arrival matters — later ticks must not fold anything.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [step, openProc]);
+  }, [step, openProcs]);
   /** Two ticked RACMs holding one control ID — two matrices written for one
    *  process at one company, both numbering from R001/C001. Flag and block
    *  (decision 9): copying both would put two controls under one ID. */
@@ -1019,6 +1413,29 @@ export default function ScopingWizard({ onCancel, onCreated, typePreselected, on
     });
     setRacmUploadFor(null);
   };
+  /** "Pick from Library" — the process whose library list is open. */
+  const [libPickerFor, setLibPickerFor] = useState<string | null>(null);
+  /** Every published library RACM, for the picker — this process's own first. */
+  const publishedLibrary = useMemo(
+    () => libraryRacms.filter(r => racmStatus(r).status !== 'Draft'),
+    [libraryRacms],
+  );
+  /** Attach a library RACM to a process in place of what it had — every
+   *  control in, as for a fresh tick. */
+  const pickFromLibrary = (process: string, racm: LibraryRacm) => {
+    const before = picksFor(process);
+    resetControls([...before, racm.id]);
+    dropRacmNotes(before);
+    setLibExtras(prev => {
+      const cur = prev[process] ?? [];
+      return cur.includes(racm.id) ? prev : { ...prev, [process]: [...cur, racm.id] };
+    });
+    setRacmPicks(prev => ({ ...prev, [process]: [racm.id] }));
+    setLibSwapped(prev => ({ ...prev, [process]: true }));
+    setLibPickerFor(null);
+    // Fold back to the one settled line — the choice is made.
+    setOpenProcs(prev => { const next = new Set(prev ?? []); next.delete(process); return next; });
+  };
   // FlowModal closes this whole sheet on Escape (a window listener). While the
   // Create RACM dialog is up, Escape belongs to it — its listeners sit on the
   // document, so stopping the key there keeps one Escape from throwing the
@@ -1031,12 +1448,21 @@ export default function ScopingWizard({ onCancel, onCreated, typePreselected, on
   }, [racmUploadFor]);
 
   // ── Gates ────────────────────────────────────────────────────────────────
-  const matTbReady = hasTb && unsourcedFiles === 0 && benchmark > 0 && (basis === 'custom' || pct > 0);
+  /** The two thresholds are typed freely and checked here, not clamped per
+   *  keystroke — clamping turned a typed "60" into 75 and a backspace into 50. */
+  const pmValid = Number.isFinite(pmPct) && pmPct >= 50 && pmPct <= 75;
+  const cttValid = Number.isFinite(cttPct) && cttPct >= 1 && cttPct <= 10;
+  // Carried over from a signed interim (5 Oct 2026): its materiality comes
+  // across prefilled, so the trial balance is optional — the rule a roll-forward
+  // already followed on the old New audit sheet.
+  const matTbReady = ((hasTb && !!tbParse) || !!carry) && !filesReading && !filesFailed && unsourcedFiles === 0 && benchmark > 0 && (basis === 'custom' || pct > 0)
+    && pmValid && cttValid;
   /** Moved companies, moved processes, RACMs and controls taken out still owed
    *  a note — one count for the footer. */
   const notesDue = notesOutstanding + procNotesOutstanding + racmNotesOutstanding + ctlNotesOutstanding;
-  const scopeReady = scopedProcesses.length > 0 && scopedEntities.length > 0
-    && notesDue === 0 && noRacmInScope.length === 0 && clashes.length === 0;
+  // A carried engagement's scope is the interim's (see the Scope step).
+  const scopeReady = !!carry || (scopedProcesses.length > 0 && scopedEntities.length > 0
+    && notesDue === 0 && noRacmInScope.length === 0 && clashes.length === 0);
 
   // Name checks. Too long blocks Continue; a name already in the library does
   // not — it saves as the next free "(2)", and Basics says so before it does.
@@ -1061,7 +1487,7 @@ export default function ScopingWizard({ onCancel, onCreated, typePreselected, on
     // Code and Owner are parked from the step (user ask) — the code is always the
     // auto-generated one, so it no longer gates. Description is required, as on staging.
     name.trim().length > 0 && !nameTooLong && description.trim().length > 0 && groupName.trim().length > 0
-      && entities.length > 0 && entities.every(e => e.name.trim()),
+      && entities.length > 0 && entities.every(e => e.name.trim()) && periodValid,
     // Materiality & TB — the rule answered and a trial balance attached (the
     // general ledger never holds Continue). The parked Scoping step's gate that
     // used to sit at this index is quoted on SCOPING_STEP.
@@ -1078,9 +1504,31 @@ export default function ScopingWizard({ onCancel, onCreated, typePreselected, on
   /** Says what a greyed Continue is waiting for — the boxes that explain it are
    *  usually further up the scroll. A clash outranks a missing RACM (it names
    *  the thing to untick), which outranks a missing note. */
-  const footerHint = step === MAT_TB_STEP
-    ? (!hasTb ? 'Upload a trial balance to continue'
-      : unsourcedFiles > 0 ? 'Answer the source of every file to continue' : null)
+  const footerHint = step === 1
+    ? (!name.trim() ? 'Name the engagement to continue'
+      : nameTooLong ? `Shorten the name to ${NAME_MAX} characters to continue`
+      : !description.trim() ? 'Add a description to continue'
+      : !groupName.trim() ? 'Add the company / group name to continue'
+      : entities.length === 0 ? 'Add at least one entity, or tick “There are no separate entities”'
+      : entities.some(e => !e.name.trim()) ? 'Name every entity to continue'
+      : !round ? 'Pick the round to continue'
+      : round === 'rollforward' && !carry ? 'Pick the signed interim this roll-forward carries over from'
+      : round === 'interim' && !cutoff ? 'Pick the interim cut-off to continue'
+      : !periodValid ? 'Check the From and To dates'
+      : null)
+    : step === SAMPLING_STEP
+    ? (samplingReady ? null : 'Every sample size must be at least 1')
+    : step === MAT_TB_STEP
+    ? (filesReading ? 'Ira is still reading the files'
+      : glInTbSlot ? 'Move the general ledger out of the trial balance to continue'
+      : filesFailed ? 'Remove the file Ira couldn’t read to continue'
+      : !hasTb && !carry ? 'Upload a trial balance to continue'
+      : unsourcedFiles > 0 ? 'Answer the source of every file to continue'
+      : !(benchmark > 0) ? `Enter ${basis === 'custom' ? 'overall materiality' : 'the benchmark'} above zero to continue`
+      : basis !== 'custom' && !(pct > 0) ? 'Enter a basis % above zero to continue'
+      : !pmValid ? 'Performance materiality is 50–75% of overall'
+      : !cttValid ? 'Clearly-trivial threshold is 1–10% of overall'
+      : null)
     : step === SCOPE_STEP
       ? (clashes.length > 0 ? 'Untick one of the RACMs whose control IDs clash'
         : noRacmInScope.length > 0 ? `Choose RACMs for ${andList(noRacmInScope)}`
@@ -1135,7 +1583,12 @@ export default function ScopingWizard({ onCancel, onCreated, typePreselected, on
    *  org chart says nothing about processes, so those cells stay the user's to
    *  fill until a RACM or trial balance arrives with something to extract.
    *  Merged by name, so a row already typed never doubles up. */
-  const [orgChart, setOrgChart] = useState<{ name: string; state: 'parsing' | 'done' } | null>(null);
+  const [orgChart, setOrgChart] = useState<
+    | { name: string; state: 'parsing'; scan?: boolean }
+    | { name: string; state: 'done'; found: number }
+    | { name: string; state: 'unreadable'; reason: string }
+    | null
+  >(null);
   /** The chart the uploaded document turned out to be. Held rather than derived
    *  on each read: the clash prompt can sit open for as long as the user likes,
    *  and the merge it eventually runs has to be the one the upload started. */
@@ -1148,6 +1601,56 @@ export default function ScopingWizard({ onCancel, onCreated, typePreselected, on
   /** The live table, readable from inside the parse timeout. */
   const entitiesRef = useRef<GroupEntity[]>([]);
   entitiesRef.current = entities;
+
+  // ── Discard guard ────────────────────────────────────────────────────────
+  // Same rule as the classic wizard: once anything is entered, ✕, Escape and
+  // Back-to-Type ask before the draft is thrown away. Getting past Basics needs
+  // a description, so every later step is dirty by definition.
+  const dirty = step > firstStep || nameTouched || description.trim() !== ''
+    || groupName.trim() !== SEED_GROUP_NAME || entities.length > 0 || soloEntity || orgChart !== null;
+  /** What Discard goes on to do — close the sheet, or return to the Type step. */
+  const [confirmDiscard, setConfirmDiscard] = useState<null | 'close' | 'type'>(null);
+  const leaveToType = () => (onBackToType ? onBackToType() : onCancel());
+  const attemptClose = () => { if (dirty) setConfirmDiscard('close'); else onCancel(); };
+  const attemptBackToType = () => { if (dirty) setConfirmDiscard('type'); else leaveToType(); };
+  // FlowModal closes the sheet on Escape from a window listener; this one sits
+  // on the document, so it runs first and can hold the key while dirty. The
+  // Create RACM dialog keeps its own Escape (the listener above).
+  //
+  // Escape belongs to the smallest thing that is open (click-through, 5 Oct):
+  // the guard itself, then an inline popover (the RACM Library picker, a date
+  // picker, a confirm), then a field being typed in — and only after all of
+  // those to the wizard. Inline note boxes cancel themselves (ScopeNote). A
+  // pristine wizard is let through, so FlowModal simply closes it.
+  const escState = useRef({ libPickerFor: null as string | null, confirmRemoveId: null as string | null, confirmDiscard: null as null | 'close' | 'type' });
+  useEffect(() => {
+    if (racmUploadFor) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key !== 'Escape') return;
+      const s = escState.current;
+      const hold = () => e.stopPropagation();
+      if (s.confirmDiscard) { hold(); setConfirmDiscard(null); return; }
+      // CustomDatePicker closes itself on this same key but lets it travel on;
+      // its menu is a fixed z-[1000] layer portalled to the body.
+      if (document.querySelector('body > .z-\\[1000\\]')) { hold(); return; }
+      if (s.libPickerFor) { hold(); setLibPickerFor(null); return; }
+      if (s.confirmRemoveId) { hold(); setConfirmRemoveId(null); return; }
+      const t = e.target as HTMLElement | null;
+      if (t && t !== document.body && (t.matches('input, textarea, select, [contenteditable="true"]'))) {
+        hold(); t.blur(); return;
+      }
+      if (!dirty) return;
+      hold();
+      setConfirmDiscard('close');
+    };
+    document.addEventListener('keydown', onKey);
+    return () => document.removeEventListener('keydown', onKey);
+  }, [dirty, racmUploadFor]);
+  // The "add at least one entity" line waits until the table has held a row
+  // (or the box was ticked) — an empty table on arrival is not a mistake yet.
+  useEffect(() => {
+    if (entities.length > 0 || soloEntity) setTouched(t => (t.entities ? t : { ...t, entities: true }));
+  }, [entities.length, soloEntity]);
 
   /** Merge the chart in, keeping the chain intact either way.
    *  `adopt`   — the row already in the table stays and becomes the parent the
@@ -1200,37 +1703,45 @@ export default function ScopingWizard({ onCancel, onCreated, typePreselected, on
     setClash(null);
   };
 
-  const onOrgChartSelected = (list: FileList | null) => {
+  const onOrgChartSelected = async (list: FileList | null) => {
     const file = list?.[0];
     if (!file) return;
-    // Which client's chart this is, decided once, here — everything downstream
-    // reads the decision rather than re-making it off a filename that may have
-    // been replaced by the time the merge runs.
-    const src = chartFor(file.name);
-    setChart(src);
     setClash(null);
-    setOrgChart({ name: file.name, state: 'parsing' });
-    window.setTimeout(() => {
-      // The user can tick "There are no separate entities" while this is still
-      // reading. That answer wins: merging a whole group in underneath it would
-      // contradict the box they just ticked, and none of the rows would be
-      // removable. Drop the extraction rather than half-apply it.
-      if (soloEntityRef.current) { setOrgChart(null); return; }
-      const have = new Set(entitiesRef.current.map(e => e.name.trim().toLowerCase()));
-      const clashing = src.entities.filter(e => have.has(e.name.toLowerCase()));
-      if (clashing.length) {
-        // Stop and ask. Nothing is merged until the user says which version wins.
-        setClash(clashing.map(c => c.name));
-        setOrgChart(prev => (prev?.name === file.name ? { ...prev, state: 'done' } : prev));
-        return;
-      }
-      setEntities(prev => mergedWithChart(prev, 'adopt', src));
-      // The chart's root IS the group. Filled in only while the field still
-      // holds the untouched default or nothing — a name the user typed is an
-      // answer, and an extraction does not get to overwrite an answer.
-      setGroupName(prev => (prev.trim() === '' || prev.trim() === SEED_GROUP_NAME ? src.groupName : prev));
-      setOrgChart(prev => (prev?.name === file.name ? { ...prev, state: 'done' } : prev));
-    }, 900);
+    setOrgChart({ name: file.name, state: 'parsing', scan: isScanFile(file.name) });
+
+    // The document itself decides what lands (24 Sep). It used to be the
+    // filename, which meant every chart but two extracted somebody else's group.
+    // A PDF, Word file or scan is read too (1 Oct); OCR says it takes a moment.
+    const result = await parseOrgChartFile(file, () =>
+      setOrgChart(prev => (prev?.name === file.name && prev.state === 'parsing' ? { ...prev, scan: true } : prev)));
+
+    // The user can tick "There are no separate entities" while this is still
+    // reading. That answer wins: merging a whole group in underneath it would
+    // contradict the box they just ticked, and none of the rows would be
+    // removable. Drop the extraction rather than half-apply it.
+    if (soloEntityRef.current) { setOrgChart(null); return; }
+
+    if (!result.ok) {
+      setOrgChart(prev => (prev?.name === file.name ? { name: file.name, state: 'unreadable', reason: result.reason } : prev));
+      return;
+    }
+
+    const src: SampleChart = { match: /(?!)/, groupName: result.chart.groupName, entities: result.chart.entities };
+    setChart(src);
+    const have = new Set(entitiesRef.current.map(e => e.name.trim().toLowerCase()));
+    const clashing = src.entities.filter(e => have.has(e.name.toLowerCase()));
+    if (clashing.length) {
+      // Stop and ask. Nothing is merged until the user says which version wins.
+      setClash(clashing.map(c => c.name));
+      setOrgChart(prev => (prev?.name === file.name ? { name: file.name, state: 'done', found: src.entities.length } : prev));
+      return;
+    }
+    setEntities(prev => mergedWithChart(prev, 'adopt', src));
+    // The chart's root IS the group. Filled in only while the field still
+    // holds the untouched default or nothing — a name the user typed is an
+    // answer, and an extraction does not get to overwrite an answer.
+    setGroupName(prev => (prev.trim() === '' || prev.trim() === SEED_GROUP_NAME ? src.groupName : prev));
+    setOrgChart(prev => (prev?.name === file.name ? { name: file.name, state: 'done', found: src.entities.length } : prev));
   };
 
   const extractedReady = racmUpload === 'done' || tbUpload === 'done';
@@ -1255,7 +1766,16 @@ export default function ScopingWizard({ onCancel, onCreated, typePreselected, on
     }
     setAttached(prev => [...prev, ...batch]);
     if (batch.some(b => b.req === 'racm') && racmUpload !== 'done') simulateRacmUpload();
-    if (TB_UPLOAD && batch.some(b => b.req === 'tb') && tbUpload !== 'done') simulateTbUpload();
+    // The file itself is read, not its name. A ledger we cannot open falls
+    // back to the simulated load so the step is never a dead end.
+    const files = Array.from(list);
+    const tbFile = files.find((f, i) => batch[i]?.req === 'tb');
+    const glFile = files.find((f, i) => batch[i]?.req === 'gl');
+    if (TB_UPLOAD && tbFile && tbUpload !== 'done') {
+      if (isReadableLedger(tbFile.name)) void ingestTrialBalance(tbFile);
+      else simulateTbUpload();
+    }
+    if (glFile && isReadableLedger(glFile.name)) void ingestGeneralLedger(glFile);
   };
 
   /** Removing the last file of a requirement re-arms it (and the step gate). */
@@ -1263,7 +1783,8 @@ export default function ScopingWizard({ onCancel, onCreated, typePreselected, on
     const next = attached.filter(a => a.id !== id);
     setAttached(next);
     if (!next.some(a => a.req === 'racm')) setRacmUpload('idle');
-    if (TB_UPLOAD && !next.some(a => a.req === 'tb')) { setTbUpload('idle'); setUploads({}); }
+    if (TB_UPLOAD && !next.some(a => a.req === 'tb')) { setTbUpload('idle'); setUploads({}); setTbParse(null); setTbAddedIds(new Set()); }
+    if (!next.some(a => a.req === 'gl')) setGlParse(null);
   };
 
   /** One consolidated group file per requirement — re-uploading replaces the
@@ -1276,9 +1797,10 @@ export default function ScopingWizard({ onCancel, onCreated, typePreselected, on
     if (!file) return;
     setAttached(prev => [...prev.filter(a => a.req !== req), { id: `att-grp-${req}-${Date.now()}`, name: file.name, req }]);
     if (req === 'tb') {
-      setTbUpload('parsing');
-      window.setTimeout(() => setTbUpload('done'), 800);
+      if (isReadableLedger(file.name)) void ingestTrialBalance(file);
+      else { setTbUpload('parsing'); window.setTimeout(() => setTbUpload('done'), 800); }
     }
+    if (req === 'gl' && isReadableLedger(file.name)) void ingestGeneralLedger(file);
   };
 
   /** RACM attached to one entity. It also registers as a group `racm`
@@ -1322,6 +1844,7 @@ export default function ScopingWizard({ onCancel, onCreated, typePreselected, on
    *  others ask — deleting a leaf is one click, as it always was, so the
    *  friction appears exactly where the damage does. */
   const [confirmRemoveId, setConfirmRemoveId] = useState<string | null>(null);
+  escState.current = { libPickerFor, confirmRemoveId, confirmDiscard };
 
   /** A company added BENEATH a named parent, rather than appended to the end of
    *  the list. It lands directly after that parent's existing family, so the
@@ -1415,6 +1938,58 @@ export default function ScopingWizard({ onCancel, onCreated, typePreselected, on
     });
   };
 
+  /** ── Trial balance → captions ────────────────────────────────────────────
+   *  Reads the file. What it finds replaces the seeded figures wholesale: a
+   *  company's captions, their balances, and the processes each one implies.
+   *  Falls back to the old simulated load only when there is nothing readable
+   *  to parse, so a demo run with a PDF still gets somewhere. */
+  const ingestTrialBalance = async (file: File) => {
+    setTbUpload('parsing');
+    setLedgerError(null);
+    applyTbResult(await parseTrialBalanceFile(file, entitiesRef.current), file.name);
+  };
+
+  /** What a read trial balance changes — shared by the Materiality & TB upload
+   *  (every file combined) and the parked single-file path above. */
+  const applyTbResult = (result: TbParseResult, fileName = '') => {
+    if (!result.ok) {
+      setTbUpload('idle');
+      setTbParse(null);
+      setUploads({});
+      setLedgerError({ kind: 'tb', name: fileName, reason: result.reason });
+      return;
+    }
+    setTbParse(result);
+    setUploads(Object.fromEntries(Object.entries(result.perEntity).map(([id, f]) => [id, { ...f }])));
+    // The trial balance is the one input that knows about a company nobody
+    // drew on the chart — a subsidiary incorporated mid-year has ledger
+    // balances before it has ever appeared on an org chart. Those rows are
+    // added rather than dropped, which is the whole reason a TB is asked for
+    // at scoping rather than at fieldwork.
+    if (result.unmatched.length) {
+      setEntities(prev => {
+        const have = new Set(prev.map(e => e.name.trim().toLowerCase()));
+        const fresh = result.unmatched
+          .filter(u => u.fileName && !have.has(u.fileName.trim().toLowerCase()))
+          .map(u => ({ id: `tb-${u.fileName.toLowerCase().replace(/[^a-z0-9]+/g, '-')}`, name: u.fileName, type: 'Subsidiary' as const, ownership: 100 }));
+        if (fresh.length) {
+          setTbAddedIds(new Set(fresh.map(f => f.id)));
+          tbAddedRows.current = new Map(fresh.map(f => [f.id, { ...f }]));
+        }
+        return fresh.length ? [...prev, ...fresh] : prev;
+      });
+      // The captions of a company the table had no row for are keyed to a
+      // blank entity until the row exists — re-point them at the row just made.
+      result.captions.push(...result.unmatched.flatMap(u => {
+        const id = `tb-${u.fileName.toLowerCase().replace(/[^a-z0-9]+/g, '-')}`;
+        return u.captions.map(c => ({ ...c, entityId: id }));
+      }));
+    }
+    setTbUpload('done');
+  };
+
+  /** A trial balance we could not open at all. The seeded load is kept for
+   *  this case only, so the step still has something to show. */
   const simulateTbUpload = () => {
     setTbUpload('parsing');
     window.setTimeout(() => {
@@ -1424,9 +1999,74 @@ export default function ScopingWizard({ onCancel, onCreated, typePreselected, on
     }, 800);
   };
 
+  /** ── General ledger → the lines behind a caption ─────────────────────────
+   *  The GL used to be attached and never opened. Reading it is what lets a
+   *  caption be drilled into: the postings that make it up, and which of them
+   *  somebody keyed by hand. */
+  const ingestGeneralLedger = async (file: File) => {
+    setLedgerError(null);
+    const result = await parseGeneralLedgerFile(file, entitiesRef.current);
+    if (!result.ok) { setLedgerError({ kind: 'gl', name: file.name, reason: result.reason }); return; }
+    setGlParse(result);
+  };
+
   /** Everything Review stands on — reachable only through both gates, but
    *  Back can undo either on the way, so Create checks again. */
   const readyToCreate = matTbReady && scopeReady;
+
+  /** Picking the interim to carry over from prefills what it already settled
+   *  (5 Oct 2026): its year, materiality, sampling methodology and companies.
+   *  All of it stays editable on the steps that follow. */
+  const pickCarry = (id: string) => {
+    setCarryId(id);
+    const src = carrySources.find(c => c.engagement.id === id);
+    if (!src) return;
+    const a = src.audit;
+    const ws = src.workspace;
+    setYearBasis(a.yearBasis === 'cy' ? 'cy' : 'fy');
+    setFyEnd(a.fiscalYear);
+    if (round === 'yearend') setFromDate(a.yearBasis === 'cy' ? `${a.fiscalYear}-01-01` : `${a.fiscalYear - 1}-04-01`);
+    const m = a.materiality;
+    const opt = m ? BASIS_OPTIONS.find(b => b.benchmarkLabel === m.basisLabel) : undefined;
+    // Written as the user's own figure for that basis, so it holds whether or
+    // not a trial balance is read afterwards.
+    if (opt && m) { setBasis(opt.id); setUserBench({ [opt.id]: m.benchmark }); setPct(m.pct); }
+    else { setBasis('custom'); setUserBench({ custom: Math.round(ws.materiality / 100_000) / 100 }); }
+    setPmPct(m?.pmPct ?? (ws.materiality ? Math.round(ws.performanceMateriality / ws.materiality * 100) : 75));
+    setCttPct(m?.ctPct ?? (ws.materiality ? Math.round(ws.rules.clearlyTrivial / ws.materiality * 100) : 5));
+    if (ws.samplingMethodology) setSampling({ ...structuredClone(ws.samplingMethodology), reviewer: undefined, proposedBy: undefined });
+    const ents = programmeFor(src.engagement.id)?.entities;
+    if (ents?.length) {
+      setEntities(ents.map(e => ({ ...e })));
+      setSoloEntity(false); soloEntityRef.current = false;
+    } else {
+      setEntities([{ id: SOLO_ENTITY_ID, name: groupShort(groupName), type: 'Holding', ownership: 100 }]);
+      setSoloEntity(true); soloEntityRef.current = true;
+    }
+  };
+  /** What a carried engagement brings — the interim's controls, by process. */
+  const carriedProcesses = carry
+    ? Array.from(new Set(carry.workspace.controls.map(c => c.process))).map(p => ({
+      process: p,
+      controls: carry.workspace.controls.filter(c => c.process === p).length,
+    }))
+    : [];
+  const carriedOpenFindings = carry ? carry.workspace.deficiencies.filter(d => d.status !== 'Closed').length : 0;
+  /** The companies the interim had in scope — its own record where it kept
+   *  one, else every company it carried. Review, the Scope summary and the
+   *  created programme all read this, not the trial-balance derivation, which
+   *  has nothing to weigh when no TB was read (click-through, 5 Oct: Review
+   *  said "Out · 0% covered" while ten controls carried over). */
+  const carriedEntityIds = useMemo(() => {
+    if (!carry) return [] as string[];
+    const kept = programmeFor(carry.engagement.id)?.scoping?.entityIds ?? [];
+    const live = entities.filter(e => kept.includes(e.id)).map(e => e.id);
+    return live.length ? live : entities.map(e => e.id);
+  }, [carry, entities]);
+  const carriedControlCount = carriedProcesses.reduce((s, p) => s + p.controls, 0);
+  /** Review's Out list folds away — on a 254-company register it is the bulk
+   *  of the page and says one thing. */
+  const [showOutOnReview, setShowOutOnReview] = useState(false);
 
   const create = () => {
     if (!readyToCreate) return;
@@ -1443,8 +2083,16 @@ export default function ScopingWizard({ onCancel, onCreated, typePreselected, on
       const kept = new Set(keptOf(r).map(c => c.id));
       return copyRacmControls(r).filter(c => kept.has(c.id));
     });
+    /** What the lead settled on the Sampling step, signed by nobody. The same
+     *  proposal goes on the engagement and on the programme record, so the
+     *  workspace opens on the table that was just filled in rather than on the
+     *  demo seed's, and the reviewer still has to sign before testing (#22). */
+    const proposedSampling: SamplingMethodology = {
+      ...sampling,
+      proposedBy: { by: owner || 'Engagement lead', at: 'just now' },
+    };
     const tbNames = scopeFiles.filter(f => f.kind === 'tb').map(f => f.name);
-    const companies = `${scopedEntities.length} of ${entities.length} ${entities.length === 1 ? 'company' : 'companies'}`;
+    const companies = `${carry ? carriedEntityIds.length : scopedEntities.length} of ${entities.length} ${entities.length === 1 ? 'company' : 'companies'}`;
     const processes = `${scopedProcesses.length} process${scopedProcesses.length === 1 ? '' : 'es'}`;
     const racmsCopied = `${tickedRacms.length} RACM${tickedRacms.length === 1 ? '' : 's'}`;
     registerEngagement({
@@ -1453,7 +2101,7 @@ export default function ScopingWizard({ onCancel, onCreated, typePreselected, on
       // the suffixed name when the typed one is taken — the same one Basics promised
       name: finalName,
       description: description.trim()
-        || `SOX 404 / ICFR programme — ${companies} and ${processes} in scope; ${racmsCopied} copied from the RACM tab (${copied.length} control${copied.length === 1 ? '' : 's'}).`,
+        || `SOX 404 / ICFR engagement — ${companies} and ${processes} in scope; ${racmsCopied} copied from the RACM Library (${copied.length} control${copied.length === 1 ? '' : 's'}).`,
       type: 'SOX / ICFR',
       soxConfig: {
         overallMateriality: Math.round(overallCr * CR),
@@ -1466,10 +2114,18 @@ export default function ScopingWizard({ onCancel, onCreated, typePreselected, on
       // The controls are the RACMs ticked on Scope, copied — the workspace seeds
       // exactly these (soxControls wins over soxProcesses), so no template is
       // generated for any process.
-      soxProcesses: [],
+      // Carried over (5 Oct 2026): the interim's processes seed the register and
+      // the workspace rolls the interim's own controls forward over them.
+      soxProcesses: carry ? carriedProcesses.map(p => p.process) : [],
       soxSeedMode: 'fresh',
-      soxRacms: tickedRacms.map(r => ({ racmId: r.id, name: r.name })),
-      soxControls: copied,
+      soxRacms: carry ? [] : tickedRacms.map(r => ({ racmId: r.id, name: r.name })),
+      soxControls: carry ? undefined : copied,
+      soxSampling: proposedSampling,
+      // The one round this engagement is (5 Oct 2026).
+      soxAudit: {
+        round: round ?? 'yearend', yearBasis, fiscalYear: fyEnd, windowFrom, windowTo,
+        ...(carry ? { carriedFromId: carry.engagement.id } : {}),
+      },
       // The anchor is the biggest process in scope (falls back to P2P).
       process: ({
         'Procure to Pay': 'P2P', 'Order to Cash': 'O2C', 'Record to Report': 'R2R', 'IT General Controls': 'ITGC',
@@ -1482,7 +2138,7 @@ export default function ScopingWizard({ onCancel, onCreated, typePreselected, on
       startDate: yearBasis === 'fy' ? `${fyEnd - 1}-04-01` : `${fyEnd}-01-01`,
       endDate: yearBasis === 'fy' ? `${fyEnd}-03-31` : `${fyEnd}-12-31`,
       entity: groupName.trim(),
-      controls: copied.length,
+      controls: carry ? carry.workspace.controls.length : copied.length,
       health: 0,
       openIssues: 0,
       lastActivity: 'Just created',
@@ -1490,10 +2146,10 @@ export default function ScopingWizard({ onCancel, onCreated, typePreselected, on
     });
     // The tab records the engagement as a user of each RACM — which is what
     // blocks deleting a RACM this engagement still names as its source.
-    markRacmsUsed(tickedRacms.map(r => r.id), { id, name: finalName });
+    if (!carry) markRacmsUsed(tickedRacms.map(r => r.id), { id, name: finalName });
     logEvent({
       action: 'Create',
-      description: `Created SOX ICFR engagement "${finalName}" — ${companies} and ${processes} in scope (${andList(scopedProcesses.map(r => r.process))}); ${racmsCopied} copied from the RACM tab (${copied.length} controls); materiality ${money(overallCr)}, performance ${money(perf)}; trial balance ${tbNames.join(', ')}`,
+      description: `Created SOX ICFR engagement "${finalName}" — ${companies} and ${processes} in scope (${andList(scopedProcesses.map(r => r.process))}); ${racmsCopied} copied from the RACM Library (${copied.length} controls); materiality ${money(overallCr)}, performance ${money(perf)}; trial balance ${tbNames.join(', ')}`,
       module: 'SOX ICFR',
       entity: 'Engagement',
     });
@@ -1551,7 +2207,7 @@ export default function ScopingWizard({ onCancel, onCreated, typePreselected, on
       beyondTb: BEYOND_TB.filter(b => beyond[b.id]).map(b => b.id),
       // Proposed, not agreed: the reviewer signs it on the Configuration tab,
       // and every control's sample size is read off it from then on (#22).
-      sampling: { ...sampling, proposedBy: { by: owner || 'Engagement lead', at: 'just now' } },
+      sampling: proposedSampling,
       // Scoped, not skipped: every process in scope has its RACMs, so the
       // workspace has nothing missing to nag about.
       scopingSkipped: undefined,
@@ -1567,7 +2223,7 @@ export default function ScopingWizard({ onCancel, onCreated, typePreselected, on
             ...(move ? { note: move.note } : {}),
           };
         }),
-        entityIds: scopedEntities.map(e => e.id),
+        entityIds: carry ? carriedEntityIds : scopedEntities.map(e => e.id),
         scopeNotes: scopeChanges,
         ...(racmChanges.length > 0 ? { racmNotes: racmChanges } : {}),
         ...(ctlChanges.length > 0 ? { controlNotes: ctlChanges } : {}),
@@ -1607,7 +2263,7 @@ export default function ScopingWizard({ onCancel, onCreated, typePreselected, on
             </div>
             <p className="text-[0.75rem] text-ink-500">Step {step + 1} of {STEPS.length} — {STEPS[step]}</p>
           </div>
-          <button onClick={onCancel} className="w-8 h-8 rounded-full text-ink-500 hover:text-ink-800 hover:bg-[#F4F2F7] flex items-center justify-center cursor-pointer shrink-0" aria-label="Close drawer"><X size={16} /></button>
+          <button onClick={attemptClose} className="w-8 h-8 rounded-full text-ink-500 hover:text-ink-800 hover:bg-[#F4F2F7] flex items-center justify-center cursor-pointer shrink-0" aria-label="Close drawer"><X size={16} /></button>
         </div>
         {/* Type stays on the rail even when it was answered on the classic
             wizard — it reads as a completed step of one journey, not a step
@@ -1616,7 +2272,7 @@ export default function ScopingWizard({ onCancel, onCreated, typePreselected, on
           steps={STEPS}
           step={step}
           onStepClick={i => {
-            if (typePreselected && i === 0) { onBackToType ? onBackToType() : onCancel(); return; }
+            if (typePreselected && i === 0) { attemptBackToType(); return; }
             setStep(i);
           }} />
       </div>
@@ -1670,13 +2326,14 @@ export default function ScopingWizard({ onCancel, onCreated, typePreselected, on
                   type="text"
                   value={name}
                   onChange={e => { setNameTouched(true); setName(e.target.value); }}
+                  onBlur={touch('name')}
                   placeholder="e.g. P2P — SOX Q3 Testing"
                   className={inputCls}
                 />
                 {!nameTouched && name.trim().length > 0 && (
                   <p className="text-[0.6875rem] text-ink-500 mt-1">Suggested from the group — edit if your team names them differently.</p>
                 )}
-                {name.trim().length === 0 && <Hint text="Name is required" />}
+                {touched.name && name.trim().length === 0 && <Hint text="Name is required" />}
                 {nameTooLong && <Hint text={`Name must be ${NAME_MAX} characters or fewer — this one is ${name.trim().length}.`} />}
                 {/* Informational, not an error — a taken name still continues. */}
                 {nameTaken && !nameTooLong && (
@@ -1690,7 +2347,7 @@ export default function ScopingWizard({ onCancel, onCreated, typePreselected, on
               <div className="grid grid-cols-2 gap-3">
                 <div>
                   <label className={basicsLabelCls}>Code <span className="text-risk-700">*</span></label>
-                  <input type="text" value={code} onChange={e => setCode(e.target.value)} className={`${inputCls} font-mono uppercase`} />
+                  <input aria-label="Code" type="text" value={code} onChange={e => setCode(e.target.value)} className={`${inputCls} font-mono uppercase`} />
                   <p className="text-[0.6875rem] text-ink-500 mt-1">Auto-generated — edit if your team uses its own scheme.</p>
                   {code.trim().length === 0 && <Hint text="Code is required" />}
                 </div>
@@ -1711,33 +2368,33 @@ export default function ScopingWizard({ onCancel, onCreated, typePreselected, on
                         className={`px-2 py-1.5 rounded-lg border text-[0.75rem] font-bold transition-all cursor-pointer ${yearBasis === 'fy' ? yeSegActive : yeSegIdle}`}
                       >
                         Financial year
-                        <span className="block text-[0.625rem] font-semibold opacity-70">Apr – Mar</span>
+                        <span className="block text-[0.6875rem] font-semibold opacity-70">Apr – Mar</span>
                       </button>
                       <button
                         onClick={() => { if (yearBasis !== 'cy') { setYearBasis('cy'); setFyEnd(y => y - 1); } }}
                         className={`px-2 py-1.5 rounded-lg border text-[0.75rem] font-bold transition-all cursor-pointer ${yearBasis === 'cy' ? yeSegActive : yeSegIdle}`}
                       >
                         Calendar year
-                        <span className="block text-[0.625rem] font-semibold opacity-70">Jan – Dec</span>
+                        <span className="block text-[0.6875rem] font-semibold opacity-70">Jan – Dec</span>
                       </button>
                     </div>
                   </div>
                 )}
                 <div>
                   <label className={basicsLabelCls}>Audit period <span className="text-risk-700">*</span></label>
-                  <select value={fyEnd} onChange={e => setFyEnd(Number(e.target.value))} className={selectCls}>
+                  <select aria-label="Audit period" value={fyEnd} onChange={e => setFyEnd(Number(e.target.value))} className={selectCls}>
                     {YEAR_OPTIONS.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
                   </select>
                 </div>
               </div>
               <p className="text-[0.75rem] text-ink-500 -mt-1">
-                An annual cycle, not a dated project — testing runs {yearBasis === 'fy' ? `Apr ${fyEnd - 1} – Mar ${fyEnd}` : `Jan – Dec ${fyEnd}`} and the programme carries the {fyLabel} name through testing and roll-forward.
+                An annual cycle, not a dated project — testing runs {yearBasis === 'fy' ? `Apr ${fyEnd - 1} – Mar ${fyEnd}` : `Jan – Dec ${fyEnd}`} and the engagement carries the {fyLabel} name through testing and roll-forward.
               </p>
               </>)}
               <div>
                 <label className={basicsLabelCls}>Description <span className="text-risk-700">*</span></label>
-                <textarea rows={2} value={description} onChange={e => setDescription(e.target.value)} placeholder="One-line description of scope and intent." className={inputCls + ' resize-none'} />
-                {description.trim().length === 0 && <Hint text="Description is required" />}
+                <textarea rows={2} value={description} onChange={e => setDescription(e.target.value)} onBlur={touch('description')} placeholder="One-line description of scope and intent." className={inputCls + ' resize-none'} />
+                {touched.description && description.trim().length === 0 && <Hint text="Description is required" />}
               </div>
 
               {/* Group & entities — moved up from Scoping (user ask): who the
@@ -1750,8 +2407,8 @@ export default function ScopingWizard({ onCancel, onCreated, typePreselected, on
                     names the company list on the RACM tab, and the company itself
                     when there are no separate entities. */}
                 <label className={basicsLabelCls}>Company / group name</label>
-                <input value={groupName} onChange={e => setGroupName(e.target.value)} placeholder="e.g. Altura Infra Group" className={inputCls} />
-                {groupName.trim().length === 0 && <Hint text="Company / group name is required" />}
+                <input value={groupName} onChange={e => setGroupName(e.target.value)} onBlur={touch('group')} placeholder="e.g. Altura Infra Group" className={inputCls} />
+                {touched.group && groupName.trim().length === 0 && <Hint text="Company / group name is required" />}
                 {/* No subsidiaries is a real answer, not an empty table — asked
                     right under the company, as staging does (user ask, 15 Sep). */}
                 <button
@@ -1768,8 +2425,8 @@ export default function ScopingWizard({ onCancel, onCreated, typePreselected, on
                     {soloEntity && <Check size={10} />}
                   </span>
                   <span>
-                    <span className="block text-[12px] font-semibold text-text">There are no separate entities</span>
-                    <span className="block text-[11px] text-text-muted leading-relaxed mt-0.5">
+                    <span className="block text-[0.75rem] font-semibold text-text">There are no separate entities</span>
+                    <span className="block text-[0.6875rem] text-text-muted leading-relaxed mt-0.5">
                       This company is audited as the single entity in scope — no subsidiaries to list.
                     </span>
                   </span>
@@ -1801,11 +2458,11 @@ export default function ScopingWizard({ onCancel, onCreated, typePreselected, on
                     return (
                       <div key={d.id} className="flex items-center gap-2 px-4 py-2.5 border-b border-border-light last:border-b-0">
                         <FileText size={13} className="text-text-muted shrink-0" />
-                        <span className="text-[12.5px] font-semibold text-text shrink-0">{d.name}</span>
-                        <span className="px-1.5 py-0.5 rounded-md border border-border text-[10px] font-bold text-text-muted shrink-0">{d.formats}</span>
+                        <span className="text-[0.8125rem] font-semibold text-text shrink-0">{d.name}</span>
+                        <span className="px-1.5 py-0.5 rounded-md border border-border text-[0.6875rem] font-bold text-text-muted shrink-0">{d.formats}</span>
                         {doc ? (
                           <span className="ml-auto flex items-center gap-1.5 min-w-0">
-                            <span className="text-[11.5px] text-text truncate">{doc.name}</span>
+                            <span className="text-[0.75rem] text-text truncate">{doc.name}</span>
                             {parsing
                               ? <Loader2 size={11} className="animate-spin text-text-muted shrink-0" />
                               : <Check size={12} className="text-compliant-600 shrink-0" />}
@@ -1818,7 +2475,7 @@ export default function ScopingWizard({ onCancel, onCreated, typePreselected, on
                             </button>
                           </span>
                         ) : (
-                          <label className="ml-auto inline-flex items-center gap-1.5 px-2 py-1 rounded-md border border-border-light bg-white hover:bg-surface-2 text-[11px] font-semibold text-text-secondary cursor-pointer transition-colors shrink-0">
+                          <label className="ml-auto inline-flex items-center gap-1.5 px-2 py-1 rounded-md border border-border-light bg-white hover:bg-surface-2 text-[0.6875rem] font-semibold text-text-secondary cursor-pointer transition-colors shrink-0">
                             <Upload size={11} /> Upload
                             <input
                               type="file"
@@ -1843,8 +2500,10 @@ export default function ScopingWizard({ onCancel, onCreated, typePreselected, on
                     header, not buried under it. Hidden once the company is
                     the single entity: there is no structure left to read. */}
                 <div className="flex items-center justify-between gap-3 mb-1.5">
-                  <div className={basicsLabelInlineCls}>
-                    {soloEntity ? 'Entity in scope' : 'Entities in scope of the group audit'}
+                  {/* One line: the header shares its row with two buttons, and the
+                      long label wrapped to two beside them. */}
+                  <div className={cn(basicsLabelInlineCls, 'min-w-0 truncate')} title={soloEntity ? 'Entity in scope' : 'Entities in scope of the group audit'}>
+                    {soloEntity ? 'Entity in scope' : 'Entities in scope'}
                   </div>
                   {/* Both ways to fill the table sit together on its header —
                       the fast one and the manual one, offered at the same
@@ -1856,15 +2515,15 @@ export default function ScopingWizard({ onCancel, onCreated, typePreselected, on
                     <div className="flex items-center gap-1.5 min-w-0">
                     <button
                       onClick={addTopLevelEntity}
-                      className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md border border-border-light bg-white hover:bg-surface-2 text-[11px] font-semibold text-primary transition-colors cursor-pointer shrink-0"
+                      className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md border border-border-light bg-white hover:bg-surface-2 text-[0.6875rem] font-semibold text-primary transition-colors cursor-pointer shrink-0"
                     >
                       <Plus size={11} /> Add entity
                     </button>
                     {(
                     orgChart === null ? (
                       <label
-                        title="Excel, CSV, image, Visio or PDF — the structure is read off the chart"
-                        className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md border border-border-light bg-white hover:bg-surface-2 text-[11px] font-semibold text-text-secondary cursor-pointer transition-colors shrink-0"
+                        title="Excel, CSV, PDF, Word or an image — the companies are read off the register"
+                        className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md border border-border-light bg-white hover:bg-surface-2 text-[0.6875rem] font-semibold text-text-secondary cursor-pointer transition-colors shrink-0"
                       >
                         <Upload size={11} /> Org Chart
                         <input
@@ -1876,13 +2535,26 @@ export default function ScopingWizard({ onCancel, onCreated, typePreselected, on
                         />
                       </label>
                     ) : orgChart.state === 'parsing' ? (
-                      <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md border border-border-light bg-white text-[11px] font-semibold text-text-muted shrink-0">
-                        <Loader2 size={11} className="animate-spin" /> Reading the chart…
+                      <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md border border-border-light bg-white text-[0.6875rem] font-semibold text-text-muted min-w-0 max-w-60">
+                        <Loader2 size={11} className="animate-spin shrink-0" />
+                        <span className="truncate">{orgChart.scan ? 'Reading a scan — this takes a few seconds' : `Reading ${orgChart.name}…`}</span>
+                      </span>
+                    ) : orgChart.state === 'unreadable' ? (
+                      <span className="inline-flex items-center gap-1.5 pl-2 pr-1 py-0.5 rounded-md border border-high-100 bg-high-50 max-w-60 min-w-0">
+                        <AlertTriangle size={11} className="text-high-700 shrink-0" />
+                        <FileChipName name={orgChart.name} className="text-high-700" />
+                        <button
+                          onClick={() => setOrgChart(null)}
+                          aria-label="Remove org chart"
+                          className="p-1 rounded text-high-700 hover:bg-high-100 transition-colors cursor-pointer shrink-0"
+                        >
+                          <X size={11} />
+                        </button>
                       </span>
                     ) : (
-                      <span className="inline-flex items-center gap-1.5 pl-2 pr-1 py-0.5 rounded-md border border-border-light bg-white max-w-[15rem] min-w-0 shrink-0">
+                      <span className="inline-flex items-center gap-1.5 pl-2 pr-1 py-0.5 rounded-md border border-border-light bg-white max-w-60 min-w-0">
                         <FileText size={11} className="text-text-muted shrink-0" />
-                        <span className="text-[11px] text-text truncate" title={orgChart.name}>{orgChart.name}</span>
+                        <FileChipName name={orgChart.name} className="text-text" />
                         <button
                           onClick={() => setOrgChart(null)}
                           aria-label="Remove org chart"
@@ -1897,6 +2569,26 @@ export default function ScopingWizard({ onCancel, onCreated, typePreselected, on
                     </div>
                   )}
                 </div>
+                {/* A chart we cannot read says so, rather than quietly handing
+                    over somebody else's group. Spreadsheets, PDFs, Word files
+                    and scans are all read (1 Oct); a file with no table in it —
+                    a drawn chart, a blank scan — stays on the chip above with
+                    this one line, and is removed with its ✕. */}
+                {!soloEntity && orgChart?.state === 'unreadable' && (
+                  <div className="mb-1.5 rounded-md border border-high-100 bg-high-50 px-2.5 py-2">
+                    <p className="text-[0.6875rem] text-high-700 leading-relaxed">
+                      {orgChart.reason === 'unsupported'
+                        ? <>Ira can’t read this file type — save the chart as Excel, CSV, PDF, Word or an image.</>
+                        : orgChart.reason === 'no-table'
+                        ? <>Ira couldn’t find a table in this file.</>
+                        : orgChart.reason === 'no-entity-column'
+                          ? <>Read <span className="font-semibold">{orgChart.name}</span>, but no column names the companies. The sheet needs a <span className="font-semibold">legal entity name</span> column — a parent, ownership % and jurisdiction column are read too, if it has them.</>
+                          : orgChart.reason === 'no-rows'
+                            ? <>Read <span className="font-semibold">{orgChart.name}</span>, but it has no company rows under its header.</>
+                            : <>Ira couldn’t find a table in this file.</>}
+                    </p>
+                  </div>
+                )}
                 {/* Extraction is a first draft, not an answer — say so once, in
                     the place the rows landed. */}
                 {/* The chart named a company the table already has. Nothing is
@@ -1905,7 +2597,7 @@ export default function ScopingWizard({ onCancel, onCreated, typePreselected, on
                     typed, and neither is a decision the screen gets to make. */}
                 {!soloEntity && clash && (
                   <div className="mb-1.5 rounded-md border border-high-100 bg-high-50 px-2.5 py-2">
-                    <p className="flex items-start gap-1.5 text-[11px] text-high-700">
+                    <p className="flex items-start gap-1.5 text-[0.6875rem] text-high-700">
                       <AlertCircle size={11} className="shrink-0 mt-0.5" />
                       <span>
                         {clash.length === 1 ? 'This company is' : `These ${clash.length} companies are`} already
@@ -1915,24 +2607,24 @@ export default function ScopingWizard({ onCancel, onCreated, typePreselected, on
                     <div className="flex items-center gap-1.5 flex-wrap mt-2">
                       <button
                         onClick={() => resolveClash('adopt')}
-                        className="px-2 py-1 rounded-md bg-primary text-white text-[11px] font-semibold hover:bg-primary-hover transition-colors cursor-pointer"
+                        className="px-2 py-1 rounded-md bg-primary text-white text-[0.6875rem] font-semibold hover:bg-primary-hover transition-colors cursor-pointer"
                       >
                         Keep mine and continue
                       </button>
                       <button
                         onClick={() => resolveClash('replace')}
-                        className="px-2 py-1 rounded-md border border-border-light bg-white text-[11px] font-semibold text-text-secondary hover:bg-surface-2 transition-colors cursor-pointer"
+                        className="px-2 py-1 rounded-md border border-border-light bg-white text-[0.6875rem] font-semibold text-text-secondary hover:bg-surface-2 transition-colors cursor-pointer"
                       >
                         Remove mine, use the chart's
                       </button>
                     </div>
-                    <p className="text-[10.5px] text-text-muted mt-1.5">
+                    <p className="text-[0.6875rem] text-text-muted mt-1.5">
                       Either way the companies held beneath it come in attached — nothing is left without a parent.
                     </p>
                   </div>
                 )}
                 {!soloEntity && !clash && orgChart?.state === 'done' && (
-                  <p className="flex items-start gap-1.5 text-[11px] text-compliant-700 mb-1.5">
+                  <p className="flex items-start gap-1.5 text-[0.6875rem] text-compliant-700 mb-1.5">
                     <Sparkles size={11} className="shrink-0 mt-0.5" />
                     <span>
                       Read {chart.entities.length} companies off the chart — check the names, types and
@@ -1948,9 +2640,9 @@ export default function ScopingWizard({ onCancel, onCreated, typePreselected, on
                         type="number" min={1} max={100}
                         value={ent.ownership}
                         onChange={e => setEntities(prev => prev.map((x, j) => j === i ? { ...x, ownership: Number(e.target.value) } : x))}
-                        className="w-14 text-[12px] tabular-nums text-text bg-white border border-border rounded-md px-2 py-1 outline-none focus:border-primary/40"
+                        className="w-14 text-[0.75rem] tabular-nums text-text bg-white border border-border rounded-md px-2 py-1 outline-none focus:border-primary/40"
                       />
-                      <span className="text-[11px] text-text-muted">%</span>
+                      <span className="text-[0.6875rem] text-text-muted">%</span>
                     </div>
                 */}
                 {/* overflow-VISIBLE, deliberately: the Type dropdown's menu is
@@ -1978,11 +2670,11 @@ export default function ScopingWizard({ onCancel, onCreated, typePreselected, on
                       ≈114px is the least that shows "Joint venture" whole in
                       the compact dropdown, Country ≈83px fits "United States",
                       and everything else stays with the entity name. */}
-                  <div className="grid grid-cols-[2.1fr_1.1fr_0.8fr_34px] gap-2.5 px-4 py-2 rounded-t-[11px] text-[10.5px] uppercase tracking-wider font-semibold text-text-muted/80 border-b border-border-light bg-surface-2/50">
+                  <div className="grid grid-cols-[2.1fr_1.1fr_0.8fr_34px] gap-2.5 px-4 py-2 rounded-t-[11px] text-[0.6875rem] uppercase tracking-wider font-semibold text-text-muted/80 border-b border-border-light bg-surface-2/50">
                     <div>Entity</div><div>Type</div><div>Country</div>{/* <div>Processes — extracted</div> */}<div />
                   </div>
                   {entities.length === 0 && (
-                    <div className="px-4 py-6 text-center text-[12px] text-text-muted border-b border-border-light">
+                    <div className="px-4 py-6 text-center text-[0.75rem] text-text-muted border-b border-border-light">
                       No entities yet — upload the org chart or add them by hand.
                     </div>
                   )}
@@ -2022,14 +2714,14 @@ export default function ScopingWizard({ onCancel, onCreated, typePreselected, on
                           companies into twelve peers. */}
                       <div className="flex items-center gap-1.5 min-w-0" style={depth > 0 ? { paddingLeft: depth * 10 } : undefined}>
                         {depth >= 2 && (
-                          <span aria-hidden className="text-[11px] text-text-muted/70 leading-none shrink-0">↳</span>
+                          <span aria-hidden className="text-[0.6875rem] text-text-muted/70 leading-none shrink-0">↳</span>
                         )}
                         {ent.type === 'Holding'
                           ? <Landmark size={14} className="text-brand-700 shrink-0" />
                           : <Building2 size={14} className="text-text-muted shrink-0" />}
                         {soloEntity ? (
                           // The company's own row — its name is the group name.
-                          <span className="block text-[13px] text-text truncate py-0.5">{ent.name || '—'}</span>
+                          <span className="block text-[0.8125rem] text-text truncate py-0.5">{ent.name || '—'}</span>
                         ) : (
                           <input
                             value={ent.name}
@@ -2042,12 +2734,14 @@ export default function ScopingWizard({ onCancel, onCreated, typePreselected, on
                               el.scrollIntoView({ block: 'nearest' });
                               queueMicrotask(() => setFocusEntityId(null));
                             }}
-                            className="w-full text-[13px] text-text bg-transparent outline-none border-b border-transparent focus:border-primary/40 transition-colors py-0.5"
+                            // truncate: a long name ends in an ellipsis instead of being
+                            // sliced mid-letter (the full name is on the title).
+                            className="w-full min-w-0 truncate text-[0.8125rem] text-text bg-transparent outline-none border-b border-transparent focus:border-primary/40 transition-colors py-0.5"
                           />
                         )}
                       </div>
                       {soloEntity ? (
-                        <span className="text-[12px] text-text-muted">Holding</span>
+                        <span className="text-[0.75rem] text-text-muted">Holding</span>
                       ) : (
                         <FormSelect
                           value={ent.type}
@@ -2055,7 +2749,7 @@ export default function ScopingWizard({ onCancel, onCreated, typePreselected, on
                           onChange={v => setEntities(prev => prev.map((x, j) => j === i ? { ...x, type: v as GroupEntity['type'] } : x))}
                           className={rowSelectCls}
                           ariaLabel={`Type for ${ent.name || `entity ${i + 1}`}`}
-                          menuCls="w-full min-w-[150px]"
+                          menuCls="w-full min-w-37.5"
                         />
                       )}
                       {/* Editable on every row — imported, hand-added and the
@@ -2068,7 +2762,7 @@ export default function ScopingWizard({ onCancel, onCreated, typePreselected, on
                         placeholder="Country"
                         aria-label={`Country for ${ent.name.trim() || `entity ${i + 1}`}`}
                         title={ent.country}
-                        className="w-full min-w-0 text-[12px] text-text-secondary bg-transparent outline-none border-b border-transparent focus:border-primary/40 transition-colors py-0.5"
+                        className="w-full min-w-0 text-[0.75rem] text-text-secondary bg-transparent outline-none border-b border-transparent focus:border-primary/40 transition-colors py-0.5"
                       />
                       {/* PARKED (user ask): the per-row "Processes — extracted"
                           cell. Uncomment with its header cell and a fifth
@@ -2080,7 +2774,7 @@ export default function ScopingWizard({ onCancel, onCreated, typePreselected, on
                         if (racm?.state === 'done') {
                           const procs = entityProcesses(ent.id);
                           return (
-                            <div className="text-[11px] text-text-muted leading-snug min-w-0 truncate" title={procs.join(', ')}>
+                            <div className="text-[0.6875rem] text-text-muted leading-snug min-w-0 truncate" title={procs.join(', ')}>
                               {procs.length ? procs.join(' · ') : '—'}
                             </div>
                           );
@@ -2089,20 +2783,20 @@ export default function ScopingWizard({ onCancel, onCreated, typePreselected, on
                         // names companies but not what they run — have nothing
                         // extracted yet, so the user fills it in.
                         if (ent.id.startsWith('ent-new-') || ent.id === SOLO_ENTITY_ID
-                          || (ORG_CHART_ENTITY_IDS.has(ent.id) && !extractedReady)) {
+                          || (isChartRow(ent.id) && !extractedReady)) {
                           return (
                             <input
                               value={manualProcs[ent.id] ?? ''}
                               onChange={e => applyManualProcs(ent.id, e.target.value)}
                               aria-label={`Processes for ${ent.name || 'new entity'}`}
                               placeholder="Type the processes — e.g. Order to Cash, Treasury"
-                              className="w-full text-[11px] text-text-secondary bg-transparent outline-none border-b border-transparent focus:border-primary/40 transition-colors py-0.5"
+                              className="w-full text-[0.6875rem] text-text-secondary bg-transparent outline-none border-b border-transparent focus:border-primary/40 transition-colors py-0.5"
                             />
                           );
                         }
                         const procs = extractedReady ? entityProcesses(ent.id) : [];
                         return (
-                          <div className="text-[11px] text-text-muted leading-snug min-w-0 truncate" title={procs.join(', ')}>
+                          <div className="text-[0.6875rem] text-text-muted leading-snug min-w-0 truncate" title={procs.join(', ')}>
                             {procs.length ? procs.join(' · ') : '—'}
                           </div>
                         );
@@ -2119,7 +2813,7 @@ export default function ScopingWizard({ onCancel, onCreated, typePreselected, on
                         {notInTrialBalance(ent) && (
                           <span
                             title="The trial balance has no numbers for this company — nothing will derive for it. Remove it, or upload its trial balance."
-                            className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded bg-mitigated-50 text-mitigated-800 text-[10px] font-bold uppercase tracking-wide whitespace-nowrap"
+                            className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded bg-mitigated-50 text-mitigated-800 text-[0.6875rem] font-bold uppercase tracking-wide whitespace-nowrap"
                           >
                             <AlertTriangle size={9} /> No TB
                           </span>
@@ -2146,19 +2840,19 @@ export default function ScopingWizard({ onCancel, onCreated, typePreselected, on
                       {confirmRemoveId === ent.id && (
                         <div className="px-4 pb-2.5 -mt-0.5">
                           <div className="flex items-center gap-2 flex-wrap rounded-md border border-risk-100 bg-risk-50 px-2.5 py-2">
-                            <span className="flex-1 min-w-0 text-[11px] text-risk-700">
+                            <span className="flex-1 min-w-0 text-[0.6875rem] text-risk-700">
                               Remove this and the {heldBeneath} compan{heldBeneath === 1 ? 'y' : 'ies'} held beneath it?
                             </span>
                             <button
                               onClick={() => setConfirmRemoveId(null)}
-                              className="px-2 py-1 rounded-md border border-border-light bg-white text-[11px] font-semibold text-text-secondary hover:bg-surface-2 transition-colors cursor-pointer shrink-0"
+                              className="px-2 py-1 rounded-md border border-border-light bg-white text-[0.6875rem] font-semibold text-text-secondary hover:bg-surface-2 transition-colors cursor-pointer shrink-0"
                             >
                               Cancel
                             </button>
                             <button
                               onClick={() => removeEntity(ent.id)}
                               aria-label={`Confirm remove ${ent.name.trim() || `entity ${i + 1}`} and everything beneath it`}
-                              className="px-2 py-1 rounded-md bg-risk-600 text-white text-[11px] font-semibold hover:bg-risk-700 transition-colors cursor-pointer shrink-0"
+                              className="px-2 py-1 rounded-md bg-risk-600 text-white text-[0.6875rem] font-semibold hover:bg-risk-700 transition-colors cursor-pointer shrink-0"
                             >
                               Remove
                             </button>
@@ -2167,7 +2861,7 @@ export default function ScopingWizard({ onCancel, onCreated, typePreselected, on
                       )}
                       {ownershipNote && (
                         <div
-                          className="pr-4 pb-2 -mt-1 text-[10.5px] text-text-muted leading-tight"
+                          className="pr-4 pb-2 -mt-1 text-[0.6875rem] text-text-muted leading-tight"
                           /* px-4 (16) + icon box (14 + gap 6) + the row's own
                              indent + the ↳ the name cell adds from depth 2 —
                              which is every row this note ever renders on, so
@@ -2191,9 +2885,9 @@ export default function ScopingWizard({ onCancel, onCreated, typePreselected, on
                           every created programme carries `scopingSkipped` — which
                           is now simply true, and the Overview nag is correct.
 
-                      <div className="pl-[38px] pr-4 pb-2.5 pt-1.5">
+                      <div className="pl-9.5 pr-4 pb-2.5 pt-1.5">
                         {!racm ? (
-                          <label className="inline-flex items-center gap-1.5 px-2 py-1 rounded-md border border-border-light bg-white hover:bg-surface-2 text-[11px] font-semibold text-text-secondary cursor-pointer transition-colors">
+                          <label className="inline-flex items-center gap-1.5 px-2 py-1 rounded-md border border-border-light bg-white hover:bg-surface-2 text-[0.6875rem] font-semibold text-text-secondary cursor-pointer transition-colors">
                             <Upload size={11} /> Upload RACM
                             <input
                               type="file"
@@ -2205,8 +2899,8 @@ export default function ScopingWizard({ onCancel, onCreated, typePreselected, on
                         ) : (
                           <span className="inline-flex items-center gap-1.5 pl-2 pr-1 h-7 rounded-md border border-border-light bg-white max-w-full min-w-0">
                             <FileText size={11} className="text-text-muted shrink-0" />
-                            <span className="text-[11px] text-text truncate">{racm.name}</span>
-                            <span className="px-1.5 py-0.5 rounded bg-brand-50 text-brand-700 text-[9.5px] font-bold uppercase tracking-wide shrink-0">RACM</span>
+                            <span className="text-[0.6875rem] text-text truncate">{racm.name}</span>
+                            <span className="px-1.5 py-0.5 rounded bg-brand-50 text-brand-700 text-[0.6875rem] font-bold uppercase tracking-wide shrink-0">RACM</span>
                             {racm.state === 'parsing' ? (
                               <Loader2 size={11} className="animate-spin text-text-muted shrink-0 mr-1" />
                             ) : (
@@ -2232,8 +2926,133 @@ export default function ScopingWizard({ onCancel, onCreated, typePreselected, on
                 </div>
 
                 {/* Staging's check, under the table (user ask, 15 Sep). */}
-                {!soloEntity && entities.length === 0 && <Hint text="Add at least one entity, or tick 'There are no separate entities'." />}
+                {touched.entities && !soloEntity && entities.length === 0 && <Hint text="Add at least one entity, or tick 'There are no separate entities'." />}
               </div>
+
+              {/* Audit period (5 Oct 2026 — one engagement = one audit round).
+                  New audit's period logic, asked here: the year, which round of
+                  it this engagement is, and the window. Asked after the client
+                  because a year-end or roll-forward carries over from that
+                  client's signed interim. */}
+              <div>
+                <label className={basicsLabelCls}>Year runs <span className="text-risk-700">*</span></label>
+                {carry ? (
+                  <div className={`${inputCls} flex items-center justify-between gap-2 bg-surface-2/50 text-text-secondary`}>
+                    <span>{yearLabel(yearBasis, fyEnd)} · {yearSpanOf(yearBasis, fyEnd)}</span>
+                    <Lock size={12} className="text-ink-400 shrink-0" />
+                  </div>
+                ) : (
+                  <div className="grid grid-cols-[1fr_1.4fr] gap-2">
+                    <div className="grid grid-cols-2 gap-1.5">
+                      {([['fy', 'Apr – Mar'], ['cy', 'Jan – Dec']] as const).map(([b, label]) => (
+                        <button
+                          key={b}
+                          type="button"
+                          onClick={() => { if (yearBasis !== b) changeYear(b, b === 'fy' ? currentFyEnd() : currentFyEnd() - 1); }}
+                          className={`px-2 py-1.5 rounded-lg border text-[0.75rem] font-bold transition-all cursor-pointer ${yearBasis === b ? yeSegActive : yeSegIdle}`}
+                        >
+                          {label}
+                        </button>
+                      ))}
+                    </div>
+                    <FormSelect
+                      value={String(fyEnd)}
+                      options={periodYearOptions.map(y => ({ value: String(y), label: `${yearLabel(yearBasis, y)} · ${yearSpanOf(yearBasis, y)}` }))}
+                      onChange={v => changeYear(yearBasis, Number(v))}
+                      className={selectCls}
+                      ariaLabel="Financial year"
+                      menuCls="w-full"
+                    />
+                  </div>
+                )}
+                {carry && <p className="text-[0.6875rem] text-ink-500 mt-1">Set by the interim this engagement carries over from.</p>}
+              </div>
+              <div>
+                <label className={basicsLabelCls}>Round <span className="text-risk-700">*</span></label>
+                <div className="grid grid-cols-3 gap-1.5">
+                  {AUDIT_ROUNDS.map(r => (
+                    <button
+                      key={r.id}
+                      type="button"
+                      onClick={() => pickRound(r.id)}
+                      aria-pressed={round === r.id}
+                      className={`px-2 py-1.5 rounded-lg border text-[0.75rem] font-bold transition-all cursor-pointer ${round === r.id ? yeSegActive : yeSegIdle}`}
+                    >
+                      {r.label}
+                    </button>
+                  ))}
+                </div>
+                {round && <p className="text-[0.6875rem] text-ink-500 mt-1">{AUDIT_ROUNDS.find(r => r.id === round)!.hint}</p>}
+              </div>
+              {(round === 'yearend' || round === 'rollforward') && (
+                <div>
+                  <label className={basicsLabelCls}>Carry over from{round === 'rollforward' && <> <span className="text-risk-700">*</span></>}</label>
+                  {carrySources.length === 0 ? (
+                    <p className="text-[0.75rem] text-ink-500">No signed interim to carry over from yet.</p>
+                  ) : (
+                    <>
+                      <FormSelect
+                        value={carryId}
+                        options={[
+                          ...(round === 'yearend' ? [{ value: '', label: 'Don’t carry over — start fresh' }] : carryId ? [] : [{ value: '', label: 'Pick a signed interim' }]),
+                          ...carrySources.map(c => ({
+                            value: c.engagement.id,
+                            label: `${c.engagement.name} · ${fmtDate(c.audit.windowFrom)} – ${fmtDate(c.audit.windowTo)}`,
+                          })),
+                        ]}
+                        onChange={pickCarry}
+                        className={selectCls}
+                        ariaLabel="Carry over from"
+                        menuCls="w-full"
+                      />
+                      <p className="text-[0.6875rem] text-ink-500 mt-1">
+                        {carry
+                          ? 'Materiality, scope and sampling come from this interim. Its controls carry over — confirm each one unchanged or edit it.'
+                          : 'Interims of this client signed by both the preparer and the reviewer.'}
+                      </p>
+                    </>
+                  )}
+                </div>
+              )}
+              {round && (
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <label className={basicsLabelCls}>From <span className="text-risk-700">*</span></label>
+                    {round === 'rollforward' ? (
+                      <div className={`${inputCls} flex items-center justify-between gap-2 bg-surface-2/50 text-text-secondary`}>
+                        <span>{windowFrom ? fmtDate(windowFrom) : '—'}</span>
+                        <Lock size={12} className="text-ink-400 shrink-0" />
+                      </div>
+                    ) : (
+                      <CustomDatePicker
+                        value={fromDate}
+                        onChange={setFromDate}
+                        minDate={yearStart}
+                        maxDate={round === 'interim' ? (cutoff || shiftDay(yearEnd, -1)) : yearEnd}
+                      />
+                    )}
+                  </div>
+                  <div>
+                    <label className={basicsLabelCls}>{round === 'interim' ? 'To — interim cut-off' : 'To'} <span className="text-risk-700">*</span></label>
+                    {round === 'interim' ? (
+                      <CustomDatePicker
+                        value={cutoff}
+                        onChange={setCutoff}
+                        minDate={fromDate || yearStart}
+                        maxDate={shiftDay(yearEnd, -1)}
+                      />
+                    ) : (
+                      <div className={`${inputCls} flex items-center justify-between gap-2 bg-surface-2/50 text-text-secondary`}>
+                        <span>{fmtDate(yearEnd)}</span>
+                        <Lock size={12} className="text-ink-400 shrink-0" />
+                      </div>
+                    )}
+                  </div>
+                </div>
+              )}
+              {round === 'rollforward' && carry && (
+                <p className="text-[0.6875rem] text-ink-500 -mt-2">Starts the day after the interim’s cut-off and runs to the year end, so the two windows can’t gap or overlap.</p>
+              )}
             </div>
           </StepShell>
         )}
@@ -2245,13 +3064,42 @@ export default function ScopingWizard({ onCancel, onCreated, typePreselected, on
             applied TO, and it is required. */}
         {step === MAT_TB_STEP && (
           <div>
+            {/* Carried over (5 Oct 2026): one line, then the same step. */}
+            {carry && (
+              <p className="mb-3 text-[0.75rem] text-ink-600 leading-relaxed">
+                Materiality is prefilled from <span className="font-semibold text-ink-900">{carry.engagement.name}</span> — change it if the year moved it. A trial balance is optional here.
+              </p>
+            )}
             <div className="flex items-baseline gap-2 mb-0.5">
               <h4 className="text-[0.8125rem] font-semibold text-ink-900">Trial balance &amp; general ledger</h4>
-              <span className="text-[0.625rem] font-semibold uppercase tracking-wider text-ink-400">Trial balance required</span>
+              <span className="text-[0.6875rem] font-semibold uppercase tracking-wider text-ink-400">{carry ? 'Optional' : 'Trial balance required'}</span>
             </div>
             <p className="text-[0.75rem] text-ink-500 mb-4 leading-relaxed">
-              Upload the trial balance to continue — its material accounts decide which processes this engagement covers. The general ledger can be added later.
+              {carry
+                ? 'Add this round’s trial balance and general ledger if you have them — the scope comes from the interim.'
+                : 'Upload the trial balance to continue — its material accounts decide which processes this engagement covers. The general ledger can be added later.'}
             </p>
+
+            {/* What was actually read, the way the org chart already says
+                "Read 8 companies off the chart". Its absence is how a file that
+                was only ever attached went unnoticed for so long: with nothing
+                claiming a number, nothing looked wrong. */}
+            {tbParse && (
+              <div className="mb-3 rounded-md border border-compliant-200 bg-compliant-50/60 px-2.5 py-2">
+                <p className="text-[0.75rem] text-compliant-700 leading-relaxed">
+                  {/* Accounts are the rows of the file; statement lines are the
+                      captions they roll up into. This used to call the second
+                      number "accounts". */}
+                  Read <span className="font-semibold">{plural(tbParse.accounts, 'account')}</span>{' '}
+                  ({plural(tbParse.captions.length, 'statement line')}) across{' '}
+                  <span className="font-semibold">{plural(new Set(tbParse.captions.map(c => c.entityId)).size, 'company', 'companies')}</span>.
+                  {tbAddedIds.size > 0 && <> {plural(tbAddedIds.size, 'company', 'companies')} the chart didn’t name {tbAddedIds.size === 1 ? 'was' : 'were'} added from it.</>}
+                </p>
+              </div>
+            )}
+
+            {/* A ledger Ira could not read says so on its own row in the box
+                below (1 Oct), rather than in one banner naming the last file. */}
 
             {/* Each kind owns its uploads: empty, the box is a dashed prompt
                 with a labelled Upload; once it holds a file it becomes a solid
@@ -2268,11 +3116,11 @@ export default function ScopingWizard({ onCancel, onCreated, typePreselected, on
                         <FileSpreadsheet size={16} className="text-brand-600 shrink-0" />
                         <span className="min-w-0 flex-1">
                           <span className="block text-[0.75rem] font-semibold text-ink-800 truncate">{title}</span>
-                          <span className="block text-[0.65625rem] text-ink-400">XLSX · CSV</span>
+                          <span className="block text-[0.6875rem] text-ink-400">Excel · CSV · PDF · Word · image</span>
                         </span>
                         <button
                           onClick={() => addScopeFile(kind)}
-                          className="h-7 px-3 inline-flex items-center gap-1.5 rounded-lg bg-brand-600 text-white text-[0.71875rem] font-semibold hover:bg-brand-700 transition-colors cursor-pointer shrink-0"
+                          className="h-7 px-3 inline-flex items-center gap-1.5 rounded-lg bg-brand-600 text-white text-[0.75rem] font-semibold hover:bg-brand-700 transition-colors cursor-pointer shrink-0"
                         >
                           <Upload size={12} /> Upload
                         </button>
@@ -2292,12 +3140,12 @@ export default function ScopingWizard({ onCancel, onCreated, typePreselected, on
                           </button>
                         </div>
                         {mine.map(({ f, i }) => (
-                          <div key={`${f.name}-${i}`} className="px-3 py-2.5 border-b border-canvas-border last:border-b-0">
+                          <div key={f.id} className="px-3 py-2.5 border-b border-canvas-border last:border-b-0">
                             <div className="flex items-center gap-2">
                               <Paperclip size={12} className="text-ink-400 shrink-0" />
                               <span className="text-[0.75rem] text-ink-900 flex-1 min-w-0 truncate" title={f.name}>{f.name}</span>
                               <button
-                                onClick={() => setScopeFiles(prev => prev.filter((_, x) => x !== i))}
+                                onClick={() => removeScopeFile(f.id)}
                                 className="text-ink-400 hover:text-risk-700 transition-colors cursor-pointer shrink-0"
                                 aria-label={`Remove ${f.name}`}
                                 title="Remove"
@@ -2305,23 +3153,56 @@ export default function ScopingWizard({ onCancel, onCreated, typePreselected, on
                                 <Trash2 size={13} />
                               </button>
                             </div>
+                            {/* Ira's one line while the file is read, and the one
+                                red line if it could not be. */}
+                            {f.read === 'pending' && (
+                              <p className="flex items-center gap-1.5 mt-1 text-[0.6875rem] text-ink-500">
+                                <Loader2 size={11} className="animate-spin shrink-0" />
+                                {f.scan ? 'Reading a scan — this takes a few seconds' : `Reading ${f.name}…`}
+                              </p>
+                            )}
+                            {/* A ledger that read fine but names companies the
+                                entity list doesn't have yet — said, not refused. */}
+                            {kind === 'gl' && f.read === 'ok' && glParse && glParse.totalLines === 0 && glParse.unmatchedNames.length > 0 && (
+                              <p className="mt-1 text-[0.6875rem] text-ink-500 leading-relaxed">
+                                Read — but none of its {plural(glParse.unmatchedNames.length, 'company', 'companies')} are in the entity list yet. Its lines link up once they are (a trial balance adds them).
+                              </p>
+                            )}
+                            {f.read === 'failed' && (
+                              <div className="flex items-center gap-2 mt-1">
+                                <p className="flex-1 min-w-0 text-[0.6875rem] text-risk-700">
+                                  {PROBLEM_LINE[f.problem ?? 'no-table']}
+                                </p>
+                                {f.problem === 'looks-like-gl' && (
+                                  <button
+                                    type="button"
+                                    onClick={() => moveToGeneralLedger(f.id)}
+                                    className="h-6 px-2 rounded-md border border-canvas-border bg-white text-[0.6875rem] font-semibold text-ink-700 hover:border-ink-300 transition-colors cursor-pointer shrink-0"
+                                  >
+                                    Move to general ledger
+                                  </button>
+                                )}
+                              </div>
+                            )}
                             {/* The source, asked as the file enters (user ask) —
                                 this step's wording; the rest of SOX keeps System
-                                export / Client-prepared for the same two answers. */}
-                            <div className="mt-2">
-                              <span className="block text-[0.65625rem] font-bold uppercase tracking-wider text-ink-400 mb-1">Source of the document</span>
+                                export / Client-prepared for the same two answers.
+                                Not asked of a file Ira couldn't read — it can only
+                                be removed. */}
+                            {f.read !== 'failed' && <div className="mt-2">
+                              <span className="block text-[0.6875rem] font-bold uppercase tracking-wider text-ink-400 mb-1">Source of the document</span>
                               <div className="grid grid-cols-2 gap-1.5" role="group" aria-label={`Source of ${f.name}`}>
                                 {([['System export', 'System generated'], ['Client-prepared', 'Client prepared']] as const).map(([o, label]) => (
                                   <button key={o} type="button" aria-pressed={f.origin === o}
-                                    onClick={() => setScopeFiles(prev => prev.map((x, n) => (n === i ? { ...x, origin: o } : x)))}
+                                    onClick={() => markScopeFile(f.id, { origin: o })}
                                     className={cn('h-7 px-2 rounded-md border text-[0.6875rem] font-semibold transition-colors cursor-pointer inline-flex items-center justify-center gap-1',
                                       f.origin === o ? 'border-brand-300 bg-brand-50 text-brand-700' : 'border-canvas-border bg-white text-ink-600 hover:border-ink-300')}>
                                     {f.origin === o && <Check size={11} className="shrink-0" />}{label}
                                   </button>
                                 ))}
                               </div>
-                              {!f.origin && <p className="text-[0.65625rem] text-high-700 font-semibold mt-1">Pick the source to continue</p>}
-                            </div>
+                              {!f.origin && <p className="text-[0.6875rem] text-high-700 font-semibold mt-1">Pick the source to continue</p>}
+                            </div>}
                           </div>
                         ))}
                       </>
@@ -2334,7 +3215,7 @@ export default function ScopingWizard({ onCancel, onCreated, typePreselected, on
             <div className="mt-6 pt-5 border-t border-canvas-border">
               <h4 className="text-[0.8125rem] font-semibold text-ink-900 mb-0.5">Materiality rule</h4>
               <p className="text-[0.75rem] text-ink-500 mb-4 leading-relaxed">
-                Set before testing starts — exceptions are measured against it.
+                Set before testing starts — deficiencies are measured against it.
               </p>
 
               <label className="block text-[0.6875rem] font-semibold text-ink-500 mb-1.5">Basis</label>
@@ -2351,54 +3232,135 @@ export default function ScopingWizard({ onCancel, onCreated, typePreselected, on
               <div className="flex gap-3 mb-4">
                 <div className="flex-1 min-w-0">
                   <label className="block text-[0.6875rem] font-semibold text-ink-500 mb-1.5">{basis === 'custom' ? 'Overall materiality (₹ Cr)' : `${basisOpt.benchmarkLabel} (₹ Cr)`}</label>
-                  <input type="number" min={0} value={benchmark} onChange={e => setBenchmark(Number(e.target.value))} className={`${matInputCls} tabular-nums`} />
+                  <DraftNumberInput min={0} value={benchmark} onValue={typeBenchmark} className={`${matInputCls} tabular-nums`} aria-label={basis === 'custom' ? 'Overall materiality (₹ Cr)' : `${basisOpt.benchmarkLabel} (₹ Cr)`} />
                 </div>
                 {basis !== 'custom' && (
                   <div className="w-24 shrink-0">
                     <label className="block text-[0.6875rem] font-semibold text-ink-500 mb-1.5">Basis %</label>
-                    <input type="number" min={0.1} max={100} step={0.1} value={pct} onChange={e => setPct(Number(e.target.value))} className={`${matInputCls} tabular-nums`} />
+                    <DraftNumberInput min={0.1} max={100} step={0.1} value={pct} onValue={setPct} className={`${matInputCls} tabular-nums`} />
                   </div>
                 )}
               </div>
+
+              {/* ── Where the figure came from (5 Oct) ───────────────────────
+                  The field is filled from the TB; one quiet line says so, or
+                  says the user's own figure differs from it. Before a TB is
+                  read, or where the TB has no figure, the field stays empty
+                  and this line says why. */}
+              {basis !== 'custom' && !tbParse && userFigure === undefined && (
+                <p className="-mt-2 mb-4 text-[0.75rem] text-ink-500">Fills in from your trial balance once it’s read.</p>
+              )}
+              {basis === 'custom' && !(benchmark > 0) && (
+                <p className="-mt-2 mb-4 text-[0.75rem] text-ink-500">A custom amount isn’t read off the TB — type it.</p>
+              )}
+              {basis !== 'custom' && tbParse && (() => {
+                const w = tbWorking[basis];
+                if (!w) return (
+                  <p className="-mt-2 mb-4 flex items-center gap-1.5 text-[0.75rem] text-ink-500">
+                    <Sparkles size={11} className="text-brand-500 shrink-0" aria-hidden />
+                    {basis === 'pbt' && tbWorking.revenue && tbWorking.expenses
+                      ? 'Your TB shows a loss before tax — pick another basis, or type the figure.'
+                      : `Ira couldn’t find ${basisOpt.benchmarkLabel.toLowerCase().replace(/ \(consolidated\)$/, '')} in your TB — type it.`}
+                  </p>
+                );
+                const same = userFigure === undefined || Math.abs(w.amount - benchmark) < 0.005;
+                return (
+                  <div className="-mt-2 mb-4">
+                    <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-[0.75rem] text-ink-600">
+                      {same ? (
+                        <>
+                          <Sparkles size={11} className="text-brand-500 shrink-0" aria-hidden />
+                          <span>From your TB</span>
+                          <span className="text-ink-300" aria-hidden>·</span>
+                          <button type="button" onClick={() => setWorkingOpen(o => !o)} aria-expanded={workingOpen}
+                            className="text-[0.6875rem] font-semibold text-brand-700 hover:underline cursor-pointer">
+                            {workingOpen ? 'Hide working' : 'Show working'}
+                          </button>
+                        </>
+                      ) : (
+                        <>
+                          <span>Your figure</span>
+                          <span className="text-ink-300" aria-hidden>·</span>
+                          <span>TB says <span className="font-semibold text-ink-900 tabular-nums">{money(w.amount)}</span></span>
+                          <button type="button" onClick={() => { takeTbBenchmark(); setWorkingOpen(false); }}
+                            title={`Use the TB figure, ${money(w.amount)}`}
+                            className="h-6 px-2 rounded-md border border-canvas-border bg-white text-[0.6875rem] font-semibold text-ink-700 hover:border-brand-300 hover:text-brand-700 transition-colors cursor-pointer">
+                            Use
+                          </button>
+                        </>
+                      )}
+                    </div>
+                    {same && workingOpen && (
+                      <div className="mt-2 rounded-lg border border-canvas-border bg-white px-3 py-2 text-[0.6875rem]">
+                        <ul className="space-y-0.5">
+                          {w.lines.map(l => (
+                            <li key={`${l.sign}${l.caption}`} className="flex items-baseline gap-2 text-ink-600">
+                              <span className="w-3 shrink-0 text-ink-400">{l.sign}</span>
+                              <span className="min-w-0 flex-1 truncate">{l.caption}</span>
+                              <span className="tabular-nums">{money(l.amount)}</span>
+                            </li>
+                          ))}
+                        </ul>
+                        <div className="mt-1.5 pt-1.5 border-t border-canvas-border flex items-baseline gap-2 font-semibold text-ink-900">
+                          <span className="w-3 shrink-0">=</span>
+                          <span className="flex-1">{basisOpt.benchmarkLabel.replace(/ \(consolidated\)$/, '')}</span>
+                          <span className="tabular-nums">{money(w.amount)}</span>
+                        </div>
+                        {w.leftOut.map(o => (
+                          <p key={o.caption} className="mt-1 text-ink-400">Left out: {o.caption} {money(o.amount)} — {o.why}.</p>
+                        ))}
+                        <p className="mt-1 text-ink-400">Added across {tbCompanies} {tbCompanies === 1 ? 'company' : 'companies'} in the file, before intercompany eliminations.</p>
+                      </div>
+                    )}
+                  </div>
+                );
+              })()}
 
               {/* The two thresholds testing runs against — asked as a share of
                   overall with the rupee figure shown back, so the two can't
                   drift apart. */}
               <div className="mt-4 space-y-3">
                 {([
-                  ['Performance materiality', pmPct, setPmPct, perf, 50, 75, 5, '% of overall — auditors typically set 50–75%'],
-                  ['Clearly-trivial threshold', cttPct, setCttPct, trivial, 1, 10, 1, '% of overall — below this, differences are passed'],
-                ] as const).map(([label, value, set, amount, lo, hi, stepBy, hint]) => (
+                  ['Performance materiality', pmPct, setPmPct, perf, 50, 75, 5, '% of overall — auditors typically set 50–75%', pmValid, 'Performance materiality is 50–75% of overall'],
+                  ['Clearly-trivial threshold', cttPct, setCttPct, trivial, 1, 10, 1, '% of overall — below this, differences are passed', cttValid, 'Clearly-trivial threshold is 1–10% of overall'],
+                ] as const).map(([label, value, set, amount, lo, hi, stepBy, hint, valid, invalidLine]) => (
                   <div key={label}>
                     <label className="block text-[0.6875rem] font-semibold text-ink-500 mb-1.5">{label}</label>
                     <div className="flex items-center gap-2">
-                      <input
-                        type="number" min={lo} max={hi} step={stepBy} value={value}
-                        onChange={e => set(Math.min(hi, Math.max(lo, Number(e.target.value))))}
+                      <DraftNumberInput
+                        min={lo} max={hi} step={stepBy} value={value}
+                        onValue={set}
+                        onLeave={touch(label)}
                         className={`${matInputCls} tabular-nums w-20`}
                         aria-label={`${label} as a percentage of overall`}
+                        aria-invalid={!valid || undefined}
                       />
-                      <span className="text-[0.71875rem] text-ink-500 shrink-0">% of overall</span>
-                      <span className="ml-auto text-[0.8125rem] font-semibold text-ink-900 tabular-nums shrink-0">{money(amount)}</span>
+                      <span className="text-[0.75rem] text-ink-500 shrink-0">% of overall</span>
+                      <span className="ml-auto text-[0.8125rem] font-semibold text-ink-900 tabular-nums shrink-0">{valid ? money(amount) : '—'}</span>
                     </div>
-                    <p className="text-[0.6875rem] text-ink-400 leading-relaxed mt-1">{hint}</p>
+                    {/* Checked once the box is left, not on every keystroke. */}
+                    {!valid && touched[label]
+                      ? <Hint text={invalidLine} />
+                      : <p className="text-[0.6875rem] text-ink-400 leading-relaxed mt-1">{hint}</p>}
                   </div>
                 ))}
               </div>
 
               <div className="mt-4 rounded-xl border border-canvas-border bg-white p-3.5">
-                <div className="text-[0.625rem] font-bold text-ink-400 uppercase tracking-wider mb-2">Computed thresholds</div>
+                <div className="text-[0.6875rem] font-bold text-ink-400 uppercase tracking-wider mb-2">Computed thresholds</div>
                 {([
-                  ['Overall materiality', money(overallCr), basis === 'custom' ? 'Set directly' : `${pct}% × ₹${benchmark} Cr`, true],
-                  ['Performance materiality', money(perf), `${pmPct}% of overall — the working threshold for testing`, false],
-                  ['Clearly trivial', money(trivial), `${cttPct}% of overall — below this, differences are passed`, false],
+                  ['Overall materiality', money(overallCr), basis === 'custom' ? 'Set directly' : benchmark > 0 ? `${pct || 0}% × ₹${benchmark} Cr` : `${pct || 0}% × the benchmark, once it’s filled`, true],
+                  // An out-of-range % shows no figure and no % — "90% of overall"
+                  // under a box saying 50–75% read as if 90 had been accepted.
+                  ['Performance materiality', pmValid ? money(perf) : '—', pmValid ? `${pmPct}% of overall — the working threshold for testing` : 'Set performance materiality to 50–75% of overall', false],
+                  ['Clearly trivial', cttValid ? money(trivial) : '—', cttValid ? `${cttPct}% of overall — below this, differences are passed` : 'Set the clearly-trivial threshold to 1–10% of overall', false],
                 ] as const).map(([label, value, note, strong], i) => (
                   <div key={label} className={cn('py-2', i < 2 && 'border-b border-canvas-border')}>
                     <div className="flex items-baseline justify-between gap-3">
                       <span className={cn('text-[0.75rem]', strong ? 'font-semibold text-ink-900' : 'text-ink-600')}>{label}</span>
-                      <span className={cn('tabular-nums', strong ? 'text-[0.875rem] font-bold text-ink-900' : 'text-[0.78125rem] text-ink-800')}>{value}</span>
+                      <span className={cn('tabular-nums', strong ? 'text-[0.875rem] font-bold text-ink-900' : 'text-[0.8125rem] text-ink-800')}>{value}</span>
                     </div>
-                    <div className="text-[0.65625rem] text-ink-400 mt-0.5">{note}</div>
+                    <div className="text-[0.6875rem] text-ink-400 mt-0.5">{note}</div>
                   </div>
                 ))}
               </div>
@@ -2408,11 +3370,11 @@ export default function ScopingWizard({ onCancel, onCreated, typePreselected, on
                   engagement is created with. */}
               {overallCr > 0 && (
                 <div className="mt-5">
-                  <h5 className="text-[0.75rem] font-semibold text-ink-900 mb-2">Where an exception would land</h5>
+                  <h5 className="text-[0.75rem] font-semibold text-ink-900 mb-2">Where a deficiency would land</h5>
                   <div className="space-y-1">
                     {LADDER.map((r, i) => (
                       <div key={r.label} className={cn('flex items-center justify-between gap-3 px-3 py-2 rounded-lg border', r.tone)}>
-                        <span className="text-[0.71875rem] font-semibold">
+                        <span className="text-[0.75rem] font-semibold">
                           <span className="text-ink-300 tabular-nums mr-1.5">{i + 1}</span>{r.label}
                         </span>
                         <span className="text-[0.6875rem] tabular-nums text-right">{r.band}</span>
@@ -2425,6 +3387,20 @@ export default function ScopingWizard({ onCancel, onCreated, typePreselected, on
                 </div>
               )}
             </div>
+
+            {/* What the uploaded ledgers said. Only appears once a trial
+                balance has actually been read — there is nothing honest to
+                show about a file we could not open. */}
+            {tbParse && (
+              <LedgerExplorer
+                entities={entities}
+                captions={captions}
+                gl={glParse}
+                perf={perf}
+                money={money}
+                addedByTb={tbAddedIds}
+              />
+            )}
 
             {/* ── Map material accounts to processes ─────────────────────────
                 After the rule, because it reads it: only accounts at or above
@@ -2440,20 +3416,20 @@ export default function ScopingWizard({ onCancel, onCreated, typePreselected, on
                   Ira suggested a process for each account — change any that landed on the wrong one.
                 </p>
                 {materialRows.length === 0 ? (
-                  <p className="rounded-xl border border-dashed border-canvas-border bg-white text-[0.71875rem] text-ink-400 px-4 py-5 text-center">
+                  <p className="rounded-xl border border-dashed border-canvas-border bg-white text-[0.75rem] text-ink-400 px-4 py-5 text-center">
                     No account in the trial balance reaches {money(perf)} — nothing to map at this threshold.
                   </p>
                 ) : (
                   /* No overflow-hidden: the process menus open downward out of
                      the last rows, and clipping them would hide the options. */
                   <div className="rounded-xl border border-canvas-border bg-white">
-                    <div className="grid grid-cols-[minmax(0,1.5fr)_minmax(0,0.7fr)_minmax(0,0.75fr)_minmax(0,1.45fr)] gap-2.5 px-3.5 py-2 border-b border-canvas-border text-[0.625rem] font-bold text-ink-400 uppercase tracking-wider">
+                    <div className="grid grid-cols-[minmax(0,1.5fr)_minmax(0,0.7fr)_minmax(0,0.75fr)_minmax(0,1.45fr)] gap-2.5 px-3.5 py-2 border-b border-canvas-border text-[0.6875rem] font-bold text-ink-400 uppercase tracking-wider">
                       <span>Account</span><span>Entity</span><span className="text-right">Balance</span><span>Process</span>
                     </div>
                     {materialRows.map(c => (
                       <div key={c.id} className="grid grid-cols-[minmax(0,1.5fr)_minmax(0,0.7fr)_minmax(0,0.75fr)_minmax(0,1.45fr)] gap-2.5 items-center px-3.5 py-2 border-b border-canvas-border last:border-b-0">
                         <span className="text-[0.75rem] text-ink-900 truncate" title={c.caption}>{c.caption}</span>
-                        <span className="text-[0.71875rem] text-ink-500 truncate" title={entities.find(e => e.id === c.entityId)?.name}>{entityShort(c.entityId, entities)}</span>
+                        <span className="text-[0.75rem] text-ink-500 truncate" title={entities.find(e => e.id === c.entityId)?.name}>{entityShort(c.entityId, entities)}</span>
                         <span className="text-[0.75rem] text-ink-800 tabular-nums text-right">{money(c.balance)}</span>
                         <FormSelect
                           value={processOf(c)}
@@ -2462,7 +3438,7 @@ export default function ScopingWizard({ onCancel, onCreated, typePreselected, on
                           className="w-full h-8 px-2.5 text-[0.75rem] border border-canvas-border rounded-lg bg-white text-ink-900 outline-none focus:border-brand-400 transition-all"
                           ariaLabel={`Process for ${c.caption}`}
                           align="right"
-                          menuCls="w-[220px]"
+                          menuCls="w-55"
                         />
                       </div>
                     ))}
@@ -2482,7 +3458,32 @@ export default function ScopingWizard({ onCancel, onCreated, typePreselected, on
             header, a reason line only where it is news, one RACM list open at
             a time, and the processes with no material accounts behind
             "Show more". */}
-        {step === SCOPE_STEP && (
+        {/* Carried over (5 Oct 2026): the scope is the interim's — its
+            processes and the controls each brings, plus its open findings. */}
+        {step === SCOPE_STEP && carry && (
+          <StepShell>
+            <h4 className="text-[0.875rem] font-semibold text-ink-900">Carried over from {carry.engagement.name}</h4>
+            <p className="text-[0.75rem] text-ink-500 mt-0.5 mb-3 leading-relaxed">
+              The interim’s controls come across with last round’s set-up. On each control page you confirm it unchanged or edit it; a design the interim found effective carries as tested.
+            </p>
+            {/* The same three facts Review repeats: companies, processes, controls. */}
+            <p className="text-[0.75rem] text-ink-600 mb-2 tabular-nums">
+              {plural(carriedEntityIds.length, 'company', 'companies')} in scope · {plural(carriedProcesses.length, 'process', 'processes')} · {plural(carriedControlCount, 'control')}
+            </p>
+            <div className="border border-border-light rounded-xl bg-white overflow-hidden">
+              {carriedProcesses.map(p => (
+                <div key={p.process} className="flex items-center justify-between gap-3 px-4 py-2.5 border-b border-border-light last:border-b-0">
+                  <span className="text-[0.8125rem] font-semibold text-text">{p.process}</span>
+                  <span className="text-[0.75rem] text-text-muted tabular-nums">{plural(p.controls, 'control')}</span>
+                </div>
+              ))}
+            </div>
+            {carriedOpenFindings > 0 && (
+              <p className="text-[0.75rem] text-ink-500 mt-2">{plural(carriedOpenFindings, 'open finding')} carry over with their controls.</p>
+            )}
+          </StepShell>
+        )}
+        {step === SCOPE_STEP && !carry && (
           <StepShell>
             {/* ── 1 · Entities ── derived, not picked. The coverage line is the
                 headline: the one number that says whether the engagement
@@ -2563,12 +3564,20 @@ export default function ScopingWizard({ onCancel, onCreated, typePreselected, on
                       ) : scope.rows.map(row => {
                         const on = companyInScope(row);
                         const absent = row.status === 'absent';
+                        /** Out because the company holding it is out. Its own tick
+                         *  cannot change that, so the row is read-only and says so
+                         *  rather than offering a control that does nothing. */
+                        const heldOut = outByAncestor(row);
                         const depth = chainDepth(row, scope.rows);
-                        const changed = !absent && overrides[row.id] !== undefined;
+                        // A row carried out by its parent has no decision of its
+                        // own to explain, so no note box — the parent's note is
+                        // the reason, and asking again would ask twice.
+                        const changed = !heldOut && overrides[row.id] !== undefined;
                         const editing = noteDrafts[row.id] !== undefined;
                         /** Only the exceptions get a line — "clears performance
                          *  materiality" is what the tick already says. */
-                        const exception = absent ? 'Not in the trial balance'
+                        const exception = heldOut ? `Out of scope with ${heldOut.name}, which holds it`
+                          : absent ? (on ? 'In scope · not in the trial balance' : 'Not in the trial balance — excluded')
                           : row.status === 'coverage' ? `Added to reach ${COVERAGE_TARGET}% coverage`
                           : row.status === 'out' ? 'Below performance materiality'
                           : null;
@@ -2578,15 +3587,17 @@ export default function ScopingWizard({ onCancel, onCreated, typePreselected, on
                               type="button"
                               role="checkbox"
                               aria-checked={on}
-                              aria-label={absent ? `${row.name} — not in the trial balance` : row.name}
-                              disabled={absent}
+                              aria-label={heldOut ? `${row.name} — out of scope with ${heldOut.name}, which holds it`
+                                : absent ? `${row.name} — not in the trial balance`
+                                : row.name}
+                              disabled={!!heldOut}
                               onClick={() => flipEntity(row)}
                               className={cn(
                                 'group w-full flex items-center gap-3 px-4 py-2 text-left transition-colors',
-                                absent ? 'cursor-not-allowed' : 'cursor-pointer hover:bg-brand-50/40',
+                                heldOut ? 'cursor-not-allowed' : 'cursor-pointer hover:bg-brand-50/40',
                               )}
                             >
-                              <TickBox state={on} disabled={absent} />
+                              <TickBox state={on} disabled={!!heldOut} />
                               {/* Only the name indents — the ticks stay one straight
                                   column however deep an entity sits. */}
                               {depth > 0 && <span aria-hidden className="shrink-0" style={{ width: `${depth * 0.75}rem` }} />}
@@ -2594,13 +3605,13 @@ export default function ScopingWizard({ onCancel, onCreated, typePreselected, on
                                 <span aria-hidden className="text-[0.6875rem] text-ink-300 leading-none shrink-0 -mr-1.5">↳</span>
                               )}
                               <span className="flex-1 min-w-0">
-                                <span className={cn('block text-[0.8125rem] truncate', absent ? 'text-ink-400' : 'text-ink-900')} title={row.name}>
+                                <span className={cn('block text-[0.8125rem] truncate', (absent && !on) || heldOut ? 'text-ink-400' : 'text-ink-900')} title={row.name}>
                                   {row.name}
                                 </span>
                                 {exception && <span className="block text-[0.6875rem] text-ink-500 mt-0.5">{exception}</span>}
                               </span>
                               {!absent && (
-                                <span className="shrink-0 text-[0.71875rem] text-ink-400 tabular-nums">
+                                <span className="shrink-0 text-[0.75rem] text-ink-400 tabular-nums">
                                   {money(row.total)} · {row.sharePct}%
                                 </span>
                               )}
@@ -2674,9 +3685,12 @@ export default function ScopingWizard({ onCancel, onCreated, typePreselected, on
                     className="overflow-hidden"
                   >
                     <p className="text-[0.75rem] text-ink-500 mb-3 leading-relaxed">
+                      {/* The list is drawn from the companies ticked above, so
+                          it says so — otherwise a process the user knows the
+                          group runs looks like it has gone missing. */}
                       {recommendedCount > 0
-                        ? `Ira ticked the ${recommendedCount === 1 ? 'process' : `${recommendedCount} processes`} with material accounts. Choose the RACMs each one is tested with — every control in a ticked RACM is in scope; open it to take one out.`
-                        : 'No process has material accounts in the trial balance. Tick the ones to test and choose their RACMs.'}
+                        ? `${scopedEntities.length === 1 ? 'For the company in scope' : `Across the ${scopedEntities.length} companies in scope`}, Ira ticked the ${recommendedCount === 1 ? 'process' : `${recommendedCount} processes`} with material accounts. Tick as many as this engagement tests. Each starts with its published RACM from the RACM Library — change any, and open one to take a control out.`
+                        : `No process has material accounts for the ${scopedEntities.length === 1 ? 'company' : 'companies'} in scope. Tick the ones to test and choose their RACMs.`}
                     </p>
                     {crossClashLines.length > 0 && (
                       <ClashNote lines={crossClashLines} />
@@ -2685,9 +3699,14 @@ export default function ScopingWizard({ onCancel, onCreated, typePreselected, on
                     <div className="rounded-lg border border-canvas-border bg-white overflow-hidden">
                       {processRows.length === 0 ? (
                         <p className="text-[0.75rem] text-ink-400 px-4 py-6 text-center">
-                          {ACCOUNT_MAPPING
-                            ? 'No material accounts mapped and no RACMs on the RACM tab yet.'
-                            : 'No material accounts in the trial balance and no RACMs on the RACM tab yet.'}
+                          {/* An empty list now has two different causes, and
+                              saying the wrong one sends the user to the RACM tab
+                              to fix something that is not broken. */}
+                          {scopedEntities.length === 0
+                            ? 'No company is in scope — tick one above and its processes appear here.'
+                            : ACCOUNT_MAPPING
+                              ? 'No material accounts mapped, and no RACMs for the companies in scope.'
+                              : 'No material accounts in the trial balance, and no RACMs for the companies in scope.'}
                         </p>
                       ) : (
                         <>
@@ -2707,7 +3726,7 @@ export default function ScopingWizard({ onCancel, onCreated, typePreselected, on
                             const allTicked = !nothingOnTab && picks.length === onTab.length && picks.every(x => outOf(x).length === 0);
                             const someTicked = picks.length > 0 && !allTicked;
                             const groupLines = on ? clashLinesFor(picks) : [];
-                            const listOpen = on && openProc === r.process;
+                            const listOpen = on && !!openProcs?.has(r.process);
                             const listId = `scope-racms-${r.process.replace(/\W+/g, '-').toLowerCase()}`;
                             /** What the RACM handle says while folded. Short: it now
                              *  shares the name row with the process and its numbers,
@@ -2727,6 +3746,11 @@ export default function ScopingWizard({ onCancel, onCreated, typePreselected, on
                               : notesDueHere > 0
                                 ? `${racmHandleBase} · ${notesDueHere} note${notesDueHere === 1 ? '' : 's'} due`
                                 : racmHandleBase;
+                            /** Settled and folded: the picked library RACM reads as
+                             *  one quiet line under the name, with "change" to open
+                             *  the list (5 Oct). A clash or a note due keeps the
+                             *  chip, which says what is wrong. */
+                            const settledLine = on && picks.length > 0 && !listOpen && groupLines.length === 0 && notesDueHere === 0;
                             return (
                               <div key={r.process} className="border-b border-canvas-border last:border-b-0">
                                 {/* ── The name row ── tick, name, and (once the process
@@ -2756,15 +3780,15 @@ export default function ScopingWizard({ onCancel, onCreated, typePreselected, on
                                     <span className="min-w-0 flex items-center gap-2">
                                       <span title={r.process} className="text-[0.8125rem] font-medium text-ink-900 truncate">{r.process}</span>
                                       {qualitative && (
-                                        <span className="shrink-0 px-1.5 rounded border border-brand-200 bg-brand-50 text-[0.625rem] font-semibold text-brand-700 leading-4">Qualitative</span>
+                                        <span className="shrink-0 px-1.5 rounded border border-brand-200 bg-brand-50 text-[0.6875rem] font-semibold text-brand-700 leading-4">Qualitative</span>
                                       )}
                                     </span>
                                   </button>
 
-                                  {on && (
+                                  {on && !settledLine && (
                                     <button
                                       type="button"
-                                      onClick={e => { e.stopPropagation(); setOpenProc(listOpen ? null : r.process); }}
+                                      onClick={e => { e.stopPropagation(); toggleProcOpen(r.process); }}
                                       aria-expanded={listOpen}
                                       aria-controls={listId}
                                       title={racmHandleLabel}
@@ -2785,11 +3809,48 @@ export default function ScopingWizard({ onCancel, onCreated, typePreselected, on
                                   )}
 
                                   {r.accounts > 0 && (
-                                    <span className="ml-auto shrink-0 text-[0.71875rem] text-ink-400 tabular-nums">
+                                    <span className="ml-auto shrink-0 text-[0.75rem] text-ink-400 tabular-nums">
                                       {money(r.total)} · {r.accounts} account{r.accounts === 1 ? '' : 's'}
                                     </span>
                                   )}
                                 </div>
+
+                                {settledLine && (
+                                  <div className="ml-11 mr-4 -mt-1 pb-2 space-y-0.5">
+                                    {picks.map((x, i) => {
+                                      const all = scopableControls(x).length;
+                                      const kept = keptOf(x).length;
+                                      const v = currentVersion(x);
+                                      return (
+                                        <p key={x.id} className="flex items-center gap-1.5 min-w-0 text-[0.75rem] text-ink-500">
+                                          <Check size={11} className="shrink-0 text-compliant-600" aria-hidden />
+                                          {/* The name gives way (ellipsis + title); the source and
+                                              the count never do — they were the part being cut. */}
+                                          <span className="min-w-0 truncate text-ink-800" title={`${x.name}${v > 0 ? ` v${v}` : ''} · from the RACM Library`}>
+                                            {x.name}{v > 0 && <span className="tabular-nums text-ink-500"> v{v}</span>}
+                                          </span>
+                                          <span className="shrink-0 whitespace-nowrap tabular-nums">
+                                            · Library · {kept === all ? plural(all, 'control') : `${kept} of ${all} controls`}
+                                          </span>
+                                          {i === picks.length - 1 && (
+                                            <>
+                                              <span className="text-ink-300 shrink-0" aria-hidden>·</span>
+                                              <button
+                                                type="button"
+                                                onClick={() => toggleProcOpen(r.process)}
+                                                aria-expanded={false}
+                                                aria-label={`Change the RACM for ${r.process}`}
+                                                className="shrink-0 font-semibold text-brand-700 hover:underline cursor-pointer"
+                                              >
+                                                change
+                                              </button>
+                                            </>
+                                          )}
+                                        </p>
+                                      );
+                                    })}
+                                  </div>
+                                )}
 
                                 {/* ── Why ── a qualitative pick asks for its reason
                                     from the list first, then the note. */}
@@ -2855,25 +3916,39 @@ export default function ScopingWizard({ onCancel, onCreated, typePreselected, on
                                       transition={{ duration: 0.18, ease: [0.2, 0, 0, 1] }}
                                       className="overflow-hidden"
                                     >
-                                      <div className="ml-[2.75rem] mr-4 pb-3">
+                                      <div className="ml-11 mr-4 pb-3">
                                         {groupLines.length > 0 && <ClashNote lines={groupLines} />}
                                         {nothingOnTab ? (
-                                          <div className="flex items-center gap-3">
-                                            <p className="flex-1 min-w-0 text-[0.71875rem] text-ink-500 leading-relaxed">
+                                          // Text on its own line, buttons under it — side by side
+                                          // the text was squeezed into a five-line column.
+                                          <div className="flex flex-col items-start gap-2">
+                                            <p className="min-w-0 text-[0.75rem] text-ink-500 leading-relaxed">
                                               {draftRacmsFor(r.process).length > 0
                                                 // The RACM exists — it just isn't publishable work yet, and
                                                 // "upload one" would send the reader to build a second copy.
-                                                ? <>{draftRacmsFor(r.process).length === 1 ? 'There is a RACM for this process, but it is still a draft' : `There are ${draftRacmsFor(r.process).length} RACMs for this process, but all of them are still drafts`}. Publish {draftRacmsFor(r.process).length === 1 ? 'it' : 'one'} on the RACM tab, upload another, or untick {r.process} and say why.</>
-                                                : <>Upload one, or untick {r.process} and say why.</>}
+                                                ? <>{draftRacmsFor(r.process).length === 1 ? 'There is a RACM for this process, but it is still a draft' : `There are ${draftRacmsFor(r.process).length} RACMs for this process, but all of them are still drafts`}. Publish {draftRacmsFor(r.process).length === 1 ? 'it' : 'one'} in the RACM Library, upload another, or untick {r.process} and say why.</>
+                                                : <>No published RACM for this process in the RACM Library. Upload one, pick another from the Library, or untick {r.process} and say why.</>}
                                             </p>
+                                            <div className="flex items-center gap-2 flex-wrap">
+                                            {publishedLibrary.length > 0 && (
+                                              <button
+                                                type="button"
+                                                onClick={() => setLibPickerFor(p => (p === r.process ? null : r.process))}
+                                                aria-expanded={libPickerFor === r.process}
+                                                className="shrink-0 h-7 px-3 inline-flex items-center gap-1.5 rounded-lg border border-canvas-border bg-white text-[0.75rem] font-semibold text-ink-700 hover:border-ink-300 transition-colors cursor-pointer"
+                                              >
+                                                Pick from Library
+                                              </button>
+                                            )}
                                             <button
                                               type="button"
                                               onClick={() => openRacmUpload(r.process)}
-                                              title={`Upload a RACM for ${r.process} — it's saved to the RACM tab and ticked here`}
-                                              className="shrink-0 h-7 px-3 inline-flex items-center gap-1.5 rounded-lg bg-brand-600 text-white text-[0.71875rem] font-semibold hover:bg-brand-700 transition-colors cursor-pointer"
+                                              title={`Upload a RACM for ${r.process} — it's saved to the RACM Library and ticked here`}
+                                              className="shrink-0 h-7 px-3 inline-flex items-center gap-1.5 rounded-lg bg-brand-600 text-white text-[0.75rem] font-semibold hover:bg-brand-700 transition-colors cursor-pointer"
                                             >
                                               <Upload size={12} /> Upload RACM
                                             </button>
+                                            </div>
                                           </div>
                                         ) : (
                                           <>
@@ -2919,7 +3994,7 @@ export default function ScopingWizard({ onCancel, onCreated, typePreselected, on
                                                         className="group flex-1 min-w-0 flex items-center gap-3 py-2 text-left cursor-pointer"
                                                       >
                                                         <TickBox state={partial ? 'mixed' : ticked} />
-                                                        <span className="flex-1 min-w-0 truncate text-[0.78125rem] text-ink-900">
+                                                        <span className="flex-1 min-w-0 truncate text-[0.8125rem] text-ink-900">
                                                           {x.name}
                                                           {showEntity && <span className="text-ink-400"> · {x.entity}</span>}
                                                         </span>
@@ -2933,7 +4008,7 @@ export default function ScopingWizard({ onCancel, onCreated, typePreselected, on
                                                           aria-expanded={ctlOpen}
                                                           aria-controls={ctlListId}
                                                           title={ctlOpen ? 'Hide controls' : 'Show controls — untick any that don’t apply'}
-                                                          className="shrink-0 h-6 -mr-1 pl-1.5 pr-1 inline-flex items-center gap-1 rounded-md text-[0.71875rem] text-ink-500 tabular-nums hover:text-brand-700 hover:bg-brand-50 transition-colors cursor-pointer"
+                                                          className="shrink-0 h-6 -mr-1 pl-1.5 pr-1 inline-flex items-center gap-1 rounded-md text-[0.75rem] text-ink-500 tabular-nums hover:text-brand-700 hover:bg-brand-50 transition-colors cursor-pointer"
                                                         >
                                                           {partial
                                                             ? `${keptCount} of ${all.length} controls${ctlNotesDue > 0 ? ' · note due' : ''}`
@@ -2941,7 +4016,7 @@ export default function ScopingWizard({ onCancel, onCreated, typePreselected, on
                                                           <ChevronDown size={12} className={cn('shrink-0 transition-transform', ctlOpen && 'rotate-180')} />
                                                         </button>
                                                       ) : (
-                                                        <span className="shrink-0 text-[0.71875rem] text-ink-400 tabular-nums">
+                                                        <span className="shrink-0 text-[0.75rem] text-ink-400 tabular-nums">
                                                           {all.length} control{all.length === 1 ? '' : 's'}
                                                         </span>
                                                       )}
@@ -3029,13 +4104,59 @@ export default function ScopingWizard({ onCancel, onCreated, typePreselected, on
                                             <button
                                               type="button"
                                               onClick={() => openRacmUpload(r.process)}
-                                              title={`Upload a RACM for ${r.process} — it's saved to the RACM tab and ticked here`}
-                                              className="mt-1.5 -ml-2 h-7 px-2 inline-flex items-center gap-1.5 rounded-lg text-[0.71875rem] font-semibold text-brand-700 hover:bg-brand-50 transition-colors cursor-pointer"
+                                              title={`Upload a RACM for ${r.process} — it's saved to the RACM Library and ticked here`}
+                                              className="mt-1.5 -ml-2 h-7 px-2 inline-flex items-center gap-1.5 rounded-lg text-[0.75rem] font-semibold text-brand-700 hover:bg-brand-50 transition-colors cursor-pointer"
                                             >
                                               <Upload size={12} /> Upload a RACM
                                             </button>
+                                            {publishedLibrary.length > picks.length && (
+                                              <button
+                                                type="button"
+                                                onClick={() => setLibPickerFor(p => (p === r.process ? null : r.process))}
+                                                aria-expanded={libPickerFor === r.process}
+                                                className="mt-1.5 h-7 px-2 inline-flex items-center gap-1.5 rounded-lg text-[0.75rem] font-semibold text-brand-700 hover:bg-brand-50 transition-colors cursor-pointer"
+                                              >
+                                                Pick from Library
+                                              </button>
+                                            )}
                                           </>
                                         )}
+                                        {/* "Pick from Library" — every published RACM,
+                                            this process's own first. Picking one puts
+                                            it in place of what the process had. */}
+                                        {libPickerFor === r.process && (() => {
+                                          const pickedIds = new Set(picks.map(p => p.id));
+                                          const options = publishedLibrary
+                                            .filter(x => !pickedIds.has(x.id))
+                                            .sort((a, b) => Number(normaliseProcess(b.process) === r.process) - Number(normaliseProcess(a.process) === r.process));
+                                          return (
+                                            <div className="mt-2 rounded-lg border border-canvas-border bg-white max-h-56 overflow-y-auto" role="listbox" aria-label={`RACMs in the Library for ${r.process}`}>
+                                              {options.length === 0 ? (
+                                                <p className="px-3 py-2.5 text-[0.75rem] text-ink-400">No other published RACM in the Library.</p>
+                                              ) : options.map(x => {
+                                                const v = currentVersion(x);
+                                                const n = scopableControls(x).length;
+                                                return (
+                                                  <button
+                                                    key={x.id}
+                                                    type="button"
+                                                    role="option"
+                                                    aria-selected={false}
+                                                    onClick={() => pickFromLibrary(r.process, x)}
+                                                    className="w-full flex items-center gap-2 px-3 py-2 border-b border-canvas-border last:border-b-0 text-left hover:bg-brand-50/40 transition-colors cursor-pointer"
+                                                  >
+                                                    <span className="flex-1 min-w-0 truncate text-[0.75rem] text-ink-900" title={x.name}>
+                                                      {x.name}{v > 0 && <span className="text-ink-500 tabular-nums"> v{v}</span>}
+                                                    </span>
+                                                    <span className="shrink-0 text-[0.6875rem] text-ink-400 tabular-nums">
+                                                      {normaliseProcess(x.process) === r.process ? '' : `${normaliseProcess(x.process)} · `}{plural(n, 'control')}
+                                                    </span>
+                                                  </button>
+                                                );
+                                              })}
+                                            </div>
+                                          );
+                                        })()}
                                       </div>
                                     </motion.div>
                                   )}
@@ -3078,9 +4199,9 @@ export default function ScopingWizard({ onCancel, onCreated, typePreselected, on
               <div className="border border-border-light rounded-xl bg-white">
                 <div className="flex items-center gap-2 px-4 py-3">
                   <FileText size={14} className="text-primary shrink-0" />
-                  <span className="text-[13px] font-bold text-text">Recommended files</span>
-                  <span className="text-[11.5px] text-text-muted">{REQUIRED_DOCS.length} recommended · {REQUIRED_DOCS.length} total</span>
-                  <label className="ml-auto inline-flex items-center gap-1.5 px-3 py-1.5 rounded-md bg-primary hover:bg-primary-hover text-white text-[11.5px] font-semibold transition-colors cursor-pointer">
+                  <span className="text-[0.8125rem] font-bold text-text">Recommended files</span>
+                  <span className="text-[0.75rem] text-text-muted">{REQUIRED_DOCS.length} recommended · {REQUIRED_DOCS.length} total</span>
+                  <label className="ml-auto inline-flex items-center gap-1.5 px-3 py-1.5 rounded-md bg-primary hover:bg-primary-hover text-white text-[0.75rem] font-semibold transition-colors cursor-pointer">
                     <Upload size={12} /> {attached.length > 0 ? 'Add more' : 'Upload'}
                     <input
                       type="file"
@@ -3096,8 +4217,8 @@ export default function ScopingWizard({ onCancel, onCreated, typePreselected, on
                     const done = attached.some(a => a.req === d.id);
                     return (
                       <div key={d.id} className={`inline-flex items-center gap-2 px-3 py-2.5 rounded-lg border ${done ? 'border-compliant-100 bg-compliant-50/40' : 'border-border-light bg-white'}`}>
-                        <span className="text-[12.5px] font-semibold text-text">{d.name}</span>
-                        <span className="px-1.5 py-0.5 rounded-md border border-border text-[10px] font-bold text-text-muted">{d.formats}</span>
+                        <span className="text-[0.8125rem] font-semibold text-text">{d.name}</span>
+                        <span className="px-1.5 py-0.5 rounded-md border border-border text-[0.6875rem] font-bold text-text-muted">{d.formats}</span>
                         {done && <Check size={13} className="text-compliant-600 shrink-0" />}
                       </div>
                     );
@@ -3108,18 +4229,18 @@ export default function ScopingWizard({ onCancel, onCreated, typePreselected, on
               {attached.length > 0 && (
                 <div className="mt-3">
                   <div className="flex items-center justify-between mb-2">
-                    <span className="inline-flex items-center gap-1.5 text-[10.5px] font-bold uppercase tracking-wider text-text-muted">
+                    <span className="inline-flex items-center gap-1.5 text-[0.6875rem] font-bold uppercase tracking-wider text-text-muted">
                       Attached
-                      <span className="w-[18px] h-[18px] rounded-full bg-ink-900 text-white text-[10px] font-bold inline-flex items-center justify-center tabular-nums">{attached.length}</span>
+                      <span className="w-4.5 h-4.5 rounded-full bg-ink-900 text-white text-[0.625rem] font-bold inline-flex items-center justify-center tabular-nums">{attached.length}</span>
                     </span>
-                    <span className="text-[11.5px] text-text-muted tabular-nums">{reqSatisfied}/{REQUIRED_DOCS.length} recommended inputs satisfied</span>
+                    <span className="text-[0.75rem] text-text-muted tabular-nums">{reqSatisfied}/{REQUIRED_DOCS.length} recommended inputs satisfied</span>
                   </div>
                   <div className="grid grid-cols-2 gap-2">
                     {attached.map(a => (
                       <span key={a.id} className="flex items-center gap-1.5 pl-2.5 pr-1.5 h-9 rounded-lg border border-border-light bg-white min-w-0">
                         <FileText size={12} className="text-text-muted shrink-0" />
-                        <span className="text-[12px] text-text truncate">{a.name}</span>
-                        <span className="px-1.5 py-0.5 rounded bg-brand-50 text-brand-700 text-[9.5px] font-bold uppercase tracking-wide whitespace-nowrap shrink-0">{REQ_TAG[a.req]}</span>
+                        <span className="text-[0.75rem] text-text truncate">{a.name}</span>
+                        <span className="px-1.5 py-0.5 rounded bg-brand-50 text-brand-700 text-[0.6875rem] font-bold uppercase tracking-wide whitespace-nowrap shrink-0">{REQ_TAG[a.req]}</span>
                         <button
                           onClick={() => removeAttached(a.id)}
                           aria-label={`Remove ${a.name}`}
@@ -3131,7 +4252,7 @@ export default function ScopingWizard({ onCancel, onCreated, typePreselected, on
                     ))}
                   </div>
                   {(racmUpload === 'parsing' || tbUpload === 'parsing') && (
-                    <span className="mt-2 inline-flex items-center gap-1.5 text-[11.5px] text-text-muted">
+                    <span className="mt-2 inline-flex items-center gap-1.5 text-[0.75rem] text-text-muted">
                       <Loader2 size={12} className="animate-spin" /> Parsing…
                     </span>
                   )}
@@ -3142,7 +4263,7 @@ export default function ScopingWizard({ onCancel, onCreated, typePreselected, on
                 to it here, so the derivation stays visible on the step that
                 caused it. */}
             {extractedReady && entities.length > 0 && (
-              <div className="flex items-center gap-1.5 text-[11.5px] text-text-muted">
+              <div className="flex items-center gap-1.5 text-[0.75rem] text-text-muted">
                 <Check size={12} className="text-compliant-600 shrink-0" />
                 {entities.length} {entities.length === 1 ? 'entity' : 'entities'} mapped from the uploads — review them on Basics.
               </div>
@@ -3158,18 +4279,18 @@ export default function ScopingWizard({ onCancel, onCreated, typePreselected, on
                 <div className="mt-5">
                   <FieldLabel>Map accounts to processes — every extracted caption</FieldLabel>
                   <div className="border border-border-light rounded-xl bg-white overflow-hidden">
-                    <div className="grid grid-cols-[1.8fr_0.9fr_1.3fr] gap-3 px-4 py-2 text-[10.5px] uppercase tracking-wider font-semibold text-text-muted/80 border-b border-border-light bg-surface-2/50">
+                    <div className="grid grid-cols-[1.8fr_0.9fr_1.3fr] gap-3 px-4 py-2 text-[0.6875rem] uppercase tracking-wider font-semibold text-text-muted/80 border-b border-border-light bg-surface-2/50">
                       <div>Extracted caption</div><div>Entity</div><div>Process</div>
                     </div>
-                    <div className="max-h-[360px] overflow-y-auto">
+                    <div className="max-h-90 overflow-y-auto">
                       {captions.map(row => (
                         <div key={row.id} className="grid grid-cols-[1.8fr_0.9fr_1.3fr] gap-3 px-4 py-2 items-center border-b border-border-light last:border-b-0">
-                          <div className="text-[12.5px] text-text truncate">{row.caption}</div>
-                          <div className="text-[11.5px] text-text-muted">{entityShort(row.entityId, entities)}</div>
-                          <select
+                          <div className="text-[0.8125rem] text-text truncate">{row.caption}</div>
+                          <div className="text-[0.75rem] text-text-muted">{entityShort(row.entityId, entities)}</div>
+                          <select aria-label={`Process for ${row.caption}`}
                             value={captionProcess(row)}
                             onChange={e => setMapping(prev => ({ ...prev, [row.id]: e.target.value as ProcessName }))}
-                            className="text-[11.5px] text-text-secondary bg-white border border-border rounded-md px-2 py-1 outline-none focus:border-primary/40 cursor-pointer"
+                            className="text-[0.75rem] text-text-secondary bg-white border border-border rounded-md px-2 py-1 outline-none focus:border-primary/40 cursor-pointer"
                           >
                             {PROCESS_NAMES.map(p => <option key={p}>{p}</option>)}
                           </select>
@@ -3178,14 +4299,14 @@ export default function ScopingWizard({ onCancel, onCreated, typePreselected, on
                     </div>
                   </div>
                   {/* Helper line parked (user ask):
-                  <p className="text-[11px] text-text-muted mt-2">The processes come from the uploaded RACM — adjust any caption that landed on the wrong one.</p>
+                  <p className="text-[0.6875rem] text-text-muted mt-2">The processes come from the uploaded RACM — adjust any caption that landed on the wrong one.</p>
                   */}
                 </div>
 
                 {BEYOND_TB_CARD && (
                 <div className="mt-4 border border-border-light rounded-xl bg-white p-4">
-                  <div className="text-[11px] font-bold text-text-muted uppercase tracking-wider mb-1">Beyond the trial balance</div>
-                  <p className="text-[11px] text-text-muted mb-3 leading-relaxed">Always considered for scope — they never appear as TB captions.</p>
+                  <div className="text-[0.6875rem] font-bold text-text-muted uppercase tracking-wider mb-1">Beyond the trial balance</div>
+                  <p className="text-[0.6875rem] text-text-muted mb-3 leading-relaxed">Always considered for scope — they never appear as TB captions.</p>
                   <div className="space-y-1.5">
                     {BEYOND_TB.map(b => {
                       const on = beyond[b.id];
@@ -3203,8 +4324,8 @@ export default function ScopingWizard({ onCancel, onCreated, typePreselected, on
                             {on && <Check size={10} />}
                           </span>
                           <span>
-                            <span className="block text-[12px] font-semibold text-text">{b.name}</span>
-                            <span className="block text-[11px] text-text-muted leading-relaxed mt-0.5">{b.why}</span>
+                            <span className="block text-[0.75rem] font-semibold text-text">{b.name}</span>
+                            <span className="block text-[0.6875rem] text-text-muted leading-relaxed mt-0.5">{b.why}</span>
                           </span>
                         </button>
                       );
@@ -3233,8 +4354,8 @@ export default function ScopingWizard({ onCancel, onCreated, typePreselected, on
                       active ? 'border-primary/50 bg-primary/5 ring-1 ring-primary/20' : 'border-border-light bg-white hover:border-primary/30'
                     }`}
                   >
-                    <div className={`text-[12.5px] font-semibold ${active ? 'text-primary' : 'text-text'}`}>{b.label}</div>
-                    <div className="text-[11px] text-text-muted mt-1 leading-relaxed">{b.hint}</div>
+                    <div className={`text-[0.8125rem] font-semibold ${active ? 'text-primary' : 'text-text'}`}>{b.label}</div>
+                    <div className="text-[0.6875rem] text-text-muted mt-1 leading-relaxed">{b.hint}</div>
                   </button>
                 );
               })}
@@ -3245,24 +4366,24 @@ export default function ScopingWizard({ onCancel, onCreated, typePreselected, on
                 <div className="grid grid-cols-2 gap-4">
                   <div>
                     <FieldLabel>{basisOpt.benchmarkLabel} (₹ Cr)</FieldLabel>
-                    <input
+                    <input aria-label={`${basisOpt.benchmarkLabel} (₹ Cr)`}
                       type="number" min={0}
                       value={benchmark}
                       onChange={e => setBenchmark(Number(e.target.value))}
-                      className="w-full px-3 py-2 text-[13px] tabular-nums border border-border rounded-lg bg-white text-text outline-none focus:border-primary/40 focus:ring-2 focus:ring-primary/10"
+                      className="w-full px-3 py-2 text-[0.8125rem] tabular-nums border border-border rounded-lg bg-white text-text outline-none focus:border-primary/40 focus:ring-2 focus:ring-primary/10"
                     />
                   </div>
                   {basis !== 'custom' && (
                     <div>
                       <FieldLabel>Basis %</FieldLabel>
                       <div className="flex items-center gap-2">
-                        <input
+                        <input aria-label="Basis %"
                           type="number" min={0.1} max={100} step={0.1}
                           value={pct}
                           onChange={e => setPct(Number(e.target.value))}
-                          className="w-20 px-3 py-2 text-[13px] tabular-nums border border-border rounded-lg bg-white text-text outline-none focus:border-primary/40 focus:ring-2 focus:ring-primary/10"
+                          className="w-20 px-3 py-2 text-[0.8125rem] tabular-nums border border-border rounded-lg bg-white text-text outline-none focus:border-primary/40 focus:ring-2 focus:ring-primary/10"
                         />
-                        <span className="text-[12px] text-text-muted truncate">% of {basisOpt.benchmarkLabel.toLowerCase()}</span>
+                        <span className="text-[0.75rem] text-text-muted truncate">% of {basisOpt.benchmarkLabel.toLowerCase()}</span>
                       </div>
                     </div>
                   )}
@@ -3271,46 +4392,46 @@ export default function ScopingWizard({ onCancel, onCreated, typePreselected, on
                   <div>
                     <FieldLabel>Overall materiality (₹ Cr)</FieldLabel>
                     <div className="flex items-center gap-2">
-                      <div className="w-40 px-3 py-2 text-[13px] font-semibold tabular-nums border border-border-light rounded-lg bg-surface-2/60 text-text">
+                      <div className="w-40 px-3 py-2 text-[0.8125rem] font-semibold tabular-nums border border-border-light rounded-lg bg-surface-2/60 text-text">
                         {fmtCr(overallCr)}
                       </div>
-                      <span className="text-[12px] text-text-muted">= {pct}% × {fmtCr(benchmark)} — switch to Custom amount to set it directly</span>
+                      <span className="text-[0.75rem] text-text-muted">= {pct}% × {fmtCr(benchmark)} — switch to Custom amount to set it directly</span>
                     </div>
                   </div>
                 )}
                 <div>
                   <FieldLabel>Performance materiality (% of overall)</FieldLabel>
                   <div className="flex items-center gap-2">
-                    <input
+                    <input aria-label="Performance materiality (% of overall)"
                       type="number" min={50} max={75} step={5}
                       value={pmPct}
                       onChange={e => setPmPct(Number(e.target.value))}
-                      className="w-20 px-3 py-2 text-[13px] tabular-nums border border-border rounded-lg bg-white text-text outline-none focus:border-primary/40 focus:ring-2 focus:ring-primary/10"
+                      className="w-20 px-3 py-2 text-[0.8125rem] tabular-nums border border-border rounded-lg bg-white text-text outline-none focus:border-primary/40 focus:ring-2 focus:ring-primary/10"
                     />
-                    <span className="text-[12px] text-text-muted">% of overall — auditors typically set 50–75%</span>
+                    <span className="text-[0.75rem] text-text-muted">% of overall — auditors typically set 50–75%</span>
                   </div>
                 </div>
                 <div>
                   <FieldLabel>Clearly-trivial threshold (% of overall)</FieldLabel>
-                  <input
+                  <input aria-label="Clearly-trivial threshold (% of overall)"
                     type="number" min={1} max={10}
                     value={cttPct}
                     onChange={e => setCttPct(Number(e.target.value))}
-                    className="w-20 px-3 py-2 text-[13px] tabular-nums border border-border rounded-lg bg-white text-text outline-none focus:border-primary/40 focus:ring-2 focus:ring-primary/10"
+                    className="w-20 px-3 py-2 text-[0.8125rem] tabular-nums border border-border rounded-lg bg-white text-text outline-none focus:border-primary/40 focus:ring-2 focus:ring-primary/10"
                   />
                 </div>
               </div>
 
               {/* Computed ladder */}
               <div className="border border-border-light rounded-xl bg-white p-4">
-                <div className="text-[11px] font-bold text-text-muted uppercase tracking-wider mb-3">Computed thresholds</div>
+                <div className="text-[0.6875rem] font-bold text-text-muted uppercase tracking-wider mb-3">Computed thresholds</div>
                 <LadderRow label="Overall materiality" value={fmtCr(overallCr)} strong
                   note={basis === 'custom' ? 'Set directly' : `${pct}% × ${fmtCr(benchmark)}`} />
                 <LadderRow label="Performance materiality" value={fmtCr(overallCr * pmPct / 100)} note={`${pmPct}% of overall — the working threshold for testing`} />
                 <LadderRow label="Clearly trivial" value={fmtCr(overallCr * cttPct / 100)} note={`${cttPct}% of overall — below this, differences are passed`} last />
                 <div className="flex items-start gap-2 mt-3 pt-3 border-t border-border-light">
                   <Info size={13} className="text-text-muted shrink-0 mt-0.5" />
-                  <p className="text-[11.5px] text-text-muted leading-relaxed">
+                  <p className="text-[0.75rem] text-text-muted leading-relaxed">
                     Materiality is locked before testing starts. Captions at or above {fmtCr(overallCr)} are flagged automatically in the next step.
                   </p>
                 </div>
@@ -3327,8 +4448,8 @@ export default function ScopingWizard({ onCancel, onCreated, typePreselected, on
             {belowThreshold.length === 0 && (
               <div className="border border-dashed border-border rounded-xl bg-white/60 px-6 py-10 text-center">
                 <Info size={18} className="mx-auto text-text-muted mb-2" />
-                <div className="text-[13px] font-semibold text-text">Nothing sits below {fmtCr(overallCr)}</div>
-                <p className="text-[12px] text-text-secondary mt-1 max-w-md mx-auto leading-relaxed">
+                <div className="text-[0.8125rem] font-semibold text-text">Nothing sits below {fmtCr(overallCr)}</div>
+                <p className="text-[0.75rem] text-text-secondary mt-1 max-w-md mx-auto leading-relaxed">
                   Every caption is already flagged quantitatively at this materiality, so there is nothing left to scope in by judgement. Continue to the mapping step.
                 </p>
               </div>
@@ -3336,13 +4457,13 @@ export default function ScopingWizard({ onCancel, onCreated, typePreselected, on
             {belowThreshold.length > 0 && (
             <>
             <div className="flex items-center gap-2 mb-2">
-              <span className="text-[12px] font-semibold text-text">
+              <span className="text-[0.75rem] font-semibold text-text">
                 {quantScope.length} of {captions.length} captions cleared materiality automatically
               </span>
-              <span className="text-[11.5px] text-text-muted">across {entities.length} entities · threshold {fmtCr(overallCr)}</span>
+              <span className="text-[0.75rem] text-text-muted">across {entities.length} entities · threshold {fmtCr(overallCr)}</span>
             </div>
             <div className="border border-border-light rounded-xl bg-white overflow-hidden">
-              <div className="grid grid-cols-[1.6fr_0.7fr_0.7fr_1.7fr] gap-3 px-4 py-2 text-[10.5px] uppercase tracking-wider font-semibold text-text-muted/80 border-b border-border-light bg-surface-2/50">
+              <div className="grid grid-cols-[1.6fr_0.7fr_0.7fr_1.7fr] gap-3 px-4 py-2 text-[0.6875rem] uppercase tracking-wider font-semibold text-text-muted/80 border-b border-border-light bg-surface-2/50">
                 <div>Caption (below {fmtCr(overallCr)})</div><div>Entity</div><div className="text-right">Balance</div><div>Scope in</div>
               </div>
               {belowThreshold.map(row => {
@@ -3351,9 +4472,9 @@ export default function ScopingWizard({ onCancel, onCreated, typePreselected, on
                 return (
                   <div key={row.id} className={`border-b border-border-light last:border-b-0 ${on ? 'bg-brand-50/30' : ''}`}>
                     <div className="grid grid-cols-[1.6fr_0.7fr_0.7fr_1.7fr] gap-3 px-4 py-2.5 items-center">
-                      <div className="text-[12.5px] text-text">{row.caption}</div>
-                      <div className="text-[11.5px] text-text-muted">{entityShort(row.entityId, entities)}</div>
-                      <div className="text-[12px] font-mono tabular-nums text-right text-text-secondary">{fmtCr(row.balance)}</div>
+                      <div className="text-[0.8125rem] text-text">{row.caption}</div>
+                      <div className="text-[0.75rem] text-text-muted">{entityShort(row.entityId, entities)}</div>
+                      <div className="text-[0.75rem] font-mono tabular-nums text-right text-text-secondary">{fmtCr(row.balance)}</div>
                       <div className="flex items-center gap-2">
                         <button
                           role="switch"
@@ -3365,15 +4486,15 @@ export default function ScopingWizard({ onCancel, onCreated, typePreselected, on
                               ? { ...prev[row.id], on: false }
                               : { captionId: row.id, reason: prev[row.id]?.reason ?? QUAL_REASONS[0], note: prev[row.id]?.note ?? '', on: true },
                           }))}
-                          className={`relative w-8 h-[18px] rounded-full transition-colors cursor-pointer shrink-0 ${on ? 'bg-primary' : 'bg-surface-3'}`}
+                          className={`relative w-8 h-4.5 rounded-full transition-colors cursor-pointer shrink-0 ${on ? 'bg-primary' : 'bg-surface-3'}`}
                         >
-                          <span className={`absolute top-[2px] w-[14px] h-[14px] rounded-full bg-white shadow-sm transition-all ${on ? 'left-[18px]' : 'left-[2px]'}`} />
+                          <span className={`absolute top-0.5 w-3.5 h-3.5 rounded-full bg-white shadow-sm transition-all ${on ? 'left-4.5' : 'left-0.5'}`} />
                         </button>
                         {on && (
-                          <select
+                          <select aria-label="Qualitative reason"
                             value={q?.reason}
                             onChange={e => setQual(prev => ({ ...prev, [row.id]: { ...prev[row.id], reason: e.target.value as QualPick['reason'] } }))}
-                            className="text-[11.5px] text-text-secondary bg-white border border-border rounded-md px-2 py-1 outline-none focus:border-primary/40 cursor-pointer min-w-0"
+                            className="text-[0.75rem] text-text-secondary bg-white border border-border rounded-md px-2 py-1 outline-none focus:border-primary/40 cursor-pointer min-w-0"
                           >
                             {QUAL_REASONS.map(r => <option key={r}>{r}</option>)}
                           </select>
@@ -3382,7 +4503,7 @@ export default function ScopingWizard({ onCancel, onCreated, typePreselected, on
                     </div>
                     {on && q?.note && (
                       <div className="px-4 pb-2.5 -mt-1">
-                        <p className="text-[11.5px] text-text-muted leading-relaxed pl-0.5">{q.note}</p>
+                        <p className="text-[0.75rem] text-text-muted leading-relaxed pl-0.5">{q.note}</p>
                       </div>
                     )}
                   </div>
@@ -3396,13 +4517,13 @@ export default function ScopingWizard({ onCancel, onCreated, typePreselected, on
             {inScope.length === 0 && (
               <div className="border border-dashed border-border rounded-xl bg-white/60 px-6 py-8 text-center mt-4">
                 <AlertCircle size={18} className="mx-auto text-risk-700 mb-2" />
-                <div className="text-[13px] font-semibold text-text">Nothing is in scope at {fmtCr(overallCr)}</div>
-                <p className="text-[12px] text-text-secondary mt-1 max-w-md mx-auto leading-relaxed">
-                  No caption clears materiality and nothing is scoped in qualitatively — zero processes would derive, so there is no programme to create. Lower the threshold on the materiality step, or scope captions in above.
+                <div className="text-[0.8125rem] font-semibold text-text">Nothing is in scope at {fmtCr(overallCr)}</div>
+                <p className="text-[0.75rem] text-text-secondary mt-1 max-w-md mx-auto leading-relaxed">
+                  No caption clears materiality and nothing is scoped in qualitatively — zero processes would derive, so there is no engagement to create. Lower the threshold on the materiality step, or scope captions in above.
                 </p>
               </div>
             )}
-            <p className="text-[11.5px] text-text-muted mt-3">
+            <p className="text-[0.75rem] text-text-muted mt-3">
               {qualScope.length} caption{qualScope.length === 1 ? '' : 's'} scoped in qualitatively — they join the {quantScope.length} quantitative flags.
             </p>
           </StepShell>
@@ -3414,10 +4535,10 @@ export default function ScopingWizard({ onCancel, onCreated, typePreselected, on
           >
             <div className="rounded-lg border border-border overflow-hidden mb-4">
               <div className="px-3.5 py-2 border-b border-border bg-canvas">
-                <div className="text-[0.78125rem] font-semibold text-text">Sample sizes</div>
-                <p className="text-[0.71875rem] text-text-secondary mt-0.5">How many items to test, by how often the control runs and how the risk is rated.</p>
+                <div className="text-[0.8125rem] font-semibold text-text">Sample sizes</div>
+                <p className="text-[0.75rem] text-text-secondary mt-0.5">How many items to test, by how often the control runs and how the risk is rated.</p>
               </div>
-              <table className="w-full text-[0.78125rem]">
+              <table className="w-full text-[0.8125rem]">
                 <thead>
                   <tr className="text-[0.6875rem] uppercase tracking-wide text-text-muted">
                     <th className="text-left font-semibold px-3.5 py-2">How often it runs</th>
@@ -3437,11 +4558,14 @@ export default function ScopingWizard({ onCancel, onCreated, typePreselected, on
                       </td>
                       {(['low', 'medium', 'high'] as const).map(r => (
                         <td key={r} className="px-2 py-1.5 text-center">
-                          <input
-                            type="number" min={1} value={sampling.sizes[f][r]}
-                            onChange={e => setSize(f, r, Math.max(1, Math.floor(Number(e.target.value) || 0)))}
+                          <DraftNumberInput
+                            min={1} value={sampling.sizes[f][r]}
+                            onValue={n => setSize(f, r, Number.isFinite(n) ? Math.floor(n) : NaN)}
+                            onLeave={touch('sampling')}
                             aria-label={`${FREQUENCY_SAYS[f]}, ${r} risk`}
-                            className="w-16 px-2 py-1 text-center border border-border rounded-md text-[0.78125rem] text-text bg-white outline-none focus:border-primary/40"
+                            aria-invalid={!(sampling.sizes[f][r] >= 1) || undefined}
+                            className={cn('w-16 px-2 py-1 text-center border rounded-md text-[0.8125rem] text-text bg-white outline-none focus:border-primary/40',
+                              touched.sampling && !(sampling.sizes[f][r] >= 1) ? 'border-risk-300' : 'border-border')}
                           />
                         </td>
                       ))}
@@ -3450,16 +4574,17 @@ export default function ScopingWizard({ onCancel, onCreated, typePreselected, on
                 </tbody>
               </table>
             </div>
+            {touched.sampling && !samplingReady && <div className="-mt-3 mb-4"><Hint text="Every sample size must be at least 1" /></div>}
 
             <div className="grid grid-cols-2 gap-3 mb-4">
               <div>
-                <div className="text-[0.78125rem] font-semibold text-text mb-1.5">How items are selected</div>
+                <div className="text-[0.8125rem] font-semibold text-text mb-1.5">How items are selected</div>
                 <div className="flex flex-col gap-1.5">
                   {SAMPLING_METHODS.map(m => (
                     <button
                       key={m} type="button" role="radio" aria-checked={sampling.method === m}
                       onClick={() => setSampling(s => ({ ...s, method: m }))}
-                      className={cn('px-3 py-2 rounded-lg border text-left text-[0.78125rem] cursor-pointer transition-colors',
+                      className={cn('px-3 py-2 rounded-lg border text-left text-[0.8125rem] cursor-pointer transition-colors',
                         sampling.method === m ? 'border-brand-200 bg-brand-50 text-brand-700 font-semibold' : 'border-border text-text-secondary hover:text-text')}
                     >{m}</button>
                   ))}
@@ -3470,13 +4595,13 @@ export default function ScopingWizard({ onCancel, onCreated, typePreselected, on
               </div>
 
               <div>
-                <div className="text-[0.78125rem] font-semibold text-text mb-1.5">Across the year's rounds</div>
+                <div className="text-[0.8125rem] font-semibold text-text mb-1.5">Across the year's rounds</div>
                 <div className="flex flex-col gap-1.5">
                   {(['per-round', 'whole-period'] as const).map(b => (
                     <button
                       key={b} type="button" role="radio" aria-checked={sampling.roundBasis === b}
                       onClick={() => setSampling(s => ({ ...s, roundBasis: b }))}
-                      className={cn('px-3 py-2 rounded-lg border text-left text-[0.78125rem] cursor-pointer transition-colors',
+                      className={cn('px-3 py-2 rounded-lg border text-left text-[0.8125rem] cursor-pointer transition-colors',
                         sampling.roundBasis === b ? 'border-brand-200 bg-brand-50 text-brand-700 font-semibold' : 'border-border text-text-secondary hover:text-text')}
                     >{b === 'per-round' ? 'Per round' : 'Whole period'}</button>
                   ))}
@@ -3487,9 +4612,33 @@ export default function ScopingWizard({ onCancel, onCreated, typePreselected, on
               </div>
             </div>
 
+            {/* Any, all or none — the one answer here that is not a choice of one
+                (the Dubai ask: quarters, countries and entities). */}
+            <div className="mb-4">
+              <div className="text-[0.8125rem] font-semibold text-text mb-1.5">What every draw has to reach</div>
+              <div className="grid grid-cols-3 gap-1.5" role="group" aria-label="What every draw has to reach">
+                {SAMPLING_SPREADS.map(x => {
+                  const on = sampling.spread.includes(x.id);
+                  return (
+                    <button
+                      key={x.id} type="button" role="checkbox" aria-checked={on}
+                      onClick={() => setSampling(s => ({ ...s, spread: on ? s.spread.filter(i => i !== x.id) : [...s.spread, x.id] }))}
+                      className={cn('px-3 py-2 rounded-lg border text-[0.8125rem] cursor-pointer transition-colors inline-flex items-center justify-center gap-1.5',
+                        on ? 'border-brand-200 bg-brand-50 text-brand-700 font-semibold' : 'border-border text-text-secondary hover:text-text')}
+                    >{on && <Check size={12} className="shrink-0" aria-hidden />}{x.label}</button>
+                  );
+                })}
+              </div>
+              <p className="text-[0.6875rem] text-text-muted mt-1.5 leading-relaxed">
+                {sampling.spread.length
+                  ? `Every control's draw is split across ${spreadLabel(sampling.spread).toLowerCase()}, with at least one item in each.`
+                  : 'Not spread — items fall wherever the selection puts them. Tick anything every draw has to reach.'}
+              </p>
+            </div>
+
             <div className="rounded-lg border border-border px-3.5 py-2.5 flex items-start gap-2">
               <Info size={13} className="text-text-muted shrink-0 mt-0.5" aria-hidden />
-              <p className="text-[0.71875rem] text-text-secondary leading-relaxed">
+              <p className="text-[0.75rem] text-text-secondary leading-relaxed">
                 This is your proposal. It becomes the agreed methodology when the reviewer signs it on the engagement's
                 Configuration tab — <span className="font-semibold text-text">testing waits for that signature</span>. Changing it afterwards creates a new version,
                 and an audit already running finishes on the version it started under.
@@ -3501,7 +4650,7 @@ export default function ScopingWizard({ onCancel, onCreated, typePreselected, on
         {step === REVIEW_STEP && (
           <StepShell
             title="Review"
-            sub={`Confirm the scope, and the RACMs it copies in, before the ${fy} programme is created.`}
+            sub={`Confirm the scope, and the RACMs it copies in, before the ${fy} engagement is created.`}
           >
             {/* S11 — the steps' answers in the order they were given: who,
                 the rule and its trial balance, the processes, then the RACMs
@@ -3509,9 +4658,11 @@ export default function ScopingWizard({ onCancel, onCreated, typePreselected, on
             <div className="grid grid-cols-1 gap-3 mb-4">
               <ReviewCard title="Engagement">
                 <ReviewRow label="Name" value={finalName} />
-                <ReviewRow label="Code" value={code.trim().toUpperCase()} />
-                <ReviewRow label="Owner" value={owner} />
-                <ReviewRow label="Cycle" value={<>{fyLabel} <span className="font-normal text-ink-400">· opinion as of {asOf}</span></>} />
+                {/* Neither is asked on Basics, so say where each came from. */}
+                <ReviewRow label="Code" value={<>{code.trim().toUpperCase()} <span className="font-normal text-ink-400">· assigned automatically</span></>} />
+                <ReviewRow label="Owner" value={<>{owner}{currentUser?.name === owner && <span className="font-normal text-ink-400"> · you</span>}</>} />
+                <ReviewRow label="Cycle" value={<>{yearLabel(yearBasis, fyEnd)} · {round ? ROUND_LABEL[round] : '—'} <span className="font-normal text-ink-400">· {windowFrom && windowTo ? `${fmtDate(windowFrom)} – ${fmtDate(windowTo)}` : `opinion as of ${asOf}`}</span></>} />
+                {carry && <ReviewRow label="Carried over from" value={<>{carry.engagement.name} <span className="font-normal text-ink-400">· {plural(carry.workspace.controls.length, 'control')}</span></>} />}
               </ReviewCard>
 
               {/* What was agreed on the Sampling step, said back before the
@@ -3519,6 +4670,7 @@ export default function ScopingWizard({ onCancel, onCreated, typePreselected, on
                   follows, so it does not belong only in a step nobody revisits. */}
               <ReviewCard title="Sampling methodology">
                 <ReviewRow label="Selection" value={sampling.method} />
+                <ReviewRow label="Spread across" value={spreadLabel(sampling.spread)} />
                 <ReviewRow label="Across rounds" value={sampling.roundBasis === 'per-round' ? 'Per round' : 'Whole period'} />
                 <ReviewRow label="Monthly control" value={`${sampling.sizes.Monthly.low}–${sampling.sizes.Monthly.high} items, by risk rating`} />
                 <p className="text-[0.6875rem] text-ink-400 mt-1 leading-relaxed">
@@ -3527,34 +4679,66 @@ export default function ScopingWizard({ onCancel, onCreated, typePreselected, on
               </ReviewCard>
 
               <ReviewCard title={soloEntity ? 'Company in scope' : 'Group & entities'}>
-                <div className="text-[13px] font-semibold text-text mb-1.5">{groupName}</div>
-                {scope.rows.map(r => {
-                  const e = entities.find(x => x.id === r.id);
-                  const on = companyInScope(r);
-                  const change = scopeChanges.find(c => c.entityId === r.id);
-                  return (
-                    <div key={r.id} className="py-0.5">
-                      <div className="flex items-center gap-1.5 text-[0.71875rem] text-text-secondary min-w-0">
-                        {r.type === 'Holding' ? <Landmark size={11} className="text-brand-700 shrink-0" /> : <Building2 size={11} className="text-text-muted shrink-0" />}
-                        <span className="truncate">{r.name}</span>
-                        {/* Its own span so a long name truncates before the country does. */}
-                        {e?.country?.trim() && <span className="shrink-0">· {e.country.trim()}</span>}
-                        <span className={cn('shrink-0 ml-auto pl-2 font-semibold', on ? 'text-ink-700' : 'text-ink-400')}>
-                          {on ? 'In scope' : 'Out'}
-                        </span>
+                <div className="text-[0.8125rem] font-semibold text-text mb-1.5">{groupName}</div>
+                {(() => {
+                  // A carried engagement's companies are the interim's; otherwise
+                  // the Scope step's tick. In-scope rows are listed; the Out rows
+                  // fold into one line (a register can run to 250+ companies).
+                  // An Out row with a note stays visible — the note is the point.
+                  const rows = carry
+                    ? entities.map(e => ({ id: e.id, name: e.name, type: e.type, on: carriedEntityIds.includes(e.id) }))
+                    : scope.rows.map(r => ({ id: r.id, name: r.name, type: r.type, on: companyInScope(r) }));
+                  const line = (r: typeof rows[number]) => {
+                    const e = entities.find(x => x.id === r.id);
+                    const change = carry ? undefined : scopeChanges.find(c => c.entityId === r.id);
+                    return (
+                      <div key={r.id} className="py-0.5">
+                        <div className="flex items-center gap-1.5 text-[0.75rem] text-text-secondary min-w-0">
+                          {r.type === 'Holding' ? <Landmark size={11} className="text-brand-700 shrink-0" /> : <Building2 size={11} className="text-text-muted shrink-0" />}
+                          <span className="truncate" title={r.name}>{r.name}</span>
+                          {/* Its own span so a long name truncates before the country does. */}
+                          {e?.country?.trim() && <span className="shrink-0">· {e.country.trim()}</span>}
+                          <span className={cn('shrink-0 ml-auto pl-2 font-semibold', r.on ? 'text-ink-700' : 'text-ink-400')}>
+                            {r.on ? 'In scope' : 'Out'}
+                          </span>
+                        </div>
+                        {/* A company moved against the trial balance says why —
+                            the part of the scope the numbers don't explain. */}
+                        {change?.note && (
+                          <p className="pl-4.25 text-[0.6875rem] text-ink-500 leading-relaxed">
+                            {change.inScope ? 'Brought in' : 'Taken out'} — {change.note}
+                          </p>
+                        )}
                       </div>
-                      {/* A company moved against the trial balance says why —
-                          the part of the scope the numbers don't explain. */}
-                      {change?.note && (
-                        <p className="pl-[17px] text-[0.6875rem] text-ink-500 leading-relaxed">
-                          {change.inScope ? 'Brought in' : 'Taken out'} — {change.note}
-                        </p>
+                    );
+                  };
+                  const noted = (id: string) => !carry && !!scopeChanges.find(c => c.entityId === id)?.note;
+                  const shown = rows.filter(r => r.on || noted(r.id));
+                  const folded = rows.filter(r => !r.on && !noted(r.id));
+                  return (
+                    <>
+                      {shown.map(line)}
+                      {folded.length > 0 && (
+                        <>
+                          <button
+                            type="button"
+                            onClick={() => setShowOutOnReview(v => !v)}
+                            aria-expanded={showOutOnReview}
+                            className="mt-1 inline-flex items-center gap-1 text-[0.75rem] font-semibold text-brand-700 hover:text-brand-800 cursor-pointer"
+                          >
+                            <ChevronDown size={12} className={cn('shrink-0 transition-transform', showOutOnReview && 'rotate-180')} />
+                            {plural(folded.length, 'company', 'companies')} out of scope
+                          </button>
+                          {showOutOnReview && <div className="mt-1">{folded.map(line)}</div>}
+                        </>
                       )}
-                    </div>
+                    </>
                   );
-                })}
+                })()}
                 <p className="mt-2 text-[0.6875rem] text-text-muted tabular-nums">
-                  {coveragePct}% of the group covered · target {COVERAGE_TARGET}%
+                  {carry
+                    ? `${plural(carriedEntityIds.length, 'company', 'companies')} carried over from the interim`
+                    : `${coveragePct}% of the group covered · target ${COVERAGE_TARGET}%`}
                 </p>
               </ReviewCard>
 
@@ -3584,7 +4768,16 @@ export default function ScopingWizard({ onCancel, onCreated, typePreselected, on
               <ReviewCard title="Processes">
                 <ReviewRow
                   label="In scope"
-                  value={scopedProcesses.length === 0 ? <span className="font-normal text-ink-400">None</span> : (
+                  value={carry ? (
+                    // Carried: the interim's processes, as the Scope step listed them.
+                    <span className="block space-y-1.5">
+                      {carriedProcesses.map(p => (
+                        <span key={p.process} className="block">
+                          {p.process}<span className="font-normal text-ink-400"> · carried over</span>
+                        </span>
+                      ))}
+                    </span>
+                  ) : scopedProcesses.length === 0 ? <span className="font-normal text-ink-400">None</span> : (
                     <span className="block space-y-1.5">
                       {scopedProcesses.map(r => {
                         const move = procChanges.find(c => c.process === r.process);
@@ -3620,7 +4813,24 @@ export default function ScopingWizard({ onCancel, onCreated, typePreselected, on
 
               {/* What the engagement will actually test — copied now, so this is
                   the last place to see it before the copies are taken. */}
-              <ReviewCard title="RACMs from the RACM tab">
+              {carry ? (
+                <ReviewCard title="Controls carried over">
+                  {carriedProcesses.map(p => (
+                    <div key={p.process} className="flex items-baseline justify-between gap-3 py-1.5 border-b border-canvas-border">
+                      <span className="text-[0.75rem] font-semibold text-ink-900 min-w-0 truncate" title={p.process}>{p.process}</span>
+                      <span className="text-[0.6875rem] text-ink-500 tabular-nums shrink-0">{plural(p.controls, 'control')}</span>
+                    </div>
+                  ))}
+                  <div className="flex items-baseline justify-between gap-3 pt-2">
+                    <span className="text-[0.75rem] font-semibold text-ink-900">Total</span>
+                    <span className="text-[0.8125rem] font-bold tabular-nums text-ink-900">{plural(carriedControlCount, 'control')}</span>
+                  </div>
+                  {carriedOpenFindings > 0 && (
+                    <p className="text-[0.6875rem] text-ink-500 mt-1.5">{plural(carriedOpenFindings, 'open finding')} carry over with their controls.</p>
+                  )}
+                </ReviewCard>
+              ) : (
+              <ReviewCard title="RACMs from the RACM Library">
                 {pickedByProcess.map(g => {
                   const count = g.racms.reduce((s, r) => s + keptOf(r).length, 0);
                   return (
@@ -3635,7 +4845,7 @@ export default function ScopingWizard({ onCancel, onCreated, typePreselected, on
                         const outs = ctlChanges.filter(c => c.racmId === r.id);
                         return (
                           <div key={r.id} className="mt-1">
-                            <div className="flex items-baseline justify-between gap-3 text-[0.71875rem]">
+                            <div className="flex items-baseline justify-between gap-3 text-[0.75rem]">
                               <span className="min-w-0 truncate text-ink-600" title={r.name}>{r.name}</span>
                               <span className="shrink-0 text-ink-400 tabular-nums">{kept < total ? `${kept} of ${total}` : kept}</span>
                             </div>
@@ -3664,6 +4874,7 @@ export default function ScopingWizard({ onCancel, onCreated, typePreselected, on
                   </span>
                 </div>
               </ReviewCard>
+              )}
             </div>
 
             {/* PARKED (S11) — the Review this step showed before creation
@@ -3687,9 +4898,9 @@ export default function ScopingWizard({ onCancel, onCreated, typePreselected, on
               )}
               <div className="grid grid-cols-1 gap-3 mb-4">
                 <ReviewCard title={soloEntity ? 'Company in scope' : 'Group & entities'}>
-                  <div className="text-[13px] font-semibold text-text mb-1.5">{groupName}</div>
+                  <div className="text-[0.8125rem] font-semibold text-text mb-1.5">{groupName}</div>
                   {entities.map(e => (
-                    <div key={e.id} className="flex items-center gap-1.5 text-[11.5px] text-text-secondary py-0.5 min-w-0">
+                    <div key={e.id} className="flex items-center gap-1.5 text-[0.75rem] text-text-secondary py-0.5 min-w-0">
                       {e.type === 'Holding' ? <Landmark size={11} className="text-brand-700 shrink-0" /> : <Building2 size={11} className="text-text-muted shrink-0" />}
                       <span className="truncate">{e.name}</span>
                       {/* Its own span so a long name truncates before the country does. */}
@@ -3697,7 +4908,7 @@ export default function ScopingWizard({ onCancel, onCreated, typePreselected, on
                       {/* Say plainly whether the matrix is in — a missing RACM is
                           the thing that stalls the engagement later. */}
                       {entityRacm[e.id]
-                        ? <span className="inline-flex items-center gap-1 text-text-muted shrink-0"><FileText size={10} /> <span className="max-w-[140px] truncate">{entityRacm[e.id].name}</span></span>
+                        ? <span className="inline-flex items-center gap-1 text-text-muted shrink-0"><FileText size={10} /> <span className="max-w-35 truncate">{entityRacm[e.id].name}</span></span>
                         : <span className="text-text-muted shrink-0">· no RACM yet</span>}
                     </div>
                   ))}
@@ -3721,7 +4932,7 @@ export default function ScopingWizard({ onCancel, onCreated, typePreselected, on
                     {GROUP_DOCS.map(d => {
                       const doc = attached.find(a => a.req === d.id);
                       return (
-                        <div key={d.id} className="flex items-center gap-1.5 text-[11.5px] py-0.5 min-w-0">
+                        <div key={d.id} className="flex items-center gap-1.5 text-[0.75rem] py-0.5 min-w-0">
                           {doc
                             ? <Check size={11} className="text-compliant-600 shrink-0" />
                             : <Circle size={9} className="text-text-muted shrink-0" />}
@@ -3730,7 +4941,7 @@ export default function ScopingWizard({ onCancel, onCreated, typePreselected, on
                         </div>
                       );
                     })}
-                    <div className="flex items-center gap-1.5 text-[11.5px] py-0.5">
+                    <div className="flex items-center gap-1.5 text-[0.75rem] py-0.5">
                       {racmCount > 0
                         ? <Check size={11} className="text-compliant-600 shrink-0" />
                         : <Circle size={9} className="text-text-muted shrink-0" />}
@@ -3746,14 +4957,14 @@ export default function ScopingWizard({ onCancel, onCreated, typePreselected, on
               </div>
 
               <div className="border border-border-light rounded-xl bg-white p-4">
-                <div className="text-[11px] font-bold text-text-muted uppercase tracking-wider mb-3">
+                <div className="text-[0.6875rem] font-bold text-text-muted uppercase tracking-wider mb-3">
                   RACMs — added from the RACM tab once the engagement exists
                 </div>
                 <div className="grid grid-cols-2 gap-2.5">
                   {derived.map(r => (
                     <div key={r.process} className="rounded-lg p-3 bg-surface-2/50">
-                      <div className="text-[12.5px] font-semibold text-text">{r.process}</div>
-                      <div className="text-[10.5px] text-text-muted mt-0.5 mb-2 tabular-nums">
+                      <div className="text-[0.8125rem] font-semibold text-text">{r.process}</div>
+                      <div className="text-[0.6875rem] text-text-muted mt-0.5 mb-2 tabular-nums">
                         {r.sources.length} source caption{r.sources.length === 1 ? '' : 's'} · {r.entities.join(', ')}
                       </div>
                       <SourceChips sources={r.sources} max={3} />
@@ -3761,8 +4972,8 @@ export default function ScopingWizard({ onCancel, onCreated, typePreselected, on
                   ))}
                   {BEYOND_TB.filter(b => beyond[b.id]).map(b => (
                     <div key={b.id} className="rounded-lg p-3 bg-surface-2/60">
-                      <div className="text-[12.5px] font-semibold text-text-secondary">{b.name}</div>
-                      <div className="text-[10.5px] text-text-muted mt-0.5">Group-level workstream — scoped without a TB caption</div>
+                      <div className="text-[0.8125rem] font-semibold text-text-secondary">{b.name}</div>
+                      <div className="text-[0.6875rem] text-text-muted mt-0.5">Group-level workstream — scoped without a TB caption</div>
                     </div>
                   ))}
                 </div>
@@ -3778,9 +4989,9 @@ export default function ScopingWizard({ onCancel, onCreated, typePreselected, on
       <div className="flex items-center justify-between py-4 border-t border-border-light sticky bottom-0 bg-canvas -mx-6 px-6">
         <button
           onClick={() => (step === firstStep
-            ? (typePreselected && onBackToType ? onBackToType() : onCancel())
+            ? (typePreselected && onBackToType ? attemptBackToType() : attemptClose())
             : setStep(s => s - 1))}
-          className="flex items-center gap-1.5 px-3.5 py-2 rounded-lg border border-border bg-white hover:bg-surface-2 text-[12.5px] font-semibold text-text-secondary transition-colors cursor-pointer"
+          className="flex items-center gap-1.5 px-3.5 py-2 rounded-lg border border-border bg-white hover:bg-surface-2 text-[0.8125rem] font-semibold text-text-secondary transition-colors cursor-pointer"
         >
           <ArrowLeft size={13} /> {step === firstStep && !(typePreselected && onBackToType) ? 'Cancel' : 'Back'}
         </button>
@@ -3788,13 +4999,13 @@ export default function ScopingWizard({ onCancel, onCreated, typePreselected, on
           <span className="flex items-center gap-2 min-w-0 pl-3">
             {/* What the greyed Continue is waiting for — see footerHint. */}
             {!canContinue && footerHint && (
-              <span className="text-[0.71875rem] text-high-700 font-medium text-right leading-snug">{footerHint}</span>
+              <span className="text-[0.75rem] text-high-700 font-medium text-right leading-snug">{footerHint}</span>
             )}
             {SCOPING_STEP && step === 2 && (
               <button
                 onClick={skipScoping}
                 title="Create without scoping — the workspace Overview flags the missing RACM; the trial balance and GL arrive on the audit that tests them"
-                className="px-3.5 py-2 rounded-lg border border-border bg-white hover:bg-surface-2 text-[12.5px] font-semibold text-text-secondary transition-colors cursor-pointer"
+                className="px-3.5 py-2 rounded-lg border border-border bg-white hover:bg-surface-2 text-[0.8125rem] font-semibold text-text-secondary transition-colors cursor-pointer"
               >
                 Skip for now
               </button>
@@ -3811,9 +5022,9 @@ export default function ScopingWizard({ onCancel, onCreated, typePreselected, on
           <button
             onClick={create}
             disabled={!readyToCreate}
-            className="flex items-center gap-1.5 px-4 py-2 bg-primary hover:bg-primary-hover text-white rounded-lg text-[13px] font-semibold transition-colors cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed"
+            className="flex items-center gap-1.5 px-4 py-2 bg-primary hover:bg-primary-hover text-white rounded-lg text-[0.8125rem] font-semibold transition-colors cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed"
           >
-            <Check size={13} /> Create {fy} programme
+            <Check size={13} /> Create {fy} engagement
           </button>
         )}
       </div>
@@ -3834,6 +5045,31 @@ export default function ScopingWizard({ onCancel, onCreated, typePreselected, on
         />,
         document.body,
       )}
+
+      {/* Discard guard — the classic wizard's dialog, word for word. Portalled
+          for the same reason as the RACM dialog above. */}
+      {confirmDiscard && createPortal(
+        <div className="fixed inset-0 z-[60] bg-ink-900/40 backdrop-blur-[2px] flex items-start justify-center pt-[18vh] px-5" onClick={() => setConfirmDiscard(null)}>
+          <div role="alertdialog" aria-modal="true" aria-labelledby="discard-engagement-title" className="w-full max-w-105 rounded-2xl bg-canvas-elevated border border-canvas-border shadow-xl" onClick={e => e.stopPropagation()}><DialogFocus />
+            <div className="px-5 pt-4 pb-3 border-b border-canvas-border">
+              <h2 id="discard-engagement-title" className="text-[0.9375rem] font-semibold text-ink-900">Discard this engagement?</h2>
+            </div>
+            <div className="p-5">
+              <p className="text-[0.8125rem] text-ink-600 leading-relaxed">The details you typed will be lost.</p>
+              <div className="mt-4 flex items-center justify-end gap-2">
+                <button onClick={() => setConfirmDiscard(null)} className="h-9 px-3.5 rounded-lg border border-canvas-border text-[0.8125rem] font-semibold text-ink-600 hover:text-ink-900 cursor-pointer">Keep editing</button>
+                <button
+                  onClick={() => { const then = confirmDiscard; setConfirmDiscard(null); if (then === 'type') leaveToType(); else onCancel(); }}
+                  className="h-9 px-3.5 rounded-lg bg-risk-600 text-white text-[0.8125rem] font-semibold hover:bg-risk-700 transition-colors cursor-pointer"
+                >
+                  Discard
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>,
+        document.body,
+      )}
     </div>
   );
 }
@@ -3846,7 +5082,7 @@ export default function ScopingWizard({ onCancel, onCreated, typePreselected, on
 function StepShell({ sub, children }: { title?: string; sub?: string; children: React.ReactNode }) {
   return (
     <div>
-      {sub && <p className="text-[12.5px] text-text-secondary mb-5 leading-relaxed">{sub}</p>}
+      {sub && <p className="text-[0.8125rem] text-text-secondary mb-5 leading-relaxed">{sub}</p>}
       {children}
     </div>
   );
@@ -3874,7 +5110,7 @@ export function StepRail({ steps, step, onStepClick }: {
           />
         ))}
       </div>
-      <div className="flex justify-between mt-1.5 text-[0.625rem] font-semibold text-ink-400 uppercase tracking-wider">
+      <div className="flex justify-between mt-1.5 text-[0.6875rem] font-semibold text-ink-400 uppercase tracking-wider">
         {steps.map((label, i) => (
           <span key={label} className={i === step ? 'text-brand-700' : ''}>{label}</span>
         ))}
@@ -3925,8 +5161,8 @@ function ScopeNote({ question, ariaLabel, editing, draft, onDraft, canSave, onSa
   children?: React.ReactNode;
 }) {
   return (
-    <div className={cn('p-3 rounded-lg border border-paper-300/70 bg-paper-50', className ?? 'ml-[2.75rem] mr-4 mb-3')}>
-      <p className="text-[0.71875rem] font-semibold text-ink-800 mb-1.5">{question}</p>
+    <div className={cn('p-3 rounded-lg border border-paper-300/70 bg-paper-50', className ?? 'ml-11 mr-4 mb-3')}>
+      <p className="text-[0.75rem] font-semibold text-ink-800 mb-1.5">{question}</p>
       {editing ? (
         <>
           {children}
@@ -3936,6 +5172,8 @@ function ScopeNote({ question, ariaLabel, editing, draft, onDraft, canSave, onSa
             rows={2}
             value={draft}
             onChange={e => onDraft(e.target.value)}
+            // Escape cancels this note only — never the wizard around it.
+            onKeyDown={e => { if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); onCancel(); } }}
             placeholder="Record your rationale — retained in the working paper."
             className="w-full text-[0.75rem] rounded-lg border border-canvas-border bg-white px-2.5 py-2 text-ink-800 placeholder:text-ink-400 outline-none focus:border-brand-400 resize-none transition-colors"
           />
@@ -3943,7 +5181,7 @@ function ScopeNote({ question, ariaLabel, editing, draft, onDraft, canSave, onSa
             <button
               type="button"
               onClick={onCancel}
-              className="h-7 px-2.5 rounded-lg text-[0.71875rem] font-semibold text-ink-500 hover:text-ink-800 hover:bg-white transition-colors cursor-pointer"
+              className="h-7 px-2.5 rounded-lg text-[0.75rem] font-semibold text-ink-500 hover:text-ink-800 hover:bg-white transition-colors cursor-pointer"
             >
               Cancel
             </button>
@@ -3951,7 +5189,7 @@ function ScopeNote({ question, ariaLabel, editing, draft, onDraft, canSave, onSa
               type="button"
               onClick={onSave}
               disabled={!canSave}
-              className="h-7 px-3 rounded-lg text-[0.71875rem] font-semibold bg-brand-600 text-white disabled:opacity-40 disabled:cursor-not-allowed enabled:hover:bg-brand-700 transition-colors cursor-pointer"
+              className="h-7 px-3 rounded-lg text-[0.75rem] font-semibold bg-brand-600 text-white disabled:opacity-40 disabled:cursor-not-allowed enabled:hover:bg-brand-700 transition-colors cursor-pointer"
             >
               Save
             </button>
@@ -3963,7 +5201,7 @@ function ScopeNote({ question, ariaLabel, editing, draft, onDraft, canSave, onSa
           <button
             type="button"
             onClick={onEdit}
-            className="shrink-0 h-6 px-2 rounded-md text-[0.71875rem] font-semibold text-brand-700 hover:bg-brand-50 transition-colors cursor-pointer"
+            className="shrink-0 h-6 px-2 rounded-md text-[0.75rem] font-semibold text-brand-700 hover:bg-brand-50 transition-colors cursor-pointer"
           >
             Edit
           </button>
@@ -3990,9 +5228,29 @@ function ClashNote({ lines }: { lines: string[] }) {
 function ReviewRow({ label, value }: { label: string; value: React.ReactNode }) {
   return (
     <div className="flex items-start justify-between gap-4 py-1.5 border-b border-canvas-border last:border-b-0">
-      <span className="text-[0.71875rem] text-ink-500 shrink-0">{label}</span>
+      <span className="text-[0.75rem] text-ink-500 shrink-0">{label}</span>
       <span className="text-[0.75rem] font-semibold text-ink-900 text-right min-w-0">{value}</span>
     </div>
+  );
+}
+
+/** A number box the user can clear and retype. It shows exactly what was typed
+ *  while focused and reports NaN for a blank box, so the step's own check —
+ *  not the keystroke — decides what is valid. `onLeave` fires on blur. */
+function DraftNumberInput({ value, onValue, onLeave, ...rest }: Omit<React.InputHTMLAttributes<HTMLInputElement>, 'value' | 'onChange' | 'type'> & {
+  value: number;
+  onValue: (n: number) => void;
+  onLeave?: () => void;
+}) {
+  const [text, setText] = useState<string | null>(null);
+  return (
+    <input
+      {...rest}
+      type="number"
+      value={text ?? (Number.isFinite(value) ? String(value) : '')}
+      onChange={e => { setText(e.target.value); onValue(e.target.value.trim() === '' ? NaN : Number(e.target.value)); }}
+      onBlur={() => { setText(null); onLeave?.(); }}
+    />
   );
 }
 
@@ -4001,7 +5259,7 @@ function Hint({ text }: { text: string }) {
 }
 
 function FieldLabel({ children }: { children: React.ReactNode }) {
-  return <div className="text-[11px] font-bold text-text-muted uppercase tracking-wider mb-1.5">{children}</div>;
+  return <div className="text-[0.6875rem] font-bold text-text-muted uppercase tracking-wider mb-1.5">{children}</div>;
 }
 
 function LadderRow({ label, value, note, strong, last }: {
@@ -4010,10 +5268,10 @@ function LadderRow({ label, value, note, strong, last }: {
   return (
     <div className={`py-2 ${last ? '' : 'border-b border-border-light'}`}>
       <div className="flex items-baseline justify-between gap-3">
-        <span className={`text-[12px] ${strong ? 'font-semibold text-text' : 'text-text-secondary'}`}>{label}</span>
-        <span className={`font-mono tabular-nums ${strong ? 'text-[15px] font-bold text-text' : 'text-[13px] text-text'}`}>{value}</span>
+        <span className={`text-[0.75rem] ${strong ? 'font-semibold text-text' : 'text-text-secondary'}`}>{label}</span>
+        <span className={`font-mono tabular-nums ${strong ? 'text-[0.9375rem] font-bold text-text' : 'text-[0.8125rem] text-text'}`}>{value}</span>
       </div>
-      {note && <div className="text-[10.5px] text-text-muted mt-0.5">{note}</div>}
+      {note && <div className="text-[0.6875rem] text-text-muted mt-0.5">{note}</div>}
     </div>
   );
 }
@@ -4021,8 +5279,8 @@ function LadderRow({ label, value, note, strong, last }: {
 function FunnelRow({ label, value, last }: { label: string; value: number; last?: boolean }) {
   return (
     <div className={`flex items-center justify-between py-1.5 ${last ? '' : 'border-b border-border-light'}`}>
-      <span className="text-[12px] text-text-secondary">{label}</span>
-      <span className="text-[13px] font-bold tabular-nums text-text">{value}</span>
+      <span className="text-[0.75rem] text-text-secondary">{label}</span>
+      <span className="text-[0.8125rem] font-bold tabular-nums text-text">{value}</span>
     </div>
   );
 }
@@ -4030,7 +5288,7 @@ function FunnelRow({ label, value, last }: { label: string; value: number; last?
 function ReviewCard({ title, children }: { title: string; children: React.ReactNode }) {
   return (
     <div className="border border-border-light rounded-xl bg-white p-4">
-      <div className="text-[11px] font-bold text-text-muted uppercase tracking-wider mb-2.5">{title}</div>
+      <div className="text-[0.6875rem] font-bold text-text-muted uppercase tracking-wider mb-2.5">{title}</div>
       {children}
     </div>
   );

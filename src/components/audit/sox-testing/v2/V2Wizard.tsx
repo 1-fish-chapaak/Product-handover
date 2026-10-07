@@ -212,7 +212,7 @@ export default function V2Wizard({ onCancel, onCreated }: Props) {
 
   return (
     <div className="flex flex-col min-h-full">
-      <div className="text-[11px] font-bold text-text-muted uppercase tracking-wider mb-4">New engagement · V2</div>
+      <div className="text-[0.6875rem] font-bold text-text-muted uppercase tracking-wider mb-4">New engagement · V2</div>
       <StepRail steps={STEPS} step={step} onStepClick={setStep} />
 
       <motion.div key={step} initial={{ opacity: 0, y: 6 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.18 }}>
@@ -229,11 +229,11 @@ export default function V2Wizard({ onCancel, onCreated }: Props) {
               <div className="grid grid-cols-2 gap-3">
                 <div>
                   <label className={labelCls}>Code <span className="text-risk-700">*</span></label>
-                  <input value={code} onChange={e => setCode(e.target.value)} className={`${inputCls} font-mono uppercase`} />
+                  <input aria-label="Code" value={code} onChange={e => setCode(e.target.value)} className={`${inputCls} font-mono uppercase`} />
                 </div>
                 <div>
                   <label className={labelCls}>Engagement owner <span className="text-risk-700">*</span></label>
-                  <select value={owner} onChange={e => setOwner(e.target.value)} className={selectCls}>
+                  <select aria-label="Engagement owner" value={owner} onChange={e => setOwner(e.target.value)} className={selectCls}>
                     {OWNER_NAMES.map(o => <option key={o} value={o}>{o}</option>)}
                   </select>
                 </div>
@@ -241,7 +241,7 @@ export default function V2Wizard({ onCancel, onCreated }: Props) {
               <div className="grid grid-cols-2 gap-3">
                 <div>
                   <label className={labelCls}>Fiscal year / audit period <span className="text-risk-700">*</span></label>
-                  <select value={fyEnd} onChange={e => setFyEnd(Number(e.target.value))} className={selectCls}>
+                  <select aria-label="Fiscal year / audit period" value={fyEnd} onChange={e => setFyEnd(Number(e.target.value))} className={selectCls}>
                     {FY_OPTIONS.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
                   </select>
                 </div>
@@ -291,8 +291,8 @@ export default function V2Wizard({ onCancel, onCreated }: Props) {
                       active ? 'border-primary/50 bg-primary/5 ring-1 ring-primary/20' : 'border-border-light bg-white hover:border-primary/30'
                     }`}
                   >
-                    <div className={`text-[12.5px] font-semibold ${active ? 'text-primary' : 'text-text'}`}>{b.label}</div>
-                    <div className="text-[11px] text-text-muted mt-1 leading-relaxed">{b.hint}</div>
+                    <div className={`text-[0.8125rem] font-semibold ${active ? 'text-primary' : 'text-text'}`}>{b.label}</div>
+                    <div className="text-[0.6875rem] text-text-muted mt-1 leading-relaxed">{b.hint}</div>
                   </button>
                 );
               })}
@@ -302,39 +302,39 @@ export default function V2Wizard({ onCancel, onCreated }: Props) {
                 <div className="grid grid-cols-2 gap-4">
                   <div>
                     <div className={labelCls}>{basisOpt.benchmarkLabel} (₹ Cr)</div>
-                    <input type="number" min={0} value={benchmark} onChange={e => setBenchmark(Number(e.target.value))}
-                      className="w-full px-3 py-2 text-[13px] tabular-nums border border-border rounded-lg bg-white text-text outline-none focus:border-primary/40 focus:ring-2 focus:ring-primary/10" />
+                    <input aria-label={`${basisOpt.benchmarkLabel} (₹ Cr)`} type="number" min={0} value={benchmark} onChange={e => setBenchmark(Number(e.target.value))}
+                      className="w-full px-3 py-2 text-[0.8125rem] tabular-nums border border-border rounded-lg bg-white text-text outline-none focus:border-primary/40 focus:ring-2 focus:ring-primary/10" />
                   </div>
                   {basis !== 'custom' && (
                     <div>
                       <div className={labelCls}>Basis %</div>
-                      <input type="number" min={0.1} max={100} step={0.05} value={pct} onChange={e => setPct(Number(e.target.value))}
-                        className="w-20 px-3 py-2 text-[13px] tabular-nums border border-border rounded-lg bg-white text-text outline-none focus:border-primary/40 focus:ring-2 focus:ring-primary/10" />
+                      <input aria-label="Basis %" type="number" min={0.1} max={100} step={0.05} value={pct} onChange={e => setPct(Number(e.target.value))}
+                        className="w-20 px-3 py-2 text-[0.8125rem] tabular-nums border border-border rounded-lg bg-white text-text outline-none focus:border-primary/40 focus:ring-2 focus:ring-primary/10" />
                     </div>
                   )}
                 </div>
                 <div>
                   <div className={labelCls}>Performance materiality (% of overall)</div>
                   <div className="flex items-center gap-2">
-                    <input type="number" min={50} max={75} step={5} value={pmPct} onChange={e => setPmPct(Number(e.target.value))}
-                      className="w-20 px-3 py-2 text-[13px] tabular-nums border border-border rounded-lg bg-white text-text outline-none focus:border-primary/40 focus:ring-2 focus:ring-primary/10" />
-                    <span className="text-[12px] text-text-muted">auditors typically set 50–75%</span>
+                    <input aria-label="Performance materiality (% of overall)" type="number" min={50} max={75} step={5} value={pmPct} onChange={e => setPmPct(Number(e.target.value))}
+                      className="w-20 px-3 py-2 text-[0.8125rem] tabular-nums border border-border rounded-lg bg-white text-text outline-none focus:border-primary/40 focus:ring-2 focus:ring-primary/10" />
+                    <span className="text-[0.75rem] text-text-muted">auditors typically set 50–75%</span>
                   </div>
                 </div>
                 <div>
                   <div className={labelCls}>Clearly-trivial threshold (% of overall)</div>
-                  <input type="number" min={1} max={10} value={cttPct} onChange={e => setCttPct(Number(e.target.value))}
-                    className="w-20 px-3 py-2 text-[13px] tabular-nums border border-border rounded-lg bg-white text-text outline-none focus:border-primary/40 focus:ring-2 focus:ring-primary/10" />
+                  <input aria-label="Clearly-trivial threshold (% of overall)" type="number" min={1} max={10} value={cttPct} onChange={e => setCttPct(Number(e.target.value))}
+                    className="w-20 px-3 py-2 text-[0.8125rem] tabular-nums border border-border rounded-lg bg-white text-text outline-none focus:border-primary/40 focus:ring-2 focus:ring-primary/10" />
                 </div>
               </div>
               <div className="border border-border-light rounded-xl bg-white p-4">
-                <div className="text-[11px] font-bold text-text-muted uppercase tracking-wider mb-3">Computed thresholds</div>
+                <div className="text-[0.6875rem] font-bold text-text-muted uppercase tracking-wider mb-3">Computed thresholds</div>
                 <LadderRow label="Overall materiality" value={fmtCr(overallCr)} note={basis === 'custom' ? 'Set directly' : `${pct}% × ${fmtCr(benchmark)}`} />
                 <LadderRow label="Performance materiality" value={fmtCr(pm)} strong note={`${pmPct}% of overall — the scoping threshold`} />
                 <LadderRow label="Clearly trivial" value={fmtCr(overallCr * cttPct / 100)} note={`${cttPct}% of overall`} last />
                 <div className="flex items-start gap-2 mt-3 pt-3 border-t border-border-light">
                   <Info size={13} className="text-text-muted shrink-0 mt-0.5" />
-                  <p className="text-[11.5px] text-text-muted leading-relaxed">
+                  <p className="text-[0.75rem] text-text-muted leading-relaxed">
                     Captions at or above {fmtCr(pm)} scope their entity in automatically.
                     If results shift mid-year, materiality can be revised from the programme
                     page — new areas scope in through the same derivation.
@@ -352,10 +352,10 @@ export default function V2Wizard({ onCancel, onCreated }: Props) {
           >
             <div className="max-w-xl mb-4">
               <div className={labelCls}>Group (listed / holding)</div>
-              <input value={groupName} onChange={e => setGroupName(e.target.value)} className={inputCls} />
+              <input aria-label="Group (listed / holding)" value={groupName} onChange={e => setGroupName(e.target.value)} className={inputCls} />
             </div>
             <div className="border border-border-light rounded-xl bg-white overflow-hidden mb-4">
-              <div className="grid grid-cols-[2.2fr_0.9fr_0.7fr_1.4fr_44px] gap-3 px-4 py-2 text-[10.5px] uppercase tracking-wider font-semibold text-text-muted/80 border-b border-border-light bg-surface-2/50">
+              <div className="grid grid-cols-[2.2fr_0.9fr_0.7fr_1.4fr_44px] gap-3 px-4 py-2 text-[0.6875rem] uppercase tracking-wider font-semibold text-text-muted/80 border-b border-border-light bg-surface-2/50">
                 <div>Entity</div><div>Type</div><div className="text-right">Group share</div><div>Trial balance</div><div />
               </div>
               {entities.map((ent, i) => {
@@ -366,37 +366,37 @@ export default function V2Wizard({ onCancel, onCreated }: Props) {
                       {ent.type === 'Holding'
                         ? <Landmark size={14} className="text-brand-700 shrink-0" />
                         : <Building2 size={14} className="text-text-muted shrink-0" />}
-                      <input
+                      <input aria-label="Entity name"
                         value={ent.name}
                         onChange={e => setEntities(prev => prev.map((x, j) => j === i ? { ...x, name: e.target.value } : x))}
-                        className="w-full text-[13px] text-text bg-transparent outline-none border-b border-transparent focus:border-primary/40 transition-colors py-0.5"
+                        className="w-full text-[0.8125rem] text-text bg-transparent outline-none border-b border-transparent focus:border-primary/40 transition-colors py-0.5"
                       />
                     </div>
-                    <select
+                    <select aria-label="Entity type"
                       value={ent.type}
                       onChange={e => setEntities(prev => prev.map((x, j) => j === i ? { ...x, type: e.target.value as V2Entity['type'] } : x))}
-                      className="text-[12px] text-text-secondary bg-white border border-border rounded-md px-2 py-1 outline-none focus:border-primary/40 cursor-pointer"
+                      className="text-[0.75rem] text-text-secondary bg-white border border-border rounded-md px-2 py-1 outline-none focus:border-primary/40 cursor-pointer"
                     >
                       <option>Holding</option>
                       <option>Subsidiary</option>
                     </select>
-                    <div className="text-[12px] font-mono tabular-nums text-right text-text-secondary">{ent.sharePct}%</div>
+                    <div className="text-[0.75rem] font-mono tabular-nums text-right text-text-secondary">{ent.sharePct}%</div>
                     <div className="min-w-0">
                       {up === undefined && (
                         <button
                           onClick={() => simulateUpload(ent.id)}
-                          className="flex items-center gap-1.5 px-2.5 py-1 rounded-md border border-border bg-white hover:bg-primary-xlight/40 hover:border-primary/30 text-[11px] font-semibold text-text-secondary hover:text-primary transition-colors cursor-pointer"
+                          className="flex items-center gap-1.5 px-2.5 py-1 rounded-md border border-border bg-white hover:bg-primary-xlight/40 hover:border-primary/30 text-[0.6875rem] font-semibold text-text-secondary hover:text-primary transition-colors cursor-pointer"
                         >
                           <Upload size={11} /> Upload TB
                         </button>
                       )}
                       {up === 'parsing' && (
-                        <span className="flex items-center gap-1.5 text-[11px] text-text-muted"><Loader2 size={11} className="animate-spin" /> Parsing…</span>
+                        <span className="flex items-center gap-1.5 text-[0.6875rem] text-text-muted"><Loader2 size={11} className="animate-spin" /> Parsing…</span>
                       )}
                       {typeof up === 'object' && (
                         <span className="flex items-center gap-1.5 min-w-0">
                           <FileSpreadsheet size={12} className="text-compliant-700 shrink-0" />
-                          <span className="text-[10.5px] font-mono text-text-secondary truncate">{up.file}</span>
+                          <span className="text-[0.6875rem] font-mono text-text-secondary truncate">{up.file}</span>
                         </span>
                       )}
                     </div>
@@ -413,13 +413,13 @@ export default function V2Wizard({ onCancel, onCreated }: Props) {
               })}
               <button
                 onClick={() => setEntities(prev => [...prev, { id: `v-new-${prev.length}-${Date.now()}`, name: '', type: 'Subsidiary', sharePct: 4 }])}
-                className="flex items-center gap-1.5 px-4 py-2.5 text-[12px] font-semibold text-primary hover:bg-primary/5 w-full transition-colors cursor-pointer"
+                className="flex items-center gap-1.5 px-4 py-2.5 text-[0.75rem] font-semibold text-primary hover:bg-primary/5 w-full transition-colors cursor-pointer"
               >
                 <Plus size={13} /> Add entity
               </button>
             </div>
             {!allUploaded && (
-              <p className="text-[11.5px] text-text-muted">Every entity needs its trial balance before the scope can be derived.</p>
+              <p className="text-[0.75rem] text-text-muted">Every entity needs its trial balance before the scope can be derived.</p>
             )}
           </StepShell>
         )}
@@ -432,13 +432,13 @@ export default function V2Wizard({ onCancel, onCreated }: Props) {
             {/* Coverage meter */}
             <div className="border border-border-light rounded-xl bg-white p-4 mb-4">
               <div className="flex items-center justify-between gap-3 flex-wrap mb-2">
-                <div className="text-[11px] font-bold text-text-muted uppercase tracking-wider">Group coverage</div>
-                <div className="flex items-center gap-2 text-[12px] text-text-secondary">
+                <div className="text-[0.6875rem] font-bold text-text-muted uppercase tracking-wider">Group coverage</div>
+                <div className="flex items-center gap-2 text-[0.75rem] text-text-secondary">
                   Target
-                  <input
+                  <input aria-label="Group coverage target (%)"
                     type="number" min={40} max={95} step={5} value={coverageTarget}
                     onChange={e => setCoverageTarget(Number(e.target.value))}
-                    className="w-16 px-2 py-1 text-[12px] tabular-nums border border-border rounded-md bg-white text-text outline-none focus:border-primary/40"
+                    className="w-16 px-2 py-1 text-[0.75rem] tabular-nums border border-border rounded-md bg-white text-text outline-none focus:border-primary/40"
                   />
                   % — agreed with the auditors, configurable
                 </div>
@@ -449,7 +449,7 @@ export default function V2Wizard({ onCancel, onCreated }: Props) {
                   style={{ width: `${Math.min(scope.coveragePct, 100)}%` }}
                 />
               </div>
-              <div className="flex items-center justify-between mt-1.5 text-[11.5px]">
+              <div className="flex items-center justify-between mt-1.5 text-[0.75rem]">
                 <span className={`font-semibold tabular-nums ${scope.coveragePct >= coverageTarget ? 'text-compliant-700' : 'text-risk-700'}`}>
                   {scope.coveragePct}% covered
                 </span>
@@ -471,10 +471,10 @@ export default function V2Wizard({ onCancel, onCreated }: Props) {
                         ? <Landmark size={13} className="text-brand-700 shrink-0" />
                         : <Building2 size={13} className="text-text-muted shrink-0" />}
                       <div className="min-w-0 flex-1">
-                        <span className={`text-[12.5px] font-semibold ${isOut ? 'text-text-muted' : 'text-text'}`}>{ent.name}</span>
-                        <span className="text-[11px] text-text-muted ml-2">{d.reason}</span>
+                        <span className={`text-[0.8125rem] font-semibold ${isOut ? 'text-text-muted' : 'text-text'}`}>{ent.name}</span>
+                        <span className="text-[0.6875rem] text-text-muted ml-2">{d.reason}</span>
                       </div>
-                      <span className="text-[11px] font-mono tabular-nums text-text-muted shrink-0">{ent.sharePct}%</span>
+                      <span className="text-[0.6875rem] font-mono tabular-nums text-text-muted shrink-0">{ent.sharePct}%</span>
                       <EntityStatusChip status={d.status} />
                       {(d.status === 'out' || d.status === 'coverage') && (
                         <button
@@ -482,16 +482,16 @@ export default function V2Wizard({ onCancel, onCreated }: Props) {
                           aria-checked={d.status === 'coverage'}
                           aria-label={`Keep ${ent.name} in scope`}
                           onClick={() => setCoverageOverrides(prev => ({ ...prev, [ent.id]: d.status === 'out' }))}
-                          className={`relative w-8 h-[18px] rounded-full transition-colors cursor-pointer shrink-0 ${d.status === 'coverage' ? 'bg-primary' : 'bg-surface-3'}`}
+                          className={`relative w-8 h-4.5 rounded-full transition-colors cursor-pointer shrink-0 ${d.status === 'coverage' ? 'bg-primary' : 'bg-surface-3'}`}
                         >
-                          <span className={`absolute top-[2px] w-[14px] h-[14px] rounded-full bg-white shadow-sm transition-all ${d.status === 'coverage' ? 'left-[18px]' : 'left-[2px]'}`} />
+                          <span className={`absolute top-0.5 w-3.5 h-3.5 rounded-full bg-white shadow-sm transition-all ${d.status === 'coverage' ? 'left-4.5' : 'left-0.5'}`} />
                         </button>
                       )}
                     </div>
                   );
                 })}
             </div>
-            <p className="text-[11.5px] text-text-muted mt-3">
+            <p className="text-[0.75rem] text-text-muted mt-3">
               {inEntities.length} of {entities.length} entities in scope. Qualitative picks on the
               next step can still pull an out entity in.
             </p>
@@ -504,39 +504,39 @@ export default function V2Wizard({ onCancel, onCreated }: Props) {
             sub={`Everything at or above ${fmtCr(pm)} is flagged automatically. Below the line, scope captions in by judgement — a pick pulls its entity into scope too.`}
           >
             <div className="flex items-center gap-2 mb-2">
-              <span className="text-[12px] font-semibold text-text">{scope.inScope.length} captions in scope</span>
-              <span className="text-[11.5px] text-text-muted">
+              <span className="text-[0.75rem] font-semibold text-text">{scope.inScope.length} captions in scope</span>
+              <span className="text-[0.75rem] text-text-muted">
                 {scope.inScope.filter(s => s.via === 'quant').length} above PM · {scope.inScope.filter(s => s.via === 'coverage').length} via coverage · {scope.inScope.filter(s => s.via === 'qual').length} qualitative
               </span>
             </div>
             <div className="border border-border-light rounded-xl bg-white overflow-hidden mb-4">
-              <div className="grid grid-cols-[1.8fr_0.9fr_0.7fr_0.9fr] gap-3 px-4 py-2 text-[10.5px] uppercase tracking-wider font-semibold text-text-muted/80 border-b border-border-light bg-surface-2/50">
+              <div className="grid grid-cols-[1.8fr_0.9fr_0.7fr_0.9fr] gap-3 px-4 py-2 text-[0.6875rem] uppercase tracking-wider font-semibold text-text-muted/80 border-b border-border-light bg-surface-2/50">
                 <div>In-scope caption</div><div>Entity</div><div className="text-right">Balance</div><div className="text-right">Via</div>
               </div>
-              <div className="max-h-[200px] overflow-y-auto">
+              <div className="max-h-50 overflow-y-auto">
                 {scope.inScope.map(({ caption: c, via }) => (
                   <div key={`${c.id}-${via}`} className="grid grid-cols-[1.8fr_0.9fr_0.7fr_0.9fr] gap-3 px-4 py-2 items-center border-b border-border-light last:border-b-0">
-                    <div className="text-[12.5px] text-text truncate">{c.caption}</div>
-                    <div className="text-[11.5px] text-text-muted">{v2EntityShort(c.entityId, entities)}</div>
-                    <div className="text-[12px] font-mono tabular-nums text-right text-text-secondary">{fmtCr(c.balance)}</div>
+                    <div className="text-[0.8125rem] text-text truncate">{c.caption}</div>
+                    <div className="text-[0.75rem] text-text-muted">{v2EntityShort(c.entityId, entities)}</div>
+                    <div className="text-[0.75rem] font-mono tabular-nums text-right text-text-secondary">{fmtCr(c.balance)}</div>
                     <div className="justify-self-end"><ViaChip via={via} /></div>
                   </div>
                 ))}
               </div>
             </div>
 
-            <div className="text-[11px] font-bold text-text-muted uppercase tracking-wider mb-2">Below {fmtCr(pm)} — scope in by judgement</div>
+            <div className="text-[0.6875rem] font-bold text-text-muted uppercase tracking-wider mb-2">Below {fmtCr(pm)} — scope in by judgement</div>
             <div className="border border-border-light rounded-xl bg-white overflow-hidden">
-              <div className="max-h-[240px] overflow-y-auto">
+              <div className="max-h-60 overflow-y-auto">
                 {belowPm.map(row => {
                   const q = qual[row.id];
                   const on = q?.on ?? false;
                   return (
                     <div key={row.id} className={`border-b border-border-light last:border-b-0 ${on ? 'bg-evidence-50/30' : ''}`}>
                       <div className="grid grid-cols-[1.7fr_0.8fr_0.6fr_1.6fr] gap-3 px-4 py-2 items-center">
-                        <div className="text-[12.5px] text-text truncate">{row.caption}</div>
-                        <div className="text-[11.5px] text-text-muted">{v2EntityShort(row.entityId, entities)}</div>
-                        <div className="text-[12px] font-mono tabular-nums text-right text-text-secondary">{fmtCr(row.balance)}</div>
+                        <div className="text-[0.8125rem] text-text truncate">{row.caption}</div>
+                        <div className="text-[0.75rem] text-text-muted">{v2EntityShort(row.entityId, entities)}</div>
+                        <div className="text-[0.75rem] font-mono tabular-nums text-right text-text-secondary">{fmtCr(row.balance)}</div>
                         <div className="flex items-center gap-2">
                           <button
                             role="switch"
@@ -548,15 +548,15 @@ export default function V2Wizard({ onCancel, onCreated }: Props) {
                                 ? { ...prev[row.id], on: false }
                                 : { captionId: row.id, reason: prev[row.id]?.reason ?? V2_QUAL_REASONS[0], note: prev[row.id]?.note ?? '', on: true },
                             }))}
-                            className={`relative w-8 h-[18px] rounded-full transition-colors cursor-pointer shrink-0 ${on ? 'bg-primary' : 'bg-surface-3'}`}
+                            className={`relative w-8 h-4.5 rounded-full transition-colors cursor-pointer shrink-0 ${on ? 'bg-primary' : 'bg-surface-3'}`}
                           >
-                            <span className={`absolute top-[2px] w-[14px] h-[14px] rounded-full bg-white shadow-sm transition-all ${on ? 'left-[18px]' : 'left-[2px]'}`} />
+                            <span className={`absolute top-0.5 w-3.5 h-3.5 rounded-full bg-white shadow-sm transition-all ${on ? 'left-4.5' : 'left-0.5'}`} />
                           </button>
                           {on && (
-                            <select
+                            <select aria-label="Qualitative reason"
                               value={q?.reason}
                               onChange={e => setQual(prev => ({ ...prev, [row.id]: { ...prev[row.id], reason: e.target.value as V2QualPick['reason'] } }))}
-                              className="text-[11px] text-text-secondary bg-white border border-border rounded-md px-2 py-1 outline-none focus:border-primary/40 cursor-pointer min-w-0"
+                              className="text-[0.6875rem] text-text-secondary bg-white border border-border rounded-md px-2 py-1 outline-none focus:border-primary/40 cursor-pointer min-w-0"
                             >
                               {V2_QUAL_REASONS.map(r => <option key={r}>{r}</option>)}
                             </select>
@@ -564,7 +564,7 @@ export default function V2Wizard({ onCancel, onCreated }: Props) {
                         </div>
                       </div>
                       {on && q?.note && (
-                        <div className="px-4 pb-2 -mt-0.5"><p className="text-[11px] text-text-muted leading-relaxed">{q.note}</p></div>
+                        <div className="px-4 pb-2 -mt-0.5"><p className="text-[0.6875rem] text-text-muted leading-relaxed">{q.note}</p></div>
                       )}
                     </div>
                   );
@@ -582,20 +582,20 @@ export default function V2Wizard({ onCancel, onCreated }: Props) {
             <div className="grid grid-cols-2 gap-4 items-start">
               <div className="space-y-4">
                 <div className="border border-border-light rounded-xl bg-white overflow-hidden">
-                  <div className="grid grid-cols-[1.7fr_1.2fr] gap-3 px-4 py-2 text-[10.5px] uppercase tracking-wider font-semibold text-text-muted/80 border-b border-border-light bg-surface-2/50">
+                  <div className="grid grid-cols-[1.7fr_1.2fr] gap-3 px-4 py-2 text-[0.6875rem] uppercase tracking-wider font-semibold text-text-muted/80 border-b border-border-light bg-surface-2/50">
                     <div>In-scope caption</div><div>Process</div>
                   </div>
-                  <div className="max-h-[300px] overflow-y-auto">
+                  <div className="max-h-75 overflow-y-auto">
                     {scope.inScope.map(({ caption: row }) => (
                       <div key={row.id} className="grid grid-cols-[1.7fr_1.2fr] gap-3 px-4 py-2 items-center border-b border-border-light last:border-b-0">
                         <div className="min-w-0">
-                          <span className="text-[12px] text-text truncate block">{row.caption}</span>
-                          <span className="text-[10.5px] text-text-muted">{v2EntityShort(row.entityId, entities)}</span>
+                          <span className="text-[0.75rem] text-text truncate block">{row.caption}</span>
+                          <span className="text-[0.6875rem] text-text-muted">{v2EntityShort(row.entityId, entities)}</span>
                         </div>
-                        <select
+                        <select aria-label={`Process for ${row.caption}`}
                           value={row.process}
                           onChange={e => setMapping(prev => ({ ...prev, [row.id]: e.target.value as V2ProcessName }))}
-                          className="text-[11.5px] text-text-secondary bg-white border border-border rounded-md px-2 py-1 outline-none focus:border-primary/40 cursor-pointer"
+                          className="text-[0.75rem] text-text-secondary bg-white border border-border rounded-md px-2 py-1 outline-none focus:border-primary/40 cursor-pointer"
                         >
                           {V2_PROCESS_NAMES.map(p => <option key={p}>{p}</option>)}
                         </select>
@@ -606,12 +606,12 @@ export default function V2Wizard({ onCancel, onCreated }: Props) {
                 <div className="border border-border-light rounded-xl bg-white p-4">
                   <div className="flex items-center gap-1.5 mb-2.5">
                     <Sparkles size={13} className="text-brand-700" />
-                    <span className="text-[11px] font-bold text-text-muted uppercase tracking-wider">Derived process RACMs</span>
+                    <span className="text-[0.6875rem] font-bold text-text-muted uppercase tracking-wider">Derived process RACMs</span>
                   </div>
                   {derived.map(r => (
                     <div key={r.area} className="flex items-center justify-between gap-2 py-1">
-                      <span className="text-[12.5px] font-semibold text-text">{r.area}</span>
-                      <span className="text-[11px] text-text-muted tabular-nums">{r.sources.length} caption{r.sources.length === 1 ? '' : 's'} · {r.entities.length} entit{r.entities.length === 1 ? 'y' : 'ies'}</span>
+                      <span className="text-[0.8125rem] font-semibold text-text">{r.area}</span>
+                      <span className="text-[0.6875rem] text-text-muted tabular-nums">{r.sources.length} caption{r.sources.length === 1 ? '' : 's'} · {r.entities.length} entit{r.entities.length === 1 ? 'y' : 'ies'}</span>
                     </div>
                   ))}
                 </div>
@@ -619,8 +619,8 @@ export default function V2Wizard({ onCancel, onCreated }: Props) {
 
               <div className="space-y-4">
                 <div className="border border-border-light rounded-xl bg-white p-4">
-                  <div className="text-[11px] font-bold text-text-muted uppercase tracking-wider mb-1">Group workstreams — each becomes a RACM</div>
-                  <p className="text-[11px] text-text-muted mb-3 leading-relaxed">Not display cards — these seed real RACM shells alongside the process RACMs.</p>
+                  <div className="text-[0.6875rem] font-bold text-text-muted uppercase tracking-wider mb-1">Group workstreams — each becomes a RACM</div>
+                  <p className="text-[0.6875rem] text-text-muted mb-3 leading-relaxed">Not display cards — these seed real RACM shells alongside the process RACMs.</p>
                   <div className="space-y-1.5">
                     {V2_WORKSTREAMS.map(w => {
                       const on = wsPicked.includes(w.id);
@@ -636,8 +636,8 @@ export default function V2Wizard({ onCancel, onCreated }: Props) {
                             {on && <Check size={10} />}
                           </span>
                           <span>
-                            <span className="block text-[12px] font-semibold text-text">{w.name}</span>
-                            <span className="block text-[11px] text-text-muted leading-relaxed mt-0.5">{w.why}</span>
+                            <span className="block text-[0.75rem] font-semibold text-text">{w.name}</span>
+                            <span className="block text-[0.6875rem] text-text-muted leading-relaxed mt-0.5">{w.why}</span>
                           </span>
                         </button>
                       );
@@ -646,8 +646,8 @@ export default function V2Wizard({ onCancel, onCreated }: Props) {
                 </div>
                 {wsPicked.includes('itgc') && (
                   <div className="border border-border-light rounded-xl bg-white p-4">
-                    <div className="text-[11px] font-bold text-text-muted uppercase tracking-wider mb-1">ITGC — scope the IT systems</div>
-                    <p className="text-[11px] text-text-muted mb-2.5 leading-relaxed">A separate scoping exercise: the systems that impact financial reporting, not the trial balance.</p>
+                    <div className="text-[0.6875rem] font-bold text-text-muted uppercase tracking-wider mb-1">ITGC — scope the IT systems</div>
+                    <p className="text-[0.6875rem] text-text-muted mb-2.5 leading-relaxed">A separate scoping exercise: the systems that impact financial reporting, not the trial balance.</p>
                     <div className="space-y-1">
                       {ITGC_SYSTEMS.map(s => {
                         const on = systems.includes(s.name);
@@ -662,8 +662,8 @@ export default function V2Wizard({ onCancel, onCreated }: Props) {
                             <span className={`w-4 h-4 rounded inline-flex items-center justify-center shrink-0 border ${on ? 'bg-primary border-primary text-white' : 'border-border bg-white'}`}>
                               {on && <Check size={10} />}
                             </span>
-                            <span className="text-[12px] font-semibold text-text">{s.name}</span>
-                            <span className="text-[10.5px] text-text-muted ml-auto">{s.role}</span>
+                            <span className="text-[0.75rem] font-semibold text-text">{s.name}</span>
+                            <span className="text-[0.6875rem] text-text-muted ml-auto">{s.role}</span>
                           </button>
                         );
                       })}
@@ -681,32 +681,32 @@ export default function V2Wizard({ onCancel, onCreated }: Props) {
             sub="Every RACM needs a process owner (who gives the data) and a control owner (who performs the control). Evidence requests and reminders go to these email addresses."
           >
             <div className="border border-border-light rounded-xl bg-white overflow-hidden">
-              <div className="grid grid-cols-[1fr_1.4fr_1.4fr] gap-3 px-4 py-2 text-[10.5px] uppercase tracking-wider font-semibold text-text-muted/80 border-b border-border-light bg-surface-2/50">
+              <div className="grid grid-cols-[1fr_1.4fr_1.4fr] gap-3 px-4 py-2 text-[0.6875rem] uppercase tracking-wider font-semibold text-text-muted/80 border-b border-border-light bg-surface-2/50">
                 <div>RACM</div><div>Process owner — gives the data</div><div>Control owner — performs the control</div>
               </div>
-              <div className="max-h-[380px] overflow-y-auto">
+              <div className="max-h-95 overflow-y-auto">
                 {allAreas.map(area => {
                   const row = peopleFor(area);
                   return (
                     <div key={area} className="grid grid-cols-[1fr_1.4fr_1.4fr] gap-3 px-4 py-2.5 items-center border-b border-border-light last:border-b-0">
-                      <div className="text-[12.5px] font-semibold text-text">{area}</div>
+                      <div className="text-[0.8125rem] font-semibold text-text">{area}</div>
                       <div>
                         <input
                           value={row.processOwner}
                           onChange={e => setPeople(prev => ({ ...prev, [area]: { ...peopleFor(area), processOwner: e.target.value } }))}
                           placeholder="Name"
-                          className="w-full text-[12px] text-text bg-transparent outline-none border-b border-transparent focus:border-primary/40 transition-colors py-0.5"
+                          className="w-full text-[0.75rem] text-text bg-transparent outline-none border-b border-transparent focus:border-primary/40 transition-colors py-0.5"
                         />
-                        <div className="text-[10.5px] font-mono text-text-muted truncate">{row.poEmail || '—'}</div>
+                        <div className="text-[0.6875rem] font-mono text-text-muted truncate">{row.poEmail || '—'}</div>
                       </div>
                       <div>
                         <input
                           value={row.controlOwner}
                           onChange={e => setPeople(prev => ({ ...prev, [area]: { ...peopleFor(area), controlOwner: e.target.value } }))}
                           placeholder="Name"
-                          className="w-full text-[12px] text-text bg-transparent outline-none border-b border-transparent focus:border-primary/40 transition-colors py-0.5"
+                          className="w-full text-[0.75rem] text-text bg-transparent outline-none border-b border-transparent focus:border-primary/40 transition-colors py-0.5"
                         />
-                        <div className="text-[10.5px] font-mono text-text-muted truncate">{row.coEmail || '—'}</div>
+                        <div className="text-[0.6875rem] font-mono text-text-muted truncate">{row.coEmail || '—'}</div>
                       </div>
                     </div>
                   );
@@ -731,11 +731,11 @@ export default function V2Wizard({ onCancel, onCreated }: Props) {
           >
             <div className="grid grid-cols-3 gap-3 mb-4">
               <ReviewCard title="Entity scope">
-                <div className="text-[13px] font-semibold text-text mb-1">{inEntities.length} of {entities.length} in scope</div>
-                <div className="text-[11.5px] text-text-secondary mb-2 tabular-nums">{scope.coveragePct}% coverage · target {coverageTarget}%</div>
+                <div className="text-[0.8125rem] font-semibold text-text mb-1">{inEntities.length} of {entities.length} in scope</div>
+                <div className="text-[0.75rem] text-text-secondary mb-2 tabular-nums">{scope.coveragePct}% coverage · target {coverageTarget}%</div>
                 {scope.decisions.filter(d => d.status !== 'out').map(d => (
                   <div key={d.entityId} className="flex items-center gap-1.5 py-0.5">
-                    <span className="text-[11.5px] text-text-secondary truncate">{entities.find(e => e.id === d.entityId)?.name}</span>
+                    <span className="text-[0.75rem] text-text-secondary truncate">{entities.find(e => e.id === d.entityId)?.name}</span>
                     <EntityStatusChip status={d.status} small />
                   </div>
                 ))}
@@ -754,28 +754,28 @@ export default function V2Wizard({ onCancel, onCreated }: Props) {
               </ReviewCard>
             </div>
             <div className="border border-border-light rounded-xl bg-white p-4">
-              <div className="text-[11px] font-bold text-text-muted uppercase tracking-wider mb-3">
+              <div className="text-[0.6875rem] font-bold text-text-muted uppercase tracking-wider mb-3">
                 RACMs to be generated — {derived.length + wsRacms.length} total
               </div>
               <div className="grid grid-cols-2 gap-2.5">
                 {derived.map(r => (
                   <div key={r.area} className="rounded-lg p-3 bg-surface-2/50">
-                    <div className="text-[12.5px] font-semibold text-text">{r.area}</div>
-                    <div className="text-[10.5px] text-text-muted mt-0.5 tabular-nums">
+                    <div className="text-[0.8125rem] font-semibold text-text">{r.area}</div>
+                    <div className="text-[0.6875rem] text-text-muted mt-0.5 tabular-nums">
                       {r.sources.length} caption{r.sources.length === 1 ? '' : 's'} · {r.entities.join(', ')}
                     </div>
-                    <div className="text-[10.5px] text-text-muted mt-1">
+                    <div className="text-[0.6875rem] text-text-muted mt-1">
                       PO {peopleFor(r.area).processOwner.split('—')[0].trim() || '—'} · CO {peopleFor(r.area).controlOwner.split('—')[0].trim() || '—'}
                     </div>
                   </div>
                 ))}
                 {wsRacms.map(r => (
                   <div key={r.area} className="rounded-lg p-3 bg-brand-50/40">
-                    <div className="text-[12.5px] font-semibold text-text">{r.area} <span className="text-[9.5px] font-bold uppercase tracking-wide text-brand-700 ml-1">workstream</span></div>
-                    <div className="text-[10.5px] text-text-muted mt-0.5">
+                    <div className="text-[0.8125rem] font-semibold text-text">{r.area} <span className="text-[0.6875rem] font-bold uppercase tracking-wide text-brand-700 ml-1">workstream</span></div>
+                    <div className="text-[0.6875rem] text-text-muted mt-0.5">
                       {r.systems ? r.systems.join(' · ') : 'Group level'}
                     </div>
-                    <div className="text-[10.5px] text-text-muted mt-1">
+                    <div className="text-[0.6875rem] text-text-muted mt-1">
                       PO {peopleFor(r.area).processOwner.split('—')[0].trim() || '—'} · CO {peopleFor(r.area).controlOwner.split('—')[0].trim() || '—'}
                     </div>
                   </div>
@@ -790,7 +790,7 @@ export default function V2Wizard({ onCancel, onCreated }: Props) {
       <div className="flex items-center justify-between py-4 border-t border-border-light sticky bottom-0 bg-canvas -mx-6 px-6">
         <button
           onClick={() => (step === 0 ? onCancel() : setStep(s => s - 1))}
-          className="flex items-center gap-1.5 px-3.5 py-2 rounded-lg border border-border bg-white hover:bg-surface-2 text-[12.5px] font-semibold text-text-secondary transition-colors cursor-pointer"
+          className="flex items-center gap-1.5 px-3.5 py-2 rounded-lg border border-border bg-white hover:bg-surface-2 text-[0.8125rem] font-semibold text-text-secondary transition-colors cursor-pointer"
         >
           <ArrowLeft size={13} /> {step === 0 ? 'Cancel' : 'Back'}
         </button>
@@ -798,7 +798,7 @@ export default function V2Wizard({ onCancel, onCreated }: Props) {
           <button
             onClick={() => canContinue && setStep(s => s + 1)}
             disabled={!canContinue}
-            className="flex items-center gap-1.5 px-4 py-2 bg-primary hover:bg-primary-hover text-white rounded-lg text-[13px] font-semibold transition-colors cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed"
+            className="flex items-center gap-1.5 px-4 py-2 bg-primary hover:bg-primary-hover text-white rounded-lg text-[0.8125rem] font-semibold transition-colors cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed"
           >
             Continue <ArrowRight size={13} />
           </button>
@@ -806,7 +806,7 @@ export default function V2Wizard({ onCancel, onCreated }: Props) {
           <button
             onClick={create}
             disabled={!canContinue}
-            className="flex items-center gap-1.5 px-4 py-2 bg-primary hover:bg-primary-hover text-white rounded-lg text-[13px] font-semibold transition-colors cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed"
+            className="flex items-center gap-1.5 px-4 py-2 bg-primary hover:bg-primary-hover text-white rounded-lg text-[0.8125rem] font-semibold transition-colors cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed"
           >
             <Check size={13} /> Create {fy} programme
           </button>
@@ -832,7 +832,7 @@ export function EntityStatusChip({ status, small }: { status: string; small?: bo
     : status === 'revision' ? 'In — revision'
     : 'Out of scope';
   return (
-    <span className={`inline-flex items-center shrink-0 rounded-full font-semibold ${cls} ${small ? 'px-1.5 h-4 text-[9px]' : 'px-2 h-5 text-[10px]'}`}>
+    <span className={`inline-flex items-center shrink-0 rounded-full font-semibold ${cls} ${small ? 'px-1.5 h-4 text-[0.625rem]' : 'px-2 h-5 text-[0.6875rem]'}`}>
       {label}
     </span>
   );
@@ -846,14 +846,14 @@ export function ViaChip({ via }: { via: 'quant' | 'qual' | 'coverage' | 'revisio
     revision: ['Revision', 'bg-evidence-50 text-evidence-700'],
   } as const;
   const [label, cls] = map[via];
-  return <span className={`inline-flex items-center px-2 h-5 rounded-full text-[10px] font-semibold ${cls}`}>{label}</span>;
+  return <span className={`inline-flex items-center px-2 h-5 rounded-full text-[0.6875rem] font-semibold ${cls}`}>{label}</span>;
 }
 
 function StepShell({ title, sub, children }: { title: string; sub: string; children: React.ReactNode }) {
   return (
     <div>
-      <h2 className="text-[18px] font-bold text-text">{title}</h2>
-      <p className="text-[12.5px] text-text-secondary mt-1 mb-5 max-w-2xl leading-relaxed">{sub}</p>
+      <h2 className="text-[1.125rem] font-bold text-text">{title}</h2>
+      <p className="text-[0.8125rem] text-text-secondary mt-1 mb-5 max-w-2xl leading-relaxed">{sub}</p>
       {children}
     </div>
   );
@@ -865,10 +865,10 @@ function LadderRow({ label, value, note, strong, last }: {
   return (
     <div className={`py-2 ${last ? '' : 'border-b border-border-light'}`}>
       <div className="flex items-baseline justify-between gap-3">
-        <span className={`text-[12px] ${strong ? 'font-semibold text-text' : 'text-text-secondary'}`}>{label}</span>
-        <span className={`font-mono tabular-nums ${strong ? 'text-[15px] font-bold text-text' : 'text-[13px] text-text'}`}>{value}</span>
+        <span className={`text-[0.75rem] ${strong ? 'font-semibold text-text' : 'text-text-secondary'}`}>{label}</span>
+        <span className={`font-mono tabular-nums ${strong ? 'text-[0.9375rem] font-bold text-text' : 'text-[0.8125rem] text-text'}`}>{value}</span>
       </div>
-      {note && <div className="text-[10.5px] text-text-muted mt-0.5">{note}</div>}
+      {note && <div className="text-[0.6875rem] text-text-muted mt-0.5">{note}</div>}
     </div>
   );
 }
@@ -876,8 +876,8 @@ function LadderRow({ label, value, note, strong, last }: {
 function FunnelRow({ label, value, last }: { label: string; value: number; last?: boolean }) {
   return (
     <div className={`flex items-center justify-between py-1.5 ${last ? '' : 'border-b border-border-light'}`}>
-      <span className="text-[12px] text-text-secondary">{label}</span>
-      <span className="text-[13px] font-bold tabular-nums text-text">{value}</span>
+      <span className="text-[0.75rem] text-text-secondary">{label}</span>
+      <span className="text-[0.8125rem] font-bold tabular-nums text-text">{value}</span>
     </div>
   );
 }
@@ -885,7 +885,7 @@ function FunnelRow({ label, value, last }: { label: string; value: number; last?
 function ReviewCard({ title, children }: { title: string; children: React.ReactNode }) {
   return (
     <div className="border border-border-light rounded-xl bg-white p-4">
-      <div className="text-[11px] font-bold text-text-muted uppercase tracking-wider mb-2.5">{title}</div>
+      <div className="text-[0.6875rem] font-bold text-text-muted uppercase tracking-wider mb-2.5">{title}</div>
       {children}
     </div>
   );

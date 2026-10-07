@@ -3,10 +3,10 @@ import { motion, AnimatePresence } from 'motion/react';
 import { Plus, Flag, Building2, X, FileSearch, RefreshCw } from 'lucide-react';
 import { useToast } from '../../../shared/Toast';
 import V2ScopingWizard from './V2ScopingWizard';
-import RollForwardWizard from '../RollForwardWizard';
 import ProgrammeView from '../ProgrammeView';
 import { fmtCr, type CyclePhase, type SoxProgramme } from '../soxTestingData';
 import { V2C_PROGRAMMES, registerV2CProgramme } from './v2ClassicStore';
+import DialogFocus from '../../../shared/DialogFocus';
 
 /**
  * SOX Testing · V2 — parity baseline: an exact copy of the Programmes tab
@@ -24,7 +24,7 @@ const PHASE_CLS: Record<CyclePhase, string> = {
   Reporting: 'bg-compliant-50 text-compliant-700',
 };
 
-type TabView = 'home' | 'wizard' | { programmeId: string } | { rollFromId: string };
+type TabView = 'home' | 'wizard' | { programmeId: string };
 
 interface Props {
   /** Routes into the classic SOX workspace (tabs + control testing). */
@@ -51,13 +51,6 @@ export default function V2Tab({ onOpenEngagement }: Props) {
   const openProgramme = typeof view === 'object' && 'programmeId' in view
     ? programmes.find(x => x.id === view.programmeId)
     : undefined;
-  const rollFrom = typeof view === 'object' && 'rollFromId' in view
-    ? programmes.find(x => x.id === view.rollFromId)
-    : undefined;
-
-  /** The annual action lives on the latest cycle only — roll it into next year. */
-  const asOfYear = (p: SoxProgramme) => Number(/\d{4}/.exec(p.asOf)?.[0] ?? 0);
-  const latestId = programmes.reduce((best, p) => (asOfYear(p) > asOfYear(best) ? p : best), programmes[0])?.id;
 
   return (
     <>
@@ -65,23 +58,23 @@ export default function V2Tab({ onOpenEngagement }: Props) {
         <div className="flex items-center justify-end mb-4">
           <button
             onClick={() => setView('wizard')}
-            className="shrink-0 flex items-center gap-2 px-4 py-2 bg-primary hover:bg-primary-hover text-white rounded-lg text-[13px] font-semibold transition-colors cursor-pointer"
+            className="shrink-0 flex items-center gap-2 px-4 py-2 bg-primary hover:bg-primary-hover text-white rounded-lg text-[0.8125rem] font-semibold transition-colors cursor-pointer"
           >
             <Plus size={14} /> New Engagement
           </button>
         </div>
 
-        <div className="text-[11px] font-bold text-text-muted uppercase tracking-wider mb-2">Programmes</div>
+        <div className="text-[0.6875rem] font-bold text-text-muted uppercase tracking-wider mb-2">Programmes</div>
         {programmes.length === 0 && (
           <div className="border border-dashed border-border rounded-xl bg-white/60 px-6 py-10 text-center">
             <FileSearch size={22} className="mx-auto text-text-muted mb-2.5" />
-            <div className="text-[13.5px] font-semibold text-text">No SOX programmes yet</div>
-            <p className="text-[12px] text-text-secondary mt-1 mb-4 max-w-sm mx-auto leading-relaxed">
+            <div className="text-[0.875rem] font-semibold text-text">No SOX programmes yet</div>
+            <p className="text-[0.75rem] text-text-secondary mt-1 mb-4 max-w-sm mx-auto leading-relaxed">
               Start with scoping — materiality, trial balances and the qualitative overlay decide what lands in scope.
             </p>
             <button
               onClick={() => setView('wizard')}
-              className="inline-flex items-center gap-2 px-4 py-2 bg-primary hover:bg-primary-hover text-white rounded-lg text-[13px] font-semibold transition-colors cursor-pointer"
+              className="inline-flex items-center gap-2 px-4 py-2 bg-primary hover:bg-primary-hover text-white rounded-lg text-[0.8125rem] font-semibold transition-colors cursor-pointer"
             >
               <Plus size={14} /> New Engagement
             </button>
@@ -104,29 +97,20 @@ export default function V2Tab({ onOpenEngagement }: Props) {
                 className="w-full text-left px-6 py-5 rounded-xl border border-border-light bg-white hover:border-primary/50 hover:shadow-sm transition-all cursor-pointer"
               >
                 <div className="flex items-center gap-2.5 flex-wrap">
-                  <h3 className="text-[14.5px] font-semibold text-text leading-snug">{p.name}</h3>
-                  <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-semibold ${PHASE_CLS[p.phase]}`}>
+                  <h3 className="text-[0.9375rem] font-semibold text-text leading-snug">{p.name}</h3>
+                  <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-[0.6875rem] font-semibold ${PHASE_CLS[p.phase]}`}>
                     {p.phase}
                   </span>
                   <span className="ml-auto flex items-center gap-1 shrink-0">
-                    {p.id === latestId && (
-                      <button
-                        onClick={e => { e.stopPropagation(); setView({ rollFromId: p.id }); }}
-                        title={`Carry ${p.fy} scoping and RACMs into the next cycle`}
-                        className="inline-flex items-center gap-1.5 px-2 py-1 rounded-md text-[11px] font-semibold text-primary hover:bg-primary/5 transition-colors cursor-pointer"
-                      >
-                        <RefreshCw size={12} /> Roll forward
-                      </button>
-                    )}
                     <button
                       onClick={e => { e.stopPropagation(); setView({ programmeId: p.id }); }}
-                      className="inline-flex items-center gap-1.5 px-2 py-1 rounded-md text-[11px] font-semibold text-primary hover:bg-primary/5 transition-colors cursor-pointer"
+                      className="inline-flex items-center gap-1.5 px-2 py-1 rounded-md text-[0.6875rem] font-semibold text-primary hover:bg-primary/5 transition-colors cursor-pointer"
                     >
                       <FileSearch size={12} /> Scoping summary
                     </button>
                   </span>
                 </div>
-                <div className="flex items-center gap-3 mt-2 text-[11.5px] text-text-secondary flex-wrap">
+                <div className="flex items-center gap-3 mt-2 text-[0.75rem] text-text-secondary flex-wrap">
                   {p.code && (<>
                     <span className="font-mono tracking-tight text-text-muted">{p.code}</span>
                     <span className="text-border">·</span>
@@ -155,7 +139,7 @@ export default function V2Tab({ onOpenEngagement }: Props) {
                 </div>
                 <div className="flex items-center gap-1.5 mt-2.5 flex-wrap">
                   {p.racms.slice(0, 7).map(r => (
-                    <span key={r.process} className="inline-flex items-center px-2 h-5 rounded-md text-[10.5px] font-semibold bg-surface-2 text-text-secondary border border-border-light">
+                    <span key={r.process} className="inline-flex items-center px-2 h-5 rounded-md text-[0.6875rem] font-semibold bg-surface-2 text-text-secondary border border-border-light">
                       {r.process}
                     </span>
                   ))}
@@ -169,15 +153,13 @@ export default function V2Tab({ onOpenEngagement }: Props) {
       <AnimatePresence>
         {view !== 'home' && (
           <FlowModal
-            key={view === 'wizard' ? 'wizard' : rollFrom ? `roll-${rollFrom.id}` : openProgramme?.id ?? 'programme'}
-            label={view === 'wizard' ? 'New engagement' : rollFrom ? 'Roll forward' : 'SOX programme'}
-            widthCls="w-[1000px]"
+            key={view === 'wizard' ? 'wizard' : openProgramme?.id ?? 'programme'}
+            label={view === 'wizard' ? 'New engagement' : 'SOX programme'}
+            widthCls="w-250"
             onClose={() => setView('home')}
           >
             {view === 'wizard' ? (
               <V2ScopingWizard onCancel={() => setView('home')} onCreated={handleCreated} />
-            ) : rollFrom ? (
-              <RollForwardWizard prior={rollFrom} onCancel={() => setView('home')} onCreated={handleCreated} />
             ) : openProgramme ? (
               <ProgrammeView
                 programme={openProgramme}
@@ -193,7 +175,7 @@ export default function V2Tab({ onOpenEngagement }: Props) {
 
 /** Same fixed-size modal shell as the classic tab — closes on X or Escape
  *  only, so an overlay click mid-wizard can't discard scoping work. */
-function FlowModal({ label, widthCls = 'w-[800px]', onClose, children }: {
+function FlowModal({ label, widthCls = 'w-200', onClose, children }: {
   label: string;
   widthCls?: string;
   onClose: () => void;
@@ -218,8 +200,9 @@ function FlowModal({ label, widthCls = 'w-[800px]', onClose, children }: {
           exit={{ opacity: 0, y: 10, scale: 0.98 }}
           transition={{ duration: 0.18 }}
           role="dialog" aria-modal="true" aria-label={label}
-          className={`pointer-events-auto relative ${widthCls} h-[800px] max-w-full max-h-full bg-canvas rounded-[1.25rem] border border-border-light shadow-[0_24px_64px_-16px_rgba(15,8,30,0.28)] overflow-hidden flex flex-col`}
+          className={`pointer-events-auto relative ${widthCls} h-200 max-w-full max-h-full bg-canvas rounded-[1.25rem] border border-border-light shadow-[0_24px_64px_-16px_rgba(15,8,30,0.28)] overflow-hidden flex flex-col`}
         >
+          <DialogFocus />
           <button
             onClick={onClose}
             aria-label="Close"
@@ -227,7 +210,7 @@ function FlowModal({ label, widthCls = 'w-[800px]', onClose, children }: {
           >
             <X size={16} />
           </button>
-          <div className="flex-1 overflow-y-auto p-6 pb-0">
+          <div className="flex-1 overflow-y-auto overscroll-contain p-6 pb-0">
             {children}
           </div>
         </motion.div>

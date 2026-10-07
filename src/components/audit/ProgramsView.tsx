@@ -12,6 +12,9 @@ import { useAuditLog } from '../../context/AdminDataContext';
 import FloatingLines from '../shared/FloatingLines';
 import { ChromaGrid, handleChromaCardMove } from '../reports/ChromaGrid';
 import { Button } from '../shared/Button';
+import { BP_COLORS } from '../governance/controlTypes';
+import { CHECK_CATALOG, PROCESS_LONG, catalogFor, readinessOf, useFreshWorkspace, useStdState } from '../../data/auditPlan';
+import type { ProcessCode } from '../../data/engagements';
 import ListPlaceholder from '../shared/ListPlaceholder';
 
 // ─── Types ──────────────────────────────────────────────────────────────────
@@ -24,7 +27,12 @@ interface Props {
   onNavigateToExecution?: (engagementId: string) => void;
   userProcesses: UserProcess[];
   addUserProcess: (p: UserProcess) => void;
+  /** New client: a process card opens its standard controls in the Control Library. */
+  onOpenProcessControls?: (code: string) => void;
 }
+
+/** The standard library's processes — what a new client's hub starts with. */
+const STD_PROCESSES: ProcessCode[] = ['P2P', 'O2C', 'R2R', 'S2C', 'INV', 'ITGC'];
 
 // ─── Constants ──────────────────────────────────────────────────────────────
 
@@ -50,17 +58,39 @@ const noun = (n: number, word: string) => `${word}${n === 1 ? '' : 's'}`;
 
 // ─── Component ──────────────────────────────────────────────────────────────
 
-export default function ProgramsView({ onSelectBP, userProcesses, addUserProcess }: Props) {
+export default function ProgramsView({ onSelectBP, userProcesses, addUserProcess, onOpenProcessControls }: Props) {
   const { addToast } = useToast();
   const { can } = useCan();
   const logEvent = useAuditLog();
   const [search, setSearch] = useState('');
   const [showCreateDrawer, setShowCreateDrawer] = useState(false);
 
-  const allProcesses: UserProcess[] = [
-    ...BUSINESS_PROCESSES.map(bp => ({ ...bp, status: 'Active' as const })),
-    ...userProcesses,
-  ];
+  const fresh = useFreshWorkspace();
+  const std = useStdState();
+
+  // A new client has no assessed processes of their own yet — only what the
+  // standard library brings, at the coverage it actually runs at (none, until
+  // workflows go live).
+  const stdProcess = (code: ProcessCode): UserProcess => {
+    const entries = catalogFor(code);
+    const auto = entries.filter(e => e.automatable);
+    const live = auto.filter(e => readinessOf(e, std) === 'live').length;
+    return {
+      id: `std-${code}`, name: PROCESS_LONG[code], abbr: code, color: BP_COLORS[code] ?? '#6a12cd',
+      risks: entries.length, controls: entries.length, coverage: auto.length ? Math.round((live / auto.length) * 100) : 0,
+      sops: 0, workflows: auto.length, status: 'Active',
+    };
+  };
+  const allProcesses: UserProcess[] = fresh
+    ? STD_PROCESSES.filter(code => CHECK_CATALOG.some(e => e.process === code)).map(stdProcess)
+    : [
+      ...BUSINESS_PROCESSES.map(bp => ({ ...bp, status: 'Active' as const })),
+      ...userProcesses,
+    ];
+  /** Card figures — the standard library's in a new workspace, the records' otherwise. */
+  const figures = (bp: UserProcess) => fresh
+    ? { coverage: bp.coverage, risks: bp.risks, controls: bp.controls, racms: 0 }
+    : { coverage: coverageForProcess(bp), risks: processRisks(bp.id).length, controls: processControls(bp.id).length, racms: racmsForProcess(bp.abbr) };
 
   const q = search.toLowerCase();
   const filteredProcesses = allProcesses.filter(bp =>
@@ -76,6 +106,7 @@ export default function ProgramsView({ onSelectBP, userProcesses, addUserProcess
   };
 
   const handleProcessClick = (bp: UserProcess) => {
+    if (fresh && onOpenProcessControls) { onOpenProcessControls(bp.abbr); return; }
     onSelectBP(bp.id);
   };
 
@@ -99,7 +130,11 @@ export default function ProgramsView({ onSelectBP, userProcesses, addUserProcess
             opacity={0.05}
           />
           <h1 className="text-[2.125rem] font-semibold tracking-tight text-ink-900 leading-[1.15]">Process Hub</h1>
-          <p className="text-[0.8125rem] text-text-secondary mt-2 max-w-md leading-relaxed">Track risk, control, and coverage across every business process you audit.</p>
+          <p className="text-[0.8125rem] text-text-secondary mt-2 max-w-md leading-relaxed">
+            {fresh
+              ? 'Your processes, as the standard library brings them. Coverage rises as their workflows go live.'
+              : 'Track risk, control, and coverage across every business process you audit.'}
+          </p>
         </div>
 
         {/* Toolbar — Search on the LEFT, New Process on the RIGHT. */}
@@ -110,7 +145,7 @@ export default function ProgramsView({ onSelectBP, userProcesses, addUserProcess
               aria-label="Search processes"
               className="pl-9 pr-3 py-2 text-[0.75rem] border border-canvas-border rounded-md bg-paper-50 text-text placeholder:text-text-muted outline-none focus:border-primary transition-colors w-48" />
           </div>
-          {can('bp_create') && (
+          {can('bp_create') && !fresh && (
           <button type="button" onClick={() => setShowCreateDrawer(true)}
             className="flex items-center gap-2 px-4 py-2 bg-primary hover:bg-primary-hover text-white rounded-md text-[0.8125rem] font-semibold transition-colors cursor-pointer shrink-0">
             <Plus size={14} />New Process
@@ -140,7 +175,7 @@ export default function ProgramsView({ onSelectBP, userProcesses, addUserProcess
           ) : (
             <ChromaGrid className={`grid gap-5 ${filteredProcesses.length === 1 ? 'grid-cols-1 max-w-[520px]' : 'grid-cols-1 md:grid-cols-2'}`} radius={320} damping={0.45} fadeOut={0.6}>
               {filteredProcesses.map((bp, i) => {
-                const coverage = coverageForProcess(bp);
+                const { coverage, risks, controls, racms } = figures(bp);
                 return (
                   <motion.button type="button" key={bp.id} initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.05 + i * 0.04 }}
                     aria-label={`Open ${bp.name}`}
@@ -164,10 +199,10 @@ export default function ProgramsView({ onSelectBP, userProcesses, addUserProcess
                       <div>
                         <div className={`font-mono text-[1.625rem] font-semibold tabular-nums leading-none ${coverage === 0 ? 'text-ink-400' : 'text-ink-900'}`}>{coverage}<span className="text-[0.9375rem] text-ink-400">%</span></div>
                         <span className="inline-flex items-center gap-1 text-[0.65625rem] uppercase tracking-wide text-ink-400 mt-2">
-                          Coverage
+                          {fresh ? 'Live coverage' : 'Coverage'}
                           <span
-                            title="Percent of identified risks that have at least one linked control."
-                            aria-label="Coverage: percent of identified risks that have at least one linked control."
+                            title={fresh ? 'Percent of automatable standard controls with a live workflow.' : 'Percent of identified risks that have at least one linked control.'}
+                            aria-label={fresh ? 'Live coverage: percent of automatable standard controls with a live workflow.' : 'Coverage: percent of identified risks that have at least one linked control.'}
                             className="inline-flex cursor-help"
                             onClick={e => e.stopPropagation()}
                           >
@@ -176,11 +211,11 @@ export default function ProgramsView({ onSelectBP, userProcesses, addUserProcess
                         </span>
                       </div>
                       <div className="flex items-baseline gap-1.5 text-[0.75rem] text-ink-400 pb-0.5">
-                        <span><span className="font-mono text-[0.8125rem] font-semibold tabular-nums text-ink-800">{processRisks(bp.id).length}</span> {noun(processRisks(bp.id).length, 'risk')}</span>
+                        <span><span className="font-mono text-[0.8125rem] font-semibold tabular-nums text-ink-800">{risks}</span> {noun(risks, 'risk')}</span>
                         <span className="text-ink-300" aria-hidden>·</span>
-                        <span><span className="font-mono text-[0.8125rem] font-semibold tabular-nums text-ink-800">{processControls(bp.id).length}</span> {noun(processControls(bp.id).length, 'control')}</span>
+                        <span><span className="font-mono text-[0.8125rem] font-semibold tabular-nums text-ink-800">{controls}</span> {noun(controls, fresh ? 'standard control' : 'control')}</span>
                         <span className="text-ink-300" aria-hidden>·</span>
-                        <span><span className="font-mono text-[0.8125rem] font-semibold tabular-nums text-ink-800">{racmsForProcess(bp.abbr)}</span> {noun(racmsForProcess(bp.abbr), 'RACM')}</span>
+                        <span><span className="font-mono text-[0.8125rem] font-semibold tabular-nums text-ink-800">{racms}</span> {noun(racms, 'RACM')}</span>
                       </div>
                     </div>
                     <div className="h-1.5 bg-paper-100 rounded-full overflow-hidden"><div className="h-full rounded-full bg-brand-600 transition-all duration-500" style={{ width: `${coverage}%` }} /></div>

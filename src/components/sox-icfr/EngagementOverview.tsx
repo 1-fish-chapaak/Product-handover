@@ -5,7 +5,7 @@ import {
   Grid3x3, Layers, Plus, Scale, ScrollText, ShieldAlert, SlidersHorizontal, Table2, Users,
 } from 'lucide-react';
 import { useIcfr } from './store';
-import { useToast } from '../shared/Toast';
+import { InlineNote, useInlineNote } from './InlineNote';
 import EmptyState from '../shared/EmptyState';
 import { Pill } from '../shared/StatusBadge';
 import { SeverityPill } from './parts';
@@ -14,8 +14,8 @@ import AddRacmModal from './AddRacmModal';
 import { formatINR, isEngagementLocked, retestAtRisk } from './helpers';
 import { entitiesFor, processesFor } from './auditScope';
 import {
-  auditDeficiencies, auditProgress, auditStatus, controlsInManyAudits, crossAuditAggregation,
-  liveAuditId, materialityConsistency, mwWatchlist, priorYearDeficiencies, type AuditStatus,
+  auditProgress, auditStatus, controlsInManyAudits, countedDeficiencies, crossAuditAggregation,
+  liveAuditId, materialityConsistency, mwWatchlist, newAuditBlock, priorYearDeficiencies, type AuditStatus,
 } from './auditPortfolio';
 import type { AuditRecord, AuditRound } from './types';
 import { cn } from '../../lib/cn';
@@ -59,15 +59,15 @@ import { cn } from '../../lib/cn';
  */
 
 const ROUND_LABEL: Record<AuditRound, string> = { interim: 'Interim', rollforward: 'Roll-forward', yearend: 'Year-end' };
-const STATUS_TONE: Record<AuditStatus, 'compliant' | 'evidence' | 'draft'> = {
-  concluded: 'compliant', active: 'evidence', planned: 'draft',
+const STATUS_TONE: Record<AuditStatus, 'compliant' | 'evidence'> = {
+  concluded: 'compliant', active: 'evidence',
 };
-const STATUS_LABEL: Record<AuditStatus, string> = { concluded: 'Concluded', active: 'Active', planned: 'Planned' };
+const STATUS_LABEL: Record<AuditStatus, string> = { concluded: 'Concluded', active: 'Active' };
 
 // ── Page furniture ───────────────────────────────────────────────────────────
 
 const cardCls = 'rounded-xl border border-canvas-border bg-canvas-elevated p-4 shadow-[0_1px_2px_rgba(15,8,30,0.04)]';
-const eyebrow = 'text-[0.625rem] font-semibold uppercase tracking-[0.1em]';
+const eyebrow = 'text-[0.6875rem] font-semibold uppercase tracking-[0.1em]';
 /** Table header band — full-bleed inside a p-4 card so it never reads as a card
  *  nested in a card. Every `-mx-4 px-4` below is the same trick. */
 const bandCls = '-mx-4 px-4 py-1.5 bg-paper-50 border-y border-canvas-border';
@@ -212,7 +212,7 @@ function AuditBody({ audit, note }: { audit: AuditRecord; note?: React.ReactNode
   // facts left, progress right, and the tile stays a short strip.
   return (
     <div className="flex flex-wrap items-center gap-x-8 gap-y-3">
-      <div className="min-w-[16rem] flex-1">
+      <div className="min-w-64 flex-1">
         <div className="flex items-center gap-1.5 text-[0.75rem] text-ink-500 flex-wrap">
           <CalendarRange size={12} className="text-ink-400 shrink-0" />
           <span className="tabular-nums">{audit.windowFrom.slice(0, 7)} → {audit.windowTo.slice(0, 7)}</span>
@@ -228,7 +228,7 @@ function AuditBody({ audit, note }: { audit: AuditRecord; note?: React.ReactNode
       {/* Testing progress — the bar is the glance, the fraction is the fact. The
           per-outcome counters that used to sit under it belong to the audit's own
           Dashboard, not to the engagement. */}
-      <div className="w-full sm:w-[22rem] shrink-0">
+      <div className="w-full sm:w-88 shrink-0">
         <Bar
           label="Concluded"
           value={progress.concluded}
@@ -285,13 +285,13 @@ function CoverageBody({ audits, range }: { audits: AuditRecord[]; range: Range }
 
       {/* Month axis, banded like a table header so the grid below reads as rows. */}
       <div className={cn(bandCls, 'flex items-center gap-2.5')}>
-        <span className="w-[76px] shrink-0" aria-hidden />
+        <span className="w-19 shrink-0" aria-hidden />
         <div className="flex-1 grid gap-px" style={cols}>
           {months.map(m => (
             <span
               key={m.key}
               className={cn(
-                'text-[0.5625rem] font-semibold uppercase tracking-[0.02em] text-center py-0.5 rounded-sm',
+                'text-[0.6875rem] font-semibold uppercase tracking-[0.02em] text-center py-0.5 rounded-sm',
                 covered.has(m.key) ? 'text-ink-500' : 'text-mitigated-700 bg-mitigated-50',
               )}
             >
@@ -306,17 +306,17 @@ function CoverageBody({ audits, range }: { audits: AuditRecord[]; range: Range }
 
       <div className="-mx-4 px-4 flex-1 flex flex-col divide-y divide-canvas-border">
         {audits.map(a => {
-          const status = auditStatus(a, eng);
+          const status = auditStatus(a);
           const from = a.windowFrom.slice(0, 7);
           const to = a.windowTo.slice(0, 7);
           return (
-            <div key={a.id} className="flex-1 min-h-[1.75rem] flex items-center gap-2.5 py-1.5">
+            <div key={a.id} className="flex-1 min-h-7 flex items-center gap-2.5 py-1.5">
               {/* Round only. The range is named in the header and the bar's
                   position says which cycle it belongs to — repeating the period on
                   every row cost the label its width and told you nothing. */}
               <span
                 title={`${a.period} ${ROUND_LABEL[a.round].toLowerCase()} · ${monthLabel(from)} → ${monthLabel(to)}`}
-                className="w-[76px] shrink-0 text-[0.75rem] font-medium text-ink-700 truncate"
+                className="w-19 shrink-0 text-[0.75rem] font-medium text-ink-700 truncate"
               >
                 {ROUND_LABEL[a.round]}
               </span>
@@ -331,8 +331,7 @@ function CoverageBody({ audits, range }: { audits: AuditRecord[]; range: Range }
                         'h-4 rounded-[3px]',
                         !on ? 'bg-paper-50'
                           : status === 'concluded' ? 'bg-compliant-500'
-                          : status === 'active' ? 'bg-brand-500'
-                          : 'bg-ink-300',
+                          : 'bg-brand-500',
                       )}
                     />
                   );
@@ -396,7 +395,10 @@ function MasterRow({ icon: Icon, title, body, count, onClick }: {
 
 export default function EngagementOverview() {
   const { eng, role, openAudit, openDeficiency, setTab, setView } = useIcfr();
-  const { addToast } = useToast();
+  // Agentic UX #11: no toasts — a range mistake shows under the range inputs,
+  // the People & roles note under that card.
+  const rangeNote = useInlineNote();
+  const peopleNote = useInlineNote();
   const [creating, setCreating] = useState(false);
   // Add RACM (S11) — the picker over the Engagements page's RACM tab.
   const [addingRacm, setAddingRacm] = useState(false);
@@ -423,6 +425,9 @@ export default function EngagementOverview() {
    * empty matrix.
    */
   const noRacm = eng.controls.length === 0;
+  /** One audit runs at a time — the running one is signed by both hands before
+   *  the next starts. The reason rides beside every create button it stops. */
+  const blocked = newAuditBlock(eng);
 
   /**
    * The widest range the engagement has anything in — the default, and what
@@ -449,12 +454,13 @@ export default function EngagementOverview() {
   const narrowed = applied.from !== fullRange.from || applied.to !== fullRange.to;
 
   const apply = () => {
+    rangeNote.clear();
     if (draft.to < draft.from) {
-      addToast({ type: 'error', message: 'The end month cannot be before the start month.' });
+      rangeNote.show('error', 'The end month cannot be before the start month.');
       return;
     }
     if (spanMonths(draft) > MAX_SPAN_MONTHS) {
-      addToast({ type: 'error', message: `Pick a range of ${MAX_SPAN_MONTHS} months or less.` });
+      rangeNote.show('error', `Pick a range of ${MAX_SPAN_MONTHS} months or less.`);
       return;
     }
     setRange({ ...draft });
@@ -488,14 +494,18 @@ export default function EngagementOverview() {
     [eng, current],
   );
   const consistency = useMemo(() => materialityConsistency(sameCycle), [sameCycle]);
-  const curStatus = current ? auditStatus(current, eng) : null;
+  const curStatus = current ? auditStatus(current) : null;
   const curInRange = !!current && overlaps(current, applied);
 
   // Everything below is scoped to the applied range — an audit outside it
   // contributes nothing to any read-out on the board.
   const ids = useMemo(() => new Set(inRange.map(a => a.id)), [inRange]);
   const mw = useMemo(() => mwWatchlist(eng).filter(x => ids.has(x.audit.id)), [eng, ids]);
-  // Fixes whose retest lands after the books close. Not filtered by the applied
+  // Fixes whose retest lands after the books close. The retest is no longer a step
+  // inside the exception (30 Sep) — it happens on the CONTROL, once the fix has had
+  // a chance to run — which is exactly why this card matters more than it did: the
+  // maths is still the fix date plus the control's operating period, and it is the
+  // only thing that says in advance there will be nothing to test. Not filtered by the applied
   // range: these are the live cycle's open exceptions, which is the only cycle
   // anyone can still move a date in — and the whole value of the card is saying
   // so while there is still room to move it.
@@ -512,7 +522,9 @@ export default function EngagementOverview() {
     [eng, currentYear, ids],
   );
   const rangeDefs = useMemo(
-    () => inRange.flatMap(a => auditDeficiencies(a, eng).map(d => ({ d, a }))),
+    // Counted once each: a weakness carried forward counts under the audit it
+    // was carried into, not again under the archive it was carried out of.
+    () => inRange.flatMap(a => countedDeficiencies(a, eng).map(d => ({ d, a }))),
     [inRange, eng],
   );
   const aggregated = useMemo(() => crossAuditAggregation(eng, inRange), [eng, inRange]);
@@ -530,10 +542,10 @@ export default function EngagementOverview() {
 
   const newAuditBtn = canCreate ? (
     <div className="flex items-center gap-2.5 shrink-0">
-      {noRacm && <span className="text-[0.75rem] text-ink-400">{RACM_FIRST}</span>}
+      {(noRacm || blocked) && <span className="text-[0.75rem] text-ink-400">{noRacm ? RACM_FIRST : blocked}</span>}
       <button
         onClick={() => setCreating(true)}
-        disabled={noRacm}
+        disabled={noRacm || !!blocked}
         className="h-9 px-3.5 shrink-0 inline-flex items-center gap-1.5 rounded-md bg-brand-600 text-white text-[0.8125rem] font-semibold shadow-sm shadow-brand-900/10 enabled:hover:bg-brand-500 enabled:active:bg-brand-800 disabled:opacity-40 disabled:shadow-none disabled:cursor-not-allowed transition-colors cursor-pointer"
       >
         <Plus size={15} /> New audit
@@ -589,7 +601,7 @@ export default function EngagementOverview() {
           body="An audit sets the period it covers, the round it is, what it tests and the materiality it is measured against. Everything on this page is a read-out across audits, so it starts with the first one."
           action={firstActions ?? undefined}
         />
-        <div className={cn(cardCls, 'mt-5 max-w-[480px] mx-auto')}>
+        <div className={cn(cardCls, 'mt-5 max-w-120 mx-auto')}>
           <span className={cn(eyebrow, 'text-brand-600')}>Setup</span>
           <h3 className="font-display text-[1.0625rem] leading-tight text-ink-900 mt-0.5 mb-2.5">Before you start</h3>
           <ul className="-mx-4 px-4 divide-y divide-canvas-border">
@@ -622,7 +634,7 @@ export default function EngagementOverview() {
             type="month"
             value={draft.from}
             max={draft.to}
-            onChange={e => setDraft(d => ({ ...d, from: e.target.value }))}
+            onChange={e => { rangeNote.clear(); setDraft(d => ({ ...d, from: e.target.value })); }}
             aria-label="Range start month"
             className={inputCls}
           />
@@ -631,7 +643,7 @@ export default function EngagementOverview() {
             type="month"
             value={draft.to}
             min={draft.from}
-            onChange={e => setDraft(d => ({ ...d, to: e.target.value }))}
+            onChange={e => { rangeNote.clear(); setDraft(d => ({ ...d, to: e.target.value })); }}
             aria-label="Range end month"
             className={inputCls}
           />
@@ -642,7 +654,7 @@ export default function EngagementOverview() {
               'h-8 px-2.5 inline-flex items-center gap-1.5 rounded-md text-[0.75rem] font-semibold transition-colors',
               dirty
                 ? 'bg-brand-600 text-white shadow-sm shadow-brand-900/10 hover:bg-brand-500 cursor-pointer'
-                : 'bg-paper-50 text-ink-400 cursor-default',
+                : 'bg-paper-50 text-ink-500 cursor-default',
             )}
           >
             <Check size={13} /> Apply
@@ -658,6 +670,8 @@ export default function EngagementOverview() {
           <span className="text-[0.75rem] text-ink-400 tabular-nums">
             {inRange.length} of {eng.audits.length} audit{eng.audits.length === 1 ? '' : 's'}
           </span>
+          {/* basis-full drops the note onto its own line under the inputs. */}
+          <InlineNote note={rangeNote.note} className="basis-full" />
         </div>
         {newAuditBtn}
       </div>
@@ -762,7 +776,7 @@ export default function EngagementOverview() {
               <CalendarClock size={13} /> Period end
             </span>
             <h2 className="font-display text-[1.0625rem] leading-snug text-ink-900">
-              Fixes that cannot be retested before period end
+              Fixes that cannot be tested before period end
             </h2>
           </div>
           <p className="mt-1 text-[0.8125rem] text-ink-600">
@@ -774,6 +788,11 @@ export default function EngagementOverview() {
           <div className="mt-2 -mx-4 px-4 divide-y divide-high-100">
             {atRisk.map(({ d, readiness }) => {
               const c = eng.controls.find(x => x.id === d.controlId);
+              // Say WHICH clock ran out. On a design gap the retest itself is never
+              // late — it needs no occurrence — so the row has to report the
+              // redesigned control's first operating test instead, or it would
+              // print a reassuring sentence under an amber warning.
+              const late = readiness.beyondPeriodEnd ? readiness : readiness.firstOperating!;
               return (
                 <button
                   key={d.id}
@@ -787,9 +806,9 @@ export default function EngagementOverview() {
                       <span className="font-mono text-[0.75rem] text-ink-500">{c?.wpRef ?? d.controlId}</span>
                       <span className="min-w-0 truncate font-medium">{c?.description ?? d.description}</span>
                     </span>
-                    <span className="block text-[0.75rem] text-ink-500 mt-0.5">{readiness.reason}</span>
+                    <span className="block text-[0.75rem] text-ink-500 mt-0.5">{late.reason}</span>
                   </span>
-                  <span className="shrink-0 text-[0.75rem] font-semibold text-high-700 tabular-nums">{readiness.label}</span>
+                  <span className="shrink-0 text-[0.75rem] font-semibold text-high-700 tabular-nums">{late.label}</span>
                   <ArrowRight size={14} className="shrink-0 mt-0.5 text-high-300 group-hover:text-high-700 transition-colors" />
                 </button>
               );
@@ -837,8 +856,11 @@ export default function EngagementOverview() {
                 {canCreate && !current.archive && (current.yearBasis === 'fy' || current.yearBasis === 'cy') && (
                   <button
                     onClick={e => { e.stopPropagation(); setRolling(current); }}
-                    title={`Carry ${current.period} ${ROUND_LABEL[current.round].toLowerCase()} into the next round`}
-                    className="h-8 px-2.5 rounded-md border border-canvas-border bg-canvas-elevated text-[0.75rem] font-semibold text-ink-600 hover:border-brand-300 hover:text-brand-700 transition-colors cursor-pointer"
+                    // Rolling forward starts a new audit — the same gate as New
+                    // audit, whose line beside the toolbar button says why.
+                    disabled={!!blocked}
+                    title={blocked ?? `Carry ${current.period} ${ROUND_LABEL[current.round].toLowerCase()} into the next round`}
+                    className="h-8 px-2.5 rounded-md border border-canvas-border bg-canvas-elevated text-[0.75rem] font-semibold text-ink-600 enabled:hover:border-brand-300 enabled:hover:text-brand-700 disabled:opacity-40 disabled:cursor-not-allowed transition-colors cursor-pointer"
                   >
                     Roll forward
                   </button>
@@ -859,7 +881,7 @@ export default function EngagementOverview() {
                     'mt-2 text-[0.75rem] font-medium inline-flex items-start gap-1.5',
                     consistency.consistent ? 'text-compliant-700' : 'text-mitigated-700',
                   )}>
-                    <Scale size={12} className="shrink-0 mt-[3px]" />
+                    <Scale size={12} className="shrink-0 mt-0.75" />
                     <span className="tabular-nums">
                       {consistency.consistent
                         ? <>All {sameCycle.length} rounds of {current.period} share materiality ₹{consistency.values[0]} Cr</>
@@ -927,9 +949,10 @@ export default function EngagementOverview() {
               title="People & roles"
               body={`Preparer ${eng.preparer.split(' · ')[0]}, reviewer ${eng.reviewer.split(' · ')[0]}.`}
               count="Settings"
-              onClick={() => addToast({ type: 'info', message: 'People & roles is managed in platform settings.' })}
+              onClick={() => peopleNote.show('info', 'People & roles is managed in platform settings.')}
             />
           </div>
+          <InlineNote note={peopleNote.note} className="mt-1" />
         </Widget>
 
         <Widget
@@ -1016,13 +1039,13 @@ export default function EngagementOverview() {
                 <div key={deficiency.id} className="flex items-start gap-2.5 py-2.5">
                   {verified
                     ? <CheckCircle2 size={14} className="text-compliant-600 shrink-0 mt-0.5" />
-                    : <Circle size={13} className="text-mitigated-500 shrink-0 mt-[3px]" />}
+                    : <Circle size={13} className="text-mitigated-500 shrink-0 mt-0.75" />}
                   <div className="min-w-0">
                     <p className="text-[0.8125rem] text-ink-700 leading-snug">{deficiency.description}</p>
                     <div className="mt-1.5 flex items-center gap-2 flex-wrap">
                       <SeverityPill s={deficiency.severity} />
                       <span className="text-[0.75rem] text-ink-400 tabular-nums">
-                        {audit.period} · {verified ? 'verified on retest' : 'not yet verified'}
+                        {audit.period} · {verified ? 'closed and signed off' : 'still open'}
                       </span>
                     </div>
                   </div>

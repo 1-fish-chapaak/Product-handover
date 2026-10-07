@@ -1,5 +1,6 @@
 import * as XLSX from 'xlsx';
-import { assessSeverity, attestationOverruled, requiredFilesOf, restsOnStatementAlone, auditorProvenChecks, combinedSample, conclusionOf, controlConclusion, designBasis, operatingApplies, countVerdict, coverageVerdict, fileOriginOf, designOutstanding, formatDueDate, formatINR, icfrConclusion, isControlLocked, itgcHolds, openMaterialWeaknesses, populationSources, sampleSizeGuide, samplingOf, trackResult, designProgress, hasRowCount, isAssisting, toeRounds, LEGACY_SOURCE_ID } from './helpers';
+import { GAP_KIND_HINT, GAP_KIND_LABEL, MW_INDICATOR_BY_ID, mwIndicatorIds, mwSourceLabel, PLAN_FIX_HINT, PLAN_FIX_LABEL } from './types';
+import { assessSeverity, attestationOverruled, entityMwPresent, mwReason, requiredFilesOf, restsOnStatementAlone, auditorProvenChecks, combinedSample, conclusionOf, controlConclusion, designBasis, operatingApplies, countVerdict, coverageVerdict, fileOriginOf, designOutstanding, designOutstandingRequired, docRequirement, formatDueDate, formatINR, icfrConclusion, isControlLocked, itgcHolds, openMaterialWeaknesses, populationSources, sampleSizeGuide, samplingOf, spreadPhrase, trackResult, designProgress, hasRowCount, isAssisting, toeRounds, versionWindow, versionNo, versionCollapse, LEGACY_SOURCE_ID } from './helpers';
 import { FIVE_W_1H, gapNature } from './types';
 import { countryFor, ownersOf } from './auditScope';
 import { extraLabel, racmConfig, type ExtraColumn } from './racmConfig';
@@ -21,7 +22,13 @@ export type PaperBlock =
   | { kind: 'kv'; title?: string; rows: [string, string][] }
   // tickFrom..tickTo (exclusive) mark the tick columns; tickTo is only needed
   // where a text column (Remarks) follows the ticks.
-  | { kind: 'table'; title: string; note?: string; headers: string[]; rows: string[][]; tickFrom?: number; tickTo?: number }
+  | { kind: 'table'; title: string; note?: string; headers: string[]; rows: string[][]; tickFrom?: number; tickTo?: number;
+      /** Rows that are a HEADING over the rows beneath, not data: row index →
+       *  nesting level (1 outermost). The row carries its label in cell 0 and
+       *  nothing else, and every renderer spans it across the table. Used by the
+       *  status report, which files controls under their company and then their
+       *  process (user, 25 Sep) instead of listing them flat. */
+      groups?: Record<number, 1 | 2> }
   | { kind: 'note'; label: string; text: string; tone: 'good' | 'bad' | 'neutral' };
 
 export const SIGNOFF_TITLE = 'Sign-off — audit record';
@@ -30,10 +37,32 @@ export const WALKTHROUGH_TITLE = 'Walkthrough — design tested on one transacti
 export const WALKTHROUGH_TABLE = 'Walkthrough — attributes on the walked transaction';
 export const JUDGEMENTS_TITLE = 'Design judgements';
 export const DESIGN_ELEMENTS_TABLE = 'Design elements — evidence & waivers';
+/** Versions. Their own constants for the same reason as the six above — the emitter
+ *  and `sectionOf` have to agree on the string, because the string is the only
+ *  identity a block has. The per-version TOD title is built with a PREFIX so one
+ *  routing arm covers however many versions a control has, and deliberately does
+ *  NOT reuse `SIGNOFF_TITLE`: the preview matches that constant to swap in a LIVE
+ *  sign-off widget, so a superseded version's signature printed under it would
+ *  become a button offering to sign the control that replaced it. */
+export const VERSIONS_TITLE = 'Control versions — what this control has been';
+export const VERSION_VERDICT_LABEL = 'Conclusion across versions';
+export const VERSION_TOD_PREFIX = 'TOD — v';
 
 /** How the drawn sample falls across the quarters. A quarterly-or-less control is
  *  stated as its own cadence; anything sampled gets an even spread, which is what
  *  the reviewer's workbook shows and what a reader checks the coverage against. */
+/** The severity as the PAPER states it — one function, so the control paper and
+ *  the register sheet can never describe the same exception two different ways.
+ *  `null` prints "Not sized" in words: a working paper must not leave a blank
+ *  where a grade belongs, and a reader a year later cannot tell a blank from an
+ *  oversight. */
+function severityCell(a: ReturnType<typeof assessSeverity>): string {
+  if (a.final === null) return 'Not sized';
+  if (a.bumped) return `${a.final} (prudent-official override)`;
+  if (a.capped) return `${a.final} (capped from ${a.raw})`;
+  return a.final;
+}
+
 function quarterlySplit(c: Control): string {
   const n = c.operating.sampling?.samples.length ?? 0;
   if (!n) return 'No sample drawn';
@@ -110,7 +139,11 @@ export function buildControlPaper(eng: IcfrEngagement, c: Control): PaperBlock[]
   // overridden. A row that only ever said "ticked" told a reviewer nothing.
   const audit = eng.audits.find(a => a.controlIds?.includes(c.id)) ?? eng.audits[0];
   const cv = countVerdict(c);
-  const gv = coverageVerdict(c, audit?.windowFrom, audit?.windowTo);
+  // Measured against the window THIS VERSION ran in. Against the whole audit
+  // window a rebuilt control reads "opens 214 days after the period starts",
+  // which is true of the period and false of the control.
+  const gwin = audit ? versionWindow(c, audit) : undefined;
+  const gv = coverageVerdict(c, gwin?.from, gwin?.to);
   // 'Variance' and 'Failed' are not interchangeable on a paper a reviewer reads:
   // an overshoot is a filter that swept wide, a shortfall is a population with a
   // hole in it, and only the second is a completeness problem.
@@ -229,6 +262,60 @@ export function buildControlPaper(eng: IcfrEngagement, c: Control): PaperBlock[]
     ],
   });
 
+  // ── What this control has BEEN ────────────────────────────────────────────────
+  // A control rebuilt after a design failure has more than one wording in the year,
+  // and the paper has to carry both: the conclusion on the live version means very
+  // little to a reader who cannot see that an earlier one failed. Printed only when
+  // there is something to print, so an ordinary control's paper is unchanged.
+  const versions = c.priorVersions ?? [];
+  if (versions.length) {
+    const collapse = versionCollapse(eng, c);
+    blocks.push({
+      kind: 'table', title: VERSIONS_TITLE,
+      note: [
+        `${versions.length + 1} version${versions.length ? 's' : ''} in this period`,
+        collapse ? `conclusion: ${collapse.verdict}` : '',
+      ].filter(Boolean).join(' · '),
+      headers: ['Version', 'The control as it read', 'Ran', 'TOD', 'TOE', 'Replaced by', 'What changed', 'Recorded by'],
+      rows: [
+        ...versions.map(v => {
+          const w = audit ? versionWindow(c, audit, v.no) : undefined;
+          return [
+            `v${v.no}`,
+            v.description,
+            w ? `${formatDueDate(w.from)} – ${formatDueDate(w.to)}` : formatDueDate(v.supersededAt),
+            v.design.conclusion,
+            v.operating.conclusion,
+            v.replaced.defId,
+            v.replaced.note,
+            `${v.replaced.by}${v.wpSignoff?.reviewer ? ` · paper countersigned by ${v.wpSignoff.reviewer.by}` : v.wpSignoff?.preparer ? ` · paper signed by ${v.wpSignoff.preparer.by}` : ''}`,
+          ];
+        }),
+        (() => {
+          const w = audit ? versionWindow(c, audit) : undefined;
+          return [
+            `v${versionNo(c)} (live)`,
+            c.description,
+            w ? `${formatDueDate(w.from)} – ${formatDueDate(w.to)}` : '—',
+            c.design.conclusion,
+            c.operating.conclusion,
+            '—', '—', '—',
+          ];
+        })(),
+      ],
+      // The live row is the one the rest of the paper is about; the superseded ones
+      // are history above it, and a reader should not have to count to tell which.
+      groups: { [versions.length]: 1 },
+    });
+    if (collapse) {
+      blocks.push({
+        kind: 'note', label: VERSION_VERDICT_LABEL,
+        text: `${collapse.verdict}. ${collapse.reason} ${collapse.disclosure}`,
+        tone: collapse.outcome === 'effective-disclosed' ? 'good' : collapse.outcome === 'in-progress' ? 'neutral' : 'bad',
+      });
+    }
+  }
+
   // The audit programme — the steps actually walked, as instructions rather than
   // conclusions. A reviewer re-performs the test off this list.
   if (c.auditSteps?.length) {
@@ -256,16 +343,21 @@ export function buildControlPaper(eng: IcfrEngagement, c: Control): PaperBlock[]
   }
 
   // Test of design — documents received + each consideration ticked
-  const docsIn = c.design.documents.filter(d => d.status === 'Received').length;
-  const waived = c.design.documents.filter(d => d.waiver && d.status !== 'Received');
-  const outstanding = designOutstanding(c).map(d => d.kind);
+  // All three are REQUIRED-only, so the paper's arithmetic matches the completeness
+  // the conclusion is gated on. Counting every element made an ITGC with its four
+  // required files attached print "4/6 received" beside "Conclusion: Effective",
+  // the two extras being a narrative and a flowchart ITGCs do not have.
+  const reqDocs = c.design.documents.filter(d => docRequirement(c, d) === 'Required');
+  const docsIn = reqDocs.filter(d => d.status === 'Received').length;
+  const waived = reqDocs.filter(d => d.waiver && d.status !== 'Received');
+  const outstanding = designOutstandingRequired(c).map(d => d.kind);
   // The evidence TYPE column is the honest column: a consideration ticked off
   // somebody's word reads very differently from one the auditor reperformed, and
   // a paper that prints only the tick invites the reader to assume the stronger.
   blocks.push({
     kind: 'table', title: 'TOD',
     note: [
-      `${docsIn}/${c.design.documents.length} design documents received${waived.length ? ` · ${waived.length} waived` : ''}${outstanding.length ? ` · outstanding: ${outstanding.join(', ')}` : ''}`,
+      `${docsIn}/${reqDocs.length} required design documents received${waived.length ? ` · ${waived.length} waived` : ''}${outstanding.length ? ` · outstanding: ${outstanding.join(', ')}` : ''}`,
       // Derived from the auditor's own proof across the checks, not asserted —
       // see designBasis. A reader can now check the claim against the two
       // columns below it rather than taking the sentence on trust.
@@ -294,6 +386,39 @@ export function buildControlPaper(eng: IcfrEngagement, c: Control): PaperBlock[]
     tickFrom: 5,
   });
 
+  // ── The design test each SUPERSEDED version failed ────────────────────────────
+  // The reason the control was rebuilt, in the form the reader needs it: the checks
+  // as they stood, and which of them the old wording could not meet. The live table
+  // above cannot carry this — its checks were re-suggested against the new wording,
+  // so the failed ones are not in it at all.
+  //
+  // Titled with a PREFIX rather than the bare 'TOD', so two design tables on one
+  // tab can be told apart in the preview and in the .xlsx, where the title is
+  // printed verbatim as the only heading a block gets.
+  for (const v of versions) {
+    const vDocs = v.design.documents.filter(d => docRequirement(c, d) === 'Required');
+    blocks.push({
+      kind: 'table',
+      title: `${VERSION_TOD_PREFIX}${v.no}, superseded ${formatDueDate(v.supersededAt)}`,
+      note: [
+        `the control as it read: ${v.description}`,
+        `${vDocs.filter(d => d.status === 'Received').length}/${vDocs.length} required design documents received`,
+        `conclusion: ${v.design.conclusion}`,
+        v.design.rationale ? `rationale: ${v.design.rationale}` : '',
+        `replaced by ${v.replaced.defId} — ${v.replaced.note}`,
+      ].filter(Boolean).join(' · '),
+      headers: ['', 'Design consideration', 'Evidenced by (client)', "Auditor's own proof", 'Tick'],
+      rows: v.design.points.map((p, i) => [
+        String(i + 1),
+        p.text,
+        v.design.documents.filter(d => p.evidencedBy?.includes(d.id)).map(d => (d.kind === 'Custom' ? d.name : d.kind)).join('; ') || '—',
+        p.auditorProof ? `${p.auditorProof.kind} — ${p.auditorProof.file.name}` : '—',
+        tick(p.override?.result ?? p.result),
+      ]),
+      tickFrom: 4,
+    });
+  }
+
   // Every design element with what backs it — and, where nothing does, the reason
   // it was waived. A waiver the paper doesn't show is an unexplained hole in the
   // completeness the conclusion rests on.
@@ -305,7 +430,9 @@ export function buildControlPaper(eng: IcfrEngagement, c: Control): PaperBlock[]
       rows: c.design.documents.map((d, i) => [
         String(i + 1),
         d.kind === 'Custom' ? d.name : d.kind,
-        d.required === false ? 'Optional' : 'Required',
+        // Off the class table, not the legacy per-element flag: an element this
+        // control does not have prints 'Not applicable', not 'Required'.
+        docRequirement(c, d),
         d.status === 'Received' ? 'Evidenced' : d.waiver ? 'Waived' : d.status,
         d.status === 'Received'
           ? (d.files?.map(f => f.name).join(' · ') || d.name)
@@ -409,7 +536,7 @@ export function buildControlPaper(eng: IcfrEngagement, c: Control): PaperBlock[]
         const m = samplingOf(eng);
         const ran = audit?.samplingVersion ?? m.version;
         const signed = m.reviewer ? `agreed by ${m.reviewer.by} on ${m.reviewer.at}` : 'NOT YET AGREED — no reviewer signature';
-        return `v${ran} · ${m.method} · ${m.roundBasis === 'per-round' ? 'sampled per round' : 'sampled across the whole period'} — ${signed}${ran !== m.version ? ` (the engagement is now on v${m.version})` : ''}`;
+        return `v${ran} · ${m.method} · ${spreadPhrase(m.spread)} · ${m.roundBasis === 'per-round' ? 'sampled per round' : 'sampled across the whole period'} — ${signed}${ran !== m.version ? ` (the engagement is now on v${m.version})` : ''}`;
       })()],
       ['Sample size — indicated', `${guide.suggested} (${guide.range}) — ${guide.note}${guide.cell ? ` [read off the agreed table: ${guide.cell.frequency} · ${guide.cell.rating} risk]` : ''}`],
       ['Sample size — drawn', c.operating.sampling ? `${c.operating.sampling.samples.length} · ${c.operating.sampling.method}, ${c.operating.sampling.basis}` : 'None drawn'],
@@ -578,7 +705,17 @@ export function buildControlPaper(eng: IcfrEngagement, c: Control): PaperBlock[]
   ].filter(Boolean).join(' ');
   const concl = controlConclusion(c, opApplies);
   blocks.push({ kind: 'note', label: 'Test results', text: results, tone: concl === 'Effective' ? 'good' : concl === 'Ineffective' ? 'bad' : 'neutral' });
-  blocks.push({ kind: 'note', label: 'Conclusion', text: `${concl} control`, tone: concl === 'Effective' ? 'good' : concl === 'Ineffective' ? 'bad' : 'neutral' });
+  // On a rebuilt control the live verdict is not the whole answer — see
+  // `versionCollapse`. The disclosure travels WITH the conclusion rather than only
+  // in the versions table above, because this note is what gets read.
+  const vc = versions.length ? versionCollapse(eng, c) : null;
+  blocks.push({
+    kind: 'note', label: 'Conclusion',
+    text: vc ? `${vc.verdict}. ${vc.disclosure}` : `${concl} control`,
+    tone: vc
+      ? (vc.outcome === 'effective-disclosed' ? 'good' : vc.outcome === 'in-progress' ? 'neutral' : 'bad')
+      : concl === 'Effective' ? 'good' : concl === 'Ineffective' ? 'bad' : 'neutral',
+  });
   // The auditor's own words behind each track's conclusion. The box that collects
   // them says "retained in the working paper", so this is that promise being kept.
   const rationales = [
@@ -597,7 +734,7 @@ export function buildControlPaper(eng: IcfrEngagement, c: Control): PaperBlock[]
     //
     // const ex = def.exposure;
     blocks.push({
-      kind: 'kv', title: `Exception — ${def.id}`, rows: [
+      kind: 'kv', title: `Deficiency — ${def.id}`, rows: [
         ['Description', def.description],
         // Where it was found and what kind of control broke — DERIVED from the
         // track that failed and the control's own nature, never asked. The
@@ -609,7 +746,17 @@ export function buildControlPaper(eng: IcfrEngagement, c: Control): PaperBlock[]
         // produce a contradiction. Superseded by the derived row above.
         //
         // ['Gap type', def.gapType ? `${def.gapType} — ${GAP_LABEL[def.gapType]}` : '—'],
-        ['Severity', a.bumped ? `${a.final} (prudent-official override)` : a.capped ? `${a.final} (capped from ${a.raw})` : a.final],
+        // Not the parked 'Gap type' above, which restated the control's nature.
+        // This says HOW the design is wrong, which the paper could not say before.
+        // ONE 'Design gap' row however many were recorded — a reader scanning a
+        // key/value table expects one, not two rows wearing the same label.
+        ...(def.track === 'design' && def.gapKinds?.length
+          ? [['Design gap', def.gapKinds.map(k => `${GAP_KIND_LABEL[k]} — ${GAP_KIND_HINT[k]}`).join('; ')] as [string, string]] : []),
+        // Redesign or workaround. On the paper because a reader a year later cannot
+        // tell the two apart from the plan text alone, and only one of them means
+        // the design that failed has stopped being the design.
+        ...(def.planReview?.fix ? [['Kind of fix', `${PLAN_FIX_LABEL[def.planReview.fix]} — ${PLAN_FIX_HINT[def.planReview.fix]}`] as [string, string]] : []),
+        ['Severity', severityCell(a)],
         // ─── PARKED (Aug 2026) — Priced impact ───────────────────────────────
         // What the gap is worth, split the way the source RACM splits it — an
         // internal-audit value metric, not an ICFR misstatement number.
@@ -648,12 +795,19 @@ export function controlPaperSections(eng: IcfrEngagement, c: Control): IcfrSheet
       return 'Results'; // linked exception
     }
     if (b.kind === 'table') {
+      // Versions read with the control they are versions OF; each superseded
+      // version's design test reads on the design tab beside the live one. Both
+      // arms sit ahead of the `return 'TOE'` fall-through below, which is where an
+      // unrecognised table silently lands.
+      if (b.title === VERSIONS_TITLE) return 'Control';
+      if (b.title.startsWith(VERSION_TOD_PREFIX)) return 'TOD';
       if (b.title === 'TOD' || b.title === WALKTHROUGH_TABLE || b.title === DESIGN_ELEMENTS_TABLE) return 'TOD';
       // the programme is what the auditor was instructed to do, so it reads with
       // the control it belongs to rather than inside one track's results
       if (b.title === 'Audit programme — steps performed') return 'Control';
       return 'TOE';
     }
+    if (b.label === VERSION_VERDICT_LABEL) return 'Control';
     if (b.label === 'Walkthrough') return 'TOD';
     return b.label === 'Samples' || b.label === 'IPE' ? 'TOE' : 'Results'; // notes
   };
@@ -672,6 +826,9 @@ function signoffRows(eng: IcfrEngagement): [string, string][] {
   const live = eng.audits.find(a => !a.archive);
   const so = live?.signoff ?? {};
   const mwOpen = openMaterialWeaknesses(eng).length;
+  // The OTHER road to an adverse opinion. Narrating the MW count alone left a
+  // paper that said 'Not effective' and gave no reason a reader could see.
+  const entityMw = entityMwPresent(eng);
   return [
     ['Prepared by', so.preparer ? `${so.preparer.by} — signed off ${so.preparer.at}` : `${eng.preparer} — NOT YET SIGNED`],
     ['Countersigned by', so.reviewer ? `${so.reviewer.by} — countersigned ${so.reviewer.at}` : `${eng.reviewer} — NOT YET COUNTERSIGNED`],
@@ -679,7 +836,7 @@ function signoffRows(eng: IcfrEngagement): [string, string][] {
     // the year end, so the paper says so instead of printing a live verdict.
     ['ICFR conclusion', live?.round === 'interim'
       ? 'Not given at interim — the opinion is as of the year end, stamped by the roll-forward or year-end round'
-      : so.icfrConclusion ? `${so.icfrConclusion} (stamped at sign-off)` : `${icfrConclusion(eng)} (live — not yet signed; ${mwOpen} material weakness${mwOpen === 1 ? '' : 'es'} open)`],
+      : so.icfrConclusion ? `${so.icfrConclusion} (stamped at sign-off)` : `${icfrConclusion(eng)} (live — not yet signed; ${mwReason(mwOpen, entityMw) || 'nothing open'})`],
     ['Audit status', so.preparer && so.reviewer ? 'Concluded — record locked' : 'In progress'],
   ];
 }
@@ -794,8 +951,12 @@ export function buildIcfrPaper(eng: IcfrEngagement, controls: Control[] = eng.co
       kind: 'table', title: 'TOD', note: 'documents received · considerations ticked · conclusion per control',
       headers: ['W/P', 'Control ID', 'Documents received', 'Outstanding documents', 'Considerations passed', 'Conclusion', 'Rationale', 'Override', 'Tested by'],
       rows: controls.map(c => {
+        // designProgress now delegates to designCompleteness, so this fraction agrees
+        // with the control page. The outstanding column goes through designOutstanding
+        // rather than a raw status test, which listed waived elements and elements the
+        // control's class never has.
         const p = designProgress(c);
-        return [c.wpRef, c.id, `${p.docsReceived}/${p.docsTotal}`, c.design.documents.filter(d => d.status !== 'Received').map(d => d.kind).join('; ') || 'None', `${p.pointsPass}/${p.pointsTotal}`, c.design.conclusion, c.design.rationale ?? '—', c.design.override ? `${c.design.override.result}: ${c.design.override.rationale}` : '—', c.design.testedBy ?? '—'];
+        return [c.wpRef, c.id, `${p.docsReceived}/${p.docsTotal}`, designOutstanding(c).map(d => d.kind).join('; ') || 'None', `${p.pointsPass}/${p.pointsTotal}`, c.design.conclusion, c.design.rationale ?? '—', c.design.override ? `${c.design.override.result}: ${c.design.override.rationale}` : '—', c.design.testedBy ?? '—'];
       }),
     }],
   };
@@ -815,7 +976,7 @@ export function buildIcfrPaper(eng: IcfrEngagement, controls: Control[] = eng.co
 
   const deficiencies: IcfrSheet = {
     name: 'Deficiencies', blocks: [{
-      kind: 'table', title: 'Deficiencies', note: defs.length ? `${defs.length} exception${defs.length === 1 ? '' : 's'}` : 'No exceptions raised',
+      kind: 'table', title: 'Deficiencies', note: defs.length ? `${defs.length} deficienc${defs.length === 1 ? 'y' : 'ies'}` : 'No deficiencies raised',
       // The header and the row below are written one column per line and in the
       // same order, so a column parked here has its cell parked there — the two
       // lists must stay the same length or the sheet shears.
@@ -823,6 +984,8 @@ export function buildIcfrPaper(eng: IcfrEngagement, controls: Control[] = eng.co
         'Deficiency', 'Control', 'Track',
         // Derived off the failed track and the control's nature — read-only.
         'Gap nature',
+        // Stated, not derived: HOW the design is wrong. Design rows only.
+        'Design gap',
         'Description', 'Root cause', 'Likelihood', 'Magnitude', 'Materiality',
         'MW indicators', 'Compensating control', 'Severity',
         // ─── PARKED (Aug 2026) — Priced impact ───────────────────────────────
@@ -835,7 +998,7 @@ export function buildIcfrPaper(eng: IcfrEngagement, controls: Control[] = eng.co
       ],
       rows: defs.map(d => {
         const a = assessSeverity(d, eng);
-        const sev = a.bumped ? `${a.final} (prudent-official override)` : a.capped ? `${a.final} (capped from ${a.raw})` : a.final;
+        const sev = severityCell(a);
         const ctl = controls.find(x => x.id === d.controlId);
         // ─── PARKED (Aug 2026) — Priced impact ─────────────────────────────
         // const ex = d.exposure;
@@ -847,8 +1010,15 @@ export function buildIcfrPaper(eng: IcfrEngagement, controls: Control[] = eng.co
           // found to answer it already. Superseded by the derived cell above.
           //
           // d.gapType ? `${d.gapType} — ${GAP_LABEL[d.gapType]}` : '—',
-          d.description, d.rootCause, d.likelihood, String(d.magnitude),
-          formatINR(eng.materiality), d.mwIndicators.join('; ') || 'None',
+          // Joined with '; ', matching the MW-indicator column two cells along.
+          d.track === 'design' ? (d.gapKinds?.length ? d.gapKinds.map(k => GAP_KIND_LABEL[k]).join('; ') : 'Not stated') : '—',
+          // NOT `String(d.magnitude)` — that printed the literal "null" into a
+          // signed working paper the moment the figure became nullable, and no
+          // compiler would have said a word about it.
+          d.description, d.rootCause, d.likelihood, d.magnitude === null ? 'Not sized' : String(d.magnitude),
+          // Words plus attribution, never the stored id — this is a client
+          // deliverable, and 'senior-management-fraud' is not a sentence.
+          formatINR(eng.materiality), mwIndicatorIds(d.mwIndicators).map(i => `${MW_INDICATOR_BY_ID[i].label} (${mwSourceLabel(MW_INDICATOR_BY_ID[i].source)})`).join('; ') || 'None',
           d.compensatingControlId ?? 'None', sev,
           // ─── PARKED (Aug 2026) — Priced impact ───────────────────────────
           // ex ? formatINR(ex.recovery) : '—',

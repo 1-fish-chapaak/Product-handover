@@ -1,15 +1,17 @@
 import { useEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { CheckCircle2, Circle, Download, Eye, FileSpreadsheet, FileText, Hourglass, PenLine, X } from 'lucide-react';
-import { controlConclusion, icfrConclusion, isControlFinal, isControlLocked, isEngagementLocked, openMaterialWeaknesses, signoffControls, trackResult } from './helpers';
+import { controlConclusion, entityMwPresent, icfrConclusion, mwReason, isControlFinal, isControlLocked, isEngagementLocked, openMaterialWeaknesses, signoffControls, trackResult } from './helpers';
 import { buildIcfrPaper, controlPaperSections, downloadControlWorkingPaper, downloadIcfrWorkingPaper, ENG_SIGNOFF_TITLE, SIGNOFF_TITLE, type PaperBlock } from './icfrWorkingPaper';
 import { buildAuditReport, downloadAuditReport } from './icfrAuditReport';
 import { downloadAuditReportPdf } from './icfrReportPdf';
 import { isFormattedControlId } from './racmIds';
 import { useIcfr } from './store';
-import { useToast } from '../shared/Toast';
+import { InlineNote, useInlineNote } from './InlineNote';
 import { cn } from '../../lib/cn';
 import type { Control, IcfrEngagement } from './types';
+import DialogFocus from '../shared/DialogFocus';
+import { tabKeys } from '../shared/tabKeys';
 
 // An irreversible sign-off act (sign / countersign) routes through a one-line
 // attest confirm before it commits — a recorded signature can't be taken back.
@@ -26,19 +28,19 @@ function Block({ b }: { b: PaperBlock }) {
   if (b.kind === 'heading') {
     return (
       <div>
-        <div className="text-[14px] font-bold text-ink-900" style={{ fontFamily: "'Source Serif 4', serif" }}>{b.text}</div>
-        <div className="text-[11.5px] text-ink-500 mt-0.5">{b.sub}</div>
+        <div className="text-[0.875rem] font-bold text-ink-900" style={{ fontFamily: "'Source Serif 4', serif" }}>{b.text}</div>
+        <div className="text-[0.75rem] text-ink-500 mt-0.5">{b.sub}</div>
       </div>
     );
   }
   if (b.kind === 'kv') {
     return (
       <div>
-        {b.title && <div className="text-[10.5px] uppercase tracking-wide font-semibold text-ink-400 mb-1.5">{b.title}</div>}
+        {b.title && <div className="text-[0.6875rem] uppercase tracking-wide font-semibold text-ink-400 mb-1.5">{b.title}</div>}
         <div className="rounded-lg border border-canvas-border divide-y divide-canvas-border">
           {b.rows.map(([k, v], i) => (
-            <div key={i} className="flex gap-3 px-3 py-1.5 text-[12px]">
-              <span className="w-[150px] shrink-0 text-ink-500">{k}</span>
+            <div key={i} className="flex gap-3 px-3 py-1.5 text-[0.75rem]">
+              <span className="w-37.5 shrink-0 text-ink-500">{k}</span>
               <span className={cn('text-ink-800 min-w-0', /NOT YET/.test(v) && 'text-ink-400')}>{v}</span>
             </div>
           ))}
@@ -49,17 +51,33 @@ function Block({ b }: { b: PaperBlock }) {
   if (b.kind === 'table') {
     return (
       <div>
-        <div className="text-[10.5px] uppercase tracking-wide font-semibold text-ink-400 mb-0.5">{b.title}</div>
-        {b.note && <div className="text-[11px] text-ink-400 mb-1.5">{b.note}</div>}
+        <div className="text-[0.6875rem] uppercase tracking-wide font-semibold text-ink-400 mb-0.5">{b.title}</div>
+        {b.note && <div className="text-[0.6875rem] text-ink-400 mb-1.5">{b.note}</div>}
         <div className="rounded-lg border border-canvas-border overflow-x-auto">
-          <table className="w-full border-collapse text-[11.5px]">
+          <table className="w-full border-collapse text-[0.75rem]">
             <thead>
               <tr className="bg-paper-50/70 text-left">
                 {b.headers.map((h, i) => <th key={i} className="px-2.5 py-1.5 font-semibold text-ink-600 whitespace-nowrap border-b border-canvas-border">{h}</th>)}
               </tr>
             </thead>
             <tbody className="divide-y divide-canvas-border">
-              {b.rows.map((r, ri) => (
+              {b.rows.map((r, ri) => {
+                // A group heading spans the table: a company, then a process.
+                // Level 1 is the heavier of the two, so the eye finds the
+                // company first and the processes read as its children.
+                const level = b.groups?.[ri];
+                if (level) return (
+                  <tr key={ri}>
+                    <td colSpan={b.headers.length}
+                      className={cn('px-2.5 align-middle',
+                        level === 1
+                          ? 'py-2 bg-paper-100 text-ink-800 font-semibold uppercase tracking-wide text-[0.6875rem]'
+                          : 'py-1.5 pl-5 bg-paper-50/70 text-ink-600 font-semibold text-[0.6875rem]')}>
+                      {r[0]}
+                    </td>
+                  </tr>
+                );
+                return (
                 <tr key={ri}>
                   {r.map((cell, ci) => (
                     <td key={ci} className={cn('px-2.5 py-1.5 align-top text-ink-700',
@@ -70,7 +88,8 @@ function Block({ b }: { b: PaperBlock }) {
                       ci > 0 && isFormattedControlId(cell) && 'whitespace-nowrap')}>{cell}</td>
                   ))}
                 </tr>
-              ))}
+                );
+              })}
               {b.rows.length === 0 && <tr><td colSpan={b.headers.length} className="px-2.5 py-2 text-ink-400">—</td></tr>}
             </tbody>
           </table>
@@ -79,9 +98,9 @@ function Block({ b }: { b: PaperBlock }) {
     );
   }
   return (
-    <div className={cn('rounded-lg border px-3 py-2 text-[12px]',
+    <div className={cn('rounded-lg border px-3 py-2 text-[0.75rem]',
       b.tone === 'good' ? 'border-compliant-200 bg-compliant-50/40' : b.tone === 'bad' ? 'border-risk-200 bg-risk-50/40' : 'border-canvas-border bg-paper-50/40')}>
-      <span className={cn('font-bold uppercase tracking-wide text-[10.5px] mr-2', b.tone === 'good' ? 'text-compliant-700' : b.tone === 'bad' ? 'text-risk-700' : 'text-ink-500')}>{b.label}</span>
+      <span className={cn('font-bold uppercase tracking-wide text-[0.6875rem] mr-2', b.tone === 'good' ? 'text-compliant-700' : b.tone === 'bad' ? 'text-risk-700' : 'text-ink-500')}>{b.label}</span>
       <span className="text-ink-800">{b.text}</span>
     </div>
   );
@@ -100,32 +119,32 @@ function ControlSignoff({ eng, c, onAttest }: { eng: IcfrEngagement; c: Control;
   const canCounter = role === 'reviewer' && !!so?.preparer && !so?.reviewer && !engLocked && notesPending === 0 && so?.preparer?.by !== me;
   return (
     <div className="rounded-xl border border-canvas-border bg-paper-50/40 p-3.5 space-y-2">
-      <div className="text-[10.5px] uppercase tracking-wide font-semibold text-ink-400 inline-flex items-center gap-1.5"><PenLine size={12} /> {SIGNOFF_TITLE}</div>
-      <div className="flex items-center gap-2 text-[12.5px]">
+      <div className="text-[0.6875rem] uppercase tracking-wide font-semibold text-ink-400 inline-flex items-center gap-1.5"><PenLine size={12} /> {SIGNOFF_TITLE}</div>
+      <div className="flex items-center gap-2 text-[0.8125rem]">
         {so?.preparer ? <CheckCircle2 size={14} className="text-compliant-700 shrink-0" /> : <Circle size={13} className="text-ink-300 shrink-0" />}
-        <span className="text-ink-500 w-[118px] shrink-0">Prepared by</span>
+        <span className="text-ink-500 w-29.5 shrink-0">Prepared by</span>
         <span className={cn('font-medium min-w-0 truncate', so?.preparer ? 'text-ink-800' : 'text-ink-400')}>{so?.preparer ? `${so.preparer.by} · ${so.preparer.at}` : `${eng.preparer} — not yet signed`}</span>
         {canSign && (
           <button onClick={() => onAttest({ kind: 'sign', run: () => signOffControlWp(c.id, 'preparer') })}
-            className="ml-auto h-7 px-2.5 shrink-0 rounded-lg bg-brand-600 text-white text-[11.5px] font-semibold hover:bg-brand-700 cursor-pointer inline-flex items-center gap-1"><PenLine size={11} /> Sign off this paper</button>
+            className="ml-auto h-7 px-2.5 shrink-0 rounded-lg bg-brand-600 text-white text-[0.75rem] font-semibold hover:bg-brand-700 cursor-pointer inline-flex items-center gap-1"><PenLine size={11} /> Sign off this paper</button>
         )}
         {role === 'auditor' && !concluded && !so?.preparer && (
-          <span className="ml-auto shrink-0 text-[10.5px] text-ink-400">conclude the control to sign</span>
+          <span className="ml-auto shrink-0 text-[0.6875rem] text-ink-400">conclude the control to sign</span>
         )}
       </div>
-      <div className="flex items-center gap-2 text-[12.5px]">
+      <div className="flex items-center gap-2 text-[0.8125rem]">
         {so?.reviewer ? <CheckCircle2 size={14} className="text-compliant-700 shrink-0" /> : <Circle size={13} className="text-ink-300 shrink-0" />}
-        <span className="text-ink-500 w-[118px] shrink-0">Countersigned by</span>
+        <span className="text-ink-500 w-29.5 shrink-0">Countersigned by</span>
         <span className={cn('font-medium min-w-0 truncate', so?.reviewer ? 'text-ink-800' : 'text-ink-400')}>{so?.reviewer ? `${so.reviewer.by} · ${so.reviewer.at}` : `${eng.reviewer} — not yet countersigned`}</span>
         {canCounter && (
           <button onClick={() => onAttest({ kind: 'counter', run: () => signOffControlWp(c.id, 'reviewer') })}
-            className="ml-auto h-7 px-2.5 shrink-0 rounded-lg bg-brand-600 text-white text-[11.5px] font-semibold hover:bg-brand-700 cursor-pointer inline-flex items-center gap-1"><PenLine size={11} /> Countersign</button>
+            className="ml-auto h-7 px-2.5 shrink-0 rounded-lg bg-brand-600 text-white text-[0.75rem] font-semibold hover:bg-brand-700 cursor-pointer inline-flex items-center gap-1"><PenLine size={11} /> Countersign</button>
         )}
         {role === 'reviewer' && !so?.preparer && (
-          <span className="ml-auto shrink-0 text-[10.5px] text-ink-400">waits for the preparer's signature</span>
+          <span className="ml-auto shrink-0 text-[0.6875rem] text-ink-400">waits for the preparer's signature</span>
         )}
         {role === 'reviewer' && !!so?.preparer && !so?.reviewer && notesPending > 0 && (
-          <span className="ml-auto shrink-0 text-[10.5px] text-ink-400">{notesPending} review note{notesPending === 1 ? '' : 's'} must close before the countersign</span>
+          <span className="ml-auto shrink-0 text-[0.6875rem] text-ink-400">{notesPending} review note{notesPending === 1 ? '' : 's'} must close before the countersign</span>
         )}
       </div>
     </div>
@@ -147,6 +166,7 @@ function EngagementSignoff({ eng, onAttest }: { eng: IcfrEngagement; onAttest: (
   const stamped = !!so.icfrConclusion;
   const effective = conclusion !== 'Not effective';
   const mwOpen = openMaterialWeaknesses(eng).length;
+  const entityMw = entityMwPresent(eng);
   // same gate as Overview: every paper concluded AND countersigned by the reviewer —
   // bar the year-end controls an interim or roll-forward holds back, which can't
   // finish in it and are listed instead of waited on (signoffControls)
@@ -157,46 +177,46 @@ function EngagementSignoff({ eng, onAttest }: { eng: IcfrEngagement; onAttest: (
   const canCounter = role === 'reviewer' && !!so.preparer && !so.reviewer && !!audit && !audit.archive;
   return (
     <div className="rounded-xl border border-canvas-border bg-paper-50/40 p-3.5 space-y-2">
-      <div className="text-[10.5px] uppercase tracking-wide font-semibold text-ink-400 inline-flex items-center gap-1.5"><PenLine size={12} /> Sign-off — included in the file</div>
-      <div className="flex items-center gap-2 text-[12.5px]">
+      <div className="text-[0.6875rem] uppercase tracking-wide font-semibold text-ink-400 inline-flex items-center gap-1.5"><PenLine size={12} /> Sign-off — included in the file</div>
+      <div className="flex items-center gap-2 text-[0.8125rem]">
         {so.preparer ? <CheckCircle2 size={14} className="text-compliant-700 shrink-0" /> : <Circle size={13} className="text-ink-300 shrink-0" />}
-        <span className="text-ink-500 w-[118px] shrink-0">Prepared by</span>
+        <span className="text-ink-500 w-29.5 shrink-0">Prepared by</span>
         <span className={cn('font-medium min-w-0 truncate', so.preparer ? 'text-ink-800' : 'text-ink-400')}>{so.preparer ? `${so.preparer.by} · ${so.preparer.at}` : `${eng.preparer} — not yet signed`}</span>
         {canSign && (
           <button onClick={() => onAttest({ kind: 'sign', run: () => signOffAudit('preparer') })}
-            className="ml-auto h-7 px-2.5 shrink-0 rounded-lg bg-brand-600 text-white text-[11.5px] font-semibold hover:bg-brand-700 cursor-pointer inline-flex items-center gap-1"><PenLine size={11} /> Sign off as preparer</button>
+            className="ml-auto h-7 px-2.5 shrink-0 rounded-lg bg-brand-600 text-white text-[0.75rem] font-semibold hover:bg-brand-700 cursor-pointer inline-flex items-center gap-1"><PenLine size={11} /> Sign off as preparer</button>
         )}
         {role === 'auditor' && !ready && !so.preparer && (
-          <span className="ml-auto shrink-0 text-[10.5px] text-ink-400">{reviewed}/{gating.length} papers countersigned — sign-off unlocks when every paper is reviewed</span>
+          <span className="ml-auto shrink-0 text-[0.6875rem] text-ink-400">{reviewed}/{gating.length} papers countersigned — sign-off unlocks when every paper is reviewed</span>
         )}
       </div>
-      <div className="flex items-center gap-2 text-[12.5px]">
+      <div className="flex items-center gap-2 text-[0.8125rem]">
         {so.reviewer ? <CheckCircle2 size={14} className="text-compliant-700 shrink-0" /> : <Circle size={13} className="text-ink-300 shrink-0" />}
-        <span className="text-ink-500 w-[118px] shrink-0">Countersigned by</span>
+        <span className="text-ink-500 w-29.5 shrink-0">Countersigned by</span>
         <span className={cn('font-medium min-w-0 truncate', so.reviewer ? 'text-ink-800' : 'text-ink-400')}>{so.reviewer ? `${so.reviewer.by} · ${so.reviewer.at}` : `${eng.reviewer} — not yet countersigned`}</span>
         {canCounter && (
           <button onClick={() => onAttest({ kind: 'counter', run: () => signOffAudit('reviewer') })}
-            className="ml-auto h-7 px-2.5 shrink-0 rounded-lg bg-brand-600 text-white text-[11.5px] font-semibold hover:bg-brand-700 cursor-pointer inline-flex items-center gap-1"><PenLine size={11} /> Countersign</button>
+            className="ml-auto h-7 px-2.5 shrink-0 rounded-lg bg-brand-600 text-white text-[0.75rem] font-semibold hover:bg-brand-700 cursor-pointer inline-flex items-center gap-1"><PenLine size={11} /> Countersign</button>
         )}
       </div>
       {/* what the gate above leaves out — the year-end controls this round can't finish */}
       {pending.length > 0 && (
-        <div className="flex items-center gap-2 text-[11px] text-ink-400">
+        <div className="flex items-center gap-2 text-[0.6875rem] text-ink-400">
           <Hourglass size={12} className="shrink-0" />
           <span>{pending.length} control{pending.length === 1 ? '' : 's'} pending until {until} — tested in the year-end audit</span>
         </div>
       )}
-      <div className="flex items-center gap-2 text-[12.5px] pt-1.5 border-t border-canvas-border">
-        <span className="text-ink-500 w-[140px] shrink-0">ICFR conclusion</span>
+      <div className="flex items-center gap-2 text-[0.8125rem] pt-1.5 border-t border-canvas-border">
+        <span className="text-ink-500 w-35 shrink-0">ICFR conclusion</span>
         {/* An interim never concludes the year — its window stops short of the
             year end, so no verdict is stamped or shown here (user ask). Saying
             "live — not yet signed" on a signed interim would be wrong twice. */}
         {audit?.round === 'interim' ? (
-          <span className="text-[11px] text-ink-400">Not given at interim — the opinion is as of the year end, stamped by the roll-forward or year-end round.</span>
+          <span className="text-[0.6875rem] text-ink-400">Not given at interim — the opinion is as of the year end, stamped by the roll-forward or year-end round.</span>
         ) : (
           <>
             <span className={cn('font-bold', effective ? 'text-compliant-700' : 'text-risk-700')}>{effective ? 'Effective' : 'Not effective'}</span>
-            <span className="text-[11px] text-ink-400">{stamped ? 'stamped at sign-off' : `live — not yet signed${mwOpen ? ` · ${mwOpen} material weakness${mwOpen === 1 ? '' : 'es'} open` : ''}`}</span>
+            <span className="text-[0.6875rem] text-ink-400">{stamped ? 'stamped at sign-off' : `live — not yet signed${mwReason(mwOpen, entityMw) ? ` · ${mwReason(mwOpen, entityMw)}` : ''}`}</span>
           </>
         )}
       </div>
@@ -205,8 +225,8 @@ function EngagementSignoff({ eng, onAttest }: { eng: IcfrEngagement; onAttest: (
 }
 
 export default function WorkingPaperModal({ eng, control, controls, report, onClose, onDownload }: { eng: IcfrEngagement; control?: Control; controls?: Control[];
-  /** Preview the AUDIT REPORT instead of a working paper. Same renderer and the
-   *  same block union — but NOT the same reading model.
+  /** Preview the INTERNAL CONTROLS STATUS REPORT instead of a working paper.
+   *  Same renderer and the same block union — but NOT the same reading model.
    *
    *  A working paper previews sheet by sheet because it exports to a workbook,
    *  and the tabs on screen are that workbook's tabs (Jul 28). The report is not
@@ -215,6 +235,9 @@ export default function WorkingPaperModal({ eng, control, controls, report, onCl
    *  sheets — so the report renders as ONE continuous scroll, its sheets becoming
    *  sections of the deliverable in the order the PDF prints them. */
   report?: boolean; onClose: () => void; onDownload?: () => void }) {
+  // The report is the OPEN audit's deliverable — its sign-off is read off that
+  // audit, not whichever one happens to be live.
+  const { openAuditId } = useIcfr();
   // A control's paper is view-only until BOTH tracks have concluded. Not a
   // permission — a readiness gate: the document does not yet say anything, and a
   // downloaded file gets treated as final by whoever opens it next.
@@ -230,7 +253,8 @@ export default function WorkingPaperModal({ eng, control, controls, report, onCl
   // the engagement paper reads sheet by sheet, like the workbook it exports to
   const [sheetIx, setSheetIx] = useState(0);
   const bodyRef = useRef<HTMLDivElement>(null);
-  const { addToast } = useToast();
+  // Agentic UX #11: no toasts — a PDF that fails is said beside the footer buttons.
+  const pdfNote = useInlineNote();
 
   // Escape closes the preview — but while the attest confirm is open it only
   // dismisses that confirm, so a stray Esc can never walk out of a sign-off.
@@ -248,21 +272,22 @@ export default function WorkingPaperModal({ eng, control, controls, report, onCl
   // library exports (and previews) a filtered paper
   const included = controls ?? eng.controls;
   // the report is issued as a PDF (user rule, Aug 2026); the papers stay .xlsx
-  const fileName = report ? `Audit_Report_ICFR_${eng.code}.pdf`
+  const fileName = report ? `Internal_Controls_Status_Report_${eng.code}.pdf`
     : control ? `Working_Paper_${control.id}.xlsx`
     : `Working_Paper_ICFR_${eng.code}.xlsx`;
 
   // Each sheet of the report becomes a page of the PDF; the .xlsx export keeps
   // the same sheets as a workbook, so the three surfaces can never disagree.
   const issuePdf = async () => {
+    pdfNote.clear();
     try {
-      await downloadAuditReportPdf(eng, included);
+      await downloadAuditReportPdf(eng, included, openAuditId);
       onDownload?.(); onClose();
     } catch {
-      addToast({ type: 'error', title: 'PDF not generated', message: 'The PDF engine could not be loaded — try again.' });
+      pdfNote.show('error', 'PDF not generated — the PDF engine could not be loaded. Try again.');
     }
   };
-  const sheets = report ? buildAuditReport(eng, included)
+  const sheets = report ? buildAuditReport(eng, included, openAuditId)
     : control ? controlPaperSections(eng, control)
     : buildIcfrPaper(eng, included);
 
@@ -276,9 +301,9 @@ export default function WorkingPaperModal({ eng, control, controls, report, onCl
     if (control && b.kind === 'note' && b.label === 'Conclusion') {
       const bad = b.tone === 'bad';
       return (
-        <div key={i} className={cn('rounded-lg border-2 px-3 py-2.5 text-[13px] font-bold inline-flex items-center gap-2',
+        <div key={i} className={cn('rounded-lg border-2 px-3 py-2.5 text-[0.8125rem] font-bold inline-flex items-center gap-2',
           b.tone === 'good' ? 'border-compliant-300 bg-compliant-50/50 text-compliant-700' : bad ? 'border-risk-300 bg-risk-50/50 text-risk-700' : 'border-canvas-border text-ink-600')}>
-          <span className="uppercase tracking-wide text-[10.5px]">Conclusion</span> {b.text}
+          <span className="uppercase tracking-wide text-[0.6875rem]">Conclusion</span> {b.text}
         </div>
       );
     }
@@ -290,25 +315,25 @@ export default function WorkingPaperModal({ eng, control, controls, report, onCl
     {/* centred on screen — the fixed-height paper reads like a document viewer,
         not a top-anchored dialog */}
     <div className="modal-backdrop" onClick={onClose}>
-      <div className="modal modal-wide flex flex-col" onClick={e => e.stopPropagation()}>
+      <div role="dialog" aria-modal="true" aria-labelledby="working-paper-title" className="modal modal-wide flex flex-col" onClick={e => e.stopPropagation()}><DialogFocus />
         <div className="flex items-center justify-between px-5 py-3.5 border-b border-canvas-border shrink-0">
           {/* the icon follows the artefact: the report is issued as a PDF, the
               papers as a workbook */}
-          <h3 className="text-[14px] font-bold text-ink-900 inline-flex items-center gap-2">
+          <h3 id="working-paper-title" className="text-[0.875rem] font-bold text-ink-900 inline-flex items-center gap-2">
             {report ? <FileText size={15} className="text-brand-600" /> : <FileSpreadsheet size={15} className="text-brand-600" />}
-            {report ? 'Audit report — preview' : 'Working paper — preview'}
+            {report ? 'Internal Controls Status Report — preview' : 'Working paper — preview'}
           </h3>
-          <button onClick={onClose} className="h-8 w-8 inline-flex items-center justify-center rounded-lg text-ink-400 hover:text-ink-800 hover:bg-paper-50 cursor-pointer"><X size={16} /></button>
+          <button onClick={onClose} aria-label="Close" className="h-8 w-8 inline-flex items-center justify-center rounded-lg text-ink-400 hover:text-ink-800 hover:bg-paper-50 cursor-pointer"><X size={16} /></button>
         </div>
 
         {/* the workbook's sheet tabs — one sheet on screen at a time (for the
             control paper these page through the sections of its single sheet).
             The report has no sheets to tab through; it scrolls. */}
         {!report && (
-          <div className="flex items-end gap-1 px-5 pt-2.5 border-b border-canvas-border shrink-0 overflow-x-auto">
+          <div role="tablist" aria-label="Sheets" onKeyDown={tabKeys} className="flex items-end gap-1 px-5 pt-2.5 border-b border-canvas-border shrink-0 overflow-x-auto">
             {sheets.map((s, i) => (
-              <button key={s.name} onClick={() => { setSheetIx(i); bodyRef.current?.scrollTo({ top: 0 }); }} aria-current={i === sheetIx ? 'true' : undefined}
-                className={cn('-mb-px shrink-0 inline-flex items-center gap-1.5 rounded-t-md border px-2.5 py-1.5 text-[11px] font-semibold whitespace-nowrap cursor-pointer transition-colors',
+              <button key={s.name} role="tab" aria-selected={i === sheetIx} onClick={() => { setSheetIx(i); bodyRef.current?.scrollTo({ top: 0 }); }}
+                className={cn('-mb-px shrink-0 inline-flex items-center gap-1.5 rounded-t-md border px-2.5 py-1.5 text-[0.6875rem] font-semibold whitespace-nowrap cursor-pointer transition-colors',
                   i === sheetIx ? 'border-canvas-border border-b-white bg-white text-ink-900' : 'border-canvas-border bg-paper-50 text-ink-500 hover:text-ink-800')}>
                 <FileSpreadsheet size={12} className={i === sheetIx ? 'text-compliant-600' : 'text-ink-300'} /> {s.name}
               </button>
@@ -327,7 +352,7 @@ export default function WorkingPaperModal({ eng, control, controls, report, onCl
             sheets.map((s, si) => (
               <section key={s.name} className={si === 0 ? undefined : 'mt-7 pt-6 border-t border-canvas-border'}>
                 {si > 0 && (
-                  <h4 className="text-[12.5px] font-bold text-ink-900 mb-3" style={{ fontFamily: "'Source Serif 4', serif" }}>{s.name}</h4>
+                  <h4 className="text-[0.8125rem] font-bold text-ink-900 mb-3" style={{ fontFamily: "'Source Serif 4', serif" }}>{s.name}</h4>
                 )}
                 <div className="space-y-4">{s.blocks.map(renderBlock)}</div>
               </section>
@@ -340,32 +365,34 @@ export default function WorkingPaperModal({ eng, control, controls, report, onCl
         </div>
 
         <div className="flex items-center justify-between gap-2 px-5 py-3.5 border-t border-canvas-border shrink-0">
-          <span className="text-[11px] text-ink-400 truncate">{fileName}{report ? ` · the deliverable — evidence stays in the working paper · ${included.length} controls` : control ? ` · single sheet, this exact layout · conclusion ${controlConclusion(control)}` : included.length < eng.controls.length ? ` · filtered — ${included.length} of ${eng.controls.length} controls` : ` · ${included.length} controls`}</span>
+          <span className="text-[0.6875rem] text-ink-400 truncate">{fileName}{report ? ` · the deliverable — evidence stays in the working paper · ${included.length} controls` : control ? ` · single sheet, this exact layout · conclusion ${controlConclusion(control)}` : included.length < eng.controls.length ? ` · filtered — ${included.length} of ${eng.controls.length} controls` : ` · ${included.length} controls`}</span>
           <div className="flex items-center gap-2 shrink-0">
             {/* A half-tested control's paper is a document that states nothing yet.
                 It stays readable — the auditor works from it while testing — but it
                 cannot leave the tool until both tracks have concluded, because a
                 file that goes out is a file somebody will treat as final. */}
             {downloadBlocked && (
-              <span className="inline-flex items-center gap-1.5 text-[11px] font-semibold text-mitigated-800 bg-mitigated-50/70 border border-mitigated-200 rounded-lg px-2.5 h-9">
+              <span className="inline-flex items-center gap-1.5 text-[0.6875rem] font-semibold text-mitigated-800 bg-mitigated-50/70 border border-mitigated-200 rounded-lg px-2.5 h-9">
                 <Eye size={12} /> View only — {blockedWhy}
               </span>
             )}
-            <button onClick={onClose} className="h-9 px-3.5 rounded-lg border border-canvas-border text-[12.5px] font-semibold text-ink-600 hover:bg-paper-50 cursor-pointer">Close</button>
+            {/* only the report's Download PDF ever sets this */}
+            <InlineNote note={pdfNote.note} />
+            <button onClick={onClose} className="h-9 px-3.5 rounded-lg border border-canvas-border text-[0.8125rem] font-semibold text-ink-600 hover:bg-paper-50 cursor-pointer">Close</button>
             {report ? (
               <>
                 {/* the report is ISSUED as a PDF (each sheet a page); the .xlsx
                     is a secondary export of the same sheets */}
-                <button onClick={() => { downloadAuditReport(eng, included); onDownload?.(); onClose(); }}
-                  className="h-9 px-3.5 rounded-lg border border-canvas-border text-[12.5px] font-semibold text-ink-600 hover:bg-paper-50 cursor-pointer inline-flex items-center gap-1.5"><FileSpreadsheet size={14} /> Export .xlsx</button>
+                <button onClick={() => { downloadAuditReport(eng, included, openAuditId); onDownload?.(); onClose(); }}
+                  className="h-9 px-3.5 rounded-lg border border-canvas-border text-[0.8125rem] font-semibold text-ink-600 hover:bg-paper-50 cursor-pointer inline-flex items-center gap-1.5"><FileSpreadsheet size={14} /> Export .xlsx</button>
                 <button onClick={issuePdf}
-                  className="h-9 px-4 rounded-lg bg-brand-600 text-white text-[12.5px] font-semibold hover:bg-brand-700 cursor-pointer inline-flex items-center gap-1.5"><Download size={14} /> Download PDF</button>
+                  className="h-9 px-4 rounded-lg bg-brand-600 text-white text-[0.8125rem] font-semibold hover:bg-brand-700 cursor-pointer inline-flex items-center gap-1.5"><Download size={14} /> Download PDF</button>
               </>
             ) : (
               <button disabled={downloadBlocked}
                 title={downloadBlocked ? `Not downloadable yet — ${blockedWhy}` : undefined}
                 onClick={() => { if (control) downloadControlWorkingPaper(eng, control); else downloadIcfrWorkingPaper(eng, included); onDownload?.(); onClose(); }}
-                className="h-9 px-4 rounded-lg bg-brand-600 text-white text-[12.5px] font-semibold enabled:hover:bg-brand-700 disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer inline-flex items-center gap-1.5"><Download size={14} /> Download .xlsx</button>
+                className="h-9 px-4 rounded-lg bg-brand-600 text-white text-[0.8125rem] font-semibold enabled:hover:bg-brand-700 disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer inline-flex items-center gap-1.5"><Download size={14} /> Download .xlsx</button>
             )}
           </div>
         </div>
@@ -375,18 +402,18 @@ export default function WorkingPaperModal({ eng, control, controls, report, onCl
     {/* attest confirm — an irreversible signature never commits on a bare click */}
     {attest && (
       <div className="modal-backdrop" onClick={() => setAttest(null)}>
-        <div className="modal" onClick={e => e.stopPropagation()}>
+        <div role="dialog" aria-modal="true" aria-labelledby="attest-title" className="modal" onClick={e => e.stopPropagation()}><DialogFocus />
           <div className="px-5 pt-4 pb-3 border-b border-canvas-border">
             <div className="flex items-center justify-between gap-3">
-              <h2 className="text-[15px] font-semibold text-ink-900 inline-flex items-center gap-2"><PenLine size={15} className="text-brand-600" /> {attest.kind === 'sign' ? 'Sign off this paper?' : 'Countersign this paper?'}</h2>
+              <h2 id="attest-title" className="text-[0.9375rem] font-semibold text-ink-900 inline-flex items-center gap-2"><PenLine size={15} className="text-brand-600" /> {attest.kind === 'sign' ? 'Sign off this paper?' : 'Countersign this paper?'}</h2>
               <button onClick={() => setAttest(null)} className="h-7 w-7 inline-flex items-center justify-center rounded-md text-ink-400 hover:text-ink-700 cursor-pointer" aria-label="Close"><X size={15} /></button>
             </div>
           </div>
           <div className="p-5">
-            <p className="text-[12.5px] text-ink-600 leading-relaxed">{attest.kind === 'sign' ? 'Confirm — sign off this working paper? Your signature is recorded.' : 'Confirm — countersign? This closes the paper.'}</p>
+            <p className="text-[0.8125rem] text-ink-600 leading-relaxed">{attest.kind === 'sign' ? 'Confirm — sign off this working paper? Your signature is recorded.' : 'Confirm — countersign? This closes the paper.'}</p>
             <div className="mt-4 flex items-center justify-end gap-2">
-              <button onClick={() => setAttest(null)} className="h-9 px-3.5 rounded-lg border border-canvas-border text-[12.5px] font-semibold text-ink-600 hover:text-ink-900 cursor-pointer">Cancel</button>
-              <button onClick={() => { attest.run(); setAttest(null); }} className="h-9 px-3.5 rounded-lg bg-brand-600 text-white text-[12.5px] font-semibold hover:bg-brand-700 transition-colors cursor-pointer inline-flex items-center gap-1.5"><PenLine size={13} /> {attest.kind === 'sign' ? 'Sign off' : 'Countersign'}</button>
+              <button onClick={() => setAttest(null)} className="h-9 px-3.5 rounded-lg border border-canvas-border text-[0.8125rem] font-semibold text-ink-600 hover:text-ink-900 cursor-pointer">Cancel</button>
+              <button onClick={() => { attest.run(); setAttest(null); }} className="h-9 px-3.5 rounded-lg bg-brand-600 text-white text-[0.8125rem] font-semibold hover:bg-brand-700 transition-colors cursor-pointer inline-flex items-center gap-1.5"><PenLine size={13} /> {attest.kind === 'sign' ? 'Sign off' : 'Countersign'}</button>
             </div>
           </div>
         </div>

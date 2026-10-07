@@ -2,7 +2,8 @@ import { buildAuditReport } from './icfrAuditReport';
 import { periodLine, type PaperBlock } from './icfrWorkingPaper';
 import type { Control, IcfrEngagement } from './types';
 
-// The audit report as a real .pdf — the format it is actually issued in.
+// The Internal Controls Status Report as a real .pdf — the format it is
+// actually issued in.
 //
 // The user's rule (Aug 2026): the report goes out as a PDF first; preview and
 // the .xlsx export stay as options. All three read the SAME sheets from
@@ -124,7 +125,22 @@ function tableBlock(b: Extract<PaperBlock, { kind: 'table' }>): Content[] {
         dontBreakRows: true,
         body: [
           b.headers.map(h => ({ text: safe(h), fontSize: 7, bold: true, color: BRAND, fillColor: BRAND_WASH, margin: [4, 4, 4, 4] })),
-          ...b.rows.map(r => b.headers.map((_, i) => ({ text: safe(r[i] ?? ''), fontSize: 7, color: INK, margin: [4, 3, 4, 3] }))),
+          // A group heading is one cell spanning the width — the company, then
+          // the process under it. Every other cell in that row must still be
+          // emitted as a placeholder or pdfmake mis-counts the columns.
+          ...b.rows.map((r, ri) => {
+            const level = b.groups?.[ri];
+            if (!level) return b.headers.map((_, i) => ({ text: safe(r[i] ?? ''), fontSize: 7, color: INK, margin: [4, 3, 4, 3] }));
+            const head = {
+              text: safe(r[0] ?? ''), colSpan: b.headers.length, bold: true,
+              fontSize: level === 1 ? 7.5 : 7,
+              color: level === 1 ? INK : MUTED,
+              fillColor: level === 1 ? PAPER : undefined,
+              characterSpacing: level === 1 ? 0.6 : 0,
+              margin: [level === 1 ? 4 : 12, level === 1 ? 5 : 4, 4, level === 1 ? 4 : 3],
+            };
+            return [head, ...b.headers.slice(1).map(() => ({ text: '' }))];
+          }),
         ],
       },
       layout: {
@@ -171,15 +187,15 @@ function blockContent(b: PaperBlock): Content[] {
 // ─── entry point ───
 
 /**
- * Compose and download the audit report as a real .pdf — each sheet a page.
+ * Compose and download the status report as a real .pdf — each sheet a page.
  *
  * Resolves once the browser has been handed the file. Throws if pdfmake fails
  * to load, so the caller can say so rather than silently doing nothing.
  */
-export async function downloadAuditReportPdf(eng: IcfrEngagement, controls: Control[] = eng.controls): Promise<void> {
+export async function downloadAuditReportPdf(eng: IcfrEngagement, controls: Control[] = eng.controls, auditId?: string | null): Promise<void> {
   const pdfMake = await loadPdfMake();
-  const sheets = buildAuditReport(eng, controls);
-  const reportName = `Audit_Report_ICFR_${eng.code}`;
+  const sheets = buildAuditReport(eng, controls, auditId);
+  const reportName = `Internal_Controls_Status_Report_${eng.code}`;
 
   const content: Content[] = [];
   sheets.forEach((sheet, i) => {
@@ -197,7 +213,7 @@ export async function downloadAuditReportPdf(eng: IcfrEngagement, controls: Cont
 
   const docDefinition = {
     info: {
-      title: `Audit report — ${eng.name} (${eng.code})`,
+      title: `Internal Controls Status Report — ${eng.name} (${eng.code})`,
       author: eng.preparer,
       subject: `${eng.framework} · ${periodLine(eng)}`,
       creator: 'Irame',

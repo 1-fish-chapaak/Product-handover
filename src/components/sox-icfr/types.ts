@@ -33,6 +33,9 @@ export type Severity = 'Deficiency' | 'Significant Deficiency' | 'Material Weakn
  *  outcome: logged, never evaluated further, and it stops the ladder dead. The
  *  conclusion shown on an exception is always this, never a hand-set field. */
 export type ExceptionGrade = 'Clearly Trivial' | Severity;
+/** A grade as it is STORED on an archive or a rollup, where the exception may
+ *  never have been sized. See `Deficiency.magnitude`. */
+export type ArchivedSeverity = ExceptionGrade | 'Not sized';
 export const EXCEPTION_GRADES: ExceptionGrade[] = ['Clearly Trivial', 'Deficiency', 'Significant Deficiency', 'Material Weakness'];
 export const GRADE_RANK: Record<ExceptionGrade, number> = {
   'Clearly Trivial': -1, Deficiency: 0, 'Significant Deficiency': 1, 'Material Weakness': 2,
@@ -44,6 +47,9 @@ export interface Override {
   by: string;
   at: string;
   rationale: string;
+  /** An optional link or file name the auditor points at as the basis for the
+   *  override — the rationale says why, this says where to look. */
+  evidence?: string;
 }
 
 export interface EvidenceFile {
@@ -75,9 +81,68 @@ export interface RequiredFile {
 export type DesignDocKind =
   | 'Process narrative' | 'Flowchart' | 'Walkthrough' | 'Control description' | 'Policy / SOP'
   | 'Precision & thresholds' | 'Segregation of duties'
+  // The technical specification behind an automated or IT-dependent control —
+  // transaction code, field group, the role that releases, whether a bypass
+  // exists, where the change log lands. It comes from IT, not from the business,
+  // which is why it is its own element and not a second use of 'Control
+  // description': that one is the business's prose and has its own row below.
+  | 'System configuration'
   // an element the auditor named themselves — its title is `name`, not the kind
   | 'Custom';
 export type DocStatus = 'Received' | 'Requested' | 'Missing';
+
+/* ── What each class of control actually has to show ──────────────────────────
+ *
+ * Until now every control was offered the same flat list, so an ITGC carried a
+ * Process narrative and a Flowchart as requirements. Those documents are not
+ * produced for ITGCs at all — their evidence is access lists, change tickets,
+ * approval records and job logs. The control could therefore never reach 100%,
+ * and the auditor cleared it by waiving the two, one at a time.
+ *
+ * Those waivers were noise. A waiver says "we decided not to obtain this". For
+ * an ITGC narrative there is nothing to decide: the document does not exist for
+ * that kind of control. Recording it as a waiver puts a judgement on the working
+ * paper that nobody ever made.
+ *
+ * Hence three states, not two:
+ *   Required  — gates the design conclusion; must be evidenced or waived.
+ *   Optional  — strengthens the file, never gates; stays attachable.
+ *   Not applicable — never chased, never waived, and OUT of the completeness
+ *                    denominator. Still attachable if somebody happens to have one.
+ */
+export type DesignDocRequirement = 'Required' | 'Optional' | 'Not applicable';
+
+/** Which column of DOC_REQUIREMENTS a control reads. Note this is two fields, not
+ *  one: ITGC is a `clazz`, while Manual / Automated / IT-dependent are `nature`.
+ *  Class wins where it is set — an ITGC is an ITGC however it is performed. */
+export type DocClassColumn = 'Manual' | 'Automated' | 'IT-dependent' | 'ITGC';
+
+/** The table. Every standard kind has a row for every column, so nothing is
+ *  derived by omission. `Custom` is deliberately absent: an auditor-named element
+ *  is not a standard kind and keeps its own `required` flag. */
+export const DOC_REQUIREMENTS: Record<DocClassColumn, Record<Exclude<DesignDocKind, 'Custom'>, DesignDocRequirement>> = {
+  Manual: {
+    'Process narrative': 'Required', 'Flowchart': 'Optional', 'Control description': 'Required',
+    'Walkthrough': 'Required', 'System configuration': 'Not applicable',
+    'Segregation of duties': 'Optional', 'Policy / SOP': 'Optional', 'Precision & thresholds': 'Optional',
+  },
+  Automated: {
+    'Process narrative': 'Optional', 'Flowchart': 'Optional', 'Control description': 'Required',
+    'Walkthrough': 'Required', 'System configuration': 'Required',
+    'Segregation of duties': 'Optional', 'Policy / SOP': 'Optional', 'Precision & thresholds': 'Optional',
+  },
+  'IT-dependent': {
+    'Process narrative': 'Required', 'Flowchart': 'Optional', 'Control description': 'Required',
+    'Walkthrough': 'Required', 'System configuration': 'Required',
+    'Segregation of duties': 'Optional', 'Policy / SOP': 'Optional', 'Precision & thresholds': 'Optional',
+  },
+  ITGC: {
+    'Process narrative': 'Not applicable', 'Flowchart': 'Not applicable', 'Control description': 'Required',
+    'Walkthrough': 'Required', 'System configuration': 'Required',
+    // the access / role extract — who holds which role, out of the system itself
+    'Segregation of duties': 'Required', 'Policy / SOP': 'Optional', 'Precision & thresholds': 'Optional',
+  },
+};
 
 /** Why a required design element will never arrive. Three things actually happen
  *  in the field: the audit team writes the narrative and flowchart itself off the
@@ -114,7 +179,17 @@ export interface DesignDoc {
   at?: string;
 }
 /** The Q&A a validation workflow produced — reviewable after it runs. */
-export interface ValidationQA { q: string; a: string; pass: boolean; }
+export interface ValidationQA {
+  q: string;
+  a: string;
+  pass: boolean;
+  /** THE WORDING IN THE EVIDENCE THIS ANSWER RESTS ON — a phrase to find in the
+   *  attached file, not a coordinate. The viewer locates it in the document and
+   *  boxes it, so a marked passage is one that is genuinely there rather than a
+   *  rectangle somebody drew (25 Sep). Absent where the answer came from the
+   *  matrix rather than from a file. */
+  cite?: string;
+}
 /** An optional evidence table the AI returns (e.g. per-item check results). */
 export interface ValidationTable { columns: string[]; rows: string[][]; }
 export interface ValidationResult {
@@ -133,6 +208,10 @@ export interface ValidationResult {
    *  blocked check stays exactly what it was: not tested, and still the
    *  auditor's to mark by hand. Set together with `result` left undefined. */
   blocked?: string;
+  /** How sure Ira was of `result`, 0–100. A verdict is binary; the certainty
+   *  behind it is not, and the reviewer spends their attention on the unsure
+   *  ones. Absent on a blocked check — there is no verdict to be sure of. */
+  confidence?: number;
   at: string;
 }
 
@@ -215,6 +294,12 @@ export interface DesignPoint {
   auditorProof?: AuditorProof;
   result: TestResult;
   override?: Override;
+  /** A person accepted Ira's result as it stands (agentic UX #1, 1 Oct). Ira
+   *  proposes; until this is set the row reads "Ira · review" and the track
+   *  cannot be concluded. A new run of Ira clears it. `byIra` marks a confirm
+   *  Ira made itself in Automatic mode (recorded under the user's name) —
+   *  "Undo Ira's" may take those back until the step is concluded. */
+  confirmed?: { by: string; at: string; byIra?: boolean };
   /** A file on a design element was added or removed after this override was
    *  recorded (S6, A17) — the override stands, flagged "Evidence changed since
    *  override". Cleared when the override is removed or recorded again. */
@@ -382,6 +467,12 @@ export interface OperatingStep {
   attestation?: Attestation;
   result: TestResult;
   override?: Override;
+  /** A person accepted Ira's result as it stands (agentic UX #1, 1 Oct). Ira
+   *  proposes; until this is set the row reads "Ira · review" and the track
+   *  cannot be concluded. A new run of Ira clears it. `byIra` marks a confirm
+   *  Ira made itself in Automatic mode (recorded under the user's name) —
+   *  "Undo Ira's" may take those back until the step is concluded. */
+  confirmed?: { by: string; at: string; byIra?: boolean };
   // Per-drawn-sample results for THIS attribute (keyed by Sample.id) — the
   // handbook grain: every attribute is tested against every sampled item.
   sampleResults?: Record<string, TestResult>;
@@ -450,7 +541,8 @@ export interface Sampling {
  * Once, and never silently. Opening the second round REQUIRES a written reason,
  * because the alternative is drawing until a clean sample turns up, which is
  * not sampling at all. The reason, the person and the round it set aside are
- * all kept here, and all three print on the working paper and the audit report:
+ * all kept here, and all three print on the working paper and the Internal
+ * Controls Status Report:
  * a round that is not on the paper is a round that was hidden.
  *
  * The LIVE round is not stored here — it is the ordinary `sampling` and the
@@ -793,7 +885,39 @@ export interface IpeTest {
   testedAt: string | null;
 }
 
+/**
+ * THE OPERATING TEST, PARKED — the control has not run yet.
+ *
+ * Distinct from `UnableToTest`, which is an evidence chase: that one asks what
+ * the owner must produce, goes to them as a request, and at period end becomes
+ * an exception. A control implemented in August has no owner to chase and owes
+ * nothing — and it must never become a finding for failing to do something it
+ * never had the chance to do.
+ *
+ * Distinct too from `yearEndPending`, which is the same idea arrived at by rule
+ * rather than judgement (an Annual control cannot have run inside an interim).
+ * That one needs no reason because the frequency is the reason. This one is the
+ * auditor's call, so it costs a reason and a date.
+ *
+ * It never concludes anything. `controlConclusion` already refuses Effective
+ * unless both tracks are effective, so a parked control simply cannot be called
+ * effective — which is the point: nobody watched it run.
+ */
+export interface OperatingPark {
+  /** Why it cannot be tested yet, in the auditor's words. */
+  reason: string;
+  /** When it is expected to become testable. What makes this a park rather than
+   *  an excuse — and what lets the control resurface instead of going quiet. */
+  expectedFrom: string;
+  by: string;
+  at: string;
+}
+
 export interface OperatingTrack {
+  /** Set while the operating test is parked — see OperatingPark. Lives on the
+   *  track, not the control, so it clears when a new round resets it: every
+   *  round decides afresh whether the control has run yet. */
+  parked?: OperatingPark;
   method: OperatingMethod;        // dominant evidence mode — informational; each attribute is evidenced independently
   /** The report the population is drawn from, and its validation — IPE gate 1.
    *  Lives on the operating track because the sample it feeds does, but it is
@@ -854,6 +978,18 @@ export type RiskRating = 'High' | 'Medium' | 'Low';
 export type TestingStrategy = 'Sampling' | 'Full population' | 'Test of one';
 export const TESTING_STRATEGIES: TestingStrategy[] = ['Sampling', 'Full population', 'Test of one'];
 export const RISK_RATINGS: RiskRating[] = ['High', 'Medium', 'Low'];
+/** HOW LIKELY THE RISK IS TO HAPPEN — the other half of the rating, and a
+ *  required column since 24 Sep. Rating is the answer; likelihood and impact are
+ *  the reasoning behind it, and a matrix that carries only the answer cannot be
+ *  re-argued when management disagrees.
+ *
+ *  NOT the rating's three words (24 Sep). Likelihood is read on the standard's
+ *  own scale — Remote, Reasonably possible, Probable — the same scale the
+ *  deficiency ladder already grades on, which is why this aliases `Likelihood`
+ *  rather than declaring a second set. High/Medium/Low is `RiskRating`, and a
+ *  control that said "Medium" here was answering the wrong question. */
+export type RiskLikelihood = Likelihood;
+export const RISK_LIKELIHOODS: RiskLikelihood[] = ['Remote', 'Reasonably possible', 'Probable'];
 
 // ─── Risk category ───────────────────────────────────────────────────────────────
 // The RACM's own category column — called "Risk category" everywhere it shows
@@ -889,6 +1025,145 @@ export const RISK_CATEGORY_TINT: Record<ControlClass, string> = {
 };
 
 // ─── Control ─────────────────────────────────────────────────────────────────────
+
+// ─── Control versions — the control the owner rebuilt ───────────────────────────
+//
+// A failed DESIGN test says the control cannot work as written. The answer to it
+// is not more evidence, it is a different control: a second approver added, a
+// threshold lowered, a step moved to before the posting instead of after. That is
+// a NEW VERSION of the control, and the two versions are not interchangeable —
+// the old wording is what failed, the new wording is what has to be tested, and a
+// paper that quietly overwrites the first with the second has destroyed the
+// finding it existed to record.
+//
+// So the superseded version is kept in full, beside the live one. `Control` itself
+// is ALWAYS the live version: every screen, every helper and every date function
+// goes on reading `c.description`, `c.design` and `c.operating` exactly as before.
+// The old versions sit in `priorVersions`, oldest first, each carrying the tracks
+// it concluded under. Nothing was moved beneath a version wrapper, deliberately —
+// that would have rewritten several hundred call sites to say the same thing.
+//
+// Because `DesignApproval`, the rationale and the walkthrough all live INSIDE
+// `DesignTrack`, a version keeps its own reviewer approval and its own walkthrough
+// with no extra field. `wpSignoff` is the one exception: it signs the control's
+// PAPER rather than one version's track, so the snapshot carries whatever
+// signature that paper had reached and the live control starts unsigned.
+//
+// Only a `redesign` gets here. A `workaround` leaves the control itself untouched
+// — someone checks behind it — so there is no second wording to test and no
+// version to record. That is the whole distinction `PlanFixKind` draws, and it is
+// why the fix kind is asked before a plan can be accepted.
+export interface ControlVersion {
+  /** 1 for the control as first written. The LIVE version's number is never
+   *  stored — it is `priorVersions.length + 1`, so there is one place to be
+   *  wrong rather than two that can disagree. */
+  no: number;
+  /** THE WORDING THIS VERSION RAN UNDER — only the fields a redesign can move.
+   *  Everything else about a control (its owner, its risk, its account, its
+   *  assertions) is the same control either way, and re-stating it per version
+   *  would invite two copies to drift apart. */
+  description: string;
+  controlActivity?: string;
+  objective?: string;
+  precision: string;
+  nature: Nature;
+  type: ControlType;
+  frequency: Frequency;
+  isMrc?: boolean;
+  mrcThreshold?: number;
+  /** THE DAY THIS VERSION STOPPED BEING THE CONTROL — the day the next one went
+   *  live. The two windows MEET rather than overlap, so no occurrence can be
+   *  claimed as evidence for both versions.
+   *
+   *  ISO `YYYY-MM-DD`, and it has to be: this is the only date on a control that
+   *  is COMPARED rather than printed, and every other loose date in the product
+   *  ('1 Apr 2026', 'Mar 2026') sorts wrong as a string. `recordNewVersion`
+   *  normalises whatever the auditor typed; the screens run it back through
+   *  `formatDueDate` to show it.
+   *
+   *  When this version STARTED is deliberately not stored: it is the version
+   *  before it being superseded, or the start of the window for version 1. See
+   *  `versionWindow`. Storing it as well would be a second place to be wrong,
+   *  and the two could then disagree about which side of a day an occurrence
+   *  falls on. */
+  supersededAt: string;
+  /** The tracks as they stood when this version was superseded: its conclusion,
+   *  its rationale, its reviewer approval, its walkthrough, its population and
+   *  its sample. Nothing here is ever written again. */
+  design: DesignTrack;
+  operating: OperatingTrack;
+  /** The signature that version's paper had reached, if it had reached one. */
+  wpSignoff?: { preparer?: SignoffEntry; reviewer?: SignoffEntry };
+  /** WHY it was superseded — the exception whose accepted plan replaced it, the
+   *  kind of fix that plan was, and what the auditor said changed. The exception
+   *  is named rather than described so the finding and the version it produced
+   *  can always be read back against each other. */
+  replaced: { defId: string; fix: PlanFixKind; note: string; by: string };
+}
+
+/** WHAT THE AUDITOR RECORDS when a rebuilt control is put in front of them.
+ *
+ *  Only the fields a redesign can actually move, and only `description`,
+ *  `liveFrom` and `note` are required: the rest are left out when they did not
+ *  change, and the live control keeps what it had. A blank field would otherwise
+ *  read as "this was removed", which is not what leaving it alone means. */
+export interface NewVersionDraft {
+  /** The control as it now reads — the sentence the next design test is against. */
+  description: string;
+  controlActivity?: string;
+  precision?: string;
+  /** A redesign moves these as often as it moves the wording: a monthly review
+   *  made weekly, a manual check automated, a detective control put before the
+   *  posting instead of after. Each of them changes what the next test looks
+   *  like, so each of them is offered. */
+  nature?: Nature;
+  type?: ControlType;
+  frequency?: Frequency;
+  mrcThreshold?: number;
+  /** THE DAY THE REBUILT CONTROL STARTED RUNNING. Required, and the reason this
+   *  is a recorded event rather than an edit: everything the new version can be
+   *  tested on begins here, and a version with no start date has no population.
+   *
+   *  Read loosely — a date input gives ISO, a typed '1 Apr 2026' also parses —
+   *  and normalised to ISO before it is stored. An unreadable date is refused
+   *  rather than kept as prose: a window that cannot be compared is worse than
+   *  no window, because the draw would silently fall back to the whole period. */
+  liveFrom: string;
+  /** What the auditor saw change, in their words — read back beside the old
+   *  wording, so "what is different about v2" is answered on the paper rather
+   *  than by diffing two sentences. */
+  note: string;
+}
+
+/** The plan steps the tester can take off Ira (Stage 1a, 2 Oct). Waiting for the
+ *  population is not one — nobody chooses whether to wait. */
+export type IraPlanStepId = 'design' | 'sample' | 'operating';
+/** What the tester told Ira to do on one control. A list left absent means
+ *  "all of them"; once narrowed, Ira reads only the ids in it and leaves the
+ *  rest exactly as they stand. */
+export interface IraPlanChoices {
+  /** Steps the tester will do themselves. */
+  skipped: IraPlanStepId[];
+  /** Design evidence files (ids) Ira reads. */
+  files?: string[];
+  /** Design checks (ids) Ira marks. */
+  checks?: string[];
+  /** TOE attributes (ids) Ira validates. */
+  attributes?: string[];
+  /** Start pressed — until then Ira runs nothing on this control. */
+  started?: { by: string; at: string };
+}
+
+/** The four parts of a control's set-up that carry between rounds. */
+export type RollPart = 'design' | 'checks' | 'population' | 'attributes';
+export type RollState = { state: 'pending' } | { state: 'confirmed' | 'edited'; by: string; at: string };
+export interface RollForward {
+  /** The round it came from, in words — "FY26 interim". */
+  from: string;
+  parts: Partial<Record<RollPart, RollState>>;
+  /** How last round drew, shown beside the attributes — not re-applied. */
+  sampling?: { method: string; size: number; basis: string };
+}
 
 export interface Control {
   id: string;
@@ -979,6 +1254,12 @@ export interface Control {
    *  People step; absent on controls created before that step existed, which is
    *  why it is optional and every read falls back to `owner`. */
   processOwner?: string;
+  /** WHICH PART OF THE SOP THIS CAME FROM — "§ 4.2". Carried so an extracted
+   *  control can be read back against the procedure it was drawn from, which
+   *  is the first thing a reviewer asks of an SOP extraction. Collected on the
+   *  import row since the required-column list was agreed, but it had nowhere
+   *  to live on the control until 24 Sep, so it stopped at the preview. */
+  sopSectionRef?: string;
   /** THE RISK OWNER — the person accountable for the risk this control answers
    *  (22 Sep: a required RACM column). A record on the matrix only: it does not
    *  change who is sent tasks or requests — that "risk owner" lane is still the
@@ -1000,6 +1281,10 @@ export interface Control {
   /** The risk's agreed rating. Drives how deep the sample goes — see
    *  `sampleSizeGuide` — and is argued with management, not derived. */
   riskRating?: RiskRating;
+  /** How likely the risk was judged to be. Read off the matrix, never derived —
+   *  the RACM list used to invent it from the rating, which meant every control
+   *  with no rating read "Medium" as though somebody had decided that. */
+  likelihood?: RiskLikelihood;
   /** WHEN THE CONTROL STARTED OPERATING in its current form — a control put in
    *  place in September cannot be tested over a year that began in April, and a
    *  sample drawn across the whole period would be drawing from months the
@@ -1051,6 +1336,21 @@ export interface Control {
   racmReview?: RacmReview;
   design: DesignTrack;
   operating: OperatingTrack;
+  /** THE VERSIONS OF THIS CONTROL THAT NO LONGER RUN, oldest first.
+   *
+   *  A peer of the two tracks above rather than a wrapper around them: the fields
+   *  on this interface are always the LIVE version, so nothing that reads a
+   *  control had to change to gain versions. Absent on the ordinary control,
+   *  which has only ever been written one way. See `ControlVersion`. */
+  priorVersions?: ControlVersion[];
+  /** Last round's set-up, brought into this one (agentic UX #13, 1 Oct). Each
+   *  part arrives PENDING and holds its own step until the auditor confirms it
+   *  unchanged or edits it — nothing is tested on last round's set-up by
+   *  accident, and Ira never confirms one, Automatic or not. */
+  rollForward?: RollForward;
+  /** Ira's plan for this control, as the tester shaped it (Stage 1a, 2 Oct).
+   *  Ira runs no step of it, Manual or Automatic, until `started` is set. */
+  iraPlan?: IraPlanChoices;
   /** Audit-side sign-off on THIS working paper — the preparer (auditor hat) signs
    *  once the control is concluded; the reviewer countersigns. Separate from the
    *  engagement-level opinion sign-off. */
@@ -1066,6 +1366,38 @@ export interface Control {
    *  has been shown to have failed, so exposure and likelihood do not apply and
    *  a severity would be a fabrication. See `UnableToTest`. */
   unableToTest?: UnableToTest;
+  /** A remediation closed against this control, so the thing that was tested is
+   *  not the thing that is there now. The retest is NOT part of the exception
+   *  flow (see `ExceptionStatus`) — it happens on the audit's own timetable, on
+   *  a control that has had a chance to run. This is the flag that says one is
+   *  owed, and it is the auditor's to clear, by testing or by judging that the
+   *  change did not touch what they tested.
+   *
+   *  Deliberately does NOT reset the conclusion. Wiping a signed conclusion
+   *  because somebody else closed a remediation would delete the auditor's work
+   *  without the auditor asking; `reopenControl` is how that is done on purpose.
+   *  A redesign is the one case where the control's own wording changes too, and
+   *  that goes through `recordNewVersion`, which resets both tracks by design. */
+  retestDue?: RetestDue;
+}
+
+/** "This control changed — it is owed a retest." Raised by a reviewer closing a
+ *  remediation, cleared by the auditor. */
+export interface RetestDue {
+  /** The exception whose close raised it. */
+  defId: string;
+  /** Which track failed and was remediated — that is the one to retest first. */
+  track: 'design' | 'operating';
+  /** Only design plans name one; a redesign also expects a new version recorded. */
+  fix?: PlanFixKind;
+  /** What was done, in the plan's own words, so the auditor knows what changed. */
+  note: string;
+  by: string;
+  at: string;
+  /** The auditor's answer. Absent while it is still owed. A reason is required
+   *  either way — "retested" points at the round, "not needed" is a judgement
+   *  and a judgement that is not written down did not happen. */
+  cleared?: { reason: string; by: string; at: string };
 }
 
 /** "Unable to test — waiting on owner". A status on the CONTROL, not a second
@@ -1144,7 +1476,13 @@ export interface HandoffTask {
    *  reader then has to search — the same reasoning `focusDefId` follows for
    *  deficiencies. Absent means the top of the page, which is right for a
    *  task that is about the control as a whole. */
-  focus?: 'population';
+  focus?: 'population' | 'design';
+  /** The one check (design point or TOE attribute id) this ask unblocks —
+   *  set by Ira's "couldn't test" card, so the card and the row can say it
+   *  was sent without keeping their own memory of it. */
+  checkId?: string;
+  /** The real due day (YYYY-MM-DD) behind `dueLabel`, where one was set. */
+  dueAt?: string;
   overdue: boolean;
   status: TaskStatus;
 }
@@ -1159,6 +1497,86 @@ export const gapNature = (track: 'design' | 'operating', nature: Nature): string
   track === 'design'
     ? (nature === 'Manual' ? 'Design gap — manual control' : 'Design gap — IT-dependent control')
     : (nature === 'Manual' ? 'Operating failure — manual control' : 'Operating failure — IT-dependent control');
+
+/** Accepting a plan for a DESIGN gap answers one more question than accepting one
+ *  for an operating failure: has the control actually been rebuilt, or has a manual
+ *  step been bolted on around it?
+ *
+ *  It matters because only one of the two ends the deficiency. A redesign means the
+ *  control that failed no longer exists in that form — its design has to be tested
+ *  again from scratch. A workaround leaves the original design exactly as it was
+ *  and adds a person checking after it, which is a compensating control wearing a
+ *  remediation's clothes: it can reduce what the failure is worth, it cannot make
+ *  the design effective. An auditor who never asks lets the second pass as the
+ *  first, and the register reads remediated when nothing was redesigned. */
+export type PlanFixKind = 'redesign' | 'workaround';
+
+export const PLAN_FIX_KINDS: PlanFixKind[] = ['redesign', 'workaround'];
+
+export const PLAN_FIX_LABEL: Record<PlanFixKind, string> = {
+  redesign: 'The control itself changes',
+  workaround: 'A manual step added around it',
+};
+
+export const PLAN_FIX_HINT: Record<PlanFixKind, string> = {
+  redesign: 'The way the control works is different now, so its design is tested again from scratch. This is what closes a design gap.',
+  workaround: 'The control is unchanged and someone checks behind it. That can cap what the failure is worth, but the design it was built with is still the design that failed.',
+};
+
+/** The six ways a control's DESIGN can be wrong.
+ *
+ *  An operating failure means the control was run badly; a design failure means it
+ *  could never have worked, and the six kinds are the six reasons why. They matter
+ *  because the fix follows the kind: a segregation gap moves a task to a different
+ *  person, a precision gap moves a number, a placement gap moves the control itself.
+ *  Ira reads the kind off the design check that failed (`suggestGapKind`). */
+export type DesignGapKind =
+  | 'sod'          // one person does and checks the same thing
+  | 'precision'    // the threshold is too loose to catch the misstatement
+  | 'placement'    // the control sits where it cannot stop the error
+  | 'bypassable'   // work can route around it
+  | 'frequency'    // it runs too rarely to catch the error in time
+  | 'no-control';  // there is effectively nothing there
+
+export const DESIGN_GAP_KINDS: DesignGapKind[] = ['sod', 'precision', 'placement', 'bypassable', 'frequency', 'no-control'];
+
+/** Selected kinds, normalised: register order, and `no-control` alone if it is
+ *  in there at all. Used at every write, so the stored order never depends on
+ *  which chip somebody happened to press first. */
+export const sortGapKinds = (ks: readonly DesignGapKind[]): DesignGapKind[] =>
+  ks.includes('no-control') ? ['no-control'] : DESIGN_GAP_KINDS.filter(k => ks.includes(k));
+
+export const GAP_KIND_LABEL: Record<DesignGapKind, string> = {
+  sod: 'No segregation of duties',
+  precision: 'Insufficient precision',
+  placement: 'Wrong place in the process',
+  bypassable: 'Can be bypassed',
+  frequency: 'Runs too rarely',
+  'no-control': 'No control at all',
+};
+
+/** What the auditor is saying when they pick it — shown under the picker. */
+export const GAP_KIND_HINT: Record<DesignGapKind, string> = {
+  sod: 'The same person performs the control and prepares what it checks, so it cannot be an independent check.',
+  precision: 'The threshold or tolerance is loose enough that a misstatement large enough to matter would pass it.',
+  placement: 'The control sits after the point where the error arises, so it can only find the error, never stop it.',
+  bypassable: 'Transactions can reach the accounts without passing through the control.',
+  frequency: 'The control runs less often than the risk occurs, so an error can reach the accounts between runs.',
+  'no-control': 'There is a row in the RACM, but nothing in the process actually does what it describes.',
+};
+
+/** What the OWNER is asked for at step ③, per kind. The generic prompt is written
+ *  for an operating failure ("normalise the match key, not recover the 4 invoices")
+ *  and is the wrong question for every one of these: a design gap is fixed by
+ *  changing the control, not by doing it more carefully. */
+export const GAP_KIND_PLAN_PROMPT: Record<DesignGapKind, string> = {
+  sod: 'Which task moves to a different person, and who takes it?',
+  precision: 'What does the threshold become, and who approved the new one?',
+  placement: 'Where does the control move to, and what stops the transaction there?',
+  bypassable: 'What closes the route around the control?',
+  frequency: 'How often will it run instead, and from when?',
+  'no-control': 'What control is being put in, who performs it, and from when?',
+};
 
 // ─── PARKED (Aug 2026) — Gap type ────────────────────────────────────────────────
 // Removed from the exception screen: derivable from the control's nature and the
@@ -1256,6 +1674,30 @@ export interface Deficiency {
   // PARKED (Aug 2026) — see the Gap type / Priced impact banners above.
   // gapType?: GapType;
   // exposure?: Exposure;
+  /** HOW the design is wrong — design track only. See DESIGN_GAP_KINDS.
+   *
+   *  Not a revival of the parked `gapType`. That one asked which KIND OF CONTROL
+   *  had failed (manual / IT / testing), which was derivable from nature and track
+   *  and so was rightly removed as a question with a knowable answer. This asks
+   *  something the nature cannot answer: WHY the design could never have worked.
+   *  A control can be manual and fail because one person does the whole thing, or
+   *  because the threshold is too loose, or because it runs too late — three
+   *  different findings needing three different fixes, all 'manual design gap'.
+   *
+   *  Ira fills it from the design check that failed and tags it in `iraSuggested`;
+   *  the auditor can change it, and the tag goes when they do. */
+  /** RENAMED FROM `gapKind` (30 Sep). A control can be insufficiently precise
+   *  AND in the wrong place — two different findings needing two different
+   *  fixes, and the scalar made the auditor pick one and lose the other.
+   *  `suggestGapKind` was already dropping the second on the floor: it returned
+   *  on the first pattern that matched.
+   *
+   *  Held in `DESIGN_GAP_KINDS` order, not click order, so two auditors doing
+   *  identical work produce identical paper. `no-control` is exclusive — "there
+   *  is nothing here" and "its threshold is too loose" cannot both be true of
+   *  one control — and the picker enforces that rather than leaving the paper
+   *  to read as nonsense. */
+  gapKinds?: DesignGapKind[];
   /** Where this lands in the report — the source RACM's report reference number. */
   reportRef?: string;
   description: string;
@@ -1272,7 +1714,28 @@ export interface Deficiency {
    *  retest of anything. */
   failedChecks?: { pointId: string; text: string }[];
   likelihood: Likelihood;
-  magnitude: number;
+  /**
+   * THE EXPOSURE — and `null` until somebody has actually answered the question.
+   *
+   * It was a plain `number` starting at 0, and that read a blank as a figure.
+   * `isClearlyTrivial` is `magnitude <= clearlyTrivial`, so every exception
+   * nobody had sized yet graded Clearly Trivial the moment it was raised — a
+   * design failure that ran the whole period, filed as not worth evaluating,
+   * on a number no person ever typed.
+   *
+   * Three states, and they are three different sentences:
+   *   null            — not sized. `gradeException` refuses to grade at all.
+   *   0 + a reason    — the auditor concluded there is no exposure. Grades.
+   *   a figure        — grades.
+   *
+   * Zero costs a reason (`magnitudeZeroReason`) precisely because zero is the
+   * value a blank used to masquerade as: if it is going to clear an exception,
+   * somebody says why in their own words.
+   */
+  magnitude: number | null;
+  /** Why the exposure is nil — required when `magnitude` is 0, meaningless
+   *  otherwise. What separates a deliberate nil from an unanswered question. */
+  magnitudeZeroReason?: string;
   mwIndicators: string[];
   compensatingControlId?: string;
   /** What Ira pre-filled when the exception was raised (S9, A31) — one line of
@@ -1284,7 +1747,7 @@ export interface Deficiency {
    *  `rootCause` (17 Sep dev call) is different in one way: while its tag is on,
    *  the root cause is Ira's draft and step 1 is not done — the auditor edits it
    *  or takes it ("Use this"), and either removes the tag (rootCauseReady). */
-  iraSuggested?: Partial<Record<'likelihood' | 'magnitude' | 'compensatingControlId' | 'rootCause', string>>;
+  iraSuggested?: Partial<Record<'likelihood' | 'magnitude' | 'compensatingControlId' | 'rootCause' | 'gapKinds', string>>;
   aggregationGroup?: string;
   /** PARKED (13 Aug 2026) — the single "same root cause as" link. Superseded by
    *  `rootCauseGroupIds`: one exception can share a mechanism with several
@@ -1322,7 +1785,7 @@ export interface Deficiency {
   /** The auditor's verdict on the plan — does it address the root cause? A
    *  rejection carries the reason back to the owner. The auditor never writes
    *  or executes the fix; this is the whole of their say in it. */
-  planReview?: { decision: 'Accepted' | 'Rejected'; reason?: string; by: string; at: string };
+  planReview?: { decision: 'Accepted' | 'Rejected'; reason?: string; fix?: PlanFixKind; by: string; at: string };
   /** The auditor's stated retest-ready date. Normally there is none: the date is
    *  DERIVED from the fix date plus the control's operating period, so storing it
    *  would just be a second copy that drifts. It is set only where the derivation
@@ -1342,7 +1805,50 @@ export interface Deficiency {
   signoff?: { by: string; at: string };
   // Prudent-official judgment: severity can be argued UP (never down) with a
   // recorded rationale — the handbook's judgment floor over the pure math.
-  prudentOverride?: { to: Severity; rationale: string; by: string; at: string };
+  /** The prudent-official test — PCAOB AS 2201 .70, which calls its answer an
+   *  indicator of a material weakness in its own right. `to` raises the grade;
+   *  `to: null` records the OTHER answer, that it was considered and the grade
+   *  stands. A required judgement that leaves no record is a hole in the file,
+   *  and "we thought about it and disagreed" is a finding too. */
+  prudentOverride?: { to: Severity | null; rationale: string; by: string; at: string };
+  /**
+   * THE SYSTEMIC CHECK, AS IT WAS ACTUALLY RUN.
+   *
+   * The scan itself is derived and costs nothing to recompute. What is NOT
+   * derivable afterwards is that somebody ran it, when, and what the register
+   * said at that moment — and therefore what the grade was argued from. A lead
+   * nobody followed and a lead that was followed and came back empty are the
+   * same empty list on screen and two completely different audit trails.
+   *
+   * Captured and never edited. The peers' own test results move under it, and a
+   * record that silently kept up with them would stop being evidence of
+   * anything. A newer answer is a NEW scan, and the panel says when the two have
+   * drifted rather than quietly swapping one for the other.
+   */
+  flawScan?: {
+    /** The gap searched for, as it stood when the scan ran. A later edit to
+     *  `gapKinds` does not rewrite this — it makes the record stale, which is a
+     *  thing worth saying out loud. */
+    gapKinds: DesignGapKind[];
+    /** The library design check the gap maps to, or null when the gap has none
+     *  and nothing could be searched for — see `notScanned`. */
+    check: string | null;
+    /** Why there was nothing to search for. Absent on a scan that ran. */
+    notScanned?: 'judgement-about-this-control';
+    /** Scoped to the process, never the engagement: a segregation flaw matches
+     *  most of the register engagement-wide, which is noise, not a finding. */
+    process: string;
+    /** Every other control in the process, with what was true of it then — the
+     *  denominator, which is what turns a list into a check with a result.
+     *  `carries` means no design check on that control covers this flaw, so it
+     *  COULD be built the same way: a prompt to look, not a finding. */
+    examined: { controlId: string; carries: boolean; tested: boolean; kinds: DesignGapKind[] }[];
+    /** How many of `examined` carry it — stored rather than recounted, so the
+     *  record and the sentence written from it cannot drift apart. */
+    carrying: number;
+    by: string;
+    at: string;
+  };
   /** Carried across when a control that could never be tested converts to an
    *  exception at period end — the working paper has to say why it was never
    *  evidenced, not just that it failed. */
@@ -1401,28 +1907,35 @@ export interface SeverityChallenge {
   response?: { decision: 'Accepted' | 'Declined'; reason: string; by: string; at: string };
 }
 
-// The six steps, as eight states — two of the steps have a handoff inside them.
+// The five steps, as seven states — two of the steps have a handoff inside them.
 // Sizing parks for the reviewer when it lands on Significant Deficiency or worse;
 // planning parks for the auditor to judge the plan against the root cause. A
-// passed retest parks at 'Awaiting reviewer' — only the reviewer closes (four-eyes).
+// submitted fix parks at 'Awaiting reviewer' — only the reviewer closes (four-eyes).
+//
+// THE RETEST IS NOT A STEP HERE (30 Sep, user's call). It used to sit between
+// the fix and the close, which forced the auditor to test a repair the day it
+// landed — often before the fixed control had run even once. A retest happens on
+// the CONTROL, on the audit's own timetable, and the close no longer waits on it:
+// the exception records what was found, what was planned, what was built, and who
+// signed it off. Closing marks the control as changed and tells the auditor it is
+// owed a retest (`Control.retestDue`), which is the honest sequence — the fix is
+// agreed now, the proof of it is gathered when there is something to gather.
 export type ExceptionStatus =
   | 'Identified'          // ① raised + ② the auditor sizes it
   | 'Rating review'       // ② reviewer confirms Significant Deficiency or worse — blocking
   | 'Planning'            // ③ risk owner writes the plan
   | 'Plan review'         // ③ auditor judges it against the root cause
   | 'Remediation'         // ④ risk owner implements and attaches evidence
-  | 'Retest'              // ⑤ auditor retests — a post-fix sample (TOE), or the failed design checks against the fix (TOD)
-  | 'Awaiting reviewer'   // ⑥ reviewer reads the retest evidence
-  | 'Closed';             // ⑥ reviewer has signed off
+  | 'Awaiting reviewer'   // ⑤ reviewer reads the plan, the fix and its evidence
+  | 'Closed';             // ⑤ reviewer has signed off
 
-/** The six steps as the screen shows them, and where each state sits. */
+/** The five steps as the screen shows them, and where each state sits. */
 export const EXCEPTION_STEPS: { n: number; title: string; role: Role; states: ExceptionStatus[] }[] = [
-  { n: 1, title: 'Exception raised', role: 'auditor', states: ['Identified'] },
+  { n: 1, title: 'Deficiency raised', role: 'auditor', states: ['Identified'] },
   { n: 2, title: 'Size it', role: 'auditor', states: ['Identified', 'Rating review'] },
   { n: 3, title: 'Plan the fix', role: 'risk-owner', states: ['Planning', 'Plan review'] },
   { n: 4, title: 'Fix and submit', role: 'risk-owner', states: ['Remediation'] },
-  { n: 5, title: 'Retest', role: 'auditor', states: ['Retest'] },
-  { n: 6, title: 'Close', role: 'reviewer', states: ['Awaiting reviewer', 'Closed'] },
+  { n: 5, title: 'Close', role: 'reviewer', states: ['Awaiting reviewer', 'Closed'] },
 ];
 
 /* ── Deficiency aggregation ───────────────────────────────────────────────────
@@ -1506,14 +2019,141 @@ export interface SignificantAccount {
   wcgw?: string[];
 }
 
-/** The engagement-level "ground rules" that drive how every exception is evaluated and routed. */
-export const MW_INDICATOR_CATALOGUE = [
-  'Restatement of previously issued financial statements',
-  'Material misstatement identified by audit, not the control',
-  'Fraud of any magnitude by senior management',
-  'Ineffective control environment / oversight',
-  'Ineffective period-end financial reporting process',
-] as const;
+/* ── Material-weakness indicators ──────────────────────────────────────────────
+ *
+ * SOME OF THESE ARE ABOUT THIS EXCEPTION. MOST ARE ABOUT THE COMPANY.
+ *
+ * The list was five flat strings, all asked on every exception's sizing panel.
+ * Three of them are not facts about an exception at all — a restatement, the
+ * audit committee's oversight, the period-end reporting process — they are facts
+ * about the company and the audit, true or false once, for everything. Asking
+ * them on each exception invites the same question to be answered several ways
+ * on one engagement, and says nothing about the control in front of the reader.
+ * `scope` is what records the difference.
+ *
+ * AND THE FOURTH WAS TWO THINGS WELDED TOGETHER. "Ineffective control
+ * environment / oversight" covered AS 2201 .69's audit-committee bullet AND a
+ * house rule about the control environment generally. One tick could not say
+ * which had been concluded, and they are different findings against different
+ * people. They are two entries now.
+ *
+ * `source` is on every row because a reader has to be able to tell a standard
+ * from this firm's own addition, and a named paragraph from a vague appeal to
+ * "the standard". Two of the six are ours and say so.
+ */
+export type MwIndicatorId =
+  | 'auditor-found-misstatement'
+  | 'senior-management-fraud'
+  | 'restatement'
+  | 'audit-committee-oversight'
+  | 'control-environment'
+  | 'period-end-reporting';
+
+/** 'exception' — a fact about THIS exception, answered while sizing it.
+ *  'entity'    — a fact about the company or the audit, concluded once. */
+export type MwIndicatorScope = 'exception' | 'entity';
+
+/** Who says so. `.69` is the indicators paragraph; `.70` is the prudent-official
+ *  test, which the standard also calls an indicator. */
+export type MwIndicatorSource =
+  | { kind: 'standard'; standard: 'PCAOB AS 2201'; paragraph: '.69' | '.70' }
+  | { kind: 'house' };
+
+export interface MwIndicatorDef {
+  id: MwIndicatorId;
+  /** What the auditor reads. Kept close to the standard's own words. */
+  label: string;
+  /** What ticking it actually asserts — the scope of the claim, in one line. */
+  hint: string;
+  scope: MwIndicatorScope;
+  source: MwIndicatorSource;
+}
+
+const AS2201_69: MwIndicatorSource = { kind: 'standard', standard: 'PCAOB AS 2201', paragraph: '.69' };
+
+export const MW_INDICATOR_CATALOGUE: readonly MwIndicatorDef[] = [
+  { id: 'auditor-found-misstatement', scope: 'exception', source: AS2201_69,
+    label: 'Material misstatement identified by the audit, not the control',
+    hint: 'The audit found a material misstatement in this period, in circumstances showing this control would not have caught it.' },
+  { id: 'senior-management-fraud', scope: 'exception', source: AS2201_69,
+    label: 'Fraud of any magnitude by senior management',
+    hint: 'Fraud on the part of senior management — material or not.' },
+  { id: 'restatement', scope: 'entity', source: AS2201_69,
+    label: 'Restatement of previously issued financial statements',
+    hint: 'Previously issued statements were restated to correct a material misstatement. True of the company, not of any one control.' },
+  { id: 'audit-committee-oversight', scope: 'entity', source: AS2201_69,
+    label: 'Ineffective audit-committee oversight of external financial reporting and ICFR',
+    hint: 'The audit committee’s oversight is ineffective. The audit committee specifically — not the control environment generally.' },
+  { id: 'control-environment', scope: 'entity', source: { kind: 'house' },
+    label: 'Ineffective control environment',
+    hint: 'Tone at the top, control consciousness, management override. Not an AS 2201 .69 indicator — this firm treats it as one.' },
+  { id: 'period-end-reporting', scope: 'entity', source: { kind: 'house' },
+    label: 'Ineffective period-end financial reporting process',
+    hint: 'AS 2201 .26–.27 require this process to be evaluated but do not list its failure as an indicator. This firm does.' },
+];
+
+/* The derived lookups live HERE, immediately under the array they read. A
+ * module-level const in another sox-icfr file reading a sox-icfr export throws
+ * at load and `npm run build` never catches it. */
+export const MW_INDICATOR_BY_ID = Object.fromEntries(
+  MW_INDICATOR_CATALOGUE.map(i => [i.id, i]),
+) as Record<MwIndicatorId, MwIndicatorDef>;
+
+/** The two asked on an exception's sizing panel. */
+export const EXCEPTION_MW_INDICATORS = MW_INDICATOR_CATALOGUE.filter(i => i.scope === 'exception');
+/** The four concluded once for the engagement. */
+export const ENTITY_MW_INDICATORS = MW_INDICATOR_CATALOGUE.filter(i => i.scope === 'entity');
+
+/** The attribution, for a screen, a column or a paper. */
+export const mwSourceLabel = (s: MwIndicatorSource): string =>
+  s.kind === 'standard' ? `${s.standard} ${s.paragraph}` : 'House rule';
+
+/* The stored value USED to be the label itself, so anything written before this
+ * change carries a sentence where an id belongs. Read through `mwIndicatorIds`
+ * rather than trusting the array — the exports write these into deliverables,
+ * and a kept .xlsx is the one place an old string can come back.
+ *
+ * The welded row is a JUDGEMENT, not a lookup: the old tick covered both halves,
+ * so either mapping asserts something nobody separately concluded. It reads as
+ * the control environment, which is the conservative half — it does not put an
+ * AS 2201 .69 finding against a named audit committee into an auditor's mouth. */
+const MW_LEGACY_LABELS: Record<string, MwIndicatorId> = {
+  'Restatement of previously issued financial statements': 'restatement',
+  'Material misstatement identified by audit, not the control': 'auditor-found-misstatement',
+  'Fraud of any magnitude by senior management': 'senior-management-fraud',
+  'Ineffective control environment / oversight': 'control-environment',
+  'Ineffective period-end financial reporting process': 'period-end-reporting',
+};
+
+/**
+ * THE AUDITOR'S CONCLUSION ON ONE COMPANY-LEVEL INDICATOR.
+ *
+ * A restatement, the audit committee's oversight, the control environment, the
+ * period-end process — each is true or false once, for the whole engagement,
+ * and each on its own means ICFR is not effective. That is why this is a
+ * CONCLUSION and not a switch: it carries a basis, a name and a date, the same
+ * as every other judgement in this module that moves an outcome
+ * (`prudentOverride`, `ratingConfirm`, `planReview`). A boolean that drives an
+ * adverse opinion with nobody's name on it is below the bar set everywhere else.
+ *
+ * A missing id means NOT YET ASKED, which is not the same as concluded absent —
+ * and the opinion is entitled to say which.
+ */
+export interface EntityMwConclusion {
+  /** Always a `scope: 'entity'` id. The other two are facts about one exception. */
+  id: MwIndicatorId;
+  present: boolean;
+  /** What was found. Required when `present` — an adverse opinion needs its reason
+   *  on the same record, not in somebody's memory. */
+  basis: string;
+  by: string;
+  at: string;
+}
+
+export const mwIndicatorIds = (stored: readonly string[] = []): MwIndicatorId[] =>
+  stored
+    .map(s => (s in MW_INDICATOR_BY_ID ? (s as MwIndicatorId) : MW_LEGACY_LABELS[s]))
+    .filter((x): x is MwIndicatorId => !!x);
 // ─── Materiality basis — the benchmark worksheet behind the number ───────────────
 // Set in the engagement drawer, locked at go-live: the benchmark, its annualized
 // amount (from the uploaded one-month GL), the chosen %, and how performance
@@ -1551,6 +2191,28 @@ export interface EntityDetection { name: string; companyCode: string; source: st
  */
 export const SAMPLING_METHODS = ['Random', 'Systematic', 'Full population'] as const;
 export type SamplingMethod = (typeof SAMPLING_METHODS)[number];
+
+/**
+ * What every draw has to reach (the Dubai ask — "an agreed sampling methodology
+ * covering quarters, countries and entities").
+ *
+ * Each group named here gets items of its own in every control's draw. None
+ * named is allowed: the selection then falls wherever it falls. It sits beside
+ * the method rather than on the audit for the reason the whole record does —
+ * spreading interim across countries and year-end across nothing would be two
+ * approaches inside one year's testing.
+ */
+export type SamplingSpread = 'quarter' | 'country' | 'entity';
+/** In the order the screens list them, which is also the order a phrase names them. */
+export const SAMPLING_SPREADS: { id: SamplingSpread; label: string }[] = [
+  { id: 'quarter', label: 'Quarters' },
+  { id: 'country', label: 'Countries' },
+  { id: 'entity', label: 'Entities' },
+];
+/** The groups as a reader names them — always in the order above, so the same
+ *  three ticked in a different order never reads as a change. */
+export const spreadLabel = (spread: SamplingSpread[]): string =>
+  SAMPLING_SPREADS.filter(s => spread.includes(s.id)).map(s => s.label).join(', ') || 'Not spread';
 
 /** How the year's rounds are sampled (23 Sep — the question that had no answer
  *  before). Interim covers part of the year and roll-forward covers the rest:
@@ -1594,6 +2256,8 @@ export interface SamplingMethodology {
   /** Every frequency has a row, so no control falls outside the agreed table. */
   sizes: Record<Frequency, SampleSizeRow>;
   method: SamplingMethod;
+  /** Any, all or none of the three. Empty is a real answer, not a missing one. */
+  spread: SamplingSpread[];
   roundBasis: SamplingRoundBasis;
   /** The engagement lead, at creation. A proposal is not yet a methodology. */
   proposedBy?: SignoffEntry;
@@ -1620,6 +2284,9 @@ export const defaultSamplingMethodology = (): SamplingMethodology => ({
     Object.entries(DEFAULT_SAMPLE_SIZES).map(([f, row]) => [f, { ...row }]),
   ) as Record<Frequency, SampleSizeRow>,
   method: 'Random',
+  // Nothing asked for until the lead asks for it — a spread the product invented
+  // would be a rule nobody agreed to.
+  spread: [],
   roundBasis: 'per-round',
   version: 1,
 });
@@ -1632,7 +2299,14 @@ export interface MaterialityRules {
   sdBandPct: number;             // significant-deficiency lower band, as % of overall materiality (e.g. 20)
   aggregate: boolean;            // aggregate individually-minor deficiencies by commonality
   autoRoute: boolean;            // auto-route an exception to the owner/reviewer by computed severity
-  mwIndicators: string[];        // MW indicators in force for this engagement (from the catalogue)
+  /** PARKED (30 Sep 2026) — "which indicators does this engagement use at all".
+   *  It was written by one screen, read by that same screen to redraw its own
+   *  ticks, and consulted by nothing else: the grading engine has only ever read
+   *  the per-exception array. A switch nobody reads is not a rule, and the
+   *  question it was really being asked to answer — IS a restatement true here —
+   *  is a conclusion, so it lives on `entityMwConclusions` instead.
+   *  Still typed so a seeded engagement does not break on load. */
+  mwIndicators: string[];
 }
 
 // ─── Execution history (shared audit trail) ──────────────────────────────────────
@@ -1643,7 +2317,29 @@ export type ExecKind =
   | 'override' | 'request-docs' | 'receive-doc' | 'waive-doc' | 'walkthrough' | 'ipe' | 'population' | 'sample' | 'reopen' | 'wp-signoff' | 'review-return' | 'exception' | 'challenge'
   // TOD's own trail (S6): elements, files and checks coming and going, Ira's
   // read of the checks, and the design approval after TOD concludes.
-  | 'add-element' | 'remove-element' | 'remove-file' | 'add-check' | 'remove-check' | 'ai-review' | 'design-approval';
+  | 'add-element' | 'remove-element' | 'remove-file' | 'add-check' | 'remove-check' | 'ai-review' | 'design-approval'
+  // The operating test parked because the control has not run yet, and lifted
+  // again once it has. Its own kind: it is neither a conclusion nor a chase.
+  | 'park-operating'
+  // The control was rebuilt after a design gap and a new version recorded. Not a
+  // 'reopen': a reopen undoes a conclusion about THIS control, this puts the
+  // conclusion beyond reach by replacing the control it was about.
+  | 'new-version';
+/** One check or attribute in an Ira run, as it stood the moment the run
+ *  finished (Stage 1c). A snapshot, not a pointer: the row can be confirmed,
+ *  overridden or re-run later, and the History line must still say what THIS
+ *  run found. `blocked` = Ira could not test it (no verdict, no confidence). */
+export interface IraRunItem {
+  label: string;
+  result: 'Pass' | 'Fail' | 'blocked';
+  confidence?: number;
+  /** The file Ira read this answer in — the same "Read in …" the working shows. */
+  source?: string;
+}
+export interface IraRunSnapshot {
+  files: string[];
+  items: IraRunItem[];
+}
 export interface ExecutionEvent {
   id: string;
   controlId: string;
@@ -1652,6 +2348,8 @@ export interface ExecutionEvent {
   verb: string;                               // active-voice phrase, e.g. 'validated', 'concluded effective'
   target?: string;                            // attribute code / consideration / document the action touched
   result?: TestResult | TrackConclusion;      // outcome, when the action produced one
+  /** Set on an Ira run only — what it read and what it found, folded open in History. */
+  iraRun?: IraRunSnapshot;
   by: string;                                 // actor display name
   role: Role;                                 // actor role — drives the trail's glyph + tint
   at: string;
@@ -1724,39 +2422,6 @@ export const AUDIT_ROUNDS: { id: AuditRound; label: string; hint: string }[] = [
 ];
 
 /**
- * How an audit's samples are picked, and what they have to be spread across
- * (A28 — feedback #38, and the Dubai ask for "an agreed sampling methodology
- * covering quarters, countries and entities").
- *
- * Set once, on the audit, rather than control by control: a methodology each
- * control could choose for itself is not an agreed one. The control's Sample
- * step reads it and asks only how many items. A roll-forward inherits its
- * interim's, for the same reason it inherits the materiality rule — two halves
- * of one year are sampled one way.
- */
-export type AuditSampleMethod = 'Random' | 'Systematic' | 'Targeted';
-export type AuditSampleSpread = 'quarter' | 'country' | 'entity';
-export interface AuditSampling {
-  method: AuditSampleMethod;
-  /** Every group named here gets items of its own in each control's draw.
-   *  Empty is allowed — the selection then falls wherever it falls. */
-  spread: AuditSampleSpread[];
-}
-export const AUDIT_SAMPLE_METHODS: { id: AuditSampleMethod; hint: string }[] = [
-  { id: 'Random', hint: 'Items picked at random from the population.' },
-  { id: 'Systematic', hint: 'Every nth item from a random start, so the picks run evenly through the window.' },
-  { id: 'Targeted', hint: 'Items picked on purpose — the largest, the riskiest, the unusual.' },
-];
-/** In the order the wizard lists them, which is also the order a phrase names them. */
-export const AUDIT_SAMPLE_SPREADS: { id: AuditSampleSpread; label: string }[] = [
-  { id: 'quarter', label: 'Quarters' },
-  { id: 'country', label: 'Countries' },
-  { id: 'entity', label: 'Entities' },
-];
-/** A new audit starts on a plain random draw with no spread asked for. */
-export const DEFAULT_AUDIT_SAMPLING: AuditSampling = { method: 'Random', spread: [] };
-
-/**
  * What an audit concluded, frozen when the next audit starts.
  *
  * A control holds ONE live design / operating paper, so a new cycle has to reset
@@ -1772,7 +2437,54 @@ export const DEFAULT_AUDIT_SAMPLING: AuditSampling = { method: 'Random', spread:
  * clearly trivial finding is archived as Clearly Trivial — the same grade the
  * register showed it under — never folded into Deficiency.
  */
+/**
+ * WHAT THE MATRIX SAID, at the moment a cycle closed.
+ *
+ * The archive's `conclusions` record how each control *finished* — effective,
+ * ineffective, how many items were tested. They say nothing about what the
+ * control WAS: its risk, its owner, how often it ran, whether it was key. And
+ * `controls` is one register carried across years and edited in place, so once
+ * this year's SOP is read in, last year's wording is gone.
+ *
+ * That is the gap this closes. From the second year onward the auditor's first
+ * question about a process is "what changed?", and it cannot be answered
+ * against a register that only ever holds the present.
+ *
+ * Deliberately the RACM's own columns and nothing else — no design or operating
+ * track, no evidence, no samples. Those are testing, and testing already has an
+ * archive. This is the matrix.
+ */
+export interface ArchivedRacmRow {
+  controlId: string;
+  /** The number the client knows, where it differs from `controlId`. */
+  code?: string;
+  wpRef: string;
+  process: string;
+  subProcess: string;
+  riskId: string;
+  riskTitle?: string;
+  /** The one-line control statement the register shows. */
+  description: string;
+  /** Who does what, to which record, when and how — the column the auditor
+   *  tests against, and the one most likely to be reworded year on year. */
+  controlActivity?: string;
+  objective?: string;
+  owner: string;
+  nature: Nature;
+  type: ControlType;
+  frequency: Frequency;
+  isKey: boolean;
+  clazz?: ControlClass;
+  /** The company this row was tested at, on an engagement scoped by entity. */
+  entity?: string;
+  assertions: Assertion[];
+}
+
 export interface AuditArchive {
+  /** The register as it stood when this cycle closed. Optional because archives
+   *  written before the snapshot existed have none — a comparison against one of
+   *  those has to say it cannot answer rather than report everything as new. */
+  racm?: ArchivedRacmRow[];
   conclusions: {
     controlId: string;
     wpRef: string;
@@ -1781,12 +2493,40 @@ export interface AuditArchive {
     design: TrackConclusion;
     operating: TrackConclusion;
     conclusion: Conclusion;
+    /** WHICH VERSION OF THE CONTROL these verdicts are about — 1 unless it was
+     *  rebuilt. The roll-forward carry reads it: an interim that tested v1 says
+     *  nothing about a v2, so a carry across a version change is refused rather
+     *  than asserting "retest only if the control changed" about a control that
+     *  did. Absent on archives written before versions existed, which is read as
+     *  version 1 because that is what they were. */
+    versionNo?: number;
+    /** THE VERSIONS SUPERSEDED DURING THIS CYCLE, oldest first — the failed design
+     *  and the control it was about, kept so the closed cycle still answers what
+     *  went wrong before the fix.
+     *
+     *  NESTED rather than one archive row per version, deliberately. The rows are
+     *  counted as controls in six places (the portfolio rollups, the archive view's
+     *  tally, the wizard's carry list) and looked up by `controlId` with `.find()`
+     *  in three more. One row per version would turn every one of those counts into
+     *  a version count and make each of those lookups return whichever version
+     *  happened to be written first. */
+    versions?: {
+      no: number;
+      description: string;
+      supersededAt: string;
+      design: TrackConclusion;
+      operating: TrackConclusion;
+      /** The exception whose accepted redesign replaced it. */
+      defId: string;
+    }[];
     /** Items with a result recorded against them when the audit closed — what
      *  the control's yearly running total reads for this round (A28). Optional
      *  because archives written before the count existed have none. */
     samplesTested?: number;
   }[];
-  deficiencies: (Deficiency & { severity: ExceptionGrade })[];
+  /** 'Not sized' is a real archived state — a prior-year finding nobody sized
+   *  travels as unsized rather than borrowing a grade it never had. */
+  deficiencies: (Deficiency & { severity: ArchivedSeverity })[];
   concludedAt: string;
 }
 
@@ -1870,10 +2610,6 @@ export interface AuditRecord {
   materiality: { basisLabel: string; benchmark: number; pct: number; pmPct?: number; ctPct?: number };
   /** ₹ Cr threshold the rule computes, frozen at creation. */
   overall: number;
-  /** How every control in this audit picks its sample (A28). Set on the period
-   *  step; a roll-forward carries its interim's. Optional only so a record that
-   *  predates it still reads — DEFAULT_AUDIT_SAMPLING stands in. */
-  sampling?: AuditSampling;
   /** This audit's own conclusion. Sign-off is per AUDIT, not per engagement —
    *  the testing happens inside an audit, so that is where the preparer signs and
    *  the reviewer countersigns. There is no engagement-level ICFR sign-off. */
@@ -1933,6 +2669,26 @@ export interface SignoffEntry { by: string; at: string }
 // icfrConclusion is stamped at each signature from live state: open MW ⇒ 'Not effective'.
 export interface EngagementSignoff { preparer?: SignoffEntry; reviewer?: SignoffEntry; icfrConclusion?: 'Effective' | 'Not effective' }
 
+/** A pattern in the auditors' overrides that a reviewer has ruled on
+ *  (agentic UX #9, 1 Oct). The same check, on three or more controls, where
+ *  Ira said one thing and the auditor changed it to the other. Approved, Ira
+ *  answers `to` on that check from then on — still unconfirmed, still the
+ *  auditor's to confirm. Rejected, it is not offered again in this audit.
+ *  Nothing is learned without one of these. */
+export interface IraLearnedRule {
+  key: string;
+  which: 'design' | 'operating';
+  text: string;
+  from: TestResult;
+  to: TestResult;
+  /** How many controls the pattern stood on when it was ruled on. */
+  count: number;
+  status: 'approved' | 'rejected';
+  by: string;
+  at: string;
+  auditId?: string;
+}
+
 export interface IcfrEngagement {
   id: string; code: string; name: string; entity: string; framework: string;
   // No Interim / Year-end round here — the period comes from the newest record
@@ -1943,6 +2699,11 @@ export interface IcfrEngagement {
   wentLiveAt?: string;
   entityDetected?: EntityDetection;
   materialityBasis?: MaterialityBasis;
+  /** What the auditor concluded about the company-level material-weakness
+   *  indicators. One entry per `scope: 'entity'` indicator that has been asked;
+   *  absent means not asked yet. Any one of them `present` makes ICFR not
+   *  effective on its own — see `icfrConclusion`. */
+  entityMwConclusions?: EntityMwConclusion[];
   rules: MaterialityRules;
   /** How this engagement samples — agreed once, before testing starts, and the
    *  thing every sample size traces back to (#22). Optional only so engagements
@@ -1962,6 +2723,8 @@ export interface IcfrEngagement {
   groupConclusions?: GroupConclusion[];
   tasks: HandoffTask[];
   discussions: Discussion[];
+  /** "Ira learned" rulings — see `IraLearnedRule`. */
+  iraLearned?: IraLearnedRule[];
   reviewNotes: ReviewNote[];
   executions: ExecutionEvent[];
   runs: RunRecord[];
@@ -1980,7 +2743,10 @@ export interface IcfrEngagement {
   fileRegistry?: AuditFileRecord[];
 }
 
-export const DESIGN_DOC_KINDS: DesignDocKind[] = ['Process narrative', 'Flowchart', 'Walkthrough', 'Control description', 'Policy / SOP', 'Precision & thresholds', 'Segregation of duties'];
+/** The menu, deliberately NOT branched by class: an auditor who has a document
+ *  can always attach it, whatever the table says about whether it is chased.
+ *  Only the requirement changes per class — see DOC_REQUIREMENTS. */
+export const DESIGN_DOC_KINDS: DesignDocKind[] = ['Process narrative', 'Flowchart', 'Walkthrough', 'Control description', 'System configuration', 'Policy / SOP', 'Precision & thresholds', 'Segregation of duties'];
 
 // PARKED (Aug 2026) — the exception no longer carries a gap type. `gapNature`
 // derives the same sentence read-only from the track and the control's nature.

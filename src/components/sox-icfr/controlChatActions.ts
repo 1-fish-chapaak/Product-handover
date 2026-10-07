@@ -1,5 +1,6 @@
 import type { ChatStepId, Situation } from './controlChatScript';
-import { DESIGN_DOC_KINDS, type Role } from './types';
+import { DESIGN_DOC_KINDS, type Role, type RollPart } from './types';
+import { ROLL_PART_ANCHOR } from './helpers';
 
 /**
  * What Ira may offer, and when.
@@ -16,13 +17,21 @@ import { DESIGN_DOC_KINDS, type Role } from './types';
  *     with them. Ira offering any of those would quietly undo a decision the
  *     page has already made.
  *
- * Heavy actions — attaching a file, waiving an element, writing the reviewer's
- * note — are not reimplemented. They open the real thing on the left, so there
- * is exactly one uploader and one waiver form in the product.
+ * Nothing here is REIMPLEMENTED. Attaching a file and waiving an element are
+ * done from the rail now (23 Sep) — but by making the page's own store calls,
+ * `attachDesignEvidence` and `waiveDesignDoc`, with the page's own accept list
+ * and the page's own insistence on a written reason. Two doors, one
+ * implementation; a file attached from here is indistinguishable from one
+ * attached on the left, because it is the same write.
+ *
+ * What stays on the page is what carries judgement a rail cannot hold: the
+ * exception's sizing panel, the reviewer's note, the design-check editor.
  */
 
 export type ChatActionId =
   | 'add-element'
+  | 'attach-doc'
+  | 'waive-doc'
   | 'upload-source'
   | 'pick-source'
   | 'upload-evidence'
@@ -72,6 +81,9 @@ export interface ChatAction {
    *  sentence. Button labels address the reader ("Show me…"), which reads
    *  backwards inside "I can …". */
   does?: string;
+  /** For `show-step`: a specific element id to scroll to, finer than the
+   *  step's own anchor (e.g. last round's Confirm / Edit bar). */
+  anchor?: string;
 }
 
 const show = (label: string, said: string, focus: ChatStepId, does = 'show you where it is on the page'): ChatAction =>
@@ -79,7 +91,33 @@ const show = (label: string, said: string, focus: ChatStepId, does = 'show you w
 
 const plural = (n: number, one: string, many = `${one}s`) => `${n} ${n === 1 ? one : many}`;
 
+/** What the store refuses while each rolled-forward part is unconfirmed (#13).
+ *  Built inside a function, never at module load (sox-icfr TDZ rule). */
+const rollHeldIds = (parts: RollPart[]): Set<ChatActionId> => {
+  const held = new Set<ChatActionId>();
+  if (parts.includes('design') || parts.includes('checks')) (['ira-run', 'conclude-effective', 'conclude-ineffective'] as const).forEach(id => held.add(id));
+  if (parts.includes('population')) (['pick-source', 'upload-source', 'lock-population'] as const).forEach(id => held.add(id));
+  if (parts.includes('attributes')) (['draw-sample', 'file-sample', 'toe-run'] as const).forEach(id => held.add(id));
+  return held;
+};
+const ROLL_STEP = (p: RollPart): ChatStepId => (p === 'population' ? 'population' : p === 'attributes' ? 'operating' : 'design');
+
 export function actionsFor(s: Situation, role: Role): ChatAction[] {
+  const out = baseActionsFor(s, role);
+  // Last round's set-up waits on the auditor: nothing the store would refuse is
+  // offered, and the one way forward is the page's own Confirm / Edit bar. Ira
+  // never confirms it — not even in Automatic mode — so there is no action for it.
+  if (role !== 'auditor' || s.rollPending.length === 0 || s.sealed || (s.locked && s.reviewerSigned)) return out;
+  const held = rollHeldIds(s.rollPending);
+  const first = s.rollPending[0];
+  const go: ChatAction = {
+    ...show('Go to last round\'s set-up', 'Show me last round\'s set-up.', ROLL_STEP(first), 'show you last round\'s set-up on the page'),
+    anchor: ROLL_PART_ANCHOR[first], primary: true,
+  };
+  return [go, ...out.filter(a => !held.has(a.id)).map(a => (a.primary ? { ...a, primary: false } : a))];
+}
+
+function baseActionsFor(s: Situation, role: Role): ChatAction[] {
   // A sealed engagement or a countersigned paper is a record, not a workspace.
   if (s.sealed || (s.locked && s.reviewerSigned)) return [];
 
@@ -100,7 +138,8 @@ export function actionsFor(s: Situation, role: Role): ChatAction[] {
     // The page's own gate, to the letter: a paper prepared by somebody else,
     // not yet countersigned, with every review note closed.
     if (s.preparerSigned && !s.reviewerSigned && !s.ownPaper) {
-      if (s.notesPending === 0) out.push({ id: 'countersign', label: 'Countersign the paper', said: 'Countersign the paper.', primary: true, does: 'countersign the working paper' });
+      // Countersigning is on the page only (agentic UX #2, 1 Oct): sign-off is
+      // the one blocking moment, taken with the paper in front of you.
       out.push(show('Take me to the sign-off', 'Take me to the sign-off.', 'signoff'));
     }
     return out;
@@ -123,7 +162,7 @@ export function actionsFor(s: Situation, role: Role): ChatAction[] {
     } else if (!ex.rootCause.trim()) {
       out.push({ id: 'rootcause-write', label: 'Tell me the mechanism', said: 'I’ll write the root cause.', primary: true, does: 'take the root cause in your own words' });
     }
-    out.push({ id: 'show-exception', label: ex.rootCause.trim() && !ex.drafted ? 'Take me to the exception' : 'Show me the exception', said: 'Take me to the exception.', does: 'show you the exception on the page' });
+    out.push({ id: 'show-exception', label: ex.rootCause.trim() && !ex.drafted ? 'Take me to the deficiency' : 'Show me the deficiency', said: 'Take me to the deficiency.', does: 'show you the deficiency on the page' });
     return out;
   }
 
@@ -134,10 +173,8 @@ export function actionsFor(s: Situation, role: Role): ChatAction[] {
   if (s.locked) {
     return s.preparerSigned
       ? [show('Take me to the sign-off', 'Take me to the sign-off.', 'signoff')]
-      : [
-        { id: 'sign-paper', label: 'Sign off this paper', said: 'Sign off this paper.', primary: true, does: 'sign the working paper and send it to the reviewer' },
-        show('Show me what I am signing', 'Show me what I am signing.', 'signoff'),
-      ];
+      // Signing is on the page only (agentic UX #2, 1 Oct) — Ira takes you there.
+      : [show('Take me to sign it', 'Show me what I am signing.', 'signoff')];
   }
 
   if (s.step === 'design') {
@@ -153,7 +190,7 @@ export function actionsFor(s: Situation, role: Role): ChatAction[] {
     // leave a seven-chip cloud sitting under every line Ira says for the rest
     // of the step.
     const picks: ChatAction[] = s.elementsOnFile === 0 && s.designResult === 'Not tested' && !s.locked
-      ? DESIGN_DOC_KINDS.filter(k => !s.elementKinds.includes(k)).map(k => ({
+      ? DESIGN_DOC_KINDS.filter(k => !s.elementKinds.includes(k) && !s.naKinds.includes(k)).map(k => ({
         id: 'add-element' as const, arg: k, label: k, group: 'pick' as const,
         said: `Add ${k.charAt(0).toLowerCase()}${k.slice(1)}.`,
         does: `add ${k.charAt(0).toLowerCase()}${k.slice(1)} to the design step`,
@@ -168,7 +205,33 @@ export function actionsFor(s: Situation, role: Role): ChatAction[] {
       return picks.length > 0 ? picks : [show('Take me to the design step', 'Take me to the design step.', 'design')];
     }
     if (s.missing.length > 0) {
-      return [show(s.missing.length === 1 ? 'Show me the missing element' : 'Show me the missing elements', 'Show me what is missing.', 'design'), ...picks];
+      const one = s.missing.length === 1;
+      // An element that will never arrive is not a hole in the paper — it is a
+      // judgement, and the page takes it with a written reason the working
+      // paper prints. Offered here because "not applicable" is the commonest
+      // answer to "this is missing", and sending the reader to the left to say
+      // it makes the rail a thing that only ever reports problems.
+      // Ira offers to add an element; an element with nothing on it is not
+      // finished work, so it offers the file too. Leading, because attaching
+      // is what the reader came to do — the waiver is the exception.
+      const attach: ChatAction[] = s.designResult === 'Not tested' && !s.locked
+        ? [{
+          id: 'attach-doc' as const, arg: one ? s.missing[0]!.id : undefined,
+          label: one ? 'Attach the file' : 'Attach a file',
+          said: one ? 'Attach the file for it.' : 'Attach a file.',
+          primary: true,
+          does: 'attach the evidence for an outstanding element',
+        }]
+        : [];
+      const waive: ChatAction[] = s.designResult === 'Not tested' && !s.locked
+        ? [{
+          id: 'waive-doc' as const, arg: one ? s.missing[0]!.id : undefined,
+          label: one ? 'Not applicable' : 'Mark one not applicable',
+          said: one ? 'That one is not applicable.' : 'One of them is not applicable.',
+          does: 'account for an element that will not be provided',
+        }]
+        : [];
+      return [...attach, show(one ? 'Show me the missing element' : 'Show me the missing elements', 'Show me what is missing.', 'design'), ...waive, ...picks];
     }
     if (s.designResult !== 'Not tested' && !s.todApproved) {
       return [show('Show me what I concluded', 'Show me what I concluded.', 'design')];
@@ -180,19 +243,36 @@ export function actionsFor(s: Situation, role: Role): ChatAction[] {
       // button that costs six seconds to tell you what it told you last time
       // is a button that teaches the reader to stop pressing them.
       const allBlocked = s.checksBlocked.length > 0 && s.checksBlocked.length === s.checksUnmarked;
-      if (!s.iraBlocked && !allBlocked) out.push({ id: 'ira-run', label: `Assess all ${s.checksTotal} checks for me`, said: 'Run the AI validation over the design checks.', primary: true, does: 'read the evidence and assess every design check' });
+      if (!s.iraBlocked && !allBlocked) out.push({ id: 'ira-run', label: `Assess all ${s.checksTotal} checks for me`, said: 'Read the evidence and assess the design checks.', primary: true, does: 'read the evidence and assess every design check' });
       out.push(show(allBlocked ? 'Show me the ones you couldn’t test' : 'I’ll mark them myself', 'Take me to the design checks.', 'design'));
       return out;
     }
     if (s.checksTotal > 0 && s.iraStale) {
       return [
-        { id: 'ira-run', label: 'Re-run the AI validation', said: 'Re-run the validation against the new evidence.', primary: true, does: 'read the new evidence and assess the checks again' },
+        { id: 'ira-run', label: 'Read the new evidence again', said: 'Read the new evidence and assess the checks again.', primary: true, does: 'read the new evidence and assess the checks again' },
         show('Conclude anyway', 'Take me to the conclusion.', 'design'),
       ];
     }
+    // A control whose RACM lists no design checks. Nothing has been ASSESSED,
+    // so nothing is concluded from here (user ask, 23 Sep): the order is
+    // elements → evidence → the checks read against it → the conclusion, and
+    // the last step cannot be reached by the first three finishing. Falling
+    // through to a verdict here was how attaching one file put "Design
+    // effective" on offer against nothing that had been tested.
+    //
+    // The page's own footer still concludes it — a judgement on the documents
+    // alone is the auditor's to make, and refusing it outright would be the
+    // rail overruling the page. It is just not a thing Ira offers.
+    if (s.checksTotal === 0) {
+      return [show('Take me to the design step', 'Take me to the design step.', 'design'), ...picks];
+    }
+
     // Everything is marked. The page disables Effective until every required
     // element is accounted for and no check is unmarked; the same gate here.
     const out: ChatAction[] = [];
+    // Ira's results wait on a person first (UX #1): no conclusion offered while
+    // any is unconfirmed — the way to them instead.
+    if (s.designUnconfirmed > 0) return [show(`Confirm Ira's ${s.designUnconfirmed} result${s.designUnconfirmed === 1 ? '' : 's'} first`, 'Show me what to confirm.', 'design'), ...picks];
     if (s.complete && s.checksUnmarked === 0) {
       out.push({ id: 'conclude-effective', label: 'Design effective', said: 'Conclude the design effective.', primary: s.checksFailed === 0, group: 'pair', does: 'conclude the design effective' });
     }
@@ -314,7 +394,9 @@ export function actionsFor(s: Situation, role: Role): ChatAction[] {
       if (s.evidenceOwed.length > 1) {
         s.evidenceOwed.forEach(x => out.push({
           id: 'upload-evidence', arg: x.stepId, group: 'pick',
-          label: `${x.code} · ${x.missing} of ${x.total}`,
+          // The page's own reading, the same way round — "1/3 files" in — not
+          // the count still missing, which read as a different number (5 Oct).
+          label: `${x.code} · ${x.total - x.missing}/${x.total} files`,
           said: `Evidence for ${x.code}.`,
           does: `take the files for attribute ${x.code}`,
         }));
@@ -326,11 +408,13 @@ export function actionsFor(s: Situation, role: Role): ChatAction[] {
         label: s.toeReady === s.toe.total - s.toe.tested
           ? `Assess ${plural(s.toeReady, 'attribute')} for me`
           : `Assess the ${plural(s.toeReady, 'attribute')} that ${s.toeReady === 1 ? 'has' : 'have'} its files`,
-        said: 'Run the AI validation over the ready attributes.',
+        said: 'Read the files and assess the ready attributes.',
         does: 'read the uploaded files and assess every attribute that has them',
       });
     }
-    if (s.toe.total > 0 && s.toe.tested === s.toe.total && !s.toeStale) {
+    if (s.toe.total > 0 && s.toe.tested === s.toe.total && !s.toeStale && s.toeUnconfirmed > 0) {
+      out.push(show(`Confirm Ira's ${s.toeUnconfirmed} result${s.toeUnconfirmed === 1 ? '' : 's'} first`, 'Show me what to confirm.', 'operating'));
+    } else if (s.toe.total > 0 && s.toe.tested === s.toe.total && !s.toeStale) {
       if (!s.toeHolds) out.push({ id: 'conclude-op-effective', label: 'Operating effective', said: 'Conclude the operating effectiveness effective.', primary: s.toe.failed === 0, group: 'pair', does: 'conclude the operating effectiveness effective' });
       out.push({ id: 'conclude-op-ineffective', label: 'Operating ineffective', said: 'Conclude the operating effectiveness ineffective.', primary: s.toe.failed > 0, group: 'pair', does: 'conclude the operating effectiveness ineffective' });
     }

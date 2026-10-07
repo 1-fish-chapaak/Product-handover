@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
-import { Check, Plus, Sparkles, Star, X } from 'lucide-react';
+import { Check, Plus, Star, X } from 'lucide-react';
 import { useIcfr } from './store';
 import { FormSelect } from '../shared/FilterSelect';
 import { useToast } from '../shared/Toast';
@@ -9,6 +9,9 @@ import type { Assertion, ControlClass, ControlType, Frequency, Nature, TestingSt
 import { peekEntityCode, peekProcessCode, riskIdOf } from './racmIds';
 import { draftAttributes, draftControlDescription, draftRiskCategory, draftRiskDescription } from './racmImport';
 import { draftDesignChecks } from './helpers';
+import { canonicalProcess } from './auditScope';
+import { IraDrafted } from './IraState';
+import DialogFocus from '../shared/DialogFocus';
 
 /**
  * New control — one focused form. The control lands in the library and the RACM
@@ -43,20 +46,19 @@ const SAME_PROC_OWNER = '__same-process-owner__';
 type DraftField = 'controlActivity' | 'newRiskDesc' | 'designChecks' | 'attributes' | 'clazz';
 type DraftMark = 'drafted' | 'edited' | 'spent';
 
-const inputCls = 'w-full h-9 px-3 rounded-lg border border-canvas-border text-[12.5px] text-ink-800 bg-canvas-elevated focus:outline-none focus:border-brand-300 focus:ring-2 focus:ring-brand-50';
+const inputCls = 'w-full h-9 px-3 rounded-lg border border-canvas-border text-[0.8125rem] text-ink-800 bg-canvas-elevated focus:outline-none focus:border-brand-300 focus:ring-2 focus:ring-brand-50';
 /** inputCls without the fixed height, so a textarea's rows are what set it. */
-const areaCls = 'w-full px-3 py-2 rounded-lg border border-canvas-border text-[0.78125rem] text-ink-800 bg-canvas-elevated leading-relaxed resize-none focus:outline-none focus:border-brand-300 focus:ring-2 focus:ring-brand-50';
+const areaCls = 'w-full px-3 py-2 rounded-lg border border-canvas-border text-[0.8125rem] text-ink-800 bg-canvas-elevated leading-relaxed resize-none focus:outline-none focus:border-brand-300 focus:ring-2 focus:ring-brand-50';
 
 function Field({ label, required = false, children, span2 = false }: { label: string; required?: boolean; children: React.ReactNode; span2?: boolean }) {
-  return <div className={span2 ? 'col-span-2' : undefined}><div className="text-[11px] font-semibold text-ink-500 mb-1">{label}{required && <span className="text-risk-600 ml-0.5" aria-hidden="true">*</span>}</div>{children}</div>;
+  return <div className={span2 ? 'col-span-2' : undefined}><div className="text-[0.6875rem] font-semibold text-ink-500 mb-1">{label}{required && <span className="text-risk-600 ml-0.5" aria-hidden="true">*</span>}</div>{children}</div>;
 }
 
 /** Under a field Ira filled: where the text came from, and the way back to blank. */
 function IraNote({ from, edited, what, onPutBack }: { from: string; edited: boolean; what: string; onPutBack: () => void }) {
   return (
     <p className="mt-1 flex items-center gap-1 text-[0.6875rem] leading-snug text-ink-500">
-      <Sparkles size={11} className="text-brand-600 shrink-0" aria-hidden />
-      <span>Drafted by Ira from the {from}{edited && ' · Edited'}</span>
+      <IraDrafted title={`Drafted from the ${from}${edited ? ' — you have edited it since' : ''}`} />
       <span aria-hidden="true">·</span>
       <button type="button" onClick={onPutBack} aria-label={`Put back — clear Ira's ${what}`}
         className="font-semibold text-brand-700 hover:text-brand-800 hover:underline cursor-pointer">Put back</button>
@@ -291,7 +293,7 @@ export default function NewControlPanel({ onClose }: { onClose: () => void }) {
     const id = addControl({
       description: description.trim(),
       controlActivity: controlActivity.trim(),
-      process: process === NEW_PROCESS ? newProcess.trim() : process, subProcess,
+      process: process === NEW_PROCESS ? canonicalProcess(newProcess) : process, subProcess,
       type, nature, frequency, owner: ownerName,
       // undefined, not the control owner's name — the store then falls back to
       // whoever the scoping wizard recorded for this process, and only reaches
@@ -306,7 +308,6 @@ export default function NewControlPanel({ onClose }: { onClose: () => void }) {
       ...(effectiveDate.trim() ? { effectiveDate: effectiveDate.trim() } : {}),
       ...risk,
     });
-    addToast({ type: 'success', title: 'Control created', message: `Linked to ${risk.riskId} — now in the library and the RACM.` });
     onClose();
     openControl(id);
   };
@@ -318,13 +319,13 @@ export default function NewControlPanel({ onClose }: { onClose: () => void }) {
 
   return (
     <div className="modal-backdrop" onClick={requestClose}>
-      <div className="modal" style={{ maxWidth: 560 }} onClick={e => e.stopPropagation()}>
+      <div role="dialog" aria-modal="true" aria-labelledby="new-control-title" className="modal" style={{ maxWidth: 560 }} onClick={e => e.stopPropagation()}><DialogFocus />
         <div className="px-5 pt-4 pb-3 border-b border-canvas-border">
           <div className="flex items-center justify-between gap-3">
-            <h2 className="text-[15px] font-semibold text-ink-900" style={{ fontFamily: "'Source Serif 4', serif" }}>New control</h2>
+            <h2 id="new-control-title" className="text-[0.9375rem] font-semibold text-ink-900" style={{ fontFamily: "'Source Serif 4', serif" }}>New control</h2>
             <button onClick={requestClose} className="h-7 w-7 inline-flex items-center justify-center rounded-md text-ink-400 hover:text-ink-700 cursor-pointer" aria-label="Close"><X size={15} /></button>
           </div>
-          <p className="text-[12px] text-ink-500 mt-0.5">It lands in the library and the RACM immediately, ready to test.</p>
+          <p className="text-[0.75rem] text-ink-500 mt-0.5">It lands in the library and the RACM immediately, ready to test.</p>
         </div>
 
         <div className="p-5 space-y-3.5">
@@ -338,7 +339,7 @@ export default function NewControlPanel({ onClose }: { onClose: () => void }) {
               Ira writes it from the title as the title loses focus — using the
               owner and frequency picked below — and Put back returns it to blank. */}
           <Field label="Control description" required>
-            <textarea value={controlActivity} rows={3} aria-required="true"
+            <textarea aria-label="Control description" value={controlActivity} rows={3} aria-required="true"
               onChange={e => { setControlActivity(e.target.value); touched('controlActivity', !!e.target.value.trim()); }}
               onBlur={() => markDrafted(draftLists(description, controlActivity))}
               placeholder="Who performs it, over which records, when, how it's evidenced, and where exceptions go"
@@ -371,7 +372,7 @@ export default function NewControlPanel({ onClose }: { onClose: () => void }) {
                 <input value={newRiskTitle} onChange={e => setNewRiskTitle(e.target.value)} onBlur={onRiskTitleBlur} aria-required="true" placeholder="e.g. Unauthorised vendor payments" className={inputCls} />
               </Field>
               <Field label="New risk description" required>
-                <textarea value={newRiskDesc} rows={2} aria-required="true"
+                <textarea aria-label="New risk description" value={newRiskDesc} rows={2} aria-required="true"
                   onChange={e => { setNewRiskDesc(e.target.value); touched('newRiskDesc', !!e.target.value.trim()); }}
                   placeholder="What could go wrong that this control prevents or detects?" className={areaCls} />
                 {noteFor('newRiskDesc', 'title', 'risk description')}
@@ -396,7 +397,7 @@ export default function NewControlPanel({ onClose }: { onClose: () => void }) {
               <div role="radiogroup" aria-label="Control type" aria-required="true" className="grid grid-cols-2 gap-1.5">
                 {TYPES.map(t => (
                   <button key={t} type="button" role="radio" aria-checked={type === t} onClick={() => pickType(t)}
-                    className={cn('h-9 px-2 inline-flex items-center justify-center gap-1 rounded-lg border text-[0.78125rem] font-semibold cursor-pointer transition-colors',
+                    className={cn('h-9 px-2 inline-flex items-center justify-center gap-1 rounded-lg border text-[0.8125rem] font-semibold cursor-pointer transition-colors',
                       type === t ? 'border-brand-200 bg-brand-50 text-brand-700' : 'border-canvas-border text-ink-500 hover:text-ink-800')}>
                     {type === t && <Check size={12} />}{t}
                   </button>
@@ -425,7 +426,7 @@ export default function NewControlPanel({ onClose }: { onClose: () => void }) {
             </Field>
             <Field label="Key control">
               <button onClick={() => setIsKey(k => !k)} type="button"
-                className={cn('h-9 w-full px-3 inline-flex items-center gap-1.5 rounded-lg border text-[12.5px] font-semibold cursor-pointer transition-colors',
+                className={cn('h-9 w-full px-3 inline-flex items-center gap-1.5 rounded-lg border text-[0.8125rem] font-semibold cursor-pointer transition-colors',
                   isKey ? 'border-mitigated-300 bg-mitigated-50 text-mitigated-700' : 'border-canvas-border text-ink-500 hover:text-ink-800')}>
                 <Star size={13} className={isKey ? 'fill-mitigated-200' : undefined} /> {isKey ? 'Key control' : 'Not key'}
               </button>
@@ -463,13 +464,13 @@ export default function NewControlPanel({ onClose }: { onClose: () => void }) {
           {/* What the TOD walks, and what the TOE tests — both read off the
               control description, so Ira fills them once there is one. */}
           <Field label="Design checks" required>
-            {designChecks.length === 0 && !iraDraft.designChecks && <p className="text-[0.71875rem] text-ink-400 mb-1">Ira drafts these from the control description — or add your own.</p>}
+            {designChecks.length === 0 && !iraDraft.designChecks && <p className="text-[0.75rem] text-ink-400 mb-1">Ira drafts these from the control description — or add your own.</p>}
             <ListEditor items={designChecks} noun="design check" placeholder="e.g. The approver is independent of the preparer"
               onChange={next => { setDesignChecks(next); touched('designChecks', next.some(x => x.trim())); }} />
             {noteFor('designChecks', 'description', 'design checks')}
           </Field>
           <Field label="Attributes" required>
-            {attributes.length === 0 && !iraDraft.attributes && <p className="text-[0.71875rem] text-ink-400 mb-1">Ira drafts these from the control description — or add your own.</p>}
+            {attributes.length === 0 && !iraDraft.attributes && <p className="text-[0.75rem] text-ink-400 mb-1">Ira drafts these from the control description — or add your own.</p>}
             <ListEditor items={attributes} noun="attribute" placeholder="e.g. Approval is evidenced before payment"
               onChange={next => { setAttributes(next); touched('attributes', next.some(x => x.trim())); }} />
             {noteFor('attributes', 'description', 'attributes')}
@@ -479,7 +480,7 @@ export default function NewControlPanel({ onClose }: { onClose: () => void }) {
             <div className="flex items-center gap-1.5 flex-wrap">
               {ASSERTIONS.map(a => (
                 <button key={a} type="button" onClick={() => toggleAssertion(a)}
-                  className={cn('h-7 px-2.5 inline-flex items-center gap-1 rounded-full border text-[11.5px] font-semibold cursor-pointer transition-colors',
+                  className={cn('h-7 px-2.5 inline-flex items-center gap-1 rounded-full border text-[0.75rem] font-semibold cursor-pointer transition-colors',
                     assertions.includes(a) ? 'border-brand-200 bg-brand-50 text-brand-700' : 'border-canvas-border text-ink-500 hover:text-ink-800')}>
                   {assertions.includes(a) && <Check size={11} />}{a}
                 </button>
@@ -488,13 +489,13 @@ export default function NewControlPanel({ onClose }: { onClose: () => void }) {
           </Field>
 
           <div className="pt-1.5 flex items-center justify-between gap-3">
-            <span className="text-[11.5px] text-ink-500 inline-flex items-center gap-1 min-w-0" role="status" aria-live="polite">
+            <span className="text-[0.75rem] text-ink-500 inline-flex items-center gap-1 min-w-0" role="status" aria-live="polite">
               {missingHint && (<><span className="text-risk-600" aria-hidden="true">*</span><span className="truncate">{missingHint}</span></>)}
             </span>
             <div className="flex items-center gap-2 shrink-0">
-              <button onClick={requestClose} className="h-9 px-3.5 rounded-lg border border-canvas-border text-[12.5px] font-semibold text-ink-600 hover:text-ink-900 cursor-pointer">Cancel</button>
+              <button onClick={requestClose} className="h-9 px-3.5 rounded-lg border border-canvas-border text-[0.8125rem] font-semibold text-ink-600 hover:text-ink-900 cursor-pointer">Cancel</button>
               <button onClick={create} disabled={!canCreate} title={missingHint ?? undefined}
-                className="h-9 px-4 rounded-lg bg-brand-600 text-white text-[12.5px] font-semibold hover:bg-brand-700 disabled:opacity-40 transition-colors cursor-pointer">
+                className="h-9 px-4 rounded-lg bg-brand-600 text-white text-[0.8125rem] font-semibold hover:bg-brand-700 disabled:opacity-40 transition-colors cursor-pointer">
                 Create control
               </button>
             </div>
@@ -505,18 +506,18 @@ export default function NewControlPanel({ onClose }: { onClose: () => void }) {
       {/* discard guard — a dirty form never vanishes on a stray backdrop click or Esc */}
       {showDiscard && (
         <div className="modal-backdrop" onClick={e => { e.stopPropagation(); setShowDiscard(false); }}>
-          <div className="modal" onClick={e => e.stopPropagation()}>
+          <div role="dialog" aria-modal="true" aria-labelledby="discard-new-control-title" className="modal" onClick={e => e.stopPropagation()}><DialogFocus />
             <div className="px-5 pt-4 pb-3 border-b border-canvas-border">
               <div className="flex items-center justify-between gap-3">
-                <h2 className="text-[15px] font-semibold text-ink-900">Discard this new control?</h2>
+                <h2 id="discard-new-control-title" className="text-[0.9375rem] font-semibold text-ink-900">Discard this new control?</h2>
                 <button onClick={() => setShowDiscard(false)} className="h-7 w-7 inline-flex items-center justify-center rounded-md text-ink-400 hover:text-ink-700 cursor-pointer" aria-label="Keep editing"><X size={15} /></button>
               </div>
             </div>
             <div className="p-5">
-              <p className="text-[12.5px] text-ink-600 leading-relaxed">You've started this control but haven't created it yet. Leave now and what you've entered won't be saved.</p>
+              <p className="text-[0.8125rem] text-ink-600 leading-relaxed">You've started this control but haven't created it yet. Leave now and what you've entered won't be saved.</p>
               <div className="mt-4 flex items-center justify-end gap-2">
-                <button onClick={() => setShowDiscard(false)} className="h-9 px-3.5 rounded-lg border border-canvas-border text-[12.5px] font-semibold text-ink-600 hover:text-ink-900 cursor-pointer">Keep editing</button>
-                <button onClick={() => { setShowDiscard(false); onClose(); }} className="h-9 px-3.5 rounded-lg bg-brand-600 text-white text-[12.5px] font-semibold hover:bg-brand-700 transition-colors cursor-pointer">Discard</button>
+                <button onClick={() => setShowDiscard(false)} className="h-9 px-3.5 rounded-lg border border-canvas-border text-[0.8125rem] font-semibold text-ink-600 hover:text-ink-900 cursor-pointer">Keep editing</button>
+                <button onClick={() => { setShowDiscard(false); onClose(); }} className="h-9 px-3.5 rounded-lg bg-brand-600 text-white text-[0.8125rem] font-semibold hover:bg-brand-700 transition-colors cursor-pointer">Discard</button>
               </div>
             </div>
           </div>

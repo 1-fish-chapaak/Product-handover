@@ -5,10 +5,17 @@ import {
 } from './helpers';
 import { countryFor } from './auditScope';
 import { periodLine, type IcfrSheet, type PaperBlock } from './icfrWorkingPaper';
-import type { Control, Deficiency, IcfrEngagement } from './types';
+import { MW_INDICATOR_BY_ID, mwIndicatorIds, mwSourceLabel } from './types';
+import type { Control, Deficiency, ExceptionGrade, IcfrEngagement } from './types';
 
 /**
- * The audit report — the deliverable, which the working paper is not.
+ * The Internal Controls Status Report — the deliverable, which the working
+ * paper is not.
+ *
+ * Named on 25 Sep. The file and its exports still read `auditReport`: the
+ * symbols are internal, the two live call sites are named here, and a rename
+ * would churn a shared worktree for no reader outside this module. The toolbar
+ * button says only "Reports" — the full name belongs to the document.
  *
  * The working paper is the evidence: what was tested, on what, and what it
  * showed — written for a reviewer and a regulator. This is the same testing
@@ -42,8 +49,11 @@ function checkCounts(c: Control): { items: number; done: number; total: number; 
   let done = 0, fails = 0;
   steps.forEach(s => samples.forEach(smp => {
     const r = s.sampleResults?.[smp.id];
-    if (r && r !== 'Not tested') done += 1;
-    if (r === 'Fail') fails += 1;
+    // A cell is done when the grid holds a verdict for it, OR the item carries
+    // its own result — items tested before the attribute grid record theirs on
+    // the item, and counting only the grid read them as untouched.
+    if ((r && r !== 'Not tested') || smp.result !== 'Not tested') done += 1;
+    if (r === 'Fail' || ((!r || r === 'Not tested') && smp.result === 'Fail')) fails += 1;
   }));
   return { items: samples.length, done, total: steps.length * samples.length, fails };
 }
@@ -79,6 +89,9 @@ const GRADE_RANK: Record<string, number> = {
 /** The grade as the report states it, with the reason for any adjustment. */
 function gradeLabel(d: Deficiency, eng: IcfrEngagement): string {
   const g = gradeException(d, eng);
+  // Said in words. A report that printed nothing here would read as a grade
+  // somebody forgot to type rather than a question nobody has answered.
+  if (g.grade === null) return 'Not sized — not graded';
   return g.bumped ? `${g.grade} (raised on judgement)`
     : g.cap ? `${g.grade} (capped from ${g.cap.from})`
     : g.grade;
@@ -87,31 +100,35 @@ function gradeLabel(d: Deficiency, eng: IcfrEngagement): string {
 /** The worst grade among a control's deficiencies — the rollup's Severity cell. */
 function worstGrade(defs: Deficiency[], eng: IcfrEngagement): string {
   if (!defs.length) return '—';
-  return defs
-    .map(d => gradeException(d, eng).grade)
-    .reduce((a, b) => (GRADE_RANK[b] > GRADE_RANK[a] ? b : a));
+  // '—' means "no deficiencies". A control whose only findings are unsized has
+  // findings, so it must not borrow that dash — it says so in its own words.
+  const graded = defs.map(d => gradeException(d, eng).grade).filter((g): g is ExceptionGrade => g !== null);
+  if (!graded.length) return 'Not sized';
+  return graded.reduce((a, b) => (GRADE_RANK[b] > GRADE_RANK[a] ? b : a));
 }
 
 /** Plain-English standing of one observation, for a reader who doesn't know the
  *  exception lifecycle's vocabulary. */
 function observationStatus(d: Deficiency): string {
-  if (d.status === 'Closed') return 'Closed — retested and accepted';
-  if (d.status === 'Awaiting reviewer') return 'Retested, awaiting reviewer close';
-  if (d.status === 'Retest') return 'Fix submitted — retest in progress';
+  if (d.status === 'Closed') return 'Closed — fix accepted and signed off';
+  if (d.status === 'Awaiting reviewer') return 'Fix delivered with its proof — awaiting reviewer sign-off';
   if (d.status === 'Remediation') return 'Action agreed — fix in progress';
   return 'Open — action not yet agreed';
 }
 
-export function buildAuditReport(eng: IcfrEngagement, controls: Control[] = eng.controls): IcfrSheet[] {
+export function buildAuditReport(eng: IcfrEngagement, controls: Control[] = eng.controls, auditId?: string | null): IcfrSheet[] {
   const ids = new Set(controls.map(c => c.id));
   const defs = eng.deficiencies.filter(d => ids.has(d.controlId));
   const concl = controls.map(c => conclusionOf(eng, c));
   const untested = concl.filter(x => x === 'Not started').length;
   const mwOpen = openMaterialWeaknesses(eng).length;
-  // Off the LIVE audit's record, like the working paper and the lock — the
-  // engagement-level signoff field is never written, so reading it kept this
-  // report a permanent draft whatever the reviewer had signed.
-  const liveSignoff = eng.audits.find(a => !a.archive)?.signoff ?? {};
+  // Off the OPEN audit's record — the report is that audit's deliverable, so
+  // its status and signatures are that audit's, not whichever one is live
+  // (Oct 2026: a report opened on one audit read another's sign-off). Falls back
+  // to the live audit only when no audit is named. The engagement-level signoff
+  // field is never written, so it is never read.
+  const liveSignoff = ((auditId ? eng.audits.find(a => a.id === auditId) : undefined)
+    ?? eng.audits.find(a => !a.archive))?.signoff ?? {};
   const opinion = liveSignoff.icfrConclusion ?? icfrConclusion(eng);
   const signed = !!liveSignoff.preparer && !!liveSignoff.reviewer;
   const byControl = (id: string): Control | undefined => controls.find(c => c.id === id);
@@ -175,39 +192,75 @@ export function buildAuditReport(eng: IcfrEngagement, controls: Control[] = eng.
     ],
   };
 
+  // ── The rollup, filed by COMPANY and then PROCESS (user, 25 Sep) ─────────
+  // It used to be one flat list of every control in the engagement, which reads
+  // as a control register rather than a status report: the people acting on this
+  // ask "how does Company X stand" first, and a flat list makes them do the
+  // sorting in their head. Company, then the processes inside it, then the
+  // controls — so the answer is the shape of the page.
+  //
+  // The Entity column is gone with it: repeating the company on every row under
+  // a heading that already names it is noise.
+  const ROLLUP_HEADERS = ['Control ID', 'Control', 'Country', 'Testing strategy', 'Readiness', 'Test items', 'Testing', 'Failed checks', 'Review', 'Conclusion', 'Severity', 'Finalized by'];
+  /** A control answering for several companies is filed under EACH of them —
+   *  a reader looking at one company has to find every control covering it, and
+   *  filing it under the first name only would hide it from the rest. The
+   *  conclusion is still one conclusion; the note under the table says so. */
+  const entitiesOf = (c: Control): string[] => (c.entities?.length ? c.entities : [c.entity ?? '—']);
+  const filed = new Map<string, Map<string, { c: Control; k: (typeof counts)[number] }[]>>();
+  controls.forEach((c, i) => {
+    entitiesOf(c).forEach(ent => {
+      const procs = filed.get(ent) ?? new Map<string, { c: Control; k: (typeof counts)[number] }[]>();
+      const key = c.process || '—';
+      procs.set(key, [...(procs.get(key) ?? []), { c, k: counts[i]! }]);
+      filed.set(ent, procs);
+    });
+  });
+  const rollupRows: string[][] = [];
+  const rollupGroups: Record<number, 1 | 2> = {};
+  const heading = (label: string, level: 1 | 2) => {
+    rollupGroups[rollupRows.length] = level;
+    rollupRows.push([label, ...ROLLUP_HEADERS.slice(1).map(() => '')]);
+  };
+  const plural = (n: number) => `${n} control${n === 1 ? '' : 's'}`;
+  Array.from(filed.keys()).sort((x, y) => x.localeCompare(y)).forEach(ent => {
+    const procs = filed.get(ent)!;
+    heading(`${ent} · ${plural(Array.from(procs.values()).reduce((s, l) => s + l.length, 0))}`, 1);
+    Array.from(procs.keys()).sort((x, y) => x.localeCompare(y)).forEach(proc => {
+      const list = procs.get(proc)!;
+      heading(`${proc} · ${plural(list.length)}`, 2);
+      list.forEach(({ c, k }) => rollupRows.push([
+        c.id,
+        c.description,
+        countryFor(eng.id, c).value,
+        c.testingStrategy ?? '—',
+        readiness(c),
+        String(k.items),
+        testingCell(k),
+        String(k.fails),
+        reviewCell(c),
+        conclusionOf(eng, c),
+        worstGrade(defs.filter(d => d.controlId === c.id), eng),
+        c.wpSignoff?.reviewer?.by ?? '—',
+      ]));
+    });
+  });
+  const sharedCount = controls.filter(c => (c.entities?.length ?? 0) > 1).length;
+
   const rollup: IcfrSheet = {
     name: 'Control Rollup', blocks: [
       {
         kind: 'table', title: 'Control rollup',
-        note: `${controls.length} control${controls.length === 1 ? '' : 's'} — one row per control, from readiness to conclusion`,
-        // Header and row are written in the same order. Where and how a control
-        // was tested reads next to its name because the people acting on this
-        // report ask which company a finding lands in before anything else.
-        headers: ['Control ID', 'Control', 'Entity', 'Country', 'Testing strategy', 'Readiness', 'Test items', 'Testing', 'Failed checks', 'Review', 'Conclusion', 'Severity', 'Finalized by'],
-        rows: controls.map((c, i) => {
-          const k = counts[i];
-          return [
-            c.id,
-            c.description,
-            // A shared control is tested at several entities, so all of them
-            // are named rather than the first one standing for the rest.
-            c.entities?.length ? c.entities.join(', ') : (c.entity ?? '—'),
-            countryFor(eng.id, c).value,
-            c.testingStrategy ?? '—',
-            readiness(c),
-            String(k.items),
-            testingCell(k),
-            String(k.fails),
-            reviewCell(c),
-            conclusionOf(eng, c),
-            worstGrade(defs.filter(d => d.controlId === c.id), eng),
-            c.wpSignoff?.reviewer?.by ?? '—',
-          ];
-        }),
+        note: `${plural(controls.length)} across ${filed.size} compan${filed.size === 1 ? 'y' : 'ies'} — filed by company, then process, from readiness to conclusion`,
+        headers: ROLLUP_HEADERS,
+        rows: rollupRows,
+        groups: rollupGroups,
       },
       {
         kind: 'note', label: 'Reading this', tone: 'neutral',
-        text: 'Readiness is the design test: a control whose design has not held up is not ready to be operated on a sample. Testing is the share of attribute checks completed across the drawn items. Review is where the control’s working paper stands with the reviewer, and Finalized by names the reviewer who countersigned it. Severity is the worst grade among the control’s deficiencies.',
+        // The shared-control sentence is only printed when there IS one —
+        // explaining a duplication the reader cannot see would just puzzle them.
+        text: `Controls are filed under the company they answer for, then the process they belong to.${sharedCount > 0 ? ` ${sharedCount === 1 ? 'One control answers' : `${sharedCount} controls answer`} for more than one company and so appear under each of them — that is one conclusion shown in several places, not several tests, which is why the rows outnumber the controls.` : ''} Readiness is the design test: a control whose design has not held up is not ready to be operated on a sample. Testing is the share of attribute checks completed across the drawn items. Review is where the control’s working paper stands with the reviewer, and Finalized by names the reviewer who countersigned it. Severity is the worst grade among the control’s deficiencies.`,
       },
     ],
   };
@@ -284,9 +337,9 @@ export function buildAuditReport(eng: IcfrEngagement, controls: Control[] = eng.
           d.controlId,
           gradeLabel(d, eng),
           d.likelihood,
-          formatINR(d.magnitude),
+          d.magnitude === null ? 'Not sized' : formatINR(d.magnitude),
           formatINR(eng.materiality),
-          d.mwIndicators.length ? d.mwIndicators.join('; ') : '—',
+          d.mwIndicators.length ? mwIndicatorIds(d.mwIndicators).map(i => `${MW_INDICATOR_BY_ID[i].label} (${mwSourceLabel(MW_INDICATOR_BY_ID[i].source)})`).join('; ') : '—',
           d.rootCause,
           d.ratingConfirm?.by ?? d.sized?.by ?? '—',
           d.ratingConfirm?.at ?? d.sized?.at ?? '—',
@@ -307,22 +360,37 @@ export function buildAuditReport(eng: IcfrEngagement, controls: Control[] = eng.
     name: MAP_TITLE, blocks: [
       {
         kind: 'note', label: MAP_TITLE, tone: 'neutral',
-        text: 'The actions below are management’s, not the audit team’s: each is the fix the control owner has committed to, with the date they committed to. The audit team retests the fix and states the outcome in the last column — a fix is not closed because it was delivered, it is closed because a retest proved it: a fresh sample for an operating failure, the failed design checks re-checked against the fix for a design one.',
+        text: 'The actions below are management’s, not the audit team’s: each is the fix the control owner has committed to, with the date they committed to. The audit team reads the plan against the root cause before the work starts, and the reviewer signs the finding off once the fix is delivered with its proof. The retest is not skipped — it is separate, and it happens on the CONTROL: a control that has been rebuilt is tested again in its own right, once it has had a chance to run, on the audit’s own timetable. That is what the Retest column reports: a fresh sample for an operating failure, the failed design checks re-read against the new wording for a design one.',
       },
       {
         kind: 'table', title: 'Agreed actions',
         note: defs.length ? `${actionable.length} open of ${defs.length} observation${defs.length === 1 ? '' : 's'}` : 'Nothing to remediate',
-        headers: ['Report ref', 'Observation', 'Agreed action', 'Owner', 'Committed date', 'Progress', 'Retest', 'Standing'],
-        rows: defs.map(d => [
-          d.reportRef ?? '—',
-          d.description,
-          d.remediation.action?.trim() || 'NOT YET AGREED',
-          d.remediation.owner || byControl(d.controlId)?.owner || '—',
-          formatDueDate(d.remediation.date),
-          d.remediation.status,
-          d.retest ? `${d.retest.result} — ${d.retest.by}, ${d.retest.at}` : 'Not retested',
-          observationStatus(d),
-        ]),
+        headers: ['Report ref', 'Observation', 'Agreed action', 'Owner', 'Committed date', 'Progress', 'Retest of the control', 'Standing'],
+        rows: defs.map(d => {
+          // The retest lives on the CONTROL now, not inside the finding — so this
+          // cell reads the flag the close raised there, and only where that flag
+          // was raised by THIS finding. A control can carry a retest owed by a
+          // different exception, and reporting somebody else's under this row
+          // would be a plain untruth. `d.retest` is the pre-30-Sep mirror: still
+          // read, so a finding retested under the old flow keeps its answer.
+          const owed = byControl(d.controlId)?.retestDue;
+          const mine = owed && owed.defId === d.id ? owed : undefined;
+          const retestCell = mine
+            ? (mine.cleared ? `Settled — ${mine.cleared.by}, ${mine.cleared.at}` : `Owed — the control changed ${mine.at}`)
+            : d.retest ? `${d.retest.result} — ${d.retest.by}, ${d.retest.at}`
+            : d.status === 'Closed' ? 'Not recorded'
+            : 'Not due until the fix is in';
+          return [
+            d.reportRef ?? '—',
+            d.description,
+            d.remediation.action?.trim() || 'NOT YET AGREED',
+            d.remediation.owner || byControl(d.controlId)?.owner || '—',
+            formatDueDate(d.remediation.date),
+            d.remediation.status,
+            retestCell,
+            observationStatus(d),
+          ];
+        }),
       },
       ...(mwOpen > 0 ? [{
         kind: 'note', label: 'Material weakness', tone: 'bad',
@@ -348,7 +416,9 @@ export function buildAuditReport(eng: IcfrEngagement, controls: Control[] = eng.
    */
   const body: { sheet: IcfrSheet; covers: string }[] = [
     { sheet: summary, covers: 'The opinion, who the audit was for and over what period, and testing at a glance' },
-    { sheet: rollup, covers: `${controls.length} control${controls.length === 1 ? '' : 's'} — one row each, from readiness to conclusion` },
+    // The contents line has to describe the section as it now reads — "one row
+    // each" survived the regrouping and contradicted the page it pointed at.
+    { sheet: rollup, covers: `${plural(controls.length)} filed under ${filed.size === 1 ? 'their company' : `the ${filed.size} companies`}, then their process` },
     { sheet: exceptions, covers: [
       exceptionRows.length
         ? `${exceptionRows.length} failed check${exceptionRows.length === 1 ? '' : 's'} — one row per failed attribute per sampled item`
@@ -365,7 +435,7 @@ export function buildAuditReport(eng: IcfrEngagement, controls: Control[] = eng.
 
   const contents: IcfrSheet = {
     name: 'Contents', blocks: [
-      { kind: 'heading', text: `Audit report — ${eng.entity}`, sub: `${eng.name} (${eng.code}) · ${eng.framework} · ${periodLine(eng)}` },
+      { kind: 'heading', text: `Internal Controls Status Report — ${eng.entity}`, sub: `${eng.name} (${eng.code}) · ${eng.framework} · ${periodLine(eng)}` },
       {
         kind: 'table', title: 'Contents',
         note: `${body.length} sections — the report reads in this order`,
@@ -387,9 +457,9 @@ export function buildAuditReport(eng: IcfrEngagement, controls: Control[] = eng.
 /** The report as a workbook — one sheet per section, same blocks the preview
  *  shows and the PDF pages. The .xlsx keeps this sheet-per-section format; the
  *  PDF (the primary issue format) turns each sheet into a page. */
-export function downloadAuditReport(eng: IcfrEngagement, controls: Control[] = eng.controls): void {
+export function downloadAuditReport(eng: IcfrEngagement, controls: Control[] = eng.controls, auditId?: string | null): void {
   const wb = XLSX.utils.book_new();
-  for (const sheet of buildAuditReport(eng, controls)) {
+  for (const sheet of buildAuditReport(eng, controls, auditId)) {
     const aoa: (string | number)[][] = [];
     sheet.blocks.forEach(b => {
       if (b.kind === 'heading') { aoa.push([b.text], [b.sub]); }
@@ -404,7 +474,7 @@ export function downloadAuditReport(eng: IcfrEngagement, controls: Control[] = e
     // sheet names cannot exceed 31 chars in xlsx
     XLSX.utils.book_append_sheet(wb, ws, sheet.name.slice(0, 31));
   }
-  XLSX.writeFile(wb, `Audit_Report_ICFR_${eng.code}.xlsx`);
+  XLSX.writeFile(wb, `Internal_Controls_Status_Report_${eng.code}.xlsx`);
 }
 
 function colWidths(rows: (string | number)[][], max = 90): XLSX.ColInfo[] {

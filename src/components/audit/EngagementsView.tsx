@@ -3,16 +3,16 @@ import { motion, AnimatePresence } from 'motion/react';
 import {
   ClipboardCheck, Calendar, ArrowUpRight, Search, Plus,
   Trash2, AlertTriangle, X, LayoutDashboard, List,
-  Pencil, UserPlus, CheckCircle2, GitBranch, Sparkles,
+  GitBranch, Sparkles,
 } from 'lucide-react';
 import Orb from '../shared/Orb';
 import { findEngagement, libraryEngagements, registerEngagement, type AutomationSubtype, type Engagement, type EngStatus, type EngType, type ProcessCode } from '../../data/engagements';
 import { useCreatedEngagements } from '../../data/createdEngagementsStore';
 import ConfirmationModal from '../shared/ConfirmationModal';
 import { FilterSelect } from '../shared/FilterSelect';
-import { OWNER_NAMES } from '../../data/grc-domain';
 import CreateEngagementWizard from './CreateEngagementWizard';
 import ScopingWizard from './sox-testing/ScopingWizard';
+import { ROUND_LABEL, soxCardStats, soxRoundOf } from '../sox-icfr/engagementRounds';
 import { FlowModal } from './sox-testing/SoxTestingTab';
 import { registerProgramme, type SoxProgramme } from './sox-testing/soxTestingData';
 import EngagementsOverview, { type ListFilter } from './EngagementsOverview';
@@ -20,7 +20,6 @@ import { useCan } from '../../context/CurrentUserContext';
 import { useToast } from '../shared/Toast';
 import { useAuditLog } from '../../context/AdminDataContext';
 import { useNotify } from '../../notifications/NotificationContext';
-import { ROSTER } from '../../notifications/triggers/caseTriggers';
 import { useInsightStackRun } from '../shared/useInsightStackRun';
 import InsightLauncherPill from '../shared/InsightLauncherPill';
 import InsightStackDrawer from '../shared/InsightStackDrawer';
@@ -70,6 +69,10 @@ const STATUS_DOT: Record<EngStatus, string> = {
   Draft: 'bg-ink-400',
   Closed: 'bg-ink-400',
 };
+
+/** What a status reads as on screen. A signed-off engagement is "Concluded" —
+ *  the word its own page uses — so the list and the page never disagree. */
+const STATUS_LABEL = (s: EngStatus): string => (s === 'Closed' ? 'Concluded' : s);
 
 const TYPE_CLS: Record<EngType, string> = {
   Compliance: 'bg-brand-50 text-brand-700 border-brand-100',
@@ -139,6 +142,9 @@ export default function EngagementsView({ onOpenEngagement, onOpenAuditPlanning,
   // SOX is scoped rather than configured, so picking that type in the wizard
   // above hands over to the same journey the SOX Testing tab runs.
   const [soxWizardOpen, setSoxWizardOpen] = useState(false);
+  /** The engagement just created — the list opens with it marked at the top,
+   *  so the new row is the first thing seen after Create. */
+  const [justCreatedId, setJustCreatedId] = useState<string | null>(null);
   /** Set when the SOX sheet's Back reopens the classic wizard — keeps the
    *  Type step showing SOX / ICFR still selected. Cleared on normal opens. */
   const [wizardInitialType, setWizardInitialType] = useState<EngType | undefined>(undefined);
@@ -156,8 +162,6 @@ export default function EngagementsView({ onOpenEngagement, onOpenAuditPlanning,
       return missing.length ? [...missing, ...prev] : prev;
     });
   }, [createdEngagements]);
-  /** Row id whose "Assign owner" popover is open. */
-  const [assignFor, setAssignFor] = useState<string | null>(null);
   /** Row pending delete confirmation. */
   const [deleteTarget, setDeleteTarget] = useState<Engagement | null>(null);
 
@@ -243,52 +247,6 @@ export default function EngagementsView({ onOpenEngagement, onOpenAuditPlanning,
 
   const anyFilterActive = typeFilter !== 'All' || statusFilter !== 'All' || processFilter !== 'All';
   const clearFilters = () => { setTypeFilter('All'); setStatusFilter('All'); setProcessFilter('All'); };
-
-  /** Close / finalize — flips to Closed with an undo toast. */
-  const handleClose = (eng: Engagement) => {
-    const prevStatus = eng.status;
-    patchEngagement(eng.id, { status: 'Closed' });
-    const openIssues = eng.openIssues ?? 0;
-    const engFacts = [{ label: 'Engagement', value: `${eng.code} · ${eng.name}` }, { label: 'New status', value: 'Closed' }, { label: 'Closed by', value: 'You' }];
-    // ENG-04 to everyone on it; ENG-05 on top when findings are still open.
-    notify({
-      eventId: 'ENG-04', title: `${eng.code} moved to Closed`, actor: 'You',
-      message: `${eng.name} is Closed.${openIssues ? ` ${openIssues} issue${openIssues === 1 ? '' : 's'} remain open.` : ' Nothing remains open.'}`,
-      facts: [...engFacts, { label: 'Remaining open', value: openIssues ? String(openIssues) : 'None' }],
-      recipients: [{ name: eng.owner, role: 'Participant' }, ...(eng.team?.auditors ?? []).map(n => ({ name: n, role: 'Participant' })), ...(eng.team?.riskOwners ?? []).map(n => ({ name: n, role: 'Participant' }))],
-      link: { view: 'engagement-overview', ref: { kind: 'engagement', id: eng.id } }, linkLabel: 'Open engagement', operationKey: `close-${eng.id}`,
-    });
-    if (openIssues > 0) {
-      notify({
-        eventId: 'ENG-05', title: `${eng.code} closed with ${openIssues} unresolved exception${openIssues === 1 ? '' : 's'}`, actor: 'You',
-        message: `${eng.name} was Completed while ${openIssues} exception${openIssues === 1 ? '' : 's'} remain open. Closing over open findings is a reportable control weakness.`,
-        facts: [...engFacts, { label: 'Open exceptions', value: String(openIssues) }],
-        recipients: [{ name: eng.owner, role: 'Engagement owner' }, ROSTER.engagementAuditor], watchers: [ROSTER.compliance],
-        link: { view: 'engagement-overview', ref: { kind: 'engagement', id: eng.id } }, linkLabel: 'Open engagement',
-      });
-    }
-    addToast({
-      message: `"${eng.name}" closed`,
-      type: 'success',
-      secondaryAction: { label: 'Undo', onClick: () => patchEngagement(eng.id, { status: prevStatus }) },
-    });
-  };
-
-  /** Assign a new owner from the row popover. */
-  const handleAssignOwner = (eng: Engagement, newOwner: string) => {
-    setAssignFor(null);
-    if (newOwner === eng.owner) return;
-    patchEngagement(eng.id, { owner: newOwner });
-    addToast({ message: `"${eng.name}" reassigned to ${newOwner}`, type: 'success' });
-    notify({
-      eventId: 'ENG-03', title: `You are now the owner of ${eng.code}`, actor: 'You',
-      message: `Ownership of ${eng.name} moved from ${eng.owner} to ${newOwner}. ${eng.openIssues ?? 0} exception${(eng.openIssues ?? 0) === 1 ? '' : 's'} open.`,
-      facts: [{ label: 'Engagement', value: `${eng.code} · ${eng.name}` }, { label: 'Previous owner', value: eng.owner }, { label: 'Open exceptions', value: String(eng.openIssues ?? 0) }],
-      recipients: [{ name: newOwner, role: 'New owner' }, { name: eng.owner, role: 'Previous owner' }], watchers: [ROSTER.engagementAuditor],
-      link: { view: 'engagement-overview', ref: { kind: 'engagement', id: eng.id } }, linkLabel: 'Open engagement',
-    });
-    logEvent({ action: 'Update', description: `Reassigned "${eng.name}" to ${newOwner}`, module: 'Engagements', entity: 'Engagement' });
-  };
 
   /** Confirmed delete — removes from the session list with an undo toast. */
   const handleDeleteConfirmed = () => {
@@ -393,7 +351,7 @@ export default function EngagementsView({ onOpenEngagement, onOpenAuditPlanning,
             />
           </div>
           <MinimalFilter label="Type" allLabel="All types" options={TYPE_FILTERS} value={typeFilter} onChange={setTypeFilter} counts={counts.type} />
-          <MinimalFilter label="Status" allLabel="All statuses" options={STATUS_FILTERS} value={statusFilter} onChange={setStatusFilter} counts={counts.status} />
+          <MinimalFilter label="Status" allLabel="All statuses" options={STATUS_FILTERS} value={statusFilter} onChange={setStatusFilter} counts={counts.status} optionLabel={o => STATUS_LABEL(o as EngStatus)} />
           <MinimalFilter label="Process" allLabel="All processes" options={PROCESS_FILTERS} value={processFilter} onChange={setProcessFilter} counts={counts.process} />
           {anyFilterActive && (
             <button
@@ -414,19 +372,21 @@ export default function EngagementsView({ onOpenEngagement, onOpenAuditPlanning,
           </div>
         ) : (
           <div>
-            {/* Column headers — label row above the cards */}
-            <div className="grid grid-cols-[2.6fr_1fr_1.7fr_80px] gap-5 px-6 pb-2 text-[0.65625rem] uppercase tracking-wider font-semibold text-text-muted/80">
-              <div>Engagement</div>
-              <div>Type</div>
-              <div>Health</div>
-              <div className="text-right">Actions</div>
-            </div>
-
+            {/* No column headers (user ask, 28 Sep). These are cards, not table
+                rows: every value already says what it is — the type is a pill,
+                health is a percentage over a bar — so the labels named what was
+                legible without them, and the last one named a column that has
+                since come down to a single icon. */}
             <div className="space-y-2">
-            {filtered.map((eng, i) => {
+            {filtered.map((row, i) => {
+              // A SOX engagement's figures are counted off its workspace — the
+              // same source and rule as its Overview — not the seed record's
+              // static numbers, which disagreed with the page they open.
+              const sox = row.type === 'SOX / ICFR' ? soxCardStats(row) : null;
+              const eng = sox ? { ...row, controls: sox.controls, health: sox.health, openIssues: sox.openIssues } : row;
               const health = healthTier(eng.health);
               const notStarted = eng.health === 0 && (eng.status === 'Planned' || eng.status === 'Draft');
-              const effective = Math.round((eng.controls * eng.health) / 100);
+              const effective = sox ? sox.effective : Math.round((eng.controls * eng.health) / 100);
               // B+C surfacing: a portfolio insight that spans this engagement
               // reflects its slice here (top-severity one; the rest stay one
               // honest line away), and explicitly-targeted actions land as
@@ -441,15 +401,16 @@ export default function EngagementsView({ onOpenEngagement, onOpenAuditPlanning,
                   animate={{ opacity: 1, y: 0 }}
                   transition={{ delay: i * 0.025 }}
                   onClick={() => onOpenEngagement(eng.id)}
-                  className="grid grid-cols-[2.6fr_1fr_1.7fr_80px] gap-5 px-6 py-5 rounded-lg border border-border-light bg-white hover:border-primary/50 hover: transition-all cursor-pointer group items-start"
+                  className={`grid grid-cols-[2.6fr_1fr_1.7fr_80px] gap-5 px-6 py-5 rounded-lg border hover:border-primary/50 hover: transition-all cursor-pointer group items-start ${eng.id === justCreatedId ? 'border-primary/50 bg-brand-50/40' : 'border-border-light bg-white'}`}
                 >
                   {/* Engagement column */}
                   <div className="min-w-0">
                     <div className="flex items-center gap-2 flex-wrap">
                       <h3 className="text-[0.90625rem] font-semibold text-text leading-snug">{eng.name}</h3>
+                      {eng.id === justCreatedId && <span className="text-[0.6875rem] font-semibold text-brand-700">Just created</span>}
                       <span className={`inline-flex items-center gap-1 px-2 h-5 rounded-full text-[0.625rem] font-semibold ${STATUS_CLS[eng.status]}`}>
                         <span className={`w-1.5 h-1.5 rounded-full ${STATUS_DOT[eng.status]}`} aria-hidden="true" />
-                        {eng.status}
+                        {STATUS_LABEL(eng.status)}
                       </span>
                       {eng.aiRecommended && (
                         <span
@@ -470,6 +431,11 @@ export default function EngagementsView({ onOpenEngagement, onOpenAuditPlanning,
                       <span>{eng.owner}</span>
                       <span className="text-border">·</span>
                       <span className="tabular-nums">{eng.periodStart} – {eng.periodEnd}</span>
+                      {/* One engagement = one audit round (5 Oct 2026) — say which. */}
+                      {eng.type === 'SOX / ICFR' && (<>
+                        <span className="text-border">·</span>
+                        <span>{ROUND_LABEL[soxRoundOf(eng)]}</span>
+                      </>)}
                     </div>
                     {/* Inline tag badges */}
                     <div className="flex items-center gap-1.5 mt-2.5 flex-wrap">
@@ -527,63 +493,13 @@ export default function EngagementsView({ onOpenEngagement, onOpenAuditPlanning,
                   </div>
 
                   {/* Actions column — no ▶ Open icon (feedback #9): it read as
-                      "run", and the whole card already opens the engagement. */}
+                      "run", and the whole card already opens the engagement.
+                      Edit, Assign owner and Close / finalize have gone too (user
+                      ask, 28 Sep): four icons on a row made the list look like a
+                      control panel when it is a way in, and each of the three
+                      changed the engagement from a screen that shows none of its
+                      detail. They belong where the engagement is open. */}
                   <div className="flex items-start justify-end gap-1">
-                    {can('eng_edit') && (
-                      <IconAction
-                        label="Edit engagement"
-                        onClick={(e) => { e.stopPropagation(); setWizardInitialType(undefined); setEditTarget(eng); setWizardOpen(true); }}
-                        className="text-text-muted hover:text-text-secondary hover:bg-canvas"
-                      >
-                        <Pencil size={14} />
-                      </IconAction>
-                    )}
-                    {can('eng_assign') && (
-                      <div className="relative">
-                        <IconAction
-                          label="Assign owner"
-                          hideTip={assignFor === eng.id}
-                          onClick={(e) => { e.stopPropagation(); setAssignFor(prev => prev === eng.id ? null : eng.id); }}
-                          className={assignFor === eng.id ? 'text-primary bg-primary/10' : 'text-text-muted hover:text-primary hover:bg-primary/10'}
-                        >
-                          <UserPlus size={14} />
-                        </IconAction>
-                        {assignFor === eng.id && (
-                          <>
-                            {/* click-away layer */}
-                            <div
-                              className="fixed inset-0 z-20"
-                              onClick={(e) => { e.stopPropagation(); setAssignFor(null); }}
-                            />
-                            <div
-                              className="absolute right-0 top-full mt-1 z-30 w-48 rounded-lg border border-border bg-white shadow-lg py-1"
-                              onClick={(e) => e.stopPropagation()}
-                            >
-                              <div className="px-3 py-1.5 text-[0.6875rem] font-bold text-text-muted uppercase tracking-wider">Assign owner</div>
-                              {OWNER_NAMES.map(n => (
-                                <button
-                                  key={n}
-                                  onClick={(e) => { e.stopPropagation(); handleAssignOwner(eng, n); }}
-                                  className={`w-full flex items-center justify-between gap-2 px-3 py-1.5 text-left text-[0.75rem] transition-colors cursor-pointer ${n === eng.owner ? 'text-primary font-semibold bg-primary/5' : 'text-text-secondary hover:bg-primary/5 hover:text-text'}`}
-                                >
-                                  {n}
-                                  {n === eng.owner && <CheckCircle2 size={12} className="shrink-0" />}
-                                </button>
-                              ))}
-                            </div>
-                          </>
-                        )}
-                      </div>
-                    )}
-                    {can('eng_close') && eng.status !== 'Closed' && (
-                      <IconAction
-                        label="Close / finalize"
-                        onClick={(e) => { e.stopPropagation(); handleClose(eng); }}
-                        className="text-text-muted hover:text-evidence-700 hover:bg-evidence-50"
-                      >
-                        <CheckCircle2 size={14} />
-                      </IconAction>
-                    )}
                     {can('eng_delete') && (
                       <IconAction
                         label="Delete engagement"
@@ -673,7 +589,7 @@ export default function EngagementsView({ onOpenEngagement, onOpenAuditPlanning,
                 // ENG-01 to the named owner; ENG-02 to everyone in scope when it starts Active.
                 notify({
                   eventId: 'ENG-01', title: `You own new engagement ${eng.code} — ${eng.name}`, actor: 'You',
-                  message: `${eng.type} · ${eng.process} · ${eng.periodStart} – ${eng.periodEnd}. Created as ${eng.status}.`,
+                  message: `${eng.type} · ${eng.process} · ${eng.periodStart} – ${eng.periodEnd}. Created as ${STATUS_LABEL(eng.status)}.`,
                   facts, recipients: [{ name: eng.owner, role: 'Named owner' }],
                   link: { view: 'engagement-overview', ref: { kind: 'engagement', id: eng.id } }, linkLabel: 'Open engagement',
                 });
@@ -686,7 +602,7 @@ export default function EngagementsView({ onOpenEngagement, onOpenAuditPlanning,
                   ];
                   people.forEach(p => notify({
                     eventId: 'ENG-02', title: `${eng.code} kicked off — you’re the ${p.role}`, actor: 'You',
-                    message: `${eng.name} is ${eng.status}. Period ${eng.periodStart} – ${eng.periodEnd}.`,
+                    message: `${eng.name} is ${STATUS_LABEL(eng.status)}. Period ${eng.periodStart} – ${eng.periodEnd}.`,
                     facts: [...facts, { label: 'Your role', value: p.role }],
                     recipients: [p], link: { view: 'engagement-overview', ref: { kind: 'engagement', id: eng.id } }, linkLabel: 'Open engagement', operationKey: `kickoff-${eng.id}`, itemLabel: p.name,
                   }));
@@ -731,17 +647,10 @@ export default function EngagementsView({ onOpenEngagement, onOpenAuditPlanning,
                 const eng = p.engagementId ? findEngagement(p.engagementId) : undefined;
                 if (eng) setAll(prev => prev.some(e => e.id === eng.id) ? prev : [eng, ...prev]);
                 setSoxWizardOpen(false);
-                addToast({
-                  type: 'success',
-                  // Skipped scoping points at the RACM, not the trial balances:
-                  // the Configuration tab this used to name is now Audit logs
-                  // and carries no upload. Matches the Overview banner.
-                  // S11: say what was copied — RACMs picked on the Scope step and
-                  // their controls — not the processes the programme records.
-                  message: eng?.soxRacms?.length
-                    ? `${p.fy} programme created — ${eng.soxRacms.length} RACM${eng.soxRacms.length === 1 ? '' : 's'} and ${eng.soxControls?.length ?? 0} controls copied from the RACM tab`
-                    : `${p.fy} programme created — add RACMs from the Control library`,
-                });
+                // One engagement = one audit round (5 Oct 2026): Create opens
+                // the new engagement on its Overview. Landing there says it was
+                // created, so no toast (no toasts in SOX).
+                if (eng) onOpenEngagement(eng.id);
               }}
             />
           </FlowModal>
@@ -856,7 +765,7 @@ function IconAction({ label, onClick, className, hideTip, children }: {
  *  non-"All" value is picked. The menu is the product's themed popover (the
  *  native <select> popup can't be styled), so it matches every other filter. */
 function MinimalFilter<T extends string>({
-  label, allLabel, options, value, onChange, counts,
+  label, allLabel, options, value, onChange, counts, optionLabel = o => o,
 }: {
   label: string;
   allLabel: string;
@@ -864,11 +773,13 @@ function MinimalFilter<T extends string>({
   value: T;
   onChange: (next: T) => void;
   counts: Record<string, number>;
+  /** Display text for an option — the value itself unless a screen word differs. */
+  optionLabel?: (opt: T) => string;
 }) {
   return (
     <FilterSelect
       value={value}
-      options={options.map(opt => ({ value: opt, label: opt === 'All' ? allLabel : `${opt} · ${counts[opt] ?? 0}` }))}
+      options={options.map(opt => ({ value: opt, label: opt === 'All' ? allLabel : `${optionLabel(opt)} · ${counts[opt] ?? 0}` }))}
       onChange={v => onChange(v as T)}
       ariaLabel={`Filter by ${label}`}
     />

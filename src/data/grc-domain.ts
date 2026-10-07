@@ -106,6 +106,7 @@ export const SUB_PROCESSES: Record<ProcessCode, string[]> = {
   R2R:  ['Journal Entries', 'Account Reconciliation', 'Period-End Close', 'Financial Reporting'],
   S2C:  ['Vendor Qualification', 'Contract Authoring', 'Approval & Signing', 'Obligation Tracking'],
   ITGC: ['Access Provisioning', 'Privileged Access', 'Change Management', 'Backup & Recovery'],
+  INV:  ['Stock Movements', 'Physical Inventory', 'Valuation', 'Write-offs & Scrap'],
 };
 
 /** Pick a stable sub-process for a workflow by hashing its id. Demo-only. */

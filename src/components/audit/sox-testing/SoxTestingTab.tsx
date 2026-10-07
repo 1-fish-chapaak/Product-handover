@@ -3,13 +3,13 @@ import { motion, AnimatePresence } from 'motion/react';
 import { Plus, Flag, Building2, X, FileSearch, RefreshCw } from 'lucide-react';
 import { useToast } from '../../shared/Toast';
 import ScopingWizard from './ScopingWizard';
-import RollForwardWizard from './RollForwardWizard';
 
 /** Card actions parked (user ask) — roll forward is a per-audit action now,
  *  reached from the engagement's Audit logs tab; the scoping-summary modal has
  *  no entry point while this is off. Flip to bring the card buttons back. */
 const CARD_ACTIONS = false;
 import ProgrammeView from './ProgrammeView';
+import DialogFocus from '../../shared/DialogFocus';
 import {
   PROGRAMMES, registerProgramme, fmtCr,
   type CyclePhase, type SoxProgramme,
@@ -35,7 +35,7 @@ const PIPELINE = [
 ];
 */
 
-type TabView = 'home' | 'wizard' | { programmeId: string } | { rollFromId: string };
+type TabView = 'home' | 'wizard' | { programmeId: string };
 
 interface Props {
   /** Routes into the classic SOX workspace (tabs + control testing). */
@@ -73,13 +73,7 @@ export default function SoxTestingTab({ onOpenEngagement }: Props) {
   const openProgramme = typeof view === 'object' && 'programmeId' in view
     ? programmes.find(x => x.id === view.programmeId)
     : undefined;
-  const rollFrom = typeof view === 'object' && 'rollFromId' in view
-    ? programmes.find(x => x.id === view.rollFromId)
-    : undefined;
 
-  /** The annual action lives on the latest cycle only — roll it into next year. */
-  const asOfYear = (p: SoxProgramme) => Number(/\d{4}/.exec(p.asOf)?.[0] ?? 0);
-  const latestId = programmes.reduce((best, p) => (asOfYear(p) > asOfYear(best) ? p : best), programmes[0])?.id;
 
   return (
     <>
@@ -88,7 +82,7 @@ export default function SoxTestingTab({ onOpenEngagement }: Props) {
         <div className="flex items-center justify-end mb-4">
           <button
             onClick={() => setView('wizard')}
-            className="shrink-0 flex items-center gap-2 px-4 py-2 bg-primary hover:bg-primary-hover text-white rounded-lg text-[13px] font-semibold transition-colors cursor-pointer"
+            className="shrink-0 flex items-center gap-2 px-4 py-2 bg-primary hover:bg-primary-hover text-white rounded-lg text-[0.8125rem] font-semibold transition-colors cursor-pointer"
           >
             <Plus size={14} /> New Engagement
           </button>
@@ -97,7 +91,7 @@ export default function SoxTestingTab({ onOpenEngagement }: Props) {
         {/*
           Pipeline explainer ("How a programme gets its scope") — parked for now.
           <div className="border border-border-light rounded-xl bg-white p-4 mb-6">
-            <div className="text-[11px] font-bold text-text-muted uppercase tracking-wider mb-3">How a programme gets its scope</div>
+            <div className="text-[0.6875rem] font-bold text-text-muted uppercase tracking-wider mb-3">How a programme gets its scope</div>
             <div className="flex items-stretch gap-1.5 overflow-x-auto pb-1">
               {PIPELINE.map((s, i) => (
                 <div key={s.label} className="flex items-center gap-1.5 shrink-0">
@@ -107,8 +101,8 @@ export default function SoxTestingTab({ onOpenEngagement }: Props) {
                       <s.icon size={14} />
                     </span>
                     <span>
-                      <span className="block text-[11.5px] font-semibold text-text leading-tight">{i + 1}. {s.label}</span>
-                      <span className="block text-[10px] text-text-muted leading-tight mt-0.5">{s.hint}</span>
+                      <span className="block text-[0.75rem] font-semibold text-text leading-tight">{i + 1}. {s.label}</span>
+                      <span className="block text-[0.6875rem] text-text-muted leading-tight mt-0.5">{s.hint}</span>
                     </span>
                   </div>
                 </div>
@@ -118,17 +112,17 @@ export default function SoxTestingTab({ onOpenEngagement }: Props) {
         */}
 
         {/* Programme cards — the tab's landing is the list itself */}
-        <div className="text-[11px] font-bold text-text-muted uppercase tracking-wider mb-2">Programmes</div>
+        <div className="text-[0.6875rem] font-bold text-text-muted uppercase tracking-wider mb-2">Programmes</div>
         {programmes.length === 0 && (
           <div className="border border-dashed border-border rounded-xl bg-white/60 px-6 py-10 text-center">
             <FileSearch size={22} className="mx-auto text-text-muted mb-2.5" />
-            <div className="text-[13.5px] font-semibold text-text">No SOX programmes yet</div>
-            <p className="text-[12px] text-text-secondary mt-1 mb-4 max-w-sm mx-auto leading-relaxed">
+            <div className="text-[0.875rem] font-semibold text-text">No SOX programmes yet</div>
+            <p className="text-[0.75rem] text-text-secondary mt-1 mb-4 max-w-sm mx-auto leading-relaxed">
               Start with scoping — materiality, trial balances and the qualitative overlay decide what lands in scope.
             </p>
             <button
               onClick={() => setView('wizard')}
-              className="inline-flex items-center gap-2 px-4 py-2 bg-primary hover:bg-primary-hover text-white rounded-lg text-[13px] font-semibold transition-colors cursor-pointer"
+              className="inline-flex items-center gap-2 px-4 py-2 bg-primary hover:bg-primary-hover text-white rounded-lg text-[0.8125rem] font-semibold transition-colors cursor-pointer"
             >
               <Plus size={14} /> New Engagement
             </button>
@@ -151,31 +145,22 @@ export default function SoxTestingTab({ onOpenEngagement }: Props) {
                 className="w-full text-left px-6 py-5 rounded-xl border border-border-light bg-white hover:border-primary/50 hover:shadow-sm transition-all cursor-pointer"
               >
                 <div className="flex items-center gap-2.5 flex-wrap">
-                  <h3 className="text-[14.5px] font-semibold text-text leading-snug">{p.name}</h3>
-                  <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-semibold ${PHASE_CLS[p.phase]}`}>
+                  <h3 className="text-[0.9375rem] font-semibold text-text leading-snug">{p.name}</h3>
+                  <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-[0.6875rem] font-semibold ${PHASE_CLS[p.phase]}`}>
                     {p.phase}
                   </span>
                   {CARD_ACTIONS && (
                   <span className="ml-auto flex items-center gap-1 shrink-0">
-                    {p.id === latestId && (
-                      <button
-                        onClick={e => { e.stopPropagation(); setView({ rollFromId: p.id }); }}
-                        title={`Carry ${p.fy} scoping and RACMs into the next cycle`}
-                        className="inline-flex items-center gap-1.5 px-2 py-1 rounded-md text-[11px] font-semibold text-primary hover:bg-primary/5 transition-colors cursor-pointer"
-                      >
-                        <RefreshCw size={12} /> Roll forward
-                      </button>
-                    )}
                     <button
                       onClick={e => { e.stopPropagation(); setView({ programmeId: p.id }); }}
-                      className="inline-flex items-center gap-1.5 px-2 py-1 rounded-md text-[11px] font-semibold text-primary hover:bg-primary/5 transition-colors cursor-pointer"
+                      className="inline-flex items-center gap-1.5 px-2 py-1 rounded-md text-[0.6875rem] font-semibold text-primary hover:bg-primary/5 transition-colors cursor-pointer"
                     >
                       <FileSearch size={12} /> Scoping summary
                     </button>
                   </span>
                   )}
                 </div>
-                <div className="flex items-center gap-3 mt-2 text-[11.5px] text-text-secondary flex-wrap">
+                <div className="flex items-center gap-3 mt-2 text-[0.75rem] text-text-secondary flex-wrap">
                   {p.code && (<>
                     <span className="font-mono tracking-tight text-text-muted">{p.code}</span>
                     <span className="text-border">·</span>
@@ -204,7 +189,7 @@ export default function SoxTestingTab({ onOpenEngagement }: Props) {
                 </div>
                 <div className="flex items-center gap-1.5 mt-2.5 flex-wrap">
                   {p.racms.slice(0, 7).map(r => (
-                    <span key={r.process} className="inline-flex items-center px-2 h-5 rounded-md text-[10.5px] font-semibold bg-surface-2 text-text-secondary border border-border-light">
+                    <span key={r.process} className="inline-flex items-center px-2 h-5 rounded-md text-[0.6875rem] font-semibold bg-surface-2 text-text-secondary border border-border-light">
                       {r.process}
                     </span>
                   ))}
@@ -215,23 +200,21 @@ export default function SoxTestingTab({ onOpenEngagement }: Props) {
         </div>
       </motion.div>
 
-      {/* Creation flows (scoping wizard, roll-forward) slide in as a full-height
-          side sheet; the scoping summary keeps the centred modal. */}
+      {/* The scoping wizard slides in as a full-height side sheet; the scoping
+          summary keeps the centred modal. */}
       <AnimatePresence>
         {view !== 'home' && (
           <FlowModal
-            key={view === 'wizard' ? 'wizard' : rollFrom ? `roll-${rollFrom.id}` : openProgramme?.id ?? 'programme'}
-            label={view === 'wizard' ? 'New engagement' : rollFrom ? 'Roll forward' : 'SOX programme'}
-            widthCls={view === 'wizard' || rollFrom ? 'w-full max-w-[560px]' : 'w-[1000px]'}
-            variant={view === 'wizard' || rollFrom ? 'sheet' : 'modal'}
+            key={view === 'wizard' ? 'wizard' : openProgramme?.id ?? 'programme'}
+            label={view === 'wizard' ? 'New engagement' : 'SOX programme'}
+            widthCls={view === 'wizard' ? 'w-full max-w-140' : 'w-250'}
+            variant={view === 'wizard' ? 'sheet' : 'modal'}
             /* the scoping sheet carries its own header close */
             hideClose={view === 'wizard'}
             onClose={() => setView('home')}
           >
             {view === 'wizard' ? (
               <ScopingWizard onCancel={() => setView('home')} onCreated={handleCreated} />
-            ) : rollFrom ? (
-              <RollForwardWizard prior={rollFrom} onCancel={() => setView('home')} onCreated={handleCreated} />
             ) : openProgramme ? (
               <ProgrammeView
                 programme={openProgramme}
@@ -249,7 +232,7 @@ export default function SoxTestingTab({ onOpenEngagement }: Props) {
  *  full-height side sheet sliding in from the right; the scoping summary keeps
  *  the centred 800px-tall modal. Closes on X or Escape only — an overlay click
  *  mid-wizard would silently discard scoping work. */
-export function FlowModal({ label, widthCls = 'w-[800px]', variant = 'modal', enterInstant, hideClose, onClose, children }: {
+export function FlowModal({ label, widthCls = 'w-200', variant = 'modal', enterInstant, hideClose, onClose, children }: {
   label: string;
   widthCls?: string;
   variant?: 'modal' | 'sheet';
@@ -303,8 +286,9 @@ export function FlowModal({ label, widthCls = 'w-[800px]', variant = 'modal', en
           role="dialog" aria-modal="true" aria-label={label}
           className={`fixed right-0 top-0 bottom-0 z-50 ${widthCls} bg-canvas border-l border-border-light shadow-2xl overflow-hidden flex flex-col`}
         >
+          <DialogFocus />
           {closeBtn}
-          <div className="flex-1 overflow-y-auto p-6 pb-0">
+          <div className="flex-1 overflow-y-auto overscroll-contain p-6 pb-0">
             {children}
           </div>
         </motion.div>
@@ -316,10 +300,11 @@ export function FlowModal({ label, widthCls = 'w-[800px]', variant = 'modal', en
             exit={{ opacity: 0, y: 10, scale: 0.98 }}
             transition={{ duration: 0.18 }}
             role="dialog" aria-modal="true" aria-label={label}
-            className={`pointer-events-auto relative ${widthCls} h-[800px] max-w-full max-h-full bg-canvas rounded-[1.25rem] border border-border-light shadow-[0_24px_64px_-16px_rgba(15,8,30,0.28)] overflow-hidden flex flex-col`}
+            className={`pointer-events-auto relative ${widthCls} h-200 max-w-full max-h-full bg-canvas rounded-[1.25rem] border border-border-light shadow-[0_24px_64px_-16px_rgba(15,8,30,0.28)] overflow-hidden flex flex-col`}
           >
+            <DialogFocus />
             {closeBtn}
-            <div className="flex-1 overflow-y-auto p-6 pb-0">
+            <div className="flex-1 overflow-y-auto overscroll-contain p-6 pb-0">
               {children}
             </div>
           </motion.div>

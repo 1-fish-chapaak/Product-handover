@@ -1,11 +1,13 @@
 import {
-  designApproved, designBlocked, designCompleteness, designFilesOf, designOutstanding, designSuggestion, isControlLocked, isEngagementLocked,
+  designApproved, designBlocked, designCompleteness, designFilesOf, designOutstanding, designOutstandingRequired, designSuggestion, docNotApplicable, isControlLocked, isEngagementLocked,
   exceptionCourtDetail,
   inquiryOnlyAttributes, operatingApplies, operatingProgress, passedWithoutFiles, pendingReviewNoteCount, pointResult,
-  populationLocked, populationSources, requiredFilesCount, requiredFilesReady, sampledSources, samePerson, stepResult, toeRoundFailed, trackResult, yearEndPending,
+  populationLocked, populationSources, requiredFilesCount, requiredFilesReady, sampledSources, samePerson, stepResult, toeRoundFailed, trackResult, unconfirmedIra, yearEndPending,
+  rollPendingParts, ROLL_PART_LABEL,
 } from './helpers';
 import { evidenceOwed } from './controlChatEvidence';
-import type { AuditRecord, Control, DesignDoc, DesignDocKind, IcfrEngagement, IpeConclusion, Role, TestResult, TrackConclusion } from './types';
+import { DESIGN_DOC_KINDS } from './types';
+import type { AuditRecord, Control, DesignDoc, DesignDocKind, IcfrEngagement, IpeConclusion, Role, RollPart, TestResult, TrackConclusion } from './types';
 
 /**
  * What Ira knows, and what Ira therefore says.
@@ -77,9 +79,19 @@ export interface Situation {
   /** The element kinds already on this control, so Ira's Add-element offer is
    *  the page's own menu minus what is there — never a duplicate. */
   elementKinds: DesignDocKind[];
+  /** Kinds this class of control never has, so Ira does not offer to add one.
+   *  Situation is a flat snapshot and carries no Control, so the class question
+   *  has to be answered here where the control is still in hand. */
+  naKinds: DesignDocKind[];
   missing: DesignDoc[];
   checksTotal: number;
   checksUnmarked: number;
+  /** Ira's results on each track still waiting on a person's confirm (UX #1). */
+  designUnconfirmed: number;
+  toeUnconfirmed: number;
+  /** Parts of last round's set-up still waiting on the auditor's Confirm /
+   *  Edit (#13). Each holds its step in the store, so Ira offers nothing in it. */
+  rollPending: RollPart[];
   checksPassed: number;
   checksFailed: number;
   iraRun: boolean;
@@ -90,7 +102,8 @@ export interface Situation {
    *  holding the conclusion, and re-running changes nothing about them until
    *  the evidence does. Different from `iraBlocked`, which is the run itself
    *  never starting. */
-  checksBlocked: { text: string; reason: string }[];
+  /** `n` is the check's place on the page (1-based), so a line can name which one. */
+  checksBlocked: { text: string; reason: string; n: number }[];
   designReturn?: { note: string; by: string; at: string };
   /** The design conclusion went against what the evidence suggested. */
   designOverride: boolean;
@@ -207,7 +220,7 @@ export function situationOf({ eng, control, role, me, audit, files }: ChatCtx): 
   const completeness = designCompleteness(control);
   // designOutstanding ignores `required` on purpose (it feeds the conclude
   // suggestion); Ira talks about obligations, so it is filtered here.
-  const missing = designOutstanding(control).filter(doc => doc.required !== false);
+  const missing = designOutstandingRequired(control);
   const requested = missing.filter(doc => doc.status === 'Requested');
   const elementsOnFile = d.documents.filter(doc => designFilesOf(doc).length > 0).length;
 
@@ -280,12 +293,15 @@ export function situationOf({ eng, control, role, me, audit, files }: ChatCtx): 
     designResult, todApproved,
     elementsTotal: completeness.total, elementsOnFile, missing,
     elementKinds: d.documents.map(doc => doc.kind),
+    naKinds: DESIGN_DOC_KINDS.filter(k => docNotApplicable(control, { kind: k })),
     complete: completeness.total > 0 && completeness.pct === 100,
     ownConclusion: samePerson(preparedBy, me),
     ownPaper: samePerson(control.wpSignoff?.preparer, me),
     checksTotal, checksUnmarked, checksPassed, checksFailed,
+    designUnconfirmed: unconfirmedIra(control, 'design').length, toeUnconfirmed: unconfirmedIra(control, 'operating').length,
+    rollPending: rollPendingParts(control),
     iraRun: !!d.ira, iraStale: !!d.ira?.evidenceChanged, iraBlocked,
-    checksBlocked: designBlocked(control).map(p => ({ text: p.text, reason: p.validation!.blocked! })),
+    checksBlocked: designBlocked(control).map(p => ({ text: p.text, reason: p.validation!.blocked!, n: d.points.findIndex(x => x.id === p.id) + 1 })),
     designReturn: d.designReturn, designOverride: !!d.override, evidenceSuggested: designSuggestion(control),
     designRationale: d.rationale, requested,
     blocked: control.unableToTest && {
@@ -323,7 +339,7 @@ export function situationOf({ eng, control, role, me, audit, files }: ChatCtx): 
   };
   s.key = [
     role, step, designResult, todApproved, missing.length, elementsOnFile, d.documents.length,
-    checksUnmarked, checksFailed, s.iraRun, s.iraStale, s.checksBlocked.length, !!d.designReturn,
+    checksUnmarked, checksFailed, s.iraRun, s.iraStale, s.checksBlocked.length, !!d.designReturn, s.designUnconfirmed, s.toeUnconfirmed, s.rollPending.join(','),
     // The extract itself, which the key used to miss entirely: locking was in
     // here but the population landing was not, so a reader who extracted on the
     // left left Ira holding the sentence it had already typed.
@@ -392,7 +408,7 @@ export function nextPrompt(ctx: ChatCtx): ChatPrompt {
       return line('Everything asked for is on file. The design came out ineffective, so the fix is yours — the remediation brief on the left says what was found and what it needs.');
     }
     if (s.designResult === 'Not tested') return line('Everything asked for is on file. The auditor is testing the design — nothing is waiting on you.');
-    if (s.toe.failed > 0) return line(`Everything asked for is on file. The design held, but ${plural(s.toe.failed, 'attribute')} failed in testing — the exceptions are yours to remediate.`);
+    if (s.toe.failed > 0) return line(`Everything asked for is on file. The design held, but ${plural(s.toe.failed, 'attribute')} failed in testing — the deficiencies are yours to remediate.`);
     return line('Everything asked for is on file and the design held. Nothing is waiting on you here.');
   }
 
@@ -415,7 +431,7 @@ export function nextPrompt(ctx: ChatCtx): ChatPrompt {
     if (s.preparerSigned && !s.reviewerSigned) {
       if (s.notesPending > 0) return line(`The paper is signed and waiting on you, but ${plural(s.notesPending, 'review note')} ${s.notesPending === 1 ? 'is' : 'are'} still open. Those close before you can countersign.`);
       if (s.ownPaper) return line('You prepared this paper, so it needs a different reviewer to countersign. Nothing for you here.');
-      const outcome = s.operatingResult === 'Ineffective' ? ' It concludes ineffective, so the exception and its grading are part of what you are signing.'
+      const outcome = s.operatingResult === 'Ineffective' ? ' It concludes ineffective, so the deficiency and its grading are part of what you are signing.'
         : s.opApplies ? ` Design and operating both held — ${s.toe.passed} of ${s.toe.total} attributes passed.`
         : ' Operating testing does not apply to this control, so the design conclusion is the whole of it.';
       return line(`The paper is prepared and waiting for your countersignature.${outcome} The working paper button up top has the whole thing.`);
@@ -427,6 +443,15 @@ export function nextPrompt(ctx: ChatCtx): ChatPrompt {
   }
 
   // ── the auditor: the work itself ──────────────────────────────────────────
+  // ── last round's set-up, before anything runs ─────────────────────────────
+  // While a rolled-forward part is unconfirmed the store refuses every action
+  // in its step, so this leads. Only the auditor confirms it, on the page —
+  // Ira never does, not even in Automatic mode.
+  if (s.rollPending.length > 0) {
+    const parts = [...new Set(s.rollPending.map(p => ROLL_PART_LABEL[p].toLowerCase()))];
+    return line(`Before anything runs here, last round's set-up needs your eye — ${listOf(parts, parts.length)} came over from the ${control.rollForward?.from ?? 'last round'}. Confirm it unchanged or edit it on the page; I won't confirm it for you.`);
+  }
+
   // ── the exception's root cause, before anything else ──────────────────────
   // It leads every other branch because nothing about the exception moves
   // until it is settled: `completeSizing` refuses without it, the grade is
@@ -467,11 +492,16 @@ export function nextPrompt(ctx: ChatCtx): ChatPrompt {
     if (s.missing.length > 0) {
       return line(`${plural(s.missing.length, 'required document')} missing before the design can be tested — ${listOf(s.missing.map(docLabel))}. Ask the owner for ${s.missing.length === 1 ? 'it' : 'them'}, or attach ${s.missing.length === 1 ? 'it' : 'them'} yourself if you have ${s.missing.length === 1 ? 'it' : 'them'}.`);
     }
+    // The reviewer's approval gates the population (product owner, 1 Oct), so a
+    // concluded design waits here and Ira offers nothing past it.
     if (s.designResult !== 'Not tested' && !s.todApproved) {
-      return line(`Design is concluded ${s.designResult.toLowerCase()} and sitting with the reviewer. Population unlocks once they approve it — nothing else to do on the design.`);
+      return line('Design is concluded. The population opens once the reviewer approves it.');
     }
     if (s.checksTotal === 0) {
-      return line('Every document is on file, but this control’s RACM lists no design checks, so there is nothing to assess. The conclusion is a judgement call on the documents alone.');
+      // Said plainly, and without offering a way past it. The design is
+      // concluded on what the checks found, so a control with no checks is not
+      // a control ready to conclude — it is a RACM row missing its checks.
+      return line('Every document is on file, but this control’s RACM lists no design checks — so there is nothing for me to read the evidence against. The checks come from the RACM row; add them there and I can assess them. Concluding without them is the page’s to allow, not mine to suggest.');
     }
     if (s.checksUnmarked > 0) {
       // ── the ones I read and could not answer (user ask, 22 Sep) ───────────
@@ -481,15 +511,15 @@ export function nextPrompt(ctx: ChatCtx): ChatPrompt {
       const cant = s.checksBlocked;
       if (cant.length > 0 && cant.length === s.checksUnmarked) {
         return line(cant.length === 1
-          ? `I read the evidence and could not answer the last one: “${cant[0].text}” — ${cant[0].reason} Mark it yourself if you know the answer, or attach what it needs and I will look again.`
+          ? `I read the evidence and could not answer check ${cant[0].n} of ${s.checksTotal}: “${cant[0].text}” — ${cant[0].reason} Mark it yourself if you know the answer, or attach what it needs and I will look again.`
           : `I read the evidence and could not answer ${plural(cant.length, 'of the checks', 'of the checks')}:\n\n${cant.map(x => `· ${x.text}\n  ${x.reason}`).join('\n')}\n\nMark them yourself if you know the answers, or attach what they need and I will look again.`);
       }
       const ready = !s.iraBlocked;
       const also = cant.length > 0 ? ` ${plural(cant.length, 'of them is', 'of them are')} waiting on me — I read ${cant.length === 1 ? 'it' : 'them'} and could not answer, so ${cant.length === 1 ? 'that one is' : 'those are'} yours or the evidence's.` : '';
-      return line(`Everything asked for is on file. ${plural(s.checksUnmarked, 'design check')} of ${s.checksTotal} not marked yet${ready ? ' — I can read the evidence and assess them all in one go, or you can mark them by hand.' : `, and I cannot run the validation because ${s.iraBlocked}.`}${also}`);
+      return line(`Everything asked for is on file. ${plural(s.checksUnmarked, 'design check')} of ${s.checksTotal} not marked yet${ready ? ' — I can read the evidence and assess them all in one go, or you can mark them by hand.' : `, and I can’t read them yet because ${s.iraBlocked}.`}${also}`);
     }
     if (s.iraStale) {
-      return line(`All ${s.checksTotal} checks are marked, but the evidence has changed since I last read it. Worth a re-run before you conclude.`);
+      return line(`All ${s.checksTotal} checks are marked, but the evidence has changed since I last read it. Worth having me read it again before you conclude.`);
     }
     const suggests = s.checksFailed > 0 ? 'ineffective' : 'effective';
     return line(`All ${s.checksTotal} checks are marked — ${s.checksPassed} pass, ${s.checksFailed} fail. The evidence points to ${suggests}. Conclude the design and it goes to the reviewer.`);
@@ -558,7 +588,11 @@ export function nextPrompt(ctx: ChatCtx): ChatPrompt {
     // and "12 to go, none of which have their files" are different problems.
     const waiting = s.toe.total - s.toe.tested;
     const filesNote = s.toeReady === 0
-      ? waiting === 1
+      // Said of the ones LEFT: after two attributes were just read, "none of
+      // them … nothing I can read" read as if the two had never happened.
+      ? s.toe.tested > 0
+        ? ` ${waiting === 1 ? 'The one left does' : `The ${waiting} left do`} not have all the files the test asks for yet, so there is nothing more I can read until they arrive.`
+        : waiting === 1
         ? ' It does not have all the files the test asks for yet, so there is nothing I can read.'
         : ' None of them have all the files the test asks for yet, so there is nothing I can read.'
       : s.toeReady < waiting ? ` ${plural(s.toeReady, 'of them has', 'of them have')} all its files — I can read those.`
@@ -638,7 +672,7 @@ export function acknowledge(prev: Situation, next: Situation): string | null {
       : `${plural(prev.checksUnmarked - next.checksUnmarked, 'check')} marked.`;
   }
   if (!prev.iraStale && next.iraStale) {
-    return 'The evidence has changed since I last read it, so that validation is stale now.';
+    return 'The evidence has changed since I last read it, so what I found is out of date now.';
   }
   if (prev.designResult === 'Not tested' && next.designResult !== 'Not tested') {
     return next.designOverride
@@ -646,7 +680,7 @@ export function acknowledge(prev: Situation, next: Situation): string | null {
       : `Design concluded ${next.designResult.toLowerCase()}.`;
   }
   if (!prev.todApproved && next.todApproved) {
-    return `${next.approvedBy?.by ?? 'The reviewer'} approved the design. Population is open.`;
+    return `${next.approvedBy?.by ?? 'The reviewer'} approved the design.${next.opApplies && !next.yePending ? ' Population is open.' : ''}`;
   }
 
   // ── ② → ⑤ ─────────────────────────────────────────────────────────────────

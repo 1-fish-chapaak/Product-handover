@@ -9,9 +9,16 @@ import { openFromLibrary } from './_sox_helpers';
  *                   in the order the engine ran them
  *   ② confirm       significant or worse BLOCKS until the reviewer agrees
  *   ③ plan          the owner writes it; the auditor judges it and nothing else
- *   ④ fix           submit stays shut until evidence is attached
- *   ⑤ retest        a fresh post-fix sample, marked per item per attribute
- *   ⑥ close         reviewer only, never the person who ran the retest
+ *   ④ fix           submit stays shut until evidence is attached, and it hands
+ *                   the finding straight to the reviewer
+ *   ⑤ close         reviewer only, never the person who accepted the plan
+ *
+ * FIVE steps since 30 Sep 2026, not six. The retest used to sit between the fix
+ * and the close, which asked the auditor to test a repair the day it landed —
+ * often before the fixed control had run once. It happens on the CONTROL now, on
+ * the audit's own timetable: closing an exception leaves a retest owed there
+ * (`Control.retestDue`) and tells the auditor. Rounds already recorded still
+ * render — the history reads, nothing re-tests.
  *
  * Also covers what came OFF the screen: Gap type and Priced impact.
  *
@@ -64,18 +71,25 @@ async function setHat(page: Page, hat: 'Auditor' | 'Reviewer' | 'Risk Owner') {
 
 /** Get ONE exception by id, expanded, scoped to its own body.
  *
- *  By id rather than by status text: every expanded body renders the six step
- *  titles, so "Retest" and "Close" appear on all of them and a status filter
- *  lands on whichever one happens to be open. It may already be open — a row
- *  that names one finding now opens that finding.
+ *  By id rather than by status text: every expanded body renders the five step
+ *  titles, so "Fix and submit" and "Close" appear on all of them and a status
+ *  filter lands on whichever one happens to be open. It may already be open — a
+ *  row that names one finding now opens that finding.
  *
  *  Deficiency management is a register, so the body sits in a row of its own
  *  (`tr.def-detail`) directly after the summary row that toggles it — which is
  *  what this scopes to. On a control's own paper the same body is a card
  *  instead, so that shape is the fallback.
  *
- *  DEF-A-01 Identified · A-02 Rating review · A-03 Plan review · A-04 Retest
- *  · A-05 Closed. Seeded that way in mockData so every state has a demo. */
+ *  DEF-A-01 Identified · A-02 Rating review · A-03 Plan review · A-04 Remediation
+ *  · A-05 Closed. Seeded that way in mockData so every state has a demo.
+ *
+ *  A-04 is the credit-note redesign: plan accepted, the rebuild MISSED, so it is
+ *  back with the owner for a third wording — and it still carries the one round
+ *  recorded back when the retest was a step here, which makes it the seed that
+ *  proves the history reads after the step went. Its stage is read loosely below
+ *  ("Step n of 5") rather than pinned, because which of the owner's two rungs it
+ *  rests on is a seed decision, not this file's subject. */
 async function openCard(page: Page, id: string) {
   const toggle = page.getByRole('button', { name: new RegExp(`(Expand|Collapse) ${id}$`) }).first();
   await expect(toggle).toBeVisible();
@@ -104,16 +118,24 @@ test('gap type and priced impact are off the screen', async ({ page }) => {
   await expect(page.getByText('Working-capital unblock')).toHaveCount(0);
 });
 
-test('the six steps, the root cause, and the working behind the grade', async ({ page }) => {
+test('the five steps, the root cause, and the working behind the grade', async ({ page }) => {
   test.setTimeout(120_000);
   await openExceptions(page, 'Auditor');
   const card = await openCard(page, 'DEF-A-01');
 
   // Each stepper pill carries its number inside the same element as its title
   // ("2Size it"), so these match on the title rather than the whole node.
-  for (const title of ['Exception raised', 'Size it', 'Plan the fix', 'Fix and submit', 'Retest', 'Close']) {
+  for (const title of ['Exception raised', 'Size it', 'Plan the fix', 'Fix and submit', 'Close']) {
     await expect(card.getByText(title).first()).toBeVisible();
   }
+  // And the rail is five wide, not six — the count comes off EXCEPTION_STEPS, so
+  // the line and the pills can never disagree. 'Identified' spans ① and ②, and
+  // DEF-A-01's root cause is already written, so it is standing on ②.
+  await expect(card.getByText(/Step 2 of 5 · Identified/)).toBeVisible();
+  // The retest is not a rung any more. There is no pill for it, and no panel
+  // behind it — the auditor's grid is parked with the state it guarded on.
+  await expect(card.getByText('Retest', { exact: true })).toHaveCount(0);
+  await expect(card.getByRole('button', { name: /Draw post-fix sample|Record retest/ })).toHaveCount(0);
   // The mechanism leads the card — the plan is judged against it at step ③.
   await expect(card.getByText('Root cause', { exact: true }).first()).toBeVisible();
 
@@ -191,29 +213,36 @@ test('the auditor judges the plan and cannot write it', async ({ page }) => {
   await expect(card.getByRole('button', { name: 'Send back', exact: true })).toBeDisabled();
 });
 
-test('the retest draws a post-fix sample and the verdict comes off the grid', async ({ page }) => {
+/* REPLACES 'the retest draws a post-fix sample and the verdict comes off the grid'
+   (30 Sep 2026). That test drove the auditor's retest grid — Draw post-fix
+   sample, the per-item-per-attribute marks, the verdict off the grid — and none
+   of it is reachable now: the state it all hung off left `ExceptionStatus`, and
+   the panels and their five store mutators are parked together. What is still
+   true, and is what this asserts instead, is the READING side: a finding that
+   already carries rounds keeps showing them, and no hat is offered a way to run
+   another from here. */
+test('the retest is off the flow — its history still reads, its grid is gone', async ({ page }) => {
   test.setTimeout(120_000);
   await openExceptions(page, 'Auditor');
   const card = await openCard(page, 'DEF-A-04');
 
-  // One round has already failed, which is the loop this counter exists to show.
+  // DEF-A-04 carries one recorded round from when the retest WAS a step. The
+  // history is a read, so it survives the step going — an exception carried over
+  // from an earlier year would otherwise lose the part a reviewer reads first.
   await expect(card.getByText('Retest history')).toBeVisible();
   await expect(card.getByText(/attempt 1/)).toBeVisible();
 
-  await card.getByRole('button', { name: /Draw post-fix sample/ }).click();
-  await page.waitForTimeout(800);
-
-  // The window starts at the fix, not at the period start.
-  await expect(card.getByText(/drawn from \d{4}-\d{2}-\d{2} → \d{4}-\d{2}-\d{2}/)).toBeVisible();
-  await expect(card.getByText(/Same attributes as the original test/)).toBeVisible();
-
-  // No verdict button until every cell is marked — a retest whose result can be
-  // asserted independently of its marks is not evidence of anything.
-  await expect(card.getByText(/Mark every item against every attribute/)).toBeVisible();
+  // And nothing to run a new one with, in the hat that used to own it.
+  await expect(card.getByRole('button', { name: /Draw post-fix sample/ })).toHaveCount(0);
   await expect(card.getByRole('button', { name: /Record retest/ })).toHaveCount(0);
+  await expect(card.getByText(/Mark every item against every attribute/)).toHaveCount(0);
+  await expect(card.getByText(/Same attributes as the original test/)).toHaveCount(0);
+
+  // The rail this finding stands on is the five-step one, and it ends at Close.
+  await expect(card.getByText(/Step \d of 5 · /)).toBeVisible();
 });
 
-test('the auditor never sees a close button on their own retest', async ({ page }) => {
+test('the close button belongs to the reviewer — the auditor never sees it', async ({ page }) => {
   test.setTimeout(120_000);
   await openExceptions(page, 'Auditor');
   await expect(page.getByRole('button', { name: /Close — reviewer sign-off/ })).toHaveCount(0);

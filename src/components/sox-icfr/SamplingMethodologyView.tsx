@@ -1,21 +1,23 @@
 import { useMemo, useState } from 'react';
 import { createPortal } from 'react-dom';
-import { AlertTriangle, ArrowRight, BadgeCheck, CalendarRange, History, Info, Lock, ShieldCheck, Shuffle, Table2 } from 'lucide-react';
+import { AlertTriangle, ArrowRight, BadgeCheck, CalendarRange, Check, History, Info, Layers, Lock, ShieldCheck, Shuffle, Table2 } from 'lucide-react';
 import { useIcfr } from './store';
 import { cn } from '../../lib/cn';
 import { isEngagementLocked, samePerson, samplingOf, samplingOverrides } from './helpers';
+import DialogFocus from '../shared/DialogFocus';
 import {
-  DEFAULT_SAMPLE_SIZES, ROUND_BASIS_EFFECT, SAMPLING_METHODS, samplingAgreed,
-  type Frequency, type SampleSizeRow, type SamplingMethod, type SamplingMethodology, type SamplingRoundBasis,
+  DEFAULT_SAMPLE_SIZES, ROUND_BASIS_EFFECT, SAMPLING_METHODS, SAMPLING_SPREADS, samplingAgreed, spreadLabel,
+  type Frequency, type SampleSizeRow, type SamplingMethod, type SamplingMethodology, type SamplingRoundBasis, type SamplingSpread,
 } from './types';
 
 /**
  * The engagement's sampling methodology — agreed once, read by every control (#22).
  *
  * The client's words: sizing decided control by control is "124 separate
- * decisions, not a methodology". So the table, the selection method and the
- * round basis live here, on the engagement, and a control's sample step reads
- * off them rather than asking the auditor to choose again.
+ * decisions, not a methodology". So the table, the selection method, what every
+ * draw has to be spread across and the round basis live here, on the engagement,
+ * and a control's sample step reads off them rather than asking the auditor to
+ * choose again.
  *
  * Three acts, kept apart deliberately (the store enforces all three): the lead
  * PROPOSES, the reviewer SIGNS, and a change to something already signed is a
@@ -40,13 +42,19 @@ const METHOD_NOTE: Record<SamplingMethod, string> = {
   'Full population': 'Nothing is sampled — every item in the population is tested.',
 };
 
+const SPREAD_NOTE: Record<SamplingSpread, string> = {
+  quarter: 'Every quarter of the audit window takes items, so no stretch of the year goes untested.',
+  country: 'Every country the control answers for takes items of its own.',
+  entity: 'Every company the control answers for takes items of its own.',
+};
+
 const BASIS_LABEL: Record<SamplingRoundBasis, string> = { 'per-round': 'Per round', 'whole-period': 'Whole period' };
 const BASIS_NOTE: Record<SamplingRoundBasis, string> = {
   'per-round': 'Interim and roll-forward each draw their own sample, from their own window.',
   'whole-period': 'One draw at year end, covering the full year in a single sample.',
 };
 
-interface Draft { sizes: Record<Frequency, SampleSizeRow>; method: SamplingMethod; roundBasis: SamplingRoundBasis }
+interface Draft { sizes: Record<Frequency, SampleSizeRow>; method: SamplingMethod; spread: SamplingSpread[]; roundBasis: SamplingRoundBasis }
 
 /** A private copy of the agreed record, so typing in the table edits the draft
  *  rather than the thing the reviewer signed. */
@@ -55,6 +63,7 @@ const snapshot = (m: SamplingMethodology): Draft => ({
     FREQUENCIES.map(f => [f, { ...(m.sizes[f] ?? DEFAULT_SAMPLE_SIZES[f]) }]),
   ) as Record<Frequency, SampleSizeRow>,
   method: m.method,
+  spread: [...(m.spread ?? [])],
   roundBasis: m.roundBasis,
 });
 
@@ -72,6 +81,7 @@ const sizesDiffer = (a: Record<Frequency, SampleSizeRow>, b: Record<Frequency, S
 function pendingChanges(cur: SamplingMethodology, draft: Draft): { field: string; from: string; to: string }[] {
   const out: { field: string; from: string; to: string }[] = [];
   if (draft.method !== cur.method) out.push({ field: 'Selection method', from: cur.method, to: draft.method });
+  if (spreadLabel(draft.spread) !== spreadLabel(cur.spread)) out.push({ field: 'Spread across', from: spreadLabel(cur.spread), to: spreadLabel(draft.spread) });
   if (draft.roundBasis !== cur.roundBasis) out.push({ field: 'Across rounds', from: BASIS_LABEL[cur.roundBasis], to: BASIS_LABEL[draft.roundBasis] });
   FREQUENCIES.forEach(f => RATINGS.forEach(r => {
     const from = cur.sizes[f]?.[r] ?? DEFAULT_SAMPLE_SIZES[f][r];
@@ -90,11 +100,21 @@ export default function SamplingMethodologyView() {
   const m = samplingOf(eng);
   const agreed = samplingAgreed(m);
   const locked = isEngagementLocked(eng);
-  const canEdit = role === 'auditor' && !locked;
+  /* An AGREED methodology is a record, not a form (user ask, 23 Sep). Until
+   * somebody says out loud that they are revising it, every field below reads
+   * rather than edits — the reviewer signed a table, and a table that can be
+   * retyped under their signature is not one they signed.
+   *
+   * Revising is the way through, and it is deliberately a decision: it creates
+   * a new version, returns the record to unsigned and blocks testing until it
+   * is signed again. That belongs behind a button somebody pressed on purpose,
+   * not behind an input box nobody noticed was live. */
+  const [revisingDraft, setRevisingDraft] = useState(false);
+  const canEdit = role === 'auditor' && !locked && (!agreed || revisingDraft);
   const log = eng.samplingLog ?? [];
   // How far the agreed table is actually being followed, counted across the
   // whole register rather than per control — the point of agreeing it once.
-  const overrides = useMemo(() => samplingOverrides(eng.controls), [eng.controls]);
+  const overrides = useMemo(() => samplingOverrides(eng.controls, eng), [eng]);
 
   const [draft, setDraft] = useState<Draft>(() => snapshot(m));
   const [revising, setRevising] = useState(false);
@@ -105,7 +125,8 @@ export default function SamplingMethodologyView() {
   const [seenVersion, setSeenVersion] = useState(m.version);
   if (seenVersion !== m.version) { setSeenVersion(m.version); setDraft(snapshot(m)); }
 
-  const dirty = draft.method !== m.method || draft.roundBasis !== m.roundBasis || sizesDiffer(draft.sizes, m.sizes);
+  const dirty = draft.method !== m.method || spreadLabel(draft.spread) !== spreadLabel(m.spread)
+    || draft.roundBasis !== m.roundBasis || sizesDiffer(draft.sizes, m.sizes);
   const changes = pendingChanges(m, draft);
 
   const setSize = (f: Frequency, r: Rating, raw: string) => {
@@ -126,7 +147,9 @@ export default function SamplingMethodologyView() {
 
   return (
     <div className="w-full space-y-4 pb-8">
-      <p className="text-[0.78125rem] text-ink-500 leading-relaxed max-w-[52rem]">
+      {/* Runs the full width of the tab (user ask, 28 Sep) — it used to stop at
+          52rem, which left it visibly short of the cards below it. */}
+      <p className="text-[0.8125rem] text-ink-500 leading-relaxed">
         How this engagement samples — agreed once, for every control. A control's sample step reads its number off
         the table below instead of asking the auditor to decide again, so there is one answer when a reviewer or an
         external auditor asks what the sampling approach is.
@@ -143,13 +166,13 @@ export default function SamplingMethodologyView() {
               : <AlertTriangle size={16} className="text-mitigated-700 shrink-0 mt-0.5" />}
             <div className="min-w-0">
               <p className={cn('text-[0.8125rem] font-bold', agreed ? 'text-compliant-800' : 'text-mitigated-800')}>{headline}</p>
-              <p className="text-[0.75rem] text-ink-600 leading-relaxed mt-1 max-w-[42rem]">
+              <p className="text-[0.75rem] text-ink-600 leading-relaxed mt-1 max-w-168">
                 {agreed
                   ? 'Every control on this engagement is sized from this table, and its working paper names the version it was tested under.'
                   : 'Testing is blocked until a reviewer signs. A size nobody has agreed is a number the auditor picked, which is the one thing this record exists to stop.'}
               </p>
               {locked && (
-                <p className="text-[0.71875rem] text-ink-500 mt-2 inline-flex items-center gap-1.5">
+                <p className="text-[0.75rem] text-ink-500 mt-2 inline-flex items-center gap-1.5">
                   <Lock size={11} /> The engagement is signed off — the methodology it was tested under is frozen.
                 </p>
               )}
@@ -162,12 +185,12 @@ export default function SamplingMethodologyView() {
             canSign ? (
               <button
                 onClick={signSampling}
-                className="h-9 px-4 shrink-0 inline-flex items-center gap-1.5 rounded-lg bg-brand-600 text-white text-[0.78125rem] font-semibold hover:bg-brand-700 transition-colors cursor-pointer"
+                className="h-9 px-4 shrink-0 inline-flex items-center gap-1.5 rounded-lg bg-brand-600 text-white text-[0.8125rem] font-semibold hover:bg-brand-700 transition-colors cursor-pointer"
               >
                 <ShieldCheck size={14} /> Sign the methodology
               </button>
             ) : (
-              <p className="text-[0.71875rem] text-ink-600 leading-relaxed shrink-0 max-w-[18rem] rounded-lg border border-canvas-border bg-canvas-elevated px-3 py-2.5">
+              <p className="text-[0.75rem] text-ink-600 leading-relaxed shrink-0 max-w-72 rounded-lg border border-canvas-border bg-canvas-elevated px-3 py-2.5">
                 {iProposed
                   ? <>You proposed this {when(m.proposedBy!.at)}, so you cannot be the one to sign it — four eyes means two people.</>
                   : <>The engagement is locked, so nothing more can be signed on it.</>}
@@ -175,7 +198,27 @@ export default function SamplingMethodologyView() {
             )
           )}
           {role !== 'reviewer' && !agreed && (
-            <p className="text-[0.71875rem] text-ink-500 shrink-0">Waiting on a reviewer.</p>
+            <p className="text-[0.75rem] text-ink-500 shrink-0">Waiting on a reviewer.</p>
+          )}
+          {/* The one way back into the fields once it is agreed, and it says
+              what it costs before it is pressed rather than after. */}
+          {agreed && role === 'auditor' && !locked && (
+            revisingDraft ? (
+              <button
+                onClick={() => { setDraft(snapshot(m)); setRevisingDraft(false); }}
+                className="h-9 px-4 shrink-0 rounded-lg border border-canvas-border bg-canvas-elevated text-[0.8125rem] font-semibold text-ink-600 hover:border-ink-300 transition-colors cursor-pointer"
+              >
+                Stop revising
+              </button>
+            ) : (
+              <button
+                onClick={() => setRevisingDraft(true)}
+                title={`Creates v${m.version + 1} and returns the methodology to unsigned`}
+                className="h-9 px-4 shrink-0 inline-flex items-center gap-1.5 rounded-lg border border-canvas-border bg-canvas-elevated text-[0.8125rem] font-semibold text-ink-700 hover:border-brand-300 hover:text-brand-700 transition-colors cursor-pointer"
+              >
+                <History size={14} /> Revise the methodology
+              </button>
+            )
           )}
         </div>
       </section>
@@ -197,13 +240,13 @@ export default function SamplingMethodologyView() {
             </span>
           </p>
           <div className="flex items-center gap-2 shrink-0">
-            <button onClick={() => setDraft(snapshot(m))} className="h-9 px-3.5 rounded-lg border border-canvas-border bg-canvas-elevated text-[0.78125rem] font-semibold text-ink-600 hover:border-ink-300 transition-colors cursor-pointer">Discard</button>
+            <button onClick={() => { setDraft(snapshot(m)); setRevisingDraft(false); }} className="h-9 px-3.5 rounded-lg border border-canvas-border bg-canvas-elevated text-[0.8125rem] font-semibold text-ink-600 hover:border-ink-300 transition-colors cursor-pointer">Discard</button>
             {agreed ? (
-              <button onClick={() => setRevising(true)} className="h-9 px-4 inline-flex items-center gap-1.5 rounded-lg bg-brand-600 text-white text-[0.78125rem] font-semibold hover:bg-brand-700 transition-colors cursor-pointer">
+              <button onClick={() => setRevising(true)} className="h-9 px-4 inline-flex items-center gap-1.5 rounded-lg bg-brand-600 text-white text-[0.8125rem] font-semibold hover:bg-brand-700 transition-colors cursor-pointer">
                 <History size={14} /> Review &amp; revise
               </button>
             ) : (
-              <button onClick={() => proposeSampling({ sizes: draft.sizes, method: draft.method, roundBasis: draft.roundBasis })} className="h-9 px-4 rounded-lg bg-brand-600 text-white text-[0.78125rem] font-semibold hover:bg-brand-700 transition-colors cursor-pointer">
+              <button onClick={() => proposeSampling({ sizes: draft.sizes, method: draft.method, spread: draft.spread, roundBasis: draft.roundBasis })} className="h-9 px-4 rounded-lg bg-brand-600 text-white text-[0.8125rem] font-semibold hover:bg-brand-700 transition-colors cursor-pointer">
                 Save the proposal
               </button>
             )}
@@ -216,7 +259,7 @@ export default function SamplingMethodologyView() {
           nextVersion={m.version + 1}
           runningAudits={eng.audits.filter(a => !a.archive).map(a => `${a.period} · v${a.samplingVersion ?? m.version}`)}
           onClose={() => setRevising(false)}
-          onRevise={reason => { reviseSampling({ sizes: draft.sizes, method: draft.method, roundBasis: draft.roundBasis }, reason); setRevising(false); }}
+          onRevise={reason => { reviseSampling({ sizes: draft.sizes, method: draft.method, spread: draft.spread, roundBasis: draft.roundBasis }, reason); setRevising(false); setRevisingDraft(false); }}
         />
       )}
 
@@ -231,28 +274,28 @@ export default function SamplingMethodologyView() {
             <span className="text-[0.9375rem] font-bold text-ink-900">
               {overrides.overridden} of {overrides.sized}
             </span>
-            <span className="text-[0.78125rem] text-ink-600">
+            <span className="text-[0.8125rem] text-ink-600">
               {overrides.overridden === 1 ? 'control has been sized' : 'controls have been sized'} against something other than this table
             </span>
           </div>
-          <p className="text-[0.71875rem] text-ink-500 mt-1 leading-relaxed max-w-[42rem]">
+          <p className="text-[0.75rem] text-ink-500 mt-1 leading-relaxed max-w-168">
             {overrides.overridden === 0
               ? 'Every size drawn so far was read off the agreed table.'
-              : 'A departure is always allowed and is never blocked — each one carries the auditor’s reason and prints on the working paper. But if this number keeps climbing, the table is not the methodology the engagement is really using.'}
+              : `${overrides.unrecorded > 0 ? `${overrides.unrecorded} of these ${overrides.unrecorded === 1 ? 'stands' : 'stand'} at another number with no reason recorded. ` : ''}A departure is always allowed and is never blocked — once recorded it carries the auditor’s reason and prints on the working paper. But if this number keeps climbing, the table is not the methodology the engagement is really using.`}
           </p>
         </section>
       )}
 
       {/* ── the table ───────────────────────────────────────────────────────────── */}
       <section className="rounded-xl border border-canvas-border bg-canvas-elevated p-5">
-        <h2 className="text-[0.8125rem] font-bold text-ink-800 inline-flex items-center gap-1.5"><Table2 size={15} className="text-brand-600" /> Sample sizes</h2>
-        <p className="text-[0.71875rem] text-ink-500 mt-0.5 mb-3">How many items to test, by how often the control runs and how it is rated. A control with no rating yet is sized at Medium.</p>
+        <h2 className="font-display text-[1.0625rem] leading-tight text-ink-900 inline-flex items-center gap-2"><Table2 size={15} className="text-brand-600" /> Sample sizes</h2>
+        <p className="text-[0.75rem] text-ink-500 mt-1 mb-3">How many items to test, by how often the control runs and how it is rated. A control with no rating yet is sized at Medium.</p>
         <table className="w-full">
           <thead>
             <tr className="border-b border-canvas-border">
-              <th className="text-left text-[0.625rem] font-bold uppercase tracking-wider text-ink-400 pb-2">Frequency</th>
+              <th className="text-left text-[0.6875rem] font-bold uppercase tracking-wider text-ink-400 pb-2">Frequency</th>
               {RATINGS.map(r => (
-                <th key={r} className="text-center text-[0.625rem] font-bold uppercase tracking-wider text-ink-400 pb-2 w-[7rem]">{r[0]!.toUpperCase()}{r.slice(1)} risk</th>
+                <th key={r} className="text-center text-[0.6875rem] font-bold uppercase tracking-wider text-ink-400 pb-2 w-28">{r[0]!.toUpperCase()}{r.slice(1)} risk</th>
               ))}
             </tr>
           </thead>
@@ -260,12 +303,12 @@ export default function SamplingMethodologyView() {
             {FREQUENCIES.map(f => (
               <tr key={f} className="border-b border-canvas-border last:border-b-0 align-top">
                 <td className="py-2.5 pr-4">
-                  <span className="text-[0.78125rem] font-semibold text-ink-800">{f}</span>
+                  <span className="text-[0.8125rem] font-semibold text-ink-800">{f}</span>
                   {/* The one row that cannot be sized off a rhythm, so the
                       judgment it needs is stated beside it rather than left to
                       whoever opens the control. */}
                   {f === 'Ad-hoc' && (
-                    <p className="text-[0.6875rem] text-ink-500 leading-relaxed mt-0.5 max-w-[26rem]">
+                    <p className="text-[0.6875rem] text-ink-500 leading-relaxed mt-0.5 max-w-104">
                       Judgment — there is no fixed rhythm to size against. Size by how often the control actually ran in
                       the period, and record that count on the paper.
                     </p>
@@ -278,10 +321,10 @@ export default function SamplingMethodologyView() {
                         type="number" min={1} value={draft.sizes[f][r]}
                         aria-label={`${f}, ${r} risk — sample size`}
                         onChange={e => setSize(f, r, e.target.value)}
-                        className="h-8 w-16 px-2 rounded-lg border border-canvas-border bg-canvas-elevated text-[0.78125rem] tabular-nums text-center focus:outline-none focus:ring-2 focus:ring-brand-200"
+                        className="h-8 w-16 px-2 rounded-lg border border-canvas-border bg-canvas-elevated text-[0.8125rem] tabular-nums text-center focus:outline-none focus:ring-2 focus:ring-brand-200"
                       />
                     ) : (
-                      <span className="text-[0.78125rem] font-semibold text-ink-800 tabular-nums">{m.sizes[f]?.[r] ?? DEFAULT_SAMPLE_SIZES[f][r]}</span>
+                      <span className="text-[0.8125rem] font-semibold text-ink-800 tabular-nums">{m.sizes[f]?.[r] ?? DEFAULT_SAMPLE_SIZES[f][r]}</span>
                     )}
                   </td>
                 ))}
@@ -297,8 +340,8 @@ export default function SamplingMethodologyView() {
 
       {/* ── how the items are picked ───────────────────────────────────────────── */}
       <section className="rounded-xl border border-canvas-border bg-canvas-elevated p-5">
-        <h2 className="text-[0.8125rem] font-bold text-ink-800 inline-flex items-center gap-1.5"><Shuffle size={15} className="text-brand-600" /> Selection method</h2>
-        <p className="text-[0.71875rem] text-ink-500 mt-0.5 mb-3">How the items are picked out of the population, on every control.</p>
+        <h2 className="font-display text-[1.0625rem] leading-tight text-ink-900 inline-flex items-center gap-2"><Shuffle size={15} className="text-brand-600" /> Selection method</h2>
+        <p className="text-[0.75rem] text-ink-500 mt-1 mb-3">How the items are picked out of the population, on every control.</p>
         <div className="grid grid-cols-3 gap-2.5" role="radiogroup" aria-label="Selection method">
           {SAMPLING_METHODS.map(opt => (
             <OptionCard
@@ -314,12 +357,37 @@ export default function SamplingMethodologyView() {
         </p>
       </section>
 
+      {/* ── what every draw has to reach ─────────────────────────────────────────
+          Any, all or none — a tick group, not a choice of one, which is why it is
+          its own section rather than three more cards under the method. */}
+      <section className="rounded-xl border border-canvas-border bg-canvas-elevated p-5">
+        <h2 className="font-display text-[1.0625rem] leading-tight text-ink-900 inline-flex items-center gap-2"><Layers size={15} className="text-brand-600" /> Spread across</h2>
+        <p className="text-[0.75rem] text-ink-500 mt-1 mb-3">Each group ticked gets items of its own in every control's draw, so a sample cannot land entirely in one quarter or one company.</p>
+        <div className="grid grid-cols-3 gap-2.5" role="group" aria-label="Spread across">
+          {SAMPLING_SPREADS.map(opt => (
+            <OptionCard
+              key={opt.id} title={opt.label} note={SPREAD_NOTE[opt.id]} multi
+              selected={draft.spread.includes(opt.id)} canEdit={canEdit}
+              onPick={() => setDraft(d => ({ ...d, spread: d.spread.includes(opt.id) ? d.spread.filter(x => x !== opt.id) : [...d.spread, opt.id] }))}
+            />
+          ))}
+        </div>
+        <div className="mt-3 rounded-lg border border-canvas-border bg-paper-50/60 px-3.5 py-2.5 flex items-start gap-2">
+          <Info size={13} className="text-ink-500 shrink-0 mt-0.5" />
+          <p className="text-[0.75rem] text-ink-600 leading-relaxed">
+            {draft.spread.length
+              ? <>Every control's draw is split across <span className="font-semibold text-ink-900">{spreadLabel(draft.spread).toLowerCase()}</span>, with at least one item in each — and the Sample step reads the draw back group by group, so a group that got none is visible.</>
+              : <><span className="font-semibold text-ink-900">Not spread</span> — items fall wherever the selection puts them. Tick anything every draw has to reach.</>}
+          </p>
+        </div>
+      </section>
+
       {/* ── one year, two rounds ──────────────────────────────────────────────────
           The consequence sentence is on screen for whatever is currently chosen
           (user ask): this is a choice people make by its effect, not by its name. */}
       <section className="rounded-xl border border-canvas-border bg-canvas-elevated p-5">
-        <h2 className="text-[0.8125rem] font-bold text-ink-800 inline-flex items-center gap-1.5"><CalendarRange size={15} className="text-brand-600" /> Across rounds</h2>
-        <p className="text-[0.71875rem] text-ink-500 mt-0.5 mb-3">A year is tested in rounds — interim first, then roll-forward. This says whether each round draws its own sample or the year is drawn once.</p>
+        <h2 className="font-display text-[1.0625rem] leading-tight text-ink-900 inline-flex items-center gap-2"><CalendarRange size={15} className="text-brand-600" /> Across rounds</h2>
+        <p className="text-[0.75rem] text-ink-500 mt-1 mb-3">A year is tested in rounds — interim first, then roll-forward. This says whether each round draws its own sample or the year is drawn once.</p>
         <div className="grid grid-cols-2 gap-2.5" role="radiogroup" aria-label="Across rounds">
           {(Object.keys(BASIS_LABEL) as SamplingRoundBasis[]).map(opt => (
             <OptionCard
@@ -343,20 +411,20 @@ export default function SamplingMethodologyView() {
           always the numbers?" — is asked here, looking at them. */}
       {log.length > 0 && (
         <section className="rounded-xl border border-canvas-border bg-canvas-elevated p-5">
-          <h2 className="text-[0.8125rem] font-bold text-ink-800 inline-flex items-center gap-1.5"><History size={15} className="text-brand-600" /> Changes to the methodology</h2>
-          <p className="text-[0.71875rem] text-ink-500 mt-0.5 mb-3">Every revision since the engagement opened, newest first. An audit stays on the version it was created under.</p>
+          <h2 className="font-display text-[1.0625rem] leading-tight text-ink-900 inline-flex items-center gap-2"><History size={15} className="text-brand-600" /> Changes to the methodology</h2>
+          <p className="text-[0.75rem] text-ink-500 mt-1 mb-3">Every revision since the engagement opened, newest first. An audit stays on the version it was created under.</p>
           <div className="space-y-2.5">
             {log.map(entry => (
               <div key={entry.id} className="rounded-xl border border-canvas-border bg-paper-50/50 px-3.5 py-3">
                 <div className="flex items-baseline justify-between gap-3 flex-wrap">
-                  <span className="text-[0.78125rem] font-bold text-ink-800">v{entry.version}</span>
+                  <span className="text-[0.8125rem] font-bold text-ink-800">v{entry.version}</span>
                   <span className="text-[0.6875rem] text-ink-400 shrink-0">{entry.by} · {entry.at}</span>
                 </div>
                 <div className="mt-1.5 space-y-1">
                   {entry.changes.map(c => (
                     <div key={c.field} className="flex items-center justify-between gap-3 rounded-lg border border-canvas-border bg-canvas-elevated px-3 py-1.5">
-                      <span className="text-[0.71875rem] text-ink-700 min-w-0 truncate">{c.field}</span>
-                      <span className="text-[0.71875rem] tabular-nums shrink-0">
+                      <span className="text-[0.75rem] text-ink-700 min-w-0 truncate">{c.field}</span>
+                      <span className="text-[0.75rem] tabular-nums shrink-0">
                         <span className="text-ink-400">{c.from}</span>
                         <ArrowRight size={10} className="inline mx-1 -mt-0.5 text-ink-300" />
                         <span className="font-bold text-ink-900">{c.to}</span>
@@ -364,7 +432,7 @@ export default function SamplingMethodologyView() {
                     </div>
                   ))}
                 </div>
-                <p className="text-[0.71875rem] text-ink-600 leading-relaxed mt-1.5"><span className="text-ink-400">Why</span> · {entry.reason}</p>
+                <p className="text-[0.75rem] text-ink-600 leading-relaxed mt-1.5"><span className="text-ink-400">Why</span> · {entry.reason}</p>
               </div>
             ))}
           </div>
@@ -376,19 +444,25 @@ export default function SamplingMethodologyView() {
 
 /** One choice in a group — a button when the reader may change it, a plain card
  *  when they may not. Absent rather than disabled, the rule the rest of the
- *  module follows: what a hat cannot do, it is not offered. */
-function OptionCard({ title, note, selected, canEdit, onPick }: {
-  title: string; note: string; selected: boolean; canEdit: boolean; onPick: () => void;
+ *  module follows: what a hat cannot do, it is not offered.
+ *
+ *  `multi` is the spread group, where any number may be on at once: same card,
+ *  but a tick, because a group of radios that does not behave like radios is the
+ *  worse of the two mistakes. */
+function OptionCard({ title, note, selected, canEdit, multi, onPick }: {
+  title: string; note: string; selected: boolean; canEdit: boolean; multi?: boolean; onPick: () => void;
 }) {
   const shell = cn('rounded-xl border px-3.5 py-3 text-left', selected ? 'border-brand-300 bg-brand-50/40' : 'border-canvas-border');
   const body = (
     <>
-      <span className={cn('block text-[0.78125rem] font-bold', selected ? 'text-brand-700' : 'text-ink-800')}>{title}</span>
+      <span className={cn('flex items-center gap-1.5 text-[0.8125rem] font-bold', selected ? 'text-brand-700' : 'text-ink-800')}>
+        {multi && selected && <Check size={12} className="shrink-0" />}{title}
+      </span>
       <span className="block text-[0.6875rem] text-ink-500 leading-relaxed mt-0.5">{note}</span>
     </>
   );
   return canEdit ? (
-    <button type="button" role="radio" aria-checked={selected} onClick={onPick}
+    <button type="button" role={multi ? 'checkbox' : 'radio'} aria-checked={selected} onClick={onPick}
       className={cn(shell, 'transition-colors cursor-pointer', !selected && 'hover:border-ink-300')}>{body}</button>
   ) : (
     <div className={shell}>{body}</div>
@@ -413,15 +487,15 @@ function ReviseModal({ changes, nextVersion, runningAudits, onClose, onRevise }:
   const [reason, setReason] = useState('');
   return createPortal(
     <div className="modal-backdrop" onClick={onClose}>
-      <div className="modal" style={{ maxWidth: 560 }} onClick={e => e.stopPropagation()}>
+      <div role="dialog" aria-modal="true" aria-labelledby="sampling-revise-title" className="modal" style={{ maxWidth: 560 }} onClick={e => e.stopPropagation()}><DialogFocus onEscape={onClose} />
         <div className="px-5 py-4 border-b border-canvas-border">
-          <h3 className="text-[0.875rem] font-bold text-ink-900 inline-flex items-center gap-2"><History size={16} className="text-brand-600" /> Revise the methodology</h3>
+          <h3 id="sampling-revise-title" className="text-[0.875rem] font-bold text-ink-900 inline-flex items-center gap-2"><History size={16} className="text-brand-600" /> Revise the methodology</h3>
           <p className="text-[0.75rem] text-ink-500 mt-1">Nothing has changed yet. This is what revising would do.</p>
         </div>
 
         <div className="px-5 py-4 space-y-4 max-h-[60vh] overflow-y-auto">
           <div>
-            <span className="block text-[0.625rem] font-bold uppercase tracking-wider text-ink-400 mb-1.5">What changes — {changes.length}</span>
+            <span className="block text-[0.6875rem] font-bold uppercase tracking-wider text-ink-400 mb-1.5">What changes — {changes.length}</span>
             <div className="space-y-1">
               {changes.map(c => (
                 <div key={c.field} className="flex items-center justify-between gap-3 rounded-lg border border-canvas-border bg-paper-50/50 px-3 py-2">
@@ -437,7 +511,7 @@ function ReviseModal({ changes, nextVersion, runningAudits, onClose, onRevise }:
           </div>
 
           <div>
-            <span className="block text-[0.625rem] font-bold uppercase tracking-wider text-ink-400 mb-1.5">What it costs</span>
+            <span className="block text-[0.6875rem] font-bold uppercase tracking-wider text-ink-400 mb-1.5">What it costs</span>
             <p className="text-[0.75rem] text-ink-600 leading-relaxed rounded-lg border border-mitigated-200 bg-mitigated-50/40 px-3 py-2.5 inline-flex items-start gap-1.5">
               <AlertTriangle size={12} className="mt-0.5 shrink-0 text-mitigated-700" />
               <span>
@@ -449,19 +523,19 @@ function ReviseModal({ changes, nextVersion, runningAudits, onClose, onRevise }:
           </div>
 
           <div>
-            <span className="block text-[0.625rem] font-bold uppercase tracking-wider text-ink-400 mb-1.5">Why this is changing</span>
+            <span className="block text-[0.6875rem] font-bold uppercase tracking-wider text-ink-400 mb-1.5">Why this is changing</span>
             <textarea value={reason} onChange={e => setReason(e.target.value)} rows={3}
               placeholder="e.g. the monthly population came in far larger than planned, so the monthly sizes are re-cut on the actual volumes"
               className="w-full px-3 py-2.5 rounded-lg border border-canvas-border bg-canvas-elevated text-[0.75rem] leading-relaxed resize-none focus:outline-none focus:ring-2 focus:ring-brand-200" />
-            <p className="text-[0.625rem] text-ink-400 mt-1">Recorded against the version, with your name and everything it moved.</p>
+            <p className="text-[0.6875rem] text-ink-400 mt-1">Recorded against the version, with your name and everything it moved.</p>
           </div>
         </div>
 
         <div className="flex items-center justify-end gap-2 px-5 py-3.5 border-t border-canvas-border bg-paper-50/40">
-          <button onClick={onClose} className="h-9 px-3.5 text-[0.78125rem] font-semibold text-ink-600 hover:text-ink-900 cursor-pointer">Cancel</button>
+          <button onClick={onClose} className="h-9 px-3.5 text-[0.8125rem] font-semibold text-ink-600 hover:text-ink-900 cursor-pointer">Cancel</button>
           <button disabled={!reason.trim()} title={reason.trim() ? undefined : 'A change to an agreed methodology needs a reason on the record.'}
             onClick={() => onRevise(reason.trim())}
-            className="h-9 px-4 rounded-lg bg-brand-600 text-white text-[0.78125rem] font-semibold enabled:hover:bg-brand-700 disabled:opacity-40 disabled:cursor-not-allowed transition-colors cursor-pointer">Create v{nextVersion}</button>
+            className="h-9 px-4 rounded-lg bg-brand-600 text-white text-[0.8125rem] font-semibold enabled:hover:bg-brand-700 disabled:opacity-40 disabled:cursor-not-allowed transition-colors cursor-pointer">Create v{nextVersion}</button>
         </div>
       </div>
     </div>,

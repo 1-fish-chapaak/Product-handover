@@ -5,7 +5,8 @@ import { ArrowLeft, Gavel, UserCheck, ShieldCheck, CheckCircle2, XCircle, Circle
 // too, which is what makes the ITGC banner read as being about the same thing.
 import { Pill, type Tone } from '../shared/StatusBadge';
 import { cn } from '../../lib/cn';
-import type { Conclusion, Court, ExceptionGrade, FileOrigin, Nature, Role, TestResult, TrackConclusion } from './types';
+import { confidenceTier } from './helpers';
+import type { ArchivedSeverity, Conclusion, Court, ExceptionGrade, FileOrigin, Nature, Role, TestResult, TrackConclusion } from './types';
 
 const CONCLUSION_TONE: Record<Conclusion, Tone> = { Effective: 'compliant', Ineffective: 'risk', 'In progress': 'evidence', 'Not started': 'draft' };
 // one word for one state: the 'Not started' conclusion WEARS "Not tested" — the
@@ -21,7 +22,15 @@ export function TrackPill({ c }: { c: TrackConclusion }) { return <Pill tone={TR
 // exposure sits under the de-minimis floor, and it reads as its own grade because
 // the ladder stopped there — it was never evaluated down to a deficiency.
 const SEVERITY_TONE: Record<ExceptionGrade, Tone> = { 'Material Weakness': 'risk', 'Significant Deficiency': 'high', Deficiency: 'mitigated', 'Clearly Trivial': 'draft' };
-export function SeverityPill({ s }: { s: ExceptionGrade }) { return <Pill tone={SEVERITY_TONE[s]}>{s}</Pill>; }
+/** `null` is a FIFTH thing on screen, and the most important one to show: the
+ *  exception has not been sized, so the engine refused to grade it. It reads as
+ *  its own pill rather than an empty cell — the pill column is how a register is
+ *  scanned, and a blank there looks like a rendering fault, not an open question. */
+export function SeverityPill({ s }: { s: ArchivedSeverity | null }) {
+  // `null` live, 'Not sized' once archived — the same state, spelled two ways
+  // because an archive stores strings and a live grade is computed.
+  return s === null || s === 'Not sized' ? <Pill tone="high">Not sized</Pill> : <Pill tone={SEVERITY_TONE[s]}>{s}</Pill>;
+}
 
 /** The house switch. Lifted here because the control page, the rules editor and
  *  the scope table all need the same one. `disabled` matters on a locked control:
@@ -34,7 +43,7 @@ export function NatureChip({ nature, small }: { nature: Nature; small?: boolean 
   const Icon = nature === 'Automated' ? WorkflowIcon : nature === 'IT-dependent' ? Cpu : Hand;
   const tone = nature === 'Automated' ? 'bg-evidence-50 border-evidence-100 text-evidence-700' : nature === 'IT-dependent' ? 'bg-brand-50 border-brand-100 text-brand-700' : 'bg-paper-50 border-canvas-border text-ink-600';
   return (
-    <span className={cn('inline-flex items-center gap-1 rounded-md border font-semibold whitespace-nowrap', tone, small ? 'px-1.5 h-5 text-[0.625rem]' : 'px-2 h-[22px] text-[0.65625rem]')}>
+    <span className={cn('inline-flex items-center gap-1 rounded-md border font-semibold whitespace-nowrap', tone, small ? 'px-1.5 h-5 text-[0.6875rem]' : 'px-2 h-5.5 text-[0.6875rem]')}>
       <Icon size={small ? 9 : 10} />{nature}
     </span>
   );
@@ -47,16 +56,43 @@ export function ResultChip({ result }: { result: TestResult }) {
 }
 
 // ─── The tickmark — auditor's signature mark on a tested item ────────────────────
-export function Tickmark({ result, size = 18 }: { result: TestResult | 'Effective' | 'Ineffective'; size?: number }) {
-  const pass = result === 'Pass' || result === 'Effective';
-  const fail = result === 'Fail' || result === 'Ineffective';
+// Ira's certainty is carried by the tick's SHAPE, not by a second badge beside
+// it: solid = sure, outlined (same glyph, same tone, hollow) = the same verdict
+// held loosely, "?" = Ira couldn't reach one. Both props are optional, so every
+// mark set by hand — or by a caller that knows nothing of confidence — draws
+// exactly as it always has.
+//
+// The outlined look is Tailwind with `!`: register.css is unlayered and so
+// outranks the utilities layer, and it may not grow a modifier of its own here.
+const TICK_OUTLINE = {
+  ok: 'bg-compliant-50! text-compliant-700! border-compliant-600!',
+  ko: 'bg-risk-50! text-risk-700! border-risk-600!',
+};
+export function Tickmark({ result, size = 18, confidence, blocked, title: titleOverride }: {
+  result: TestResult | 'Effective' | 'Ineffective'; size?: number;
+  /** 0–100, how sure Ira was. Below CONFIDENT_AT the tick is drawn outlined. */
+  confidence?: number;
+  /** Ira couldn't test this — a neutral "?" in place of any verdict. */
+  blocked?: boolean;
+  /** Hover words in place of the "N% sure" line, for a tick that is not a
+   *  percentage (an SOP row: "Written in the SOP word for word"). */
+  title?: string;
+}) {
+  const pass = !blocked && (result === 'Pass' || result === 'Effective');
+  const fail = !blocked && (result === 'Fail' || result === 'Ineffective');
+  const unsure = confidence != null && confidenceTier(confidence) === 'medium';
+  const title = titleOverride ?? (blocked ? "Ira couldn't test this" : confidence != null ? `Ira · ${Math.round(confidence)}% sure` : undefined);
+  const label = typeof result === 'string' ? result : '';
   return (
     <span
-      className={cn('sox-tick inline-flex items-center justify-center font-mono font-bold select-none', pass ? 'sox-tick-ok' : fail ? 'sox-tick-ko' : 'sox-tick-none')}
+      className={cn('sox-tick inline-flex items-center justify-center font-mono font-bold select-none',
+        pass ? 'sox-tick-ok' : fail ? 'sox-tick-ko' : 'sox-tick-none',
+        unsure && pass && TICK_OUTLINE.ok, unsure && fail && TICK_OUTLINE.ko)}
       style={{ width: size, height: size, fontSize: size * 0.6 }}
-      aria-label={typeof result === 'string' ? result : ''}
+      title={title}
+      aria-label={blocked ? title : title ? `${label} — ${title}` : label}
     >
-      {pass ? '✓' : fail ? '✗' : '–'}
+      {blocked ? '?' : pass ? '✓' : fail ? '✗' : '–'}
     </span>
   );
 }
@@ -79,7 +115,7 @@ export function Stamp({ result, size = 'sm', animate = true }: { result: 'Effect
 
 // ─── The baton — whose court is the ball in ──────────────────────────────────────
 const COURT: Record<Court, { tone: Tone; label: string; Icon: typeof Gavel }> = {
-  auditor: { tone: 'info', label: 'Your court', Icon: Gavel },
+  auditor: { tone: 'info', label: 'You', Icon: Gavel },
   'risk-owner': { tone: 'mitigated', label: 'Risk owner', Icon: UserCheck },
   reviewer: { tone: 'evidence', label: 'Reviewer', Icon: ShieldCheck },
   none: { tone: 'compliant', label: 'Closed', Icon: CheckCircle2 },
@@ -93,7 +129,7 @@ export function CourtBadge({ court, fromRole, who }: { court: Court; fromRole?: 
   const label = who ? who
     : court === 'auditor' && fromRole && fromRole !== 'auditor' ? 'Auditor'
     : court === 'risk-owner' && fromRole === 'risk-owner' ? 'You'
-    : court === 'reviewer' && fromRole === 'reviewer' ? 'Your court'
+    : court === 'reviewer' && fromRole === 'reviewer' ? 'You'
     : c.label;
   return <span className="inline-flex items-center gap-1"><c.Icon size={12} className="text-ink-400" /><Pill tone={c.tone}>{label}</Pill></span>;
 }
@@ -108,7 +144,7 @@ export function RoleSwitcher({ role, onChange }: { role: Role; onChange: (r: Rol
         const Icon = ROLE_ICON[r];
         const active = role === r;
         return (
-          <button key={r} onClick={() => onChange(r)} className={cn('relative inline-flex items-center gap-2 px-3 h-8 rounded-lg text-[0.78125rem] font-semibold transition-colors cursor-pointer', active ? 'text-brand-700' : 'text-ink-500 hover:text-ink-700')}>
+          <button key={r} onClick={() => onChange(r)} className={cn('relative inline-flex items-center gap-2 px-3 h-8 rounded-lg text-[0.8125rem] font-semibold transition-colors cursor-pointer', active ? 'text-brand-700' : 'text-ink-500 hover:text-ink-700')}>
             {active && <motion.span layoutId="icfr-role-pill" className="absolute inset-0 rounded-lg bg-canvas-elevated shadow-[0_2px_8px_-3px_rgba(15,8,30,0.25)] ring-1 ring-brand-100" transition={{ type: 'spring', stiffness: 420, damping: 32 }} />}
             <span className="relative inline-flex items-center gap-1.5"><Icon size={14} />{ROLE_NAME[r]}</span>
           </button>
@@ -157,7 +193,7 @@ export function OwnerPicker({ owner, options, onChange }: { owner: string; optio
         aria-controls={open ? 'owner-persona-menu' : undefined}
         aria-activedescendant={open && activeIndex >= 0 ? optId(activeIndex) : undefined}
         title={`Acting as ${owner}`}
-        className="h-8 px-2.5 inline-flex items-center gap-1.5 rounded-lg border border-canvas-border bg-canvas-elevated text-[12px] font-semibold text-ink-700 hover:border-mitigated-300 hover:text-mitigated-700 transition-colors cursor-pointer">
+        className="h-8 px-2.5 inline-flex items-center gap-1.5 rounded-lg border border-canvas-border bg-canvas-elevated text-[0.75rem] font-semibold text-ink-700 hover:border-mitigated-300 hover:text-mitigated-700 transition-colors cursor-pointer">
         <UserCheck size={13} className="text-mitigated-600" /> as {short}<ChevronDown size={12} className="text-ink-400" />
       </button>
       <AnimatePresence>
@@ -170,7 +206,7 @@ export function OwnerPicker({ owner, options, onChange }: { owner: string; optio
               {options.map((o, i) => (
                 <button key={o} id={optId(i)} role="menuitemradio" aria-checked={o === owner} tabIndex={-1}
                   onClick={() => select(o)} onMouseEnter={() => setActiveIndex(i)}
-                  className={cn('w-full text-left px-2.5 py-1.5 rounded-lg text-[12.5px] cursor-pointer flex items-center gap-2', i === activeIndex && 'bg-paper-50', o === owner ? 'text-mitigated-700 font-semibold' : 'text-ink-700')}>
+                  className={cn('w-full text-left px-2.5 py-1.5 rounded-lg text-[0.8125rem] cursor-pointer flex items-center gap-2', i === activeIndex && 'bg-paper-50', o === owner ? 'text-mitigated-700 font-semibold' : 'text-ink-700')}>
                   {o === owner ? <Check size={12} /> : <span className="w-3" />}{o}
                 </button>
               ))}
@@ -308,7 +344,7 @@ export function RagCard({ m }: { m: RagMeterDef; /** @deprecated the card no lon
     <div className={cn('rounded-xl border transition-colors', open ? 'h-full' : 'self-start', tint)}>
       <button type="button" onClick={() => setOpen(o => !o)} aria-expanded={open} aria-controls={bodyId}
         aria-label={m.empty ? `${m.label} — not set up` : `${m.label} ${m.pct}% — ${statusWordOf(m)}`}
-        className="w-full min-h-[4.75rem] text-left p-3.5 flex items-center gap-3 cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-200 rounded-xl">
+        className="w-full min-h-19 text-left p-3.5 flex items-center gap-3 cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-200 rounded-xl">
         <div className="relative w-12 h-12 shrink-0">
           <svg viewBox="0 0 40 40" className="w-12 h-12 -rotate-90">
             <circle cx="20" cy="20" r="16" fill="none" stroke="var(--color-paper-200)" strokeWidth="4" />
@@ -338,7 +374,7 @@ export function RagCard({ m }: { m: RagMeterDef; /** @deprecated the card no lon
               </div>
               {m.formula && (
                 <div className="mt-2.5 rounded-lg border border-canvas-border bg-paper-50/70 px-3 py-2.5">
-                  <div className="text-[0.625rem] font-bold uppercase tracking-wider text-ink-400">How this is counted</div>
+                  <div className="text-[0.6875rem] font-bold uppercase tracking-wider text-ink-400">How this is counted</div>
                   <div className="mt-1 font-mono text-[0.6875rem] leading-relaxed text-ink-800">{m.formula}</div>
                 </div>
               )}
@@ -369,10 +405,7 @@ export function RagCard({ m }: { m: RagMeterDef; /** @deprecated the card no lon
  *  forbids by name — and the strip is the worse offender of the two shapes,
  *  because a ramp read left to right invites the eye to compare scores that
  *  measure completely different things. Red outranks amber; a tie goes to the
- *  lower score. Everything else is ink, and the bar is a quantity, not a verdict.
- *
- *  Exported because the folded rail draws the same three scores in a column,
- *  and a second copy of this rule would eventually pick a different one. */
+ *  lower score. Everything else is ink, and the bar is a quantity, not a verdict. */
 export function worstMeter(meters: RagMeterDef[]): RagMeterDef | null {
   return meters.reduce<RagMeterDef | null>((acc, m) => {
     if (m.empty) return acc;
@@ -385,14 +418,109 @@ export function worstMeter(meters: RagMeterDef[]): RagMeterDef | null {
     return m.pct < acc.pct ? m : acc;
   }, null);
 }
-/** Red, amber, green or none — as a word, for whoever needs to branch on it. */
-export const ragState = ragWord;
-
-export function RagKpiRow({ meters, flush }: { meters: RagMeterDef[]; /** Sitting inside another panel — no border of its own, just a rule under it. */ flush?: boolean }) {
+export function RagKpiRow({ meters, flush, inline, dial }: {
+  meters: RagMeterDef[];
+  /** Sitting inside another panel — no border of its own, just a rule under it. */
+  flush?: boolean;
+  /** Riding IN the status bar rather than under it (user ask, 23 Sep): the three
+   *  readings and the verdict are one statement about how far this control has
+   *  got, and a row of their own under the row they belong to said it twice.
+   *
+   *  Inline drops the panel each reading could open. A popover hung off a status
+   *  bar is the wrong weight for one sentence, so the sentence becomes the
+   *  title — still there on hover, no longer a thing to open and close. */
+  inline?: boolean;
+  /** Inline, but each number wearing its own arc (user ask, 23 Sep) — for when
+   *  the Ira rail is open and this row has 400px less to say the same thing in.
+   *
+   *  It reads as the richer treatment and is in fact the far narrower one: the
+   *  number moves INSIDE the ring and the NAME drops to the tooltip, which is
+   *  where the width actually was — three scores called things like "Design
+   *  coverage confidence" is most of a row. What is left is the one thing a
+   *  glance can use: 100 / 80 / 50, told apart by the arc before they are read.
+   *
+   *  With the rail shut there is room for the names, so they come back and the
+   *  rings go: a row of dials across a full-width status bar is decoration. */
+  dial?: boolean;
+}) {
   const [openLabel, setOpenLabel] = useState<string | null>(null);
   const open = meters.find(m => m.label === openLabel) ?? null;
   const worst = worstMeter(meters);
   if (!meters.length) return null;
+
+  if (inline) {
+    // Same geometry as the card's ring, so the two never drift: r=16 in a 40
+    // viewBox, the arc drawn from twelve o'clock, and nothing drawn at all for a
+    // score of zero — a round cap on a zero-length dash leaves a floating dot.
+    const C = 2 * Math.PI * 16;
+    return (
+      <div className={cn('flex items-center min-w-0', dial ? 'gap-3' : 'gap-5')}>
+        {meters.map(m => {
+          const state = ragWord(m);
+          const flagged = worst === m;
+          const StateIcon = state === 'red' ? AlertTriangle : AlertCircle;
+          // The strip's rule, kept: ONE score may wear a colour and only if it
+          // is the one that needs reading. Three ramped arcs side by side is the
+          // heat strip by another shape, and worse here — a ring reads as a
+          // gauge, so three of them invite a comparison between scores that
+          // measure completely different things. The arc length is the quantity;
+          // the colour is the exception.
+          const numCls = m.empty ? 'text-ink-300'
+            : flagged && state === 'red' ? 'text-risk-700'
+            : flagged && state === 'amber' ? 'text-high-700'
+            : 'text-ink-900';
+          const label = (
+            <span className="inline-flex items-center gap-1 text-[0.6875rem] font-semibold text-ink-500 truncate">
+              {flagged && <StateIcon size={10} className={cn('shrink-0', state === 'red' ? 'text-risk-700' : 'text-high-700')} />}
+              {m.label}
+            </span>
+          );
+          if (!dial) {
+            return (
+              <div key={m.label} title={m.detail} className="min-w-0 inline-flex items-baseline gap-1.5">
+                <span className={cn('text-[0.8125rem] font-bold tabular-nums', numCls)}>{m.empty ? '—' : `${m.pct}%`}</span>
+                {label}
+              </div>
+            );
+          }
+          // No name beside the dial (user ask, 23 Sep) — it is the name that
+          // costs the width, and three of "Design coverage confidence" is most
+          // of a row that has 400px less of one. The ring says how far; the
+          // hover says of what.
+          return (
+            <div key={m.label} title={`${m.label} — ${statusWordOf(m)}. ${m.detail}`} className="shrink-0 inline-flex items-center gap-1">
+              <div className="relative w-8 h-8">
+                <svg viewBox="0 0 40 40" aria-hidden className="w-8 h-8 -rotate-90">
+                  <circle cx="20" cy="20" r="16" fill="none" stroke="var(--color-paper-200)" strokeWidth="4" />
+                  {!m.empty && m.pct > 0 && (
+                    <circle cx="20" cy="20" r="16" fill="none" strokeWidth="4" strokeLinecap="round"
+                      stroke={flagged ? ragColor(m) : 'var(--color-ink-400)'}
+                      strokeDasharray={`${(m.pct / 100) * C} ${C}`} />
+                  )}
+                </svg>
+                {/* No per-cent sign inside the ring. A ring IS a proportion, so
+                    the symbol earns nothing and the fourth character is what
+                    pushes "100%" wider than the hole it has to sit in. */}
+                <span className={cn('absolute inset-0 flex items-center justify-center text-[0.625rem] font-bold tabular-nums', numCls)}>{m.empty ? '—' : m.pct}</span>
+              </div>
+              {/* The one thing that does not become a tooltip. Dropping the name
+                  is a width decision; dropping the flag would leave colour as
+                  the only signal, which is the one thing DESIGN.md forbids
+                  outright. */}
+              {flagged && <StateIcon size={11} className={cn('shrink-0', state === 'red' ? 'text-risk-700' : 'text-high-700')} />}
+              {/* A one-word name beside each ring (click-through, 5 Oct): three
+                  bare numbers read as nothing. The short word fits where the
+                  full name did not; the full name stays on hover. */}
+              <span aria-hidden className="text-[0.6875rem] font-semibold text-ink-500 whitespace-nowrap">{m.short ?? m.label}</span>
+              {/* Sighted readers hover. Everyone else still gets the name. */}
+              <span className="sr-only">{m.label} — {m.empty ? 'not set up' : `${m.pct}%`}, {statusWordOf(m)}</span>
+            </div>
+          );
+        })}
+      </div>
+    );
+  }
+
   return (
     <div className={cn(flush ? 'border-b border-canvas-border' : 'panel overflow-hidden')}>
       <div className="grid" style={{ gridTemplateColumns: `repeat(${meters.length}, minmax(0, 1fr))` }}>
@@ -408,18 +536,19 @@ export function RagKpiRow({ meters, flush }: { meters: RagMeterDef[]; /** Sittin
           return (
             <button key={m.label} type="button" onClick={() => setOpenLabel(on ? null : m.label)}
               aria-expanded={on} aria-label={m.empty ? `${m.label} — not set up` : `${m.label} ${m.pct}% — ${statusWordOf(m)}`}
-              className={cn('px-3 pt-3 pb-2.5 text-left cursor-pointer transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-200',
+              className={cn('px-3 py-3 text-left cursor-pointer transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-200',
                 i > 0 && 'border-l border-canvas-border', on ? 'bg-paper-50' : 'hover:bg-paper-50/60')}>
               <div className={cn('text-[1.0625rem] font-bold tabular-nums leading-none', numCls)}>{m.empty ? '—' : `${m.pct}%`}</div>
               {/* The icon is why the colour is allowed at all: colour is never
                   the only signal (DESIGN.md §6). */}
-              <div className="mt-1.5 flex items-start gap-1 text-[0.65625rem] font-semibold text-ink-500 leading-tight">
+              <div className="mt-1.5 flex items-start gap-1 text-[0.6875rem] font-semibold text-ink-500 leading-tight">
                 {flagged && <StateIcon size={11} className={cn('shrink-0 mt-px', state === 'red' ? 'text-risk-700' : 'text-high-700')} />}
                 <span className="min-w-0">{m.label}</span>
               </div>
-              <div className="mt-2 h-[3px] rounded-full bg-paper-200 overflow-hidden">
-                <div className="h-full rounded-full bg-ink-300 transition-[width] duration-300" style={{ width: `${m.empty ? 0 : m.pct}%` }} />
-              </div>
+              {/* No bar under the number (user ask, 23 Sep). It drew the same
+                  percentage a second time, in a form you cannot read a value
+                  off — so it added width, not information, and said the one
+                  fact twice. */}
             </button>
           );
         })}
@@ -432,7 +561,7 @@ export function RagKpiRow({ meters, flush }: { meters: RagMeterDef[]; /** Sittin
               <div className="text-[0.75rem] font-semibold text-ink-700">{open.detail}</div>
               {open.formula && (
                 <div className="mt-2 rounded-lg border border-canvas-border bg-paper-50/70 px-3 py-2.5">
-                  <div className="text-[0.625rem] font-bold uppercase tracking-wider text-ink-400">How this is counted</div>
+                  <div className="text-[0.6875rem] font-bold uppercase tracking-wider text-ink-400">How this is counted</div>
                   <div className="mt-1 font-mono text-[0.6875rem] leading-relaxed text-ink-800">{open.formula}</div>
                 </div>
               )}
@@ -489,14 +618,14 @@ export function ItgcCascadeBanner({ failed, affected, onOpenControl, onShowAffec
         <div className="mt-2 flex flex-wrap items-center gap-1.5">
           {failed.map(f => (
             <button key={f.id} onClick={() => onOpenControl(f.id)} title={f.description}
-              className="inline-flex items-center gap-1.5 max-w-full px-2 h-[22px] rounded-md border border-mitigated-200 bg-canvas-elevated text-[0.6875rem] font-semibold text-mitigated-800 hover:border-mitigated-400 transition-colors cursor-pointer">
+              className="inline-flex items-center gap-1.5 max-w-full px-2 h-5.5 rounded-md border border-mitigated-200 bg-canvas-elevated text-[0.6875rem] font-semibold text-mitigated-800 hover:border-mitigated-400 transition-colors cursor-pointer">
               <span className="font-mono">{f.code}</span>
               <span className="truncate font-medium text-ink-600">{f.description}</span>
             </button>
           ))}
           {onShowAffected && affected > 0 && (
             <button onClick={onShowAffected}
-              className="inline-flex items-center gap-1 px-2 h-[22px] rounded-md text-[0.6875rem] font-bold text-mitigated-800 hover:bg-mitigated-100 transition-colors cursor-pointer">
+              className="inline-flex items-center gap-1 px-2 h-5.5 rounded-md text-[0.6875rem] font-bold text-mitigated-800 hover:bg-mitigated-100 transition-colors cursor-pointer">
               Show the {affected} affected <ChevronDown size={12} className="-rotate-90" />
             </button>
           )}
@@ -524,10 +653,10 @@ export function OriginPicker({ value, onPick, disabled }: { value?: FileOrigin; 
           <button key={o.id} type="button" disabled={disabled} onClick={() => onPick(o.id)}
             className={cn('text-left rounded-lg border px-3 py-2.5 transition-colors disabled:cursor-not-allowed disabled:opacity-60',
               on ? 'border-brand-300 bg-brand-50' : 'border-canvas-border bg-canvas-elevated enabled:hover:border-ink-300 cursor-pointer')}>
-            <span className={cn('flex items-center gap-1.5 text-[0.78125rem] font-semibold', on ? 'text-brand-700' : 'text-ink-800')}>
+            <span className={cn('flex items-center gap-1.5 text-[0.8125rem] font-semibold', on ? 'text-brand-700' : 'text-ink-800')}>
               {on && <Check size={12} className="shrink-0" />}{o.id}
             </span>
-            <span className="block text-[0.65625rem] text-ink-400 mt-0.5 leading-snug">{o.hint}</span>
+            <span className="block text-[0.6875rem] text-ink-400 mt-0.5 leading-snug">{o.hint}</span>
           </button>
         );
       })}

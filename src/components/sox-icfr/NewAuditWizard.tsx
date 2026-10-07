@@ -19,16 +19,17 @@ import {
   entitiesFor, entitiesInFiles, entityTotals, materialAccounts, mergeScopeEntities, normaliseProcess,
   type ProcessScopeRow, recommendProcesses, SOX_MAPPING_PROCESSES,
 } from './auditScope';
-import { conclusionOf, isEngagementLocked, spreadPhrase, trackResult } from './helpers';
+import { conclusionOf, isEngagementLocked, trackResult } from './helpers';
 import RacmImportReview from './RacmImportReview';
 import { useIcfr } from './store';
 import { useAuditLog } from '../../context/AdminDataContext';
-import { useToast } from '../shared/Toast';
+import { InlineNote, useInlineNote } from './InlineNote';
 import {
-  AUDIT_ROUNDS, AUDIT_SAMPLE_METHODS, AUDIT_SAMPLE_SPREADS, DEFAULT_AUDIT_SAMPLING,
-  type AuditRecord, type AuditRound, type AuditSampleMethod, type AuditSampleSpread, type AuditScopeKind, type Control, type FileOrigin,
+  AUDIT_ROUNDS,
+  type AuditRecord, type AuditRound, type AuditScopeKind, type Control, type FileOrigin,
 } from './types';
 import { cn } from '../../lib/cn';
+import { IraDrafted } from './IraState';
 
 /**
  * New audit — the wizard behind the New audit button on the Overview and the
@@ -73,11 +74,11 @@ const STEPS: readonly string[] = SCOPING_STEPS
   : ['Audit period', 'Review'];
 const REVIEW = STEPS.length - 1;
 
-const inputCls = 'w-full px-3 py-2 text-[13px] border border-canvas-border rounded-lg bg-white text-ink-900 outline-none focus:border-brand-400 focus:ring-2 focus:ring-brand-500/10 transition-all';
+const inputCls = 'w-full px-3 py-2 text-[0.8125rem] border border-canvas-border rounded-lg bg-white text-ink-900 outline-none focus:border-brand-400 focus:ring-2 focus:ring-brand-500/10 transition-all';
 /** A FormSelect trigger wearing the input's clothes. Native <select> is avoided
  *  on purpose: its open menu is the OS one, which ignores the product theme. */
 const selectCls = inputCls + ' cursor-pointer appearance-none';
-const labelCls = 'block text-[11px] font-semibold text-ink-500 mb-1.5';
+const labelCls = 'block text-[0.6875rem] font-semibold text-ink-500 mb-1.5';
 
 function StepShell({ title, sub, children }: { title: string; sub: string; children: React.ReactNode }) {
   return (
@@ -93,8 +94,8 @@ function StepShell({ title, sub, children }: { title: string; sub: string; child
 function ReviewRow({ label, value }: { label: string; value: React.ReactNode }) {
   return (
     <div className="flex items-start justify-between gap-4 py-2 border-b border-canvas-border last:border-b-0">
-      <span className="text-[11.5px] text-ink-500 shrink-0">{label}</span>
-      <span className="text-[12.5px] font-semibold text-ink-900 text-right min-w-0">{value}</span>
+      <span className="text-[0.75rem] text-ink-500 shrink-0">{label}</span>
+      <span className="text-[0.8125rem] font-semibold text-ink-900 text-right min-w-0">{value}</span>
     </div>
   );
 }
@@ -111,7 +112,10 @@ export default function NewAuditWizard({ onClose, prefillFrom }: {
 }) {
   const { eng, role, createAudit, createRacm, registerFile, addControl, addDesignPoint, setControlKey, me } = useIcfr();
   const logEvent = useAuditLog();
-  const { addToast } = useToast();
+  // Agentic UX #11: no toasts — a refused add-control is said under the RACM
+  // row whose + Control button started it (ctrlNoteFor names that row).
+  const ctrlNote = useInlineNote();
+  const [ctrlNoteFor, setCtrlNoteFor] = useState<string | null>(null);
   const [step, setStep] = useState(0);
 
   /** What the Roll forward button on `prefillFrom` means, resolved once. */
@@ -176,11 +180,11 @@ export default function NewAuditWizard({ onClose, prefillFrom }: {
   );
   const hasYearEnd = sameYearAudits.some(a => a.round === 'yearend');
   const yearInterims = sameYearAudits.filter(a => a.round === 'interim');
-  // Concluded = signed by preparer AND reviewer, or archived — auditStatus's
-  // meaning of the word (user ask). An unsigned interim is still someone's open
+  // Concluded = signed by preparer AND reviewer — auditStatus's meaning of the
+  // word (user ask); being archived is not enough. An unsigned interim is still someone's open
   // work, and a roll-forward can only extend an answer that has been given.
   const concludedInterims = useMemo(
-    () => sameYearAudits.filter(a => a.round === 'interim' && auditStatus(a, eng) === 'concluded'),
+    () => sameYearAudits.filter(a => a.round === 'interim' && auditStatus(a) === 'concluded'),
     [sameYearAudits, eng],
   );
 
@@ -299,21 +303,6 @@ export default function NewAuditWizard({ onClose, prefillFrom }: {
     : round === 'rollforward' ? !!parent
     : round === 'yearend' ? !!fromDate && fromDate <= yearEnd
     : false;
-
-  // ── Sampling methodology (A28) ───────────────────────────────────────────
-  // Agreed once for the whole audit — how items are selected and what every
-  // control's draw has to be spread across — so no control picks its own. A new
-  // audit starts on a plain random draw with no spread asked for.
-  const [sampMethod, setSampMethod] = useState<AuditSampleMethod>(DEFAULT_AUDIT_SAMPLING.method);
-  const [sampSpread, setSampSpread] = useState<AuditSampleSpread[]>(DEFAULT_AUDIT_SAMPLING.spread);
-  const toggleSpread = (id: AuditSampleSpread) =>
-    setSampSpread(prev => (prev.includes(id) ? prev.filter(x => x !== id) : [...prev, id]));
-  /** What the audit is created with. A roll-forward reads its interim's, the way
-   *  it reads the year and the materiality rule — two halves of one year are
-   *  sampled one way. */
-  const sampFinal = round === 'rollforward' && parent
-    ? (parent.sampling ?? DEFAULT_AUDIT_SAMPLING)
-    : { method: sampMethod, spread: AUDIT_SAMPLE_SPREADS.map(x => x.id).filter(id => sampSpread.includes(id)) };
 
   // ── Files ────────────────────────────────────────────────────────────────
   // Provenance rides with the file from the moment it is picked — it is a
@@ -469,7 +458,8 @@ export default function NewAuditWizard({ onClose, prefillFrom }: {
    *
    * It is the SAME judgement the control page sets, on the same field, so it
    * lands on the engagement's control and shows up wherever that control is
-   * read: the RACM, both registers, the working paper and the audit report.
+   * read: the RACM, both registers, the working paper and the Internal
+   * Controls Status Report.
    *
    * No concluded-control guard, unlike the control page: scoping runs before
    * any testing exists. A new audit is created with nothing tested, and a
@@ -924,12 +914,6 @@ export default function NewAuditWizard({ onClose, prefillFrom }: {
         files: engFiles,
         materiality: { basisLabel: engMat.basisLabel, benchmark: engMat.benchmark, pct: engMat.pct, pmPct: engMat.pmPct, ctPct: engMat.ctPct },
         overall: engMat.overall,
-        sampling: sampFinal,
-      });
-      addToast({
-        type: 'success',
-        title: 'Audit created',
-        message: `${periodLabel}${isRf ? ` roll-forward from the ${parent!.period} interim` : ''} — ${eng.controls.length} control${eng.controls.length === 1 ? '' : 's'} across ${libraryByProcess.length} process${libraryByProcess.length === 1 ? '' : 'es'}.`,
       });
       onClose();
       return;
@@ -976,7 +960,6 @@ export default function NewAuditWizard({ onClose, prefillFrom }: {
       // verbatim, or the step's own inputs.
       materiality: { basisLabel: matFinal.basisLabel, benchmark: matFinal.benchmark, pct: matFinal.pct, pmPct: matFinal.pmPct, ctPct: matFinal.ctPct },
       overall: matFinal.overall,
-      sampling: sampFinal,
     }, { freshControlIds: addedControlIds });
     // The answers given upstairs become the files' records, so every control on
     // this audit inherits them and none is asked again.
@@ -987,15 +970,6 @@ export default function NewAuditWizard({ onClose, prefillFrom }: {
         rows: f.kind === 'tb' ? 1240 : 18432, from: `${periodLabel} audit`,
         uploadedBy: me, uploadedAt: 'just now', origin: f.origin, originBy: me, originAt: 'just now',
       });
-    });
-    addToast({
-      type: 'success',
-      title: 'Audit created',
-      message: isRf
-        ? `${periodLabel} roll-forward — ${rfPicked.length} control${rfPicked.length === 1 ? '' : 's'} carried forward from the ${parent!.period} interim${rfFailed.length ? `, ${rfFailed.length} failed control${rfFailed.length === 1 ? '' : 's'} in for a full retest` : ''}.`
-        : scopeKind === 'entity'
-          ? `${periodLabel} — ${scopedEntities.length} entit${scopedEntities.length === 1 ? 'y' : 'ies'} in scope, ${coveragePct}% of the group.`
-          : `${periodLabel} — ${pickedControls.length} control${pickedControls.length === 1 ? '' : 's'} across ${picked.length} RACM${picked.length === 1 ? '' : 's'}.`,
     });
     onClose();
   };
@@ -1019,8 +993,12 @@ export default function NewAuditWizard({ onClose, prefillFrom }: {
       assertions: [],
     });
     // addControl returns '' on a locked engagement rather than throwing.
+    // The add-control sheet covers the wizard, so close it and say why under
+    // the RACM row it was opened from.
     if (!id) {
-      addToast({ type: 'error', title: 'Control not added', message: 'This engagement is locked.' });
+      setAddCtrlRacm(null);
+      setCtrlNoteFor(process);
+      ctrlNote.show('error', 'Control not added — this engagement is locked.');
       return;
     }
     // The attributes typed on the form become the control's design
@@ -1038,7 +1016,6 @@ export default function NewAuditWizard({ onClose, prefillFrom }: {
     setPickedControls(prev => [...prev, id]);
     setOpenRacm(process);
     setAddCtrlRacm(null);
-    addToast({ type: 'success', title: 'Control added', message: `${description} — added to ${process} and put in scope.` });
   };
 
   return (
@@ -1047,7 +1024,7 @@ export default function NewAuditWizard({ onClose, prefillFrom }: {
         review decides for itself what Escape means (it won't close on Review),
         so while it is open the sheet under it must not also hear the key and
         throw the whole wizard away. */}
-    <FlowModal label="New audit" widthCls="w-full max-w-[560px]" variant="sheet" hideClose onClose={racmUpload ? () => {} : onClose}>
+    <FlowModal label="New audit" widthCls="w-full max-w-140" variant="sheet" hideClose onClose={racmUpload ? () => {} : onClose}>
       {/* FlowModal's sheet is one scroll container (flex-1 overflow-y-auto p-6
           pb-0), so a plain footer just flows after the content and floats
           mid-sheet on short steps. min-h-full + flex-col makes this fill the
@@ -1085,11 +1062,11 @@ export default function NewAuditWizard({ onClose, prefillFrom }: {
             {round === 'rollforward' && parent ? (
               <>
                 <label className={labelCls}>Financial year</label>
-                <div className="w-full px-3 py-2 text-[13px] border border-canvas-border rounded-lg bg-canvas text-ink-600 flex items-center justify-between gap-2">
+                <div className="w-full px-3 py-2 text-[0.8125rem] border border-canvas-border rounded-lg bg-canvas text-ink-600 flex items-center justify-between gap-2">
                   <span>{periodLabel} · {periodSpan}</span>
                   <Lock size={12} className="text-ink-400 shrink-0" />
                 </div>
-                <p className="text-[11px] text-ink-400 mt-1.5">Set with the interim this roll-forward continues — one year, answered once.</p>
+                <p className="text-[0.6875rem] text-ink-400 mt-1.5">Set with the interim this roll-forward continues — one year, answered once.</p>
               </>
             ) : (
               <>
@@ -1100,7 +1077,7 @@ export default function NewAuditWizard({ onClose, prefillFrom }: {
                       key={b}
                       onClick={() => changeYear(b, b === 'fy' ? currentFyEnd() : currentFyEnd() - 1)}
                       className={cn(
-                        'px-2 py-2 rounded-lg border text-[12px] font-bold transition-all cursor-pointer',
+                        'px-2 py-2 rounded-lg border text-[0.75rem] font-bold transition-all cursor-pointer',
                         yearBasis === b
                           ? 'border-brand-500 bg-brand-50 text-brand-700 ring-2 ring-brand-500/15'
                           : 'border-canvas-border bg-white text-ink-500 hover:bg-brand-50/40',
@@ -1138,7 +1115,7 @@ export default function NewAuditWizard({ onClose, prefillFrom }: {
                     aria-disabled={!!gate || undefined}
                     title={gate ?? undefined}
                     className={cn(
-                      'px-2 py-2 rounded-lg border text-[12px] font-bold transition-all',
+                      'px-2 py-2 rounded-lg border text-[0.75rem] font-bold transition-all',
                       gate
                         ? 'border-canvas-border bg-canvas text-ink-300 cursor-not-allowed'
                         : round === r.id
@@ -1151,10 +1128,10 @@ export default function NewAuditWizard({ onClose, prefillFrom }: {
                 );
               })}
             </div>
-            {round && <p className="text-[11px] text-ink-400 mt-1.5">{AUDIT_ROUNDS.find(r => r.id === round)!.hint}</p>}
+            {round && <p className="text-[0.6875rem] text-ink-400 mt-1.5">{AUDIT_ROUNDS.find(r => r.id === round)!.hint}</p>}
             {AUDIT_ROUNDS.filter(r => roundGate[r.id]).map(r => (
-              <p key={r.id} className="text-[11px] text-ink-400 mt-1.5 flex items-start gap-1.5">
-                <Lock size={11} className="shrink-0 mt-[1px]" />
+              <p key={r.id} className="text-[0.6875rem] text-ink-400 mt-1.5 flex items-start gap-1.5">
+                <Lock size={11} className="shrink-0 mt-0.25" />
                 <span><span className="font-semibold text-ink-500">{r.label}</span> — {roundGate[r.id]}</span>
               </p>
             ))}
@@ -1174,7 +1151,7 @@ export default function NewAuditWizard({ onClose, prefillFrom }: {
                   className={selectCls}
                   ariaLabel="Parent interim audit"
                 />
-                <p className="text-[11px] text-ink-400 mt-1.5">
+                <p className="text-[0.6875rem] text-ink-400 mt-1.5">
                   The interim whose evidence this roll-forward extends to the year end.
                 </p>
               </>
@@ -1192,7 +1169,7 @@ export default function NewAuditWizard({ onClose, prefillFrom }: {
                 <div>
                   <label className={labelCls}>From</label>
                   {round === 'rollforward' ? (
-                    <div className="w-full px-3 py-2 text-[13px] border border-canvas-border rounded-lg bg-canvas text-ink-600 flex items-center justify-between gap-2">
+                    <div className="w-full px-3 py-2 text-[0.8125rem] border border-canvas-border rounded-lg bg-canvas text-ink-600 flex items-center justify-between gap-2">
                       <span>{windowFrom ? fmtDate(windowFrom) : '—'}</span>
                       <Lock size={12} className="text-ink-400 shrink-0" />
                     </div>
@@ -1215,7 +1192,7 @@ export default function NewAuditWizard({ onClose, prefillFrom }: {
                       maxDate={shiftDay(yearEnd, -1)}
                     />
                   ) : (
-                    <div className="w-full px-3 py-2 text-[13px] border border-canvas-border rounded-lg bg-canvas text-ink-600 flex items-center justify-between gap-2">
+                    <div className="w-full px-3 py-2 text-[0.8125rem] border border-canvas-border rounded-lg bg-canvas text-ink-600 flex items-center justify-between gap-2">
                       <span>{fmtDate(yearEnd)}</span>
                       <Lock size={12} className="text-ink-400 shrink-0" />
                     </div>
@@ -1224,14 +1201,14 @@ export default function NewAuditWizard({ onClose, prefillFrom }: {
               </div>
             )}
             {round === 'rollforward' && parent && (
-              <p className="text-[11px] text-ink-400 mt-1.5">
+              <p className="text-[0.6875rem] text-ink-400 mt-1.5">
                 Starts the day after the {parent.period} interim's cut-off and runs to the year end — derived, so the two windows can't gap or overlap.
               </p>
             )}
 
             <div className="mt-3 flex items-start gap-2 p-3 rounded-lg bg-brand-50/60 border border-brand-100">
               <CalendarRange size={13} className="text-brand-600 shrink-0 mt-0.5" />
-              <p className="text-[11.5px] text-ink-600 leading-relaxed">
+              <p className="text-[0.75rem] text-ink-600 leading-relaxed">
                 {!round
                   ? <>Pick which pass of <span className="font-semibold text-ink-900">{periodLabel}</span> this audit is — the dates follow from it.</>
                   : periodValid
@@ -1242,105 +1219,6 @@ export default function NewAuditWizard({ onClose, prefillFrom }: {
                       : 'Pick the concluded interim this roll-forward continues from.'}
               </p>
             </div>
-
-            {/* Sampling methodology (A28) — after the dates, once the round is
-                known, because a roll-forward doesn't get to answer it. Agreed
-                here for every control in the audit: each control's Sample step
-                reads it and asks only how many items. A roll-forward still
-                waiting on its parent has no answer to show yet. */}
-            {round && (round !== 'rollforward' || parent) && (
-              <div className="mt-6 pt-5 border-t border-canvas-border">
-                <div className="flex items-center gap-2 mb-0.5">
-                  <h4 className="text-[0.8125rem] font-semibold text-ink-900">Sampling methodology</h4>
-                  {round === 'rollforward' && parent && (
-                    <span className="inline-flex items-center gap-1 text-[0.625rem] font-bold uppercase tracking-wider text-ink-400">
-                      <Lock size={10} /> Inherited
-                    </span>
-                  )}
-                </div>
-                <p className="text-[0.75rem] text-ink-500 mb-4 leading-relaxed">
-                  How every control in this audit picks its samples. Each control then sets only how many items.
-                </p>
-                {round === 'rollforward' && parent ? (
-                  /* Read-only, like the year above: the interim answered it, and
-                     one year is sampled one way. */
-                  <>
-                    <div className="grid grid-cols-2 gap-3">
-                      <div>
-                        <label className={labelCls}>Selection</label>
-                        <div className="w-full px-3 py-2 text-[0.8125rem] border border-canvas-border rounded-lg bg-canvas text-ink-600 flex items-center justify-between gap-2">
-                          <span>{sampFinal.method}</span>
-                          <Lock size={12} className="text-ink-400 shrink-0" />
-                        </div>
-                      </div>
-                      <div>
-                        <label className={labelCls}>Spread by</label>
-                        <div className="w-full px-3 py-2 text-[0.8125rem] border border-canvas-border rounded-lg bg-canvas text-ink-600 flex items-center justify-between gap-2">
-                          <span className="truncate">
-                            {sampFinal.spread.length
-                              ? AUDIT_SAMPLE_SPREADS.filter(x => sampFinal.spread.includes(x.id)).map(x => x.label).join(', ')
-                              : 'Not spread'}
-                          </span>
-                          <Lock size={12} className="text-ink-400 shrink-0" />
-                        </div>
-                      </div>
-                    </div>
-                    <p className="text-[0.6875rem] text-ink-400 mt-1.5">From the {parent.period} interim — can't be changed here.</p>
-                  </>
-                ) : (
-                  <>
-                    <label className={labelCls}>Selection</label>
-                    <div className="grid grid-cols-3 gap-1.5">
-                      {AUDIT_SAMPLE_METHODS.map(m => (
-                        <button
-                          key={m.id}
-                          onClick={() => setSampMethod(m.id)}
-                          aria-pressed={sampMethod === m.id}
-                          className={cn(
-                            'px-2 py-2 rounded-lg border text-[0.75rem] font-bold transition-all cursor-pointer',
-                            sampMethod === m.id
-                              ? 'border-brand-500 bg-brand-50 text-brand-700 ring-2 ring-brand-500/15'
-                              : 'border-canvas-border bg-white text-ink-500 hover:bg-brand-50/40',
-                          )}
-                        >
-                          {m.id}
-                        </button>
-                      ))}
-                    </div>
-                    <p className="text-[0.6875rem] text-ink-400 mt-1.5">{AUDIT_SAMPLE_METHODS.find(m => m.id === sampMethod)!.hint}</p>
-
-                    {/* Any, all or none — each one ticked gets items of its own
-                        in every control's draw. */}
-                    <label className={`${labelCls} mt-4`}>Spread by</label>
-                    <div className="grid grid-cols-3 gap-1.5">
-                      {AUDIT_SAMPLE_SPREADS.map(x => {
-                        const on = sampSpread.includes(x.id);
-                        return (
-                          <button
-                            key={x.id}
-                            onClick={() => toggleSpread(x.id)}
-                            aria-pressed={on}
-                            className={cn(
-                              'px-2 py-2 rounded-lg border text-[0.75rem] font-bold transition-all cursor-pointer inline-flex items-center justify-center gap-1.5',
-                              on
-                                ? 'border-brand-500 bg-brand-50 text-brand-700 ring-2 ring-brand-500/15'
-                                : 'border-canvas-border bg-white text-ink-500 hover:bg-brand-50/40',
-                            )}
-                          >
-                            {on && <Check size={12} className="shrink-0" />}{x.label}
-                          </button>
-                        );
-                      })}
-                    </div>
-                    <p className="text-[0.6875rem] text-ink-400 mt-1.5">
-                      {sampSpread.length
-                        ? `Every control's draw is split across ${AUDIT_SAMPLE_SPREADS.filter(x => sampSpread.includes(x.id)).map(x => x.label.toLowerCase()).join(', ').replace(/, ([^,]*)$/, ' and $1')}, with at least one item in each.`
-                        : 'Not spread — items fall wherever the selection puts them. Pick any that every draw has to reach.'}
-                    </p>
-                  </>
-                )}
-              </div>
-            )}
           </StepShell>
         )}
 
@@ -1355,8 +1233,8 @@ export default function NewAuditWizard({ onClose, prefillFrom }: {
                 are mapped below and decide the processes in scope. The general
                 ledger stays optional throughout. */}
             <div className="flex items-baseline gap-2 mb-0.5">
-              <h4 className="text-[13px] font-semibold text-ink-900">Trial balance &amp; general ledger</h4>
-              <span className="text-[10px] font-semibold uppercase tracking-wider text-ink-400">
+              <h4 className="text-[0.8125rem] font-semibold text-ink-900">Trial balance &amp; general ledger</h4>
+              <span className="text-[0.6875rem] font-semibold uppercase tracking-wider text-ink-400">
                 {round === 'rollforward' ? 'Optional' : 'Trial balance required'}
               </span>
             </div>
@@ -1386,12 +1264,12 @@ export default function NewAuditWizard({ onClose, prefillFrom }: {
                       <div className="flex items-center gap-2.5 px-3 py-2.5">
                         <FileSpreadsheet size={16} className="text-brand-600 shrink-0" />
                         <span className="min-w-0 flex-1">
-                          <span className="block text-[12px] font-semibold text-ink-800 truncate">{title}</span>
-                          <span className="block text-[10.5px] text-ink-400">XLSX · CSV</span>
+                          <span className="block text-[0.75rem] font-semibold text-ink-800 truncate">{title}</span>
+                          <span className="block text-[0.6875rem] text-ink-400">XLSX · CSV</span>
                         </span>
                         <button
                           onClick={() => addFile(kind)}
-                          className="h-7 px-3 inline-flex items-center gap-1.5 rounded-lg bg-brand-600 text-white text-[11.5px] font-semibold hover:bg-brand-700 transition-colors cursor-pointer shrink-0"
+                          className="h-7 px-3 inline-flex items-center gap-1.5 rounded-lg bg-brand-600 text-white text-[0.75rem] font-semibold hover:bg-brand-700 transition-colors cursor-pointer shrink-0"
                         >
                           <Upload size={12} /> Upload
                         </button>
@@ -1400,7 +1278,7 @@ export default function NewAuditWizard({ onClose, prefillFrom }: {
                       <>
                         <div className="flex items-center gap-2 px-3 py-2 border-b border-canvas-border">
                           <FileSpreadsheet size={14} className="text-brand-600 shrink-0" />
-                          <span className="text-[12px] font-semibold text-ink-800 flex-1 min-w-0 truncate">{title}</span>
+                          <span className="text-[0.75rem] font-semibold text-ink-800 flex-1 min-w-0 truncate">{title}</span>
                           <button
                             onClick={() => addFile(kind)}
                             title={`Upload another ${title.toLowerCase()}`}
@@ -1416,7 +1294,7 @@ export default function NewAuditWizard({ onClose, prefillFrom }: {
                                 already says which it is. */}
                             <div className="flex items-center gap-2">
                               <Paperclip size={12} className="text-ink-400 shrink-0" />
-                              <span className="text-[12px] text-ink-900 flex-1 min-w-0 truncate" title={f.name}>{f.name}</span>
+                              <span className="text-[0.75rem] text-ink-900 flex-1 min-w-0 truncate" title={f.name}>{f.name}</span>
                               <button
                                 onClick={() => setFiles(prev => prev.filter((_, x) => x !== i))}
                                 className="text-ink-400 hover:text-risk-700 transition-colors cursor-pointer shrink-0"
@@ -1430,17 +1308,17 @@ export default function NewAuditWizard({ onClose, prefillFrom }: {
                                 audit carries the answer from here, and no control
                                 is ever asked it again. */}
                             <div className="mt-2">
-                              <span className="block text-[10.5px] font-bold uppercase tracking-wider text-ink-400 mb-1">Came from</span>
+                              <span className="block text-[0.6875rem] font-bold uppercase tracking-wider text-ink-400 mb-1">Came from</span>
                               <div className="grid grid-cols-2 gap-1.5">
                                 {(['System export', 'Client-prepared'] as FileOrigin[]).map(o => (
                                   <button key={o} onClick={() => setFiles(prev => prev.map((x, n) => (n === i ? { ...x, origin: o } : x)))}
-                                    className={cn('h-7 px-2 rounded-md border text-[11px] font-semibold transition-colors cursor-pointer inline-flex items-center justify-center gap-1',
+                                    className={cn('h-7 px-2 rounded-md border text-[0.6875rem] font-semibold transition-colors cursor-pointer inline-flex items-center justify-center gap-1',
                                       f.origin === o ? 'border-brand-300 bg-brand-50 text-brand-700' : 'border-canvas-border bg-white text-ink-600 hover:border-ink-300')}>
                                     {f.origin === o && <Check size={11} className="shrink-0" />}{o}
                                   </button>
                                 ))}
                               </div>
-                              {!f.origin && <p className="text-[10.5px] text-mitigated-800 font-semibold mt-1 leading-relaxed">Needed before a control can draw on it</p>}
+                              {!f.origin && <p className="text-[0.6875rem] text-mitigated-800 font-semibold mt-1 leading-relaxed">Needed before a control can draw on it</p>}
                             </div>
                           </div>
                         ))}
@@ -1459,8 +1337,8 @@ export default function NewAuditWizard({ onClose, prefillFrom }: {
             {round === 'rollforward' && parent ? (
               <div className="mt-6 pt-5 border-t border-canvas-border">
                 <div className="flex items-center gap-2 mb-0.5">
-                  <h4 className="text-[13px] font-semibold text-ink-900">Materiality rule</h4>
-                  <span className="inline-flex items-center gap-1 text-[10px] font-bold uppercase tracking-wider text-ink-400">
+                  <h4 className="text-[0.8125rem] font-semibold text-ink-900">Materiality rule</h4>
+                  <span className="inline-flex items-center gap-1 text-[0.6875rem] font-bold uppercase tracking-wider text-ink-400">
                     <Lock size={10} /> Inherited
                   </span>
                 </div>
@@ -1477,19 +1355,19 @@ export default function NewAuditWizard({ onClose, prefillFrom }: {
                   ] as const).map(([label, value, note, strong], i) => (
                     <div key={label} className={cn('py-2', i < 2 && 'border-b border-canvas-border')}>
                       <div className="flex items-baseline justify-between gap-3">
-                        <span className={cn('text-[12px]', strong ? 'font-semibold text-ink-900' : 'text-ink-600')}>{label}</span>
-                        <span className={cn('tabular-nums', strong ? 'text-[14px] font-bold text-ink-900' : 'text-[12.5px] text-ink-800')}>{value}</span>
+                        <span className={cn('text-[0.75rem]', strong ? 'font-semibold text-ink-900' : 'text-ink-600')}>{label}</span>
+                        <span className={cn('tabular-nums', strong ? 'text-[0.875rem] font-bold text-ink-900' : 'text-[0.8125rem] text-ink-800')}>{value}</span>
                       </div>
-                      <div className="text-[10.5px] text-ink-400 mt-0.5">{note}</div>
+                      <div className="text-[0.6875rem] text-ink-400 mt-0.5">{note}</div>
                     </div>
                   ))}
                 </div>
               </div>
             ) : (
             <div className="mt-6 pt-5 border-t border-canvas-border">
-              <h4 className="text-[13px] font-semibold text-ink-900 mb-0.5">Materiality rule</h4>
+              <h4 className="text-[0.8125rem] font-semibold text-ink-900 mb-0.5">Materiality rule</h4>
               <p className="text-[0.75rem] text-ink-500 mb-4 leading-relaxed">
-                Set before testing starts — exceptions are measured against it.
+                Set before testing starts — deficiencies are measured against it.
               </p>
 
               {/* Back to a dropdown (user ask), now five bases deep — the cards
@@ -1504,17 +1382,17 @@ export default function NewAuditWizard({ onClose, prefillFrom }: {
                 ariaLabel="Materiality basis"
                 menuCls="w-full"
               />
-              <p className="text-[11px] text-ink-400 mb-4">{basisOpt.hint}</p>
+              <p className="text-[0.6875rem] text-ink-400 mb-4">{basisOpt.hint}</p>
 
               <div className="flex gap-3 mb-4">
                 <div className="flex-1">
                   <label className={labelCls}>{basis === 'custom' ? 'Overall materiality (₹ Cr)' : `${basisOpt.benchmarkLabel} (₹ Cr)`}</label>
-                  <input type="number" min={0} value={benchmark} onChange={e => setBenchmark(Number(e.target.value))} className={`${inputCls} tabular-nums`} />
+                  <input aria-label={basis === 'custom' ? 'Overall materiality (₹ Cr)' : `${basisOpt.benchmarkLabel} (₹ Cr)`} type="number" min={0} value={benchmark} onChange={e => setBenchmark(Number(e.target.value))} className={`${inputCls} tabular-nums`} />
                 </div>
                 {basis !== 'custom' && (
                   <div className="w-24">
                     <label className={labelCls}>Basis %</label>
-                    <input type="number" min={0.1} max={100} step={0.1} value={pct} onChange={e => setPct(Number(e.target.value))} className={`${inputCls} tabular-nums`} />
+                    <input aria-label="Basis %" type="number" min={0.1} max={100} step={0.1} value={pct} onChange={e => setPct(Number(e.target.value))} className={`${inputCls} tabular-nums`} />
                   </div>
                 )}
               </div>
@@ -1544,10 +1422,10 @@ export default function NewAuditWizard({ onClose, prefillFrom }: {
                         className={`${inputCls} tabular-nums w-20`}
                         aria-label={`${label} as a percentage of overall`}
                       />
-                      <span className="text-[11.5px] text-ink-500 shrink-0">% of overall</span>
-                      <span className="ml-auto text-[13px] font-semibold text-ink-900 tabular-nums shrink-0">{money(amount)}</span>
+                      <span className="text-[0.75rem] text-ink-500 shrink-0">% of overall</span>
+                      <span className="ml-auto text-[0.8125rem] font-semibold text-ink-900 tabular-nums shrink-0">{money(amount)}</span>
                     </div>
-                    <p className="text-[11px] text-ink-400 leading-relaxed mt-1">{hint}</p>
+                    <p className="text-[0.6875rem] text-ink-400 leading-relaxed mt-1">{hint}</p>
                   </div>
                 ))}
               </div>
@@ -1556,7 +1434,7 @@ export default function NewAuditWizard({ onClose, prefillFrom }: {
                   summary card, brought over whole (user ask). It restates the
                   three amounts shown above; that repetition was raised and kept. */}
               <div className="mt-4 rounded-xl border border-canvas-border bg-white p-3.5">
-                <div className="text-[10px] font-bold text-ink-400 uppercase tracking-wider mb-2">Computed thresholds</div>
+                <div className="text-[0.6875rem] font-bold text-ink-400 uppercase tracking-wider mb-2">Computed thresholds</div>
                 {([
                   ['Overall materiality', money(overall), basis === 'custom' ? 'Set directly' : `${pct}% × ₹${benchmark} Cr`, true],
                   ['Performance materiality', money(perf), `${pmPct}% of overall — the working threshold for testing`, false],
@@ -1564,10 +1442,10 @@ export default function NewAuditWizard({ onClose, prefillFrom }: {
                 ] as const).map(([label, value, note, strong], i) => (
                   <div key={label} className={cn('py-2', i < 2 && 'border-b border-canvas-border')}>
                     <div className="flex items-baseline justify-between gap-3">
-                      <span className={cn('text-[12px]', strong ? 'font-semibold text-ink-900' : 'text-ink-600')}>{label}</span>
-                      <span className={cn('tabular-nums', strong ? 'text-[14px] font-bold text-ink-900' : 'text-[12.5px] text-ink-800')}>{value}</span>
+                      <span className={cn('text-[0.75rem]', strong ? 'font-semibold text-ink-900' : 'text-ink-600')}>{label}</span>
+                      <span className={cn('tabular-nums', strong ? 'text-[0.875rem] font-bold text-ink-900' : 'text-[0.8125rem] text-ink-800')}>{value}</span>
                     </div>
-                    <div className="text-[10.5px] text-ink-400 mt-0.5">{note}</div>
+                    <div className="text-[0.6875rem] text-ink-400 mt-0.5">{note}</div>
                   </div>
                 ))}
               </div>
@@ -1577,18 +1455,18 @@ export default function NewAuditWizard({ onClose, prefillFrom }: {
                   the engagement's Materiality & scope rules. */}
               {overall > 0 && (
                 <div className="mt-5">
-                  <h5 className="text-[12px] font-semibold text-ink-900 mb-2">Where an exception would land</h5>
+                  <h5 className="text-[0.75rem] font-semibold text-ink-900 mb-2">Where a deficiency would land</h5>
                   <div className="space-y-1">
                     {LADDER.map((r, i) => (
                       <div key={r.label} className={cn('flex items-center justify-between gap-3 px-3 py-2 rounded-lg border', r.tone)}>
-                        <span className="text-[11.5px] font-semibold">
+                        <span className="text-[0.75rem] font-semibold">
                           <span className="text-ink-300 tabular-nums mr-1.5">{i + 1}</span>{r.label}
                         </span>
-                        <span className="text-[11px] tabular-nums text-right">{r.band}</span>
+                        <span className="text-[0.6875rem] tabular-nums text-right">{r.band}</span>
                       </div>
                     ))}
                   </div>
-                  <p className="text-[11px] text-ink-400 mt-1.5 leading-relaxed">
+                  <p className="text-[0.6875rem] text-ink-400 mt-1.5 leading-relaxed">
                     Set on Materiality &amp; scope, shown here so you can see the effect before the audit is created.
                   </p>
                 </div>
@@ -1608,23 +1486,23 @@ export default function NewAuditWizard({ onClose, prefillFrom }: {
                   <span className="font-normal text-ink-500"> · {materialRows.length} account{materialRows.length === 1 ? '' : 's'} ≥ {money(perf)} (PM)</span>
                 </h4>
                 <p className="text-[0.75rem] text-ink-500 mb-3 leading-relaxed">
-                  Ira suggested a process for each account — change any that landed on the wrong one.
+                  <IraDrafted title="Ira suggested a process for each account" /> · change any that landed on the wrong one.
                 </p>
                 {materialRows.length === 0 ? (
-                  <p className="rounded-xl border border-dashed border-canvas-border bg-white text-[0.71875rem] text-ink-400 px-4 py-5 text-center">
+                  <p className="rounded-xl border border-dashed border-canvas-border bg-white text-[0.75rem] text-ink-400 px-4 py-5 text-center">
                     No account in the trial balance reaches {money(perf)} — nothing to map at this threshold.
                   </p>
                 ) : (
                   /* No overflow-hidden: the process menus open downward out of
                      the last rows, and clipping them would hide the options. */
                   <div className="rounded-xl border border-canvas-border bg-white">
-                    <div className="grid grid-cols-[minmax(0,1.5fr)_minmax(0,0.7fr)_minmax(0,0.75fr)_minmax(0,1.45fr)] gap-2.5 px-3.5 py-2 border-b border-canvas-border text-[0.625rem] font-bold text-ink-400 uppercase tracking-wider">
+                    <div className="grid grid-cols-[minmax(0,1.5fr)_minmax(0,0.7fr)_minmax(0,0.75fr)_minmax(0,1.45fr)] gap-2.5 px-3.5 py-2 border-b border-canvas-border text-[0.6875rem] font-bold text-ink-400 uppercase tracking-wider">
                       <span>Account</span><span>Entity</span><span className="text-right">Balance</span><span>Process</span>
                     </div>
                     {materialRows.map(c => (
                       <div key={c.id} className="grid grid-cols-[minmax(0,1.5fr)_minmax(0,0.7fr)_minmax(0,0.75fr)_minmax(0,1.45fr)] gap-2.5 items-center px-3.5 py-2 border-b border-canvas-border last:border-b-0">
                         <span className="text-[0.75rem] text-ink-900 truncate" title={c.caption}>{c.caption}</span>
-                        <span className="text-[0.71875rem] text-ink-500 truncate">{entityShort(c.entityId, entities)}</span>
+                        <span className="text-[0.75rem] text-ink-500 truncate">{entityShort(c.entityId, entities)}</span>
                         <span className="text-[0.75rem] text-ink-800 tabular-nums text-right">{money(c.balance)}</span>
                         <FormSelect
                           value={processOf(c)}
@@ -1633,7 +1511,7 @@ export default function NewAuditWizard({ onClose, prefillFrom }: {
                           className="w-full h-8 px-2.5 text-[0.75rem] border border-canvas-border rounded-lg bg-white text-ink-900 outline-none focus:border-brand-400 transition-all"
                           ariaLabel={`Process for ${c.caption}`}
                           align="right"
-                          menuCls="w-[220px]"
+                          menuCls="w-55"
                         />
                       </div>
                     ))}
@@ -1651,13 +1529,13 @@ export default function NewAuditWizard({ onClose, prefillFrom }: {
             untested is shown excluded, each with its reason. */}
         {SCOPING_STEPS && step === 2 && round === 'rollforward' && parent && (
           <StepShell title="What this audit covers" sub={`What the ${parent.period} interim proved carries forward, and what it failed comes along for a full retest — with its open findings.`}>
-            <p className="mb-2 px-1 text-[11px] text-ink-500">
+            <p className="mb-2 px-1 text-[0.6875rem] text-ink-500">
               <span className="font-semibold text-ink-900 tabular-nums">{rfPicked.length}</span> of {rfEffective.length} effective control{rfEffective.length === 1 ? '' : 's'} carried forward
               {rfFailed.length > 0 && <> · <span className="font-semibold text-ink-900 tabular-nums">{rfFailed.length}</span> failed — full retest</>}
             </p>
             <div className="border border-canvas-border rounded-xl overflow-hidden">
               {rfEffective.length === 0 ? (
-                <p className="text-[11.5px] text-ink-400 px-4 py-6 text-center">
+                <p className="text-[0.75rem] text-ink-400 px-4 py-6 text-center">
                   The {parent.period} interim concluded nothing effective{rfFailed.length ? ' — only the failed controls below come along, for a full retest' : ' — there is nothing to roll forward'}.
                 </p>
               ) : rfEffective.map(v => {
@@ -1673,12 +1551,12 @@ export default function NewAuditWizard({ onClose, prefillFrom }: {
                       {on && <Check size={11} strokeWidth={3} />}
                     </span>
                     <span className="flex-1 min-w-0">
-                      <span className="block text-[12.5px] text-ink-900 truncate">
+                      <span className="block text-[0.8125rem] text-ink-900 truncate">
                         <span className="font-semibold">{v.wpRef}</span> · {v.description}
                       </span>
                       {/* No sample-size promise here (user ask) — how big the
                           draw is stays the auditor's call on the control page. */}
-                      <span className="block text-[11px] text-ink-400 mt-0.5">{v.process} · Effective at interim — design carries, operating retested to year end</span>
+                      <span className="block text-[0.6875rem] text-ink-400 mt-0.5">{v.process} · Effective at interim — design carries, operating retested to year end</span>
                     </span>
                   </button>
                 );
@@ -1694,8 +1572,8 @@ export default function NewAuditWizard({ onClose, prefillFrom }: {
                 operating side in full. Open findings ride along. */}
             {rfFailed.length > 0 && (
               <>
-                <h5 className="text-[12px] font-semibold text-ink-900 mt-4 mb-0.5">Full retest — failed at interim</h5>
-                <p className="text-[11px] text-ink-500 mb-2 leading-relaxed">
+                <h5 className="text-[0.75rem] font-semibold text-ink-900 mt-4 mb-0.5">Full retest — failed at interim</h5>
+                <p className="text-[0.6875rem] text-ink-500 mb-2 leading-relaxed">
                   Always in scope — a failed control and its open findings can't be left behind by the
                   round that exists to close the year.
                 </p>
@@ -1706,10 +1584,10 @@ export default function NewAuditWizard({ onClose, prefillFrom }: {
                       <div key={v.id} className="flex items-start gap-3 px-3.5 py-2.5 border-b border-canvas-border last:border-b-0 bg-white">
                         <Lock size={13} className="text-ink-400 shrink-0 mt-0.5" />
                         <span className="flex-1 min-w-0">
-                          <span className="block text-[12.5px] text-ink-900 truncate">
+                          <span className="block text-[0.8125rem] text-ink-900 truncate">
                             <span className="font-semibold">{v.wpRef}</span> · {v.description}
                           </span>
-                          <span className="block text-[11px] text-ink-400 mt-0.5">
+                          <span className="block text-[0.6875rem] text-ink-400 mt-0.5">
                             {v.process} · {v.design === 'Effective'
                               ? 'TOD carried — operating retested in full'
                               : 'TOD failed at interim — design retested too'}
@@ -1725,8 +1603,8 @@ export default function NewAuditWizard({ onClose, prefillFrom }: {
 
             {rfExcluded.length > 0 && (
               <>
-                <h5 className="text-[12px] font-semibold text-ink-900 mt-4 mb-0.5">Not carried forward</h5>
-                <p className="text-[11px] text-ink-500 mb-2 leading-relaxed">
+                <h5 className="text-[0.75rem] font-semibold text-ink-900 mt-4 mb-0.5">Not carried forward</h5>
+                <p className="text-[0.6875rem] text-ink-500 mb-2 leading-relaxed">
                   Not tested at interim — a roll-forward has nothing of theirs to extend. These wait for
                   the year-end audit.
                 </p>
@@ -1735,10 +1613,10 @@ export default function NewAuditWizard({ onClose, prefillFrom }: {
                     <div key={v.id} className="flex items-start gap-3 px-3.5 py-2.5 border-b border-canvas-border last:border-b-0 bg-white opacity-50">
                       <X size={14} className="text-ink-400 shrink-0 mt-0.5" />
                       <span className="flex-1 min-w-0">
-                        <span className="block text-[12.5px] text-ink-900 truncate">
+                        <span className="block text-[0.8125rem] text-ink-900 truncate">
                           <span className="font-semibold">{v.wpRef}</span> · {v.description}
                         </span>
-                        <span className="block text-[11px] text-ink-400 mt-0.5">
+                        <span className="block text-[0.6875rem] text-ink-400 mt-0.5">
                           {v.process} · Not tested at interim — belongs in a year-end audit
                         </span>
                       </span>
@@ -1773,7 +1651,7 @@ export default function NewAuditWizard({ onClose, prefillFrom }: {
               </p>
               <div className="border border-canvas-border rounded-xl overflow-hidden">
                 {processRows.length === 0 ? (
-                  <p className="text-[0.71875rem] text-ink-400 px-4 py-6 text-center">
+                  <p className="text-[0.75rem] text-ink-400 px-4 py-6 text-center">
                     No material accounts mapped and no RACMs on this engagement yet.
                   </p>
                 ) : processRows.map(r => {
@@ -1791,10 +1669,10 @@ export default function NewAuditWizard({ onClose, prefillFrom }: {
                           <span className="flex items-center gap-2">
                             <span className="text-[0.8125rem] text-ink-900 truncate">{r.process}</span>
                             {qualitative && (
-                              <span className="shrink-0 px-1.5 rounded border border-brand-200 bg-brand-50 text-[0.625rem] font-semibold text-brand-700 leading-4">Qualitative</span>
+                              <span className="shrink-0 px-1.5 rounded border border-brand-200 bg-brand-50 text-[0.6875rem] font-semibold text-brand-700 leading-4">Qualitative</span>
                             )}
                           </span>
-                          <span className="block text-[0.65625rem] text-ink-500 mt-0.5 leading-relaxed tabular-nums">
+                          <span className="block text-[0.6875rem] text-ink-500 mt-0.5 leading-relaxed tabular-nums">
                             {r.accounts > 0
                               ? `${money(r.total)} · ${r.accounts} material account${r.accounts === 1 ? '' : 's'}`
                               : 'No material accounts'}
@@ -1802,12 +1680,12 @@ export default function NewAuditWizard({ onClose, prefillFrom }: {
                           {/* Can it be tested — asked only of a process that is
                               in, because that is the only time it matters. */}
                           {on && (racm ? (
-                            <span className="flex items-center gap-1 mt-1 text-[0.65625rem] font-semibold text-compliant-700">
+                            <span className="flex items-center gap-1 mt-1 text-[0.6875rem] font-semibold text-compliant-700">
                               <Check size={11} className="shrink-0" /> {r.process} · {racm.count} control{racm.count === 1 ? '' : 's'}
                             </span>
                           ) : (
                             <span className="block mt-1">
-                              <span className="flex items-center gap-1 text-[0.65625rem] font-semibold text-risk-700">
+                              <span className="flex items-center gap-1 text-[0.6875rem] font-semibold text-risk-700">
                                 <X size={11} className="shrink-0" /> No RACM — can't be tested.
                               </span>
                               <span className="flex flex-wrap items-center gap-x-2 gap-y-1 mt-1.5">
@@ -1815,11 +1693,11 @@ export default function NewAuditWizard({ onClose, prefillFrom }: {
                                   onClick={() => uploadRacm(r.process)}
                                   disabled={!canUploadRacm}
                                   title={canUploadRacm ? `Upload the ${r.process} RACM` : 'Only an auditor can upload a RACM, and not on a locked engagement'}
-                                  className="h-7 px-3 inline-flex items-center gap-1.5 rounded-lg bg-brand-600 text-white text-[0.71875rem] font-semibold enabled:hover:bg-brand-700 disabled:opacity-40 disabled:cursor-not-allowed transition-colors cursor-pointer"
+                                  className="h-7 px-3 inline-flex items-center gap-1.5 rounded-lg bg-brand-600 text-white text-[0.75rem] font-semibold enabled:hover:bg-brand-700 disabled:opacity-40 disabled:cursor-not-allowed transition-colors cursor-pointer"
                                 >
                                   <Upload size={12} /> Upload RACM
                                 </button>
-                                <span className="text-[0.65625rem] text-ink-500">or move it out with a note</span>
+                                <span className="text-[0.6875rem] text-ink-500">or move it out with a note</span>
                               </span>
                             </span>
                           ))}
@@ -1834,8 +1712,8 @@ export default function NewAuditWizard({ onClose, prefillFrom }: {
                           onClick={() => flipProcess(r)}
                           className="shrink-0 mt-1 cursor-pointer"
                         >
-                          <span className={cn('block w-8 h-[18px] rounded-full relative transition-colors', on ? 'bg-brand-600' : 'bg-canvas-border')}>
-                            <span className={cn('absolute top-[2px] w-3.5 h-3.5 rounded-full bg-white transition-all', on ? 'left-[16px]' : 'left-[2px]')} />
+                          <span className={cn('block w-8 h-4.5 rounded-full relative transition-colors', on ? 'bg-brand-600' : 'bg-canvas-border')}>
+                            <span className={cn('absolute top-0.5 w-3.5 h-3.5 rounded-full bg-white transition-all', on ? 'left-4' : 'left-0.5')} />
                           </span>
                         </button>
                       </div>
@@ -1886,14 +1764,14 @@ export default function NewAuditWizard({ onClose, prefillFrom }: {
                                   <div className="flex items-center justify-end gap-2 mt-2">
                                     <button
                                       onClick={() => cancelProcNote(r.process)}
-                                      className="h-7 px-2.5 text-[0.71875rem] font-semibold text-ink-500 hover:text-ink-800 transition-colors cursor-pointer"
+                                      className="h-7 px-2.5 text-[0.75rem] font-semibold text-ink-500 hover:text-ink-800 transition-colors cursor-pointer"
                                     >
                                       Cancel
                                     </button>
                                     <button
                                       onClick={() => saveProcNote(r.process)}
                                       disabled={!(procNoteDrafts[r.process] ?? '').trim() || (qualitative && !reasonDraft)}
-                                      className="h-7 px-3 text-[0.71875rem] font-semibold rounded-lg bg-high-600 text-white disabled:opacity-40 enabled:hover:bg-high-700 transition-colors cursor-pointer"
+                                      className="h-7 px-3 text-[0.75rem] font-semibold rounded-lg bg-high-600 text-white disabled:opacity-40 enabled:hover:bg-high-700 transition-colors cursor-pointer"
                                     >
                                       Save
                                     </button>
@@ -1910,7 +1788,7 @@ export default function NewAuditWizard({ onClose, prefillFrom }: {
                                       setProcNoteDrafts(prev => ({ ...prev, [r.process]: procNotes[r.process] ?? '' }));
                                       if (qualitative) setProcReasonDrafts(prev => ({ ...prev, [r.process]: procReasons[r.process] ?? '' }));
                                     }}
-                                    className="shrink-0 h-6 px-2 text-[0.71875rem] font-semibold text-high-700 hover:bg-high-100/60 rounded-md transition-colors cursor-pointer"
+                                    className="shrink-0 h-6 px-2 text-[0.75rem] font-semibold text-high-700 hover:bg-high-100/60 rounded-md transition-colors cursor-pointer"
                                   >
                                     Edit
                                   </button>
@@ -1932,7 +1810,7 @@ export default function NewAuditWizard({ onClose, prefillFrom }: {
                   key={id}
                   onClick={() => switchKind(id)}
                   className={cn(
-                    'px-2 py-2 rounded-lg border text-[12px] font-bold transition-all cursor-pointer inline-flex items-center justify-center gap-1.5',
+                    'px-2 py-2 rounded-lg border text-[0.75rem] font-bold transition-all cursor-pointer inline-flex items-center justify-center gap-1.5',
                     scopeKind === id
                       ? 'border-brand-500 bg-brand-50 text-brand-700 ring-2 ring-brand-500/15'
                       : 'border-canvas-border bg-white text-ink-500 hover:bg-brand-50/40',
@@ -1955,12 +1833,12 @@ export default function NewAuditWizard({ onClose, prefillFrom }: {
                 className="w-full mb-2 flex items-center gap-2.5 px-3.5 py-2.5 rounded-xl border border-canvas-border bg-white hover:border-brand-300 transition-colors cursor-pointer text-left"
               >
                 {/* Same phantom-token fix as the entity rows' switch below. */}
-                <span className={cn('w-8 h-[18px] rounded-full relative shrink-0 transition-colors', keyOnly ? 'bg-brand-600' : 'bg-canvas-border')}>
-                  <span className={cn('absolute top-[2px] w-3.5 h-3.5 rounded-full bg-white transition-all', keyOnly ? 'left-[16px]' : 'left-[2px]')} />
+                <span className={cn('w-8 h-4.5 rounded-full relative shrink-0 transition-colors', keyOnly ? 'bg-brand-600' : 'bg-canvas-border')}>
+                  <span className={cn('absolute top-0.5 w-3.5 h-3.5 rounded-full bg-white transition-all', keyOnly ? 'left-4' : 'left-0.5')} />
                 </span>
                 <span className="min-w-0">
-                  <span className="block text-[12.5px] font-semibold text-ink-900">Key controls only</span>
-                  <span className="block text-[11px] text-ink-500">
+                  <span className="block text-[0.8125rem] font-semibold text-ink-900">Key controls only</span>
+                  <span className="block text-[0.6875rem] text-ink-500">
                     {keyOnly
                       ? 'Every key control is in scope. Untick any you don’t want.'
                       : 'Turn on to put every key control in scope at once.'}
@@ -1975,7 +1853,7 @@ export default function NewAuditWizard({ onClose, prefillFrom }: {
                 named once here rather than left to be discovered by hovering
                 the right pixel. Sits directly above the list it explains. */}
             {scopeKind === 'racm' && (
-              <p className="mb-2 px-1 flex items-center gap-1.5 text-[11px] text-ink-500">
+              <p className="mb-2 px-1 flex items-center gap-1.5 text-[0.6875rem] text-ink-500">
                 <Star size={11} className="text-mitigated-600 fill-mitigated-200 shrink-0" />
                 Key control
                 <span className="text-ink-300">·</span>
@@ -1992,8 +1870,8 @@ export default function NewAuditWizard({ onClose, prefillFrom }: {
                 across the group. */}
             {scopeKind === 'entity' && scope.rows.length > 0 && (
               <div className="mb-3 rounded-xl border border-canvas-border bg-white px-3.5 py-3">
-                <p className="text-[11.5px] text-ink-600 leading-relaxed">
-                  <span className="text-[15px] font-bold text-ink-900 tabular-nums">{coveragePct}%</span> of the group covered
+                <p className="text-[0.75rem] text-ink-600 leading-relaxed">
+                  <span className="text-[0.9375rem] font-bold text-ink-900 tabular-nums">{coveragePct}%</span> of the group covered
                   <span className="text-ink-400"> · target {COVERAGE_TARGET}%</span>
                 </p>
                 <span className="relative mt-2 block h-1.5 rounded-full bg-paper-100 overflow-visible">
@@ -2005,7 +1883,7 @@ export default function NewAuditWizard({ onClose, prefillFrom }: {
                       can't tell you whether you have cleared it. */}
                   <span className="absolute -top-0.5 h-2.5 w-px bg-ink-400" style={{ left: `${COVERAGE_TARGET}%` }} aria-hidden />
                 </span>
-                <p className="text-[11px] text-ink-400 mt-1.5 leading-relaxed">
+                <p className="text-[0.6875rem] text-ink-400 mt-1.5 leading-relaxed">
                   {coveragePct >= COVERAGE_TARGET
                     ? 'Enough of the group is covered. Toggle any company in or out to overrule this.'
                     : `Below target — bring more companies in until ${COVERAGE_TARGET}% of the group is covered.`}
@@ -2014,7 +1892,7 @@ export default function NewAuditWizard({ onClose, prefillFrom }: {
             )}
 
             {scopeKind === 'entity' && splitFromParent.length > 0 && (
-              <p className="flex items-start gap-1.5 mb-2 text-[11px] text-high-700">
+              <p className="flex items-start gap-1.5 mb-2 text-[0.6875rem] text-high-700">
                 <AlertTriangle size={11} className="shrink-0 mt-0.5" />
                 <span>
                   {splitFromParent.length} compan{splitFromParent.length === 1 ? 'y is' : 'ies are'} held by a
@@ -2027,7 +1905,7 @@ export default function NewAuditWizard({ onClose, prefillFrom }: {
             <div className="border border-canvas-border rounded-xl overflow-hidden">
               {scopeKind === 'entity' ? (
                 scope.rows.length === 0 ? (
-                  <p className="text-[11.5px] text-ink-400 px-4 py-6 text-center">No entities on this engagement yet.</p>
+                  <p className="text-[0.75rem] text-ink-400 px-4 py-6 text-center">No entities on this engagement yet.</p>
                 ) : scope.rows.map(row => {
                   const on = inScope(row);
                   const absent = row.status === 'absent';
@@ -2056,7 +1934,7 @@ export default function NewAuditWizard({ onClose, prefillFrom }: {
                           and right depending on how deep it sits. */}
                       {depth > 0 && <span aria-hidden className="shrink-0" style={{ width: depth * 12 }} />}
                       {depth >= 2 && (
-                        <span aria-hidden className="text-[11px] text-ink-300 leading-none shrink-0 mt-1 -mr-1.5">↳</span>
+                        <span aria-hidden className="text-[0.6875rem] text-ink-300 leading-none shrink-0 mt-1 -mr-1.5">↳</span>
                       )}
                       {/* Colours stay as they are on every row — the wrapper's
                           opacity is what says "excluded", so the row reads as
@@ -2066,12 +1944,12 @@ export default function NewAuditWizard({ onClose, prefillFrom }: {
                         : <Building2 size={14} className="text-ink-400 shrink-0 mt-0.5" />}
                       <span className="flex-1 min-w-0">
                         <span className="flex items-center gap-2">
-                          <span className="text-[13px] text-ink-900 truncate">{row.name}</span>
+                          <span className="text-[0.8125rem] text-ink-900 truncate">{row.name}</span>
                           {!absent && row.sharePct > 0 && (
-                            <span className="text-[11px] tabular-nums text-ink-400 shrink-0 ml-auto">{row.sharePct}%</span>
+                            <span className="text-[0.6875rem] tabular-nums text-ink-400 shrink-0 ml-auto">{row.sharePct}%</span>
                           )}
                         </span>
-                        <span className="block text-[10.5px] text-ink-500 mt-0.5 leading-relaxed">{row.reason}</span>
+                        <span className="block text-[0.6875rem] text-ink-500 mt-0.5 leading-relaxed">{row.reason}</span>
                       </span>
                       {absent ? (
                         /* Nothing to weigh and nothing to test — so no toggle,
@@ -2098,8 +1976,8 @@ export default function NewAuditWizard({ onClose, prefillFrom }: {
                               never existed (the ink ramp starts at 300), so the
                               utility was never generated and the off track came
                               out fully transparent: a white knob on a white row. */}
-                          <span className={cn('block w-8 h-[18px] rounded-full relative transition-colors', on ? 'bg-brand-600' : 'bg-canvas-border')}>
-                            <span className={cn('absolute top-[2px] w-3.5 h-3.5 rounded-full bg-white transition-all', on ? 'left-[16px]' : 'left-[2px]')} />
+                          <span className={cn('block w-8 h-4.5 rounded-full relative transition-colors', on ? 'bg-brand-600' : 'bg-canvas-border')}>
+                            <span className={cn('absolute top-0.5 w-3.5 h-3.5 rounded-full bg-white transition-all', on ? 'left-4' : 'left-0.5')} />
                           </span>
                         </button>
                       )}
@@ -2121,7 +1999,7 @@ export default function NewAuditWizard({ onClose, prefillFrom }: {
                           className="overflow-hidden"
                         >
                           <div className="mx-4 mb-3 p-3 rounded-xl border border-high-200 bg-high-50/40">
-                            <span className="text-[11px] font-semibold text-high-700 mb-1.5 flex items-center gap-1.5">
+                            <span className="text-[0.6875rem] font-semibold text-high-700 mb-1.5 flex items-center gap-1.5">
                               <Pencil size={11} className="shrink-0" />
                               {on ? 'Why is this company in scope?' : 'Why is this company out of scope?'}
                             </span>
@@ -2135,19 +2013,19 @@ export default function NewAuditWizard({ onClose, prefillFrom }: {
                                   value={noteDrafts[row.id] ?? ''}
                                   onChange={e => setNoteDrafts(prev => ({ ...prev, [row.id]: e.target.value }))}
                                   placeholder="Record your rationale — retained in the working paper."
-                                  className="w-full text-[12px] rounded-lg border border-canvas-border bg-white px-2.5 py-2 text-ink-800 placeholder:text-ink-400 outline-none focus:border-high-300 focus:ring-2 focus:ring-high-200/60 resize-none transition-all"
+                                  className="w-full text-[0.75rem] rounded-lg border border-canvas-border bg-white px-2.5 py-2 text-ink-800 placeholder:text-ink-400 outline-none focus:border-high-300 focus:ring-2 focus:ring-high-200/60 resize-none transition-all"
                                 />
                                 <div className="flex items-center justify-end gap-2 mt-2">
                                   <button
                                     onClick={() => cancelNote(row)}
-                                    className="h-7 px-2.5 text-[11.5px] font-semibold text-ink-500 hover:text-ink-800 transition-colors cursor-pointer"
+                                    className="h-7 px-2.5 text-[0.75rem] font-semibold text-ink-500 hover:text-ink-800 transition-colors cursor-pointer"
                                   >
                                     Cancel
                                   </button>
                                   <button
                                     onClick={() => saveNote(row.id)}
                                     disabled={!(noteDrafts[row.id] ?? '').trim()}
-                                    className="h-7 px-3 text-[11.5px] font-semibold rounded-lg bg-high-600 text-white disabled:opacity-40 enabled:hover:bg-high-700 transition-colors cursor-pointer"
+                                    className="h-7 px-3 text-[0.75rem] font-semibold rounded-lg bg-high-600 text-white disabled:opacity-40 enabled:hover:bg-high-700 transition-colors cursor-pointer"
                                   >
                                     Save
                                   </button>
@@ -2158,10 +2036,10 @@ export default function NewAuditWizard({ onClose, prefillFrom }: {
                                  of moved companies stays scannable instead of
                                  being a column of open textareas. */
                               <div className="flex items-start justify-between gap-3">
-                                <p className="text-[12px] text-ink-700 leading-relaxed min-w-0 whitespace-pre-wrap">{scopeNotes[row.id]}</p>
+                                <p className="text-[0.75rem] text-ink-700 leading-relaxed min-w-0 whitespace-pre-wrap">{scopeNotes[row.id]}</p>
                                 <button
                                   onClick={() => setNoteDrafts(prev => ({ ...prev, [row.id]: scopeNotes[row.id] ?? '' }))}
-                                  className="shrink-0 h-6 px-2 text-[11.5px] font-semibold text-high-700 hover:bg-high-100/60 rounded-md transition-colors cursor-pointer"
+                                  className="shrink-0 h-6 px-2 text-[0.75rem] font-semibold text-high-700 hover:bg-high-100/60 rounded-md transition-colors cursor-pointer"
                                 >
                                   Edit
                                 </button>
@@ -2175,7 +2053,7 @@ export default function NewAuditWizard({ onClose, prefillFrom }: {
                   );
                 })
               ) : options.length === 0 ? (
-                <p className="text-[11.5px] text-ink-400 px-4 py-6 text-center">
+                <p className="text-[0.75rem] text-ink-400 px-4 py-6 text-center">
                   No RACMs yet — create one from the RACM tab first.
                 </p>
               ) : options.map(o => {
@@ -2203,8 +2081,8 @@ export default function NewAuditWizard({ onClose, prefillFrom }: {
                         onClick={() => setOpenRacm(expanded ? null : o.id)}
                         className="flex-1 min-w-0 flex items-center gap-2 text-left cursor-pointer"
                       >
-                        <span className="text-[13px] text-ink-900 truncate">{o.primary}</span>
-                        <span className="text-[11px] text-ink-400 shrink-0 ml-auto tabular-nums">
+                        <span className="text-[0.8125rem] text-ink-900 truncate">{o.primary}</span>
+                        <span className="text-[0.6875rem] text-ink-400 shrink-0 ml-auto tabular-nums">
                           {chosen > 0 ? `${chosen}/${rows.length} selected` : `${rows.length} control${rows.length === 1 ? '' : 's'}`}
                         </span>
                       </button>
@@ -2214,10 +2092,10 @@ export default function NewAuditWizard({ onClose, prefillFrom }: {
                           nesting a button inside a button isn't valid, and this
                           one must not expand the RACM. */}
                       <button
-                        onClick={() => setAddCtrlRacm(o.id)}
+                        onClick={() => { ctrlNote.clear(); setAddCtrlRacm(o.id); }}
                         title={`Add a control to ${o.primary}`}
                         aria-label={`Add a control to ${o.primary}`}
-                        className="shrink-0 inline-flex items-center gap-1 h-6 pl-1.5 pr-2 rounded-md text-[11px] font-semibold text-brand-700 hover:bg-brand-50 transition-colors cursor-pointer"
+                        className="shrink-0 inline-flex items-center gap-1 h-6 pl-1.5 pr-2 rounded-md text-[0.6875rem] font-semibold text-brand-700 hover:bg-brand-50 transition-colors cursor-pointer"
                       >
                         <Plus size={12} className="shrink-0" /> Control
                       </button>
@@ -2230,11 +2108,12 @@ export default function NewAuditWizard({ onClose, prefillFrom }: {
                         <ChevronDown size={14} className={cn('text-ink-400 transition-transform', expanded && 'rotate-180')} />
                       </button>
                     </div>
+                    {ctrlNoteFor === o.id && <InlineNote note={ctrlNote.note} className="px-4 pb-2 -mt-1 text-right" />}
 
                     {expanded && (
                       <div className="bg-canvas/60 border-t border-canvas-border">
                         {rows.length === 0 ? (
-                          <p className="text-[11.5px] text-ink-400 px-4 py-4 text-center">
+                          <p className="text-[0.75rem] text-ink-400 px-4 py-4 text-center">
                             No key controls in this RACM — turn the switch off to see the rest.
                           </p>
                         ) : rows.map(c => {
@@ -2276,19 +2155,19 @@ export default function NewAuditWizard({ onClose, prefillFrom }: {
                                       onClick={e => { e.stopPropagation(); toggleKey(c); }}
                                       title={`${c.id} is ${c.isKey ? 'a key control' : 'non-key'} — click to mark it ${c.isKey ? 'non-key' : 'key'}`}
                                       aria-label={`${c.id} is ${c.isKey ? 'a key control' : 'non-key'}. Mark it ${c.isKey ? 'non-key' : 'key'}`}
-                                      className="shrink-0 w-[18px] h-[18px] -ml-[3px] inline-flex items-center justify-center rounded cursor-pointer transition-colors hover:bg-mitigated-100"
+                                      className="shrink-0 w-4.5 h-4.5 -ml-0.75 inline-flex items-center justify-center rounded cursor-pointer transition-colors hover:bg-mitigated-100"
                                     >
                                       <Star size={11} className={c.isKey ? 'text-mitigated-600 fill-mitigated-200' : 'text-ink-300'} />
                                     </button>
                                   ) : c.isKey && <Star size={11} className="text-mitigated-600 fill-mitigated-200 shrink-0" />}
-                                  <span className="text-[12px] text-ink-800 truncate">{c.description}</span>
+                                  <span className="text-[0.75rem] text-ink-800 truncate">{c.description}</span>
                                 </span>
                                 {/* The company, not just the id's @suffix. A
                                     control runs at several of them and the rows
                                     are otherwise word-for-word identical — five
                                     controls across two companies read as five
                                     duplicated pairs without this. */}
-                                <span className="flex items-center gap-1.5 mt-0.5 min-w-0 text-[10.5px] text-ink-400">
+                                <span className="flex items-center gap-1.5 mt-0.5 min-w-0 text-[0.6875rem] text-ink-400">
                                   <span className="font-mono shrink-0">{c.id} · {c.subProcess}</span>
                                   {c.entity && (
                                     <span className="inline-flex items-center gap-1 min-w-0" title={c.entity}>
@@ -2308,7 +2187,7 @@ export default function NewAuditWizard({ onClose, prefillFrom }: {
                 );
               })}
             </div>
-            <p className="text-[11.5px] text-ink-400 mt-2">
+            <p className="text-[0.75rem] text-ink-400 mt-2">
               {scopeKind === 'entity'
                 ? `${scopedEntities.length} entit${scopedEntities.length === 1 ? 'y' : 'ies'} in scope`
                 : `${picked.length} RACM${picked.length === 1 ? '' : 's'} · ${pickedControls.length} control${pickedControls.length === 1 ? '' : 's'} selected`}
@@ -2328,7 +2207,6 @@ export default function NewAuditWizard({ onClose, prefillFrom }: {
                 <ReviewRow label="Continues from" value={`${parent.period} interim`} />
               )}
               <ReviewRow label="Window" value={windowFrom && windowTo ? `${fmtDate(windowFrom)} – ${fmtDate(windowTo)}` : '—'} />
-              <ReviewRow label="Sampling" value={<>{sampFinal.method} <span className="font-normal text-ink-400">· {spreadPhrase(sampFinal.spread)}{round === 'rollforward' ? ' · from parent' : ''}</span></>} />
               {/* S11 follow-up — what the engagement already settled, read-only:
                   the rule and files set when it was created, and the whole
                   Control Library as the scope. */}
@@ -2441,7 +2319,7 @@ export default function NewAuditWizard({ onClose, prefillFrom }: {
                         <span key={c.entityId} className="block">
                           {c.name}
                           <span className="font-normal text-ink-400"> · {c.inScope ? 'brought in' : 'taken out'}</span>
-                          <span className="block text-[11px] font-normal text-ink-500 leading-relaxed">{c.note}</span>
+                          <span className="block text-[0.6875rem] font-normal text-ink-500 leading-relaxed">{c.note}</span>
                         </span>
                       ))}
                     </span>
@@ -2461,7 +2339,7 @@ export default function NewAuditWizard({ onClose, prefillFrom }: {
       <div className="sticky bottom-0 z-10 bg-canvas -mx-6 px-6 mt-6 pt-4 pb-6 border-t border-canvas-border flex items-center justify-between gap-2">
         <button
           onClick={() => (step === 0 ? onClose() : setStep(s => s - 1))}
-          className="h-9 px-3.5 inline-flex items-center gap-1.5 rounded-lg border border-canvas-border text-[12.5px] font-semibold text-ink-600 hover:text-ink-900 transition-colors cursor-pointer"
+          className="h-9 px-3.5 inline-flex items-center gap-1.5 rounded-lg border border-canvas-border text-[0.8125rem] font-semibold text-ink-600 hover:text-ink-900 transition-colors cursor-pointer"
         >
           <ArrowLeft size={13} /> {step === 0 ? 'Cancel' : 'Back'}
         </button>
@@ -2469,16 +2347,16 @@ export default function NewAuditWizard({ onClose, prefillFrom }: {
           {/* Says what the greyed button is waiting for. Without it a disabled
               Continue is a dead end — the boxes are further up the scroll. */}
           {SCOPING_STEPS && step === 1 && round !== 'rollforward' && !hasTb && (
-            <span className="text-[0.71875rem] text-high-700 font-medium">Upload a trial balance to continue</span>
+            <span className="text-[0.75rem] text-high-700 font-medium">Upload a trial balance to continue</span>
           )}
           {/* A process that can't be tested outranks a missing note — it names
               what to upload, which the boxes further up don't. */}
           {SCOPING_STEPS && step === 2 && round !== 'rollforward' && noRacmInScope.length > 0 ? (
-            <span className="text-[0.71875rem] text-high-700 font-medium text-right">
+            <span className="text-[0.75rem] text-high-700 font-medium text-right">
               {noRacmInScope.join(', ').replace(/, ([^,]*)$/, ' and $1')} {noRacmInScope.length === 1 ? 'has' : 'have'} no RACM
             </span>
           ) : SCOPING_STEPS && step === 2 && notesDue > 0 && (
-            <span className="text-[0.71875rem] text-high-700 font-medium">
+            <span className="text-[0.75rem] text-high-700 font-medium">
               {notesDue} change{notesDue === 1 ? '' : 's'} need{notesDue === 1 ? 's' : ''} a note
             </span>
           )}
@@ -2486,14 +2364,14 @@ export default function NewAuditWizard({ onClose, prefillFrom }: {
             <button
               onClick={() => setStep(s => s + 1)}
               disabled={!canContinue}
-              className="h-9 px-4 inline-flex items-center gap-1.5 rounded-lg bg-brand-600 text-white text-[12.5px] font-semibold hover:bg-brand-700 disabled:opacity-40 transition-colors cursor-pointer"
+              className="h-9 px-4 inline-flex items-center gap-1.5 rounded-lg bg-brand-600 text-white text-[0.8125rem] font-semibold hover:bg-brand-700 disabled:opacity-40 transition-colors cursor-pointer"
             >
               Continue <ArrowRight size={13} />
             </button>
           ) : (
             <button
               onClick={create}
-              className="h-9 px-4 inline-flex items-center gap-1.5 rounded-lg bg-brand-600 text-white text-[12.5px] font-semibold hover:bg-brand-700 transition-colors cursor-pointer"
+              className="h-9 px-4 inline-flex items-center gap-1.5 rounded-lg bg-brand-600 text-white text-[0.8125rem] font-semibold hover:bg-brand-700 transition-colors cursor-pointer"
             >
               <Check size={14} /> Create audit
             </button>

@@ -1,15 +1,15 @@
 import { entityShort } from '../audit/sox-testing/soxTestingData';
 import { normaliseProcess, programmeFor } from './auditScope';
-import { NEW_FLOW_ENGAGEMENT_ID } from './flow';
-import { titleFromRisk, validationQA } from './helpers';
+import { ALTURA_YE_ENGAGEMENT_ID, NEW_FLOW_ENGAGEMENT_ID } from './flow';
+import { applyDocRequirements, designCheckQA, docColumnOf, docRequirement, racmRowOf, requiredFilesOf, requiredFilesReady, requiredKindsFor, stepResult, titleFromRisk } from './helpers';
 import { entityCodeFor, processCodeFor, renameEngagementIds } from './racmIds';
 import { defaultSamplingMethodology, FIVE_W_1H, ipeChecklist, ROUND_TAG, ROUND_WINDOW_LABEL } from './types';
 import type {
-  Assertion, Attestation, AuditArchive, AuditRecord, AuditSampling, Control, DesignDoc, DesignPoint, DesignTrack, DesignWaiverReason, Deficiency, Discussion, DocStatus,
+  ArchivedRacmRow, Assertion, Attestation, AuditArchive, AuditRecord, Control, DesignDoc, DesignPoint, DesignTrack, DesignWaiverReason, Deficiency, Discussion, DocStatus,
   // PARKED (Aug 2026) — `GapType` went with the Gap type field; see types.ts.
   // GapType,
   EvidenceFile, ExceptionStatus, ExecKind, ExecutionEvent, Frequency, HandoffTask, IcfrEngagement, IpeTest, Nature, OperatingStep, OperatingTrack,
-  ControlClass, ControlType, FiveWOneH, RacmReview, ReviewNote, RiskRating, Role, Sample, Severity, RunControlOutcome, RunRecord, Sampling, SignificantAccount, SourceRole, TestingStrategy, TestProcedure, TestResult, TrackConclusion,
+  ControlClass, ControlType, FiveWOneH, RacmReview, ReviewNote, RiskRating, Role, Sample, SamplingMethodology, Severity, RunControlOutcome, RunRecord, Sampling, SignificantAccount, SourceRole, TestingStrategy, TestProcedure, TestResult, TrackConclusion,
 } from './types';
 
 // ── builders ─────────────────────────────────────────────────────────────────────
@@ -76,7 +76,7 @@ const activityOf = (owner: string, subProcess: string, frequency: Frequency, nat
 
 let _p = 0;
 const point = (text: string, result: DesignPoint['result'] = 'Pass', wfName = 'Design walkthrough check', stepId?: string): DesignPoint =>
-  ({ id: `dp${++_p}`, text, stepId, result, workflowId: `wf-tod-${_p}`, workflowName: wfName, workflowRunRef: result !== 'Not tested' ? 'run · validated' : undefined, validation: result !== 'Not tested' ? { qa: validationQA(text, result === 'Fail'), at: '14 Apr' } : undefined });
+  ({ id: `dp${++_p}`, text, stepId, result, workflowId: `wf-tod-${_p}`, workflowName: wfName, workflowRunRef: result !== 'Not tested' ? 'run · validated' : undefined, validation: result !== 'Not tested' ? { qa: designCheckQA(text, result === 'Fail'), at: '14 Apr' } : undefined });
 
 let _s = 0;
 const step = (code: string, description: string, assertion: Assertion, precision: string, procedures: TestProcedure[], result: OperatingStep['result'] = 'Not tested', extra: Partial<OperatingStep> = {}): OperatingStep => {
@@ -396,7 +396,10 @@ const DETAILED: Control[] = [
       doc('Process narrative', 'P2P vendor-master narrative v3.pdf', 'Received'),
       doc('Flowchart', 'Vendor onboarding flowchart.pdf', 'Received'),
       doc('Walkthrough', 'Walkthrough — 11 Apr (R. Khanna).pdf', 'Received'),
-      doc('Control description', 'SAP config — dual control MM.pdf', 'Received'),
+      doc('Control description', 'Vendor bank-detail control description.pdf', 'Received'),
+      // Filed as a control description until 'System configuration' existed as a
+      // kind of its own. It is IT's specification, not the business's prose.
+      doc('System configuration', 'SAP config — dual control MM.pdf', 'Received'),
     ], [
       point('Second-authoriser role is segregated from the requester in SAP roles.'),
       point('Block cannot be bypassed by the requester (tested in config).'),
@@ -430,6 +433,7 @@ const DETAILED: Control[] = [
       doc('Process narrative', 'Purchasing narrative v2.pdf', 'Received'),
       doc('Flowchart', 'PO approval flowchart.pdf', 'Received'),
       doc('Walkthrough', 'Walkthrough — 10 Apr.pdf', 'Received'),
+      doc('Control description', 'PO release-strategy control description.pdf', 'Received'),
       doc('Policy / SOP', 'Delegation-of-authority matrix FY26.xlsx', 'Received'),
       // The client has no segregation matrix for the release strategy, so there is
       // no file to chase — the audit team derived it on the walkthrough call and
@@ -485,7 +489,9 @@ const DETAILED: Control[] = [
       doc('Process narrative', 'AP three-way match narrative.pdf', 'Received'),
       doc('Flowchart', '3-way match flowchart.pdf', 'Received'),
       doc('Walkthrough', 'Walkthrough — 09 Apr.pdf', 'Received'),
-      doc('Control description', 'Tolerance config — MM.pdf', 'Requested'),
+      doc('Control description', 'Three-way match control description.pdf', 'Received'),
+      // Still outstanding, which is what the row's review remark says.
+      doc('System configuration', 'Tolerance config — MM.pdf', 'Requested'),
     ], [
       point('Tolerances are set centrally and changes are controlled (GITC reliance).'),
       point('Held items cannot be released to pay without buyer clearance.', 'Not tested'),
@@ -518,7 +524,8 @@ const DETAILED: Control[] = [
     wpSignoff: { preparer: { by: 'A. Mehta', at: '16 Apr' } },
     design: designTrack('Effective', [
       doc('Process narrative', 'Duplicate-block narrative.pdf', 'Received'),
-      doc('Control description', 'SAP duplicate-check config.pdf', 'Received'),
+      doc('Control description', 'Duplicate-invoice control description.pdf', 'Received'),
+      doc('System configuration', 'SAP duplicate-check config.pdf', 'Received'),
       doc('Walkthrough', 'Walkthrough — 09 Apr.pdf', 'Received'),
     ], [
       point('Match key includes vendor, reference and amount.'),
@@ -813,10 +820,25 @@ function generate(): Control[] {
       const design: TrackConclusion = pat === 4 || pat === 5 ? 'Not tested' : 'Effective';
       const operating: TrackConclusion = pat <= 1 || pat === 6 ? 'Effective' : 'Not tested';
       const designConcluded = design === 'Effective';
+      const clazz = classOf(sp.process, `${title} ${desc}`);
+      // The elements this class of control actually has, off DOC_REQUIREMENTS —
+      // an ITGC gets its configuration and access extract, not a narrative and a
+      // flowchart. Seeding the old flat three left every ITGC short of the
+      // requirements it was then measured against.
+      const fileFor: Record<string, string> = {
+        'Process narrative': `${sp.prefix} narrative.pdf`,
+        'Control description': `${sp.prefix} control description.pdf`,
+        'Walkthrough': `Walkthrough — ${sp.process}.pdf`,
+        'System configuration': `${sp.prefix} configuration export.pdf`,
+        'Segregation of duties': `${sp.prefix} role assignments.xlsx`,
+      };
       const docs: DesignDoc[] = [
-        doc('Process narrative', `${sp.prefix} narrative.pdf`, designConcluded ? 'Received' : pat === 5 ? 'Received' : 'Requested'),
-        doc('Flowchart', `${sp.prefix} flowchart.pdf`, designConcluded ? 'Received' : 'Requested'),
-        doc('Walkthrough', `Walkthrough — ${sp.process}.pdf`, designConcluded ? 'Received' : pat === 5 ? 'Requested' : 'Missing'),
+        ...requiredKindsFor(docColumnOf({ process: sp.process, nature })).map(kind =>
+          doc(kind, fileFor[kind] ?? `${sp.prefix} ${kind.toLowerCase()}.pdf`,
+            designConcluded ? 'Received' : kind === 'Walkthrough' ? (pat === 5 ? 'Requested' : 'Missing') : pat === 5 ? 'Received' : 'Requested')),
+        // Optional, and only where it is a thing this class has at all — it
+        // strengthens the file without gating the conclusion.
+        ...(docColumnOf({ process: sp.process, nature }) === 'ITGC' ? [] : [doc('Flowchart', `${sp.prefix} flowchart.pdf`, designConcluded ? 'Received' : 'Requested')]),
       ];
       const points: DesignPoint[] = [point('Control addresses the stated risk and assertion.', designConcluded ? 'Pass' : 'Not tested'), point('Control operates at sufficient precision.', designConcluded ? 'Pass' : 'Not tested')];
       const evidenced = operating === 'Effective';
@@ -835,7 +857,7 @@ function generate(): Control[] {
         id: `${sp.prefix}-C-${String(idx + 1).padStart(2, '0')}`, wpRef: `${sp.wp}-${String(idx + 1).padStart(2, '0')}`,
         description: desc + '.', process: sp.process, subProcess: sp.subs[i % sp.subs.length],
         nature, type: i % 3 === 0 ? 'Detective' : 'Preventive', frequency: nature === 'Automated' ? 'Recurring' : (['Daily', 'Monthly', 'Quarterly'] as const)[i % 3],
-        isKey: i % 4 !== 0, clazz: classOf(sp.process, `${title} ${desc}`), precision: `${title} — operates to prevent or detect the risk at transaction level.`,
+        isKey: i % 4 !== 0, clazz, precision: `${title} — operates to prevent or detect the risk at transaction level.`,
         // The rating tracks the key judgement: the row that isn't key is the one
         // whose failure the group can absorb, so it sizes at the bottom of the band.
         riskRating: (i % 4 === 0 ? 'Low' : i % 3 === 0 ? 'Medium' : 'High') as RiskRating,
@@ -1002,6 +1024,10 @@ const ENGAGEMENT: IcfrEngagement = {
   // engagement's own reviewer signed — never the same person (#22).
   samplingMethodology: {
     ...defaultSamplingMethodology(),
+    // Spread so each company a control answers for gets items of its own — the
+    // seeded draws were dealt that way, and a methodology that did not ask for
+    // it would not explain the samples already on the controls.
+    spread: ['entity'],
     proposedBy: { by: 'A. Mehta', at: '2 Apr' },
     reviewer: { by: REVIEWER, at: '3 Apr' },
   },
@@ -1093,16 +1119,10 @@ function libraryRunHistory(controls: Control[]): RunRecord[] {
   return runs;
 }
 
-/** Every seeded audit, on every SOX engagement, samples the same way (A28): at
- *  random, spread so each company a control answers for gets items of its own.
- *  Draws already on the seeded controls stay exactly as they were — only a new
- *  draw follows it. */
-const SEEDED_SAMPLING: AuditSampling = { method: 'Random', spread: ['entity'] };
-
 /**
  * The cycles this engagement has run — the engagement Overview's primary content.
  *
- * Three, across two fiscal years, and each one earns its place:
+ * Two, across two fiscal years, and each one earns its place:
  *
  *   CY 2025 · year-end     concluded, and ARCHIVED. Its conclusions and the two
  *                          deficiencies it raised survive as a snapshot, which is
@@ -1111,12 +1131,14 @@ const SEEDED_SAMPLING: AuditSampling = { method: 'Random', spread: ['entity'] };
  *                          controls. First in the array, because the array is
  *                          newest-created-first and the live audit is the newest
  *                          unarchived record (see liveAuditId).
- *   CY 2026 · roll-forward  planned, P2P + O2C only. Nothing tested under it yet.
+ *
+ * No planned rounds: an audit that exists is the one being tested, and the next
+ * one starts only once the running one is signed by both hands. (A planned
+ * CY 2026 roll-forward used to sit here and opened onto the live interim's
+ * results — removed 1 Oct 2026.)
  *
  * What that shape demonstrates: two-year grouping, a coverage timeline with
- * Oct–Dec 2026 visibly uncovered, a Treasury control that appears in two audits
- * (test once, rely many), prior-year deficiencies to carry forward, and the
- * materiality check reading ✓ because both CY 2026 rounds share ₹12 Cr.
+ * Jul–Dec 2026 visibly uncovered, and prior-year deficiencies to carry forward.
  *
  * Scoped by RACM rather than by entity so the record needs no entity lookup —
  * the entities live in another store.
@@ -1131,8 +1153,71 @@ function libraryAudits(processes: string[], controls: Control[]): AuditRecord[] 
   // ITS conclusions, not this cycle's: two controls failed and were remediated.
   const priorScope = controls.filter(c => first.includes(c.process));
   const failedIds = priorScope.slice(0, 2).map(c => c.id);
+
+  // ── CY 2025's own matrix ───────────────────────────────────────────────────
+  // From the second year onward the first question asked of a process is "what
+  // changed?", and it can only be answered against a record of what the matrix
+  // said before. So the prior cycle archives its register, not just its results.
+  //
+  // Seeded with real movement in it, because a comparison that finds nothing
+  // demonstrates nothing. Four kinds, one of each:
+  //
+  //   arrived   one control in this year's register did not exist in CY 2025
+  //   retired   one control CY 2025 had and this year's SOP no longer describes
+  //   changed   four rows whose wording, owner, frequency or key status moved
+  //   the rest  untouched, so the changes stand out rather than drown
+  //
+  // The control that arrived this year is also absent from the prior
+  // CONCLUSIONS below: a control that did not exist cannot have been tested.
+  const arrived = priorScope[2];
+  const priorTested = priorScope.filter(c => c.id !== arrived?.id);
+
+  /** One realistic year-on-year movement each, by position in the register.
+   *  Every one is written to differ from whatever this year holds rather than
+   *  to a fixed value, so the seed cannot quietly stop demonstrating anything
+   *  when the register underneath it is edited. */
+  const priorEdits: ((row: ArchivedRacmRow) => ArchivedRacmRow)[] = [
+    // Ran quarterly last year; the SOP has it monthly now.
+    row => ({ ...row, frequency: row.frequency === 'Quarterly' ? 'Monthly' : 'Quarterly' }),
+    // Owned by someone who has since left.
+    row => ({ ...row, owner: row.owner === 'K. Raghavan' ? 'S. Menon' : 'K. Raghavan' }),
+    // Same control, reworded when the SOP was rewritten — the commonest change
+    // of all, and the one a reader is least likely to spot unaided.
+    row => ({ ...row, controlActivity: row.controlActivity ? `${row.controlActivity} The reviewer initials the printed report and files it with the pack.` : row.controlActivity }),
+    // Not a key control last year; this year's scoping made it one.
+    row => ({ ...row, isKey: !row.isKey }),
+  ];
+
+  const priorRacm: ArchivedRacmRow[] = [
+    ...priorTested.map((c, i) => (priorEdits[i] ?? ((r: ArchivedRacmRow) => r))(racmRowOf(c))),
+    // The control that left. A manual call-back retired once the ERP began
+    // enforcing the bank detail itself — a good reason, and exactly the kind of
+    // change that should still be seen and signed for rather than noticed a
+    // year later. This is the case the whole comparison exists for.
+    {
+      controlId: 'CY25-C-RETIRED',
+      wpRef: 'WP-CY25-R01',
+      process: first[0]!,
+      subProcess: 'Vendor master',
+      riskId: priorTested[0]?.riskId ?? 'R-001',
+      riskTitle: 'Payment is made to a bank account the vendor does not own.',
+      description: 'Vendor bank details are confirmed by call-back before the first payment.',
+      controlActivity: 'Before a new vendor is paid, the accounts payable clerk telephones the vendor on the number held in the approved vendor file — never a number supplied with the invoice — and reads back the account details for confirmation. The call is logged with the date, the name of the person spoken to and the clerk who made it.',
+      objective: 'Money reaches the vendor, and only the vendor.',
+      owner: 'K. Raghavan',
+      nature: 'Manual',
+      type: 'Preventive',
+      frequency: 'Recurring',
+      isKey: true,
+      clazz: 'Fraud',
+      entity: priorTested[0]?.entity,
+      assertions: ['Existence / Occurrence'],
+    },
+  ];
+
   const archive: AuditArchive = {
-    conclusions: priorScope.map(c => ({
+    racm: priorRacm,
+    conclusions: priorTested.map(c => ({
       controlId: c.id,
       wpRef: c.wpRef,
       process: c.process,
@@ -1141,8 +1226,8 @@ function libraryAudits(processes: string[], controls: Control[]): AuditRecord[] 
       operating: failedIds.includes(c.id) ? ('Ineffective' as const) : ('Effective' as const),
       conclusion: failedIds.includes(c.id) ? ('Ineffective' as const) : ('Effective' as const),
     })),
-    // One was verified on retest, one is still open — which is exactly the split
-    // the continuity section exists to show. Next year's audit starts here.
+    // One was closed and signed off, one is still open — which is exactly the
+    // split the continuity section exists to show. Next year's audit starts here.
     deficiencies: failedIds.map((controlId, i) => ({
       id: `def-cy25-0${i + 1}`,
       controlId,
@@ -1156,7 +1241,10 @@ function libraryAudits(processes: string[], controls: Control[]): AuditRecord[] 
         : 'Quarterly reconciliation for Q3 was signed a month after the close deadline.',
       rootCause: i === 0 ? 'Approval matrix not enforced in the payment run.' : 'No calendar reminder on the close checklist.',
       likelihood: 'Reasonably possible' as const,
-      magnitude: i === 0 ? 4.2 : 1.1,
+      // ₹ Cr written as rupees. These read '4.2' and '1.1' and meant ₹4.2 Cr
+      // and ₹1.1 Cr — but the field is whole rupees everywhere else, so the
+      // engine saw four rupees and graded both Clearly Trivial.
+      magnitude: i === 0 ? 42_000_000 : 11_000_000,
       mwIndicators: [],
       aggregationGroup: first[i % first.length]!,
       remediation: {
@@ -1165,7 +1253,11 @@ function libraryAudits(processes: string[], controls: Control[]): AuditRecord[] 
         owner: 'R. Iyer',
         status: 'Done' as const,
       },
-      status: (i === 0 ? 'Closed' : 'Retest') as ExceptionStatus,
+      // The second one's fix is in with its proof and the reviewer has not signed
+      // it off — which is where an unfinished remediation sits now that the retest
+      // step is gone (30 Sep). Its recorded retest verdict is kept: this cycle
+      // closed before the change, and an archive reports what it reported.
+      status: (i === 0 ? 'Closed' : 'Awaiting reviewer') as ExceptionStatus,
       retest: i === 0 ? { result: 'Pass' as const, at: '12 Dec 2025', by: 'A. Mehta' } : undefined,
       severity: 'Significant Deficiency' as Severity,
     })),
@@ -1178,25 +1270,15 @@ function libraryAudits(processes: string[], controls: Control[]): AuditRecord[] 
       periodSpan: 'Jan 2026 – Dec 2026', round: 'interim', windowFrom: '2026-01-01', windowTo: '2026-06-30',
       scopeKind: 'racm', scopeNames: processes, scopeIds: [],
       files: [{ name: 'altura-group-tb-2026.xlsx', kind: 'tb' }, { name: 'altura-group-gl-2026.csv', kind: 'gl' }],
-      materiality: { basisLabel, benchmark: 240, pct: 5 }, overall: 12, sampling: SEEDED_SAMPLING,
+      materiality: { basisLabel, benchmark: 240, pct: 5 }, overall: 12,
       by: 'A. Mehta', role: 'auditor', at: '02 Jan 2026',
-    },
-    {
-      id: 'audit-cy26-rf', period: 'CY 2026', yearBasis: 'cy', fiscalYear: 2026,
-      periodSpan: 'Jan 2026 – Dec 2026', round: 'rollforward', windowFrom: '2026-07-01', windowTo: '2026-09-30',
-      scopeKind: 'racm', scopeNames: first, scopeIds: [],
-      // Same threshold as the interim round on purpose: one opinion, one ruler.
-      // The consistency check on the engagement Overview is reading these two.
-      files: [], materiality: { basisLabel, benchmark: 240, pct: 5 }, overall: 12, sampling: SEEDED_SAMPLING,
-      rolledFromId: 'audit-cy26-interim',
-      by: 'A. Mehta', role: 'auditor', at: '04 Jul 2026',
     },
     {
       id: 'audit-cy25', period: 'CY 2025', yearBasis: 'cy', fiscalYear: 2025,
       periodSpan: 'Jan 2025 – Dec 2025', round: 'yearend', windowFrom: '2025-10-01', windowTo: '2025-12-31',
       scopeKind: 'racm', scopeNames: first, scopeIds: [],
       files: [{ name: 'altura-group-tb-2025.xlsx', kind: 'tb' }],
-      materiality: { basisLabel, benchmark: 210, pct: 5 }, overall: 10.5, sampling: SEEDED_SAMPLING,
+      materiality: { basisLabel, benchmark: 210, pct: 5 }, overall: 10.5,
       signoff: { preparer: { by: 'A. Mehta', at: '10 Jan 2026' }, reviewer: { by: 'J. Fernandes', at: '12 Jan 2026' }, icfrConclusion: 'Effective' },
       archive,
       by: 'A. Mehta', role: 'auditor', at: '03 Jan 2025',
@@ -1342,8 +1424,8 @@ function alturaPathControl(controls: Control[]): Control[] {
  *   DEF-A-01  Identified       raised, the auditor is still sizing it
  *   DEF-A-02  Rating review    graded, waiting on the reviewer to confirm it
  *   DEF-A-03  Plan review      plan submitted, auditor has not judged it yet
- *   DEF-A-04  Retest           plan accepted, fix in, ONE failed round on the clock
- *   DEF-A-05  Closed           passed its retest and countersigned
+ *   DEF-A-04  Remediation      plan accepted, the rebuild MISSED — back with the owner
+ *   DEF-A-05  Closed           fix accepted and countersigned; its control is owed a retest
  *   DEF-A-06  Planning         the ITGC — rating confirmed, owner writing the plan
  *   DEF-A-07  Identified       PP&E — being sized, and already raised by its group
  *   DEF-A-08  Rating review    PP&E
@@ -1488,7 +1570,14 @@ function alturaDeficiencies(controls: Control[]): Deficiency[] {
       likelihood: 'Probable', magnitude: 132_000_000,
       // An indicator, not a number — this is a control-environment failure, so
       // the compensating-control cap is blocked outright and it stays an MW.
-      mwIndicators: ['Ineffective control environment / oversight'],
+      // The old welded 'Ineffective control environment / oversight' lived HERE,
+      // on one exception, and forced it to Material Weakness. It is a fact about
+      // the company, so it has moved to `entityMwConclusions` on the engagement
+      // (see below) where it makes ICFR not effective without pretending the
+      // weakness belongs to one vendor-master control.
+      // This exception grades Material Weakness on its own arithmetic anyway —
+      // ₹13.2 Cr against ₹12 Cr materiality — so the register reads the same.
+      mwIndicators: [],
       aggregationGroup: 'Procure to Pay',
       // Deliberately NOT confirmed yet — this is the reviewer's gate, waiting.
       remediation: {
@@ -1537,6 +1626,61 @@ function alturaDeficiencies(controls: Control[]): Deficiency[] {
     const cnFailedChecks = creditNotes.design.points
       .filter(p => p.result === 'Fail')
       .map(p => ({ pointId: p.id, text: p.text }));
+
+    // ── The one control in the seed that has been REBUILT ────────────────────
+    // Everything above is v1: credit notes approved per note, which is the design
+    // DEF-A-04 says can never work. The owner's accepted plan moved the threshold
+    // to a rolling monthly total, so on 30 Jun the control itself changed — and a
+    // changed control is a new version, not an edited row (see `ControlVersion`).
+    //
+    // The rebuild then MISSED. The round recorded below reads: the rule groups on
+    // the customer CODE, so one customer under two codes is measured twice and
+    // still clears the threshold. So v2 is what is running now, it is what failed
+    // its own design test, and the exception is back with the OWNER for a third
+    // wording. That is the whole loop this seed exists to show, and the dates line
+    // up with the round's own window (30 Jun → 05 Aug).
+    creditNotes.priorVersions = [{
+      no: 1,
+      description: creditNotes.description,
+      controlActivity: creditNotes.controlActivity,
+      objective: creditNotes.objective,
+      precision: creditNotes.precision,
+      nature: creditNotes.nature,
+      type: creditNotes.type,
+      frequency: creditNotes.frequency,
+      supersededAt: '2026-06-30',
+      // The failed design track, kept whole — this is the finding, and the live
+      // control's own track no longer holds it.
+      design: creditNotes.design,
+      operating: creditNotes.operating,
+      replaced: {
+        defId: 'DEF-A-04', fix: 'redesign',
+        note: 'The approval threshold moved from each note on its own to a rolling monthly total, so a series of small notes to one customer can no longer pass unapproved.',
+        by: 'A. Mehta',
+      },
+    }];
+    // v2 — the control as it now reads, and as it was tested in round 1.
+    creditNotes.description = 'Credit notes are held for approval once a customer\u2019s rolling monthly total passes \u20B92 L.';
+    creditNotes.design = {
+      ...creditNotes.design,
+      // Its OWN elements, not v1's. Two things turn on this. The narrative and the
+      // matrix describing a per-note threshold describe a control that no longer
+      // runs, so the owner resent them with the change ticket — which is what the
+      // fix evidence on the exception is. And the ids have to differ: sharing one
+      // array between the version and the live track would mean the door adding an
+      // element to v2 silently editing v1's concluded paper.
+      documents: creditNotes.design.documents.map(d => ({ ...d, id: `${d.id}-v2`, files: d.files?.map(f => ({ ...f, id: `${f.id}-v2` })) })),
+      // Its own checks, against its own wording — re-suggested rather than carried,
+      // and the first of them is what round 1 found wanting.
+      points: creditNotes.design.points.map((p, i) => (i === 0
+        ? { ...p, text: 'The rolling total is measured against the customer, not against a customer code, so one customer cannot be counted twice.', result: 'Fail' as TestResult }
+        : { ...p, result: 'Pass' as TestResult })),
+      conclusion: 'Ineffective',
+      rationale: 'The rolling monthly total works. The key it groups on does not: a customer set up under a second code is measured twice and clears the threshold with nobody approving it.',
+      testedBy: 'A. Mehta', testedAt: '05 Aug 2026',
+      // A carry is a statement about a control that did not change. This one did.
+      carriedFrom: undefined,
+    };
     // PARKED (C11) — the credit-note sample the round used to carry. A TOD
     // exception has no sample to redraw; kept so the old seed restores whole:
     //   const cnAttrs = creditNotes.operating.steps.map(s => ({ code: s.code, description: s.description }));
@@ -1561,18 +1705,29 @@ function alturaDeficiencies(controls: Control[]): Deficiency[] {
       // The auditor's whole say in the fix: does it address the mechanism? A
       // rolling total measured per customer sees the thing the old threshold
       // could not, so it was accepted and the owner went and built it.
-      planReview: { decision: 'Accepted', reason: 'The rolling monthly total is measured per customer, which is exactly what the per-note threshold could not see. Accepted.', by: 'A. Mehta', at: '20 Jun 2026' },
+      // A REDESIGN, not a workaround: the threshold itself moves, so the control
+      // that comes back is a different control and has to be tested as one. This is
+      // what makes the rebuild below a version rather than an edit.
+      planReview: { decision: 'Accepted', fix: 'redesign', reason: 'The rolling monthly total is measured per customer, which is exactly what the per-note threshold could not see. Accepted.', by: 'A. Mehta', at: '20 Jun 2026' },
       remediation: {
         action: 'Move the approval threshold to a rolling monthly total per customer and hold issue until it is approved.',
-        date: '30 Jun', owner: 'P. Sharma', status: 'Done',
+        // Back to in-progress: what was built did not do what the plan promised,
+        // so the fix is not done. The evidence from the first attempt stays —
+        // it is what the miss was found against, and deleting it would leave the
+        // record saying the rebuild never happened.
+        date: '30 Jun', owner: 'P. Sharma', status: 'In progress',
         evidence: [
           { id: 'cn-ev-1', name: 'Credit note approval rule — rolling monthly total.pdf', kind: 'PDF', uploadedBy: 'P. Sharma', uploadedAt: '30 Jun 2026' },
           { id: 'cn-ev-2', name: 'Change ticket CHG-4471.pdf', kind: 'PDF', uploadedBy: 'P. Sharma', uploadedAt: '30 Jun 2026' },
         ],
       },
-      // One round run and failed, which is the loop this counter exists to show.
-      // The round is never edited: round 2 will be appended alongside it, and
-      // `retests.length` is what the reviewer reads as "how many times now?".
+      // One round run and failed — the record of what the rebuild was tested
+      // against and why it did not hold. HISTORY from 30 Sep: the retest is no
+      // longer a step inside the exception, so nothing appends a round 2 here;
+      // the changed control is tested again on the audit's own timetable instead
+      // (see `Control.retestDue`). The round is kept whole because it is the
+      // sentence that tells the owner what to change, and it still counts toward
+      // "how many times now?" wherever that is asked.
       // The design checks that failed, as they stood when it was raised.
       failedChecks: cnFailedChecks,
       retests: [{
@@ -1589,10 +1744,14 @@ function alturaDeficiencies(controls: Control[]): Deficiency[] {
       }],
       // The latest round's verdict, mirrored for readers that only want the answer.
       retest: { result: 'Fail', at: '05 Aug 2026', by: 'A. Mehta' },
-      // The control is monthly, so a second round needs a full month off the
+      // The control is monthly, so the next look needs a full month off the
       // corrected grouping key — end of September at the earliest.
       expectedRetestReady: '30 Sep 2026',
-      status: 'Retest',
+      // Back in the owner's court. The plan was accepted and what they built was
+      // tested and found wanting, so a third wording is theirs to write — this is
+      // step ④ again, not a step of its own. The old 'Retest' state has gone
+      // (30 Sep): a fix waits on the reviewer, never on a test.
+      status: 'Remediation',
     });
   }
 
@@ -1640,6 +1799,23 @@ function alturaDeficiencies(controls: Control[]): Deficiency[] {
       signoff: { by: 'J. Fernandes', at: '19 Jul 2026' },
       status: 'Closed',
     });
+    // THE CONTROL CHANGED, SO IT IS OWED A RETEST (30 Sep).
+    //
+    // Closing DEF-A-05 accepted the fix and signed it off. It did not prove the
+    // fixed control — the proof of a fix is gathered later, on the audit's own
+    // timetable, once the changed control has had a chance to run. So the close
+    // stamps this flag, and the auditor meets it on the control rather than
+    // inside the finding: in the bell, on the control page, and as a marker in
+    // the Control Library and the register.
+    //
+    // Seeded UNCLEARED, because that is the state worth arriving on. Settling it
+    // is one recorded sentence — the July round on the exception above is exactly
+    // the sort of thing an auditor points at when they write it.
+    disposals.retestDue = {
+      defId: 'DEF-A-05', track: 'operating',
+      note: 'The disposal note now routes to finance on approval instead of travelling with the monthly asset run, so the run that was tested is not the run that happens now.',
+      by: 'J. Fernandes', at: '19 Jul 2026',
+    };
   }
 
   if (privilegedAccess) {
@@ -1949,29 +2125,33 @@ function alturaAwaitingApproval(controls: Control[]): Control[] {
  * Every SOX engagement's Overview is the audit portfolio now, so an engagement
  * with no audits would show its testing nowhere — the work would sit behind an
  * audit that doesn't exist. One year-end round covering everything, holding
- * whatever the seed tested. Status derives itself: an engagement whose controls
- * are untested reads Planned without anything having to say so.
+ * whatever the seed tested. Status derives itself: it reads Active until the
+ * preparer and the reviewer have both signed it.
  */
 function singleAudit(meta: SeedMeta, controls: Control[]): AuditRecord[] {
-  if (!controls.length) return [];
-  const year = Number(/(\d{4})/.exec(meta.periodEnd ?? '')?.[1] ?? new Date().getFullYear());
+  // One engagement = one audit round (5 Oct 2026): every engagement has its one
+  // audit, even before it has controls — there is no audit level left to fall
+  // back to. The round and window come from Create engagement's Basics when it
+  // set them (meta.audit); the older seeds are each one year-end.
+  const a = meta.audit;
+  const year = a?.fiscalYear ?? Number(/(\d{4})/.exec(meta.periodEnd ?? '')?.[1] ?? new Date().getFullYear());
+  const cy = a?.yearBasis === 'cy';
   const processes = Array.from(new Set(controls.map(c => c.process)));
   return [{
-    id: `audit-${meta.id ?? 'eng'}-ye`,
-    period: `FY ${year - 1}-${String(year).slice(-2)}`,
-    yearBasis: 'fy',
+    id: `audit-${meta.id ?? 'eng'}-${a?.round === 'interim' ? 'int' : a?.round === 'rollforward' ? 'rf' : 'ye'}`,
+    period: cy ? `CY ${year}` : `FY ${year - 1}-${String(year).slice(-2)}`,
+    yearBasis: cy ? 'cy' : 'fy',
     fiscalYear: year,
-    periodSpan: `Apr ${year - 1} – Mar ${year}`,
-    round: 'yearend',
-    windowFrom: `${year}-01-01`,
-    windowTo: `${year}-03-31`,
+    periodSpan: cy ? `Jan ${year} – Dec ${year}` : `Apr ${year - 1} – Mar ${year}`,
+    round: a?.round ?? 'yearend',
+    windowFrom: a?.windowFrom ?? `${year}-01-01`,
+    windowTo: a?.windowTo ?? `${year}-03-31`,
     scopeKind: 'racm',
     scopeNames: processes,
     scopeIds: [],
     files: [],
     materiality: { basisLabel: 'Profit before tax (consolidated)', benchmark: 240, pct: 5 },
     overall: 12,
-    sampling: SEEDED_SAMPLING,
     by: meta.owner ?? 'A. Mehta',
     role: 'auditor',
     at: `01 Apr ${year - 1}`,
@@ -2006,7 +2186,6 @@ function signedInterim(meta: SeedMeta, controls: Control[]): AuditRecord[] {
     files: [{ name: `altura-renewables-tb-fy${String(year).slice(-2)}.xlsx`, kind: 'tb' }],
     materiality: { basisLabel: 'Profit before tax (consolidated)', benchmark: 240, pct: 5, pmPct: 75, ctPct: 5 },
     overall: 12,
-    sampling: SEEDED_SAMPLING,
     signoff: {
       preparer: { by: 'A. Mehta', at: `12 Aug ${year - 1}` },
       reviewer: { by: 'J. Fernandes', at: `14 Aug ${year - 1}` },
@@ -2057,7 +2236,8 @@ function rfDemoDeficiencies(controls: Control[]): Deficiency[] {
       ? 'Post-approval edits are not routed back for re-approval.'
       : 'The approval matrix is not enforced in the release run.',
     likelihood: 'Reasonably possible' as const,
-    magnitude: i === 0 ? 3.4 : 1.6,
+    // Rupees, not crores — see the archive seeds above for what this cost.
+    magnitude: i === 0 ? 34_000_000 : 16_000_000,
     mwIndicators: [],
     // Freshly raised — no fix planned yet; that is the roll-forward's opening state.
     remediation: { action: '', date: null, owner: 'R. Iyer', status: 'Open' as const },
@@ -2068,8 +2248,8 @@ function rfDemoDeficiencies(controls: Control[]): Deficiency[] {
 /** Identity carried in from the app-level Engagement record (engagements.ts). */
 export interface SeedMeta { id?: string; code?: string; name?: string; /** The company being audited. Carried because the workspace clones the flagship
   *  seed: without it every engagement inherited the flagship's own company, and
-  *  the audit report — which names the entity in its title and its first table —
-  *  issued under the wrong client. */ entity?: string; process?: string; /** Scoping-derived process list — when present, the workspace seeds one RACM per entry. */ processes?: string[]; /** Testing state for scoping-derived RACMs — see Engagement.soxSeedMode. */ seedMode?: 'fresh' | 'live' | 'carried'; periodStart?: string; periodEnd?: string; owner?: string; materiality?: number; performanceMateriality?: number; clearlyTrivial?: number; sdBandPct?: number; /** Controls copied from the RACM tab when the engagement was created (S11) — when present they are the register, as picked. */ controls?: Control[]; }
+  *  the status report — which names the entity in its title and its first table —
+  *  issued under the wrong client. */ entity?: string; process?: string; /** Scoping-derived process list — when present, the workspace seeds one RACM per entry. */ processes?: string[]; /** Testing state for scoping-derived RACMs — see Engagement.soxSeedMode. */ seedMode?: 'fresh' | 'live' | 'carried'; periodStart?: string; periodEnd?: string; owner?: string; materiality?: number; performanceMateriality?: number; clearlyTrivial?: number; sdBandPct?: number; /** The one audit round this engagement is (5 Oct 2026) — from Engagement.soxAudit. */ audit?: { round: AuditRecord['round']; yearBasis?: 'fy' | 'cy'; fiscalYear?: number; windowFrom?: string; windowTo?: string }; /** The signed interim engagement a year-end / roll-forward carries over from — the store rolls its controls forward at seed time. */ carryFrom?: SeedMeta; /** Controls copied from the RACM tab when the engagement was created (S11) — when present they are the register, as picked. */ controls?: Control[]; /** The sampling approach the lead proposed at creation (#22) — when present it replaces the flagship's agreed one, proposal and all, so the workspace opens on what was just proposed and still waiting to be signed. */ sampling?: SamplingMethodology; }
 
 /** A group is recorded with its listing status attached — "Altura Infra Holdings
  *  Ltd (Listed)" — because that is what the scoping screens key off. A document
@@ -2086,8 +2266,148 @@ const PROC_LABEL: Record<string, string> = { P2P: 'Procure to Pay', O2C: 'Order 
  * engagement's own.
  */
 export function seedIcfrEngagement(meta?: SeedMeta): IcfrEngagement {
-  const eng = withRacmFields(seedEngagementBody(meta));
+  // applyDocRequirements runs BEFORE withConcludedEvidence, not after.
+  //
+  // Several seeds override a control's nature after its documents were derived —
+  // the Fixed Assets capitalisation control is flipped Automated → Manual further
+  // up so it can carry a population — which leaves the document list describing
+  // the class the control used to be. Reconciling here, ahead of the evidence
+  // back-fill, means the kinds that get added are then evidenced like any other,
+  // so a seed that says "design Effective, signed" is actually complete.
+  //
+  // The store re-runs this same pass on every write. This call is not that: it is
+  // so the SEED is honest before anything reads it.
+  const built = withConcludedEvidence(applyDocRequirements(withRacmFields(seedEngagementBody(meta))).eng);
+  // Altura's files have real bytes behind them (see withAlturaEvidence). Last,
+  // so every file the passes above put on file gets its bytes too; before the
+  // rename, because the folders are named by the seed's own ids.
+  const eng = meta?.id === NEW_FLOW_ENGAGEMENT_ID || meta?.id === ALTURA_YE_ENGAGEMENT_ID ? withAlturaEvidence(built) : built;
   return renameEngagementIds(eng, processCodeFor, e => entityCodeFor(e || eng.entity));
+}
+
+/**
+ * REAL FILES BEHIND ALTURA'S EVIDENCE (product owner, 2 Oct).
+ *
+ * Every other seeded file is a record with no bytes, so the evidence viewer can
+ * only say "attached in an earlier session". For FY26 ICFR — Altura Infra Group
+ * each control has a folder of genuine documents under
+ * public/samples/sox-evidence/altura/<seed id>/ — its narrative, control
+ * description, walkthrough, flowchart or configuration export (and, for an
+ * ITGC, the role matrix), plus a TOE evidence pack (PDF) and population extract
+ * (XLSX) listing every sampled item. Each file's text contains the wording
+ * Ira's answers cite, so the viewer finds and boxes the passage rather than
+ * showing a document with nothing marked.
+ *
+ * Only `url` (and `kind`, to match the file actually served) is added — no
+ * status, result, conclusion or file count moves. A TOE file record maps to
+ * the control's pack by its own extension: a spreadsheet to the population
+ * extract, anything else to the PDF pack.
+ *
+ * One more thing a run would have left behind: a design check the seed already
+ * validated never had its elements linked, so its working opened on no file.
+ * Ira links every element with a file to each check it reads (runDesignIra);
+ * the seeded checks get the same links, and nothing else.
+ *
+ * The files are generated, not hand-made — the generator reads this seed
+ * through the app's own helpers, so the values each pack prints are the ones
+ * `documentSystemRows` shows for the same item. Regenerate after changing
+ * Altura's controls, attributes or samples.
+ */
+function withAlturaEvidence(eng: IcfrEngagement): IcfrEngagement {
+  const DESIGN: Partial<Record<DesignDoc['kind'], string>> = {
+    'Process narrative': 'design-process-narrative.pdf',
+    'Control description': 'design-control-description.pdf',
+    'Walkthrough': 'design-walkthrough.pdf',
+    'Flowchart': 'design-flowchart.pdf',
+    'System configuration': 'design-system-configuration.pdf',
+    'Segregation of duties': 'design-segregation-of-duties.xlsx',
+  };
+  const served = (f: EvidenceFile, url: string): EvidenceFile =>
+    ({ ...f, url, kind: url.endsWith('.xlsx') ? 'XLSX' : 'PDF' });
+  return {
+    ...eng,
+    controls: eng.controls.map(c => {
+      const dir = `/samples/sox-evidence/altura/${c.id}/`;
+      const toe = (f: EvidenceFile): EvidenceFile =>
+        served(f, dir + (/\.(xlsx?|csv)$/i.test(f.name) ? 'toe-population.xlsx' : 'toe-evidence-pack.pdf'));
+      const documents = c.design.documents.map(d => {
+        const name = DESIGN[d.kind];
+        return name && d.files?.length ? { ...d, files: d.files.map(f => served(f, dir + name)) } : d;
+      });
+      const onFile = documents.filter(d => d.files?.length).map(d => d.id);
+      return {
+        ...c,
+        design: {
+          ...c.design,
+          documents,
+          points: c.design.points.map(p => (p.validation && !p.evidencedBy?.length && onFile.length ? { ...p, evidencedBy: onFile } : p)),
+        },
+        operating: {
+          ...c.operating,
+          steps: c.operating.steps.map(s => ({
+            ...s,
+            ...(s.inputFile ? { inputFile: toe(s.inputFile) } : {}),
+            ...(s.requiredFiles ? { requiredFiles: s.requiredFiles.map(rf => (rf.file ? { ...rf, file: toe(rf.file) } : rf)) } : {}),
+          })),
+        },
+      };
+    }),
+  };
+}
+
+/** "Signed approval record" on attribute 4.2 -> signed_approval_record_4_2.pdf */
+const evidenceFileName = (label: string, code: string): string =>
+  `${label.toLowerCase().replace(/[^a-z0-9]+/g, '_').replace(/^_|_$/g, '')}_${code.replace(/[^a-zA-Z0-9]+/g, '_')}.pdf`;
+
+/**
+ * The evidence a conclusion the seed already reached would have needed.
+ *
+ * Seeded controls are plain objects. They never pass through `concludeOperating`,
+ * so not one of its guards ever ran against them — and 82 controls arrived TOE
+ * EFFECTIVE, signed, countersigned and locked, while every passing attribute
+ * still read "Required files 0 of 3 uploaded". That is the exact thing
+ * `passedWithoutFiles` exists to forbid: the demo was showing a finished control
+ * the product itself would have refused to let anybody finish.
+ *
+ * So the files a conclusion implies go on file, and nothing else moves. An
+ * attribute that did not pass gets nothing. A design element stays outstanding
+ * unless its own TOD concluded — the half-finished controls are the point of the
+ * seed, and filling those in would trade one lie for another. No result, no
+ * conclusion and no signature is touched anywhere.
+ *
+ * tests/seed-integrity.spec.ts holds this line, by asking of every concluded
+ * control the same question the store asks before it lets you conclude.
+ */
+function withConcludedEvidence(eng: IcfrEngagement): IcfrEngagement {
+  return {
+    ...eng,
+    controls: eng.controls.map(c => {
+      let next = c;
+      // TOE: a Pass the files do not back cannot carry an effective track.
+      if (c.operating.conclusion === 'Effective') {
+        next = { ...next, operating: { ...next.operating, steps: next.operating.steps.map(s => {
+          if (stepResult(s) !== 'Pass' || requiredFilesReady(s, c)) return s;
+          return { ...s, requiredFiles: requiredFilesOf(s, c).map(rf => rf.file ? rf : {
+            ...rf, file: file(evidenceFileName(rf.label, s.code), c.owner),
+          }) };
+        }) } };
+      }
+      // TOD: the conclude footer locks while a required element is neither
+      // evidenced nor waived, so an effective design cannot have one open.
+      if (c.design.conclusion === 'Effective') {
+        next = { ...next, design: { ...next.design, documents: next.design.documents.map(d => (
+          // Only a REQUIRED element is force-evidenced. This read `d.required === false`,
+          // the legacy per-element flag, which is undefined on anything the class table
+          // added — so an element the control does not even have was handed a file.
+          docRequirement(next, d) !== 'Required' || d.status === 'Received' || d.waiver ? d : {
+            ...d, status: 'Received' as DocStatus, uploadedBy: 'Risk Owner', at: '12 Apr',
+            files: [{ id: `ddf-${d.id}`, name: d.name, kind: (d.name.toLowerCase().endsWith('.xlsx') ? 'XLSX' : 'PDF') as EvidenceFile['kind'], uploadedBy: 'Risk Owner', uploadedAt: '12 Apr' }],
+          }
+        )) } };
+      }
+      return next;
+    }),
+  };
 }
 
 /**
@@ -2125,6 +2445,15 @@ function seedEngagementBody(meta?: SeedMeta): IcfrEngagement {
   if (meta?.performanceMateriality) base.performanceMateriality = meta.performanceMateriality;
   if (meta?.clearlyTrivial != null) base.rules.clearlyTrivial = meta.clearlyTrivial;
   if (meta?.sdBandPct) base.rules.sdBandPct = meta.sdBandPct;
+  // The flagship's table came with the reviewer's signature already on it, and a
+  // clone of that would tell a brand-new engagement its sampling had been agreed
+  // before anyone looked at it. So a proposal made at creation replaces the whole
+  // record: the signature comes off, because it is the reviewer's to give, and
+  // the revision history starts empty, because nothing has been revised (#22).
+  if (meta?.sampling) {
+    base.samplingMethodology = { ...structuredClone(meta.sampling), reviewer: undefined };
+    base.samplingLog = [];
+  }
   // No meta, or the flagship engagement → the fully-populated demo, with identity overlaid.
   if (!meta || !meta.id || meta.id === 'eng-1') {
     if (meta) {
@@ -2156,13 +2485,24 @@ function seedEngagementBody(meta?: SeedMeta): IcfrEngagement {
   // deeper seed: varied attribute counts, partial workflow mapping, a real run
   // history and the audits those cycles ran under. Every other engagement is
   // seeded exactly as before. See `rich` on racmTemplateForProcesses.
-  const rich = meta.id === NEW_FLOW_ENGAGEMENT_ID;
+  // Altura's CY 2025 year-end (split out, 5 Oct 2026) is built off the same seed.
+  const rich = meta.id === NEW_FLOW_ENGAGEMENT_ID || meta.id === ALTURA_YE_ENGAGEMENT_ID;
   // Picked from the RACM tab at creation (S11): the copies the engagement took,
   // already carrying their companies and IDs.
   const picked = meta.controls ? structuredClone(meta.controls) : null;
+  // Both branches build through the SAME builder (25 Sep). `racmTemplate` alone
+  // returns bare shells — `design: designTrack('Not tested', [], [])` — so the
+  // classic single-process engagements (ENG-002 O2C, ENG-010 R2R) arrived with
+  // no design elements, no attributes and no design checks: a Test of Design
+  // step with nothing in it to test, and a Test of Operating Effectiveness with
+  // nothing to sample. That is not a "fresh" state, it is an empty one, and it
+  // made those two engagements the only SOX engagements a walkthrough could not
+  // be started in. Scoping-derived engagements already got the full body from
+  // racmTemplateForProcesses; routing the default through it gives the classic
+  // ones the same register, untested, which is what fresh should mean.
   const built = picked ?? (meta.processes
     ? (meta.processes.length ? racmTemplateForProcesses(meta.processes, meta.seedMode, rich) : [])
-    : racmTemplate(proc));
+    : racmTemplateForProcesses([proc], meta.seedMode, rich));
   // Every control gets the company it is performed at, plus — where its process
   // reaches further — the companies its one conclusion answers for. One row per
   // control either way. Only Altura's scoping actually spans companies today, so
@@ -2209,7 +2549,9 @@ function seedEngagementBody(meta?: SeedMeta): IcfrEngagement {
   // fails five of the controls those runs concluded on, and a run record states
   // the outcome as it stood when it ran, so re-reading it here would be wrong.
   // Every other engagement stays clean, as before.
-  const deficiencies = rich ? alturaDeficiencies(controls) : rfDemo ? rfDemoDeficiencies(controls) : [];
+  // The split-out CY 2025 year-end's findings live on its archive — this
+  // year's open ones belong to the CY 2026 interim, not to it.
+  const deficiencies = meta.id === ALTURA_YE_ENGAGEMENT_ID ? [] : rich ? alturaDeficiencies(controls) : rfDemo ? rfDemoDeficiencies(controls) : [];
   // A blocked control, not a finding — see alturaUnableToTest. Altura only, like
   // the findings above; every other engagement stays clean.
   if (rich) alturaUnableToTest(controls);
@@ -2217,7 +2559,11 @@ function seedEngagementBody(meta?: SeedMeta): IcfrEngagement {
   // two), so every concluded TOD is approved on arrival — except the one Altura
   // control alturaAwaitingApproval left waiting.
   controls = withDesignApprovals(controls, meta.owner ?? base.preparer, base.reviewer);
+  // One engagement = one round (5 Oct 2026): Altura's two rounds are two
+  // engagements now — the running CY 2026 interim (SOX-104) and the signed,
+  // archived CY 2025 year-end (SOX-103) — each holding only its own audit.
   const audits = rich ? libraryAudits(meta.processes ?? [], controls)
+      .filter(a => (meta.id === ALTURA_YE_ENGAGEMENT_ID ? a.round === 'yearend' : a.round === 'interim'))
     // The roll-forward demo — a countersigned interim instead of the open
     // year-end every other engagement gets. See signedInterim.
     : meta.id === 'eng-sox-rf' ? signedInterim(meta, controls)
@@ -2243,14 +2589,23 @@ function seedEngagementBody(meta?: SeedMeta): IcfrEngagement {
     preparer: meta.owner ?? base.preparer,
     controls,
     deficiencies,
+    // The company-level indicator that used to be stapled to DEF-A-02. It is a
+    // fact about Altura, not about one vendor-master control, and this is where
+    // it makes ICFR not effective on its own. Altura only — this is the
+    // engagement that demonstrates the adverse road.
+    entityMwConclusions: rich ? [{
+      id: 'control-environment' as const, present: true,
+      basis: 'Segregation is enforced by convention rather than by the system across the purchase-to-pay estate; three of the five exceptions this year turn on the same absent separation.',
+      by: 'A. Mehta', at: '14 Feb 2026',
+    }] : undefined,
     tasks: [],
     discussions: [],
-    reviewNotes: rich ? alturaReviewNotes(controls) : [],
+    reviewNotes: rich && meta.id !== ALTURA_YE_ENGAGEMENT_ID ? alturaReviewNotes(controls) : [],
     executions: [],
     runs,
     // Every SOX engagement has at least one audit now: the Overview IS the audit
     // portfolio, so testing that belongs to no audit would be testing with no
-    // home. Altura has run three rounds across two years; the rest have one.
+    // home. Altura has run two rounds across two years; the rest have one.
     audits,
     signoff: {},
     rulesLog: [],
@@ -2496,10 +2851,25 @@ export function racmTemplateForProcesses(names: string[], mode: 'fresh' | 'live'
       // no Population step, no IPE test and no Sample. The fresh one is Manual.
       const nature: Nature = i % 3 === 1 && !last ? 'Automated' : 'Manual';
       const title = c.description.replace(/\.$/, '');
+      // The elements this class of control actually has, off DOC_REQUIREMENTS —
+      // the same shape `generate()` uses. It was a hardcoded three (narrative,
+      // flowchart, walkthrough) for every nature and every process, which is why
+      // 40 live-mode controls concluded design Effective and then read 33–67%
+      // complete the moment applyDocRequirements added the kinds they were short
+      // of. `carried` mode concludes off the same array and had the same defect.
+      const col = docColumnOf({ process: name, nature });
+      const fileFor: Partial<Record<DesignDoc['kind'], string>> = {
+        'Process narrative': `${name} narrative.pdf`,
+        'Control description': `${name} control description.pdf`,
+        'Walkthrough': `Walkthrough — ${name}.pdf`,
+        'System configuration': `${name} configuration export.pdf`,
+        'Segregation of duties': `${name} role assignments.xlsx`,
+      };
       const docs: DesignDoc[] = [
-        doc('Process narrative', `${name} narrative.pdf`, 'Received'),
-        doc('Flowchart', `${name} flowchart.pdf`, 'Received'),
-        doc('Walkthrough', `Walkthrough — ${name}.pdf`, designDone ? 'Received' : 'Requested'),
+        ...requiredKindsFor(col).map(kind => doc(kind, fileFor[kind] ?? `${name} ${kind.toLowerCase()}.pdf`,
+          kind === 'Walkthrough' ? (designDone ? 'Received' : 'Requested') : 'Received')),
+        // Optional, and only where the class has one at all.
+        ...(col === 'ITGC' ? [] : [doc('Flowchart', `${name} flowchart.pdf`, 'Received')]),
       ];
       // How many attributes this control carries, and how many of them a
       // workflow evidences. An automated control is fully instrumented; a manual

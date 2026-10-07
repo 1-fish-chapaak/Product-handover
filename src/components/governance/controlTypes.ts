@@ -6,7 +6,16 @@ export interface ControlRow {
   name: string;
   description: string;
   objective: string;
-  businessProcess: 'P2P' | 'O2C' | 'R2R' | 'ITGC' | 'S2C';
+  businessProcess: 'P2P' | 'O2C' | 'R2R' | 'ITGC' | 'S2C' | 'INV';
+  /** Standard library controls ship with every account (their workflow is
+   *  preloaded and adapted to the client's data); everything else is the
+   *  client's own. Omitted = 'custom'. */
+  library?: 'standard' | 'custom';
+  /** Standard library only — the catalog key the control comes from. */
+  stdKey?: string;
+  /** Control-level test attributes — what testing checks, how it passes or
+   *  fails, and the evidence it needs. Shown even before a workflow is linked. */
+  attributes?: TestAttribute[];
   subProcess: string;
   classification: 'Key' | 'Non-Key';
   nature: 'Preventive' | 'Detective' | 'Corrective';
@@ -24,7 +33,7 @@ export interface ControlRow {
 }
 
 export const BP_COLORS: Record<string, string> = {
-  P2P: '#6a12cd', O2C: '#0284c7', R2R: '#d97706', ITGC: '#16a34a', S2C: '#8b5cf6',
+  P2P: '#6a12cd', O2C: '#0284c7', R2R: '#d97706', ITGC: '#16a34a', S2C: '#8b5cf6', INV: '#0f766e',
 };
 
 export const AUTOMATION_STYLES: Record<string, { bg: string; text: string }> = {

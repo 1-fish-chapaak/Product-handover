@@ -66,7 +66,9 @@ test('reworked SOX engagement shows the four tabs, and deficiencies as a drill-i
 
   // Deficiency management lost its tab but not its page: the Overview's
   // severity rail still drills in, under a breadcrumb instead of the tab bar.
-  const rail = page.getByRole('button', { name: /still working through remediation|Manage deficiencies/ }).first();
+  // The rail's wording lost its middle rung on 30 Sep — the journey it names is
+  // "plan → fix → close" now that the retest happens on the control instead.
+  const rail = page.getByRole('button', { name: /still working through plan|Manage deficiencies/ }).first();
   if (await rail.count() > 0) {
     await rail.click();
     await page.waitForTimeout(700);

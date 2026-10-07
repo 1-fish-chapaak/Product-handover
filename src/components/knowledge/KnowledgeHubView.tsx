@@ -6,9 +6,8 @@ import DataSourcesView, {
 } from '../data-sources/DataSourcesView';
 import SmartLearnView from './SmartLearnView';
 import FloatingLines from '../shared/FloatingLines';
-import OneClickAuditModal from '../one-click-audit/OneClickAuditModal';
-import { SEED } from '../data-sources/sources';
 import { MEMORY_STORE } from '../../data/memoryStore';
+import { connectedDatabaseCount } from '../../hooks/useKnowledgeSources';
 
 type TabId = 'data' | 'learn';
 const TABS: { id: TabId; label: string; icon: React.ElementType }[] = [
@@ -89,8 +88,7 @@ export default function KnowledgeHubView({ initialTab = 'data', focusMemoryId = 
   // back).
   const [detailOpen, setDetailOpen] = useState(false);
   // One-Click Audit modal — surfaced because integrated DBs are connected.
-  const [auditWithAiOpen, setAuditWithAiOpen] = useState(false);
-  const connectedDbs = SEED.filter(s => s.type === 'database').length;
+  const connectedDbs = connectedDatabaseCount();
   // Tab-aware subhead. Data Sources speaks to the live catalog; Smart Learn
   // to the memory registry it now hosts.
   const ira = <span className="font-medium text-brand-700">IRA</span>;
@@ -198,8 +196,9 @@ export default function KnowledgeHubView({ initialTab = 'data', focusMemoryId = 
             >
               {/* Audit with AI — recommended banner. Shown because integrated DB
                   sources are connected; opens the One-Click Audit wizard. Hidden
-                  while a source detail takes over the page. */}
-              {!detailOpen && (
+                  while a source detail takes over the page, and until a database
+                  is connected — a new client has nothing for it to plan from. */}
+              {!detailOpen && connectedDbs > 0 && (
                 <motion.div
                   initial={{ opacity: 0, y: 6 }}
                   animate={{ opacity: 1, y: 0 }}
@@ -227,17 +226,19 @@ export default function KnowledgeHubView({ initialTab = 'data', focusMemoryId = 
                         <span className="px-1.5 h-[18px] inline-flex items-center rounded-full bg-fuchsia-400/25 text-fuchsia-100 text-[9px] font-bold uppercase tracking-[0.1em]">Recommended</span>
                       </div>
                       <p className="text-[0.75rem] text-white/65 truncate">
-                        {connectedDbs} databases connected — Ira can draft engagements, controls & workflows from your live data in one click.
+                        {connectedDbs} database{connectedDbs === 1 ? '' : 's'} connected — Ira can draft engagements, controls & workflows from your live data in one click.
                       </p>
                     </div>
                   </div>
                   <button
                     type="button"
-                    onClick={() => setAuditWithAiOpen(true)}
+                    // The One-Click modal is retired — Audit with AI is a full
+                    // page under the Workflow Builder now.
+                    onClick={() => window.dispatchEvent(new CustomEvent('app:navigate-view', { detail: { view: 'audit-with-ai' } }))}
                     className="relative shrink-0 h-9 px-4 rounded-lg bg-white text-brand-800 hover:bg-brand-50 text-[0.8125rem] font-semibold flex items-center gap-1.5 cursor-pointer transition-colors shadow-[0_4px_14px_-4px_rgba(0,0,0,0.4)]"
                   >
                     <Zap size={13} />
-                    One-Click Audit
+                    Plan my audit
                     <ArrowRight size={13} />
                   </button>
                 </motion.div>
@@ -260,9 +261,6 @@ export default function KnowledgeHubView({ initialTab = 'data', focusMemoryId = 
         </AnimatePresence>
       </div>
 
-      <AnimatePresence>
-        {auditWithAiOpen && <OneClickAuditModal onClose={() => setAuditWithAiOpen(false)} />}
-      </AnimatePresence>
     </div>
   );
 }

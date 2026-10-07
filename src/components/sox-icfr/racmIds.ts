@@ -243,8 +243,17 @@ const PROCESS_CODES = new Map<string, string>();
 const ENTITY_CODES = new Map<string, string>();
 const nameKey = (name: string) => name.trim().toLowerCase();
 
-function codeFor(register: Map<string, string>, name: string, suggest: (n: string) => string, drop: Set<string>, keep = true): string {
-  const key = nameKey(name);
+/** A company's register key: the name without its legal suffix or bracketed
+ *  note. "Altura Infra Holdings Ltd (Listed)", "Altura Infra Holdings Ltd" and
+ *  "Altura Infra Holdings Limited" are one company, so they hold one code —
+ *  otherwise the second spelling found AIH taken and a RACM upload numbered the
+ *  same company ALT while the seed and SOP extraction numbered it AIH (5 Oct). */
+const entityKey = (entity: string) => words(entity, LEGAL_WORDS).join(' ').toLowerCase() || nameKey(entity);
+/** True when two spellings name the same company for code purposes. */
+export const sameEntityName = (a: string, b: string) => entityKey(a) === entityKey(b);
+
+function codeFor(register: Map<string, string>, name: string, suggest: (n: string) => string, drop: Set<string>, keep = true, keyOf: (n: string) => string = nameKey): string {
+  const key = keyOf(name);
   const had = register.get(key);
   if (had) return had;
   const base = suggest(name);
@@ -266,12 +275,12 @@ const processName = (process: string) => PROCESS_ALIASES[nameKey(process)] ?? pr
 /** The process's code — the one it already has, else a new unique one. */
 export const processCodeFor = (process: string) => codeFor(PROCESS_CODES, processName(process), suggestProcessCode, FILLER_WORDS);
 /** The company's code — the one it already has, else a new unique one. */
-export const entityCodeFor = (entity: string) => codeFor(ENTITY_CODES, entity, suggestEntityCode, LEGAL_WORDS);
+export const entityCodeFor = (entity: string) => codeFor(ENTITY_CODES, entity, suggestEntityCode, LEGAL_WORDS, true, entityKey);
 
 /** The code a name has or would get — without giving it one. For previews
  *  that change as someone types. */
 export const peekProcessCode = (process: string) => codeFor(PROCESS_CODES, processName(process), suggestProcessCode, FILLER_WORDS, false);
-export const peekEntityCode = (entity: string) => codeFor(ENTITY_CODES, entity, suggestEntityCode, LEGAL_WORDS, false);
+export const peekEntityCode = (entity: string) => codeFor(ENTITY_CODES, entity, suggestEntityCode, LEGAL_WORDS, false, entityKey);
 
 /** Which other process already uses this code (lower-cased name), if any. */
 export const processCodeTakenBy = (code: string, process: string) => {
@@ -281,7 +290,7 @@ export const processCodeTakenBy = (code: string, process: string) => {
 /** Which other company already uses this code (lower-cased name), if any. */
 export const entityCodeTakenBy = (code: string, entity: string) => {
   const owner = ownerOf(ENTITY_CODES, code);
-  return owner && owner !== nameKey(entity) ? owner : undefined;
+  return owner && owner !== entityKey(entity) ? owner : undefined;
 };
 
 /** Record an edited code. Refused (false) when another name holds it. */
@@ -292,6 +301,6 @@ export function setProcessCode(process: string, code: string): boolean {
 }
 export function setEntityCode(entity: string, code: string): boolean {
   if (!CODE_OK(code) || entityCodeTakenBy(code, entity)) return false;
-  ENTITY_CODES.set(nameKey(entity), code);
+  ENTITY_CODES.set(entityKey(entity), code);
   return true;
 }

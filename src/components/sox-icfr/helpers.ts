@@ -1,18 +1,32 @@
 import { riskCategoryOf } from './racmImport';
-import { DEFAULT_SAMPLE_SIZES, defaultSamplingMethodology, isInquiryOnly, ipeReliable, GRADE_RANK, AUDIT_SAMPLE_SPREADS, DEFAULT_AUDIT_SAMPLING, TESTING_STRATEGIES } from './types';
-import type {
-  AuditorProofKind, AuditSampleSpread, AuditSampling, Conclusion, Control, Court, Deficiency, DesignDoc, DesignDocKind, DesignTrack, ExceptionGrade, HandoffTask, IcfrEngagement,
+import { DEFAULT_SAMPLE_SIZES, defaultSamplingMethodology, isInquiryOnly, ipeReliable, GRADE_RANK, sortGapKinds, SAMPLING_SPREADS, TESTING_STRATEGIES, DOC_REQUIREMENTS, GAP_KIND_LABEL } from './types';
+import type { DesignGapKind,
+  AuditorProofKind, Conclusion, Control, Court, Deficiency, DesignDoc, EntityMwConclusion, DesignDocKind, DesignTrack, ExceptionGrade, HandoffTask, IcfrEngagement,
+  DesignDocRequirement, DocClassColumn,
   FileOrigin, IpeCheck, Likelihood, MaterialityRules, OperatingTrack, Population, PopulationBasis, PopulationSource, ReviewNote, RiskRating, Role,
-  Sample, SamplingMethodology, Severity, TestingStrategy, ToeRound, TrackConclusion, DeficiencyGroup, ExceptionStatus,
-  ControlType, Nature,
+  Sample, SamplingMethod, SamplingMethodology, SamplingSpread, Severity, TestingStrategy, ToeRound, TrackConclusion, DeficiencyGroup, ExceptionStatus,
+  ControlType, Nature, ArchivedRacmRow, ExecutionEvent, DocStatus, ControlVersion,
 } from './types';
 
 // ─── Severity (handbook §9.5) ────────────────────────────────────────────────────
 
 
 /** What a control's deterministic demo numbers hash — the id it was seeded
- *  under, so the S11 ID rename moves nothing. See Control.seedKey. */
-export const seedKeyOf = (c: { id: string; seedKey?: string }): string => c.seedKey ?? c.id;
+ *  under, so the S11 ID rename moves nothing. See Control.seedKey.
+ *
+ *  THE VERSION IS PART OF THE KEY. A rebuilt control is a different control, and it
+ *  must not draw the same population: fifteen derived values hang off this one
+ *  string — the instance refs and amounts, the month-by-month shape, the sample
+ *  dates, the narrowed count — and a v2 that hashed identically to v1 would show
+ *  the auditor the same hundred invoices and call them a fresh test.
+ *
+ *  Appended only when there ARE prior versions, which is load-bearing rather than
+ *  tidy: it keeps v1 byte-identical to what every seeded fixture, archived paper
+ *  and committed screenshot already shows. */
+export const seedKeyOf = (c: { id: string; seedKey?: string; priorVersions?: unknown[] }): string => {
+  const base = c.seedKey ?? c.id;
+  return c.priorVersions?.length ? `${base}·v${c.priorVersions.length + 1}` : base;
+};
 
 export function isReasonablyPossible(l: Likelihood): boolean { return l !== 'Remote'; }
 // ─── PARKED (Sep 2026) — the three-grade severity calculator ─────────────────────
@@ -44,8 +58,10 @@ export function isClearlyTrivial(magnitude: number, rules: MaterialityRules): bo
 // exception — capBlocked says why a chosen control had no effect.
 export const SEVERITY_RANK: Record<Severity, number> = { Deficiency: 0, 'Significant Deficiency': 1, 'Material Weakness': 2 };
 export interface SeverityAssessment {
-  raw: ExceptionGrade;
-  final: ExceptionGrade;
+  /** Both `null` while the exception is unsized — there is no grade to shorten.
+   *  See `ExceptionGradeResult.grade`. */
+  raw: ExceptionGrade | null;
+  final: ExceptionGrade | null;
   capped: boolean;
   capBlocked?: 'not-effective' | 'mw-indicator';
   bumped?: boolean;   // prudent-official judgment raised the grade above the math
@@ -95,9 +111,18 @@ export interface GradeStep {
 }
 
 export interface ExceptionGradeResult {
-  grade: ExceptionGrade;
-  /** Where rule 5's ladder landed, before cap, aggregation or judgment. */
-  ladderGrade: ExceptionGrade;
+  /**
+   * `null` when the exception has not been sized — see `Deficiency.magnitude`.
+   *
+   * Nullable rather than a stand-in grade, because every grade in the union is
+   * a claim about the exception and there is no honest one to make yet. It also
+   * puts the compiler to work: every reader of a grade now has to say what it
+   * shows when there is none, which is the whole point of the change.
+   */
+  grade: ExceptionGrade | null;
+  /** Where rule 5's ladder landed, before cap, aggregation or judgment.
+   *  `null` alongside `grade` when the ladder was never reached. */
+  ladderGrade: ExceptionGrade | null;
   working: GradeStep[];
   cap?: { from: ExceptionGrade; to: ExceptionGrade; by: string };
   capBlocked?: 'not-effective' | 'mw-indicator' | 'none-chosen';
@@ -172,7 +197,16 @@ export function joinsNoDerivedGroup(d: Deficiency, eng: IcfrEngagement): boolean
  *  trivial never aggregates — the de-minimis rule stopped it before aggregation
  *  was reached — and a closed one has been remediated. */
 export const aggregable = (d: Deficiency, eng: IcfrEngagement): boolean =>
-  d.status !== 'Closed' && !isClearlyTrivial(d.magnitude, eng.rules);
+  // An unsized exception STAYS IN. It is not trivial — nobody has said what it
+  // is — and dropping it would hide it from the group that should be asking
+  // about it. It contributes no figure (see `combinedExposure`), which makes
+  // the total provisional rather than smaller, and the group says so.
+  d.status !== 'Closed' && (d.magnitude === null || !isClearlyTrivial(d.magnitude, eng.rules));
+
+/** Members of a group nobody has sized. A total missing a member is not a
+ *  total, and the screen has to be able to name which ones are missing. */
+export const unsizedIn = (members: Deficiency[]): Deficiency[] =>
+  members.filter(d => d.magnitude === null);
 
 /** The keys this exception groups on. */
 export function groupKeysFor(d: Deficiency, eng: IcfrEngagement): { kind: 'account' | 'root cause'; key: string; name: string }[] {
@@ -237,6 +271,10 @@ export function combinedExposure(members: Deficiency[], eng: IcfrEngagement): { 
     // Unplaceable figures each get a partition of their own, keyed so they can
     // never merge with anything — including each other.
     const key = id ?? `\u0000unplaced:${d.id}:${i}`;
+    // An unsized member contributes nothing and makes the total unprovable —
+    // the same hole `unverified` already exists to declare. Silently adding 0
+    // would hand back a number that looks complete and is not.
+    if (d.magnitude === null) { unverified = true; return; }
     partitions.set(key, Math.max(partitions.get(key) ?? 0, d.magnitude));
   });
   return { total: Array.from(partitions.values()).reduce((a, b) => a + b, 0), unverified };
@@ -362,7 +400,7 @@ export function gradeException(d: Deficiency, eng: IcfrEngagement, ownGradeOnly 
     working.push({ n: 2, rule: 'Compensating control', fired: false, detail: 'No cap available — an indicator cannot be argued down by another control.' });
     return { grade: 'Material Weakness', ladderGrade: 'Material Weakness', working, capBlocked: d.compensatingControlId ? 'mw-indicator' : undefined };
   }
-  working.push({ n: 1, rule: 'MW indicator', fired: false, detail: 'None recorded on this exception.' });
+  working.push({ n: 1, rule: 'MW indicator', fired: false, detail: 'None recorded on this deficiency.' });
 
   // ── 2 ── is a cap available, and does it actually stand up?
   let capValid = false;
@@ -377,8 +415,23 @@ export function gradeException(d: Deficiency, eng: IcfrEngagement, ownGradeOnly 
       working.push({ n: 2, rule: 'Compensating control', fired: false, detail: `${d.compensatingControlId} is not concluded effective in this engagement, so it caps nothing.` });
     } else {
       capValid = true;
-      working.push({ n: 2, rule: 'Compensating control', fired: true, detail: `${d.compensatingControlId} is tested effective — it can cap a material weakness down to significant, and never clears the exception.` });
+      working.push({ n: 2, rule: 'Compensating control', fired: true, detail: `${d.compensatingControlId} is tested effective — it can cap a material weakness down to significant, and never clears the deficiency.` });
     }
+  }
+
+  // ── not sized ── the question has not been answered, so there is no answer.
+  //
+  // AFTER rule 1 and rule 2 on purpose. An indicator is a material weakness
+  // "whatever the amount", so it settles an unsized exception exactly as it
+  // settles a sized one — refusing to grade there would lose a finding the
+  // standard says is already made. Everything BELOW this line reads the figure,
+  // and a figure nobody entered is not a small figure.
+  if (d.magnitude === null) {
+    working.push({
+      n: 3, rule: 'Exposure', fired: true,
+      detail: 'Not sized yet — nothing below this can be evaluated. Enter what could have slipped through, or record nil with a reason.',
+    });
+    return { grade: null, ladderGrade: null, working, capBlocked };
   }
 
   // ── 3 ── below the de-minimis line nothing further is evaluated.
@@ -408,7 +461,7 @@ export function gradeException(d: Deficiency, eng: IcfrEngagement, ownGradeOnly 
   if (capValid && grade === 'Material Weakness') {
     cap = { from: grade, to: 'Significant Deficiency', by: d.compensatingControlId! };
     grade = 'Significant Deficiency';
-    working.push({ n: 2, rule: 'Compensating control — applied', fired: true, detail: `Capped from Material Weakness to Significant Deficiency by ${d.compensatingControlId}. The exception stands.` });
+    working.push({ n: 2, rule: 'Compensating control — applied', fired: true, detail: `Capped from Material Weakness to Significant Deficiency by ${d.compensatingControlId}. The deficiency stands.` });
   }
 
   // ── 6 ── individually minor, collectively not.
@@ -421,7 +474,7 @@ export function gradeException(d: Deficiency, eng: IcfrEngagement, ownGradeOnly 
   if (!eng.rules.aggregate) {
     working.push({ n: 6, rule: 'Aggregation', fired: false, detail: 'Switched off in the engagement ground rules.' });
   } else if (ownGradeOnly) {
-    working.push({ n: 6, rule: 'Aggregation', fired: false, detail: 'Not evaluated — this is the exception on its own, which is what its groups are built from.' });
+    working.push({ n: 6, rule: 'Aggregation', fired: false, detail: 'Not evaluated — this is the deficiency on its own, which is what its groups are built from.' });
   } else {
     const groups = groupsFor(d, eng);
     if (groups.length) {
@@ -430,22 +483,29 @@ export function gradeException(d: Deficiency, eng: IcfrEngagement, ownGradeOnly 
       aggregate = { members: worst.members.length, sum: worst.exposure, grade: worst.grade, raised, sharedBy: worst.name };
       working.push({
         n: 6, rule: 'Aggregation', fired: raised,
-        detail: `${worst.members.length} exception${worst.members.length === 1 ? '' : 's'} on ${worst.name} — ${RUPEE(worst.exposure)} together${worst.unverified ? ' (not all of it placed against a population)' : ''} ⇒ ${worst.grade}${raised ? `, which raises this one from ${grade}.` : ', which does not raise it.'}`,
+        detail: `${worst.members.length} deficienc${worst.members.length === 1 ? 'y' : 'ies'} on ${worst.name} — ${RUPEE(worst.exposure)} together${worst.unverified ? ' (not all of it placed against a population)' : ''} ⇒ ${worst.grade}${raised ? `, which raises this one from ${grade}.` : ', which does not raise it.'}`,
       });
       if (raised) grade = worst.grade;
     } else {
-      working.push({ n: 6, rule: 'Aggregation', fired: false, detail: joinsNoDerivedGroup(d, eng) ? 'Not grouped — an MW indicator or an ITGC exception does not aggregate on a line item.' : 'Nothing else hits the same line item, and it is not linked to a root cause.' });
+      working.push({ n: 6, rule: 'Aggregation', fired: false, detail: joinsNoDerivedGroup(d, eng) ? 'Not grouped — an MW indicator or an ITGC deficiency does not aggregate on a line item.' : 'Nothing else hits the same line item, and it is not linked to a root cause.' });
     }
   }
 
   // ── 7 ── judgment, upward only.
   let bumped: ExceptionGradeResult['bumped'];
-  if (d.prudentOverride && GRADE_RANK[d.prudentOverride.to] > GRADE_RANK[grade]) {
+  if (d.prudentOverride?.to && GRADE_RANK[d.prudentOverride.to] > GRADE_RANK[grade]) {
     bumped = { from: grade, to: d.prudentOverride.to, rationale: d.prudentOverride.rationale };
     working.push({ n: 7, rule: 'Prudent official', fired: true, detail: `Raised to ${d.prudentOverride.to} by ${d.prudentOverride.by} — ${d.prudentOverride.rationale}` });
     grade = d.prudentOverride.to;
   } else {
-    working.push({ n: 7, rule: 'Prudent official', fired: false, detail: d.prudentOverride ? 'Recorded, but it does not sit above the calculated grade.' : 'No judgment applied.' });
+    // Three answers, not two. "Considered, and the grade stands" is a judgement
+    // somebody made and signed, and the working says so — it is not the same as
+    // nobody having looked, which is what the old two-branch line implied.
+    working.push({ n: 7, rule: 'Prudent official', fired: false,
+      detail: d.prudentOverride?.to === null
+        ? `Considered — the grade stands. ${d.prudentOverride.by}: “${d.prudentOverride.rationale}”`
+        : d.prudentOverride ? 'Recorded, but it does not sit above the calculated grade.'
+          : 'Not yet considered.' });
   }
 
   return { grade, ladderGrade, working, cap, capBlocked, aggregate, bumped };
@@ -458,12 +518,12 @@ export function gradeException(d: Deficiency, eng: IcfrEngagement, ownGradeOnly 
 // so the threshold helper it needed is gone.)
 
 // ─── No two rungs in a row by the same hands ─────────────────────────────────────
-// A finding travels through eight steps, and at every handoff the point is that
+// A finding travels through seven states, and at every handoff the point is that
 // somebody ELSE looks. Roles alone do not guarantee that: one person can hold two
 // hats, and on a small team usually does. So each rung stamps who did it, and the
 // next one is refused to that name — sized-then-confirmed, submitted-then-judged,
-// fixed-then-retested, retested-then-closed. Checked by NAME for the same reason
-// the own-control prohibition is: changing hats must not change the answer.
+// judged-then-closed. Checked by NAME for the same reason the own-control
+// prohibition is: changing hats must not change the answer.
 //
 // An absent stamp (a finding seeded mid-ladder, or raised before the field
 // existed) reads as "no clash known" rather than blocking — a rule that fires on
@@ -483,8 +543,7 @@ export function courtForException(d: Deficiency): Court {
     case 'Planning': return 'risk-owner';       // ③ writing the plan
     case 'Plan review': return 'auditor';       // ③ judging it against the root cause
     case 'Remediation': return 'risk-owner';    // ④ doing the work
-    case 'Retest': return 'auditor';            // ⑤ retesting the fix
-    case 'Awaiting reviewer': return 'reviewer';// ⑥ reading the evidence and closing
+    case 'Awaiting reviewer': return 'reviewer';// ⑤ reading the evidence and closing
     case 'Closed': return 'none';
   }
 }
@@ -495,6 +554,15 @@ export function rootCauseReady(d: Pick<Deficiency, 'rootCause' | 'iraSuggested'>
   return !!d.rootCause.trim() && !d.iraSuggested?.rootCause;
 }
 
+/** Has the exposure been ANSWERED? The twin of `rootCauseReady`, and the other
+ *  half of what step 2 exists to settle. Nil is an answer; nil without a reason
+ *  is the blank wearing a number's clothes, and is not. */
+export function sizingReady(d: Pick<Deficiency, 'magnitude' | 'magnitudeZeroReason'>): boolean {
+  if (d.magnitude === null) return false;
+  if (d.magnitude === 0) return !!d.magnitudeZeroReason?.trim();
+  return true;
+}
+
 /**
  * Ira's draft root cause, read off what failed — the failed design checks for a
  * TOD exception, the failed attributes, the items they failed on and the notes
@@ -502,6 +570,45 @@ export function rootCauseReady(d: Pick<Deficiency, 'rootCause' | 'iraSuggested'>
  * points at, not the count, and quotes the evidence it came from. null when
  * nothing failed that it could read (an unable-to-test exception).
  */
+/** Which of the six design-gap kinds a failed design check is describing.
+ *
+ *  Matched on the check's WORDING, not its id, because a design check is free text:
+ *  the library seeds most of them but an auditor can write their own, and two
+ *  auditors write the segregation check five different ways. The patterns below are
+ *  deliberately about the idea, not the library's exact sentence.
+ *
+ *  'no-control' is never matched. It is the one kind that is a judgement about the
+ *  whole control rather than about any single check — "there is a row here, but
+ *  nothing in the process does this" — so the auditor states it by hand or not at
+ *  all. Returning it from a regex would put words in their mouth. */
+const GAP_KIND_PATTERNS: [RegExp, DesignGapKind][] = [
+  [/independent of|segregat|separation of dut|same person|performs? (it|the control) and (also )?(approv|review)|prepares? what it checks/i, 'sod'],
+  [/threshold|toleran|precision|\blimit\b|materiality of the check|how close/i, 'precision'],
+  [/point in the process|where the error|before it (is |gets )?post|after the fact|upstream|downstream|sits after|too late in/i, 'placement'],
+  [/complete population|routes? around|bypass|circumvent|work(s|ed)? around|every transaction passes/i, 'bypassable'],
+  [/often enough|frequen(cy|t enough)|between runs|once a (year|quarter) is not/i, 'frequency'],
+];
+
+export function suggestGapKind(c: Control): { kinds: DesignGapKind[]; reason: string } | null {
+  // EVERY failed check, not the first. This returned on the first pattern that
+  // matched and silently dropped the rest, so a control failing both the
+  // threshold check and the placement check was recorded as one of the two,
+  // picked by the order of `design.points`. That was a defect before the field
+  // could even hold two.
+  const failed = c.design.points.filter(p => (p.override?.result ?? p.result) === 'Fail').map(p => p.text);
+  const hits: { kind: DesignGapKind; text: string }[] = [];
+  for (const text of failed) {
+    const hit = GAP_KIND_PATTERNS.find(([re]) => re.test(text));
+    if (hit && !hits.some(h => h.kind === hit[1])) hits.push({ kind: hit[1], text });
+  }
+  if (!hits.length) return null;
+  const quoted = hits.map(h => `"${h.text.replace(/[.\s]+$/, '')}"`);
+  return {
+    kinds: sortGapKinds(hits.map(h => h.kind)),
+    reason: `from the failed design check${hits.length > 1 ? 's' : ''} ${quoted.length > 1 ? `${quoted.slice(0, -1).join(', ')} and ${quoted[quoted.length - 1]}` : quoted[0]}`,
+  };
+}
+
 export function suggestRootCause(
   c: Control, track: 'design' | 'operating', failedSamples: string[], onSecondRound: boolean,
 ): { text: string; reason: string } | null {
@@ -607,8 +714,7 @@ export function exceptionCourtDetail(d: Deficiency, eng: IcfrEngagement): { who:
     : d.status === 'Planning' ? (d.planReview?.decision === 'Rejected' ? 'rewriting the plan' : 'writing the plan')
     : d.status === 'Plan review' ? 'checking the plan against the root cause'
     : d.status === 'Remediation' ? 'implementing the fix and attaching evidence'
-    : d.status === 'Retest' ? (d.track === 'design' ? 're-checking the failed design checks against the fix' : 'retesting on a post-fix sample')
-    : d.status === 'Awaiting reviewer' ? 'reading the retest evidence and closing'
+    : d.status === 'Awaiting reviewer' ? 'reading the fix evidence and closing'
     : 'closed';
   return { who: court === 'none' ? (d.signoff?.by ?? who) : who, doing };
 }
@@ -617,6 +723,11 @@ export function exceptionCourtDetail(d: Deficiency, eng: IcfrEngagement): { who:
 // A repaired control has to RUN before it can be sampled again — you cannot retest
 // a monthly control the week after it was fixed and call the result evidence. The
 // wait comes off the control's own frequency.
+//
+// This is the arithmetic behind the whole reason the retest left the exception
+// flow (30 Sep): the fix is agreed now and the proof of it is gathered when there
+// is something to gather. Closing an exception raises `Control.retestDue`, and
+// this says when the auditor can honestly answer it.
 
 export const OPERATING_PERIOD: Record<Frequency, { months: number | null; label: string }> = {
   Daily: { months: 1, label: 'about a month of daily runs' },
@@ -650,6 +761,16 @@ export interface RetestReadiness {
   needsManualDate: boolean;
   /** Annual — it cannot produce another occurrence inside this period at all. */
   neverThisPeriod: boolean;
+  /** DESIGN track: the retest needs no occurrence. A design is re-checked against
+   *  the fix evidence, so it is ready the day the fix lands — the operating
+   *  frequency is the wrong clock for it and this says so. */
+  retestNeedsNoRun: boolean;
+  /** DESIGN track, the clock that DOES matter: a redesigned control is a NEW
+   *  control, and it has to run before anyone can test how it operates. This is
+   *  when that first operating test becomes possible, and whether it lands after
+   *  the books close — the "a Q4 design deficiency cannot close this year" rule.
+   *  Absent on the operating track, where the retest itself is the sample. */
+  firstOperating?: { label: string; reason: string; beyondPeriodEnd: boolean };
 }
 
 /** A period end written as 'Dec 2026' means the END of December, not the 1st.
@@ -662,16 +783,182 @@ function parsePeriodEnd(label: string): Date | null {
   return hasDay ? d : new Date(d.getFullYear(), d.getMonth() + 1, 0, 23, 59, 59);
 }
 
+/** Rewriting the control, versioning the RACM row and re-running the design test,
+ *  before the rebuilt control has run even once. One month, deliberately coarse:
+ *  the answer this drives is "this year or not", and half-month precision would
+ *  only invite an argument about the wrong thing. */
+const REDESIGN_LEAD_MONTHS = 1;
+
+export interface RemediationRunway {
+  /** Whole days from today to period end. Negative once the books have closed. */
+  daysLeft: number;
+  /** Months the whole chain needs — the rebuild, then an operating period. Null
+   *  when the control cannot produce a testable occurrence this period at all. */
+  monthsNeeded: number | null;
+  /** When a first operating test could finish if the rebuild started today. */
+  earliest: Date | null;
+  verdict: 'fits' | 'tight' | 'cannot-close';
+  /** The sentence for the panel, written for the auditor rather than about the
+   *  computation. */
+  line: string;
+}
+
+/**
+ * HOW MUCH OF THE YEAR IS LEFT — asked while the exception is being SIZED.
+ *
+ * Fixing a design failure is a long chain: redesign, version the RACM row, a
+ * fresh design test, then a period during which the rebuilt control actually
+ * runs, then a first operating test. Two to three months at the fast end. If
+ * year end is close the control cannot be concluded effective as at year end
+ * however good the plan is — and that changes what the plan can honestly
+ * promise, which is why it belongs beside the sizing rather than after the plan
+ * is written.
+ *
+ * NOT a second copy of `retestReadiness.firstOperating`. That clock starts at
+ * `remediation.date`, so it is silent through the whole of sizing — there is no
+ * plan and no date yet — and on every Daily/Weekly/Monthly/Quarterly control it
+ * reads "not at risk" for want of a date to count from. This one starts TODAY
+ * and asks whether the chain could finish even if the owner began this
+ * afternoon. Same table, same period-end parse, so the line shown at sizing and
+ * the verdict reached at sign-off cannot disagree.
+ *
+ * Design track only: on the operating track the retest IS the sample, and
+ * `retestReadiness` is already the whole answer.
+ */
+/**
+ * CAN THIS DESIGN EXCEPTION BE CLOSED? — and if not, why not.
+ *
+ * A design failure means the control was built wrong and could never have
+ * worked. Fixing it makes a NEW control, and a new control has not been watched
+ * operating just because its design re-check passed. Closing on the design
+ * alone says "this works now" on the strength of reading it, which is exactly
+ * the evidence a design test is not.
+ *
+ * Two things this refuses, both of which were closable:
+ *
+ *   A REDESIGN WHOSE NEW VERSION CANNOT BE WATCHED IN TIME. `versionCollapse`
+ *   already computes that verdict — 'ineffective-carries' — and it was read by
+ *   the working paper and the control page and by nothing that could act on it.
+ *   Closing there files a finding as fixed in a year that never saw it run.
+ *
+ *   A WORKAROUND CLOSED AS IF IT WERE A REBUILD. `workaround` leaves the control
+ *   itself untouched — `PLAN_FIX_HINT` says so — so the design that failed is
+ *   still the design. The retest re-reads the OLD failed checks against a new
+ *   manual step beside it, which is worth knowing and is not the same as the
+ *   flaw being gone. It closes, but it is named for what it is.
+ *
+ * Returns null when there is nothing to say — the operating track, or a design
+ * exception that has earned its close.
+ */
+export function designCloseBlock(d: Deficiency, c: Control | undefined, eng: IcfrEngagement): {
+  blocks: boolean; reason: string;
+} | null {
+  if (d.track !== 'design') return null;
+  const fix = d.planReview?.fix;
+
+  if (fix === 'redesign') {
+    const collapse = c ? versionCollapse(eng, c) : null;
+    if (collapse?.outcome === 'ineffective-carries') {
+      return {
+        blocks: true,
+        reason: `The rebuilt control cannot run enough times to be tested before ${eng.periodEnd}, so nothing this year shows it operating. The design is not the problem — the absence of a period to test it in is. This finding carries to the next cycle rather than closing in this one.`,
+      };
+    }
+    return null;
+  }
+
+  if (fix === 'workaround') {
+    return {
+      blocks: false,
+      reason: 'Closed on a workaround: the control itself was not rebuilt, so the design that failed is still the design. What was re-checked is the manual step put beside it.',
+    };
+  }
+  return null;
+}
+
+export function remediationRunway(
+  d: Deficiency, c: Control | undefined, periodEnd: string, today: Date = new Date(),
+): RemediationRunway | null {
+  if (d.track !== 'design') return null;
+  const end = parsePeriodEnd(periodEnd);
+  if (!end) return null;
+
+  const period = OPERATING_PERIOD[c?.frequency ?? 'Monthly'];
+  const daysLeft = Math.ceil((end.getTime() - today.getTime()) / 86_400_000);
+  const monthsNeeded = period.months === null ? null : REDESIGN_LEAD_MONTHS + period.months;
+
+  let earliest: Date | null = null;
+  if (monthsNeeded !== null) {
+    earliest = new Date(today);
+    earliest.setMonth(earliest.getMonth() + monthsNeeded);
+  }
+
+  const verdict: RemediationRunway['verdict'] =
+    earliest === null || earliest > end ? 'cannot-close'
+      : Math.ceil((end.getTime() - earliest.getTime()) / 86_400_000) <= 30 ? 'tight'
+        : 'fits';
+
+  const endLabel = shortDate(end);
+  const line =
+    monthsNeeded === null
+      ? `Too late to close this year. ${period.label[0]!.toUpperCase()}${period.label.slice(1)}, so a rebuilt version cannot be watched operating before the year ends on ${endLabel} — this finding carries forward however quickly the redesign lands.`
+      : verdict === 'cannot-close'
+        ? `Too late to close this year. Even starting the rebuild today, the control would not have run long enough to test until ${shortDate(earliest!)} — after the year ends on ${endLabel}. Whatever the plan promises, this cannot be signed off as working this year.`
+        : verdict === 'tight'
+          ? `Only just enough time. Starting now, the control could be tested by ${shortDate(earliest!)}, ${Math.ceil((end.getTime() - earliest!.getTime()) / 86_400_000)} days before the year ends on ${endLabel} — any slip and it stays open.`
+          : `There is time. Starting now, the control could be tested by ${shortDate(earliest!)}, comfortably before the year ends on ${endLabel}.`;
+
+  return { daysLeft, monthsNeeded, earliest, verdict, line };
+}
+
 export function retestReadiness(d: Deficiency, c: Control | undefined, periodEnd: string): RetestReadiness {
   const period = OPERATING_PERIOD[c?.frequency ?? 'Monthly'];
   const end = parsePeriodEnd(periodEnd);
   const fixed = parseLooseDate(d.remediation.date);
+  const base = { needsManualDate: false, neverThisPeriod: false, retestNeedsNoRun: false };
+
+  // ── The design track has a different clock, and used to be given the wrong one.
+  //
+  // A TOD retest re-reads the design checks against the fix — there is no sample
+  // in it at all — so it needs no occurrence and is ready the day the fix lands.
+  // This line used to tell a design exception "Retestable from {fix
+  // date + three to four monthly closes}", and on an Annual control "Not retestable
+  // this period", both counted off an operating frequency that has nothing to do
+  // with re-reading a design. Both were false.
+  //
+  // What the operating frequency DOES govern on this track is the question after
+  // it: a redesigned control is a new control, and nobody can test how it operates
+  // until it has run. That is the year-end rule — a design gap found late cannot
+  // finish its first operating test before the books close, however fast the
+  // redesign lands — and it is reported as a second clock rather than as the
+  // retest's own date, because the two are genuinely different dates.
+  if (d.track === 'design') {
+    const ran = fixed && period.months !== null ? (() => { const r = new Date(fixed); r.setMonth(r.getMonth() + period.months!); return r; })() : null;
+    const opBeyond = !!end && (!!ran ? ran > end : period.months === null);
+    const firstOperating = {
+      label: ran ? shortDate(ran) : period.months === null ? 'Not this period' : 'Once the fix has a date',
+      reason: ran
+        ? `The redesigned control has to run before anyone can test how it operates: ${shortDate(fixed!)} plus ${period.label}.${opBeyond ? ` That is after period end (${periodEnd}) — the new control cannot finish a first operating test this year, so this deficiency carries forward however quickly the redesign lands.` : ''}`
+        : period.months === null
+          ? `The control ${c?.frequency === 'Annual' ? 'runs once a year' : 'has no fixed rhythm'}, so a redesigned version cannot produce a testable occurrence before ${periodEnd}. The design can still be re-checked now — it is the operating test that carries forward.`
+          : `The wait is ${period.label} from the day the fix lands, and the plan has no date yet.`,
+      beyondPeriodEnd: opBeyond,
+    };
+    return {
+      ...base, retestNeedsNoRun: true, firstOperating,
+      date: fixed ?? null,
+      beyondPeriodEnd: false,       // the DESIGN re-check is never the thing that runs out of time
+      label: fixed ? shortDate(fixed) : 'As soon as the fix lands',
+      reason: `A design retest re-reads the failed design checks against the fix — it needs no occurrence of the control, so there is nothing to wait for.${fixed ? '' : ' The plan has no fix date yet.'}`,
+    };
+  }
 
   // Stated by the auditor — it wins over the arithmetic wherever it exists.
   const stated = parseLooseDate(d.expectedRetestReady);
   if (stated) {
     return {
-      date: stated, beyondPeriodEnd: !!end && stated > end, needsManualDate: false, neverThisPeriod: false,
+      ...base,
+      date: stated, beyondPeriodEnd: !!end && stated > end,
       label: shortDate(stated),
       reason: `Set by the auditor rather than counted off the frequency.${end && stated > end ? ` That lands after period end (${periodEnd}).` : ''}`,
     };
@@ -679,7 +966,7 @@ export function retestReadiness(d: Deficiency, c: Control | undefined, periodEnd
 
   if (c?.frequency === 'Annual') {
     return {
-      date: null, beyondPeriodEnd: true, needsManualDate: false, neverThisPeriod: true,
+      ...base, neverThisPeriod: true, date: null, beyondPeriodEnd: true,
       label: 'Not retestable this period',
       reason: `It ${period.label}. Whatever is fixed now, there is no second occurrence to sample before ${periodEnd} — this carries forward.`,
     };
@@ -687,7 +974,7 @@ export function retestReadiness(d: Deficiency, c: Control | undefined, periodEnd
 
   if (c?.frequency === 'Ad-hoc') {
     return {
-      date: null, beyondPeriodEnd: false, needsManualDate: true, neverThisPeriod: false,
+      ...base, needsManualDate: true, date: null, beyondPeriodEnd: false,
       label: 'Auditor to set',
       reason: 'The control runs when it runs — there is no frequency to count forward from, so the expected date has to be stated.',
     };
@@ -695,7 +982,7 @@ export function retestReadiness(d: Deficiency, c: Control | undefined, periodEnd
 
   if (!fixed || period.months === null) {
     return {
-      date: null, beyondPeriodEnd: false, needsManualDate: false, neverThisPeriod: false,
+      ...base, date: null, beyondPeriodEnd: false,
       label: 'Once the fix has a date',
       reason: `The wait is ${period.label}, counted from the day the fix lands. The plan has no date yet.`,
     };
@@ -705,7 +992,7 @@ export function retestReadiness(d: Deficiency, c: Control | undefined, periodEnd
   ready.setMonth(ready.getMonth() + period.months);
   const beyond = !!end && ready > end;
   return {
-    date: ready, beyondPeriodEnd: beyond, needsManualDate: false, neverThisPeriod: false,
+    ...base, date: ready, beyondPeriodEnd: beyond,
     label: shortDate(ready),
     reason: `Fixed ${shortDate(fixed)} plus ${period.label}.${beyond ? ` That lands after period end (${periodEnd}) — there will be no testable sample in time.` : ''}`,
   };
@@ -718,17 +1005,239 @@ export function retestAtRisk(eng: IcfrEngagement): { d: Deficiency; readiness: R
   return eng.deficiencies
     .filter(d => d.status !== 'Closed')
     .map(d => ({ d, readiness: retestReadiness(d, eng.controls.find(c => c.id === d.controlId), eng.periodEnd) }))
-    .filter(x => x.readiness.beyondPeriodEnd);
+    // Either clock running out counts. A design exception's own re-check is never
+    // late — it needs no occurrence — but the redesigned control's FIRST operating
+    // test can land after the books close, and that is the one a partner needs to
+    // see before the year is over. Filtering on `beyondPeriodEnd` alone would drop
+    // every design gap out of this list precisely when it matters most.
+    .filter(x => x.readiness.beyondPeriodEnd || !!x.readiness.firstOperating?.beyondPeriodEnd);
 }
 
 /** The design checks a TOD retest re-checks — the ones whose failure raised the
  *  exception, never a list written for the retest. First answer wins:
- *    · a round already started or run — every round re-checks the same list;
+ *    · a round already started or run — only ever a record raised back when the
+ *      retest was a step in this flow, and every round re-checked the same list;
  *    · the list stamped on the exception when it was raised;
  *    · the control's design checks reading Fail now — for an exception raised
  *      before the stamp existed;
  *    · every design check on the control — a design exception that never isolated
  *      a failing check (never evidenced) has nothing narrower to re-check. */
+// ─── Control versions ─────────────────────────────────────────────────────────────
+// A failed design test is answered by rebuilding the control, not by re-reading the
+// same one — see `ControlVersion`. These are the reads; `recordNewVersion` in the
+// store is the one write.
+
+/** THE LIVE VERSION'S NUMBER. Never stored: a control with no prior versions is on
+ *  v1, and each superseded version pushes the live one up by one. */
+export function versionNo(c: Control): number {
+  return (c.priorVersions?.length ?? 0) + 1;
+}
+
+/** Whether this control has ever been rebuilt — the test every version-aware
+ *  surface makes first, so an ordinary control shows no version furniture at all. */
+export function hasVersions(c: Control): boolean {
+  return !!c.priorVersions?.length;
+}
+
+/** EVERY VERSION THIS EXCEPTION HAS PRODUCED, oldest first.
+ *
+ *  Plural, because one finding can produce more than one: a rebuild that misses is
+ *  sent back to the owner and rebuilt again, and each attempt is a version of the
+ *  control that genuinely ran for a while. Matched on the exception rather than on
+ *  position — a control can also carry versions raised by a different finding. */
+export function versionsFor(c: Control, defId: string): ControlVersion[] {
+  return (c.priorVersions ?? []).filter(v => v.replaced.defId === defId);
+}
+
+/** The LATEST version this exception produced. Deliberately the last rather than
+ *  the first: on a twice-rebuilt control the first is two attempts out of date, and
+ *  every screen asking this question means "what did they build most recently". */
+export function versionFrom(c: Control, defId: string): ControlVersion | undefined {
+  const all = versionsFor(c, defId);
+  return all[all.length - 1];
+}
+
+/** A DESIGN EXCEPTION WITH NOTHING YET TO TEST.
+ *
+ *  Its plan was accepted as a redesign, the owner has submitted the fix, and the
+ *  rebuilt control has not been recorded — so there is no wording to test that the
+ *  auditor has not already concluded on.
+ *
+ *  Counted against the RETEST ROUNDS rather than simply asking whether any version
+ *  exists, because a rebuild could miss: round 1 fails, the exception goes back to
+ *  the owner, they rebuild a second time — and the auditor has to record that
+ *  second rebuild too. One version per round run, and the step asks for the next
+ *  one whenever the count has fallen behind:
+ *
+ *    first arrival        0 versions, 0 rounds  ⇒ asks
+ *    version recorded     1 version,  0 rounds  ⇒ does not ask
+ *    round 1 failed       1 version,  1 round   ⇒ asks again
+ *
+ *  SINCE THE RETEST LEFT THE FLOW (30 Sep) only the first two rows can occur —
+ *  nothing writes `retests` any more, so the count is always nil and this reads
+ *  "no version recorded yet". That is the same answer it always gave on a live
+ *  exception, and the third row stays because a record from an earlier year can
+ *  still carry rounds. A second rebuild is now the auditor's own act on the
+ *  control (`recordNewVersion`), not something a failed round demands.
+ *
+ *  A workaround never gets here: it leaves the control as it was, so what would be
+ *  re-checked is the old checks read again against the new compensating step. */
+export function awaitsNewVersion(c: Control, d: Deficiency): boolean {
+  return d.track === 'design'
+    && d.planReview?.decision === 'Accepted'
+    && d.planReview.fix === 'redesign'
+    && versionsFor(c, d.id).length <= (d.retests?.length ?? 0);
+}
+
+/** WHERE A REBUILT CONTROL LANDS — the collapse rule.
+ *
+ *  A control that failed its design test and was rebuilt has two results on the
+ *  record, and the year needs one. The rule the product follows:
+ *
+ *    the new version ran long enough to be tested  ⇒  EFFECTIVE, with the earlier
+ *                                                     failure disclosed
+ *    it did not                                    ⇒  INEFFECTIVE, and the finding
+ *                                                     carries forward
+ *
+ *  "Ran long enough" is deliberately NOT re-derived here. It is read off the same
+ *  `firstOperating` clock the exception card already shows the auditor — "the
+ *  redesigned control has to run before anyone can test how it operates" — so the
+ *  warning raised in November and the verdict reached in March can never disagree
+ *  about the same control. One clock, two screens.
+ *
+ *  Returns null on a control that was never rebuilt: there is nothing to collapse,
+ *  and `controlConclusion` is the whole answer.
+ *
+ *  NOT a replacement for `controlConclusion`, which stays the live version's own
+ *  verdict and is what every register, meter and rollup reads. This is the sentence
+ *  the sign-off step and the working paper need on top of it. */
+export type VersionOutcome = 'effective-disclosed' | 'ineffective-carries' | 'rebuild-failed' | 'in-progress';
+export interface VersionCollapse {
+  /** The live version's number, and the one it replaced. */
+  no: number;
+  prior: ControlVersion;
+  outcome: VersionOutcome;
+  /** One line for the paper and the sign-off step. */
+  verdict: string;
+  reason: string;
+  /** The earlier failure, stated — what a reader of the conclusion is entitled to
+   *  see beside it, and the reason 'Effective' is not the whole truth on its own. */
+  disclosure: string;
+}
+export function versionCollapse(eng: IcfrEngagement, c: Control): VersionCollapse | null {
+  const prior = c.priorVersions?.[c.priorVersions.length - 1];
+  if (!prior) return null;
+  const no = versionNo(c);
+  const def = eng.deficiencies.find(d => d.id === prior.replaced.defId);
+  // The clock: can this rebuild finish a first operating test before the books
+  // close? `firstOperating` is absent on an operating-track exception, and this
+  // version can only have come from a design one.
+  const late = !!(def && retestReadiness(def, c, eng.periodEnd).firstOperating?.beyondPeriodEnd);
+  const d = trackResult(c.design);
+  const o = trackResult(c.operating);
+  const disclosure = `v${prior.no} was concluded ${prior.design.conclusion.toLowerCase()} on its design${def ? ` (${def.id}${def.gapKinds?.length ? ` — ${def.gapKinds.map(k => GAP_KIND_LABEL[k]).join(', ')}` : ''})` : ''}, and superseded on ${formatDueDate(prior.supersededAt)}. v${no} is the control from that day: ${prior.replaced.note}`;
+
+  // The rebuild failed as well. Nothing to collapse — the finding is live, on a
+  // second wording, and the ladder treats it as the more serious thing it is.
+  if (d === 'Ineffective' || o === 'Ineffective') {
+    return {
+      no, prior, outcome: 'rebuild-failed', disclosure,
+      verdict: 'Ineffective — the rebuilt control failed too',
+      reason: `v${no} was tested on its own terms and did not hold either. Two versions of this control have now failed, which is what the severity is assessed against rather than one.`,
+    };
+  }
+
+  // It cannot be operating-tested in time. The design may be sound; the year has
+  // no evidence that it WORKS, and an effective conclusion would be asserting one.
+  if (late) {
+    return {
+      no, prior, outcome: 'ineffective-carries', disclosure,
+      verdict: 'Ineffective — carries forward',
+      reason: `The rebuilt control cannot produce enough occurrences to test before ${eng.periodEnd}, so nothing this year shows it operating. The design is not the problem — the absence of a period to test it in is, and that is why the finding travels to the next cycle instead of closing in this one.`,
+    };
+  }
+
+  if (d === 'Effective' && (o === 'Effective' || !operatingApplies(eng, c))) {
+    return {
+      no, prior, outcome: 'effective-disclosed', disclosure,
+      verdict: 'Effective — with the earlier failure disclosed',
+      reason: `v${no} was designed and tested from ${formatDueDate(prior.supersededAt)} and holds. The conclusion is about the control as it now runs; the version it replaced failed, and that stays on the paper rather than being absorbed into this verdict.`,
+    };
+  }
+
+  return {
+    no, prior, outcome: 'in-progress', disclosure,
+    verdict: 'Not concluded yet',
+    reason: `v${no} is still being tested. It has a period it can be tested in — the verdict follows the work.`,
+  };
+}
+
+/** THE WINDOW ONE VERSION WAS THE CONTROL — the dates its population and its
+ *  sample have to come from, and the reason a version is a recorded event.
+ *
+ *  A version's START is not stored (see `ControlVersion.supersededAt`): it is the
+ *  previous version being superseded, or the start of the audit window for v1.
+ *  A version's END is the day the NEXT one went live, or the end of the window for
+ *  the live one. Both ends are then clamped to the audit's own window — a control
+ *  rebuilt in a prior year is not being tested from that year, and a version live
+ *  today is not tested past period end.
+ *
+ *  This is the ONE place a version's dates come from. The population's filter, the
+ *  draw and the coverage check all read it, so what a control's population SHOWS
+ *  and what the sample is drawn FROM can never disagree about when the control
+ *  being tested actually existed. That disagreement is the whole bug versions
+ *  introduce, and it is closed here rather than at each of the four clamp points.
+ *
+ *  `no` defaults to the live version. Pass a prior version's number to read the
+ *  window its own concluded test covered — the working paper does. */
+export function versionWindow(
+  c: Control,
+  a: Pick<AuditRecord, 'windowFrom' | 'windowTo'> | undefined,
+  no: number = versionNo(c),
+): { from: string; to: string } {
+  const w = a ?? FALLBACK_WINDOW;
+  const prior = c.priorVersions ?? [];
+  // ISO throughout, which is what makes these comparisons legal — `supersededAt`
+  // is normalised on the way in for exactly this reason.
+  const start = no <= 1 ? w.windowFrom : prior[no - 2]?.supersededAt ?? w.windowFrom;
+  const stop = no > prior.length ? w.windowTo : prior[no - 1]?.supersededAt ?? w.windowTo;
+  const from = start > w.windowFrom ? start : w.windowFrom;
+  const to = stop < w.windowTo ? stop : w.windowTo;
+  // A version that went live AFTER the window closed has no window inside it —
+  // an empty one, not an inverted one. Without this the pair comes back with
+  // `from` past `to`, which every month count reads as a negative span and every
+  // draw reads as a range it can deal items anywhere inside. An empty window is
+  // the truthful answer, and it is what makes the population come back with
+  // nothing to test rather than with a year of somebody else's transactions.
+  return { from: from > to ? to : from, to };
+}
+
+/** The live version's window, narrowed onto an audit record so it can be handed
+ *  straight to `dealSample`, `auditQuarters` and `readSamplePrompt` — the same
+ *  trick `stretch` already plays for a narrowed draw. Returns the audit unchanged
+ *  on a control that was never rebuilt, so nothing moves for the ordinary case. */
+export function versionAudit<T extends Pick<AuditRecord, 'windowFrom' | 'windowTo'>>(c: Control, a: T | undefined): T | undefined {
+  if (!a || !hasVersions(c)) return a;
+  const { from, to } = versionWindow(c, a);
+  return from === a.windowFrom && to === a.windowTo ? a : { ...a, windowFrom: from, windowTo: to };
+}
+
+/** The retest of a REBUILT control is its new version's design test, not a re-read
+ *  of the old checks. True once the rebuild has been recorded — from which point
+ *  the marks are READ off the live TOD rather than hand-entered, so nothing can say
+ *  passed while the design test it rests on has not.
+ *
+ *  With the retest off the exception flow the `!awaitsNewVersion` clause is now
+ *  implied by the one before it — a recorded version is exactly what that asks
+ *  about. Left standing because it is the clause that would carry the weight again
+ *  the moment rounds come back, and it changes no answer in the meantime. */
+export function isVersionRetest(c: Control, d: Deficiency): boolean {
+  return d.track === 'design'
+    && d.planReview?.fix === 'redesign'
+    && !!versionFrom(c, d.id)
+    && !awaitsNewVersion(c, d);
+}
+
 export function designRetestChecks(d: Deficiency, c: Control | undefined): { pointId: string; text: string }[] {
   const run = d.retestDraft?.checks ?? d.retests?.find(r => r.checks?.length)?.checks;
   if (run?.length) return run.map(x => ({ pointId: x.pointId, text: x.text }));
@@ -756,7 +1265,10 @@ export function previewRegrades(eng: IcfrEngagement, patch: RulesPatch): { defId
   return eng.deficiencies
     .filter(d => d.status !== 'Closed')
     .map(d => ({ defId: d.id, from: assessSeverity(d, eng).final, to: assessSeverity(d, next).final }))
-    .filter(x => x.from !== x.to);
+    // A change to the ground rules cannot re-grade what has no grade. An
+    // unsized exception is null on both sides and simply is not a re-grade.
+    .filter((x): x is { defId: string; from: ExceptionGrade; to: ExceptionGrade } =>
+      x.from !== null && x.to !== null && x.from !== x.to);
 }
 
 // ─── Engagement-level ICFR conclusion ────────────────────────────────────────────
@@ -766,8 +1278,40 @@ export function previewRegrades(eng: IcfrEngagement, patch: RulesPatch): { defId
 export function openMaterialWeaknesses(eng: IcfrEngagement): Deficiency[] {
   return eng.deficiencies.filter(d => d.status !== 'Closed' && assessSeverity(d, eng).final === 'Material Weakness');
 }
+/** The company-level indicators the auditor has concluded ARE present. */
+export const entityMwPresent = (eng: IcfrEngagement): EntityMwConclusion[] =>
+  (eng.entityMwConclusions ?? []).filter(c => c.present);
+
+/**
+ * EVERYTHING THAT MAKES ICFR NOT EFFECTIVE, AND WHY — read once.
+ *
+ * Two roads, not one. An open material weakness on a control is the obvious
+ * one. The other is a company-level indicator: a restatement, the audit
+ * committee, the control environment, the period-end process. AS 2201 .69 calls
+ * each an indicator that A material weakness exists — which makes ICFR not
+ * effective — without making any individual control's exception one.
+ *
+ * Five surfaces used to work the verdict out for themselves, from the MW count
+ * alone. They ask this instead, so the dashboard, the paper, the report and the
+ * signature cannot reach four different answers about the same engagement.
+ */
+export function mwBasis(eng: IcfrEngagement): {
+  openMw: Deficiency[]; entity: EntityMwConclusion[]; notEffective: boolean;
+} {
+  const openMw = openMaterialWeaknesses(eng);
+  const entity = entityMwPresent(eng);
+  return { openMw, entity, notEffective: openMw.length > 0 || entity.length > 0 };
+}
+
+/** Why ICFR is not effective, in a phrase — for a paper, a modal or a report.
+ *  Both roads, so a reader is never told the verdict without the reason. */
+export const mwReason = (openMw: number, entity: readonly EntityMwConclusion[]): string =>
+  [openMw ? `${openMw} material weakness${openMw === 1 ? '' : 'es'} open` : '',
+    entity.length ? `${entity.length} company-level indicator${entity.length === 1 ? '' : 's'} present` : '']
+    .filter(Boolean).join(' · ');
+
 export function icfrConclusion(eng: IcfrEngagement): 'Effective' | 'Not effective' {
-  return openMaterialWeaknesses(eng).length ? 'Not effective' : 'Effective';
+  return mwBasis(eng).notEffective ? 'Not effective' : 'Effective';
 }
 
 // ─── ITGC cascade — a failed ITGC invalidates "test of one" downstream ───────────
@@ -856,14 +1400,29 @@ export const LEGACY_SOURCE_ID = 'src-legacy';
  *  existed is. */
 export function ipeChecksFor(c: Control, sourceId: string): IpeCheck[] {
   const checks = c.operating.ipe?.checks ?? [];
-  return checks.filter(k => (k.sourceId ?? LEGACY_SOURCE_ID) === sourceId);
+  const home = untaggedHome(c);
+  return checks.filter(k => (k.sourceId ?? home) === sourceId);
+}
+
+/** The file an untagged IPE check belongs to: the population's first file.
+ *  The same rule the store applies when a second file joins (addPopulationSource)
+ *  — reading untagged as LEGACY_SOURCE_ID alone missed every single-file
+ *  population extracted today, whose one file is 'src-1', so a report proven
+ *  Reliable still read "not registered yet" on its own row. */
+function untaggedHome(c: Control): string {
+  return c.operating.population?.sources?.[0]?.id ?? LEGACY_SOURCE_ID;
 }
 
 /** The items drawn out of one file. Tagged the same way, for the same reason. */
 export function samplesFor(c: Control, sourceId: string): Sample[] {
   const samples = c.operating.sampling?.samples ?? [];
-  return samples.filter(s => (s.sourceId ?? LEGACY_SOURCE_ID) === sourceId);
+  return samples.filter(s => sampleSourceOf(c, s) === sourceId);
 }
+/** The file one item was drawn from. An untagged item belongs to the
+ *  population's first file — the same rule as an untagged IPE check. Reading
+ *  untagged as LEGACY_SOURCE_ID alone left every seeded draw off its own file,
+ *  so a control with 25 items tested read "not drawn yet" (click-through, 5 Oct). */
+export const sampleSourceOf = (c: Control, s: Sample): string => s.sourceId ?? untaggedHome(c);
 
 /** Is this file the thing being tested, or a table joined onto it? */
 export const isAssisting = (s: PopulationSource): boolean => s.role === 'assisting';
@@ -951,10 +1510,10 @@ export function untouchedPaths(c: Control): string[] {
   return pathCoverage(c).filter(p => p.drawn === 0).map(p => p.path);
 }
 
-// ─── The audit's sampling methodology (A28) ──────────────────────────────────────
+// ─── The engagement's sampling methodology, turned into a draw (A28) ─────────────
 // How items are selected, and what they have to be spread across, is agreed once
-// on the audit (feedback #38; Dubai — "an agreed sampling methodology covering
-// quarters, countries and entities"). A control asks how many, and from which
+// on the ENGAGEMENT (feedback #38; Dubai — "an agreed sampling methodology
+// covering quarters, countries and entities"). A control asks how many, and from which
 // months — in words, per file (see readSamplePrompt), never how. What follows
 // turns that agreement into a draw — which quarter each item falls in, which
 // company it is dealt to — and reads the draw back as the split the Sample step
@@ -968,12 +1527,10 @@ type AuditWindow = Pick<AuditRecord, 'windowFrom' | 'windowTo' | 'yearBasis'>;
 export function workingAudit(eng: Pick<IcfrEngagement, 'audits'>, openAuditId: string | null): AuditRecord | undefined {
   return eng.audits.find(a => a.id === openAuditId) ?? eng.audits.find(a => !a.archive);
 }
-/** The audit's methodology, with the default standing in for a record older than it. */
-export const auditSampling = (a?: AuditRecord): AuditSampling => a?.sampling ?? DEFAULT_AUDIT_SAMPLING;
 
-/** "spread by quarter and entity", or "not spread" — named in the wizard's order. */
-export function spreadPhrase(spread: AuditSampleSpread[]): string {
-  const words = AUDIT_SAMPLE_SPREADS.map(s => s.id).filter(id => spread.includes(id));
+/** "spread by quarter and entity", or "not spread" — named in the agreed order. */
+export function spreadPhrase(spread: SamplingSpread[]): string {
+  const words = SAMPLING_SPREADS.map(s => s.id).filter(id => spread.includes(id));
   if (!words.length) return 'not spread';
   return `spread by ${words.length > 1 ? `${words.slice(0, -1).join(', ')} and ${words[words.length - 1]}` : words[0]}`;
 }
@@ -1008,7 +1565,7 @@ export function auditQuarters(a: AuditWindow): { label: string; from: string; to
   return out.map(q => ({ label: repeats ? `${q.label} ${q.year}` : q.label, from: q.from, to: q.to }));
 }
 
-/** When an item happened. A draw made under the audit's methodology stored the
+/** When an item happened. A draw made under the agreed methodology stored the
  *  date it dealt; an older item gets a stable one off its own id, somewhere in
  *  `home` — the round that drew it (sampleHome) — so the date on its row, the
  *  quarter it counts in and the round it counts toward all agree. Never the open
@@ -1221,10 +1778,11 @@ export function exposureFromData(d: Deficiency, eng: IcfrEngagement, x: Exposure
     const { count, value } = populationValue(c, from, to, x.home ?? a);
     return { kind: 'population', value, count, population: pop.count, from, to, firstFailed, fixed };
   }
-  // The audit's own ruler decides what is material — the one its mapping was made
-  // against — and the mapping wins wherever one was made (S10, A34a).
+  // The ENGAGEMENT's performance materiality decides what is material (Oct 2026:
+  // materiality is the engagement's only — an audit no longer carries a ruler of
+  // its own) — and the mapping wins wherever one was made (S10, A34a).
   const process = x.normalise(c.process);
-  const pmCr = a.overall > 0 ? (a.overall * (a.materiality.pmPct ?? 75)) / 100 : eng.performanceMateriality / 1e7;
+  const pmCr = eng.performanceMateriality / 1e7;
   const mapped = a.accountProcesses
     ? x.captions.filter(k => a.accountProcesses![k.id] !== undefined && x.normalise(a.accountProcesses![k.id]!) === process)
     : x.captions.filter(k => k.balance >= pmCr && x.normalise(k.process) === process);
@@ -1247,17 +1805,61 @@ export function exposureFromData(d: Deficiency, eng: IcfrEngagement, x: Exposure
 //    Reasonably possible below that. NEVER Remote: Remote caps the grade at a
 //    deficiency, and arguing a grade down is the auditor's call to make, not a
 //    default to accept by not looking.
-//  Exposure — the figure worked out from the data above. Left at ₹0 and untagged
-//    when there is nothing to work it out from.
+//  Exposure — the figure worked out from the data above. Left UNSIZED (null) and
+//    untagged when there is nothing to work it out from. It was left at ₹0, and
+//    ₹0 is below every de-minimis line, so the engine graded the exception
+//    Clearly Trivial before a person had answered anything.
 //  Compensating control — another control concluded effective on the same risk,
 //    else in the same process; the first in register order. None qualifying is
 //    still an answer, and is tagged as one.
 export interface SizingSuggestion {
   likelihood: Likelihood;
-  magnitude: number;
+  /** `null` when there was nothing to work a figure out from — see below. */
+  magnitude: number | null;
   compensatingControlId?: string;
   iraSuggested: NonNullable<Deficiency['iraSuggested']>;
 }
+
+/**
+ * WHAT EACH DESIGN GAP MEANS FOR LIKELIHOOD.
+ *
+ * 'Probable' was stamped on every design failure, with one reason: "built wrong,
+ * so it fails every time it runs". That is true of two of the six. A control
+ * nobody segregated, and a control that is not there, cannot work at all — every
+ * run fails. The other four fail on a SUBSET of what passes through them: what
+ * falls between two runs, what sits under the threshold, what already cleared
+ * the earlier step, what took the route around it. A subset is 'Reasonably
+ * possible', and saying otherwise overstates the finding in Ira's voice.
+ *
+ * Never 'Remote' — Remote caps the grade at a deficiency, and arguing a grade
+ * DOWN is the auditor's call to make, not a default to accept by not looking.
+ */
+const GAP_KIND_LIKELIHOOD: Record<DesignGapKind, { likelihood: Likelihood; reason: string }> = {
+  sod: { likelihood: 'Probable', reason: 'no segregation of duties — one hand does it and checks it, so no run is independent' },
+  precision: { likelihood: 'Reasonably possible', reason: 'insufficient precision — only what sits under the threshold gets through' },
+  placement: { likelihood: 'Reasonably possible', reason: 'wrong place in the process — it cannot stop what the earlier step let through' },
+  bypassable: { likelihood: 'Reasonably possible', reason: 'can be bypassed — it only fails on what took the route around it' },
+  frequency: { likelihood: 'Reasonably possible', reason: 'runs too rarely — only what falls between two runs gets through' },
+  'no-control': { likelihood: 'Probable', reason: 'no control at all — nothing in the process does this, so nothing is ever caught' },
+};
+
+/** No kind named: the failed check matched no pattern. The design failed, but
+ *  nothing on the record says HOW, so the every-run claim cannot be made for it. */
+const GAP_KIND_UNNAMED = {
+  likelihood: 'Reasonably possible' as Likelihood,
+  reason: 'design failure with no gap named — nothing says yet that it fails every time it runs',
+};
+
+/** The likelihood a design gap argues for. Exported so `updateDeficiency` can
+ *  re-read it when the auditor changes the gap kind. */
+export const likelihoodForGap = (ks?: readonly DesignGapKind[]) => {
+  // The LIKELIEST of the selected kinds carries it. Two flaws do not make a
+  // failure rarer, and taking the gentlest would let adding a finding argue the
+  // suggestion down — the same one-way rule aggregation already follows.
+  const picked = (ks ?? []).map(k => GAP_KIND_LIKELIHOOD[k]);
+  if (!picked.length) return GAP_KIND_UNNAMED;
+  return picked.find(g => g.likelihood === 'Probable') ?? picked[0]!;
+};
 
 export function suggestSizing(d: Deficiency, eng: IcfrEngagement, x: ExposureContext, secondRound = false): SizingSuggestion {
   const c = eng.controls.find(k => k.id === d.controlId);
@@ -1271,8 +1873,9 @@ export function suggestSizing(d: Deficiency, eng: IcfrEngagement, x: ExposureCon
     likelihood = 'Probable';
     tag.likelihood = 'never evidenced — nothing shows the control ran at all';
   } else if (d.track === 'design') {
-    likelihood = 'Probable';
-    tag.likelihood = 'design failure — built wrong, so it fails every time it runs';
+    const g = likelihoodForGap(d.gapKinds);
+    likelihood = g.likelihood;
+    tag.likelihood = g.reason;
   } else if (secondRound) {
     likelihood = 'Probable';
     tag.likelihood = f ? `failed again on the redrawn sample — ${f} of ${n} items` : 'failed again on the redrawn sample';
@@ -1285,7 +1888,10 @@ export function suggestSizing(d: Deficiency, eng: IcfrEngagement, x: ExposureCon
     tag.likelihood = `${f} of ${n} items failed (${pct}%) — under 1 in 10, no pattern`;
   }
 
-  let magnitude = 0;
+  // NULL, not ₹0. Ira sizes what it can work out and leaves the rest alone —
+  // and "I could not work this out" has to reach the record as an unanswered
+  // question, or the first thing the engine does is call it clearly trivial.
+  let magnitude: number | null = null;
   const ex = exposureFromData(d, eng, x);
   if (ex.kind === 'population' && ex.value > 0) {
     magnitude = ex.value;
@@ -1295,6 +1901,14 @@ export function suggestSizing(d: Deficiency, eng: IcfrEngagement, x: ExposureCon
   } else if (ex.kind === 'trial-balance' && ex.value > 0) {
     magnitude = ex.value;
     tag.magnitude = 'whole period from the trial balance, see working';
+  } else {
+    // TAGGED, even though there is no figure. Untagged ₹0 was the bug's whole
+    // disguise: nothing on screen said nobody had looked. Ira saying "I could
+    // not work this out" is the opposite of silence, and it is what sends the
+    // auditor to the question instead of past it.
+    tag.magnitude = ex.kind === 'trial-balance'
+      ? `no material account maps to ${ex.process} — nothing on the trial balance to price the whole period from`
+      : 'nothing in the data to size this from — the figure has to be judged';
   }
 
   let compensatingControlId: string | undefined;
@@ -1345,7 +1959,7 @@ export interface DealtItem { date: string; entity?: string }
  * carry no date of their own (sampleHome).
  */
 export function dealSample(
-  c: Control, a: AuditWindow | undefined, sampling: AuditSampling, count: number, existing: Sample[], key: string,
+  c: Control, a: AuditWindow | undefined, sampling: SamplingMethodology, count: number, existing: Sample[], key: string,
   countryOf: (entity: string) => string | undefined, home: Pick<AuditRecord, 'windowFrom' | 'windowTo'> | undefined,
 ): DealtItem[] {
   const spread = sampling.spread;
@@ -1394,7 +2008,7 @@ export function dealSample(
 /** Label for the companies a register left without a country. Listed, so the
  *  gap shows, but never flagged as a group the draw missed — it isn't one. */
 export const NO_COUNTRY = 'Country not recorded';
-export interface SampleSplit { axis: AuditSampleSpread; groups: { label: string; n: number }[] }
+export interface SampleSplit { axis: SamplingSpread; groups: { label: string; n: number }[] }
 /**
  * The draw read back along each axis the audit spreads by. The groups come from
  * what the control has to reach — the quarters of the window, the companies it
@@ -1402,7 +2016,7 @@ export interface SampleSplit { axis: AuditSampleSpread; groups: { label: string;
  * with nothing in it is listed at 0. That is the point of listing it.
  */
 export function sampleSplit(
-  c: Control, a: AuditWindow | undefined, sampling: AuditSampling, countryOf: (entity: string) => string | undefined,
+  c: Control, a: AuditWindow | undefined, sampling: SamplingMethodology, countryOf: (entity: string) => string | undefined,
   home: Pick<AuditRecord, 'windowFrom' | 'windowTo'> | undefined,
 ): SampleSplit[] {
   const items = c.operating.sampling?.samples ?? [];
@@ -1410,7 +2024,7 @@ export function sampleSplit(
   // A row answering for one company owns its items without tagging them.
   const companyOf = (s: Sample) => s.entity ?? (companies.length === 1 ? companies[0] : undefined);
   const countryKey = (e: string) => countryOf(e) ?? NO_COUNTRY;
-  return AUDIT_SAMPLE_SPREADS.map(x => x.id).filter(axis => sampling.spread.includes(axis)).map(axis => {
+  return SAMPLING_SPREADS.map(x => x.id).filter(axis => sampling.spread.includes(axis)).map(axis => {
     if (axis === 'quarter') {
       const w = a ?? { ...FALLBACK_WINDOW, yearBasis: 'fy' as const };
       return { axis, groups: auditQuarters(w).map(q => ({ label: q.label, n: items.filter(s => { const d = sampleDate(s, home); return d >= q.from && d <= q.to; }).length })) };
@@ -1545,8 +2159,8 @@ export function expectedInputsFor(c: Control): { inputs: ExpectedInput[]; awaiti
 //
 // The words decide two things: how many items, and which months — a stretch
 // inside the audit's window. How the items are picked and what they are spread
-// across was agreed on the audit (A28), so an ask that names another method is
-// drawn the audit's way, and the reading says so rather than quietly ignoring it.
+// across was agreed on the engagement (A28), so an ask that names another method
+// is drawn the agreed way, and the reading says so rather than quietly ignoring it.
 
 /** The months a stretch runs through — "Jan–Jun", or "Nov 2025–Feb 2026" when it
  *  crosses a year. */
@@ -1585,14 +2199,16 @@ const WHEN = /\b(?:q([1-4])|h([12])|(first|second|third|fourth|1st|2nd|3rd|4th)\
 const ORDINAL: Record<string, number> = { first: 1, second: 2, third: 3, fourth: 4, '1st': 1, '2nd': 2, '3rd': 3, '4th': 4 };
 const NUMBER_WORDS: Record<string, number> = { one: 1, two: 2, three: 3, four: 4, five: 5, six: 6, seven: 7, eight: 8, nine: 9, ten: 10, eleven: 11, twelve: 12, fifteen: 15, twenty: 20, 'twenty-five': 25, thirty: 30, forty: 40, fifty: 50 };
 const UNIT = '(?:items?|rows?|instances?|samples?|vendors?|invoices?|entries|entry|transactions?|payments?|journals?)';
-const METHOD_WORDS: [RegExp, AuditSampling['method']][] = [
+// 'Targeted' is not one of the agreed methods — it is a word an ask can still
+// use, and naming it is how the reading can say the method did not move.
+const METHOD_WORDS: [RegExp, SamplingMethod | 'Targeted'][] = [
   [/\b(?:at\s+)?random(?:ly)?\b/, 'Random'],
   [/\bsystematic(?:ally)?\b|\bevery\s+(?:nth|\d+(?:st|nd|rd|th))\b|\bevenly\s+spaced\b/, 'Systematic'],
   [/\btarget(?:ed)?\b|\blargest\b|\bhighest\b|\bbiggest\b|\bjudge?ment(?:al)?\b/, 'Targeted'],
 ];
 
 export function readSamplePrompt(
-  prompt: string, source: PopulationSource, suggested: number, a: AuditWindow | undefined, sampling: AuditSampling,
+  prompt: string, source: PopulationSource, suggested: number, a: AuditWindow | undefined, sampling: SamplingMethodology,
 ): SamplePlan {
   const w = a ?? { ...FALLBACK_WINDOW, yearBasis: 'fy' as const };
   const whole = monthSpanLabel(w.windowFrom, w.windowTo);
@@ -1679,12 +2295,12 @@ export function readSamplePrompt(
     : runRate ? Math.max(1, Math.min(source.count, monthsN * perMonth))
     : suggested;
 
-  // ── the method is the audit's ────────────────────────────────────────────────
+  // ── the method is the engagement's ───────────────────────────────────────────
   const named = METHOD_WORDS.filter(([re]) => re.test(lower)).map(([, m]) => m);
   const notes = [
     runRate ? `every instance in ${monthsN === 1 ? 'that month' : `those ${monthsN} months`}, at this file's run rate` : '',
     outside ? 'the months asked for are outside this audit' : '',
-    named.some(m => m !== sampling.method) ? `method stays ${sampling.method} — set on the audit` : '',
+    named.some(m => m !== sampling.method) ? `method stays ${sampling.method} — agreed for this engagement` : '',
   ].filter(Boolean);
   return {
     size,
@@ -1762,6 +2378,18 @@ export function fmtDay(iso?: string, empty = '—'): string {
   if (!iso) return empty;
   const d = parseDay(iso);
   return d ? d.toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' }) : iso;
+}
+
+/** '2026-10-05' → '5 Oct' — a near due day, read without its year. */
+export function dayMonth(iso?: string): string {
+  const d = parseDay(iso);
+  return d ? `${d.getDate()} ${['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'][d.getMonth()]}` : (iso ?? '');
+}
+
+/** The open ask Ira's "couldn't test" card sent the owner for one check, if
+ *  any — read off the task list, so it survives a reload or a new visit. */
+export function couldntAskFor(eng: IcfrEngagement, controlId: string, checkId: string): HandoffTask | undefined {
+  return eng.tasks.find(t => t.controlId === controlId && t.checkId === checkId && t.status === 'open');
 }
 
 /** An instant as a person reads it on the page — '15 Sep 2026, 14:32'. Built by
@@ -1877,6 +2505,41 @@ export function dataWindow(c: Control): { from: string; to: string } | null {
   return {
     from: `${fy}-${String(fm).padStart(2, '0')}-01`,
     to: `${end.getFullYear()}-${String(end.getMonth() + 1).padStart(2, '0')}-${String(end.getDate()).padStart(2, '0')}`,
+  };
+}
+
+/**
+ * A control, reduced to the RACM columns worth comparing a year later.
+ *
+ * A hoisted declaration on purpose: `mockData` calls this from its own module
+ * body while `helpers` is still initialising, and anything that reads a
+ * module-level const from there dies on the temporal dead zone. This reads only
+ * its argument.
+ */
+export function racmRowOf(c: Control): ArchivedRacmRow {
+  return {
+    controlId: c.id,
+    code: c.code,
+    wpRef: c.wpRef,
+    process: c.process,
+    subProcess: c.subProcess,
+    riskId: c.riskId,
+    // The same fallback the register itself gets (`withRacmFields`). Without it
+    // a snapshot taken before that pass runs holds no title while the live row
+    // holds one, and every untouched control reads as "risk renamed" — noise
+    // that would cost the comparison its credibility on the first screen.
+    riskTitle: c.riskTitle ?? (titleFromRisk(c.riskDescription) || undefined),
+    description: c.description,
+    controlActivity: c.controlActivity,
+    objective: c.objective,
+    owner: c.owner,
+    nature: c.nature,
+    type: c.type,
+    frequency: c.frequency,
+    isKey: c.isKey,
+    clazz: c.clazz,
+    entity: c.entity,
+    assertions: c.assertions,
   };
 }
 
@@ -2246,9 +2909,31 @@ const RATING_NOTE: Record<RiskRating, string> = {
  * Only controls that have actually been sized count in the denominator: a
  * control nobody has drawn a sample for has not departed from anything.
  */
-export function samplingOverrides(controls: Control[]): { overridden: number; sized: number } {
+export function samplingOverrides(controls: Control[], eng?: IcfrEngagement): { overridden: number; sized: number; unrecorded: number } {
   const sized = controls.filter(c => c.operating?.sampling);
-  return { overridden: sized.filter(c => c.operating.sampling?.override).length, sized: sized.length };
+  // With the engagement in hand, a draw that simply stands at another number
+  // than the table counts too — it departed whether or not anyone said so.
+  const off = sized.map(c => eng ? sizeDeparture(eng, c) : (c.operating.sampling?.override ? { recorded: true } : null));
+  return { overridden: off.filter(Boolean).length, sized: sized.length, unrecorded: off.filter(d => d && !d.recorded).length };
+}
+
+/**
+ * Does this control's draw stand at a different number from the agreed table?
+ *
+ * One rule for every reader — the Sample step's sentence, the year card's
+ * target and the methodology page's count (click-through, 5 Oct: a control "tested
+ * at 5 items, the number the agreed table gives it" under "Monthly · Medium → 4").
+ * A recorded departure is compared at the size it was set to; otherwise the draw
+ * is compared before any extension after a failure, which moves the size for a
+ * reason of its own. A full-population test is not sized off the table at all.
+ */
+export function sizeDeparture(eng: IcfrEngagement, c: Control): { size: number; agreed: number; recorded: boolean } | null {
+  const s = c.operating?.sampling;
+  if (!s || s.method === 'Full population') return null;
+  if (s.override) return { size: s.override.size, agreed: s.override.agreed, recorded: true };
+  const agreed = sampleSizeGuide(c, itgcHolds(eng, c), samplingOf(eng)).suggested;
+  const size = s.size - s.samples.filter(x => x.extension).length;
+  return size === agreed ? null : { size, agreed, recorded: false };
 }
 
 /** This engagement's agreed sampling methodology — the product default where an
@@ -2392,6 +3077,11 @@ export function isControlFinal(c: Control): boolean {
 export function isAwaitingReview(c: Control): boolean {
   return isControlLocked(c) && !!c.wpSignoff?.preparer && !c.wpSignoff?.reviewer;
 }
+/** The papers waiting for the reviewer's countersign, in Reviewer queue order —
+ *  the queue lists them from here, and "Countersign & next" walks the same list. */
+export function awaitingCountersign(eng: IcfrEngagement): Control[] {
+  return eng.controls.filter(isAwaitingReview);
+}
 
 // ─── Review notes — the formal raise → resolve → verify channel ──────────────────
 export function reviewNotesFor(eng: IcfrEngagement, controlId: string): ReviewNote[] {
@@ -2404,7 +3094,7 @@ export function pendingReviewNoteCount(eng: IcfrEngagement, controlId: string): 
 
 // ─── Track progress ──────────────────────────────────────────────────────────────
 
-import type { DesignPoint, EvidenceFile, OperatingStep, RequiredFile, TestResult, ValidationQA, ValidationTable } from './types';
+import type { DesignPoint, EvidenceFile, OperatingStep, RequiredFile, TestResult, ValidationQA, ValidationResult, ValidationTable } from './types';
 export function pointResult(p: DesignPoint): TestResult { return p.override ? (p.override.result as TestResult) : p.result; }
 
 /** A validated file and a person's attestation reached opposite conclusions on
@@ -2419,6 +3109,31 @@ export function pointResult(p: DesignPoint): TestResult { return p.override ? (p
 export function attestationOverruled(s: OperatingStep): boolean {
   return !!(s.validation?.result && s.attestation?.result && s.validation.result !== s.attestation.result);
 }
+/** Ira's result standing on a row, waiting for a person to confirm it (agentic
+ *  UX #1, 1 Oct): a verdict Ira reached, not overridden, not yet confirmed. */
+export function awaitsConfirm(row: { validation?: ValidationResult; override?: unknown; confirmed?: unknown }): boolean {
+  return !!row.validation?.result && !row.validation.blocked && !row.override && !row.confirmed;
+}
+/** Every row on a track still waiting on that confirmation — what holds the
+ *  conclusion back. */
+export function unconfirmedIra(c: Control, which: 'design' | 'operating'): (DesignPoint | OperatingStep)[] {
+  return which === 'design' ? c.design.points.filter(awaitsConfirm) : c.operating.steps.filter(awaitsConfirm);
+}
+/** What "Undo Ira's" takes back on a track not yet concluded (UX #15): Ira's
+ *  unconfirmed verdicts, its "couldn't test" notes, and the confirms Ira made
+ *  itself in Automatic mode. A person's own confirm or override is never on it.
+ *  `auto` is how many of the rows are Ira's own confirms. */
+export function iraUndoable(c: Control): { points: DesignPoint[]; steps: OperatingStep[]; auto: number } {
+  const take = (row: { validation?: ValidationResult; override?: unknown; confirmed?: { byIra?: boolean }; result: TestResult }) =>
+    !!row.validation && !row.override && (row.confirmed
+      ? !!row.confirmed.byIra
+      : awaitsConfirm(row) || (!!row.validation.blocked && row.result === 'Not tested'));
+  const points = c.design.conclusion === 'Not tested' ? c.design.points.filter(take) : [];
+  const steps = c.operating.conclusion === 'Not tested' ? c.operating.steps.filter(take) : [];
+  const auto = [...points, ...steps].filter(r => r.confirmed?.byIra).length;
+  return { points, steps, auto };
+}
+
 export function stepResult(s: OperatingStep): TestResult {
   // The auditor's own override stays supreme — it is a named judgment with a
   // recorded reason, not a second opinion sneaking past the evidence.
@@ -2426,6 +3141,35 @@ export function stepResult(s: OperatingStep): TestResult {
   if (attestationOverruled(s)) return s.validation!.result as TestResult;
   return s.result;
 }
+
+// ─── Ira's confidence — how sure the verdict is, drawn in the tick's shape ───────
+// A reviewer can't read every check twice, so the tick tells them which ones to
+// look at: a solid tick is a verdict Ira is sure of, an outlined one is the same
+// verdict held loosely. Two tiers, not a percentage on the page — the number is
+// on hover for whoever wants it.
+export type ConfidenceTier = 'high' | 'medium';
+/** At or above this, the tick is drawn solid. */
+export const CONFIDENT_AT = 80;
+
+/** How sure Ira was of this validation, or undefined where there is no verdict
+ *  (never validated, or blocked — nothing to be sure of).
+ *
+ *  MOCK: the prototype's validations carry no real confidence yet, so where
+ *  `v.confidence` is unset a number is invented from a hash of `key` (user
+ *  approved invented values). Hashed rather than random so a check keeps the
+ *  same number on every render — a tick that flickered between solid and
+ *  outlined would say the verdict itself was changing. Roughly three in four
+ *  land 85–98 and the rest 55–79, which is about the mix a reviewer should
+ *  expect: mostly sure, a handful worth a second look. */
+export function confidenceOf(v: ValidationResult | undefined, key: string): number | undefined {
+  if (!v || v.blocked) return undefined;
+  if (v.confidence != null) return v.confidence;
+  let h = 2166136261; // FNV-1a — cheap, stable, spreads short keys well
+  for (let i = 0; i < key.length; i++) { h ^= key.charCodeAt(i); h = Math.imul(h, 16777619); }
+  h >>>= 0;
+  return h % 4 === 0 ? 55 + ((h >>> 2) % 25) : 85 + ((h >>> 2) % 14);
+}
+export function confidenceTier(n: number): ConfidenceTier { return n >= CONFIDENT_AT ? 'high' : 'medium'; }
 
 // ─── Required files — the evidence an attribute's AI validation runs against ─────
 // The RACM's Control Evidence column names what proves a control; Ira splits it
@@ -2563,13 +3307,135 @@ export function designBlocked(c: Control): DesignPoint[] {
 }
 
 /** Deterministic Q&A a design-validation workflow returns for a consideration. */
+/** Wording to look for in the attached evidence, per question. Short and
+ *  common on purpose: these are matched against whatever document the client
+ *  uploaded, so a phrase of two or three ordinary words finds the passage where
+ *  a sentence copied from our own samples would find nothing.
+ *
+ *  Alternatives separated by a pipe, tried in order. One document says
+ *  "independent of the preparer" where another says "someone other than the
+ *  person who keyed it"; both are the same point, and a single fixed word finds
+ *  only one of them.
+ *
+ *  A FUNCTION, not a `const` object, and that is load-bearing. mockData calls
+ *  validationQA from its own module body (every seeded point carries its Q&A),
+ *  and helpers is reached through an import cycle — helpers → racmImport → …
+ *  → mockData → helpers — so mockData's body can run while helpers is still
+ *  part-initialised. A module-level const read from here is then in its
+ *  temporal dead zone and the whole module graph dies on load with "Cannot
+ *  access 'QA_CITES' before initialization". A function declaration is hoisted,
+ *  so it is callable whenever mockData gets there. */
+function qaCites() {
+  return {
+    risk: 'risk|assertion|address the',
+    precision: 'tolerance|threshold|precision|limit',
+    segregation: 'independent|other than the person|segregat|cannot be bypassed|authority',
+    evidence: 'audit trail|evidenced|retained|log',
+  } as const;
+}
+
 export function validationQA(text: string, fail: boolean): ValidationQA[] {
+  const cites = qaCites();
   return [
-    { q: 'Does the control as described address the stated risk and assertion?', a: 'Yes — traced to the risk register and the relevant assertion in the narrative.', pass: true },
-    { q: 'Is the control performed at sufficient precision to catch a material error?', a: fail ? 'No — the review occurs after the entry is posted, so a material error could already be recorded before detection.' : 'Yes — it operates before the transaction completes and the threshold is below performance materiality.', pass: !fail },
-    { q: 'Is the performer segregated from the activity being controlled?', a: 'Yes — distinct system roles were confirmed in the walkthrough.', pass: true },
-    { q: 'Is the control’s operation evidenced and retained for the period?', a: fail ? 'Partially — sign-off is retained but does not evidence the pre-posting review.' : 'Yes — evidenced and retained for the full period.', pass: !fail },
+    { q: 'Does the control as described address the stated risk and assertion?', a: 'Yes — traced to the risk register and the relevant assertion in the narrative.', pass: true, cite: cites.risk },
+    { q: 'Is the control performed at sufficient precision to catch a material error?', a: fail ? 'No — the review occurs after the entry is posted, so a material error could already be recorded before detection.' : 'Yes — it operates before the transaction completes and the threshold is below performance materiality.', pass: !fail, cite: cites.precision },
+    { q: 'Is the performer segregated from the activity being controlled?', a: 'Yes — distinct system roles were confirmed in the walkthrough.', pass: true, cite: cites.segregation },
+    { q: 'Is the control’s operation evidenced and retained for the period?', a: fail ? 'Partially — sign-off is retained but does not evidence the pre-posting review.' : 'Yes — evidenced and retained for the full period.', pass: !fail, cite: cites.evidence },
   ];
+}
+
+/**
+ * WHAT ONE DESIGN CHECK ASKS — its own question, not the whole standard set.
+ *
+ * A design check is a single proposition about how the control is built. Its
+ * result used to be `validationQA`, which returns the four standard design
+ * attributes and ignores the check it was handed — `text` sat in the signature
+ * and was never read. So every check in a control produced an identical list,
+ * and opening "Control addresses the stated risk and assertion" re-asked the
+ * precision question that is the NEXT design check in the same list. The result
+ * of one check was showing the whole set (user, 25 Sep — "yaha design checks
+ * kyu aa rahe h when i am looking at result of 1 design check in particular").
+ *
+ * The industry's wording is kept exactly as it was: these ARE design checks and
+ * the terminology is the standard one (user's correction — the earlier plan to
+ * rename them was wrong). What changed is only which of them a given check is
+ * answered against.
+ *
+ * Two checks are matched to the standard questions they were written as. Every
+ * other check — an attribute's own design check, or one the auditor added —
+ * asks about ITSELF and cites its own distinctive wording, because a check that
+ * says "exceptions are followed through to resolution" is not answered by a
+ * question about precision.
+ *
+ * TOE keeps `validationQA`: an attribute's AI validation is a different surface
+ * and was not in scope here.
+ */
+export function designCheckQA(text: string, fail: boolean): ValidationQA[] {
+  const cites = qaCites();
+  const t = text.toLowerCase();
+  if (/addresses the stated risk|risk and assertion/.test(t)) {
+    return [{ q: 'Does the control as described address the stated risk and assertion?', a: fail ? 'No — what is on file does not tie the control to the risk it is recorded against.' : 'Yes — traced to the risk register and the relevant assertion in the narrative.', pass: !fail, cite: cites.risk }];
+  }
+  if (/sufficient precision|operates at sufficient/.test(t)) {
+    return [{ q: 'Is the control performed at sufficient precision to catch a material error?', a: fail ? 'No — the review occurs after the entry is posted, so a material error could already be recorded before detection.' : 'Yes — it operates before the transaction completes and the threshold is below performance materiality.', pass: !fail, cite: cites.precision }];
+  }
+  return [selfQA(text, fail)];
+}
+
+/** Wording to look for, per subject a check can be about. Ordered — the first
+ *  that recognises the check wins, so the specific subjects lead. The strings
+ *  are alternatives for the annotator, the same shape as `qaCites`.
+ *
+ *  A function for the same reason `qaCites` is one: mockData builds every
+ *  seeded check's Q&A from its own module body, while helpers is only
+ *  part-initialised, and a module-level const read from there is in its
+ *  temporal dead zone. */
+function checkCites(): [RegExp, string][] {
+  return [
+    [/independen|segregat|prepares what it checks|four eyes|second person/, 'independent|other than the person|segregat|cannot be bypassed'],
+    [/authorit|competen|delegation/, 'authority|authorised|delegation|competen'],
+    [/threshold|toleran|\blimit/, 'tolerance|threshold|limit'],
+    [/exception|escalat|resolution|investigat|differen/, 'exception|escalat|investigat|unexplained|difference|held'],
+    [/evidence that it operated|evidenc|retain|audit trail|\blog\b/, 'audit trail|evidenced|retained|log'],
+    [/complete population|population|routes around/, 'population|every|complete'],
+    [/cut-?off|correct period|month-?end|timel/, 'period|month-end|cut-off|timely'],
+    [/change control|configur/, 'configuration|change control|under change'],
+    [/reliab|performed against/, 'report|reliable|extracted|source'],
+    [/often enough|frequen/, 'monthly|each month|frequency'],
+    [/approv|authoris|sign-?off/, 'approv|authoris|sign-off|signed'],
+    [/reconcil/, 'reconcil|agreed|difference'],
+    [/review/, 'review|reviewed|checked'],
+    [/match|compar/, 'match|compared|agrees'],
+    [/performed|operate|described/, 'performed|operates|described|carried out'],
+  ];
+}
+
+/** A check answered against itself. The question is the check put as one, so a
+ *  reader who clicked "Exceptions handled per policy" is asked about exceptions
+ *  and nothing else. */
+function selfQA(text: string, fail: boolean): ValidationQA {
+  // "Exceptions handled per policy — designed to happen, at per exception."
+  //  → the proposition, and the cadence it is designed to happen at.
+  const m = text.match(/^(.*?)\s*—\s*designed to happen,?\s*at\s+(.*?)\.?$/i);
+  const core = (m ? m[1]! : text).replace(/\.$/, '').trim();
+  const at = m ? m[2]!.replace(/\.$/, '').trim() : '';
+  const t = core.toLowerCase();
+  const hit = checkCites().find(([re]) => re.test(t));
+  // Nothing recognised — the check's own significant words, so the passage
+  // marked is still the wording this answer rests on rather than a guess. No
+  // words worth citing means no citation, and the document renders unmarked.
+  const stop = new Set(['the', 'and', 'that', 'this', 'with', 'from', 'control', 'controls', 'person', 'performing', 'designed', 'happen', 'before', 'after', 'each', 'every', 'their', 'there', 'which', 'what', 'when', 'into', 'over', 'been', 'does', 'must']);
+  const words = hit ? [] : t.replace(/[^a-z\s]/g, ' ').split(/\s+/).filter(w => w.length > 4 && !stop.has(w)).slice(0, 3);
+  return {
+    // A check that already carries an em-dash cannot take another one and stay
+    // readable, so it is asked with a colon instead.
+    q: core.includes('—') ? `Does the design provide for this: ${core}?` : `${core} — is that provided for in the design?`,
+    a: fail
+      ? `No — what is on file does not describe this${at ? ` operating ${at}` : ''}.`
+      : `Yes — the documents on file describe it and who performs it${at ? `, operating ${at}` : ''}.`,
+    pass: !fail,
+    ...(hit ? { cite: hit[1] } : words.length ? { cite: words.join('|') } : {}),
+  };
 }
 
 // ── deterministic "real" results — every run reads like an actual test, and two
@@ -2599,8 +3465,15 @@ export function wfRunRef(key: string, fail: boolean): string {
 const APPROVERS = ['R. Iyer', 'S. Menon', 'A. Kapoor', 'P. Nair', 'D. Rao'];
 const BANKS = ['HDFC', 'ICICI', 'SBI', 'Axis'];
 const ROLES = ['AP clerk', 'AP approver', 'Treasury maker', 'Treasury checker'];
-const MONTHS_SHORT = ['Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec', 'Jan', 'Feb', 'Mar'];
-const onDay = (h: number) => `${(h % 27) + 1} ${MONTHS_SHORT[(h >>> 3) % 12]}`;
+/** A day off the hash, with its year, inside the same fallback stretch
+ *  sampleDate uses. Only the pre-sample table reads it — a drawn item is
+ *  compared on its own date (documentSystemRows), never on a made-up one. */
+const onDay = (h: number) => {
+  const from = dayOf(FALLBACK_WINDOW.windowFrom);
+  return fmtDay(isoOf(from + (h % (dayOf(FALLBACK_WINDOW.windowTo) - from + 1))));
+};
+/** Fields that are a date — compared on the sampled item's own date. */
+const DATE_FIELDS = new Set(['Hold release date', 'Review date', 'Posting date']);
 const COMPARE_FIELDS: [RegExp, string, (h: number) => string][] = [
   [/approval/i, 'Approver', h => APPROVERS[h % APPROVERS.length]!],
   [/vendor master/i, 'Vendor bank account', h => `${BANKS[h % BANKS.length]} …${String(1000 + ((h >>> 2) % 9000))}`],
@@ -2632,20 +3505,44 @@ export interface DocumentSystemRow { id: string; ref: string; field: string; doc
 /** One row per item: the document's value, the system's value, and whether they
  *  agree. Read off the verdicts already on the attribute, so this table and the
  *  sample grid can never disagree about which item failed. */
-function compareRow(key: string, id: string, ref: string, i: number, fields: [string, (h: number) => string][], result: TestResult): DocumentSystemRow {
+function compareRow(key: string, id: string, ref: string, i: number, fields: [string, (h: number) => string][], result: TestResult, date?: string): DocumentSystemRow {
   const [field, value] = fields[i % fields.length]!;
-  const h = hnum(key + id);
+  // Hashed on the FIELD and the item's REF, not the attribute or the draw slot:
+  // one transaction's approval record names one approver, whichever attribute
+  // reads it — and the Altura evidence packs (public/samples/sox-evidence) print
+  // these same values, so they must not move with a step id that the seed
+  // counter hands out differently on every seeding.
+  const h = hnum(key + field + ref);
+  // A date field reads the item's own date (the one the sample grid shows); a
+  // mismatch is the system holding a date a few days off it.
+  if (date && DATE_FIELDS.has(field)) {
+    const document = fmtDay(date);
+    const off = (2 + (h % 4)) * (h & 1 ? -1 : 1);
+    return { id, ref, field, document, system: result === 'Fail' ? fmtDay(isoOf(dayOf(date) + off)) : document, result };
+  }
   const document = value(h);
   // a mismatch has to actually differ — walk the hash until it does
   let system = document;
   for (let k = 1; result === 'Fail' && system === document && k < 8; k++) system = value(h + k * 7919);
   return { id, ref, field, document, system, result };
 }
+/** One item against one attribute. An item tested before the TOE grid existed
+ *  carries its result on the item, not per attribute (the sampleTested rule), so
+ *  with no per-attribute cell the item's own result stands: a failed item marks
+ *  the attributes that did not pass as a whole, and an attribute that passed as
+ *  a whole keeps its pass. Without this a closed control with every item passed
+ *  read "Not tested" in every cell (click-through, 5 Oct). */
+export function itemResult(step: OperatingStep, item: Sample): TestResult {
+  const own = step.sampleResults?.[item.id];
+  if (own) return own;
+  if (item.result === 'Fail') return step.result === 'Pass' ? 'Pass' : 'Fail';
+  return item.result ?? 'Not tested';
+}
 /** The drawn sample, compared item by item. Empty before a sample exists. */
-export function documentSystemRows(c: Control, s: OperatingStep): DocumentSystemRow[] {
+export function documentSystemRows(c: Control, s: OperatingStep, home?: Pick<AuditRecord, 'windowFrom' | 'windowTo'>): DocumentSystemRow[] {
   const fields = compareFieldsFor(c, s);
   return (c.operating.sampling?.samples ?? []).map((it, i) =>
-    compareRow(seedKeyOf(c) + s.id, it.id, it.ref, i, fields, s.sampleResults?.[it.id] ?? 'Not tested'));
+    compareRow(seedKeyOf(c), it.id, it.ref, i, fields, itemResult(s, it), sampleDate(it, home)));
 }
 
 /** Plain-language summary the AI returns after comparing the sampled items'
@@ -2680,19 +3577,143 @@ export function validationTable(c: Control, s: OperatingStep, fail: boolean, key
   return { columns: ['Item', 'Field', 'Document says', 'System says', 'Result'], rows };
 }
 
+/** Which column of DOC_REQUIREMENTS this control reads. Process first — an ITGC is
+ *  an ITGC however it happens to be performed — then nature for everything else.
+ *
+ *  It has to be `process`, NOT `clazz`. `clazz` is the RACM's *Risk category*
+ *  column (`NewControlPanel` labels it exactly that, and `racmImport` fills it
+ *  from `riskCategory`), so a manual business control whose risk happens to be
+ *  categorised "IT dependent" would read the ITGC column and never be asked for
+ *  its narrative. `process === 'IT General Controls'` is what `failedItgcs` and
+ *  `isItgcDependent` already mean by an ITGC.
+ *
+ *  CAVEAT, and it is a real one: this is exact string equality, and three screens
+ *  let the process be hand-typed instead of picked — `Racm.tsx` ("＋ Name another
+ *  process…"), `CreateRacmFlow.tsx` ("Add a process") and `NewControlPanel.tsx`.
+ *  A typed "ITGC" is not 'IT General Controls', so that control silently reads
+ *  its `nature` column: asked for a narrative it will never have, never asked for
+ *  its access extract. The alias map that would close this already exists —
+ *  PROCESS_ALIASES in `CreateRacmFlow.tsx` — but is only ever applied to file
+ *  names, never to what the auditor types. */
+export function docColumnOf(c: Pick<Control, 'process' | 'nature'>): DocClassColumn {
+  return c.process === 'IT General Controls' ? 'ITGC' : c.nature;
+}
+
+/** Is this element required, optional, or not a thing this control has at all?
+ *
+ *  A `Custom` element is the auditor's own — it is not in the table and keeps the
+ *  `required` flag it was created with, because the person who named it is the
+ *  person who decided it mattered. */
+export function docRequirement(c: Control, d: Pick<DesignDoc, 'kind' | 'required'>): DesignDocRequirement {
+  if (d.kind === 'Custom') return d.required === false ? 'Optional' : 'Required';
+  return DOC_REQUIREMENTS[docColumnOf(c)][d.kind];
+}
+
+/** Elements that do not apply to this class of control. Not chased, not waived,
+ *  and out of the completeness denominator — see DOC_REQUIREMENTS. */
+export function docNotApplicable(c: Control, d: Pick<DesignDoc, 'kind' | 'required'>): boolean {
+  return docRequirement(c, d) === 'Not applicable';
+}
+
+/** The kinds a control of this class has to show. Used to seed a new control
+ *  with the right elements rather than the same two for everybody. */
+export function requiredKindsFor(col: DocClassColumn): Exclude<DesignDocKind, 'Custom'>[] {
+  const row = DOC_REQUIREMENTS[col];
+  return (Object.keys(row) as Exclude<DesignDocKind, 'Custom'>[]).filter(k => row[k] === 'Required');
+}
+
+/* ── Bringing an existing register onto the class table ──────────────────────
+ *
+ * Two things have to happen to a register written before DOC_REQUIREMENTS existed.
+ *
+ * ONE — waivers that were never judgements. An ITGC used to carry Process
+ * narrative and Flowchart as requirements, and the only way to clear them was to
+ * waive each one. That records a decision nobody made: the documents do not exist
+ * for that kind of control. The waiver is lifted off the element and written to
+ * the trail instead, with the reason it went. The record is kept, not deleted — a
+ * control that was already concluded must not look as though its evidence quietly
+ * changed.
+ *
+ * TWO — required kinds the control never had an element for. The denominator is
+ * the required kinds for the class, not "whichever required elements happen to be
+ * on the record". Without this the table is decorative: an ITGC needs a system
+ * configuration and an access extract, and if neither is ever listed, neither is
+ * ever asked for and the control reads complete without them. They are added as
+ * Missing, which is what they are. Completeness drops, and it should: those
+ * documents genuinely are not there.
+ */
+export function applyDocRequirements(eng: IcfrEngagement): { eng: IcfrEngagement; waivers: number; added: number; controls: number } {
+  const execs: ExecutionEvent[] = [];
+  let waivers = 0, added = 0;
+  const controls = eng.controls.map(c => {
+    const stale = c.design.documents.filter(d => d.waiver && docNotApplicable(c, d));
+    const have = new Set(c.design.documents.map(d => d.kind));
+    // A carried design is LAST cycle's conclusion, not this cycle's work. Roll
+    // forward re-tests operating and lets design stand, and the evidence behind
+    // it went into the parent's archive with it. Adding this year's required
+    // kinds as Missing would put "Effective — carried forward" and "evidence
+    // suggests Ineffective" on the same page, and chase the owner for files the
+    // audit team already holds. Stale waivers are still lifted below: lifting one
+    // asks for nothing.
+    const absent = c.design.carriedFrom ? [] : requiredKindsFor(docColumnOf(c)).filter(k => !have.has(k));
+    if (!stale.length && !absent.length) return c;
+    waivers += stale.length; added += absent.length;
+    const asA = docColumnOf(c) === 'ITGC' ? 'an IT general control' : `a ${docColumnOf(c).toLowerCase()} control`;
+    stale.forEach((d, i) => execs.push({
+      id: `reclass-${c.id}-${d.id}-${i}`, controlId: c.id, track: 'design', kind: 'waive-doc',
+      verb: `waiver lifted — ${d.kind} does not apply to ${asA}`,
+      target: d.kind, by: d.waiver!.by, role: 'auditor', at: d.waiver!.at,
+      from: `Waived — ${d.waiver!.reason}`, to: 'Not applicable',
+    }));
+    const documents = [
+      ...c.design.documents.map(d => d.waiver && docNotApplicable(c, d) ? { ...d, waiver: undefined } : d),
+      ...absent.map(kind => ({ id: `req-${c.id}-${kind.replace(/\W+/g, '-')}`, kind, name: `${kind} — to provide`, status: 'Missing' as DocStatus })),
+    ];
+    return { ...c, design: { ...c.design, documents } };
+  });
+  const touched = controls.filter((c, i) => c !== eng.controls[i]).length;
+  return {
+    eng: touched ? { ...eng, controls, executions: [...execs, ...eng.executions] } : eng,
+    waivers, added, controls: touched,
+  };
+}
+
 /** TOD completeness — the share of REQUIRED design elements that carry evidence.
- *  Concluding design effective is gated on this reaching 100%. */
+ *  Concluding design effective is gated on this reaching 100%.
+ *
+ *  The denominator is the required kinds FOR THIS CONTROL'S CLASS. An ITGC with
+ *  its configuration and access extract attached reads 100%, not 60% with two
+ *  waivers against documents ITGCs never have. */
 export function designCompleteness(c: Control): { done: number; total: number; pct: number } {
-  const req = c.design.documents.filter(d => d.required !== false);
+  const req = c.design.documents.filter(d => docRequirement(c, d) === 'Required');
   // A waived element is accounted for, not outstanding — the audit team wrote it,
   // the client holds it, or there is nothing to hold. Either way the auditor has
   // recorded why, and a recorded judgement shouldn't read as a missing file.
   const done = req.filter(d => d.status === 'Received' || d.waiver).length;
   return { done, total: req.length, pct: req.length ? Math.round((done / req.length) * 100) : 0 };
 }
-/** Elements still genuinely outstanding — neither evidenced nor waived. */
+/** Elements still genuinely outstanding — neither evidenced nor waived. A
+ *  not-applicable element is never outstanding: there is nothing to obtain. */
 export function designOutstanding(c: Control): DesignDoc[] {
-  return c.design.documents.filter(d => d.status !== 'Received' && !d.waiver);
+  return c.design.documents.filter(d => d.status !== 'Received' && !d.waiver && !docNotApplicable(c, d));
+}
+/** The outstanding elements that actually GATE the design conclusion — the
+ *  Required ones.
+ *
+ *  `designOutstanding` is the whole list still worth having, and it is the right
+ *  answer for a PBC request: an Optional element genuinely is worth asking the
+ *  client for. But it is the wrong answer for a lock, a conclusion or Ira's
+ *  chase, because an Optional element missing is a thinner file, not a blocked
+ *  one — and a page that reads 100% complete while refusing to conclude is a
+ *  product arguing with itself.
+ *
+ *  This replaces `designOutstanding(c).filter(d => d.required !== false)`, which
+ *  five sites used to spell by hand. That test predates DOC_REQUIREMENTS and only
+ *  ever worked by accident: `d.required` is set to false for exactly two kinds by
+ *  the seed and by nothing else, so every element the auditor or an import added
+ *  read as Required whatever the class says. */
+export function designOutstandingRequired(c: Control): DesignDoc[] {
+  return designOutstanding(c).filter(d => docRequirement(c, d) === 'Required');
 }
 /** What the evidence says the design conclusion should be.
  *
@@ -2706,8 +3727,17 @@ export function designOutstanding(c: Control): DesignDoc[] {
 export function designSuggestion(c: Control): TrackConclusion {
   const d = c.design;
   const walkFailed = d.walkthrough ? c.operating.steps.some(s => d.walkthrough!.attributeResults[s.id] === 'Fail') : false;
-  return d.documents.length === 0 && d.points.length === 0 ? 'Not tested'
-    : designOutstanding(c).length > 0 || walkFailed || d.points.some(p => pointResult(p) === 'Fail') ? 'Ineffective'
+  // No design checks defined ⇒ nothing has been judged, whatever is on the file.
+  // Calling a design ineffective because documents are outstanding, when nobody
+  // has yet written down what the design has to show, states a conclusion the
+  // work does not support — and it is what made the untouched RACM row read
+  // Ineffective once its required elements were seeded.
+  // Nor before anything has been tested (click-through, 5 Oct: "Evidence
+  // suggests: Ineffective" on PX-05 with no check tested) — outstanding
+  // documents say the work is unfinished, not that the design failed.
+  const anyTested = walkFailed || d.points.some(p => pointResult(p) !== 'Not tested');
+  return d.points.length === 0 || !anyTested ? 'Not tested'
+    : designOutstandingRequired(c).length > 0 || walkFailed || d.points.some(p => pointResult(p) === 'Fail') ? 'Ineffective'
     : d.points.length > 0 && d.points.every(p => pointResult(p) === 'Pass') ? 'Effective' : 'Not tested';
 }
 /** What the attribute results point to, before anybody concludes anything.
@@ -2720,6 +3750,21 @@ export function operatingSuggestion(c: Control): TrackConclusion {
   const steps = c.operating.steps;
   if (steps.some(s => stepResult(s) === 'Fail')) return 'Ineffective';
   return steps.length > 0 && steps.every(s => stepResult(s) !== 'Not tested') ? 'Effective' : 'Not tested';
+}
+
+/** A picked file's extension, read as one of the four evidence kinds the model
+ *  knows. Same mapping the store uses when a file arrives by any other door.
+ *
+ *  Lives here rather than beside one picker because there are now two doors on
+ *  to a design element — the page's and the chat rail's — and a file attached
+ *  from one must not come out a different kind from the same file attached
+ *  from the other. */
+export function evidenceKindOf(name: string): EvidenceFile['kind'] {
+  const n = name.toLowerCase();
+  if (n.endsWith('.csv')) return 'CSV';
+  if (n.endsWith('.xlsx') || n.endsWith('.xls')) return 'XLSX';
+  if (n.endsWith('.png') || n.endsWith('.jpg') || n.endsWith('.jpeg')) return 'IMG';
+  return 'PDF';
 }
 
 /** The files on a design element. An older seeded element can read Received with
@@ -2752,11 +3797,15 @@ export function performanceMaterialityOf(b: MaterialityBasis): number { return M
 export function clearlyTrivialOf(b: MaterialityBasis): number { return Math.round(overallMateriality(b) * b.ctPct / 100); }
 
 export function designProgress(c: Control) {
-  const docs = c.design.documents;
+  // Delegates rather than re-counting. It used to count `documents` raw, so the
+  // register read "5/6 docs, 83%" on a control the dossier read 100% complete —
+  // the extra row being a waived or Optional element, or one the class does not
+  // have at all. One implementation, one number.
+  const { done, total } = designCompleteness(c);
   return {
-    docsReceived: docs.filter(d => d.status === 'Received').length,
-    docsTotal: docs.length,
-    docsMissing: docs.filter(d => d.status !== 'Received').length,
+    docsReceived: done,
+    docsTotal: total,
+    docsMissing: total - done,
     pointsPass: c.design.points.filter(p => pointResult(p) === 'Pass').length,
     pointsTotal: c.design.points.length,
   };
@@ -2827,6 +3876,31 @@ export function operatingProgress(c: Control) {
   };
 }
 
+/** Who reached each result, in one line: "Ira checked 2 · you overrode 1 ·
+ *  1 not tested" (agentic UI review, 29 Sep). The rationale used to say "All N
+ *  passed" whether Ira read the evidence, the auditor ticked it by hand, or
+ *  nothing was tested at all. Only the parts that are non-zero are said. */
+function provenanceLine(items: { validated: boolean; blocked: boolean; overridden: boolean; result: TestResult }[]): string {
+  let ira = 0, overrode = 0, byHand = 0, couldNot = 0, untested = 0;
+  items.forEach(i => {
+    if (i.overridden) overrode += 1;
+    else if (i.blocked) couldNot += 1;
+    else if (i.result === 'Not tested') untested += 1;
+    else if (i.validated) ira += 1;
+    else byHand += 1;
+  });
+  // Read as a sentence on the working paper ("Ira checked 1; 1 couldn't be
+  // tested"), not a row of chips — the reviewer reads this, not the screen.
+  const line = [
+    ira && `Ira checked ${ira}`,
+    byHand && `${byHand} marked by hand`,
+    overrode && `${overrode} overridden`,
+    couldNot && `${couldNot} couldn't be tested`,
+    untested && `${untested} not tested yet`,
+  ].filter(Boolean).join('; ');
+  return line && line[0].toUpperCase() + line.slice(1);
+}
+
 /** The rationale the conclusion box opens with.
  *
  *  Every conclusion has to reach the working paper with words against it, but
@@ -2840,6 +3914,20 @@ export function operatingProgress(c: Control) {
  *  which one they would press would be putting words in their mouth. Disagreeing
  *  with it is exactly the case where they should be writing their own. */
 export function concludeRationale(c: Control, which: 'design' | 'operating'): string {
+  const body = rationaleBody(c, which);
+  const line = which === 'design'
+    ? provenanceLine(c.design.points.map(p => ({
+        validated: !!p.validation && !p.validation.blocked, blocked: !!p.validation?.blocked && pointResult(p) === 'Not tested',
+        overridden: !!p.override, result: pointResult(p),
+      })))
+    : provenanceLine(c.operating.steps.map(s => ({
+        validated: !!s.validation && !s.validation.blocked, blocked: !!s.validation?.blocked && stepResult(s) === 'Not tested',
+        overridden: !!s.override, result: stepResult(s),
+      })));
+  return line ? `${line}.\n${body}` : body;
+}
+
+function rationaleBody(c: Control, which: 'design' | 'operating'): string {
   if (which === 'design') {
     const { pointsPass, pointsTotal } = designProgress(c);
     const evidenced = c.design.documents
@@ -2850,7 +3938,10 @@ export function concludeRationale(c: Control, which: 'design' | 'operating'): st
       : '';
     if (!pointsTotal) return `No design checks were recorded for this control${against}.`;
     const failed = c.design.points.filter(p => pointResult(p) === 'Fail');
-    if (!failed.length) return `All ${pointsTotal} design check${pointsTotal === 1 ? '' : 's'} passed${against}.`;
+    // "All passed" only when every check actually has a result — a check nobody
+    // tested is not a pass, and the sentence used to count it as one.
+    if (!failed.length && pointsPass === pointsTotal) return `All ${pointsTotal} design check${pointsTotal === 1 ? '' : 's'} passed${against}.`;
+    if (!failed.length) return `${pointsPass} of ${pointsTotal} design checks passed${against}; the rest have no result yet.`;
     // A failed check is named WITH the attribute it belongs to. The rationale is
     // what the paper carries as the reason, and "exceptions handled per policy
     // failed" does not say which of the five things the control has to do.
@@ -2864,7 +3955,8 @@ export function concludeRationale(c: Control, which: 'design' | 'operating'): st
   const n = c.operating.sampling?.size;
   const across = n ? ` across ${n} sampled item${n === 1 ? '' : 's'}` : '';
   if (!total) return `No attributes were recorded for this control${across}.`;
-  if (!failed) return `All ${total} attribute${total === 1 ? '' : 's'} passed${across}.`;
+  if (!failed && passed === total) return `All ${total} attribute${total === 1 ? '' : 's'} passed${across}.`;
+  if (!failed) return `${passed} of ${total} attributes passed${across}; the rest have no result yet.`;
   return `${passed} of ${total} attributes passed${across}. ${failed} failed.`;
 }
 
@@ -3007,7 +4099,32 @@ const CHECK_LIBRARY: { text: string; when: (c: Control) => boolean }[] = [
   { text: 'The system configuration behind the control is under change control.', when: c => c.nature === 'Automated' || c.nature === 'IT-dependent' || /\bautomatic|\bconfigur|\bsystem blocks?\b/i.test(wordingOf(c)) },
   { text: 'The report the control is performed against is itself reliable.', when: c => c.nature === 'IT-dependent' },
   { text: 'The control runs often enough to catch a misstatement before it reaches the accounts.', when: c => c.frequency === 'Quarterly' || c.frequency === 'Annual' },
+  // The placement question. Nothing in the library asked it before, so an auditor
+  // who found a control sitting downstream of the error had no check to fail and
+  // the finding had nowhere to land. Offered where it bites: a detective control,
+  // or one whose own wording says it happens after the fact.
+  { text: 'The control sits at the point in the process where the error would arise, not after it.', when: c => c.type === 'Detective' || /\bafter\b|\bsubsequent|\bmonth[- ]end\b|\bperiod[- ]end\b|\bpost(ing|ed)?\b|\bonce .* (has|have) been/i.test(wordingOf(c)) },
 ];
+
+/** Which library check, failing, means which design gap.
+ *
+ *  The inverse of GAP_KIND_PATTERNS: that reads a kind off a failed check's wording,
+ *  this asks "what would this flaw look like on ANOTHER control". Kept beside
+ *  CHECK_LIBRARY so a reworded check cannot silently orphan a kind.
+ *
+ *  `no-control` maps to nothing on purpose. It is the auditor's judgement about a
+ *  whole control — "there is a row here but nothing in the process does it" — and no
+ *  predicate over a Control row can spot that elsewhere. A scan that tried would be
+ *  guessing, so it says so instead.
+ */
+const GAP_KIND_CHECK: Record<DesignGapKind, string | null> = {
+  sod: 'The person performing the control is independent of the person who prepares what it checks.',
+  precision: 'The threshold or tolerance the control operates at is documented and approved.',
+  placement: 'The control sits at the point in the process where the error would arise, not after it.',
+  bypassable: 'The control operates over a complete population — nothing routes around it.',
+  frequency: 'The control runs often enough to catch a misstatement before it reaches the accounts.',
+  'no-control': null,
+};
 
 /** Significant words, so "reviewer is independent of the preparer" and "the
  *  person performing the control is independent of the person who prepares"
@@ -3016,10 +4133,64 @@ const STOPWORDS = new Set(['the', 'a', 'an', 'is', 'are', 'of', 'to', 'and', 'or
 function keyWords(s: string): Set<string> {
   return new Set(s.toLowerCase().replace(/[^a-z\s]/g, ' ').split(/\s+/).filter(w => w.length > 3 && !STOPWORDS.has(w)));
 }
-function alreadyCovered(existing: Set<string>[], candidate: string): boolean {
+
+/**
+ * The same consideration, said the way a client's document says it.
+ *
+ * Shared words alone are not enough to recognise a repeat. The SOP writes "the
+ * reviewer is someone other than the preparer" where the library writes "the
+ * person performing the control is independent of the person who prepares what
+ * it checks" — one consideration, two sentences, and not a significant word
+ * between them. Counting words offered it back as a suggestion, which is the
+ * opposite of what a suggestion is for (user ask, 27 Sep: "ira will only
+ * suggest the data that is required but is missing in the uploaded documents").
+ *
+ * So each library check carries how else it gets said. Where an entry holds two
+ * patterns, one check must satisfy **both** — "limit" on its own is a limit, not
+ * a documented one, and a single loose word must not be able to retire a whole
+ * consideration. Keyed by the library's own text so the two cannot drift apart.
+ */
+const CHECK_SAID_ANOTHER_WAY: Record<string, RegExp[]> = {
+  // Added with the placement check itself. Without it `alreadyCovered` fell back
+  // to bag-of-words overlap, so a check already asking this in the auditor's own
+  // words would not retire the suggestion — and the systemic scan below would
+  // then name a control that already covers the flaw.
+  'The control sits at the point in the process where the error would arise, not after it.':
+    [/\bpoint in the process|\bupstream|\bdownstream|\bbefore .{0,24}post|\bafter the fact|\bpre-?post|\bat the point of/i],
+  'The person performing the control is independent of the person who prepares what it checks.':
+    [/\bindependen|\bsegregat|\bother than\b|\bsomeone else\b|\bseparate (?:person|individual)|\bfour[- ]eyes\b|\bmaker[- ]?checker\b|\bnot .{0,24}\bprepar/i],
+  'The threshold or tolerance the control operates at is documented and approved.':
+    [/\bthreshold|\btoleranc|\blimit|\bmaterialit|\bde ?minimis/i, /\bdocument|\bapprov|\bdefin|\bagreed|\bauthoris|\bauthoriz/i],
+  'Exceptions the control raises are followed through to resolution, not just noted.':
+    [/\bexception|\bdifferenc|\bdiscrepanc|\bvarianc|\bmismatch|\bfail/i, /\bresolv|\bfollow|\bclear|\bescalat|\binvestigat|\bheld\b|\bcorrect/i],
+  'The control leaves evidence that it operated — a reviewer can tell it ran on a given date.':
+    [/\bevidenc|\bsign(?:-|\s)?off|\bsigned\b|\baudit trail|\binitial(?:led|s)\b|\blog(?:ged)?\b|\bretain/i],
+  'The person performing the control has the authority and competence to do so.':
+    [/\bauthorit|\bcompeten|\bdelegat|\bmandate|\bqualifi|\btrained|\bskill/i],
+  'The control operates over a complete population — nothing routes around it.':
+    [/\bcomplete|\bpopulation|\ball (?:transactions|items|entries)|\bbypass|\broutes? around/i],
+  'Transactions are captured in the correct period.':
+    [/\bcut[- ]?off|\bcorrect period|\bproper period|\bperiod[- ]end\b/i],
+  'The inputs to the calculation are independently verified before it runs.':
+    [/\binput|\bsource data|\bdata used|\bassumption|\bfeed/i, /\bverif|\bindependen|\bagreed|\bchecked|\breconcil|\bvalidat/i],
+  'The system configuration behind the control is under change control.':
+    [/\bconfigurat|\bsystem setting|\bchange control|\bchange management|\bparameter/i, /\bchange|\bauthoris|\bauthoriz|\bapprov/i],
+  'The report the control is performed against is itself reliable.':
+    [/\breport|\bipe\b|\binformation produced/i, /\breliab|\baccurat|\bcomplete|\bverif|\bvalidat/i],
+  'The control runs often enough to catch a misstatement before it reaches the accounts.':
+    [/\bfrequen|\bhow often|\btimely|\bin time\b|\bbefore the (?:accounts|ledger|close|books)/i],
+};
+
+function alreadyCovered(existing: string[], candidate: string): boolean {
+  // Said another way, by one check on its own. Tested check by check rather than
+  // against all of them joined, so a pair cannot be satisfied half by one line
+  // and half by another — that is two considerations, not one.
+  const said = CHECK_SAID_ANOTHER_WAY[candidate];
+  if (said && existing.some(text => said.every(re => re.test(text)))) return true;
   const cand = keyWords(candidate);
   if (cand.size === 0) return false;
-  return existing.some(have => {
+  return existing.some(text => {
+    const have = keyWords(text);
     let hits = 0;
     cand.forEach(w => { if (have.has(w)) hits++; });
     return hits / cand.size >= 0.5;
@@ -3111,6 +4282,97 @@ export function draftDesignChecks(input: {
   return suggestedDesignChecks(draft);
 }
 
+/** Where else this design flaw could be — the systemic check.
+ *
+ *  A design deficiency is a statement about how a control was BUILT, and controls in
+ *  one process are usually built by the same people to the same habit. So the first
+ *  question after "this one is wrong" is "who else did we build this way", and it has
+ *  to reach controls nobody has tested yet — which is exactly what the existing
+ *  grouping cannot do: `deficiencyGroups` starts from `eng.deficiencies`, so a
+ *  control with no exception on it is invisible to every grouping in the module.
+ *
+ *  A candidate is a control that (a) is in the same process, (b) the flaw's own
+ *  library check would be offered to — the `when` predicate fires — and (c) has no
+ *  check covering it yet. `suggestedDesignChecks` already answers (b) and (c) in one
+ *  expression: membership means the predicate fired AND nothing existing retires it.
+ *
+ *  Scoped to the PROCESS, not the engagement. Measured on the seeded register: a
+ *  segregation flaw matches 73 of 99 controls engagement-wide, which is not a finding
+ *  but noise. Inside the process it is 2–13, which an auditor can actually read. Risk
+ *  id was the other candidate and is useless here — the register carries one control
+ *  per risk, so it always returns nothing.
+ *
+ *  Split by whether anyone has looked yet, because only one half is actionable: an
+ *  untested peer is work the auditor can still do, while a peer already concluded
+ *  effective on that very check is EVIDENCE the habit is not universal — worth
+ *  counting, not worth listing.
+ *
+ *  Reads the flaw from the deficiency's `gapKind`, not from the control's live design
+ *  points: the kind is what the auditor stated, and a later edit to the TOD must not
+ *  quietly change who this names.
+ */
+/** The scan as a RECORD — what `runFlawScan` stores. Built from the live scan,
+ *  so the stored answer and the screen's answer can never be two computations. */
+export function buildFlawScan(eng: IcfrEngagement, d: Deficiency, by: string): NonNullable<Deficiency['flawScan']> | null {
+  if (d.track !== 'design' || !d.gapKinds?.length) return null;
+  const c = eng.controls.find(x => x.id === d.controlId);
+  if (!c) return null;
+  // One scan over the process, but each peer remembers WHICH of the searched
+  // flaws it could carry — a merged list that could not say which flaw it
+  // matched would be a worse record than the two separate ones it replaced.
+  const searched = d.gapKinds.map(k => ({ k, check: GAP_KIND_CHECK[k] })).filter((x): x is { k: DesignGapKind; check: string } => !!x.check);
+  const check = searched.map(x => x.check).join(' · ') || null;
+  const peers = eng.controls.filter(x => x.id !== c.id && x.process === c.process);
+  // `no-control` maps to no check on purpose — it is a judgement about a whole
+  // control that no predicate over a register row can spot elsewhere. The record
+  // is still written: "we asked and there was nothing to ask" is the answer a
+  // reviewer needs, and an absent field cannot give it.
+  const examined = check
+    ? peers.map(x => {
+      const own = suggestedDesignChecks(x);
+      const kinds = searched.filter(y => own.includes(y.check)).map(y => y.k);
+      return { controlId: x.id, carries: kinds.length > 0, tested: designStarted(x), kinds };
+    })
+    : [];
+  return {
+    gapKinds: d.gapKinds,
+    check,
+    ...(check ? {} : { notScanned: 'judgement-about-this-control' as const }),
+    process: c.process,
+    examined,
+    carrying: examined.filter(x => x.carries).length,
+    by, at: 'just now',
+  };
+}
+
+/** Has the register moved under a stored scan? Counts only, because the answer
+ *  a reader needs is "is this still true", not a diff to reconcile in their head. */
+export function flawScanDrift(eng: IcfrEngagement, d: Deficiency): { gapChanged: boolean; moved: number } | null {
+  const stored = d.flawScan;
+  if (!stored) return null;
+  const same = (d.gapKinds ?? []).length === stored.gapKinds.length && (d.gapKinds ?? []).every(k => stored.gapKinds.includes(k));
+  if ((d.gapKinds?.length ?? 0) > 0 && !same) return { gapChanged: true, moved: 0 };
+  const live = buildFlawScan(eng, d, stored.by);
+  if (!live) return null;
+  const was = new Map(stored.examined.map(x => [x.controlId, x]));
+  const moved = live.examined.filter(x => {
+    const before = was.get(x.controlId);
+    return !before || before.carries !== x.carries || before.tested !== x.tested;
+  }).length + stored.examined.filter(x => !live.examined.some(y => y.controlId === x.controlId)).length;
+  return { gapChanged: false, moved };
+}
+
+export function sameFlawElsewhere(eng: IcfrEngagement, d: Deficiency): { untested: Control[]; tested: Control[]; check: string | null } {
+  const c = eng.controls.find(x => x.id === d.controlId);
+  // Every check the selected gaps map to. A peer matches on ANY of them, and
+  // `buildFlawScan` keeps which — this view only needs "is it worth a look".
+  const checks = d.track === 'design' ? (d.gapKinds ?? []).map(k => GAP_KIND_CHECK[k]).filter((x): x is string => !!x) : [];
+  const check = checks.join(' · ') || null;
+  if (!c || !check) return { untested: [], tested: [], check: null };
+  const peers = eng.controls.filter(x => x.id !== c.id && x.process === c.process && checks.some(ck => suggestedDesignChecks(x).includes(ck)));
+  return { untested: peers.filter(x => !designStarted(x)), tested: peers.filter(x => designStarted(x)), check };
+}
+
 export function suggestedDesignChecks(c: Control): string[] {
   // Control-level checks only, deliberately. The library offers control-level
   // considerations, and it decides "already covered" on keyword overlap — so
@@ -3118,7 +4380,7 @@ export function suggestedDesignChecks(c: Control): string[] {
   // a coincidence of wording. An attribute check reading "…exceptions handled
   // per policy…" would silently retire the library's own exceptions check, which
   // is a different question about a different thing.
-  const existing = c.design.points.filter(p => !p.stepId).map(p => keyWords(p.text));
+  const existing = c.design.points.filter(p => !p.stepId).map(p => p.text);
   return CHECK_LIBRARY
     .filter(x => x.when(c))
     .map(x => x.text)
@@ -3150,7 +4412,7 @@ export function courtFor(c: Control, tasks: HandoffTask[], notes: ReviewNote[] =
 
 import type { AuditRecord, Frequency } from './types';
 import type { ProcurementRacmRow } from '../../data/procurement-racm';
-import { ownersOf } from './auditScope';
+import { isOwnerOf, ownersOf } from './auditScope';
 const CYCLE_DAYS: Record<Frequency, number> = { Daily: 1, Weekly: 7, Monthly: 30, Quarterly: 90, Annual: 365, Recurring: 7, 'Ad-hoc': 30 };
 
 // ── year-end controls (A29) ──────────────────────────────────────────────────
@@ -3161,6 +4423,27 @@ const CYCLE_DAYS: Record<Frequency, number> = { Daily: 1, Weekly: 7, Monthly: 30
 // time. Nothing new is set on the control: Annual is the whole rule. A year-end
 // round, and quarter and custom audits (one-off checks with no rounds), hold
 // nothing back.
+/**
+ * THE OPERATING TEST IS HELD, and why — the one question the three operating
+ * steps each need answered before they render anything.
+ *
+ * Two reasons, and the rule outranks the judgement: an Annual control in an
+ * interim could not have run whatever the auditor thinks, so `yearEndPending`
+ * is checked first. Otherwise it is the auditor's own park.
+ *
+ * Returning one shape for both means Population, Sample and Test of
+ * effectiveness ask once and say the same thing, instead of each growing its
+ * own second branch.
+ */
+export function operatingHeld(
+  c: Control, audit?: AuditRecord | null,
+): { kind: 'year-end'; until: string } | { kind: 'parked'; until: string; reason: string; by: string } | null {
+  const ye = yearEndPending(c, audit);
+  if (ye) return { kind: 'year-end', until: ye.until };
+  const p = c.operating.parked;
+  return p ? { kind: 'parked', until: p.expectedFrom, reason: p.reason, by: p.by } : null;
+}
+
 /** The date an Annual control's operating work is pending until in this audit —
  *  the last day of the audit's cycle — or null when nothing is held back. */
 export function yearEndPending(c: Control, audit?: AuditRecord | null): { until: string } | null {
@@ -3205,8 +4488,10 @@ export function testDueDisplay(c: Control, opApplies = true, audit?: AuditRecord
   if (concl === 'Ineffective') return { label: 'Retest after remediation', cls: 'text-risk-700' };
   const d = testDueInDays(c);
   if (concl === 'Effective') return { label: `Next test in ${d}d`, cls: '' };
-  const pending = yearEndPending(c, audit);
-  if (pending) return { label: `Pending until ${pending.until}`, cls: '' };
+  // Held reads as held, never as due or overdue — a control nobody could have
+  // tested yet has not been neglected, and colouring it red would say it had.
+  const held = operatingHeld(c, audit);
+  if (held) return { label: held.kind === 'parked' ? `Parked until ${held.until}` : `Pending until ${held.until}`, cls: '' };
   if (d < 0) return { label: `Overdue ${-d}d`, cls: 'text-risk-700 font-semibold' };
   if (d === 0) return { label: 'Due today', cls: 'text-mitigated-700 font-semibold' };
   return { label: testDueLabel(d), cls: '' };
@@ -3215,7 +4500,7 @@ export function testDueDisplay(c: Control, opApplies = true, audit?: AuditRecord
 /** Same `audit` as testDueDisplay: a control the open audit holds back until year
  *  end is not due in it, so it is never counted as due now or overdue. */
 export function isTestDueNow(c: Control, audit?: AuditRecord | null): boolean {
-  return !isConcluded(c) && !yearEndPending(c, audit) && testDueInDays(c) <= 0;
+  return !isConcluded(c) && !operatingHeld(c, audit) && testDueInDays(c) <= 0;
 }
 
 export function testsDueNow(controls: Control[], audit?: AuditRecord | null): Control[] {
@@ -3259,10 +4544,12 @@ export function engagementProgress(eng: IcfrEngagement, controls?: Control[]) {
 /**
  * How much of the engagement is FINISHED — the third engagement score.
  *
- * Milestone-weighted, because "done" is not one event: a control travels RACM
- * approval → TOD → TOE → countersign, and an exception raised on the way has to
- * be closed before the control is off the table. Each control is worth exactly
- * 1.0, split across those five, and the engagement reads the average.
+ * Milestone-weighted, because "done" is not one event: a control travels TOD →
+ * TOE → countersign, and an exception raised on the way has to be closed before
+ * the control is off the table. Each control is worth exactly 1.0, split evenly
+ * across those four (0.25 each), and the engagement reads the average. RACM row
+ * approval is no longer a milestone (Oct 2026): it was never set in practice and
+ * cannot be set on a tested control, so it held every engagement below 90%.
  *
  * Weights sum to 1.0 per control, so `Σ credits ÷ control count` is the same
  * number as `Σ credits ÷ Σ maximum credits` — the control is the denominator
@@ -3273,7 +4560,7 @@ export function engagementProgress(eng: IcfrEngagement, controls?: Control[]) {
  * finished work, so every milestone credits on conclusion, whichever way it
  * went. An engagement can read 100% and still conclude ICFR not effective.
  */
-const MILESTONE = { racm: 0.10, tod: 0.25, toe: 0.30, countersign: 0.25, exceptions: 0.10 } as const;
+const MILESTONE = { tod: 0.25, toe: 0.25, countersign: 0.25, exceptions: 0.25 } as const;
 
 export function engagementCompleteness(eng: IcfrEngagement, controls?: Control[]) {
   const cs = controls ?? eng.controls;
@@ -3288,7 +4575,6 @@ export function engagementCompleteness(eng: IcfrEngagement, controls?: Control[]
     // time an ITGC conclusion changed, which is not progress.
     const shortForm = !operatingApplies(eng, c);
     let n = 0;
-    if (c.racmReview?.status === 'Approved') n += MILESTONE.racm;
     if (trackResult(c.design) !== 'Not tested') n += MILESTONE.tod + (shortForm ? MILESTONE.toe : 0);
     if (!shortForm && trackResult(c.operating) !== 'Not tested') n += MILESTONE.toe;
     if (isControlLockedIn(eng, c) && !!c.wpSignoff?.reviewer) n += MILESTONE.countersign;
@@ -3317,9 +4603,21 @@ export function tasksForRole(eng: IcfrEngagement, role: Role): HandoffTask[] {
   return eng.tasks.filter(t => t.assigneeRole === role && t.status === 'open');
 }
 /** Person-lane match: a task is this owner's if it names them, or rides a control they own. */
+/** Is this task this owner's?
+ *
+ *  Through `isOwnerOf`, which is the same test every permission in the exception
+ *  flow uses (`ownsIt` → submitPlan, updateRemediation, setExceptionStatus). It
+ *  read `c.owner` alone, so a task riding a control this person runs as PROCESS
+ *  owner was dropped from their portal while they were still allowed to act on it
+ *  — the permission and the inbox disagreed, and `remediationBrief.ts` already
+ *  worked around it by calling isOwnerOf itself. One rule now, in one place.
+ *
+ *  Risk owner, control owner and process owner are one role here (there is no
+ *  separate process-owner hat in `Role`), which is exactly why the narrower test
+ *  was wrong rather than merely strict. */
 export function isOwnerTask(eng: IcfrEngagement, t: HandoffTask, owner: string): boolean {
-  return t.assigneeRole === 'risk-owner'
-    && (t.assignee === owner || eng.controls.find(c => c.id === t.controlId)?.owner === owner);
+  const c = eng.controls.find(x => x.id === t.controlId);
+  return t.assigneeRole === 'risk-owner' && (t.assignee === owner || (!!c && isOwnerOf(c, owner)));
 }
 export function discussionsFor(eng: IcfrEngagement, controlId: string) {
   return eng.discussions.filter(d => d.controlId === controlId);
@@ -3368,6 +4666,13 @@ export const RACM_ROWS_KEY = (racmId: string) => `sox-racm-rows:${racmId}`;
  *  the first lock lives in another browser tab and can be reached by other
  *  means. */
 export const RACM_LOCKED_KEY = (racmId: string) => `sox-racm-locked:${racmId}`;
+/** The editor asking for this matrix to be published (24 Sep). A RACM made in
+ *  the library starts as a draft and only a published row can be scoped into an
+ *  engagement, so Publish had to be reachable from the spreadsheet — but the
+ *  editor runs in its OWN TAB with its own module state and cannot call the
+ *  library's store. It writes here instead, and the library tab listens on the
+ *  same `storage` event that already carries row edits. */
+export const RACM_PUBLISH_KEY = (racmId: string) => `sox-racm-publish:${racmId}`;
 export function racmEditorRows(controls: Control[], process: string): ProcurementRacmRow[] {
   const seen = new Set<string>();
   return controls
@@ -3396,7 +4701,7 @@ export function racmEditorRows(controls: Control[], process: string): Procuremen
         riskTitle: c.riskTitle ?? '',
         riskDescription: c.riskDescription,
         riskRating: c.riskRating ?? '',
-        likelihood: '',
+        likelihood: c.likelihood ?? '',
         impact: '',
         controlTitle: c.description,
         controlObjective: c.objective ?? '',
@@ -3411,6 +4716,7 @@ export function racmEditorRows(controls: Control[], process: string): Procuremen
         // process owner where the RACM named none. `applyEditorRows` reads an
         // untouched cell as "still that", so the fallback is never stamped on.
         riskOwner: ownersOf(c).riskOwner,
+        processOwner: c.processOwner ?? '',
         controlEvidence: evidence.join('; '),
         assertions: c.assertions.join(', '),
         fsLineItem: '',
@@ -3420,7 +4726,12 @@ export function racmEditorRows(controls: Control[], process: string): Procuremen
         segregationOfDuties: '',
         mgmtReviewControl: c.isMrc ? 'Yes' : '',
         confidence: '',
-        sopSectionRef: '',
+        sopSectionRef: c.sopSectionRef ?? '',
+        // What was checked to conclude the control is designed to work. The
+        // grid had no column for these at all until 24 Sep, so a RACM built
+        // from an upload or an SOP carried its TOD checks through the import
+        // and then dropped them at the last step.
+        designChecks: c.design.points.map(p => p.text).join(' | '),
         attributes: c.operating.steps.map(s => s.description).join(' | '),
         // The client's own columns travel with the row, so the grid can show
         // them beside ours and an edit has somewhere to land on the way back.
@@ -3637,3 +4948,76 @@ export function titleFromRisk(text: string): string {
   const out = cut.length <= MAX ? cut : `${cut.slice(0, cut.lastIndexOf(' ', MAX)).replace(/[.;:,]+$/, '')}…`;
   return out[0]!.toUpperCase() + out.slice(1);
 }
+
+// ─── "Ira learned" — patterns in the overrides (agentic UX #9, 1 Oct) ─────────────
+// The same check, overridden the same way on 3+ controls, becomes a card the
+// reviewer rules on. Nothing is learned silently: until a reviewer approves,
+// Ira's answers stay exactly as they were.
+import type { IraLearnedRule } from './types';
+
+export const LEARN_AT = 3;
+
+export interface OverridePattern {
+  key: string;
+  which: 'design' | 'operating';
+  text: string;
+  from: TestResult;
+  to: TestResult;
+  controls: string[];
+  reasons: string[];
+}
+
+const learnText = (t: string) => t.trim().toLowerCase().replace(/\s+/g, ' ').replace(/[.]+$/, '');
+export const learnKey = (which: 'design' | 'operating', text: string, from: TestResult, to: TestResult) =>
+  `${which}|${learnText(text)}|${from}>${to}`;
+
+/** Patterns with enough controls behind them that no reviewer has ruled on yet
+ *  in this audit. Ira's verdict is read off `validation.result`, which an
+ *  override sits on top of and never clears. */
+export function overridePatterns(eng: IcfrEngagement, auditId?: string | null): OverridePattern[] {
+  const ruled = new Set((eng.iraLearned ?? []).filter(r => (r.auditId ?? null) === (auditId ?? null)).map(r => r.key));
+  const by = new Map<string, OverridePattern>();
+  const add = (which: 'design' | 'operating', text: string, from: TestResult | undefined, o: { result: string; rationale: string } | undefined, controlId: string) => {
+    if (!o || !from || from === 'Not tested') return;
+    const to = o.result as TestResult;
+    if ((to !== 'Pass' && to !== 'Fail') || to === from) return;
+    const key = learnKey(which, text, from, to);
+    if (ruled.has(key)) return;
+    const p = by.get(key) ?? { key, which, text, from, to, controls: [], reasons: [] };
+    if (!p.controls.includes(controlId)) p.controls.push(controlId);
+    if (o.rationale?.trim()) p.reasons.push(o.rationale.trim());
+    by.set(key, p);
+  };
+  for (const c of eng.controls) {
+    for (const p of c.design.points) add('design', p.text, p.validation?.result, p.override, c.id);
+    for (const s of c.operating.steps) add('operating', s.description, s.validation?.result, s.override, c.id);
+  }
+  return [...by.values()].filter(p => p.controls.length >= LEARN_AT);
+}
+
+/** The approved rule that turns Ira's `res` on this check into another answer. */
+export function learnedRuleFor(rules: IraLearnedRule[] | undefined, which: 'design' | 'operating', text: string, res: TestResult, auditId?: string | null): IraLearnedRule | undefined {
+  return (rules ?? []).find(r => r.status === 'approved' && (r.auditId ?? null) === (auditId ?? null) && r.key === learnKey(which, text, res, r.to));
+}
+
+export const learnedNote = (r: IraLearnedRule) =>
+  `Learned: auditors changed ${r.from} to ${r.to} on this check on ${r.count} controls, and ${r.by} approved it.`;
+
+// ─── Roll-forward — last round's set-up, confirmed before it is used (#13) ───────
+import type { RollPart } from './types';
+
+export const ROLL_PART_LABEL: Record<RollPart, string> = {
+  design: 'Design documents and walkthrough',
+  checks: 'Design checks',
+  population: 'Population set-up',
+  attributes: 'Test attributes',
+};
+/** Where on the control page each part's Confirm / Edit bar sits. */
+export const ROLL_PART_ANCHOR: Record<RollPart, string> = {
+  design: 'roll-design', checks: 'roll-design', population: 'roll-population', attributes: 'roll-attributes',
+};
+
+/** A part brought from last round that nobody has confirmed or edited yet. */
+export const rollPending = (c: Control, part: RollPart): boolean => c.rollForward?.parts[part]?.state === 'pending';
+export const rollPendingParts = (c: Control): RollPart[] =>
+  (['design', 'checks', 'population', 'attributes'] as RollPart[]).filter(p => rollPending(c, p));

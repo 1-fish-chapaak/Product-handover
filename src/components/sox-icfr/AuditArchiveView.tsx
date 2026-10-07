@@ -2,7 +2,7 @@ import { useMemo } from 'react';
 import { Building2, CalendarRange, CheckCircle2, FileSpreadsheet, Grid3x3, Lock, Scale, ShieldAlert, ShieldCheck } from 'lucide-react';
 import { Pill } from '../shared/StatusBadge';
 import { SeverityPill } from './parts';
-import { formatINR } from './helpers';
+import { fmtDay, formatINR } from './helpers';
 import type { AuditRecord, ExceptionGrade, SoxTabLike } from './types';
 import { cn } from '../../lib/cn';
 
@@ -58,8 +58,8 @@ export default function AuditArchiveView({ audit, tab }: { audit: AuditRecord; t
           Concluded {archive.concludedAt} — read-only
         </p>
         <p className="text-[0.75rem] text-ink-500 mt-0.5 leading-relaxed">
-          Everything below is this audit's own record, frozen when the next cycle started. The current
-          cycle's testing is on the audit that owns it.
+          This engagement is signed off by the preparer and the reviewer. Everything below is its own
+          record and can't be changed.
         </p>
       </div>
       {conclusion && (
@@ -99,7 +99,7 @@ export default function AuditArchiveView({ audit, tab }: { audit: AuditRecord; t
             <dl className="space-y-2 text-[0.75rem]">
               {[
                 ['Period', `${audit.period} · ${ROUND_LABEL[audit.round]}`, CalendarRange],
-                ['Window', `${audit.windowFrom} → ${audit.windowTo}`, CalendarRange],
+                ['Window', `${fmtDay(audit.windowFrom)} → ${fmtDay(audit.windowTo)}`, CalendarRange],
                 ['Scope', audit.scopeNames.join(', '), audit.scopeKind === 'entity' ? Building2 : Grid3x3],
                 ['Materiality', `₹${audit.overall} Cr · ${audit.materiality.pct}% of ₹${audit.materiality.benchmark} Cr`, Scale],
               ].map(([label, value, Icon]) => {
@@ -107,7 +107,7 @@ export default function AuditArchiveView({ audit, tab }: { audit: AuditRecord; t
                 return (
                   <div key={label as string} className="flex items-start gap-2">
                     <I size={12} className="text-ink-400 shrink-0 mt-0.5" />
-                    <dt className="text-ink-500 w-[86px] shrink-0">{label as string}</dt>
+                    <dt className="text-ink-500 w-21.5 shrink-0">{label as string}</dt>
                     <dd className="text-ink-800 font-medium min-w-0 tabular-nums">{value as string}</dd>
                   </div>
                 );
@@ -115,7 +115,7 @@ export default function AuditArchiveView({ audit, tab }: { audit: AuditRecord; t
               {audit.files.length > 0 && (
                 <div className="flex items-start gap-2">
                   <FileSpreadsheet size={12} className="text-ink-400 shrink-0 mt-0.5" />
-                  <dt className="text-ink-500 w-[86px] shrink-0">Files</dt>
+                  <dt className="text-ink-500 w-21.5 shrink-0">Files</dt>
                   <dd className="text-ink-800 font-medium min-w-0">{audit.files.map(f => f.name).join(', ')}</dd>
                 </div>
               )}
@@ -129,8 +129,8 @@ export default function AuditArchiveView({ audit, tab }: { audit: AuditRecord; t
                 <div key={label} className="flex items-center gap-2">
                   {entry
                     ? <CheckCircle2 size={13} className="text-compliant-600 shrink-0" />
-                    : <span className="w-[13px] h-[13px] rounded-full border border-ink-300 shrink-0" aria-hidden />}
-                  <span className="text-ink-500 w-[104px] shrink-0">{label}</span>
+                    : <span className="w-3.25 h-3.25 rounded-full border border-ink-300 shrink-0" aria-hidden />}
+                  <span className="text-ink-500 w-26 shrink-0">{label}</span>
                   <span className="text-ink-800 font-medium min-w-0 truncate">
                     {entry ? `${entry.by}` : 'not signed'}
                   </span>
@@ -224,18 +224,33 @@ export default function AuditArchiveView({ audit, tab }: { audit: AuditRecord; t
                   <div className="mt-2 pt-2 border-t border-canvas-border grid sm:grid-cols-2 gap-x-4 gap-y-1 text-[0.75rem]">
                     <span className="text-ink-600">
                       <span className="text-ink-400">Magnitude </span>
-                      <span className="tabular-nums font-medium text-ink-900">{formatINR(d.magnitude)}</span>
+                      {/* An archive showing ₹0 for a finding nobody sized is a false record of
+                          what last year knew. */}
+                      <span className="tabular-nums font-medium text-ink-900">{d.magnitude === null ? 'Not sized' : formatINR(d.magnitude)}</span>
                     </span>
                     <span className="text-ink-600 truncate">
                       <span className="text-ink-400">Remediation </span>
                       <span className="font-medium text-ink-900">{d.remediation.status}</span>
                       {d.remediation.owner && <span className="text-ink-400"> · {d.remediation.owner}</span>}
                     </span>
+                    {/* An archive frozen before 30 Sep carries a retest verdict
+                        inside the finding, because the exception flow had a retest
+                        step then. Newer ones will not: the retest moved onto the
+                        control and happens on the audit's own timetable, so what a
+                        close records is the sign-off. Both are shown where both
+                        exist — a closed cycle answers what it answered. */}
                     {d.retest && (
                       <span className="text-ink-600">
                         <span className="text-ink-400">Retest </span>
                         <span className={cn('font-medium', d.retest.result === 'Pass' ? 'text-compliant-700' : 'text-risk-700')}>{d.retest.result}</span>
                         <span className="text-ink-400"> · {d.retest.at}</span>
+                      </span>
+                    )}
+                    {d.signoff && (
+                      <span className="text-ink-600 truncate">
+                        <span className="text-ink-400">Signed off </span>
+                        <span className="font-medium text-ink-900">{d.signoff.by}</span>
+                        <span className="text-ink-400"> · {d.signoff.at}</span>
                       </span>
                     )}
                   </div>
@@ -252,7 +267,7 @@ export default function AuditArchiveView({ audit, tab }: { audit: AuditRecord; t
   return (
     <div>
       {banner}
-      <div className={cn(cardCls, 'max-w-[560px]')}>
+      <div className={cn(cardCls, 'max-w-140')}>
         <h3 className="text-[0.8125rem] font-semibold text-ink-900 mb-1">Ground rules as tested</h3>
         <p className="text-[0.75rem] text-ink-500 mb-3 leading-relaxed">
           Frozen at conclusion. Changing them now would rewrite what this audit measured against, so
@@ -261,7 +276,7 @@ export default function AuditArchiveView({ audit, tab }: { audit: AuditRecord; t
         <dl className="text-[0.75rem] divide-y divide-canvas-border">
           {[
             ['Period', `${audit.period} · ${ROUND_LABEL[audit.round]}`],
-            ['Window', `${audit.windowFrom} → ${audit.windowTo}`],
+            ['Window', `${fmtDay(audit.windowFrom)} → ${fmtDay(audit.windowTo)}`],
             ['Scope', `${audit.scopeNames.join(', ')} (${audit.scopeKind === 'entity' ? 'by entity' : 'by RACM'})`],
             ['Basis', audit.materiality.basisLabel],
             ['Benchmark', `₹${audit.materiality.benchmark} Cr`],

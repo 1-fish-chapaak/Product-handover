@@ -24,9 +24,43 @@ import { programmeFor, sameCompany } from './auditScope';
 import { applyEditorRows, lockedEditorIds, RACM_LOCKED_KEY, RACM_ROWS_KEY, racmEditorRows } from './helpers';
 import { seedIcfrEngagement, type SeedMeta } from './mockData';
 import type { Control } from './types';
+import { currentWorkspaceId, onWorkspaceChange } from '../../data/auditPlan/workspace';
+
+/**
+ * The ONE flowchart a process has.
+ *
+ * Kept on the RACM rather than on each control (user, 29 Sep: "ek hi chart
+ * process level pe rahe, controls uspe point karein"). A chart per control
+ * would be the same drawing copied N times, and N copies of one picture cannot
+ * be confirmed once — which is the only way a walkthrough of the process can
+ * confirm it.
+ *
+ * It is born `unconfirmed` and stays there. An SOP gives the order of steps,
+ * the roles, the systems and the decision points; it does not give WHERE THE
+ * CONTROL ACTUALLY SITS — before the entry is posted or after it — which is the
+ * single question the design test answers, and a deficiency invisible in an
+ * SOP. Nor does it give the workarounds the process has grown since, nor the
+ * override routes it lists as exceptions and people use routinely. So until an
+ * auditor has walked the process and said this is right, it satisfies no
+ * control's Flowchart element.
+ */
+export interface ProcessFlowchart {
+  /** The SOP it was read from. */
+  source: string;
+  drawnAt: string;
+  status: 'unconfirmed' | 'confirmed';
+  confirmedBy?: string;
+  confirmedAt?: string;
+  /** What the auditor changed when they confirmed it, in their words. The gap
+   *  between the written process and the real one is itself a finding, so it is
+   *  recorded rather than silently absorbed into the drawing. */
+  corrections?: { note: string; by: string; at: string }[];
+}
 
 export interface LibraryRacm {
   id: string;
+  /** Workspace it was created in; seeds and older records belong to Platform. */
+  workspaceId?: string;
   /** What the list calls it — "Treasury — Altura Infra Holdings Ltd", or the file's name. */
   name: string;
   process: string;
@@ -38,6 +72,9 @@ export interface LibraryRacm {
   fileName?: string;
   /** The SOP behind an extracted RACM, viewable for the session. */
   sopUrl?: string;
+  /** The process flowchart drawn from that SOP. Only ever set on an extracted
+   *  RACM — there is nothing to draw one from otherwise. */
+  flowchart?: ProcessFlowchart;
   /** The rows, IDs already ENTITY/PROCESS/R001/C001. */
   controls: Control[];
   createdBy: string;
@@ -139,21 +176,99 @@ const listeners = new Set<() => void>();
 const emit = () => listeners.forEach(l => l());
 const subscribe = (l: () => void) => { listeners.add(l); return () => { listeners.delete(l); }; };
 
+/** ── Where the library lives between page loads ──────────────────────────────
+ *  It used to live in this module variable and nowhere else, so a refresh —
+ *  accidental or otherwise — took every uploaded RACM with it, and anyone
+ *  mid-demo had to import their matrix again (24 Sep).
+ *
+ *  Versioned in the key rather than inside the payload: if the shape of a
+ *  LibraryRacm ever changes, the old key is simply never read again, which is
+ *  safer than trying to migrate a half-understood record.
+ */
+const LIBRARY_KEY = 'sox-racm-library:v1';
+
+/** Anything unreadable is treated as nothing saved. A library that fails to
+ *  parse should fall back to the seeds, not take the page down with it. */
+function loadLibrary(): LibraryRacm[] | null {
+  if (typeof window === 'undefined') return null;
+  try {
+    const raw = window.localStorage.getItem(LIBRARY_KEY);
+    if (!raw) return null;
+    const parsed: unknown = JSON.parse(raw);
+    if (!Array.isArray(parsed)) return null;
+    // Shallow shape check — enough to reject a stale or foreign payload
+    // without pretending to validate every field.
+    const ok = parsed.every(r => r && typeof r === 'object'
+      && typeof (r as LibraryRacm).id === 'string'
+      && typeof (r as LibraryRacm).process === 'string'
+      && Array.isArray((r as LibraryRacm).controls));
+    return ok ? (parsed as LibraryRacm[]) : null;
+  } catch { return null; }
+}
+
+/** Saving is best-effort. A private window, blocked storage or a library past
+ *  the quota all mean the same thing here: this tab keeps working from memory
+ *  and the next load starts from the seeds. */
+function saveLibrary(list: LibraryRacm[]): void {
+  if (typeof window === 'undefined') return;
+  try { window.localStorage.setItem(LIBRARY_KEY, JSON.stringify(list)); } catch { /* memory only */ }
+}
+
 function all(): LibraryRacm[] {
-  if (!RACMS) RACMS = seedFromEngagements();
+  if (!RACMS) {
+    const saved = loadLibrary();
+    const seeded = seedFromEngagements();
+    // A seeded id is derived from its engagement and process, so it is the same
+    // string on every load. That makes the merge safe both ways: what the user
+    // changed is kept, and a RACM belonging to an engagement created since the
+    // last save still appears rather than being hidden by the restore.
+    if (saved) {
+      const have = new Set(saved.map(r => r.id));
+      RACMS = [...saved, ...seeded.filter(s => !have.has(s.id))];
+    } else {
+      RACMS = seeded;
+    }
+  }
   return RACMS;
 }
 function commit(next: LibraryRacm[]): void {
   RACMS = next;
+  saveLibrary(next);
   emit();
+}
+
+/** Another tab changed the library. Adopt its list rather than re-saving it —
+ *  the tab that made the change has already written it, and writing again from
+ *  here would bounce the same value back at every other tab. */
+function adoptLibrary(raw: string | null): void {
+  if (!raw) return;
+  try {
+    const parsed: unknown = JSON.parse(raw);
+    if (!Array.isArray(parsed)) return;
+    RACMS = parsed as LibraryRacm[];
+    emit();
+  } catch { /* unreadable — keep what this tab has */ }
 }
 
 /** Every RACM on the tab, newest first. Re-renders when one is added, deleted or picked. */
 export function useRacmLibrary(): LibraryRacm[] {
-  return useSyncExternalStore(subscribe, all, all);
+  return useSyncExternalStore(subscribe, visible, visible);
 }
 /** The same list, read once — for code outside React. */
-export const racmLibrary = (): LibraryRacm[] => all();
+export const racmLibrary = (): LibraryRacm[] => visible();
+
+/** This workspace's RACMs only. Cached against the list and workspace, since
+ *  useSyncExternalStore needs the same array back until something changes. */
+let view: { src: LibraryRacm[] | null; ws: string; out: LibraryRacm[] } = { src: null, ws: '', out: [] };
+function visible(): LibraryRacm[] {
+  const src = all();
+  const ws = currentWorkspaceId();
+  if (view.src !== src || view.ws !== ws) view = { src, ws, out: src.filter(r => (r.workspaceId ?? 'platform') === ws) };
+  return view.out;
+}
+// A workspace switch re-derives the seeds (they come from that workspace's
+// engagements) and re-filters the list.
+onWorkspaceChange(() => { RACMS = null; emit(); });
 export const findLibraryRacm = (id: string): LibraryRacm | undefined => all().find(r => r.id === id);
 
 let seq = 0;
@@ -161,6 +276,7 @@ let seq = 0;
 export function addLibraryRacm(input: Omit<LibraryRacm, 'id' | 'usedBy' | 'createdAt' | 'published' | 'history'> & { createdAt?: string; published?: string[] }): LibraryRacm {
   const racm: LibraryRacm = {
     ...input,
+    workspaceId: currentWorkspaceId(),
     id: `racm-${Date.now().toString(36)}-${(++seq).toString(36)}`,
     controls: input.controls.map(racmRowOf),
     createdAt: input.createdAt ?? 'just now',
@@ -199,12 +315,32 @@ export function addLibraryRacm(input: Omit<LibraryRacm, 'id' | 'usedBy' | 'creat
  * did not arrive, and the editor still holds the rows either way.
  */
 function applyEditorWrite(key: string, raw: string | null): void {
+  // Publish asked for from the editor's tab. The rows it wants published are
+  // whatever is unpublished here when the ask arrives — the editor cannot know
+  // the library's state, so it asks for the action, never the outcome.
+  if (raw && key.startsWith('sox-racm-publish:')) {
+    const racm = findLibraryRacm(key.slice('sox-racm-publish:'.length));
+    if (!racm) return;
+    let by = 'You';
+    try { by = (JSON.parse(raw) as { by?: string }).by || 'You'; } catch { /* the ask still stands */ }
+    publishRacm(racm.id, by);
+    return;
+  }
   if (!raw || !key.startsWith('sox-racm-rows:')) return;
-  const racm = findLibraryRacm(key.slice('sox-racm-rows:'.length));
-  if (!racm) return;
   let rows;
   try { rows = JSON.parse(raw); } catch { return; }
   if (!Array.isArray(rows)) return;
+  saveEditorRows(key.slice('sox-racm-rows:'.length), rows);
+}
+
+/** The spreadsheet editor's rows, written straight into the library. The
+ *  editor opened from the RACM Library runs in the SAME tab (5 Oct) and calls
+ *  this as its rows change; the storage listener below still routes an
+ *  editor in another tab through here too. Nothing changes when the rows
+ *  match what the library already holds, so a first render writes nothing. */
+export function saveEditorRows(racmId: string, rows: Parameters<typeof applyEditorRows>[2]): void {
+  const racm = findLibraryRacm(racmId);
+  if (!racm) return;
   const { controls, changed, added } = applyEditorRows(racm.controls, racm.process, rows, new Set(racm.published));
   if (!changed && !added) return;
   const what = [
@@ -224,13 +360,25 @@ function applyEditorWrite(key: string, raw: string | null): void {
 }
 
 if (typeof window !== 'undefined') {
-  window.addEventListener('storage', e => { if (e.key) applyEditorWrite(e.key, e.newValue); });
+  window.addEventListener('storage', e => {
+    if (!e.key) return;
+    // The library itself travels between tabs too, so a RACM uploaded on one
+    // tab shows up on the RACM Library open in another.
+    if (e.key === LIBRARY_KEY) { adoptLibrary(e.newValue); return; }
+    applyEditorWrite(e.key, e.newValue);
+  });
 }
 
 /** Hand a RACM's rows to the spreadsheet editor, with the list of rows it must
  *  not let anyone change. Both go into storage under the RACM's own keys; the
  *  editor reads them when its tab opens, and writes the rows back to the first
  *  of them as they change. */
+/** The same handoff, in memory — for the editor opened in this tab, which
+ *  reads the library directly instead of through storage. */
+export function editorHandoff(r: LibraryRacm): { rows: ReturnType<typeof racmEditorRows>; lockedIds: string[] } {
+  return { rows: racmEditorRows(r.controls, r.process), lockedIds: lockedEditorIds(r.controls, r.process, r.published) };
+}
+
 export function writeEditorHandoff(r: LibraryRacm): void {
   try {
     window.localStorage.setItem(RACM_ROWS_KEY(r.id), JSON.stringify(racmEditorRows(r.controls, r.process)));
@@ -342,7 +490,7 @@ export function knownCompanies(): { group: string; companies: string[] }[] {
   });
   const named = new Set(Array.from(groups.values()).flatMap(s => Array.from(s)));
   racms.forEach(r => [r.entity, ...r.controls.map(c => c.entity)].forEach(c => {
-    if (c && !named.has(bare(c))) add('Added on the RACM tab', c);
+    if (c && !named.has(bare(c))) add('Added in the RACM Library', c);
   }));
   return Array.from(groups, ([group, set]) => ({ group, companies: Array.from(set).sort((a, b) => a.localeCompare(b)) }));
 }
@@ -360,7 +508,7 @@ export function seedMetaFor(e: Engagement): SeedMeta {
     periodStart: e.periodStart, periodEnd: e.periodEnd, owner: e.owner,
     materiality: e.soxConfig?.overallMateriality, performanceMateriality: e.soxConfig?.performanceMateriality,
     clearlyTrivial: e.soxConfig?.clearlyTrivial, sdBandPct: e.soxConfig?.sdBandPct,
-    controls: e.soxControls,
+    controls: e.soxControls, sampling: e.soxSampling,
   };
 }
 

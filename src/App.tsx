@@ -1,4 +1,4 @@
-import { useRef, useEffect, useState, useCallback } from 'react';
+import { useRef, useEffect, useLayoutEffect, useState, useCallback } from 'react';
 import { AnimatePresence, motion } from 'motion/react';
 import { Sparkles } from 'lucide-react';
 import { useAppState, getInitialKnowledgeHubTab, getInitialMemoryFocus, type View } from './hooks/useAppState';
@@ -15,6 +15,17 @@ import { Lock } from 'lucide-react';
 import { GENERATED_REPORTS, GENERATED_REPORTS_KEY } from './data/mockData';
 import Sidebar from './components/sidebar/Sidebar';
 import ChatView from './components/chat/ChatView';
+import WorkflowBuilderLanding from './components/workflow/WorkflowBuilderLanding';
+import AuditWithAiView from './components/audit-plan/AuditWithAiView';
+import AdaptStandardView from './components/audit-plan/AdaptStandardView';
+import BuildsView from './components/audit-plan/BuildsView';
+import HomeHub from './components/home/HomeHub';
+import TodayView from './components/home/TodayView';
+import { ensureBatchRunning, pendingItems, setAuditWorkspace, useAllBatches, useFreshWorkspace } from './data/auditPlan';
+import FirstRunState, { type FirstRunPage } from './components/shared/FirstRunState';
+import { libraryEngagements } from './data/engagements';
+import { WORKSPACES } from './data/workspaces';
+import { useNotify } from './notifications/NotificationContext';
 import ArtifactPanel from './components/artifacts/ArtifactPanel';
 import WorkflowTemplates from './components/workflow/WorkflowTemplates';
 import WorkflowDetail from './components/workflow/WorkflowDetail';
@@ -22,6 +33,7 @@ import WorkflowLibraryView from './components/workflow/WorkflowLibraryView';
 import BusinessProcesses, { ControlDetailStandalone } from './components/audit/BusinessProcesses';
 import RiskRegister from './components/audit/RiskRegister';
 import RacmPage from './components/sox-icfr/RacmPage';
+import { editorHandoff, findLibraryRacm } from './components/sox-icfr/racmLibrary';
 import AuditExecution from './components/audit/AuditExecution';
 import DashboardView from './components/dashboard/DashboardView';
 import DashboardListPage from './components/dashboard/DashboardListPage';
@@ -55,6 +67,7 @@ import RACMView from './components/governance/RACMView';
 import RacmFullPageEditor from './components/audit/RacmFullPageEditor';
 import type { ProcurementRacmRow } from './data/procurement-racm';
 import ControlLibraryView from './components/governance/ControlLibraryView';
+import StandardLibraryBanner, { type StdBannerPage } from './components/governance/StandardLibraryBanner';
 import ControlTestingView from './components/execution/ControlTestingView';
 import EvidenceView from './components/execution/EvidenceView';
 import AIConciergeView from './components/intelligence/AIConciergeView';
@@ -146,6 +159,42 @@ class ErrorBoundary extends React.Component<{ children: React.ReactNode }, { has
   }
 }
 
+/** Keeps batch builds moving and announces finished ones. Batches run in the
+ *  main app (never in a review-session tab, which only displays), so they
+ *  continue whichever page the user is on, and resume after a reload. */
+const NOTIFIED_KEY = 'irame.batch.notified';
+function BatchWatcher() {
+  const batches = useAllBatches();
+  const notify = useNotify();
+  const { currentUser } = useCurrentUser();
+  const isSessionTab = typeof window !== 'undefined' && new URLSearchParams(window.location.search).has('session');
+  useEffect(() => {
+    if (isSessionTab) return;
+    batches.forEach(b => { if (b.items.some(i => i.status === 'queued' || i.status === 'building')) ensureBatchRunning(b.id); });
+    let notified: string[] = [];
+    try { notified = JSON.parse(localStorage.getItem(NOTIFIED_KEY) ?? '[]'); } catch { /* ignore */ }
+    const fresh = batches.filter(b =>
+      !notified.includes(b.id)
+      && Date.now() - b.createdAt < 86_400_000
+      && b.items.every(i => i.status !== 'queued' && i.status !== 'building'));
+    if (fresh.length === 0) return;
+    fresh.forEach(b => {
+      const { needsInput, toReview } = pendingItems([b]);
+      notify({
+        eventId: 'WFL-13',
+        title: `${b.items.length} workflow${b.items.length === 1 ? '' : 's'} built — ${toReview.length} ready to review`,
+        message: `${b.title}.${needsInput.length ? ` ${needsInput.length} need${needsInput.length === 1 ? 's' : ''} a file from you.` : ''}`,
+        recipients: [{ name: currentUser?.name ?? 'You' }],
+        link: { view: 'builds' },
+        linkLabel: 'Open Builds & reviews',
+        dedupKey: b.id,
+      });
+    });
+    try { localStorage.setItem(NOTIFIED_KEY, JSON.stringify([...notified, ...fresh.map(b => b.id)])); } catch { /* ignore */ }
+  }, [batches, notify, currentUser, isSessionTab]);
+  return null;
+}
+
 function AppInner() {
   const {
     state,
@@ -176,6 +225,10 @@ function AppInner() {
     setQueryAssumptions,
     enterWorkflowMode,
     startWorkflowForEngagement,
+    startWorkflowAgent,
+    clearWorkflowAgentSeed,
+    startAdaptStandard,
+    clearAdaptSeed,
     openWorkflowExecutor,
     openChat,
     setSelectedChatId,
@@ -197,7 +250,14 @@ function AppInner() {
     setFocusedNotificationRefId,
   } = useAppState();
 
-  const { can, canAny, currentUser } = useCurrentUser();
+  const { can, canAny, currentUser, activeWorkspaceId } = useCurrentUser();
+  // Point the audit-plan stores at this workspace before paint — a fresh
+  // client workspace starts with nothing live and its own saved progress.
+  useLayoutEffect(() => {
+    setAuditWorkspace(activeWorkspaceId, !!WORKSPACES.find(w => w.id === activeWorkspaceId)?.fresh);
+  }, [activeWorkspaceId]);
+  // A new client's workspace: pages with nothing of theirs yet say so.
+  const freshWs = useFreshWorkspace();
   const logEvent = useAuditLog();
 
   // Knowledge Hub deep-link state — which tab to land on and (optionally)
@@ -318,7 +378,7 @@ function AppInner() {
   const [engagementBackView, setEngagementBackView] = useState<'programs' | 'audit-planning' | 'business-processes'>('programs');
   const [workflowBackView, setWorkflowBackView] = useState<'workflow-library' | 'business-processes' | null>(null);
   // Local context for the full-page RACM editor: which RACM, what process, where to go back to.
-  type RacmEditorContext = { racmId: string; racmName: string; processLabel: string; backView: 'engagement-overview' | 'business-processes' | 'bp-detail' | 'engagement-final' | 'ai-concierge' | 'ai-concierge-racm'; backLabel?: string; sourceFiles?: string[]; initialRows?: ProcurementRacmRow[]; lockedRowIds?: string[] };
+  type RacmEditorContext = { racmId: string; racmName: string; processLabel: string; backView: 'engagement-overview' | 'business-processes' | 'bp-detail' | 'engagement-final' | 'ai-concierge' | 'ai-concierge-racm' | 'racm-library'; backLabel?: string; sourceFiles?: string[]; initialRows?: ProcurementRacmRow[]; lockedRowIds?: string[] };
   // Deep-link support: when this tab is opened at ?view=racm-full-editor (the
   // "Open in editor" new tab), restore the editor context at init so there's no
   // mount-time setState / double render. getInitialView (useAppState) already
@@ -328,6 +388,15 @@ function AppInner() {
     const params = new URLSearchParams(window.location.search);
     if (params.get('view') !== 'racm-full-editor') return null;
     const racmId = params.get('racmId') ?? '';
+    // Opened from the RACM Library (same tab since 5 Oct): a reload reads the
+    // matrix straight from the library, which keeps itself between loads.
+    if (params.get('backView') === 'racm-library') {
+      const lib = racmId ? findLibraryRacm(racmId) : undefined;
+      if (lib) {
+        const { rows, lockedIds } = editorHandoff(lib);
+        return { racmId, initialRows: rows, lockedRowIds: lockedIds, racmName: lib.name, processLabel: lib.process, backView: 'racm-library', backLabel: 'RACM Library' };
+      }
+    }
     // A SOX RACM hands its own rows over before opening this tab (Racm.tsx) —
     // this tab has none of the engagement's state to read them from.
     let initialRows: ProcurementRacmRow[] | undefined;
@@ -353,6 +422,18 @@ function AppInner() {
       backLabel: params.get('backLabel') ?? undefined,
     };
   });
+  // Leaving the editor (its back link, or the sidebar) must take its deep link
+  // with it — otherwise the bar keeps saying racm-full-editor over whatever
+  // page is showing, and a reload drops the reader back into the editor.
+  useEffect(() => {
+    if (state.view === 'racm-full-editor') return;
+    const params = new URLSearchParams(window.location.search);
+    if (params.get('view') !== 'racm-full-editor') return;
+    ['view', 'racmId', 'racmName', 'processLabel', 'backView', 'backLabel'].forEach(k => params.delete(k));
+    if (state.view === 'racm-library') params.set('view', 'racm-library');
+    const qs = params.toString();
+    window.history.replaceState(window.history.state, '', `${window.location.pathname}${qs ? `?${qs}` : ''}${window.location.hash}`);
+  }, [state.view]);
   const openRacmFullEditor = (ctx: RacmEditorContext) => {
     setRacmEditorContext(ctx);
     setView('racm-full-editor');
@@ -604,6 +685,22 @@ function AppInner() {
     );
   };
 
+  /** What a page says in a new client's workspace before anything has run. */
+  const firstRun = (page: FirstRunPage) => <FirstRunState page={page} onNavigate={(v) => setView(v as View)} />;
+
+  /** A page with the standard-library banner above it. */
+  const withStdBanner = (page: StdBannerPage, node: React.ReactNode) => (
+    <div className="flex-1 flex flex-col min-h-0 overflow-hidden">
+      <StandardLibraryBanner
+        page={page}
+        onAdapt={(keys, choices) => startAdaptStandard({ keys, choices })}
+        onOpenLibrary={() => setView('governance-controls')}
+        onOpenBuilds={() => setView('builds')}
+      />
+      <div className="flex-1 flex flex-col min-h-0 overflow-hidden">{node}</div>
+    </div>
+  );
+
   const renderMainView = () => {
     if (viewLoading) {
       return (
@@ -639,16 +736,32 @@ function AppInner() {
     switch (state.view) {
       case 'home':
         return (
-          <HomeView
-            setView={setView}
-            notifications={notif.notifications}
-            onSelectNotification={handleNotificationSelect}
-            onOpenNotificationDrawer={() => notif.openDrawer()}
-            setChatInitialQuery={setChatInitialQuery}
-            setSelectedWorkflow={setSelectedWorkflow}
-            openAuditExecution={openAuditExecution}
-            setSelectedBP={setSelectedBP}
-            onLaunchWorkflowBuilder={launchWorkflowBuilderWithPrompt}
+          <HomeHub
+            today={
+              <TodayView
+                onAdapt={(keys, choices) => startAdaptStandard({ keys, choices })}
+                adaptDraft={state.adaptSeed}
+                onResumeAdapt={() => setView('adapt-standard')}
+                onOpenBuilds={() => setView('builds')}
+                onOpenControls={() => setView('governance-controls')}
+                onOpenEngagement={openEngagement}
+                onAuditWithAi={() => setView('audit-with-ai')}
+                onConnectData={() => setView('knowledge-hub')}
+              />
+            }
+            insights={freshWs ? firstRun('insights') : (
+              <HomeView
+                setView={setView}
+                notifications={notif.notifications}
+                onSelectNotification={handleNotificationSelect}
+                onOpenNotificationDrawer={() => notif.openDrawer()}
+                setChatInitialQuery={setChatInitialQuery}
+                setSelectedWorkflow={setSelectedWorkflow}
+                openAuditExecution={openAuditExecution}
+                setSelectedBP={setSelectedBP}
+                onLaunchWorkflowBuilder={launchWorkflowBuilderWithPrompt}
+              />
+            )}
           />
         );
 
@@ -777,6 +890,11 @@ function AppInner() {
               onViewDashboard={(id) => openDashboard(id)}
               onViewReport={(id) => { setView('reports'); setFocusReportId(id); }}
               workflowEngagementContext={state.workflowBuilderEngagementName}
+              workflowAgentSeed={state.workflowAgentSeed}
+              onWorkflowAgentSeedConsumed={clearWorkflowAgentSeed}
+              onOpenEngagement={openEngagement}
+              // Main tab only — a review-session tab must never overwrite the thread.
+              persistKey={new URLSearchParams(window.location.search).has('session') ? undefined : 'main'}
             /></div>
             {state.showArtifacts && (
               <div
@@ -851,14 +969,36 @@ function AppInner() {
         );
       }
 
-      case 'workflow-library':
+      case 'workflow-builder':
+        return withStdBanner('workflow-builder', (
+          <WorkflowBuilderLanding
+            onSelectAgent={(agent) => startWorkflowAgent({ agent })}
+            onAuditWithAi={() => setView('audit-with-ai')}
+          />
+        ));
+
+      case 'audit-with-ai':
         return (
-          <WorkflowLibraryView
-            onCreateWorkflow={() => enterWorkflowMode()}
-            onSelectWorkflow={(id) => setSelectedWorkflow(id)}
-            onRunWorkflow={(id) => openWorkflowExecutor(id)}
+          <AuditWithAiView
+            onBack={() => setView('workflow-builder')}
+            onOpenEngagement={openEngagement}
+            onBuildBatch={(batchId) => startWorkflowAgent({ agent: 'grc', batchId })}
+            onOpenLibrary={() => setView('workflow-library')}
           />
         );
+
+      case 'workflow-library':
+        return withStdBanner('workflow-library', (
+          <WorkflowLibraryView
+            onCreateWorkflow={() => setView('workflow-builder')}
+            onSelectWorkflow={(id) => setSelectedWorkflow(id)}
+            onRunWorkflow={(id) => openWorkflowExecutor(id)}
+            onBuildDraft={(engagementId, checkId) => startWorkflowAgent({ agent: 'grc', buildQueue: { engagementId, checkIds: [checkId] } })}
+            onOpenEngagement={openEngagement}
+            onAdaptStandard={(keys, choices) => startAdaptStandard({ keys, choices })}
+            onOpenBuilds={() => setView('builds')}
+          />
+        ));
 
       case 'workflow-executor':
         return (
@@ -908,19 +1048,23 @@ function AppInner() {
         );
 
       case 'programs':
-        return (
+        return withStdBanner('process-hub', (
           <ProgramsView
             selectedBPId={state.selectedBPId}
             onSelectBP={setSelectedBP}
             userProcesses={state.userProcesses}
             addUserProcess={addUserProcess}
+            onOpenProcessControls={(code) => {
+              try { window.sessionStorage.setItem('control-library.open-process', code); } catch { /* ignore */ }
+              setView('governance-controls');
+            }}
             onNavigateToExecution={(engId) => {
               setEngagementBackView('programs');
               openAuditExecution(engId);
               setView('engagement-detail');
             }}
           />
-        );
+        ));
 
       case 'business-processes':
       case 'bp-detail':
@@ -957,14 +1101,25 @@ function AppInner() {
       // it belongs with Risk Register and Control Library rather than inside
       // the engagement portfolio.
       case 'racm-library':
-        return <RacmPage canManage={can('eng_create')} />;
+        return withStdBanner('racm', (
+          <RacmPage canManage={can('eng_create')}
+            onOpenEditor={(r) => {
+              // Same tab (5 Oct): the editor reads and saves the library
+              // directly, and the SOP file's link stays alive. The address bar
+              // names the matrix so a reload comes back to it.
+              const { rows, lockedIds } = editorHandoff(r);
+              const params = new URLSearchParams({ view: 'racm-full-editor', racmId: r.id, backView: 'racm-library' });
+              window.history.replaceState(window.history.state, '', `${window.location.pathname}?${params.toString()}${window.location.hash}`);
+              openRacmFullEditor({ racmId: r.id, racmName: r.name, processLabel: r.process, backView: 'racm-library', backLabel: 'RACM Library', initialRows: rows, lockedRowIds: lockedIds });
+            }} />
+        ));
 
       case 'audit-risk-register':
-        return (
+        return withStdBanner('risk-register', freshWs ? firstRun('risk-register') : (
           <RiskRegister
             onNavigate={(v) => setView(v as View)}
           />
-        );
+        ));
 
       case 'audit-execution':
         return <AuditExecution />;
@@ -1025,6 +1180,7 @@ function AppInner() {
 
       case 'reports':
       case 'report-history':
+        if (freshWs) return firstRun('reports');
         return (
           <ReportsView
             onOpenBuilder={() => openReportBuilder('new')}
@@ -1093,7 +1249,7 @@ function AppInner() {
         return <ComplianceEngagementApp engagementId={state.selectedEngagementId ?? undefined} onBack={backToEngagementList} />;
 
       case 'engagements':
-        return (
+        return withStdBanner('engagements', freshWs && libraryEngagements().length === 0 ? firstRun('engagements') : (
           <EngagementsView
             onOpenAuditPlanning={() => setView('audit-planning')}
             onOpenEngagement={(id) => { setSoxFromTesting(false); openEngagement(id); }}
@@ -1104,7 +1260,7 @@ function AppInner() {
             initialList={engBackToList}
             onInitialListConsumed={() => setEngBackToList(false)}
           />
-        );
+        ));
 
       case 'engagement-overview':
         return (
@@ -1149,6 +1305,7 @@ function AppInner() {
       }
 
       case 'my-queue':
+        if (freshWs) return firstRun('my-queue');
         return (
           <MyQueueView
             onOpenException={(engagementId) => openCaseManagement(engagementId)}
@@ -1163,6 +1320,7 @@ function AppInner() {
         return <EngagementCompareView onBack={() => setView('engagements')} />;
 
       case 'audit-planning':
+        if (freshWs) return firstRun('audit-planning');
         return <AuditPlanningPage
           onOpenEngagements={() => setView('engagements')}
           onNavigateToExecution={(engId) => {
@@ -1198,6 +1356,7 @@ function AppInner() {
             sourceFiles={racmEditorContext?.sourceFiles}
             initialRows={racmEditorContext?.initialRows}
             lockedRowIds={racmEditorContext?.lockedRowIds}
+            libraryLive={racmEditorContext?.backView === 'racm-library'}
           />
         );
 
@@ -1206,7 +1365,28 @@ function AppInner() {
 
       case 'governance-controls':
       case 'governance-control-detail':
-        return <ControlLibraryView />;
+        return <ControlLibraryView onAdapt={(keys, choices) => startAdaptStandard({ keys, choices })} onOpenBuilds={() => setView('builds')} />;
+
+      case 'builds':
+        return (
+          <BuildsView
+            onOpenEngagement={openEngagement}
+            onOpenLibrary={() => setView('workflow-library')}
+            onOpenControls={() => setView('governance-controls')}
+            onAuditWithAi={() => setView('audit-with-ai')}
+          />
+        );
+
+      case 'adapt-standard':
+        return state.adaptSeed ? (
+          <AdaptStandardView
+            keys={state.adaptSeed.keys}
+            choices={state.adaptSeed.choices}
+            onChangeChoices={(choices) => startAdaptStandard({ keys: state.adaptSeed!.keys, choices })}
+            onBack={() => setView('governance-controls')}
+            onBuild={(batchId) => { clearAdaptSeed(); startWorkflowAgent({ agent: 'grc', batchId }); }}
+          />
+        ) : <ControlLibraryView onAdapt={(keys, choices) => startAdaptStandard({ keys, choices })} onOpenBuilds={() => setView('builds')} />;
 
       // Execution — new pages
       case 'execution-testing':
@@ -1318,6 +1498,7 @@ function AppInner() {
   return (
     <>
       <BulkRunProgressProvider>
+      <BatchWatcher />
       <ShareProvider openShare={({ type, id, name, anchor }) => setShowShareModal(true, { type, id: id ?? type, name }, anchor)}>
       <div className="flex h-screen w-full bg-canvas overflow-hidden">
         {!((LAUNCHED_FROM_REPORT && state.view === 'manage-exceptions') || state.view === 'engagement-case-management') && (

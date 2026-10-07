@@ -1,6 +1,6 @@
-import { controlCode, formatDueDate, formatINR, gradeException, parseLooseDate } from './helpers';
+import { controlCode, designOutstanding, formatDueDate, versionFrom, versionNo, formatINR, gradeException, parseLooseDate } from './helpers';
 import { isOwnerOf, ownersOf } from './auditScope';
-import { SEVERITY_URGENCY } from './types';
+import { PLAN_FIX_HINT, PLAN_FIX_LABEL, SEVERITY_URGENCY } from './types';
 import type { Control, Deficiency, DesignDoc, EvidenceFile, ExceptionStatus, HandoffTask, IcfrEngagement } from './types';
 
 // ─── The remediation brief — the risk owner's own copy ───────────────────────────
@@ -61,8 +61,11 @@ const STAGE: Record<ExceptionStatus, string> = {
   'Planning': 'WITH YOU — write the plan: what will change, who does it, and by when.',
   'Plan review': 'With the audit team — they are reading your plan against the root cause.',
   'Remediation': 'WITH YOU — make the change, then attach the proof and submit it.',
-  'Retest': 'With the audit team — they are testing the fixed control again.',
-  'Awaiting reviewer': 'With the audit team — your evidence is being read.',
+  // The retest step is gone (30 Sep) — a submitted fix goes straight to the
+  // reviewer. The control itself is tested again later, on the audit's own
+  // timetable, and that is the audit team's work rather than a step the owner
+  // is waiting on, so the brief does not promise it here.
+  'Awaiting reviewer': 'With the audit team — the plan, the fix and your proof are being read before it is signed off.',
   'Closed': 'Closed. Nothing further is needed from you on this one.',
 };
 
@@ -119,9 +122,12 @@ export function openExceptionsFor(eng: IcfrEngagement, owner: string): Deficienc
 
 /** The design elements still being asked for on a control — the owner's side of
  *  the request. A waived element is not outstanding: the audit team accounted for
- *  it themselves, so chasing the owner for it would be chasing a closed item. */
-const outstandingDocs = (c: Control): DesignDoc[] =>
-  c.design.documents.filter(d => d.status !== 'Received' && !d.waiver);
+ *  it themselves, so chasing the owner for it would be chasing a closed item.
+ *  Nor is one that does not apply to this class of control: an ITGC has no process
+ *  narrative to send, and putting it on the owner's brief invites them to invent
+ *  something. Optional elements DO stay — they are worth asking for, they just do
+ *  not gate the conclusion (`designOutstandingRequired`). */
+const outstandingDocs = (c: Control): DesignDoc[] => designOutstanding(c);
 
 /** The open handoffs sitting with this person. `isOwnerTask` in helpers.ts matches
  *  on `c.owner` alone, which drops every task riding a control this person runs as
@@ -206,23 +212,25 @@ export function buildRemediationBrief(eng: IcfrEngagement, owner: string, defId?
       // The mechanism, not the count. It sits above the plan because the plan is
       // judged against it — a fix that does not change this is not a fix.
       ['Root cause', d.rootCause],
-      ['Classification', grade],
-      ['What that means', URGENCY[grade] ?? '—'],
+      ['Classification', grade ?? 'Not sized yet'],
+      ['What that means', (grade && URGENCY[grade]) ?? '—'],
       // Read-only, and here because an owner arguing for budget needs a number to
       // argue with. Stated as what could have slipped through — never as a
       // distance from a threshold, which is the ruler by another name.
-      ['Exposure', `${formatINR(d.magnitude)} — what could have slipped through`],
+      // '₹0' here would be an actively harmful number: the owner reads this to
+      // argue for budget, and nought is the strongest argument against them.
+      ['Exposure', d.magnitude === null ? 'Not sized yet' : `${formatINR(d.magnitude)} — what could have slipped through`],
       ['Likelihood', d.likelihood],
     ];
     if (d.compensatingControlId) {
-      exceptionRows.push(['Compensating control', `${d.compensatingControlId} — it caps how far the grade can rise, and never clears the exception.`]);
+      exceptionRows.push(['Compensating control', `${d.compensatingControlId} — it caps how far the grade can rise, and never clears the deficiency.`]);
     }
     if (d.mwIndicators.length) {
       exceptionRows.push(['Escalated', 'A reportable condition was recorded against this control, which sets the grade whatever the exposure.']);
     }
     exceptionRows.push(['Where it stands', STAGE[d.status]]);
     exceptionRows.push(['Fix due by', dueUrgency(d.remediation.date)]);
-    blocks.push({ kind: 'kv', title: `Exception — ${d.id}`, rows: exceptionRows });
+    blocks.push({ kind: 'kv', title: `Deficiency — ${d.id}`, rows: exceptionRows });
 
     // ── The argument, if there was one ───────────────────────────────────────
     // Their own challenge and the answer to it. On the brief because "I disagreed
@@ -256,6 +264,22 @@ export function buildRemediationBrief(eng: IcfrEngagement, owner: string, defId?
       planRows.push(['Reviewed by the audit team', d.planReview.decision === 'Accepted'
         ? `Accepted — ${d.planReview.by}, ${d.planReview.at}`
         : `Sent back — ${d.planReview.reason ?? 'no reason recorded'} (${d.planReview.by}, ${d.planReview.at})`]);
+      // On a design gap the audit team also recorded WHICH kind of fix this is, and
+      // the owner should read it in their own copy: a workaround leaves the control
+      // as it was, so the finding does not go away when the workaround is in place.
+      if (d.planReview.fix) planRows.push(['What kind of fix', `${PLAN_FIX_LABEL[d.planReview.fix]} — ${PLAN_FIX_HINT[d.planReview.fix]}`]);
+      // Once the rebuilt control has been recorded, the owner is entitled to see
+      // WHAT the audit team wrote down as the control they now run, and from when.
+      // Their evidence for the rest of the year is judged against this sentence and
+      // this date, and an owner still sending the old month's approvals has not
+      // been told. A redesign the team has not recorded yet says so instead — the
+      // silence would otherwise read as agreement.
+      if (d.planReview.fix === 'redesign' && d.planReview.decision === 'Accepted' && c) {
+        const v = versionFrom(c, d.id);
+        planRows.push(['The control you now run', v
+          ? `v${versionNo(c)}, running since ${formatDueDate(v.supersededAt)} — "${c.description}". Recorded by ${v.replaced.by}: ${v.replaced.note}`
+          : 'The audit team has not recorded the rebuilt control yet. Until they do, the design test cannot start again.']);
+      }
     }
     blocks.push({ kind: 'kv', title: 'Your remediation plan', rows: planRows });
 
@@ -275,6 +299,13 @@ export function buildRemediationBrief(eng: IcfrEngagement, owner: string, defId?
     // paper and stay in the audit file. A PASSED round is deliberately absent too:
     // a pass is the audit team's conclusion, and the owner hears it when the
     // exception closes, not from a brief that would be announcing it early.
+    //
+    // HISTORIC from 30 Sep: the retest left the exception flow, so no new round
+    // is ever appended and this only ever quotes a miss recorded before the
+    // change. Kept, because a written miss is still the clearest thing the owner
+    // can be told about a fix that did not work. What is deliberately NOT here is
+    // the retest now owed on the CONTROL (`Control.retestDue`) — that is the
+    // audit's own testing plan, and this file is owner-safe by field.
     (d.retests ?? []).filter(x => x.result === 'Fail').forEach(x => {
       blocks.push({
         kind: 'note', label: `Retest ${x.n} — did not hold`, tone: 'bad',
@@ -410,7 +441,7 @@ export function buildRemediationBrief(eng: IcfrEngagement, owner: string, defId?
   // reason `exceptionCourtDetail` names a person rather than a role.
   blocks.push({
     kind: 'note', label: 'If something here is wrong', tone: 'neutral',
-    text: `Reply to ${eng.preparer} rather than editing this document — dates, plans and evidence are recorded against the exception itself, and a change made here would not reach it.`,
+    text: `Reply to ${eng.preparer} rather than editing this document — dates, plans and evidence are recorded against the deficiency itself, and a change made here would not reach it.`,
   });
 
   return blocks;

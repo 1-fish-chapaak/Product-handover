@@ -605,6 +605,26 @@ export const NOTIFICATION_EVENTS: NotificationEventDef[] = [
     dedup: { kind: 'collapse-by-operation', note: 'One message per move operation.' },
     configurability: { mandatory: true, channelConfigurable: false, optOut: false, note: 'Admin policy.' }, priority: 'P2', overridesQuietHours: false, requiresAction: false, deeplink: 'admin',
   },
+  {
+    id: 'WFL-13', module: 'Workflows & Data', event: 'Batch build finished',
+    trigger: 'Ira finishes building every workflow in a batch (adapt, Audit with AI, a split prompt).', channel: 'in-app',
+    whyThisChannel: 'Batches run while the user works elsewhere; this is how they learn the reviews are waiting.',
+    recipients: [R('workflow-owner', 'Whoever started the batch')], watchers: [],
+    cadence: 'Once per batch',
+    content: ['batch title', 'workflows built', 'ready to review', 'need input', 'deeplink'],
+    dedup: { kind: 'none' },
+    configurability: { mandatory: false, channelConfigurable: true, optOut: true, note: 'Owner can mute batch summaries.' }, priority: 'P1', overridesQuietHours: false, requiresAction: true, deeplink: 'workflow',
+  },
+  {
+    id: 'WFL-14', module: 'Workflows & Data', event: 'Workflow review assigned',
+    trigger: 'Someone assigns a built workflow to a teammate to review and approve.', channel: 'both',
+    whyThisChannel: 'A review assigned to you is work only you can unblock — it goes live, and starts returning hours, when you approve.',
+    recipients: [R('workflow-owner', 'The assigned reviewer')], watchers: [],
+    cadence: 'On assignment',
+    content: ['workflow name', 'control id', 'assigned by', 'review link'],
+    dedup: { kind: 'none' },
+    configurability: { mandatory: false, channelConfigurable: true, optOut: false, note: 'Not opt-out — an assigned review is the reviewer’s to act on.' }, priority: 'P1', overridesQuietHours: false, requiresAction: true, deeplink: 'workflow',
+  },
 
   // ── Dashboards ──
   {

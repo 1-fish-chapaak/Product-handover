@@ -4,7 +4,7 @@ import type { MockAuditData } from './stream/mockStream';
 import { motion, AnimatePresence, useReducedMotion } from 'motion/react';
 import { renderAssistantText } from '../shared/AssistantMarkdown';
 import {
-  Send, Paperclip, Sparkles, History, X, FileText, FileSpreadsheet, PanelRightOpen, PanelRightClose,
+  Send, Paperclip, Sparkles, History, X, FileText, Database, FileSpreadsheet, PanelRightOpen, PanelRightClose,
   PanelLeftClose, PanelLeftOpen,
   Workflow, BarChart3, PieChart, LineChart, ChevronDown, ChevronLeft, ChevronRight,
   MessageSquare, ArrowRight, Plus, Lightbulb,
@@ -38,13 +38,21 @@ import {
 import InsightGenerator from '../shared/InsightGenerator';
 import LayeredInsightCard from '../shared/LayeredInsightCard';
 import type { WorkflowTypeId } from '../../data/mockData';
-import type { ArtifactTab } from '../../hooks/useAppState';
+import type { ArtifactTab, WorkflowAgent, WorkflowAgentSeed } from '../../hooks/useAppState';
+import { SplitPlanCard, AgentNudgeCard } from './SplitPlanCards';
+import { BatchBuildCard, ReviewSessionCard } from './BatchBuildCards';
+import type { SplitPlanData, NudgeData } from './splitPlan';
+import { readTabMessages, writeTabMessages } from './chatTabsStorage';
+import {
+  commitPlan, createBatch, decomposePrompt, findSession, getPlanWorkflows, itemsFromPlanRows, planFromPrompt, reviseSession,
+  useFreshWorkspace, type AuditPlan, type PlanWorkflowRow,
+} from '../../data/auditPlan';
+import { connectedDatabaseCount } from '../../hooks/useKnowledgeSources';
 import { TextShimmer } from '../shared/TextShimmer';
 import { AuditifyHelloEffect } from '../shared/HelloEffect';
 import FloatingLines from '../shared/FloatingLines';
 // Persona removed — Rive WebGL crashes in some browsers
 import DataPickerModal, { type AttachmentSelection } from './DataPickerModal';
-import OneClickAuditModal from '../one-click-audit/OneClickAuditModal';
 import SmartQueriesModal, { SmartQueriesBanner } from './SmartQueriesModal';
 import { describeAnalyzedData } from './smartQueries';
 import { type ComposerContext, type ComposerIconKey, type ComposerTone, editPlanContext } from './composerContext';
@@ -66,7 +74,7 @@ import { AddToDashboardModal } from './AddToDashboardModal';
 import { AddToReportModal } from './AddToReportModal';
 import { LIBRARY_WORKFLOWS } from '../workflow/WorkflowLibraryView';
 import Gated from '../shared/Gated';
-import { useCan } from '../../context/CurrentUserContext';
+import { useCan, useCurrentUser } from '../../context/CurrentUserContext';
 import {
   SectionHeader as WidgetSectionHeader,
   KpiPreviewRow,
@@ -144,7 +152,15 @@ export interface ChatMessage {
     | 'workflow-review'
     | 'workflow-tolerance'
     | 'workflow-view-preview'
-    | 'workflow-output';
+    | 'workflow-output'
+    // GRC agent — a complex prompt split into checks under an engagement,
+    // the General agent's nudge toward it, a batch build (several workflows
+    // built at once, each reviewed in its own session), and one of those
+    // review sessions.
+    | 'workflow-split-plan'
+    | 'workflow-agent-nudge'
+    | 'workflow-batch'
+    | 'workflow-review-session';
   richData?: Record<string, unknown>;
   // Tracks which dashboards/reports this result was added to
   addedTo?: {
@@ -814,6 +830,14 @@ export interface ChatViewProps {
   onViewReport?: (reportId: string) => void;
   /** When set, shows an "Adding workflow for engagement — <name>" banner above the composer. */
   workflowEngagementContext?: string | null;
+  /** Hand-off into a fresh workflow-builder chat with a chosen agent. */
+  workflowAgentSeed?: WorkflowAgentSeed | null;
+  onWorkflowAgentSeedConsumed?: () => void;
+  /** Open an engagement workspace (split-plan cards link to it). */
+  onOpenEngagement?: (engagementId: string) => void;
+  /** Keep this thread across navigation: restored when Ask IRA reopens,
+   *  unless the user arrives with something new to start. */
+  persistKey?: string;
   /** Tab mode: initial conversation for this tab (restored from storage, or
    *  pre-loaded from a saved chat). When provided, ChatView seeds messages from
    *  it and skips the selectedChatId auto-load (the tab manager owns loading). */
@@ -2020,6 +2044,8 @@ interface SaveAsWorkflowModalProps {
   defaultDescription: string;
   /** LLM-detected configurable keys to seed the Configuration section. */
   defaultConfigurables?: { key: string; type: ConfigurableKey['type']; value: string }[];
+  /** Business process to preselect (inferred from the workflow being built). */
+  defaultBpId?: string;
   /** Audit result data — drives the second-step "Choose what to add" picker. */
   resultData: import('./AddToDashboardModal').AuditResultData;
   onCancel: () => void;
@@ -2034,7 +2060,7 @@ interface SaveAsWorkflowModalProps {
   }) => void;
 }
 
-function SaveAsWorkflowModal({ open, defaultName, defaultDescription, defaultConfigurables, resultData, onCancel, onConfirm }: SaveAsWorkflowModalProps) {
+function SaveAsWorkflowModal({ open, defaultName, defaultDescription, defaultConfigurables, defaultBpId, resultData, onCancel, onConfirm }: SaveAsWorkflowModalProps) {
   // Two-step flow: 1) workflow metadata (name, BP, description, configurables,
   // frequency) → 2) "Choose what to add" granular widget picker (KPIs, charts,
   // table) — mirrors AddToDashboard / AddToReport so the user keeps the same
@@ -2089,8 +2115,9 @@ function SaveAsWorkflowModal({ open, defaultName, defaultDescription, defaultCon
       setStep('details');
       setName(defaultName);
       setDescription(defaultDescription);
-      setBpId('');
-      setSubProcessId('');
+      // Prefilled from what's being built — one less required field to hunt for.
+      setBpId(defaultBpId ?? '');
+      setSubProcessId(defaultBpId ? (SOPS.find(sop => sop.bpId === defaultBpId)?.id ?? '') : '');
       setBpOpen(false);
       setSubOpen(false);
       setFrequency('Daily');
@@ -3284,7 +3311,7 @@ ${transcriptHtml}
   );
 }
 
-export default function ChatView({ showChatHistory, toggleChatHistory, setShowArtifacts, showArtifacts, setActiveArtifactTab, setArtifactMode, setWorkflowType, initialQuery, onInitialQueryProcessed, workflowRunSeed, onWorkflowRunSeedConsumed, composerDraft, onComposerDraftConsumed, composerContextSeed, onComposerContextSeedConsumed, selectedChatId, onChatLoaded, setView, pendingDashboard, onAddToDashboard, onDismissPendingDashboard, onLaunchWorkflowBuilder, workflowBuilderSeedPrompt, onWorkflowBuilderSeedConsumed, availableDashboards, availableReports, onAddResultToDashboard, onAddResultToReport, onViewDashboard, onViewReport, workflowEngagementContext, initialMessages, onMessagesChange }: ChatViewProps) {
+export default function ChatView({ showChatHistory, toggleChatHistory, setShowArtifacts, showArtifacts, setActiveArtifactTab, setArtifactMode, setWorkflowType, initialQuery, onInitialQueryProcessed, workflowRunSeed, onWorkflowRunSeedConsumed, composerDraft, onComposerDraftConsumed, composerContextSeed, onComposerContextSeedConsumed, selectedChatId, onChatLoaded, setView, pendingDashboard, onAddToDashboard, onDismissPendingDashboard, onLaunchWorkflowBuilder, workflowBuilderSeedPrompt, onWorkflowBuilderSeedConsumed, availableDashboards, availableReports, onAddResultToDashboard, onAddResultToReport, onViewDashboard, onViewReport, workflowEngagementContext, workflowAgentSeed, onWorkflowAgentSeedConsumed, onOpenEngagement, persistKey, initialMessages, onMessagesChange }: ChatViewProps) {
   const { addToast } = useToast();
   const logEvent = useAuditLog();
   const { can } = useCan();
@@ -3303,7 +3330,19 @@ export default function ChatView({ showChatHistory, toggleChatHistory, setShowAr
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [workflowBuilderSeedPrompt]);
-  const [messages, setMessages] = useState<ChatMessage[]>(() => initialMessages ?? []);
+  // The thread the user left when they navigated away — so a batch card and
+  // its Review links are still there when they come back. Skipped when they
+  // arrive to start something (a seed, a saved chat, a query hand-off).
+  const [resumed] = useState<{ messages: ChatMessage[]; meta: { workflowMode?: boolean; agent?: WorkflowAgent } } | null>(() => {
+    if (!persistKey || initialMessages) return null;
+    if (workflowAgentSeed || selectedChatId || initialQuery || workflowRunSeed || workflowBuilderSeedPrompt != null) return null;
+    const msgs = readTabMessages(`resume-${persistKey}`);
+    if (!msgs || msgs.length === 0) return null;
+    let meta = {};
+    try { meta = JSON.parse(localStorage.getItem(`irame.chat.resume-meta.${persistKey}`) ?? '{}'); } catch { /* ignore */ }
+    return { messages: msgs, meta };
+  });
+  const [messages, setMessages] = useState<ChatMessage[]>(() => initialMessages ?? resumed?.messages ?? []);
   // Tab mode: report message changes up so the tab manager (ChatTabsView) can
   // persist this tab's conversation to localStorage.
   useEffect(() => { onMessagesChange?.(messages); }, [messages, onMessagesChange]);
@@ -3390,6 +3429,7 @@ export default function ChatView({ showChatHistory, toggleChatHistory, setShowAr
   // Workflow modal's "Create Workflow" button).
   const [buildWorkflowMode, setBuildWorkflowMode] = useState(
     !!workflowEngagementContext ||
+    !!resumed?.meta.workflowMode ||
     (typeof window !== 'undefined' && new URLSearchParams(window.location.search).get('compose') === 'workflow')
   );
 
@@ -3397,6 +3437,24 @@ export default function ChatView({ showChatHistory, toggleChatHistory, setShowAr
   useEffect(() => {
     if (workflowEngagementContext) setBuildWorkflowMode(true);
   }, [workflowEngagementContext]);
+
+  // Workflow agent for this chat. Pickable on the empty state, fixed once the
+  // thread starts (production: "Start a new chat to choose another agent").
+  // GRC splits complex prompts into control-linked checks; General builds one
+  // analysis and only nudges toward GRC.
+  const [wfAgent, setWfAgent] = useState<WorkflowAgent>(resumed?.meta.agent ?? 'grc');
+  // Save the thread (and its mode) as it changes, so leaving Ask IRA never
+  // loses it. "New chat" saves an empty thread, which restores as fresh.
+  useEffect(() => {
+    if (!persistKey) return;
+    writeTabMessages(`resume-${persistKey}`, messages);
+    try { localStorage.setItem(`irame.chat.resume-meta.${persistKey}`, JSON.stringify({ workflowMode: buildWorkflowMode, agent: wfAgent })); } catch { /* quota */ }
+  }, [persistKey, messages, buildWorkflowMode, wfAgent]);
+  // Set when this chat is a batch-built workflow's review session (opened in
+  // its own tab): typed messages become change requests for that workflow.
+  const reviewSessionRef = useRef<string | null>(null);
+  const consumedSeedRef = useRef<WorkflowAgentSeed | null>(null);
+  const { currentUser } = useCurrentUser();
 
   // ───────── Rotating placeholder (hero empty-state composer) ─────────
   // Typewriter effect: types each prompt character-by-character, holds
@@ -4809,14 +4867,21 @@ export default function ChatView({ showChatHistory, toggleChatHistory, setShowAr
 
   // Kick off a workflow build from a typed prompt. Mirrors the journey's
   // applyWorkflow but pushes everything into ChatView's messages array.
-  const startWorkflowBuild = useCallback(async (prompt: string, attachments: UploadedFile[] = []) => {
-    // Push the user's prompt as the opening message of the thread.
-    setMessages(prev => [...prev, { id: `msg-${Date.now()}`, role: 'user', text: prompt, timestamp: new Date() }]);
+  const startWorkflowBuild = useCallback(async (
+    prompt: string,
+    attachments: UploadedFile[] = [],
+    opts: { echoUser?: boolean; draft?: WorkflowDraft } = {},
+  ) => {
+    // Push the user's prompt as the opening message of the thread — unless
+    // it's already there (split plan / nudge answered, or a queued check).
+    if (opts.echoUser !== false) {
+      setMessages(prev => [...prev, { id: `msg-${Date.now()}`, role: 'user', text: prompt, timestamp: new Date() }]);
+    }
     setIsTyping(true);
     // Generate the workflow draft (mock). Keep a brief "thinking" beat
     // so the assistant turn has shape.
     await new Promise(r => setTimeout(r, 600));
-    const draft = wfGenerate(prompt);
+    const draft = opts.draft ?? wfGenerate(prompt);
     setWfWorkflow(draft);
 
     // Carry-forward Step 1 attachments into required inputs.
@@ -5007,6 +5072,201 @@ export default function ChatView({ showChatHistory, toggleChatHistory, setShowAr
     }, 700);
   }, [messages, wfWorkflow, wfFiles, wfMappings, wfPushAssistant, wfPushCard]);
 
+  // ─── GRC agent: complex prompt → plan → batch build ─────────────────────
+  // A prompt asking for several distinct tests becomes a plan (one check per
+  // control, under a recommended engagement) instead of one crammed workflow.
+  // Accepting commits the plan and Ira builds every new check as a batch —
+  // one row per workflow here, each reviewed in its own session tab.
+
+  /** Clear the in-thread builder so the next build starts clean — stale refs
+   *  would otherwise block the Upload → Clarify → Map effects. */
+  const resetWfBuild = useCallback(() => {
+    setWfWorkflow(null);
+    setWfFiles({});
+    setWfMappings({});
+    setWfAlignments({});
+    setWfResult(null);
+    setWfSaved(false);
+    setWfUploadModalOpen(false);
+    wfHasPushedClarifyRef.current = false;
+    wfHasPushedMapRef.current = false;
+    wfValidateCompleteRef.current = null;
+    wfUploadModalSeededFor.current = null;
+  }, []);
+
+  // Attachments that rode in with the split prompt / nudge — handed to the
+  // first check so the user doesn't attach twice.
+  const splitAttachmentsRef = useRef<UploadedFile[]>([]);
+
+  const setRichData = (msgId: string, patch: Record<string, unknown>) =>
+    setMessages(m => m.map(x => (x.id === msgId ? { ...x, richData: { ...(x.richData ?? {}), ...patch } } : x)));
+
+  const startSplitPlan = (prompt: string, attachments: UploadedFile[], echoUser = true) => {
+    const plan = planFromPrompt(prompt, { owner: currentUser?.name ?? 'You', engagementContextName: workflowEngagementContext });
+    if (!plan) { startWorkflowBuild(prompt, attachments, { echoUser }); return; }
+    splitAttachmentsRef.current = attachments;
+    const eng = plan.engagements[0];
+    const reuse = eng.controls.filter(c => c.check.kind === 'reuse').length;
+    const fresh = eng.controls.filter(c => c.check.kind === 'new').length;
+    if (echoUser) setMessages(m => [...m, { id: `msg-${Date.now()}`, role: 'user', text: prompt, timestamp: new Date() }]);
+    setIsTyping(true);
+    const thinkingId = wfMakeId();
+    setMessages(m => [...m, {
+      id: thinkingId,
+      role: 'assistant',
+      text: 'Reading your prompt…',
+      thinking: [
+        `Found ${eng.controls.length} distinct tests in the prompt`,
+        `Matched each to a control — ${eng.controls.map(c => c.controlId).join(', ')}`,
+        `Checked the Workflow Library — ${reuse} already exist${reuse === 1 ? 's' : ''}`,
+        eng.target.kind === 'existing' ? `Landing them in ${eng.target.engagementName}` : `Recommended engagement — ${eng.name}`,
+      ],
+      timestamp: new Date(),
+    }]);
+    window.setTimeout(() => {
+      setIsTyping(false);
+      setMessages(m => [
+        ...m.map(x => (x.id === thinkingId
+          ? { ...x, text: `Your prompt covers **${eng.controls.length} separate tests**, so I'd set them up as one check per control${eng.target.kind === 'existing' ? ` inside **${eng.target.engagementName}**` : ' under an engagement'} — ${reuse} can reuse workflows you already have, ${fresh} ${fresh === 1 ? 'is' : 'are'} new.` }
+          : x)),
+        {
+          id: wfMakeId(),
+          role: 'assistant',
+          text: '',
+          timestamp: new Date(),
+          richType: 'workflow-split-plan',
+          richData: { plan, status: 'open' } satisfies SplitPlanData as unknown as Record<string, unknown>,
+        },
+      ]);
+    }, 1600);
+  };
+
+  /** Push a batch card (and run it) for workflows already committed. */
+  const pushBatch = (batchId: string, intro: string) => {
+    wfPushAssistant(intro);
+    setMessages(m => [...m, {
+      id: wfMakeId(),
+      role: 'assistant',
+      text: '',
+      timestamp: new Date(),
+      richType: 'workflow-batch',
+      richData: { batchId },
+    }]);
+  };
+
+  const batchFromRows = (rows: PlanWorkflowRow[], origin: 'split' | 'audit-plan' | 'draft', engagementId: string, engagementName: string) => {
+    const items = itemsFromPlanRows(rows);
+    return createBatch({
+      title: `Building ${items.length} check${items.length === 1 ? '' : 's'} for ${engagementName}`,
+      origin,
+      engagementId,
+      engagementName,
+      owner: currentUser?.name ?? 'You',
+      items,
+    });
+  };
+
+  const confirmSplit = (msgId: string) => {
+    const msg = messages.find(m => m.id === msgId);
+    if (!msg) return;
+    const data = msg.richData as unknown as SplitPlanData;
+    const [res] = commitPlan(data.plan);
+    if (!res) return;
+    setRichData(msgId, {
+      status: 'committed',
+      committed: { engagementId: res.engagementId, engagementName: res.engagementName, created: res.created, reused: res.reused, newChecks: res.newChecks.length, manual: res.manual },
+    });
+    logEvent({ action: 'Create', description: `${res.created ? 'Created' : 'Extended'} engagement "${res.engagementName}" from a split prompt (${res.controls.length} controls)`, module: 'Ask IRA', entity: 'Engagement' });
+    const linked = res.reused > 0 ? ` ${res.reused} reuse${res.reused === 1 ? 's' : ''} an existing workflow and ${res.reused === 1 ? 'is' : 'are'} already linked.` : '';
+    if (res.newChecks.length === 0) {
+      wfPushAssistant(`${res.created ? 'Created' : 'Updated'} **${res.engagementName}** with ${res.controls.length} controls.${linked} Nothing new to build.`);
+      return;
+    }
+    const batchId = batchFromRows(res.newChecks, 'split', res.engagementId, res.engagementName);
+    window.setTimeout(() => pushBatch(batchId,
+      `${res.created ? 'Created' : 'Updated'} **${res.engagementName}** with ${res.controls.length} controls.${linked} Building the **${res.newChecks.length} new check${res.newChecks.length === 1 ? '' : 's'}** now, on your connected data — open any one to review it in its own session.`,
+    ), 600);
+  };
+
+  const buildSplitAsOne = (msgId: string) => {
+    const msg = messages.find(m => m.id === msgId);
+    const data = msg?.richData as unknown as SplitPlanData | undefined;
+    if (!data) return;
+    setRichData(msgId, { status: 'declined' });
+    startWorkflowBuild(data.plan.prompt ?? '', splitAttachmentsRef.current, { echoUser: false });
+  };
+
+  const updateSplitPlan = (msgId: string, plan: AuditPlan) => setRichData(msgId, { plan });
+
+  /** Show one batch-built workflow's review session in this thread. Used when
+   *  a session tab opens, and by "Approve & next" to move the same tab on to
+   *  the next workflow (the URL follows, so a reload lands on it). */
+  const openReviewSession = (sessionId: string) => {
+    reviewSessionRef.current = sessionId;
+    const hit = findSession(sessionId);
+    try {
+      const url = new URL(window.location.href);
+      url.searchParams.set('view', 'chat');
+      url.searchParams.set('session', sessionId);
+      window.history.replaceState(null, '', url.toString());
+    } catch { /* non-browser */ }
+    setMessages([
+      ...(hit ? [{ id: `msg-${Date.now()}`, role: 'user' as const, text: `Review ${hit.item.name} (${hit.item.controlId})`, timestamp: new Date() }] : []),
+      {
+        id: wfMakeId(),
+        role: 'assistant',
+        text: hit
+          ? `Here's **${hit.item.name}**, built as part of *${hit.batch.title}*. Check the result and what I assumed — ask for any change below, or approve it.`
+          : 'I couldn\'t find this review session.',
+        timestamp: new Date(),
+      },
+      { id: wfMakeId(), role: 'assistant', text: '', timestamp: new Date(), richType: 'workflow-review-session', richData: { sessionId } },
+    ]);
+  };
+
+  /** Build an engagement's remaining draft checks as a batch (Audit with AI
+   *  hand-off, or one draft row from the Workflow Library). */
+  const startBatchForEngagement = (engagementId: string, checkIds?: string[]) => {
+    const drafts = getPlanWorkflows().filter(w => w.engagementId === engagementId && w.status === 'draft' && (!checkIds || checkIds.includes(w.checkId)));
+    if (drafts.length === 0) {
+      wfPushAssistant('Nothing left to build — every check for this engagement is already built.');
+      return;
+    }
+    const engagementName = drafts[0].engagementName;
+    const batchId = batchFromRows(drafts, checkIds ? 'draft' : 'audit-plan', engagementId, engagementName);
+    pushBatch(batchId, drafts.length === 1
+      ? `Building **${drafts[0].name}** for **${engagementName}** on your connected data. Open it to review when it's ready.`
+      : `Building the **${drafts.length} new checks** for **${engagementName}** on your connected data — open any one to review it in its own session.`);
+  };
+
+  const pushAgentNudge = (prompt: string, checks: string[], attachments: UploadedFile[]) => {
+    splitAttachmentsRef.current = attachments;
+    setMessages(m => [...m, { id: `msg-${Date.now()}`, role: 'user', text: prompt, timestamp: new Date() }]);
+    setIsTyping(true);
+    window.setTimeout(() => {
+      setIsTyping(false);
+      setMessages(m => [...m, {
+        id: wfMakeId(),
+        role: 'assistant',
+        text: '',
+        timestamp: new Date(),
+        richType: 'workflow-agent-nudge',
+        richData: { prompt, checks, status: 'open' } satisfies NudgeData as unknown as Record<string, unknown>,
+      }]);
+    }, 700);
+  };
+
+  /** Route a workflow-mode prompt: split (GRC), nudge (General), or build. */
+  const routeWorkflowPrompt = (prompt: string, attachments: UploadedFile[], agent: WorkflowAgent = wfAgent) => {
+    const dec = decomposePrompt(prompt);
+    if (dec.isComplex) {
+      if (agent === 'grc') { startSplitPlan(prompt, attachments); return; }
+      pushAgentNudge(prompt, dec.entries.map(e => e.checkName), attachments);
+      return;
+    }
+    startWorkflowBuild(prompt, attachments);
+  };
+
   const simulateResponse = (userMsg: string, explicitMode?: 'query' | 'workflow') => {
     clearTimers();
 
@@ -5100,6 +5360,23 @@ export default function ChatView({ showChatHistory, toggleChatHistory, setShowAr
       ...files.map(f => ({ kind: 'file' as const, name: f.name })),
     ];
 
+    // A review session: what's typed is a change to that one workflow.
+    if (reviewSessionRef.current && trimmed) {
+      const sessionId = reviewSessionRef.current;
+      setMessages(m => [...m, { id: `msg-${Date.now()}`, role: 'user', text: trimmed, timestamp: new Date() }]);
+      setInput('');
+      if (textareaRef.current) textareaRef.current.style.height = 'auto';
+      setIsTyping(true);
+      window.setTimeout(() => {
+        setIsTyping(false);
+        const n = reviseSession(sessionId, trimmed);
+        wfPushAssistant(n == null
+          ? 'Noted — I\'ll apply that once the workflow finishes building.'
+          : `Applied and re-ran — **${n} exceptions** now. The change is listed under what I assumed; approve when it looks right.`);
+      }, 900);
+      return;
+    }
+
     // Workflow mode pill is on → ALWAYS start a workflow build. If a
     // previous workflow build is still hanging around (wfWorkflow set
     // from an earlier prompt in this thread), we reset its state first
@@ -5123,19 +5400,8 @@ export default function ChatView({ showChatHistory, toggleChatHistory, setShowAr
       if (textareaRef.current) textareaRef.current.style.height = 'auto';
       // Reset any in-flight workflow state from a prior build in this
       // thread so the new prompt isn't blocked by stale refs.
-      if (wfWorkflow) {
-        setWfWorkflow(null);
-        setWfFiles({});
-        setWfMappings({});
-        setWfAlignments({});
-        setWfResult(null);
-        setWfSaved(false);
-        wfHasPushedClarifyRef.current = false;
-        wfHasPushedMapRef.current = false;
-        wfValidateCompleteRef.current = null;
-        wfUploadModalSeededFor.current = null;
-      }
-      startWorkflowBuild(trimmed, attachmentsForWorkflow);
+      if (wfWorkflow) resetWfBuild();
+      routeWorkflowPrompt(trimmed, attachmentsForWorkflow);
       return;
     }
 
@@ -5631,9 +5897,8 @@ export default function ChatView({ showChatHistory, toggleChatHistory, setShowAr
 
   const isEmpty = messages.length === 0;
 
-  // One-Click Audit — the "audit with AI" wizard surfaced as a banner on the
-  // empty state (integrated DB sources are connected, so Ira can draft a plan).
-  const [showOneClickAudit, setShowOneClickAudit] = useState(false);
+  // Audit with AI — surfaced as a banner on the empty state (integrated DB
+  // sources are connected, so Ira can draft a plan). Opens the full page.
 
   // Smart queries — Ira "profiles" the attached data (or the connected sources
   // when nothing is attached yet) and offers ready-to-ask questions per
@@ -5652,6 +5917,9 @@ export default function ChatView({ showChatHistory, toggleChatHistory, setShowAr
     const t = setTimeout(() => setSmartQueriesGenerating(false), 4200);
     return () => clearTimeout(t);
   }, [files, attachedSources]);
+  // A new client with nothing connected or attached has no data to profile.
+  const freshWorkspace = useFreshWorkspace();
+  const noData = freshWorkspace && connectedDatabaseCount() === 0 && files.length === 0 && attachedSources.length === 0;
   const smartQueriesData = describeAnalyzedData(
     files.map(f => f.name),
     attachedSources.map(s => s.name),
@@ -5888,6 +6156,37 @@ export default function ChatView({ showChatHistory, toggleChatHistory, setShowAr
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [journeySeed]);
 
+  // Workflow Builder hand-off — a fresh chat with the chosen agent, then an
+  // optional first prompt or a plan's draft checks to build in turn.
+  useEffect(() => {
+    // Consume each hand-off once — StrictMode re-runs this effect before the
+    // parent clears the seed, which would push the batch intro twice.
+    if (!workflowAgentSeed || consumedSeedRef.current === workflowAgentSeed) return;
+    consumedSeedRef.current = workflowAgentSeed;
+    const seed = workflowAgentSeed;
+    onWorkflowAgentSeedConsumed?.();
+    resetChat();
+    resetWfBuild();
+    reviewSessionRef.current = null;
+    setWfAgent(seed.agent);
+    setBuildWorkflowMode(true);
+    setArtifactMode('workflow');
+    if (seed.reviewSessionId) {
+      const sessionId = seed.reviewSessionId;
+      queueMicrotask(() => openReviewSession(sessionId));
+    } else if (seed.batchId) {
+      const batchId = seed.batchId;
+      queueMicrotask(() => pushBatch(batchId, 'Building these on your data now. I won\'t stop to ask — anything I can\'t resolve waits as **Needs your input**. Open any workflow to review it in its own session.'));
+    } else if (seed.buildQueue) {
+      const { engagementId, checkIds } = seed.buildQueue;
+      queueMicrotask(() => startBatchForEngagement(engagementId, checkIds));
+    } else if (seed.prompt) {
+      const prompt = seed.prompt;
+      queueMicrotask(() => routeWorkflowPrompt(prompt, [], seed.agent));
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [workflowAgentSeed]);
+
   /* ────────────────────── EMPTY STATE ────────────────────── */
   if (isEmpty) {
     return (
@@ -5948,7 +6247,7 @@ export default function ChatView({ showChatHistory, toggleChatHistory, setShowAr
             </div>
           )}
 
-          {/* One-Click Audit banner — mirrors the pendingDashboard banner slot.
+          {/* Audit with AI banner — mirrors the pendingDashboard banner slot.
               Dark brand gradient so it reads as the AI surface it opens. */}
           <div className="shrink-0 mx-5 mt-14 mb-2 relative overflow-hidden rounded-xl border border-brand-300/40 bg-gradient-to-r from-[#26064A] via-[#3B0B72] to-[#550FA5] px-4 py-2.5 flex items-center justify-between gap-3 z-10">
             <FloatingLines
@@ -5968,19 +6267,23 @@ export default function ChatView({ showChatHistory, toggleChatHistory, setShowAr
               </div>
               <div className="min-w-0">
                 <div className="flex items-center gap-2">
-                  <p className="text-[0.8125rem] font-semibold text-white">One-Click Audit</p>
+                  <p className="text-[0.8125rem] font-semibold text-white">Audit with AI</p>
                   <span className="px-1.5 h-[16px] inline-flex items-center rounded-full bg-fuchsia-400/25 text-fuchsia-100 text-[8.5px] font-bold uppercase tracking-[0.1em]">New</span>
                 </div>
-                <p className="text-[0.6875rem] text-white/65 truncate">Your databases are connected — let Ira draft engagements, controls & workflows for your review.</p>
+                <p className="text-[0.6875rem] text-white/65 truncate">
+                  {noData
+                    ? 'Tell Ira what you audit and share your reports — it plans engagements, controls and a check for each, for your review.'
+                    : 'Your databases are connected — let Ira plan engagements, controls and a check for each, for your review.'}
+                </p>
               </div>
             </div>
             <button
               type="button"
-              onClick={() => setShowOneClickAudit(true)}
+              onClick={() => setView?.('audit-with-ai')}
               className="relative shrink-0 flex items-center gap-1.5 px-3.5 py-1.5 bg-white text-brand-800 hover:bg-brand-50 text-[0.75rem] font-semibold rounded-md transition-colors cursor-pointer shadow-[0_4px_14px_-4px_rgba(0,0,0,0.4)]"
             >
               <Zap size={12} />
-              Start
+              Plan my audit
             </button>
           </div>
 
@@ -6239,6 +6542,32 @@ export default function ChatView({ showChatHistory, toggleChatHistory, setShowAr
                       ))}
                     </div>
 
+                    {/* Workflow agent — General explores and analyses; GRC
+                        tests controls and splits multi-test prompts into
+                        control-linked checks. Fixed once the chat starts. */}
+                    {buildWorkflowMode && (
+                      <div role="radiogroup" aria-label="Workflow agent" className="inline-flex items-center rounded-full bg-paper-100 p-0.5 shadow-[inset_0_0_0_1px_rgba(15,8,30,0.06)]">
+                        {([
+                          { id: 'general', label: 'General', title: 'General — explore and analyse data with tables, charts, KPIs and summaries' },
+                          { id: 'grc', label: 'GRC', title: 'GRC — test controls and find violations; multi-test prompts become control-linked checks' },
+                        ] as const).map(a => (
+                          <button
+                            key={a.id}
+                            type="button"
+                            role="radio"
+                            aria-checked={wfAgent === a.id}
+                            title={a.title}
+                            onClick={() => setWfAgent(a.id)}
+                            className={`h-8 px-3 rounded-full text-[0.75rem] transition-colors cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/30 ${
+                              wfAgent === a.id ? 'bg-canvas-elevated text-brand-700 font-semibold shadow-[0_1px_2px_rgba(15,8,30,0.10)]' : 'text-ink-500 font-medium hover:text-ink-800'
+                            }`}
+                          >
+                            {a.label}
+                          </button>
+                        ))}
+                      </div>
+                    )}
+
                     {(input.trim() || files.length > 0 || attachedSources.length > 0) && (
                       <button
                         type="button"
@@ -6296,10 +6625,27 @@ export default function ChatView({ showChatHistory, toggleChatHistory, setShowAr
                   animate={{ opacity: 1, y: 0 }}
                   transition={prefersReducedMotion ? { duration: 0 } : { duration: 0.4, delay: 0.15, ease: [0.2, 0, 0, 1] }}
                 >
-                  <SmartQueriesBanner
-                    generating={smartQueriesGenerating}
-                    onOpen={openSmartQueries}
-                  />
+                  {noData ? (
+                    <div className="flex items-center gap-3 rounded-2xl border border-dashed border-canvas-border bg-canvas-elevated px-4 py-3 text-left">
+                      <span className="size-9 rounded-lg bg-paper-100 text-ink-500 flex items-center justify-center shrink-0"><Database size={16} aria-hidden /></span>
+                      <div className="min-w-0 flex-1">
+                        <p className="text-[0.8125rem] font-medium text-ink-900">Smart queries start with your data</p>
+                        <p className="text-[0.75rem] text-ink-500">Attach a file above, or connect your ERP — Ira profiles it and suggests the questions worth asking.</p>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => setView?.('knowledge-hub')}
+                        className="shrink-0 h-8 px-3 rounded-lg border border-canvas-border text-[0.75rem] font-medium text-ink-700 hover:border-brand-200 hover:bg-brand-50 cursor-pointer"
+                      >
+                        Connect data
+                      </button>
+                    </div>
+                  ) : (
+                    <SmartQueriesBanner
+                      generating={smartQueriesGenerating}
+                      onOpen={openSmartQueries}
+                    />
+                  )}
                 </motion.div>
               )}
               </div>
@@ -6316,9 +6662,6 @@ export default function ChatView({ showChatHistory, toggleChatHistory, setShowAr
           initialSourceIds={attachedSources.flatMap(s => s.kind === 'source' ? [s.sourceId] : [])}
           initialFiles={files}
         />
-        <AnimatePresence>
-          {showOneClickAudit && <OneClickAuditModal onClose={() => setShowOneClickAudit(false)} />}
-        </AnimatePresence>
         <SmartQueriesModal
           open={showSmartQueries}
           loading={smartQueriesGenerating}
@@ -7156,6 +7499,54 @@ export default function ChatView({ showChatHistory, toggleChatHistory, setShowAr
                           saved={wfSaved}
                         />
                       ) : null
+                    ) : msg.richType === 'workflow-split-plan' ? (
+                      <SplitPlanCard
+                        data={msg.richData as unknown as SplitPlanData}
+                        recommendExisting={!!workflowEngagementContext}
+                        onChange={(plan) => updateSplitPlan(msg.id, plan)}
+                        onConfirm={() => confirmSplit(msg.id)}
+                        onBuildAsOne={() => buildSplitAsOne(msg.id)}
+                        onOpenEngagement={(id) => onOpenEngagement?.(id)}
+                      />
+                    ) : msg.richType === 'workflow-agent-nudge' ? (
+                      <AgentNudgeCard
+                        data={msg.richData as unknown as NudgeData}
+                        onSwitch={() => {
+                          const d = msg.richData as unknown as NudgeData;
+                          setRichData(msg.id, { status: 'switched' });
+                          const atts = splitAttachmentsRef.current;
+                          // The agent is fixed per chat — switching starts a
+                          // fresh GRC chat carrying the same prompt.
+                          window.setTimeout(() => {
+                            resetChat();
+                            setWfAgent('grc');
+                            setBuildWorkflowMode(true);
+                            setArtifactMode('workflow');
+                            startSplitPlan(d.prompt, atts);
+                          }, 350);
+                        }}
+                        onKeep={() => {
+                          const d = msg.richData as unknown as NudgeData;
+                          setRichData(msg.id, { status: 'kept' });
+                          startWorkflowBuild(d.prompt, splitAttachmentsRef.current, { echoUser: false });
+                        }}
+                      />
+                    ) : msg.richType === 'workflow-batch' ? (
+                      <BatchBuildCard
+                        batchId={String((msg.richData as { batchId?: string }).batchId ?? '')}
+                        onOpenEngagement={(id) => onOpenEngagement?.(id)}
+                        onOpenLibrary={() => setView?.('workflow-library')}
+                        onOpenControls={() => setView?.('governance-controls')}
+                      />
+                    ) : msg.richType === 'workflow-review-session' ? (
+                      <ReviewSessionCard
+                        sessionId={String((msg.richData as { sessionId?: string }).sessionId ?? '')}
+                        onNext={openReviewSession}
+                        onAskChange={(draft) => {
+                          setInput(draft);
+                          requestAnimationFrame(() => { textareaRef.current?.focus(); handleTextareaInput(); });
+                        }}
+                      />
                     ) : msg.richType === 'error' ? (
                       // Terminal error state. Single icon + label (no side-stripe) per
                       // DESIGN.md alert-card scoping; the risk token names the kind,
@@ -7700,6 +8091,29 @@ export default function ChatView({ showChatHistory, toggleChatHistory, setShowAr
             // is open the composer is hidden and this card is the single input
             // surface (pick an option, or type your own answer in the card).
             <div className="mb-2">
+              {/* Same fast path as the build's questions — including the
+                  pre-save confirmation, the last stop before a workflow saves. */}
+              <div className="flex items-center justify-between gap-3 mb-1.5 px-1 text-[0.75rem] text-ink-500">
+                <span>Ira's standard defaults answer these for most audits — change any later.</span>
+                <button
+                  type="button"
+                  onClick={() => {
+                    const id = openClarification.id;
+                    setMessages(prev => prev.map(m => {
+                      if (m.id !== id || m.richType !== 'clarification') return m;
+                      const d = m.richData as unknown as QueryClarificationData;
+                      const answers = { ...d.answers };
+                      d.questions.forEach((q, qi) => { if (!answers[qi]?.length && q.options[0]) answers[qi] = [q.options[0]]; });
+                      return { ...m, richData: { ...d, answers } as unknown as Record<string, unknown> };
+                    }));
+                    // Queued after the fill above, so it submits the defaults.
+                    submitClarification(id);
+                  }}
+                  className="shrink-0 h-7 px-2.5 rounded-md text-[0.75rem] font-semibold text-brand-700 hover:bg-brand-50 cursor-pointer"
+                >
+                  Use standard defaults
+                </button>
+              </div>
               <QueryClarificationCard
                 data={openClarification.richData as unknown as QueryClarificationData}
                 onSetAnswer={(qi, ans) => updateClarificationAnswer(openClarification.id, qi, ans)}
@@ -7718,6 +8132,26 @@ export default function ChatView({ showChatHistory, toggleChatHistory, setShowAr
             // above. Answers are written without advancing; Done sets index to
             // the question count, which fires the build's continuation effect.
             <div className="mb-2">
+              {/* The fast path: every unanswered question takes its standard
+                  default (the first option), and the build moves on. */}
+              <div className="flex items-center justify-between gap-3 mb-1.5 px-1 text-[0.75rem] text-ink-500">
+                <span>Short on time? Ira's standard defaults cover most audits — you can change any of them later.</span>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setMessages(prev => prev.map(m => {
+                      if (m.id !== openWorkflowClarify.id || m.richType !== 'workflow-clarify') return m;
+                      const d = m.richData as { questions: ClarifyQuestion[]; answers: Record<string, string> };
+                      const answers = { ...d.answers };
+                      d.questions.forEach(q => { if (!answers[q.id] && q.options[0]) answers[q.id] = q.options[0]; });
+                      return { ...m, richData: { ...(m.richData as object), answers, index: d.questions.length } };
+                    }));
+                  }}
+                  className="shrink-0 h-7 px-2.5 rounded-md text-[0.75rem] font-semibold text-brand-700 hover:bg-brand-50 cursor-pointer"
+                >
+                  Use standard defaults
+                </button>
+              </div>
               <QueryClarificationCard
                 data={openWorkflowClarifyData}
                 onSetAnswer={(qi, ans) => {
@@ -7888,7 +8322,7 @@ export default function ChatView({ showChatHistory, toggleChatHistory, setShowAr
                     onChange={e => { setInput(e.target.value); handleTextareaInput(); }}
                     onKeyDown={handleKeyDown}
                     onPaste={handleComposerPaste}
-                    placeholder={composerContext?.placeholder ?? (buildWorkflowMode ? 'Describe the workflow you want to build…' : 'Reply to Ira…')}
+                    placeholder={composerContext?.placeholder ?? (reviewSessionRef.current ? 'Ask for a change to this workflow…' : buildWorkflowMode ? 'Describe the workflow you want to build…' : 'Reply to Ira…')}
                     aria-label="Message Ira"
                     className="no-focus-ring w-full bg-transparent border-none outline-none resize-none px-5 pt-4 pb-2 text-[0.9375rem] leading-[1.5] text-ink-800 placeholder:text-ink-400 min-h-[24px] max-h-[240px]"
                     rows={1}
@@ -7935,7 +8369,7 @@ export default function ChatView({ showChatHistory, toggleChatHistory, setShowAr
                             ? <Workflow size={11} strokeWidth={2.25} />
                             : <MessageSquare size={11} strokeWidth={2.25} />}
                         </span>
-                        {buildWorkflowMode ? 'Workflow' : 'Chat'}
+                        {buildWorkflowMode ? `Workflow · ${wfAgent === 'grc' ? 'GRC' : 'General'}` : 'Chat'}
                       </div>
 
                       {isGenerating ? (
@@ -8040,6 +8474,14 @@ export default function ChatView({ showChatHistory, toggleChatHistory, setShowAr
           return (
             <SaveAsWorkflowModal
               open={showSaveAsWfModal}
+              defaultBpId={(() => {
+                const hay = `${wfWorkflow?.name ?? ''} ${wfWorkflow?.category ?? ''} ${riskAns}`.toLowerCase();
+                return /reconcil|journal|ledger|gl\b|close/.test(hay) ? 'r2r'
+                  : /contract|sourcing|tender/.test(hay) ? 's2c'
+                  : /customer|sales|revenue|credit/.test(hay) ? 'o2c'
+                  : /invoice|vendor|payment|purchase|po\b|ap\b|duplicate/.test(hay) ? 'p2p'
+                  : undefined;
+              })()}
               defaultName={defaultName}
               defaultDescription={defaultDescription}
               defaultConfigurables={defaultConfigurables}

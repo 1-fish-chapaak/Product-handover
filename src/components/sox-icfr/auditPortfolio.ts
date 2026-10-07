@@ -1,6 +1,6 @@
 import { assessSeverity, conclusionOf } from './helpers';
 import { auditCovers } from './auditScope';
-import type { AuditRecord, AuditRound, Conclusion, Control, Deficiency, ExceptionGrade, IcfrEngagement } from './types';
+import type { ArchivedSeverity, AuditRecord, AuditRound, Conclusion, Control, Deficiency, ExceptionGrade, IcfrEngagement } from './types';
 
 /**
  * The engagement's audit portfolio — everything the engagement-level Overview
@@ -79,31 +79,44 @@ export function uncoveredMonths(audits: AuditRecord[], basis: 'fy' | 'cy', year:
 
 // ── Status ───────────────────────────────────────────────────────────────────
 
-export type AuditStatus = 'planned' | 'active' | 'concluded';
+export type AuditStatus = 'active' | 'concluded';
 
 /**
  * Which audit owns the live results.
  *
  * There is exactly one, and it is the newest unarchived record: creating an audit
- * prepends it and archives whatever was live. Everything else unarchived is
- * planned — a round that hasn't run. This matters because two audits can cover
- * the same controls, and without this the planned round would read the live
- * cycle's numbers as its own.
+ * prepends it and archives whatever was live. There are no planned audits — an
+ * audit that exists is the one being tested — and a new one cannot start until
+ * the running one is signed by both hands (newAuditBlock below).
  */
 export const liveAuditId = (eng: IcfrEngagement): string | undefined => eng.audits.find(a => !a.archive)?.id;
 export const isLiveAudit = (a: AuditRecord, eng: IcfrEngagement) => a.id === liveAuditId(eng);
 
 /**
- * Derived, never stored: a stored status goes stale the moment somebody tests a
- * control. Concluded means signed and countersigned, or archived. Of the rest,
- * only the live audit can be active, and only once something it covers has
- * actually been tested.
+ * Derived, never stored: a stored status goes stale the moment somebody signs.
+ * Concluded means signed by the preparer AND countersigned by the reviewer —
+ * nothing else, archived or not. Everything short of that is still active.
  */
-export function auditStatus(a: AuditRecord, eng: IcfrEngagement): AuditStatus {
-  if (a.archive || (a.signoff?.preparer && a.signoff?.reviewer)) return 'concluded';
-  if (!isLiveAudit(a, eng)) return 'planned';
-  const covered = eng.controls.filter(c => auditCovers(a, c, eng.id));
-  return covered.some(c => conclusionOf(eng, c) !== 'Not started') ? 'active' : 'planned';
+export function auditStatus(a: AuditRecord): AuditStatus {
+  return a.signoff?.preparer && a.signoff?.reviewer ? 'concluded' : 'active';
+}
+
+const ROUND_WORD: Record<AuditRound, string> = { interim: 'interim', rollforward: 'roll-forward', yearend: 'year-end' };
+/** An audit as people say it — "CY 2026 interim". */
+export const auditLabel = (a: AuditRecord) => `${a.period} ${ROUND_WORD[a.round] ?? ''}`.trim();
+
+/**
+ * Why a new audit can't start yet, or null when it can.
+ *
+ * One audit runs at a time. Starting the next one archives the running one and
+ * resets the controls it covers, so the running one has to be finished first —
+ * signed by the preparer and countersigned by the reviewer. Every New audit and
+ * Roll forward button reads this, and the store refuses on the same test.
+ */
+export function newAuditBlock(eng: IcfrEngagement): string | null {
+  const live = eng.audits.find(a => !a.archive);
+  if (!live || auditStatus(live) === 'concluded') return null;
+  return `Sign off ${auditLabel(live)} first — the preparer and the reviewer both sign before a new audit starts.`;
 }
 
 // ── Grouping ─────────────────────────────────────────────────────────────────
@@ -145,8 +158,8 @@ export function auditProgress(a: AuditRecord, eng: IcfrEngagement): AuditProgres
     };
   }
   const covered = eng.controls.filter(c => auditCovers(a, c, eng.id));
-  // A planned round has not run. Its scope is real, so the total counts, but the
-  // live cycle's conclusions are not its results and must not be shown as them.
+  // Only the live audit owns what is on the controls. Any other unarchived record
+  // (there should be none) must not show the live cycle's results as its own.
   if (!isLiveAudit(a, eng)) return { total: covered.length, effective: 0, ineffective: 0, concluded: 0 };
   const concl = covered.map(c => conclusionOf(eng, c));
   return {
@@ -160,17 +173,52 @@ export function auditProgress(a: AuditRecord, eng: IcfrEngagement): AuditProgres
 /** An audit's deficiencies with severity resolved — archived ones carry theirs.
  *  All four grades: a clearly trivial finding counts as Clearly Trivial here,
  *  exactly as the register shows it, not as a Deficiency. */
-export function auditDeficiencies(a: AuditRecord, eng: IcfrEngagement): (Deficiency & { severity: ExceptionGrade })[] {
+export function auditDeficiencies(a: AuditRecord, eng: IcfrEngagement): (Deficiency & { severity: ArchivedSeverity })[] {
   if (a.archive) return a.archive.deficiencies;
-  // Same reason as auditProgress: a planned round has raised nothing.
+  // Same reason as auditProgress: only the live audit owns the live findings.
   if (!isLiveAudit(a, eng)) return [];
   const covered = new Set(eng.controls.filter(c => auditCovers(a, c, eng.id)).map(c => c.id));
   return eng.deficiencies
     .filter(d => covered.has(d.controlId))
-    .map(d => ({ ...d, severity: assessSeverity(d, eng).final }));
+    // Same reading as the archive: unsized travels as unsized, so a rollup
+    // cannot quietly bucket an unanswered question as a graded finding.
+    .map(d => ({ ...d, severity: assessSeverity(d, eng).final ?? 'Not sized' as const }));
 }
 
 // ── Cross-audit ──────────────────────────────────────────────────────────────
+
+/**
+ * Who COUNTS each deficiency — once, keyed by id.
+ *
+ * An open deficiency carries forward when the next audit starts: it is written
+ * into the outgoing audit's archive AND stays live under the new one, with the
+ * same id. Read both and every carried weakness is counted twice. So each id
+ * belongs to the newest audit that holds it — the live audit first, then the
+ * archives newest first (the array is newest-created-first). The older archive
+ * can still SHOW it as carried forward; it just doesn't count it.
+ *
+ * Cached per engagement snapshot: state is immutable, so a new snapshot is a new
+ * key, and the many per-audit reads on one render share one pass.
+ */
+const ownerCache = new WeakMap<IcfrEngagement, Map<string, string>>();
+function deficiencyOwners(eng: IcfrEngagement): Map<string, string> {
+  const hit = ownerCache.get(eng);
+  if (hit) return hit;
+  const owners = new Map<string, string>();
+  const liveId = liveAuditId(eng);
+  const ordered = [...eng.audits.filter(a => a.id === liveId), ...eng.audits.filter(a => a.id !== liveId)];
+  ordered.forEach(a => auditDeficiencies(a, eng).forEach(d => { if (!owners.has(d.id)) owners.set(d.id, a.id); }));
+  ownerCache.set(eng, owners);
+  return owners;
+}
+
+/** The deficiencies this audit COUNTS — auditDeficiencies less any carried on to
+ *  a newer audit. Every cross-audit sum reads this, never auditDeficiencies. */
+export function countedDeficiencies(a: AuditRecord, eng: IcfrEngagement): (Deficiency & { severity: ArchivedSeverity })[] {
+  const owners = deficiencyOwners(eng);
+  return auditDeficiencies(a, eng).filter(d => owners.get(d.id) === a.id);
+}
+
 
 export type SeverityCount = Record<ExceptionGrade, number>;
 const emptyCount = (): SeverityCount => ({ 'Material Weakness': 0, 'Significant Deficiency': 0, Deficiency: 0, 'Clearly Trivial': 0 });
@@ -185,24 +233,30 @@ const emptyCount = (): SeverityCount => ({ 'Material Weakness': 0, 'Significant 
  */
 export function yearSeverityRollup(eng: IcfrEngagement, audits: AuditRecord[]): {
   counts: SeverityCount; open: number; total: number; mwOpen: number;
+  /** Findings nobody has sized — kept out of the four grade buckets, because an
+   *  unanswered question is not a small one. */
+  unsized: number;
 } {
   const counts = emptyCount();
+  // Unsized is counted apart from the four grades. Folding it into any of them
+  // would make the year read as more settled than it is.
+  let unsized = 0;
   let open = 0; let total = 0; let mwOpen = 0;
   audits.forEach(a => {
-    auditDeficiencies(a, eng).forEach(d => {
-      counts[d.severity] += 1;
+    countedDeficiencies(a, eng).forEach(d => {
+      if (d.severity === 'Not sized') unsized += 1; else counts[d.severity] += 1;
       total += 1;
       if (d.status !== 'Closed') { open += 1; if (d.severity === 'Material Weakness') mwOpen += 1; }
     });
   });
-  return { counts, open, total, mwOpen };
+  return { counts, open, total, mwOpen, unsized };
 }
 
 /** Open material weaknesses anywhere on the engagement, with the audit that
  *  raised each one. One of these puts the whole entity's conclusion at risk, so
  *  it belongs above any single audit. */
-export function mwWatchlist(eng: IcfrEngagement): { audit: AuditRecord; deficiency: Deficiency & { severity: ExceptionGrade } }[] {
-  return eng.audits.flatMap(a => auditDeficiencies(a, eng)
+export function mwWatchlist(eng: IcfrEngagement): { audit: AuditRecord; deficiency: Deficiency & { severity: ArchivedSeverity } }[] {
+  return eng.audits.flatMap(a => countedDeficiencies(a, eng)
     .filter(d => d.severity === 'Material Weakness' && d.status !== 'Closed')
     .map(deficiency => ({ audit: a, deficiency })));
 }
@@ -218,13 +272,15 @@ export function crossAuditAggregation(eng: IcfrEngagement, audits: AuditRecord[]
 }[] {
   const groups = new Map<string, { audits: Set<string>; count: number; combined: number }>();
   audits.forEach(a => {
-    auditDeficiencies(a, eng).forEach(d => {
+    countedDeficiencies(a, eng).forEach(d => {
       const key = d.aggregationGroup ?? 'Ungrouped';
       if (!groups.has(key)) groups.set(key, { audits: new Set(), count: 0, combined: 0 });
       const g = groups.get(key)!;
       g.audits.add(`${a.period} · ${a.round}`);
       g.count += 1;
-      g.combined += d.magnitude;
+      // Skipped, never added as 0 — a total silently short a member is a
+      // number that looks complete and is not.
+      if (d.magnitude !== null) g.combined += d.magnitude;
     });
   });
   return Array.from(groups, ([group, g]) => ({ group, audits: Array.from(g.audits), count: g.count, combined: g.combined }))
@@ -260,14 +316,24 @@ export function materialityConsistency(audits: AuditRecord[]): { consistent: boo
  * standing question, not history.
  */
 export function priorYearDeficiencies(eng: IcfrEngagement, currentYear: number): {
-  audit: AuditRecord; deficiency: Deficiency & { severity: ExceptionGrade }; verified: boolean;
+  audit: AuditRecord; deficiency: Deficiency & { severity: ArchivedSeverity }; verified: boolean;
 }[] {
   return eng.audits
     .filter(a => a.fiscalYear < currentYear)
     .flatMap(a => auditDeficiencies(a, eng).map(deficiency => ({
       audit: a,
       deficiency,
-      // Retested and passed, or signed off as closed — anything else is open.
-      verified: deficiency.retest?.result === 'Pass' || deficiency.status === 'Closed',
+      // Signed off as closed — anything else is a standing question.
+      //
+      // The passed-retest half of this test is gone (30 Sep). It was always the
+      // weaker of the two — a round that passed but was never closed means the
+      // reviewer had not agreed it, so calling it verified answered a question
+      // nobody had signed — and now no new round is ever recorded at all, so it
+      // could only ever have fired on history. What "verified" honestly means for
+      // a prior-year finding is that the audit reached a conclusion on it and a
+      // second pair of eyes signed that conclusion: the close. Whether the CONTROL
+      // has since been retested is a different question, asked on the control
+      // (`Control.retestDue`), and it is not this list's to answer.
+      verified: deficiency.status === 'Closed',
     })));
 }

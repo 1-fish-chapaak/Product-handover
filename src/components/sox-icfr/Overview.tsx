@@ -10,15 +10,18 @@ import AddRacmModal from './AddRacmModal';
 import { defWord } from './flow';
 import { useToast } from '../shared/Toast';
 import {
-  assessSeverity, conclusionOf, controlCode, engagementCompleteness, engagementProgress, failedItgcs, formatINR, isEngagementLocked, isItgcDependent, signoffControls, testsDueNow, trackResult,
+  assessSeverity, conclusionOf, controlCode, engagementCompleteness, engagementProgress, failedItgcs, formatINR, icfrConclusion, isEngagementLocked, isItgcDependent, signoffControls, testsDueNow, trackResult,
 } from './helpers';
 import { cn } from '../../lib/cn';
 import { ItgcCascadeBanner, RagStrip, type RagMeterDef } from './parts';
 import { PROGRAMMES } from '../audit/sox-testing/soxTestingData';
 import { isOwnerOf } from './auditScope';
+import { newAuditBlock } from './auditPortfolio';
 import RiskOwnerPortal from './RiskOwnerPortal';
+import IraWorkSection from './IraWorkSection';
 import ReviewerQueue from './ReviewerQueue';
 import type { Control, ExceptionGrade, IcfrEngagement, TaskType } from './types';
+import DialogFocus from '../shared/DialogFocus';
 
 const fmt = (n: number) => formatINR(n);
 
@@ -131,36 +134,34 @@ export default function Overview() {
 
   const sev = useMemo(() => {
     const c: Record<ExceptionGrade, number> = { 'Material Weakness': 0, 'Significant Deficiency': 0, Deficiency: 0, 'Clearly Trivial': 0 };
-    let open = 0; let mwOpen = 0;
+    let open = 0; let mwOpen = 0; let unsized = 0;
     scopedDefs.forEach(d => {
       // assessed severity — a validly-capped MW counts as an SD everywhere
       const s = assessSeverity(d, eng).final;
+      // An unsized exception is in no severity bucket — it is the bucket this
+      // whole change exists to make visible, and it is counted on its own.
+      if (s === null) { unsized += 1; if (d.status !== 'Closed') open += 1; return; }
       c[s] += 1;
       if (d.status !== 'Closed') { open += 1; if (s === 'Material Weakness') mwOpen += 1; }
     });
-    return { c, open, mwOpen };
+    return { c, open, mwOpen, unsized };
   }, [eng, M, scopedDefs]);
 
   // An open MW never blocks signing — it flips what the signature concludes.
   // Once signed, the stamped conclusion wins over the live derivation.
-  const signsEffective = so.icfrConclusion ? so.icfrConclusion !== 'Not effective' : sev.mwOpen === 0;
+  // Through `icfrConclusion`, NOT the MW count. Counting only material
+  // weaknesses on controls missed the other road to an adverse opinion — a
+  // company-level indicator — and this screen is where the audit is signed.
+  const signsEffective = so.icfrConclusion ? so.icfrConclusion !== 'Not effective' : icfrConclusion(eng) === 'Effective';
   // An interim's signature concludes the ROUND, never the year — its window
   // stops short of the year end, so no ICFR verdict is stamped or claimed
   // (user ask). The opinion arrives with the roll-forward or year-end.
   const isInterim = eng.audits.find(a => a.id === openAuditId)?.round === 'interim';
   const signPreparer = () => {
     signOffAudit('preparer');
-    addToast({ type: signsEffective ? 'success' : 'warning', title: 'Signed off', message: signsEffective || isInterim ? `Prepared by ${eng.preparer} — over to the reviewer.` : `Prepared by ${eng.preparer} as ICFR not effective — over to the reviewer.` });
   };
   const signReviewer = () => {
     signOffAudit('reviewer');
-    addToast({
-      type: signsEffective || isInterim ? 'success' : 'warning',
-      title: 'Countersigned',
-      message: isInterim
-        ? 'Interim concluded — roll-forward can now extend it. The year\'s ICFR opinion comes at year end.'
-        : signsEffective ? 'This audit is concluded — ICFR effective.' : 'This audit is concluded — ICFR not effective (material weakness open).',
-    });
   };
 
   const openTasks = eng.tasks.filter(t => t.status === 'open');
@@ -200,6 +201,67 @@ export default function Overview() {
     { k: 'Waiting on owner', v: stats.waitingOnOwner, t: 'text-mitigated-700', view: 'owner' },
   ];
 
+  // The tiles and rings now sit behind "Show health detail" (agentic UI review
+  // #12, 30 Sep): the landing led with 6 counters, 4 rings and 3 cards before
+  // the one list that says what to DO. Collapsed by default — nothing deleted —
+  // and remembered per viewer. Browser storage can throw (private window,
+  // blocked site data), so every read and write is guarded; the page renders
+  // the same without it.
+  const [healthOpen, setHealthOpen] = useState<boolean>(() => {
+    try { return localStorage.getItem('sox-overview-health-detail') === 'open'; } catch { return false; }
+  });
+  const toggleHealth = () => setHealthOpen(o => {
+    const next = !o;
+    try { localStorage.setItem('sox-overview-health-detail', next ? 'open' : 'closed'); } catch { /* storage blocked — the toggle still works for this visit */ }
+    return next;
+  });
+
+  // year-end countdown + the needs-attention rows — hoisted out of the sign-off
+  // box so the rows can lead the page as "Needs you" (agentic UI review #12,
+  // 30 Sep) while the sign-off block stays where it was. Same rows, same
+  // destinations, same show-rules — only where they render changed.
+  const end = parsePeriodEnd(eng.periodEnd);
+  const endLabel = fmtPeriodEnd(eng.periodEnd);
+  const days = end ? Math.ceil((end.getTime() - Date.now()) / 86_400_000) : null;
+  const past = days !== null && days < 0;
+  const openOther = sev.open - sev.mwOpen;
+  const unconcluded = ready.total - concludedCount;
+  const papersAwaiting = ready.total - ready.reviewed - unconcluded;
+  // the 8-vs-9 truth: most await the reviewer's countersign, the rest the
+  // preparer's own signature — the row says the split instead of hiding it
+  const papersWithReviewer = ready.awaitingReview;
+  const papersWithPreparer = papersAwaiting - ready.awaitingReview;
+  // One row per outstanding item — each keeps the same filtered destination it linked to before.
+  // The exceptions count lives HERE and only here — the sign-off block never restates it.
+  const needsRows = [
+    { key: 'mw', show: sev.mwOpen > 0, onClick: () => openDeficiencies(), icon: <AlertTriangle size={13} className="text-risk-600" />,
+      label: <><b className="font-semibold text-risk-700">{sev.mwOpen}</b> material weakness{sev.mwOpen === 1 ? '' : 'es'} open — {past ? 'ICFR ineffective, open past year-end' : 'ICFR ineffective if still open at year-end'}</> },
+    { key: 'other', show: openOther > 0, onClick: () => openDeficiencies(), icon: <Circle size={11} className="text-high-600" />,
+      // The journey as it now runs: the retest left the exception flow on
+      // 30 Sep, so naming it here promised a step nobody will ever see.
+      label: <><b className="font-semibold text-ink-900">{openOther}</b> {openOther === 1 ? W.one : W.many} still working through plan → fix → close</> },
+    { key: 'unconcluded', show: unconcluded > 0, onClick: () => openRegister({ view: 'open' }), icon: <Circle size={11} className="text-ink-400" />,
+      label: <><b className="font-semibold text-ink-900">{unconcluded}</b> control{unconcluded === 1 ? '' : 's'} not concluded</> },
+    { key: 'papers-rev', show: papersWithReviewer > 0, onClick: () => openRegister({ view: 'review' }), icon: <Circle size={11} className="text-evidence-600" />,
+      label: <><b className="font-semibold text-ink-900">{papersWithReviewer}</b> paper{papersWithReviewer === 1 ? '' : 's'} awaiting countersign — with the reviewer</> },
+    { key: 'papers-prep', show: papersWithPreparer > 0, onClick: () => openRegister({ view: 'papers' }), icon: <Circle size={11} className="text-evidence-600" />,
+      label: <><b className="font-semibold text-ink-900">{papersWithPreparer}</b> paper{papersWithPreparer === 1 ? '' : 's'} awaiting the preparer's signature</> },
+  ].filter(r => r.show);
+  const rowCls = 'w-full flex items-center gap-2.5 py-1.5 px-2 -mx-1 rounded-lg text-left hover:bg-paper-100 transition-colors cursor-pointer group';
+
+  // The six tiles folded into one sentence (agentic UI review #12, 30 Sep).
+  // Each segment opens the register exactly as its tile did. TOD and TOE always
+  // show — they are the progress; the rest drop out at zero, since "0 waiting on
+  // owner" is not news. Text over chips: the number carries the tile's tone.
+  const progressSegs = [
+    { k: 'TOD', v: <>TOD <b className={cn('font-bold tabular-nums', tiles[0]!.t)}>{stats.designDone}/{stats.total}</b></>, show: true, view: tiles[0]!.view, title: tiles[0]!.k },
+    { k: 'TOE', v: <>TOE <b className={cn('font-bold tabular-nums', tiles[1]!.t)}>{stats.operatingDone}/{stats.total}</b></>, show: true, view: tiles[1]!.view, title: tiles[1]!.k },
+    { k: 'eff', v: <><b className={cn('font-bold tabular-nums', tiles[2]!.t)}>{stats.effective}</b> effective</>, show: stats.effective > 0, view: tiles[2]!.view, title: tiles[2]!.k },
+    { k: 'ineff', v: <><b className={cn('font-bold tabular-nums', tiles[3]!.t)}>{stats.ineffective}</b> ineffective</>, show: stats.ineffective > 0, view: tiles[3]!.view, title: tiles[3]!.k },
+    { k: 'review', v: <><b className={cn('font-bold tabular-nums', tiles[4]!.t)}>{stats.awaitingReview}</b> awaiting review</>, show: stats.awaitingReview > 0, view: tiles[4]!.view, title: tiles[4]!.k },
+    { k: 'owner', v: <><b className={cn('font-bold tabular-nums', tiles[5]!.t)}>{stats.waitingOnOwner}</b> waiting on owner</>, show: stats.waitingOnOwner > 0, view: tiles[5]!.view, title: tiles[5]!.k },
+  ].filter(s => s.show);
+
   return (
     <div className="space-y-5">
       {/* New audit — appended above the read-out rather than woven into it, so the
@@ -216,11 +278,14 @@ export default function Overview() {
               ends in something testable — and a RACM here IS a process's set of
               controls, so an empty library is an empty matrix. The reason rides
               beside the dead button; the fix is Add RACM. */}
-          {racmMissing && <span className="text-[11.5px] text-ink-400">Add a RACM first — an audit with no controls has nothing to test.</span>}
+          {racmMissing && <span className="text-[0.75rem] text-ink-400">Add a RACM first — an audit with no controls has nothing to test.</span>}
+          {/* One audit runs at a time — the running one is signed by both hands
+              before the next starts. */}
+          {!racmMissing && newAuditBlock(eng) && <span className="text-[0.75rem] text-ink-400">{newAuditBlock(eng)}</span>}
           <button
             onClick={() => setCreating(true)}
-            disabled={racmMissing}
-            className="h-9 px-3.5 inline-flex items-center gap-1.5 rounded-lg bg-brand-600 text-white text-[12.5px] font-semibold enabled:hover:bg-brand-700 disabled:opacity-40 disabled:cursor-not-allowed transition-colors cursor-pointer"
+            disabled={racmMissing || !!newAuditBlock(eng)}
+            className="h-9 px-3.5 inline-flex items-center gap-1.5 rounded-lg bg-brand-600 text-white text-[0.8125rem] font-semibold enabled:hover:bg-brand-700 disabled:opacity-40 disabled:cursor-not-allowed transition-colors cursor-pointer"
           >
             <Plus size={15} /> New audit
           </button>
@@ -231,6 +296,11 @@ export default function Overview() {
       </AnimatePresence>
       {addingRacm && <AddRacmModal onClose={() => setAddingRacm(false)} />}
 
+      {/* Ira's work — what Ira has done across this audit that waits on the
+          auditor (product owner, 2 Oct). The auditor's only: confirming is the
+          testing pen. Inside an audit only, and gone once it is concluded. */}
+      {role === 'auditor' && inAudit && !isConcluded && <IraWorkSection controls={scoped} />}
+
       {/* Risk owner's actionable inbox leads — first-line owners act before they browse status. */}
       {isOwner && <RiskOwnerPortal />}
 
@@ -240,28 +310,38 @@ export default function Overview() {
         const ineff = myControls.filter(c => conclusionOf(eng, c) === 'Ineffective').length;
         const due = testsDueNow(myControls, eng.audits.find(a => a.id === openAuditId)).length;
         const openDefs = myDefs.filter(d => d.status !== 'Closed');
-        const inRem = openDefs.filter(d => d.status === 'Identified' || d.status === 'Remediation').length;
-        const inRetest = openDefs.filter(d => d.status === 'Retest').length;
+        // The owner's two courts are Planning and Remediation — the same pair the
+        // portal filters on. 'Identified' is the AUDIT TEAM's court, so counting it
+        // told the owner to act on findings that were not yet theirs, while
+        // 'Planning' — the plan they genuinely owed — was left out entirely.
+        const inRem = openDefs.filter(d => d.status === 'Planning' || d.status === 'Remediation').length;
+        // The other half of the same split. This used to count only the retest
+        // step, which has gone (30 Sep) — and even while it lived it was too
+        // narrow: a finding being sized, waiting on the rating gate or sitting
+        // with the reviewer appeared in neither number, so the card quietly
+        // under-reported. Anything open that is not in the owner's two courts is
+        // with the audit team, whichever of their hats is holding it.
+        const withAudit = openDefs.length - inRem;
         return (
           <div className="grid sm:grid-cols-2 gap-4">
             <button onClick={() => setTab('controls')} className="text-left rounded-2xl border border-canvas-border bg-canvas-elevated p-4 hover:border-brand-300 transition-colors cursor-pointer">
-              <h2 className="text-[13px] font-bold text-ink-800 inline-flex items-center gap-1.5"><ShieldCheck size={15} className="text-brand-600" /> My controls</h2>
-              <div className="flex items-center gap-x-4 gap-y-1 flex-wrap mt-2.5 text-[12.5px] text-ink-600">
-                <span><b className="text-[17px] font-bold tabular-nums text-ink-900">{myControls.length}</b> total</span>
+              <h2 className="text-[0.8125rem] font-bold text-ink-800 inline-flex items-center gap-1.5"><ShieldCheck size={15} className="text-brand-600" /> My controls</h2>
+              <div className="flex items-center gap-x-4 gap-y-1 flex-wrap mt-2.5 text-[0.8125rem] text-ink-600">
+                <span><b className="text-[1.0625rem] font-bold tabular-nums text-ink-900">{myControls.length}</b> total</span>
                 <span><b className="font-bold text-compliant-700">{eff}</b> effective</span>
                 {ineff > 0 && <span><b className="font-bold text-risk-700">{ineff}</b> ineffective</span>}
                 {due > 0 && <span><b className="font-bold text-mitigated-700">{due}</b> due now</span>}
               </div>
-              <span className="mt-2.5 inline-flex items-center gap-1 text-[12px] font-semibold text-brand-700">Open my controls <ArrowRight size={13} /></span>
+              <span className="mt-2.5 inline-flex items-center gap-1 text-[0.75rem] font-semibold text-brand-700">Open my controls <ArrowRight size={13} /></span>
             </button>
             <button onClick={() => openDeficiencies()} className="text-left rounded-2xl border border-canvas-border bg-canvas-elevated p-4 hover:border-brand-300 transition-colors cursor-pointer">
-              <h2 className="text-[13px] font-bold text-ink-800 inline-flex items-center gap-1.5"><AlertTriangle size={15} className="text-risk-600" /> {W.mine}</h2>
-              <div className="flex items-center gap-x-4 gap-y-1 flex-wrap mt-2.5 text-[12.5px] text-ink-600">
-                <span><b className="text-[17px] font-bold tabular-nums text-ink-900">{openDefs.length}</b> open</span>
+              <h2 className="text-[0.8125rem] font-bold text-ink-800 inline-flex items-center gap-1.5"><AlertTriangle size={15} className="text-risk-600" /> {W.mine}</h2>
+              <div className="flex items-center gap-x-4 gap-y-1 flex-wrap mt-2.5 text-[0.8125rem] text-ink-600">
+                <span><b className="text-[1.0625rem] font-bold tabular-nums text-ink-900">{openDefs.length}</b> open</span>
                 {inRem > 0 && <span><b className="font-bold text-high-700">{inRem}</b> on you to remediate</span>}
-                {inRetest > 0 && <span><b className="font-bold text-evidence-700">{inRetest}</b> with the auditor</span>}
+                {withAudit > 0 && <span><b className="font-bold text-evidence-700">{withAudit}</b> with the audit team</span>}
               </div>
-              <span className="mt-2.5 inline-flex items-center gap-1 text-[12px] font-semibold text-brand-700">Manage {W.mine.toLowerCase()} <ArrowRight size={13} /></span>
+              <span className="mt-2.5 inline-flex items-center gap-1 text-[0.75rem] font-semibold text-brand-700">Manage {W.mine.toLowerCase()} <ArrowRight size={13} /></span>
             </button>
           </div>
         );
@@ -273,11 +353,11 @@ export default function Overview() {
         <div className="rounded-2xl border border-high-200 bg-high-50 p-4 flex items-start gap-3">
           <AlertTriangle size={16} className="text-high-700 shrink-0 mt-0.5" />
           <div className="flex-1 min-w-0">
-            <h2 className="text-[13px] font-bold text-ink-900">The RACM is missing</h2>
+            <h2 className="text-[0.8125rem] font-bold text-ink-900">The RACM is missing</h2>
             {/* The RACM tab is parked (S11) — the link opens Add RACM instead,
                 which picks from the Engagements page's RACM tab or uploads one.
                 It is the auditor's action, so everyone else is told whose it is. */}
-            <p className="text-[12.5px] text-ink-600 mt-1 leading-relaxed">
+            <p className="text-[0.8125rem] text-ink-600 mt-1 leading-relaxed">
               {role === 'auditor' && !isEngagementLocked(eng) ? (
                 <>
                   Add or generate the RACM with{' '}
@@ -323,24 +403,85 @@ export default function Overview() {
       )}
       */}
 
-      {/* progress rail */}
-      {!isOwner && <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
-        {tiles.map(s => (
-          <button key={s.k} onClick={() => openRegister({ view: s.view })} title={`Open the Control Library — ${s.k}`} className="text-left rounded-xl border border-canvas-border bg-canvas-elevated px-4 py-3 hover:border-brand-300 transition-colors cursor-pointer">
-            <div className={cn('text-[20px] font-bold tabular-nums', s.t)}>{s.v}</div>
-            <div className="text-[11.5px] text-ink-500 font-medium mt-0.5">{s.k}</div>
-          </button>
-        ))}
-      </div>}
+      {/* Needs you — the page leads with what to DO (agentic UI review #12,
+          30 Sep). These are the rows that used to sit inside the sign-off box
+          under the year-end countdown; the countdown rides along as the
+          subtitle. Empty is one quiet line, not an empty box. Same tones as the
+          old box: amber once the period has ended or an MW is open. Gone once
+          the audit is concluded, as the old list was — nothing is left to do. */}
+      {!isOwner && !isConcluded && (
+        <section className={cn('rounded-2xl border p-4', past || sev.mwOpen > 0 ? 'border-high-200 bg-high-50/30' : 'border-canvas-border bg-canvas-elevated')}>
+          <div className="flex items-baseline gap-2 flex-wrap">
+            <h2 className="font-display text-[1.0625rem] leading-tight text-ink-900">Needs you</h2>
+            <span className={cn('inline-flex items-center gap-1 text-[0.75rem]', past || sev.mwOpen ? 'text-high-700' : 'text-ink-500')}>
+              <Hourglass size={12} className="self-center" />
+              {days === null ? `Year-end — ${endLabel}`
+                : past ? `Period ended ${endLabel} — the opinion clock is running`
+                : `${days} day${days === 1 ? '' : 's'} to year-end (${endLabel})`}
+            </span>
+          </div>
+          <div className="mt-2.5 space-y-0.5">
+            {needsRows.map(r => (
+              <button key={r.key} onClick={r.onClick} className={rowCls}>
+                <span className="w-4 flex justify-center shrink-0">{r.icon}</span>
+                <span className="text-[0.8125rem] text-ink-700">{r.label}</span>
+                <ChevronRight size={14} className="ml-auto shrink-0 text-ink-300 group-hover:text-ink-500 transition-colors" />
+              </button>
+            ))}
+            {needsRows.length === 0 && (
+              <div className="flex items-center gap-2.5 py-1.5 px-2 -mx-1">
+                <span className="w-4 flex justify-center shrink-0"><CheckCircle2 size={14} className="text-compliant-600" /></span>
+                <span className="text-[0.8125rem] text-ink-600">
+                  Nothing needs you right now{signoffReady && !isConcluded ? ' — the audit is ready to conclude' : ''}
+                </span>
+              </div>
+            )}
+          </div>
+        </section>
+      )}
 
-      {/* Audit health — RAG roll-ups across the controls this AUDIT covers, and
-          only shown inside one (user ask). It was called Engagement health and
-          sat on the engagement's Overview, where it described a register nobody
-          tests as a whole; a cycle is what these meters are actually about. */}
-      {!isOwner && inAudit && (
-        <div className="rounded-2xl border border-canvas-border bg-canvas-elevated p-4">
-          <h2 className="text-[13px] font-bold text-ink-800 inline-flex items-center gap-1.5 mb-3"><ShieldCheck size={15} className="text-brand-600" /> Audit health</h2>
-          <RagStrip meters={ragMeters} />
+      {/* ONE progress line in place of the six-tile rail (agentic UI review #12,
+          30 Sep). The tiles and the Audit health rings are still here, exactly
+          as they rendered, behind "Show health detail" — collapsed by default. */}
+      {!isOwner && (
+        <div className="space-y-3">
+          <div className="flex items-center gap-x-1.5 gap-y-1 flex-wrap text-[0.8125rem] text-ink-600">
+            {progressSegs.map((s, i) => (
+              <span key={s.k} className="inline-flex items-center gap-1.5">
+                {i > 0 && <span className="text-ink-300" aria-hidden>·</span>}
+                <button onClick={() => openRegister({ view: s.view })} title={`Open the Control Library — ${s.title}`} className="hover:text-ink-900 hover:underline underline-offset-2 cursor-pointer transition-colors">
+                  {s.v}
+                </button>
+              </span>
+            ))}
+            <button onClick={toggleHealth} aria-expanded={healthOpen} className="ml-auto inline-flex items-center gap-1 text-[0.75rem] font-semibold text-brand-700 hover:text-brand-800 cursor-pointer transition-colors">
+              {healthOpen ? 'Hide health detail' : 'Show health detail'}
+              <ChevronRight size={13} className={cn('transition-transform', healthOpen && 'rotate-90')} />
+            </button>
+          </div>
+
+          {healthOpen && <>
+            {/* progress rail */}
+            <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
+              {tiles.map(s => (
+                <button key={s.k} onClick={() => openRegister({ view: s.view })} title={`Open the Control Library — ${s.k}`} className="text-left rounded-xl border border-canvas-border bg-canvas-elevated px-4 py-3 hover:border-brand-300 transition-colors cursor-pointer">
+                  <div className={cn('text-[1.25rem] font-bold tabular-nums', s.t)}>{s.v}</div>
+                  <div className="text-[0.75rem] text-ink-500 font-medium mt-0.5">{s.k}</div>
+                </button>
+              ))}
+            </div>
+
+            {/* Audit health — RAG roll-ups across the controls this AUDIT covers, and
+                only shown inside one (user ask). It was called Engagement health and
+                sat on the engagement's Overview, where it described a register nobody
+                tests as a whole; a cycle is what these meters are actually about. */}
+            {inAudit && (
+              <div className="rounded-2xl border border-canvas-border bg-canvas-elevated p-4">
+                <h2 className="font-display text-[1.0625rem] leading-tight text-ink-900 inline-flex items-center gap-2 mb-3"><ShieldCheck size={15} className="text-brand-600" /> Audit health</h2>
+                <RagStrip meters={ragMeters} />
+              </div>
+            )}
+          </>}
         </div>
       )}
 
@@ -349,26 +490,26 @@ export default function Overview() {
         {/* exceptions */}
         <div className="rounded-2xl border border-canvas-border bg-canvas-elevated p-4 flex flex-col">
           <div className="flex items-center justify-between mb-3">
-            <h2 className="text-[13px] font-bold text-ink-800 inline-flex items-center gap-1.5"><AlertTriangle size={15} className="text-risk-600" /> {W.Many}</h2>
-            <span className="text-[11px] font-semibold text-ink-400">{sev.open} open · {scopedDefs.length} total</span>
+            <h2 className="font-display text-[1.0625rem] leading-tight text-ink-900 inline-flex items-center gap-2"><AlertTriangle size={15} className="text-risk-600" /> {W.Many}</h2>
+            <span className="text-[0.6875rem] font-semibold text-ink-400">{sev.open} open · {scopedDefs.length} total</span>
           </div>
           <div className="space-y-2 flex-1">
             {SEV_META.map(s => (
               <div key={s.key} className="flex items-center gap-2">
                 <span className={cn('w-2 h-2 rounded-full', s.dot)} />
-                <span className="text-[12.5px] text-ink-600">{s.label}</span>
-                <span className={cn('ml-auto text-[15px] font-bold tabular-nums', s.text)}>{sev.c[s.key]}</span>
+                <span className="text-[0.8125rem] text-ink-600">{s.label}</span>
+                <span className={cn('ml-auto text-[0.9375rem] font-bold tabular-nums', s.text)}>{sev.c[s.key]}</span>
               </div>
             ))}
           </div>
-          <button onClick={() => openDeficiencies()} className="mt-3 inline-flex items-center gap-1 text-[12px] font-semibold text-brand-700 hover:text-brand-800 cursor-pointer transition-colors">Manage {W.many} <ArrowRight size={13} /></button>
+          <button onClick={() => openDeficiencies()} className="mt-3 inline-flex items-center gap-1 text-[0.75rem] font-semibold text-brand-700 hover:text-brand-800 cursor-pointer transition-colors">Manage {W.many} <ArrowRight size={13} /></button>
         </div>
 
         {/* handoffs */}
         <div className="rounded-2xl border border-canvas-border bg-canvas-elevated p-4 flex flex-col">
           <div className="flex items-center justify-between mb-3">
-            <h2 className="text-[13px] font-bold text-ink-800 inline-flex items-center gap-1.5"><Inbox size={15} className="text-evidence-600" /> Handoffs</h2>
-            <span className="text-[11px] font-semibold text-ink-400">{openTasks.length} open</span>
+            <h2 className="font-display text-[1.0625rem] leading-tight text-ink-900 inline-flex items-center gap-2"><Inbox size={15} className="text-evidence-600" /> Handoffs</h2>
+            <span className="text-[0.6875rem] font-semibold text-ink-400">{openTasks.length} open</span>
           </div>
           <div className="space-y-2 flex-1">
             {(Object.keys(HANDOFF_META) as TaskType[]).map(t => {
@@ -376,13 +517,13 @@ export default function Overview() {
               return (
                 <div key={t} className="flex items-center gap-2">
                   <m.Icon size={13} className={m.tone} />
-                  <span className="text-[12.5px] text-ink-600">{m.label}</span>
-                  <span className="ml-auto text-[15px] font-bold tabular-nums text-ink-800">{handoffs[t]}</span>
+                  <span className="text-[0.8125rem] text-ink-600">{m.label}</span>
+                  <span className="ml-auto text-[0.9375rem] font-bold tabular-nums text-ink-800">{handoffs[t]}</span>
                 </div>
               );
             })}
           </div>
-          <button onClick={() => setView('handoffs')} className="mt-3 inline-flex items-center gap-1 text-[12px] font-semibold text-brand-700 hover:text-brand-800 cursor-pointer transition-colors text-left">
+          <button onClick={() => setView('handoffs')} className="mt-3 inline-flex items-center gap-1 text-[0.75rem] font-semibold text-brand-700 hover:text-brand-800 cursor-pointer transition-colors text-left">
             Manage handoffs <ArrowRight size={13} />
           </button>
         </div>
@@ -390,7 +531,7 @@ export default function Overview() {
         {/* materiality */}
         <div className="rounded-2xl border border-canvas-border bg-canvas-elevated p-4 flex flex-col">
           <div className="flex items-center justify-between mb-3">
-            <h2 className="text-[13px] font-bold text-ink-800 inline-flex items-center gap-1.5"><Scale size={15} className="text-brand-600" /> Materiality</h2>
+            <h2 className="font-display text-[1.0625rem] leading-tight text-ink-900 inline-flex items-center gap-2"><Scale size={15} className="text-brand-600" /> Materiality</h2>
           </div>
           <div className="space-y-2 flex-1">
             {[
@@ -399,8 +540,8 @@ export default function Overview() {
               { k: 'Clearly trivial', v: eng.rules.clearlyTrivial },
             ].map(r => (
               <div key={r.k} className="flex items-center gap-2">
-                <span className="text-[12.5px] text-ink-600">{r.k}</span>
-                <span className="ml-auto text-[13.5px] font-bold tabular-nums text-ink-800">{fmt(r.v)}</span>
+                <span className="text-[0.8125rem] text-ink-600">{r.k}</span>
+                <span className="ml-auto text-[0.875rem] font-bold tabular-nums text-ink-800">{fmt(r.v)}</span>
               </div>
             ))}
           </div>
@@ -411,7 +552,7 @@ export default function Overview() {
               setTab('config');
               setTimeout(() => document.getElementById('materiality-ground-rules')?.scrollIntoView({ behavior: 'smooth', block: 'start' }), 140);
             }}
-            className="mt-3 inline-flex items-center gap-1 text-[12px] font-semibold text-brand-700 hover:text-brand-800 cursor-pointer transition-colors"
+            className="mt-3 inline-flex items-center gap-1 text-[0.75rem] font-semibold text-brand-700 hover:text-brand-800 cursor-pointer transition-colors"
           >
             Materiality &amp; scope <ArrowRight size={13} />
           </button>
@@ -422,78 +563,27 @@ export default function Overview() {
           hat sees it, and it collapses to save the scroll. */}
       {role === 'reviewer' && <ReviewerQueue />}
 
-      {/* year-end countdown + engagement sign-off — ONE box: the work that must
-          close, then the closure moment as its final step. Audit-side only. */}
+      {/* engagement sign-off — the closure moment. The year-end countdown and
+          the needs-attention rows that used to lead this box now lead the page
+          as "Needs you" (agentic UI review #12, 30 Sep); rendering them here too
+          would say every fact twice, so this box is the signature alone. Its
+          amber tone went with the rows — the warning belongs where the work is.
+          Audit-side only. */}
       {!isOwner && (() => {
-        const end = parsePeriodEnd(eng.periodEnd);
-        const endLabel = fmtPeriodEnd(eng.periodEnd);
-        const days = end ? Math.ceil((end.getTime() - Date.now()) / 86_400_000) : null;
-        const past = days !== null && days < 0;
-        const openOther = sev.open - sev.mwOpen;
-        const unconcluded = ready.total - concludedCount;
-        const papersAwaiting = ready.total - ready.reviewed - unconcluded;
-        // the 8-vs-9 truth: most await the reviewer's countersign, the rest the
-        // preparer's own signature — the row says the split instead of hiding it
-        const papersWithReviewer = ready.awaitingReview;
-        const papersWithPreparer = papersAwaiting - ready.awaitingReview;
-        const allClear = sev.mwOpen === 0 && openOther === 0 && unconcluded === 0 && ready.reviewed === ready.total;
-        // One row per outstanding item — each keeps the same filtered destination it linked to before.
-        // The exceptions count lives HERE and only here — the sign-off block below never restates it.
-        const rows = [
-          { key: 'mw', show: sev.mwOpen > 0, onClick: () => openDeficiencies(), icon: <AlertTriangle size={13} className="text-risk-600" />,
-            label: <><b className="font-semibold text-risk-700">{sev.mwOpen}</b> material weakness{sev.mwOpen === 1 ? '' : 'es'} open — {past ? 'ICFR ineffective, open past year-end' : 'ICFR ineffective if still open at year-end'}</> },
-          { key: 'other', show: openOther > 0, onClick: () => openDeficiencies(), icon: <Circle size={11} className="text-high-600" />,
-            label: <><b className="font-semibold text-ink-900">{openOther}</b> {openOther === 1 ? W.one : W.many} still working through remediation → retest → close</> },
-          { key: 'unconcluded', show: unconcluded > 0, onClick: () => openRegister({ view: 'open' }), icon: <Circle size={11} className="text-ink-400" />,
-            label: <><b className="font-semibold text-ink-900">{unconcluded}</b> control{unconcluded === 1 ? '' : 's'} not concluded</> },
-          { key: 'papers-rev', show: papersWithReviewer > 0, onClick: () => openRegister({ view: 'review' }), icon: <Circle size={11} className="text-evidence-600" />,
-            label: <><b className="font-semibold text-ink-900">{papersWithReviewer}</b> paper{papersWithReviewer === 1 ? '' : 's'} awaiting countersign — with the reviewer</> },
-          { key: 'papers-prep', show: papersWithPreparer > 0, onClick: () => openRegister({ view: 'papers' }), icon: <Circle size={11} className="text-evidence-600" />,
-            label: <><b className="font-semibold text-ink-900">{papersWithPreparer}</b> paper{papersWithPreparer === 1 ? '' : 's'} awaiting the preparer's signature</> },
-        ].filter(r => r.show);
-        const rowCls = 'w-full flex items-center gap-2.5 py-1.5 px-2 -mx-1 rounded-lg text-left hover:bg-paper-100 transition-colors cursor-pointer group';
         return (
-          <section id="eng-signoff" className={cn('rounded-2xl border p-4', !isConcluded && (past || sev.mwOpen > 0) ? 'border-high-200 bg-high-50/30' : 'border-canvas-border bg-canvas-elevated')}>
-            {!isConcluded && <>
-              <div className="flex items-center gap-2 flex-wrap">
-                <Hourglass size={15} className={past || sev.mwOpen ? 'text-high-700' : 'text-brand-600'} />
-                <h2 className="text-[13px] font-bold text-ink-800">
-                  {days === null ? `Year-end — ${endLabel}`
-                    : past ? `Period ended ${endLabel} — the opinion clock is running`
-                    : `${days} day${days === 1 ? '' : 's'} to year-end (${endLabel})`}
-                </h2>
-                <span className="text-[11.5px] text-ink-500">— what must close before the opinion date</span>
-              </div>
-              <div className="mt-3 space-y-0.5">
-                {rows.map(r => (
-                  <button key={r.key} onClick={r.onClick} className={rowCls}>
-                    <span className="w-4 flex justify-center shrink-0">{r.icon}</span>
-                    <span className="text-[12.5px] text-ink-700">{r.label}</span>
-                    <ChevronRight size={14} className="ml-auto shrink-0 text-ink-300 group-hover:text-ink-500 transition-colors" />
-                  </button>
-                ))}
-                {allClear && (
-                  <div className="flex items-center gap-2.5 py-1.5 px-2 -mx-1">
-                    <span className="w-4 flex justify-center shrink-0"><CheckCircle2 size={14} className="text-compliant-600" /></span>
-                    <span className="text-[12.5px] font-semibold text-compliant-700">Nothing outstanding — ready to conclude</span>
-                  </div>
-                )}
-              </div>
-            </>}
-
-            {/* the closure moment — the checklist's final step, not a separate card */}
-            <div className={cn('flex items-start justify-between gap-4 flex-wrap', !isConcluded && 'mt-3 pt-3.5 border-t border-canvas-border/70')}>
+          <section id="eng-signoff" className="rounded-2xl border border-canvas-border bg-canvas-elevated p-4">
+            <div className="flex items-start justify-between gap-4 flex-wrap">
               <div className="min-w-0 flex-1">
-                <h2 className="text-[13px] font-bold text-ink-800 inline-flex items-center gap-1.5"><PenLine size={15} className="text-brand-600" /> Audit sign-off</h2>
-                <p className="text-[12px] text-ink-500 mt-1">
+                <h2 className="font-display text-[1.0625rem] leading-tight text-ink-900 inline-flex items-center gap-2"><PenLine size={15} className="text-brand-600" /> Audit sign-off</h2>
+                <p className="text-[0.75rem] text-ink-500 mt-1">
                   {isConcluded
                     ? 'Signed and countersigned — this audit is concluded.'
                     : signoffReady
                       ? `Every control ${signScope.pending.length ? 'due in this audit ' : ''}is concluded and countersigned — the audit is ready for sign-off.`
-                      : 'Unlocks once everything above is closed. The preparer signs first; the reviewer countersigns to conclude.'}
+                      : 'Unlocks once everything in Needs you is closed. The preparer signs first; the reviewer countersigns to conclude.'}
                 </p>
                 {(signoffReady || !!so.preparer) && (
-                  <div className={cn('inline-flex items-center gap-1.5 mt-2.5 px-2.5 py-1.5 rounded-lg border text-[12px] font-semibold',
+                  <div className={cn('inline-flex items-center gap-1.5 mt-2.5 px-2.5 py-1.5 rounded-lg border text-[0.75rem] font-semibold',
                     signsEffective ? 'text-compliant-700 bg-compliant-50/50 border-compliant-200' : 'text-risk-700 bg-risk-50/50 border-risk-200')}>
                     {signsEffective ? <ShieldCheck size={13} /> : <ShieldAlert size={13} />}
                     {/* Interim wording never claims the year's opinion — the
@@ -511,7 +601,7 @@ export default function Overview() {
                           : `Signing concludes ICFR not effective — ${sev.mwOpen} material weakness${sev.mwOpen === 1 ? '' : 'es'} open`}
                   </div>
                 )}
-                <div className="flex items-center gap-4 mt-2.5 flex-wrap text-[12px]">
+                <div className="flex items-center gap-4 mt-2.5 flex-wrap text-[0.75rem]">
                   <span className={cn('inline-flex items-center gap-1.5 font-semibold', signoffReady ? 'text-compliant-700' : 'text-ink-500')}>
                     {signoffReady ? <CheckCircle2 size={13} /> : <Circle size={13} />} {concludedCount}/{ready.total} concluded · {ready.reviewed}/{ready.total} countersigned
                   </span>
@@ -527,31 +617,31 @@ export default function Overview() {
               <div className="flex flex-col gap-1.5 items-end shrink-0">
                 {/* each signature belongs to one hat: auditor prepares, reviewer countersigns */}
                 {so.preparer ? (
-                  <span className="inline-flex items-center gap-1.5 text-[12px] font-semibold text-compliant-700"><CheckCircle2 size={14} /> Prepared — {so.preparer.by} <span className="text-ink-400 font-medium">· {so.preparer.at}</span></span>
+                  <span className="inline-flex items-center gap-1.5 text-[0.75rem] font-semibold text-compliant-700"><CheckCircle2 size={14} /> Prepared — {so.preparer.by} <span className="text-ink-400 font-medium">· {so.preparer.at}</span></span>
                 ) : role === 'auditor' ? (
                   <button onClick={() => setConfirmSign('preparer')} disabled={!signoffReady} title={signoffReady ? `Sign off as ${eng.preparer}` : 'Every control must be concluded first'}
-                    className="h-9 px-4 inline-flex items-center justify-center gap-1.5 rounded-lg bg-brand-600 text-white text-[12.5px] font-semibold hover:bg-brand-700 disabled:opacity-40 disabled:cursor-not-allowed transition-colors cursor-pointer">
+                    className="h-9 px-4 inline-flex items-center justify-center gap-1.5 rounded-lg bg-brand-600 text-white text-[0.8125rem] font-semibold hover:bg-brand-700 disabled:opacity-40 disabled:cursor-not-allowed transition-colors cursor-pointer">
                     <PenLine size={14} /> Sign off as preparer
                   </button>
                 ) : (
-                  <span className="inline-flex items-center gap-1.5 text-[12px] text-ink-400"><Circle size={13} /> Awaiting preparer — {eng.preparer}</span>
+                  <span className="inline-flex items-center gap-1.5 text-[0.75rem] text-ink-400"><Circle size={13} /> Awaiting preparer — {eng.preparer}</span>
                 )}
                 {so.reviewer ? (
-                  <span className="inline-flex items-center gap-1.5 text-[12px] font-semibold text-compliant-700"><CheckCircle2 size={14} /> Reviewed — {so.reviewer.by} <span className="text-ink-400 font-medium">· {so.reviewer.at}</span></span>
+                  <span className="inline-flex items-center gap-1.5 text-[0.75rem] font-semibold text-compliant-700"><CheckCircle2 size={14} /> Reviewed — {so.reviewer.by} <span className="text-ink-400 font-medium">· {so.reviewer.at}</span></span>
                 ) : so.preparer ? (
                   role === 'reviewer' ? (
                     <button onClick={() => setConfirmSign('reviewer')} title={`Countersign as ${eng.reviewer}`}
-                      className="h-9 px-4 inline-flex items-center justify-center gap-1.5 rounded-lg border border-brand-200 bg-brand-50 text-brand-700 text-[12.5px] font-semibold hover:bg-brand-100 transition-colors cursor-pointer">
+                      className="h-9 px-4 inline-flex items-center justify-center gap-1.5 rounded-lg border border-brand-200 bg-brand-50 text-brand-700 text-[0.8125rem] font-semibold hover:bg-brand-100 transition-colors cursor-pointer">
                       <PenLine size={14} /> Countersign as reviewer
                     </button>
                   ) : (
-                    <span className="inline-flex items-center gap-1.5 text-[12px] text-ink-400"><Circle size={13} /> Awaiting reviewer — {eng.reviewer}</span>
+                    <span className="inline-flex items-center gap-1.5 text-[0.75rem] text-ink-400"><Circle size={13} /> Awaiting reviewer — {eng.reviewer}</span>
                   )
                 ) : (
-                  <span className="inline-flex items-center gap-1.5 text-[12px] text-ink-400"><Circle size={13} /> Then: reviewer countersign — {eng.reviewer}</span>
+                  <span className="inline-flex items-center gap-1.5 text-[0.75rem] text-ink-400"><Circle size={13} /> Then: reviewer countersign — {eng.reviewer}</span>
                 )}
                 {isConcluded && (
-                  <span className={cn('inline-flex items-center gap-1.5 text-[11px] font-bold uppercase tracking-wide', signsEffective ? 'text-compliant-700' : 'text-ink-500')}><BadgeCheck size={13} /> Concluded</span>
+                  <span className={cn('inline-flex items-center gap-1.5 text-[0.6875rem] font-bold uppercase tracking-wide', signsEffective ? 'text-compliant-700' : 'text-ink-500')}><BadgeCheck size={13} /> Concluded</span>
                 )}
               </div>
             </div>
@@ -561,7 +651,7 @@ export default function Overview() {
 
       {/* by process — the engagement-wide rollup, audit-side only */}
       {!isOwner && <section>
-        <h2 className="text-[12px] font-semibold text-ink-500 uppercase tracking-wide mb-2.5 inline-flex items-center gap-1.5"><ShieldCheck size={13} /> By process</h2>
+        <h2 className="text-[0.75rem] font-semibold text-ink-500 uppercase tracking-wide mb-2.5 inline-flex items-center gap-1.5"><ShieldCheck size={13} /> By process</h2>
         <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-3">
           {processes.map(p => {
             const notStarted = p.total - p.effective - p.ineffective - p.inProgress;
@@ -570,8 +660,8 @@ export default function Overview() {
               <button key={p.name} onClick={() => openRegister({ process: p.name })} className="text-left rounded-2xl border border-canvas-border bg-canvas-elevated p-4 hover:border-brand-300 hover:shadow-[0_4px_16px_-8px_rgba(15,8,30,0.25)] transition-all cursor-pointer">
                 <div className="flex items-center gap-2 mb-2.5">
                   <span className="w-2.5 h-2.5 rounded-full" style={{ background: spineColor(p.name) }} />
-                  <span className="text-[13.5px] font-semibold text-ink-900 truncate">{p.name}</span>
-                  <span className="ml-auto text-[11.5px] font-semibold text-ink-400 tabular-nums">{p.total} controls</span>
+                  <span className="text-[0.875rem] font-semibold text-ink-900 truncate">{p.name}</span>
+                  <span className="ml-auto text-[0.75rem] font-semibold text-ink-400 tabular-nums">{p.total} controls</span>
                 </div>
                 <div className="flex h-2 rounded-full overflow-hidden bg-paper-100 mb-2.5">
                   {seg(p.effective, 'var(--color-compliant-500)')}
@@ -579,7 +669,7 @@ export default function Overview() {
                   {seg(p.inProgress, 'var(--color-brand-400)')}
                   {seg(notStarted, 'var(--color-paper-300)')}
                 </div>
-                <div className="flex items-center gap-x-3 gap-y-1 flex-wrap text-[11px] text-ink-500">
+                <div className="flex items-center gap-x-3 gap-y-1 flex-wrap text-[0.6875rem] text-ink-500">
                   <span><b className="text-compliant-700">{p.effective}</b> effective</span>
                   {p.ineffective > 0 && <span><b className="text-risk-700">{p.ineffective}</b> ineffective</span>}
                   {p.inProgress > 0 && <span><b className="text-brand-700">{p.inProgress}</b> in progress</span>}
@@ -595,15 +685,15 @@ export default function Overview() {
       {/* attest confirm — terminal sign-off is one-way, so it never fires on a bare click */}
       {confirmSign && (
         <div className="modal-backdrop" onClick={() => setConfirmSign(null)}>
-          <div className="modal" onClick={e => e.stopPropagation()}>
+          <div role="dialog" aria-modal="true" aria-labelledby="confirm-sign-title" className="modal" onClick={e => e.stopPropagation()}><DialogFocus onEscape={() => setConfirmSign(null)} />
             <div className="px-5 pt-4 pb-3 border-b border-canvas-border">
               <div className="flex items-center justify-between gap-3">
-                <h2 className="text-[15px] font-semibold text-ink-900">{confirmSign === 'preparer' ? 'Sign off as preparer?' : 'Countersign as reviewer?'}</h2>
+                <h2 id="confirm-sign-title" className="text-[0.9375rem] font-semibold text-ink-900">{confirmSign === 'preparer' ? 'Sign off as preparer?' : 'Countersign as reviewer?'}</h2>
                 <button onClick={() => setConfirmSign(null)} className="h-7 w-7 inline-flex items-center justify-center rounded-md text-ink-400 hover:text-ink-700 cursor-pointer" aria-label="Close"><X size={15} /></button>
               </div>
             </div>
             <div className="p-5">
-              <p className="text-[12.5px] text-ink-600 leading-relaxed">
+              <p className="text-[0.8125rem] text-ink-600 leading-relaxed">
                 {confirmSign === 'preparer'
                   ? (signsEffective
                       ? 'This records your preparer signature and hands the audit to the reviewer. You can’t un-sign.'
@@ -611,8 +701,8 @@ export default function Overview() {
                   : <>This countersigns and concludes this audit as ICFR {signsEffective ? 'effective' : 'not effective'}. This can’t be undone.</>}
               </p>
               <div className="mt-4 flex items-center justify-end gap-2">
-                <button onClick={() => setConfirmSign(null)} className="h-9 px-3.5 rounded-lg border border-canvas-border text-[12.5px] font-semibold text-ink-600 hover:text-ink-900 cursor-pointer">Cancel</button>
-                <button onClick={() => { if (confirmSign === 'preparer') signPreparer(); else signReviewer(); setConfirmSign(null); }} className="h-9 px-3.5 rounded-lg bg-brand-600 text-white text-[12.5px] font-semibold hover:bg-brand-700 transition-colors cursor-pointer">{confirmSign === 'preparer' ? 'Confirm — sign off' : 'Confirm — countersign'}</button>
+                <button onClick={() => setConfirmSign(null)} className="h-9 px-3.5 rounded-lg border border-canvas-border text-[0.8125rem] font-semibold text-ink-600 hover:text-ink-900 cursor-pointer">Cancel</button>
+                <button onClick={() => { if (confirmSign === 'preparer') signPreparer(); else signReviewer(); setConfirmSign(null); }} className="h-9 px-3.5 rounded-lg bg-brand-600 text-white text-[0.8125rem] font-semibold hover:bg-brand-700 transition-colors cursor-pointer">{confirmSign === 'preparer' ? 'Confirm — sign off' : 'Confirm — countersign'}</button>
               </div>
             </div>
           </div>
@@ -623,8 +713,10 @@ export default function Overview() {
 }
 
 /**
- * The engagement-wide RAG trio, read in order as one sentence: is the matrix
- * ready to test against → are the controls working → how far through are we.
+ * The engagement-wide RAG trio, read in order as one sentence: are the controls
+ * working → how much testing ground is covered → how far through are we. (RACM
+ * completeness was a fourth meter until Oct 2026 — it counted row approvals
+ * that are never given in practice, so it read 0% on every audit.)
  *
  * Exported because the Dashboard (engagement level) and the Overview tab (inside
  * an audit) both read it. One computation, so the two can never disagree about
@@ -638,8 +730,6 @@ export default function Overview() {
  */
 export function engagementRagMeters(eng: IcfrEngagement, controls: Control[]): RagMeterDef[] {
     const total = controls.length;
-    const approved = controls.filter(c => c.racmReview?.status === 'Approved').length;
-    const remarks = controls.filter(c => c.racmReview?.status === 'Remark').length;
     const concl = controls.map(c => conclusionOf(eng, c));
     const effective = concl.filter(x => x === 'Effective').length;
     const ineffective = concl.filter(x => x === 'Ineffective').length;
@@ -652,18 +742,13 @@ export function engagementRagMeters(eng: IcfrEngagement, controls: Control[]): R
       const samples = c.operating.sampling?.samples ?? [];
       checksTotal += samples.length ? samples.length * steps.length : steps.length;
       checksDone += samples.length
-        ? steps.reduce((n, s) => n + samples.filter(smp => { const r = s.sampleResults?.[smp.id]; return r && r !== 'Not tested'; }).length, 0)
+        // A cell is done when the grid holds a verdict for it, OR the item
+        // carries its own result — items tested before the attribute grid record
+        // theirs on the item, the same rule as sampleTested().
+        ? steps.reduce((n, s) => n + samples.filter(smp => { const r = s.sampleResults?.[smp.id]; return (!!r && r !== 'Not tested') || smp.result !== 'Not tested'; }).length, 0)
         : steps.filter(s => s.result !== 'Not tested').length;
     });
     return [
-      {
-        // One RACM row IS one control, so the denominator is the scope itself. A
-        // remark is a blocker with a named condition, never a half-approval —
-        // it rides beside the score and is not netted off it.
-        label: 'RACM completeness', pct: total ? Math.round((approved / total) * 100) : 0, empty: total === 0,
-        detail: `${approved}/${total} rows approved${remarks ? ` · ${remarks} remark${remarks === 1 ? '' : 's'} open` : ''}`,
-        formula: 'rows approved ÷ in-scope controls × 100',
-      },
       {
         // Effective needs BOTH tracks effective; either one ineffective sinks the
         // control. A short-form automated control concludes on design alone. Not
@@ -683,8 +768,8 @@ export function engagementRagMeters(eng: IcfrEngagement, controls: Control[]): R
         formula: 'operating checks run ÷ operating checks total, summed across the register × 100',
       },
       {
-        // Each control is worth 1.0 — RACM 0.10 · TOD 0.25 · TOE 0.30 ·
-        // countersign 0.25 · exceptions closed 0.10 — and credits on CONCLUSION,
+        // Each control is worth 1.0 — TOD 0.25 · TOE 0.25 · countersign 0.25 ·
+        // exceptions closed 0.25 — and credits on CONCLUSION,
         // whichever way it went. Completeness is not effectiveness: a 100%
         // engagement can still conclude ICFR not effective. See
         // engagementCompleteness in helpers.ts for the rest.

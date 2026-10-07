@@ -22,7 +22,7 @@
 .wp-ref {
   font-family: var(--font-mono, ui-monospace, monospace);
   font-weight: 700;
-  font-size: 11px;
+  font-size: 0.6875rem;
   letter-spacing: 0.04em;
   color: var(--color-ink-700);
   padding: 1px 6px;
@@ -36,7 +36,7 @@
 .wf-tag {
   font-family: var(--font-mono, ui-monospace, monospace);
   font-weight: 700;
-  font-size: 11px;
+  font-size: 0.6875rem;
   letter-spacing: 0.03em;
   color: var(--color-brand-700);
   padding: 2px 9px;
@@ -55,7 +55,7 @@
   border-bottom: 1px solid var(--paper-rule-strong);
 }
 .reg-head th {
-  text-align: left; font-weight: 600; font-size: 10.5px; letter-spacing: 0.06em; text-transform: uppercase;
+  text-align: left; font-weight: 600; font-size: 0.6875rem; letter-spacing: 0.06em; text-transform: uppercase;
   color: var(--color-ink-500); padding: 9px 12px; white-space: nowrap;
   /* the column is fixed-width now, so a long header ellipses rather than
      arguing with the width the reader dragged it to */
@@ -77,7 +77,7 @@
 .reg-row:hover { background: color-mix(in srgb, var(--color-brand-50) 45%, transparent); }
 .reg-row:focus-visible { outline: 2px solid var(--color-brand-500); outline-offset: -2px; background: color-mix(in srgb, var(--color-brand-50) 55%, transparent); }
 .reg-row.sel { background: color-mix(in srgb, var(--color-brand-50) 70%, transparent); }
-.reg-row td { padding: 9px 12px; vertical-align: middle; font-size: 12.5px; color: var(--color-ink-700);
+.reg-row td { padding: 9px 12px; vertical-align: middle; font-size: 0.8125rem; color: var(--color-ink-700);
   /* fixed layout means content can't widen a column, so it has to be clipped
      instead of spilling into the neighbour */
   overflow: hidden; }
@@ -86,10 +86,13 @@
   background: color-mix(in srgb, var(--color-ink-900) 3.5%, transparent);
   border-bottom: 1px solid var(--paper-rule-strong);
   border-top: 1px solid var(--paper-rule-strong);
-  font-weight: 700; font-size: 11.5px; color: var(--color-ink-700);
+  font-weight: 700; font-size: 0.75rem; color: var(--color-ink-700);
   padding: 7px 12px; position: sticky; top: 33px; z-index: 4;
 }
-.reg-dense .reg-row td { padding-top: 5px; padding-bottom: 5px; font-size: 12px; }
+/* The group row spans the whole table, so its label would scroll off with the
+   first columns — pin it to the left edge of the scroller instead. */
+.reg-group-label { position: sticky; left: 12px; }
+.reg-dense .reg-row td { padding-top: 5px; padding-bottom: 5px; font-size: 0.75rem; }
 /* Sentence-length cells (the control objective) — two lines, then ellipsis, with
    the full text on the title attribute. Dense mode drops it to one. */
 .reg-clamp { display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; line-height: 1.35; }
@@ -111,6 +114,11 @@
    drops `text-transform` on <button>, so a header that carries a filter would
    otherwise be the only title-case one in the row. */
 .def-reg .reg-head th button { text-transform: uppercase; }
+/* Scrolled sideways, the deficiency ID stays put so every row still says which
+   one it is. Summary rows only — an opened row's body spans the table. */
+.def-reg .reg-head th:first-child,
+.def-reg .reg-row > td:first-child { position: sticky; left: 0; z-index: 3; background: var(--color-canvas-elevated); }
+.def-reg .reg-head th:first-child { z-index: 6; }
 
 /* tiny track meter in a register cell */
 .cell-track { display: inline-flex; align-items: center; gap: 7px; }
@@ -120,7 +128,7 @@
 /* ── saved-view + filter chips — one shared primitive (heights + selected state aligned) ── */
 .view-chip, .filter-pill {
   display: inline-flex; align-items: center; gap: 5px; height: 28px; padding: 0 11px; border-radius: 8px;
-  font-size: 12px; font-weight: 600; cursor: pointer; transition: all .12s; white-space: nowrap;
+  font-size: 0.75rem; font-weight: 600; cursor: pointer; transition: all .12s; white-space: nowrap;
   border: 1px solid var(--color-canvas-border); color: var(--color-ink-600); background: var(--color-canvas-elevated);
 }
 .view-chip:hover, .filter-pill:hover { color: var(--color-ink-900); border-color: var(--paper-rule-strong); }
@@ -130,7 +138,7 @@
 .shelf { margin-bottom: 24px; }
 .shelf-head { display: flex; align-items: center; gap: 9px; margin-bottom: 11px; }
 .shelf-swatch { width: 12px; height: 17px; border-radius: 2px 3px 3px 2px; box-shadow: inset -2px 0 0 rgba(0,0,0,.24), 0 1px 2px rgba(0,0,0,.18); }
-.shelf-title { font-family: var(--font-display, 'Source Serif 4', serif); font-weight: 600; font-size: 15px; color: var(--color-ink-800); letter-spacing: -0.01em; }
+.shelf-title { font-family: var(--font-display, 'Source Serif 4', serif); font-weight: 600; font-size: 0.9375rem; color: var(--color-ink-800); letter-spacing: -0.01em; }
 .shelf-board { height: 1px; flex: 1; background: var(--paper-rule-strong); }
 .card-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(306px, 1fr)); gap: 15px; }
 
@@ -146,22 +154,22 @@
 .ac-card:hover { border-color: color-mix(in srgb, var(--color-ink-900) 17%, transparent); box-shadow: 0 10px 26px -14px rgba(15,8,30,.28); transform: translateY(-2px); }
 .ac-card:focus-visible { outline: 2px solid var(--color-brand-500); outline-offset: 2px; }
 
-.ac-eyebrow { font-size: 10px; font-weight: 700; letter-spacing: .07em; text-transform: uppercase; color: var(--color-ink-400); display: inline-flex; align-items: center; gap: 5px; min-width: 0; }
+.ac-eyebrow { font-size: 0.6875rem; font-weight: 700; letter-spacing: .07em; text-transform: uppercase; color: var(--color-ink-400); display: inline-flex; align-items: center; gap: 5px; min-width: 0; }
 .ac-eyebrow .dot { width: 7px; height: 7px; border-radius: 2px; flex-shrink: 0; }
 .ac-eyebrow .lbl { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.ac-title { font-weight: 600; font-size: 13.5px; line-height: 1.35; color: var(--color-ink-900); display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; min-height: 37px; }
-.ac-meta { font-size: 11px; color: var(--color-ink-500); margin-top: 4px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.ac-title { font-weight: 600; font-size: 0.875rem; line-height: 1.35; color: var(--color-ink-900); display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; min-height: 37px; }
+.ac-meta { font-size: 0.6875rem; color: var(--color-ink-500); margin-top: 4px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .ac-div { height: 1px; background: var(--paper-rule); margin: 11px 0; }
 .ac-track { display: flex; align-items: center; gap: 9px; padding: 1px 0; }
 .ac-track + .ac-track { margin-top: 3px; }
-.ac-track-label { font-size: 11px; font-weight: 600; color: var(--color-ink-500); width: 72px; flex-shrink: 0; }
+.ac-track-label { font-size: 0.6875rem; font-weight: 600; color: var(--color-ink-500); width: 72px; flex-shrink: 0; }
 .ac-dot { width: 8px; height: 8px; border-radius: 99px; flex-shrink: 0; }
 .ac-dot.ok { background: var(--color-compliant-500); }
 .ac-dot.ko { background: var(--color-risk-500); }
 .ac-dot.prog { background: var(--color-mitigated-400); }
 .ac-dot.none { background: var(--paper-rule-strong); }
-.ac-track-status { font-size: 12px; color: var(--color-ink-700); font-weight: 500; }
-.ac-track-count { margin-left: auto; font-size: 11px; color: var(--color-ink-400); font-variant-numeric: tabular-nums; }
+.ac-track-status { font-size: 0.75rem; color: var(--color-ink-700); font-weight: 500; }
+.ac-track-count { margin-left: auto; font-size: 0.6875rem; color: var(--color-ink-400); font-variant-numeric: tabular-nums; }
 .ac-foot { display: flex; align-items: center; gap: 8px; margin-top: 12px; }
 
 /* ── Dossier — the leadsheet ────────────────────────────────────────────────────── */
@@ -179,7 +187,7 @@
 }
 .leadsheet-title { font-family: var(--font-display, 'Source Serif 4', serif); font-weight: 600; letter-spacing: -0.01em; }
 .leadsheet-stamp {
-  font-family: var(--font-mono, monospace); font-weight: 700; font-size: 12px; letter-spacing: 0.06em;
+  font-family: var(--font-mono, monospace); font-weight: 700; font-size: 0.75rem; letter-spacing: 0.06em;
   color: var(--color-ink-700); border: 1.5px solid var(--paper-rule-strong); border-radius: 6px;
   padding: 5px 9px; text-align: center; line-height: 1.3; background: color-mix(in srgb, var(--color-paper-50) 50%, transparent);
 }
@@ -189,7 +197,7 @@
 .track-head { padding: 15px 18px; border-bottom: 1px solid var(--paper-rule); display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; }
 .track-design .track-head { background: color-mix(in srgb, var(--color-brand-50) 38%, transparent); }
 .track-operating .track-head { background: color-mix(in srgb, var(--color-evidence-50) 42%, transparent); }
-.track-num { font-family: var(--font-mono, monospace); font-weight: 700; font-size: 11px; color: var(--color-ink-400); }
+.track-num { font-family: var(--font-mono, monospace); font-weight: 700; font-size: 0.6875rem; color: var(--color-ink-400); }
 
 /* document checklist row */
 .doc-row { display: flex; align-items: center; gap: 11px; padding: 10px 12px; border-radius: 10px; border: 1px solid var(--paper-rule); }
@@ -203,7 +211,7 @@
 
 /* override marker */
 .override-tag {
-  display: inline-flex; align-items: center; gap: 4px; font-size: 10.5px; font-weight: 700; letter-spacing: 0.03em;
+  display: inline-flex; align-items: center; gap: 4px; font-size: 0.6875rem; font-weight: 700; letter-spacing: 0.03em;
   color: var(--color-high-700); background: color-mix(in srgb, var(--color-high-50) 70%, transparent);
   border: 1px solid color-mix(in srgb, var(--color-high-500) 30%, transparent); border-radius: 5px; padding: 1px 6px;
 }
@@ -229,7 +237,7 @@
 .vstep:last-child .vstep-rail { display: none; }
 .vstep-node {
   position: absolute; left: 0; top: 0; width: 38px; height: 38px; border-radius: 11px;
-  display: flex; align-items: center; justify-content: center; font-weight: 700; font-size: 14px;
+  display: flex; align-items: center; justify-content: center; font-weight: 700; font-size: 0.875rem;
   border: 1px solid var(--color-canvas-border); background: var(--color-canvas-elevated); color: var(--color-ink-500);
   transition: box-shadow .15s, border-color .15s;
 }
@@ -242,6 +250,25 @@
 .panel { border: 1px solid var(--color-canvas-border); border-radius: 14px; background: var(--color-canvas-elevated); }
 .panel-locked { opacity: .62; }
 .subcard { border: 1px solid var(--paper-rule); border-radius: 11px; background: var(--color-canvas-elevated); }
+
+/* ── A design check nobody has answered yet ─────────────────────────────────────
+ * Amber on the row (user ask, 1 Oct). "What is left to do" is a question the
+ * reader asks of the LIST, not of one row: a tick read one at a time answers it
+ * slowly, and an unmarked check is exactly the one that looks like nothing.
+ * Tinting the rows that are still open turns the next step into something seen
+ * rather than counted.
+ *
+ * A wash and a border, not a stripe down the side. This step is already a column
+ * of cards, and a bar on some of them reads as a second kind of card rather than
+ * the same card in a different state.
+ *
+ * Weak on purpose: on a control nobody has started this is EVERY row, and a loud
+ * tint there would be the whole screen shouting. It has to still read as paper.
+ */
+.subcard-todo {
+  border-color: var(--color-high-300);
+  background: color-mix(in srgb, var(--color-high-50) 55%, var(--color-canvas-elevated));
+}
 
 /* ── Toggle switch ──────────────────────────────────────────────────────────────── */
 .toggle { width: 34px; height: 20px; border-radius: 999px; background: var(--color-paper-200); position: relative; transition: background .15s; cursor: pointer; border: none; flex-shrink: 0; padding: 0; }
@@ -256,17 +283,27 @@
   font-family: var(--font-mono, ui-monospace, monospace);
   font-weight: 800; letter-spacing: 0.12em; text-transform: uppercase;
   border: 2.5px solid currentColor; border-radius: 7px;
-  padding: 3px 9px; font-size: 11px; line-height: 1; white-space: nowrap;
+  padding: 3px 9px; font-size: 0.6875rem; line-height: 1; white-space: nowrap;
   transform: rotate(-7deg);
   box-shadow: inset 0 0 0 1px color-mix(in srgb, currentColor 18%, transparent);
 }
 .stamp-ok { color: var(--color-compliant); }
 .stamp-ko { color: var(--color-risk); }
-.stamp-lg { font-size: 17px; padding: 8px 18px; border-width: 3px; letter-spacing: 0.16em; }
+.stamp-lg { font-size: 1.0625rem; padding: 8px 18px; border-width: 3px; letter-spacing: 0.16em; }
 .stamp-flash { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; pointer-events: none; z-index: 8; }
 
 /* ── Modal ──────────────────────────────────────────────────────────────────────── */
-.modal-backdrop { position: fixed; inset: 0; background: color-mix(in srgb, var(--color-ink-900) 42%, transparent); backdrop-filter: blur(2px); z-index: 50; display: flex; align-items: flex-start; justify-content: center; padding: 64px 20px; overflow-y: auto; }
+/* `overscroll-behavior: contain` is the whole scroll lock, and it belongs here
+   rather than on the body. #root is height:100vh/overflow:hidden (index.css),
+   so the body has no scrollbar to lock — every `document.body.style.overflow =
+   'hidden'` in the repo is inert. The page's real scroller is .sox-book-ui (or,
+   on the control dossier, a pane inside it), and since 24 of these backdrops are
+   portalled to document.body, that scroller isn't even an ancestor: no
+   body-level or :has() rule can reach it. The backdrop is already its own
+   scroller (overflow-y: auto below), so the only leak was chaining past its
+   scroll end into the page behind. Containing the chain fixes that for portalled
+   and inline backdrops alike, with nothing wired per modal. */
+.modal-backdrop { position: fixed; inset: 0; background: color-mix(in srgb, var(--color-ink-900) 42%, transparent); backdrop-filter: blur(2px); z-index: 50; display: flex; align-items: flex-start; justify-content: center; padding: 64px 20px; overflow-y: auto; overscroll-behavior: contain; }
 /* `margin: auto 0` centres the dialog when it fits and top-anchors it when it
    doesn't. `align-items: center` would look the same until a modal grew past the
    viewport, then clip its head off the top with no way to scroll up to it. */

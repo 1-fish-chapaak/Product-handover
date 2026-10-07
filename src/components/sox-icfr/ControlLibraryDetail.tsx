@@ -83,7 +83,7 @@ function RequiredFilesCell({ control, step, canEdit }: { control: Control; step:
             aria-label={`Rename required file ${f.label}`}
             className={cn(inputCls, 'w-48')} />
         ) : (
-          <span key={f.id} className="inline-flex items-center gap-1.5 h-[1.625rem] pl-2 pr-1.5 rounded-md border border-canvas-border bg-canvas text-[0.71875rem] text-ink-700">
+          <span key={f.id} className="inline-flex items-center gap-1.5 h-6.5 pl-2 pr-1.5 rounded-md border border-canvas-border bg-canvas text-[0.75rem] text-ink-700">
             <FileText size={11} className="shrink-0 text-ink-400" />
             {canEdit ? (
               <button type="button" onClick={() => { setDraft(f.label); setEditingId(f.id); }} title="Rename"
@@ -107,7 +107,7 @@ function RequiredFilesCell({ control, step, canEdit }: { control: Control; step:
           className={cn(inputCls, 'w-56')} />
       ) : (
         <button type="button" onClick={() => setAdding(true)}
-          className="inline-flex items-center gap-1 h-[1.625rem] px-2 rounded-md border border-dashed border-canvas-border text-[0.6875rem] font-semibold text-ink-500 hover:border-brand-300 hover:text-brand-700 hover:bg-brand-50/40 transition-colors cursor-pointer">
+          className="inline-flex items-center gap-1 h-6.5 px-2 rounded-md border border-dashed border-canvas-border text-[0.6875rem] font-semibold text-ink-500 hover:border-brand-300 hover:text-brand-700 hover:bg-brand-50/40 transition-colors cursor-pointer">
           <Plus size={11} /> Add file
         </button>
       ))}
@@ -174,7 +174,7 @@ function OwnerField({ value, options, canEdit, onChange }: { value: string; opti
       {close => (
         <>
           {options.map(o => (
-            <button key={o} className={menuItem} onClick={() => { if (o !== value) onChange(o); close(); }}>
+            <button key={o} role="menuitem" className={menuItem} onClick={() => { if (o !== value) onChange(o); close(); }}>
               {o === value && <Check size={12} className="text-brand-600" />}
               <span className={o === value ? 'font-semibold' : undefined}>{o}</span>
             </button>
@@ -329,7 +329,7 @@ export default function ControlLibraryDetail() {
 
         {/* One line, no labels. Judgements are chips because they are somebody's
             call; the rest is plain text because it is just what the control is. */}
-        <div className="mt-3 flex items-center gap-2.5 flex-wrap text-[0.78125rem] text-ink-500">
+        <div className="mt-3 flex items-center gap-2.5 flex-wrap text-[0.8125rem] text-ink-500">
           <KeyControlChip control={control} canEdit={canEdit} />
           {control.riskRating && <Pill tone={control.riskRating === 'High' ? 'risk' : control.riskRating === 'Medium' ? 'mitigated' : 'draft'}>{control.riskRating} risk</Pill>}
           <span aria-hidden className="w-px h-3.5 bg-canvas-border" />
@@ -400,11 +400,15 @@ export default function ControlLibraryDetail() {
                     {control.riskDescription}
                   </p>
                 )}
-                <p className="mt-2">
-                  <span className="font-semibold text-ink-900">Control description</span>
-                  <span className="text-ink-300 mx-1.5">·</span>
-                  {control.controlActivity}
-                </p>
+                {/* Hidden when the row carries no Control Activity, as on the
+                    control page — the label over nothing read as a bug. */}
+                {control.controlActivity?.trim() && (
+                  <p className="mt-2">
+                    <span className="font-semibold text-ink-900">Control description</span>
+                    <span className="text-ink-300 mx-1.5">·</span>
+                    {control.controlActivity}
+                  </p>
+                )}
                 {/* The short facts, each said with its name (user ask). They used
                     to run bare beside the title — "Payments · Financial · Manual
                     · Preventive · Monthly" asks the reader to know the schema by
@@ -503,14 +507,14 @@ export default function ControlLibraryDetail() {
             </span>
             {canEdit && (addingAttr ? (
               <span className="flex items-center gap-2">
-                <input autoFocus value={newAttr} onChange={e => setNewAttr(e.target.value)}
+                <input aria-label="New attribute" autoFocus value={newAttr} onChange={e => setNewAttr(e.target.value)}
                   onKeyDown={e => { if (e.key === 'Enter') submitAttr(); if (e.key === 'Escape') { setAddingAttr(false); setNewAttr(''); } }}
                   placeholder="e.g. Approval evidenced before the transaction posts"
-                  className="w-80 h-9 px-3 rounded-lg border border-canvas-border bg-canvas-elevated text-[0.78125rem] focus:outline-none focus:ring-2 focus:ring-brand-200" />
+                  className="w-80 h-9 px-3 rounded-lg border border-canvas-border bg-canvas-elevated text-[0.8125rem] focus:outline-none focus:ring-2 focus:ring-brand-200" />
                 <button disabled={!newAttr.trim()} onClick={submitAttr} className="h-9 px-3 rounded-lg bg-brand-600 text-white text-[0.75rem] font-semibold disabled:opacity-40 enabled:hover:bg-brand-700 transition-colors cursor-pointer">Add</button>
               </span>
             ) : (
-              <button onClick={() => setAddingAttr(true)} className="h-8 px-3 inline-flex items-center gap-1.5 rounded-lg border border-canvas-border bg-canvas-elevated text-[0.71875rem] font-semibold text-ink-700 hover:border-brand-300 hover:text-brand-700 transition-colors cursor-pointer">
+              <button onClick={() => setAddingAttr(true)} className="h-8 px-3 inline-flex items-center gap-1.5 rounded-lg border border-canvas-border bg-canvas-elevated text-[0.75rem] font-semibold text-ink-700 hover:border-brand-300 hover:text-brand-700 transition-colors cursor-pointer">
                 <Plus size={12} /> Add attribute
               </button>
             ))}

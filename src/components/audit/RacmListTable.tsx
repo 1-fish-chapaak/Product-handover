@@ -290,7 +290,8 @@ function synthSeedEntries(racm: RacmEntry): Record<string, string>[] {
     const h = hashStr(c.id + ':' + c.riskId);
     const subs = SUB_PROCESS_POOL[racm.process] ?? ['General Operations'];
     const rating = risk ? risk.severity.charAt(0).toUpperCase() + risk.severity.slice(1) : 'Medium';
-    const likelihood = rating === 'Critical' || rating === 'High' ? 'High' : rating === 'Medium' ? 'Medium' : 'Low';
+    // Likelihood reads on its own three words, not the rating's (24 Sep).
+    const likelihood = rating === 'Critical' || rating === 'High' ? 'Probable' : rating === 'Medium' ? 'Reasonably possible' : 'Remote';
     const impact = rating === 'Critical' || rating === 'High' ? 'High' : rating === 'Medium' ? 'Medium' : 'Low';
     const owner = OWNER_POOL[h % OWNER_POOL.length];
     const reviewer = OWNER_POOL[(h + 2) % OWNER_POOL.length];

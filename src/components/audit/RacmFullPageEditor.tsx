@@ -14,7 +14,7 @@ import { AnimatePresence, motion } from 'motion/react';
 import {
   ArrowLeft, Search, Filter, Plus, Download, Upload, Columns3, Layers,
   X, ChevronRight, ChevronDown, Save, Lock, Share2,
-  AlertTriangle, Star, Trash2, Check, PencilLine,
+  AlertTriangle, Star, Trash2, Check, PencilLine, FileText,
 } from 'lucide-react';
 import { useShare, rectFromEvent } from '../../context/ShareContext';
 import { useAuditLog } from '../../context/AdminDataContext';
@@ -22,15 +22,21 @@ import { useToast } from '../shared/Toast';
 import {
   PROCUREMENT_RACM_ROWS, PROCUREMENT_RACM_COLUMNS, COLUMN_GROUP_LABELS, COLUMN_GROUP_ORDER,
   extraColumnKey, extraRacmColumns, racmCellText, racmRowWithCell,
-  groupRowsBySubProcess, deriveRiskRatingClass, deriveControlTypeClass, deriveControlNatureClass,
+  groupRowsBySubProcess, deriveRiskRatingClass, deriveLikelihoodClass, deriveControlTypeClass, deriveControlNatureClass,
   type ProcurementRacmRow, type ColumnGroup, type RacmColumnDef, type RacmColumnKey,
 } from '../../data/procurement-racm';
 import { useRacmConfig } from '../sox-icfr/racmConfig';
-import { racmSetupKeyFor } from '../sox-icfr/racmLibrary';
-import { CONTROL_CLASSES } from '../sox-icfr/types';
+import { racmSetupKeyFor, useRacmLibrary, currentVersion, nextVersion, publishRacm, saveEditorRows } from '../sox-icfr/racmLibrary';
+import { RACM_PUBLISH_KEY, lockedEditorIds } from '../sox-icfr/helpers';
+import { entityCodeFor, processCodeFor } from '../sox-icfr/racmIds';
+import { useCurrentUser } from '../../context/CurrentUserContext';
+import { CONTROL_CLASSES, RISK_LIKELIHOODS } from '../sox-icfr/types';
 import Gated from '../shared/Gated';
 import { Button } from '../shared/Button';
 import ListPlaceholder from '../shared/ListPlaceholder';
+import DialogFocus from '../shared/DialogFocus';
+import MenuFocus from '../shared/MenuFocus';
+import { InlineNote, useInlineNote } from '../sox-icfr/InlineNote';
 
 interface Props {
   onBack: () => void;
@@ -67,11 +73,32 @@ interface Props {
    * fully editable, and so does every row added in this editor.
    */
   lockedRowIds?: string[];
+  /**
+   * Opened from the RACM Library in the SAME tab (5 Oct). Edits and Publish go
+   * straight into the library store instead of through the storage bridge a
+   * separate tab needs, and the SOP file — a link that only lives as long as
+   * the page that read it — can still be opened from here.
+   */
+  libraryLive?: boolean;
 }
 
 // One wording for the rule, so the grid cells and the detail panel explain a
 // published row the same way wherever the user meets it.
 const LOCKED_ROW_TITLE = 'Published — this row is fixed. Add a new control instead.';
+
+// What a row needs before the library will keep it (5 Oct). `applyEditorRows`
+// drops a new row with no title or no risk description, so a blank "Add
+// Risk-Control" row used to vanish on reopen — and Publish still said v2.
+const REQUIRED_ROW_FIELDS: { key: 'riskId' | 'controlId' | 'controlTitle' | 'riskDescription'; label: string }[] = [
+  { key: 'riskId', label: 'Risk ID' },
+  { key: 'controlId', label: 'Control ID' },
+  { key: 'controlTitle', label: 'Control title' },
+  { key: 'riskDescription', label: 'Risk description' },
+];
+const missingRowFields = (r: ProcurementRacmRow): string[] =>
+  REQUIRED_ROW_FIELDS.filter(f => !String(r[f.key] ?? '').trim()
+    // A title can stand in for itself through the activity, as on the way back.
+    && !(f.key === 'controlTitle' && String(r.controlActivity ?? '').trim())).map(f => f.label);
 
 // Trailing "Ref" column — shown only when a RACM was consolidated from 2+ files.
 const REF_COLUMN: RacmColumnDef = { key: 'ref', label: 'Ref', group: 'meta', width: 220 };
@@ -142,13 +169,16 @@ const BULK_EDIT_EXCLUDED = new Set<RacmColumnKey>(['riskId', 'controlId', 'isKey
 // Columns with a closed vocabulary get a picker, so a bulk edit can't mint a new
 // spelling ("high", "Adhoc") that would split the header filters and chips.
 const RATING_VALUES = ['High', 'Medium', 'Low'];
+// Likelihood is NOT rated on the rating's scale (24 Sep). It reads on the
+// standard's own three words, so the grid offers those and nothing else.
+const LIKELIHOOD_VALUES = [...RISK_LIKELIHOODS];
 // The two answers a yes/no column of the client's may hold.
 const YES_NO_VALUES = ['Yes', 'No'];
 const BULK_VALUE_OPTIONS: Partial<Record<RacmColumnKey, string[]>> = {
   // Risk category reads its six from the control record rather than a list of its
   // own, so the grid, the import and the control can never drift onto a seventh.
   riskCategory: CONTROL_CLASSES,
-  riskRating: RATING_VALUES, likelihood: RATING_VALUES, impact: RATING_VALUES,
+  riskRating: RATING_VALUES, likelihood: LIKELIHOOD_VALUES, impact: RATING_VALUES,
   controlType: ['Preventive', 'Detective'],
   controlNature: ['Manual', 'Automated', 'IT-dependent'],
   frequency: ['Annual', 'Quarterly', 'Monthly', 'Weekly', 'Daily', 'Recurring', 'Ad-hoc'],
@@ -160,10 +190,17 @@ const BULK_LONG_TEXT_KEYS = new Set<RacmColumnKey>([
   'attributes', 'ipeIceDetails', 'mgmtReviewControl',
 ]);
 
-export default function RacmFullPageEditor({ onBack, backView, backLabel, racmName, racmId, processLabel, sourceFiles, initialRows, lockedRowIds }: Props) {
+export default function RacmFullPageEditor({ onBack, backView, backLabel, racmName, racmId, processLabel, sourceFiles, initialRows, lockedRowIds, libraryLive }: Props) {
   const { openShare } = useShare();
   const logEvent = useAuditLog();
-  const { addToast } = useToast();
+  const { addToast: toast } = useToast();
+  // SOX has no toasts (1 Oct): opened from the RACM Library, the same messages
+  // land as one line under the title instead. Other screens keep the toast.
+  const libNote = useInlineNote();
+  const addToast = (t: { type: 'success' | 'info' | 'error' | 'warning'; title?: string; message: string }) => {
+    if (!libraryLive) { toast(t); return; }
+    libNote.show(t.type === 'error' ? 'error' : t.type === 'warning' ? 'warning' : 'info', t.title ? `${t.title} — ${t.message}` : t.message);
+  };
   // When generated from 2+ files, show a trailing "Ref" column and tag each row
   // with its source file (round-robin across the uploaded files for this mock).
   const showRef = (sourceFiles?.length ?? 0) > 1;
@@ -225,8 +262,10 @@ export default function RacmFullPageEditor({ onBack, backView, backLabel, racmNa
   // sample belongs to no RACM, and saving it would invent one.
   useEffect(() => {
     if (!racmId || !initialRows) return;
+    // Same tab as the library: write the rows into it directly.
+    if (libraryLive) { saveEditorRows(racmId, rows); return; }
     try { localStorage.setItem(`sox-racm-rows:${racmId}`, JSON.stringify(rows)); } catch { /* storage blocked — the edits stay in this tab */ }
-  }, [rows, racmId, initialRows]);
+  }, [rows, racmId, initialRows, libraryLive]);
   const [showColumnPanel, setShowColumnPanel] = useState(false);
   const [selectedRowIds, setSelectedRowIds] = useState<Set<string>>(new Set());
   const [detailRowId, setDetailRowId] = useState<string | null>(null);
@@ -238,6 +277,23 @@ export default function RacmFullPageEditor({ onBack, backView, backLabel, racmNa
   const [page, setPage] = useState(1);
   const [perPage, setPerPage] = useState(50);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
+  // WHERE THIS MATRIX IS IN ITS LIFE (24 Sep). A RACM made in the library —
+  // uploaded or read off an SOP — starts as a draft, and only a published row
+  // can be scoped into an engagement.
+  //
+  // This tab CANNOT read the library's store: the editor opens in its own
+  // window, where that module state is a fresh seed that has never heard of a
+  // matrix created minutes ago. What it does get is the handoff — the rows, and
+  // `lockedRowIds`, which IS the published set in the editor's own spelling. So
+  // the lifecycle is read from the handoff, and publishing is asked for through
+  // the same storage channel the row edits already travel on.
+  const [publishOpen, setPublishOpen] = useState(false);
+  const [justPublished, setJustPublished] = useState(false);
+  // The version this tab's Publish will become, noted at the click so the label
+  // can show it before the library tab writes the publish back.
+  const [publishedAs, setPublishedAs] = useState<number | null>(null);
+  const { currentUser } = useCurrentUser();
+
   // Header: inline-renamable title + a working status (mock lifecycle).
   const [titleOverride, setTitleOverride] = useState<string | null>(null);
   const [editingTitle, setEditingTitle] = useState(false);
@@ -254,11 +310,49 @@ export default function RacmFullPageEditor({ onBack, backView, backLabel, racmNa
   // — of one set. Rows added here mint their own ids and never appear on the
   // published list, which is the point of the rule: you add a new control rather
   // than rewrite one that has already been signed off.
-  const lockedControlIds = useMemo(() => new Set(lockedRowIds ?? []), [lockedRowIds]);
+  // Only a library matrix has a lifecycle at all: a concierge or Process Hub
+  // one was never published and never will be, so it keeps Export and Share.
+  const inLibrary = !!racmId && !!initialRows;
+  // The same whole-number version the library card shows. The library persists
+  // to storage and adopts other tabs' writes, so this tab reads the card's number.
+  const library = useRacmLibrary();
+  const libRacm = inLibrary ? library.find(r => r.id === racmId) : undefined;
+  // Same tab as the library (5 Oct): what is published is read off the library
+  // itself, so a row published here locks at once and a row added after it is
+  // a draft again — the handoff list was a snapshot from when the page opened.
+  const lockedControlIds = useMemo(
+    () => new Set(libraryLive && libRacm ? lockedEditorIds(libRacm.controls, libRacm.process, libRacm.published) : (lockedRowIds ?? [])),
+    [libraryLive, libRacm, lockedRowIds],
+  );
+  // Draft rows are simply the ones the handoff did not lock. `justPublished`
+  // flips this tab the moment Publish is pressed — the library tab is the one
+  // that actually records it, and its answer never comes back to this window.
+  const publishedCount = justPublished ? rows.length : lockedControlIds.size;
+  const draftCount = justPublished ? 0 : rows.filter(r => !lockedControlIds.has(r.controlId)).length;
+  const lifecycle: string | null = !inLibrary ? null
+    : draftCount === 0 ? 'Published'
+    : publishedCount === 0 ? 'Draft'
+    : 'Published · additions';
+  const versionNo = libRacm
+    ? Math.max(currentVersion(libRacm), justPublished ? (publishedAs ?? 0) : 0)
+    : null;
+  // No label at all off the library; "unpublished" until a first publish.
+  const versionLabel: string | null = !inLibrary ? null
+    : versionNo !== null ? (versionNo === 0 ? 'unpublished' : `v${versionNo}`)
+    : lifecycle === 'Draft' ? 'unpublished'
+    : null;
+
   const lockedRowKeys = useMemo(
     () => new Set(rows.filter(r => lockedControlIds.has(r.controlId)).map(r => `${r.riskId}-${r.controlId}`)),
     [rows, lockedControlIds],
   );
+  // Draft rows the library cannot keep yet — Publish waits for them.
+  const incompleteDrafts = useMemo(
+    () => (inLibrary && !justPublished ? rows.filter(r => !lockedControlIds.has(r.controlId) && missingRowFields(r).length > 0) : []),
+    [rows, lockedControlIds, inLibrary, justPublished],
+  );
+  const incompleteLine = incompleteDrafts.length === 0 ? null
+    : `${incompleteDrafts.length === 1 ? `${incompleteDrafts[0]!.controlId || 'A new row'} is` : `${incompleteDrafts.length} new rows are`} missing ${Array.from(new Set(incompleteDrafts.flatMap(missingRowFields))).join(', ')} — fill ${incompleteDrafts.length === 1 ? 'it' : 'them'} in to publish.`;
 
   // Which columns offer a header filter. A client's column that holds a list or
   // a yes/no filters by its values, the way our closed-vocabulary columns do;
@@ -383,9 +477,21 @@ export default function RacmFullPageEditor({ onBack, backView, backLabel, racmNa
 
   // Overlay any user resize overrides on the default widths, then hand these
   // "effective" columns to the header + rows so widths stay in sync everywhere.
+  // The two ID columns are sized to the longest ID they hold (5 Oct): an
+  // ENTITY/PROCESS/R001/C001 id was hard-clipped at the old 88/104px, and so
+  // were their own headers ("RISK …", "CONTR…"). Mono 11px ≈ 6.7px a character,
+  // plus the cell padding and, on Control ID, the padlock.
+  const idWidths = useMemo(() => {
+    const longest = (k: 'riskId' | 'controlId') => Math.max(0, ...rows.map(r => (r[k] ?? '').length));
+    return {
+      riskId: Math.min(220, Math.max(116, Math.ceil(longest('riskId') * 6.7) + 28)),
+      controlId: Math.min(260, Math.max(136, Math.ceil(longest('controlId') * 6.7) + 44)),
+    } as Record<string, number>;
+  }, [rows]);
   const effCols = useMemo<RacmColumnDef[]>(
-    () => visibleColumns.map(c => (colWidths[c.key as string] != null ? { ...c, width: colWidths[c.key as string] } : c)),
-    [visibleColumns, colWidths],
+    () => visibleColumns.map(c => (colWidths[c.key as string] != null ? { ...c, width: colWidths[c.key as string] }
+      : idWidths[c.key as string] != null ? { ...c, width: idWidths[c.key as string]! } : c)),
+    [visibleColumns, colWidths, idWidths],
   );
   const startResize = (e: { clientX: number; preventDefault: () => void; stopPropagation: () => void }, key: string, startW: number) => {
     e.preventDefault(); e.stopPropagation();
@@ -434,14 +540,30 @@ export default function RacmFullPageEditor({ onBack, backView, backLabel, racmNa
   const addRow = () => {
     const nextNum = rows.length + 1;
     const id = String(nextNum).padStart(3, '0');
+    // A library RACM numbers a new row the way every other RACM path does —
+    // ENTITY/PROCESS/R00n/C001 off the same code register the seed, the upload
+    // and the SOP extraction use (5 Oct: this proposed "R006 · C006").
+    let riskId = `R${id}`;
+    let controlId = `C${id}`;
+    const libEntity = libRacm ? (libRacm.entity || rows.find(r => r.entity?.trim())?.entity?.split(',')[0]?.trim() || '') : '';
+    if (libRacm && libEntity) {
+      const prefix = `${entityCodeFor(libEntity)}/${processCodeFor(libRacm.process)}/R`;
+      const taken = rows.map(r => (r.riskId.startsWith(prefix) ? parseInt(r.riskId.slice(prefix.length), 10) : 0)).filter(n => n > 0);
+      riskId = `${prefix}${String(Math.max(0, ...taken) + 1).padStart(3, '0')}`;
+      controlId = `${riskId}/C001`;
+    }
     const blank: ProcurementRacmRow = {
-      riskId: `R${id}`, controlId: `C${id}`,
+      riskId, controlId,
       processArea: processLabel || 'Procurement Lifecycle Management', subProcess: '(Add sub-process)',
-      entity: '', country: '',
+      entity: libEntity, country: '',
       riskCategory: '', riskTitle: '', riskDescription: '',
-      riskRating: 'Medium', likelihood: 'Medium', impact: 'Medium',
+      // Likelihood starts blank on purpose: a new control's likelihood is a
+      // judgement somebody makes, and pre-filling it meant every added row
+      // read as though that judgement had already been made.
+      riskRating: 'Medium', likelihood: '', impact: 'Medium',
       controlObjective: '', controlActivity: '',
       controlType: 'Preventive', controlNature: 'Manual', frequency: 'Monthly',
+      designChecks: '',
       effectiveDate: '', testingStrategy: '',
       controlOwner: '', riskOwner: '', controlEvidence: '',
       assertions: '', fsLineItem: '', regulatoryRef: '',
@@ -563,7 +685,9 @@ export default function RacmFullPageEditor({ onBack, backView, backLabel, racmNa
   const detailRow = detailRowId ? rows.find(r => `${r.riskId}-${r.controlId}` === detailRowId) || null : null;
 
   // Cleaned, renamable display title — strip the leading "RACM ·" and any extension.
-  const baseName = (racmName ?? 'Procurement SOP: Budget to Payment RACM')
+  // A library RACM keeps the name the library gives it, casing and all; only a
+  // file-derived name is cleaned up.
+  const baseName = libRacm ? libRacm.name : (racmName ?? 'Procurement SOP: Budget to Payment RACM')
     .replace(/^RACM\s*·\s*/i, '')
     .replace(/\.(xlsx|xls|csv|pdf|docx?|json)$/i, '')
     .replace(/[-_]+/g, ' ')                              // separators → spaces
@@ -575,6 +699,8 @@ export default function RacmFullPageEditor({ onBack, backView, backLabel, racmNa
     'Draft': 'bg-draft-50 text-draft-700',
     'In Review': 'bg-evidence-50 text-evidence-700',
     'Final': 'bg-compliant-50 text-compliant-700',
+    'Published': 'bg-compliant-50 text-compliant-700',
+    'Published · additions': 'bg-evidence-50 text-evidence-700',
   };
 
   // ─── Build sticky-left offset map (px-based) ─────────────────────────
@@ -609,7 +735,7 @@ export default function RacmFullPageEditor({ onBack, backView, backLabel, racmNa
       <div className="bg-white px-6 pt-0 pb-3.5 flex items-center justify-between gap-4 flex-wrap gap-y-2 shrink-0">
         <div className="min-w-0 flex items-center gap-3">
           {editingTitle ? (
-            <input
+            <input aria-label="RACM title"
               autoFocus
               defaultValue={displayTitle}
               onBlur={(e) => { const v = e.target.value.trim(); setTitleOverride(v || null); setEditingTitle(false); }}
@@ -617,7 +743,7 @@ export default function RacmFullPageEditor({ onBack, backView, backLabel, racmNa
                 if (e.key === 'Enter') (e.target as HTMLInputElement).blur();
                 else if (e.key === 'Escape') setEditingTitle(false);
               }}
-              className="text-[1.375rem] font-bold text-ink-900 leading-tight bg-white border border-brand-200 rounded-md px-2 py-0.5 -mx-1 outline-none focus:ring-2 focus:ring-primary/20 min-w-[18rem]"
+              className="text-[1.375rem] font-bold text-ink-900 leading-tight bg-white border border-brand-200 rounded-md px-2 py-0.5 -mx-1 outline-none focus:ring-2 focus:ring-primary/20 min-w-72"
             />
           ) : (
             <button
@@ -631,10 +757,11 @@ export default function RacmFullPageEditor({ onBack, backView, backLabel, racmNa
           {/* Inline meta — process tag(s), static status badge, version */}
           <div className="flex items-center gap-2 shrink-0">
             {processLabel && <span className="px-2 py-0.5 rounded text-xs font-bold bg-primary/10 text-primary">{processLabel}</span>}
-            {singleProcessArea && <span className="px-2 py-0.5 rounded text-xs font-semibold bg-paper-100 text-ink-600 whitespace-nowrap">{singleProcessArea}</span>}
-            <span className={`px-2 py-0.5 rounded text-xs font-bold ${STATUS_TONES[status]}`}>{status}</span>
-            <span className="text-xs text-text-muted font-mono">v0.1</span>
+            {singleProcessArea && singleProcessArea.trim().toLowerCase() !== (processLabel ?? '').trim().toLowerCase() && <span className="px-2 py-0.5 rounded text-xs font-semibold bg-paper-100 text-ink-600 whitespace-nowrap">{singleProcessArea}</span>}
+            <span className={`px-2 py-0.5 rounded text-xs font-bold ${STATUS_TONES[lifecycle ?? status]}`}>{lifecycle ?? status}</span>
+            {versionLabel && <span className="text-xs text-text-muted font-mono">{versionLabel}</span>}
           </div>
+          <InlineNote note={libNote.note} className="ml-2 min-w-0 truncate" />
         </div>
         <div className="flex items-center gap-2 shrink-0">
           {/* Concierge-only: start another generation. Reuses Back (to 'ai-concierge-racm'). */}
@@ -643,18 +770,40 @@ export default function RacmFullPageEditor({ onBack, backView, backLabel, racmNa
               Generate new
             </Button>
           )}
-          <Gated permission="racm_share">
-          <Button variant="outline" size="md" leftIcon={<Share2 size={14} />}
-            onClick={(e) => openShare({ type: 'racm', id: racmId ?? 'racm', anchor: rectFromEvent(e) })}>
-            Share
-          </Button>
-          </Gated>
-          <Gated permission="ctrl_export" mode="disable" title="You don't have permission to export">
-          <Button variant="outline" size="md" leftIcon={<Download size={14} />}
-            onClick={() => setShowImportToast(true)}>
-            Export
-          </Button>
-          </Gated>
+          {/* A matrix still carrying unpublished rows offers Publish INSTEAD of
+              Export and Share (user ask, 24 Sep): until it is published it is
+              nobody's matrix but its author's, so there is nothing to send on.
+              Once every row is published the two come back. A matrix with
+              published rows AND later additions shows all three — the published
+              half can be shared, the new rows still need publishing. */}
+          {/* The SOP behind an extracted RACM. Its link only lives as long as
+              the page that read the file, which is why this shows only when
+              the editor shares that page (opened from the RACM Library). */}
+          {libraryLive && libRacm?.sopUrl && (
+            <Button variant="outline" size="md" leftIcon={<FileText size={14} />}
+              onClick={() => { window.open(libRacm.sopUrl, '_blank', 'noopener'); }}>
+              View SOP
+            </Button>
+          )}
+          {inLibrary && draftCount > 0 && (
+            <Button variant="primary" size="md" leftIcon={<Upload size={14} />} onClick={() => setPublishOpen(true)}>
+              {publishedCount === 0 ? 'Publish' : `Publish ${draftCount} new`}
+            </Button>
+          )}
+          {(!inLibrary || publishedCount > 0) && (<>
+            <Gated permission="racm_share">
+            <Button variant="outline" size="md" leftIcon={<Share2 size={14} />}
+              onClick={(e) => openShare({ type: 'racm', id: racmId ?? 'racm', anchor: rectFromEvent(e) })}>
+              Share
+            </Button>
+            </Gated>
+            <Gated permission="ctrl_export" mode="disable" title="You don't have permission to export">
+            <Button variant="outline" size="md" leftIcon={<Download size={14} />}
+              onClick={() => setShowImportToast(true)}>
+              Export
+            </Button>
+            </Gated>
+          </>)}
           <input ref={fileInputRef} type="file" accept=".xlsx,.csv" className="hidden"
             onChange={() => { setShowImportToast(true); if (fileInputRef.current) fileInputRef.current.value = ''; }} />
         </div>
@@ -691,11 +840,11 @@ export default function RacmFullPageEditor({ onBack, backView, backLabel, racmNa
                       onSubmit={(e) => { e.preventDefault(); applyBulkUpdate(); }}
                       className="absolute right-0 top-full mt-1 w-72 bg-white border border-border rounded-xl shadow-xl z-30 overflow-hidden">
                       <div className="px-3 py-2 border-b border-border-light bg-surface-2/40">
-                        <h6 id="racm-bulk-update-title" className="text-[0.625rem] font-bold text-text uppercase tracking-wider">Update column</h6>
+                        <h6 id="racm-bulk-update-title" className="text-[0.6875rem] font-bold text-text uppercase tracking-wider">Update column</h6>
                       </div>
                       <div className="p-3 space-y-3">
                         <div>
-                          <label htmlFor="racm-bulk-column" className="text-[0.5625rem] font-semibold text-text-muted uppercase tracking-wider block mb-1">Column</label>
+                          <label htmlFor="racm-bulk-column" className="text-[0.6875rem] font-semibold text-text-muted uppercase tracking-wider block mb-1">Column</label>
                           <select id="racm-bulk-column" autoFocus value={bulkCol}
                             onChange={e => { setBulkCol(e.target.value as RacmColumnKey | ''); setBulkValue(''); }}
                             className="w-full h-7 px-2 border border-border rounded-lg text-xs text-text bg-white outline-none focus:border-primary/40 focus-visible:ring-2 focus-visible:ring-primary/20 cursor-pointer">
@@ -705,7 +854,7 @@ export default function RacmFullPageEditor({ onBack, backView, backLabel, racmNa
                         </div>
                         {bulkCol && (
                           <div>
-                            <label htmlFor="racm-bulk-value" className="text-[0.5625rem] font-semibold text-text-muted uppercase tracking-wider block mb-1">Value</label>
+                            <label htmlFor="racm-bulk-value" className="text-[0.6875rem] font-semibold text-text-muted uppercase tracking-wider block mb-1">Value</label>
                             {bulkOptions ? (
                               <select id="racm-bulk-value" value={bulkValue} onChange={e => setBulkValue(e.target.value)}
                                 className="w-full h-7 px-2 border border-border rounded-lg text-xs text-text bg-white outline-none focus:border-primary/40 focus-visible:ring-2 focus-visible:ring-primary/20 cursor-pointer">
@@ -720,7 +869,7 @@ export default function RacmFullPageEditor({ onBack, backView, backLabel, racmNa
                                 className="w-full h-7 px-2.5 border border-border rounded-lg text-xs text-text bg-white outline-none focus:border-primary/40 focus-visible:ring-2 focus-visible:ring-primary/20" />
                             )}
                             {!bulkOptions && (
-                              <p className="mt-1 text-[0.625rem] text-text-muted">Leave blank to clear this column on the selected rows</p>
+                              <p className="mt-1 text-[0.6875rem] text-text-muted">Leave blank to clear this column on the selected rows</p>
                             )}
                           </div>
                         )}
@@ -752,15 +901,16 @@ export default function RacmFullPageEditor({ onBack, backView, backLabel, racmNa
             {groupByOpen && (
               <>
                 <div className="fixed inset-0 z-10" onClick={() => setGroupByOpen(false)} />
-                <div className="absolute right-0 top-full mt-1 w-56 bg-white border border-border rounded-xl shadow-xl z-30 overflow-hidden">
+                <div role="menu" aria-labelledby="racm-group-by-title" className="absolute right-0 top-full mt-1 w-56 bg-white border border-border rounded-xl shadow-xl z-30 overflow-hidden">
+                  <MenuFocus onClose={() => setGroupByOpen(false)} />
                   <div className="px-3 py-2 border-b border-border-light bg-surface-2/40">
-                    <h6 className="text-[0.625rem] font-bold text-text uppercase tracking-wider">Group by</h6>
+                    <h6 id="racm-group-by-title" className="text-[0.6875rem] font-bold text-text uppercase tracking-wider">Group by</h6>
                   </div>
                   <div className="p-2 space-y-0.5">
                     {GROUP_BY_OPTIONS.map(opt => {
                       const on = groupBy === opt.value;
                       return (
-                        <button key={opt.value} onClick={() => { setGroupBy(opt.value); setGroupByOpen(false); }}
+                        <button key={opt.value} role="menuitemradio" aria-checked={on} onClick={() => { setGroupBy(opt.value); setGroupByOpen(false); }}
                           className={`w-full flex items-center justify-between px-2 py-1.5 rounded-lg text-xs cursor-pointer transition-colors ${on ? 'bg-primary/5 text-primary font-semibold' : 'text-text-secondary hover:bg-surface-2 font-medium'}`}>
                           <span>{opt.label}</span>
                           {on && <Check size={13} className="text-primary" />}
@@ -798,7 +948,7 @@ export default function RacmFullPageEditor({ onBack, backView, backLabel, racmNa
       </div>
 
       {/* Stats strip */}
-      <div className="bg-white border-b border-border-light px-6 py-2 flex items-center gap-6 text-[0.625rem] shrink-0 overflow-x-auto">
+      <div className="bg-white border-b border-border-light px-6 py-2 flex items-center gap-6 text-[0.6875rem] shrink-0 overflow-x-auto">
         <StatPill label="Total Controls" value={stats.total} />
         <StatPill label="Total Risks" value={stats.risks} />
         <StatPill label="Sub-Processes" value={stats.subProcesses} />
@@ -812,7 +962,8 @@ export default function RacmFullPageEditor({ onBack, backView, backLabel, racmNa
       {/* Grid container — 24px side gutters match the header's px-6. The inner div is the
           scroll region, so sticky columns + the scrollbar stay within the inset gutters. */}
       <div className="flex-1 min-h-0 px-6 bg-white">
-        <div className="h-full overflow-auto shadow-[inset_-14px_0_10px_-10px_rgba(15,8,30,0.05)]">
+        <div className="h-full overflow-auto shadow-[inset_-14px_0_10px_-10px_rgba(15,8,30,0.05)]"
+          style={{ scrollPaddingLeft: stickyOffsets.total, scrollPaddingTop: 36 }}>
         {filteredRows.length === 0 ? (
           <ListPlaceholder
             icon={Search}
@@ -885,12 +1036,82 @@ export default function RacmFullPageEditor({ onBack, backView, backLabel, racmNa
             row={detailRow}
             columns={allColumns}
             readOnly={lockedRowKeys.has(`${detailRow.riskId}-${detailRow.controlId}`)}
+            missing={inLibrary ? missingRowFields(detailRow) : []}
             onClose={() => setDetailRowId(null)}
             onImport={() => fileInputRef.current?.click()}
             onUpdate={(k, v) => updateCell(`${detailRow.riskId}-${detailRow.controlId}`, k, v)}
           />
         )}
       </AnimatePresence>
+
+      {/* Publishing is the moment a matrix stops being editable, so it is asked
+          for once, plainly, with the count it will fix — the same words the
+          RACM Library asks in, because it is the same decision. */}
+      {/* Publishing is the moment a matrix stops being editable, so it is asked
+          for once, plainly, with the count it will fix — the same words the
+          RACM Library asks in, because it is the same decision. */}
+      {publishOpen && racmId && (
+        <div className="modal-backdrop" onClick={() => setPublishOpen(false)}>
+          <div className="modal" onClick={e => e.stopPropagation()} role="dialog" aria-modal="true" aria-labelledby="publish-racm-editor-title"
+            onKeyDown={e => { if (e.key === 'Escape') setPublishOpen(false); }}><DialogFocus />
+            <div className="px-5 pt-4 pb-3 border-b border-canvas-border">
+              <div className="flex items-center justify-between gap-3">
+                <h2 id="publish-racm-editor-title" className="text-[0.9375rem] font-semibold text-ink-900">
+                  {publishedCount === 0
+                    ? `Publish ${displayTitle}?`
+                    : `Publish ${draftCount} new control${draftCount === 1 ? '' : 's'}?`}
+                </h2>
+                <button onClick={() => setPublishOpen(false)} className="h-7 w-7 inline-flex items-center justify-center rounded-md text-ink-400 hover:text-ink-700 cursor-pointer" aria-label="Close"><X size={15} /></button>
+              </div>
+            </div>
+            <div className="p-5">
+              <p className="text-[0.8125rem] text-ink-600 leading-relaxed">
+                {draftCount === 1 ? 'This row' : `These ${draftCount} rows`} can be scoped into an engagement once published.
+              </p>
+              {incompleteLine && (
+                <p role="alert" className="mt-2 flex items-start gap-1.5 text-[0.75rem] leading-snug text-mitigated-700">
+                  <AlertTriangle size={12} className="mt-0.5 shrink-0" aria-hidden /> {incompleteLine}
+                </p>
+              )}
+              <div className="mt-3 flex items-start gap-2.5 rounded-lg border border-canvas-border bg-paper-50 px-3.5 py-3">
+                <Lock size={14} className="text-ink-400 mt-0.5 shrink-0" />
+                <p className="text-[0.75rem] text-ink-600 leading-relaxed">
+                  A published row can't be edited again. Anything still to change should be changed first —
+                  afterwards the only way to alter this matrix is to add a control to it.
+                </p>
+              </div>
+              <div className="mt-4 flex items-center justify-end gap-2">
+                <button onClick={() => setPublishOpen(false)} autoFocus className="h-9 px-3.5 rounded-lg border border-canvas-border text-[0.8125rem] font-semibold text-ink-600 hover:text-ink-900 cursor-pointer">Cancel</button>
+                <button disabled={!!incompleteLine} onClick={() => {
+                  if (incompleteLine) return;
+                  setPublishOpen(false);
+                  // Same tab: the library answers, so the count and version
+                  // shown are the ones it actually recorded — never a promise.
+                  const version = libRacm ? nextVersion(libRacm) : null;
+                  const n = libraryLive ? publishRacm(racmId, currentUser?.name ?? 'You') : draftCount;
+                  if (n === 0) return;
+                  setPublishedAs(version);
+                  // Another tab only asks, so it shows the answer it expects;
+                  // the same tab reads the library's answer back directly.
+                  if (!libraryLive) {
+                    try { localStorage.setItem(RACM_PUBLISH_KEY(racmId), JSON.stringify({ by: currentUser?.name ?? 'You', at: Date.now() })); } catch { /* the ask is lost, the rows are not */ }
+                    setJustPublished(true);
+                  }
+                  logEvent({ action: 'Update', description: `Published ${n} control${n === 1 ? '' : 's'} in ${displayTitle}`, module: 'SOX ICFR', entity: 'RACM' });
+                  addToast({
+                    type: 'success',
+                    title: publishedCount === 0 ? 'RACM published' : 'New controls published',
+                    message: `${n} control${n === 1 ? '' : 's'} ${n === 1 ? 'is' : 'are'} now fixed, and engagements can scope from ${n === 1 ? 'it' : 'them'}.`,
+                  });
+                }}
+                  className="h-9 px-3.5 inline-flex items-center gap-1.5 rounded-lg bg-brand-600 text-white text-[0.8125rem] font-semibold enabled:hover:bg-brand-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors cursor-pointer">
+                  <Upload size={13} /> Publish
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Import/Export toast */}
       <AnimatePresence>
@@ -924,7 +1145,7 @@ function StatPill({ label, value, accent }: { label: string; value: number; acce
   return (
     <div className="flex items-center gap-1.5 shrink-0">
       <span className={`text-[0.75rem] font-bold tabular-nums ${accent ?? 'text-text'}`}>{value}</span>
-      <span className="text-[0.625rem] text-text-muted">{label}</span>
+      <span className="text-[0.6875rem] text-text-muted">{label}</span>
     </div>
   );
 }
@@ -963,7 +1184,7 @@ function ColumnFilterControl({ colKey: _colKey, label, mode, options, value, onC
       </button>
       {open && createPortal(
         <div ref={menuRef} style={{ position: 'fixed', top: pos.top, left: pos.left }}
-          className="w-[212px] bg-white border border-border-light rounded-md shadow-lg z-[60] py-1 normal-case tracking-normal">
+          className="w-53 bg-white border border-border-light rounded-md shadow-lg z-[60] py-1 normal-case tracking-normal">
           {keyToggle && (
             <label className="flex items-center gap-2 px-3 py-2 text-[0.75rem] font-medium text-ink-800 hover:bg-surface-2 cursor-pointer border-b border-border-light">
               <input type="checkbox" checked={keyToggle.checked} onChange={(e) => keyToggle.onChange(e.target.checked)} className="accent-brand-600 cursor-pointer" />
@@ -981,10 +1202,10 @@ function ColumnFilterControl({ colKey: _colKey, label, mode, options, value, onC
           ) : (
             <>
               <div className="px-3 py-1.5 border-b border-border-light flex items-center justify-between">
-                <span className="text-[0.625rem] uppercase tracking-wider font-semibold text-ink-500">Filter</span>
+                <span className="text-[0.6875rem] uppercase tracking-wider font-semibold text-ink-500">Filter</span>
                 {active && <button type="button" onClick={() => onChange([])} className="text-[0.6875rem] text-brand-700 hover:text-brand-600 cursor-pointer">Clear</button>}
               </div>
-              <ul className="py-1 max-h-[240px] overflow-y-auto">
+              <ul className="py-1 max-h-60 overflow-y-auto">
                 {options.map(opt => {
                   const checked = value.includes(opt);
                   return (
@@ -1033,7 +1254,7 @@ function ColumnVisibilityPanel({
   return (
     <div ref={ref} className="absolute right-0 top-full mt-1 w-72 bg-white border border-border rounded-xl shadow-xl z-30 overflow-hidden">
       <div className="px-3 py-2 border-b border-border-light bg-surface-2/40 flex items-center justify-between">
-        <h6 className="text-[0.625rem] font-bold text-text uppercase tracking-wider">Show columns</h6>
+        <h6 className="text-[0.6875rem] font-bold text-text uppercase tracking-wider">Show columns</h6>
         <button onClick={onReset} className="text-[0.6875rem] font-semibold text-brand-700 hover:text-brand-600 cursor-pointer">Reset</button>
       </div>
       <div className="px-2.5 pt-2 pb-1">
@@ -1043,7 +1264,7 @@ function ColumnVisibilityPanel({
             className="w-full pl-7 pr-2 py-1.5 border border-border rounded-lg text-xs bg-white outline-none focus:border-primary/40 transition-colors" />
         </div>
       </div>
-      <ul className="py-1 max-h-[300px] overflow-y-auto">
+      <ul className="py-1 max-h-75 overflow-y-auto">
         {filtered.length === 0 && <li className="px-3 py-3 text-xs text-ink-400 text-center">No columns match.</li>}
         {filtered.map(col => {
           const locked = LOCKED_KEYS.has(col.key);
@@ -1055,7 +1276,7 @@ function ColumnVisibilityPanel({
                   onChange={() => onToggle(col.key)}
                   className="accent-brand-600 cursor-pointer w-3.5 h-3.5 shrink-0" />
                 <span className="truncate">{col.label}</span>
-                {locked && <span className="ml-auto text-[0.625rem] text-ink-400 shrink-0">locked</span>}
+                {locked && <span className="ml-auto text-[0.6875rem] text-ink-400 shrink-0">locked</span>}
               </label>
             </li>
           );
@@ -1099,10 +1320,10 @@ function RacmGrid({
   return (
     <div style={{ minWidth: totalWidth }}>
       {/* Sticky header */}
-      <div className="sticky top-0 z-20 flex bg-surface-2/95 border-b border-border backdrop-blur">
+      <div className="sticky top-0 z-20 flex bg-surface-2 border-b border-border">
         {/* checkbox column */}
-        <div className="sticky left-0 bg-surface-2/95 border-r border-border-light h-9 w-10 flex items-center justify-center z-10">
-          <span className="text-[0.5625rem] text-ink-400 font-bold">#</span>
+        <div className="sticky left-0 bg-surface-2 border-r border-border-light h-9 w-10 flex items-center justify-center z-10">
+          <span className="text-[0.6875rem] text-ink-400 font-bold">#</span>
         </div>
         {visibleColumns.map(c => {
           const pinned = pinnedKeys.has(c.key);
@@ -1112,7 +1333,7 @@ function RacmGrid({
           return (
             <div key={c.key}
               style={{ width: c.width, minWidth: c.width, left: pinned ? left : undefined }}
-              className={`relative h-9 px-3 flex items-center justify-between gap-1 text-[0.5625rem] font-bold text-text-muted uppercase tracking-wider border-r border-border-light ${pinned ? 'sticky bg-surface-2/95 z-10' : ''} ${isLastPinned ? 'shadow-[2px_0_3px_-2px_rgba(0,0,0,0.08)]' : ''}`}>
+              className={`relative h-9 px-3 flex items-center justify-between gap-1 text-[0.6875rem] font-bold text-text-muted uppercase tracking-wider border-r border-border-light ${pinned ? 'sticky bg-surface-2 z-10' : ''} ${isLastPinned ? 'shadow-[2px_0_3px_-2px_rgba(0,0,0,0.08)]' : ''}`}>
               <span className="truncate">{c.label}</span>
               {filterMode && (
                 <ColumnFilterControl colKey={c.key as string} label={c.label}
@@ -1139,13 +1360,17 @@ function RacmGrid({
         return (
           <div key={group.label}>
             {showGroupHeaders && (
-              <button onClick={() => onToggleGroup(group.label)}
-                className="sticky left-0 z-10 w-full text-left flex items-center gap-2 px-4 py-1.5 bg-primary/5 border-b border-primary/15 hover:bg-primary/10 transition-colors cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/30 focus-visible:ring-offset-1"
-                style={{ minWidth: totalWidth }}>
-                {collapsed ? <ChevronRight size={12} className="text-primary" /> : <ChevronDown size={12} className="text-primary" />}
-                <span className="text-[0.6875rem] font-bold text-primary truncate">{group.label}</span>
-                <span className="text-[0.625rem] text-primary/70 tabular-nums">({group.count})</span>
-              </button>
+              // The band spans the grid; only its label is sticky. A sticky
+              // button as wide as the grid has nowhere to stick, so it slid
+              // out with the scroll and the group rows went blank (5 Oct).
+              <div className="bg-brand-50 border-b border-primary/15" style={{ minWidth: totalWidth }}>
+                <button onClick={() => onToggleGroup(group.label)}
+                  className="sticky left-0 z-10 max-w-[min(100%,640px)] text-left inline-flex items-center gap-2 px-4 py-1.5 bg-brand-50 hover:bg-brand-100 transition-colors cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/30 focus-visible:ring-offset-1">
+                  {collapsed ? <ChevronRight size={12} className="text-primary" /> : <ChevronDown size={12} className="text-primary" />}
+                  <span className="text-[0.6875rem] font-bold text-primary truncate">{group.label}</span>
+                  <span className="text-[0.6875rem] text-primary/70 tabular-nums">({group.count})</span>
+                </button>
+              </div>
             )}
             {!collapsed && group.rows.map((r, idx) => {
               const rowKey = `${r.riskId}-${r.controlId}`;
@@ -1194,7 +1419,11 @@ function RacmGridRow({
   onToggleKey: (rowKey: string) => void;
 }) {
   const [editingKey, setEditingKey] = useState<RacmColumnKey | null>(null);
-  const bg = isSelected ? 'bg-primary/8' : (rowIdx % 2 === 0 ? 'bg-white' : 'bg-surface-2/30');
+  // OPAQUE, every state. A frozen column is painted over the rows sliding
+  // sideways beneath it, so a translucent background lets that content read
+  // straight through the pinned cells — two rows of text on top of each other.
+  // surface-2 is #FCFAFD, so at full strength the zebra looks as it always did.
+  const bg = isSelected ? 'bg-brand-50' : (rowIdx % 2 === 0 ? 'bg-white' : 'bg-surface-2');
   // A published row never opens an editor — including the attributes modal,
   // which would otherwise look like it saved and then quietly discard the work.
   // Editing in the grid is free text for every column, ours and the client's
@@ -1205,7 +1434,7 @@ function RacmGridRow({
   return (
     <div className={`group flex border-b border-border-light/70 hover:bg-primary/5 ${bg} transition-colors`}>
       {/* checkbox */}
-      <div className={`sticky left-0 h-10 w-10 flex items-center justify-center border-r border-border-light z-10 ${bg}`}>
+      <div className={`sticky left-0 h-10 w-10 flex items-center justify-center border-r border-border-light z-10 ${bg} group-hover:bg-brand-50`}>
         <label className="flex items-center gap-2 cursor-pointer">
           <input type="checkbox" checked={isSelected} onChange={onToggleSelected}
             className="w-3.5 h-3.5 rounded border-border accent-primary cursor-pointer" />
@@ -1220,7 +1449,7 @@ function RacmGridRow({
         return (
           <div key={c.key}
             style={{ width: c.width, minWidth: c.width, left: pinned ? left : undefined }}
-            className={`h-10 px-3 py-1.5 text-[0.6875rem] text-text border-r border-border-light/70 ${pinned ? `sticky z-10 ${bg}` : ''} ${isLastPinned ? 'shadow-[2px_0_3px_-2px_rgba(0,0,0,0.08)]' : ''} ${isEditing && !isAttrEditing ? 'p-0' : ''}`}>
+            className={`h-10 px-3 py-1.5 text-[0.6875rem] text-text border-r border-border-light/70 ${pinned ? `sticky z-10 ${bg} group-hover:bg-brand-50` : ''} ${isLastPinned ? 'shadow-[2px_0_3px_-2px_rgba(0,0,0,0.08)]' : ''} ${isEditing && !isAttrEditing ? 'p-0' : ''}`}>
             {isAttrEditing ? (
               <>
                 <CellContent row={row} col={c} locked={locked} onEdit={() => {}} onOpenDetail={onOpenDetail} onToggleKey={() => onToggleKey(rowKey)} />
@@ -1231,7 +1460,10 @@ function RacmGridRow({
                 />
               </>
             ) : isEditing ? (
-              <input autoFocus defaultValue={racmCellText(row, c.key)}
+              <input aria-label={c.label} autoFocus defaultValue={racmCellText(row, c.key)}
+                // A cell half under the frozen columns is scrolled clear of
+                // them before typing starts (scroll-padding on the grid).
+                onFocus={e => { if (!pinned) e.currentTarget.parentElement?.scrollIntoView({ block: 'nearest', inline: 'nearest' }); }}
                 onBlur={e => { onUpdateCell(rowKey, c.key, e.target.value); setEditingKey(null); }}
                 onKeyDown={e => {
                   if (e.key === 'Enter') { onUpdateCell(rowKey, c.key, (e.target as HTMLInputElement).value); setEditingKey(null); }
@@ -1294,11 +1526,12 @@ function AttributeEditModal({ value, onSave, onClose }: { value: string; onSave:
         animate={{ opacity: 1, scale: 1, y: 0 }}
         exit={{ opacity: 0, scale: 0.97, y: 8 }}
         role="dialog" aria-modal="true" aria-labelledby="attr-modal-title"
-        className="fixed top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 z-50 w-full max-w-[440px] bg-white rounded-xl border border-border-light shadow-xl overflow-hidden"
+        className="fixed top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 z-50 w-full max-w-110 bg-white rounded-xl border border-border-light shadow-xl overflow-hidden"
       >
+        <DialogFocus />
         <div className="flex items-center justify-between px-6 pt-5 pb-4 border-b border-border-light">
           <h3 id="attr-modal-title" className="text-[1rem] font-bold text-ink-900">Edit Attributes</h3>
-          <button onClick={onClose} className="p-1.5 rounded-lg text-ink-500 hover:text-ink-800 hover:bg-surface-2 transition-colors cursor-pointer shrink-0"><X size={16} /></button>
+          <button onClick={onClose} aria-label="Close" className="p-1.5 rounded-lg text-ink-500 hover:text-ink-800 hover:bg-surface-2 transition-colors cursor-pointer shrink-0"><X size={16} /></button>
         </div>
         <div className="px-6 py-5 space-y-4">
           {/* Current attributes */}
@@ -1307,7 +1540,7 @@ function AttributeEditModal({ value, onSave, onClose }: { value: string; onSave:
               {attrs.map((a, idx) => (
                 <span key={idx} className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-[0.6875rem] font-medium bg-purple-50 text-purple-700 border border-purple-100">
                   {a}
-                  <button onClick={() => removeAttr(idx)} className="text-purple-400 hover:text-risk cursor-pointer transition-colors"><X size={10} /></button>
+                  <button onClick={() => removeAttr(idx)} aria-label={`Remove ${a}`} className="text-purple-400 hover:text-risk cursor-pointer transition-colors"><X size={10} /></button>
                 </span>
               ))}
             </div>
@@ -1330,7 +1563,7 @@ function AttributeEditModal({ value, onSave, onClose }: { value: string; onSave:
               Add
             </Button>
           </div>
-          <p className="text-[0.625rem] text-ink-400">Press Enter after each attribute to add it. Click the x on a chip to remove.</p>
+          <p className="text-[0.6875rem] text-ink-400">Press Enter after each attribute to add it. Click the x on a chip to remove.</p>
         </div>
         <div className="px-6 py-4 border-t border-border-light bg-surface-2/20 flex items-center justify-end gap-3">
           <Button variant="outline" size="sm" onClick={onClose}>Cancel</Button>
@@ -1370,7 +1603,7 @@ function CellContent({
         disabled={locked}
         aria-label={`Key control — ${row.controlId}`}
         title={locked ? LOCKED_ROW_TITLE : on ? 'Key control — click to unmark' : 'Not a key control — click to mark'}
-        className={`group/key h-6 px-2 inline-flex items-center gap-1.5 rounded-full border text-[0.5625rem] font-bold uppercase tracking-wider ${locked ? 'cursor-default' : 'cursor-pointer'} transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40 focus-visible:ring-inset ${
+        className={`group/key h-6 px-2 inline-flex items-center gap-1.5 rounded-full border text-[0.6875rem] font-bold uppercase tracking-wider ${locked ? 'cursor-default' : 'cursor-pointer'} transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40 focus-visible:ring-inset ${
           on
             ? 'bg-mitigated-50 text-mitigated-700 border-mitigated-700/15 hover:bg-mitigated-100'
             : 'border-transparent text-ink-400 hover:text-mitigated-700 hover:bg-mitigated-50/60'
@@ -1398,7 +1631,9 @@ function CellContent({
 
   if (CHIP_COLUMNS.has(col.key)) {
     const cls =
-      col.key === 'riskRating' || col.key === 'likelihood' || col.key === 'impact'
+      col.key === 'likelihood'
+        ? deriveLikelihoodClass(val)
+        : col.key === 'riskRating' || col.key === 'impact'
         ? deriveRiskRatingClass(val)
         : col.key === 'controlType'
           ? deriveControlTypeClass(val)
@@ -1408,7 +1643,7 @@ function CellContent({
     return (
       <button onDoubleClick={onEdit} disabled={locked} title={locked ? LOCKED_ROW_TITLE : undefined}
         onKeyDown={(e) => { if (e.key === 'Enter' || e.key === 'F2') { e.preventDefault(); onEdit(); } }}
-        className={`px-2 h-5 rounded-full text-[0.5625rem] font-bold inline-flex items-center border ${cls} ${locked ? 'cursor-default' : 'cursor-pointer'} focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40 focus-visible:ring-inset`}>
+        className={`px-2 h-5 rounded-full text-[0.6875rem] font-bold inline-flex items-center border ${cls} ${locked ? 'cursor-default' : 'cursor-pointer'} focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40 focus-visible:ring-inset`}>
         {val || '—'}
       </button>
     );
@@ -1420,13 +1655,13 @@ function CellContent({
     // to add some, which it would never be able to honour.
     if (!val) return locked
       ? <span className="text-ink-300">—</span>
-      : <button onClick={onEdit} className="text-[0.625rem] text-primary hover:underline cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40 focus-visible:ring-inset rounded">+ Add attributes</button>;
+      : <button onClick={onEdit} className="text-[0.6875rem] text-primary hover:underline cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40 focus-visible:ring-inset rounded">+ Add attributes</button>;
     const items = val.split(',').map(s => s.trim()).filter(Boolean);
     return (
       <button onClick={onEdit} disabled={locked} title={locked ? LOCKED_ROW_TITLE : undefined}
         className={`flex flex-wrap gap-1 py-0.5 -mx-1 px-1 ${locked ? 'cursor-default' : 'cursor-pointer hover:bg-white/60'} rounded transition-colors w-full text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40 focus-visible:ring-inset`}>
         {items.map((attr, idx) => (
-          <span key={idx} className="inline-flex items-center px-1.5 py-0.5 rounded text-[0.5625rem] font-medium bg-purple-50 text-purple-700 border border-purple-100 whitespace-nowrap">
+          <span key={idx} className="inline-flex items-center px-1.5 py-0.5 rounded text-[0.6875rem] font-medium bg-purple-50 text-purple-700 border border-purple-100 whitespace-nowrap">
             {attr}
           </span>
         ))}
@@ -1445,8 +1680,10 @@ function CellContent({
 
 // ─── Detail Panel ─────────────────────────────────────────────────────────
 function DetailPanel({
-  row, columns, readOnly, onClose, onUpdate, onImport,
+  row, columns, readOnly, missing = [], onClose, onUpdate, onImport,
 }: {
+  /** Required fields this row still lacks — until filled the library won't keep it. */
+  missing?: string[];
   row: ProcurementRacmRow;
   /** Our columns plus the client's own, so the panel shows the whole row. */
   columns: RacmColumnDef[];
@@ -1460,29 +1697,42 @@ function DetailPanel({
   // Non-modal side panel: the grid behind stays interactive (no backdrop / focus
   // trap / aria-modal). We only close on Escape and move initial focus to Close.
   const closeRef = useRef<HTMLButtonElement>(null);
+  const panelRef = useRef<HTMLDivElement>(null);
   useEffect(() => {
-    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose(); };
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key !== 'Escape') return;
+      // Escape inside one of the panel's fields leaves the field, keeping what
+      // was typed (blur saves it) — it no longer closes the panel and loses the
+      // half-written title (5 Oct). A second Escape closes.
+      const t = e.target as HTMLElement | null;
+      if (t && panelRef.current?.contains(t) && (t.tagName === 'INPUT' || t.tagName === 'TEXTAREA')) {
+        t.blur();
+        closeRef.current?.focus();
+        return;
+      }
+      onClose();
+    };
     document.addEventListener('keydown', onKey);
     return () => document.removeEventListener('keydown', onKey);
   }, [onClose]);
   useEffect(() => { closeRef.current?.focus(); }, []);
 
   return (
-    <motion.div initial={{ x: 480, opacity: 0 }} animate={{ x: 0, opacity: 1 }} exit={{ x: 480, opacity: 0 }}
+    <motion.div ref={panelRef} initial={{ x: 480, opacity: 0 }} animate={{ x: 0, opacity: 1 }} exit={{ x: 480, opacity: 0 }}
       transition={{ type: 'spring', stiffness: 320, damping: 32 }}
       role="dialog" aria-label={`Risk & control detail — ${row.riskId} · ${row.controlId}`}
-      className="fixed right-0 top-0 bottom-0 w-[520px] bg-white border-l border-border shadow-2xl z-40 flex flex-col">
+      className="fixed right-0 top-0 bottom-0 w-130 bg-white border-l border-border shadow-2xl z-40 flex flex-col">
       {/* header */}
       <div className="px-5 py-3 border-b border-border-light flex items-start justify-between">
         <div className="min-w-0">
           <div className="flex items-center gap-2 mb-1">
-            <span className="text-[0.625rem] font-mono text-ink-400">{row.riskId} · {row.controlId}</span>
-            <span className={`px-1.5 h-4 rounded text-[0.5rem] font-bold inline-flex items-center border ${deriveRiskRatingClass(row.riskRating)}`}>{row.riskRating}</span>
-            <span className={`px-1.5 h-4 rounded text-[0.5rem] font-bold inline-flex items-center border ${deriveControlTypeClass(row.controlType)}`}>{row.controlType}</span>
-            <span className={`px-1.5 h-4 rounded text-[0.5rem] font-bold inline-flex items-center border ${deriveControlNatureClass(row.controlNature)}`}>{row.controlNature}</span>
+            <span className="text-[0.6875rem] font-mono text-ink-400">{row.riskId} · {row.controlId}</span>
+            <span className={`px-1.5 h-4 rounded text-[0.625rem] font-bold inline-flex items-center border ${deriveRiskRatingClass(row.riskRating)}`}>{row.riskRating}</span>
+            <span className={`px-1.5 h-4 rounded text-[0.625rem] font-bold inline-flex items-center border ${deriveControlTypeClass(row.controlType)}`}>{row.controlType}</span>
+            <span className={`px-1.5 h-4 rounded text-[0.625rem] font-bold inline-flex items-center border ${deriveControlNatureClass(row.controlNature)}`}>{row.controlNature}</span>
           </div>
-          <h2 className="text-[0.8125rem] font-bold text-text truncate">{row.controlObjective || row.controlActivity?.slice(0, 80) || '(No objective)'}</h2>
-          <p className="text-[0.625rem] text-text-muted mt-0.5 truncate">{row.subProcess}</p>
+          <h2 className="text-[0.9375rem] font-semibold text-text truncate">{row.controlObjective || row.controlActivity?.slice(0, 80) || '(No objective)'}</h2>
+          <p className="text-[0.6875rem] text-text-muted mt-0.5 truncate">{row.subProcess}</p>
         </div>
         <button ref={closeRef} onClick={onClose} aria-label="Close detail panel" className="p-1.5 rounded-lg text-ink-500 hover:text-ink-800 hover:bg-surface-2 transition-colors cursor-pointer shrink-0 -mr-1"><X size={16} /></button>
       </div>
@@ -1506,8 +1756,10 @@ function DetailPanel({
         {/* The footer line is the one place the published rule is spelled out:
             it sits outside the scrolling body, so it is on screen next to the
             greyed fields however far down the panel the reader is. */}
-        <div className="flex items-center gap-1.5 text-[0.625rem] text-text-muted">
-          {readOnly ? <><Lock size={10} />{LOCKED_ROW_TITLE}</> : <><Save size={10} />Changes auto-save</>}
+        <div className="flex items-center gap-1.5 text-[0.6875rem] text-text-muted">
+          {readOnly ? <><Lock size={10} />{LOCKED_ROW_TITLE}</>
+            : missing.length ? <span className="text-mitigated-700 inline-flex items-center gap-1.5"><AlertTriangle size={10} />Not saved until {missing.join(', ')} {missing.length === 1 ? 'is' : 'are'} filled in</span>
+            : <><Save size={10} />Changes auto-save</>}
         </div>
         <div className="flex items-center gap-2">
           {onImport && (
@@ -1530,7 +1782,7 @@ function DetailSection({ label, children }: { label: string; children: React.Rea
     <div className="rounded-lg border border-border-light">
       <button onClick={() => setOpen(v => !v)}
         className="w-full px-3 py-2 flex items-center justify-between hover:bg-surface-2/30 cursor-pointer transition-colors">
-        <span className="text-[0.625rem] font-bold text-text uppercase tracking-wider">{label}</span>
+        <span className="text-[0.6875rem] font-bold text-text uppercase tracking-wider">{label}</span>
         {open ? <ChevronDown size={11} className="text-ink-400" /> : <ChevronRight size={11} className="text-ink-400" />}
       </button>
       {open && <div className="px-3 pb-3 pt-1 space-y-2.5">{children}</div>}
@@ -1540,17 +1792,21 @@ function DetailSection({ label, children }: { label: string; children: React.Rea
 
 function DetailField({ label, value, onChange, multiLine, readOnly }: { label: string; value: string; onChange: (v: string) => void; multiLine?: boolean; readOnly?: boolean }) {
   // Read-only keeps the field selectable and scrollable — a published control is
-  // still something people come here to read and copy out of.
-  const tone = readOnly ? 'bg-surface-2/50 text-text-muted' : 'bg-white text-text focus:border-primary/40';
+  // still something people come here to read and copy out of. Because it stays in
+  // the tab order for that reason, it needs the same focus border as an editable
+  // one: `outline-none` below removes the browser's ring, and nothing globally
+  // replaces it for inputs (index.css gives the 4px ring to buttons only), so
+  // without this a keyboard user landing here saw no indication at all.
+  const tone = readOnly ? 'bg-surface-2/50 text-text-muted focus:border-primary/40' : 'bg-white text-text focus:border-primary/40';
   return (
     <div>
-      <label className="text-[0.5625rem] font-semibold text-text-muted uppercase tracking-wider block mb-1">{label}</label>
+      <label className="text-[0.6875rem] font-semibold text-text-muted uppercase tracking-wider block mb-1">{label}</label>
       {multiLine ? (
-        <textarea defaultValue={value} readOnly={readOnly} onBlur={readOnly ? undefined : e => onChange(e.target.value)}
+        <textarea aria-label={label} defaultValue={value} readOnly={readOnly} onBlur={readOnly ? undefined : e => onChange(e.target.value)}
           rows={Math.min(6, Math.max(2, Math.ceil((value || '').length / 50)))}
           className={`w-full px-2.5 py-1.5 border border-border rounded-lg text-[0.6875rem] outline-none transition-all resize-none ${tone}`} />
       ) : (
-        <input defaultValue={value} readOnly={readOnly} onBlur={readOnly ? undefined : e => onChange(e.target.value)}
+        <input aria-label={label} defaultValue={value} readOnly={readOnly} onBlur={readOnly ? undefined : e => onChange(e.target.value)}
           className={`w-full px-2.5 py-1.5 border border-border rounded-lg text-[0.6875rem] outline-none transition-all ${tone}`} />
       )}
     </div>

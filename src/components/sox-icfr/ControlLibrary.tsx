@@ -18,10 +18,12 @@ import {
 import { ItgcCascadeBanner, NatureChip, Th, Tickmark } from './parts';
 import NewControlPanel from './NewControlPanel';
 import AddRacmModal from './AddRacmModal';
+import { InlineNote, useInlineNote } from './InlineNote';
 import WorkingPaperModal from './WorkingPaperModal';
 import { useToast } from '../shared/Toast';
 import { cn } from '../../lib/cn';
 import type { AuditRecord, Control, IcfrEngagement, RunKind, RunRecord } from './types';
+import DialogFocus from '../shared/DialogFocus';
 
 /**
  * Control Library — the LIBRARY lens (user ask, 30 Jul).
@@ -112,20 +114,20 @@ const reviewStatusOf = (c: Control): Exclude<ReviewFilter, 'All'> => c.racmRevie
 /** The review status on a row — pending, ready to test, or the remark itself. */
 function ReviewStatus({ c }: { c: Control }) {
   const r = c.racmReview;
-  if (!r) return <span className="inline-flex items-center gap-1.5 text-[0.71875rem] text-ink-400"><Circle size={11} /> Pending review</span>;
+  if (!r) return <span className="inline-flex items-center gap-1.5 text-[0.75rem] text-ink-400"><Circle size={11} /> Pending review</span>;
   if (r.status === 'Approved') {
     // "ready to test", never a tested result — its own icon keeps it clear of the ✓ tickmarks
     return (
       <span className="flex flex-col gap-0.5 min-w-0">
-        <span className="inline-flex items-center gap-1 text-[0.71875rem] font-semibold text-compliant-700"><ClipboardCheck size={13} /> Ready to test</span>
-        <span className="text-[0.65625rem] text-ink-400 truncate" title={`Approved · ${r.by} · ${r.at}`}>{r.by} · {r.at}</span>
+        <span className="inline-flex items-center gap-1 text-[0.75rem] font-semibold text-compliant-700"><ClipboardCheck size={13} /> Ready to test</span>
+        <span className="text-[0.6875rem] text-ink-400 truncate" title={`Approved · ${r.by} · ${r.at}`}>{r.by} · {r.at}</span>
       </span>
     );
   }
   return (
     <span className="flex flex-col gap-0.5 min-w-0">
-      <span className="inline-flex items-center gap-1 text-[0.71875rem] font-semibold text-high-700"><MessageSquareWarning size={13} /> Remark</span>
-      <span className="text-[0.65625rem] text-ink-500 truncate" title={r.remark}>{r.remark}</span>
+      <span className="inline-flex items-center gap-1 text-[0.75rem] font-semibold text-high-700"><MessageSquareWarning size={13} /> Remark</span>
+      <span className="text-[0.6875rem] text-ink-500 truncate" title={r.remark}>{r.remark}</span>
     </span>
   );
 }
@@ -134,11 +136,15 @@ const COLW_KEY = 'sox-library-colw';
 /** The Overview's counts still deep-link in. They are testing questions, so the
  *  lens has no dropdown for them — it honours the preset once and says so. */
 const PRESET_LABEL: Record<string, string> = {
-  due: 'Tests due now', court: 'In your court', design: 'TOD not tested', 'design-done': 'TOD concluded',
+  due: 'Tests due now', court: 'Waiting on me', design: 'TOD not tested', 'design-done': 'TOD concluded',
   operating: 'TOE not tested', 'operating-done': 'TOE concluded', effective: 'Effective',
   exceptions: 'Not effective', review: 'Awaiting review', owner: 'Waiting on owner',
   open: 'Not concluded', papers: 'Awaiting sign-off', key: 'Key controls',
   itgc: 'Test-of-one withdrawn',
+  // Controls a closed remediation changed. Not a testing question like the rest —
+  // it is "what is no longer the thing we tested" — so it earns its own way in
+  // below rather than only arriving from another screen.
+  'retest-due': 'Owed a retest',
 };
 
 // ── card ────────────────────────────────────────────────────────────────────────
@@ -153,7 +159,7 @@ export function LastRunFact({ c, runs }: { c: Control; runs: RunRecord[] }) {
   const Kind = last ? KIND_META[last.kind] : undefined;
   if (!(last && Kind && lastOutcome)) {
     return (
-      <span className="inline-flex items-center gap-1 h-5 px-2 rounded-full bg-paper-50 border border-canvas-border text-[0.625rem] font-semibold text-ink-400">
+      <span className="inline-flex items-center gap-1 h-5 px-2 rounded-full bg-paper-50 border border-canvas-border text-[0.6875rem] font-semibold text-ink-500">
         <Clock size={10} /> Never run
       </span>
     );
@@ -161,10 +167,10 @@ export function LastRunFact({ c, runs }: { c: Control; runs: RunRecord[] }) {
   return (
     <div className="flex items-center justify-between gap-2 flex-wrap">
       <div className="flex items-center gap-1.5 flex-wrap">
-        <span className="inline-flex items-center gap-1 h-5 px-2 rounded-full bg-paper-50 border border-canvas-border text-[0.625rem] font-semibold text-ink-500">
+        <span className="inline-flex items-center gap-1 h-5 px-2 rounded-full bg-paper-50 border border-canvas-border text-[0.6875rem] font-semibold text-ink-500">
           <Clock size={10} /> Last run: {last.at}
         </span>
-        <span className="inline-flex items-center gap-1 h-5 px-2 rounded-full bg-paper-50 border border-canvas-border text-[0.625rem] font-semibold text-ink-500">
+        <span className="inline-flex items-center gap-1 h-5 px-2 rounded-full bg-paper-50 border border-canvas-border text-[0.6875rem] font-semibold text-ink-500">
           <History size={10} /> {runs.length} run{runs.length === 1 ? '' : 's'}
         </span>
       </div>
@@ -216,15 +222,15 @@ function LibraryCard({ c, runs, audits, onOpen, selectable, selected, onToggle }
       <div className="grid grid-cols-3 gap-x-2">
         <div>
           <div className="text-[1.0625rem] font-bold text-ink-900 tabular-nums leading-none">{attrs}</div>
-          <div className="text-[0.65625rem] text-ink-500 font-medium mt-1.5">Attributes</div>
+          <div className="text-[0.6875rem] text-ink-500 font-medium mt-1.5">Attributes</div>
         </div>
         <div>
           <div className={cn('text-[1.0625rem] font-bold tabular-nums leading-none', files === 0 ? 'text-ink-400' : 'text-ink-900')}>{files}</div>
-          <div className="text-[0.65625rem] text-ink-500 font-medium mt-1.5">Required files</div>
+          <div className="text-[0.6875rem] text-ink-500 font-medium mt-1.5">Required files</div>
         </div>
         <div>
           <div className={cn('text-[1.0625rem] font-bold tabular-nums leading-none', audits.length === 0 ? 'text-ink-400' : 'text-ink-900')}>{audits.length}</div>
-          <div className="text-[0.65625rem] text-ink-500 font-medium mt-1.5">Audit runs</div>
+          <div className="text-[0.6875rem] text-ink-500 font-medium mt-1.5">Audit runs</div>
         </div>
       </div>
 
@@ -264,9 +270,9 @@ export function RunHistoryList({ c, runs }: { c: Control; runs: RunRecord[] }) {
                   <span className="text-[0.8125rem] font-semibold text-ink-900 truncate">{r.label}</span>
                   <span className="ml-auto text-[0.6875rem] text-ink-400 shrink-0 tabular-nums">{r.at}</span>
                 </div>
-                {r.detail && <p className="text-[0.71875rem] text-ink-500 mt-0.5">{r.detail}</p>}
+                {r.detail && <p className="text-[0.75rem] text-ink-500 mt-0.5">{r.detail}</p>}
                 <div className="flex items-center gap-2.5 mt-2 flex-wrap text-[0.6875rem] text-ink-500">
-                  <span className={cn('px-1.5 h-[1.125rem] inline-flex items-center rounded font-semibold', meta.chip)}>{meta.label}</span>
+                  <span className={cn('px-1.5 h-4.5 inline-flex items-center rounded font-semibold', meta.chip)}>{meta.label}</span>
                   {mine && (
                     <span className="inline-flex items-center gap-1">
                       <Tickmark result={mine.outcome} size={13} />
@@ -278,7 +284,7 @@ export function RunHistoryList({ c, runs }: { c: Control; runs: RunRecord[] }) {
                   <span className="text-ink-400">{r.by}</span>
                 </div>
                 {r.datasets && r.datasets.length > 0 && (
-                  <p className="text-[0.65625rem] text-ink-400 mt-1.5">Ran against {r.datasets.join(', ')}</p>
+                  <p className="text-[0.6875rem] text-ink-400 mt-1.5">Ran against {r.datasets.join(', ')}</p>
                 )}
               </div>
             </div>
@@ -294,14 +300,14 @@ export function RunHistoryDrawer({ c, runs, onClose, onOpenControl }: {
 }) {
   return (
     <Drawer
-      title={`Run history — ${c.wpRef}`}
+      title={`Run history — ${controlCode(c)}`}
       subtitle={<span className="text-[0.75rem] text-ink-500">{controlCode(c)} · {c.description}</span>}
       onClose={onClose}
-      ariaLabel={`Run history for ${c.id}`}
+      ariaLabel={`Run history for ${controlCode(c)}`}
       footer={(
         <div className="flex items-center justify-end gap-2">
-          <button onClick={onClose} className="h-9 px-3.5 rounded-lg border border-canvas-border text-[0.78125rem] font-semibold text-ink-600 hover:text-ink-900 hover:border-ink-300 transition-colors cursor-pointer">Close</button>
-          <button onClick={onOpenControl} className="h-9 px-3.5 inline-flex items-center gap-1.5 rounded-lg bg-brand-600 text-white text-[0.78125rem] font-semibold hover:bg-brand-700 transition-colors cursor-pointer">
+          <button onClick={onClose} className="h-9 px-3.5 rounded-lg border border-canvas-border text-[0.8125rem] font-semibold text-ink-600 hover:text-ink-900 hover:border-ink-300 transition-colors cursor-pointer">Close</button>
+          <button onClick={onOpenControl} className="h-9 px-3.5 inline-flex items-center gap-1.5 rounded-lg bg-brand-600 text-white text-[0.8125rem] font-semibold hover:bg-brand-700 transition-colors cursor-pointer">
             Open control page <ArrowRight size={14} />
           </button>
         </div>
@@ -320,6 +326,8 @@ export default function ControlLibrary() {
   const [creating, setCreating] = useState(false);
   // Add RACM (S11) — copy RACMs in from the Engagements page's RACM tab.
   const [addingRacm, setAddingRacm] = useState(false);
+  /** What Add RACM just copied in, said once under the toolbar. */
+  const addedNote = useInlineNote();
   const [historyFor, setHistoryFor] = useState<string | null>(null);
   const [reportPreview, setReportPreview] = useState(false);
   const [q, setQ] = useState('');
@@ -394,6 +402,10 @@ export default function ControlLibrary() {
     scoped.forEach(c => (runsBy.get(c.id) ?? []).forEach(r => runIds.add(r.id)));
     return { attrs, files, runs: runIds.size };
   }, [scoped, runsBy]);
+  // Controls a closed remediation changed and nobody has settled yet. Counted so
+  // the way in below can say how many there are — a link that turns out to open
+  // an empty list is a link people stop trusting.
+  const retestOwed = useMemo(() => scoped.filter(c => c.retestDue && !c.retestDue.cleared).length, [scoped]);
 
   // The parked testing lens owned these predicates; the preset chip borrows them.
   const matchesPreset = (c: Control): boolean => {
@@ -415,6 +427,10 @@ export default function ControlLibrary() {
       // The controls an ITGC failure landed on — same predicate as the testing
       // lens, so the banner lands on the same set from either screen.
       case 'itgc': return isItgcDependent(c) && failedItgcs(eng).length > 0;
+      // A remediation closed against it, so what the audit tested is not what is
+      // running now. Uncleared only — a settled one is a working-paper fact, not
+      // an outstanding job, and leaving it in the list would make the count lie.
+      case 'retest-due': return !!c.retestDue && !c.retestDue.cleared;
       default: return true;
     }
   };
@@ -458,7 +474,6 @@ export default function ControlLibrary() {
   const saveRemark = () => {
     if (!remarkFor || !remarkText.trim()) return;
     remarkRacmRow(remarkFor.id, remarkText.trim());
-    addToast({ type: 'success', title: 'Remark saved', message: `${controlCode(remarkFor)} — the owner sees it in their notifications.` });
     setRemarkFor(null);
   };
   const approvable = Array.from(sel).filter(id => { const c = scoped.find(x => x.id === id); return !!c && canReview(c); });
@@ -467,12 +482,17 @@ export default function ControlLibrary() {
     const remarked = approvable.filter(id => scoped.find(c => c.id === id)?.racmReview?.status === 'Remark').length;
     if (remarked > 0) { setBulkApproveIds(approvable); return; }
     approveRacmRows(approvable);
-    addToast({ type: 'success', title: `${approvable.length} control${approvable.length === 1 ? '' : 's'} ready to test`, message: 'Approved in pre-testing review.' });
     setSel(new Set());
   };
 
   const historyControl = historyFor ? scoped.find(c => c.id === historyFor) : undefined;
-  const colSpan = LIB_COLS.length;
+  // Stacked by process, every group header already names it — the Process
+  // column would repeat it on each row. It stays while a process filter is on,
+  // so that filter (it lives in the column header) can still be cleared.
+  const hideProcessCol = groupBy === 'process' && process === 'All';
+  const cols = hideProcessCol ? LIB_COLS.filter(c => c.key !== 'process') : LIB_COLS;
+  const tableWidth = totalWidth - (hideProcessCol ? widthOf('process') : 0);
+  const colSpan = cols.length;
 
   return (
     <div>
@@ -482,7 +502,7 @@ export default function ControlLibrary() {
       <div className="flex items-center gap-2 mb-4 flex-wrap">
         <div className="relative">
           <Search size={14} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-ink-400" />
-          <input value={q} onChange={e => setQ(e.target.value)} placeholder="Search controls and owners…" className="h-9 w-64 pl-8 pr-3 rounded-lg border border-canvas-border bg-canvas-elevated text-[0.78125rem] text-ink-800 placeholder:text-ink-400 focus:outline-none focus:ring-2 focus:ring-brand-200" />
+          <input value={q} onChange={e => setQ(e.target.value)} placeholder="Search controls and owners…" className="h-9 w-64 pl-8 pr-3 rounded-lg border border-canvas-border bg-canvas-elevated text-[0.8125rem] text-ink-800 placeholder:text-ink-400 focus:outline-none focus:ring-2 focus:ring-brand-200" />
         </div>
         <div className="flex-1" />
         {/* Same three controls as the audit register, in the same shapes: no "GROUP"
@@ -503,14 +523,15 @@ export default function ControlLibrary() {
             className={cn('p-1.5 rounded-sm cursor-pointer transition-colors', layout === 'cards' ? 'bg-paper-50 text-brand-700' : 'text-ink-400 hover:text-ink-600')}><LayoutGrid size={16} /></button>
         </div>
         <span className="w-px h-6 bg-canvas-border mx-0.5" aria-hidden />
-        {role !== 'risk-owner' && <button onClick={() => setReportPreview(true)} title="Audit report — observations and the management action plan" className="h-9 px-3 inline-flex items-center gap-1.5 rounded-lg border border-canvas-border text-[0.78125rem] font-semibold text-ink-600 hover:text-ink-900 hover:border-ink-300 transition-colors cursor-pointer"><FileText size={14} /> Audit report</button>}
+        {role !== 'risk-owner' && <button onClick={() => setReportPreview(true)} title="Internal Controls Status Report — observations and the management action plan" className="h-9 px-3 inline-flex items-center gap-1.5 rounded-lg border border-canvas-border text-[0.8125rem] font-semibold text-ink-600 hover:text-ink-900 hover:border-ink-300 transition-colors cursor-pointer"><FileText size={14} /> Reports</button>}
         {/* Add RACM (S11) — the engagement's RACM tab is parked, so this is where
             its controls come in from: RACMs picked off the Engagements page's
             RACM tab and copied. Same gate as New control, kept left of it so
             the primary action stays last. */}
-        {role === 'auditor' && !isEngagementLocked(eng) && <button onClick={() => setAddingRacm(true)} title="Copy controls in from RACMs on the Engagements page's RACM tab" className="h-9 px-3 inline-flex items-center gap-1.5 rounded-lg border border-canvas-border text-[0.78125rem] font-semibold text-ink-600 hover:text-ink-900 hover:border-ink-300 transition-colors cursor-pointer"><Table2 size={14} /> Add RACM</button>}
-        {role === 'auditor' && !isEngagementLocked(eng) && <button onClick={() => setCreating(true)} className="h-9 px-3.5 inline-flex items-center gap-1.5 rounded-lg bg-brand-600 text-white text-[0.78125rem] font-semibold hover:bg-brand-700 transition-colors cursor-pointer"><Plus size={15} /> New control</button>}
+        {role === 'auditor' && !isEngagementLocked(eng) && <button onClick={() => setAddingRacm(true)} title="Copy controls in from RACMs in the RACM Library" className="h-9 px-3 inline-flex items-center gap-1.5 rounded-lg border border-canvas-border text-[0.8125rem] font-semibold text-ink-600 hover:text-ink-900 hover:border-ink-300 transition-colors cursor-pointer"><Table2 size={14} /> Add RACM</button>}
+        {role === 'auditor' && !isEngagementLocked(eng) && <button onClick={() => setCreating(true)} className="h-9 px-3.5 inline-flex items-center gap-1.5 rounded-lg bg-brand-600 text-white text-[0.8125rem] font-semibold hover:bg-brand-700 transition-colors cursor-pointer"><Plus size={15} /> New control</button>}
       </div>
+      <InlineNote note={addedNote.note} className="-mt-2 mb-3 text-right" />
 
       {/* KPI rail — what the library is made of, not how testing is going */}
       <div className="flex items-stretch gap-3 mb-4 flex-wrap">
@@ -521,9 +542,9 @@ export default function ControlLibrary() {
           { k: 'Runs logged', v: String(rail.runs), t: 'text-brand-700' },
           { k: 'Audit runs', v: String(eng.audits.length), t: 'text-mitigated-700' },
         ].map(s => (
-          <div key={s.k} className="flex-1 min-w-[7.5rem] rounded-xl border border-canvas-border bg-canvas-elevated px-4 py-2.5">
+          <div key={s.k} className="flex-1 min-w-30 rounded-xl border border-canvas-border bg-canvas-elevated px-4 py-2.5">
             <div className={cn('text-[1.25rem] font-bold tabular-nums leading-6', s.t)}>{s.v}</div>
-            <div className="text-[0.71875rem] text-ink-500 font-medium mt-0.5">{s.k}</div>
+            <div className="text-[0.75rem] text-ink-500 font-medium mt-0.5">{s.k}</div>
           </div>
         ))}
       </div>
@@ -558,12 +579,27 @@ export default function ControlLibrary() {
       )}
       */}
 
+      {/* ── controls that are no longer the thing we tested ──────────────────────
+          The one preset this lens offers from cold. Every other one is a testing
+          question that belongs to the parked register; this is a question about
+          the library itself — which of these rows describes a control that has
+          since been rebuilt — and the auditor has nowhere else to ask it. Quiet
+          line, not a banner: it is a job to pick up, not an alarm. Audit-side,
+          like the register and the control page. */}
+      {role !== 'risk-owner' && preset !== 'retest-due' && retestOwed > 0 && (
+        <button onClick={() => setPreset('retest-due')}
+          className="mb-3 inline-flex items-center gap-1.5 text-[0.75rem] font-semibold text-mitigated-800 hover:text-mitigated-900 cursor-pointer">
+          <RotateCcw size={13} />
+          {retestOwed} control{retestOwed === 1 ? '' : 's'} changed since {retestOwed === 1 ? 'it was' : 'they were'} tested — show {retestOwed === 1 ? 'it' : 'them'}
+        </button>
+      )}
+
       {/* an Overview count sent us here with intent — say so, and let it go */}
       {preset && (
         <div className="flex items-center gap-2 mb-3 flex-wrap">
-          <span className="text-[0.71875rem] text-ink-500">Filtered from the Overview:</span>
+          <span className="text-[0.75rem] text-ink-500">{preset === 'retest-due' ? 'Showing:' : 'Filtered from the Overview:'}</span>
           <button onClick={() => setPreset(null)}
-            className="inline-flex items-center gap-1.5 h-7 pl-2.5 pr-2 rounded-full border border-brand-200 bg-brand-50 text-[0.71875rem] font-semibold text-brand-700 hover:border-brand-300 cursor-pointer transition-colors"
+            className="inline-flex items-center gap-1.5 h-7 pl-2.5 pr-2 rounded-full border border-brand-200 bg-brand-50 text-[0.75rem] font-semibold text-brand-700 hover:border-brand-300 cursor-pointer transition-colors"
             aria-label={`Clear the ${PRESET_LABEL[preset] ?? preset} filter`}>
             {PRESET_LABEL[preset] ?? preset} <X size={12} />
           </button>
@@ -581,8 +617,8 @@ export default function ControlLibrary() {
                   <div className="shelf-head">
                     <span className="shelf-swatch" style={{ background: spineColor(g.key) }} />
                     <span className="shelf-title">{g.key}</span>
-                    <span className="text-[0.71875rem] text-ink-400 font-medium">· {g.rows.length}</span>
-                    <span className="text-[0.65625rem] font-semibold text-ink-400 hidden md:inline">{attrs} attributes · {files} required files</span>
+                    <span className="text-[0.75rem] text-ink-400 font-medium">· {g.rows.length}</span>
+                    <span className="text-[0.6875rem] font-semibold text-ink-400 hidden md:inline">{attrs} attributes · {files} required files</span>
                     <span className="shelf-board" />
                   </div>
                 )}
@@ -604,11 +640,11 @@ export default function ControlLibrary() {
         <div className={cn('reg-wrap', dense && 'reg-dense')}>
           {/* Fixed layout + a colgroup means the widths are the ones on record, not
               whatever the longest cell argued for — which is what lets a drag hold. */}
-          <table className="border-collapse" style={{ tableLayout: 'fixed', width: totalWidth }}>
-            <colgroup>{LIB_COLS.map(c => <col key={c.key} style={{ width: widthOf(c.key) }} />)}</colgroup>
+          <table className="border-collapse" style={{ tableLayout: 'fixed', width: tableWidth }}>
+            <colgroup>{cols.map(c => <col key={c.key} style={{ width: widthOf(c.key) }} />)}</colgroup>
             <thead className="reg-head">
               <tr>
-                <Th {...th('process')}><HeaderFilter label="Process" value={process} options={processes} allLabel="All processes" onChange={setProcess} ariaLabel="Filter by process" /></Th>
+                {!hideProcessCol && <Th {...th('process')}><HeaderFilter label="Process" value={process} options={processes} allLabel="All processes" onChange={setProcess} ariaLabel="Filter by process" /></Th>}
                 <Th {...th('control')}>Control</Th>
                 <Th {...th('entity')}><HeaderFilter label="Entity" value={entity} options={entities} allLabel="All entities" onChange={setEntity} ariaLabel="Filter by entity" /></Th>
                 <Th {...th('type')} title="Preventive controls stop it happening; detective controls find it after it has">
@@ -631,8 +667,8 @@ export default function ControlLibrary() {
                 <FragmentGroup key={g.key || 'flat'}>
                   {g.key && (
                     <tr className="reg-group-row"><td colSpan={colSpan}>
-                      <span className="inline-flex items-center gap-2">{g.key}<span className="text-ink-400 font-medium">· {g.rows.length}</span>
-                        <span className="ml-2 text-[0.65625rem] font-semibold text-ink-400">
+                      <span className="reg-group-label inline-flex items-center gap-2">{g.key}<span className="text-ink-400 font-medium">· {g.rows.length}</span>
+                        <span className="ml-2 text-[0.6875rem] font-semibold text-ink-400">
                           {g.rows.reduce((n, c) => n + attributeStats(c).attrs, 0)} attributes · {g.rows.reduce((n, c) => n + attributeStats(c).files, 0)} required files
                         </span>
                       </span>
@@ -651,25 +687,25 @@ export default function ControlLibrary() {
                             bulk bar, so nothing downstream is dead.
                         <td onClick={e => { e.stopPropagation(); if (e.target === e.currentTarget) toggle(c.id); }}><input type="checkbox" checked={sel.has(c.id)} onChange={() => toggle(c.id)} className="cursor-pointer accent-brand-600" aria-label={`Select ${c.id}`} /></td>
                         */}
-                        <td className="text-[0.71875rem] text-ink-600"><span className="truncate block" title={c.process}>{c.process}</span></td>
+                        {!hideProcessCol && <td className="text-[0.75rem] text-ink-600"><span className="truncate block" title={c.process}>{c.process}</span></td>}
                         <td className="tight">
                           <div className="flex items-center gap-1.5">
                             {c.isKey && <Star size={12} className="text-mitigated-600 fill-mitigated-200 shrink-0" />}
-                            <span className="font-semibold text-ink-900 text-[0.78125rem] truncate min-w-0">{c.description}</span>
+                            <span className="reg-clamp font-semibold text-ink-900 text-[0.8125rem] min-w-0" title={c.description}>{c.description}</span>
                           </div>
                           {/* process and owner have their own columns now — saying them
                               twice on the same row is noise. */}
                           <div className="text-[0.6875rem] text-ink-400 mt-0.5">{[controlCode(c), c.subProcess].filter(Boolean).join(' · ')}</div>
                         </td>
-                        <td className="text-[0.71875rem] text-ink-700">
+                        <td className="text-[0.75rem] text-ink-700">
                           {entityCell(c)
                             ? <span className="flex items-center gap-1.5 min-w-0 max-w-full" title={entityCell(c)!.title}><Building2 size={12} className="text-ink-300 shrink-0" /><span className="truncate">{entityCell(c)!.label}</span>{entityCell(c)!.more > 0 && <span className="shrink-0 font-semibold text-ink-500">+{entityCell(c)!.more}</span>}</span>
                             : <span className="text-ink-300">—</span>}
                         </td>
-                        <td className="text-[0.71875rem] text-ink-600">{c.type}</td>
-                        <td className="text-[0.71875rem] text-ink-600">{c.frequency}</td>
-                        <td className="text-[0.71875rem] text-ink-600"><span className="truncate block" title={c.owner}>{c.owner}</span></td>
-                        <td className="text-[0.71875rem] text-ink-500">
+                        <td className="text-[0.75rem] text-ink-600">{c.type}</td>
+                        <td className="text-[0.75rem] text-ink-600">{c.frequency}</td>
+                        <td className="text-[0.75rem] text-ink-600"><span className="truncate block" title={c.owner}>{c.owner}</span></td>
+                        <td className="text-[0.75rem] text-ink-500">
                           <span className="reg-clamp" title={c.objective ?? undefined}>{c.objective ?? '—'}</span>
                         </td>
                         <td><NatureChip nature={c.nature} small /></td>
@@ -679,8 +715,8 @@ export default function ControlLibrary() {
                             ? <span className="text-ink-400 text-[0.6875rem]">None yet</span>
                             : (
                               <span className="inline-flex flex-col leading-tight">
-                                <span className="text-[0.71875rem] font-semibold text-ink-800 tabular-nums">{as.length}</span>
-                                <span className="text-[0.625rem] text-ink-400">{as.map(a => a.period).join(' · ')}</span>
+                                <span className="text-[0.75rem] font-semibold text-ink-800 tabular-nums">{as.length}</span>
+                                <span className="text-[0.6875rem] text-ink-400">{as.map(a => a.period).join(' · ')}</span>
                               </span>
                             )}
                         </td>
@@ -688,11 +724,11 @@ export default function ControlLibrary() {
                           {last && lastOutcome ? (
                             <button onClick={e => { e.stopPropagation(); setHistoryFor(c.id); }}
                               className="inline-flex items-center gap-1.5 text-left cursor-pointer group/run"
-                              aria-label={`Run history for ${c.wpRef}`}>
+                              aria-label={`Run history for ${controlCode(c)}`}>
                               <Tickmark result={lastOutcome.outcome} size={14} />
                               <span className="flex flex-col leading-tight min-w-0">
                                 <span className="text-[0.6875rem] font-semibold text-ink-700 truncate group-hover/run:text-brand-700 transition-colors">{KIND_META[last.kind].label} · {last.at}</span>
-                                <span className="text-[0.625rem] text-ink-400">{rs.length} run{rs.length === 1 ? '' : 's'} in history</span>
+                                <span className="text-[0.6875rem] text-ink-400">{rs.length} run{rs.length === 1 ? '' : 's'} in history</span>
                               </span>
                             </button>
                           ) : <span className="text-ink-400 text-[0.6875rem]">Never run</span>}
@@ -733,17 +769,17 @@ export default function ControlLibrary() {
           </table>
         </div>
       )}
-      <div className="mt-3 text-[0.71875rem] text-ink-400">Showing {filtered.length} of {scoped.length} controls</div>
+      <div className="mt-3 text-[0.75rem] text-ink-400">Showing {filtered.length} of {scoped.length} controls</div>
 
       {/* bulk bar — no bulk TEST here (user ask, 30 Jul: SOX controls aren't
           bulk-tested); the library is still where design documents are chased. */}
       {sel.size > 0 && (
         <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-30 flex items-center gap-3 bg-ink-900 text-white rounded-2xl pl-4 pr-2.5 py-2.5 shadow-[0_12px_40px_-12px_rgba(15,8,30,0.6)]">
-          <span className="text-[0.78125rem] font-semibold">{sel.size} selected</span>
+          <span className="text-[0.8125rem] font-semibold">{sel.size} selected</span>
           <span className="w-px h-5 bg-white/20" />
-          {approvable.length > 0 && <button onClick={approveSelected} className="h-8 px-3 inline-flex items-center gap-1.5 rounded-lg bg-white/10 hover:bg-white/20 text-[0.78125rem] font-semibold transition-colors cursor-pointer"><CheckCircle2 size={14} /> Approve {approvable.length}</button>}
-          {role === 'auditor' && <button onClick={() => { requestDesignDocs(Array.from(sel)); addToast({ type: 'success', title: 'Requests sent', message: `Document requests raised on ${sel.size} control${sel.size === 1 ? '' : 's'} — the owners see them as tasks.` }); setSel(new Set()); }} className="h-8 px-3 inline-flex items-center gap-1.5 rounded-lg bg-white/10 hover:bg-white/20 text-[0.78125rem] font-semibold transition-colors cursor-pointer"><FileText size={14} /> Request design documents</button>}
-          <button onClick={() => { openControl(Array.from(sel)[0]); setSel(new Set()); }} className="h-8 px-3 inline-flex items-center gap-1.5 rounded-lg bg-white/10 hover:bg-white/20 text-[0.78125rem] font-semibold transition-colors cursor-pointer"><Send size={14} /> Open first</button>
+          {approvable.length > 0 && <button onClick={approveSelected} className="h-8 px-3 inline-flex items-center gap-1.5 rounded-lg bg-white/10 hover:bg-white/20 text-[0.8125rem] font-semibold transition-colors cursor-pointer"><CheckCircle2 size={14} /> Approve {approvable.length}</button>}
+          {role === 'auditor' && <button onClick={() => { requestDesignDocs(Array.from(sel));  setSel(new Set()); }} className="h-8 px-3 inline-flex items-center gap-1.5 rounded-lg bg-white/10 hover:bg-white/20 text-[0.8125rem] font-semibold transition-colors cursor-pointer"><FileText size={14} /> Request design documents</button>}
+          <button onClick={() => { openControl(Array.from(sel)[0]); setSel(new Set()); }} className="h-8 px-3 inline-flex items-center gap-1.5 rounded-lg bg-white/10 hover:bg-white/20 text-[0.8125rem] font-semibold transition-colors cursor-pointer"><Send size={14} /> Open first</button>
           <button onClick={() => setSel(new Set())} className="h-8 w-8 inline-flex items-center justify-center rounded-lg hover:bg-white/15 transition-colors cursor-pointer" aria-label="Clear selection"><X size={15} /></button>
         </div>
       )}
@@ -765,7 +801,7 @@ export default function ControlLibrary() {
         return (
           <div className="modal-backdrop" onClick={() => setBulkApproveIds(null)}>
             <div className="modal" onClick={e => e.stopPropagation()} role="dialog" aria-modal="true" aria-labelledby="bulk-approve-title"
-              onKeyDown={e => { if (e.key === 'Escape') setBulkApproveIds(null); }}>
+              onKeyDown={e => { if (e.key === 'Escape') setBulkApproveIds(null); }}><DialogFocus />
               <div className="px-5 pt-4 pb-3 border-b border-canvas-border">
                 <div className="flex items-center justify-between gap-3">
                   <h2 id="bulk-approve-title" className="text-[0.9375rem] font-semibold text-ink-900">Approve {bulkApproveIds.length} control{bulkApproveIds.length === 1 ? '' : 's'}?</h2>
@@ -773,11 +809,11 @@ export default function ControlLibrary() {
                 </div>
               </div>
               <div className="p-5">
-                <p className="text-[0.78125rem] text-ink-600 leading-relaxed">{remarked} of them {remarked === 1 ? 'has an open remark' : 'have open remarks'} — approving clears {remarked === 1 ? 'it' : 'them'} from the record.</p>
+                <p className="text-[0.8125rem] text-ink-600 leading-relaxed">{remarked} of them {remarked === 1 ? 'has an open remark' : 'have open remarks'} — approving clears {remarked === 1 ? 'it' : 'them'} from the record.</p>
                 <div className="mt-4 flex items-center justify-end gap-2">
-                  <button onClick={() => setBulkApproveIds(null)} autoFocus className="h-9 px-3.5 rounded-lg border border-canvas-border text-[0.78125rem] font-semibold text-ink-600 hover:text-ink-900 cursor-pointer">Cancel</button>
-                  <button onClick={() => { approveRacmRows(bulkApproveIds); addToast({ type: 'success', title: `${bulkApproveIds.length} control${bulkApproveIds.length === 1 ? '' : 's'} ready to test`, message: 'Approved in pre-testing review.' }); setSel(new Set()); setBulkApproveIds(null); }}
-                    className="h-9 px-3.5 rounded-lg bg-compliant-600 text-white text-[0.78125rem] font-semibold hover:bg-compliant-700 transition-colors cursor-pointer inline-flex items-center gap-1.5"><CheckCircle2 size={13} /> Approve anyway</button>
+                  <button onClick={() => setBulkApproveIds(null)} autoFocus className="h-9 px-3.5 rounded-lg border border-canvas-border text-[0.8125rem] font-semibold text-ink-600 hover:text-ink-900 cursor-pointer">Cancel</button>
+                  <button onClick={() => { approveRacmRows(bulkApproveIds);  setSel(new Set()); setBulkApproveIds(null); }}
+                    className="h-9 px-3.5 rounded-lg bg-compliant-600 text-white text-[0.8125rem] font-semibold hover:bg-compliant-700 transition-colors cursor-pointer inline-flex items-center gap-1.5"><CheckCircle2 size={13} /> Approve anyway</button>
                 </div>
               </div>
             </div>
@@ -789,7 +825,7 @@ export default function ControlLibrary() {
       {remarkFor && (
         <div className="modal-backdrop" onClick={() => setRemarkFor(null)}>
           <div className="modal" onClick={e => e.stopPropagation()} role="dialog" aria-modal="true" aria-labelledby="remark-title"
-            onKeyDown={e => { if (e.key === 'Escape') setRemarkFor(null); }}>
+            onKeyDown={e => { if (e.key === 'Escape') setRemarkFor(null); }}><DialogFocus />
             <div className="px-5 pt-4 pb-3 border-b border-canvas-border">
               <div className="flex items-center justify-between gap-3">
                 <h2 id="remark-title" className="text-[0.9375rem] font-semibold text-ink-900">Remark — <span className="wp-ref">{controlCode(remarkFor)}</span></h2>
@@ -801,13 +837,13 @@ export default function ControlLibrary() {
               <label htmlFor="remark-text" className="sr-only">Remark</label>
               <textarea id="remark-text" value={remarkText} onChange={e => setRemarkText(e.target.value)} rows={4} autoFocus
                 placeholder="What must change before this control can be approved?"
-                className="w-full rounded-lg border border-canvas-border bg-canvas-elevated p-3 text-[0.78125rem] text-ink-800 placeholder:text-ink-400 focus:outline-none focus:ring-2 focus:ring-brand-200 resize-none" />
+                className="w-full rounded-lg border border-canvas-border bg-canvas-elevated p-3 text-[0.8125rem] text-ink-800 placeholder:text-ink-400 focus:outline-none focus:ring-2 focus:ring-brand-200 resize-none" />
               <div className="mt-3 flex items-center justify-end gap-2">
                 {remarkFor.racmReview && (
-                  <button onClick={() => { clearRacmReview(remarkFor.id); setRemarkFor(null); }} className="h-9 px-3 mr-auto text-[0.78125rem] font-semibold text-ink-500 hover:text-ink-800 cursor-pointer">Clear review</button>
+                  <button onClick={() => { clearRacmReview(remarkFor.id); setRemarkFor(null); }} className="h-9 px-3 mr-auto text-[0.8125rem] font-semibold text-ink-500 hover:text-ink-800 cursor-pointer">Clear review</button>
                 )}
-                <button onClick={() => setRemarkFor(null)} className="h-9 px-3.5 rounded-lg border border-canvas-border text-[0.78125rem] font-semibold text-ink-600 hover:text-ink-900 cursor-pointer">Cancel</button>
-                <button onClick={saveRemark} disabled={!remarkText.trim()} className="h-9 px-3.5 rounded-lg bg-brand-600 text-white text-[0.78125rem] font-semibold hover:bg-brand-700 disabled:opacity-40 transition-colors cursor-pointer">Save remark</button>
+                <button onClick={() => setRemarkFor(null)} className="h-9 px-3.5 rounded-lg border border-canvas-border text-[0.8125rem] font-semibold text-ink-600 hover:text-ink-900 cursor-pointer">Cancel</button>
+                <button onClick={saveRemark} disabled={!remarkText.trim()} className="h-9 px-3.5 rounded-lg bg-brand-600 text-white text-[0.8125rem] font-semibold hover:bg-brand-700 disabled:opacity-40 transition-colors cursor-pointer">Save remark</button>
               </div>
             </div>
           </div>
@@ -815,9 +851,11 @@ export default function ControlLibrary() {
       )}
 
       {creating && <NewControlPanel onClose={() => setCreating(false)} />}
-      {addingRacm && <AddRacmModal onClose={() => setAddingRacm(false)} />}
-      {/* the paper and the report follow the filters — only the visible controls go in */}
-      {reportPreview && <WorkingPaperModal eng={eng} controls={filtered} report onClose={() => setReportPreview(false)} />}
+      {addingRacm && <AddRacmModal onClose={() => setAddingRacm(false)} onAdded={text => addedNote.show('info', text)} />}
+      {/* The report ignores the filters (Oct 2026): it is the audit's deliverable,
+          so it always covers the open audit's full scope. A filtered report
+          concluded on a slice — "Not effective" over 0 controls. */}
+      {reportPreview && <WorkingPaperModal eng={eng} controls={auditScoped} report onClose={() => setReportPreview(false)} />}
     </div>
   );
 }
