@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef, useMemo } from 'react';
 import { flushSync } from 'react-dom';
-import { Check, X, CloudUpload, Loader2, ArrowLeft } from 'lucide-react';
+import { Check, X, CloudUpload, Loader2 } from 'lucide-react';
 import { AtrUploadProvider, useAtrUpload } from './AtrUploadContext';
 import { useAdminSettings } from './adminStore';
 import { seedSession, seedEmptySession, PROCESSING_MESSAGES, PROCESSING_DURATION_MS } from './mockExtraction';
@@ -109,14 +109,12 @@ export interface AtrUploadTabProps {
    *  cover facts). They print on the ATR cover, so the upload step does not ask
    *  for them again; `reportName` names the extracted report and its ATR. */
   initialMeta?: Partial<ReportMeta>;
-  /** Back to the New Report modal (the details step) — shown on the Upload tab. */
-  onBack?: () => void;
   /** Open straight on this extracted report's observations (Observations
    *  Extracted → detail) — "Edit observations" from a generated ATR. */
   initialSessionId?: string;
 }
 
-function AtrUploadInner({ onClose, onMinimizedChange, onGenerated, initialMeta, onBack, initialSessionId }: AtrUploadTabProps) {
+function AtrUploadInner({ onClose, onMinimizedChange, onGenerated, initialMeta, initialSessionId }: AtrUploadTabProps) {
   const { state, setMethod, addSession, selectSession, updateSession, goTo } = useAtrUpload();
   // The org-wide default escalation matrix (configured in Reports → Admin) is
   // applied to every newly-extracted report. `addLog` records each change to the
@@ -366,11 +364,6 @@ function AtrUploadInner({ onClose, onMinimizedChange, onGenerated, initialMeta, 
               </div>
             </div>
             <div className="flex items-center gap-1 shrink-0">
-              {onBack && onUploadStage && (
-                <button type="button" onClick={onBack} className="inline-flex items-center gap-1.5 h-8 px-2.5 rounded-md text-[0.75rem] font-medium text-ink-600 hover:text-brand-700 hover:bg-canvas transition-colors cursor-pointer" title="Back to the report details">
-                  <ArrowLeft size={14} aria-hidden="true" /> Back
-                </button>
-              )}
               {onClose && (
                 <button onClick={requestClose} className="w-8 h-8 rounded-md text-ink-500 hover:text-ink-800 hover:bg-canvas flex items-center justify-center cursor-pointer shrink-0" aria-label="Close"><X size={18} /></button>
               )}

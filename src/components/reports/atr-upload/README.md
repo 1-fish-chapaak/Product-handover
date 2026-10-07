@@ -56,8 +56,7 @@ Every saved ATR carries an append-only timeline (`reports/atrTimeline.ts`, local
 
 | Observation | State | Demonstrates |
 |---|---|---|
-| #1 Vendor Master, #2 Three-Way Match, #5 Scrap Sale | Complete | normal extracted cards |
-| #3 Freight Rate | Partial — Risk Summary missing | single missing-field resolve |
+| #1 Vendor Master, #2 Three-Way Match, #3 Freight Rate, #5 Scrap Sale | Complete | normal extracted cards |
 | #4 Stock Variance | Complete; annexure **unlinked** | annexure link state on a complete obs |
 | #6 (untitled) | Incomplete — Title missing | the Incomplete badge + Fill/Skip flow |
 

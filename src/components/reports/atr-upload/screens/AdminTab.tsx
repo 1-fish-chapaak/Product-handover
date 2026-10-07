@@ -1,39 +1,18 @@
 import { useState } from 'react';
-import { ListChecks, CalendarClock, Settings2, ScrollText } from 'lucide-react';
+import { ListChecks, Settings2 } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
 import LovManager from '../components/LovManager';
-import TransactionLogs from '../components/TransactionLogs';
-import EscalationMatrixAdmin from '../components/EscalationMatrixAdmin';
-import { summarizeMatrixSet } from '../escalationMatrix';
-import { useToast } from '../../../shared/Toast';
-import { useAdminSettings } from '../adminStore';
 
 interface Feature { id: string; label: string; desc: string; icon: LucideIcon }
 
 // Each admin capability is its own segregated feature; more will be added here.
+// Two have moved out to the platform's own Administration console, where they
+// serve every module rather than just this one: escalation matrices (now many,
+// named by department, which a report ties to an observation or an action plan)
+// and the change history, which Administration → Audit Log already keeps.
 const FEATURES: Feature[] = [
   { id: 'lov', label: 'Fields & Lists of Values', desc: 'Mandatory fields, custom fields, dropdown options', icon: ListChecks },
-  { id: 'escalation', label: 'Escalation Matrix', desc: 'Reminder & escalation cadence per severity', icon: CalendarClock },
-  { id: 'logs', label: 'Transaction Logs', desc: 'Action-level change history', icon: ScrollText },
 ];
-
-/** Escalation Matrix admin feature — the severity-aware matrix (one shared
- *  cadence, or one per Critical / High / Medium / Low) applied to every new
- *  report's exceptions, with the "how it works" explainer on top. */
-function EscalationFeature() {
-  const { escalation, setEscalation, addLog } = useAdminSettings();
-  const { addToast } = useToast();
-  return (
-    <EscalationMatrixAdmin
-      value={escalation}
-      onSave={next => {
-        setEscalation(next);
-        addToast({ type: 'success', message: 'Escalation matrix saved.' });
-        addLog({ action: 'Config', target: 'Escalation Matrix', detail: summarizeMatrixSet(next) });
-      }}
-    />
-  );
-}
 
 /** The Admin tab — a settings surface with a feature rail on the left and the
  *  active feature on the right. Segregated feature-by-feature so new admin
@@ -71,12 +50,10 @@ export default function AdminTab() {
         </nav>
       </aside>
 
-      {/* Active feature — LOV scrolls in a padded frame; the escalation editor
-          owns its own full-height layout, so it runs full-bleed. */}
+      {/* Active feature — LOV owns its own full-height layout, so it runs
+          full-bleed. */}
       <div className="flex-1 min-w-0 min-h-0 overflow-hidden">
         {active === 'lov' && <div className="h-full min-h-0"><LovManager /></div>}
-        {active === 'escalation' && <div className="h-full min-h-0"><EscalationFeature /></div>}
-        {active === 'logs' && <div className="h-full min-h-0 px-6 py-5"><TransactionLogs /></div>}
       </div>
     </div>
   );

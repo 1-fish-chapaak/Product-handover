@@ -85,7 +85,7 @@ export default function AtrReportsLibrary({ atrs, onOpen, onShare, onDownload, v
       const parts: string[] = [a.name, a.area, a.generatedBy, a.riskOwner ?? '', a.sourceReport ?? '',
         a.atrData.meta.auditEntity ?? '', a.atrData.meta.auditTitle ?? '', a.atrData.meta.auditPeriod ?? ''];
       a.atrData.observations.forEach(o => {
-        parts.push(o.title, o.description ?? '', o.riskSummary ?? '', o.process ?? '');
+        parts.push(o.title, o.description ?? '', o.process ?? '');
         o.actionPlans.forEach(p => parts.push(p.text, p.actionTaken ?? '', p.evidence ?? '', p.verification ?? ''));
       });
       a.atrData.insights?.forEach(i => parts.push(i.title, i.body));

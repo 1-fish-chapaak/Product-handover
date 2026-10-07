@@ -11,7 +11,7 @@ import type {
 
 // ─── The required observation fields (drives template + parsing) ───
 type FieldKey =
-  | 'title' | 'description' | 'riskSummary' | 'recommendation'
+  | 'title' | 'description' | 'recommendation'
   | 'actionTaken' | 'evidence' | 'verification' | 'classification' | 'risk' | 'dueDate';
 
 export interface AtrField {
@@ -26,7 +26,6 @@ export interface AtrField {
 export const REQUIRED_FIELDS: AtrField[] = [
   { key: 'title',          label: 'Observation Title',                       hint: 'Short title of the observation.', example: 'Vendor Master Management', match: ['observation title', 'title'] },
   { key: 'description',     label: 'Observation Description',                 hint: 'What was observed / the issue.', example: '14 vendor codes activated in SAP without standard onboarding documentation.', match: ['description', 'issue', 'observation'] },
-  { key: 'riskSummary',    label: 'Risk Summary',                            hint: 'The risk this exposes.', example: 'Unauthorized vendor creation could enable fictitious vendor fraud and duplicate payments.', match: ['risk summary'] },
   { key: 'recommendation', label: 'Recommendation / Action Plan',  hint: 'Action plan / recommendation.', example: "Enforce a 'Maker-Checker' protocol for vendor onboarding in SAP.", match: ['recommendation', 'management action plan', 'action plan'] },
   { key: 'actionTaken',    label: 'Action Taken',                            hint: 'What management actually did to remediate.', example: "Redesigned the SAP vendor onboarding workflow to enforce maker-checker; no profile activates without second-level validation.", match: ['action taken', 'remediation', 'action'] },
   { key: 'evidence',       label: 'Evidence',                                hint: 'Evidence / supporting documents.', example: 'UAT report, SAP workflow diagram, sample of 3 newly activated vendors.', match: ['evidence'] },
@@ -112,7 +111,7 @@ export interface AtrExecSummary {
 }
 
 export function computeExecSummary(observations: AtrObservation[]): AtrExecSummary {
-  const classification: Record<AtrClassification, number> = { 'Design Deficiency': 0, 'System Deficiency': 0, 'Procedural Non-Compliance': 0 };
+  const classification: Record<AtrClassification, number> = { 'Design Deficiency': 0, 'System Deficiency': 0, 'Procedural Non-Compliance': 0, Other: 0 };
   const risk: Record<AtrRisk, number> = { Critical: 0, High: 0, Medium: 0, Low: 0, 'Not Applicable': 0 };
   const obsStatus: Record<AtrObservationStatus, number> = { Closed: 0, 'In Progress': 0, Open: 0, Overdue: 0 };
   const actionStatus: Record<AtrActionStatus, number> = { Implemented: 0, 'Partially Implemented': 0, Pending: 0, Overdue: 0, 'Not Due': 0 };
@@ -195,7 +194,6 @@ function obsRows(meta: AtrMeta, observations: AtrObservation[]) {
       rows.push({
         'Observation Title': o.title,
         'Observation Description': i === 0 ? (o.description ?? '') : '',
-        'Risk Summary': i === 0 ? (o.riskSummary ?? '') : '',
         'Recommendation / Action Plan': p.text ?? '',
         'Action Taken': p.actionTaken ?? '',
         'Evidence': p.evidence ?? '',
@@ -210,13 +208,118 @@ function obsRows(meta: AtrMeta, observations: AtrObservation[]) {
   return { rows, meta };
 }
 
+// ─── The ATR as a workbook ───
+// The Observations sheet reads across, not down: **every observation is a
+// column**, each row one of its details. Two observations sit side by side at a
+// glance, which is how an ATR is reviewed. The row-per-action-plan detail keeps
+// its own sheet, because a cell cannot hold five plans legibly.
+
+const XL_DASH = '—';
+const xlTxt = (v: unknown): string => {
+  const s = typeof v === 'string' ? v.trim() : v == null ? '' : String(v);
+  return s || XL_DASH;
+};
+
+/** Column widths from the content, so nothing opens as `####`. */
+function xlFit(rows: (string | number)[][], first = 24, max = 56): XLSX.ColInfo[] {
+  const widths: number[] = [];
+  rows.forEach(r => r.forEach((cell, i) => {
+    const longest = Math.max(...String(cell ?? '').split('\n').map(l => l.length));
+    widths[i] = Math.min(max, Math.max(widths[i] ?? (i === 0 ? first : 18), longest + 2));
+  }));
+  return widths.map(wch => ({ wch }));
+}
+
+/** One observation's plans as a single cell — numbered, newline-separated. */
+function plansCell(o: AtrObservation): string {
+  if (!o.actionPlans.length) return XL_DASH;
+  return o.actionPlans.map((p, i) => {
+    const head = p.title?.trim() || p.text?.trim() || `Action plan ${i + 1}`;
+    const bits = [p.status && `Status: ${p.status}`, p.dueDate && `Due: ${p.dueDate}`].filter(Boolean);
+    return `${i + 1}. ${head}${bits.length ? ` (${bits.join(' · ')})` : ''}`;
+  }).join('\n');
+}
+
+/** The detail rows of the Observations sheet, in the order the report prints them. */
+const OBSERVATION_DETAIL_ROWS: { label: string; value: (o: AtrObservation, i: number) => string }[] = [
+  { label: 'Observation ID', value: (_o, i) => `OBS-${String(i + 1).padStart(2, '0')}` },
+  { label: 'Process / Area', value: o => xlTxt(o.process) },
+  { label: 'Risk Significance', value: o => xlTxt(o.risk) },
+  { label: 'Classification', value: o => xlTxt(o.classification) },
+  { label: 'Status', value: o => xlTxt(o.status) },
+  { label: 'Exceptions', value: o => (o.exceptions == null ? XL_DASH : String(o.exceptions)) },
+  { label: 'Observation Description', value: o => xlTxt(o.description) },
+  { label: 'Query Summary', value: o => xlTxt(o.querySummary) },
+  { label: 'Root Cause', value: o => xlTxt(o.rootCause) },
+  { label: 'Solution Type', value: o => xlTxt(o.solutionType) },
+  { label: 'Risk Implications', value: o => xlTxt(o.riskImplications) },
+  { label: 'Risk Implication Details', value: o => xlTxt(o.riskImplicationsDetails) },
+  { label: 'Action Plans', value: o => String(o.actionPlans.length) },
+  { label: 'Action Plan Detail', value: o => plansCell(o) },
+  { label: 'Linked Annexures', value: o => (o.linkedAnnexures?.length ? o.linkedAnnexures.map(a => a.name).join('\n') : XL_DASH) },
+];
+
 export function exportAtrExcel(meta: AtrMeta, observations: AtrObservation[]) {
-  const { rows } = obsRows(meta, observations);
-  const ws = XLSX.utils.json_to_sheet(rows);
-  ws['!cols'] = Object.keys(rows[0] ?? { a: 1 }).map(() => ({ wch: 30 }));
   const wb = XLSX.utils.book_new();
-  XLSX.utils.book_append_sheet(wb, ws, 'Observations');
-  XLSX.writeFile(wb, `${meta.reportId || 'ATR'}.xlsx`);
+  const ex = computeExecSummary(observations);
+  const name = meta.reportName?.trim() || meta.auditTitle?.trim() || meta.reportId || 'Action Taken Report';
+
+  // ── Sheet 1: Report — the cover, as printed on screen ──
+  const coverRows: (string | number)[][] = [
+    ['Action Taken Report', ''],
+    [],
+    ['Report Name', xlTxt(meta.reportName ?? name)],
+    ['Report Number', xlTxt(meta.reportNumber)],
+    ['Audit Title', xlTxt(meta.auditTitle)],
+    ['Audit Entity', xlTxt(meta.auditEntity)],
+    ['Audit Period', xlTxt(meta.auditPeriod)],
+    ['Financial Year', xlTxt(meta.financialYear)],
+    ['Section', xlTxt(meta.section)],
+    ['Review Type', xlTxt(meta.reviewType)],
+    ['Audit Location', xlTxt(meta.auditLocation)],
+    ['Region', xlTxt(meta.region)],
+    ['Location', xlTxt(meta.location)],
+    ['Function', xlTxt(meta.auditFunction)],
+    ['Audit SPOC', xlTxt(meta.auditSpoc)],
+    ['Prepared By', xlTxt(meta.preparedBy)],
+    ['Reviewed By', xlTxt(meta.reviewedBy)],
+    ['Generated On', xlTxt(meta.generatedOn)],
+    [],
+    ['— Summary —', ''],
+    ['Observations', ex.totalObservations],
+    ['Exceptions', meta.totalExceptions ?? ex.totalExceptions],
+    ['Action Plans', ex.totalActionPlans],
+    ['Open', ex.obsStatus.Open + ex.obsStatus.Overdue],
+    ['Partially Closed', ex.obsStatus['In Progress']],
+    ['Closed', ex.obsStatus.Closed],
+    ...(ex.progressPct != null ? [['Remediated', `${ex.progressPct}%`]] : []),
+  ];
+  const cover = XLSX.utils.aoa_to_sheet(coverRows);
+  cover['!cols'] = [{ wch: 24 }, { wch: 64 }];
+  cover['!merges'] = [{ s: { r: 0, c: 0 }, e: { r: 0, c: 1 } }];
+  XLSX.utils.book_append_sheet(wb, cover, 'Report');
+
+  // ── Sheet 2: Observations — one column per observation ──
+  const header = ['Detail', ...observations.map((o, i) => o.title?.trim() || `Observation ${i + 1}`)];
+  const detail = OBSERVATION_DETAIL_ROWS.map(r => [r.label, ...observations.map((o, i) => r.value(o, i))]);
+  const obsSheetRows: (string | number)[][] = observations.length ? [header, ...detail] : [['Detail'], ['No observations on this report']];
+  const obsSheet = XLSX.utils.aoa_to_sheet(obsSheetRows);
+  obsSheet['!cols'] = xlFit(obsSheetRows);
+  // The header row and the Detail column are what everything is read against.
+  obsSheet['!freeze'] = { xSplit: 1, ySplit: 1 };
+  XLSX.utils.book_append_sheet(wb, obsSheet, 'Observations');
+
+  // ── Sheet 3: Action Plans — the row-per-plan detail ──
+  const { rows } = obsRows(meta, observations);
+  if (rows.length) {
+    const planSheet = XLSX.utils.json_to_sheet(rows);
+    planSheet['!cols'] = Object.keys(rows[0]).map(() => ({ wch: 30 }));
+    XLSX.utils.book_append_sheet(wb, planSheet, 'Action Plans');
+  }
+
+  const file = `${name.replace(/[^\w\s-]/g, '').trim().replace(/\s+/g, '_') || meta.reportId || 'ATR'}.xlsx`;
+  XLSX.writeFile(wb, file);
+  return file;
 }
 
 export function exportAtrWord(meta: AtrMeta, observations: AtrObservation[]) {
@@ -231,7 +334,6 @@ export function exportAtrWord(meta: AtrMeta, observations: AtrObservation[]) {
       <h3 style="color:#550FA5;margin:16px 0 4px;">${i + 1}. ${esc(o.title)}${o.process ? ` — ${esc(o.process)}` : ''}</h3>
       <p style="margin:0;color:#6B5D82;">${[o.risk && `${o.risk} Risk`, o.status].filter(Boolean).map(esc).join(' · ')}</p>
       ${o.description ? `<p style="margin:6px 0 2px;"><b>Issue:</b> ${esc(o.description)}</p>` : ''}
-      ${o.riskSummary ? `<p style="margin:0 0 2px;"><b>Risk Summary:</b> ${esc(o.riskSummary)}</p>` : ''}
       ${plans}`;
   }).join('');
   const html = `<!DOCTYPE html><html xmlns:o="urn:schemas-microsoft-com:office:office" xmlns:w="urn:schemas-microsoft-com:office:word" xmlns="http://www.w3.org/TR/REC-html40"><head><meta charset="utf-8"><title>${esc(meta.reportId)}</title></head>
@@ -284,7 +386,6 @@ export async function parseObservationsFromFile(file: File): Promise<AtrObservat
       const obs: AtrObservation = {
         title: title || 'Untitled Observation',
         description: val(row, 'description') || undefined,
-        riskSummary: val(row, 'riskSummary') || undefined,
         classification: normaliseClassification(val(row, 'classification')),
         risk,
         actionPlans: recommendation
@@ -339,7 +440,6 @@ export function deriveObservationsFromReport(report: DerivableReport): AtrObserv
     const obs: AtrObservation = {
       title: q.title || 'Untitled Observation',
       description: q.summary || q.answer || undefined,
-      riskSummary: q.risk || (q.findings && q.findings.length > 1 ? q.findings.join(' ') : undefined),
       risk: normaliseRisk(q.severity),
       exceptions,
       actionPlans: [{ text: recommendation }],
@@ -364,7 +464,6 @@ export const SAMPLE_OBSERVATIONS: AtrObservation[] = [
     classification: 'System Deficiency',
     description: 'During the review period, 14 vendor codes were activated in SAP without the standard onboarding documentation (PAN, GST, MSME declaration, bank letter). Of these, 6 were used for transactions exceeding ₹15 lakhs aggregate.',
     querySummary: 'Review of vendor creation and approval workflows in SAP.',
-    riskSummary: 'Unauthorized vendor creation could enable fictitious vendor fraud, duplicate payments, and PMLA non-compliance.',
     actionPlans: [
       { title: 'Mandatory 2FA for vendor-master access', text: "Configure mandatory dual-factor authentication (2FA) via RSA tokens for all users with SAP 'Vendor Master' creation or modification rights.", dueDate: '15 May 2026', status: 'Implemented', actionTaken: 'Enabled RSA-token 2FA on the M_LFA1_BUK authorization object for all 18 users with vendor-master create/change rights; legacy password-only access disabled on 24 Apr 2026.', evidence: 'Security audit logs, configuration screenshots of SAP 2FA module, and signed monthly user access review report (April 2026).', verification: 'Verified in SAP on 25 Apr 2026 — 2FA active for all 18 users with M_LFA1_BUK authorization. Accepted.' },
       { title: 'Maker-checker vendor onboarding workflow', text: "Redesign the vendor onboarding workflow in SAP to enforce a strict 'Maker-Checker' protocol. No vendor profile can be activated without second-level validation.", dueDate: '20 Jun 2026', status: 'Implemented', actionTaken: 'Rebuilt the vendor onboarding workflow so the maker can only submit; activation now requires a separate checker release. Deployed to production after UAT sign-off.', evidence: 'UAT report, workflow diagram in SAP, and sample of 3 newly activated vendors.', verification: 'Verified flow in SAP Production environment. Workflow functioning as expected.' },
@@ -380,7 +479,6 @@ export const SAMPLE_OBSERVATIONS: AtrObservation[] = [
     classification: 'Procedural Non-Compliance',
     description: 'In 23 of 4,217 sampled invoices, payments were released despite tolerance exceptions in 3-way match (PO ↔ GRN ↔ Invoice). MIRO bypass override was used by 4 users without documented justification.',
     querySummary: 'Assessment of PO / GRN / Invoice matching controls and tolerance override usage in SAP MM.',
-    riskSummary: 'Bypass of 3-way match controls weakens accuracy of vendor payouts and may result in payment for goods not received or at incorrect rates.',
     actionPlans: [
       { title: 'Tighten OMR1 tolerance limits', text: 'Tighten OMR1 tolerance limits and remove tolerance override authority from non-Finance Manager roles.', dueDate: '10 May 2026', status: 'Implemented', actionTaken: 'Revised OMR1 tolerance keys to near-zero and stripped the override authorization from all non-Finance-Manager roles via SU01; only 2 Finance Managers retain it.', evidence: 'OMR1 configuration screenshots, updated SU01 role assignments, and approval email from CFO dated 28 Apr 2026.', verification: 'Verified — tolerance limits revised, only 2 Finance Manager users retain override. Test transactions confirm block on others.' },
       { title: 'Monthly MIRO override exception report', text: 'Implement a monthly exception report from SAP for all MIRO override transactions, reviewed and signed by the Finance Controller.', dueDate: '30 Jun 2026', status: 'Pending', actionTaken: 'Drafted the SQ01 query for MIRO override transactions; report layout under review with the Finance Controller. Not yet operationalised.', evidence: 'Draft SAP query (SQ01) shared; report design under review. To be operationalised from May 2026 cycle.', verification: 'Pending — first signed exception report awaited. Will re-verify in Q4 follow-up.' },
@@ -395,7 +493,6 @@ export const SAMPLE_OBSERVATIONS: AtrObservation[] = [
     classification: 'Design Deficiency',
     description: 'In September 2024, 2 dispatch lots (DL-0917 and DL-0928) were released to transporters without prior freight rate approval in SAP. Rates were back-dated and approved post-dispatch, creating a control gap of ₹4.7 lakh.',
     querySummary: 'Validation of pre-dispatch freight rate approval workflow and contract-rate vs actual-rate variance.',
-    riskSummary: 'Post-facto rate approval undermines the integrity of dispatch authorisation and exposes the company to inflated freight outflow.',
     actionPlans: [
       { title: 'Hard block on unrated dispatch (VL01N)', text: 'Configure a hard block in the SAP logistics module preventing dispatch document creation (VL01N) unless an approved freight rate exists in the contract master (TK11).', dueDate: '30 Apr 2026', status: 'Overdue', actionTaken: 'Functional spec for the VL01N user-exit signed off and development assigned to the internal SAP team; build incomplete — go-live slipped from 30 Apr to mid-June.', evidence: 'Functional spec drafted; user-exit development assigned to internal SAP team. Go-live slipped from 30 Apr to mid-June.', verification: 'OVERDUE — control still not enforced. Escalated to Audit Committee on 12 May 2026. Revised target: 15 Jun 2026.' },
       { title: 'Pre-dispatch rate-approval checklist', text: 'Introduce a pre-dispatch logistics checklist with mandatory rate-approval reference number capture before gate-out.', dueDate: '30 Jun 2026', status: 'Pending', actionTaken: 'Checklist template designed and circulated to the plant head; field rollout with monthly compliance KPI tracking scheduled but not yet started.', evidence: 'Checklist template circulated to plant-head; field rollout scheduled with monthly compliance KPI tracking.', verification: 'Awaiting first month of rollout data — verification deferred to Q4 review.' },
@@ -410,7 +507,6 @@ export const SAMPLE_OBSERVATIONS: AtrObservation[] = [
     classification: 'Procedural Non-Compliance',
     description: 'Quarterly physical verification of finished-goods (PPC 50kg cement bags) at Plant-2 showed a negative variance of 1,840 bags valued at ₹6.4 lakh. Variance was not investigated within the SOP-mandated 7 working days.',
     querySummary: 'Review of stock-take variance recording, root-cause analysis, and write-off approvals.',
-    riskSummary: 'Uninvestigated stock variances may conceal pilferage or system mis-postings and distort FG inventory in financial statements.',
     actionPlans: [
       { title: '7-day variance investigation tracker', text: 'Introduce a mandatory 7-day variance investigation tracker with auto-escalation to Plant Head and Finance Controller for variances above ₹1 lakh.', dueDate: '25 May 2026', status: 'Pending', actionTaken: 'SOP for the 7-day variance tracker drafted and circulated; awaiting Plant Head sign-off before the SharePoint tracker is built. No investigations logged yet.', evidence: 'SOP draft circulated; awaiting Plant Head sign-off. Tracker to be hosted on internal SharePoint.', verification: 'Open — implementation not yet started. Will follow up in next cycle.' },
     ],
@@ -424,7 +520,6 @@ export const SAMPLE_OBSERVATIONS: AtrObservation[] = [
     classification: 'System Deficiency',
     description: 'Sample testing of 8 scrap-sale instances showed 3 cases where the approved minimum scrap rate and gate-pass quantity were not reconciled to invoice / receipt. Net under-recovery: ₹1.2 lakh.',
     querySummary: 'Assessment of scrap disposal authorisation, rate-setting committee minutes, and gate-pass to invoice reconciliation.',
-    riskSummary: 'Inadequate scrap reconciliation can lead to revenue leakage and provides opportunity for unrecorded cash collections at the plant gate.',
     actionPlans: [
       { title: 'Activate SAP Scrap Sale module', text: 'Activate the SAP Scrap Sale module with mandatory gate-pass quantity capture, minimum rate validation, and end-of-month reconciliation report.', dueDate: '30 Apr 2026', status: 'Implemented', actionTaken: 'Activated the SAP Scrap Sale module with gate-pass quantity capture and minimum-rate validation; end-of-month reconciliation reports run and signed for Feb–Apr 2026.', evidence: 'SAP module configuration evidence, signed reconciliation reports for Feb–Apr 2026, and committee minutes.', verification: 'Verified — full reconciliation for 3 consecutive months reviewed. No variance noted. Closed.' },
       { title: 'Quarterly Scrap Rate Committee rotation', text: 'Mandate quarterly rotation of the Scrap Rate Committee members to reduce concentration risk.', dueDate: '30 Apr 2026', status: 'Implemented', actionTaken: 'Updated the committee charter to require quarterly member rotation; HR communicated the change and the Q1 FY26 committee was reconstituted accordingly.', evidence: 'Updated committee charter, HR communication, and Q1 FY26 committee composition.', verification: 'Verified — rotation effected for Q1 FY26. Closed.' },

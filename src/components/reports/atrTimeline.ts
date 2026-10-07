@@ -19,7 +19,7 @@
 // taken in the Manage Exceptions tab — which opens in a separate browser tab —
 // still reach the report, and the reader picks them up live via `storage`.
 
-import type { AtrReportData, AtrObservation, AtrActionPlan, AtrLinkedAnnexure, AtrObservationStatus, AtrActionStatus } from './atrTypes';
+import type { AtrReportData, AtrObservation, AtrActionPlan, AtrCloseout, AtrLinkedAnnexure, AtrObservationStatus, AtrActionStatus } from './atrTypes';
 import type { GrcException, GrcCaseDetail } from '../../data/mockData';
 
 export type AtrEventRole = 'Auditor' | 'Risk Owner' | 'Preparer' | 'System';
@@ -30,6 +30,7 @@ export type AtrEventKind =
   | 'action-completed' | 'action-verified' | 'action-discrepancy'
   | 'due-date-requested' | 'due-date-approved' | 'due-date-rejected'
   | 'case-closed'
+  | 'escalation-set'
   | 'annexure-linked' | 'annexure-unlinked';
 
 /** A data-level change to replay on the report. Targets an observation by
@@ -41,7 +42,7 @@ export interface AtrEventPatch {
   replace?: AtrReportData;
   observationIndex?: number;
   observationTitle?: string;
-  observation?: { status?: AtrObservationStatus; classification?: AtrObservation['classification']; classificationIfEmpty?: boolean };
+  observation?: { status?: AtrObservationStatus; classification?: AtrObservation['classification']; classificationIfEmpty?: boolean; risk?: AtrObservation['risk']; closeout?: AtrCloseout };
   plan?: { caseId?: string; index?: number; set: Partial<AtrActionPlan> };
   /** Link / unlink supporting annexures on the observation. */
   annexures?: { add?: AtrLinkedAnnexure[]; removeId?: string };
@@ -62,6 +63,10 @@ export interface AtrEvent {
   observationIndex?: number;
   observationTitle?: string;
   patch?: AtrEventPatch;
+  /** Recorded by the report's own close-out panel. That journey is a walkthrough
+   *  of the workflow rather than real case work, so it lives for one page load
+   *  and is dropped on the next — see `dropCloseoutEvents`. */
+  closeout?: true;
 }
 
 export interface AtrTimeline {
@@ -110,7 +115,13 @@ export interface TimelineSeed {
 /** The timeline for a report, creating it from the saved snapshot on first use. */
 export function loadTimeline(reportId: string, data: AtrReportData, seed: TimelineSeed): AtrTimeline {
   const existing = read(reportId);
-  if (existing?.baseline) return existing;
+  if (existing?.baseline) {
+    // A hard refresh is a fresh start for the close-out walkthrough. Anything an
+    // older build wrote to storage is cleaned out here too.
+    const clean = dropCloseoutEvents(existing);
+    if (clean !== existing) write(reportId, clean);
+    return clean;
+  }
   const t = seed.seedHistory ? seedDemoHistory(data, seed) : {
     baseline: data,
     events: [{
@@ -121,6 +132,14 @@ export function loadTimeline(reportId: string, data: AtrReportData, seed: Timeli
   };
   write(reportId, t);
   return t;
+}
+
+/** Strip the close-out panel's events, so the panel opens from its zero state
+ *  on every page load. Real case work — events arriving from Manage Exceptions,
+ *  inline edits, annexure links — carries no `closeout` flag and survives. */
+export function dropCloseoutEvents(t: AtrTimeline): AtrTimeline {
+  const events = t.events.filter(e => !e.closeout);
+  return events.length === t.events.length ? t : { ...t, events };
 }
 
 export function appendEvents(reportId: string, events: AtrEvent[]): AtrTimeline | null {
@@ -158,6 +177,8 @@ function applyPatch(data: AtrReportData, patch: AtrEventPatch): AtrReportData {
   if (patch.observation) {
     const po = patch.observation;
     if (po.classification && (!po.classificationIfEmpty || !obs.classification)) obs.classification = po.classification;
+    if (po.risk) obs.risk = po.risk;
+    if (po.closeout) obs.closeout = { ...obs.closeout, ...po.closeout };
     if (po.status) explicitStatus = po.status;
   }
   if (patch.plan) {

@@ -23,7 +23,7 @@ import NewReportModal, { type NewReportDraft } from './NewReportModal';
 import type { ReportMeta } from './atr-upload/types';
 import AdminTab from './atr-upload/screens/AdminTab';
 import { AdminSettingsProvider } from './atr-upload/adminStore';
-import ObservationExceptionsAction from './atr-upload/components/ObservationExceptionsAction';
+import { observationExceptions } from './atr-upload/observationExceptions';
 import { UPLOAD_REPORT_ID_PREFIX, loadUploadSession } from './atr-upload/uploadedReport';
 import { useNotify } from '../../notifications/NotificationContext';
 import { ROSTER } from '../../notifications/triggers/caseTriggers';
@@ -1087,7 +1087,14 @@ function ReportsViewInner({
             setAtrMinimized(false);
             setAtrUploadOpen(true);
           } : undefined}
-          renderObservationActions={uploadSession ? (i, obs) => <ObservationExceptionsAction session={uploadSession} index={i} obs={obs} /> : undefined}
+          observationExceptions={uploadSession ? (i, obs) => {
+            const ex = observationExceptions(uploadSession, i, obs);
+            if (!ex) return null;
+            return {
+              count: ex.count,
+              open: () => logEvent({ action: 'Export', description: ex.handoff(), module: 'Reports', entity: 'Exception Case' }),
+            };
+          } : undefined}
           // Report Snapshot: curated library ATRs get a believable remediation
           // history to explore; ATRs the user generated start from their real
           // generated snapshot and grow only with real actions.
@@ -1919,7 +1926,6 @@ function ReportsViewInner({
                   onGenerated={saveUploadedAtr}
                   initialMeta={atrInitialMeta}
                   initialSessionId={atrOpenSessionId ?? undefined}
-                  onBack={lastDraft ? () => { setAtrUploadOpen(false); setAtrMinimized(false); setNewReportOpen(true); } : undefined}
                 />
               </div>
             </motion.div>
