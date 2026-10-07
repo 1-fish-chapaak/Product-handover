@@ -26,11 +26,11 @@ export type CompletenessStatus = 'Complete' | 'Partial' | 'Incomplete';
 
 export type MissingFieldState = 'missing' | 'filled-by-user' | 'skipped';
 
-/** The 10 ATR fields that extraction can flag as missing. Mirrors the keys in
+/** The ATR fields that extraction can flag as missing. Mirrors the keys in
  *  atrTemplate.ts REQUIRED_FIELDS so the resolver and the template stay aligned. */
 export type ExtractedFieldKey =
   | 'title' | 'description' | 'rootCause' | 'solutionType'
-  | 'riskSummary' | 'riskImplications' | 'riskImplicationsDetails'
+  | 'riskImplications' | 'riskImplicationsDetails'
   | 'recommendation' | 'actionTaken' | 'evidence' | 'verification'
   | 'classification' | 'risk' | 'dueDate';
 

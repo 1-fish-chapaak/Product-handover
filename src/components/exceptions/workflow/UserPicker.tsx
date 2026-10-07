@@ -64,18 +64,23 @@ export function UserSelect({ users, value, onChange, placeholder = 'Select a use
 }
 
 /** Multi-user select (level approvers). */
-export function UserMultiSelect({ users, selectedIds, onChange }: {
+export function UserMultiSelect({ users, selectedIds, onChange, ariaLabel }: {
   users: OrgUser[]; selectedIds: string[]; onChange: (ids: string[]) => void;
+  /** Names the trigger when a screen carries more than one of these, so they are
+   *  not all announced as "Select approver(s)…". */
+  ariaLabel?: string;
 }) {
   const [open, setOpen] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
   useOutside(ref, () => setOpen(false), open);
   const toggle = (id: string) => onChange(selectedIds.includes(id) ? selectedIds.filter(x => x !== id) : [...selectedIds, id]);
-  const sel = users.filter(u => selectedIds.includes(u.id));
+  // In the order they were picked — for a sequential chain that order is the
+  // level order, so the chips must not silently re-sort to roster order.
+  const sel = selectedIds.map(id => users.find(u => u.id === id)).filter((u): u is OrgUser => !!u);
 
   return (
     <div ref={ref} className="relative">
-      <button type="button" onClick={() => setOpen(o => !o)} className="w-full min-h-9 px-2 py-1 bg-canvas-elevated border border-canvas-border rounded-md flex items-center flex-wrap gap-1.5 hover:border-brand-200 cursor-pointer">
+      <button type="button" aria-label={ariaLabel} aria-expanded={open} onClick={() => setOpen(o => !o)} className="w-full min-h-9 px-2 py-1 bg-canvas-elevated border border-canvas-border rounded-md flex items-center flex-wrap gap-1.5 hover:border-brand-200 cursor-pointer">
         {sel.length === 0 && <span className="text-[0.78125rem] text-ink-400 px-1">Select approver(s)…</span>}
         {sel.map(u => (
           <span key={u.id} className="inline-flex items-center gap-1.5 h-7 pl-1 pr-2 bg-brand-50 rounded-full text-[0.71875rem] text-brand-700">

@@ -8,16 +8,15 @@ import type { AtrObservation, AtrInsight } from './atrTypes';
 import { SAMPLE_OBSERVATIONS } from './atrTemplate';
 
 export type ComplField =
-  | 'description' | 'riskSummary' | 'classification' | 'risk'
+  | 'description' | 'classification' | 'risk'
   | 'recommendation' | 'actionTaken' | 'evidence';
 
 export const COMPLETENESS_FIELDS: ComplField[] = [
-  'description', 'riskSummary', 'classification', 'risk', 'recommendation', 'actionTaken', 'evidence',
+  'description', 'classification', 'risk', 'recommendation', 'actionTaken', 'evidence',
 ];
 
 export const FIELD_LABEL: Record<ComplField, string> = {
   description: 'Observation Description',
-  riskSummary: 'Risk Summary',
   classification: 'Classification Status',
   risk: 'Risk Significance',
   recommendation: 'Recommendation / Action Plan',
@@ -106,7 +105,6 @@ export const ANNEXURE_POOL: AtrAnnexure[] = [
 function hasValue(obs: AtrObservation, f: ComplField): boolean {
   switch (f) {
     case 'description': return !!obs.description?.trim();
-    case 'riskSummary': return !!obs.riskSummary?.trim();
     case 'classification': return !!obs.classification;
     case 'risk': return !!obs.risk;
     case 'recommendation': return obs.actionPlans.some(p => p.text?.trim());
@@ -324,7 +322,6 @@ export function atrFromReport(
       process: q.risk,
       description: q.summary,
       querySummary: `${q.id} · ${q.title}`,
-      riskSummary: (q.observations ?? [])[0],
       classification: classifyFrom(q.risk),
       risk: toRisk(q.severity),
       status,
