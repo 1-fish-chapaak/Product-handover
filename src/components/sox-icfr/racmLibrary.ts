@@ -597,6 +597,11 @@ export function racmRowOf(c: Control): Control {
     ...(c.testingStrategy ? { testingStrategy: c.testingStrategy } : {}),
     ...(c.extras ? { extras: { ...c.extras } } : {}),
     ...(c.accountIds ? { accountIds: [...c.accountIds] } : {}),
+    // Where in the SOP it was read, and how the SOP says to test it (stage 7) —
+    // the matrix's own record, so it reaches every engagement that copies it.
+    ...(c.sopSectionRef ? { sopSectionRef: c.sopSectionRef } : {}),
+    ...(c.sopSource ? { sopSource: { ...c.sopSource } } : {}),
+    ...(c.sopTestGuidance ? { sopTestGuidance: { ...c.sopTestGuidance } } : {}),
     assertions: [...c.assertions],
     design: {
       documents: c.design.documents.map(d => ({

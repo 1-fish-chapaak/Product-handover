@@ -625,6 +625,16 @@ export const NOTIFICATION_EVENTS: NotificationEventDef[] = [
     dedup: { kind: 'none' },
     configurability: { mandatory: false, channelConfigurable: true, optOut: false, note: 'Not opt-out — an assigned review is the reviewer’s to act on.' }, priority: 'P1', overridesQuietHours: false, requiresAction: true, deeplink: 'workflow',
   },
+  {
+    id: 'WFL-15', module: 'Workflows & Data', event: 'SOP extraction finished',
+    trigger: 'Ira finishes drafting a RACM from an SOP the uploader left running.', channel: 'in-app',
+    whyThisChannel: 'The uploader was told they could leave while Ira extracted — this is the promised call back.',
+    recipients: [R('uploader', 'Uploader')], watchers: [],
+    cadence: 'On completion',
+    content: ['file name', 'process', 'rows drafted', 'deeplink'],
+    dedup: { kind: 'none' },
+    configurability: { mandatory: false, channelConfigurable: true, optOut: false, note: 'Not opt-out — the user was promised this.' }, priority: 'P1', overridesQuietHours: false, requiresAction: true, deeplink: 'data-source',
+  },
 
   // ── Dashboards ──
   {

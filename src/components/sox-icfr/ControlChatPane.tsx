@@ -326,7 +326,7 @@ function IraPlan({ control, mode, rerun, onRerun, waiting, fileWait, onUpload }:
   const attrs = choice?.attributes ? steps.filter(st => choice.attributes!.includes(st.id)) : steps;
   const size = control.operating.sampling?.size ?? sampleSizeGuide(control, itgcHolds(eng, control), samplingOf(eng)).suggested;
   const plan: { id?: IraPlanStepId; text: string; done: boolean; narrow?: boolean; pop?: boolean }[] = [
-    { id: 'design', text: `Read ${files.length === allFiles.length ? 'the ' : ''}${plural(files.length, 'design file')} against ${plural(checks.length, 'check')}`, done: checks.length > 0 && checks.every(p => pointResult(p) !== 'Not tested'), narrow: allFiles.length > 1 || allChecks.length > 1 },
+    { id: 'design', text: `Read ${files.length === allFiles.length ? 'the ' : ''}${plural(files.length, 'design file')} against ${plural(checks.length, 'check')}${control.sopTestGuidance ? `, using the SOP’s steps (p.${control.sopTestGuidance.page})` : ''}`, done: checks.length > 0 && checks.every(p => pointResult(p) !== 'Not tested'), narrow: allFiles.length > 1 || allChecks.length > 1 },
   ];
   if (operatingApplies(eng, control)) {
     plan.push(
@@ -487,7 +487,8 @@ function WhatIraKnows({ control }: { control: Control }) {
       : `Population: ${pop.count.toLocaleString('en-IN')} instances${pop.sourceFile ? ` from ${pop.sourceFile}` : ''}${pop.locked ? ', locked' : ', not locked yet'}.`);
     const s = control.operating.sampling;
     if (s && s.size > 0) out.push(`Sample drawn: ${plural(s.size, 'item')}, ${s.method.toLowerCase()}.`);
-    out.push(`Comes from ${control.process}${control.subProcess ? ` · ${control.subProcess}` : ''}${control.sopSectionRef ? `, SOP ${control.sopSectionRef}` : ''}.`);
+    out.push(`Comes from ${control.process}${control.subProcess ? ` · ${control.subProcess}` : ''}${control.sopSectionRef ? `, SOP ${control.sopSectionRef}` : ''}${control.sopSource ? `, page ${control.sopSource.page}` : ''}.`);
+    if (control.sopTestGuidance) out.push(`The SOP says how to test it, on page ${control.sopTestGuidance.page}: “${control.sopTestGuidance.text}”`);
     return out;
   }, [control]);
   return (
@@ -1202,6 +1203,11 @@ export default function ControlChatPane({ control }: { control: Control }) {
     return null;
   })();
   const fileHeldHere = FILE_HELD[control.id] ?? [];
+  // Before Start, the plan is the one thing the rail asks of the tester (user
+  // ask, 8 Oct: "when we have plan, why do we have buttons separately"). The
+  // live step card and its buttons wait until Start — then they come back to
+  // say what is holding Ira and what to press.
+  const planUnstarted = role === 'auditor' && !control.iraPlan?.started && !isControlLockedIn(eng, control);
   const askShown = iraMode === 'automatic' && !!fileAsk && !fileHeldHere.includes(fileAsk.step) && !working && !draw && !extract && !waive && !pile;
   const owner = ownersOf(control).processOwner;
   const askKey = (r: FileAskRow) => `file-ask:${r.key}`;
@@ -1690,7 +1696,7 @@ export default function ControlChatPane({ control }: { control: Control }) {
            <span>{CAPABILITY[prompt.step]}</span>
          </p>
        )}
-       <div className="mt-5 space-y-5">
+       <div className="flex-1 flex flex-col mt-5 space-y-5">
         {items.map(it => it.kind === 'fold' ? (
           <div key={it.id}>
             <button type="button" onClick={() => setOpenFolds(o => (o.includes(it.id) ? o.filter(x => x !== it.id) : [...o, it.id]))}
@@ -1853,8 +1859,11 @@ export default function ControlChatPane({ control }: { control: Control }) {
           </div>
         )}
 
-        {!working && !ipeDraft && !pile && !draw && !extract && !awaitingCause && !waive && (
-          <div>
+        {/* Bottom-aligned (user ask, 8 Oct): the live step and its buttons
+            sit on the floor of the rail, right above the composer, however
+            short the thread above is. */}
+        {!working && !ipeDraft && !pile && !draw && !extract && !awaitingCause && !waive && !planUnstarted && (
+          <div className="mt-auto">
             {/* Ira's mark sits on the LIVE line only. The thread above stays
                 unmarked prose (DESIGN.md §7.1.7 — no avatar, identity carried
                 by alignment); what the mark distinguishes is not "who said
