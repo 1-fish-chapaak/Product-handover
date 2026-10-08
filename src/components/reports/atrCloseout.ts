@@ -75,6 +75,44 @@ export const planRejected = (p: AtrActionPlan) => p.planReview === 'Rejected';
 export const planActed = (p: AtrActionPlan) => !!p.actionTaken?.trim();
 export const planSettled = (p: AtrActionPlan) => p.status === 'Implemented';
 
+// ─── One plan at a time ───
+// Action plans run independently. The risk owner can raise several on one
+// observation, and each then makes its own way: a plan sent back for revision
+// does not hold up one that is already being carried out, and a plan closed
+// early does not wait for the rest. The observation is finished when all of
+// them are.
+
+export type PlanPhase = 'plan-review' | 'replan' | 'in-progress' | 'action-review' | 'closed';
+
+/** Where one action plan has got to, on its own. */
+export function planPhase(p: AtrActionPlan): PlanPhase {
+  if (planRejected(p)) return 'replan';
+  if (!planApproved(p)) return 'plan-review';
+  if (!planActed(p)) return 'in-progress';
+  if (planSettled(p)) return 'closed';
+  return 'action-review';
+}
+
+/** Whose move it is on one plan — the same split as the observation's phases. */
+export const PLAN_PHASE_ACTOR: Record<PlanPhase, CloseoutRole | null> = {
+  'plan-review': 'auditor',
+  replan: 'owner',
+  'in-progress': 'owner',
+  'action-review': 'auditor',
+  closed: null,
+};
+
+export const PLAN_PHASE_LABEL: Record<PlanPhase, string> = {
+  'plan-review': 'Awaiting plan approval',
+  replan: 'Sent back to revise',
+  'in-progress': 'In progress',
+  'action-review': 'Awaiting review',
+  closed: 'Closed',
+};
+
+/** A plan nobody owes a move on. */
+export const planDone = (p: AtrActionPlan) => planPhase(p) === 'closed';
+
 /** Where this observation has got to. */
 export function closeoutPhase(o: AtrObservation): CloseoutPhase {
   const { plans } = closeoutPlans(o);
@@ -128,25 +166,41 @@ export function closeoutState(o: AtrObservation): CloseoutState {
 
 /** How many moves are outstanding on this observation — one for a decision the
  *  whole observation needs, or one per action plan still waiting on someone.
- *  Zero once it is closed. This is the number on the report's Manage CTA. */
+ *  Zero once it is closed. This is the number on the report's Manage CTA.
+ *
+ *  Counted across every plan rather than only the ones in the observation's
+ *  headline phase: plans run independently, so a plan sent back and a plan
+ *  waiting to be carried out are two outstanding moves, not one. */
 export function pendingActions(o: AtrObservation): number {
   const st = closeoutState(o);
+  if (st.closed) return 0;
   switch (st.phase) {
     case 'unassigned':
     case 'classify':
     case 'fp-review':
       return 1;
-    case 'plan-review':
-      return st.plans.filter(p => !planApproved(p)).length;
-    case 'replan':
-      return st.plans.filter(planRejected).length;
-    case 'in-progress':
-      return st.plans.filter(p => planApproved(p) && !planActed(p)).length;
-    case 'action-review':
-      return st.plans.filter(p => planActed(p) && !planSettled(p)).length;
     default:
-      return 0;
+      return st.plans.filter(p => !planDone(p)).length;
   }
+}
+
+/** What each side is owed on this observation, by plan. Drives the "needs you"
+  * dot on the role toggle, which otherwise reads only the headline phase and
+  * so missed work waiting on the other side. */
+export function pendingByRole(o: AtrObservation): Record<CloseoutRole, number> {
+  const st = closeoutState(o);
+  const out: Record<CloseoutRole, number> = { auditor: 0, owner: 0 };
+  if (st.closed) return out;
+  const actor = PHASE_ACTOR[st.phase];
+  if (st.phase === 'unassigned' || st.phase === 'classify' || st.phase === 'fp-review') {
+    if (actor) out[actor] = 1;
+    return out;
+  }
+  st.plans.forEach(p => {
+    const who = PLAN_PHASE_ACTOR[planPhase(p)];
+    if (who) out[who] += 1;
+  });
+  return out;
 }
 
 // ─── Events ───

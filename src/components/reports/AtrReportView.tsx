@@ -20,7 +20,8 @@ import AtrObservationCloseout, { type ExistingPlan } from './AtrObservationClose
 import AtrObservationManageMenu, { type ObservationExceptionsEntry } from './AtrObservationManageMenu';
 import type { Audience } from '../shared/audience';
 import { REPORT_TEMPLATES } from '../../data/mockData';
-import { reportGradient, type EditableTemplate } from './reportShared';
+import { reportGradient, reportAccent, type EditableTemplate } from './reportShared';
+import { templateHeaderFields, templateBodyFields, templateKpiFields, templateSummaryColumns, templateCarries } from './templateFields';
 
 // Summarize an edit into a version label by diffing the saved report against the
 // working draft — so the version trail reads from what actually changed rather
@@ -107,6 +108,8 @@ interface AtrReport {
   atrData: AtrReportData;
   /** Format last applied from the command bar — restored when it reopens. */
   appliedTemplateId?: string;
+  /** The format the report was created in (the one picked in New Report). */
+  templateId?: string;
   shareAudience?: Audience;
 }
 
@@ -142,11 +145,16 @@ export default function AtrReportView({ report, onBack, onShare, onSave, onEditO
   const editable = !!onSave;
   const [editing, setEditing] = useState(false);
   const [editMenuOpen, setEditMenuOpen] = useState(false);
-  // The template was chosen when the report was created; it only brands the
-  // banner here (no Apply Template control on an ATR).
+  // The format this report is written in: one applied later from the command
+  // bar wins, otherwise the one it was created from. It brands the banner and
+  // decides which fields print, so the report comes out as the format that was
+  // picked in New Report rather than as a generic ATR.
   const appliedTemplate = useMemo<(typeof REPORT_TEMPLATES[number] | EditableTemplate) | null>(
-    () => (report.appliedTemplateId ? templates.find(t => t.id === report.appliedTemplateId) ?? null : null),
-    [report.appliedTemplateId, templates],
+    () => {
+      const id = report.appliedTemplateId ?? report.templateId;
+      return id ? templates.find(t => t.id === id) ?? null : null;
+    },
+    [report.appliedTemplateId, report.templateId, templates],
   );
   const { addToast } = useToast();
   // Save runs only after the user confirms.
@@ -348,72 +356,98 @@ export default function AtrReportView({ report, onBack, onShare, onSave, onEditO
   // Map the ATR data onto the shared download-preview section model so the ATR
   // exports through the same modal (preview + PDF/DOCX/PPTX/HTML/Excel) as every
   // other report, instead of a bare window.print().
+  // The exported document carries the same fields as the report on screen: the
+  // format's own selection drives both. A format with no opinion exports
+  // everything, exactly as it did before formats carried field lists.
+  const hdrFields = templateHeaderFields(appliedTemplate as EditableTemplate | null);
+  const bodyFieldKeys = templateBodyFields(appliedTemplate as EditableTemplate | null);
+  const kpiFieldKeys = templateKpiFields(appliedTemplate as EditableTemplate | null);
+
   const buildDownloadSections = (): DownloadPreviewSection[] => {
     const ex = computeExecSummary(observations);
     const totalExceptions = meta.totalExceptions ?? ex.totalExceptions;
     const openCount = ex.obsStatus.Open + ex.obsStatus.Overdue;
-    const stats = [
-      { label: 'Observations', value: String(ex.totalObservations), accent: ATR_TONE_HEX.brand },
-      { label: 'Exceptions', value: String(totalExceptions), accent: ATR_TONE_HEX.ink },
-      { label: 'Action Plans', value: String(ex.totalActionPlans), accent: ATR_TONE_HEX.brand },
-      { label: 'Open', value: String(openCount), accent: ATR_TONE_HEX.high },
-      { label: 'Closed', value: String(ex.obsStatus.Closed), accent: ATR_TONE_HEX.compliant },
-      { label: 'In Progress', value: String(ex.obsStatus['In Progress']), accent: ATR_TONE_HEX.mitigated },
-    ];
+    const stats = ([
+      { key: 'observations', label: 'Observations', value: String(ex.totalObservations), accent: ATR_TONE_HEX.brand },
+      { key: undefined, label: 'Exceptions', value: String(totalExceptions), accent: ATR_TONE_HEX.ink },
+      { key: 'actionPlans', label: 'Action Plans', value: String(ex.totalActionPlans), accent: ATR_TONE_HEX.brand },
+      { key: 'obsOpen', label: 'Open', value: String(openCount), accent: ATR_TONE_HEX.high },
+      { key: 'obsClosed', label: 'Closed', value: String(ex.obsStatus.Closed), accent: ATR_TONE_HEX.compliant },
+      { key: 'obsPartial', label: 'In Progress', value: String(ex.obsStatus['In Progress']), accent: ATR_TONE_HEX.mitigated },
+    ] as { key?: string; label: string; value: string; accent: string }[])
+      .filter(s => !s.key || templateCarries(kpiFieldKeys, s.key))
+      .map(({ label, value, accent }) => ({ label, value, accent }));
+
+    const detailLines = ([
+      ['reportName', 'Report Name', meta.reportName], ['reportNumber', 'Report Number', meta.reportNumber],
+      ['auditTitle', 'Audit Title', meta.auditTitle], ['auditEntity', 'Audit Entity', meta.auditEntity],
+      ['auditPeriod', 'Audit Period', meta.auditPeriod], ['financialYear', 'Financial Year', meta.financialYear],
+      ['section', 'Section', meta.section], ['reviewType', 'Review Type', meta.reviewType],
+      ['auditLocation', 'Audit Location', meta.auditLocation], ['region', 'Region', meta.region],
+      ['location', 'Location', meta.location], ['auditFunction', 'Function', meta.auditFunction],
+      ['auditSpoc', 'Audit SPOC', meta.auditSpoc], ['preparedBy', 'Prepared By', meta.preparedBy],
+      ['reviewedBy', 'Reviewed By', meta.reviewedBy], ['generatedOn', 'Generated On', meta.generatedOn],
+    ] as [string, string, string | undefined][])
+      .filter(([key, , v]) => !!v?.trim() && templateCarries(hdrFields, key))
+      .map(([, k, v]) => `${k}: ${v}`)
+      .join('\n');
+
     return [
-      {
+      ...(stats.length > 0 ? [{
         id: 'atr-exec',
-        kind: 'summary',
+        kind: 'summary' as const,
         title: 'Executive Summary',
         content: `${ex.totalObservations} observation${ex.totalObservations === 1 ? '' : 's'} carrying ${totalExceptions} exception${totalExceptions === 1 ? '' : 's'} across ${ex.totalActionPlans} action plan${ex.totalActionPlans === 1 ? '' : 's'}${ex.progressPct != null ? `, ${ex.progressPct}% remediated` : ''}.`,
         stats,
-      },
+      }] : []),
       // The report details block, printed exactly as the reader sees it.
-      {
+      ...(detailLines ? [{
         id: 'atr-details',
-        kind: 'note',
+        kind: 'note' as const,
         title: 'Report Details',
-        content: ([
-          ['Report Name', meta.reportName], ['Report Number', meta.reportNumber],
-          ['Audit Title', meta.auditTitle], ['Audit Entity', meta.auditEntity],
-          ['Audit Period', meta.auditPeriod], ['Financial Year', meta.financialYear],
-          ['Section', meta.section], ['Review Type', meta.reviewType],
-          ['Audit Location', meta.auditLocation], ['Region', meta.region], ['Location', meta.location],
-          ['Function', meta.auditFunction], ['Audit SPOC', meta.auditSpoc],
-          ['Prepared By', meta.preparedBy], ['Reviewed By', meta.reviewedBy],
-          ['Generated On', meta.generatedOn],
-        ] as [string, string | undefined][])
-          .filter(([, v]) => !!v?.trim())
-          .map(([k, v]) => `${k}: ${v}`)
-          .join('\n'),
-      },
+        content: detailLines,
+      }] : []),
       // Every field the observation carries on screen goes into the export —
-      // a PDF that quietly drops the risk summary is not the same report.
+      // a PDF that quietly drops the risk summary is not the same report — but
+      // a field the format does not carry is not on screen either, so it is not
+      // in the export.
       ...observations.map((o, i): DownloadPreviewSection => {
+        const has = (key: string) => templateCarries(bodyFieldKeys, key);
         const line = (label: string, v?: string | number) =>
           (v == null || String(v).trim() === '' ? null : `${label}: ${v}`);
+        const keyed = (key: string, label: string, v?: string | number) => (has(key) ? line(label, v) : null);
         const head = [
-          line('Process', o.process), line('Severity', o.risk), line('Classification', o.classification),
-          line('Status', o.status), line('Exceptions', o.exceptions),
+          line('Process', o.process), keyed('risk', 'Severity', o.risk),
+          keyed('classification', 'Classification', o.classification),
+          keyed('observationStatus', 'Status', o.status), line('Exceptions', o.exceptions),
         ].filter(Boolean).join(' · ');
-        const plans = o.actionPlans.map((p, k) => {
-          const meta2 = [p.status, p.dueDate && `due ${p.dueDate}`].filter(Boolean).join(' · ');
-          return [
-            `Action Plan ${k + 1}${p.title ? ` — ${p.title}` : ''}${meta2 ? ` (${meta2})` : ''}`,
-            p.text, line('Action Taken', p.actionTaken), line('Evidence', p.evidence),
-            line('Verification', p.verification),
-          ].filter(Boolean).join('\n');
-        });
+        const anyPlanField = ['actionPlanTitle', 'actionTakenStatus', 'recommendation', 'actionTaken', 'verification', 'dueDate'].some(has);
+        const plans = anyPlanField
+          ? o.actionPlans.map((p, k) => {
+            const meta2 = [has('actionTakenStatus') && p.status, has('dueDate') && p.dueDate && `due ${p.dueDate}`].filter(Boolean).join(' · ');
+            return [
+              `Action Plan ${k + 1}${has('actionPlanTitle') && p.title ? ` — ${p.title}` : ''}${meta2 ? ` (${meta2})` : ''}`,
+              has('recommendation') ? p.text : null,
+              keyed('actionTaken', 'Action Taken', p.actionTaken),
+              line('Evidence', p.evidence),
+              keyed('verification', 'Verification', p.verification),
+            ].filter(Boolean).join('\n');
+          })
+          : [];
         return {
           id: `atr-obs-${i}`,
           kind: 'observation',
           obsId: `OBS-${String(i + 1).padStart(2, '0')}`,
           title: o.title,
           description: [
-            head, o.description, line('Query Summary', o.querySummary),
-            line('Root Cause', o.rootCause), line('Solution Type', o.solutionType),
-            line('Risk Implications', o.riskImplications),
-            o.riskImplicationsDetails, ...plans,
+            head,
+            has('description') ? o.description : null,
+            line('Query Summary', o.querySummary),
+            keyed('rootCause', 'Root Cause', o.rootCause),
+            keyed('solutionType', 'Solution Type', o.solutionType),
+            keyed('riskImplications', 'Risk Implications', o.riskImplications),
+            has('riskImplicationsDetails') ? o.riskImplicationsDetails : null,
+            ...plans,
           ].filter(Boolean).join('\n\n').trim() || o.title,
         };
       }),
@@ -422,15 +456,29 @@ export default function AtrReportView({ report, onBack, onShare, onSave, onEditO
 
   // ── Download ── PDF and Excel are one click each from the toolbar menu; the
   // modal stays for Word / PowerPoint / web and its preview.
-  const exportCtx = () => ({
-    reportName: report.name,
-    reportTag: report.tag,
-    reportId: meta.reportId?.toUpperCase(),
-    generatedBy: report.generatedBy ?? meta.preparedBy ?? '—',
-    generatedAt: report.generatedAt ?? meta.generatedOn ?? '',
-    sections: buildDownloadSections(),
-    pageNumbers: true,
-  });
+  // The exported file is this report, so it leaves in this report's own
+  // letterhead: the format's gradient and accent, its mark, its sign-off and
+  // closing pages. Without these a branded report exported in default purple.
+  const exportCtx = () => {
+    const t = appliedTemplate as EditableTemplate | null;
+    const brand = t?.brandColor ?? meta.brandColor;
+    return {
+      reportName: report.name,
+      reportTag: report.tag,
+      reportId: meta.reportId?.toUpperCase(),
+      templateName: t?.name,
+      generatedBy: report.generatedBy ?? meta.preparedBy ?? '—',
+      generatedAt: report.generatedAt ?? meta.generatedOn ?? '',
+      sections: buildDownloadSections(),
+      pageNumbers: t?.pageNumbers ?? true,
+      gradient: reportGradient(t?.theme, brand),
+      accent: reportAccent(t?.theme, brand),
+      brandColor: brand,
+      logoDataUrl: t?.logoDataUrl ?? meta.logoDataUrl,
+      signatories: t?.signoffEnabled ? t?.signatories : undefined,
+      closingText: t?.closingEnabled ? t?.closingText : undefined,
+    };
+  };
   const downloadPdf = () => {
     if (downloading) return;
     setDownloading(true);
@@ -443,7 +491,7 @@ export default function AtrReportView({ report, onBack, onShare, onSave, onEditO
       .finally(() => setDownloading(false));
   };
   const downloadExcel = () => {
-    exportAtrExcel(meta, observations);
+    exportAtrExcel(meta, observations, { header: hdrFields, body: bodyFieldKeys, kpi: kpiFieldKeys });
     addToast({ type: 'success', message: `${report.name}.xlsx downloaded.` });
     setDownloadMenuOpen(false);
   };
@@ -725,6 +773,12 @@ export default function AtrReportView({ report, onBack, onShare, onSave, onEditO
                 </div>
               );
             }}
+            headerFields={templateHeaderFields(appliedTemplate as EditableTemplate | null)}
+            bodyFields={templateBodyFields(appliedTemplate as EditableTemplate | null)}
+            headerText={(appliedTemplate as EditableTemplate | null)?.headerText}
+            footerText={(appliedTemplate as EditableTemplate | null)?.footerText}
+            kpiFields={templateKpiFields(appliedTemplate as EditableTemplate | null)}
+            summaryColumns={templateSummaryColumns(appliedTemplate as EditableTemplate | null)}
             gradient={reportGradient(
               (appliedTemplate as EditableTemplate | null)?.theme,
               (appliedTemplate as EditableTemplate | null)?.brandColor,

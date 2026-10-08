@@ -20,7 +20,7 @@ import UploadReportModal from './UploadReportModal';
 import ConfirmDialog from './ConfirmDialog';
 import AtrReportView from './AtrReportView';
 import AtrUploadTab from './atr-upload/AtrUploadTab';
-import NewReportModal, { type NewReportDraft } from './NewReportModal';
+import NewReportModal, { type NewReportDraft, type TemplateOption } from './NewReportModal';
 import type { ReportMeta } from './atr-upload/types';
 import AdminTab from './atr-upload/screens/AdminTab';
 import { AdminSettingsProvider } from './atr-upload/adminStore';
@@ -46,7 +46,7 @@ import { findEngagement, ENGAGEMENTS } from '../../data/engagements';
 import {
   ICON_MAP, CATEGORY_COLORS, BLANK_TEMPLATE, mergeTemplateOptions,
   reportKind, startReportDownload, oneDefaultOnly, REPORT_COL_W as COL_W,
-  renderedQueryCount, renderedSectionCount,
+  renderedQueryCount, renderedSectionCount, templateLineage, isStandardTemplate,
   type EditableTemplate, type GeneratedReport, templateCategoryLabel } from './reportShared';
 import SmartTable from '../shared/SmartTable';
 import { useToast } from '../shared/Toast';
@@ -253,12 +253,15 @@ function ReportsViewInner({
   // generated and its card is saved.
   const [newReportOpen, setNewReportOpen] = useState(false);
   const [atrInitialMeta, setAtrInitialMeta] = useState<Partial<ReportMeta> | undefined>(undefined);
+  // The format the wizard is writing in, so its review step asks only for the
+  // fields that format carries and the generated ATR comes out in its branding.
+  const [atrTemplateId, setAtrTemplateId] = useState<string | undefined>(undefined);
   // The draft behind an open wizard, so Back reopens New Report where it was.
   const [lastDraft, setLastDraft] = useState<NewReportDraft | null>(null);
   // "Edit observations" on a generated ATR opens the wizard straight on that
   // extracted report's observations.
   const [atrOpenSessionId, setAtrOpenSessionId] = useState<string | null>(null);
-  const newReportExtrasRef = useRef<{ audience: NewReportDraft['audience'] } | null>(null);
+  const newReportExtrasRef = useRef<{ audience: NewReportDraft['audience']; templateId?: string; description?: string } | null>(null);
   // When the wizard minimizes during extraction, present it as a small floating
   // toast so the rest of the app stays usable; otherwise it fills the screen.
   const [atrMinimized, setAtrMinimized] = useState(false);
@@ -341,6 +344,17 @@ function ReportsViewInner({
     } catch { /* quota/private mode — customs stay session-only */ }
   }, [customTemplatesLocal]);
   const customTemplates = customTemplatesProp ?? customTemplatesLocal;
+  // Every format on the Templates tab, standard first. The New Report picker
+  // and the upload wizard both read this one list, so a format offered on the
+  // picker is always a format the wizard can resolve.
+  const allTemplates = useMemo<EditableTemplate[]>(
+    () => [...(REPORT_TEMPLATES as unknown as EditableTemplate[]), ...customTemplates as unknown as EditableTemplate[]],
+    [customTemplates],
+  );
+  const templateOptions = useMemo<TemplateOption[]>(
+    () => allTemplates.map(t => ({ id: t.id, name: t.name, desc: t.desc, baseId: t.baseId, custom: !isStandardTemplate(t.id) })),
+    [allTemplates],
+  );
   const addCustomTemplate = (t: EditableTemplate) => {
     if (onAddCustomTemplate) onAddCustomTemplate(t);
     else setCustomTemplatesLocal(prev => [t, ...prev]);
@@ -350,6 +364,9 @@ function ReportsViewInner({
     else setCustomTemplatesLocal(prev => prev.filter(t => t.id !== id));
   };
   const updateCustomTemplate = (t: EditableTemplate) => {
+    // A copy is handed to the editor without being stored, so the first save of
+    // one is a create. Anything already on the list overwrites in place.
+    if (!customTemplates.some(x => x.id === t.id)) { addCustomTemplateUnique(t, true); return; }
     if (onUpdateCustomTemplate) onUpdateCustomTemplate(t as typeof REPORT_TEMPLATES[number]);
     else setCustomTemplatesLocal(prev => prev.map(x => x.id === t.id ? t : x));
   };
@@ -844,7 +861,10 @@ function ReportsViewInner({
       const base = data.meta.reportName?.trim() || data.meta.auditTitle?.trim() || 'Action Taken Report';
       card = {
         id,
-        templateId: 'rt-007',
+        // The format this report was created in, so it prints the fields that
+        // format carries in its own branding. Falls back to the standard ATR
+        // for a report started before formats were linked.
+        templateId: newReportExtrasRef.current?.templateId ?? 'rt-007',
         kind: 'atr' as const,
         name: uniqueReportName(base),
         tag: 'Internal Audit' as const,
@@ -859,6 +879,7 @@ function ReportsViewInner({
         sourceReport: base,
         // Visibility from the New Report modal that started this.
         shareAudience: newReportExtrasRef.current?.audience,
+        desc: newReportExtrasRef.current?.description || undefined,
       } as unknown as GeneratedReport;
       newReportExtrasRef.current = null;
       const saved = card;
@@ -901,15 +922,18 @@ function ReportsViewInner({
   // saved to My Reports and opened.
   const createFromDraft = useCallback((draft: NewReportDraft) => {
     setNewReportOpen(false);
-    if (draft.templateId === 'rt-007') {
+    // Which journey a format runs is its lineage, not its id — a duplicate of
+    // the ATR is still an ATR however it was renamed.
+    const template = allTemplates.find(t => t.id === draft.templateId);
+    if (templateLineage(template) === 'atr') {
       setLastDraft(draft);
-      newReportExtrasRef.current = { audience: draft.audience };
+      newReportExtrasRef.current = { audience: draft.audience, templateId: draft.templateId, description: draft.description };
       setAtrInitialMeta(draft.meta);
+      setAtrTemplateId(draft.templateId);
       setAtrMinimized(false);
       setAtrUploadOpen(true);
       return;
     }
-    const template = REPORT_TEMPLATES.find(t => t.id === draft.templateId);
     const now = new Date();
     const stamp = `${now.toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' })}, ${now.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' })}`;
     const sections = template?.sections ?? [];
@@ -934,6 +958,7 @@ function ReportsViewInner({
       generatedQueries: [],
       templateSections: sections,
       shareAudience: draft.audience,
+      desc: draft.description || undefined,
       reportPeriod: draft.meta.auditPeriod || undefined,
       coverDetails: Object.keys(coverDetails).length ? coverDetails : undefined,
     } as unknown as GeneratedReport;
@@ -948,7 +973,7 @@ function ReportsViewInner({
     setActiveTab('my-reports');
     setReportType('all');
     openReport(newReport);
-  }, [addToast, notify, openReport]);
+  }, [addToast, notify, openReport, allTemplates]);
 
   // Offline banner — listens to online/offline events.
   const [isOffline, setIsOffline] = useState(() =>
@@ -1176,7 +1201,6 @@ function ReportsViewInner({
       <TemplatePreview
         template={previewTemplate as EditableTemplate}
         isCustom={isCustom}
-        onBack={() => setPreviewTemplate(null)}
         onEdit={() => { setPreviewTemplate(null); setEditingTemplate(previewTemplate); }}
         onDuplicate={() => {
           // A copy carries the whole shape and branding, gets its own id, and
@@ -1185,18 +1209,21 @@ function ReportsViewInner({
             ...(previewTemplate as EditableTemplate),
             id: `ct-${Date.now()}`,
             name: `${previewTemplate.name} (copy)`,
+            // Remember the standard it came from. That is what decides which
+            // journey New Report runs and which badge the format wears, so
+            // renaming the copy can never change what it is. A copy of a copy
+            // keeps pointing at the original standard.
+            baseId: (previewTemplate as EditableTemplate).baseId ?? previewTemplate.id,
             // A copy starts unscoped: inheriting "the format all internal audit
             // reports use" would silently switch every report to the duplicate.
             isDefault: false,
             engagementId: undefined,
           };
           setPreviewTemplate(null);
-          // Edit the object that was actually stored. addCustomTemplateUnique
-          // renames on a collision, so opening `copy` showed a name the saved
-          // template did not have and saved a second clashing one.
-          const saved = addCustomTemplateUnique(copy, true);
-          setEditingTemplate(saved);
-          addToast({ type: 'success', message: `Copied “${previewTemplate.name}” as “${saved.name}”. Editing the copy now.` });
+          // The copy is not stored yet — it exists only in the editor until
+          // Save changes is pressed, so backing out leaves no stray template.
+          setEditingTemplate(copy as typeof REPORT_TEMPLATES[number]);
+          addToast({ type: 'info', message: `Editing a copy of “${previewTemplate.name}”. It is saved when you press Save changes.` });
         }}
         onDelete={() => {
           // The confirm dialog lives on the list page, so return there first.
@@ -1957,6 +1984,8 @@ function ReportsViewInner({
                   onMinimizedChange={setAtrMinimized}
                   onGenerated={saveUploadedAtr}
                   initialMeta={atrInitialMeta}
+                  templateId={atrTemplateId}
+                  templates={allTemplates}
                   initialSessionId={atrOpenSessionId ?? undefined}
                 />
               </div>
@@ -1972,6 +2001,7 @@ function ReportsViewInner({
         onClose={() => setNewReportOpen(false)}
         onCreate={createFromDraft}
         nameTaken={reportNameTaken}
+        templates={templateOptions}
         initialDraft={lastDraft}
       />
 
@@ -1984,6 +2014,9 @@ function ReportsViewInner({
             // template's seeded state.
             key={editingTemplate.id}
             template={editingTemplate}
+            // Computed rather than tracked: a duplicate is handed over without
+            // being stored, and this is the only reliable way to know that.
+            unsaved={!customTemplates.some(t => t.id === editingTemplate.id)}
             // New templates open with an empty name field so the author must name
             // it — a shared "Untitled Template" default collided for everyone.
             // One that arrives with sections came from a report we read, so it
