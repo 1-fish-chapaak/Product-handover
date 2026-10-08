@@ -3,32 +3,12 @@ import { AlertCircle } from 'lucide-react';
 import DatePicker from '../../../shared/DatePicker';
 import { useCurrentUser } from '../../../../context/CurrentUserContext';
 import { useAdminSettings } from '../adminStore';
-import { financialYearOf, isReportNumberTaken } from '../reportClassification';
+import { financialYearOf, isReportNumberTaken, splitPeriod, joinPeriod } from '../reportClassification';
 import { BUILTIN_REPORT_FIELDS, type BuiltinReportField, type CustomReportField } from '../reportFields';
 import type { ReportMeta } from '../types';
 
 const INPUT_CLS = 'w-full h-9 px-3 bg-canvas-elevated border border-canvas-border rounded-md text-[0.8125rem] text-ink-800 placeholder:text-ink-400 outline-none focus:border-brand-400 focus:ring-2 focus:ring-brand-500/10 transition-all';
 
-// ISO "yyyy-mm-dd" → "DD Mon YYYY".
-const fmtDate = (iso: string) => {
-  if (!iso) return '';
-  const d = new Date(iso + 'T00:00:00');
-  return Number.isNaN(d.getTime()) ? iso : d.toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' });
-};
-// "DD Mon YYYY" → ISO "yyyy-mm-dd" (the reverse, for re-opening a saved draft).
-const MONTHS = ['jan', 'feb', 'mar', 'apr', 'may', 'jun', 'jul', 'aug', 'sep', 'oct', 'nov', 'dec'];
-const toIso = (label: string) => {
-  // en-GB prints "Sept", which Date() will not parse — match on the prefix.
-  const m = label.trim().match(/^(\d{1,2})\s+([A-Za-z]+)\s+(\d{4})$/);
-  const month = m ? MONTHS.indexOf(m[2].slice(0, 3).toLowerCase()) : -1;
-  if (!m || month < 0) return '';
-  return `${m[3]}-${String(month + 1).padStart(2, '0')}-${m[1].padStart(2, '0')}`;
-};
-// The stored "start – end" period back into its two ISO dates.
-const splitPeriod = (period?: string): [string, string] => {
-  const [a, b] = (period ?? '').split(/\s+[–-]\s+/);
-  return [a ? toIso(a) : '', b ? toIso(b) : ''];
-};
 
 function Field({ label, required, hint, children, className = '' }: { label: string; required?: boolean; hint?: string; children: ReactNode; className?: string }) {
   return (
@@ -153,7 +133,7 @@ export default function ReportDetailsForm({ onChange, intro, suggestedReportName
         auditFunction: values.auditFunction, auditSpoc, financialYear,
         auditTitle: values.auditTitle.trim(),
         auditEntity: values.auditEntity.trim(),
-        auditPeriod: periodStart && periodEnd ? `${fmtDate(periodStart)} – ${fmtDate(periodEnd)}` : '',
+        auditPeriod: joinPeriod(periodStart, periodEnd),
         preparedBy: values.preparedBy.trim(),
         generatedOn,
         custom: Object.keys(trimmedCustom).length ? trimmedCustom : undefined,

@@ -247,6 +247,18 @@ export const TEMPLATE_THEME_ACCENT: Record<string, string> = {
 const DEFAULT_BRAND = '#6a12cd';
 /** Accept #rgb / #rrggbb (with or without #); returns null for anything else so
  *  callers can fall back rather than render a broken colour. */
+/** Blend two hex colours — `t` of 0 returns `from`, 1 returns `to`. Used to
+ *  paint a gradient in surfaces that can only draw flat fills, such as the PDF
+ *  cover band, so an exported report carries the same letterhead as the screen. */
+export function lerpHexColor(from: string, to: string, t: number): string {
+  const a = parseHexColor(from);
+  const b = parseHexColor(to);
+  if (!a || !b) return from;
+  const at = Math.min(1, Math.max(0, t));
+  const ch = (x: number, y: number) => Math.round(x + (y - x) * at);
+  return `#${[ch(a.r, b.r), ch(a.g, b.g), ch(a.b, b.b)].map(v => v.toString(16).padStart(2, '0')).join('')}`;
+}
+
 function parseHexColor(hex?: string): { r: number; g: number; b: number } | null {
   if (!hex) return null;
   let h = hex.trim().replace(/^#/, '');
@@ -743,6 +755,17 @@ export type TemplateSection = {
  *  Standard templates omit these; custom templates persist them. */
 export type EditableTemplate = Omit<typeof REPORT_TEMPLATES[number], 'sections'> & {
   sections: TemplateSection[];
+  /** The standard fields this template carries, ticked in step 1 of the editor.
+   *  Header fields print on the cover; body fields print under each
+   *  observation. Absent means the template predates the step and carries the
+   *  defaults. */
+  headerFields?: string[];
+  /** Executive Summary — which rollup tiles the report opens with. */
+  kpiFields?: string[];
+  /** Observation Wise Summary — which columns its table carries. */
+  summaryColumns?: string[];
+  /** Observation Details — what each observation carries. */
+  bodyFields?: string[];
   brand?: string;
   theme?: string;
   /** Custom brand colour (hex). When set, drives the report cover gradient +
@@ -796,7 +819,24 @@ export type EditableTemplate = Omit<typeof REPORT_TEMPLATES[number], 'sections'>
    *  the list. Nothing is hidden by it and any single report can still be
    *  switched from its own Apply Template picker. */
   isDefault?: boolean;
+  /** The standard format this one was duplicated from — `rt-007` for the
+   *  Action Taken Report, `rt-internal-audit` for the Internal Audit Report.
+   *  Lineage decides which journey the New Report modal runs and which badge
+   *  the template wears, so a rename can never change what a format *is*.
+   *  Absent on formats built from scratch or predating the field; those fall
+   *  back to the name/description match in `templateLineage`. */
+  baseId?: string;
 };
+
+/** Which standard format a template descends from. The explicit `baseId`
+ *  written at duplication wins; otherwise fall back to reading the name and
+ *  description, which is all a pre-`baseId` copy carries. */
+export function templateLineage(t?: { id?: string; baseId?: string; name?: string; desc?: string } | null): 'atr' | 'ia' {
+  const id = t?.baseId ?? t?.id;
+  if (id && TEMPLATE_KIND[id]) return TEMPLATE_KIND[id] === 'atr' ? 'atr' : 'ia';
+  if (/\batr\b|action taken report/i.test(`${t?.name ?? ''} ${t?.desc ?? ''}`)) return 'atr';
+  return 'ia';
+}
 
 export type QueryShape = { id: string; risk: string; severity: string; title: string; addedBy: string; kpis: { label: string; value: string; color: string }[]; summary: string; findings: string[]; observations: string[]; answer: string; chartData: number[] };
 

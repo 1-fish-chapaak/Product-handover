@@ -4,6 +4,7 @@ import type {
   AtrObservation,
   AtrReportData,
   AtrActionStatus,
+  AtrActionPlan,
   AtrObservationStatus,
   AtrClassification,
   AtrRisk,
@@ -186,26 +187,56 @@ export function downloadWordTemplate() {
 }
 
 // ─── Export the generated ATR back out (real Excel / Word) ───
-function obsRows(meta: AtrMeta, observations: AtrObservation[]) {
+
+/** The fields the report format carries, as the workbook needs them. Each list
+ *  is `null` when the format has no opinion, which means "export everything" —
+ *  the same contract `templateCarries` reads. */
+export interface AtrExportFields {
+  header?: string[] | null;
+  body?: string[] | null;
+  kpi?: string[] | null;
+}
+
+/** A column or row is exported when the format carries its field.
+ *
+ *  Columns with no `key` are structural — the observation's identity, the
+ *  process it sits in, the evidence and annexures attached to it. Those are not
+ *  template fields at all, so there is nothing to tick for them and nothing to
+ *  read them from anywhere else; they always export. */
+const carries = (list: string[] | null | undefined, key?: string): boolean =>
+  !key || list == null || list.includes(key);
+
+/** The Action Plans sheet, one row per plan. The column order is the order the
+ *  report prints the fields in, and each column names the template field it
+ *  comes from so the sheet can never carry a column the report does not. */
+const PLAN_COLUMNS: { header: string; key?: string; value: (o: AtrObservation, p: AtrActionPlan, first: boolean) => string }[] = [
+  { header: 'Observation Title', key: 'title', value: o => o.title },
+  { header: 'Observation Description', key: 'description', value: (o, _p, first) => (first ? o.description ?? '' : '') },
+  { header: 'Observation Status', key: 'observationStatus', value: (o, _p, first) => (first ? o.status ?? '' : '') },
+  { header: 'Risk Significance', key: 'risk', value: (o, _p, first) => (first ? o.risk ?? '' : '') },
+  { header: 'Classification', key: 'classification', value: o => o.classification ?? '' },
+  { header: 'Action Plan Title', key: 'actionPlanTitle', value: (_o, p) => p.title ?? '' },
+  { header: 'Action Taken Status', key: 'actionTakenStatus', value: (_o, p) => p.status ?? '' },
+  { header: 'Recommendation / Action Plan', key: 'recommendation', value: (_o, p) => p.text ?? '' },
+  { header: 'Action Taken', key: 'actionTaken', value: (_o, p) => p.actionTaken ?? '' },
+  { header: 'Evidence', value: (_o, p) => p.evidence ?? '' },
+  { header: 'Due Date / Timeline', key: 'dueDate', value: (_o, p) => p.dueDate ?? '' },
+  { header: 'Management Comments / Auditor Verification', key: 'verification', value: (_o, p) => p.verification ?? '' },
+];
+
+function obsRows(observations: AtrObservation[], fields?: AtrExportFields) {
+  const cols = PLAN_COLUMNS.filter(c => carries(fields?.body, c.key));
   const rows: Record<string, string>[] = [];
+  if (cols.length === 0) return { rows, cols };
   observations.forEach(o => {
-    const plans = o.actionPlans.length ? o.actionPlans : [{ text: '' } as AtrObservation['actionPlans'][number]];
+    const plans = o.actionPlans.length ? o.actionPlans : [{ text: '' } as AtrActionPlan];
     plans.forEach((p, i) => {
-      rows.push({
-        'Observation Title': o.title,
-        'Observation Description': i === 0 ? (o.description ?? '') : '',
-        'Recommendation / Action Plan': p.text ?? '',
-        'Action Taken': p.actionTaken ?? '',
-        'Evidence': p.evidence ?? '',
-        'Management Comments / Auditor Verification': p.verification ?? '',
-        'Classification Status': o.classification ?? '',
-        'Risk Significance': i === 0 ? (o.risk ?? '') : '',
-        'Due Date / Timeline': p.dueDate ?? '',
-        'Status': p.status ?? '',
-      });
+      const row: Record<string, string> = {};
+      cols.forEach(c => { row[c.header] = c.value(o, p, i === 0); });
+      rows.push(row);
     });
   });
-  return { rows, meta };
+  return { rows, cols };
 }
 
 // ─── The ATR as a workbook ───
@@ -240,59 +271,86 @@ function plansCell(o: AtrObservation): string {
   }).join('\n');
 }
 
-/** The detail rows of the Observations sheet, in the order the report prints them. */
-const OBSERVATION_DETAIL_ROWS: { label: string; value: (o: AtrObservation, i: number) => string }[] = [
+/** The cover sheet's facts, each naming the header field it comes from, so the
+ *  workbook's cover carries exactly what the report's cover carries. */
+const COVER_FACTS: { label: string; key?: string; value: (m: AtrMeta) => unknown }[] = [
+  { label: 'Report Name', key: 'reportName', value: m => m.reportName },
+  { label: 'Report Number', key: 'reportNumber', value: m => m.reportNumber },
+  { label: 'Audit Title', key: 'auditTitle', value: m => m.auditTitle },
+  { label: 'Audit Entity', key: 'auditEntity', value: m => m.auditEntity },
+  { label: 'Audit Period', key: 'auditPeriod', value: m => m.auditPeriod },
+  { label: 'Financial Year', key: 'financialYear', value: m => m.financialYear },
+  { label: 'Section', key: 'section', value: m => m.section },
+  { label: 'Review Type', key: 'reviewType', value: m => m.reviewType },
+  { label: 'Audit Location', key: 'auditLocation', value: m => m.auditLocation },
+  { label: 'Region', key: 'region', value: m => m.region },
+  { label: 'Location', key: 'location', value: m => m.location },
+  { label: 'Function', key: 'auditFunction', value: m => m.auditFunction },
+  { label: 'Audit SPOC', key: 'auditSpoc', value: m => m.auditSpoc },
+  { label: 'Prepared By', key: 'preparedBy', value: m => m.preparedBy },
+  { label: 'Reviewed By', key: 'reviewedBy', value: m => m.reviewedBy },
+  { label: 'Generated On', key: 'generatedOn', value: m => m.generatedOn },
+];
+
+/** The Executive Summary tiles, named by the KPI the template ticks. */
+const COVER_KPIS: { label: string; key?: string; value: (ex: AtrExecSummary, m: AtrMeta) => string | number }[] = [
+  { label: 'Observations', key: 'observations', value: ex => ex.totalObservations },
+  { label: 'Exceptions', value: (ex, m) => m.totalExceptions ?? ex.totalExceptions },
+  { label: 'Action Plans', key: 'actionPlans', value: ex => ex.totalActionPlans },
+  { label: 'Open', key: 'obsOpen', value: ex => ex.obsStatus.Open + ex.obsStatus.Overdue },
+  { label: 'Partially Closed', key: 'obsPartial', value: ex => ex.obsStatus['In Progress'] },
+  { label: 'Closed', key: 'obsClosed', value: ex => ex.obsStatus.Closed },
+  { label: 'Action Plans Overdue', key: 'plansOverdue', value: ex => ex.actionStatus.Overdue },
+];
+
+/** The detail rows of the Observations sheet, in the order the report prints
+ *  them, each naming the body field it comes from. Rows with no key are the
+ *  observation's own identity and attachments — not template fields, so they
+ *  always export. */
+const OBSERVATION_DETAIL_ROWS: { label: string; key?: string; value: (o: AtrObservation, i: number) => string }[] = [
   { label: 'Observation ID', value: (_o, i) => `OBS-${String(i + 1).padStart(2, '0')}` },
   { label: 'Process / Area', value: o => xlTxt(o.process) },
-  { label: 'Risk Significance', value: o => xlTxt(o.risk) },
-  { label: 'Classification', value: o => xlTxt(o.classification) },
-  { label: 'Status', value: o => xlTxt(o.status) },
+  { label: 'Observation Description', key: 'description', value: o => xlTxt(o.description) },
+  { label: 'Observation Status', key: 'observationStatus', value: o => xlTxt(o.status) },
+  { label: 'Risk Significance', key: 'risk', value: o => xlTxt(o.risk) },
+  { label: 'Classification', key: 'classification', value: o => xlTxt(o.classification) },
   { label: 'Exceptions', value: o => (o.exceptions == null ? XL_DASH : String(o.exceptions)) },
-  { label: 'Observation Description', value: o => xlTxt(o.description) },
   { label: 'Query Summary', value: o => xlTxt(o.querySummary) },
-  { label: 'Root Cause', value: o => xlTxt(o.rootCause) },
-  { label: 'Solution Type', value: o => xlTxt(o.solutionType) },
-  { label: 'Risk Implications', value: o => xlTxt(o.riskImplications) },
-  { label: 'Risk Implication Details', value: o => xlTxt(o.riskImplicationsDetails) },
+  { label: 'Root Cause', key: 'rootCause', value: o => xlTxt(o.rootCause) },
+  { label: 'Solution Type', key: 'solutionType', value: o => xlTxt(o.solutionType) },
+  { label: 'Risk Implications', key: 'riskImplications', value: o => xlTxt(o.riskImplications) },
+  { label: 'Risk Implication Details', key: 'riskImplicationsDetails', value: o => xlTxt(o.riskImplicationsDetails) },
   { label: 'Action Plans', value: o => String(o.actionPlans.length) },
   { label: 'Action Plan Detail', value: o => plansCell(o) },
   { label: 'Linked Annexures', value: o => (o.linkedAnnexures?.length ? o.linkedAnnexures.map(a => a.name).join('\n') : XL_DASH) },
 ];
 
-export function exportAtrExcel(meta: AtrMeta, observations: AtrObservation[]) {
+/**
+ * The ATR as a workbook.
+ *
+ * `fields` is the report format's own field selection. The workbook exports
+ * exactly the fields the report prints — a format built by ticking boxes in the
+ * template editor produces a spreadsheet with those columns and no others, so
+ * the export and the report on screen can never disagree about what this report
+ * carries. Omitted (or null lists) exports everything, which is what a report
+ * with no format behind it should do.
+ */
+export function exportAtrExcel(meta: AtrMeta, observations: AtrObservation[], fields?: AtrExportFields) {
   const wb = XLSX.utils.book_new();
   const ex = computeExecSummary(observations);
   const name = meta.reportName?.trim() || meta.auditTitle?.trim() || meta.reportId || 'Action Taken Report';
 
   // ── Sheet 1: Report — the cover, as printed on screen ──
+  const facts = COVER_FACTS.filter(f => carries(fields?.header, f.key));
+  const kpis = COVER_KPIS.filter(k => carries(fields?.kpi, k.key));
   const coverRows: (string | number)[][] = [
     ['Action Taken Report', ''],
     [],
-    ['Report Name', xlTxt(meta.reportName ?? name)],
-    ['Report Number', xlTxt(meta.reportNumber)],
-    ['Audit Title', xlTxt(meta.auditTitle)],
-    ['Audit Entity', xlTxt(meta.auditEntity)],
-    ['Audit Period', xlTxt(meta.auditPeriod)],
-    ['Financial Year', xlTxt(meta.financialYear)],
-    ['Section', xlTxt(meta.section)],
-    ['Review Type', xlTxt(meta.reviewType)],
-    ['Audit Location', xlTxt(meta.auditLocation)],
-    ['Region', xlTxt(meta.region)],
-    ['Location', xlTxt(meta.location)],
-    ['Function', xlTxt(meta.auditFunction)],
-    ['Audit SPOC', xlTxt(meta.auditSpoc)],
-    ['Prepared By', xlTxt(meta.preparedBy)],
-    ['Reviewed By', xlTxt(meta.reviewedBy)],
-    ['Generated On', xlTxt(meta.generatedOn)],
-    [],
-    ['— Summary —', ''],
-    ['Observations', ex.totalObservations],
-    ['Exceptions', meta.totalExceptions ?? ex.totalExceptions],
-    ['Action Plans', ex.totalActionPlans],
-    ['Open', ex.obsStatus.Open + ex.obsStatus.Overdue],
-    ['Partially Closed', ex.obsStatus['In Progress']],
-    ['Closed', ex.obsStatus.Closed],
-    ...(ex.progressPct != null ? [['Remediated', `${ex.progressPct}%`]] : []),
+    ...facts.map(f => [f.label, xlTxt(f.value(meta))]),
+    ...(kpis.length
+      ? [[], ['— Summary —', ''], ...kpis.map(k => [k.label, k.value(ex, meta)])]
+      : []),
+    ...(kpis.length && ex.progressPct != null ? [['Remediated', `${ex.progressPct}%`]] : []),
   ];
   const cover = XLSX.utils.aoa_to_sheet(coverRows);
   cover['!cols'] = [{ wch: 24 }, { wch: 64 }];
@@ -300,20 +358,19 @@ export function exportAtrExcel(meta: AtrMeta, observations: AtrObservation[]) {
   XLSX.utils.book_append_sheet(wb, cover, 'Report');
 
   // ── Sheet 2: Observations — one column per observation ──
+  const detailRows = OBSERVATION_DETAIL_ROWS.filter(r => carries(fields?.body, r.key));
   const header = ['Detail', ...observations.map((o, i) => o.title?.trim() || `Observation ${i + 1}`)];
-  const detail = OBSERVATION_DETAIL_ROWS.map(r => [r.label, ...observations.map((o, i) => r.value(o, i))]);
+  const detail = detailRows.map(r => [r.label, ...observations.map((o, i) => r.value(o, i))]);
   const obsSheetRows: (string | number)[][] = observations.length ? [header, ...detail] : [['Detail'], ['No observations on this report']];
   const obsSheet = XLSX.utils.aoa_to_sheet(obsSheetRows);
   obsSheet['!cols'] = xlFit(obsSheetRows);
-  // The header row and the Detail column are what everything is read against.
-  obsSheet['!freeze'] = { xSplit: 1, ySplit: 1 };
   XLSX.utils.book_append_sheet(wb, obsSheet, 'Observations');
 
   // ── Sheet 3: Action Plans — the row-per-plan detail ──
-  const { rows } = obsRows(meta, observations);
+  const { rows, cols } = obsRows(observations, fields);
   if (rows.length) {
-    const planSheet = XLSX.utils.json_to_sheet(rows);
-    planSheet['!cols'] = Object.keys(rows[0]).map(() => ({ wch: 30 }));
+    const planSheet = XLSX.utils.json_to_sheet(rows, { header: cols.map(c => c.header) });
+    planSheet['!cols'] = cols.map(() => ({ wch: 30 }));
     XLSX.utils.book_append_sheet(wb, planSheet, 'Action Plans');
   }
 

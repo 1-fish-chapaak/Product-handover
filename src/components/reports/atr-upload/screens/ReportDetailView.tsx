@@ -18,6 +18,7 @@ import EditableReportHeader from '../components/EditableReportHeader';
 import { setFieldValue, recomputeCompleteness, hasUnresolved, OBSERVATION_FIELDS } from '../observationFields';
 import { toAtrReportData } from '../toAtrReportData';
 import type { ExtractedObservation, ExtractedFieldKey, ExtractedAnnexure, ReportMeta } from '../types';
+import { templateHeaderFields, templateBodyFields, type TemplateFieldSource } from '../../templateFields';
 
 type Filter = 'all' | 'issues';
 
@@ -25,7 +26,7 @@ type Filter = 'all' | 'issues';
  *  editable cover-details header, its observations (select + fix fields), and
  *  each observation's annexures linked inline. Replaces the old separate
  *  extraction-summary and annexures steps. */
-export default function ReportDetailView({ onBack, onGenerate, onViewAtr, onRegenerate, onSaveDraft }: {
+export default function ReportDetailView({ onBack, onGenerate, onViewAtr, onRegenerate, onSaveDraft, template }: {
   /** Back to a list of extracted reports — absent in the single-report journey. */
   onBack?: () => void;
   /** Save the report into Reports as a draft ATR without issuing it. */
@@ -36,6 +37,11 @@ export default function ReportDetailView({ onBack, onGenerate, onViewAtr, onRege
   onViewAtr: () => void;
   /** Regenerate the saved ATR from the observations as edited here. */
   onRegenerate: () => void;
+  /** The report format this report is written in. A format built by ticking
+   *  fields carries exactly those, so the details header and each observation
+   *  ask only for what the finished report will print. Null means the format
+   *  has no opinion and everything is asked for, as before. */
+  template?: TemplateFieldSource | null;
 }) {
   const { state, updateSession } = useAtrUpload();
   const { addToast } = useToast();
@@ -48,6 +54,11 @@ export default function ReportDetailView({ onBack, onGenerate, onViewAtr, onRege
 
   if (!session) return null;
   const { observations, annexures } = session;
+
+  // What the chosen format prints. Null = the format has no opinion, so every
+  // field is asked for exactly as it was before formats were linked.
+  const headerFields = templateHeaderFields(template);
+  const bodyFields = templateBodyFields(template);
 
   // Report + field/observation labels used in the transaction log.
   const reportLabel = session.meta.reportName?.trim() || session.meta.auditTitle?.trim() || session.file?.filename || 'Report';
@@ -194,7 +205,7 @@ export default function ReportDetailView({ onBack, onGenerate, onViewAtr, onRege
         )}
 
         {/* Editable report details header */}
-        <EditableReportHeader meta={session.meta} onChange={patchMeta} />
+        <EditableReportHeader meta={session.meta} onChange={patchMeta} fields={headerFields} />
 
         {/* Observations */}
         {observations.length === 0 ? (
@@ -234,6 +245,7 @@ export default function ReportDetailView({ onBack, onGenerate, onViewAtr, onRege
               <div className="space-y-2.5">
                 {visible.map(o => (
                   <ObservationExtractCard
+                    fields={bodyFields}
                     key={o.id}
                     obs={o}
                     linkedAnnexures={annexFor(o.id).length}
