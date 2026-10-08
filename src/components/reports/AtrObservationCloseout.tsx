@@ -10,7 +10,7 @@ import type { AtrEvent, AtrTimeline } from './atrTimeline';
 import { fmtEventTime, ROLE_TONE } from './atrTimeline';
 import {
   closeoutState, newCloseoutEvent, planApproved, planRejected, planActed, planSettled,
-  resolveMatrixId, PHASE_TEXT, type CloseoutRole,
+  resolveMatrixId, PHASE_TEXT, planPhase, PLAN_PHASE_LABEL, type CloseoutRole, type PlanPhase,
 } from './atrCloseout';
 import { useEscalationMatrices, escalationMatrices, policyFor, chainLine, approvalChain } from '../../data/escalationMatrixStore';
 import { matrixForSeverity, summarizeMatrix } from './atr-upload/escalationMatrix';
@@ -164,6 +164,8 @@ export default function AtrObservationCloseout({ open, index, obs, me, timeline,
   const [planDecision, setPlanDecision] = useState<Record<number, PlanOutcome | undefined>>({});
   const [decision, setDecision] = useState<Record<number, ActionOutcome | undefined>>({});
   const [revise, setRevise] = useState<Record<number, { title: string; text: string; due: string } | undefined>>({});
+  // A further action plan the risk owner is writing, after classification.
+  const [adding, setAdding] = useState<{ title: string; text: string; due: string } | null>(null);
   // Assignment now settles two things at once: who owns it, and under which
   // approval & escalation matrix. Both are drafted here and committed together.
   const [matrixPick, setMatrixPick] = useState('');
@@ -416,6 +418,20 @@ export default function AtrObservationCloseout({ open, index, obs, me, timeline,
     setView('auditor');
   };
 
+  /** A further plan on an observation already classified. It joins the others
+   *  at the start of its own journey — pending approval — without touching
+   *  theirs. No index on the patch means it is appended rather than replacing
+   *  one. The view is left where it is: the risk owner may be adding several,
+   *  and the auditor's side picks it up through the "needs you" dot. */
+  const addPlan = () => {
+    if (!adding?.title.trim() || !adding.text.trim() || !adding.due.trim()) return;
+    fire('plan-submitted', 'Risk Owner',
+      `Submitted a further action plan on ${obsRef} · ${adding.title.trim()}`,
+      { plan: { set: { title: adding.title.trim(), text: adding.text.trim(), dueDate: adding.due.trim(), status: 'Pending', planReview: 'Pending', closeout: true } } },
+      adding.text.trim());
+    setAdding(null);
+  };
+
   const addPlanRow = () => setNewPlans(p => [...p, { title: '', text: '', due: '' }]);
   /** Copy an existing plan in as a new row. A due date that has already passed
    *  is dropped rather than carried over — the picker offers the wording, the
@@ -435,12 +451,20 @@ export default function AtrObservationCloseout({ open, index, obs, me, timeline,
   const setPlanRow = (i: number, patch: Partial<{ title: string; text: string; due: string }>) =>
     setNewPlans(p => p.map((row, k) => (k === i ? { ...row, ...patch } : row)));
 
-  const planState = (p: AtrActionPlan) =>
-    planSettled(p) ? { text: p.status!, tone: TONE_DONE }
-      : p.planReview === 'Rejected' ? { text: 'Plan rejected', tone: 'bg-risk-50 text-risk-700' }
-      : !planApproved(p) ? { text: 'Awaiting plan approval', tone: TONE_WAIT }
-      : !planActed(p) ? { text: 'In progress', tone: TONE_WAIT }
-      : { text: 'Awaiting review', tone: TONE_WAIT };
+  // The plan's own stage, worded and toned from the one place that decides it,
+  // so the pill can never disagree with what the panel lets you do to it.
+  const PLAN_TONE: Record<PlanPhase, string> = {
+    'plan-review': TONE_WAIT,
+    replan: 'bg-risk-50 text-risk-700',
+    'in-progress': TONE_WAIT,
+    'action-review': TONE_WAIT,
+    closed: TONE_DONE,
+  };
+  const planState = (p: AtrActionPlan) => {
+    const ph = planPhase(p);
+    // A finished plan says how it finished (Implemented), not just "Closed".
+    return { text: ph === 'closed' ? (p.status ?? PLAN_PHASE_LABEL.closed) : PLAN_PHASE_LABEL[ph], tone: PLAN_TONE[ph] };
+  };
 
   // ── The two sides ──
   const auditorView = (
@@ -816,7 +840,7 @@ export default function AtrObservationCloseout({ open, index, obs, me, timeline,
 
       <Card key="o-taken" title="Action plans" state={plans.length === 0 ? { text: 'No plans', tone: TONE_IDLE } : plans.some(planRejected) ? { text: `${plans.filter(planRejected).length} sent back`, tone: 'bg-risk-50 text-risk-700' } : plans.every(planActed) ? { text: 'Recorded', tone: TONE_DONE } : { text: `${plans.filter(planActed).length} of ${plans.length}`, tone: TONE_WAIT }}
         defaultOpen={phase === 'in-progress' || phase === 'replan'}
-        note="Revise anything the auditor sent back and resubmit it. Once a plan is approved, record what you actually did and the evidence that proves it.">
+        note="Each plan runs on its own: revise anything sent back and resubmit it, and record what you did on the ones already approved. Raise another plan whenever the work turns out to need one.">
         {plans.length === 0
           ? <p className="text-[0.75rem] text-ink-500">Nothing yet — classify this as a true exception and add an action plan first.</p>
           : plans.map((p, i) => {
@@ -870,6 +894,42 @@ export default function AtrObservationCloseout({ open, index, obs, me, timeline,
               </div>
             );
           })}
+          {/* More plans, raised as the work turns out to need them. One
+              observation often needs several fixes, and they rarely all become
+              obvious at classification time — so a plan can be raised whenever,
+              and makes its own way from here: approval, action, review. The
+              others carry on where they are. */}
+          {co.verdict === 'True Exception' && !closed && (
+            <div className="mt-3 pt-3 border-t border-canvas-border">
+              {adding ? (
+                <div className="rounded-md border border-brand-200 bg-brand-50/40 px-3 py-2.5 space-y-2">
+                  <div className="flex items-center justify-between gap-2">
+                    <span className="text-[0.6875rem] font-semibold uppercase tracking-wide text-brand-700">New action plan</span>
+                    <button type="button" onClick={() => setAdding(null)} aria-label="Discard this action plan"
+                      className="w-6 h-6 rounded-md text-ink-400 hover:text-risk-700 hover:bg-risk-50 flex items-center justify-center cursor-pointer"><X size={12} /></button>
+                  </div>
+                  <input value={adding.title} onChange={e => setAdding({ ...adding, title: e.target.value })}
+                    placeholder="Title * — e.g. Reverse duplicate invoice postings" aria-label="New action plan title" className={FIELD} />
+                  <textarea rows={2} value={adding.text} onChange={e => setAdding({ ...adding, text: e.target.value })}
+                    placeholder="What must be done, and what evidence closes it? *" className={AREA} />
+                  <div className="grid grid-cols-2 gap-2">
+                    <div className="h-9 px-2.5 rounded-md border border-canvas-border bg-canvas flex items-center text-[0.75rem] text-ink-500">Owner · <span className="font-semibold text-ink-800 ml-1">{co.owner}</span></div>
+                    <DatePicker value={adding.due} min={isoToday()} onChange={e => setAdding({ ...adding, due: e.target.value })}
+                      placeholder="Due date *" aria-label="New action plan due date" className={`${FIELD} cursor-pointer`} />
+                  </div>
+                  <button type="button" onClick={addPlan}
+                    disabled={!adding.title.trim() || !adding.text.trim() || !adding.due.trim()} className={BTN_PRIMARY}>
+                    <Check size={13} aria-hidden="true" /> Submit for approval
+                  </button>
+                </div>
+              ) : (
+                <button type="button" onClick={() => setAdding({ title: '', text: '', due: '' })}
+                  className="inline-flex items-center gap-1.5 h-8 px-3 rounded-md border border-canvas-border text-[0.75rem] font-semibold text-ink-700 hover:border-brand-300 hover:text-brand-700 cursor-pointer transition-colors">
+                  <Plus size={13} aria-hidden="true" /> Add action plan
+                </button>
+              )}
+            </div>
+          )}
       </Card>
     </>
   );

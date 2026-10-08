@@ -1,9 +1,10 @@
 import { useState, type ReactNode } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
-import { ChevronDown, Pencil, Check, X, ClipboardList, Paperclip, UserCheck, RotateCcw } from 'lucide-react';
+import { ChevronDown, Pencil, Check, X, Paperclip, UserCheck, RotateCcw } from 'lucide-react';
 import Checkbox from '../../../shared/Checkbox';
 import MissingFieldResolver from './MissingFieldResolver';
 import { OBSERVATION_FIELDS, getFieldValue, type FieldDef } from '../observationFields';
+import { templateCarries } from '../../templateFields';
 import { useAdminSettings } from '../adminStore';
 import type { ExtractedObservation, ExtractedFieldKey } from '../types';
 
@@ -25,7 +26,7 @@ const RISK_DOT: Record<string, string> = { High: 'bg-risk-500', Medium: 'bg-miti
 const COMPLETENESS_DOT: Record<string, string> = { Complete: 'bg-compliant-500', Partial: 'bg-mitigated-500', Incomplete: 'bg-risk-500' };
 
 export default function ObservationExtractCard({
-  obs, linkedAnnexures, linkedRows, onToggleSelect, onEditField, onResolve, annexureSlot,
+  obs, linkedAnnexures, linkedRows, onToggleSelect, onEditField, onResolve, annexureSlot, fields,
 }: {
   obs: ExtractedObservation;
   linkedAnnexures: number;
@@ -36,6 +37,10 @@ export default function ObservationExtractCard({
   /** Optional inline annexure-linking strip, rendered under the header row so
    *  each annexure is managed on the observation it belongs to. */
   annexureSlot?: ReactNode;
+  /** The observation fields the chosen report format prints, or null when it
+   *  has no opinion. Asking the auditor to fill a field the finished report
+   *  will not carry is work for nothing, so the rest are left off. */
+  fields?: string[] | null;
 }) {
   // Default-open observations that still need attention so the demo path is obvious.
   const [open, setOpen] = useState(obs.missingFields.some(f => f.state === 'missing'));
@@ -49,19 +54,33 @@ export default function ObservationExtractCard({
     return k ? lov(k) : field.options;
   };
 
+  // Only the fields the report will actually print are worth reviewing. The
+  // catalogue keeps its own order either way, so the card reads the same.
+  const shownFields = OBSERVATION_FIELDS.filter(f => templateCarries(fields ?? null, f.key as string));
+
   const missingMap = new Map(obs.missingFields.map(f => [f.key, f]));
   const title = obs.title?.trim() || 'Untitled observation';
 
   // One quiet meta line: process · risk · classification · completeness.
+  // Risk and classification are report fields, so a format that does not carry
+  // them does not get them here either — and with neither shown there is no
+  // completeness to report on, because completeness only ever described the
+  // fields being reviewed.
   const metaParts: React.ReactNode[] = [];
   if (obs.process) metaParts.push(<span className="text-ink-600">{obs.process}</span>);
-  metaParts.push(obs.risk
-    ? <span className="inline-flex items-center gap-1.5"><span className={`w-1.5 h-1.5 rounded-full ${RISK_DOT[obs.risk] ?? 'bg-ink-300'}`} aria-hidden="true" />{obs.risk} risk</span>
-    : <span className="text-ink-400">Risk not detected</span>);
-  metaParts.push(obs.classification
-    ? <span className="text-ink-600">{obs.classification}</span>
-    : <span className="text-ink-400">Class not detected</span>);
-  metaParts.push(<span className="inline-flex items-center gap-1.5"><span className={`w-1.5 h-1.5 rounded-full ${COMPLETENESS_DOT[obs.completeness] ?? 'bg-ink-300'}`} aria-hidden="true" />{obs.completeness}</span>);
+  if (templateCarries(fields ?? null, 'risk')) {
+    metaParts.push(obs.risk
+      ? <span className="inline-flex items-center gap-1.5"><span className={`w-1.5 h-1.5 rounded-full ${RISK_DOT[obs.risk] ?? 'bg-ink-300'}`} aria-hidden="true" />{obs.risk} risk</span>
+      : <span className="text-ink-400">Risk not detected</span>);
+  }
+  if (templateCarries(fields ?? null, 'classification')) {
+    metaParts.push(obs.classification
+      ? <span className="text-ink-600">{obs.classification}</span>
+      : <span className="text-ink-400">Class not detected</span>);
+  }
+  if (shownFields.length > 0) {
+    metaParts.push(<span className="inline-flex items-center gap-1.5"><span className={`w-1.5 h-1.5 rounded-full ${COMPLETENESS_DOT[obs.completeness] ?? 'bg-ink-300'}`} aria-hidden="true" />{obs.completeness}</span>);
+  }
 
   const startEdit = (key: ExtractedFieldKey) => { setDraft(getFieldValue(obs, key)); setEditing(key); };
   const commit = (field: FieldDef) => {
@@ -95,7 +114,6 @@ export default function ObservationExtractCard({
         </button>
 
         <div className="flex items-center gap-3.5 shrink-0 pt-1">
-          <span className="inline-flex items-center gap-1 text-[0.71875rem] tabular-nums text-ink-400" title={`${obs.actionPlans.length} action plan${obs.actionPlans.length === 1 ? '' : 's'}`}><ClipboardList size={13} aria-hidden="true" />{obs.actionPlans.length}</span>
           <span className="inline-flex items-center gap-1 text-[0.71875rem] tabular-nums text-ink-400" title={`${linkedRows} linked annexure row${linkedRows === 1 ? '' : 's'}${linkedAnnexures > 1 ? ` across ${linkedAnnexures} files` : ''}`}><Paperclip size={13} aria-hidden="true" />{linkedRows}{linkedAnnexures > 1 ? ` · ${linkedAnnexures}` : ''}</span>
           <button onClick={() => setOpen(o => !o)} aria-label={open ? 'Collapse' : 'Expand'} className="text-ink-300 hover:text-ink-700 cursor-pointer">
             <motion.span animate={{ rotate: open ? 180 : 0 }} transition={{ duration: 0.2 }} className="inline-block"><ChevronDown size={16} aria-hidden="true" /></motion.span>
@@ -112,7 +130,7 @@ export default function ObservationExtractCard({
         {open && (
           <motion.div initial={{ height: 0, opacity: 0 }} animate={{ height: 'auto', opacity: 1 }} exit={{ height: 0, opacity: 0 }} transition={{ duration: 0.22 }} className="overflow-hidden border-t border-canvas-border">
             <div className="px-5 py-4 grid sm:grid-cols-2 lg:grid-cols-3 gap-x-8 gap-y-4 bg-[#FCFBFD]">
-              {OBSERVATION_FIELDS.map(field => {
+              {shownFields.map(field => {
                 const mf = missingMap.get(field.key);
                 const isEditing = editing === field.key;
                 const value = getFieldValue(obs, field.key);
