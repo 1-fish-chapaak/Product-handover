@@ -6,6 +6,7 @@ import { decide } from './service';
 import { eventById } from './catalogue';
 import { DEFAULT_PREFERENCES, type AppNotification, type EmailMessage, type NotificationPreferences, type NotifyInput } from './types';
 import { seedNotifications } from './seeds';
+import { WORKSPACES } from '../data/workspaces';
 
 // ─── Persistence ───
 // One store for everything the centre shows, so a delivery from another tab
@@ -18,9 +19,13 @@ interface Store {
   prefs: NotificationPreferences;
 }
 
-function load(): Store {
+/** Each workspace has its own inbox; Platform keeps the original key. */
+const keyFor = (ws: string) => (ws === 'platform' ? STORE_KEY : `${STORE_KEY}.${ws}`);
+const isFresh = (ws: string) => !!WORKSPACES.find(w => w.id === ws)?.fresh;
+
+function load(ws: string): Store {
   try {
-    const raw = localStorage.getItem(STORE_KEY);
+    const raw = localStorage.getItem(keyFor(ws));
     if (raw) {
       const parsed = JSON.parse(raw) as Partial<Store>;
       // Action Hub / Approval chains were folded into Exceptions Management.
@@ -32,12 +37,14 @@ function load(): Store {
       };
     }
   } catch { /* fall through to a fresh store */ }
+  // A new client's inbox starts empty — nothing has happened there yet.
+  if (isFresh(ws)) return { notifications: [], emails: [], prefs: DEFAULT_PREFERENCES };
   // First run: a realistic sample of the catalogue, so the centre reads as a
   // live system rather than an empty shell.
   const seeded = seedNotifications();
   return { notifications: seeded.notifications, emails: seeded.emails, prefs: DEFAULT_PREFERENCES };
 }
-function save(s: Store) { try { localStorage.setItem(STORE_KEY, JSON.stringify(s)); } catch { /* quota */ } }
+function save(s: Store, ws: string) { try { localStorage.setItem(keyFor(ws), JSON.stringify(s)); } catch { /* quota */ } }
 
 // ─── Context ───
 
@@ -88,10 +95,19 @@ export function useNotify(): (input: NotifyInput) => string | null {
 }
 
 export function NotificationProvider({ children }: { children: ReactNode }) {
-  const [store, setStore] = useState<Store>(load);
+  const { currentUser, activeWorkspaceId } = useCurrentUser();
+  // The inbox and the workspace it belongs to are one piece of state, so an
+  // inbox can never be saved under another workspace's key. Switching
+  // workspace swaps it (adjusted during render).
+  const [slot, setSlot] = useState(() => ({ ws: activeWorkspaceId, store: load(activeWorkspaceId) }));
+  if (slot.ws !== activeWorkspaceId) setSlot({ ws: activeWorkspaceId, store: load(activeWorkspaceId) });
+  const store = slot.store;
+  const setStore = useCallback((u: Store | ((s: Store) => Store)) => {
+    setSlot(cur => ({ ...cur, store: typeof u === 'function' ? u(cur.store) : u }));
+  }, []);
   const storeRef = useRef(store);
-  useEffect(() => { storeRef.current = store; save(store); }, [store]);
-  const { currentUser } = useCurrentUser();
+  const wsRef = useRef(slot.ws);
+  useEffect(() => { storeRef.current = slot.store; wsRef.current = slot.ws; save(slot.store, slot.ws); }, [slot]);
   const { addToast } = useToast();
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [drawerTab, setDrawerTab] = useState<NotificationTab>('all');
@@ -101,12 +117,12 @@ export function NotificationProvider({ children }: { children: ReactNode }) {
   // Other tabs write the same store — take their version.
   useEffect(() => {
     const onStorage = (e: StorageEvent) => {
-      if (e.key !== STORE_KEY || !e.newValue) return;
+      if (e.key !== keyFor(wsRef.current) || !e.newValue) return;
       try { setStore(JSON.parse(e.newValue) as Store); } catch { /* half-written */ }
     };
     window.addEventListener('storage', onStorage);
     return () => window.removeEventListener('storage', onStorage);
-  }, []);
+  }, [setStore]);
 
   // Release tick, once a minute: a notification whose quiet-hours hold has
   // passed becomes a normal delivery, and any queued email whose send time has
@@ -130,7 +146,7 @@ export function NotificationProvider({ children }: { children: ReactNode }) {
     tick();
     const id = window.setInterval(tick, 60_000);
     return () => window.clearInterval(id);
-  }, []);
+  }, [setStore]);
 
   const notify = useCallback((input: NotifyInput): string | null => {
     const def = eventById(input.eventId);
@@ -160,21 +176,21 @@ export function NotificationProvider({ children }: { children: ReactNode }) {
       addToast({ type: def.requiresAction ? 'warning' : 'info', title: next.title, message: next.message });
     }
     return next.id;
-  }, [currentUser, addToast]);
+  }, [currentUser, addToast, setStore]);
 
-  const markRead = useCallback((id: string) => setStore(s => ({ ...s, notifications: s.notifications.map(n => (n.id === id ? { ...n, read: true } : n)) })), []);
-  const markAllRead = useCallback(() => setStore(s => ({ ...s, notifications: s.notifications.map(n => (n.read || n.scheduledFor ? n : { ...n, read: true })) })), []);
+  const markRead = useCallback((id: string) => setStore(s => ({ ...s, notifications: s.notifications.map(n => (n.id === id ? { ...n, read: true } : n)) })), [setStore]);
+  const markAllRead = useCallback(() => setStore(s => ({ ...s, notifications: s.notifications.map(n => (n.read || n.scheduledFor ? n : { ...n, read: true })) })), [setStore]);
   const setActionState = useCallback((id: string, state: NotificationActionState | undefined) =>
-    setStore(s => ({ ...s, notifications: s.notifications.map(n => (n.id === id ? { ...n, actionState: state, read: true } : n)) })), []);
+    setStore(s => ({ ...s, notifications: s.notifications.map(n => (n.id === id ? { ...n, actionState: state, read: true } : n)) })), [setStore]);
   const restore = useCallback((snapshot: PlatformNotification) =>
-    setStore(s => ({ ...s, notifications: s.notifications.map(n => (n.id === snapshot.id ? { ...n, ...snapshot } : n)) })), []);
+    setStore(s => ({ ...s, notifications: s.notifications.map(n => (n.id === snapshot.id ? { ...n, ...snapshot } : n)) })), [setStore]);
   const releaseNow = useCallback((id: string) => setStore(s => ({
     ...s,
     notifications: s.notifications.map(n => (n.id === id ? { ...n, scheduledFor: undefined, createdAt: new Date().toISOString() } : n)),
     emails: s.emails.map(e => (e.notificationId === id ? { ...e, status: 'sent', sentAt: new Date().toISOString(), scheduledFor: undefined } : e)),
-  })), []);
-  const setPrefs = useCallback((updater: (p: NotificationPreferences) => NotificationPreferences) => setStore(s => ({ ...s, prefs: updater(s.prefs) })), []);
-  const resetPrefs = useCallback(() => setStore(s => ({ ...s, prefs: DEFAULT_PREFERENCES })), []);
+  })), [setStore]);
+  const setPrefs = useCallback((updater: (p: NotificationPreferences) => NotificationPreferences) => setStore(s => ({ ...s, prefs: updater(s.prefs) })), [setStore]);
+  const resetPrefs = useCallback(() => setStore(s => ({ ...s, prefs: DEFAULT_PREFERENCES })), [setStore]);
   const openDrawer = useCallback((tab?: NotificationTab) => { if (tab) setDrawerTab(tab); setDrawerOpen(true); }, []);
   const closeDrawer = useCallback(() => setDrawerOpen(false), []);
 

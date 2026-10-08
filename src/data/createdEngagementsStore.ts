@@ -11,6 +11,7 @@
 // ─────────────────────────────────────────────────────────────────────────────
 import { useSyncExternalStore } from 'react';
 import { registerEngagement, type Engagement } from './engagements';
+import { currentWorkspaceId, onWorkspaceChange } from './auditPlan/workspace';
 
 const STORAGE_KEY = 'irame.createdEngagements';
 
@@ -51,18 +52,26 @@ function subscribe(fn: () => void): () => void {
   return () => listeners.delete(fn);
 }
 
+/** This workspace's created engagements — cached so the snapshot stays the
+ *  same array until the list or the workspace changes. */
+let view: { src: Engagement[] | null; ws: string; out: Engagement[] } = { src: null, ws: '', out: [] };
 function getSnapshot(): Engagement[] {
-  return cache;
+  const ws = currentWorkspaceId();
+  if (view.src !== cache || view.ws !== ws) view = { src: cache, ws, out: cache.filter(e => (e.workspaceId ?? 'platform') === ws) };
+  return view.out;
 }
+onWorkspaceChange(emit);
 
-/** All created engagements (newest first). Non-reactive read. */
+/** This workspace's created engagements (newest first). Non-reactive read. */
 export function getCreatedEngagements(): Engagement[] {
-  return cache;
+  return getSnapshot();
 }
 
 /** Persist a batch of newly-created engagements and notify subscribers. */
-export function addCreatedEngagements(engs: Engagement[]): void {
-  if (engs.length === 0) return;
+export function addCreatedEngagements(incoming: Engagement[]): void {
+  if (incoming.length === 0) return;
+  // Stamp the workspace so each client's list holds only its own.
+  const engs = incoming.map(e => (e.workspaceId ? e : { ...e, workspaceId: currentWorkspaceId() }));
   engs.forEach(registerEngagement);
   cache = [...engs, ...cache.filter(e => !engs.some(n => n.id === e.id))];
   persist();

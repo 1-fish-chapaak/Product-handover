@@ -4,7 +4,7 @@ import type { MockAuditData } from './stream/mockStream';
 import { motion, AnimatePresence, useReducedMotion } from 'motion/react';
 import { renderAssistantText } from '../shared/AssistantMarkdown';
 import {
-  Send, Paperclip, Sparkles, History, X, FileText, FileSpreadsheet, PanelRightOpen, PanelRightClose,
+  Send, Paperclip, Sparkles, History, X, FileText, Database, FileSpreadsheet, PanelRightOpen, PanelRightClose,
   PanelLeftClose, PanelLeftOpen,
   Workflow, BarChart3, PieChart, LineChart, ChevronDown, ChevronLeft, ChevronRight,
   MessageSquare, ArrowRight, Plus, Lightbulb,
@@ -45,8 +45,9 @@ import type { SplitPlanData, NudgeData } from './splitPlan';
 import { readTabMessages, writeTabMessages } from './chatTabsStorage';
 import {
   commitPlan, createBatch, decomposePrompt, findSession, getPlanWorkflows, itemsFromPlanRows, planFromPrompt, reviseSession,
-  type AuditPlan, type PlanWorkflowRow,
+  useFreshWorkspace, type AuditPlan, type PlanWorkflowRow,
 } from '../../data/auditPlan';
+import { connectedDatabaseCount } from '../../hooks/useKnowledgeSources';
 import { TextShimmer } from '../shared/TextShimmer';
 import { AuditifyHelloEffect } from '../shared/HelloEffect';
 import FloatingLines from '../shared/FloatingLines';
@@ -5916,6 +5917,9 @@ export default function ChatView({ showChatHistory, toggleChatHistory, setShowAr
     const t = setTimeout(() => setSmartQueriesGenerating(false), 4200);
     return () => clearTimeout(t);
   }, [files, attachedSources]);
+  // A new client with nothing connected or attached has no data to profile.
+  const freshWorkspace = useFreshWorkspace();
+  const noData = freshWorkspace && connectedDatabaseCount() === 0 && files.length === 0 && attachedSources.length === 0;
   const smartQueriesData = describeAnalyzedData(
     files.map(f => f.name),
     attachedSources.map(s => s.name),
@@ -6266,7 +6270,11 @@ export default function ChatView({ showChatHistory, toggleChatHistory, setShowAr
                   <p className="text-[0.8125rem] font-semibold text-white">Audit with AI</p>
                   <span className="px-1.5 h-[16px] inline-flex items-center rounded-full bg-fuchsia-400/25 text-fuchsia-100 text-[8.5px] font-bold uppercase tracking-[0.1em]">New</span>
                 </div>
-                <p className="text-[0.6875rem] text-white/65 truncate">Your databases are connected — let Ira plan engagements, controls and a check for each, for your review.</p>
+                <p className="text-[0.6875rem] text-white/65 truncate">
+                  {noData
+                    ? 'Tell Ira what you audit and share your reports — it plans engagements, controls and a check for each, for your review.'
+                    : 'Your databases are connected — let Ira plan engagements, controls and a check for each, for your review.'}
+                </p>
               </div>
             </div>
             <button
@@ -6617,10 +6625,27 @@ export default function ChatView({ showChatHistory, toggleChatHistory, setShowAr
                   animate={{ opacity: 1, y: 0 }}
                   transition={prefersReducedMotion ? { duration: 0 } : { duration: 0.4, delay: 0.15, ease: [0.2, 0, 0, 1] }}
                 >
-                  <SmartQueriesBanner
-                    generating={smartQueriesGenerating}
-                    onOpen={openSmartQueries}
-                  />
+                  {noData ? (
+                    <div className="flex items-center gap-3 rounded-2xl border border-dashed border-canvas-border bg-canvas-elevated px-4 py-3 text-left">
+                      <span className="size-9 rounded-lg bg-paper-100 text-ink-500 flex items-center justify-center shrink-0"><Database size={16} aria-hidden /></span>
+                      <div className="min-w-0 flex-1">
+                        <p className="text-[0.8125rem] font-medium text-ink-900">Smart queries start with your data</p>
+                        <p className="text-[0.75rem] text-ink-500">Attach a file above, or connect your ERP — Ira profiles it and suggests the questions worth asking.</p>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => setView?.('knowledge-hub')}
+                        className="shrink-0 h-8 px-3 rounded-lg border border-canvas-border text-[0.75rem] font-medium text-ink-700 hover:border-brand-200 hover:bg-brand-50 cursor-pointer"
+                      >
+                        Connect data
+                      </button>
+                    </div>
+                  ) : (
+                    <SmartQueriesBanner
+                      generating={smartQueriesGenerating}
+                      onOpen={openSmartQueries}
+                    />
+                  )}
                 </motion.div>
               )}
               </div>

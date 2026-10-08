@@ -2,8 +2,8 @@ import { useRef, useState } from 'react';
 import { motion } from 'motion/react';
 import ConfirmationModal from '../shared/ConfirmationModal';
 import {
-  Calendar, Trash2,
-  ClipboardList, ListChecks, CircleDot, CheckCircle2, Clock,
+  Calendar, Trash2, ChevronDown,
+  ClipboardList, ListChecks, CircleDot, CheckCircle2, Clock, AlertTriangle,
 } from 'lucide-react';
 import type {
   AtrMeta, AtrObservation, AtrActionPlan, AtrInsight,
@@ -31,6 +31,7 @@ const CLASSIFICATION_PILL: Record<AtrClassification, string> = {
   'Design Deficiency': 'bg-high-50 text-high-700',
   'System Deficiency': 'bg-risk-50 text-risk-700',
   'Procedural Non-Compliance': 'bg-brand-50 text-brand-700',
+  Other: 'bg-paper-100 text-ink-600',
 };
 // Observation severity (risk significance) pill.
 const SEVERITY_PILL: Record<AtrRisk, string> = {
@@ -194,19 +195,17 @@ export default function AtrDocument({
   const [pendingDelete, setPendingDelete] = useState<{ title: string; description: string; run: () => void } | null>(null);
   const confirmDelete = (title: string, description: string, run: () => void) => setPendingDelete({ title, description, run });
 
-  // Executive Summary — five KPIs (observation breakdown + action plans).
-  // Overdue observations fold into Open; "Partially Closed" = In Progress.
-  const openCount = ex.obsStatus.Open + ex.obsStatus.Overdue;
+  // Executive Summary — the observation breakdown first (the four statuses add
+  // up to the Observations count, so an overdue observation reads as Open),
+  // then the action-plan total and the ones past their due date.
   const kpis: { label: string; value: number; tone: Tone; icon: React.ElementType }[] = [
     { label: 'Observations', value: ex.totalObservations, tone: 'brand', icon: ClipboardList },
-    { label: 'Observations Open', value: openCount, tone: 'high', icon: CircleDot },
+    { label: 'Observations Open', value: ex.obsStatus.Open + ex.obsStatus.Overdue, tone: 'high', icon: CircleDot },
     { label: 'Observations Partially Closed', value: ex.obsStatus['In Progress'], tone: 'mitigated', icon: Clock },
     { label: 'Observations Closed', value: ex.obsStatus.Closed, tone: 'compliant', icon: CheckCircle2 },
     { label: 'Action Plans', value: ex.totalActionPlans, tone: 'brand', icon: ListChecks },
+    { label: 'Action Plans Overdue', value: ex.actionStatus.Overdue, tone: 'risk', icon: AlertTriangle },
   ];
-
-  const displayStatus = (s?: AtrObservationStatus): 'Open' | 'Partially Closed' | 'Closed' =>
-    s === 'Closed' ? 'Closed' : s === 'In Progress' ? 'Partially Closed' : 'Open';
 
   // ── Section bodies (keyed so order/visibility props drive them) ──
   const bodies: Record<AtrSectionKey, (n: number) => React.ReactNode> = {
@@ -224,57 +223,7 @@ export default function AtrDocument({
     process: n => (
       <>
         <ReportNumberedHeading n={n} title="Observation Wise Summary" subtitle="Severity, action plans and status — per observation" />
-        <div className="overflow-hidden rounded-lg border border-canvas-border">
-          <table className="w-full text-[0.75rem]">
-            <thead>
-              <tr className="bg-brand-50/60 text-ink-700 text-left">
-                <th className="px-4 py-2.5 font-semibold">Observation &amp; Action Plans</th>
-                <th className="px-3 py-2.5 font-semibold text-center w-[110px]">Severity</th>
-                <th className="px-3 py-2.5 font-semibold text-center w-[120px]">Status</th>
-              </tr>
-            </thead>
-            <tbody>
-              {observations.map((o, i) => {
-                const st = displayStatus(o.status);
-                const stCls = st === 'Closed' ? 'bg-compliant-50 text-compliant-700' : st === 'Partially Closed' ? 'bg-mitigated-50 text-mitigated-700' : 'bg-high-50 text-high-700';
-                return (
-                  <motion.tr
-                    key={i}
-                    initial={{ opacity: 0, y: 4 }}
-                    animate={{ opacity: 1, y: 0 }}
-                    transition={{ duration: 0.28, delay: Math.min(i, 12) * 0.03, ease: [0.22, 1, 0.36, 1] }}
-                    className="border-t border-canvas-border align-top"
-                  >
-                    <td className="px-4 py-3">
-                      <div className="font-semibold text-ink-900 leading-snug">{o.title}</div>
-                      {o.process && <div className="text-[0.6875rem] text-ink-500">{o.process}</div>}
-                      {o.actionPlans.length > 0 && (
-                        <ul className="mt-2 space-y-1.5">
-                          {o.actionPlans.map((p, j) => {
-                            const ap = p.status ? ACTION_STATUS[p.status] : null;
-                            return (
-                              <li key={j} className="flex items-center gap-2 flex-wrap">
-                                <span className={`w-1.5 h-1.5 rounded-full shrink-0 ${ap?.dot ?? 'bg-ink-300'}`} aria-hidden="true" />
-                                <span className="text-[0.6875rem] text-ink-700">{p.title || p.text || `Action plan ${j + 1}`}</span>
-                                {p.status && <span className={`inline-flex items-center h-5 px-2 rounded-full text-[0.625rem] font-semibold ${ap?.pill ?? ''}`}>{p.status}</span>}
-                              </li>
-                            );
-                          })}
-                        </ul>
-                      )}
-                    </td>
-                    <td className="px-3 py-3 text-center">
-                      {o.risk && <span className={`inline-flex items-center h-6 px-2.5 rounded-full text-[0.6875rem] font-semibold ${SEVERITY_PILL[o.risk]}`}>{o.risk}</span>}
-                    </td>
-                    <td className="px-3 py-3 text-center">
-                      <span className={`inline-flex items-center h-6 px-2.5 rounded-full text-[0.6875rem] font-semibold ${stCls}`}>{st}</span>
-                    </td>
-                  </motion.tr>
-                );
-              })}
-            </tbody>
-          </table>
-        </div>
+        <ObservationSummaryTable observations={observations} />
       </>
     ),
     details: n => (
@@ -373,20 +322,130 @@ export default function AtrDocument({
   );
 }
 
+/** An observation's action plans bucketed for the summary table. A plan is
+ *  closed only when Implemented; Partially Implemented is still open work. */
+function planCounts(o: AtrObservation) {
+  let closed = 0, overdue = 0;
+  o.actionPlans.forEach(p => {
+    if (p.status === 'Overdue') overdue += 1;
+    else if (p.status === 'Implemented') closed += 1;
+  });
+  return { total: o.actionPlans.length, open: o.actionPlans.length - closed - overdue, closed, overdue };
+}
+
+function displayStatus(s?: AtrObservationStatus): 'Open' | 'Partially Closed' | 'Closed' {
+  return s === 'Closed' ? 'Closed' : s === 'In Progress' ? 'Partially Closed' : 'Open';
+}
+
+/** Observation Wise Summary. One control for the whole section shows or hides
+ *  the action plans under every observation — the counts always read, and the
+ *  plan lists come in when the reader wants the detail behind them. */
+function ObservationSummaryTable({ observations }: { observations: AtrObservation[] }) {
+  const [showPlans, setShowPlans] = useState(false);
+  // A zero is context, not a finding — it stays quiet.
+  const num = (v: number, tone: string) => <span className={`tabular-nums font-semibold ${v === 0 ? 'text-ink-300' : tone}`}>{v}</span>;
+
+  return (
+    <div className="overflow-hidden rounded-lg border border-canvas-border">
+      <table className="w-full text-[0.75rem]">
+        <thead>
+          <tr className="bg-brand-50/60 text-ink-700 text-left">
+            <th className="px-4 py-2.5 font-semibold">
+              <button
+                type="button"
+                onClick={() => setShowPlans(v => !v)}
+                aria-expanded={showPlans}
+                title={showPlans ? 'Hide the action plans under every observation' : 'Show the action plans under every observation'}
+                className="inline-flex items-center gap-1.5 -ml-1 px-1 py-0.5 rounded-sm font-semibold text-ink-700 hover:text-brand-700 hover:bg-brand-100/60 cursor-pointer transition-colors print:hidden"
+              >
+                Observation &amp; Action Plans
+                <ChevronDown size={13} aria-hidden="true" className={`text-ink-400 transition-transform ${showPlans ? 'rotate-180' : ''}`} />
+              </button>
+              <span className="hidden print:inline">Observation &amp; Action Plans</span>
+            </th>
+            {/* The four counts share one width so the gaps between them
+                read as a rhythm; the two pill columns are wide enough that
+                "Partially Closed" never wraps. */}
+            <th className="px-2 py-2.5 font-semibold text-center w-[74px] whitespace-nowrap" title="Total action plans on this observation">Plans</th>
+            <th className="px-2 py-2.5 font-semibold text-center w-[74px] whitespace-nowrap" title="Action plans still to be completed">Open</th>
+            <th className="px-2 py-2.5 font-semibold text-center w-[74px] whitespace-nowrap" title="Action plans implemented">Closed</th>
+            <th className="px-2 py-2.5 font-semibold text-center w-[74px] whitespace-nowrap" title="Action plans past their due date">Overdue</th>
+            <th className="px-3 py-2.5 font-semibold text-center w-[104px] whitespace-nowrap">Severity</th>
+            <th className="px-3 py-2.5 font-semibold text-center w-[136px] whitespace-nowrap">Status</th>
+          </tr>
+        </thead>
+        <tbody>
+          {observations.flatMap((o, i) => {
+            const st = displayStatus(o.status);
+            const stCls = st === 'Closed' ? 'bg-compliant-50 text-compliant-700' : st === 'Partially Closed' ? 'bg-mitigated-50 text-mitigated-700' : 'bg-high-50 text-high-700';
+            const pc = planCounts(o);
+            return [
+              <motion.tr
+                key={i}
+                initial={{ opacity: 0, y: 4 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ duration: 0.28, delay: Math.min(i, 12) * 0.03, ease: [0.22, 1, 0.36, 1] }}
+                className="border-t border-canvas-border align-top"
+              >
+                <td className="px-4 py-3">
+                  <div className="font-semibold text-ink-900 leading-snug">{o.title}</div>
+                  {o.process && <div className="text-[0.6875rem] text-ink-500">{o.process}</div>}
+                </td>
+                <td className="px-2 py-3 text-center">{num(pc.total, 'text-ink-800')}</td>
+                <td className="px-2 py-3 text-center">{num(pc.open, 'text-high-700')}</td>
+                <td className="px-2 py-3 text-center">{num(pc.closed, 'text-compliant-700')}</td>
+                <td className="px-2 py-3 text-center">{num(pc.overdue, 'text-risk-700')}</td>
+                <td className="px-3 py-3 text-center">
+                  {o.risk && <span className={`inline-flex items-center h-6 px-2.5 rounded-full text-[0.6875rem] font-semibold ${SEVERITY_PILL[o.risk]}`}>{o.risk}</span>}
+                </td>
+                <td className="px-3 py-3 text-center">
+                  <span className={`inline-flex items-center h-6 px-2.5 rounded-full text-[0.6875rem] font-semibold whitespace-nowrap ${stCls}`}>{st}</span>
+                </td>
+              </motion.tr>,
+              // One row per action plan, so its status reads down the Status
+              // column with the observation's. Paper has no drop-down, so print
+              // always carries them.
+              ...o.actionPlans.map((p, j) => {
+                const ap = p.status ? ACTION_STATUS[p.status] : null;
+                return (
+                  <tr key={`${i}-p${j}`} className={`border-t border-canvas-border/60 bg-canvas/30 ${showPlans ? '' : 'hidden print:table-row'}`}>
+                    <td className="px-4 py-2 pl-9">
+                      <span className="flex items-start gap-2">
+                        <span className={`w-1.5 h-1.5 mt-1.5 rounded-full shrink-0 ${ap?.dot ?? 'bg-ink-300'}`} aria-hidden="true" />
+                        <span className="text-[0.6875rem] text-ink-700 leading-snug">{p.title || p.text || `Action plan ${j + 1}`}</span>
+                      </span>
+                    </td>
+                    <td colSpan={5} />
+                    <td className="px-3 py-2 text-center">
+                      {p.status && <span className="text-[0.6875rem] text-ink-900 whitespace-nowrap">{p.status}</span>}
+                    </td>
+                  </tr>
+                );
+              }),
+            ];
+          })}
+        </tbody>
+      </table>
+    </div>
+  );
+}
+
 function ObservationCard({ index, obs, editable, onChange, onDelete, actions, footer }: { index: number; obs: AtrObservation; editable?: boolean; onChange?: (next: AtrObservation) => void; onDelete?: () => void; actions?: React.ReactNode; footer?: React.ReactNode }) {
   const setPlan = (i: number, next: AtrActionPlan) => onChange?.({ ...obs, actionPlans: obs.actionPlans.map((p, idx) => (idx === i ? next : p)) });
   return (
     <div className="border border-canvas-border rounded-lg overflow-hidden">
       {/* Header */}
-      <div className="bg-brand-50/40 px-5 py-4 flex items-start justify-between gap-4 flex-wrap">
-        <div className="flex items-center gap-2.5 flex-wrap min-w-0">
+      <div className="bg-brand-50/40 px-5 py-4 flex items-start justify-between gap-4">
+        <div className="flex items-center gap-2.5 min-w-0 flex-1">
           <span className="shrink-0 w-7 h-7 rounded-md bg-brand-600 text-white text-[0.8125rem] font-bold flex items-center justify-center">{index}</span>
           <div className="min-w-0">
             <h3 className="text-[1.0625rem] font-semibold text-ink-900 leading-tight"><EditableText value={obs.title} editable={editable} onCommit={v => onChange?.({ ...obs, title: v })} /></h3>
             {obs.process && <div className="text-[0.625rem] font-semibold uppercase tracking-[0.1em] text-ink-500 mt-0.5">{obs.process}</div>}
           </div>
         </div>
-        <div className="flex items-center gap-2 flex-wrap">
+        {/* Status, annexures and Manage stay on the title's own line, hard
+            against the right corner — they never wrap under a long title. */}
+        <div className="flex items-center gap-2 shrink-0">
           {obs.status && (() => {
             const s: AtrObservationStatus = obs.status === 'Overdue' ? 'Open' : obs.status;
             const label = s === 'In Progress' ? 'Partially Closed' : s;

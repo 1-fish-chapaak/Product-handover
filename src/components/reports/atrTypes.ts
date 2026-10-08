@@ -6,7 +6,13 @@ export type AtrRisk = 'Critical' | 'High' | 'Medium' | 'Low' | 'Not Applicable';
 export type AtrClassification =
   | 'Design Deficiency'
   | 'System Deficiency'
-  | 'Procedural Non-Compliance';
+  | 'Procedural Non-Compliance'
+  | 'Other';
+
+/** The Risk Owner's first call on an observation: is it real? */
+export type AtrVerdict = 'True Exception' | 'False Positive';
+/** Where an action plan sits in the auditor's approval of the plan itself. */
+export type AtrPlanReview = 'Pending' | 'Approved' | 'Rejected';
 export type AtrObservationStatus = 'Closed' | 'In Progress' | 'Open' | 'Overdue';
 export type AtrActionStatus =
   | 'Implemented'
@@ -28,9 +34,54 @@ export interface AtrActionPlan {
   evidence?: string;
   /** Management comments or checker / auditor verification. */
   verification?: string;
+  /** The auditor's decision on the plan itself, before the work begins.
+   *  Absent = not yet submitted for approval. */
+  planReview?: AtrPlanReview;
+  /** How far the risk owner's approval flow has got on this plan — the index of
+   *  the level now deciding. Only meaningful while `planReview` is Pending. */
+  approvalLevel?: number;
+  /** The same, for the later review of the action actually taken. */
+  actionLevel?: number;
+  planReviewComment?: string;
   /** The case-management case this plan tracks, when it was created or updated
    *  from Manage Exceptions (see atrTimeline.ts). */
   caseId?: string;
+  /** Raised through the report's own close-out journey (atrCloseout.ts). That
+   *  journey starts empty on every page load, so the panel shows only the plans
+   *  it raised itself — never the ones the report was generated with. */
+  closeout?: true;
+  /** The escalation matrix chasing THIS plan, when it needs one of its own —
+   *  a plan owned by a different department to the rest of the observation.
+   *  Absent means the observation's matrix governs it. See
+   *  data/escalationMatrixStore.ts. */
+  escalationMatrixId?: string;
+}
+
+/** Everything the report's own close-out journey records about an observation.
+ *  It lives in its own object, apart from the fields the report was generated
+ *  with, so the journey can never inherit them: it always starts at "the auditor
+ *  assigns a risk owner". Session-only — see atrTimeline.dropCloseoutEvents. */
+export interface AtrCloseout {
+  /** Who remediates, and who verifies. */
+  owner?: string;
+  auditor?: string;
+  /** True Exception (needs a sub-class + action plans) or False Positive
+   *  (needs a reason, and closes with no plans). */
+  verdict?: AtrVerdict;
+  classification?: AtrClassification;
+  classificationComment?: string;
+  falsePositiveReason?: string;
+  /** A False Positive is a claim that there is nothing to fix, so the auditor
+   *  signs it off before it closes anything. Absent until the risk owner makes
+   *  the call; 'Rejected' hands it back to be reclassified. */
+  fpReview?: AtrPlanReview;
+  fpReviewComment?: string;
+  /** How far the approval flow has got on the false-positive call. */
+  fpLevel?: number;
+  /** The escalation matrix governing every action plan on this observation,
+   *  unless a plan names its own. Tied by the auditor, chosen from the matrices
+   *  configured in Administration → Escalation Matrix. */
+  escalationMatrixId?: string;
 }
 
 /** A file or data source linked to an observation as supporting annexure. */
@@ -64,7 +115,6 @@ export interface AtrObservation {
   rootCause?: string;
   /** Solution type — Incident / Systemic / Not applicable. */
   solutionType?: string;
-  riskSummary?: string;
   /** Risk implication category (Financial / Operational / …). */
   riskImplications?: string;
   /** Free-text elaboration of the risk implications. */
@@ -72,6 +122,9 @@ export interface AtrObservation {
   classification?: AtrClassification;
   risk?: AtrRisk;
   status?: AtrObservationStatus;
+  /** The report's own close-out journey — assign, classify, plan, act, verify.
+   *  Namespaced so it never reads the report's generated content as progress. */
+  closeout?: AtrCloseout;
   /** Number of underlying flagged exceptions that roll up into this observation. */
   exceptions?: number;
   actionPlans: AtrActionPlan[];

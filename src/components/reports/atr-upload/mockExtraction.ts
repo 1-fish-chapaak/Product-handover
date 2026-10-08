@@ -52,7 +52,6 @@ const FIELD_LABEL: Record<MissingField['key'], string> = {
   description: 'Observation Description',
   rootCause: 'Root Cause',
   solutionType: 'Solution Type',
-  riskSummary: 'Risk Summary',
   riskImplications: 'Risk Implications',
   riskImplicationsDetails: 'Risk Implication Details',
   recommendation: 'Recommendation / Action Plan',
@@ -79,10 +78,10 @@ function computeMissing(o: ExtractedObservation): MissingField[] {
 
 // Per-observation overrides keyed by index into SAMPLE_OBSERVATIONS — confidence,
 // plus which values to strip so they read as "not extracted" (Missing).
-const OBS_OVERRIDES: Array<{ confidence: number; stripRiskSummary?: boolean }> = [
+const OBS_OVERRIDES: Array<{ confidence: number }> = [
   { confidence: 0.97 },                                 // 1 Vendor Master — Complete
   { confidence: 0.94 },                                 // 2 Three-Way Match — Complete
-  { confidence: 0.81, stripRiskSummary: true },         // 3 Freight Rate — Risk Summary not extracted
+  { confidence: 0.81 },                                 // 3 Freight Rate
   { confidence: 0.88 },                                 // 4 Stock Variance — Risk Implication Details not extracted (below)
   { confidence: 0.96 },                                 // 5 Scrap Sale — Complete
 ];
@@ -105,8 +104,6 @@ function buildObservations(): ExtractedObservation[] {
     const ov = OBS_OVERRIDES[i];
     const base: ExtractedObservation = {
       ...o,
-      // Strip a value here and there so it reads as "not extracted" (Missing).
-      riskSummary: ov.stripRiskSummary ? undefined : o.riskSummary,
       rootCause: ROOT_CAUSES[i % ROOT_CAUSES.length],
       solutionType: SOLUTION_TYPES[i % SOLUTION_TYPES.length],
       riskImplications: RISK_IMPLICATIONS[i % RISK_IMPLICATIONS.length],
@@ -123,8 +120,8 @@ function buildObservations(): ExtractedObservation[] {
     return { ...base, missingFields, completeness: completenessFrom(missingFields, !!base.title?.trim()) };
   });
 
-  // 6th observation — deliberately incomplete (Title + Risk Summary not
-  // extracted) to exercise the "Incomplete" badge and the Fill / Skip flow.
+  // 6th observation — deliberately incomplete (no Title extracted) to exercise
+  // the "Incomplete" badge and the Fill / Skip flow.
   const obs6: ExtractedObservation = {
     id: 'obs-6',
     number: 6,

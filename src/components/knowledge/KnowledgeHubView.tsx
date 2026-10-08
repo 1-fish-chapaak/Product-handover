@@ -6,8 +6,8 @@ import DataSourcesView, {
 } from '../data-sources/DataSourcesView';
 import SmartLearnView from './SmartLearnView';
 import FloatingLines from '../shared/FloatingLines';
-import { SEED } from '../data-sources/sources';
 import { MEMORY_STORE } from '../../data/memoryStore';
+import { connectedDatabaseCount } from '../../hooks/useKnowledgeSources';
 
 type TabId = 'data' | 'learn';
 const TABS: { id: TabId; label: string; icon: React.ElementType }[] = [
@@ -88,7 +88,7 @@ export default function KnowledgeHubView({ initialTab = 'data', focusMemoryId = 
   // back).
   const [detailOpen, setDetailOpen] = useState(false);
   // One-Click Audit modal — surfaced because integrated DBs are connected.
-  const connectedDbs = SEED.filter(s => s.type === 'database').length;
+  const connectedDbs = connectedDatabaseCount();
   // Tab-aware subhead. Data Sources speaks to the live catalog; Smart Learn
   // to the memory registry it now hosts.
   const ira = <span className="font-medium text-brand-700">IRA</span>;
@@ -196,8 +196,9 @@ export default function KnowledgeHubView({ initialTab = 'data', focusMemoryId = 
             >
               {/* Audit with AI — recommended banner. Shown because integrated DB
                   sources are connected; opens the One-Click Audit wizard. Hidden
-                  while a source detail takes over the page. */}
-              {!detailOpen && (
+                  while a source detail takes over the page, and until a database
+                  is connected — a new client has nothing for it to plan from. */}
+              {!detailOpen && connectedDbs > 0 && (
                 <motion.div
                   initial={{ opacity: 0, y: 6 }}
                   animate={{ opacity: 1, y: 0 }}
@@ -225,7 +226,7 @@ export default function KnowledgeHubView({ initialTab = 'data', focusMemoryId = 
                         <span className="px-1.5 h-[18px] inline-flex items-center rounded-full bg-fuchsia-400/25 text-fuchsia-100 text-[9px] font-bold uppercase tracking-[0.1em]">Recommended</span>
                       </div>
                       <p className="text-[0.75rem] text-white/65 truncate">
-                        {connectedDbs} databases connected — Ira can draft engagements, controls & workflows from your live data in one click.
+                        {connectedDbs} database{connectedDbs === 1 ? '' : 's'} connected — Ira can draft engagements, controls & workflows from your live data in one click.
                       </p>
                     </div>
                   </div>

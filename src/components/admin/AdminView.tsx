@@ -15,6 +15,7 @@ import {
   Users, User, Shield, ScrollText,
   UserPlus, Plus, Download, ArrowRight,
   ChevronDown, Pencil, Trash2, X, Check, Crown, Send, UserCheck, UserX, Gauge, UserMinus,
+  CalendarClock,
   Brain, Lock, CircleSlash, Undo2,} from 'lucide-react';
 import { MEMORY_STORE, KIND_META, SCOPE_META } from '../../data/memoryStore';
 import {
@@ -30,6 +31,7 @@ import { StatusBadge, ActionBadge, ResultBadge } from '../shared/StatusBadge';
 import Modal from '../shared/Modal';
 import Checkbox from '../shared/Checkbox';
 import ConfirmationModal from '../shared/ConfirmationModal';
+import EscalationMatrixSection from './EscalationMatrixSection';
 import EmptyState from '../shared/EmptyState';
 import { useToast } from '../shared/Toast';
 import { RolesWorkspace, CreateRoleModal, type RoleSeed } from './RolesWorkspace';
@@ -47,7 +49,7 @@ interface Props {
  *  (search left · filters/CTA right) → content. People & Teams are two views of
  *  one "Members" tab, toggled by a segmented switch above the (unchanged) People
  *  / Teams screens. */
-type SectionId = 'members' | 'roles' | 'memory' | 'logs';
+type SectionId = 'members' | 'roles' | 'escalation' | 'memory' | 'logs';
 type MembersView = 'people' | 'teams';
 
 const STATUS_MAP: Record<UserStatus, string> = {
@@ -2197,6 +2199,7 @@ export default function AdminView({ activeTab }: Props) {
   const initialMembersView: MembersView = activeTab === 'teams' ? 'teams' : 'people';
 
   const prefersReduced = useReducedMotion();
+  const { can } = useCurrentUser();
 
   const [section, setSection] = useState<SectionId>(initialSection);
   const [membersView, setMembersView] = useState<MembersView>(initialMembersView);
@@ -2222,6 +2225,9 @@ export default function AdminView({ activeTab }: Props) {
   const sections: SectionDef[] = [
     { id: 'members', label: 'Users & Teams', icon: Users },
     { id: 'roles', label: 'Roles & Permissions', icon: Shield },
+    // Escalation matrices are configuration, not report content — they live
+    // beside the other things an admin owns, and the report only picks from them.
+    ...(can('ad_escalation_manage') ? [{ id: 'escalation' as const, label: 'Approval & Escalation Matrix', icon: CalendarClock }] : []),
     { id: 'memory', label: 'Memory', icon: Brain },
     { id: 'logs', label: 'Audit Log', icon: ScrollText },
   ];
@@ -2322,6 +2328,17 @@ export default function AdminView({ activeTab }: Props) {
             transition={{ duration: prefersReduced ? 0 : 0.18, ease: [0.4, 0, 0.2, 1] }}
           >
             <RolesWorkspace key={`roles-${roleFocusNonce}`} initialRoleId={roleFocusId} onCreateRole={openCreateRole} />
+          </motion.div>
+        ) : section === 'escalation' ? (
+          <motion.div
+            key="escalation"
+            className="pt-4"
+            initial={prefersReduced ? false : { opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={prefersReduced ? undefined : { opacity: 0 }}
+            transition={{ duration: prefersReduced ? 0 : 0.18, ease: [0.4, 0, 0.2, 1] }}
+          >
+            <EscalationMatrixSection />
           </motion.div>
         ) : section === 'memory' ? (
           <motion.div

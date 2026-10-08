@@ -19,6 +19,8 @@
 import { useSyncExternalStore } from 'react';
 import type { ControlRow } from '../../components/governance/controlTypes';
 import { CHECK_CATALOG, type CatalogEntry } from './catalog';
+import { stdAssertions, stdAttributes, stdOwner } from './catalogDetail';
+import { isFreshWorkspace, onWorkspaceChange, workspaceSuffix } from './workspace';
 
 export type StdReadiness = 'live' | 'awaiting-review' | 'needs-data' | 'manual';
 
@@ -27,11 +29,12 @@ export interface StdState {
   live: string[];
 }
 
-const KEY = 'irame.stdLibrary.state';
+const BASE_KEY = 'irame.stdLibrary.state';
+const key = () => `${BASE_KEY}${workspaceSuffix()}`;
 
 function readState(): StdState {
   try {
-    const raw = localStorage.getItem(KEY);
+    const raw = localStorage.getItem(key());
     const v = raw ? JSON.parse(raw) : null;
     return v && Array.isArray(v.built) && Array.isArray(v.live) ? v : { built: [], live: [] };
   } catch { return { built: [], live: [] }; }
@@ -43,21 +46,24 @@ const emit = () => listeners.forEach(fn => fn());
 // Listen for other tabs at module level, not per subscriber — an approval in
 // a review tab must land here even while no mounted component reads the store.
 if (typeof window !== 'undefined') {
-  window.addEventListener('storage', e => { if (e.key === KEY) { state = readState(); emit(); } });
+  window.addEventListener('storage', e => { if (e.key === key()) { state = readState(); emit(); } });
 }
+onWorkspaceChange(() => { state = readState(); emit(); });
 const subscribe = (fn: () => void) => {
   listeners.add(fn);
   return () => { listeners.delete(fn); };
 };
 function persist(next: StdState) {
   state = next;
-  try { localStorage.setItem(KEY, JSON.stringify(state)); } catch { /* quota */ }
+  try { localStorage.setItem(key(), JSON.stringify(state)); } catch { /* quota */ }
   emit();
 }
 
 export function readinessOf(entry: CatalogEntry, s: StdState = state): StdReadiness {
   if (!entry.automatable) return 'manual';
-  if (entry.existingWorkflowId || s.live.includes(entry.key)) return 'live';
+  // A workflow the account already runs is live — except in a fresh
+  // workspace, where nothing runs on the client's data yet.
+  if ((entry.existingWorkflowId && !isFreshWorkspace()) || s.live.includes(entry.key)) return 'live';
   if (s.built.includes(entry.key)) return 'awaiting-review';
   return 'needs-data';
 }
@@ -97,13 +103,12 @@ export function useStdState(): StdState {
 
 /** The standard workflow's name for an entry — the library workflow it
  *  already maps to, else the standard check name. */
-export const stdWorkflowName = (e: CatalogEntry) => e.existingWorkflowName ?? e.checkName;
+export const stdWorkflowName = (e: CatalogEntry) => (isFreshWorkspace() ? e.checkName : e.existingWorkflowName ?? e.checkName);
 
 /** Standard controls as Control Library rows. */
 export function standardControlRows(s: StdState): ControlRow[] {
   return CHECK_CATALOG.map(e => {
     const readiness = readinessOf(e, s);
-    const exists = readiness === 'live' || readiness === 'awaiting-review';
     return {
       id: `STD-${e.controlId}`,
       controlId: e.controlId,
@@ -116,11 +121,14 @@ export function standardControlRows(s: StdState): ControlRow[] {
       nature: e.controlType,
       automation: e.automatable ? 'Automated' : 'Manual',
       frequency: e.frequency,
-      owner: 'Standard library',
-      assertions: [],
-      mappedRisks: [],
+      owner: stdOwner(e.key),
+      assertions: stdAssertions(e.key),
+      mappedRisks: [`R-${e.controlId}`],
       linkedWorkflows: e.automatable ? [stdWorkflowName(e)] : [],
-      linkedWorkflowIds: exists ? [e.existingWorkflowId ?? `std-${e.key}`] : [],
+      // The standard workflow ships with the control — linked from day one;
+      // readiness (not the link) says whether it runs on this client's data.
+      linkedWorkflowIds: e.automatable ? [(!isFreshWorkspace() && e.existingWorkflowId) || `std-${e.key}`] : [],
+      attributes: stdAttributes(e.key, e.controlId),
       usedInRACMs: 0,
       status: 'Active',
       createdAt: 'Preloaded',

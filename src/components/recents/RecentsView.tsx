@@ -5,6 +5,7 @@ import {
 } from 'lucide-react';
 import type { View } from '../../hooks/useAppState';
 import { CHAT_HISTORY, WORKFLOWS } from '../../data/mockData';
+import { useFreshWorkspace } from '../../data/auditPlan';
 import {
   DateFilterPicker, dateInFilter, isDateFilterActive, dateFilterLabel,
   DEFAULT_DATE_FILTER, type DateFilter,
@@ -225,8 +226,10 @@ export default function RecentsView({ setView, openChat, openWorkflowExecutor }:
     writeBookmarkedMessages(next);
   };
 
-  const chatRows = useMemo(buildChatRows, []);
-  const workflowRows = useMemo(buildWorkflowRunRows, []);
+  // A new client's workspace has no history of its own yet.
+  const fresh = useFreshWorkspace();
+  const chatRows = useMemo(() => (fresh ? [] : buildChatRows()), [fresh]);
+  const workflowRows = useMemo(() => (fresh ? [] : buildWorkflowRunRows()), [fresh]);
 
   const matchesText = (text: string) => !search || text.toLowerCase().includes(search.toLowerCase());
   const matchesDate = (ts: Date) => dateInFilter(ts.toISOString(), dateFilter, NOW);
@@ -594,7 +597,8 @@ function EmptyState({ label }: { label: string }) {
   return (
     <div className="text-center py-16">
       <Search size={28} className="mx-auto text-ink-400 mb-3" />
-      <p className="text-[0.875rem] text-ink-500">No {label} match your search.</p>
+      <p className="text-[0.875rem] font-medium text-ink-700">No {label} yet</p>
+      <p className="mt-1 text-[0.8125rem] text-ink-500">They’ll appear here as you work with Ira.</p>
     </div>
   );
 }

@@ -122,6 +122,7 @@ export const CATEGORY_COLORS: Record<string, string> = {
   Executive: 'text-indigo-600 bg-indigo-50',
   SOX: 'text-evidence-700 bg-evidence-50',
   ATR: 'text-brand-700 bg-brand-50',
+  Custom: 'text-brand-700 bg-brand-50',
   Other: 'text-ink-500 bg-paper-50',
 };
 
@@ -312,7 +313,7 @@ export function isStandardTemplate(id?: string): boolean {
   return !!id && STANDARD_TEMPLATE_IDS.has(id);
 }
 export function templateCategoryLabel(t: { id?: string; category?: string }): string {
-  return isStandardTemplate(t.id) ? STANDARD_TEMPLATE_LABEL : (t.category ?? 'Custom');
+  return t.category ?? 'Custom';
 }
 
 /** The report body accent (numbers/ticks): custom brandColor wins, else theme. */
@@ -782,6 +783,9 @@ export type EditableTemplate = Omit<typeof REPORT_TEMPLATES[number], 'sections'>
    *  Informational only — it labels the template, it does not restrict who
    *  can use it or hide it from any other engagement's reports. */
   engagementId?: string;
+  /** Display name for `engagementId` when the engagement isn't in the local
+   *  engagement list (seeded templates mirrored from staging). */
+  engagementName?: string;
   /** The file this format was read from, kept so the builder can still say
    *  where the shape came from long after the import ran. Nothing is read back
    *  out of the file; this is the name only. */

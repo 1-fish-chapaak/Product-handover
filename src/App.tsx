@@ -1,4 +1,4 @@
-import { useRef, useEffect, useState, useCallback } from 'react';
+import { useRef, useEffect, useLayoutEffect, useState, useCallback } from 'react';
 import { AnimatePresence, motion } from 'motion/react';
 import { Sparkles } from 'lucide-react';
 import { useAppState, getInitialKnowledgeHubTab, getInitialMemoryFocus, type View } from './hooks/useAppState';
@@ -21,7 +21,10 @@ import AdaptStandardView from './components/audit-plan/AdaptStandardView';
 import BuildsView from './components/audit-plan/BuildsView';
 import HomeHub from './components/home/HomeHub';
 import TodayView from './components/home/TodayView';
-import { ensureBatchRunning, pendingItems, useAllBatches } from './data/auditPlan';
+import { ensureBatchRunning, pendingItems, setAuditWorkspace, useAllBatches, useFreshWorkspace } from './data/auditPlan';
+import FirstRunState, { type FirstRunPage } from './components/shared/FirstRunState';
+import { libraryEngagements } from './data/engagements';
+import { WORKSPACES } from './data/workspaces';
 import { useNotify } from './notifications/NotificationContext';
 import ArtifactPanel from './components/artifacts/ArtifactPanel';
 import WorkflowTemplates from './components/workflow/WorkflowTemplates';
@@ -38,6 +41,7 @@ import ReportsView from './components/reports/ReportsView';
 import type { EditableTemplate, TemplateSection } from './components/reports/reportShared';
 import { letterheadLine, looksLikeCapturedLetterhead, oneDefaultOnly, splitLetterhead } from './components/reports/reportShared';
 import { REPORT_TEMPLATES } from './data/mockData';
+import { SEED_CUSTOM_TEMPLATES } from './data/seedCustomTemplates';
 import HomeView from './components/home/HomeView';
 import RecentsView from './components/recents/RecentsView';
 import KnowledgeHubView from './components/knowledge/KnowledgeHubView';
@@ -64,6 +68,7 @@ import RACMView from './components/governance/RACMView';
 import RacmFullPageEditor from './components/audit/RacmFullPageEditor';
 import type { ProcurementRacmRow } from './data/procurement-racm';
 import ControlLibraryView from './components/governance/ControlLibraryView';
+import StandardLibraryBanner, { type StdBannerPage } from './components/governance/StandardLibraryBanner';
 import ControlTestingView from './components/execution/ControlTestingView';
 import EvidenceView from './components/execution/EvidenceView';
 import AIConciergeView from './components/intelligence/AIConciergeView';
@@ -124,6 +129,8 @@ const SHARED_DASHBOARD_OPTIONS = [
 // v2 — resets the Custom list to a clean slate (the v1 blob had accumulated
 // dozens of test copies); new templates persist here going forward.
 const CUSTOM_TEMPLATES_KEY = 'irame.reports.customTemplates.v2';
+// Set once the staging custom templates have been seeded into the list above.
+const STAGING_SEED_FLAG_KEY = 'irame.reports.stagingSeed.v1';
 // The old demo seeds — filtered out of any previously persisted blob so the
 // Custom section only ever shows templates the user actually created.
 const DEMO_TEMPLATE_IDS = new Set(['ct-custom-01', 'ct-custom-02', 'ct-003', 'ct-004', 'ct-005', 'ct-006']);
@@ -248,7 +255,14 @@ function AppInner() {
     setFocusedNotificationRefId,
   } = useAppState();
 
-  const { can, canAny, currentUser } = useCurrentUser();
+  const { can, canAny, currentUser, activeWorkspaceId } = useCurrentUser();
+  // Point the audit-plan stores at this workspace before paint — a fresh
+  // client workspace starts with nothing live and its own saved progress.
+  useLayoutEffect(() => {
+    setAuditWorkspace(activeWorkspaceId, !!WORKSPACES.find(w => w.id === activeWorkspaceId)?.fresh);
+  }, [activeWorkspaceId]);
+  // A new client's workspace: pages with nothing of theirs yet say so.
+  const freshWs = useFreshWorkspace();
   const logEvent = useAuditLog();
 
   // Knowledge Hub deep-link state — which tab to land on and (optionally)
@@ -460,17 +474,30 @@ function AppInner() {
             })
     ), []);
   const [customTemplates, setCustomTemplates] = useState<CustomTemplate[]>(() => {
+    let stored: CustomTemplate[] = [];
     try {
       const raw = localStorage.getItem(CUSTOM_TEMPLATES_KEY);
       if (raw) {
         const parsed = JSON.parse(raw);
-        if (Array.isArray(parsed)) return hydrateTemplates(parsed as CustomTemplate[]);
+        if (Array.isArray(parsed)) stored = hydrateTemplates(parsed as CustomTemplate[]);
       }
     } catch { /* ignore */ }
-    return [];
+    // Seed staging's custom templates once, after whatever the user already
+    // has. The flag (set in the effect below, so this initializer stays pure
+    // under StrictMode's double call) keeps a deleted seed from coming back.
+    try {
+      if (!localStorage.getItem(STAGING_SEED_FLAG_KEY)) {
+        const have = new Set(stored.map(t => t.id));
+        return [...stored, ...SEED_CUSTOM_TEMPLATES.filter(t => !have.has(t.id))];
+      }
+    } catch { /* ignore */ }
+    return stored;
   });
   useEffect(() => {
-    try { localStorage.setItem(CUSTOM_TEMPLATES_KEY, JSON.stringify(customTemplates)); } catch { /* ignore */ }
+    try {
+      localStorage.setItem(CUSTOM_TEMPLATES_KEY, JSON.stringify(customTemplates));
+      localStorage.setItem(STAGING_SEED_FLAG_KEY, '1');
+    } catch { /* ignore */ }
   }, [customTemplates]);
   // Another tab saved a template. The storage event only fires in the OTHER
   // tabs, so there is no loop with the write above: this tab takes what that
@@ -678,6 +705,22 @@ function AppInner() {
     );
   };
 
+  /** What a page says in a new client's workspace before anything has run. */
+  const firstRun = (page: FirstRunPage) => <FirstRunState page={page} onNavigate={(v) => setView(v as View)} />;
+
+  /** A page with the standard-library banner above it. */
+  const withStdBanner = (page: StdBannerPage, node: React.ReactNode) => (
+    <div className="flex-1 flex flex-col min-h-0 overflow-hidden">
+      <StandardLibraryBanner
+        page={page}
+        onAdapt={(keys, choices) => startAdaptStandard({ keys, choices })}
+        onOpenLibrary={() => setView('governance-controls')}
+        onOpenBuilds={() => setView('builds')}
+      />
+      <div className="flex-1 flex flex-col min-h-0 overflow-hidden">{node}</div>
+    </div>
+  );
+
   const renderMainView = () => {
     if (viewLoading) {
       return (
@@ -726,7 +769,7 @@ function AppInner() {
                 onConnectData={() => setView('knowledge-hub')}
               />
             }
-            insights={
+            insights={freshWs ? firstRun('insights') : (
               <HomeView
                 setView={setView}
                 notifications={notif.notifications}
@@ -738,7 +781,7 @@ function AppInner() {
                 setSelectedBP={setSelectedBP}
                 onLaunchWorkflowBuilder={launchWorkflowBuilderWithPrompt}
               />
-            }
+            )}
           />
         );
 
@@ -947,12 +990,12 @@ function AppInner() {
       }
 
       case 'workflow-builder':
-        return (
+        return withStdBanner('workflow-builder', (
           <WorkflowBuilderLanding
             onSelectAgent={(agent) => startWorkflowAgent({ agent })}
             onAuditWithAi={() => setView('audit-with-ai')}
           />
-        );
+        ));
 
       case 'audit-with-ai':
         return (
@@ -965,7 +1008,7 @@ function AppInner() {
         );
 
       case 'workflow-library':
-        return (
+        return withStdBanner('workflow-library', (
           <WorkflowLibraryView
             onCreateWorkflow={() => setView('workflow-builder')}
             onSelectWorkflow={(id) => setSelectedWorkflow(id)}
@@ -975,7 +1018,7 @@ function AppInner() {
             onAdaptStandard={(keys, choices) => startAdaptStandard({ keys, choices })}
             onOpenBuilds={() => setView('builds')}
           />
-        );
+        ));
 
       case 'workflow-executor':
         return (
@@ -1025,19 +1068,23 @@ function AppInner() {
         );
 
       case 'programs':
-        return (
+        return withStdBanner('process-hub', (
           <ProgramsView
             selectedBPId={state.selectedBPId}
             onSelectBP={setSelectedBP}
             userProcesses={state.userProcesses}
             addUserProcess={addUserProcess}
+            onOpenProcessControls={(code) => {
+              try { window.sessionStorage.setItem('control-library.open-process', code); } catch { /* ignore */ }
+              setView('governance-controls');
+            }}
             onNavigateToExecution={(engId) => {
               setEngagementBackView('programs');
               openAuditExecution(engId);
               setView('engagement-detail');
             }}
           />
-        );
+        ));
 
       case 'business-processes':
       case 'bp-detail':
@@ -1074,7 +1121,7 @@ function AppInner() {
       // it belongs with Risk Register and Control Library rather than inside
       // the engagement portfolio.
       case 'racm-library':
-        return (
+        return withStdBanner('racm', (
           <RacmPage canManage={can('eng_create')}
             onOpenEditor={(r) => {
               // Same tab (5 Oct): the editor reads and saves the library
@@ -1085,14 +1132,14 @@ function AppInner() {
               window.history.replaceState(window.history.state, '', `${window.location.pathname}?${params.toString()}${window.location.hash}`);
               openRacmFullEditor({ racmId: r.id, racmName: r.name, processLabel: r.process, backView: 'racm-library', backLabel: 'RACM Library', initialRows: rows, lockedRowIds: lockedIds });
             }} />
-        );
+        ));
 
       case 'audit-risk-register':
-        return (
+        return withStdBanner('risk-register', freshWs ? firstRun('risk-register') : (
           <RiskRegister
             onNavigate={(v) => setView(v as View)}
           />
-        );
+        ));
 
       case 'audit-execution':
         return <AuditExecution />;
@@ -1153,6 +1200,7 @@ function AppInner() {
 
       case 'reports':
       case 'report-history':
+        if (freshWs) return firstRun('reports');
         return (
           <ReportsView
             onOpenBuilder={() => openReportBuilder('new')}
@@ -1221,7 +1269,7 @@ function AppInner() {
         return <ComplianceEngagementApp engagementId={state.selectedEngagementId ?? undefined} onBack={backToEngagementList} />;
 
       case 'engagements':
-        return (
+        return withStdBanner('engagements', freshWs && libraryEngagements().length === 0 ? firstRun('engagements') : (
           <EngagementsView
             onOpenAuditPlanning={() => setView('audit-planning')}
             onOpenEngagement={(id) => { setSoxFromTesting(false); openEngagement(id); }}
@@ -1232,7 +1280,7 @@ function AppInner() {
             initialList={engBackToList}
             onInitialListConsumed={() => setEngBackToList(false)}
           />
-        );
+        ));
 
       case 'engagement-overview':
         return (
@@ -1277,6 +1325,7 @@ function AppInner() {
       }
 
       case 'my-queue':
+        if (freshWs) return firstRun('my-queue');
         return (
           <MyQueueView
             onOpenException={(engagementId) => openCaseManagement(engagementId)}
@@ -1291,6 +1340,7 @@ function AppInner() {
         return <EngagementCompareView onBack={() => setView('engagements')} />;
 
       case 'audit-planning':
+        if (freshWs) return firstRun('audit-planning');
         return <AuditPlanningPage
           onOpenEngagements={() => setView('engagements')}
           onNavigateToExecution={(engId) => {

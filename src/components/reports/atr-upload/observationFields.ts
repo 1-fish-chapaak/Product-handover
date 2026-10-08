@@ -32,7 +32,6 @@ export const OBSERVATION_FIELDS: FieldDef[] = [
   { key: 'description',             label: 'Observation Description',                    kind: 'textarea',       loc: 'obs' },
   { key: 'rootCause',              label: 'Root Cause',                                 kind: 'select',         loc: 'obs', options: ROOT_CAUSE_OPTIONS },
   { key: 'solutionType',           label: 'Solution Type',                              kind: 'select',         loc: 'obs', options: SOLUTION_TYPE_OPTIONS },
-  { key: 'riskSummary',            label: 'Risk Summary',                               kind: 'textarea',       loc: 'obs' },
   { key: 'riskImplications',       label: 'Risk Implications',                          kind: 'select',         loc: 'obs', options: RISK_IMPLICATIONS_OPTIONS },
   { key: 'riskImplicationsDetails', label: 'Risk Implication Details',                  kind: 'textarea',       loc: 'obs' },
   { key: 'risk',                   label: 'Risk Significance',                          kind: 'risk',           loc: 'obs' },
