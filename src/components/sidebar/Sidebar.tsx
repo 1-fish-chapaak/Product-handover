@@ -95,12 +95,12 @@ function DockItem({ icon: Icon, label, active, onClick, badge, mouseY, reduce, o
         focus:outline-none focus-visible:ring-2 focus-visible:ring-sidebar-accent focus-visible:ring-offset-1 focus-visible:ring-offset-sidebar-bg
         ${active ? 'bg-brand-500/25 text-sidebar-accent' : 'text-sidebar-text hover:bg-sidebar-surface-hover hover:text-sidebar-accent'}`}
     >
-      <Icon size={17} />
+      <Icon size={18} />
       {/* The open-app dot, beside the icon rather than under it — the dock runs
           down the page, so "under" would sit between two icons. */}
       {active && <span className="absolute -left-[7px] top-1/2 -translate-y-1/2 w-1 h-1 rounded-full bg-sidebar-accent" aria-hidden />}
       {badge && (
-        <span className="absolute -top-1.5 -right-1.5 min-w-[18px] h-[18px] px-1 rounded-full bg-[#FF3B30] text-white text-[0.625rem] font-semibold leading-none flex items-center justify-center tabular-nums shadow-sm" aria-hidden>
+        <span className="absolute -top-1.5 -right-1.5 min-w-[18px] h-[18px] px-1 rounded-full bg-sidebar-accent text-brand-600 text-[0.625rem] font-bold leading-none flex items-center justify-center tabular-nums shadow-sm" aria-hidden>
           {badge}
         </span>
       )}
@@ -226,16 +226,15 @@ export default function Sidebar({ view, setView, unreadNotifications, notificati
       onMouseDown={() => setFocusInside(false)}
       onBlur={e => { if (!dockRef.current?.contains(e.relatedTarget as Node)) setFocusInside(false); }}
     >
-      {/* Mirror glass (8 Oct, user ask): the same purple, but see-through —
-          the page behind shows blurred through it, as on the Mac's dock — with
-          a polished sheen on top: a bright rim, a soft shine at the head and a
-          diagonal glint, the way light catches a mirror. */}
-      <div className="relative h-full w-[56px] rounded-[18px] bg-brand-950/95 backdrop-blur-xl backdrop-saturate-[1.8] border border-white/15 shadow-[inset_0_1px_0_rgb(255_255_255_/_0.30),inset_0_-1px_0_rgb(255_255_255_/_0.08),0_10px_30px_-8px_rgb(38_6_74_/_0.45)] flex flex-col items-center">
+      {/* The rail's own contrast (8 Oct, user ask): solid sidebar purple and
+          white icons, as the expanded sidebar had — with a faint mirror sheen
+          on top (rim, head shine, diagonal glint). */}
+      <div className="relative h-full w-[56px] rounded-[18px] bg-sidebar-bg noise-texture border border-white/10 shadow-[inset_0_1px_0_rgb(255_255_255_/_0.30),inset_0_-1px_0_rgb(255_255_255_/_0.08),0_10px_30px_-8px_rgb(38_6_74_/_0.45)] flex flex-col items-center">
         <div aria-hidden className="pointer-events-none absolute inset-0 rounded-[18px] overflow-hidden"
           style={{ backgroundImage: [
-            'linear-gradient(115deg, rgb(255 255 255 / 0) 28%, rgb(255 255 255 / 0.16) 40%, rgb(255 255 255 / 0.04) 47%, rgb(255 255 255 / 0) 52%, rgb(255 255 255 / 0.07) 60%, rgb(255 255 255 / 0) 66%)',
-            'linear-gradient(90deg, rgb(255 255 255 / 0.10) 0%, rgb(255 255 255 / 0) 22%, rgb(255 255 255 / 0) 80%, rgb(255 255 255 / 0.05) 100%)',
-            'linear-gradient(180deg, rgb(255 255 255 / 0.22) 0%, rgb(255 255 255 / 0.06) 14%, rgb(255 255 255 / 0) 35%, rgb(255 255 255 / 0) 85%, rgb(255 255 255 / 0.08) 100%)',
+            'linear-gradient(115deg, rgb(255 255 255 / 0) 28%, rgb(255 255 255 / 0.07) 40%, rgb(255 255 255 / 0.02) 47%, rgb(255 255 255 / 0) 52%, rgb(255 255 255 / 0.03) 60%, rgb(255 255 255 / 0) 66%)',
+            'linear-gradient(90deg, rgb(255 255 255 / 0.05) 0%, rgb(255 255 255 / 0) 22%, rgb(255 255 255 / 0) 80%, rgb(255 255 255 / 0.05) 100%)',
+            'linear-gradient(180deg, rgb(255 255 255 / 0.10) 0%, rgb(255 255 255 / 0.03) 14%, rgb(255 255 255 / 0) 35%, rgb(255 255 255 / 0) 85%, rgb(255 255 255 / 0.08) 100%)',
           ].join(', ') }} />
 
         {/* ── Top: workspace + bell ── */}
@@ -261,7 +260,7 @@ export default function Sidebar({ view, setView, unreadNotifications, notificati
             className={notificationDrawerOpen
               ? 'bg-sidebar-surface-active text-sidebar-accent'
               : 'text-white hover:bg-sidebar-surface-hover hover:text-sidebar-accent'}
-            badgeClassName="bg-[#FF3B30] text-white ring-1 ring-white/70"
+            badgeClassName="bg-sidebar-accent text-brand-600"
           />
 
           {/* Workspace switcher */}

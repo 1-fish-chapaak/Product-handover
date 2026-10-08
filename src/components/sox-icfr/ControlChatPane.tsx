@@ -1203,6 +1203,11 @@ export default function ControlChatPane({ control }: { control: Control }) {
     return null;
   })();
   const fileHeldHere = FILE_HELD[control.id] ?? [];
+  // Before Start, the plan is the one thing the rail asks of the tester (user
+  // ask, 8 Oct: "when we have plan, why do we have buttons separately"). The
+  // live step card and its buttons wait until Start — then they come back to
+  // say what is holding Ira and what to press.
+  const planUnstarted = role === 'auditor' && !control.iraPlan?.started && !isControlLockedIn(eng, control);
   const askShown = iraMode === 'automatic' && !!fileAsk && !fileHeldHere.includes(fileAsk.step) && !working && !draw && !extract && !waive && !pile;
   const owner = ownersOf(control).processOwner;
   const askKey = (r: FileAskRow) => `file-ask:${r.key}`;
@@ -1691,7 +1696,7 @@ export default function ControlChatPane({ control }: { control: Control }) {
            <span>{CAPABILITY[prompt.step]}</span>
          </p>
        )}
-       <div className="mt-5 space-y-5">
+       <div className="flex-1 flex flex-col mt-5 space-y-5">
         {items.map(it => it.kind === 'fold' ? (
           <div key={it.id}>
             <button type="button" onClick={() => setOpenFolds(o => (o.includes(it.id) ? o.filter(x => x !== it.id) : [...o, it.id]))}
@@ -1854,8 +1859,11 @@ export default function ControlChatPane({ control }: { control: Control }) {
           </div>
         )}
 
-        {!working && !ipeDraft && !pile && !draw && !extract && !awaitingCause && !waive && (
-          <div>
+        {/* Bottom-aligned (user ask, 8 Oct): the live step and its buttons
+            sit on the floor of the rail, right above the composer, however
+            short the thread above is. */}
+        {!working && !ipeDraft && !pile && !draw && !extract && !awaitingCause && !waive && !planUnstarted && (
+          <div className="mt-auto">
             {/* Ira's mark sits on the LIVE line only. The thread above stays
                 unmarked prose (DESIGN.md §7.1.7 — no avatar, identity carried
                 by alignment); what the mark distinguishes is not "who said

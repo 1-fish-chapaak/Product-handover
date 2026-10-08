@@ -1,11 +1,12 @@
 import { useEffect, useMemo, useState } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import {
-  ClipboardCheck, Calendar, ArrowUpRight, Search, Plus,
+  Calendar, ArrowUpRight, Search, Plus,
   Trash2, AlertTriangle, X, LayoutDashboard, List,
-  GitBranch, Sparkles,
+  GitBranch, Sparkles, UserRound, ShieldCheck,
 } from 'lucide-react';
-import Orb from '../shared/Orb';
+import FloatingLines from '../shared/FloatingLines';
+import { Button } from '../shared/Button';
 import { findEngagement, libraryEngagements, registerEngagement, type AutomationSubtype, type Engagement, type EngStatus, type EngType, type ProcessCode } from '../../data/engagements';
 import { useCreatedEngagements } from '../../data/createdEngagementsStore';
 import ConfirmationModal from '../shared/ConfirmationModal';
@@ -27,7 +28,7 @@ import type { StackRowNav } from '../shared/InsightStack';
 import { ActionDrawer, InsightReflection, TargetedActionList } from '../shared/TargetedActions';
 import { getActionsForTarget, getReflectionsFor, useInsightCacheVersion, type TargetedAction } from '../shared/insightCache';
 import { makePortfolioBuilder, portfolioInsightSubjects, portfolioStackSteps, PORTFOLIO_SUBJECT_ID } from '../../data/portfolioInsights';
-import WorkflowConfigurator from '../exceptions/workflow/WorkflowConfigurator';
+import ApprovalFlowsPanel from './ApprovalFlowsPanel';
 import type { Persona } from '../exceptions/workflow/workflowTypes';
 
 type EngViewMode = 'overview' | 'list' | 'approval-flow';
@@ -74,11 +75,13 @@ const STATUS_DOT: Record<EngStatus, string> = {
  *  the word its own page uses — so the list and the page never disagree. */
 const STATUS_LABEL = (s: EngStatus): string => (s === 'Closed' ? 'Concluded' : s);
 
-const TYPE_CLS: Record<EngType, string> = {
-  Compliance: 'bg-brand-50 text-brand-700 border-brand-100',
-  'Internal Audit': 'bg-evidence-50 text-evidence-700 border-evidence-100',
-  Automation: 'bg-compliant-50 text-compliant-700 border-compliant-100',
-  'SOX / ICFR': 'bg-brand-100 text-brand-800 border-brand-200',
+/** Type reads as coloured text on the entry's meta line (Control Library's
+ *  "Standard library" treatment), not a pill. */
+const TYPE_TEXT: Record<EngType, string> = {
+  Compliance: 'text-brand-700',
+  'Internal Audit': 'text-evidence-700',
+  Automation: 'text-compliant-700',
+  'SOX / ICFR': 'text-brand-800',
 };
 
 const TYPE_LABEL: Record<EngType, string> = {
@@ -281,52 +284,84 @@ export default function EngagementsView({ onOpenEngagement, onOpenAuditPlanning,
   };
 
   return (
-    <div className="h-full overflow-y-auto bg-white bg-mesh-gradient relative">
-      <Orb hoverIntensity={0.06} rotateOnHover hue={275} opacity={0.05} />
-      <div className="p-8 relative">
-        {/* Header */}
-        <div className="flex items-end justify-between mb-5">
-          <div>
-            <div className="text-[0.6875rem] font-semibold text-text-muted tracking-wider uppercase mb-1">Engagements</div>
-            <h1 className="text-[2rem] font-bold text-text leading-tight">Engagement Library</h1>
-            <p className="text-[0.8125rem] text-text-secondary mt-1.5 max-w-xl">
-              {/* One line for the whole library, whichever tab is open (user ask). */}
-              A cross-engagement snapshot — health, attention, and activity across your whole portfolio.
-            </p>
-          </div>
-          <div className="flex items-center gap-2 shrink-0">
-            {/* Portfolio AI insights — library chrome, because the roll-up
-                spans every engagement, not any one tab. */}
-            <InsightLauncherPill
-              run={insightRun}
-              onOpen={() => setInsightsPanelOpen(true)}
-              idleTitle="Correlates findings across every engagement in the library — shared root causes, reliance dependencies, colliding milestones. Won’t run automatically; you trigger it so it only bills when you need it."
-            />
-            <div className="h-9 w-px bg-border-light mx-1" aria-hidden="true" />
-            <button
-              onClick={onOpenAuditPlanning}
-              className="flex items-center gap-1.5 px-3.5 py-2 rounded-lg border border-border bg-white hover:bg-primary-xlight/40 hover:border-primary/30 text-[0.75rem] font-semibold text-text-secondary hover:text-primary transition-colors cursor-pointer"
-              title="See engagements laid out on the FY timeline"
-            >
-              <Calendar size={13} />
-              Audit Planning Timeline
-              <ArrowUpRight size={12} />
-            </button>
-            {can('eng_create') && (
+    // Knowledge Hub's chrome: full-bleed elevated header strip (title ·
+    // subhead · underlined tabs) pinned on top; the tab content scrolls below.
+    <div className="kh-no-focus-ring h-full flex flex-col overflow-hidden bg-canvas">
+      <div className="px-6 lg:px-12 xl:px-[124px] pt-8 shrink-0">
+        <div className="bg-canvas-elevated -mx-6 lg:-mx-12 xl:-mx-[124px] px-6 lg:px-12 xl:px-[124px] -mt-8 pt-8 border-b border-canvas-border relative overflow-hidden">
+          <FloatingLines
+            enabledWaves={['top', 'bottom']}
+            lineCount={3}
+            lineDistance={10}
+            bendRadius={5}
+            bendStrength={-0.3}
+            interactive
+            parallax
+            color="#6a12cd"
+            opacity={0.05}
+          />
+          <motion.div
+            initial={{ opacity: 0, y: 8 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.4, ease: [0.22, 1, 0.36, 1] }}
+            className="relative mb-6 flex flex-wrap lg:flex-nowrap items-end justify-between gap-x-6 gap-y-4"
+          >
+            <div className="min-w-0 flex-1">
+              <h1 className="text-[2.125rem] font-semibold tracking-tight text-ink-900 leading-[1.15]">
+                Engagement Library
+              </h1>
+              <p className="mt-2 text-[0.9375rem] text-ink-500 leading-relaxed max-w-2xl">
+                {/* One line for the whole library, whichever tab is open (user ask). */}
+                A cross-engagement snapshot — health, attention, and activity across your whole portfolio.
+              </p>
+            </div>
+            <div className="flex items-center gap-2 shrink-0">
+              {/* One primary action per tab. Portfolio AI insights only on
+                  Overview (row reflections on the list still open its drawer);
+                  Approval Flow's own Create flow sits in its toolbar. */}
+              {mode === 'overview' && (<>
+                <InsightLauncherPill
+                  run={insightRun}
+                  onOpen={() => setInsightsPanelOpen(true)}
+                  idleTitle="Correlates findings across every engagement in the library — shared root causes, reliance dependencies, colliding milestones. Won’t run automatically; you trigger it so it only bills when you need it."
+                />
+                <div className="h-9 w-px bg-border-light mx-1" aria-hidden="true" />
+              </>)}
               <button
-                onClick={() => { setWizardInitialType(undefined); setWizardOpen(true); }}
-                className="flex items-center gap-2 px-4 py-2 bg-primary hover:bg-primary-hover text-white rounded-lg text-[0.8125rem] font-semibold transition-colors cursor-pointer"
+                onClick={onOpenAuditPlanning}
+                className="flex items-center gap-1.5 px-3.5 py-2 rounded-lg border border-border bg-white hover:bg-primary-xlight/40 hover:border-primary/30 text-[0.75rem] font-semibold text-text-secondary hover:text-primary transition-colors cursor-pointer"
+                title="See engagements laid out on the FY timeline"
               >
-                <Plus size={14} />New Engagement
+                <Calendar size={13} />
+                Audit Planning Timeline
+                <ArrowUpRight size={12} />
               </button>
-            )}
-          </div>
-        </div>
+              {mode !== 'approval-flow' && can('eng_create') && (
+                <Button
+                  variant="primary"
+                  leftIcon={<Plus size={14} />}
+                  onClick={() => { setWizardInitialType(undefined); setWizardOpen(true); }}
+                >
+                  New Engagement
+                </Button>
+              )}
+            </div>
+          </motion.div>
 
-        {/* Primary view switcher — prominent, on its own row */}
-        <div className="flex items-center gap-3 mb-6 border-b border-border-light">
-          <ViewToggle mode={mode} onChange={setMode} count={all.length} />
+          {/* Tabs sit on the strip's border-b, which is their underline track. */}
+          <motion.div
+            initial={{ opacity: 0, y: 6 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.4, delay: 0.08, ease: [0.22, 1, 0.36, 1] }}
+            className="relative -mb-px"
+          >
+            <ViewToggle mode={mode} onChange={setMode} count={all.length} />
+          </motion.div>
         </div>
+      </div>
+
+      {/* Tab content — the page's one scroll region under the pinned header. */}
+      <div className="px-6 lg:px-12 xl:px-[124px] pt-6 pb-8 flex-1 min-h-0 overflow-y-auto">
 
         {mode === 'overview' && (
           <EngagementsOverview
@@ -338,46 +373,72 @@ export default function EngagementsView({ onOpenEngagement, onOpenAuditPlanning,
         )}
 
         {mode === 'list' && (<>
-        {/* Search + filters — one compact row, no dedicated panel */}
-        <div className="flex items-center gap-2 mb-5 flex-wrap">
-          <div className="relative flex-1 min-w-[220px] max-w-md">
-            <Search size={14} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-text-muted" />
-            <input
-              type="text"
-              placeholder="Search engagement, owner, framework, or code..."
-              value={search}
-              onChange={e => setSearch(e.target.value)}
-              className="w-full pl-10 pr-3.5 py-2 text-[0.8125rem] border border-border rounded-lg bg-white text-text placeholder:text-text-muted outline-none focus:border-primary/40 focus:ring-2 focus:ring-primary/10 transition-all"
-            />
+        {/* Toolbar — Control Library's grammar: type as a segmented control,
+            process + search on the right, status as pills underneath. */}
+        <div className="flex flex-wrap items-center gap-x-3 gap-y-2 mb-3">
+          <div role="tablist" aria-label="Engagement type" className="inline-flex items-center gap-0.5 p-0.5 rounded-lg bg-paper-100">
+            {TYPE_FILTERS.map(t => (
+              <button
+                key={t}
+                role="tab"
+                aria-selected={typeFilter === t}
+                onClick={() => setTypeFilter(t)}
+                className={`h-7 px-3 rounded-md text-[0.75rem] font-medium cursor-pointer transition-colors whitespace-nowrap ${typeFilter === t ? 'bg-canvas-elevated text-ink-900 shadow-sm' : 'text-ink-500 hover:text-ink-800'}`}
+              >
+                {t === 'All' ? 'All' : TYPE_LABEL[t]} <span className="ml-0.5 text-ink-400 tabular-nums">{counts.type[t] ?? 0}</span>
+              </button>
+            ))}
           </div>
-          <MinimalFilter label="Type" allLabel="All types" options={TYPE_FILTERS} value={typeFilter} onChange={setTypeFilter} counts={counts.type} />
-          <MinimalFilter label="Status" allLabel="All statuses" options={STATUS_FILTERS} value={statusFilter} onChange={setStatusFilter} counts={counts.status} optionLabel={o => STATUS_LABEL(o as EngStatus)} />
-          <MinimalFilter label="Process" allLabel="All processes" options={PROCESS_FILTERS} value={processFilter} onChange={setProcessFilter} counts={counts.process} />
+          <div className="ml-auto flex items-center gap-2 w-full sm:w-auto">
+            <MinimalFilter label="Process" allLabel="All processes" options={PROCESS_FILTERS} value={processFilter} onChange={setProcessFilter} counts={counts.process} />
+            <div className="relative flex-1 sm:flex-none sm:w-72">
+              <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-ink-400" aria-hidden />
+              <input
+                type="text"
+                value={search}
+                onChange={e => setSearch(e.target.value)}
+                placeholder="Search name, owner, code…"
+                aria-label="Search engagements"
+                className="w-full h-9 pl-9 pr-3 rounded-lg border border-canvas-border bg-canvas-elevated text-[0.8125rem] text-ink-900 placeholder:text-ink-400 outline-none focus:border-brand-300"
+              />
+            </div>
+          </div>
+        </div>
+        <div className="flex flex-wrap items-center gap-1.5 mb-7" role="group" aria-label="Filter by status">
+          {STATUS_FILTERS
+            .filter(s => s === 'All' || s === statusFilter || (counts.status[s] ?? 0) > 0)
+            .map(s => (
+              <button
+                key={s}
+                aria-pressed={statusFilter === s}
+                onClick={() => setStatusFilter(s)}
+                className={`h-7 px-3 rounded-full border text-[0.75rem] cursor-pointer transition-colors ${statusFilter === s ? 'border-brand-300 bg-brand-50 text-brand-700 font-medium' : 'border-canvas-border text-ink-600 hover:border-brand-200'}`}
+              >
+                {s === 'All' ? 'Any status' : STATUS_LABEL(s)}
+                {s !== 'All' && <span className="ml-1.5 tabular-nums text-ink-400">{counts.status[s] ?? 0}</span>}
+              </button>
+            ))}
           {anyFilterActive && (
             <button
               onClick={clearFilters}
-              className="inline-flex items-center gap-1 text-[0.75rem] font-semibold text-text-muted hover:text-primary px-2 py-1.5 rounded-md hover:bg-primary/5 transition-colors cursor-pointer"
+              className="ml-1 inline-flex items-center gap-1 h-7 px-2 rounded-md text-[0.75rem] font-medium text-ink-500 hover:text-brand-700 hover:bg-brand-50 transition-colors cursor-pointer"
             >
-              <X size={12} /> Clear
+              <X size={12} aria-hidden /> Clear filters
             </button>
           )}
         </div>
 
         {/* List */}
         {filtered.length === 0 ? (
-          <div className="border border-border-light rounded-xl p-14 text-center bg-white">
-            <ClipboardCheck size={32} className="text-text-muted mx-auto mb-3" />
-            <p className="text-[0.875rem] font-semibold text-text mb-1">No engagements match your filters</p>
-            <p className="text-[0.75rem] text-text-muted">Try clearing the type, status, process, or search filter.</p>
+          <div className="rounded-xl border border-dashed border-canvas-border px-6 py-16 text-center">
+            <p className="text-[0.875rem] font-medium text-ink-800">No engagements match your filters</p>
+            <p className="mt-1 text-[0.8125rem] text-ink-500">Try clearing the type, status, process, or search filter.</p>
           </div>
         ) : (
           <div>
-            {/* No column headers (user ask, 28 Sep). These are cards, not table
-                rows: every value already says what it is — the type is a pill,
-                health is a percentage over a bar — so the labels named what was
-                legible without them, and the last one named a column that has
-                since come down to a single icon. */}
-            <div className="space-y-2">
+            {/* Entries, not table rows (no column headers, user ask 28 Sep):
+                every value says what it is — Control Library's entry card. */}
+            <ul className="space-y-3">
             {filtered.map((row, i) => {
               // A SOX engagement's figures are counted off its workspace — the
               // same source and rule as its Overview — not the seed record's
@@ -394,121 +455,102 @@ export default function EngagementsView({ onOpenEngagement, onOpenAuditPlanning,
               const reflections = getReflectionsFor('engagement', eng.id)
                 .sort((a, b) => INSIGHT_SEV_RANK[a.source.severity] - INSIGHT_SEV_RANK[b.source.severity]);
               const rowActions = getActionsForTarget('engagement', eng.id);
+              const isNew = eng.id === justCreatedId;
               return (
-                <motion.div
+                <motion.li
                   key={eng.id}
                   initial={{ opacity: 0, y: 4 }}
                   animate={{ opacity: 1, y: 0 }}
-                  transition={{ delay: i * 0.025 }}
+                  transition={{ delay: Math.min(i, 12) * 0.025 }}
                   onClick={() => onOpenEngagement(eng.id)}
-                  className={`grid grid-cols-[2.6fr_1fr_1.7fr_80px] gap-5 px-6 py-5 rounded-lg border hover:border-primary/50 hover: transition-all cursor-pointer group items-start ${eng.id === justCreatedId ? 'border-primary/50 bg-brand-50/40' : 'border-border-light bg-white'}`}
+                  className={`group rounded-xl border bg-canvas-elevated transition-[border-color,box-shadow] duration-150 cursor-pointer hover:shadow-[0_8px_24px_rgba(15,8,30,0.04)] ${isNew ? 'border-brand-300' : 'border-canvas-border hover:border-brand-200'}`}
                 >
-                  {/* Engagement column */}
-                  <div className="min-w-0">
-                    <div className="flex items-center gap-2 flex-wrap">
-                      <h3 className="text-[0.90625rem] font-semibold text-text leading-snug">{eng.name}</h3>
-                      {eng.id === justCreatedId && <span className="text-[0.6875rem] font-semibold text-brand-700">Just created</span>}
-                      <span className={`inline-flex items-center gap-1 px-2 h-5 rounded-full text-[0.625rem] font-semibold ${STATUS_CLS[eng.status]}`}>
-                        <span className={`w-1.5 h-1.5 rounded-full ${STATUS_DOT[eng.status]}`} aria-hidden="true" />
-                        {STATUS_LABEL(eng.status)}
-                      </span>
-                      {eng.aiRecommended && (
-                        <span
-                          className="inline-flex items-center gap-1 px-2 h-5 rounded-full text-[10px] font-semibold bg-gradient-to-r from-brand-500 to-fuchsia-500 text-white"
-                          title="Drafted by Ira's One-Click Audit"
-                        >
-                          <Sparkles size={10} />
-                          AI Recommended
-                        </span>
-                      )}
-                    </div>
-                    <p className="text-[0.75rem] text-text-secondary mt-1.5 leading-relaxed line-clamp-2 max-w-2xl">
-                      {eng.description}
-                    </p>
-                    <div className="flex items-center gap-3 mt-2 text-[0.6875rem] text-text-muted flex-wrap">
-                      <span className="font-mono tracking-tight">{eng.code}</span>
-                      <span className="text-border">·</span>
-                      <span>{eng.owner}</span>
-                      <span className="text-border">·</span>
-                      <span className="tabular-nums">{eng.periodStart} – {eng.periodEnd}</span>
-                      {/* One engagement = one audit round (5 Oct 2026) — say which. */}
-                      {eng.type === 'SOX / ICFR' && (<>
-                        <span className="text-border">·</span>
-                        <span>{ROUND_LABEL[soxRoundOf(eng)]}</span>
-                      </>)}
-                    </div>
-                    {/* Inline tag badges */}
-                    <div className="flex items-center gap-1.5 mt-2.5 flex-wrap">
-                      <span className="inline-flex items-center px-2 h-5 rounded-md text-[0.65625rem] font-semibold bg-surface-2 text-text-secondary border border-border-light">
-                        {eng.process}
-                      </span>
-                      <span className="inline-flex items-center px-2 h-5 rounded-md text-[0.65625rem] font-medium bg-white text-text-muted border border-border-light">
-                        {eng.framework}
-                      </span>
-                    </div>
-                  </div>
-
-                  {/* Type column */}
-                  <div className="flex flex-col items-start gap-1.5">
-                    <span className={`inline-flex items-center px-2.5 py-1 rounded-md text-[0.6875rem] font-semibold border ${TYPE_CLS[eng.type]}`}>
-                      {TYPE_LABEL[eng.type]}
-                    </span>
-                    {eng.type === 'Automation' && eng.subtype && (
-                      <span className="inline-flex items-center px-1.5 h-4 rounded text-[0.59375rem] font-bold uppercase tracking-wide bg-compliant-50/60 text-compliant-700 border border-compliant-100/70">
-                        {SUBTYPE_LABEL[eng.subtype]}
-                      </span>
-                    )}
-                  </div>
-
-                  {/* Health column */}
-                  <div className="flex flex-col gap-1.5 min-w-0">
-                    {notStarted ? (
-                      <div className="text-[0.6875rem] text-text-muted italic">
-                        {eng.controls} controls · not started
+                  <div className="flex items-start gap-6 px-5 py-4">
+                    <div className="min-w-0 flex-1">
+                      {/* Meta line — code · process · type · subtype · round */}
+                      <div className="flex flex-wrap items-center gap-x-2 text-[0.6875rem] text-ink-400">
+                        <span className="font-mono text-ink-500 tabular-nums">{eng.code}</span>
+                        <span aria-hidden>·</span>
+                        <span className="font-mono">{eng.process}</span>
+                        <span aria-hidden>·</span>
+                        <span className={`font-medium ${TYPE_TEXT[eng.type]}`}>{TYPE_LABEL[eng.type]}</span>
+                        {eng.type === 'Automation' && eng.subtype && (<>
+                          <span aria-hidden>·</span>
+                          <span className="text-ink-500">{SUBTYPE_LABEL[eng.subtype]}</span>
+                        </>)}
+                        {/* One engagement = one audit round (5 Oct 2026) — say which. */}
+                        {eng.type === 'SOX / ICFR' && (<>
+                          <span aria-hidden>·</span>
+                          <span className="text-ink-500">{ROUND_LABEL[soxRoundOf(eng)]}</span>
+                        </>)}
                       </div>
-                    ) : (
-                      <>
-                        <div className="flex items-baseline justify-between gap-2">
-                          <div className="flex items-baseline gap-2 min-w-0">
-                            <span className={`text-[0.9375rem] font-bold tabular-nums leading-none ${health.text}`}>{eng.health}%</span>
-                            <span className="text-[0.6875rem] text-text-secondary tabular-nums truncate">
-                              <span className="font-semibold text-text">{effective}</span>
-                              <span className="text-text-muted">/{eng.controls}</span>
-                              <span className="text-text-muted ml-1">controls effective</span>
-                            </span>
+                      <h3 className="mt-1 flex flex-wrap items-center gap-2 text-[0.9375rem] font-semibold leading-snug text-ink-900">
+                        <button
+                          type="button"
+                          onClick={e => { e.stopPropagation(); onOpenEngagement(eng.id); }}
+                          className="text-left cursor-pointer group-hover:text-brand-700 transition-colors"
+                        >
+                          {eng.name}
+                        </button>
+                        {isNew && <span className="text-[0.6875rem] font-semibold text-brand-700">Just created</span>}
+                        {eng.aiRecommended && (
+                          <span
+                            className="inline-flex items-center gap-1 h-5 px-2 rounded-full text-[0.625rem] font-semibold bg-brand-50 text-brand-700"
+                            title="Drafted by Ira's One-Click Audit"
+                          >
+                            <Sparkles size={10} aria-hidden />
+                            AI Recommended
+                          </span>
+                        )}
+                      </h3>
+                      <p className="mt-1 max-w-[75ch] text-[0.8125rem] leading-relaxed text-ink-500 line-clamp-2">{eng.description}</p>
+
+                      <div className="mt-3 flex flex-wrap items-center gap-x-5 gap-y-1.5 text-[0.75rem] text-ink-500">
+                        <span className="inline-flex items-center gap-1.5"><UserRound size={12} className="text-ink-400" aria-hidden />{eng.owner}</span>
+                        <span className="inline-flex items-center gap-1.5 tabular-nums"><Calendar size={12} className="text-ink-400" aria-hidden />{eng.periodStart} – {eng.periodEnd}</span>
+                        <span className="inline-flex items-center gap-1.5"><ShieldCheck size={12} className="text-ink-400" aria-hidden />{eng.framework}</span>
+                        {eng.openIssues > 0 && (
+                          <span className="inline-flex items-center gap-1.5 text-risk-700">
+                            <AlertTriangle size={12} aria-hidden />
+                            <span className="font-semibold tabular-nums">{eng.openIssues}</span> open
+                          </span>
+                        )}
+                      </div>
+                    </div>
+
+                    {/* Status + health. No ▶ Open icon (feedback #9) and no
+                        Edit / Assign / Close (user ask, 28 Sep) — the whole
+                        card opens the engagement; only Delete stays here. */}
+                    <div className="w-52 shrink-0 flex flex-col items-end gap-3 pt-0.5">
+                      <div className="flex items-center gap-1">
+                        <span className={`inline-flex items-center gap-1.5 h-6 px-2.5 rounded-full text-[0.6875rem] font-medium whitespace-nowrap ${STATUS_CLS[eng.status]}`}>
+                          <span className={`size-1.5 rounded-full ${STATUS_DOT[eng.status]}`} aria-hidden />
+                          {STATUS_LABEL(eng.status)}
+                        </span>
+                        {can('eng_delete') && (
+                          <IconAction
+                            label="Delete engagement"
+                            onClick={(e) => { e.stopPropagation(); setDeleteTarget(eng); }}
+                            className="text-ink-400 hover:text-risk-700 hover:bg-risk-50"
+                          >
+                            <Trash2 size={13} />
+                          </IconAction>
+                        )}
+                      </div>
+                      {notStarted ? (
+                        <span className="text-[0.6875rem] text-ink-400 tabular-nums">{eng.controls} controls · not started</span>
+                      ) : (
+                        <div className="w-full">
+                          <div className="flex items-baseline justify-between gap-2 text-[0.6875rem] text-ink-500 tabular-nums">
+                            <span><span className="font-semibold text-ink-900">{effective}</span>/{eng.controls} controls effective</span>
+                            <span className={`font-mono font-semibold ${health.text}`}>{eng.health}%</span>
+                          </div>
+                          <div className="mt-1 h-1.5 rounded-full bg-paper-100 overflow-hidden">
+                            <div className={`h-full rounded-full ${health.bar} transition-all duration-500`} style={{ width: `${eng.health}%` }} />
                           </div>
                         </div>
-                        <div className="h-1.5 bg-surface-3 rounded-full overflow-hidden">
-                          <div className={`h-full ${health.bar} rounded-full transition-all duration-500`} style={{ width: `${eng.health}%` }} />
-                        </div>
-                      </>
-                    )}
-                    {eng.openIssues > 0 && (
-                      <div className="flex items-center gap-1 mt-0.5">
-                        <AlertTriangle size={11} className="text-risk-700" />
-                        <span className="text-[0.6875rem] font-semibold text-risk-700">{eng.openIssues}</span>
-                        <span className="text-[0.6875rem] text-text-muted">open</span>
-                      </div>
-                    )}
-                  </div>
-
-                  {/* Actions column — no ▶ Open icon (feedback #9): it read as
-                      "run", and the whole card already opens the engagement.
-                      Edit, Assign owner and Close / finalize have gone too (user
-                      ask, 28 Sep): four icons on a row made the list look like a
-                      control panel when it is a way in, and each of the three
-                      changed the engagement from a screen that shows none of its
-                      detail. They belong where the engagement is open. */}
-                  <div className="flex items-start justify-end gap-1">
-                    {can('eng_delete') && (
-                      <IconAction
-                        label="Delete engagement"
-                        onClick={(e) => { e.stopPropagation(); setDeleteTarget(eng); }}
-                        className="text-text-muted hover:text-risk-700 hover:bg-risk-50"
-                      >
-                        <Trash2 size={14} />
-                      </IconAction>
-                    )}
+                      )}
+                    </div>
                   </div>
 
                   {/* Portfolio-insight reflection + travelled actions — the
@@ -516,7 +558,7 @@ export default function EngagementsView({ onOpenEngagement, onOpenAuditPlanning,
                       must not open the engagement (the row's own action). */}
                   {(reflections.length > 0 || rowActions.length > 0) && (
                     <div
-                      className="col-span-full flex flex-col gap-2 pt-3 mt-1 border-t border-border-light/70 cursor-default"
+                      className="mx-5 pb-4 pt-3 border-t border-canvas-border flex flex-col gap-2 cursor-default"
                       onClick={(e) => e.stopPropagation()}
                     >
                       {reflections[0] && (
@@ -544,28 +586,20 @@ export default function EngagementsView({ onOpenEngagement, onOpenAuditPlanning,
                       )}
                     </div>
                   )}
-                </motion.div>
+                </motion.li>
               );
             })}
-            </div>
+            </ul>
 
-            {/* Footer */}
-            <div className="px-6 py-2.5 mt-2 text-[0.6875rem] text-text-muted">
+            <p className="mt-4 text-[0.75rem] text-ink-400 tabular-nums">
               {filtered.length} of {all.length} engagements
-            </div>
+            </p>
           </div>
         )}
         </>)}
 
 
-        {mode === 'approval-flow' && (
-          <div>
-            <p className="text-[0.78125rem] text-text-secondary mb-4 max-w-[620px]">
-              Define reusable approval chains that apply wherever exceptions are sent for approval. Switch sides to manage Risk Owner or Auditor flows.
-            </p>
-            <WorkflowConfigurator role={flowRole} onRoleChange={setFlowRole} currentUserId={flowRole === 'auditor' ? 'u-au-owner' : 'u-ro-owner'} />
-          </div>
-        )}
+        {mode === 'approval-flow' && <ApprovalFlowsPanel role={flowRole} onRoleChange={setFlowRole} />}
       </div>
 
       {/* `custom` = "is the SOX sheet taking over?" — while true, the exiting
@@ -688,7 +722,8 @@ export default function EngagementsView({ onOpenEngagement, onOpenAuditPlanning,
   );
 }
 
-/** Primary Overview ⇄ List view switcher — large underline tabs. */
+/** Primary view switcher — Knowledge Hub's underlined tabs (spring brand
+ *  bar riding the header strip's border-b). */
 function ViewToggle({
   mode, onChange, count,
 }: {
@@ -702,7 +737,7 @@ function ViewToggle({
     { id: 'approval-flow', label: 'Approval Flow', Icon: GitBranch },
   ];
   return (
-    <div className="flex items-center gap-1" role="tablist" aria-label="Engagements view">
+    <div className="flex gap-6" role="tablist" aria-label="Engagements view">
       {tabs.map(({ id, label, Icon, badge }) => {
         const active = mode === id;
         return (
@@ -711,18 +746,25 @@ function ViewToggle({
             role="tab"
             aria-selected={active}
             onClick={() => onChange(id)}
-            className={`flex items-center gap-2 px-4 py-3 text-[0.875rem] font-semibold border-b-2 -mb-px transition-colors cursor-pointer ${
-              active
-                ? 'border-primary text-primary'
-                : 'border-transparent text-text-muted hover:text-text hover:border-border'
+            className={`pb-3 text-[0.8125rem] font-semibold relative transition-colors cursor-pointer whitespace-nowrap ${
+              active ? 'text-brand-700' : 'text-ink-500 hover:text-ink-700'
             }`}
           >
-            <Icon size={16} />
-            {label}
-            {badge != null && (
-              <span className={`tabular-nums text-[0.6875rem] font-bold px-1.5 py-0.5 rounded-full ${
-                active ? 'bg-primary/10 text-primary' : 'bg-surface-2 text-text-muted'
-              }`}>{badge}</span>
+            <span className="flex items-center gap-2">
+              <Icon size={14} />
+              {label}
+              {badge != null && (
+                <span className={`tabular-nums text-[0.625rem] font-bold px-1.5 py-0.5 rounded-full ${
+                  active ? 'bg-brand-100 text-brand-700' : 'bg-paper-50 text-ink-500'
+                }`}>{badge}</span>
+              )}
+            </span>
+            {active && (
+              <motion.div
+                layoutId="eng-main-tab-underline"
+                className="absolute bottom-0 left-0 right-0 h-[3px] bg-brand-600 rounded-full"
+                transition={{ type: 'spring', stiffness: 380, damping: 32 }}
+              />
             )}
           </button>
         );
