@@ -38,9 +38,7 @@ const CAP = 4;
 
 const rowCls = 'flex-1 min-w-0 flex items-center gap-2.5 py-1.5 px-2 -mx-1 rounded-lg text-left hover:bg-paper-100 transition-colors cursor-pointer group';
 
-/** `bare`: no card or heading — the rows sit inside Ira's briefing on the
- *  Overview (8 Oct), and nothing renders when there is nothing to show. */
-export default function IraWorkSection({ controls, bare }: { controls: Control[]; bare?: boolean }) {
+export default function IraWorkSection({ controls }: { controls: Control[] }) {
   const { eng, openAuditId, openControl, confirmIra } = useIcfr();
   const runs = useControlRuns();
   const note = useInlineNote();
@@ -127,62 +125,6 @@ export default function IraWorkSection({ controls, bare }: { controls: Control[]
   );
   const chevron = <ChevronRight size={14} className="ml-auto shrink-0 text-ink-300 group-hover:text-ink-500 transition-colors" />;
 
-  const groups = (
-    <div className="space-y-3">
-      {group('waiting', 'Waiting for you', waiting, r => (
-        <div key={r.key} className="flex items-center gap-2">
-          <button type="button" onClick={() => openControl(r.control.id, TRACK_FOCUS[r.track])} className={rowCls}
-            title={`Open ${controlCode(r.control)} at ${r.track === 'design' ? 'test of design' : 'test of effectiveness'}`}>
-            {code(r.control)}
-            <span className="text-[0.8125rem] text-ink-700 truncate">
-              {TRACK_LABEL[r.track]} · {[r.sure.length ? `${r.sure.length} sure` : null, r.lessSure ? `${r.lessSure} less sure` : null].filter(Boolean).join(', ')}
-            </span>
-            {chevron}
-          </button>
-          {r.canConfirm && (
-            <button type="button" onClick={() => confirm(r)}
-              className="h-6 px-2 shrink-0 rounded-md border border-brand-200 bg-brand-50 text-[0.6875rem] font-semibold text-brand-700 hover:bg-brand-100 transition-colors cursor-pointer">
-              Confirm {r.sure.length}
-            </button>
-          )}
-          {r.why && <span className="shrink-0 text-[0.6875rem] text-ink-500">{r.why}</span>}
-        </div>
-      ))}
-      {group('couldnt', 'Couldn’t test', couldnt, r => (
-        <button key={r.key} type="button" onClick={() => openControl(r.control.id, TRACK_FOCUS[r.track])} className={rowCls}
-          title={`Open ${controlCode(r.control)} at ${r.track === 'design' ? 'test of design' : 'test of effectiveness'}`}>
-          {code(r.control)}
-          <span className="text-[0.8125rem] text-ink-700 truncate">
-            {TRACK_LABEL[r.track]} · {r.checks} {r.track === 'design' ? (r.checks === 1 ? 'check' : 'checks') : (r.checks === 1 ? 'attribute' : 'attributes')}
-            <span className="text-ink-500"> — {[
-              ...askedPhrases(r.asked, r.checks),
-              r.notAsked ? (r.notAsked === r.checks ? 'not asked yet' : `${r.notAsked} not asked yet`) : null,
-            ].filter(Boolean).join(' · ')}</span>
-          </span>
-          {chevron}
-        </button>
-      ))}
-      {group('running', 'Running', running, r => (
-        <button key={r.key} type="button" onClick={() => openControl(r.control.id)} className={rowCls} title={`Open ${controlCode(r.control)}`}>
-          {code(r.control)}
-          <span className="text-[0.8125rem] text-ink-700 truncate">{r.label}…</span>
-          {chevron}
-        </button>
-      ))}
-    </div>
-  );
-
-  if (bare) {
-    if (empty) return null;
-    return (
-      <div className="mt-3">
-        <p className="text-[0.75rem] text-ink-500 mb-1">From my work</p>
-        {groups}
-        <InlineNote note={note.note} className="mt-2" />
-      </div>
-    );
-  }
-
   return (
     <section className="rounded-2xl border border-canvas-border bg-canvas-elevated p-4">
       <h2 className="font-display text-[1.0625rem] leading-tight text-ink-900 inline-flex items-center gap-1.5">
@@ -192,7 +134,48 @@ export default function IraWorkSection({ controls, bare }: { controls: Control[]
       {empty ? (
         <p className="mt-2 text-[0.8125rem] text-ink-500">Nothing from Ira waiting for you.</p>
       ) : (
-        <div className="mt-2.5">{groups}</div>
+        <div className="mt-2.5 space-y-3">
+          {group('waiting', 'Waiting for you', waiting, r => (
+            <div key={r.key} className="flex items-center gap-2">
+              <button type="button" onClick={() => openControl(r.control.id, TRACK_FOCUS[r.track])} className={rowCls}
+                title={`Open ${controlCode(r.control)} at ${r.track === 'design' ? 'test of design' : 'test of effectiveness'}`}>
+                {code(r.control)}
+                <span className="text-[0.8125rem] text-ink-700 truncate">
+                  {TRACK_LABEL[r.track]} · {[r.sure.length ? `${r.sure.length} sure` : null, r.lessSure ? `${r.lessSure} less sure` : null].filter(Boolean).join(', ')}
+                </span>
+                {chevron}
+              </button>
+              {r.canConfirm && (
+                <button type="button" onClick={() => confirm(r)}
+                  className="h-6 px-2 shrink-0 rounded-md border border-brand-200 bg-brand-50 text-[0.6875rem] font-semibold text-brand-700 hover:bg-brand-100 transition-colors cursor-pointer">
+                  Confirm {r.sure.length}
+                </button>
+              )}
+              {r.why && <span className="shrink-0 text-[0.6875rem] text-ink-500">{r.why}</span>}
+            </div>
+          ))}
+          {group('couldnt', 'Couldn’t test', couldnt, r => (
+            <button key={r.key} type="button" onClick={() => openControl(r.control.id, TRACK_FOCUS[r.track])} className={rowCls}
+              title={`Open ${controlCode(r.control)} at ${r.track === 'design' ? 'test of design' : 'test of effectiveness'}`}>
+              {code(r.control)}
+              <span className="text-[0.8125rem] text-ink-700 truncate">
+                {TRACK_LABEL[r.track]} · {r.checks} {r.track === 'design' ? (r.checks === 1 ? 'check' : 'checks') : (r.checks === 1 ? 'attribute' : 'attributes')}
+                <span className="text-ink-500"> — {[
+                  ...askedPhrases(r.asked, r.checks),
+                  r.notAsked ? (r.notAsked === r.checks ? 'not asked yet' : `${r.notAsked} not asked yet`) : null,
+                ].filter(Boolean).join(' · ')}</span>
+              </span>
+              {chevron}
+            </button>
+          ))}
+          {group('running', 'Running', running, r => (
+            <button key={r.key} type="button" onClick={() => openControl(r.control.id)} className={rowCls} title={`Open ${controlCode(r.control)}`}>
+              {code(r.control)}
+              <span className="text-[0.8125rem] text-ink-700 truncate">{r.label}…</span>
+              {chevron}
+            </button>
+          ))}
+        </div>
       )}
       <InlineNote note={note.note} className="mt-2" />
     </section>
