@@ -13,12 +13,15 @@ import { motion, AnimatePresence } from 'motion/react';
 import { Loader2, RefreshCw, ShieldCheck, Sparkles } from 'lucide-react';
 import type { InsightStackRun } from './useInsightStackRun';
 
-export default function InsightLauncherPill({ run, onOpen, idleTitle }: {
+export default function InsightLauncherPill({ run, onOpen, idleTitle, compact }: {
   run: InsightStackRun;
   /** Open the results surface (the insight stack drawer). */
   onOpen: () => void;
   /** The idle pill's cost-gate tooltip — worded for this launcher's scope. */
   idleTitle: string;
+  /** Idle as an icon button that widens to its full label on hover / focus
+   *  (Engagement Library header, user ask 8 Oct). */
+  compact?: boolean;
 }) {
   const { phase, step, steps, outcome, stack } = run;
 
@@ -93,6 +96,26 @@ export default function InsightLauncherPill({ run, onOpen, idleTitle }: {
   }
 
   // Idle — the cost gate, compressed. The full explainer rides the tooltip.
+  if (compact) {
+    // A fixed 36px slot; the button grows leftward over it, so widening never
+    // moves the header (a moving target loses the hover and flickers).
+    return (
+      <span className="relative block w-9 h-9 shrink-0">
+      <button
+        type="button" onClick={run.run}
+        title={idleTitle}
+        aria-label="Generate AI insights"
+        className="group absolute right-0 top-0 z-10 inline-flex items-center rounded-lg bg-brand-600 text-white h-9 px-[11px] text-[0.78125rem] font-semibold hover:bg-brand-500 focus-visible:bg-brand-500 transition-colors cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/30"
+      >
+        <Sparkles size={14} aria-hidden="true" className="shrink-0" />
+        <span aria-hidden="true"
+          className="overflow-hidden whitespace-nowrap max-w-0 opacity-0 group-hover:max-w-[11rem] group-hover:opacity-100 group-hover:ml-1.5 group-focus-visible:max-w-[11rem] group-focus-visible:opacity-100 group-focus-visible:ml-1.5 transition-[max-width,opacity,margin] duration-200 ease-out motion-reduce:transition-none">
+          Generate AI insights
+        </span>
+      </button>
+      </span>
+    );
+  }
   return (
     <button
       type="button" onClick={run.run}

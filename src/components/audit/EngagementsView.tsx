@@ -323,6 +323,7 @@ export default function EngagementsView({ onOpenEngagement, onOpenAuditPlanning,
                 <InsightLauncherPill
                   run={insightRun}
                   onOpen={() => setInsightsPanelOpen(true)}
+                  compact
                   idleTitle="Correlates findings across every engagement in the library — shared root causes, reliance dependencies, colliding milestones. Won’t run automatically; you trigger it so it only bills when you need it."
                 />
                 <div className="h-9 w-px bg-border-light mx-1" aria-hidden="true" />
@@ -375,7 +376,7 @@ export default function EngagementsView({ onOpenEngagement, onOpenAuditPlanning,
         {mode === 'list' && (<>
         {/* Toolbar — Control Library's grammar: type as a segmented control,
             process + search on the right, status as pills underneath. */}
-        <div className="flex flex-wrap items-center gap-x-3 gap-y-2 mb-3">
+        <div className="flex flex-wrap items-center gap-x-3 gap-y-2 mb-7">
           <div role="tablist" aria-label="Engagement type" className="inline-flex items-center gap-0.5 p-0.5 rounded-lg bg-paper-100">
             {TYPE_FILTERS.map(t => (
               <button
@@ -390,8 +391,20 @@ export default function EngagementsView({ onOpenEngagement, onOpenAuditPlanning,
             ))}
           </div>
           <div className="ml-auto flex items-center gap-2 w-full sm:w-auto">
+            {anyFilterActive && (
+              <button
+                onClick={clearFilters}
+                className="inline-flex items-center gap-1 h-9 px-2 rounded-md text-[0.75rem] font-medium text-ink-500 hover:text-brand-700 hover:bg-brand-50 transition-colors cursor-pointer whitespace-nowrap"
+              >
+                <X size={12} aria-hidden /> Clear filters
+              </button>
+            )}
+            {/* Status as one filter button (user ask, 8 Oct) — it was a row of pills. */}
+            <MinimalFilter label="Status" allLabel="Any status"
+              options={STATUS_FILTERS.filter(st => st === 'All' || st === statusFilter || (counts.status[st] ?? 0) > 0)}
+              value={statusFilter} onChange={setStatusFilter} counts={counts.status} optionLabel={st => (st === 'All' ? 'Any status' : STATUS_LABEL(st))} />
             <MinimalFilter label="Process" allLabel="All processes" options={PROCESS_FILTERS} value={processFilter} onChange={setProcessFilter} counts={counts.process} />
-            <div className="relative flex-1 sm:flex-none sm:w-72">
+            <div className="relative flex-1 sm:flex-none sm:w-60">
               <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-ink-400" aria-hidden />
               <input
                 type="text"
@@ -404,30 +417,6 @@ export default function EngagementsView({ onOpenEngagement, onOpenAuditPlanning,
             </div>
           </div>
         </div>
-        <div className="flex flex-wrap items-center gap-1.5 mb-7" role="group" aria-label="Filter by status">
-          {STATUS_FILTERS
-            .filter(s => s === 'All' || s === statusFilter || (counts.status[s] ?? 0) > 0)
-            .map(s => (
-              <button
-                key={s}
-                aria-pressed={statusFilter === s}
-                onClick={() => setStatusFilter(s)}
-                className={`h-7 px-3 rounded-full border text-[0.75rem] cursor-pointer transition-colors ${statusFilter === s ? 'border-brand-300 bg-brand-50 text-brand-700 font-medium' : 'border-canvas-border text-ink-600 hover:border-brand-200'}`}
-              >
-                {s === 'All' ? 'Any status' : STATUS_LABEL(s)}
-                {s !== 'All' && <span className="ml-1.5 tabular-nums text-ink-400">{counts.status[s] ?? 0}</span>}
-              </button>
-            ))}
-          {anyFilterActive && (
-            <button
-              onClick={clearFilters}
-              className="ml-1 inline-flex items-center gap-1 h-7 px-2 rounded-md text-[0.75rem] font-medium text-ink-500 hover:text-brand-700 hover:bg-brand-50 transition-colors cursor-pointer"
-            >
-              <X size={12} aria-hidden /> Clear filters
-            </button>
-          )}
-        </div>
-
         {/* List */}
         {filtered.length === 0 ? (
           <div className="rounded-xl border border-dashed border-canvas-border px-6 py-16 text-center">

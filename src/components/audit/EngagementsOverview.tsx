@@ -1,10 +1,9 @@
-import { useEffect, useId, useMemo, useRef, useState } from 'react';
+import { useMemo, useRef, useState } from 'react';
 import {
   AlertTriangle, ChevronRight, ShieldCheck, ArrowRight, Workflow, User, ListChecks, CheckCircle2,
   Upload, MessageSquare, RefreshCw, Shield, Sparkles, UserRound,
 } from 'lucide-react';
 import { KpiCountUp } from '../shared/KpiTile';
-import IraBriefing, { useBriefingTasks, type BriefingTask, type BriefingTopic } from '../shared/IraBriefing';
 import type { Engagement, EngStatus, EngType, ProcessCode } from '../../data/engagements';
 import { ENGAGEMENT_EXCEPTIONS, type Severity } from '../../data/engagement-exceptions';
 import { ENGAGEMENT_ACTIVITY, formatDay, type ActivityType } from '../../data/engagement-activity';
@@ -243,83 +242,8 @@ export default function EngagementsOverview({ engagements, onOpenEngagement, onG
 
   const healthTone = healthTier(stats.avgHealth);
 
-  // Ira speaks first (user ask, 8 Oct — Option A): the portfolio briefing, from
-  // the same numbers as the strip and lists below. Stage 1 — it says, it does
-  // not start anything yet.
-  const plural = (n: number, one: string, many = `${one}s`) => `${n} ${n === 1 ? one : many}`;
-  const dueThisWeek = stats.upcoming.filter(u => u.next.hours <= 7 * 24).length;
-  const inReview = stats.byStatus.find(s => s.status === 'Review')?.count ?? 0;
-  // Stage 2: Go ahead. All three are acted out for now — the result lines say
-  // where to look, and nothing is written to an engagement.
-  const { state: bt, set: setBt, actOut } = useBriefingTasks('portfolio');
-  const task = (key: string, show: boolean, text: string, working: string, done: string, onOpen: () => void): BriefingTask | null => {
-    const k = bt[key];
-    return k ? { key, text, state: k.state, progress: k.state === 'working' ? working : done, onOpen } : show ? { key, text, state: 'todo' } : null;
-  };
-  const tasks = [
-    task('notes', stats.attention.length > 0, `Write a status note for the ${plural(stats.attention.length, 'engagement')} that need attention`,
-      'Writing status notes…', `Status notes written for ${plural(stats.attention.length, 'engagement')}`, scrollToAttention),
-    task('milestones', dueThisWeek > 0, `Get ready for the next milestone on the ${plural(dueThisWeek, 'engagement')} due this week`,
-      'Checking what each milestone still needs…', `Milestone checklists ready for ${plural(dueThisWeek, 'engagement')}`, () => onGoToList()),
-    task('findings', stats.openFindings > 0, `Group the ${plural(stats.openFindings, 'open finding')} by root cause`,
-      'Grouping the open findings…', `${plural(stats.openFindings, 'open finding')} grouped by root cause`, scrollToAttention),
-  ].filter((t): t is BriefingTask => !!t);
-  const goAhead = (run: string[], skip: string[]) => {
-    skip.forEach(k => setBt(k, { state: 'skipped' }));
-    run.forEach((k, i) => actOut(k, 1800 + i * 900));
-  };
-  // Stage 3: the Ask box — fixed topics, answered from the numbers on this page.
-  const b = (n: number | string) => <b className="font-semibold text-ink-900">{n}</b>;
-  const topics: BriefingTopic[] = [
-    { match: /attention|risk|worst|problem|trouble/i, answer: () => stats.attention.length ? (
-      <><p>{b(stats.attention.length)} {stats.attention.length === 1 ? 'engagement needs' : 'engagements need'} attention:</p>
-        <ul className="mt-1 list-disc pl-4 space-y-0.5 marker:text-ink-300">
-          {stats.attention.map(e => <li key={e.id}><button type="button" onClick={() => onOpenEngagement(e.id)} className="text-left hover:text-brand-700 cursor-pointer">{e.name}</button> — health {e.health}%, {plural(e.openIssues, 'open issue')}</li>)}
-        </ul></>
-    ) : <>Nothing needs attention right now.</> },
-    { match: /finding|exception|critical|issue|severity/i, answer: () => (
-      <>{b(stats.openFindings)} open findings: {b(stats.sevCounts.Critical)} critical, {b(stats.sevCounts.High)} high, {b(stats.sevCounts.Medium)} medium, {b(stats.sevCounts.Low)} low.</>
-    ) },
-    { match: /milestone|due|deadline|next|week|upcoming|kab/i, answer: () => stats.upcoming.length ? (
-      <><p>Next milestones:</p>
-        <ul className="mt-1 list-disc pl-4 space-y-0.5 marker:text-ink-300">
-          {stats.upcoming.map(u => <li key={u.eng.id}>{u.eng.name} — {u.next.label}{u.next.date ? `, ${fmtMilestoneDate(u.next.date)}` : ""}</li>)}
-        </ul></>
-    ) : <>No milestones coming up.</> },
-    { match: /health|score|how.*doing|percent/i, answer: () => (
-      <>Portfolio health is {b(`${stats.avgHealth}%`)} across the engagements that have started — {stats.byType.filter(t => t.hasStarted).map((t, i, a) => <span key={t.type}>{t.type} {b(`${t.health}%`)}{i < a.length - 1 ? ', ' : ''}</span>)}.</>
-    ) },
-    { match: /how many|count|active|status|kitn|total/i, answer: () => (
-      <>{b(stats.total)} engagements — {stats.byStatus.filter(x => x.count > 0).map((x, i, a) => <span key={x.status}>{b(x.count)} {x.status.toLowerCase()}{i < a.length - 1 ? ', ' : ''}</span>)}.</>
-    ) },
-  ];
-  const needs = [
-    stats.sevCounts.Critical > 0 && { key: 'critical', onClick: scrollToAttention,
-      icon: <AlertTriangle size={13} className="text-risk-600" />,
-      label: <><b className="font-semibold text-risk-700">{stats.sevCounts.Critical}</b> critical finding{stats.sevCounts.Critical === 1 ? '' : 's'} open</> },
-    stats.atRisk > 0 && { key: 'at-risk', onClick: scrollToAttention,
-      icon: <span className="size-2 rounded-full bg-high-500" />,
-      label: <><b className="font-semibold text-ink-900">{stats.atRisk}</b> engagement{stats.atRisk === 1 ? '' : 's'} at risk — health under 65%</> },
-    inReview > 0 && { key: 'review', onClick: () => onGoToList({ status: 'Review' }),
-      icon: <span className="size-2 rounded-full bg-mitigated-500" />,
-      label: <><b className="font-semibold text-ink-900">{inReview}</b> engagement{inReview === 1 ? ' is' : 's are'} in review</> },
-  ].filter((x): x is Exclude<typeof x, false> => !!x);
-
   return (
     <div className="space-y-10 pb-8">
-      <IraBriefing
-        context="Your portfolio"
-        lead={<><b className="font-semibold text-ink-900">{plural(stats.total, 'engagement')}</b>, {stats.activeCount} active — portfolio health is {stats.avgHealth}%.</>}
-        tasks={tasks}
-        onGoAhead={goAhead}
-        needs={needs}
-        ask={{
-          placeholder: 'Ask Ira about your portfolio…',
-          suggestions: ['Which engagements need attention?', 'What is due this week?', 'How are the findings split?', 'How healthy is the portfolio?'],
-          topics,
-          fallback: 'I can answer about engagements that need attention, findings, upcoming milestones, health and counts for now — try one of those.',
-        }}
-      />
       {/* ── Headline numbers — one hairline strip, not four cards ── */}
       <section aria-label="Portfolio at a glance" className="relative z-20 grid grid-cols-2 lg:grid-cols-4 rounded-xl border border-canvas-border bg-canvas-elevated">
         <Stat
@@ -328,35 +252,7 @@ export default function EngagementsOverview({ engagements, onOpenEngagement, onG
           delay={0}
           onClick={() => onGoToList()}
           note={<>Across every type · <span className="text-brand-700">view library</span></>}
-          popover={{
-            title: 'By type',
-            body: (
-              <ul>
-                {stats.byType.map(({ type, count, health, hasStarted }) => {
-                  const tier = healthTier(health);
-                  return (
-                    <li key={type}>
-                      <PopoverRow onClick={() => onGoToList({ type })} dim={count === 0}>
-                        <span className={`size-2 rounded-full shrink-0 ${TYPE_DOT[type]}`} aria-hidden />
-                        <span className="text-ink-800 truncate min-w-0">{type}</span>
-                        <span className="text-ink-400 tabular-nums">{count}</span>
-                        <span className="ml-auto flex items-center gap-2 shrink-0">
-                          {hasStarted ? (
-                            <>
-                              <Meter pct={health} bar={tier.bar} className="w-14" />
-                              <span className={`w-8 text-right font-mono font-semibold tabular-nums ${tier.text}`}>{health}%</span>
-                            </>
-                          ) : (
-                            <span className="text-ink-400">Not started</span>
-                          )}
-                        </span>
-                      </PopoverRow>
-                    </li>
-                  );
-                })}
-              </ul>
-            ),
-          }}
+          breakdown={stats.byType.map(({ type, count }) => ({ key: type, dot: TYPE_DOT[type], count, text: type, onClick: () => onGoToList({ type }) }))}
         />
         <Stat
           label="Active"
@@ -364,22 +260,7 @@ export default function EngagementsOverview({ engagements, onOpenEngagement, onG
           delay={80}
           onClick={() => onGoToList({ status: 'Active' })}
           note="Currently in flight"
-          popover={{
-            title: 'By status',
-            body: (
-              <ul>
-                {stats.byStatus.map(({ status, count }) => (
-                  <li key={status}>
-                    <PopoverRow onClick={() => onGoToList({ status })} dim={count === 0}>
-                      <span className={`size-2 rounded-full shrink-0 ${STATUS_DOT[status]}`} aria-hidden />
-                      <span className="text-ink-800">{status}</span>
-                      <span className="ml-auto text-ink-500 font-semibold tabular-nums">{count}</span>
-                    </PopoverRow>
-                  </li>
-                ))}
-              </ul>
-            ),
-          }}
+          breakdown={stats.byStatus.map(({ status, count }) => ({ key: status, dot: STATUS_DOT[status], count, text: status.toLowerCase(), onClick: () => onGoToList({ status }) }))}
         />
         <Stat
           label="Portfolio health"
@@ -578,44 +459,34 @@ function Meter({ pct, bar, className = '' }: { pct: number; bar: string; classNa
 }
 
 /** Headline number. With `popover`, hover or focus opens its breakdown below. */
-function Stat({ label, value, note, meter, delay, onClick, popover }: {
+/** One line of a KPI's breakdown, shown in place of its note on hover. */
+interface BreakdownPart { key: string; dot: string; count: number; text: string; onClick: () => void }
+
+function Stat({ label, value, note, meter, delay, onClick, breakdown }: {
   label: string;
   value: string;
   note: React.ReactNode;
   meter?: React.ReactNode;
   delay: number;
   onClick: () => void;
-  popover?: { title: string; body: React.ReactNode };
+  /** Hover / focus swaps the note for this breakdown, in the tile itself
+   *  (user ask, 8 Oct — it was a dropdown). Each part filters the library. */
+  breakdown?: BreakdownPart[];
 }) {
-  const [open, setOpen] = useState(false);
-  const closeTimer = useRef<number | undefined>(undefined);
-  const btnRef = useRef<HTMLButtonElement>(null);
-  const popId = useId();
-  // Escape hands focus back to the KPI — that focus mustn't reopen it.
-  const skipFocusOpen = useRef(false);
-  useEffect(() => () => window.clearTimeout(closeTimer.current), []);
-
-  const show = () => { window.clearTimeout(closeTimer.current); if (popover) setOpen(true); };
-  // Small delay so the pointer can cross the gap into the popover.
-  const hide = () => { window.clearTimeout(closeTimer.current); closeTimer.current = window.setTimeout(() => setOpen(false), 150); };
-
+  const [hot, setHot] = useState(false);
+  const showParts = !!breakdown && hot;
   return (
     <div
-      className="relative border-canvas-border [&:not(:first-child)]:border-l max-lg:[&:nth-child(3)]:border-l-0 max-lg:[&:nth-child(n+3)]:border-t lg:first:rounded-l-xl lg:last:rounded-r-xl"
-      onMouseEnter={show}
-      onMouseLeave={hide}
-      onFocus={() => { if (skipFocusOpen.current) { skipFocusOpen.current = false; return; } show(); }}
-      onBlur={e => { if (!e.currentTarget.contains(e.relatedTarget as Node | null)) setOpen(false); }}
-      onKeyDown={e => { if (e.key === 'Escape' && open) { e.stopPropagation(); setOpen(false); skipFocusOpen.current = true; btnRef.current?.focus(); } }}
+      className="group relative border-canvas-border [&:not(:first-child)]:border-l max-lg:[&:nth-child(3)]:border-l-0 max-lg:[&:nth-child(n+3)]:border-t lg:first:rounded-l-xl lg:last:rounded-r-xl hover:bg-paper-50 focus-within:bg-paper-50 transition-colors"
+      onMouseEnter={() => setHot(true)}
+      onMouseLeave={() => setHot(false)}
+      onFocus={() => setHot(true)}
+      onBlur={e => { if (!e.currentTarget.contains(e.relatedTarget as Node | null)) setHot(false); }}
     >
-      <button
-        ref={btnRef}
-        onClick={onClick}
-        aria-expanded={popover ? open : undefined}
-        aria-controls={popover ? popId : undefined}
-        aria-describedby={popover && open ? popId : undefined}
-        className="group w-full h-full text-left px-5 py-4 rounded-[inherit] cursor-pointer transition-colors hover:bg-paper-50"
-      >
+      {/* The whole tile is the KPI's own link; the breakdown parts sit above it. */}
+      <button onClick={onClick} aria-label={`${label}: ${value}`}
+        className="absolute inset-0 rounded-[inherit] cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/30" />
+      <div className="relative pointer-events-none px-5 py-4">
         <Eyebrow>{label}</Eyebrow>
         <div className="flex items-end gap-3">
           <span className="text-[1.75rem] leading-none font-semibold tracking-tight text-ink-900 tabular-nums">
@@ -623,33 +494,22 @@ function Stat({ label, value, note, meter, delay, onClick, popover }: {
           </span>
           {meter && <span className="flex-1 max-w-[7rem] mb-1.5">{meter}</span>}
         </div>
-        <div className="mt-2 text-[0.75rem] text-ink-500 tabular-nums">{note}</div>
-      </button>
-      {popover && open && (
-        <div
-          id={popId}
-          role="region"
-          aria-label={`${label} ${popover.title.toLowerCase()}`}
-          className="absolute left-3 top-full mt-1.5 z-30 w-72 rounded-xl border border-canvas-border bg-canvas-elevated shadow-lg p-2"
-        >
-          <div className="px-2 pt-1 pb-1.5 text-[0.6875rem] font-semibold uppercase tracking-wider text-ink-400">{popover.title}</div>
-          {popover.body}
-          <p className="px-2 pt-1.5 mt-1 border-t border-canvas-border text-[0.6875rem] text-ink-400">Click a line to open the library filtered to it</p>
+        {/* Two lines kept for every tile, so the swap never moves the strip. */}
+        <div className="mt-2 min-h-[2.25rem] text-[0.75rem] leading-[1.125rem] text-ink-500 tabular-nums" aria-live="polite">
+          {showParts ? (
+            <span className="flex flex-wrap gap-x-2.5">
+              {breakdown!.filter(p => p.count > 0).map(p => (
+                <button key={p.key} type="button" onClick={p.onClick}
+                  className="pointer-events-auto inline-flex items-center gap-1 h-[1.125rem] rounded hover:text-brand-700 cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/30">
+                  <span className={`size-1.5 rounded-full shrink-0 ${p.dot}`} aria-hidden />
+                  <b className="font-semibold text-ink-800">{p.count}</b> {p.text}
+                </button>
+              ))}
+            </span>
+          ) : note}
         </div>
-      )}
+      </div>
     </div>
-  );
-}
-
-/** One clickable breakdown line inside a KPI popover. */
-function PopoverRow({ children, onClick, dim }: { children: React.ReactNode; onClick: () => void; dim: boolean }) {
-  return (
-    <button
-      onClick={onClick}
-      className={`w-full flex items-center gap-2.5 h-8 px-2 rounded-lg text-[0.75rem] text-left hover:bg-paper-50 focus-visible:bg-paper-50 transition-colors cursor-pointer ${dim ? 'opacity-50' : ''}`}
-    >
-      {children}
-    </button>
   );
 }
 

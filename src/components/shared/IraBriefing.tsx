@@ -30,13 +30,14 @@ const labelCls = 'text-[0.6875rem] font-semibold uppercase tracking-[0.08em] tex
  *  answer, built from the page's own numbers. */
 export interface BriefingTopic { match: RegExp; answer: () => ReactNode }
 
-export default function IraBriefing({ context, lead, tasks, onGoAhead, needs, extra, nothingNeeded, ask }: {
+export default function IraBriefing({ context, lead, tasks = [], onGoAhead, needs, extra, nothingNeeded, ask }: {
   /** Where Ira is speaking from — "CY 2026 Interim", "Your portfolio". */
   context: string;
   lead: ReactNode;
-  tasks: BriefingTask[];
+  /** Leave out for a briefing with no plan (the Engagement Library, 8 Oct). */
+  tasks?: BriefingTask[];
   /** Run these tasks; the rest are left to the user. */
-  onGoAhead: (run: string[], skip: string[]) => void;
+  onGoAhead?: (run: string[], skip: string[]) => void;
   needs: BriefingNeed[];
   /** More rows under "What needs you first" (e.g. Ira's own results to confirm). */
   extra?: ReactNode;
@@ -62,7 +63,7 @@ export default function IraBriefing({ context, lead, tasks, onGoAhead, needs, ex
   const live = tasks.filter(t => t.state !== 'skipped').length;
 
   const go = () => {
-    onGoAhead(ticked.map(t => t.key), todo.filter(t => off.includes(t.key)).map(t => t.key));
+    onGoAhead?.(ticked.map(t => t.key), todo.filter(t => off.includes(t.key)).map(t => t.key));
     setEditing(false);
   };
 
@@ -78,7 +79,7 @@ export default function IraBriefing({ context, lead, tasks, onGoAhead, needs, ex
       <div className="mt-3 ml-8 space-y-5">
         <p className="text-[1.0625rem] leading-relaxed text-ink-800">{lead}</p>
 
-        <div>
+        {onGoAhead && <div>
           <p className={labelCls}>
             {started ? <>What I’m doing <span className="normal-case tracking-normal font-normal text-ink-500">· {done} of {live} done</span></> : 'Here’s what I’ll do now'}
           </p>
@@ -128,7 +129,7 @@ export default function IraBriefing({ context, lead, tasks, onGoAhead, needs, ex
               </button>
             </div>
           )}
-        </div>
+        </div>}
 
         <div>
           <p className={labelCls}>What needs you first</p>
