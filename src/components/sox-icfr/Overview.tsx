@@ -10,7 +10,7 @@ import AddRacmModal from './AddRacmModal';
 import { defWord } from './flow';
 import { useToast } from '../shared/Toast';
 import {
-  assessSeverity, conclusionOf, controlCode, isControlLockedIn, engagementCompleteness, engagementProgress, failedItgcs, formatINR, icfrConclusion, isEngagementLocked, isItgcDependent, signoffControls, testsDueNow, trackResult,
+  assessSeverity, conclusionOf, controlCode, engagementCompleteness, engagementProgress, failedItgcs, formatINR, icfrConclusion, isEngagementLocked, isItgcDependent, signoffControls, testsDueNow, trackResult,
 } from './helpers';
 import { cn } from '../../lib/cn';
 import { ItgcCascadeBanner, RagStrip, type RagMeterDef } from './parts';
@@ -22,7 +22,6 @@ import IraWorkSection from './IraWorkSection';
 import ReviewerQueue from './ReviewerQueue';
 import type { Control, ExceptionGrade, IcfrEngagement, TaskType } from './types';
 import DialogFocus from '../shared/DialogFocus';
-import IraBriefing, { useBriefingTasks, type BriefingTask, type BriefingTopic } from '../shared/IraBriefing';
 
 const fmt = (n: number) => formatINR(n);
 
@@ -68,7 +67,7 @@ const HANDOFF_META: Record<TaskType, { label: string; Icon: typeof Upload; tone:
 };
 
 export default function Overview() {
-  const { eng, role, meOwner, openAuditId, setView, setTab, openControl, openRegister, signOffAudit, startIraPlan } = useIcfr();
+  const { eng, role, meOwner, openAuditId, setView, setTab, openControl, openRegister, signOffAudit } = useIcfr();
   const { addToast } = useToast();
   // Terminal sign-off is one-way — an ATTEST confirm gates it, never a bare click.
   const [confirmSign, setConfirmSign] = useState<null | 'preparer' | 'reviewer'>(null);
@@ -250,73 +249,6 @@ export default function Overview() {
   ].filter(r => r.show);
   const rowCls = 'w-full flex items-center gap-2.5 py-1.5 px-2 -mx-1 rounded-lg text-left hover:bg-paper-100 transition-colors cursor-pointer group';
 
-  // Ira speaks first (user ask, 8 Oct — Option A): the auditor's Overview of an
-  // open audit leads with Ira's briefing, which takes in Ira's work and Needs
-  // you. Every count is one this page already shows. Stage 1: it says, it does
-  // not start anything yet.
-  const briefing = role === 'auditor' && inAudit && !isConcluded;
-  const openAudit = eng.audits.find(a => a.id === openAuditId);
-  const planIds = scoped.filter(c => !isControlLockedIn(eng, c) && !c.iraPlan?.started
-    && conclusionOf(eng, c) !== 'Effective' && conclusionOf(eng, c) !== 'Ineffective').map(c => c.id);
-  // Stage 2: Go ahead. The plan is real — the same Start as each control's page,
-  // for every control not concluded. The other two are acted out for now.
-  const { state: bt, set: setBt, actOut } = useBriefingTasks(`audit:${eng.id}:${openAuditId ?? ''}`);
-  const isDone = (id: string) => { const c = scoped.find(x => x.id === id); return !!c && ['Effective', 'Ineffective'].includes(conclusionOf(eng, c)); };
-  const task = (key: string, show: boolean, text: string, extra: Omit<BriefingTask, 'key' | 'text' | 'state'> = {}): BriefingTask | null =>
-    bt[key] ? { key, text, state: bt[key]!.state, ...extra } : show ? { key, text, state: 'todo', ...extra } : null;
-  const planRan = bt.plan?.ids ?? [];
-  const tasks = [
-    task('plan', planIds.length > 0, `Run my plan on the ${planIds.length} control${planIds.length === 1 ? '' : 's'} not concluded — read the files, draft the sample requests, validate the attributes`, {
-      progress: <>Started my plan on {planRan.length} control{planRan.length === 1 ? '' : 's'} · {planRan.filter(isDone).length} concluded so far</>,
-      onOpen: () => openRegister({ view: 'open' }),
-    }),
-    task('remediation', sev.open > 0, `Draft remediation plans for the ${sev.open} open ${sev.open === 1 ? W.one : W.many}`, {
-      progress: bt.remediation?.state === 'working' ? <>Drafting remediation plans for {sev.open} {sev.open === 1 ? W.one : W.many}…</> : <>Remediation plans drafted for {sev.open} {sev.open === 1 ? W.one : W.many} — ready for your review</>,
-      onOpen: openDeficiencies,
-    }),
-    task('pack', papersAwaiting > 0, `Put together the countersign pack for the ${papersAwaiting} paper${papersAwaiting === 1 ? '' : 's'}`, {
-      progress: bt.pack?.state === 'working' ? <>Putting the countersign pack together…</> : <>Countersign pack ready — {papersAwaiting} paper{papersAwaiting === 1 ? '' : 's'}</>,
-      onOpen: () => openRegister({ view: 'review' }),
-    }),
-  ].filter((t): t is BriefingTask => !!t);
-  const goAhead = (run: string[], skip: string[]) => {
-    skip.forEach(k => setBt(k, { state: 'skipped' }));
-    if (run.includes('plan')) { planIds.forEach(startIraPlan); setBt('plan', { state: 'done', ids: planIds }); }
-    if (run.includes('remediation')) actOut('remediation', 2200);
-    if (run.includes('pack')) actOut('pack', 3200);
-  };
-  // Stage 3: the Ask box. A fixed set of topics, each answered from the numbers
-  // on this page — anything else gets an honest "not yet".
-  const b = (n: number | string) => <b className="font-semibold text-ink-900">{n}</b>;
-  const pl = (n: number, one: string, many = `${one}s`) => (n === 1 ? one : many);
-  const topics: BriefingTopic[] = [
-    { match: /block|stuck|hold|wait|ruk|pend|need/i, answer: () => needsRows.length ? (
-      <><p>Here is what is holding the audit:</p>
-        <ul className="mt-1 list-disc pl-4 space-y-0.5 marker:text-ink-300">{needsRows.map(r => <li key={r.key}>{r.label}</li>)}</ul></>
-    ) : <>Nothing is holding it — {signoffReady ? 'every paper is countersigned, so it is ready to sign off.' : 'the rest is with me.'}</> },
-    { match: /defici|weakness|mw|finding|exception|issue/i, answer: () => (
-      <>{b(sev.open)} open {pl(sev.open, W.one, W.many)}: {b(sev.c['Material Weakness'])} material {pl(sev.c['Material Weakness'], 'weakness', 'weaknesses')}, {b(sev.c['Significant Deficiency'])} significant, {b(sev.c.Deficiency)} other{sev.unsized ? <>, and {b(sev.unsized)} not sized yet</> : null}.
-        {sev.mwOpen > 0 && <> While any material weakness is open at year-end, ICFR is ineffective.</>}</>
-    ) },
-    { match: /when|finish|done|kab|khatam|year.?end|deadline|time/i, answer: () => (
-      <>{days === null ? <>Year-end is {endLabel}.</> : past ? <>The period ended {endLabel}.</> : <>{b(days)} {pl(days, 'day')} to year-end ({endLabel}).</>} {b(concludedCount)} of {b(ready.total)} controls are concluded — {b(unconcluded)} to go, and {b(papersAwaiting)} {pl(papersAwaiting, 'paper')} still to countersign.</>
-    ) },
-    { match: /progress|tod|toe|status|kitn|how many|effective/i, answer: () => (
-      <>TOD {b(`${stats.designDone}/${stats.total}`)}, TOE {b(`${stats.operatingDone}/${stats.total}`)}. {b(stats.effective)} effective, {b(stats.ineffective)} ineffective, {b(stats.awaitingReview)} awaiting review{stats.waitingOnOwner ? <>, {b(stats.waitingOnOwner)} waiting on the owner</> : null}.</>
-    ) },
-    { match: /material(?!\s*weak)|threshold|trivial/i, answer: () => (
-      <>Overall materiality {b(fmt(M))}, performance {b(fmt(eng.performanceMateriality))}, clearly trivial {b(fmt(eng.rules.clearlyTrivial))}.</>
-    ) },
-    { match: /sign|conclude|opinion/i, answer: () => (
-      signoffReady ? <>Every paper is countersigned — the preparer can sign now, then the reviewer countersigns.</>
-        : <>Sign-off unlocks once every control is concluded and countersigned: {b(unconcluded)} not concluded, {b(papersAwaiting)} {pl(papersAwaiting, 'paper')} awaiting a signature. The preparer signs first, then the reviewer.</>
-    ) },
-  ];
-  const briefLead = <>
-    {days === null ? <>Year-end is {endLabel}</> : past ? <b className="font-semibold text-high-700">The period ended {endLabel}</b> : <b className="font-semibold text-ink-900">{days} day{days === 1 ? '' : 's'} to year-end</b>}
-    , and {concludedCount} of {ready.total} control{ready.total === 1 ? ' is' : 's are'} concluded.
-  </>;
-
   // The six tiles folded into one sentence (agentic UI review #12, 30 Sep).
   // Each segment opens the register exactly as its tile did. TOD and TOE always
   // show — they are the progress; the rest drop out at zero, since "0 waiting on
@@ -367,23 +299,7 @@ export default function Overview() {
       {/* Ira's work — what Ira has done across this audit that waits on the
           auditor (product owner, 2 Oct). The auditor's only: confirming is the
           testing pen. Inside an audit only, and gone once it is concluded. */}
-      {briefing && (
-        <IraBriefing
-          context={openAudit ? `${openAudit.period} ${openAudit.round === 'interim' ? 'Interim' : openAudit.round === 'yearend' ? 'Year-end' : ''}`.trim() : 'This audit'}
-          lead={briefLead}
-          tasks={tasks}
-          onGoAhead={goAhead}
-          needs={needsRows.map(r => ({ key: r.key, icon: r.icon, label: r.label, onClick: r.onClick }))}
-          extra={<IraWorkSection controls={scoped} bare />}
-          nothingNeeded={signoffReady ? 'Nothing needs you — the audit is ready to conclude' : undefined}
-          ask={{
-            placeholder: 'Ask Ira about this audit…',
-            suggestions: ['What is holding the audit?', 'How many deficiencies are open?', 'When will we finish?', 'What is the materiality?'],
-            topics,
-            fallback: 'I can answer about what is holding the audit, deficiencies, progress, timing, materiality and sign-off for now — try one of those.',
-          }}
-        />
-      )}
+      {role === 'auditor' && inAudit && !isConcluded && <IraWorkSection controls={scoped} />}
 
       {/* Risk owner's actionable inbox leads — first-line owners act before they browse status. */}
       {isOwner && <RiskOwnerPortal />}
@@ -493,7 +409,7 @@ export default function Overview() {
           subtitle. Empty is one quiet line, not an empty box. Same tones as the
           old box: amber once the period has ended or an MW is open. Gone once
           the audit is concluded, as the old list was — nothing is left to do. */}
-      {!isOwner && !isConcluded && !briefing && (
+      {!isOwner && !isConcluded && (
         <section className={cn('rounded-2xl border p-4', past || sev.mwOpen > 0 ? 'border-high-200 bg-high-50/30' : 'border-canvas-border bg-canvas-elevated')}>
           <div className="flex items-baseline gap-2 flex-wrap">
             <h2 className="font-display text-[1.0625rem] leading-tight text-ink-900">Needs you</h2>

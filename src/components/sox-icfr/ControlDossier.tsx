@@ -5,7 +5,7 @@ import {
   FileText, Upload, MessageSquare, PanelRightClose, Workflow as WorkflowIcon, Hand, AlertTriangle,
   Send, Lock, ClipboardCheck, FileCheck2, FlaskConical, CheckCircle2, XCircle,
   CornerDownRight, Pencil, RotateCcw, Cpu, ChevronRight, Scale, Paperclip, Plus, Trash2,
-  Mail, X, Loader2, ChevronDown, Check, PlayCircle, Link2, ListChecks, Gavel, UserCheck, History, FileUp, ArrowLeft, Footprints, BadgeCheck, Star,
+  Mail, X, Loader2, ChevronDown, Check, Play, PlayCircle, Link2, ListChecks, Gavel, UserCheck, History, FileUp, ArrowLeft, Footprints, BadgeCheck, Star,
   Database, Circle, PenLine, Eye, Inbox, ChevronUp, AlertCircle, FileWarning, StickyNote, Filter, Quote, CalendarClock, GitBranch} from 'lucide-react';
 import { ineffectiveTooEarly, useIcfr } from './store';
 import EvidenceAnnotator from './EvidenceAnnotator';
@@ -21,7 +21,7 @@ import {
   // formatINR,
   concludeRationale, controlCode, controlConclusion, courtFor, operatingApplies, designCompleteness, designOutstanding, designOutstandingRequired, discussionsFor, extractionCriteria,
   isControlLocked, isControlLockedIn, itgcHolds, failedItgcs, isItgcDependent, docRequirement, docColumnOf, docNotApplicable, operatingProgress, operatingSuggestion, TOE_MAX_ROUNDS, toeRoundFailed, toeRoundNo, toeRounds, toeSpent, canRedrawToe, canExtendToe, populationLocked, sampleSizeGuide, samplingOf, trackResult, pointResult, stepResult, attestationOverruled, inquiryOnlyAttributes, restsOnStatementAlone,
-  countVerdict, coverageVerdict, derivedRunCount, populationReady, designBasis, designSuggestion, auditorProvenChecks, suggestedDesignChecks, suggestPopulationFile, fmtDay, parseDay,
+  countVerdict, coverageVerdict, derivedRunCount, populationReady, designBasis, designSuggestion, auditorProvenChecks, suggestedDesignChecks, STARTER_DESIGN_CHECKS, suggestPopulationFile, fmtDay, parseDay,
   iraCannotTest, designBlocked, confidenceOf, CONFIDENT_AT, awaitsConfirm, unconfirmedIra, ROLL_PART_LABEL, ROLL_PART_ANCHOR, couldntAskFor, dayMonth,
   monthlyBreakdown, spikeMonths, priorRoundCount, fileUsable, originLabel, guessFileKind, populationSources, ipeChecksFor, samplesFor, sampleSourceOf,
   expectedInputsFor, hasRowCount, isAssisting, sampledSources, reviewNotesFor, isShared, entityCoverage, uncoveredEntities, hasPaths, pathCoverage, untouchedPaths, type PopVerdict,
@@ -46,6 +46,7 @@ import RemediationBriefModal from './RemediationBriefModal';
 import ControlChatPane, { iraStepUndone } from './ControlChatPane';
 import { DESIGN_RUN_STEPS, TOE_RUN_STEPS, controlRun, endRun, runIsLive, startRun, railShown, useControlRun, useIraMode, type ControlRun } from './controlChat';
 import { DeficiencyCard } from './extraViews';
+import { todJourney, useTodJourney } from './todJourney';
 import DatePicker from '../shared/DatePicker';
 import { cn } from '../../lib/cn';
 // PARKED (Aug 2026) — Gap type and Priced impact left this screen; the banners in
@@ -1693,6 +1694,8 @@ function DesignSection({ control, canEdit: canEditIn, locked = false }: { contro
   useEffect(() => {
     // An undone step waits for Run again on the plan (5 Oct) — Undo is not a cue to re-read.
     if (!planRuns || !canTest || locked || iraRunning || iraBlocked || !autoDue || controlRun(control.id) || iraStepUndone(control.id, 'design')) return;
+    // The zero-state journey in Manual: the tester presses Run AI validation (8 Oct).
+    if (iraMode === 'manual' && todJourney(control.id)) return;
     const key = `${control.id}|${d.documents.map(x => designFilesOf(x).length).join(',')}|${iraStale}`;
     if (autoKey.current === key) return;
     autoKey.current = key;
@@ -1700,7 +1703,10 @@ function DesignSection({ control, canEdit: canEditIn, locked = false }: { contro
   }); // eslint-disable-line react-hooks/exhaustive-deps
   useEffect(() => {
     if (iraMode !== 'automatic' || !planRuns || !canTest || locked || d.conclusion !== 'Not tested') return;
-    const sure = d.points.filter(p => awaitsConfirm(p) && (confidenceOf(p.validation, `${control.id}:${p.id}`) ?? 0) >= CONFIDENT_AT);
+    // On the zero-state journey Ira passes or fails every check it reached a
+    // verdict on (user ask, 8 Oct); the tester overrides on the row.
+    const all = !!todJourney(control.id);
+    const sure = d.points.filter(p => awaitsConfirm(p) && (all || (confidenceOf(p.validation, `${control.id}:${p.id}`) ?? 0) >= CONFIDENT_AT));
     if (sure.length) confirmIra(control.id, 'design', sure.map(p => p.id), { byIra: true });
   }, [iraMode, planRuns, canTest, locked, d.conclusion, d.points, control.id, confirmIra]);
   const addStandard = (k: DesignDocKind) => { addDesignDoc(control.id, k); logEvent({ action: 'Create', description: `Added design element to ${control.id}`, module: 'SOX ICFR', entity: 'Control' }); };
@@ -1710,7 +1716,16 @@ function DesignSection({ control, canEdit: canEditIn, locked = false }: { contro
     logEvent({ action: 'Create', description: `Added custom design element "${customName.trim()}" to ${control.id}`, module: 'SOX ICFR', entity: 'Control' });
     setCustomName(''); setCustomDesc(''); setAddingCustom(false);
   };
-  // one definition, used by both the empty state and the section header
+  // The empty state's one action (8 Oct, matching production): the RACM's two
+  // control-level design checks, untested. The store's own write lays the
+  // REQUIRED elements for this class on with them (applyDocRequirements), so
+  // only the optional flowchart is added here — adding the rest too doubled them.
+  const startDesignTest = () => {
+    STARTER_DESIGN_CHECKS.forEach(t => addDesignPoint(control.id, t));
+    if (!docNotApplicable(control, { kind: 'Flowchart' })) addDesignDoc(control.id, 'Flowchart');
+    logEvent({ action: 'Create', description: `Started the design test on ${control.id}`, module: 'SOX ICFR', entity: 'Control' });
+  };
+  // the section header's add menu
   const addElementMenu = (
     <Dropdown trigger={<><Plus size={12} /> Add element</>}>{close => <>
       {/* Only the kinds this class of control actually has — offering an ITGC a
@@ -1764,7 +1779,10 @@ function DesignSection({ control, canEdit: canEditIn, locked = false }: { contro
   // set this up" — it broke the deliberately-incomplete RACM row, which showed
   // three "to provide" rows instead of its empty state. What still means nobody
   // has set it up is that the RACM row lists no design checks.
-  const empty = d.points.length === 0 && d.documents.every(x => x.status !== 'Received');
+  // Set up once Ira's plan is approved, too — its elements are on the step
+  // before any file is (zero-state journey, 8 Oct).
+  const empty = d.points.length === 0 && d.documents.every(x => x.status !== 'Received') && !control.iraPlan?.started;
+  const journey = useTodJourney(control.id);
 
   // ── the checks, filed under what they are about (dev call, Aug 2026) ────────
   // Design and operating already test the SAME attributes — see Walkthrough in
@@ -1785,8 +1803,13 @@ function DesignSection({ control, canEdit: canEditIn, locked = false }: { contro
     <div className="p-5">
       <SopTestGuidanceNote control={control} />
       {empty && !addingCustom ? (
-        <EmptyState icon={<FileText size={18} />} title="TOD isn’t set up yet" hint="Add the design elements this control is evidenced by — process narrative, flowchart, walkthrough, precision &amp; thresholds. The design checks come from its RACM.">
-          {canEdit && addElementMenu}
+        <EmptyState icon={<FileText size={18} />} title="TOD isn’t set up yet" hint="Start the design test to work through this control’s elements and checks.">
+          {canEdit && (
+            <button onClick={startDesignTest}
+              className="h-10 px-4 inline-flex items-center gap-2 rounded-lg bg-brand-600 text-white text-[0.8125rem] font-semibold hover:bg-brand-700 transition-colors cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-500/60">
+              <Play size={14} /> Start the design test
+            </button>
+          )}
         </EmptyState>
       ) : (
         <>
@@ -2017,7 +2040,12 @@ function DesignSection({ control, canEdit: canEditIn, locked = false }: { contro
             <p className="-mt-1 mb-2.5 text-[0.6875rem] text-ink-500">{busyNote(liveRun)}</p>
           )}
           {!iraRunning && !chatRun && <ConfirmSure control={control} which="design" rows={d.points} />}
-          {d.points.length === 0 ? <p className="text-[0.75rem] text-ink-400 mb-5">No considerations yet — add the design points you’ll assess in the walkthrough.</p> : (
+          {journey?.phase === 'loading-checks' ? (
+            <div className="space-y-2 mb-5" aria-live="polite" aria-label="Loading the design checks">
+              <p className="text-[0.75rem] text-ink-500 inline-flex items-center gap-1.5"><Loader2 size={12} className="animate-spin text-brand-500" /> Loading the design checks from the RACM…</p>
+              {[0, 1].map(i => <div key={i} className="h-16 rounded-xl border border-canvas-border bg-paper-50 animate-pulse" />)}
+            </div>
+          ) : d.points.length === 0 ? <p className="text-[0.75rem] text-ink-400 mb-5">{journey ? 'Ira loads the design checks once the required documents are in.' : 'No considerations yet — add the design points you’ll assess in the walkthrough.'}</p> : (
             <div className="space-y-4 mb-5">
               {controlChecks.length > 0 && (
                 <div className="space-y-2">
@@ -6208,24 +6236,6 @@ function UnableToTestBanner({ control }: { control: Control }) {
 }
 
 // ── the dossier ──────────────────────────────────────────────────────────────────
-/** A yes/no that outlives the visit. Storage throws in a private window and
- *  comes back empty when site data is cleared, so every touch is guarded and
- *  the default simply stands — the worst case is a preference that lasts the
- *  session instead of the week. */
-const RAIL_OPEN_KEY = 'sox-control-rail-open';
-function useRemembered(key: string, fallback: boolean) {
-  const [on, setOn] = useState(() => {
-    try { const v = window.localStorage.getItem(key); return v === null ? fallback : v === '1'; }
-    catch { return fallback; }
-  });
-  // Stable across renders so an effect can depend on it without re-firing.
-  const set = useCallback((next: boolean) => {
-    setOn(next);
-    try { window.localStorage.setItem(key, next ? '1' : '0'); } catch { /* storage blocked */ }
-  }, [key]);
-  return [on, set] as const;
-}
-
 export default function ControlDossier() {
   const { eng, role, selectedControlId, back, setView, reopenControl, focusStep, clearFocusStep, openAuditId } = useIcfr();
   const logEvent = useAuditLog();
@@ -6242,11 +6252,10 @@ export default function ControlDossier() {
   const [reopenWhy, setReopenWhy] = useState('');
   // The deficiency this paper raised, graded here rather than somewhere else.
   const [defOpen, setDefOpen] = useState(false);
-  // Whether the rail is out. It outlives the visit the way the tab order does
-  // — an auditor who folds it away to read a wide sample table has said
-  // something about how they work, not about this one control, and being made
-  // to say it again on the next control would be the tool forgetting.
-  const [railOpen, setRailOpen] = useRemembered(RAIL_OPEN_KEY, true);
+  // Whether the rail is out. Every control opens with it out, on Ira (user
+  // ask, 8 Oct): the agent does the testing, so the agent is the first thing
+  // on the page. Folding it still holds for the rest of that visit.
+  const [railOpen, setRailOpen] = useState(true);
   // Which pane is showing, held here rather than inside the rail: the folded
   // spine picks one too, and unfolding on the chat when the reader pressed
   // History would be the tool overruling them.
@@ -6256,7 +6265,7 @@ export default function ControlDossier() {
   // Layer 3 and file-at-passage views sit over the rail's tabs (review #3, #4).
   const [railDetail, setRailDetail] = useState<RailDetail | null>(null);
   const openRailDetail = useCallback((d: RailDetail) => { setRailDetail(d); setRailOpen(true); }, [setRailOpen]);
-  useEffect(() => { setRailDetail(null); }, [selectedControlId]);
+  useEffect(() => { setRailDetail(null); setRailOpen(true); setRailPane('ask'); }, [selectedControlId]);
   const control = eng.controls.find(c => c.id === selectedControlId);
   // This client's own columns, for the head block. Read above the early return
   // with the rest of the hooks, so it keys off the control when there is one and

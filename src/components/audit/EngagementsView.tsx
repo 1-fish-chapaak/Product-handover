@@ -374,10 +374,29 @@ export default function EngagementsView({ onOpenEngagement, onOpenAuditPlanning,
         )}
 
         {mode === 'list' && (<>
-        {/* Toolbar — Control Library's grammar: type as a segmented control,
-            process + search on the right, status as pills underneath. */}
-        <div className="flex flex-wrap items-center gap-x-3 gap-y-2 mb-7">
-          <div role="tablist" aria-label="Engagement type" className="inline-flex items-center gap-0.5 p-0.5 rounded-lg bg-paper-100">
+        {/* Toolbar (user ask, 8 Oct): type in the MIDDLE, status and process on
+            the right, and the search box gone.
+            Three columns rather than a flex row with an `ml-auto`, because that
+            only centres the type filter when the group beside it happens to be
+            the same width as the empty space on the left — which it never is.
+            The outer two columns are equal and the middle one takes what it
+            needs, so the segmented control sits on the page's centre line and
+            stays there however wide the two sides get. Search reads from the
+            left, what narrows the list from the right, and what the list IS in
+            the middle. */}
+        <div className="grid grid-cols-1 sm:grid-cols-[1fr_auto_1fr] items-center gap-x-3 gap-y-2 mb-7">
+          <div className="relative w-full sm:max-w-60">
+            <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-ink-400" aria-hidden />
+            <input
+              type="text"
+              value={search}
+              onChange={e => setSearch(e.target.value)}
+              placeholder="Search name, owner, code…"
+              aria-label="Search engagements"
+              className="w-full h-9 pl-9 pr-3 rounded-lg border border-canvas-border bg-canvas-elevated text-[0.8125rem] text-ink-900 placeholder:text-ink-400 outline-none focus:border-brand-300"
+            />
+          </div>
+          <div role="tablist" aria-label="Engagement type" className="inline-flex items-center gap-0.5 p-0.5 rounded-lg bg-paper-100 justify-self-center">
             {TYPE_FILTERS.map(t => (
               <button
                 key={t}
@@ -390,7 +409,7 @@ export default function EngagementsView({ onOpenEngagement, onOpenAuditPlanning,
               </button>
             ))}
           </div>
-          <div className="ml-auto flex items-center gap-2 w-full sm:w-auto">
+          <div className="flex items-center justify-end gap-2 w-full sm:w-auto">
             {anyFilterActive && (
               <button
                 onClick={clearFilters}
@@ -404,17 +423,6 @@ export default function EngagementsView({ onOpenEngagement, onOpenAuditPlanning,
               options={STATUS_FILTERS.filter(st => st === 'All' || st === statusFilter || (counts.status[st] ?? 0) > 0)}
               value={statusFilter} onChange={setStatusFilter} counts={counts.status} optionLabel={st => (st === 'All' ? 'Any status' : STATUS_LABEL(st))} />
             <MinimalFilter label="Process" allLabel="All processes" options={PROCESS_FILTERS} value={processFilter} onChange={setProcessFilter} counts={counts.process} />
-            <div className="relative flex-1 sm:flex-none sm:w-60">
-              <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-ink-400" aria-hidden />
-              <input
-                type="text"
-                value={search}
-                onChange={e => setSearch(e.target.value)}
-                placeholder="Search name, owner, code…"
-                aria-label="Search engagements"
-                className="w-full h-9 pl-9 pr-3 rounded-lg border border-canvas-border bg-canvas-elevated text-[0.8125rem] text-ink-900 placeholder:text-ink-400 outline-none focus:border-brand-300"
-              />
-            </div>
           </div>
         </div>
         {/* List */}

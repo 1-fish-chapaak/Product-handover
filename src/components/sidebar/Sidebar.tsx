@@ -1,5 +1,5 @@
 import { useRef, useState, useEffect, useMemo } from 'react';
-import { motion, AnimatePresence, useReducedMotion, useMotionValue, useSpring, useTransform, type MotionValue } from 'motion/react';
+import { motion, AnimatePresence, useReducedMotion } from 'motion/react';
 import {
   MessageSquare, Workflow, Database, LayoutDashboard,
   FileBarChart, ChevronDown,
@@ -25,12 +25,16 @@ import { WORKSPACES } from '../../data/workspaces';
  *
  * A floating strip on the left — rounded, set off the page edge — holding the
  * same items, in the same order, under the same permissions as the rail it
- * replaces. Icons only: an item's name pops out beside it on hover AND on
- * keyboard focus, so tabbing through still reads as a menu. Icons grow under
- * the pointer and their neighbours a little, as on the Mac; not when the system
- * asks for reduced motion. The groups (Programs, Global, System) are split by
- * thin lines; the page you are on has a small dot beside its icon; counts sit as
- * badges on the icon. The expand button is gone — there is nothing to expand.
+ * replaces. EVERY ITEM CARRIES ITS NAME (8 Oct, user ask): a column of bare
+ * icons made the reader hover to find out what anything was, and a name that
+ * only exists on hover is not a label, it is a quiz. The groups (Programs,
+ * Global, System) are split by thin lines; the page you are on is tinted and
+ * marked at the left edge; counts sit at the end of their row.
+ *
+ * Two things went with the icons-only rail, because both only ever answered
+ * "what is this?": the pop-out name on hover, and the Mac magnification —
+ * a wide labelled row cannot grow towards the pointer without its text
+ * running off the end.
  * It hides itself like the Mac's dock (8 Oct): off-screen until the pointer
  * touches the left edge, sliding over the page rather than taking room from it.
  *
@@ -49,67 +53,41 @@ interface SidebarProps {
   onOpenNotifications: () => void;
 }
 
-/** The name beside a hovered or focused icon — one, drawn at the dock's level
- *  so the scrolling list can't clip it. */
-interface Tip { label: string; x: number; y: number }
-
 /** How far the pointer reaches, in px, and how big the icon under it gets. */
-const REACH = 96;
-const GROW = 1.3;
 
-/* ── One dock icon ── */
-function DockItem({ icon: Icon, label, active, onClick, badge, mouseY, reduce, onTip }: {
+/* ── One dock row — icon, name, and whatever it is counting ── */
+function DockItem({ icon: Icon, label, active, onClick, badge }: {
   icon: React.ElementType; label: string; active: boolean; onClick: () => void; badge?: string;
-  mouseY: MotionValue<number>; reduce: boolean; onTip: (t: Tip | null) => void;
 }) {
-  const ref = useRef<HTMLButtonElement>(null);
-  // Distance from the pointer to this icon's middle; Infinity when the pointer
-  // is off the dock, which the clamp below turns into "normal size".
-  const distance = useTransform(mouseY, y => {
-    const b = ref.current?.getBoundingClientRect();
-    return b && Number.isFinite(y) ? y - (b.top + b.height / 2) : Infinity;
-  });
-  const grown = useTransform(distance, [-REACH, 0, REACH], [1, GROW, 1], { clamp: true });
-  const scale = useSpring(grown, { mass: 0.1, stiffness: 180, damping: 14 });
-
-  const show = () => {
-    const b = ref.current?.getBoundingClientRect();
-    if (b) onTip({ label: badge ? `${label} · ${badge}` : label, x: b.right + 14, y: b.top + b.height / 2 });
-  };
-
   return (
-    <motion.button
-      ref={ref}
+    <button
       type="button"
-      onClick={() => { onTip(null); onClick(); }}
-      onMouseEnter={show}
-      onMouseLeave={() => onTip(null)}
-      // Keyboard focus says the name too — a column of bare icons is not a menu.
-      onFocus={e => { if (e.currentTarget.matches(':focus-visible')) show(); }}
-      onBlur={() => onTip(null)}
+      onClick={onClick}
       aria-label={badge ? `${label}, ${badge}` : label}
       aria-current={active ? 'page' : undefined}
-      // Grows away from the screen edge, as a left-side Mac dock does.
-      style={{ scale: reduce ? 1 : scale, transformOrigin: 'left center' }}
-      className={`relative w-8 h-8 shrink-0 rounded-lg flex items-center justify-center transition-colors duration-150 cursor-pointer
+      className={`relative w-full h-9 shrink-0 rounded-lg flex items-center gap-3 px-2.5 text-left transition-colors duration-150 cursor-pointer
         focus:outline-none focus-visible:ring-2 focus-visible:ring-sidebar-accent focus-visible:ring-offset-1 focus-visible:ring-offset-sidebar-bg
         ${active ? 'bg-brand-500/25 text-sidebar-accent' : 'text-sidebar-text hover:bg-sidebar-surface-hover hover:text-sidebar-accent'}`}
     >
-      <Icon size={18} />
-      {/* The open-app dot, beside the icon rather than under it — the dock runs
-          down the page, so "under" would sit between two icons. */}
-      {active && <span className="absolute -left-[7px] top-1/2 -translate-y-1/2 w-1 h-1 rounded-full bg-sidebar-accent" aria-hidden />}
+      {/* The page you are on, marked at the edge the rail runs along. A dot
+          beside the icon worked when the row was the icon; on a full-width row
+          it would float in the middle of nothing. */}
+      {active && <span className="absolute left-0 top-1/2 -translate-y-1/2 w-[3px] h-4 rounded-r-full bg-sidebar-accent" aria-hidden />}
+      <Icon size={18} className="shrink-0" />
+      <span className="min-w-0 flex-1 truncate text-[0.8125rem] font-medium">{label}</span>
+      {/* At the end of the row, not pinned to the icon's corner — there is a
+          row to put it on now, and a number reads better beside its name. */}
       {badge && (
-        <span className="absolute -top-1.5 -right-1.5 min-w-[18px] h-[18px] px-1 rounded-full bg-sidebar-accent text-brand-600 text-[0.625rem] font-bold leading-none flex items-center justify-center tabular-nums shadow-sm" aria-hidden>
+        <span className="shrink-0 min-w-[18px] h-[18px] px-1 rounded-full bg-sidebar-accent text-brand-600 text-[0.625rem] font-bold leading-none flex items-center justify-center tabular-nums" aria-hidden>
           {badge}
         </span>
       )}
-    </motion.button>
+    </button>
   );
 }
 
 /* ── Group divider ── */
-const DockDivider = () => <div className="w-7 h-px my-1 bg-sidebar-border shrink-0" aria-hidden />;
+const DockDivider = () => <div className="w-full h-px my-1 bg-sidebar-border shrink-0" aria-hidden />;
 
 // Workspace switcher options — shared with the login chooser.
 const TEAMS = WORKSPACES.map(w => ({ id: w.id, name: w.name }));
@@ -126,8 +104,6 @@ export default function Sidebar({ view, setView, unreadNotifications, notificati
   const [memoryDrawerOpen, setMemoryDrawerOpen] = useState(false);
   const [helpOpen, setHelpOpen] = useState(false);
   const userMenuRef = useRef<HTMLDivElement>(null);
-  const [tip, setTip] = useState<Tip | null>(null);
-  const mouseY = useMotionValue(Infinity);
 
   // ── Auto-hide, as on the Mac (8 Oct, user ask) ──
   // The dock lives off-screen and takes no room from the page. Touching the
@@ -163,9 +139,9 @@ export default function Sidebar({ view, setView, unreadNotifications, notificati
   const held = hovering || focusInside || teamOpen || userMenuOpen || notificationDrawerOpen || memoryDrawerOpen;
   useEffect(() => {
     if (held) { setShown(true); return; }
-    const t = window.setTimeout(() => { setShown(false); setTip(null); mouseY.set(Infinity); }, 350);
+    const t = window.setTimeout(() => setShown(false), 350);
     return () => window.clearTimeout(t);
-  }, [held, mouseY]);
+  }, [held]);
 
   const filteredTeams = TEAMS.filter(t => t.name.toLowerCase().includes(teamSearch.toLowerCase()));
   const teamName = TEAMS.find(t => t.id === activeTeam)?.name ?? 'Workspace';
@@ -200,8 +176,7 @@ export default function Sidebar({ view, setView, unreadNotifications, notificati
   const adminViews: View[] = ['admin-users', 'admin-roles', 'admin-logs'];
 
   const item = (icon: React.ElementType, label: string, active: boolean, go: () => void, badge?: string) => (
-    <DockItem key={label} icon={icon} label={label} active={active} onClick={go} badge={badge}
-      mouseY={mouseY} reduce={prefersReducedMotion} onTip={setTip} />
+    <DockItem key={label} icon={icon} label={label} active={active} onClick={go} badge={badge} />
   );
 
   // Popovers open to the RIGHT of the dock, beside what opened them.
@@ -229,7 +204,7 @@ export default function Sidebar({ view, setView, unreadNotifications, notificati
       {/* The rail's own contrast (8 Oct, user ask): solid sidebar purple and
           white icons, as the expanded sidebar had — with a faint mirror sheen
           on top (rim, head shine, diagonal glint). */}
-      <div className="relative h-full w-[56px] rounded-[18px] bg-sidebar-bg noise-texture border border-white/10 shadow-[inset_0_1px_0_rgb(255_255_255_/_0.30),inset_0_-1px_0_rgb(255_255_255_/_0.08),0_10px_30px_-8px_rgb(38_6_74_/_0.45)] flex flex-col items-center">
+      <div className="relative h-full w-[228px] rounded-[18px] bg-sidebar-bg noise-texture border border-white/10 shadow-[inset_0_1px_0_rgb(255_255_255_/_0.30),inset_0_-1px_0_rgb(255_255_255_/_0.08),0_10px_30px_-8px_rgb(38_6_74_/_0.45)] flex flex-col items-stretch px-2">
         <div aria-hidden className="pointer-events-none absolute inset-0 rounded-[18px] overflow-hidden"
           style={{ backgroundImage: [
             'linear-gradient(115deg, rgb(255 255 255 / 0) 28%, rgb(255 255 255 / 0.07) 40%, rgb(255 255 255 / 0.02) 47%, rgb(255 255 255 / 0) 52%, rgb(255 255 255 / 0.03) 60%, rgb(255 255 255 / 0) 66%)',
@@ -238,25 +213,31 @@ export default function Sidebar({ view, setView, unreadNotifications, notificati
           ].join(', ') }} />
 
         {/* ── Top: workspace + bell ── */}
-        <div className="shrink-0 pt-2.5 pb-1.5 flex flex-col items-center gap-1.5 relative" ref={teamRef}>
+        <div className="shrink-0 pt-2.5 pb-1.5 flex items-center gap-2 relative" ref={teamRef}>
           <button
             type="button"
-            onClick={() => { setTip(null); setTeamOpen(p => !p); setTeamSearch(''); }}
-            onMouseEnter={e => { const b = e.currentTarget.getBoundingClientRect(); setTip({ label: `IRAME.AI · ${teamName}`, x: b.right + 14, y: b.top + b.height / 2 }); }}
-            onMouseLeave={() => setTip(null)}
+            onClick={() => { setTeamOpen(p => !p); setTeamSearch(''); }}
             aria-label={`IRAME.AI — workspace: ${teamName}`}
             aria-expanded={teamOpen}
-            className="w-8 h-8 rounded-lg bg-gradient-to-br from-brand-500 to-brand-400 flex items-center justify-center cursor-pointer"
-            style={{ boxShadow: '0 2px 8px rgb(106 18 205 / 0.30)' }}
+            className="min-w-0 flex-1 flex items-center gap-2 px-1 py-1 rounded-lg hover:bg-sidebar-surface-hover transition-colors cursor-pointer"
           >
-            <Sparkles size={15} className="text-white" />
+            <span className="w-8 h-8 shrink-0 rounded-lg bg-gradient-to-br from-brand-500 to-brand-400 flex items-center justify-center"
+              style={{ boxShadow: '0 2px 8px rgb(106 18 205 / 0.30)' }}>
+              <Sparkles size={15} className="text-white" />
+            </span>
+            {/* The workspace is the thing that changes; the product name above it
+                is the thing that does not, so it sits smaller and quieter. */}
+            <span className="min-w-0 flex-1 text-left">
+              <span className="block text-[0.625rem] font-semibold uppercase tracking-wider text-sidebar-text/60">IRAME.AI</span>
+              <span className="block truncate text-[0.8125rem] font-semibold text-white">{teamName}</span>
+            </span>
           </button>
 
           <NotificationBell
             unreadCount={unreadNotifications}
             open={notificationDrawerOpen}
             onMouseDown={(e) => { e.stopPropagation(); }}
-            onClick={() => { setTip(null); onOpenNotifications(); }}
+            onClick={() => { onOpenNotifications(); }}
             className={notificationDrawerOpen
               ? 'bg-sidebar-surface-active text-sidebar-accent'
               : 'text-white hover:bg-sidebar-surface-hover hover:text-sidebar-accent'}
@@ -326,10 +307,7 @@ export default function Sidebar({ view, setView, unreadNotifications, notificati
         {/* ── The icons ── */}
         <nav
           aria-label="Main"
-          onMouseMove={e => mouseY.set(e.clientY)}
-          onMouseLeave={() => mouseY.set(Infinity)}
-          onScroll={() => setTip(null)}
-          className="flex-1 min-h-0 w-full overflow-y-auto overflow-x-hidden flex flex-col items-center gap-1 py-1.5 [scrollbar-width:none]"
+          className="flex-1 min-h-0 w-full overflow-y-auto overflow-x-hidden flex flex-col items-stretch gap-0.5 py-1.5 [scrollbar-width:none]"
         >
           {/* Top action — Ask IRA is free for everyone (no permission gate) */}
           {item(MessageSquare, 'Ask IRA', view === 'chat' || view === 'chat-trash', () => setView('chat'))}
@@ -380,14 +358,18 @@ export default function Sidebar({ view, setView, unreadNotifications, notificati
         <div className="shrink-0 pt-1 pb-2.5 relative" ref={userMenuRef}>
           <button
             type="button"
-            onClick={() => { setTip(null); setUserMenuOpen(p => !p); setSignOutConfirm(false); setHelpOpen(false); }}
-            onMouseEnter={e => { const b = e.currentTarget.getBoundingClientRect(); setTip({ label: `${currentUser?.name ?? 'Signed out'}${activeRole?.name ? ` · ${activeRole.name}` : ''}`, x: b.right + 14, y: b.top + b.height / 2 }); }}
-            onMouseLeave={() => setTip(null)}
+            onClick={() => { setUserMenuOpen(p => !p); setSignOutConfirm(false); setHelpOpen(false); }}
             aria-label={`Your account — ${currentUser?.name ?? 'signed out'}`}
             aria-expanded={userMenuOpen}
-            className="w-9 h-9 rounded-full bg-sidebar-accent flex items-center justify-center text-[0.75rem] font-bold text-brand-600 cursor-pointer hover:ring-2 hover:ring-white/20 transition-shadow"
+            className="w-full flex items-center gap-2.5 px-1 py-1 rounded-lg hover:bg-sidebar-surface-hover transition-colors cursor-pointer"
           >
-            {currentUser?.initials ?? '—'}
+            <span className="w-9 h-9 shrink-0 rounded-full bg-sidebar-accent flex items-center justify-center text-[0.75rem] font-bold text-brand-600">
+              {currentUser?.initials ?? '—'}
+            </span>
+            <span className="min-w-0 flex-1 text-left">
+              <span className="block truncate text-[0.8125rem] font-semibold text-white">{currentUser?.name ?? 'Signed out'}</span>
+              {activeRole?.name && <span className="block truncate text-[0.6875rem] text-sidebar-text/70">{activeRole.name}</span>}
+            </span>
           </button>
 
           {/* User menu */}
@@ -485,15 +467,6 @@ export default function Sidebar({ view, setView, unreadNotifications, notificati
         </div>
       </div>
     </motion.div>
-
-      {/* The name beside the icon under the pointer (or under keyboard focus). */}
-      {tip && shown && !teamOpen && !userMenuOpen && (
-        <div role="tooltip"
-          className="fixed z-[80] pointer-events-none px-2.5 py-1 rounded-md bg-[#3A3A3C]/90 backdrop-blur-md border border-white/10 text-white text-[0.75rem] font-medium whitespace-nowrap shadow-lg -translate-y-1/2"
-          style={{ left: tip.x, top: tip.y }}>
-          {tip.label}
-        </div>
-      )}
 
       {/* Personal memory home — rendered at the shell level so the drawer
           overlays the app, not the dock. */}

@@ -8,7 +8,7 @@ import {
   evidenceKindOf, fileUsable, guessFileKind, itgcHolds, narrowedCount, operatingSuggestion, populationFrom, populationSources,
   readRowCount, readSamplePrompt, sampleSizeGuide, samplingOf, sampledSources, seedKeyOf, trackResult, workingAudit,
   awaitsConfirm, iraUndoable, isControlLockedIn, operatingApplies, pointResult, populationLocked, requiredFilesReady, stepResult,
-  controlCode, couldntAskFor, dayMonth, requiredFilesOf,
+  controlCode, couldntAskFor, dayMonth, requiredFilesOf, docNotApplicable, STARTER_DESIGN_CHECKS,
 } from './helpers';
 import { ownersOf } from './auditScope';
 import IraFileAsk, { type FileAskRow, type FileAskStep } from './IraFileAsk';
@@ -16,6 +16,7 @@ import { useAuditFiles } from './useAuditFiles';
 import { OriginPicker } from './parts';
 import { ROUND_TAG } from './types';
 import { sampleRefs } from './mockData';
+import { setTodJourney, useTodJourney } from './todJourney';
 import { DESIGN_RUN_STEPS, TOE_RUN_STEPS, controlRun, endRun, say, sayOnce, setIraMode, startRun, stopRun, useControlRun, useControlThread, useIraMode, type ChatMsg, type ControlRun, type RunStep } from './controlChat';
 import { useTypewriter } from '../chat/reveal/useTypewriter';
 import { acknowledge, listOf, nextPrompt, type ChatStepId, type PopFile, type Situation } from './controlChatScript';
@@ -326,7 +327,7 @@ function IraPlan({ control, mode, rerun, onRerun, waiting, fileWait, onUpload }:
   const attrs = choice?.attributes ? steps.filter(st => choice.attributes!.includes(st.id)) : steps;
   const size = control.operating.sampling?.size ?? sampleSizeGuide(control, itgcHolds(eng, control), samplingOf(eng)).suggested;
   const plan: { id?: IraPlanStepId; text: string; done: boolean; narrow?: boolean; pop?: boolean }[] = [
-    { id: 'design', text: `Read ${files.length === allFiles.length ? 'the ' : ''}${plural(files.length, 'design file')} against ${plural(checks.length, 'check')}${control.sopTestGuidance ? `, using the SOP’s steps (p.${control.sopTestGuidance.page})` : ''}`, done: checks.length > 0 && checks.every(p => pointResult(p) !== 'Not tested'), narrow: allFiles.length > 1 || allChecks.length > 1 },
+    { id: 'design', text: `${allChecks.length === 0 ? 'Read the design files against the design checks, once the design test is set up' : `${allFiles.length === 0 ? 'Read the design files, once they’re on file,' : `Read ${files.length === allFiles.length ? 'the ' : ''}${plural(files.length, 'design file')}`} against ${plural(checks.length, 'check')}`}${control.sopTestGuidance ? `, using the SOP’s steps (p.${control.sopTestGuidance.page})` : ''}`, done: checks.length > 0 && checks.every(p => pointResult(p) !== 'Not tested'), narrow: allFiles.length > 1 || allChecks.length > 1 },
   ];
   if (operatingApplies(eng, control)) {
     plan.push(
@@ -507,13 +508,96 @@ function WhatIraKnows({ control }: { control: Control }) {
   );
 }
 
+// The journey's buttons — the rail's own primary/secondary pair (see the
+// verdict pair below), so Approve / Reject read as one question's two answers.
+const JOURNEY_PRIMARY = 'py-2.5 rounded-xl text-[0.8125rem] font-semibold text-white bg-gradient-to-r from-brand-600 to-fuchsia-600 hover:from-brand-500 hover:to-fuchsia-500 shadow-[0_6px_20px_-8px_rgba(106,18,205,0.55)] transition-all duration-150 cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/30';
+const JOURNEY_SECONDARY = 'py-2.5 rounded-xl text-[0.8125rem] border border-canvas-border bg-canvas-elevated text-ink-700 hover:bg-brand-50 hover:text-brand-700 hover:border-brand-200 transition-all duration-150 cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/30';
+/** Ira working something out — one quiet pulsing line. */
+function Thinking({ text }: { text: string }) {
+  return (
+    <p className="flex items-center gap-2 text-[0.8125rem] text-ink-500">
+      <Sparkles size={13} className="text-brand-500 animate-pulse" aria-hidden />
+      <span className="animate-pulse">{text}</span>
+    </p>
+  );
+}
+
 export default function ControlChatPane({ control }: { control: Control }) {
   const { eng, role, me, openAuditId, addDesignDoc, runDesignIra, concludeDesign, overrideDesign, approveDesign, setDesignPoint, overrideDesignPoint,
     setIpeCheck, concludeIpe, uploadRequiredFile, drawSourceSample, approveSource, lockPopulation, concludeOperating, overrideOperating, signOffControlWp,
     setStepResult, overrideStep, validateReadyAttributes, registerFile, setPopulation, updateDeficiency, waiveDesignDoc, attachDesignEvidence, undoIra, confirmIra,
-    remindOwnerForFiles, setDocStatus } = useIcfr();
+    remindOwnerForFiles, setDocStatus, addDesignPoint, startIraPlan } = useIcfr();
   const logEvent = useAuditLog();
   const audit = useMemo(() => eng.audits.find(a => a.id === openAuditId) ?? null, [eng.audits, openAuditId]);
+  // Zero state (user ask, 8 Oct — matching production): a control nobody has
+  // touched, its design test not even set up. No plan yet. Ira takes a moment
+  // to read the paper and introduces itself; Continue is what begins the
+  // journey below.
+  const zeroState = role === 'auditor' && !control.iraPlan?.started && !isControlLockedIn(eng, control)
+    // the same test as the TOD's "isn't set up yet" — required elements can sit
+    // there as empty placeholders, so nothing received and no checks is zero
+    && control.design.points.length === 0 && control.design.documents.every(d => d.status !== 'Received');
+  const [reading, setReading] = useState(zeroState);
+  useEffect(() => {
+    if (!zeroState) return;
+    setReading(true);
+    const t = setTimeout(() => setReading(false), 1600);
+    return () => clearTimeout(t);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [control.id]);
+  // ── The zero state's journey through TOD (user ask, 8 Oct) ─────────────────
+  // Continue → a plan to approve or reject → the elements → their documents →
+  // "shall I start testing?" → the checks load and are tested. See todJourney.ts.
+  const journey = useTodJourney(control.id);
+  useEffect(() => {
+    if (journey?.phase !== 'planning' && journey?.phase !== 'replanning') return;
+    const t = setTimeout(() => setTodJourney(control.id, { phase: 'proposal', version: journey.version + 1 }), 1800);
+    return () => clearTimeout(t);
+  }, [journey?.phase, control.id]); // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => {
+    if (journey?.phase !== 'loading-checks') return;
+    const t = setTimeout(() => {
+      STARTER_DESIGN_CHECKS.forEach(x => addDesignPoint(control.id, x));
+      setTodJourney(control.id, { phase: 'testing' });
+    }, 1400);
+    return () => clearTimeout(t);
+  }, [journey?.phase, control.id]); // eslint-disable-line react-hooks/exhaustive-deps
+  const docName = (d: { kind: string; name: string }) => (d.kind === 'Custom' ? d.name : d.kind);
+  const planFlowchart = !journey?.skipFlowchart && !docNotApplicable(control, { kind: 'Flowchart' });
+  const planElements = `${listOf(designOutstandingRequired(control).map(docName))}${planFlowchart ? ', plus the Flowchart (optional)' : ''}`;
+  const continueZero = () => {
+    say(control.id, 'ira', 'Hey there, I’m Ira, your SOX agent. I’m your guide and orchestrator for this working paper. This paper is ready for its design review, with no decisions made yet.');
+    say(control.id, 'user', 'Continue');
+    setTodJourney(control.id, { phase: 'planning', version: 0 });
+  };
+  const approvePlan = () => {
+    say(control.id, 'user', 'Approve the plan');
+    const manual = iraMode === 'manual';
+    if (planFlowchart) addDesignDoc(control.id, 'Flowchart');
+    if (manual) STARTER_DESIGN_CHECKS.forEach(x => addDesignPoint(control.id, x));
+    startIraPlan(control.id);
+    skipAck.current = true;
+    say(control.id, 'ira', manual
+      ? `Plan approved. I’ve added the design elements to the test of design — ${planElements} — and its ${STARTER_DESIGN_CHECKS.length} design checks. You’re in Manual, so attach the evidence on each element on the left, then press Run AI validation above the design checks.`
+      : `Plan approved — starting the test of design. I’ve added the design elements it needs: ${planElements}. Next I need their documents.`);
+    setTodJourney(control.id, { phase: manual ? 'testing' : 'approved' });
+    logEvent({ action: 'Update', description: `Approved Ira's plan on ${control.id}`, module: 'SOX ICFR', entity: 'Control' });
+  };
+  const rejectPlan = () => {
+    say(control.id, 'user', 'Reject the plan');
+    say(control.id, 'ira', 'What should I change in the plan? Tell me below and I’ll draw it again.');
+    setTodJourney(control.id, { phase: 'revising' });
+  };
+  const startChecks = () => {
+    say(control.id, 'user', 'Yes, start testing');
+    say(control.id, 'ira', 'Loading the design checks from the RACM, then I’ll test each one against the evidence.');
+    setTodJourney(control.id, { phase: 'loading-checks' });
+  };
+  const holdChecks = () => {
+    say(control.id, 'user', 'Not yet');
+    say(control.id, 'ira', 'Okay — I’ll wait. Press Start testing when you’re ready.');
+    setTodJourney(control.id, { phase: 'held' });
+  };
   // The audit's own files, read exactly as the source picker on the left reads
   // them: `ofAudit` only — everything the engagement merely holds is not
   // evidence somebody put here, and a rail offering it would be a second
@@ -1167,7 +1251,7 @@ export default function ControlChatPane({ control }: { control: Control }) {
     const p = control.iraPlan;
     if (!p?.started || role !== 'auditor' || s.locked || s.sealed || isControlLockedIn(eng, control)) return null;
     if (s.step === 'design') {
-      if (p.skipped.includes('design') || s.designResult !== 'Not tested' || s.checksTotal === 0 || s.missing.length === 0
+      if (p.skipped.includes('design') || s.designResult !== 'Not tested' || (s.checksTotal === 0 && journey?.phase !== 'approved') || s.missing.length === 0
         || s.rollPending.some(x => x === 'design' || x === 'checks')) return null;
       return { step: 'design', rows: s.missing.map(d => ({
         key: d.id, label: d.kind === 'Custom' ? d.name : d.kind, docId: d.id, accept: EVIDENCE_ACCEPT, multiple: true,
@@ -1208,7 +1292,10 @@ export default function ControlChatPane({ control }: { control: Control }) {
   // live step card and its buttons wait until Start — then they come back to
   // say what is holding Ira and what to press.
   const planUnstarted = role === 'auditor' && !control.iraPlan?.started && !isControlLockedIn(eng, control);
-  const askShown = iraMode === 'automatic' && !!fileAsk && !fileHeldHere.includes(fileAsk.step) && !working && !draw && !extract && !waive && !pile;
+  // Evidence in, no checks yet: Ira asks before it tests (journey, 8 Oct).
+  const testAsk = role === 'auditor' && iraMode === 'automatic' && (journey?.phase === 'approved' || journey?.phase === 'held')
+    && control.design.points.length === 0 && designOutstandingRequired(control).length === 0;
+  const askShown = !testAsk && iraMode === 'automatic' && !!fileAsk && !fileHeldHere.includes(fileAsk.step) && !working && !draw && !extract && !waive && !pile;
   const owner = ownersOf(control).processOwner;
   const askKey = (r: FileAskRow) => `file-ask:${r.key}`;
   const askedOf = (rows: FileAskRow[]) => {
@@ -1227,7 +1314,7 @@ export default function ControlChatPane({ control }: { control: Control }) {
       attachDesignEvidence(control.id, row.docId, list);
       logEvent({ action: 'Upload', description: `Attached ${list.map(f => f.name).join(', ')} to the ${row.label} design element on ${control.id} from Ira's file request`, module: 'SOX ICFR', entity: 'Control' });
       skipAck.current = true;
-      say(control.id, 'ira', `${listOf(list.map(f => f.name))} — on ${doc ? row.label : 'the element'}. Carrying on with the design checks.`);
+      say(control.id, 'ira', `${listOf(list.map(f => f.name))} — on ${doc ? row.label : 'the element'}.${control.design.points.length ? ' Carrying on with the design checks.' : ''}`);
       return;
     }
     const f = files[0];
@@ -1408,6 +1495,13 @@ export default function ControlChatPane({ control }: { control: Control }) {
     if (!text || working) return;
     say(control.id, 'user', text);
     setDraft('');
+
+    // A rejected plan: this line is what to change (user ask, 8 Oct).
+    if (journey?.phase === 'revising') {
+      setTodJourney(control.id, { phase: 'replanning', note: text, skipFlowchart: journey.skipFlowchart || /flow ?chart/i.test(text) });
+      say(control.id, 'ira', 'Got it — making a new plan.');
+      return;
+    }
 
     // Mid-sentence: the last thing said was "tell me why", so this is the why.
     // Not parsed, not matched against anything — a rationale is whatever the
@@ -1671,14 +1765,28 @@ export default function ControlChatPane({ control }: { control: Control }) {
   // same exception the stepper makes on the left.
   const stepLabel = role === 'risk-owner' && prompt.step === 'design' ? 'Documents' : STEP_LABEL[prompt.step];
 
+  const planBlock = (
+    <>
+      {/* Who does the work, said first (user ask, 8 Oct): the rail opens on
+          every control, and its first line is the agent taking the test. */}
+      <p className="mb-2.5 text-[0.8125rem] leading-snug text-ink-800">
+        I’ll do the control testing on {control.wpRef ?? controlCode(control)} — read the design evidence, draw the sample and test each item against the attributes. You review what I find and conclude; I never conclude or sign.
+      </p>
+      <IraPlan control={control} mode={iraMode} rerun={rerun} onRerun={runAgain} waiting={planWait} fileWait={fileWait} onUpload={reopenAsk} />
+    </>
+  );
+
   return (
     <>
       {/* The plan sits OUTSIDE the scroll (user report, 5 Oct): it used to be
           the first thing in the thread and scrolled away as the chat grew.
           Capped, so an open ✎ list cannot push the conversation off the rail. */}
-      {role === 'auditor' && (
+      {/* Before Start the plan is the live thing, so it sits on the floor of
+          the rail with the rest of the live content (below); once running it
+          moves up here and stays put. */}
+      {role === 'auditor' && !planUnstarted && (
         <div className="shrink-0 max-h-[45%] overflow-y-auto px-3 pt-2.5 pb-2 border-b border-canvas-border">
-          <IraPlan control={control} mode={iraMode} rerun={rerun} onRerun={runAgain} waiting={planWait} fileWait={fileWait} onUpload={reopenAsk} />
+          {planBlock}
         </div>
       )}
       {/* 20px between turns, where the 840px thread uses 40 — prose needs the
@@ -1687,10 +1795,10 @@ export default function ControlChatPane({ control }: { control: Control }) {
           pushed to the floor with `mt-auto`, which left a tall empty gap
           between the plan and the first line (user report, 5 Oct). */}
       <div ref={scrollRef} className="chat-canvas-mesh flex-1 min-h-0 overflow-y-auto px-3 pt-3 pb-4 flex flex-col">
-       <WhatIraKnows control={control} />
+       {!zeroState && <WhatIraKnows control={control} />}
        {/* The step's capability note, under what Ira knows — the tester's
            only: it describes the testing pen, which the owner does not hold. */}
-       {role === 'auditor' && (
+       {role === 'auditor' && !zeroState && (
          <p className="mt-1.5 flex items-start gap-1.5 text-[0.75rem] leading-snug text-ink-500">
            <Sparkles size={11} className="text-brand-500 shrink-0 mt-0.75" aria-hidden />
            <span>{CAPABILITY[prompt.step]}</span>
@@ -1859,10 +1967,64 @@ export default function ControlChatPane({ control }: { control: Control }) {
           </div>
         )}
 
+        {/* Not started yet: who does the work and the plan to Start, on the
+            floor of the rail right above the composer (user ask, 8 Oct). */}
+        {planUnstarted && !zeroState && <div className="mt-auto">{planBlock}</div>}
+        {zeroState && (
+          <div className="mt-auto" aria-live="polite">
+            {!journey ? (reading ? (
+              <Thinking text="Reading this working paper…" />
+            ) : (
+              <motion.div initial={still ? false : { opacity: 0, y: 6 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.4, ease: [0.22, 1, 0.36, 1] }}>
+                <p className="text-[0.875rem] leading-relaxed text-ink-800">Hey there, I’m Ira, your SOX agent. I’m your guide and orchestrator for this working paper.</p>
+                <p className="mt-3 text-[0.875rem] leading-relaxed text-ink-800">This paper is ready for its design review, with no decisions made yet. Press Continue when you’re ready, and I’ll take it from there.</p>
+                <button type="button" onClick={continueZero} className={cn('mt-4 w-full', JOURNEY_PRIMARY)}>Continue</button>
+              </motion.div>
+            )) : journey.phase === 'planning' || journey.phase === 'replanning' ? (
+              <Thinking text={journey.phase === 'planning' ? 'Making a plan…' : 'Making a new plan…'} />
+            ) : journey.phase === 'proposal' ? (
+              <motion.div initial={still ? false : { opacity: 0, y: 6 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.4, ease: [0.22, 1, 0.36, 1] }}
+                className="rounded-xl border border-brand-100 bg-canvas-elevated p-3.5">
+                <p className="flex items-center gap-1.5 text-[0.8125rem] font-semibold text-ink-900">
+                  <Sparkles size={13} className="text-brand-500" aria-hidden />
+                  {journey.version > 1 ? 'Here’s the new plan' : 'Here’s my plan'} for {control.wpRef ?? controlCode(control)}
+                </p>
+                {journey.note && <p className="mt-1.5 text-[0.75rem] text-ink-500">Changed for you: “{journey.note}”</p>}
+                <ol className="mt-2.5 space-y-1.5 text-[0.8125rem] leading-snug text-ink-700 list-decimal pl-5 marker:text-ink-400">
+                  <li>Add the design elements this control needs to the test of design — {planElements}.</li>
+                  <li>Ask you for their documents.</li>
+                  <li>Load the {STARTER_DESIGN_CHECKS.length} design checks and test each against the evidence. I mark each pass or fail; you can override.</li>
+                  {operatingApplies(eng, control) && (
+                    <li>Then the population, a request for {control.operating.sampling?.size ?? sampleSizeGuide(control, itgcHolds(eng, control), samplingOf(eng)).suggested} sample items, and {control.operating.steps.length} attributes.</li>
+                  )}
+                </ol>
+                <div className="mt-3.5 grid grid-cols-2 gap-1.5">
+                  <button type="button" onClick={approvePlan} className={JOURNEY_PRIMARY}>Approve</button>
+                  <button type="button" onClick={rejectPlan} className={JOURNEY_SECONDARY}>Reject</button>
+                </div>
+              </motion.div>
+            ) : null}
+          </div>
+        )}
+        {testAsk && (
+          <motion.div className="mt-auto" initial={still ? false : { opacity: 0, y: 6 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.4, ease: [0.22, 1, 0.36, 1] }}>
+            <p className="text-[0.875rem] leading-relaxed text-ink-800">
+              {journey?.phase === 'held'
+                ? 'Whenever you’re ready, I’ll test the design checks against the evidence.'
+                : `The evidence is on file — ${listOf(control.design.documents.filter(d => d.status === 'Received').map(docName))}. Should I start testing the design checks?`}
+            </p>
+            <div className={cn('mt-3 grid gap-1.5', journey?.phase === 'held' ? 'grid-cols-1' : 'grid-cols-2')}>
+              <button type="button" onClick={startChecks} className={JOURNEY_PRIMARY}>{journey?.phase === 'held' ? 'Start testing' : 'Yes, start testing'}</button>
+              {journey?.phase !== 'held' && <button type="button" onClick={holdChecks} className={JOURNEY_SECONDARY}>Not yet</button>}
+            </div>
+          </motion.div>
+        )}
+        {journey?.phase === 'loading-checks' && <div className="mt-auto"><Thinking text="Loading the design checks…" /></div>}
+
         {/* Bottom-aligned (user ask, 8 Oct): the live step and its buttons
             sit on the floor of the rail, right above the composer, however
             short the thread above is. */}
-        {!working && !ipeDraft && !pile && !draw && !extract && !awaitingCause && !waive && !planUnstarted && (
+        {!working && !ipeDraft && !pile && !draw && !extract && !awaitingCause && !waive && !planUnstarted && !testAsk && journey?.phase !== 'loading-checks' && (
           <div className="mt-auto">
             {/* Ira's mark sits on the LIVE line only. The thread above stays
                 unmarked prose (DESIGN.md §7.1.7 — no avatar, identity carried
