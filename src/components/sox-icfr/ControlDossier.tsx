@@ -1547,6 +1547,25 @@ function evidenceFileName(label: string, wpRef: string, kind: DesignDocKind): st
   return `${label.replace(/[^A-Za-z0-9]+/g, '_')}_${wpRef}_FY26.${EVIDENCE_EXT[kind] ?? 'pdf'}`;
 }
 
+/** THE SOP'S OWN "HOW TO TEST THIS" (7 Oct, SOP extraction stage 7) — folded,
+ *  one quiet line at the top of the TOD step, on controls extracted from an SOP.
+ *  Reference only: Ira reads it too, and cites the page in its plan. */
+function SopTestGuidanceNote({ control }: { control: Control }) {
+  const [open, setOpen] = useState(false);
+  const g = control.sopTestGuidance;
+  if (!g) return null;
+  return (
+    <div className="mb-4">
+      <button type="button" onClick={() => setOpen(o => !o)} aria-expanded={open}
+        className="inline-flex items-center gap-1 text-[0.75rem] font-semibold text-ink-600 hover:text-ink-900 cursor-pointer">
+        <ChevronRight size={12} aria-hidden className={cn('shrink-0 transition-transform', open && 'rotate-90')} />
+        How the SOP says to test this <span className="font-mono font-normal text-ink-400">· p.{g.page}</span>
+      </button>
+      {open && <p className="mt-1 ml-4 max-w-2xl text-[0.75rem] leading-snug text-ink-700">{g.text}</p>}
+    </div>
+  );
+}
+
 function DesignSection({ control, canEdit: canEditIn, locked = false }: { control: Control; canEdit: boolean;
   /** The reviewer has approved this TOD. The step is read-only from then on —
    *  evidence, checks and the conclusion all stand as approved. Reopening it
@@ -1764,6 +1783,7 @@ function DesignSection({ control, canEdit: canEditIn, locked = false }: { contro
 
   return (
     <div className="p-5">
+      <SopTestGuidanceNote control={control} />
       {empty && !addingCustom ? (
         <EmptyState icon={<FileText size={18} />} title="TOD isn’t set up yet" hint="Add the design elements this control is evidenced by — process narrative, flowchart, walkthrough, precision &amp; thresholds. The design checks come from its RACM.">
           {canEdit && addElementMenu}

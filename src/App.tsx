@@ -89,6 +89,8 @@ import WorkingPaperPanel from './components/execution/WorkingPaperPanel';
 import WorkflowExecutionPanel from './components/execution/WorkflowExecutionPanel';
 import TraceabilityPanel from './components/execution/TraceabilityPanel';
 import NotificationPopover from './notifications/NotificationPopover';
+import { requestOpenSopDraft } from './components/sox-icfr/sopBackgroundDrafts';
+import SopDraftNotifier from './components/sox-icfr/SopDraftNotifier';
 import NotificationEmailModal from './notifications/NotificationEmailModal';
 import NotificationPreferencesModal from './notifications/NotificationPreferencesModal';
 import { NotificationProvider, useNotifications } from './notifications/NotificationContext';
@@ -305,6 +307,8 @@ function AppInner() {
     // rest land on the view.
     if (ref?.kind === 'report') { setView('reports'); window.dispatchEvent(new CustomEvent('irame:open-report', { detail: { id: ref.id } })); return; }
     if (ref?.kind === 'engagement') { openEngagement(ref.id); return; }
+    // An SOP draft Ira finished after the reader left: the RACM Library reopens it.
+    if (ref?.kind === 'racm-draft') { requestOpenSopDraft(ref.id); setView('racm-library'); return; }
     if (n.link?.view) setView(n.link.view);
   };
 
@@ -1594,6 +1598,7 @@ function AppInner() {
         {/* Notification centre + the email preview and preferences it opens. */}
         <AnimatePresence>
           <NotificationPopover onSelect={handleNotificationSelect} />
+          <SopDraftNotifier />
         </AnimatePresence>
         <AnimatePresence>
           {notif.viewingEmail && (
