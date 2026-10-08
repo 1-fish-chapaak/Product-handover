@@ -326,7 +326,7 @@ function IraPlan({ control, mode, rerun, onRerun, waiting, fileWait, onUpload }:
   const attrs = choice?.attributes ? steps.filter(st => choice.attributes!.includes(st.id)) : steps;
   const size = control.operating.sampling?.size ?? sampleSizeGuide(control, itgcHolds(eng, control), samplingOf(eng)).suggested;
   const plan: { id?: IraPlanStepId; text: string; done: boolean; narrow?: boolean; pop?: boolean }[] = [
-    { id: 'design', text: `Read ${files.length === allFiles.length ? 'the ' : ''}${plural(files.length, 'design file')} against ${plural(checks.length, 'check')}`, done: checks.length > 0 && checks.every(p => pointResult(p) !== 'Not tested'), narrow: allFiles.length > 1 || allChecks.length > 1 },
+    { id: 'design', text: `Read ${files.length === allFiles.length ? 'the ' : ''}${plural(files.length, 'design file')} against ${plural(checks.length, 'check')}${control.sopTestGuidance ? `, using the SOP’s steps (p.${control.sopTestGuidance.page})` : ''}`, done: checks.length > 0 && checks.every(p => pointResult(p) !== 'Not tested'), narrow: allFiles.length > 1 || allChecks.length > 1 },
   ];
   if (operatingApplies(eng, control)) {
     plan.push(
@@ -487,7 +487,8 @@ function WhatIraKnows({ control }: { control: Control }) {
       : `Population: ${pop.count.toLocaleString('en-IN')} instances${pop.sourceFile ? ` from ${pop.sourceFile}` : ''}${pop.locked ? ', locked' : ', not locked yet'}.`);
     const s = control.operating.sampling;
     if (s && s.size > 0) out.push(`Sample drawn: ${plural(s.size, 'item')}, ${s.method.toLowerCase()}.`);
-    out.push(`Comes from ${control.process}${control.subProcess ? ` · ${control.subProcess}` : ''}${control.sopSectionRef ? `, SOP ${control.sopSectionRef}` : ''}.`);
+    out.push(`Comes from ${control.process}${control.subProcess ? ` · ${control.subProcess}` : ''}${control.sopSectionRef ? `, SOP ${control.sopSectionRef}` : ''}${control.sopSource ? `, page ${control.sopSource.page}` : ''}.`);
+    if (control.sopTestGuidance) out.push(`The SOP says how to test it, on page ${control.sopTestGuidance.page}: “${control.sopTestGuidance.text}”`);
     return out;
   }, [control]);
   return (

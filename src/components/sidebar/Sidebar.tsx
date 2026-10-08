@@ -1,12 +1,12 @@
 import { useRef, useState, useEffect, useMemo } from 'react';
-import { motion, AnimatePresence, useReducedMotion } from 'motion/react';
+import { motion, AnimatePresence, useReducedMotion, useMotionValue, useSpring, useTransform, type MotionValue } from 'motion/react';
 import {
   MessageSquare, Workflow, Database, LayoutDashboard,
-  FileBarChart, ChevronDown, PanelLeft, PanelLeftClose,
+  FileBarChart, ChevronDown,
   AlertTriangle, Sparkles, Building2, Home, Calendar,
   Shield, Search as SearchIcon, Settings, Clock, Check,
-  Wand2, MoreHorizontal, LogOut, HelpCircle, ExternalLink,
-  ClipboardCheck, FlaskConical, Layers, Inbox, BarChart3,
+  Wand2, LogOut, HelpCircle, ExternalLink,
+  ClipboardCheck, Layers, Inbox, BarChart3,
   Brain, Table2, ListChecks,
 } from 'lucide-react';
 import { pendingItems, useAllBatches, useFreshWorkspace } from '../../data/auditPlan';
@@ -19,6 +19,25 @@ import { ENGAGEMENT_EXCEPTIONS } from '../../data/engagement-exceptions';
 import { myQueueFor, personForUser } from '../../data/grc-domain';
 import { WORKSPACES } from '../../data/workspaces';
 
+/**
+ * THE SIDEBAR AS A DOCK (7 Oct, user ask: "Docker style, jaise MacBook mein
+ * hota hai").
+ *
+ * A floating strip on the left — rounded, set off the page edge — holding the
+ * same items, in the same order, under the same permissions as the rail it
+ * replaces. Icons only: an item's name pops out beside it on hover AND on
+ * keyboard focus, so tabbing through still reads as a menu. Icons grow under
+ * the pointer and their neighbours a little, as on the Mac; not when the system
+ * asks for reduced motion. The groups (Programs, Global, System) are split by
+ * thin lines; the page you are on has a small dot beside its icon; counts sit as
+ * badges on the icon. The expand button is gone — there is nothing to expand.
+ * It hides itself like the Mac's dock (8 Oct): off-screen until the pointer
+ * touches the left edge, sliding over the page rather than taking room from it.
+ *
+ * `expanded` / `toggleSidebar` are still passed by the shell (its ⌘\ shortcut);
+ * the dock ignores them.
+ */
+
 interface SidebarProps {
   view: View;
   setView: (v: View) => void;
@@ -30,114 +49,73 @@ interface SidebarProps {
   onOpenNotifications: () => void;
 }
 
-/* ── Flat nav item ── */
-function NavItem({ icon: Icon, label, active, expanded, onClick, badge, dot }: {
-  icon: React.ElementType; label: string; active: boolean; expanded: boolean; onClick: (e: React.MouseEvent<HTMLButtonElement>) => void; badge?: string; dot?: boolean;
+/** The name beside a hovered or focused icon — one, drawn at the dock's level
+ *  so the scrolling list can't clip it. */
+interface Tip { label: string; x: number; y: number }
+
+/** How far the pointer reaches, in px, and how big the icon under it gets. */
+const REACH = 96;
+const GROW = 1.3;
+
+/* ── One dock icon ── */
+function DockItem({ icon: Icon, label, active, onClick, badge, mouseY, reduce, onTip }: {
+  icon: React.ElementType; label: string; active: boolean; onClick: () => void; badge?: string;
+  mouseY: MotionValue<number>; reduce: boolean; onTip: (t: Tip | null) => void;
 }) {
-  const prefersReducedMotion = useReducedMotion();
+  const ref = useRef<HTMLButtonElement>(null);
+  // Distance from the pointer to this icon's middle; Infinity when the pointer
+  // is off the dock, which the clamp below turns into "normal size".
+  const distance = useTransform(mouseY, y => {
+    const b = ref.current?.getBoundingClientRect();
+    return b && Number.isFinite(y) ? y - (b.top + b.height / 2) : Infinity;
+  });
+  const grown = useTransform(distance, [-REACH, 0, REACH], [1, GROW, 1], { clamp: true });
+  const scale = useSpring(grown, { mass: 0.1, stiffness: 180, damping: 14 });
+
+  const show = () => {
+    const b = ref.current?.getBoundingClientRect();
+    if (b) onTip({ label: badge ? `${label} · ${badge}` : label, x: b.right + 14, y: b.top + b.height / 2 });
+  };
+
   return (
     <motion.button
-      onClick={onClick}
-      title={!expanded ? label : undefined}
-      /* The label is not in the DOM while the rail is collapsed, so without
-         this the only accessible name is the `title`, which is the weakest
-         source there is and never appears on keyboard focus. */
-      aria-label={label}
+      ref={ref}
+      type="button"
+      onClick={() => { onTip(null); onClick(); }}
+      onMouseEnter={show}
+      onMouseLeave={() => onTip(null)}
+      // Keyboard focus says the name too — a column of bare icons is not a menu.
+      onFocus={e => { if (e.currentTarget.matches(':focus-visible')) show(); }}
+      onBlur={() => onTip(null)}
+      aria-label={badge ? `${label}, ${badge}` : label}
       aria-current={active ? 'page' : undefined}
-      whileTap={prefersReducedMotion ? undefined : { scale: 0.97 }}
-      transition={{ type: 'spring', stiffness: 600, damping: 30 }}
-      /* These rows had NO focused state: outline none, no ring, no background
-         change. Focus landed and was invisible, on a 64px rail showing icons
-         and no labels, so tabbing through read as nothing happening at all. */
-      className={`
-        flex items-center gap-2.5 rounded-sm transition-colors duration-150 relative cursor-pointer
+      // Grows away from the screen edge, as a left-side Mac dock does.
+      style={{ scale: reduce ? 1 : scale, transformOrigin: 'left center' }}
+      className={`relative w-8 h-8 shrink-0 rounded-lg flex items-center justify-center transition-colors duration-150 cursor-pointer
         focus:outline-none focus-visible:ring-2 focus-visible:ring-sidebar-accent focus-visible:ring-offset-1 focus-visible:ring-offset-sidebar-bg
-        ${expanded ? 'w-full h-8 px-3.5' : 'w-8 h-8 mx-auto px-0 justify-center'}
-        ${active
-          ? 'text-sidebar-accent font-semibold'
-          : 'text-sidebar-text hover:bg-sidebar-surface-hover hover:text-sidebar-accent'
-        }
-      `}
+        ${active ? 'bg-brand-500/25 text-sidebar-accent' : 'text-sidebar-text hover:bg-sidebar-surface-hover hover:text-sidebar-accent'}`}
     >
-      {/* Animated active pill — shared layoutId glides the highlight between
-          nav items when the selection changes (modern Linear/Vercel-style nav). */}
-      {active && (
-        <motion.span
-          layoutId="sidebar-active-pill"
-          className="absolute inset-0 rounded-sm bg-brand-500/25"
-          transition={prefersReducedMotion ? { duration: 0 } : { type: 'spring', bounce: 0.18, duration: 0.5 }}
-        >
-          {/* Left accent bar — rides along with the pill */}
-          <span className="absolute left-0 top-1/2 -translate-y-1/2 h-4 w-[3px] rounded-r-full bg-sidebar-accent" />
-        </motion.span>
+      <Icon size={17} />
+      {/* The open-app dot, beside the icon rather than under it — the dock runs
+          down the page, so "under" would sit between two icons. */}
+      {active && <span className="absolute -left-[7px] top-1/2 -translate-y-1/2 w-1 h-1 rounded-full bg-sidebar-accent" aria-hidden />}
+      {badge && (
+        <span className="absolute -top-1.5 -right-1.5 min-w-[18px] h-[18px] px-1 rounded-full bg-[#FF3B30] text-white text-[0.625rem] font-semibold leading-none flex items-center justify-center tabular-nums shadow-sm" aria-hidden>
+          {badge}
+        </span>
       )}
-      <motion.span
-        animate={prefersReducedMotion ? undefined : { scale: active ? [1, 1.1, 1] : 1 }}
-        transition={{ duration: 0.45, ease: [0.22, 1, 0.36, 1] }}
-        className="relative z-10 shrink-0 flex items-center justify-center"
-      >
-        <Icon size={18} />
-        {dot && !expanded && (
-          <span
-            className="absolute -top-0.5 -right-0.5 w-2 h-2 rounded-full bg-brand-400 ring-2 ring-sidebar-bg"
-            aria-hidden="true"
-          />
-        )}
-      </motion.span>
-      <AnimatePresence>
-        {expanded && (
-          <motion.span
-            initial={{ opacity: 0, x: -6 }}
-            animate={{ opacity: 1, x: 0 }}
-            exit={{ opacity: 0, x: -6, transition: { duration: 0.1, ease: 'easeIn' } }}
-            transition={{ duration: 0.24, ease: [0.22, 1, 0.36, 1], delay: 0.06 }}
-            className="relative z-10 text-[0.875rem] leading-[20px] truncate whitespace-nowrap"
-            style={{ fontWeight: active ? 600 : 520 }}
-          >
-            {label}
-          </motion.span>
-        )}
-      </AnimatePresence>
-      <AnimatePresence>
-        {expanded && badge && (
-          <motion.span
-            initial={{ opacity: 0, scale: 0.9 }}
-            animate={{ opacity: 1, scale: 1 }}
-            exit={{ opacity: 0, scale: 0.9 }}
-            transition={{ duration: 0.12 }}
-            className="relative z-10 ml-auto text-[0.75rem] font-semibold bg-sidebar-accent text-brand-600 px-[7px] py-[2px] rounded-full tabular-nums"
-          >
-            {badge}
-          </motion.span>
-        )}
-      </AnimatePresence>
     </motion.button>
   );
 }
 
-/* ── Section divider with optional label ── */
-function Divider({ label, expanded }: { label?: string; expanded: boolean }) {
-  if (!expanded || !label) {
-    return (
-      <div className="mx-0 py-[13.5px]">
-        <div className="h-px bg-sidebar-border" />
-      </div>
-    );
-  }
-  return (
-    <div className="px-3.5 py-2">
-      <span className="text-[0.75rem] leading-[16px] font-medium uppercase text-white/60">{label}</span>
-    </div>
-  );
-}
+/* ── Group divider ── */
+const DockDivider = () => <div className="w-7 h-px my-1 bg-sidebar-border shrink-0" aria-hidden />;
 
 // Workspace switcher options — shared with the login chooser.
 const TEAMS = WORKSPACES.map(w => ({ id: w.id, name: w.name }));
 
-export default function Sidebar({ view, setView, expanded, toggleSidebar, unreadNotifications, notificationDrawerOpen, onOpenNotifications }: SidebarProps) {
-  const prefersReducedMotion = useReducedMotion();
-  const [hoverExpanded, setHoverExpanded] = useState(false);
-  const hoverTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+export default function Sidebar({ view, setView, unreadNotifications, notificationDrawerOpen, onOpenNotifications }: SidebarProps) {
+  const prefersReducedMotion = useReducedMotion() ?? false;
   const [teamOpen, setTeamOpen] = useState(false);
   const [teamSearch, setTeamSearch] = useState('');
   const teamRef = useRef<HTMLDivElement>(null);
@@ -148,6 +126,18 @@ export default function Sidebar({ view, setView, expanded, toggleSidebar, unread
   const [memoryDrawerOpen, setMemoryDrawerOpen] = useState(false);
   const [helpOpen, setHelpOpen] = useState(false);
   const userMenuRef = useRef<HTMLDivElement>(null);
+  const [tip, setTip] = useState<Tip | null>(null);
+  const mouseY = useMotionValue(Infinity);
+
+  // ── Auto-hide, as on the Mac (8 Oct, user ask) ──
+  // The dock lives off-screen and takes no room from the page. Touching the
+  // left edge slides it in; leaving it slides it out after a beat. It stays
+  // out while a menu, the bell's panel or the memory drawer is open, and
+  // while keyboard focus is inside it — tabbing in reveals it too.
+  const [shown, setShown] = useState(false);
+  const [hovering, setHovering] = useState(false);
+  const [focusInside, setFocusInside] = useState(false);
+  const dockRef = useRef<HTMLDivElement>(null);
 
   const { currentUser, activeRole, can, canAny, signOut,
     activeWorkspaceId: activeTeam, setActiveWorkspace: setActiveTeam } = useCurrentUser();
@@ -170,9 +160,15 @@ export default function Sidebar({ view, setView, expanded, toggleSidebar, unread
     return () => document.removeEventListener('mousedown', close);
   }, [userMenuOpen]);
 
-  const filteredTeams = TEAMS.filter(t => t.name.toLowerCase().includes(teamSearch.toLowerCase()));
+  const held = hovering || focusInside || teamOpen || userMenuOpen || notificationDrawerOpen || memoryDrawerOpen;
+  useEffect(() => {
+    if (held) { setShown(true); return; }
+    const t = window.setTimeout(() => { setShown(false); setTip(null); mouseY.set(Infinity); }, 350);
+    return () => window.clearTimeout(t);
+  }, [held, mouseY]);
 
-  const isExpanded = expanded || hoverExpanded;
+  const filteredTeams = TEAMS.filter(t => t.name.toLowerCase().includes(teamSearch.toLowerCase()));
+  const teamName = TEAMS.find(t => t.id === activeTeam)?.name ?? 'Workspace';
 
   // ── Permission-driven section visibility ──
   const programsVisible = canAny(['plan_view', 'eng_view', 'bp_view']);
@@ -198,398 +194,313 @@ export default function Sidebar({ view, setView, expanded, toggleSidebar, unread
     [currentUser?.name, freshWs],
   );
 
-  const handleMouseEnter = () => {
-    if (hoverTimerRef.current) clearTimeout(hoverTimerRef.current);
-    if (!expanded) {
-      hoverTimerRef.current = setTimeout(() => setHoverExpanded(true), 200);
-    }
-  };
-
-  const handleMouseLeave = () => {
-    if (hoverTimerRef.current) clearTimeout(hoverTimerRef.current);
-    if (!expanded) {
-      hoverTimerRef.current = setTimeout(() => setHoverExpanded(false), 250);
-    }
-  };
-
-  /* Keyboard focus opens the rail, the same way hovering does.
-   *
-   * Tabbing into a collapsed rail put focus on an icon with no label beside it,
-   * which is not a navigable menu, it is a column of guesses. It opens only for
-   * focus the browser itself considers keyboard focus (`:focus-visible`), so a
-   * mouse click does not pin the rail open until focus happens to move away.
-   * No delay either: a hover delay stops the rail twitching as the pointer
-   * crosses it, and a keyboard user crossing nothing should not wait. */
-  const handleFocus = (e: React.FocusEvent<HTMLElement>) => {
-    if (expanded) return;
-    if (!(e.target as HTMLElement).matches?.(':focus-visible')) return;
-    if (hoverTimerRef.current) clearTimeout(hoverTimerRef.current);
-    setHoverExpanded(true);
-  };
-
-  const handleBlur = (e: React.FocusEvent<HTMLElement>) => {
-    if (expanded) return;
-    // Moving between two rows inside the rail is not leaving it.
-    if (e.currentTarget.contains(e.relatedTarget as Node)) return;
-    if (hoverTimerRef.current) clearTimeout(hoverTimerRef.current);
-    setHoverExpanded(false);
-  };
-
   /* View group helpers for active detection */
   const workflowViews: View[] = ['workflow-templates', 'workflow-detail', 'workflow-library', 'workflow-executor'];
   const aiConciergeViews: View[] = ['ai-concierge', 'ai-concierge-forensics', 'ai-concierge-table-extractor'];
   const adminViews: View[] = ['admin-users', 'admin-roles', 'admin-logs'];
 
-  return (
-    // In-flow rail — animating its width reflows the page, so expanding (hover
-    // OR pinned) pushes the main content right. Content shifts on open.
-    <motion.div
-      animate={{ width: isExpanded ? 256 : 64 }}
-      transition={prefersReducedMotion ? { duration: 0 } : { duration: 0.4, ease: [0.32, 0.72, 0, 1] }}
-      onMouseEnter={handleMouseEnter}
-      onMouseLeave={handleMouseLeave}
-      onFocus={handleFocus}
-      onBlur={handleBlur}
-      className="h-full bg-sidebar-bg noise-texture flex flex-col shrink-0 overflow-hidden z-50"
-    >
-      {/* ── Sidebar header: collapsed shows ONLY the bell (centered in 64px);
-          expanded shows logo + IRAME.AI + Audit Intelligence on the left,
-          bell on the right. The bell uses Framer Motion's `layout` prop so
-          it slides smoothly between the two positions in lockstep with the
-          sidebar's width animation — no manual position calculations. ── */}
-      <div className={`border-b border-sidebar-border shrink-0 relative h-[59px] flex items-center ${isExpanded ? 'px-4 justify-between gap-3' : 'px-0 justify-center'}`} ref={teamRef}>
-        {/* Logo + IRAME.AI label + team switcher — expanded only */}
-        <AnimatePresence initial={false}>
-          {isExpanded && (
-            <motion.div
-              initial={{ opacity: 0, x: -8 }}
-              animate={{ opacity: 1, x: 0 }}
-              exit={{ opacity: 0, x: -8, transition: { duration: 0.1, ease: 'easeIn' } }}
-              transition={{ duration: 0.28, ease: [0.22, 1, 0.36, 1], delay: 0.06 }}
-              className="flex items-center gap-3 overflow-hidden"
-            >
-              <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-brand-500 to-brand-400 flex items-center justify-center shrink-0" style={{ boxShadow: '0 2px 8px rgb(106 18 205 / 0.30)' }}>
-                <Sparkles size={14} className="text-white" />
-              </div>
-              <div>
-                <div className="text-[0.875rem] font-bold text-sidebar-accent leading-tight whitespace-nowrap">IRAME.AI</div>
-                <button
-                  onClick={() => { setTeamOpen(p => !p); setTeamSearch(''); }}
-                  className="text-[0.75rem] text-white font-medium whitespace-nowrap flex items-center gap-1 hover:text-sidebar-text transition-colors cursor-pointer"
-                >
-                  {TEAMS.find(t => t.id === activeTeam)?.name ?? 'Workspace'}
-                  <ChevronDown size={8} className={`text-white transition-transform duration-150 ${teamOpen ? 'rotate-180' : ''}`} />
-                </button>
-              </div>
-            </motion.div>
-          )}
-        </AnimatePresence>
+  const item = (icon: React.ElementType, label: string, active: boolean, go: () => void, badge?: string) => (
+    <DockItem key={label} icon={icon} label={label} active={active} onClick={go} badge={badge}
+      mouseY={mouseY} reduce={prefersReducedMotion} onTip={setTip} />
+  );
 
-        {/* Notification bell — uses motion `layout` to smoothly transition
-            position between collapsed (centered, 64px) and expanded (right
-            edge, 256px). The `layout` system measures the DOM before/after
-            and animates the transform — no slide-in-from-the-right glitch. */}
-        <motion.div layout transition={{ duration: 0.28, ease: [0.22, 0.68, 0, 1] }} className="shrink-0">
+  // Popovers open to the RIGHT of the dock, beside what opened them.
+  const popover = 'absolute left-full ml-3 w-64 rounded-xl z-50 overflow-hidden border border-white/[0.12] bg-sidebar-bg shadow-2xl';
+
+  return (
+    <>
+    {/* The edge that calls the dock — a thin strip along the left of the screen. */}
+    <div aria-hidden className="fixed left-0 top-0 h-full w-1.5 z-[60]" onMouseEnter={() => setHovering(true)} onMouseLeave={() => setHovering(false)} />
+
+    <motion.div
+      ref={dockRef}
+      className="fixed left-0 top-0 h-full py-2 pl-2 pr-4 z-[70]"
+      initial={false}
+      animate={{ x: shown ? 0 : '-100%' }}
+      transition={prefersReducedMotion ? { duration: 0 } : { type: 'spring', stiffness: 420, damping: 38 }}
+      onMouseEnter={() => setHovering(true)}
+      onMouseLeave={() => setHovering(false)}
+      // Keyboard focus only — a clicked icon keeps focus, and that must not
+      // pin the dock open.
+      onFocus={e => { if ((e.target as HTMLElement).matches(':focus-visible')) setFocusInside(true); }}
+      onMouseDown={() => setFocusInside(false)}
+      onBlur={e => { if (!dockRef.current?.contains(e.relatedTarget as Node)) setFocusInside(false); }}
+    >
+      {/* Mirror glass (8 Oct, user ask): the same purple, but see-through —
+          the page behind shows blurred through it, as on the Mac's dock — with
+          a polished sheen on top: a bright rim, a soft shine at the head and a
+          diagonal glint, the way light catches a mirror. */}
+      <div className="relative h-full w-[56px] rounded-[18px] bg-brand-950/95 backdrop-blur-xl backdrop-saturate-[1.8] border border-white/15 shadow-[inset_0_1px_0_rgb(255_255_255_/_0.30),inset_0_-1px_0_rgb(255_255_255_/_0.08),0_10px_30px_-8px_rgb(38_6_74_/_0.45)] flex flex-col items-center">
+        <div aria-hidden className="pointer-events-none absolute inset-0 rounded-[18px] overflow-hidden"
+          style={{ backgroundImage: [
+            'linear-gradient(115deg, rgb(255 255 255 / 0) 28%, rgb(255 255 255 / 0.16) 40%, rgb(255 255 255 / 0.04) 47%, rgb(255 255 255 / 0) 52%, rgb(255 255 255 / 0.07) 60%, rgb(255 255 255 / 0) 66%)',
+            'linear-gradient(90deg, rgb(255 255 255 / 0.10) 0%, rgb(255 255 255 / 0) 22%, rgb(255 255 255 / 0) 80%, rgb(255 255 255 / 0.05) 100%)',
+            'linear-gradient(180deg, rgb(255 255 255 / 0.22) 0%, rgb(255 255 255 / 0.06) 14%, rgb(255 255 255 / 0) 35%, rgb(255 255 255 / 0) 85%, rgb(255 255 255 / 0.08) 100%)',
+          ].join(', ') }} />
+
+        {/* ── Top: workspace + bell ── */}
+        <div className="shrink-0 pt-2.5 pb-1.5 flex flex-col items-center gap-1.5 relative" ref={teamRef}>
+          <button
+            type="button"
+            onClick={() => { setTip(null); setTeamOpen(p => !p); setTeamSearch(''); }}
+            onMouseEnter={e => { const b = e.currentTarget.getBoundingClientRect(); setTip({ label: `IRAME.AI · ${teamName}`, x: b.right + 14, y: b.top + b.height / 2 }); }}
+            onMouseLeave={() => setTip(null)}
+            aria-label={`IRAME.AI — workspace: ${teamName}`}
+            aria-expanded={teamOpen}
+            className="w-8 h-8 rounded-lg bg-gradient-to-br from-brand-500 to-brand-400 flex items-center justify-center cursor-pointer"
+            style={{ boxShadow: '0 2px 8px rgb(106 18 205 / 0.30)' }}
+          >
+            <Sparkles size={15} className="text-white" />
+          </button>
+
           <NotificationBell
             unreadCount={unreadNotifications}
             open={notificationDrawerOpen}
-            onMouseEnter={() => {
-              // Hovering the bell should not auto-expand the sidebar.
-              // Cancelling the pending expand timer keeps the bell stationary
-              // under the user's cursor so the click target doesn't slide away.
-              if (hoverTimerRef.current) clearTimeout(hoverTimerRef.current);
-            }}
             onMouseDown={(e) => { e.stopPropagation(); }}
-            onClick={() => {
-              // Cancel any pending hover-expand and clear the hover state so
-              // clicking the bell doesn't drag the sidebar open under the user.
-              if (hoverTimerRef.current) clearTimeout(hoverTimerRef.current);
-              setHoverExpanded(false);
-              onOpenNotifications();
-            }}
+            onClick={() => { setTip(null); onOpenNotifications(); }}
             className={notificationDrawerOpen
               ? 'bg-sidebar-surface-active text-sidebar-accent'
               : 'text-white hover:bg-sidebar-surface-hover hover:text-sidebar-accent'}
-            badgeClassName="bg-sidebar-accent text-brand-600"
+            badgeClassName="bg-[#FF3B30] text-white ring-1 ring-white/70"
           />
-        </motion.div>
 
-        {/* Team switcher dropdown */}
-        <AnimatePresence>
-          {teamOpen && isExpanded && (
-            <motion.div
-              initial={{ opacity: 0, y: -6, scale: 0.97 }}
-              animate={{ opacity: 1, y: 0, scale: 1 }}
-              exit={{ opacity: 0, y: -4, scale: 0.98 }}
-              transition={{ duration: 0.15, ease: [0.22, 0.68, 0, 1] }}
-              className="absolute left-3 right-3 top-full mt-0 rounded-xl z-50 overflow-hidden border border-white/[0.12] bg-sidebar-bg shadow-2xl"
-            >
-              {/* Search */}
-              <div className="p-3">
-                <div
-                  className="flex items-center gap-2.5 px-3.5 h-10 rounded-lg text-[0.8125rem]"
-                  style={{
-                    border: '1px solid rgba(163, 102, 240, 0.35)',
-                    background: 'rgba(163, 102, 240, 0.08)',
-                  }}
-                >
-                  <SearchIcon size={14} className="text-white shrink-0" />
-                  <input
-                    type="text"
-                    placeholder="Search workspace"
-                    value={teamSearch}
-                    onChange={e => setTeamSearch(e.target.value)}
-                    className="flex-1 bg-transparent outline-none text-white placeholder:text-white/60 text-[0.8125rem]"
-                    style={{ boxShadow: 'none' }}
-                    autoFocus
-                  />
+          {/* Workspace switcher */}
+          <AnimatePresence>
+            {teamOpen && (
+              <motion.div
+                initial={{ opacity: 0, x: -6, scale: 0.97 }}
+                animate={{ opacity: 1, x: 0, scale: 1 }}
+                exit={{ opacity: 0, x: -4, scale: 0.98 }}
+                transition={{ duration: 0.15, ease: [0.22, 0.68, 0, 1] }}
+                className={`${popover} top-2`}
+              >
+                <div className="px-4 pt-3 pb-1">
+                  <div className="text-[0.875rem] font-bold text-sidebar-accent leading-tight">IRAME.AI</div>
+                  <div className="text-[0.75rem] text-white/70">Switch workspace</div>
                 </div>
-              </div>
+                <div className="p-3">
+                  <div
+                    className="flex items-center gap-2.5 px-3.5 h-10 rounded-lg text-[0.8125rem]"
+                    style={{ border: '1px solid rgba(163, 102, 240, 0.35)', background: 'rgba(163, 102, 240, 0.08)' }}
+                  >
+                    <SearchIcon size={14} className="text-white shrink-0" />
+                    <input
+                      type="text"
+                      placeholder="Search workspace"
+                      value={teamSearch}
+                      onChange={e => setTeamSearch(e.target.value)}
+                      className="flex-1 bg-transparent outline-none text-white placeholder:text-white/60 text-[0.8125rem]"
+                      style={{ boxShadow: 'none' }}
+                      autoFocus
+                    />
+                  </div>
+                </div>
+                <div className="h-px bg-white/[0.08]" />
+                <div className="py-1.5 max-h-[220px] overflow-y-auto">
+                  {filteredTeams.map(team => {
+                    const isActive = activeTeam === team.id;
+                    return (
+                      <button
+                        key={team.id}
+                        onClick={() => { setActiveTeam(team.id); setTeamOpen(false); }}
+                        className={`w-full flex items-center justify-between px-4 py-3 text-[0.875rem] transition-colors duration-100 cursor-pointer ${isActive ? 'text-white' : 'text-white hover:bg-white/[0.05]'}`}
+                      >
+                        <span style={{ fontWeight: isActive ? 600 : 400 }}>{team.name}</span>
+                        {isActive ? (
+                          <div className="w-[22px] h-[22px] rounded-full bg-brand-400 flex items-center justify-center">
+                            <Check size={12} className="text-white" strokeWidth={2.5} />
+                          </div>
+                        ) : (
+                          <div className="w-[22px] h-[22px] rounded-full border-[1.5px] border-white/20" />
+                        )}
+                      </button>
+                    );
+                  })}
+                </div>
+              </motion.div>
+            )}
+          </AnimatePresence>
+        </div>
 
-              <div className="h-px bg-white/[0.08]" />
+        <DockDivider />
 
-              {/* Team list */}
-              <div className="py-1.5 max-h-[220px] overflow-y-auto">
-                {filteredTeams.map(team => {
-                  const isActive = activeTeam === team.id;
-                  return (
-                    <button
-                      key={team.id}
-                      onClick={() => { setActiveTeam(team.id); setTeamOpen(false); }}
-                      className={`w-full flex items-center justify-between px-4 py-3 text-[0.875rem] transition-colors duration-100 cursor-pointer ${isActive ? 'text-white' : 'text-white hover:bg-white/[0.05]'}`}
-                    >
-                      <span style={{ fontWeight: isActive ? 600 : 400 }}>{team.name}</span>
-                      {isActive ? (
-                        <div className="w-[22px] h-[22px] rounded-full bg-brand-400 flex items-center justify-center">
-                          <Check size={12} className="text-white" strokeWidth={2.5} />
-                        </div>
-                      ) : (
-                        <div className="w-[22px] h-[22px] rounded-full border-[1.5px] border-white/20" />
-                      )}
-                    </button>
-                  );
-                })}
-              </div>
-            </motion.div>
-          )}
-        </AnimatePresence>
-      </div>
-
-      {/* ── Navigation ── */}
-      <nav className={`flex-1 overflow-y-auto overflow-x-hidden py-2 ${isExpanded ? 'px-2' : 'px-0'}`}>
-        <div className="space-y-0.5">
-
+        {/* ── The icons ── */}
+        <nav
+          aria-label="Main"
+          onMouseMove={e => mouseY.set(e.clientY)}
+          onMouseLeave={() => mouseY.set(Infinity)}
+          onScroll={() => setTip(null)}
+          className="flex-1 min-h-0 w-full overflow-y-auto overflow-x-hidden flex flex-col items-center gap-1 py-1.5 [scrollbar-width:none]"
+        >
           {/* Top action — Ask IRA is free for everyone (no permission gate) */}
-          <NavItem icon={MessageSquare} label="Ask IRA" active={view === 'chat' || view === 'chat-trash'} expanded={isExpanded} onClick={() => setView('chat')} />
-
-          {/* Workflow Builder — agent chooser (General / GRC) + Audit with AI.
-              Open like Ask IRA; Audit with AI gates itself on wf_create. */}
-          <NavItem icon={Workflow} label="Workflow Builder" active={view === 'workflow-builder' || view === 'audit-with-ai'} expanded={isExpanded} onClick={() => setView('workflow-builder')} />
-          {(allBatches.length > 0 || view === 'builds') && (
-            <NavItem icon={ListChecks} label="Builds & reviews" active={view === 'builds'} expanded={isExpanded} badge={buildsCount > 0 ? String(buildsCount) : undefined} onClick={() => setView('builds')} />
-          )}
+          {item(MessageSquare, 'Ask IRA', view === 'chat' || view === 'chat-trash', () => setView('chat'))}
+          {/* Workflow Builder — agent chooser (General / GRC) + Audit with AI. */}
+          {item(Workflow, 'Workflow Builder', view === 'workflow-builder' || view === 'audit-with-ai', () => setView('workflow-builder'))}
+          {(allBatches.length > 0 || view === 'builds')
+            && item(ListChecks, 'Builds & reviews', view === 'builds', () => setView('builds'), buildsCount > 0 ? String(buildsCount) : undefined)}
 
           {/* Primary — always available */}
-          <NavItem icon={Home} label="Home" active={view === 'home'} expanded={isExpanded} onClick={() => setView('home')} />
-          <NavItem icon={Clock} label="Recents" active={view === 'recents'} expanded={isExpanded} onClick={() => setView('recents')} />
+          {item(Home, 'Home', view === 'home', () => setView('home'))}
+          {item(Clock, 'Recents', view === 'recents', () => setView('recents'))}
 
           {/* ── PROGRAMS ── */}
-          {programsVisible && <Divider label="Programs" expanded={isExpanded} />}
-
-          {can('plan_view') && <NavItem icon={Calendar} label="Audit Planning" active={view === 'audit-planning'} expanded={isExpanded} onClick={() => setView('audit-planning')} />}
-          {can('eng_view') && <NavItem icon={ClipboardCheck} label="Engagements" active={view === 'engagements' || view === 'engagement-overview' || view === 'engagement-case-management' || view === 'sox-icfr'} expanded={isExpanded} onClick={() => setView('engagements')} />}
-          {/* SOX Testing — PARKED from the sidebar (user ask). Creating a SOX
-              engagement now runs the same scoping journey from Engagements, so
-              the separate section was a second door to the same flow. Only this
-              nav item is commented out: the 'sox-testing' route, the page and
-              its components stay wired and compiling, so restoring the section
-              is uncommenting this one line.
-              Known consequence while it's off — the seeded FY26 programme
-              (sox-prog-fy26) was only reachable from this page's card. Opening
-              "FY26 ICFR — Airline P2P & O2C" from Engagements opens eng-1
-              instead, which carries no soxProcesses / soxSeedMode / soxConfig
-              and so seeds a thinner workspace. Fix when wanted: add those three
-              fields to the eng-1 seed in data/engagements.ts.
-          {can('eng_view') && <NavItem icon={FlaskConical} label="SOX Testing" active={view === 'sox-testing'} expanded={isExpanded} onClick={() => setView('sox-testing')} />}
-          */}
-          {/* Personal cross-engagement queue — same eng_view gate as the
-              routed 'my-queue' view (rbac VIEW_PERMISSIONS); risk owners hold
-              it via VIEW_ALL, so their home screen is always reachable. */}
-          {can('eng_view') && <NavItem icon={Inbox} label="My Queue" active={view === 'my-queue'} expanded={isExpanded} badge={myQueueCount > 0 ? String(myQueueCount) : undefined} onClick={() => setView('my-queue')} />}
-          {can('bp_view') && <NavItem icon={Layers} label="Process Hub" active={view === 'programs' || view === 'business-processes' || view === 'bp-detail'} expanded={isExpanded} onClick={() => setView('programs')} />}
+          {programsVisible && <DockDivider />}
+          {can('plan_view') && item(Calendar, 'Audit Planning', view === 'audit-planning', () => setView('audit-planning'))}
+          {can('eng_view') && item(ClipboardCheck, 'Engagements', view === 'engagements' || view === 'engagement-overview' || view === 'engagement-case-management' || view === 'sox-icfr', () => setView('engagements'))}
+          {/* SOX Testing — PARKED from the sidebar (user ask); the route and its
+              page stay wired, so restoring it is one line here. */}
+          {/* Personal cross-engagement queue — same eng_view gate as the routed
+              'my-queue' view, so risk owners' home screen is always reachable. */}
+          {can('eng_view') && item(Inbox, 'My Queue', view === 'my-queue', () => setView('my-queue'), myQueueCount > 0 ? String(myQueueCount) : undefined)}
+          {can('bp_view') && item(Layers, 'Process Hub', view === 'programs' || view === 'business-processes' || view === 'bp-detail', () => setView('programs'))}
 
           {/* ── GLOBAL ── */}
-          {globalVisible && <Divider label="Global" expanded={isExpanded} />}
-
-          {can('db_view') && <NavItem icon={LayoutDashboard} label="Dashboard" active={view === 'dashboards'} expanded={isExpanded} onClick={() => setView('dashboards')} />}
-          {can('rp_view') && <NavItem icon={FileBarChart} label="Report" active={view === 'reports' || view === 'report-history' || view === 'report-builder'} expanded={isExpanded} onClick={() => setView('reports')} />}
+          {globalVisible && <DockDivider />}
+          {can('db_view') && item(LayoutDashboard, 'Dashboard', view === 'dashboards', () => setView('dashboards'))}
+          {can('rp_view') && item(FileBarChart, 'Report', view === 'reports' || view === 'report-history' || view === 'report-builder', () => setView('reports'))}
           {/* RACM sits above the register and the library because it is where
-              the other two come from: risks and controls are written into a
-              matrix first, and published from there. */}
-          {can('racm_view') && <NavItem icon={Table2} label="RACM Library" active={view === 'racm-library'} expanded={isExpanded} onClick={() => setView('racm-library')} />}
-          {can('risk_view') && <NavItem icon={AlertTriangle} label="Risk Register" active={view === 'audit-risk-register'} expanded={isExpanded} onClick={() => setView('audit-risk-register')} />}
-          {can('ctrl_view') && <NavItem icon={Shield} label="Control Library" active={view === 'governance-controls' || view === 'governance-control-detail' || view === 'adapt-standard'} expanded={isExpanded} onClick={() => setView('governance-controls')} />}
-          {can('wf_view') && <NavItem icon={Workflow} label="Workflow Library" active={workflowViews.includes(view)} expanded={isExpanded} onClick={() => setView('workflow-library')} />}
-          {can('concierge_use') && <NavItem icon={Wand2} label="AI Concierge" active={aiConciergeViews.includes(view)} expanded={isExpanded} onClick={() => setView('ai-concierge')} />}
+              the other two come from. */}
+          {can('racm_view') && item(Table2, 'RACM Library', view === 'racm-library', () => setView('racm-library'))}
+          {can('risk_view') && item(AlertTriangle, 'Risk Register', view === 'audit-risk-register', () => setView('audit-risk-register'))}
+          {can('ctrl_view') && item(Shield, 'Control Library', view === 'governance-controls' || view === 'governance-control-detail' || view === 'adapt-standard', () => setView('governance-controls'))}
+          {can('wf_view') && item(Workflow, 'Workflow Library', workflowViews.includes(view), () => setView('workflow-library'))}
+          {can('concierge_use') && item(Wand2, 'AI Concierge', aiConciergeViews.includes(view), () => setView('ai-concierge'))}
 
           {/* ── SYSTEM ── */}
-          <Divider label="System" expanded={isExpanded} />
+          <DockDivider />
+          {can('ds_live') && item(Database, 'Knowledge Hub', view === 'knowledge-hub' || view === 'data-sources' || view === 'configuration', () => setView('knowledge-hub'))}
+          {/* One entry, four tabs — ungated, because two of the four tabs are
+              open to everybody; the page drops the ones a role does not carry. */}
+          {item(BarChart3, 'Platform Usage', view === 'platform-usage' || view === 'connectors', () => setView('platform-usage'))}
+          {adminVisible && item(Settings, 'Admin', adminViews.includes(view), () => setView(firstAdminView))}
+        </nav>
 
-          {can('ds_live') && <NavItem icon={Database} label="Knowledge Hub" active={view === 'knowledge-hub' || view === 'data-sources' || view === 'configuration'} expanded={isExpanded} onClick={() => setView('knowledge-hub')} />}
-          {/* One entry, four tabs: what the platform did, what that work was
-              worth, what it cost to run, and what can be looked up outside
-              this workspace. They answer the same question from different
-              ends, so they sit behind one nav entry rather than four.
+        <DockDivider />
 
-              Ungated, because two of the four tabs are open to everybody. The
-              page itself drops the tabs a reader's role does not carry. */}
-          <NavItem icon={BarChart3} label="Platform Usage" active={view === 'platform-usage' || view === 'connectors'} expanded={isExpanded} onClick={() => setView('platform-usage')} />
-          {adminVisible && <NavItem icon={Settings} label="Admin" active={adminViews.includes(view)} expanded={isExpanded} onClick={() => setView(firstAdminView)} />}
-
-        </div>
-      </nav>
-
-      {/* ── User profile ── */}
-      <div className={`border-t border-sidebar-border shrink-0 relative py-3 ${isExpanded ? 'px-3' : 'px-0'}`} ref={userMenuRef}>
-        <AnimatePresence>
-          {isExpanded && (
-            <motion.div
-              initial={{ opacity: 0, height: 0 }}
-              animate={{ opacity: 1, height: 'auto' }}
-              exit={{ opacity: 0, height: 0 }}
-              className="flex items-center gap-2.5 px-2.5 py-2.5 rounded-lg bg-sidebar-surface border border-sidebar-border cursor-pointer hover:bg-sidebar-surface-hover transition-colors"
-            >
-              <div className="w-8 h-8 rounded-full bg-sidebar-accent flex items-center justify-center text-[0.75rem] font-bold text-brand-600 shrink-0">
-                {currentUser?.initials ?? '—'}
-              </div>
-              <div className="flex-1 min-w-0">
-                <div className="text-[0.8125rem] font-semibold text-sidebar-accent truncate">{currentUser?.name ?? 'Signed out'}</div>
-                <div className="text-[0.75rem] text-white truncate">{activeRole?.name ?? currentUser?.title ?? ''}</div>
-              </div>
-              <button
-                onClick={(e) => { e.stopPropagation(); toggleSidebar(); }}
-                title="Collapse sidebar (⌘\)"
-                aria-label="Collapse sidebar"
-                aria-pressed={true}
-                className="p-1 rounded-md hover:bg-white/[0.08] transition-colors text-white hover:text-sidebar-text cursor-pointer"
-              >
-                <PanelLeftClose size={16} />
-              </button>
-              <button
-                onClick={(e) => { e.stopPropagation(); setUserMenuOpen(p => !p); setSignOutConfirm(false); setHelpOpen(false); }}
-                className="p-1 rounded-md hover:bg-white/[0.08] transition-colors text-white hover:text-sidebar-text cursor-pointer"
-              >
-                <MoreHorizontal size={16} />
-              </button>
-            </motion.div>
-          )}
-        </AnimatePresence>
-
-        {/* User menu dropdown */}
-        <AnimatePresence>
-          {userMenuOpen && isExpanded && (
-            <motion.div
-              initial={{ opacity: 0, y: 4, scale: 0.98 }}
-              animate={{ opacity: 1, y: 0, scale: 1 }}
-              exit={{ opacity: 0, y: 4, scale: 0.98 }}
-              transition={{ duration: 0.12 }}
-              className="absolute left-3 right-3 bottom-full mb-0 rounded-xl z-50 overflow-hidden border border-white/[0.12] bg-sidebar-bg shadow-2xl"
-            >
-              {signOutConfirm ? (
-                <div className="p-4">
-                  <div className="text-[0.8125rem] font-semibold text-white mb-1">Sign out?</div>
-                  <div className="text-[0.75rem] text-white/50 mb-4">You'll need to sign in again to access your workspace.</div>
-                  <div className="flex gap-2">
-                    <button
-                      onClick={() => setSignOutConfirm(false)}
-                      className="flex-1 px-3 py-2 rounded-lg text-[0.8125rem] font-medium text-white/80 border border-white/[0.12] hover:bg-white/[0.06] transition-colors cursor-pointer"
-                    >
-                      Cancel
-                    </button>
-                    <button
-                      onClick={() => { setSignOutConfirm(false); setUserMenuOpen(false); signOut(); }}
-                      className="flex-1 px-3 py-2 rounded-lg text-[0.8125rem] font-medium text-white bg-risk hover:bg-risk-700 transition-colors cursor-pointer"
-                    >
-                      Sign Out
-                    </button>
-                  </div>
-                </div>
-              ) : (
-                <div>
-                  <div className="py-1.5">
-                    <div className="flex items-center gap-2.5 px-4 py-2.5 text-[0.8125rem] text-white cursor-not-allowed">
-                      <Building2 size={14} className="text-white" />
-                      Irame Labs Pvt Ltd
-                    </div>
-                    <button
-                      onClick={() => { setUserMenuOpen(false); setHelpOpen(false); setMemoryDrawerOpen(true); }}
-                      className="w-full flex items-center gap-2.5 px-4 py-2.5 text-[0.8125rem] text-white hover:bg-white/[0.06] transition-colors cursor-pointer"
-                    >
-                      <Brain size={14} className="text-white" />
-                      What IRA knows about me
-                    </button>
-                    <button
-                      onClick={() => setHelpOpen(p => !p)}
-                      className="w-full flex items-center gap-2.5 px-4 py-2.5 text-[0.8125rem] text-white hover:bg-white/[0.06] transition-colors cursor-pointer"
-                    >
-                      <HelpCircle size={14} className="text-white" />
-                      <span className="flex-1 text-left">Help & Support</span>
-                      <ChevronDown size={12} className={`text-white transition-transform duration-150 ${helpOpen ? 'rotate-180' : ''}`} />
-                    </button>
-                    {helpOpen && (
-                      <>
-                        <div className="h-px mx-3 bg-white/[0.08]" />
-                        <div className="py-1">
-                          {[
-                            { label: 'Get Started', url: 'https://irame.ai/get-started' },
-                            { label: 'Term of Use', url: 'https://irame.ai/terms' },
-                            { label: 'Privacy Policy', url: 'https://irame.ai/privacy' },
-                          ].map(item => (
-                            <button
-                              key={item.label}
-                              onClick={() => { setUserMenuOpen(false); setHelpOpen(false); window.open(item.url, '_blank'); }}
-                              className="w-full flex items-center justify-between px-4 py-2.5 text-[0.8125rem] text-white hover:bg-white/[0.06] transition-colors cursor-pointer"
-                            >
-                              {item.label}
-                              <ExternalLink size={12} className="text-white" />
-                            </button>
-                          ))}
-                        </div>
-                      </>
-                    )}
-                    <div className="h-px mx-3 my-1 bg-white/[0.08]" />
-                    <button
-                      onClick={() => setSignOutConfirm(true)}
-                      className="w-full flex items-center gap-2.5 px-4 py-2.5 text-[0.8125rem] text-red-400 hover:bg-white/[0.06] hover:text-red-300 transition-colors cursor-pointer"
-                    >
-                      <LogOut size={14} />
-                      Sign Out
-                    </button>
-                  </div>
-                </div>
-              )}
-            </motion.div>
-          )}
-        </AnimatePresence>
-
-        {!isExpanded && (
+        {/* ── Bottom: you ── */}
+        <div className="shrink-0 pt-1 pb-2.5 relative" ref={userMenuRef}>
           <button
-            onClick={toggleSidebar}
-            className="w-full flex items-center justify-center text-white hover:text-sidebar-text transition-colors p-1.5 rounded-lg hover:bg-sidebar-surface-hover cursor-pointer"
-            title="Pin sidebar open (⌘\)"
-            aria-label="Pin sidebar open"
-            aria-pressed={false}
+            type="button"
+            onClick={() => { setTip(null); setUserMenuOpen(p => !p); setSignOutConfirm(false); setHelpOpen(false); }}
+            onMouseEnter={e => { const b = e.currentTarget.getBoundingClientRect(); setTip({ label: `${currentUser?.name ?? 'Signed out'}${activeRole?.name ? ` · ${activeRole.name}` : ''}`, x: b.right + 14, y: b.top + b.height / 2 }); }}
+            onMouseLeave={() => setTip(null)}
+            aria-label={`Your account — ${currentUser?.name ?? 'signed out'}`}
+            aria-expanded={userMenuOpen}
+            className="w-9 h-9 rounded-full bg-sidebar-accent flex items-center justify-center text-[0.75rem] font-bold text-brand-600 cursor-pointer hover:ring-2 hover:ring-white/20 transition-shadow"
           >
-            <PanelLeft size={15} />
+            {currentUser?.initials ?? '—'}
           </button>
-        )}
+
+          {/* User menu */}
+          <AnimatePresence>
+            {userMenuOpen && (
+              <motion.div
+                initial={{ opacity: 0, x: -6, scale: 0.98 }}
+                animate={{ opacity: 1, x: 0, scale: 1 }}
+                exit={{ opacity: 0, x: -4, scale: 0.98 }}
+                transition={{ duration: 0.12 }}
+                className={`${popover} bottom-2`}
+              >
+                {signOutConfirm ? (
+                  <div className="p-4">
+                    <div className="text-[0.8125rem] font-semibold text-white mb-1">Sign out?</div>
+                    <div className="text-[0.75rem] text-white/50 mb-4">You'll need to sign in again to access your workspace.</div>
+                    <div className="flex gap-2">
+                      <button
+                        onClick={() => setSignOutConfirm(false)}
+                        className="flex-1 px-3 py-2 rounded-lg text-[0.8125rem] font-medium text-white/80 border border-white/[0.12] hover:bg-white/[0.06] transition-colors cursor-pointer"
+                      >
+                        Cancel
+                      </button>
+                      <button
+                        onClick={() => { setSignOutConfirm(false); setUserMenuOpen(false); signOut(); }}
+                        className="flex-1 px-3 py-2 rounded-lg text-[0.8125rem] font-medium text-white bg-risk hover:bg-risk-700 transition-colors cursor-pointer"
+                      >
+                        Sign Out
+                      </button>
+                    </div>
+                  </div>
+                ) : (
+                  <div>
+                    {/* Who you are — the expanded rail used to say this; the dock
+                        has no room, so the menu does. */}
+                    <div className="px-4 pt-3 pb-2.5 border-b border-white/[0.08]">
+                      <div className="text-[0.8125rem] font-semibold text-sidebar-accent truncate">{currentUser?.name ?? 'Signed out'}</div>
+                      <div className="text-[0.75rem] text-white truncate">{activeRole?.name ?? currentUser?.title ?? ''}</div>
+                    </div>
+                    <div className="py-1.5">
+                      <div className="flex items-center gap-2.5 px-4 py-2.5 text-[0.8125rem] text-white cursor-not-allowed">
+                        <Building2 size={14} className="text-white" />
+                        Irame Labs Pvt Ltd
+                      </div>
+                      <button
+                        onClick={() => { setUserMenuOpen(false); setHelpOpen(false); setMemoryDrawerOpen(true); }}
+                        className="w-full flex items-center gap-2.5 px-4 py-2.5 text-[0.8125rem] text-white hover:bg-white/[0.06] transition-colors cursor-pointer"
+                      >
+                        <Brain size={14} className="text-white" />
+                        What IRA knows about me
+                      </button>
+                      <button
+                        onClick={() => setHelpOpen(p => !p)}
+                        className="w-full flex items-center gap-2.5 px-4 py-2.5 text-[0.8125rem] text-white hover:bg-white/[0.06] transition-colors cursor-pointer"
+                      >
+                        <HelpCircle size={14} className="text-white" />
+                        <span className="flex-1 text-left">Help & Support</span>
+                        <ChevronDown size={12} className={`text-white transition-transform duration-150 ${helpOpen ? 'rotate-180' : ''}`} />
+                      </button>
+                      {helpOpen && (
+                        <>
+                          <div className="h-px mx-3 bg-white/[0.08]" />
+                          <div className="py-1">
+                            {[
+                              { label: 'Get Started', url: 'https://irame.ai/get-started' },
+                              { label: 'Term of Use', url: 'https://irame.ai/terms' },
+                              { label: 'Privacy Policy', url: 'https://irame.ai/privacy' },
+                            ].map(link => (
+                              <button
+                                key={link.label}
+                                onClick={() => { setUserMenuOpen(false); setHelpOpen(false); window.open(link.url, '_blank'); }}
+                                className="w-full flex items-center justify-between px-4 py-2.5 text-[0.8125rem] text-white hover:bg-white/[0.06] transition-colors cursor-pointer"
+                              >
+                                {link.label}
+                                <ExternalLink size={12} className="text-white" />
+                              </button>
+                            ))}
+                          </div>
+                        </>
+                      )}
+                      <div className="h-px mx-3 my-1 bg-white/[0.08]" />
+                      <button
+                        onClick={() => setSignOutConfirm(true)}
+                        className="w-full flex items-center gap-2.5 px-4 py-2.5 text-[0.8125rem] text-red-400 hover:bg-white/[0.06] hover:text-red-300 transition-colors cursor-pointer"
+                      >
+                        <LogOut size={14} />
+                        Sign Out
+                      </button>
+                    </div>
+                  </div>
+                )}
+              </motion.div>
+            )}
+          </AnimatePresence>
+        </div>
       </div>
+    </motion.div>
+
+      {/* The name beside the icon under the pointer (or under keyboard focus). */}
+      {tip && shown && !teamOpen && !userMenuOpen && (
+        <div role="tooltip"
+          className="fixed z-[80] pointer-events-none px-2.5 py-1 rounded-md bg-[#3A3A3C]/90 backdrop-blur-md border border-white/10 text-white text-[0.75rem] font-medium whitespace-nowrap shadow-lg -translate-y-1/2"
+          style={{ left: tip.x, top: tip.y }}>
+          {tip.label}
+        </div>
+      )}
 
       {/* Personal memory home — rendered at the shell level so the drawer
-          overlays the app, not the sidebar column. */}
+          overlays the app, not the dock. */}
       <AnimatePresence>
         {memoryDrawerOpen && <PersonalMemoryDrawer onClose={() => setMemoryDrawerOpen(false)} />}
       </AnimatePresence>
-    </motion.div>
+    </>
   );
 }
