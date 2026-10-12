@@ -374,18 +374,11 @@ export default function EngagementsView({ onOpenEngagement, onOpenAuditPlanning,
         )}
 
         {mode === 'list' && (<>
-        {/* Toolbar (user ask, 8 Oct): type in the MIDDLE, status and process on
-            the right, and the search box gone.
-            Three columns rather than a flex row with an `ml-auto`, because that
-            only centres the type filter when the group beside it happens to be
-            the same width as the empty space on the left — which it never is.
-            The outer two columns are equal and the middle one takes what it
-            needs, so the segmented control sits on the page's centre line and
-            stays there however wide the two sides get. Search reads from the
-            left, what narrows the list from the right, and what the list IS in
-            the middle. */}
-        <div className="grid grid-cols-1 sm:grid-cols-[1fr_auto_1fr] items-center gap-x-3 gap-y-2 mb-7">
-          <div className="relative w-full sm:max-w-60">
+        {/* Toolbar (user ask, 12 Oct): search on the left; type, status and
+            process on the right as three filter buttons of one kind — the type
+            used to be a segmented control in the middle. */}
+        <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-2 mb-7">
+          <div className="relative w-full sm:w-60">
             <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-ink-400" aria-hidden />
             <input
               type="text"
@@ -396,20 +389,7 @@ export default function EngagementsView({ onOpenEngagement, onOpenAuditPlanning,
               className="w-full h-9 pl-9 pr-3 rounded-lg border border-canvas-border bg-canvas-elevated text-[0.8125rem] text-ink-900 placeholder:text-ink-400 outline-none focus:border-brand-300"
             />
           </div>
-          <div role="tablist" aria-label="Engagement type" className="inline-flex items-center gap-0.5 p-0.5 rounded-lg bg-paper-100 justify-self-center">
-            {TYPE_FILTERS.map(t => (
-              <button
-                key={t}
-                role="tab"
-                aria-selected={typeFilter === t}
-                onClick={() => setTypeFilter(t)}
-                className={`h-7 px-3 rounded-md text-[0.75rem] font-medium cursor-pointer transition-colors whitespace-nowrap ${typeFilter === t ? 'bg-canvas-elevated text-ink-900 shadow-sm' : 'text-ink-500 hover:text-ink-800'}`}
-              >
-                {t === 'All' ? 'All' : TYPE_LABEL[t]} <span className="ml-0.5 text-ink-400 tabular-nums">{counts.type[t] ?? 0}</span>
-              </button>
-            ))}
-          </div>
-          <div className="flex items-center justify-end gap-2 w-full sm:w-auto">
+          <div className="flex items-center justify-end gap-2 flex-wrap">
             {anyFilterActive && (
               <button
                 onClick={clearFilters}
@@ -418,6 +398,8 @@ export default function EngagementsView({ onOpenEngagement, onOpenAuditPlanning,
                 <X size={12} aria-hidden /> Clear filters
               </button>
             )}
+            <MinimalFilter label="Type" allLabel="All types" options={TYPE_FILTERS} value={typeFilter} onChange={setTypeFilter}
+              counts={counts.type} optionLabel={t => (t === 'All' ? 'All types' : TYPE_LABEL[t])} />
             {/* Status as one filter button (user ask, 8 Oct) — it was a row of pills. */}
             <MinimalFilter label="Status" allLabel="Any status"
               options={STATUS_FILTERS.filter(st => st === 'All' || st === statusFilter || (counts.status[st] ?? 0) > 0)}
@@ -821,6 +803,7 @@ function MinimalFilter<T extends string>({
       options={options.map(opt => ({ value: opt, label: opt === 'All' ? allLabel : `${optionLabel(opt)} · ${counts[opt] ?? 0}` }))}
       onChange={v => onChange(v as T)}
       ariaLabel={`Filter by ${label}`}
+      noIcon
     />
   );
 }
