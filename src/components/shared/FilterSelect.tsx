@@ -17,7 +17,8 @@ export const POP_ANIM = { initial: { opacity: 0, y: -4, scale: 0.98 }, animate: 
 
 export function triggerCls(engaged: boolean, open: boolean): string {
   return cn(
-    'inline-flex items-center gap-1.5 h-9 px-2.5 rounded-lg border text-[12.5px] font-semibold transition-colors cursor-pointer',
+    // One line, always (user ask, 12 Oct): a squeezed toolbar wrapped "Any status" in two.
+    'inline-flex items-center gap-1.5 h-9 px-2.5 rounded-lg border text-[12.5px] font-semibold whitespace-nowrap shrink-0 transition-colors cursor-pointer',
     engaged ? 'border-brand-300 bg-brand-50 text-brand-700 hover:bg-brand-100'
       : open ? 'border-brand-600 bg-canvas text-brand-700'
       : 'border-canvas-border bg-canvas-elevated text-ink-700 hover:border-brand-200',
@@ -137,11 +138,13 @@ function OptionsPopover({ open, onClose, options, value, onSelect, align, menuCl
 /** Toolbar filter dropdown. An 'All' option is relabelled via `allLabel`; the
  *  trigger tints brand while the filter is engaged (anything but 'All', or the
  *  caller's `engaged` override for non-'All' sentinels). */
-export function FilterSelect({ value, options, allLabel, onChange, ariaLabel, prefix, engaged, align = 'left' }: {
+export function FilterSelect({ value, options, allLabel, onChange, ariaLabel, prefix, engaged, align = 'left', noIcon }: {
   value: string; options: readonly (string | SelectOption)[]; allLabel?: string;
   onChange: (v: string) => void; ariaLabel: string;
   /** Uppercase text label shown instead of the funnel icon (e.g. "Status"). */
   prefix?: string; engaged?: boolean; align?: 'left' | 'right';
+  /** No funnel icon — text and chevron only (Engagement Library, 12 Oct). */
+  noIcon?: boolean;
 }) {
   const [open, setOpen] = useState(false);
   const opts = options.map(norm).map(o => (o.value === 'All' && allLabel ? { ...o, label: allLabel } : o));
@@ -152,7 +155,7 @@ export function FilterSelect({ value, options, allLabel, onChange, ariaLabel, pr
       <button onClick={() => setOpen(o => !o)} className={triggerCls(isEngaged, open)} aria-label={ariaLabel} aria-expanded={open}>
         {prefix
           ? <span className={cn('text-[11px] font-semibold uppercase tracking-wide', isEngaged ? 'text-brand-600' : 'text-ink-400')}>{prefix}</span>
-          : <ListFilter size={13} className={isEngaged ? 'text-brand-600' : 'text-ink-400'} />}
+          : !noIcon && <ListFilter size={13} className={isEngaged ? 'text-brand-600' : 'text-ink-400'} />}
         {label}
         <ChevronDown size={14} className={cn('transition-transform', open ? 'rotate-180 text-brand-600' : 'text-ink-400')} />
       </button>
