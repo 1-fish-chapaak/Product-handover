@@ -5,7 +5,7 @@ import {
   Building2, Landmark, Upload, FileText, Check, Circle, Plus, Trash2, X,
   ArrowRight, ArrowLeft, Loader2, Info, Sparkles,
   ShieldCheck, ClipboardList, Zap, AlertCircle, AlertTriangle,
-  FileSpreadsheet, Grid3x3, Paperclip, Pencil, Minus, ChevronDown, Lock,
+  FileSpreadsheet, Grid3x3, Paperclip, Pencil, Minus, ChevronDown, Lock, RefreshCw, ExternalLink,
 } from 'lucide-react';
 import { CustomDatePicker } from '../../shared/CustomDatePicker';
 import { AUDIT_ROUNDS, type AuditRound } from '../../sox-icfr/types';
@@ -34,7 +34,6 @@ import {
 import {
   clashSummary, controlIdClashes, copyRacmControls, currentVersion, isRowPublished, markRacmsUsed, racmStatus, useRacmLibrary, type LibraryRacm,
 } from '../../sox-icfr/racmLibrary';
-import CreateRacmFlow from '../../sox-icfr/CreateRacmFlow';
 import { parseOrgChartFile } from './orgChartImport';
 import LedgerExplorer from './LedgerExplorer';
 import {
@@ -305,21 +304,36 @@ const yearLabel = (basis: 'fy' | 'cy', end: number) =>
  *  with a named reason when picked. */
 const ORG_CHART_ACCEPT = `${TABLE_FILE_ACCEPT},.svg,.vsd,.vsdx,.vsdm,.ppt,.pptx,.drawio`;
 
-/** A file on Materiality & TB, and how reading it went. `problem` says why a
- *  failed one failed: no table Ira could use, or a general ledger in the
- *  trial-balance slot. `scan` is true while OCR is running on it. */
+/** A file on Materiality & TB, and how reading it went. `new` = attached and
+ *  waiting on Extract (PwC call, 12 Oct: upload, then Extract — nothing is read
+ *  on pick any more). `problem` says why a failed one failed: no table Ira
+ *  could use, or a general ledger in the trial-balance slot. `scan` is true
+ *  while OCR is running on it. */
 interface ScopeFile {
   id: string;
   name: string;
   kind: 'tb' | 'gl';
   origin?: FileOrigin;
-  read: 'pending' | 'ok' | 'failed';
+  read: 'new' | 'pending' | 'ok' | 'failed';
   problem?: ScopeFileProblem;
   scan?: boolean;
 }
 type ScopeFileProblem = 'no-table' | 'unsupported' | 'no-amount-column' | 'no-rows' | 'not-a-ledger' | 'looks-like-gl';
 const asProblem = (reason: string): ScopeFileProblem =>
   (['unsupported', 'no-amount-column', 'no-rows', 'not-a-ledger', 'looks-like-gl'] as const).find(r => r === reason) ?? 'no-table';
+/** A company's scope, said in the agreed words. Full and Partial reuse the
+ *  status tones; Out of scope is plain muted text, like the rest of an Out row. */
+function ScopeLabel({ label }: { label: 'Full scope' | 'Partial scope' | 'Out of scope' }) {
+  return (
+    <span className={cn('shrink-0 inline-flex items-center h-5 px-1.5 rounded text-[0.6875rem] font-semibold whitespace-nowrap',
+      label === 'Full scope' ? 'bg-compliant-50 text-compliant-700'
+        : label === 'Partial scope' ? 'bg-mitigated-50 text-mitigated-700'
+        : 'text-ink-400')}>
+      {label}
+    </span>
+  );
+}
+
 /** Name what's missing when Ira knows it (user, 1 Oct); the general line otherwise. */
 const PROBLEM_LINE: Record<ScopeFileProblem, string> = {
   'no-table': 'Ira couldn’t find a table in this file.',
@@ -699,13 +713,6 @@ export default function ScopingWizard({ onCancel, onCreated, typePreselected, on
    *  what the company derivation on Scope weighs every company against. */
   const perf = overallCr * pmPct / 100;
   const trivial = overallCr * cttPct / 100;
-  const sd = overallCr * SD_BAND_PCT / 100;
-  const LADDER = [
-    { label: 'Clearly trivial', band: `≤ ${money(trivial)}`, tone: 'text-ink-500 bg-paper-50 border-canvas-border' },
-    { label: 'Deficiency', band: `> ${money(trivial)} and < ${money(sd)}`, tone: 'text-mitigated-700 bg-mitigated-50/50 border-mitigated-200' },
-    { label: 'Significant deficiency', band: `≥ ${money(sd)} · ${SD_BAND_PCT}% of overall`, tone: 'text-high-700 bg-high-50/50 border-high-200' },
-    { label: 'Material weakness', band: `≥ ${money(overallCr)} or any MW indicator`, tone: 'text-risk-700 bg-risk-50/50 border-risk-200' },
-  ];
 
   /** Files attached on Materiality & TB. Kept apart from the parked Basics
    *  `attached` list on purpose: that list drives the Basics table's "No TB"
@@ -720,6 +727,8 @@ export default function ScopingWizard({ onCancel, onCreated, typePreselected, on
   /** What each file read into, by file id — kept so the trial balance can be
    *  recombined (another file added, one removed) without reading a scan twice. */
   const scopeReads = useRef(new Map<string, LedgerFileRead>());
+  /** The picked files themselves, held until Extract reads them. */
+  const scopeRaw = useRef(new Map<string, File>());
   /** Files still waiting on their source. One Ira could not read is not asked —
    *  it can only be removed. */
   const unsourcedFiles = scopeFiles.filter(f => !f.origin && f.read !== 'failed').length;
@@ -731,6 +740,11 @@ export default function ScopingWizard({ onCancel, onCreated, typePreselected, on
   /** Still reading, or could not be read — either holds Continue. */
   const filesReading = scopeFiles.some(f => f.read === 'pending');
   const filesFailed = scopeFiles.some(f => f.read === 'failed');
+  /** Attached but not extracted yet — Extract is owed before Next. */
+  const filesNew = scopeFiles.filter(f => f.read === 'new').length;
+  /** Companies the trial balance names that the entity list doesn't have. Not
+   *  added any more (PwC call, 12 Oct) — the list is Basics' — only counted. */
+  const [tbUnlisted, setTbUnlisted] = useState(0);
   const glInTbSlot = scopeFiles.some(f => f.kind === 'tb' && f.problem === 'looks-like-gl');
 
   const markScopeFile = (id: string, patch: Partial<ScopeFile>) =>
@@ -754,7 +768,12 @@ export default function ScopingWizard({ onCancel, onCreated, typePreselected, on
    *  same reader puts it into rows; a file it cannot find a table in stays
    *  listed with the reason, and Continue waits until it is removed. */
   const readScopeFile = async (id: string, kind: 'tb' | 'gl', file: File) => {
-    const r = await readLedgerFile(file, () => markScopeFile(id, { scan: true }));
+    // Held for at least a beat, so Extract visibly does something on a small
+    // spreadsheet that reads in a few milliseconds.
+    const [r] = await Promise.all([
+      readLedgerFile(file, () => markScopeFile(id, { scan: true })),
+      new Promise(res => window.setTimeout(res, 1200)),
+    ]);
     if (!r.ok) { markScopeFile(id, { read: 'failed', problem: asProblem(r.reason), scan: false }); return; }
     scopeReads.current.set(id, r.read);
     markScopeFile(id, { scan: false });
@@ -773,16 +792,29 @@ export default function ScopingWizard({ onCancel, onCreated, typePreselected, on
       if (!picked.length) return;
       const added = picked.map((f, n) => ({
         file: f,
-        entry: { id: `sf-${Date.now()}-${n}`, name: f.name, kind, read: 'pending' as const, scan: isScanFile(f.name) },
+        entry: { id: `sf-${Date.now()}-${n}`, name: f.name, kind, read: 'new' as const },
       }));
+      added.forEach(a => scopeRaw.current.set(a.entry.id, a.file));
       setScopeFiles(prev => [...prev, ...added.map(a => a.entry)]);
-      added.forEach(a => { void readScopeFile(a.entry.id, kind, a.file); });
     };
     input.click();
   };
 
+  /** Extract: read every file still waiting, all at once. Each row shows its
+   *  own reading line; one that can't be read says why and holds Next. */
+  const extractScopeFiles = () => {
+    const waiting = scopeFiles.filter(f => f.read === 'new');
+    waiting.forEach(f => markScopeFile(f.id, { read: 'pending', scan: isScanFile(f.name) }));
+    waiting.forEach(f => {
+      const file = scopeRaw.current.get(f.id);
+      if (file) void readScopeFile(f.id, f.kind, file);
+      else markScopeFile(f.id, { read: 'failed', problem: 'no-table', scan: false });
+    });
+  };
+
   const removeScopeFile = (id: string) => {
     scopeReads.current.delete(id);
+    scopeRaw.current.delete(id);
     setScopeFiles(prev => prev.filter(f => f.id !== id));
   };
 
@@ -817,6 +849,7 @@ export default function ScopingWizard({ onCancel, onCreated, typePreselected, on
     setTbAddedIds(new Set());
     if (!reads.length) {
       setTbParse(null);
+      setTbUnlisted(0);
       setUploads({});
       setLedgerError(null);
       return;
@@ -850,7 +883,14 @@ export default function ScopingWizard({ onCancel, onCreated, typePreselected, on
   );
   /** Every RACM on the Engagements page's RACM tab. The engagement copies from
    *  here, so this is also the list the Scope step picks from. */
-  const libraryRacms = useRacmLibrary();
+  const liveRacms = useRacmLibrary();
+  /** The RACM list as of the last Refresh (PwC call, 12 Oct). A new RACM is
+   *  added in another browser tab, and this step only takes it in when the
+   *  user presses Refresh — the prototype's library would otherwise slide it
+   *  in on its own, which the real product won't. Everything else about a
+   *  RACM already here (a draft published, a control edited) still shows live. */
+  const [knownRacmIds, setKnownRacmIds] = useState<Set<string>>(() => new Set(liveRacms.map(r => r.id)));
+  const libraryRacms = useMemo(() => liveRacms.filter(r => knownRacmIds.has(r.id)), [liveRacms, knownRacmIds]);
   /** Every process the RACM tab holds a RACM for, by its normalised name. */
   // Published only: a process whose only matrix is still a draft has nothing
   // this engagement can test, and saying it has a RACM would be a promise the
@@ -1080,6 +1120,17 @@ export default function ScopingWizard({ onCancel, onCreated, typePreselected, on
     }));
   const procNotesOutstanding = procChanges.filter(c => !c.note || (c.qualitative && !c.reason)).length;
   const scopedProcesses = processRows.filter(procInScope);
+  /** Full / Partial / Out of scope for one company (PwC call, 12 Oct) — plain
+   *  arithmetic on the ticks, no AI, and not "significant / non-significant".
+   *  A company's processes are the ones its material accounts map to. Every
+   *  one of them ticked = Full; any left unticked = Partial. A company with no
+   *  material account has no process to leave out, so ticked it reads Full. */
+  const entityScopeLabel = (entityId: string, on: boolean): 'Full scope' | 'Partial scope' | 'Out of scope' => {
+    if (!on) return 'Out of scope';
+    const mine = new Set(materialRows.filter(c => c.entityId === entityId).map(c => processOf(c)));
+    const ticked = new Set(scopedProcesses.map(r => r.process));
+    return [...mine].every(p => ticked.has(p)) ? 'Full scope' : 'Partial scope';
+  };
   const recommendedCount = processRows.filter(r => r.recommended).length;
   /** Never recommended, not in scope, not moved — shown only on "Show more". */
   const isQuietProc = (r: ProcessScopeRow) => !r.recommended && !procInScope(r) && procOverrides[r.process] === undefined;
@@ -1391,9 +1442,13 @@ export default function ScopingWizard({ onCancel, onCreated, typePreselected, on
   const crossClashLines = clashSummary(clashes.filter(c =>
     !pickedByProcess.some(g => c.holders.every(h => g.racms.some(r => r.name === h)))));
 
-  /** Upload RACM from a process with nothing to pick — the RACM tab's own
-   *  Create RACM, process fixed. The RACM lands on the tab and is ticked here. */
-  const [racmUploadFor, setRacmUploadFor] = useState<{ process: string; entity: string } | null>(null);
+  /** Add new RACM (PwC call, 12 Oct): the RACM Library's own Create RACM,
+   *  opened in a NEW browser tab with the process settled. This step then
+   *  waits on that process — Continue stays off — until Refresh finds the new
+   *  RACM, which is ticked as it arrives. */
+  const [awaitingRacm, setAwaitingRacm] = useState<string[]>([]);
+  /** A Refresh that found nothing new for these yet — said on the row. */
+  const [refreshedEmpty, setRefreshedEmpty] = useState<string[]>([]);
   const openRacmUpload = (process: string) => {
     // The matrix is tested at one company: the in-scope company carrying most
     // of this process's material balance, or the first company in scope.
@@ -1404,14 +1459,33 @@ export default function ScopingWizard({ onCancel, onCreated, typePreselected, on
     });
     const topId = Array.from(byCompany).sort((a, b) => b[1] - a[1])[0]?.[0];
     const entity = scopedEntities.find(e => e.id === topId)?.name ?? scopedEntities[0]?.name ?? '';
-    setRacmUploadFor({ process, entity });
+    const params = new URLSearchParams({ view: 'racm-library', addRacmFor: process });
+    if (entity) params.set('entity', entity);
+    window.open(`${window.location.origin}${window.location.pathname}?${params.toString()}`, '_blank', 'noopener');
+    setAwaitingRacm(prev => (prev.includes(process) ? prev : [...prev, process]));
+    setRefreshedEmpty(prev => prev.filter(p => p !== process));
   };
-  const onRacmUploaded = (process: string, racm: LibraryRacm) => {
-    setRacmPicks(prev => {
-      const cur = prev[process] ?? defaultPicksFor(process);
-      return { ...prev, [process]: cur.includes(racm.id) ? cur : [...cur, racm.id] };
+  const stopAwaiting = (process: string) => {
+    setAwaitingRacm(prev => prev.filter(p => p !== process));
+    setRefreshedEmpty(prev => prev.filter(p => p !== process));
+  };
+  /** Refresh: take in every RACM saved since the last look. One that is
+   *  published and belongs to a process waiting on it is ticked there. */
+  const refreshRacms = () => {
+    const fresh = liveRacms.filter(r => !knownRacmIds.has(r.id));
+    setKnownRacmIds(new Set(liveRacms.map(r => r.id)));
+    const found: string[] = [];
+    awaitingRacm.forEach(process => {
+      const mine = fresh.filter(r => normaliseProcess(r.process) === process && racmStatus(r).status !== 'Draft');
+      if (!mine.length) return;
+      found.push(process);
+      setRacmPicks(prev => {
+        const cur = prev[process] ?? defaultPicksFor(process);
+        return { ...prev, [process]: [...cur, ...mine.map(r => r.id).filter(id => !cur.includes(id))] };
+      });
     });
-    setRacmUploadFor(null);
+    setAwaitingRacm(prev => prev.filter(p => !found.includes(p)));
+    setRefreshedEmpty(awaitingRacm.filter(p => !found.includes(p)));
   };
   /** "Pick from Library" — the process whose library list is open. */
   const [libPickerFor, setLibPickerFor] = useState<string | null>(null);
@@ -1436,16 +1510,6 @@ export default function ScopingWizard({ onCancel, onCreated, typePreselected, on
     // Fold back to the one settled line — the choice is made.
     setOpenProcs(prev => { const next = new Set(prev ?? []); next.delete(process); return next; });
   };
-  // FlowModal closes this whole sheet on Escape (a window listener). While the
-  // Create RACM dialog is up, Escape belongs to it — its listeners sit on the
-  // document, so stopping the key there keeps one Escape from throwing the
-  // engagement away along with the dialog.
-  useEffect(() => {
-    if (!racmUploadFor) return;
-    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') e.stopPropagation(); };
-    document.addEventListener('keydown', onKey);
-    return () => document.removeEventListener('keydown', onKey);
-  }, [racmUploadFor]);
 
   // ── Gates ────────────────────────────────────────────────────────────────
   /** The two thresholds are typed freely and checked here, not clamped per
@@ -1455,14 +1519,15 @@ export default function ScopingWizard({ onCancel, onCreated, typePreselected, on
   // Carried over from a signed interim (5 Oct 2026): its materiality comes
   // across prefilled, so the trial balance is optional — the rule a roll-forward
   // already followed on the old New audit sheet.
-  const matTbReady = ((hasTb && !!tbParse) || !!carry) && !filesReading && !filesFailed && unsourcedFiles === 0 && benchmark > 0 && (basis === 'custom' || pct > 0)
+  const matTbReady = ((hasTb && !!tbParse) || !!carry) && !filesReading && !filesFailed && filesNew === 0 && unsourcedFiles === 0 && benchmark > 0 && (basis === 'custom' || pct > 0)
     && pmValid && cttValid;
   /** Moved companies, moved processes, RACMs and controls taken out still owed
    *  a note — one count for the footer. */
   const notesDue = notesOutstanding + procNotesOutstanding + racmNotesOutstanding + ctlNotesOutstanding;
   // A carried engagement's scope is the interim's (see the Scope step).
   const scopeReady = !!carry || (scopedProcesses.length > 0 && scopedEntities.length > 0
-    && notesDue === 0 && noRacmInScope.length === 0 && clashes.length === 0);
+    && notesDue === 0 && noRacmInScope.length === 0 && clashes.length === 0
+    && awaitingRacm.filter(p => scopedProcesses.some(r => r.process === p)).length === 0);
 
   // Name checks. Too long blocks Continue; a name already in the library does
   // not — it saves as the next free "(2)", and Basics says so before it does.
@@ -1504,6 +1569,8 @@ export default function ScopingWizard({ onCancel, onCreated, typePreselected, on
   /** Says what a greyed Continue is waiting for — the boxes that explain it are
    *  usually further up the scroll. A clash outranks a missing RACM (it names
    *  the thing to untick), which outranks a missing note. */
+  /** In-scope processes whose new RACM hasn't been refreshed in yet. */
+  const waitingOn = awaitingRacm.filter(p => scopedProcesses.some(r => r.process === p));
   const footerHint = step === 1
     ? (!name.trim() ? 'Name the engagement to continue'
       : nameTooLong ? `Shorten the name to ${NAME_MAX} characters to continue`
@@ -1519,18 +1586,20 @@ export default function ScopingWizard({ onCancel, onCreated, typePreselected, on
     : step === SAMPLING_STEP
     ? (samplingReady ? null : 'Every sample size must be at least 1')
     : step === MAT_TB_STEP
-    ? (filesReading ? 'Ira is still reading the files'
+    ? (filesReading ? 'Ira is still extracting from the files'
       : glInTbSlot ? 'Move the general ledger out of the trial balance to continue'
-      : filesFailed ? 'Remove the file Ira couldn’t read to continue'
+      : filesFailed ? 'Remove or replace the file Ira couldn’t extract from to continue'
+      : filesNew > 0 ? 'Extract from the uploaded files to continue'
       : !hasTb && !carry ? 'Upload a trial balance to continue'
       : unsourcedFiles > 0 ? 'Answer the source of every file to continue'
       : !(benchmark > 0) ? `Enter ${basis === 'custom' ? 'overall materiality' : 'the benchmark'} above zero to continue`
       : basis !== 'custom' && !(pct > 0) ? 'Enter a basis % above zero to continue'
       : !pmValid ? 'Performance materiality is 50–75% of overall'
-      : !cttValid ? 'Clearly-trivial threshold is 1–10% of overall'
+      : !cttValid ? 'Posting materiality is 1–10% of overall'
       : null)
     : step === SCOPE_STEP
-      ? (clashes.length > 0 ? 'Untick one of the RACMs whose control IDs clash'
+      ? (waitingOn.length > 0 ? `Waiting on the new RACM for ${andList(waitingOn)} — press Refresh once it’s saved`
+        : clashes.length > 0 ? 'Untick one of the RACMs whose control IDs clash'
         : noRacmInScope.length > 0 ? `Choose RACMs for ${andList(noRacmInScope)}`
         : notesDue > 0 ? `${notesDue} change${notesDue === 1 ? '' : 's'} need${notesDue === 1 ? 's' : ''} a note`
         : scopedProcesses.length === 0 ? 'Tick at least one process'
@@ -1624,7 +1693,6 @@ export default function ScopingWizard({ onCancel, onCreated, typePreselected, on
   // pristine wizard is let through, so FlowModal simply closes it.
   const escState = useRef({ libPickerFor: null as string | null, confirmRemoveId: null as string | null, confirmDiscard: null as null | 'close' | 'type' });
   useEffect(() => {
-    if (racmUploadFor) return;
     const onKey = (e: KeyboardEvent) => {
       if (e.key !== 'Escape') return;
       const s = escState.current;
@@ -1645,7 +1713,7 @@ export default function ScopingWizard({ onCancel, onCreated, typePreselected, on
     };
     document.addEventListener('keydown', onKey);
     return () => document.removeEventListener('keydown', onKey);
-  }, [dirty, racmUploadFor]);
+  }, [dirty]);
   // The "add at least one entity" line waits until the table has held a row
   // (or the box was ticked) — an empty table on arrival is not a mistake yet.
   useEffect(() => {
@@ -1961,30 +2029,11 @@ export default function ScopingWizard({ onCancel, onCreated, typePreselected, on
     }
     setTbParse(result);
     setUploads(Object.fromEntries(Object.entries(result.perEntity).map(([id, f]) => [id, { ...f }])));
-    // The trial balance is the one input that knows about a company nobody
-    // drew on the chart — a subsidiary incorporated mid-year has ledger
-    // balances before it has ever appeared on an org chart. Those rows are
-    // added rather than dropped, which is the whole reason a TB is asked for
-    // at scoping rather than at fieldwork.
-    if (result.unmatched.length) {
-      setEntities(prev => {
-        const have = new Set(prev.map(e => e.name.trim().toLowerCase()));
-        const fresh = result.unmatched
-          .filter(u => u.fileName && !have.has(u.fileName.trim().toLowerCase()))
-          .map(u => ({ id: `tb-${u.fileName.toLowerCase().replace(/[^a-z0-9]+/g, '-')}`, name: u.fileName, type: 'Subsidiary' as const, ownership: 100 }));
-        if (fresh.length) {
-          setTbAddedIds(new Set(fresh.map(f => f.id)));
-          tbAddedRows.current = new Map(fresh.map(f => [f.id, { ...f }]));
-        }
-        return fresh.length ? [...prev, ...fresh] : prev;
-      });
-      // The captions of a company the table had no row for are keyed to a
-      // blank entity until the row exists — re-point them at the row just made.
-      result.captions.push(...result.unmatched.flatMap(u => {
-        const id = `tb-${u.fileName.toLowerCase().replace(/[^a-z0-9]+/g, '-')}`;
-        return u.captions.map(c => ({ ...c, entityId: id }));
-      }));
-    }
+    // A company the trial balance names but the entity list doesn't is no
+    // longer added to the list (PwC call, 12 Oct — "remove Add companies from
+    // trial balance"): the list is the one Basics built. Its figures are left
+    // out, and the step says how many so nothing goes quietly missing.
+    setTbUnlisted(new Set(result.unmatched.map(u => u.fileName.trim().toLowerCase()).filter(Boolean)).size);
     setTbUpload('done');
   };
 
@@ -3153,8 +3202,11 @@ export default function ScopingWizard({ onCancel, onCreated, typePreselected, on
                                 <Trash2 size={13} />
                               </button>
                             </div>
-                            {/* Ira's one line while the file is read, and the one
-                                red line if it could not be. */}
+                            {/* Waiting on Extract; then Ira's one line while the
+                                file is read, and the one red line if it could not be. */}
+                            {f.read === 'new' && (
+                              <p className="mt-1 text-[0.6875rem] text-ink-400">Not extracted yet</p>
+                            )}
                             {f.read === 'pending' && (
                               <p className="flex items-center gap-1.5 mt-1 text-[0.6875rem] text-ink-500">
                                 <Loader2 size={11} className="animate-spin shrink-0" />
@@ -3165,7 +3217,7 @@ export default function ScopingWizard({ onCancel, onCreated, typePreselected, on
                                 entity list doesn't have yet — said, not refused. */}
                             {kind === 'gl' && f.read === 'ok' && glParse && glParse.totalLines === 0 && glParse.unmatchedNames.length > 0 && (
                               <p className="mt-1 text-[0.6875rem] text-ink-500 leading-relaxed">
-                                Read — but none of its {plural(glParse.unmatchedNames.length, 'company', 'companies')} are in the entity list yet. Its lines link up once they are (a trial balance adds them).
+                                Read — but none of its {plural(glParse.unmatchedNames.length, 'company', 'companies')} are in the entity list yet. Add them on Basics to link its lines.
                               </p>
                             )}
                             {f.read === 'failed' && (
@@ -3212,6 +3264,39 @@ export default function ScopingWizard({ onCancel, onCreated, typePreselected, on
               })}
             </div>
 
+            {/* ── Extract (PwC call, 12 Oct) ─────────────────────────────────
+                Uploading only attaches. Extract reads every waiting file —
+                AI reads the format, the materiality rule below stays the same
+                fixed rule. Shown while anything is waiting or being read. */}
+            {(filesNew > 0 || filesReading) && (
+              <div className="mb-4 flex items-center gap-3 rounded-lg border border-canvas-border bg-white px-3 py-2.5">
+                <span className="min-w-0 flex-1 text-[0.75rem] text-ink-600">
+                  {filesReading
+                    ? 'Extracting materiality figures and companies…'
+                    : `${plural(filesNew, 'file')} ready — extract the materiality figures and companies from ${filesNew === 1 ? 'it' : 'them'}.`}
+                </span>
+                <button
+                  type="button"
+                  onClick={extractScopeFiles}
+                  disabled={filesReading}
+                  className="h-8 px-3 inline-flex items-center gap-1.5 rounded-md bg-brand-600 text-white text-[0.75rem] font-semibold hover:bg-brand-700 transition-colors cursor-pointer shrink-0 disabled:opacity-60 disabled:cursor-default"
+                >
+                  {filesReading ? <Loader2 size={12} className="animate-spin" /> : <Sparkles size={12} />}
+                  {filesReading ? 'Extracting…' : 'Extract'}
+                </button>
+              </div>
+            )}
+            {!filesReading && filesFailed && (
+              <p role="alert" className="mb-4 text-[0.75rem] text-risk-700 leading-relaxed">
+                Ira couldn’t extract from {plural(scopeFiles.filter(f => f.read === 'failed').length, 'file')} — the reason is on {scopeFiles.filter(f => f.read === 'failed').length === 1 ? 'it' : 'each'} above. Remove or replace {scopeFiles.filter(f => f.read === 'failed').length === 1 ? 'it' : 'them'} to continue.
+              </p>
+            )}
+            {tbParse && tbUnlisted > 0 && (
+              <p className="mb-4 text-[0.75rem] text-ink-500 leading-relaxed">
+                {plural(tbUnlisted, 'company', 'companies')} in the trial balance {tbUnlisted === 1 ? 'isn’t' : 'aren’t'} on your entity list, so {tbUnlisted === 1 ? 'its' : 'their'} figures are left out. Add {tbUnlisted === 1 ? 'it' : 'them'} on Basics to include {tbUnlisted === 1 ? 'it' : 'them'}.
+              </p>
+            )}
+
             <div className="mt-6 pt-5 border-t border-canvas-border">
               <h4 className="text-[0.8125rem] font-semibold text-ink-900 mb-0.5">Materiality rule</h4>
               <p className="text-[0.75rem] text-ink-500 mb-4 leading-relaxed">
@@ -3248,7 +3333,7 @@ export default function ScopingWizard({ onCancel, onCreated, typePreselected, on
                   read, or where the TB has no figure, the field stays empty
                   and this line says why. */}
               {basis !== 'custom' && !tbParse && userFigure === undefined && (
-                <p className="-mt-2 mb-4 text-[0.75rem] text-ink-500">Fills in from your trial balance once it’s read.</p>
+                <p className="-mt-2 mb-4 text-[0.75rem] text-ink-500">Fills in from your trial balance once it’s extracted.</p>
               )}
               {basis === 'custom' && !(benchmark > 0) && (
                 <p className="-mt-2 mb-4 text-[0.75rem] text-ink-500">A custom amount isn’t read off the TB — type it.</p>
@@ -3322,7 +3407,7 @@ export default function ScopingWizard({ onCancel, onCreated, typePreselected, on
               <div className="mt-4 space-y-3">
                 {([
                   ['Performance materiality', pmPct, setPmPct, perf, 50, 75, 5, '% of overall — auditors typically set 50–75%', pmValid, 'Performance materiality is 50–75% of overall'],
-                  ['Clearly-trivial threshold', cttPct, setCttPct, trivial, 1, 10, 1, '% of overall — below this, differences are passed', cttValid, 'Clearly-trivial threshold is 1–10% of overall'],
+                  ['Posting materiality', cttPct, setCttPct, trivial, 1, 10, 1, '% of overall — below this, differences are passed', cttValid, 'Posting materiality is 1–10% of overall'],
                 ] as const).map(([label, value, set, amount, lo, hi, stepBy, hint, valid, invalidLine]) => (
                   <div key={label}>
                     <label className="block text-[0.6875rem] font-semibold text-ink-500 mb-1.5">{label}</label>
@@ -3353,7 +3438,7 @@ export default function ScopingWizard({ onCancel, onCreated, typePreselected, on
                   // An out-of-range % shows no figure and no % — "90% of overall"
                   // under a box saying 50–75% read as if 90 had been accepted.
                   ['Performance materiality', pmValid ? money(perf) : '—', pmValid ? `${pmPct}% of overall — the working threshold for testing` : 'Set performance materiality to 50–75% of overall', false],
-                  ['Clearly trivial', cttValid ? money(trivial) : '—', cttValid ? `${cttPct}% of overall — below this, differences are passed` : 'Set the clearly-trivial threshold to 1–10% of overall', false],
+                  ['Posting materiality', cttValid ? money(trivial) : '—', cttValid ? `${cttPct}% of overall — below this, differences are passed` : 'Set posting materiality to 1–10% of overall', false],
                 ] as const).map(([label, value, note, strong], i) => (
                   <div key={label} className={cn('py-2', i < 2 && 'border-b border-canvas-border')}>
                     <div className="flex items-baseline justify-between gap-3">
@@ -3365,27 +3450,9 @@ export default function ScopingWizard({ onCancel, onCreated, typePreselected, on
                 ))}
               </div>
 
-              {/* Read-only — where these numbers land, not another place to set
-                  them. The significant-deficiency band is the one the
-                  engagement is created with. */}
-              {overallCr > 0 && (
-                <div className="mt-5">
-                  <h5 className="text-[0.75rem] font-semibold text-ink-900 mb-2">Where a deficiency would land</h5>
-                  <div className="space-y-1">
-                    {LADDER.map((r, i) => (
-                      <div key={r.label} className={cn('flex items-center justify-between gap-3 px-3 py-2 rounded-lg border', r.tone)}>
-                        <span className="text-[0.75rem] font-semibold">
-                          <span className="text-ink-300 tabular-nums mr-1.5">{i + 1}</span>{r.label}
-                        </span>
-                        <span className="text-[0.6875rem] tabular-nums text-right">{r.band}</span>
-                      </div>
-                    ))}
-                  </div>
-                  <p className="text-[0.6875rem] text-ink-400 mt-1.5 leading-relaxed">
-                    The significant-deficiency band starts at {SD_BAND_PCT}% of overall — change it on Materiality &amp; scope once the engagement exists.
-                  </p>
-                </div>
-              )}
+              {/* The "Where a deficiency would land" ladder is gone (13 Oct):
+                  the auditor picks the deficiency type on the exception, so no
+                  threshold sorts it into a band any more. */}
             </div>
 
             {/* What the uploaded ledgers said. Only appears once a trial
@@ -3615,6 +3682,7 @@ export default function ScopingWizard({ onCancel, onCreated, typePreselected, on
                                   {money(row.total)} · {row.sharePct}%
                                 </span>
                               )}
+                              <ScopeLabel label={entityScopeLabel(row.id, on)} />
                             </button>
 
                             <AnimatePresence initial={false}>
@@ -3668,11 +3736,23 @@ export default function ScopingWizard({ onCancel, onCreated, typePreselected, on
                     <ChevronDown size={14} className={cn('shrink-0 text-ink-400 transition-transform', processesOpen && 'rotate-180')} />
                   </button>
                 </h4>
-                {processRows.length > 0 && (
-                  <span className="shrink-0 text-[0.75rem] text-ink-500 tabular-nums">
-                    {scopedProcesses.length} in scope · {tickedRacms.length} RACM{tickedRacms.length === 1 ? '' : 's'} · {tickedControlCount} control{tickedControlCount === 1 ? '' : 's'}
-                  </span>
-                )}
+                <span className="shrink-0 flex items-baseline gap-3">
+                  {processRows.length > 0 && (
+                    <span className="text-[0.75rem] text-ink-500 tabular-nums">
+                      {scopedProcesses.length} in scope · {tickedRacms.length} RACM{tickedRacms.length === 1 ? '' : 's'} · {tickedControlCount} control{tickedControlCount === 1 ? '' : 's'}
+                    </span>
+                  )}
+                  {/* Reloads the RACM list — how a RACM added in another tab
+                      gets here (PwC call, 12 Oct). */}
+                  <button
+                    type="button"
+                    onClick={refreshRacms}
+                    title="Reload the RACM list — picks up a RACM added in another tab"
+                    className="self-center h-7 px-2 inline-flex items-center gap-1.5 rounded-md text-[0.75rem] font-semibold text-brand-700 hover:bg-brand-50 transition-colors cursor-pointer"
+                  >
+                    <RefreshCw size={12} /> Refresh
+                  </button>
+                </span>
               </div>
               <AnimatePresence initial={false}>
                 {processesOpen && (
@@ -3917,6 +3997,20 @@ export default function ScopingWizard({ onCancel, onCreated, typePreselected, on
                                       className="overflow-hidden"
                                     >
                                       <div className="ml-11 mr-4 pb-3">
+                                        {awaitingRacm.includes(r.process) && (
+                                          <div className="mb-2 flex items-start gap-2 rounded-md border border-brand-200 bg-brand-50/60 px-2.5 py-2 text-[0.75rem] text-ink-700">
+                                            <Loader2 size={12} className="mt-0.5 shrink-0 animate-spin text-brand-600" aria-hidden />
+                                            <span className="min-w-0 flex-1 leading-relaxed">
+                                              {refreshedEmpty.includes(r.process)
+                                                ? <>No new RACM for {r.process} yet. Save it in the other tab, then press <b className="font-semibold">Refresh</b> again.</>
+                                                : <>Adding a RACM for {r.process} in a new tab. Once it’s saved there, press <b className="font-semibold">Refresh</b> above to bring it in.</>}
+                                            </span>
+                                            <button type="button" onClick={() => stopAwaiting(r.process)}
+                                              className="shrink-0 text-[0.6875rem] font-semibold text-ink-500 hover:text-ink-800 cursor-pointer">
+                                              Stop waiting
+                                            </button>
+                                          </div>
+                                        )}
                                         {groupLines.length > 0 && <ClashNote lines={groupLines} />}
                                         {nothingOnTab ? (
                                           // Text on its own line, buttons under it — side by side
@@ -3943,10 +4037,10 @@ export default function ScopingWizard({ onCancel, onCreated, typePreselected, on
                                             <button
                                               type="button"
                                               onClick={() => openRacmUpload(r.process)}
-                                              title={`Upload a RACM for ${r.process} — it's saved to the RACM Library and ticked here`}
+                                              title={`Add a RACM for ${r.process} in a new tab — then press Refresh here`}
                                               className="shrink-0 h-7 px-3 inline-flex items-center gap-1.5 rounded-lg bg-brand-600 text-white text-[0.75rem] font-semibold hover:bg-brand-700 transition-colors cursor-pointer"
                                             >
-                                              <Upload size={12} /> Upload RACM
+                                              <Plus size={12} /> Add new RACM <ExternalLink size={11} className="opacity-80" />
                                             </button>
                                             </div>
                                           </div>
@@ -4104,10 +4198,10 @@ export default function ScopingWizard({ onCancel, onCreated, typePreselected, on
                                             <button
                                               type="button"
                                               onClick={() => openRacmUpload(r.process)}
-                                              title={`Upload a RACM for ${r.process} — it's saved to the RACM Library and ticked here`}
+                                              title={`Add a RACM for ${r.process} in a new tab — then press Refresh here`}
                                               className="mt-1.5 -ml-2 h-7 px-2 inline-flex items-center gap-1.5 rounded-lg text-[0.75rem] font-semibold text-brand-700 hover:bg-brand-50 transition-colors cursor-pointer"
                                             >
-                                              <Upload size={12} /> Upload a RACM
+                                              <Plus size={12} /> Add new RACM <ExternalLink size={11} className="opacity-80" />
                                             </button>
                                             {publishedLibrary.length > picks.length && (
                                               <button
@@ -4412,8 +4506,8 @@ export default function ScopingWizard({ onCancel, onCreated, typePreselected, on
                   </div>
                 </div>
                 <div>
-                  <FieldLabel>Clearly-trivial threshold (% of overall)</FieldLabel>
-                  <input aria-label="Clearly-trivial threshold (% of overall)"
+                  <FieldLabel>Posting materiality (% of overall)</FieldLabel>
+                  <input aria-label="Posting materiality (% of overall)"
                     type="number" min={1} max={10}
                     value={cttPct}
                     onChange={e => setCttPct(Number(e.target.value))}
@@ -4428,7 +4522,7 @@ export default function ScopingWizard({ onCancel, onCreated, typePreselected, on
                 <LadderRow label="Overall materiality" value={fmtCr(overallCr)} strong
                   note={basis === 'custom' ? 'Set directly' : `${pct}% × ${fmtCr(benchmark)}`} />
                 <LadderRow label="Performance materiality" value={fmtCr(overallCr * pmPct / 100)} note={`${pmPct}% of overall — the working threshold for testing`} />
-                <LadderRow label="Clearly trivial" value={fmtCr(overallCr * cttPct / 100)} note={`${cttPct}% of overall — below this, differences are passed`} last />
+                <LadderRow label="Posting materiality" value={fmtCr(overallCr * cttPct / 100)} note={`${cttPct}% of overall — below this, differences are passed`} last />
                 <div className="flex items-start gap-2 mt-3 pt-3 border-t border-border-light">
                   <Info size={13} className="text-text-muted shrink-0 mt-0.5" />
                   <p className="text-[0.75rem] text-text-muted leading-relaxed">
@@ -4698,8 +4792,12 @@ export default function ScopingWizard({ onCancel, onCreated, typePreselected, on
                           <span className="truncate" title={r.name}>{r.name}</span>
                           {/* Its own span so a long name truncates before the country does. */}
                           {e?.country?.trim() && <span className="shrink-0">· {e.country.trim()}</span>}
-                          <span className={cn('shrink-0 ml-auto pl-2 font-semibold', r.on ? 'text-ink-700' : 'text-ink-400')}>
-                            {r.on ? 'In scope' : 'Out'}
+                          {/* A carried engagement's processes are the interim's,
+                              not ticked here, so it keeps In scope / Out of scope. */}
+                          <span className="shrink-0 ml-auto pl-2">
+                            {carry
+                              ? <span className={cn('font-semibold', r.on ? 'text-ink-700' : 'text-ink-400')}>{r.on ? 'In scope' : 'Out of scope'}</span>
+                              : <ScopeLabel label={entityScopeLabel(r.id, r.on)} />}
                           </span>
                         </div>
                         {/* A company moved against the trial balance says why —
@@ -4745,7 +4843,7 @@ export default function ScopingWizard({ onCancel, onCreated, typePreselected, on
               <ReviewCard title="Materiality">
                 <LadderRow label="Overall" value={money(overallCr)} strong note={basis === 'custom' ? 'Set directly' : `${pct}% of ${basisOpt.benchmarkLabel.toLowerCase()}`} />
                 <LadderRow label="Performance" value={money(perf)} note={`${pmPct}% of overall`} />
-                <LadderRow label="Clearly trivial" value={money(trivial)} note={`${cttPct}% of overall`} last />
+                <LadderRow label="Posting materiality" value={money(trivial)} note={`${cttPct}% of overall`} last />
               </ReviewCard>
 
               <ReviewCard title="Trial balance & accounts">
@@ -4917,7 +5015,7 @@ export default function ScopingWizard({ onCancel, onCreated, typePreselected, on
                 <ReviewCard title="Materiality">
                   <LadderRow label="Overall" value={fmtCr(overallCr)} strong note={basis === 'custom' ? 'Set directly' : `${pct}% of ${basisOpt.benchmarkLabel.toLowerCase()}`} />
                   <LadderRow label="Performance" value={fmtCr(overallCr * pmPct / 100)} note={`${pmPct}% of overall`} />
-                  <LadderRow label="Clearly trivial" value={fmtCr(overallCr * cttPct / 100)} note={`${cttPct}% of overall`} last />
+                  <LadderRow label="Posting materiality" value={fmtCr(overallCr * cttPct / 100)} note={`${cttPct}% of overall`} last />
                 </ReviewCard>
                 <ReviewCard title="Scope funnel">
                   <FunnelRow label="TB captions parsed" value={captions.length} />
@@ -5010,6 +5108,10 @@ export default function ScopingWizard({ onCancel, onCreated, typePreselected, on
                 Skip for now
               </button>
             )}
+            {/* The tooltip sits on a wrapper: a disabled button gets no hover. */}
+            <span className="shrink-0" title={step === SCOPE_STEP && waitingOn.length > 0
+              ? 'Save the new RACM in the tab that opened, come back here and press Refresh above the processes. Continue turns on once it appears.'
+              : undefined}>
             <button
               onClick={goNext}
               disabled={!canContinue}
@@ -5017,6 +5119,7 @@ export default function ScopingWizard({ onCancel, onCreated, typePreselected, on
             >
               Continue <ArrowRight size={13} />
             </button>
+            </span>
           </span>
         ) : (
           <button
@@ -5029,22 +5132,6 @@ export default function ScopingWizard({ onCancel, onCreated, typePreselected, on
         )}
       </div>
 
-      {/* Upload RACM, from a process on Scope — the RACM tab's own Create RACM
-          with the process settled by the row it was pressed on. Portalled to
-          the body: this sheet is a transformed, fixed panel, and a fixed
-          dialog inside it would be positioned against the sheet rather than
-          the window. The RACM is saved to the tab by the dialog; it is only
-          ticked here. */}
-      {racmUploadFor && createPortal(
-        <CreateRacmFlow
-          fixedProcess={racmUploadFor.process}
-          defaultEntity={racmUploadFor.entity || undefined}
-          publishOnCreate
-          onClose={() => setRacmUploadFor(null)}
-          onCreated={racm => onRacmUploaded(racmUploadFor.process, racm)}
-        />,
-        document.body,
-      )}
 
       {/* Discard guard — the classic wizard's dialog, word for word. Portalled
           for the same reason as the RACM dialog above. */}

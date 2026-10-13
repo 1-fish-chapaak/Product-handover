@@ -121,7 +121,7 @@ export default function ProgrammeView({ programme: p, onOpenWorkspace }: Props) 
           <SummaryRow label="Overall" value={fmtCr(p.materiality.overall)} strong
             note={p.materiality.basis === 'custom' ? 'Set directly' : `${p.materiality.pct}% of ${p.materiality.benchmarkLabel.toLowerCase()}`} />
           <SummaryRow label="Performance" value={fmtCr(p.materiality.overall * p.materiality.pmPct / 100)} note={`${p.materiality.pmPct}% of overall`} />
-          <SummaryRow label="Clearly trivial" value={fmtCr(p.materiality.overall * p.materiality.cttPct / 100)} note={`${p.materiality.cttPct}% of overall`} last />
+          <SummaryRow label="Posting materiality" value={fmtCr(p.materiality.overall * p.materiality.cttPct / 100)} note={`${p.materiality.cttPct}% of overall`} last />
         </div>
 
         <div className="p-4">

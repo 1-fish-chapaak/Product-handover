@@ -537,7 +537,7 @@ export default function Overview() {
             {[
               { k: 'Overall', v: M },
               { k: 'Performance', v: eng.performanceMateriality },
-              { k: 'Clearly trivial', v: eng.rules.clearlyTrivial },
+              { k: 'Posting materiality', v: eng.rules.clearlyTrivial },
             ].map(r => (
               <div key={r.k} className="flex items-center gap-2">
                 <span className="text-[0.8125rem] text-ink-600">{r.k}</span>

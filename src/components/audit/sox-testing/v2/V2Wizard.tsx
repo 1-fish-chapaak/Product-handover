@@ -322,8 +322,8 @@ export default function V2Wizard({ onCancel, onCreated }: Props) {
                   </div>
                 </div>
                 <div>
-                  <div className={labelCls}>Clearly-trivial threshold (% of overall)</div>
-                  <input aria-label="Clearly-trivial threshold (% of overall)" type="number" min={1} max={10} value={cttPct} onChange={e => setCttPct(Number(e.target.value))}
+                  <div className={labelCls}>Posting materiality (% of overall)</div>
+                  <input aria-label="Posting materiality (% of overall)" type="number" min={1} max={10} value={cttPct} onChange={e => setCttPct(Number(e.target.value))}
                     className="w-20 px-3 py-2 text-[0.8125rem] tabular-nums border border-border rounded-lg bg-white text-text outline-none focus:border-primary/40 focus:ring-2 focus:ring-primary/10" />
                 </div>
               </div>
@@ -331,7 +331,7 @@ export default function V2Wizard({ onCancel, onCreated }: Props) {
                 <div className="text-[0.6875rem] font-bold text-text-muted uppercase tracking-wider mb-3">Computed thresholds</div>
                 <LadderRow label="Overall materiality" value={fmtCr(overallCr)} note={basis === 'custom' ? 'Set directly' : `${pct}% × ${fmtCr(benchmark)}`} />
                 <LadderRow label="Performance materiality" value={fmtCr(pm)} strong note={`${pmPct}% of overall — the scoping threshold`} />
-                <LadderRow label="Clearly trivial" value={fmtCr(overallCr * cttPct / 100)} note={`${cttPct}% of overall`} last />
+                <LadderRow label="Posting materiality" value={fmtCr(overallCr * cttPct / 100)} note={`${cttPct}% of overall`} last />
                 <div className="flex items-start gap-2 mt-3 pt-3 border-t border-border-light">
                   <Info size={13} className="text-text-muted shrink-0 mt-0.5" />
                   <p className="text-[0.75rem] text-text-muted leading-relaxed">
@@ -743,7 +743,7 @@ export default function V2Wizard({ onCancel, onCreated }: Props) {
               <ReviewCard title="Materiality">
                 <LadderRow label="Overall" value={fmtCr(overallCr)} note={basis === 'custom' ? 'Set directly' : `${pct}% of ${basisOpt.benchmarkLabel.toLowerCase()}`} />
                 <LadderRow label="Performance" value={fmtCr(pm)} strong note={`${pmPct}% — the scoping threshold`} />
-                <LadderRow label="Clearly trivial" value={fmtCr(overallCr * cttPct / 100)} note={`${cttPct}% of overall`} last />
+                <LadderRow label="Posting materiality" value={fmtCr(overallCr * cttPct / 100)} note={`${cttPct}% of overall`} last />
               </ReviewCard>
               <ReviewCard title="Scope funnel">
                 <FunnelRow label="TB captions parsed" value={captions.length} />

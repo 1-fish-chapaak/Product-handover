@@ -394,7 +394,7 @@ export default function AuditConfigView({ audit }: { audit: AuditRecord }) {
             {([
               ['Overall materiality', eng.materiality],
               ['Performance materiality', eng.performanceMateriality],
-              ['Clearly trivial', eng.rules.clearlyTrivial],
+              ['Posting materiality', eng.rules.clearlyTrivial],
             ] as const).map(([k, v]) => (
               <div key={k} className="flex items-center gap-3 px-4 py-2.5 border-b border-canvas-border last:border-b-0">
                 <span className="text-[0.8125rem] text-ink-600">{k}</span>

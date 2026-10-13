@@ -29,7 +29,7 @@ const SEVERITY_TONE: Record<ExceptionGrade, Tone> = { 'Material Weakness': 'risk
 export function SeverityPill({ s }: { s: ArchivedSeverity | null }) {
   // `null` live, 'Not sized' once archived — the same state, spelled two ways
   // because an archive stores strings and a live grade is computed.
-  return s === null || s === 'Not sized' ? <Pill tone="high">Not sized</Pill> : <Pill tone={SEVERITY_TONE[s]}>{s}</Pill>;
+  return s === null || s === 'Not sized' ? <Pill tone="high">Not classified</Pill> : <Pill tone={SEVERITY_TONE[s]}>{s}</Pill>;
 }
 
 /** The house switch. Lifted here because the control page, the rules editor and

@@ -498,8 +498,8 @@ function ConfigInner({ prog, engId, reconcileScope }: {
             />
           </div>
           <div>
-            <Label>Clearly trivial (% of overall)</Label>
-            <input aria-label="Clearly trivial (% of overall)"
+            <Label>Posting materiality (% of overall)</Label>
+            <input aria-label="Posting materiality (% of overall)"
               type="number" min={1} max={10}
               value={cttPct}
               onChange={e => { setCttPct(Number(e.target.value)); saveRules(rules, pmPct, Number(e.target.value)); }}

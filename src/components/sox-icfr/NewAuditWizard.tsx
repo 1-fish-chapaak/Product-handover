@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   AlertTriangle, ArrowLeft, ArrowRight, Building2, CalendarRange, Check, ChevronDown, FileSpreadsheet,
-  Grid3x3, Landmark, Lock, Paperclip, Pencil, Plus, Scale, Sparkles, Star, Trash2, Upload, X,
+  Grid3x3, Landmark, Lock, Paperclip, Pencil, Plus, Sparkles, Star, Trash2, Upload, X,
 } from 'lucide-react';
 import { AnimatePresence, motion } from 'motion/react';
 import { FlowModal } from '../audit/sox-testing/SoxTestingTab';
@@ -350,20 +350,9 @@ export default function NewAuditWizard({ onClose, prefillFrom }: {
   const [ctPct, setCtPct] = useState(5);
   const perf = overall * pmPct / 100;
   const trivial = overall * ctPct / 100;
-  /** Where a significant deficiency starts. Not asked here — it is an
-   *  engagement-level ground rule, so the ladder reads the engagement's own
-   *  band rather than inventing a second source of truth. */
-  const sdPct = eng.rules.sdBandPct;
-  const sd = overall * sdPct / 100;
   /** ₹ Cr in, readable money out — under a crore reads as lakhs, the way the
    *  Materiality & scope page and the Overview card already write it. */
   const money = (cr: number) => (cr >= 1 ? `₹${cr.toFixed(2)} Cr` : `₹${(cr * 100).toFixed(1)} L`);
-  const LADDER = [
-    { label: 'Clearly trivial', band: `≤ ${money(trivial)}`, tone: 'text-ink-500 bg-paper-50 border-canvas-border' },
-    { label: 'Deficiency', band: `> ${money(trivial)} and < ${money(sd)}`, tone: 'text-mitigated-700 bg-mitigated-50/50 border-mitigated-200' },
-    { label: 'Significant deficiency', band: `≥ ${money(sd)} · ${sdPct}% of overall`, tone: 'text-high-700 bg-high-50/50 border-high-200' },
-    { label: 'Material weakness', band: `≥ ${money(overall)} or any MW indicator`, tone: 'text-risk-700 bg-risk-50/50 border-risk-200' },
-  ];
 
   /** The rule this audit will actually be created with. A roll-forward reads
    *  its parent's, verbatim (user ask) — an interim and its roll-forward are
@@ -1351,7 +1340,7 @@ export default function NewAuditWizard({ onClose, prefillFrom }: {
                   {([
                     ['Overall materiality', money(matFinal.overall), matFinal.basisLabel, true],
                     ['Performance materiality', money(matPerf), `${matFinal.pmPct}% of overall — the working threshold for testing`, false],
-                    ['Clearly trivial', money(matTrivial), `${matFinal.ctPct}% of overall — below this, differences are passed`, false],
+                    ['Posting materiality', money(matTrivial), `${matFinal.ctPct}% of overall — below this, differences are passed`, false],
                   ] as const).map(([label, value, note, strong], i) => (
                     <div key={label} className={cn('py-2', i < 2 && 'border-b border-canvas-border')}>
                       <div className="flex items-baseline justify-between gap-3">
@@ -1411,7 +1400,7 @@ export default function NewAuditWizard({ onClose, prefillFrom }: {
               <div className="mt-4 space-y-3">
                 {([
                   ['Performance materiality', pmPct, setPmPct, perf, 50, 75, 5, '% of overall — auditors typically set 50–75%'],
-                  ['Clearly-trivial threshold', ctPct, setCtPct, trivial, 1, 10, 1, '% of overall — below this, differences are passed'],
+                  ['Posting materiality', ctPct, setCtPct, trivial, 1, 10, 1, '% of overall — below this, differences are passed'],
                 ] as const).map(([label, value, set, amount, lo, hi, stepBy, hint]) => (
                   <div key={label}>
                     <label className={labelCls}>{label}</label>
@@ -1438,7 +1427,7 @@ export default function NewAuditWizard({ onClose, prefillFrom }: {
                 {([
                   ['Overall materiality', money(overall), basis === 'custom' ? 'Set directly' : `${pct}% × ₹${benchmark} Cr`, true],
                   ['Performance materiality', money(perf), `${pmPct}% of overall — the working threshold for testing`, false],
-                  ['Clearly trivial', money(trivial), `${ctPct}% of overall — below this, differences are passed`, false],
+                  ['Posting materiality', money(trivial), `${ctPct}% of overall — below this, differences are passed`, false],
                 ] as const).map(([label, value, note, strong], i) => (
                   <div key={label} className={cn('py-2', i < 2 && 'border-b border-canvas-border')}>
                     <div className="flex items-baseline justify-between gap-3">
@@ -1450,27 +1439,9 @@ export default function NewAuditWizard({ onClose, prefillFrom }: {
                 ))}
               </div>
 
-              {/* Read-only — the ladder is where these numbers land, not another
-                  place to set them. The significant-deficiency band comes from
-                  the engagement's Materiality & scope rules. */}
-              {overall > 0 && (
-                <div className="mt-5">
-                  <h5 className="text-[0.75rem] font-semibold text-ink-900 mb-2">Where a deficiency would land</h5>
-                  <div className="space-y-1">
-                    {LADDER.map((r, i) => (
-                      <div key={r.label} className={cn('flex items-center justify-between gap-3 px-3 py-2 rounded-lg border', r.tone)}>
-                        <span className="text-[0.75rem] font-semibold">
-                          <span className="text-ink-300 tabular-nums mr-1.5">{i + 1}</span>{r.label}
-                        </span>
-                        <span className="text-[0.6875rem] tabular-nums text-right">{r.band}</span>
-                      </div>
-                    ))}
-                  </div>
-                  <p className="text-[0.6875rem] text-ink-400 mt-1.5 leading-relaxed">
-                    Set on Materiality &amp; scope, shown here so you can see the effect before the audit is created.
-                  </p>
-                </div>
-              )}
+              {/* The "Where a deficiency would land" ladder is gone (13 Oct):
+                  the auditor picks the deficiency type on the exception, so no
+                  threshold sorts it into a band any more. */}
             </div>
             )}
 
@@ -2214,7 +2185,7 @@ export default function NewAuditWizard({ onClose, prefillFrom }: {
                 <>
                   <ReviewRow label="Materiality" value={<>{money(engMat.overall)} <span className="font-normal text-ink-400">· {engMat.basisLabel}</span></>} />
                   <ReviewRow label="Performance materiality" value={<>{money(engMat.overall * engMat.pmPct / 100)} <span className="font-normal text-ink-400">· {engMat.pmPct}% of overall</span></>} />
-                  <ReviewRow label="Clearly trivial" value={<>{money(engMat.overall * engMat.ctPct / 100)} <span className="font-normal text-ink-400">· {engMat.ctPct}% of overall</span></>} />
+                  <ReviewRow label="Posting materiality" value={<>{money(engMat.overall * engMat.ctPct / 100)} <span className="font-normal text-ink-400">· {engMat.ctPct}% of overall</span></>} />
                   <ReviewRow label="TB / GL" value={engFiles.length === 0 ? <span className="font-normal text-ink-400">None on the engagement</span> : engFiles.map(f => f.name).join(', ')} />
                   <p className="text-[0.6875rem] text-ink-400 -mt-1 mb-2">Materiality and the trial balance were set when the engagement was created.</p>
                   <ReviewRow
@@ -2235,7 +2206,7 @@ export default function NewAuditWizard({ onClose, prefillFrom }: {
                   rule it will actually be created with: its parent's. */}
               <ReviewRow label="Materiality" value={<>₹{matFinal.overall} Cr <span className="font-normal text-ink-400">· {matFinal.basisLabel}{round === 'rollforward' ? ' · from parent' : ''}</span></>} />
               <ReviewRow label="Performance materiality" value={<>{money(matPerf)} <span className="font-normal text-ink-400">· {matFinal.pmPct}% of overall</span></>} />
-              <ReviewRow label="Clearly trivial" value={<>{money(matTrivial)} <span className="font-normal text-ink-400">· {matFinal.ctPct}% of overall</span></>} />
+              <ReviewRow label="Posting materiality" value={<>{money(matTrivial)} <span className="font-normal text-ink-400">· {matFinal.ctPct}% of overall</span></>} />
               <ReviewRow
                 label="TB / GL"
                 value={files.length === 0 ? <span className="font-normal text-ink-400">Not attached</span> : files.map(f => f.name).join(', ')}

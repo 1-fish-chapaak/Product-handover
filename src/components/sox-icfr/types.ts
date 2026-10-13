@@ -1740,6 +1740,23 @@ export interface Deficiency {
    * somebody says why in their own words.
    */
   magnitude: number | null;
+  /**
+   * The deficiency type, picked by the auditor from a dropdown (PwC call,
+   * 12 Oct): Deficiency, Significant Deficiency, Material Weakness or Clearly
+   * Trivial. The grade IS this pick — exposure and likelihood are recorded
+   * beside it as their own values and no longer conclude anything.
+   *
+   *   null       — raised since the change, type not picked yet. No grade.
+   *   undefined  — a record from before the change (the seeds): it keeps the
+   *                grade the old rule-based engine gave it until someone picks.
+   */
+  deficiencyType?: ExceptionGrade | null;
+  /** Who picked the type, for the working line. */
+  deficiencyTypeBy?: string;
+  /** The last email sent about this exception (PwC call, 12 Oct): one mail,
+   *  to the one person the next action is waiting on, each time it moves. The
+   *  real send is the notification service's; the prototype records it. */
+  lastEmail?: { to: string; at: string; status: string };
   /** Why the exposure is nil — required when `magnitude` is 0, meaningless
    *  otherwise. What separates a deliberate nil from an unanswered question. */
   magnitudeZeroReason?: string;

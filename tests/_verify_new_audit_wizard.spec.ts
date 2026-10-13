@@ -97,7 +97,7 @@ test('materiality step asks performance and clearly-trivial, and computes them',
   // Defaults: PBT 420 × 5% = ₹21 Cr, PM 75% = ₹15.75 Cr, CT 5% = ₹1.05 Cr.
   await expect(sheet.getByText(/Overall materiality .* — .*% of/)).toHaveCount(0);
   const pm = sheet.getByLabel(/Performance materiality as a percentage/);
-  const ct = sheet.getByLabel(/Clearly-trivial threshold as a percentage/);
+  const ct = sheet.getByLabel(/Posting materiality as a percentage/);
   await expect(pm).toHaveValue('75');
   await expect(ct).toHaveValue('5');
   await expect(sheet.getByText('₹15.75 Cr').first()).toBeVisible();

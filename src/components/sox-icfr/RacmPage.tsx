@@ -42,7 +42,30 @@ export default function RacmPage({ canManage, onOpenEditor }: {
    * actually on screen when the toast names it, and that is the library's
    * state to clear, not this page's.
    */
-  const [creating, setCreating] = useState(false);
+  /** Arriving from a Scope step's "Add new RACM" (a new tab, PwC call 12 Oct):
+   *  `?addRacmFor=<process>&entity=<company>` opens Create RACM straight away
+   *  for that process. Read once; the params come off the address bar as the
+   *  wizard closes, so a reload doesn't open it again. */
+  const [createFor] = useState<{ process: string; entity?: string } | undefined>(() => {
+    if (typeof window === 'undefined') return undefined;
+    const q = new URLSearchParams(window.location.search);
+    const process = q.get('addRacmFor');
+    return process ? { process, entity: q.get('entity') ?? undefined } : undefined;
+  });
+  const [creating, setCreatingRaw] = useState(!!createFor && canManage);
+  /** Still on the Scope step's errand — cleared once that wizard closes, so the
+   *  header's own Create RACM opens the ordinary chooser again. */
+  const [fromScope, setFromScope] = useState(!!createFor);
+  const setCreating = (open: boolean) => {
+    setCreatingRaw(open);
+    if (open || !fromScope) return;
+    setFromScope(false);
+    const q = new URLSearchParams(window.location.search);
+    if (!q.has('addRacmFor')) return;
+    q.delete('addRacmFor'); q.delete('entity');
+    const qs = q.toString();
+    window.history.replaceState(window.history.state, '', `${window.location.pathname}${qs ? `?${qs}` : ''}${window.location.hash}`);
+  };
 
   /* PARKED (1 Oct, user ask) — the whole tab row. With Config gone there was
      one screen left, and a tablist of one is a control that cannot do anything:
@@ -135,7 +158,8 @@ export default function RacmPage({ canManage, onOpenEditor }: {
       {/* The one scroll region on the page. Its own top padding replaces the
           margin the strip used to carry. */}
       <div className="flex-1 min-h-0 overflow-y-auto px-9 pt-6 pb-8">
-        <RacmLibraryView canManage={canManage} creating={creating} setCreating={setCreating} onOpenEditor={onOpenEditor} />
+        <RacmLibraryView canManage={canManage} creating={creating} setCreating={setCreating} onOpenEditor={onOpenEditor}
+          createFor={fromScope ? createFor : undefined} />
         {/* PARKED — <RacmConfigView canManage={canManage} /> */}
       </div>
     </div>
