@@ -38,6 +38,7 @@ export type View =
   | 'governance-control-detail'
   | 'racm-library'
   | 'audit-risk-register'
+  | 'risk-dashboard'
   | 'audit-planning'
   | 'programs'
   // Engagements
@@ -257,6 +258,7 @@ const getInitialView = (): View => {
   if (v === 'manage-exceptions') return 'manage-exceptions';
   if (v === 'racm-full-editor') return 'racm-full-editor';
   if (v === 'audit-risk-register') return 'audit-risk-register';
+  if (v === 'risk-dashboard') return 'risk-dashboard';
   if (v === 'racm-library') return 'racm-library';
   if (v === 'control-detail' && params.get('controlId')) return 'control-detail';
   if (v === 'chat') return 'chat';

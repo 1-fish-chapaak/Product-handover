@@ -1,7 +1,7 @@
 import { useRef, useState, useEffect, useMemo } from 'react';
 import { motion, AnimatePresence, useReducedMotion } from 'motion/react';
 import {
-  MessageSquare, Workflow, Database, LayoutDashboard,
+  MessageSquare, Workflow, Database, LayoutDashboard, Gauge,
   FileBarChart, ChevronDown, PanelLeft, PanelLeftClose,
   AlertTriangle, Sparkles, Building2, Home, Calendar,
   Shield, Search as SearchIcon, Settings, Clock, Check,
@@ -193,6 +193,12 @@ export default function Sidebar({ view, setView, expanded, toggleSidebar, unread
   const buildsCount = buildsPending.needsInput.length + buildsPending.toReview.length;
   // A new client has no engagement exceptions yet — the queue starts empty.
   const freshWs = useFreshWorkspace();
+  // Clicking the page you're already on goes back to its start (e.g. from an
+  // open risk or control to the list) — the page listens for this.
+  const goTo = (v: View) => {
+    if (v === view) window.dispatchEvent(new CustomEvent('app:view-reselect', { detail: { view: v } }));
+    setView(v);
+  };
   const myQueueCount = useMemo(
     () => (freshWs ? 0 : myQueueFor(ENGAGEMENT_EXCEPTIONS, personForUser(currentUser?.name)).length),
     [currentUser?.name, freshWs],
@@ -427,8 +433,9 @@ export default function Sidebar({ view, setView, expanded, toggleSidebar, unread
               the other two come from: risks and controls are written into a
               matrix first, and published from there. */}
           {can('racm_view') && <NavItem icon={Table2} label="RACM Library" active={view === 'racm-library'} expanded={isExpanded} onClick={() => setView('racm-library')} />}
-          {can('risk_view') && <NavItem icon={AlertTriangle} label="Risk Register" active={view === 'audit-risk-register'} expanded={isExpanded} onClick={() => setView('audit-risk-register')} />}
-          {can('ctrl_view') && <NavItem icon={Shield} label="Control Library" active={view === 'governance-controls' || view === 'governance-control-detail' || view === 'adapt-standard'} expanded={isExpanded} onClick={() => setView('governance-controls')} />}
+          {can('risk_view') && <NavItem icon={Gauge} label="Risk Dashboard" active={view === 'risk-dashboard'} expanded={isExpanded} onClick={() => goTo('risk-dashboard')} />}
+          {can('risk_view') && <NavItem icon={AlertTriangle} label="Risk Register" active={view === 'audit-risk-register'} expanded={isExpanded} onClick={() => goTo('audit-risk-register')} />}
+          {can('ctrl_view') && <NavItem icon={Shield} label="Control Library" active={view === 'governance-controls' || view === 'governance-control-detail' || view === 'adapt-standard'} expanded={isExpanded} onClick={() => goTo('governance-controls')} />}
           {can('wf_view') && <NavItem icon={Workflow} label="Workflow Library" active={workflowViews.includes(view)} expanded={isExpanded} onClick={() => setView('workflow-library')} />}
           {can('concierge_use') && <NavItem icon={Wand2} label="AI Concierge" active={aiConciergeViews.includes(view)} expanded={isExpanded} onClick={() => setView('ai-concierge')} />}
 

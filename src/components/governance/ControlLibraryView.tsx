@@ -19,7 +19,7 @@ import { type ControlRow, BP_COLORS, ASSERTION_LABELS, SEED_WORKFLOW_ATTRIBUTES 
 import { CONTROL_LIBRARY } from '../../data/controlLibrary';
 import {
   CHECK_CATALOG, PROCESS_BLURB, PROCESS_LONG, filesForEntry, standardControlRows, useStdState, useFreshWorkspace,
-  readinessOf, hoursPerMonthFor, fmtHours, valueOfKey, type FileSourceChoice, type StdState,
+  hoursPerMonthFor, fmtHours, valueOfKey, type FileSourceChoice, type StdState,
 } from '../../data/auditPlan';
 import type { ProcessCode } from '../../data/engagements';
 import { Button } from '../shared/Button';
@@ -27,6 +27,8 @@ import AdaptDataModal from '../audit-plan/AdaptDataModal';
 import CircularCarousel from '../shared/carousel/CircularCarousel';
 import { PROCESS_CARD_ASPECT, processCardImage } from './processCards';
 import ControlLibraryWelcome from './ControlLibraryWelcome';
+import { controlStatusOf } from '../../data/erm/controls';
+import { useRiskRatings } from '../../data/erm/store';
 
 /* ─── Control Library ───────────────────────────────────────────────────────
  * Processes first: a carousel of process cards (live coverage and counts on
@@ -72,14 +74,16 @@ const SUBPROCESS_ALIAS: Record<string, string> = {
   'Contract Compliance': 'Contract Management',
 };
 
-function statusOf(c: ControlRow, std: StdState): RowStatus {
-  if (isStd(c)) {
-    const e = CHECK_CATALOG.find(x => x.key === c.stdKey);
-    return e ? readinessOf(e, std) : 'needs-data';
-  }
-  if (c.status === 'Draft') return 'draft';
-  return c.linkedWorkflows.length > 0 ? 'live' : c.automation === 'Manual' ? 'manual' : 'no-workflow';
+/** The Control Library's status rule — shared with the risk register. */
+const statusOf = (c: ControlRow, std: StdState): RowStatus => controlStatusOf(c, std);
+
+/** Open a risk in the Risk Register. */
+function openRisk(id: string) {
+  try { window.sessionStorage.setItem('risk-register.open-risk', id); } catch { /* ignore */ }
+  window.dispatchEvent(new CustomEvent('app:navigate-view', { detail: { view: 'audit-risk-register' } }));
 }
+
+interface LinkedRisk { id: string; name: string; tier: string }
 
 /** A control's test attributes: its workflow's seeded set, else its own. */
 const attributesOf = (c: ControlRow) =>
@@ -101,6 +105,9 @@ export default function ControlLibraryView({ processFilter, onAdapt, onOpenBuild
   const created = useCreatedControls();
   const adapted = useStdState();
   const fresh = useFreshWorkspace();
+  // The risks each control mitigates, with their live rating (Risk Register).
+  const { ratings: riskRatings } = useRiskRatings();
+  const risksOf = (cid: string): LinkedRisk[] => riskRatings.filter(r => r.risk.controlIds.includes(cid)).map(r => ({ id: r.risk.id, name: r.risk.name, tier: r.tier }));
 
   // Controls created via the wizard (e.g. a risk's Link Control → Create Control).
   const createdRows: ControlRow[] = created.map(c => {
@@ -138,6 +145,12 @@ export default function ControlLibraryView({ processFilter, onAdapt, onOpenBuild
     }
     return null;
   });
+  // The sidebar's Control Library, clicked while a control is open, returns to the list.
+  useEffect(() => {
+    const onReselect = (e: Event) => { if ((e as CustomEvent<{ view: string }>).detail?.view === 'governance-controls') setSelectedControlId(null); };
+    window.addEventListener('app:view-reselect', onReselect);
+    return () => window.removeEventListener('app:view-reselect', onReselect);
+  }, []);
   const [showCreateDrawer, setShowCreateDrawer] = useState(false);
   const [linkWfControlId, setLinkWfControlId] = useState<string | null>(null);
   const [processIdx, setProcessIdx] = useState(() => {
@@ -497,6 +510,7 @@ export default function ControlLibraryView({ processFilter, onAdapt, onOpenBuild
                           <li key={c.id}>
                             <ControlEntry
                               control={c}
+                              risks={risksOf(c.controlId)}
                               status={st}
                               open={open}
                               onToggle={() => setExpanded(open ? null : c.id)}
@@ -522,6 +536,7 @@ export default function ControlLibraryView({ processFilter, onAdapt, onOpenBuild
                               detail={
                                 <ExpandedDetail
                                   control={c}
+                                  risks={risksOf(c.controlId)}
                                   status={st}
                                   entryFiles={files}
                                   onOpen={() => setSelectedControlId(c.id)}
@@ -674,9 +689,10 @@ const STATUS_ICON: Record<RowStatus, { icon: typeof CircleCheck; cls: string }> 
 /** One control, as an entry rather than a row: who it is, what it does, how
  *  it's tested, and the one thing to do next. Opens in place for the rest. */
 function ControlEntry({
-  control: c, status, open, onToggle, showProcess, files, selectable, selected, selecting, onSelect, recs, action, detail,
+  control: c, risks, status, open, onToggle, showProcess, files, selectable, selected, selecting, onSelect, recs, action, detail,
 }: {
   control: ControlRow;
+  risks: LinkedRisk[];
   status: RowStatus;
   open: boolean;
   onToggle: () => void;
@@ -747,6 +763,11 @@ function ControlEntry({
             {attrs.length > 0 && (
               <span className="inline-flex items-center gap-1.5"><ListChecks size={12} className="text-ink-400" aria-hidden /><span className="tabular-nums">{attrs.length}</span> test attribute{attrs.length === 1 ? '' : 's'}</span>
             )}
+            {risks.length > 0 && (
+              <span className="inline-flex items-center gap-1.5" title={risks.map(r => `${r.id} ${r.name} — ${r.tier}`).join('\n')}>
+                <ShieldAlert size={12} className="text-ink-400" aria-hidden />Mitigates <span className="tabular-nums">{risks.length}</span> risk{risks.length === 1 ? '' : 's'}
+              </span>
+            )}
             {status === 'needs-data' && files.length > 0 && (
               <span className="inline-flex items-center gap-1.5">
                 <span>Needs</span>
@@ -794,8 +815,9 @@ function Eyebrow({ children }: { children: React.ReactNode }) {
 
 /** The rest of the definition, in place: what it covers, how it runs, the
  *  data behind it, and every test attribute. */
-function ExpandedDetail({ control: c, status, entryFiles, onOpen, onLink, tools }: {
+function ExpandedDetail({ control: c, risks, status, entryFiles, onOpen, onLink, tools }: {
   control: ControlRow;
+  risks: LinkedRisk[];
   status: RowStatus;
   entryFiles: { code: string; name: string; matches?: string }[];
   onOpen: () => void;
@@ -818,9 +840,21 @@ function ExpandedDetail({ control: c, status, entryFiles, onOpen, onLink, tools 
           <Eyebrow>What it covers</Eyebrow>
           {c.objective && <p className="text-[0.8125rem] leading-relaxed text-ink-700">{c.objective}</p>}
           <div className="mt-2.5 flex flex-wrap items-center gap-1.5">
-            {c.mappedRisks.map(r => (
-              <span key={r} className="inline-flex items-center gap-1 h-6 px-2 rounded-full bg-risk-50 text-risk-700 text-[0.6875rem] font-mono"><ShieldAlert size={11} aria-hidden />{r}</span>
-            ))}
+            {risks.length > 0
+              ? risks.map(r => (
+                <button
+                  key={r.id}
+                  type="button"
+                  onClick={() => openRisk(r.id)}
+                  title={`${r.name} — ${r.tier}. Open in the Risk Register`}
+                  className="inline-flex items-center gap-1 h-6 px-2 rounded-full bg-risk-50 text-risk-700 text-[0.6875rem] cursor-pointer hover:bg-risk-100"
+                >
+                  <ShieldAlert size={11} aria-hidden /><span className="font-mono">{r.id}</span><span className="font-sans font-medium">· {r.tier}</span>
+                </button>
+              ))
+              : c.mappedRisks.map(r => (
+                <span key={r} className="inline-flex items-center gap-1 h-6 px-2 rounded-full bg-risk-50 text-risk-700 text-[0.6875rem] font-mono"><ShieldAlert size={11} aria-hidden />{r}</span>
+              ))}
             {c.assertions.map(a => (
               <span key={a} className="inline-flex items-center h-6 px-2 rounded-full border border-canvas-border text-ink-600 text-[0.6875rem]">{ASSERTION_LABELS[a] ?? a}</span>
             ))}

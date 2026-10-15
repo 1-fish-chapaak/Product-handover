@@ -31,7 +31,8 @@ import WorkflowTemplates from './components/workflow/WorkflowTemplates';
 import WorkflowDetail from './components/workflow/WorkflowDetail';
 import WorkflowLibraryView from './components/workflow/WorkflowLibraryView';
 import BusinessProcesses, { ControlDetailStandalone } from './components/audit/BusinessProcesses';
-import RiskRegister from './components/audit/RiskRegister';
+import RiskRegisterPage from './components/risk/RiskRegisterPage';
+import RiskDashboard from './components/risk/RiskDashboard';
 import RacmPage from './components/sox-icfr/RacmPage';
 import { editorHandoff, findLibraryRacm } from './components/sox-icfr/racmLibrary';
 import AuditExecution from './components/audit/AuditExecution';
@@ -1114,10 +1115,16 @@ function AppInner() {
             }} />
         ));
 
+      case 'risk-dashboard':
+        return withStdBanner('risk-register', freshWs ? firstRun('risk-dashboard') : (
+          <RiskDashboard onNavigate={(v) => setView(v as View)} onAdapt={(keys, choices) => startAdaptStandard({ keys, choices })} />
+        ));
+
       case 'audit-risk-register':
         return withStdBanner('risk-register', freshWs ? firstRun('risk-register') : (
-          <RiskRegister
+          <RiskRegisterPage
             onNavigate={(v) => setView(v as View)}
+            onAdapt={(keys, choices) => startAdaptStandard({ keys, choices })}
           />
         ));
 
